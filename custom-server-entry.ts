@@ -13,6 +13,8 @@ import { createStartHandler, defaultStreamHandler } from "@tanstack/react-start/
 import { logger } from "./src/lib/logger";
 import { getCorsHeaders, handleCorsPreflightIfNeeded } from "./src/lib/api-helpers";
 import { buildHealthzPayload } from "./src/lib/healthz";
+import { handleYtDlpRequest } from "./src/lib/ytdlp/http";
+import { syncYtDlpUpstream } from "./src/lib/ytdlp/upstream";
 import { RateLimiter } from "./worker/rate-limiter";
 
 // NOTE: DO classes (MeetingRoom, VoiceRoom, RateLimiterDO) are hosted in
@@ -120,6 +122,11 @@ export default {
       }
     }
 
+    const ytdlpResponse = await handleYtDlpRequest(request, _ctx);
+    if (ytdlpResponse) {
+      return withDesktopCors(request, ytdlpResponse);
+    }
+
     // ── Global Main Gateway WebSocket → MeetingRoom DO ────────────────
     if (url.pathname === "/api/gateway") {
       const err = requireWebSocket(request);
@@ -169,5 +176,15 @@ export default {
       });
     }
     return url.pathname.startsWith("/api/") ? withDesktopCors(request, response) : response;
+  },
+
+  async scheduled(
+    _controller: ScheduledController,
+    _env: Env,
+    ctx: ExecutionContext,
+  ): Promise<void> {
+    ctx.waitUntil(syncYtDlpUpstream(true).catch((error) => {
+      console.error("yt-dlp upstream sync failed:", error);
+    }));
   },
 };

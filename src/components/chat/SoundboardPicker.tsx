@@ -47,6 +47,7 @@ import EmojiToken from "./EmojiToken";
 import { AvatarImage } from "./AvatarImage";
 import { UploadSoundModal, type UploadSoundData } from "./UploadSoundModal";
 import { useDelayUnmount } from "@/hooks/useDelayUnmount";
+import { ListenTogetherPanel } from "./ListenTogetherPanel";
 
 interface Props {
   isClosing?: boolean;
@@ -56,10 +57,12 @@ interface Props {
   sfu: SFUClient | null;
   serverId?: string | null;
   channelId?: string | null;
+  roomSlug?: string | null;
+  voiceSessionId?: string | null;
   localUserId?: string | null;
 }
 
-type SoundboardView = "soundboard" | "myinstants" | "radio";
+type SoundboardView = "soundboard" | "myinstants" | "radio" | "listenTogether";
 
 interface RadioStation {
   stationuuid: string;
@@ -256,6 +259,8 @@ export default function SoundboardPicker({
   sfu,
   serverId,
   channelId,
+  roomSlug,
+  voiceSessionId,
   localUserId,
 }: Props) {
   const [activeView, setActiveView] = useState<SoundboardView>("soundboard");
@@ -586,14 +591,20 @@ export default function SoundboardPicker({
       }
 
       const rect = markerRef.current.getBoundingClientRect();
-      const pickerWidth = 440;
+      const pickerWidth = Math.min(
+        window.innerWidth - 24,
+        activeView === "listenTogether" ? 980 : 440,
+      );
       
       const MAX_HEIGHT = Math.min(820, window.innerHeight - 20);
 
       const style: React.CSSProperties = { 
         opacity: 1,
+        width: pickerWidth,
         maxHeight: MAX_HEIGHT,
-        height: "min(760px, 75vh)",
+        height: activeView === "listenTogether"
+          ? "min(820px, 82vh)"
+          : "min(760px, 75vh)",
       };
 
       let left = rect.left;
@@ -623,7 +634,7 @@ export default function SoundboardPicker({
       window.removeEventListener("resize", updatePosition);
       window.cancelAnimationFrame(frameId);
     };
-  }, [markerRef, placement]);
+  }, [activeView, markerRef, placement]);
 
   const broadcastSound = (sound: { id: string; name: string; dataUrl?: string; mediaUrl?: string; volume?: number; emoji?: string; }) => {
     // Generate a deterministic playback ID so that playing the same sound
@@ -838,7 +849,10 @@ export default function SoundboardPicker({
         <dialog
           open
           className={cn(
-            "picker-panel fixed z-[260] m-0 flex w-full sm:w-[min(440px,calc(100vw-24px))] flex-col overflow-hidden border p-0 shadow-2xl outline-none animate-in fade-in zoom-in-95 duration-150 sm:rounded-[26px] max-sm:inset-x-0 max-sm:bottom-0 max-sm:top-auto max-sm:h-[85dvh] max-sm:w-full max-sm:rounded-t-[26px] max-sm:rounded-b-none max-sm:border-x-0 max-sm:border-b-0 max-sm:translate-y-0 max-sm:slide-in-from-bottom max-sm:zoom-in-100",
+            "picker-panel fixed z-[260] m-0 flex w-full flex-col overflow-hidden border p-0 shadow-2xl outline-none animate-in fade-in zoom-in-95 duration-150 sm:rounded-[26px] max-sm:inset-x-0 max-sm:bottom-0 max-sm:top-auto max-sm:h-[85dvh] max-sm:w-full max-sm:rounded-t-[26px] max-sm:rounded-b-none max-sm:border-x-0 max-sm:border-b-0 max-sm:translate-y-0 max-sm:slide-in-from-bottom max-sm:zoom-in-100",
+            activeView === "listenTogether"
+          ? "sm:w-[min(980px,calc(100vw-24px))]"
+              : "sm:w-[min(440px,calc(100vw-24px))]",
             !markerRef && placementClasses
           )}
           style={markerRef ? dynamicStyle : undefined}
@@ -862,6 +876,20 @@ export default function SoundboardPicker({
                   </div>
 
                   <div className="flex shrink-0 items-center gap-2">
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <button
+                          type="button"
+                          onClick={() => setActiveView("listenTogether")}
+                          className="inline-flex h-11 items-center gap-2 rounded-2xl border border-rm-border bg-gradient-to-br from-sky-500/20 via-blue-500/20 to-cyan-500/20 px-3 text-sm font-black text-rm-text shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] transition-transform hover:scale-[1.01] active:scale-[0.99]"
+                        >
+                          <Headphones className="h-4 w-4 text-sky-300" />
+                          <span className="hidden sm:inline">Listen</span>
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent side="bottom" sideOffset={8}>Listen Together</TooltipContent>
+                    </Tooltip>
+
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <button
@@ -894,6 +922,23 @@ export default function SoundboardPicker({
                   </div>
                 </div>
               </>
+            ) : activeView === "listenTogether" ? (
+              <div className="flex items-center justify-between gap-3">
+                <button
+                  type="button"
+                  onClick={() => setActiveView("soundboard")}
+                  className="inline-flex h-10 items-center gap-2 rounded-2xl border border-rm-border bg-rm-bg-hover px-3 text-sm font-semibold text-rm-text transition-colors hover:bg-rm-bg-active"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                  Back
+                </button>
+                <div className="min-w-0 flex-1 text-right">
+                  <div className="truncate text-sm font-black tracking-[0.12em] text-rm-text">Listen Together</div>
+                  <div className="truncate text-xs text-rm-text-muted">
+                    Synced room playback with a shared queue
+                  </div>
+                </div>
+              </div>
             ) : (
               <>
                 <div className="flex items-center justify-between gap-3">
@@ -922,8 +967,17 @@ export default function SoundboardPicker({
             )}
           </div>
 
-          <div className="min-h-0 flex-1">
-            {activeView === "soundboard" ? (
+          <div className="min-h-0 flex-1 overflow-hidden">
+            {activeView === "listenTogether" ? (
+              <ListenTogetherPanel
+                sfu={sfu}
+                serverId={serverId}
+                channelId={channelId}
+                roomSlug={roomSlug}
+                voiceSessionId={voiceSessionId}
+                localUserId={localUserId}
+              />
+            ) : activeView === "soundboard" ? (
               <div className="flex h-full">
                 <aside className="flex w-[68px] shrink-0 flex-col border-r border-rm-border bg-rm-bg-surface/30 px-2 py-3">
                   <div className="no-scrollbar flex min-h-0 flex-col gap-2 overflow-y-auto overflow-x-hidden pr-1">

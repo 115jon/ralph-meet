@@ -11,6 +11,7 @@
 // When the call ends, unmounting <ActiveCallSession> triggers cleanup.
 // ============================================================================
 
+import { VoiceListenTogetherManager } from "@/components/chat/VoiceListenTogetherManager";
 import { useVoiceChannel } from "@/hooks/useVoiceChannel";
 import { useChatStore } from "@/stores/chat-store";
 import { useCallStore } from "@/stores/useCallStore";
@@ -82,6 +83,8 @@ function ActiveCallSession({
       hasMicrophone: voice.hasMicrophone,
       audioBlocked: voice.audioBlocked,
       gridItems: voice.gridItems,
+      roomSlug: voice.roomSlug,
+      voiceSessionId: voice.voiceSessionId,
       streamThumbnails: voice.streamThumbnails,
       watchedStreams: voice.watchedStreams,
       watchersByStreamer: voice.watchersByStreamer,
@@ -103,6 +106,8 @@ function ActiveCallSession({
     voice.hasMicrophone,
     voice.audioBlocked,
     voice.gridItems,
+    voice.roomSlug,
+    voice.voiceSessionId,
     voice.streamThumbnails,
     voice.watchedStreams,
     voice.watchersByStreamer,
@@ -144,6 +149,12 @@ function ActiveCallSession({
     };
   }, []);
 
-  // This component renders nothing — it just manages the SFU lifecycle
-  return null;
+  return (
+    <VoiceListenTogetherManager
+      sfu={voice.sfu}
+      roomSlug={voice.roomSlug}
+      voiceSessionId={voice.voiceSessionId}
+      channelId={channelId}
+    />
+  );
 }

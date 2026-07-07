@@ -50,6 +50,9 @@ const VoiceAppsModal = lazy(() =>
 const VoiceSoundboardManager = lazy(() =>
   import("@/components/chat/VoiceSoundboardManager").then((mod) => ({ default: mod.VoiceSoundboardManager }))
 );
+const VoiceListenTogetherManager = lazy(() =>
+  import("@/components/chat/VoiceListenTogetherManager").then((mod) => ({ default: mod.VoiceListenTogetherManager }))
+);
 
 const EMPTY_GRID_ITEMS: never[] = [];
 
@@ -990,6 +993,8 @@ export default function ChatPage() {
               spatialAudioState={localStreamState?.spatialAudioState}
               onUpdateSpatialAudioState={localStreamState?.updateSharedSpatialAudioState}
               voiceSettingsUserId={localStreamState?.settingsUserId}
+              roomSlug={localStreamState?.roomSlug}
+              voiceSessionId={localStreamState?.voiceSessionId}
               onOpenActivities={() => setVoiceAppsModal("activities")}
             />
           </div>
@@ -1001,6 +1006,13 @@ export default function ChatPage() {
               sfu={localStreamState?.sfu ?? null}
               serverId={voiceState.serverId ?? activeServerId}
               localUserId={user?.id}
+            />
+            <VoiceListenTogetherManager
+              sfu={localStreamState?.sfu ?? null}
+              serverId={voiceState.serverId ?? activeServerId}
+              channelId={localStreamState?.channelId ?? voiceState.channelId}
+              roomSlug={localStreamState?.roomSlug}
+              voiceSessionId={localStreamState?.voiceSessionId}
             />
           </Suspense>
         )}

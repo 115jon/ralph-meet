@@ -47,6 +47,9 @@ import { Route as ApiServerIconsSplatRouteImport } from './routes/api/server-ico
 import { Route as ApiProfileAssetsManageRouteImport } from './routes/api/profile-assets/manage'
 import { Route as ApiProfileAssetsSplatRouteImport } from './routes/api/profile-assets/$'
 import { Route as ApiMyinstantsFavoritesRouteImport } from './routes/api/myinstants/favorites'
+import { Route as ApiListenTogetherStreamRouteImport } from './routes/api/listen-together/stream'
+import { Route as ApiListenTogetherSearchRouteImport } from './routes/api/listen-together/search'
+import { Route as ApiListenTogetherResolveRouteImport } from './routes/api/listen-together/resolve'
 import { Route as ApiCollectiblesSyncRouteImport } from './routes/api/collectibles/sync'
 import { Route as ApiCollectiblesCatalogRouteImport } from './routes/api/collectibles/catalog'
 import { Route as ApiCollectiblesApplyRouteImport } from './routes/api/collectibles/apply'
@@ -286,6 +289,22 @@ const ApiMyinstantsFavoritesRoute = ApiMyinstantsFavoritesRouteImport.update({
   path: '/favorites',
   getParentRoute: () => ApiMyinstantsRoute,
 } as any)
+const ApiListenTogetherStreamRoute = ApiListenTogetherStreamRouteImport.update({
+  id: '/api/listen-together/stream',
+  path: '/api/listen-together/stream',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiListenTogetherSearchRoute = ApiListenTogetherSearchRouteImport.update({
+  id: '/api/listen-together/search',
+  path: '/api/listen-together/search',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiListenTogetherResolveRoute =
+  ApiListenTogetherResolveRouteImport.update({
+    id: '/api/listen-together/resolve',
+    path: '/api/listen-together/resolve',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiCollectiblesSyncRoute = ApiCollectiblesSyncRouteImport.update({
   id: '/api/collectibles/sync',
   path: '/api/collectibles/sync',
@@ -573,6 +592,9 @@ export interface FileRoutesByFullPath {
   '/api/collectibles/apply': typeof ApiCollectiblesApplyRoute
   '/api/collectibles/catalog': typeof ApiCollectiblesCatalogRoute
   '/api/collectibles/sync': typeof ApiCollectiblesSyncRoute
+  '/api/listen-together/resolve': typeof ApiListenTogetherResolveRoute
+  '/api/listen-together/search': typeof ApiListenTogetherSearchRoute
+  '/api/listen-together/stream': typeof ApiListenTogetherStreamRoute
   '/api/myinstants/favorites': typeof ApiMyinstantsFavoritesRoute
   '/api/profile-assets/$': typeof ApiProfileAssetsSplatRoute
   '/api/profile-assets/manage': typeof ApiProfileAssetsManageRoute
@@ -660,6 +682,9 @@ export interface FileRoutesByTo {
   '/api/collectibles/apply': typeof ApiCollectiblesApplyRoute
   '/api/collectibles/catalog': typeof ApiCollectiblesCatalogRoute
   '/api/collectibles/sync': typeof ApiCollectiblesSyncRoute
+  '/api/listen-together/resolve': typeof ApiListenTogetherResolveRoute
+  '/api/listen-together/search': typeof ApiListenTogetherSearchRoute
+  '/api/listen-together/stream': typeof ApiListenTogetherStreamRoute
   '/api/myinstants/favorites': typeof ApiMyinstantsFavoritesRoute
   '/api/profile-assets/$': typeof ApiProfileAssetsSplatRoute
   '/api/profile-assets/manage': typeof ApiProfileAssetsManageRoute
@@ -748,6 +773,9 @@ export interface FileRoutesById {
   '/api/collectibles/apply': typeof ApiCollectiblesApplyRoute
   '/api/collectibles/catalog': typeof ApiCollectiblesCatalogRoute
   '/api/collectibles/sync': typeof ApiCollectiblesSyncRoute
+  '/api/listen-together/resolve': typeof ApiListenTogetherResolveRoute
+  '/api/listen-together/search': typeof ApiListenTogetherSearchRoute
+  '/api/listen-together/stream': typeof ApiListenTogetherStreamRoute
   '/api/myinstants/favorites': typeof ApiMyinstantsFavoritesRoute
   '/api/profile-assets/$': typeof ApiProfileAssetsSplatRoute
   '/api/profile-assets/manage': typeof ApiProfileAssetsManageRoute
@@ -837,6 +865,9 @@ export interface FileRouteTypes {
     | '/api/collectibles/apply'
     | '/api/collectibles/catalog'
     | '/api/collectibles/sync'
+    | '/api/listen-together/resolve'
+    | '/api/listen-together/search'
+    | '/api/listen-together/stream'
     | '/api/myinstants/favorites'
     | '/api/profile-assets/$'
     | '/api/profile-assets/manage'
@@ -924,6 +955,9 @@ export interface FileRouteTypes {
     | '/api/collectibles/apply'
     | '/api/collectibles/catalog'
     | '/api/collectibles/sync'
+    | '/api/listen-together/resolve'
+    | '/api/listen-together/search'
+    | '/api/listen-together/stream'
     | '/api/myinstants/favorites'
     | '/api/profile-assets/$'
     | '/api/profile-assets/manage'
@@ -1011,6 +1045,9 @@ export interface FileRouteTypes {
     | '/api/collectibles/apply'
     | '/api/collectibles/catalog'
     | '/api/collectibles/sync'
+    | '/api/listen-together/resolve'
+    | '/api/listen-together/search'
+    | '/api/listen-together/stream'
     | '/api/myinstants/favorites'
     | '/api/profile-assets/$'
     | '/api/profile-assets/manage'
@@ -1097,6 +1134,9 @@ export interface RootRouteChildren {
   ApiCollectiblesApplyRoute: typeof ApiCollectiblesApplyRoute
   ApiCollectiblesCatalogRoute: typeof ApiCollectiblesCatalogRoute
   ApiCollectiblesSyncRoute: typeof ApiCollectiblesSyncRoute
+  ApiListenTogetherResolveRoute: typeof ApiListenTogetherResolveRoute
+  ApiListenTogetherSearchRoute: typeof ApiListenTogetherSearchRoute
+  ApiListenTogetherStreamRoute: typeof ApiListenTogetherStreamRoute
   ApiProfileAssetsSplatRoute: typeof ApiProfileAssetsSplatRoute
   ApiProfileAssetsManageRoute: typeof ApiProfileAssetsManageRoute
   ApiServerIconsSplatRoute: typeof ApiServerIconsSplatRoute
@@ -1379,6 +1419,27 @@ declare module '@tanstack/react-router' {
       fullPath: '/api/myinstants/favorites'
       preLoaderRoute: typeof ApiMyinstantsFavoritesRouteImport
       parentRoute: typeof ApiMyinstantsRoute
+    }
+    '/api/listen-together/stream': {
+      id: '/api/listen-together/stream'
+      path: '/api/listen-together/stream'
+      fullPath: '/api/listen-together/stream'
+      preLoaderRoute: typeof ApiListenTogetherStreamRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/listen-together/search': {
+      id: '/api/listen-together/search'
+      path: '/api/listen-together/search'
+      fullPath: '/api/listen-together/search'
+      preLoaderRoute: typeof ApiListenTogetherSearchRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/listen-together/resolve': {
+      id: '/api/listen-together/resolve'
+      path: '/api/listen-together/resolve'
+      fullPath: '/api/listen-together/resolve'
+      preLoaderRoute: typeof ApiListenTogetherResolveRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/api/collectibles/sync': {
       id: '/api/collectibles/sync'
@@ -1979,6 +2040,9 @@ const rootRouteChildren: RootRouteChildren = {
   ApiCollectiblesApplyRoute: ApiCollectiblesApplyRoute,
   ApiCollectiblesCatalogRoute: ApiCollectiblesCatalogRoute,
   ApiCollectiblesSyncRoute: ApiCollectiblesSyncRoute,
+  ApiListenTogetherResolveRoute: ApiListenTogetherResolveRoute,
+  ApiListenTogetherSearchRoute: ApiListenTogetherSearchRoute,
+  ApiListenTogetherStreamRoute: ApiListenTogetherStreamRoute,
   ApiProfileAssetsSplatRoute: ApiProfileAssetsSplatRoute,
   ApiProfileAssetsManageRoute: ApiProfileAssetsManageRoute,
   ApiServerIconsSplatRoute: ApiServerIconsSplatRoute,

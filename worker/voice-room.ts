@@ -14,7 +14,28 @@ import {
   isReconnectWithinGrace,
   isSupersededVoiceConnection,
 } from "../src/lib/voice/connection-generation";
+import {
+  buildListenTogetherSnapshot,
+  createListenTogetherState,
+  isValidListenTogetherVideoId,
+  type ListenTogetherCommand,
+  type ListenTogetherEnqueueCommand,
+  type ListenTogetherEvent,
+  type ListenTogetherPersistentState,
+  type ListenTogetherQueueEntry,
+  type ListenTogetherStateSnapshot,
+} from "../src/lib/listen-together";
 import { decideFailedPublisherSessionEviction } from "../src/lib/voice/sfu-publisher-eviction";
+import {
+  clearListenTogether,
+  enqueueListenTogetherEntries,
+  freezeListenTogetherPlayback,
+  pauseListenTogether,
+  playListenTogether,
+  removeListenTogetherEntry,
+  seekListenTogether,
+  skipListenTogether,
+} from "../src/lib/voice/listen-together-state";
 import { getNextVoicePresenceAlarmTime } from "../src/lib/voice-presence";
 
 const log = clog("VoiceGW");
@@ -219,6 +240,28 @@ export class VoiceRoom extends DurableObject<Env> {
       );
     `);
 
+    this.sql.exec(`
+      CREATE TABLE IF NOT EXISTS listen_together_state (
+        id INTEGER PRIMARY KEY CHECK(id = 1),
+        room_slug TEXT NOT NULL,
+        revision INTEGER NOT NULL DEFAULT 0,
+        paused INTEGER NOT NULL DEFAULT 1,
+        current_entry_id TEXT,
+        anchor_position_ms INTEGER NOT NULL DEFAULT 0,
+        anchor_updated_at INTEGER,
+        last_updated_at INTEGER NOT NULL DEFAULT 0
+      );
+    `);
+
+    this.sql.exec(`
+      CREATE TABLE IF NOT EXISTS listen_together_queue (
+        entry_id TEXT PRIMARY KEY,
+        sort_order INTEGER NOT NULL,
+        entry_json TEXT NOT NULL,
+        requested_at INTEGER NOT NULL
+      );
+    `);
+
     // Indexes for common query paths — CREATE INDEX IF NOT EXISTS is idempotent
     this.sql.exec(`CREATE INDEX IF NOT EXISTS idx_tracks_participant ON tracks(participant_id);`);
     this.sql.exec(`CREATE INDEX IF NOT EXISTS idx_tracks_session ON tracks(session_id);`);
@@ -229,6 +272,7 @@ export class VoiceRoom extends DurableObject<Env> {
     this.sql.exec(`CREATE INDEX IF NOT EXISTS idx_stream_watchers_viewer ON stream_watchers(viewer_user_id);`);
     this.sql.exec(`CREATE INDEX IF NOT EXISTS idx_stream_watchers_streamer_pid ON stream_watchers(streamer_participant_id);`);
     this.sql.exec(`CREATE INDEX IF NOT EXISTS idx_stream_watchers_viewer_pid ON stream_watchers(viewer_participant_id);`);
+    this.sql.exec(`CREATE INDEX IF NOT EXISTS idx_listen_together_queue_order ON listen_together_queue(sort_order);`);
   }
 
   async fetch(request: Request): Promise<Response> {
@@ -443,17 +487,8 @@ export class VoiceRoom extends DurableObject<Env> {
     // Run every cycle to detect 410'd sessions quickly
     this.ctx.waitUntil(this.validateSfuSessions());
 
-    // If anyone remains, reschedule alarm
-    const countRow = [...this.sql.exec(`SELECT COUNT(*) as c FROM participants`)][0];
-    const c1 = countRow.c as number;
-    const pendingCountRow = [...this.sql.exec(`SELECT COUNT(*) as c FROM pending_reconnects`)][0];
-    const c2 = pendingCountRow.c as number;
-    const demoChatCountRow = [...this.sql.exec(`SELECT COUNT(*) as c FROM demo_chat_messages`)][0];
-    const c3 = demoChatCountRow.c as number;
-
-    if (c1 > 0 || c2 > 0 || c3 > 0) {
-      this.scheduleAlarm();
-    }
+    this.advanceListenTogetherIfNeeded(now);
+    this.scheduleAlarm();
   }
 
   private getNextAlarmTime(now: number) {
@@ -469,21 +504,382 @@ export class VoiceRoom extends DurableObject<Env> {
       if (row.expires_at) deadlines.push(row.expires_at as number);
     }
 
+    const listenTogetherDeadline = this.getListenTogetherTrackDeadline(now);
+    if (listenTogetherDeadline) {
+      deadlines.push(listenTogetherDeadline);
+    }
+
     return getNextVoicePresenceAlarmTime(now, VOICE_PRUNE_ALARM_INTERVAL_MS, deadlines);
   }
 
   private scheduleAlarm() {
     const now = Date.now();
-    const nextAlarm = this.getNextAlarmTime(now);
 
     this.ctx.storage.getAlarm().then((currentAlarm) => {
-      if (currentAlarm === null || currentAlarm <= now || nextAlarm < currentAlarm) {
+      const countRow = [...this.sql.exec(`SELECT COUNT(*) as c FROM participants`)][0];
+      const participantCount = Number(countRow?.c ?? 0);
+      const pendingCountRow = [...this.sql.exec(`SELECT COUNT(*) as c FROM pending_reconnects`)][0];
+      const pendingCount = Number(pendingCountRow?.c ?? 0);
+      const demoChatCountRow = [...this.sql.exec(`SELECT COUNT(*) as c FROM demo_chat_messages`)][0];
+      const demoChatCount = Number(demoChatCountRow?.c ?? 0);
+      const listenTogetherDeadline = this.getListenTogetherTrackDeadline(now);
+      const hasWork =
+        participantCount > 0
+        || pendingCount > 0
+        || demoChatCount > 0
+        || typeof listenTogetherDeadline === "number";
+
+      if (!hasWork) {
+        if (currentAlarm !== null) {
+          return this.ctx.storage.deleteAlarm();
+        }
+        return;
+      }
+
+      const nextAlarm = this.getNextAlarmTime(now);
+      if (currentAlarm === null || currentAlarm !== nextAlarm) {
         return this.ctx.storage.setAlarm(nextAlarm);
       }
     }).catch(() => { });
   }
 
   // ── Helpers ────────────────────────────────────────────────────────────
+
+  private getActiveParticipantCount() {
+    const row = [...this.sql.exec(`
+      SELECT COUNT(*) as c
+      FROM participants
+      WHERE id NOT IN (SELECT participant_id FROM pending_reconnects)
+    `)][0];
+    return Number(row?.c ?? 0);
+  }
+
+  private loadListenTogetherState(): ListenTogetherPersistentState {
+    const row = [...this.sql.exec(
+      `SELECT room_slug, revision, paused, current_entry_id, anchor_position_ms, anchor_updated_at, last_updated_at
+       FROM listen_together_state
+       WHERE id = 1`
+    )][0];
+
+    if (!row) {
+      const initial = createListenTogetherState(this.roomSlug || "");
+      this.saveListenTogetherState(initial);
+      return initial;
+    }
+
+    return {
+      roomSlug: this.roomSlug || String(row.room_slug ?? ""),
+      revision: Number(row.revision ?? 0),
+      paused: Number(row.paused ?? 1) === 1,
+      currentEntryId: typeof row.current_entry_id === "string" ? row.current_entry_id : null,
+      anchorPositionMs: Number(row.anchor_position_ms ?? 0),
+      anchorUpdatedAt:
+        typeof row.anchor_updated_at === "number" || typeof row.anchor_updated_at === "string"
+          ? Number(row.anchor_updated_at)
+          : null,
+      lastUpdatedAt: Number(row.last_updated_at ?? 0),
+    };
+  }
+
+  private saveListenTogetherState(state: ListenTogetherPersistentState) {
+    this.sql.exec(
+      `INSERT INTO listen_together_state (
+         id,
+         room_slug,
+         revision,
+         paused,
+         current_entry_id,
+         anchor_position_ms,
+         anchor_updated_at,
+         last_updated_at
+       )
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET
+         room_slug = excluded.room_slug,
+         revision = excluded.revision,
+         paused = excluded.paused,
+         current_entry_id = excluded.current_entry_id,
+         anchor_position_ms = excluded.anchor_position_ms,
+         anchor_updated_at = excluded.anchor_updated_at,
+         last_updated_at = excluded.last_updated_at`,
+      1,
+      state.roomSlug,
+      state.revision,
+      state.paused ? 1 : 0,
+      state.currentEntryId,
+      state.anchorPositionMs,
+      state.anchorUpdatedAt,
+      state.lastUpdatedAt,
+    );
+  }
+
+  private loadListenTogetherQueue(): ListenTogetherQueueEntry[] {
+    const queue: ListenTogetherQueueEntry[] = [];
+    for (const row of this.sql.exec(`SELECT entry_json FROM listen_together_queue ORDER BY sort_order ASC`)) {
+      try {
+        const parsed = JSON.parse(String(row.entry_json)) as ListenTogetherQueueEntry;
+        if (parsed?.entryId) queue.push(parsed);
+      } catch {
+        // Ignore malformed persisted entries.
+      }
+    }
+    return queue;
+  }
+
+  private saveListenTogetherQueue(queue: ListenTogetherQueueEntry[]) {
+    this.sql.exec(`DELETE FROM listen_together_queue`);
+    queue.forEach((entry, index) => {
+      this.sql.exec(
+        `INSERT INTO listen_together_queue (entry_id, sort_order, entry_json, requested_at)
+         VALUES (?, ?, ?, ?)`,
+        entry.entryId,
+        index,
+        JSON.stringify(entry),
+        entry.requestedAt,
+      );
+    });
+  }
+
+  private persistListenTogetherState(state: ListenTogetherPersistentState, queue: ListenTogetherQueueEntry[]) {
+    this.saveListenTogetherState(state);
+    this.saveListenTogetherQueue(queue);
+  }
+
+  private getListenTogetherSnapshot(now = Date.now()): ListenTogetherStateSnapshot {
+    const state = this.loadListenTogetherState();
+    const effectiveState = state.roomSlug
+      ? state
+      : { ...state, roomSlug: this.roomSlug || state.roomSlug };
+    return buildListenTogetherSnapshot(effectiveState, this.loadListenTogetherQueue(), now);
+  }
+
+  private sendListenTogetherError(ws: WebSocket, roomSlug: string, code: string, message: string) {
+    const payload: ListenTogetherEvent = {
+      type: "listen_together.error",
+      room_slug: roomSlug,
+      code,
+      message,
+    };
+    this.sendTo(ws, { op: Op.VoiceAppEvent, d: payload });
+  }
+
+  private sendListenTogetherSnapshot(ws: WebSocket, snapshot?: ListenTogetherStateSnapshot) {
+    const effectiveSnapshot = snapshot ?? this.getListenTogetherSnapshot();
+    const payload: ListenTogetherEvent = {
+      type: "listen_together.snapshot",
+      room_slug: effectiveSnapshot.roomSlug,
+      snapshot: effectiveSnapshot,
+    };
+    this.sendTo(ws, { op: Op.VoiceAppEvent, d: payload });
+  }
+
+  private broadcastListenTogetherUpdates(
+    snapshot: ListenTogetherStateSnapshot,
+    queueChanged: boolean,
+    playbackChanged: boolean,
+  ) {
+    this.broadcast({
+      op: Op.VoiceAppEvent,
+      d: {
+        type: "listen_together.snapshot",
+        room_slug: snapshot.roomSlug,
+        snapshot,
+      } satisfies ListenTogetherEvent,
+    });
+
+    if (queueChanged) {
+      this.broadcast({
+        op: Op.VoiceAppEvent,
+        d: {
+          type: "listen_together.queue.updated",
+          room_slug: snapshot.roomSlug,
+          snapshot,
+        } satisfies ListenTogetherEvent,
+      });
+    }
+
+    if (playbackChanged) {
+      this.broadcast({
+        op: Op.VoiceAppEvent,
+        d: {
+          type: "listen_together.playback.updated",
+          room_slug: snapshot.roomSlug,
+          snapshot,
+        } satisfies ListenTogetherEvent,
+      });
+    }
+  }
+
+  private getListenTogetherTrackDeadline(now = Date.now()) {
+    if (this.getActiveParticipantCount() <= 0) return null;
+    const snapshot = this.getListenTogetherSnapshot(now);
+    if (!snapshot.currentEntry || snapshot.paused || typeof snapshot.durationMs !== "number") {
+      return null;
+    }
+    return now + Math.max(0, snapshot.durationMs - snapshot.positionMs);
+  }
+
+  private maybeFreezeListenTogetherForEmptyRoom(now = Date.now()) {
+    if (this.getActiveParticipantCount() > 0) return;
+    const state = this.loadListenTogetherState();
+    const queue = this.loadListenTogetherQueue();
+    const result = freezeListenTogetherPlayback(this.roomSlug || state.roomSlug, queue, state, now);
+    if (!result.playbackChanged) return;
+    this.persistListenTogetherState(result.state, result.queue);
+  }
+
+  private advanceListenTogetherIfNeeded(now = Date.now()) {
+    if (this.getActiveParticipantCount() <= 0) return;
+
+    const state = this.loadListenTogetherState();
+    const queue = this.loadListenTogetherQueue();
+    const snapshot = buildListenTogetherSnapshot(state, queue, now);
+    if (!snapshot.currentEntry || snapshot.paused || typeof snapshot.durationMs !== "number") {
+      return;
+    }
+    if (snapshot.positionMs < snapshot.durationMs) {
+      return;
+    }
+
+    const result = skipListenTogether(this.roomSlug || snapshot.roomSlug, queue, state, now);
+    this.persistListenTogetherState(result.state, result.queue);
+    this.broadcastListenTogetherUpdates(
+      buildListenTogetherSnapshot(result.state, result.queue, now),
+      result.queueChanged,
+      true,
+    );
+  }
+
+  private sanitizeListenTogetherEnqueueEntries(entries: unknown, callerUserId: string | null): ListenTogetherEnqueueCommand["entries"] {
+    if (!Array.isArray(entries)) return [];
+    const allowedProviders = new Set(["youtube", "youtube_music", "spotify"]);
+
+    return entries
+      .map((entry) => {
+        if (!entry || typeof entry !== "object") return null;
+        const payload = entry as Record<string, unknown>;
+        const track = payload.track as Record<string, unknown> | undefined;
+        const requester = payload.requester as Record<string, unknown> | undefined;
+        const provider =
+          typeof track?.provider === "string" && allowedProviders.has(track.provider)
+            ? track.provider
+            : null;
+        const videoId =
+          typeof track?.videoId === "string" && isValidListenTogetherVideoId(track.videoId)
+            ? track.videoId
+            : null;
+        const title = typeof track?.title === "string" ? track.title.trim().slice(0, 160) : "";
+        const durationMs = Number(track?.durationMs ?? 0);
+        if (!provider || !videoId || !title || !Number.isFinite(durationMs) || durationMs <= 0) {
+          return null;
+        }
+
+        return {
+          track: {
+            id: typeof track?.id === "string" ? track.id.slice(0, 160) : `${provider}:${videoId}`,
+            provider,
+            videoId,
+            title,
+            artist: typeof track?.artist === "string" ? track.artist.trim().slice(0, 120) : null,
+            album: typeof track?.album === "string" ? track.album.trim().slice(0, 120) : null,
+            durationMs: Math.max(1, Math.floor(durationMs)),
+            artworkUrl: typeof track?.artworkUrl === "string" ? track.artworkUrl.slice(0, 2048) : null,
+            canonicalUrl: typeof track?.canonicalUrl === "string" ? track.canonicalUrl.slice(0, 2048) : `https://www.youtube.com/watch?v=${videoId}`,
+            sourceUrl: typeof track?.sourceUrl === "string" ? track.sourceUrl.slice(0, 2048) : null,
+            sourceLabel: typeof track?.sourceLabel === "string" ? track.sourceLabel.trim().slice(0, 48) : "YouTube",
+          },
+          requester: {
+            userId: callerUserId || (typeof requester?.userId === "string" ? requester.userId.slice(0, 160) : "guest"),
+            displayName: typeof requester?.displayName === "string" ? requester.displayName.trim().slice(0, 80) : "Guest",
+            avatarUrl: typeof requester?.avatarUrl === "string" ? requester.avatarUrl.slice(0, 2048) : null,
+            avatarDisplay: typeof requester?.avatarDisplay === "string" ? requester.avatarDisplay.slice(0, 64) : null,
+          },
+          importBatchId: typeof payload.importBatchId === "string" ? payload.importBatchId.slice(0, 120) : null,
+          importBatchLabel: typeof payload.importBatchLabel === "string" ? payload.importBatchLabel.slice(0, 120) : null,
+        };
+      })
+      .filter((entry): entry is ListenTogetherEnqueueCommand["entries"][number] => !!entry);
+  }
+
+  private handleListenTogetherCommand(ws: WebSocket, d: ListenTogetherCommand, callerUserId: string | null) {
+    const roomSlug = typeof d.room_slug === "string" && d.room_slug.trim()
+      ? d.room_slug.trim()
+      : this.roomSlug;
+
+    if (!roomSlug || (this.roomSlug && roomSlug !== this.roomSlug)) {
+      this.sendListenTogetherError(ws, roomSlug || this.roomSlug, "ROOM_MISMATCH", "Voice room mismatch");
+      return;
+    }
+
+    if (d.type === "listen_together.state.request") {
+      this.sendListenTogetherSnapshot(ws);
+      return;
+    }
+
+    const state = this.loadListenTogetherState();
+    const queue = this.loadListenTogetherQueue();
+    const effectiveRoomSlug = this.roomSlug || roomSlug || state.roomSlug;
+    const now = Date.now();
+    let result:
+      | ReturnType<typeof enqueueListenTogetherEntries>
+      | ReturnType<typeof playListenTogether>
+      | ReturnType<typeof pauseListenTogether>
+      | ReturnType<typeof seekListenTogether>
+      | ReturnType<typeof skipListenTogether>
+      | ReturnType<typeof removeListenTogetherEntry>
+      | ReturnType<typeof clearListenTogether>
+      | null = null;
+
+    switch (d.type) {
+      case "listen_together.enqueue": {
+        const mode = d.mode === "play-next" ? "play-next" : "append";
+        const entries = this.sanitizeListenTogetherEnqueueEntries(d.entries, callerUserId);
+        if (entries.length === 0) {
+          this.sendListenTogetherError(ws, effectiveRoomSlug, "EMPTY_QUEUE", "Nothing valid to queue");
+          return;
+        }
+        result = enqueueListenTogetherEntries(effectiveRoomSlug, queue, state, entries, mode, now);
+        break;
+      }
+      case "listen_together.play":
+        result = playListenTogether(effectiveRoomSlug, queue, state, d.entryId, now);
+        break;
+      case "listen_together.pause":
+        if (typeof d.paused !== "boolean") {
+          this.sendListenTogetherError(ws, effectiveRoomSlug, "INVALID_PAUSE", "Pause state is invalid");
+          return;
+        }
+        result = pauseListenTogether(effectiveRoomSlug, queue, state, d.paused, now);
+        break;
+      case "listen_together.seek":
+        if (typeof d.positionMs !== "number" || !Number.isFinite(d.positionMs)) {
+          this.sendListenTogetherError(ws, effectiveRoomSlug, "INVALID_SEEK", "Seek position is invalid");
+          return;
+        }
+        result = seekListenTogether(effectiveRoomSlug, queue, state, d.positionMs, now);
+        break;
+      case "listen_together.skip":
+        result = skipListenTogether(effectiveRoomSlug, queue, state, now);
+        break;
+      case "listen_together.remove":
+        if (typeof d.entryId !== "string" || !d.entryId.trim()) {
+          this.sendListenTogetherError(ws, effectiveRoomSlug, "INVALID_REMOVE", "Queue entry is invalid");
+          return;
+        }
+        result = removeListenTogetherEntry(effectiveRoomSlug, queue, state, d.entryId.trim(), now);
+        break;
+      case "listen_together.clear":
+        result = clearListenTogether(effectiveRoomSlug, state, now);
+        break;
+    }
+
+    if (!result) return;
+
+    this.persistListenTogetherState(result.state, result.queue);
+    const snapshot = buildListenTogetherSnapshot(result.state, result.queue, now);
+    this.broadcastListenTogetherUpdates(snapshot, result.queueChanged, result.playbackChanged);
+    this.scheduleAlarm();
+  }
 
   private getWsByParticipant(participantId: string): WebSocket | undefined {
     const rows = [...this.sql.exec("SELECT connection_id FROM participants WHERE id = ?", participantId)];
@@ -1334,6 +1730,11 @@ export class VoiceRoom extends DurableObject<Env> {
     const type = typeof d.type === "string" ? d.type : "";
     const callerUserId = this.getUserIdForParticipant(pid);
 
+    if (type.startsWith("listen_together.")) {
+      this.handleListenTogetherCommand(ws, d as ListenTogetherCommand, callerUserId);
+      return;
+    }
+
     if (type === "demo.chat.send") {
       this.handleDemoChatSend(ws, pid, d);
       return;
@@ -1856,7 +2257,6 @@ export class VoiceRoom extends DurableObject<Env> {
         "INSERT INTO pending_reconnects (participant_id, disconnected_at) VALUES (?, ?) ON CONFLICT(participant_id) DO UPDATE SET disconnected_at = excluded.disconnected_at",
         participantId, now
       );
-      this.scheduleAlarm();
     } else {
       // Client intended to leave forever, or we are pruning them.
       // Clean up SFU resources and SQLite data completely.
@@ -1876,6 +2276,9 @@ export class VoiceRoom extends DurableObject<Env> {
         this.broadcastStreamWatcherSnapshot();
       }
     }
+
+    this.maybeFreezeListenTogetherForEmptyRoom();
+    this.scheduleAlarm();
 
     if (ws) {
       try { ws.close(1000, "Left voice"); } catch { /* already closed */ }
@@ -1899,6 +2302,9 @@ export class VoiceRoom extends DurableObject<Env> {
     if (didChangeStreamWatchers) {
       this.broadcastStreamWatcherSnapshot();
     }
+
+    this.maybeFreezeListenTogetherForEmptyRoom();
+    this.scheduleAlarm();
   }
 
   private async cleanupSfuSessionsByParticipantId(participantId: string) {
