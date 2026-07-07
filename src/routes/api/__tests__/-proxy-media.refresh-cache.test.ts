@@ -6,8 +6,8 @@ const hoisted = vi.hoisted(() => ({
   cacheSetMock: vi.fn(),
   extractAndProcessEmbedsMock: vi.fn(),
   fetchInstagramOEmbedMetadataMock: vi.fn(),
-  fetchInstagramVideoMetadataMock: vi.fn(),
   fetchTikTokProxyMetadataMock: vi.fn(),
+  resolveInstagramVideoMetadataMock: vi.fn(),
 }));
 
 vi.mock("@/lib/cache", () => ({
@@ -18,8 +18,11 @@ vi.mock("@/lib/cache", () => ({
 
 vi.mock("@/lib/share-preview-proxy", () => ({
   fetchInstagramOEmbedMetadata: hoisted.fetchInstagramOEmbedMetadataMock,
-  fetchInstagramVideoMetadata: hoisted.fetchInstagramVideoMetadataMock,
   fetchTikTokProxyMetadata: hoisted.fetchTikTokProxyMetadataMock,
+}));
+
+vi.mock("@/lib/instagram-video-resolver", () => ({
+  resolveInstagramVideoMetadata: hoisted.resolveInstagramVideoMetadataMock,
 }));
 
 vi.mock("@/services/embed-fetcher", () => ({
@@ -41,8 +44,8 @@ afterEach(() => {
   hoisted.cacheSetMock.mockReset();
   hoisted.extractAndProcessEmbedsMock.mockReset();
   hoisted.fetchInstagramOEmbedMetadataMock.mockReset();
-  hoisted.fetchInstagramVideoMetadataMock.mockReset();
   hoisted.fetchTikTokProxyMetadataMock.mockReset();
+  hoisted.resolveInstagramVideoMetadataMock.mockReset();
 });
 
 describe("proxy media stale TikTok cache handling", () => {
@@ -84,5 +87,84 @@ describe("proxy media stale TikTok cache handling", () => {
     expect(upstreamFetchMock).toHaveBeenCalledTimes(1);
     expect(hoisted.fetchTikTokProxyMetadataMock).toHaveBeenCalledTimes(3);
     expect(hoisted.cacheSetMock).not.toHaveBeenCalled();
+  });
+
+  it("bypasses the Instagram refresh cache after a stale asset returns 403", async () => {
+    const sourceUrl = "https://www.instagram.com/p/DZ9DK2RgNSk/?igsh=MXV1bnhwem9iMmY4bA==";
+    const staleImageUrl = "https://scontent-ord5-1.cdninstagram.com/v/t51.82787-15/730789341_17944127202213277_6913518894253597983_n.jpg?stp=dst-jpg_e35_s640x640_sh2.08_tt6&_nc_ht=scontent-ord5-1.cdninstagram.com&_nc_cat=101&_nc_sid=57e406&oh=00_AQDx9LC9h7uYQ1UdVfD1icczKSVXjx0ucuMouw-IJveBpg&oe=6A4A071B";
+    const freshImageUrl = "https://scontent-ord5-2.cdninstagram.com/v/t51.82787-15/730789341_17944127202213277_6913518894253597983_n.jpg?stp=c363.0.1090.1090a_dst-jpg_e35_s640x640_tt6&_nc_cat=104&_nc_sid=18de74&_nc_ht=scontent-ord5-2.cdninstagram.com&oh=00_AQB23V7tkXoY_q_85WBrDyANhyZ2u_z2X-T52tBIe0_teQ&oe=6A53095B";
+
+    hoisted.cacheFetchMock.mockImplementation(async (_key: string, _ttl: number, fetcher: () => Promise<unknown>) => fetcher());
+    hoisted.fetchInstagramOEmbedMetadataMock.mockResolvedValue(null);
+    hoisted.resolveInstagramVideoMetadataMock.mockImplementation(async (_url: string, options?: { bypassCache?: boolean }) => {
+      if (!options?.bypassCache) {
+        return {
+          videoUrl: null,
+          thumbnailUrl: staleImageUrl,
+          title: "rukia!",
+          durationSeconds: null,
+          media: [{
+            type: "image",
+            url: staleImageUrl,
+          }],
+        };
+      }
+
+      return {
+        videoUrl: null,
+        thumbnailUrl: freshImageUrl,
+        title: "rukia!",
+        durationSeconds: null,
+        media: [{
+          type: "image",
+          url: freshImageUrl,
+        }],
+      };
+    });
+
+    const upstreamFetchMock = vi.fn(async (input: string | URL | Request) => {
+      const url = input.toString();
+      if (url === staleImageUrl) {
+        return new Response("expired", {
+          status: 403,
+          headers: {
+            "Content-Type": "text/html; charset=utf-8",
+          },
+        });
+      }
+      if (url === freshImageUrl) {
+        return new Response("fresh-image", {
+          status: 200,
+          headers: {
+            "Content-Type": "image/jpeg",
+            "Content-Length": "11",
+          },
+        });
+      }
+
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+
+    vi.stubGlobal("fetch", upstreamFetchMock as unknown as typeof fetch);
+
+    const response = await proxyMedia(
+      new Request(`https://meet.test/api/proxy-media?url=${encodeURIComponent(staleImageUrl)}&sourceUrl=${encodeURIComponent(sourceUrl)}`),
+      true,
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("Content-Type")).toBe("image/jpeg");
+    expect(upstreamFetchMock).toHaveBeenCalledTimes(2);
+    expect(hoisted.resolveInstagramVideoMetadataMock).toHaveBeenCalledTimes(2);
+    expect(hoisted.resolveInstagramVideoMetadataMock).toHaveBeenNthCalledWith(
+      1,
+      "https://www.instagram.com/p/DZ9DK2RgNSk/",
+      { bypassCache: undefined },
+    );
+    expect(hoisted.resolveInstagramVideoMetadataMock).toHaveBeenNthCalledWith(
+      2,
+      "https://www.instagram.com/p/DZ9DK2RgNSk/",
+      { bypassCache: true },
+    );
   });
 });

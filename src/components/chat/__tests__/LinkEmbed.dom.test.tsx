@@ -787,7 +787,7 @@ describe("LinkEmbed DOM rendering", () => {
     const video = await waitFor(() => {
       const element = container.querySelector("video.rm-custom-video") as HTMLVideoElement | null;
       expect(element).not.toBeNull();
-      return element;
+      return element as HTMLVideoElement;
     });
 
     fireEvent.error(video);

@@ -287,6 +287,264 @@ describe("hydrateInstagramEmbedsForShare", () => {
     });
   });
 
+  it("falls back to the Instagram shortcode endpoint when oEmbed returns null", async () => {
+    workerEnv.INSTAGRAM_SESSIONID = "sessionid";
+    workerEnv.INSTAGRAM_CSRFTOKEN = "csrftoken";
+
+    vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => {
+      const url = input.toString();
+      if (url.startsWith("https://www.instagram.com/api/v1/oembed/")) {
+        return new Response("not found", {
+          status: 404,
+          headers: {
+            "Content-Type": "text/html; charset=utf-8",
+          },
+        });
+      }
+      if (url.startsWith("https://i.instagram.com/api/v1/media/shortcode/DXU4PV2AGJU/info/")) {
+        return Response.json({
+          items: [{
+            video_versions: [
+              { url: "https://scontent-ord5-1.cdninstagram.com/video.mp4?sig=2", width: 720, height: 1280 },
+            ],
+            image_versions2: {
+              candidates: [
+                { url: "https://scontent-ord5-1.cdninstagram.com/thumb-2.jpg" },
+              ],
+            },
+            caption: { text: "craziest work again" },
+            video_duration: 64.2,
+          }],
+        });
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    }));
+
+    const hydrated = await hydrateInstagramEmbedsForShare(makeShare());
+
+    expect(hydrated.snapshot.embeds[0].video).toEqual({
+      url: "https://scontent-ord5-1.cdninstagram.com/video.mp4?sig=2",
+      width: 720,
+      height: 1280,
+      kind: "direct",
+      contentType: "video/mp4",
+      durationSeconds: 64.2,
+    });
+    expect(hydrated.snapshot.embeds[0].thumbnail).toEqual({
+      url: "https://scontent-ord5-1.cdninstagram.com/thumb.jpg",
+      width: 640,
+      height: 1137,
+    });
+  });
+
+  it("falls back to the public Instagram page metadata when API endpoints return 404", async () => {
+    workerEnv.INSTAGRAM_SESSIONID = "sessionid";
+    workerEnv.INSTAGRAM_CSRFTOKEN = "csrftoken";
+
+    vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => {
+      const url = input.toString();
+      if (url.startsWith("https://www.instagram.com/api/v1/oembed/")) {
+        return new Response("No Media Match", {
+          status: 404,
+          headers: {
+            "Content-Type": "text/html; charset=utf-8",
+          },
+        });
+      }
+      if (url.startsWith("https://i.instagram.com/api/v1/media/shortcode/DZ9DK2RgNSk/info/")) {
+        return new Response("not found", {
+          status: 404,
+          headers: {
+            "Content-Type": "text/html; charset=utf-8",
+          },
+        });
+      }
+      if (url.startsWith("https://www.instagram.com/api/v1/media/shortcode/DZ9DK2RgNSk/info/")) {
+        return new Response("not found", {
+          status: 404,
+          headers: {
+            "Content-Type": "text/html; charset=utf-8",
+          },
+        });
+      }
+      if (url === "https://www.instagram.com/p/DZ9DK2RgNSk/") {
+        return new Response(`
+          <html>
+            <head>
+              <meta property="og:title" content="tas on Instagram: &quot;rukia!&quot;" />
+              <meta property="og:description" content="1,073 likes, 15 comments - tasyiu on June 23, 2026: &quot;rukia!&quot;. " />
+              <meta property="og:image" content="https://scontent-ord5-2.cdninstagram.com/fresh-image.jpg?oe=6A53095B&amp;_nc_ht=scontent-ord5-2.cdninstagram.com" />
+            </head>
+          </html>
+        `, {
+          status: 200,
+          headers: {
+            "Content-Type": "text/html; charset=utf-8",
+          },
+        });
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    }));
+
+    const share = makeShare();
+    share.snapshot.content = "https://www.instagram.com/p/DZ9DK2RgNSk/?igsh=MXV1bnhwem9iMmY4bA==";
+    share.snapshot.embeds[0] = {
+      ...share.snapshot.embeds[0],
+      url: "https://www.instagram.com/p/DZ9DK2RgNSk/?igsh=MXV1bnhwem9iMmY4bA==",
+      rawTitle: undefined,
+      thumbnail: undefined,
+      media: undefined,
+      video: undefined,
+      author: undefined,
+      metrics: undefined,
+      timestamp: undefined,
+      audio: undefined,
+    };
+
+    const hydrated = await hydrateInstagramEmbedsForShare(share);
+
+    expect(hydrated.snapshot.embeds[0].rawTitle).toBe("rukia!");
+    expect(hydrated.snapshot.embeds[0].thumbnail).toEqual({
+      url: "https://scontent-ord5-2.cdninstagram.com/fresh-image.jpg?oe=6A53095B&_nc_ht=scontent-ord5-2.cdninstagram.com",
+      width: undefined,
+      height: undefined,
+    });
+    expect(hydrated.snapshot.embeds[0].media).toEqual([
+      {
+        type: "image",
+        url: "https://scontent-ord5-2.cdninstagram.com/fresh-image.jpg?oe=6A53095B&_nc_ht=scontent-ord5-2.cdninstagram.com",
+        altText: "rukia!",
+      },
+    ]);
+    expect(hydrated.snapshot.embeds[0].metrics).toEqual({
+      comments: 15,
+      likes: 1073,
+      views: undefined,
+    });
+  });
+
+  it("uses the shared entity id from the public Instagram page to recover slideshow media", async () => {
+    workerEnv.INSTAGRAM_SESSIONID = "sessionid";
+    workerEnv.INSTAGRAM_CSRFTOKEN = "csrftoken";
+
+    vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => {
+      const url = input.toString();
+      if (url.startsWith("https://www.instagram.com/api/v1/oembed/")) {
+        return new Response("No Media Match", {
+          status: 404,
+          headers: {
+            "Content-Type": "text/html; charset=utf-8",
+          },
+        });
+      }
+      if (url.startsWith("https://i.instagram.com/api/v1/media/shortcode/DZ9DK2RgNSk/info/")) {
+        return new Response("not found", {
+          status: 404,
+          headers: {
+            "Content-Type": "text/html; charset=utf-8",
+          },
+        });
+      }
+      if (url.startsWith("https://www.instagram.com/api/v1/media/shortcode/DZ9DK2RgNSk/info/")) {
+        return new Response("not found", {
+          status: 404,
+          headers: {
+            "Content-Type": "text/html; charset=utf-8",
+          },
+        });
+      }
+      if (url.startsWith("https://i.instagram.com/api/v1/media/3926308389746955428/info/")) {
+        return Response.json({
+          items: [{
+            caption: { text: "rukia!" },
+            like_count: 1073,
+            comment_count: 15,
+            taken_at: 1782272402,
+            carousel_media: [
+              {
+                image_versions2: {
+                  candidates: [
+                    { url: "https://scontent-ord5-2.cdninstagram.com/slide-1.jpg?oe=6A53095B", width: 2728, height: 1817 },
+                    { url: "https://scontent-ord5-2.cdninstagram.com/slide-1-small.jpg?oe=6A53095B", width: 750, height: 500 },
+                  ],
+                },
+              },
+              {
+                image_versions2: {
+                  candidates: [
+                    { url: "https://scontent-ord5-1.cdninstagram.com/slide-2.jpg?oe=6A532925", width: 2727, height: 1816 },
+                    { url: "https://scontent-ord5-1.cdninstagram.com/slide-2-small.jpg?oe=6A532925", width: 750, height: 499 },
+                  ],
+                },
+              },
+            ],
+          }],
+        });
+      }
+      if (url === "https://www.instagram.com/p/DZ9DK2RgNSk/") {
+        return new Response(`
+          <html>
+            <head>
+              <meta property="og:title" content="tas on Instagram: &quot;rukia!&quot;" />
+              <meta property="og:description" content="1,073 likes, 15 comments - tasyiu on June 23, 2026: &quot;rukia!&quot;. " />
+              <meta property="og:image" content="https://scontent-ord5-2.cdninstagram.com/slide-1.jpg?oe=6A53095B" />
+              <script type="application/json">{"shared_entity_id":"3926308389746955428"}</script>
+            </head>
+          </html>
+        `, {
+          status: 200,
+          headers: {
+            "Content-Type": "text/html; charset=utf-8",
+          },
+        });
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    }));
+
+    const share = makeShare();
+    share.snapshot.content = "https://www.instagram.com/p/DZ9DK2RgNSk/?igsh=MXV1bnhwem9iMmY4bA==";
+    share.snapshot.embeds[0] = {
+      ...share.snapshot.embeds[0],
+      url: "https://www.instagram.com/p/DZ9DK2RgNSk/?igsh=MXV1bnhwem9iMmY4bA==",
+      rawTitle: undefined,
+      thumbnail: undefined,
+      media: undefined,
+      video: undefined,
+      author: undefined,
+      metrics: undefined,
+      timestamp: undefined,
+      audio: undefined,
+    };
+
+    const hydrated = await hydrateInstagramEmbedsForShare(share);
+
+    expect(hydrated.snapshot.embeds[0].rawTitle).toBe("rukia!");
+    expect(hydrated.snapshot.embeds[0].thumbnail).toEqual({
+      url: "https://scontent-ord5-2.cdninstagram.com/slide-1.jpg?oe=6A53095B",
+      width: 2728,
+      height: 1817,
+    });
+    expect(hydrated.snapshot.embeds[0].media).toEqual([
+      {
+        type: "image",
+        url: "https://scontent-ord5-2.cdninstagram.com/slide-1.jpg?oe=6A53095B",
+        width: 2728,
+        height: 1817,
+      },
+      {
+        type: "image",
+        url: "https://scontent-ord5-1.cdninstagram.com/slide-2.jpg?oe=6A532925",
+        width: 2727,
+        height: 1816,
+      },
+    ]);
+    expect(hydrated.snapshot.embeds[0].metrics).toEqual({
+      comments: 15,
+      likes: 1073,
+      views: undefined,
+    });
+  });
+
   it("leaves non-Instagram embeds unchanged", async () => {
     const share = {
       ...makeShare(),

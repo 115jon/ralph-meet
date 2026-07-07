@@ -1,7 +1,7 @@
-import type { EmbedInfo } from "@/lib/types";
 import { resolveInstagramVideoMetadata } from "@/lib/instagram-video-resolver";
 import { fetchTikTokProxyMetadata } from "@/lib/share-preview-proxy";
 import type { MessageShare } from "@/services/message-share.service";
+import type { EmbedInfo } from "@/lib/types";
 
 function isInstagramEmbed(embed: EmbedInfo): boolean {
   const provider = embed.provider?.name?.toLowerCase();
@@ -46,8 +46,22 @@ function buildTikTokVideoEmbed(videoUrl: string) {
 }
 
 export async function hydrateInstagramEmbedsForShare(share: MessageShare): Promise<MessageShare> {
+  const refreshedEmbeds = await hydrateSocialEmbeds(share.snapshot.embeds);
+
+  if (refreshedEmbeds === share.snapshot.embeds) return share;
+
+  return {
+    ...share,
+    snapshot: {
+      ...share.snapshot,
+      embeds: refreshedEmbeds,
+    },
+  };
+}
+
+export async function hydrateSocialEmbeds(embeds: EmbedInfo[]): Promise<EmbedInfo[]> {
   const refreshedEmbeds = await Promise.all(
-    share.snapshot.embeds.map(async (embed) => {
+    embeds.map(async (embed) => {
       if (isInstagramEmbed(embed)) {
         const hasDirectVideo = !!embed.video?.url && embed.video.kind !== "player";
         const needsVideo = !hasDirectVideo;
@@ -301,14 +315,6 @@ export async function hydrateInstagramEmbedsForShare(share: MessageShare): Promi
     }),
   );
 
-  const changed = refreshedEmbeds.some((embed, index) => embed !== share.snapshot.embeds[index]);
-  if (!changed) return share;
-
-  return {
-    ...share,
-    snapshot: {
-      ...share.snapshot,
-      embeds: refreshedEmbeds,
-    },
-  };
+  const changed = refreshedEmbeds.some((embed, index) => embed !== embeds[index]);
+  return changed ? refreshedEmbeds : embeds;
 }

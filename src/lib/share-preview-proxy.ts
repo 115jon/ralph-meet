@@ -423,7 +423,7 @@ function getTikTokPlayerApiMedia(item: any, postType: "video" | "slideshow", cov
         width: readPositiveNumber(dimensions?.width),
         height: readPositiveNumber(dimensions?.height),
       };
-    }).filter((value): value is EmbedMedia => value !== null);
+    }).filter((value: EmbedMedia | null): value is EmbedMedia => value !== null);
 
     return media.length > 0 ? media : undefined;
   }

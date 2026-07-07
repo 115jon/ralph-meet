@@ -5,6 +5,8 @@ import { fetchInstagramOEmbedMetadata } from "@/lib/share-preview-proxy";
 import type { EmbedAudio, EmbedMedia } from "@/lib/types";
 
 const INSTAGRAM_VIDEO_TTL = 50 * 60;
+const INSTAGRAM_VIDEO_CACHE_SAFETY_WINDOW = 5 * 60;
+const INSTAGRAM_WEAK_FALLBACK_TTL = 5 * 60;
 
 export interface InstagramVideoResult {
   videoUrl: string | null;
@@ -27,7 +29,15 @@ function decodeInstagramXmlEntities(value: string): string {
     .replace(/&quot;/g, '"')
     .replace(/&#39;/g, "'")
     .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">");
+    .replace(/&gt;/g, ">")
+    .replace(/&#x([0-9a-f]+);/gi, (_, hex: string) => {
+      const codePoint = Number.parseInt(hex, 16);
+      return Number.isFinite(codePoint) ? String.fromCodePoint(codePoint) : _;
+    })
+    .replace(/&#(\d+);/g, (_, decimal: string) => {
+      const codePoint = Number.parseInt(decimal, 10);
+      return Number.isFinite(codePoint) ? String.fromCodePoint(codePoint) : _;
+    });
 }
 
 export function extractInstagramVideoUrlsFromDashManifest(manifest: string): string[] {
@@ -51,6 +61,149 @@ interface InstagramSessionSecrets {
 
 function normalizeHeaderValue(value: string): string {
   return value.replace(/[\r\n]+/g, "").trim();
+}
+
+function firstNonEmptyString(...values: Array<string | null | undefined>): string | null {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim()) {
+      return value.trim();
+    }
+  }
+
+  return null;
+}
+
+function escapeRegexLiteral(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function readInstagramMetaContent(html: string, key: string): string | null {
+  const escapedKey = escapeRegexLiteral(key);
+  const patterns = [
+    new RegExp(`<meta[^>]+property=["']${escapedKey}["'][^>]+content=["']([^"']+)["']`, "i"),
+    new RegExp(`<meta[^>]+content=["']([^"']+)["'][^>]+property=["']${escapedKey}["']`, "i"),
+    new RegExp(`<meta[^>]+name=["']${escapedKey}["'][^>]+content=["']([^"']+)["']`, "i"),
+    new RegExp(`<meta[^>]+content=["']([^"']+)["'][^>]+name=["']${escapedKey}["']`, "i"),
+  ];
+
+  for (const pattern of patterns) {
+    const match = html.match(pattern);
+    if (match?.[1]) {
+      return decodeInstagramXmlEntities(match[1]);
+    }
+  }
+
+  return null;
+}
+
+function extractInstagramCaptionFromMetaText(value: string | null | undefined): string | null {
+  if (typeof value !== "string" || !value.trim()) return null;
+
+  const decoded = decodeInstagramXmlEntities(value).trim();
+  const captionSource = decoded.includes(":")
+    ? decoded.slice(decoded.lastIndexOf(":") + 1)
+    : decoded;
+  const normalized = captionSource
+    .trim()
+    .replace(/^["'“”]+/, "")
+    .replace(/["'“”]+\.?\s*$/, "")
+    .trim();
+
+  return normalized || null;
+}
+
+function parseInstagramMetricCount(value: string | null | undefined): number | null {
+  if (typeof value !== "string" || !value.trim()) return null;
+
+  const normalized = value.replace(/,/g, "").trim();
+  const compactMatch = normalized.match(/^(\d+(?:\.\d+)?)\s*([kmb])$/i);
+  if (compactMatch) {
+    const amount = Number(compactMatch[1]);
+    const suffix = compactMatch[2]?.toLowerCase();
+    if (!Number.isFinite(amount) || !suffix) return null;
+
+    const multiplier = suffix === "k" ? 1_000 : suffix === "m" ? 1_000_000 : 1_000_000_000;
+    return Math.round(amount * multiplier);
+  }
+
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+}
+
+function extractInstagramMetricsFromDescription(description: string | null | undefined): {
+  likeCount: number | null;
+  commentCount: number | null;
+  timestamp: string | null;
+} {
+  if (typeof description !== "string" || !description.trim()) {
+    return {
+      likeCount: null,
+      commentCount: null,
+      timestamp: null,
+    };
+  }
+
+  const decoded = decodeInstagramXmlEntities(description).trim();
+  const metricMatch = decoded.match(/^([\d.,kmb]+)\s+likes?,\s+([\d.,kmb]+)\s+comments?\s+-\s+.+?\s+on\s+([^:]+):/i);
+
+  return {
+    likeCount: parseInstagramMetricCount(metricMatch?.[1] ?? null),
+    commentCount: parseInstagramMetricCount(metricMatch?.[2] ?? null),
+    timestamp: toIsoTimestamp(metricMatch?.[3] ?? null),
+  };
+}
+
+function extractInstagramSharedEntityId(html: string): string | null {
+  return html.match(/(?:\\"|")shared_entity_id(?:\\"|"):(?:\\"|")(\d+)(?:\\"|")/)?.[1] ?? null;
+}
+
+function readInstagramUrlExpiryEpochSeconds(rawUrl: string | null | undefined): number | null {
+  if (typeof rawUrl !== "string" || !rawUrl.trim()) return null;
+
+  try {
+    const parsed = new URL(rawUrl);
+    const xExpires = parsed.searchParams.get("x-expires");
+    if (xExpires) {
+      const epoch = Number(xExpires);
+      if (Number.isFinite(epoch) && epoch > 0) {
+        return epoch;
+      }
+    }
+
+    const oe = parsed.searchParams.get("oe");
+    if (oe && /^[0-9a-f]+$/i.test(oe)) {
+      const epoch = Number.parseInt(oe, 16);
+      if (Number.isFinite(epoch) && epoch > 0) {
+        return epoch;
+      }
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
+}
+
+function getInstagramMetadataCacheTtl(result: InstagramVideoResult): number {
+  const expiries = [
+    result.videoUrl,
+    result.thumbnailUrl,
+    result.authorAvatarUrl,
+    result.audio?.url ?? null,
+    result.audio?.artworkUrl ?? null,
+    ...(result.media ?? []).flatMap((item) => [item.url, item.thumbnailUrl ?? null]),
+  ].flatMap((candidate) => {
+    const expiry = readInstagramUrlExpiryEpochSeconds(candidate);
+    return expiry === null ? [] : [expiry];
+  });
+
+  if (expiries.length === 0) {
+    return INSTAGRAM_VIDEO_TTL;
+  }
+
+  const earliestExpiry = Math.min(...expiries);
+  const secondsUntilRefresh = earliestExpiry - Math.floor(Date.now() / 1000) - INSTAGRAM_VIDEO_CACHE_SAFETY_WINDOW;
+  return Math.max(60, Math.min(INSTAGRAM_VIDEO_TTL, secondsUntilRefresh));
 }
 
 export function canonicalizeInstagramUrl(rawUrl: string): string | null {
@@ -265,7 +418,7 @@ function collectInstagramMedia(item: any): EmbedMedia[] {
   return media;
 }
 
-function hasResolvedInstagramMetadata(result: InstagramVideoResult | null | undefined): boolean {
+function hasResolvedInstagramMetadata(result: InstagramVideoResult | null | undefined): result is InstagramVideoResult {
   if (!result) return false;
 
   return Boolean(
@@ -281,6 +434,24 @@ function hasResolvedInstagramMetadata(result: InstagramVideoResult | null | unde
     || result.timestamp
     || result.audio,
   );
+}
+
+function isInstagramWeakFallbackResult(result: InstagramVideoResult | null | undefined): boolean {
+  if (!hasResolvedInstagramMetadata(result)) {
+    return false;
+  }
+
+  const media = result.media ?? [];
+  const hasVideoMedia = Boolean(result.videoUrl) || media.some((entry) => entry.type === "video");
+  const hasMultipleMediaItems = media.length > 1;
+  const hasSessionDerivedMetadata = Boolean(
+    result.authorAvatarUrl
+    || result.authorVerified !== null && result.authorVerified !== undefined
+    || result.audio
+    || result.viewCount !== null && result.viewCount !== undefined,
+  );
+
+  return !hasVideoMedia && !hasMultipleMediaItems && !hasSessionDerivedMetadata;
 }
 
 export function parseInstagramGraphqlPayload(payload: any): InstagramVideoResult {
@@ -381,39 +552,27 @@ async function fetchInstagramMediaInfoPayload(
   throw new Error("Instagram media info could not be resolved");
 }
 
-async function fetchInstagramMedia(canonicalUrl: string): Promise<InstagramVideoResult> {
-  const secrets = getInstagramSessionSecrets();
-  if (!secrets) {
-    throw new Error("Instagram session secrets are not configured");
-  }
-
-  const oembed = await fetchInstagramOEmbedMetadata(canonicalUrl);
-  const mediaPk = normalizeInstagramMediaPk(oembed.mediaId);
-  const shortcode = extractInstagramShortcode(canonicalUrl);
-
-  if (!mediaPk && !shortcode) {
-    throw new Error("Instagram oEmbed did not return a media id");
-  }
-
-  const iPhonePayload = await fetchInstagramMediaInfoPayload(canonicalUrl, secrets, {
-    mediaPk,
-    shortcode,
-  });
-  const item = Array.isArray(iPhonePayload?.items) ? iPhonePayload.items[0] : null;
+function buildInstagramResultFromMediaItem(
+  item: any,
+  oembed?: {
+    title?: string | null;
+    thumbnailUrl?: string | null;
+  },
+): InstagramVideoResult {
   const media = collectInstagramMedia(item);
   const primaryVideo = media.find((entry) => entry.type === "video");
   const primaryImage = media.find((entry) => entry.type === "image");
   const fallbackImage = getLargestImageCandidate(item?.image_versions2?.candidates ?? []);
   const caption = typeof item?.caption?.text === "string" && item.caption.text.trim()
     ? item.caption.text
-    : (oembed.title ?? null);
+    : (oembed?.title ?? null);
   const durationSeconds = typeof item?.video_duration === "number"
     ? item.video_duration
     : (primaryVideo?.durationSeconds ?? null);
 
   return {
     videoUrl: primaryVideo?.url ?? null,
-    thumbnailUrl: primaryVideo?.thumbnailUrl ?? primaryImage?.url ?? fallbackImage?.url ?? oembed.thumbnailUrl ?? null,
+    thumbnailUrl: primaryVideo?.thumbnailUrl ?? primaryImage?.url ?? fallbackImage?.url ?? oembed?.thumbnailUrl ?? null,
     title: caption,
     durationSeconds,
     media: media.length > 0 ? media : undefined,
@@ -431,19 +590,223 @@ async function fetchInstagramMedia(canonicalUrl: string): Promise<InstagramVideo
   };
 }
 
-export async function resolveInstagramVideoMetadata(rawUrl: string): Promise<InstagramVideoResult | null> {
+async function fetchInstagramPublicPageSharedEntityId(canonicalUrl: string): Promise<string | null> {
+  const response = await fetch(canonicalUrl, {
+    headers: {
+      "Accept": "text/html,application/xhtml+xml",
+      "Accept-Language": "en-US,en;q=0.8",
+      "User-Agent": "Mozilla/5.0 (compatible; RalphMeetBot/1.0; +https://meet.115jon.site)",
+    },
+  });
+
+  if (!response.ok || !response.headers.get("content-type")?.includes("html")) {
+    return null;
+  }
+
+  return extractInstagramSharedEntityId(await response.text());
+}
+
+async function fetchInstagramSharedEntityMetadata(
+  canonicalUrl: string,
+  secrets: InstagramSessionSecrets,
+  oembed?: {
+    title?: string | null;
+    thumbnailUrl?: string | null;
+  },
+): Promise<InstagramVideoResult | null> {
+  const sharedEntityId = await fetchInstagramPublicPageSharedEntityId(canonicalUrl);
+  if (!sharedEntityId) return null;
+
+  try {
+    const payload = await fetchInstagramMediaInfoPayload(canonicalUrl, secrets, {
+      mediaPk: sharedEntityId,
+      shortcode: null,
+    });
+    const item = Array.isArray(payload?.items) ? payload.items[0] : null;
+    if (!item || typeof item !== "object") return null;
+
+    return buildInstagramResultFromMediaItem(item, oembed);
+  } catch {
+    return null;
+  }
+}
+
+async function fetchInstagramPublicPageMetadata(
+  canonicalUrl: string,
+  fallback?: {
+    thumbnailUrl?: string | null;
+    title?: string | null;
+  },
+): Promise<InstagramVideoResult | null> {
+  const response = await fetch(canonicalUrl, {
+    headers: {
+      "Accept": "text/html,application/xhtml+xml",
+      "Accept-Language": "en-US,en;q=0.8",
+      "User-Agent": "Mozilla/5.0 (compatible; RalphMeetBot/1.0; +https://meet.115jon.site)",
+    },
+  });
+
+  if (!response.ok || !response.headers.get("content-type")?.includes("html")) {
+    return null;
+  }
+
+  const html = await response.text();
+  const ogTitle = readInstagramMetaContent(html, "og:title");
+  const ogDescription = firstNonEmptyString(
+    readInstagramMetaContent(html, "og:description"),
+    readInstagramMetaContent(html, "description"),
+    readInstagramMetaContent(html, "twitter:description"),
+  );
+  const ogImageUrl = firstNonEmptyString(readInstagramMetaContent(html, "og:image"), fallback?.thumbnailUrl ?? null);
+  const ogVideoUrl = firstNonEmptyString(
+    readInstagramMetaContent(html, "og:video:secure_url"),
+    readInstagramMetaContent(html, "og:video:url"),
+    readInstagramMetaContent(html, "og:video"),
+  );
+  const title = firstNonEmptyString(
+    extractInstagramCaptionFromMetaText(ogTitle),
+    extractInstagramCaptionFromMetaText(ogDescription),
+    fallback?.title ?? null,
+  );
+  const { likeCount, commentCount, timestamp } = extractInstagramMetricsFromDescription(ogDescription);
+
+  const media: EmbedMedia[] = [];
+  if (ogVideoUrl) {
+    media.push({
+      type: "video",
+      url: ogVideoUrl,
+      thumbnailUrl: ogImageUrl ?? undefined,
+      contentType: /\.(mp4)($|\?)/i.test(ogVideoUrl) ? "video/mp4" : undefined,
+      altText: title ?? undefined,
+    });
+  } else if (ogImageUrl) {
+    media.push({
+      type: "image",
+      url: ogImageUrl,
+      altText: title ?? undefined,
+    });
+  }
+
+  if (!ogVideoUrl && !ogImageUrl && !title && likeCount === null && commentCount === null && !timestamp) {
+    return null;
+  }
+
+  return {
+    videoUrl: ogVideoUrl ?? null,
+    thumbnailUrl: ogImageUrl ?? null,
+    title,
+    durationSeconds: null,
+    media: media.length > 0 ? media : undefined,
+    authorAvatarUrl: null,
+    authorVerified: null,
+    likeCount,
+    commentCount,
+    viewCount: null,
+    timestamp,
+    audio: null,
+  };
+}
+
+async function fetchInstagramMedia(canonicalUrl: string): Promise<InstagramVideoResult> {
+  const secrets = getInstagramSessionSecrets();
+  if (!secrets) {
+    throw new Error("Instagram session secrets are not configured");
+  }
+
+  const oembed = await fetchInstagramOEmbedMetadata(canonicalUrl);
+  const mediaPk = normalizeInstagramMediaPk(oembed?.mediaId);
+  const shortcode = extractInstagramShortcode(canonicalUrl);
+  const fallbackToPublicPage = () => fetchInstagramPublicPageMetadata(canonicalUrl, {
+    thumbnailUrl: oembed?.thumbnailUrl ?? null,
+    title: oembed?.title ?? null,
+  });
+  const fallbackToSharedEntityMedia = () => fetchInstagramSharedEntityMetadata(canonicalUrl, secrets, {
+    thumbnailUrl: oembed?.thumbnailUrl ?? null,
+    title: oembed?.title ?? null,
+  });
+
+  if (!mediaPk && !shortcode) {
+    const sharedEntityFallback = await fallbackToSharedEntityMedia();
+    if (sharedEntityFallback) {
+      return sharedEntityFallback;
+    }
+
+    const publicFallback = await fallbackToPublicPage();
+    if (publicFallback) {
+      return publicFallback;
+    }
+
+    throw new Error("Instagram oEmbed did not return a media id");
+  }
+
+  let iPhonePayload: any;
+  try {
+    iPhonePayload = await fetchInstagramMediaInfoPayload(canonicalUrl, secrets, {
+      mediaPk,
+      shortcode,
+    });
+  } catch (error) {
+    const sharedEntityFallback = await fallbackToSharedEntityMedia();
+    if (sharedEntityFallback) {
+      return sharedEntityFallback;
+    }
+
+    const publicFallback = await fallbackToPublicPage();
+    if (publicFallback) {
+      return publicFallback;
+    }
+
+    throw error;
+  }
+
+  const item = Array.isArray(iPhonePayload?.items) ? iPhonePayload.items[0] : null;
+  if (!item || typeof item !== "object") {
+    const sharedEntityFallback = await fallbackToSharedEntityMedia();
+    if (sharedEntityFallback) {
+      return sharedEntityFallback;
+    }
+
+    const publicFallback = await fallbackToPublicPage();
+    if (publicFallback) {
+      return publicFallback;
+    }
+  }
+  const result = buildInstagramResultFromMediaItem(item, {
+    thumbnailUrl: oembed?.thumbnailUrl ?? null,
+    title: oembed?.title ?? null,
+  });
+
+  if (hasResolvedInstagramMetadata(result)) {
+    return result;
+  }
+
+  return (await fallbackToSharedEntityMedia()) ?? (await fallbackToPublicPage()) ?? result;
+}
+
+export async function resolveInstagramVideoMetadata(
+  rawUrl: string,
+  options?: {
+    bypassCache?: boolean;
+  },
+): Promise<InstagramVideoResult | null> {
   const canonicalUrl = canonicalizeInstagramUrl(rawUrl);
   if (!canonicalUrl) return null;
 
   const cacheKey = `instagram-video:${canonicalUrl}`;
-  const cached = await cacheGet<InstagramVideoResult>(cacheKey);
-  if (hasResolvedInstagramMetadata(cached)) {
-    return cached;
+  const hasSessionSecrets = Boolean(getInstagramSessionSecrets());
+  if (!options?.bypassCache) {
+    const cached = await cacheGet<InstagramVideoResult>(cacheKey);
+    if (hasResolvedInstagramMetadata(cached) && (!hasSessionSecrets || !isInstagramWeakFallbackResult(cached))) {
+      return cached;
+    }
   }
 
   const result = await fetchInstagramMedia(canonicalUrl);
   if (hasResolvedInstagramMetadata(result)) {
-    void cacheSet(cacheKey, result, INSTAGRAM_VIDEO_TTL);
+    const ttlSeconds = hasSessionSecrets && isInstagramWeakFallbackResult(result)
+      ? INSTAGRAM_WEAK_FALLBACK_TTL
+      : getInstagramMetadataCacheTtl(result);
+    void cacheSet(cacheKey, result, ttlSeconds);
   }
 
   return result;

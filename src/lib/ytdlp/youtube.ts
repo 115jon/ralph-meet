@@ -38,7 +38,9 @@ const WEB_SAFARI_INNERTUBE_ATTEMPT = {
       utcOffsetMinutes: 0,
     },
   },
+  clientVersion: "2.20260114.08.00",
   clientNameHeader: "1",
+  visitorData: null,
   origin: "https://www.youtube.com",
 } as const;
 
@@ -57,7 +59,9 @@ const TV_INNERTUBE_ATTEMPT = {
       utcOffsetMinutes: 0,
     },
   },
+  clientVersion: "7.20260114.12.00",
   clientNameHeader: "7",
+  visitorData: null,
   origin: "https://www.youtube.com",
 } as const;
 
@@ -80,7 +84,9 @@ const ANDROID_VR_INNERTUBE_ATTEMPT = {
       utcOffsetMinutes: 0,
     },
   },
+  clientVersion: "1.65.10",
   clientNameHeader: "28",
+  visitorData: null,
   origin: "https://www.youtube.com",
 } as const;
 
@@ -101,7 +107,9 @@ const ANDROID_INNERTUBE_ATTEMPT = {
       utcOffsetMinutes: 0,
     },
   },
+  clientVersion: "21.02.35",
   clientNameHeader: "3",
+  visitorData: null,
   origin: "https://www.youtube.com",
 } as const;
 
@@ -123,7 +131,9 @@ const IOS_INNERTUBE_ATTEMPT = {
       utcOffsetMinutes: 0,
     },
   },
+  clientVersion: "21.02.3",
   clientNameHeader: "5",
+  visitorData: null,
   origin: "https://www.youtube.com",
 } as const;
 
@@ -917,11 +927,21 @@ function describePlayabilityStatus(playerResponse: Record<string, unknown> | nul
   }
 
   const playabilityStatus = playerResponse.playabilityStatus;
+  const errorScreen = isRecord(playabilityStatus.errorScreen) ? playabilityStatus.errorScreen : null;
+  const playerErrorMessageRenderer = errorScreen && isRecord(errorScreen.playerErrorMessageRenderer)
+    ? errorScreen.playerErrorMessageRenderer
+    : null;
+  const playerErrorReason = playerErrorMessageRenderer && isRecord(playerErrorMessageRenderer.reason)
+    ? playerErrorMessageRenderer.reason
+    : null;
+  const playerLegacyDesktopYpcOfferRenderer = errorScreen && isRecord(errorScreen.playerLegacyDesktopYpcOfferRenderer)
+    ? errorScreen.playerLegacyDesktopYpcOfferRenderer
+    : null;
   const status = toStringValue(playabilityStatus.status);
   const reason =
     toStringValue(playabilityStatus.reason)
-    ?? toStringValue(playabilityStatus.errorScreen?.playerErrorMessageRenderer?.reason?.simpleText)
-    ?? toStringValue(playabilityStatus.errorScreen?.playerLegacyDesktopYpcOfferRenderer?.itemTitle);
+    ?? toStringValue(playerErrorReason?.simpleText)
+    ?? toStringValue(playerLegacyDesktopYpcOfferRenderer?.itemTitle);
 
   return [status, reason].filter(Boolean).join(": ") || null;
 }

@@ -1,7 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { cacheFetch, cacheGet, cacheSet } from "@/lib/cache";
 import { clog } from "@/lib/console-logger";
-import { fetchInstagramOEmbedMetadata, fetchInstagramVideoMetadata, fetchTikTokProxyMetadata } from "@/lib/share-preview-proxy";
+import { resolveInstagramVideoMetadata } from "@/lib/instagram-video-resolver";
+import { fetchInstagramOEmbedMetadata, fetchTikTokProxyMetadata } from "@/lib/share-preview-proxy";
 import { isTikTokMediaHostname } from "@/lib/tiktok-hosts";
 import type { EmbedInfo } from "@/lib/types";
 import { extractAndProcessEmbeds } from "@/services/embed-fetcher";
@@ -497,7 +498,7 @@ function collectXRefreshCandidates(embeds: EmbedInfo[]): RefreshableMediaCandida
   return candidates;
 }
 
-function collectInstagramRefreshCandidates(metadata: Awaited<ReturnType<typeof fetchInstagramVideoMetadata>>): RefreshableMediaCandidate[] {
+function collectInstagramRefreshCandidates(metadata: Awaited<ReturnType<typeof resolveInstagramVideoMetadata>>): RefreshableMediaCandidate[] {
   if (!metadata) return [];
 
   const candidates: RefreshableMediaCandidate[] = [];
@@ -617,22 +618,30 @@ async function resolveRefreshedMediaUrl(
   if (isInstagramSourceUrl(sourceUrl)) {
     const canonicalUrl = canonicalizeInstagramUrl(sourceUrl);
     const cacheKey = `v1:proxy-media:instagram:${canonicalUrl}`;
-    const candidates = await cacheFetch<RefreshableMediaCandidate[]>(
-      cacheKey,
-      INSTAGRAM_REFRESH_TTL,
-      async () => {
-        const video = await fetchInstagramVideoMetadata(canonicalUrl);
-        const refreshed = await fetchInstagramOEmbedMetadata(canonicalUrl);
-        const nextCandidates = collectInstagramRefreshCandidates(video);
-        if (refreshed?.thumbnailUrl) {
-          nextCandidates.push({
-            type: "image",
-            url: refreshed.thumbnailUrl,
-          });
-        }
-        return nextCandidates;
-      },
-    );
+    const fetchCandidates = async () => {
+      const video = await resolveInstagramVideoMetadata(canonicalUrl, {
+        bypassCache: options?.bypassCache,
+      });
+      const refreshed = await fetchInstagramOEmbedMetadata(canonicalUrl);
+      const nextCandidates = collectInstagramRefreshCandidates(video);
+      if (refreshed?.thumbnailUrl) {
+        nextCandidates.push({
+          type: "image",
+          url: refreshed.thumbnailUrl,
+        });
+      }
+      return nextCandidates;
+    };
+    const candidates = options?.bypassCache
+      ? await fetchCandidates()
+      : await cacheFetch<RefreshableMediaCandidate[]>(
+          cacheKey,
+          INSTAGRAM_REFRESH_TTL,
+          fetchCandidates,
+        );
+    if (options?.bypassCache && candidates.length > 0) {
+      void Promise.resolve(cacheSet(cacheKey, candidates, INSTAGRAM_REFRESH_TTL)).catch(() => {});
+    }
     return pickRefreshedMediaUrl(candidates, requestUrl);
   }
 
@@ -770,7 +779,17 @@ export async function proxyMedia(request: Request, includeBody: boolean): Promis
       if (upstream.ok) break;
     }
 
-    if (!upstream.ok && isTikTokProxyRequest) {
+    let shouldBypassRefreshCache = isTikTokProxyRequest;
+    if (!shouldBypassRefreshCache) {
+      try {
+        const refreshSourceUrl = new URL(refreshSource);
+        shouldBypassRefreshCache = isInstagramSourceUrl(refreshSourceUrl) || isXSourceUrl(refreshSourceUrl);
+      } catch {
+        shouldBypassRefreshCache = false;
+      }
+    }
+
+    if (!upstream.ok && shouldBypassRefreshCache) {
       const forcedRefreshUrls = await resolveRefreshedMediaUrls(refreshSource, mediaUrl.toString(), {
         forceRefresh: true,
         bypassCache: true,
@@ -787,7 +806,7 @@ export async function proxyMedia(request: Request, includeBody: boolean): Promis
     }
   }
 
-  if ((hostname.includes("tiktok") || hostname === "video.twimg.com" || hostname === "pbs.twimg.com") && !upstream.ok) {
+  if ((hostname.includes("tiktok") || hostname.includes("cdninstagram.com") || hostname === "video.twimg.com" || hostname === "pbs.twimg.com") && !upstream.ok) {
     log.warn("External media upstream failure", {
       status: upstream.status,
       statusText: upstream.statusText,

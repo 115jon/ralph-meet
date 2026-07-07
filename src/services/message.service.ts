@@ -8,10 +8,15 @@
 
 import { ServiceError } from "@/lib/service-error";
 import { getAttachmentUrl } from "@/lib/attachment-url";
+import { clog } from "@/lib/console-logger";
+import { hydrateSocialEmbeds } from "@/lib/share-embed-refresh";
 import type { AvatarDisplay } from "@/lib/avatar-display";
+import type { EmbedInfo } from "@/lib/types";
 import type { D1Database } from "@cloudflare/workers-types";
 import { markSharesDeletedForMessage } from "./message-share.service";
 import type { BroadcastDescriptor } from "./server.service";
+
+const embedHydrationLog = clog("message-embed-hydration");
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -602,7 +607,36 @@ export async function listMessages(
     formatMessageRow(row, userId, reactionsByMessage, attachmentsByMessage, replyPreviews)
   );
 
-  return { messages, hasMoreBefore, hasMoreAfter, mode };
+  const hydratedMessages = await Promise.all(messages.map(async (message) => {
+    const embeds = Array.isArray(message.embeds) ? message.embeds as EmbedInfo[] : [];
+    if (embeds.length === 0) {
+      return message;
+    }
+
+    const hydratedEmbeds = await hydrateSocialEmbeds(embeds).catch((error) => {
+      embedHydrationLog.warn(`Failed to refresh embeds for message ${String(message.id)}`, error);
+      return embeds;
+    });
+
+    if (hydratedEmbeds === embeds) {
+      return message;
+    }
+
+    try {
+      await db.prepare(
+        `UPDATE messages SET embeds = ? WHERE id = ?`
+      ).bind(JSON.stringify(hydratedEmbeds), String(message.id)).run();
+    } catch (error) {
+      embedHydrationLog.warn(`Failed to persist refreshed embeds for message ${String(message.id)}`, error);
+    }
+
+    return {
+      ...message,
+      embeds: hydratedEmbeds,
+    };
+  }));
+
+  return { messages: hydratedMessages, hasMoreBefore, hasMoreAfter, mode };
 }
 
 // ─── createMessage ───────────────────────────────────────────────────────────

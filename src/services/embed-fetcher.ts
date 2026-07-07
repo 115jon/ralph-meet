@@ -1,5 +1,6 @@
 import type { EmbedInfo } from "@/lib/types";
-import { fetchInstagramOEmbedMetadata, fetchInstagramVideoMetadata, fetchTikTokProxyMetadata } from "@/lib/share-preview-proxy";
+import { resolveInstagramVideoMetadata } from "@/lib/instagram-video-resolver";
+import { fetchInstagramOEmbedMetadata, fetchTikTokProxyMetadata } from "@/lib/share-preview-proxy";
 import { clog } from "@/lib/console-logger";
 
 const log = clog("EmbedFetcher");
@@ -1068,7 +1069,7 @@ function readPositiveNumber(...values: Array<unknown>): number | undefined {
 async function fetchInstagramData(url: string): Promise<EmbedInfo | null> {
   const [data, videoData] = await Promise.all([
     fetchInstagramOEmbedMetadata(url),
-    fetchInstagramVideoMetadata(url),
+    resolveInstagramVideoMetadata(url),
   ]);
   if (!data) return null;
 
@@ -1082,14 +1083,19 @@ async function fetchInstagramData(url: string): Promise<EmbedInfo | null> {
   const thumbnailHeight = firstMedia?.type === "image"
     ? firstMedia.height
     : firstVideo?.height ?? data.thumbnailHeight;
+  const authorIconUrl = videoData?.authorAvatarUrl ?? undefined;
+  const authorVerified = videoData?.authorVerified ?? undefined;
+  const videoDurationSeconds = videoData?.durationSeconds ?? undefined;
+  const audio = videoData?.audio ?? undefined;
+  const timestamp = videoData?.timestamp ?? undefined;
   const metrics = (
     videoData?.commentCount !== undefined
     || videoData?.likeCount !== undefined
     || videoData?.viewCount !== undefined
   ) ? {
-    comments: videoData?.commentCount,
-    likes: videoData?.likeCount,
-    views: videoData?.viewCount,
+    comments: videoData?.commentCount ?? undefined,
+    likes: videoData?.likeCount ?? undefined,
+    views: videoData?.viewCount ?? undefined,
   } : undefined;
 
   return {
@@ -1100,8 +1106,8 @@ async function fetchInstagramData(url: string): Promise<EmbedInfo | null> {
     author: data.authorName ? {
       name: data.authorName,
       url: data.authorUrl,
-      iconURL: videoData?.authorAvatarUrl,
-      isVerified: videoData?.authorVerified,
+      iconURL: authorIconUrl,
+      isVerified: authorVerified,
     } : undefined,
     provider: {
       name: data.providerName || "Instagram",
@@ -1120,10 +1126,10 @@ async function fetchInstagramData(url: string): Promise<EmbedInfo | null> {
       height: firstVideo?.height ?? 1280,
       kind: "direct",
       contentType: "video/mp4",
-      durationSeconds: videoData.durationSeconds,
+      durationSeconds: videoDurationSeconds,
     } : undefined,
-    audio: videoData?.audio,
-    timestamp: videoData?.timestamp,
+    audio,
+    timestamp,
     metrics,
     footer: {
       text: "Instagram",

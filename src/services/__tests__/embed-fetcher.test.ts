@@ -1,4 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+const hoisted = vi.hoisted(() => ({
+  resolveInstagramVideoMetadataMock: vi.fn(),
+}));
+
+vi.mock("@/lib/instagram-video-resolver", () => ({
+  resolveInstagramVideoMetadata: hoisted.resolveInstagramVideoMetadataMock,
+}));
+
 import { extractAndProcessEmbeds } from "../embed-fetcher";
 
 const X_URL = "https://x.com/ausso52693/status/2057892777069883519";
@@ -7,6 +15,7 @@ const VIDEO_URL = "https://video.twimg.com/amplify_video/2057892165804601344/vid
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
+  hoisted.resolveInstagramVideoMetadataMock.mockReset();
 });
 
 describe("extractAndProcessEmbeds", () => {
@@ -1203,6 +1212,13 @@ describe("extractAndProcessEmbeds", () => {
   });
 
   it("builds Instagram reel embeds from public oEmbed metadata", async () => {
+    hoisted.resolveInstagramVideoMetadataMock.mockResolvedValue({
+      videoUrl: "https://scontent-ord5-1.cdninstagram.com/video.mp4?sig=1",
+      thumbnailUrl: "https://scontent-ord5-1.cdninstagram.com/thumb.jpg",
+      title: "craziest work",
+      durationSeconds: 128.4,
+    });
+
     vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => {
       const url = input.toString();
       if (url.startsWith("https://www.instagram.com/api/v1/oembed/")) {
@@ -1215,14 +1231,6 @@ describe("extractAndProcessEmbeds", () => {
           thumbnail_url: "https://scontent-ord5-1.cdninstagram.com/thumb.jpg",
           thumbnail_width: 640,
           thumbnail_height: 1137,
-        });
-      }
-      if (url.startsWith("https://meet.115jon.site/api/instagram-video?videoUrl=")) {
-        return Response.json({
-          videoUrl: "https://scontent-ord5-1.cdninstagram.com/video.mp4?sig=1",
-          thumbnailUrl: "https://scontent-ord5-1.cdninstagram.com/thumb.jpg",
-          title: "craziest work",
-          durationSeconds: 128.4,
         });
       }
       return new Response("not found", { status: 404 });
