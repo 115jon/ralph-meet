@@ -38,6 +38,10 @@ export interface CallVoiceState {
   audioBlocked: boolean;
   /** Voice grid items (participants with media streams) */
   gridItems: GridItem[];
+  /** Active voice room slug for the call */
+  roomSlug: string | null;
+  /** Local durable-object voice session id */
+  voiceSessionId: string | null;
   /** Thumbnails for streams */
   streamThumbnails: Record<string, string>;
   /** Watched streams by the local user */
@@ -81,6 +85,8 @@ const initialState = {
   hasMicrophone: false,
   audioBlocked: false,
   gridItems: [] as GridItem[],
+  roomSlug: null as string | null,
+  voiceSessionId: null as string | null,
   streamThumbnails: {} as Record<string, string>,
   watchedStreams: {} as Record<string, boolean>,
   watchersByStreamer: {} as StreamWatchersByStreamer,

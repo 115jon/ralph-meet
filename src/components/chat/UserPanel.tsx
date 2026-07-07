@@ -72,6 +72,8 @@ interface Props {
   spatialAudioState?: SharedSpatialAudioState;
   onUpdateSpatialAudioState?: (state: SharedSpatialAudioState) => void;
   voiceSettingsUserId?: string;
+  roomSlug?: string | null;
+  voiceSessionId?: string | null;
   onOpenActivities?: () => void;
   onOpenSoundboard?: () => void;
 }
@@ -252,6 +254,8 @@ function CallDashboardSection({
   const watchersByStreamer = useCallVoiceStore((s) => s.watchersByStreamer);
   const spatialAudioState = useCallVoiceStore((s) => s.spatialAudioState);
   const updateSharedSpatialAudioState = useCallVoiceStore((s) => s.updateSharedSpatialAudioState);
+  const callRoomSlug = useCallVoiceStore((s) => s.roomSlug);
+  const callVoiceSessionId = useCallVoiceStore((s) => s.voiceSessionId);
 
   const handleCallLeave = useCallVoiceStore((s) => s.handleLeave);
   const defaultParticipantCapabilities = useMemo(
@@ -297,6 +301,8 @@ function CallDashboardSection({
         participantCapabilities={defaultParticipantCapabilities}
         localUserId={useChatStore.getState().user?.id}
         voiceSettingsUserId={useChatStore.getState().user?.id}
+        roomSlug={callRoomSlug}
+        voiceSessionId={callVoiceSessionId}
         serverId={serverId}
         onOpenActivities={onOpenActivities}
         onOpenSoundboard={onOpenSoundboard}
@@ -347,6 +353,8 @@ export default function UserPanel({
   spatialAudioState,
   onUpdateSpatialAudioState,
   voiceSettingsUserId,
+  roomSlug,
+  voiceSessionId,
   onOpenActivities,
   onOpenSoundboard,
 }: Props) {
@@ -467,6 +475,8 @@ export default function UserPanel({
               onUpdateSpatialAudioState={onUpdateSpatialAudioState}
               voiceSettingsUserId={voiceSettingsUserId}
               localUserId={user.id}
+              roomSlug={roomSlug}
+              voiceSessionId={voiceSessionId}
               serverId={serverId}
                participantCapabilities={participantCapabilities}
                onOpenVoiceSettings={() => {

@@ -43,6 +43,8 @@ export interface VoiceSessionStreamState {
   updateSharedSpatialAudioState: (state: any) => void;
   settingsUserId: string;
   channelId: string;
+  roomSlug: string | null;
+  voiceSessionId: string | null;
   isPreviewHidden: boolean;
   togglePreviewHidden: () => Promise<void> | void;
 }
@@ -115,6 +117,8 @@ export default function VoiceChannelView({
     spatialAudioState,
     updateSharedSpatialAudioState,
     settingsUserId,
+    roomSlug,
+    voiceSessionId,
     togglePreviewHidden,
     isPreviewHidden,
   } = useVoiceChannel({ channelId, serverId, onJoined, onLeft, autoJoin });
@@ -263,10 +267,12 @@ export default function VoiceChannelView({
       updateSharedSpatialAudioState,
       settingsUserId,
       channelId,
+      roomSlug,
+      voiceSessionId,
       isPreviewHidden,
       togglePreviewHidden,
     });
-  }, [isScreenSharing, isStreamingAudio, currentScreenQuality, currentScreenSource, toggleScreenShare, onToggleStreamAudio, isCameraActive, hasCamera, hasMicrophone, toggleCamera, handleLeave, onStreamStateUpdate, availableQualities, sfu, gridItems, streamThumbnails, watchedStreams, watchersByStreamer, onToggleWatch, watchAndFocusStreamByUserId, spatialAudioState, updateSharedSpatialAudioState, settingsUserId, channelId, isPreviewHidden, togglePreviewHidden]);
+  }, [isScreenSharing, isStreamingAudio, currentScreenQuality, currentScreenSource, toggleScreenShare, onToggleStreamAudio, isCameraActive, hasCamera, hasMicrophone, toggleCamera, handleLeave, onStreamStateUpdate, availableQualities, sfu, gridItems, streamThumbnails, watchedStreams, watchersByStreamer, onToggleWatch, watchAndFocusStreamByUserId, spatialAudioState, updateSharedSpatialAudioState, settingsUserId, channelId, roomSlug, voiceSessionId, isPreviewHidden, togglePreviewHidden]);
 
 
   // Fullscreen change listener

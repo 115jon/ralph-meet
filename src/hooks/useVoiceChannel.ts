@@ -483,6 +483,7 @@ export function useVoiceChannel({
   })));
   const { sendVoiceChannelJoin, sendVoiceChannelLeave, sendVoiceStateUpdate, setSpeakingUsers } = useChatActions();
   const currentVoiceChannelStartedAt = channelId ? voiceChannelStartedAt[channelId] ?? null : null;
+  const resolvedRoomSlug = roomSlugOverride || (serverId && channelId ? `voice-${serverId}-${channelId}` : "");
 
   const [voiceState, voiceDispatch] = useReducer((state: any, action: any) => {
     switch (action.type) {
@@ -1024,7 +1025,7 @@ export function useVoiceChannel({
     const displayName = chatUserDisplayName?.trim() || null;
     const username = chatUsername || user?.username || user?.fullName || "Guest";
     const name = mode === "room" ? (guestName || "Guest") : (displayName || username);
-    const roomSlug = roomSlugOverride || `voice-${serverId}-${channelId}`;
+    const roomSlug = resolvedRoomSlug;
     const sfu = new SFUClient(roomSlug);
     sfuRef.current = sfu;
     setSfuInstance(sfu);
@@ -1436,7 +1437,7 @@ export function useVoiceChannel({
     );
     sfu.resumeAudioContext();
     localStreamRef.current = new MediaStream();
-  }, [user, serverId, channelId, sendVoiceChannelJoin, onJoined, roomSlugOverride, isCall, mode, guestName, settingsUserId, chatUserAvatarUrl, chatUserAvatarDisplay, chatUserDisplayName, chatUsername]);
+  }, [user, serverId, channelId, sendVoiceChannelJoin, onJoined, resolvedRoomSlug, isCall, mode, guestName, settingsUserId, chatUserAvatarUrl, chatUserAvatarDisplay, chatUserDisplayName, chatUsername]);
 
   useEffect(() => {
     if (!joined || mode === "room" || !channelId || !chatConnected) return;
@@ -2881,5 +2882,7 @@ export function useVoiceChannel({
     audioStalled,
     spatialAudioState,
     updateSharedSpatialAudioState,
+    roomSlug: resolvedRoomSlug || null,
+    voiceSessionId: myIdRef.current || null,
   };
 }

@@ -91,18 +91,36 @@ async function fetchVoiceSessionCheck(
   return await response.json() as VoiceSessionCheckResponse;
 }
 
-export async function requireActiveVoiceChannelSession(
+function getVoiceSessionIdFromRequest(request: Request): string | null {
+  const headerSessionId = request.headers.get("X-Voice-Session-Id")?.trim();
+  if (headerSessionId) return headerSessionId;
+
+  try {
+    const url = new URL(request.url);
+    const querySessionId = url.searchParams.get("sessionId")?.trim();
+    return querySessionId || null;
+  } catch {
+    return null;
+  }
+}
+
+export async function requireActiveVoiceRoomSession(
   request: Request,
   userId: string,
-  channelId: string,
-  serverId: string,
-  errorMessage = "You must be actively connected to this voice channel to change its status.",
+  roomSlug: string,
+  options?: {
+    serverId?: string | null;
+    channelId?: string | null;
+    errorMessage?: string;
+  },
 ): Promise<{ sessionId: string | null; exactSessionMatched: boolean } | Response> {
-  const sessionId = request.headers.get("X-Voice-Session-Id")?.trim() || null;
+  const sessionId = getVoiceSessionIdFromRequest(request);
+  const errorMessage = options?.errorMessage
+    ?? "You must be actively connected to this voice room to use this feature.";
 
   if (!sessionId) {
     return apiError(
-      "Reconnect to this voice channel from this client before changing its status.",
+      "Reconnect to this voice room from this client before using this feature.",
       403,
       "VOICE_STATUS_REQUIRES_LOCAL_SESSION",
       request,
@@ -110,26 +128,31 @@ export async function requireActiveVoiceChannelSession(
   }
 
   try {
-    const globalSessionData = await fetchVoiceSessionCheck("global-gateway", {
-      user_id: userId,
-      channel_id: channelId,
-      require_exact_session: false,
-      require_channel_match: true,
-    });
+    const channelId = options?.channelId?.trim();
+    const serverId = options?.serverId?.trim();
 
-    if (!globalSessionData) {
-      return apiError("Could not verify your voice session right now.", 503, "VOICE_SESSION_CHECK_FAILED", request);
-    }
-
-    if (!globalSessionData.allowed) {
-      return apiError(errorMessage, 403, "VOICE_STATUS_REQUIRES_ACTIVE_SESSION", request);
-    }
-
-    const localRoomSessionData = await fetchVoiceSessionCheck(buildVoiceChannelRoomSlug(serverId, channelId), {
+    if (channelId && serverId) {
+      const globalSessionData = await fetchVoiceSessionCheck("global-gateway", {
         user_id: userId,
-        session_id: sessionId,
-        require_exact_session: true,
-        require_channel_match: false,
+        channel_id: channelId,
+        require_exact_session: false,
+        require_channel_match: true,
+      });
+
+      if (!globalSessionData) {
+        return apiError("Could not verify your voice session right now.", 503, "VOICE_SESSION_CHECK_FAILED", request);
+      }
+
+      if (!globalSessionData.allowed) {
+        return apiError(errorMessage, 403, "VOICE_STATUS_REQUIRES_ACTIVE_SESSION", request);
+      }
+    }
+
+    const localRoomSessionData = await fetchVoiceSessionCheck(roomSlug, {
+      user_id: userId,
+      session_id: sessionId,
+      require_exact_session: true,
+      require_channel_match: false,
     });
 
     if (!localRoomSessionData) {
@@ -148,6 +171,25 @@ export async function requireActiveVoiceChannelSession(
     authLog.error("Voice session verification failed:", error);
     return apiError("Could not verify your voice session right now.", 503, "VOICE_SESSION_CHECK_FAILED", request);
   }
+}
+
+export async function requireActiveVoiceChannelSession(
+  request: Request,
+  userId: string,
+  channelId: string,
+  serverId: string,
+  errorMessage = "You must be actively connected to this voice channel to change its status.",
+): Promise<{ sessionId: string | null; exactSessionMatched: boolean } | Response> {
+  return requireActiveVoiceRoomSession(
+    request,
+    userId,
+    buildVoiceChannelRoomSlug(serverId, channelId),
+    {
+      channelId,
+      serverId,
+      errorMessage,
+    },
+  );
 }
 
 export async function requireAuth(req?: Request): Promise<{ userId: string } | Response> {

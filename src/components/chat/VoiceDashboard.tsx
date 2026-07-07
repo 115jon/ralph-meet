@@ -84,6 +84,8 @@ interface VoiceDashboardProps {
   onOpenVoiceSettings?: () => void;
   voiceSettingsUserId?: string;
   localUserId?: string | null;
+  roomSlug?: string | null;
+  voiceSessionId?: string | null;
   serverId?: string | null;
   onOpenActivities?: () => void;
   onOpenSoundboard?: () => void;
@@ -119,6 +121,8 @@ export function VoiceDashboard({
   onOpenVoiceSettings,
   voiceSettingsUserId,
   localUserId,
+  roomSlug,
+  voiceSessionId,
   serverId,
   onOpenActivities,
   onOpenSoundboard: _onOpenSoundboard,
@@ -696,6 +700,8 @@ export function VoiceDashboard({
                     sfu={sfu}
                     serverId={serverId}
                     channelId={voiceChannelId}
+                    roomSlug={roomSlug}
+                    voiceSessionId={voiceSessionId}
                     isClosing={!isSoundboardPickerOpen}
                     localUserId={localUserId}
                   />
