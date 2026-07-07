@@ -34,7 +34,9 @@ const X_HEADER_DATE_WITH_YEAR_FORMATTER = new Intl.DateTimeFormat(undefined, {
   year: "numeric",
 });
 
-const EMBED_PLAYER_SANDBOX = "allow-presentation allow-scripts";
+// TikTok's player bootstrap reads its own cookies; without allow-same-origin
+// the iframe fallback logs SecurityError and never finishes initialising.
+const EMBED_PLAYER_SANDBOX = "allow-presentation allow-same-origin allow-scripts";
 const EMBED_WIDGET_SANDBOX = "allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox allow-presentation allow-scripts";
 
 const X_FOOTER_DATE_TIME_FORMATTER = new Intl.DateTimeFormat(undefined, {

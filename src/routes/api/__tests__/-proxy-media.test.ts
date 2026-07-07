@@ -49,6 +49,7 @@ describe("proxy media helpers", () => {
       expect(isAllowedMediaUrl(new URL("https://api16-normal-useast5.tiktokv.us/path"))).toBe(true);
       expect(isAllowedMediaUrl(new URL("https://anything.tiktokv.us/path"))).toBe(true);
       expect(isAllowedMediaUrl(new URL("https://anything.tiktokcdn-us.com/path"))).toBe(true);
+      expect(isAllowedMediaUrl(new URL("https://anything.tiktokcdn-eu.com/path"))).toBe(true);
       expect(isAllowedMediaUrl(new URL("https://anything.tiktokcdn.com/path"))).toBe(true);
     });
 
@@ -126,6 +127,9 @@ describe("proxy media helpers", () => {
       expect(normalizeRefreshableMediaKey("https://v16m.tiktokcdn-us.com/example/video/file/?token=1")).toBe(
         "v16m.tiktokcdn-us.com/example/video/file/"
       );
+      expect(normalizeRefreshableMediaKey("https://p16-common-sign.tiktokcdn-eu.com/example/image/file.webp?token=1")).toBe(
+        "p16-common-sign.tiktokcdn-eu.com/example/image/file.webp"
+      );
     });
 
     it("matches refreshed TikTok avatar urls by stable path when the signature changes", () => {
@@ -158,6 +162,33 @@ describe("proxy media helpers", () => {
         "https://p19-common-sign.tiktokcdn-us.com/tos-alisg-p-0037/example-cover~tplv-tiktokx-shrink-aq:360:360:q75.webp?x-expires=1783458000&x-signature=coverfresh",
       ]);
     });
+
+    it("matches refreshed TikTok assets across regional CDN hosts by stable path", () => {
+      expect(pickRefreshedMediaUrl([
+        {
+          type: "image",
+          url: "https://p16-common-sign.tiktokcdn-us.com/tos-useast8-p-0068-tx2/example-cover~tplv-tiktokx-origin.image?x-expires=1783612800&x-signature=freshsig",
+        },
+      ], "https://p16-common-sign.tiktokcdn-eu.com/tos-useast8-p-0068-tx2/example-cover~tplv-tiktokx-origin.image?x-expires=1783285200&x-signature=stalesig")).toBe(
+        "https://p16-common-sign.tiktokcdn-us.com/tos-useast8-p-0068-tx2/example-cover~tplv-tiktokx-origin.image?x-expires=1783612800&x-signature=freshsig"
+      );
+    });
+
+    it("prefers refreshed TikTok image candidates for origin.image requests", () => {
+      expect(pickRefreshedMediaUrl([
+        {
+          type: "video",
+          url: "https://v16m.tiktokcdn-us.com/example/video.mp4?mime_type=video_mp4&fresh=1",
+          thumbnailUrl: "https://p16-common-sign.tiktokcdn-us.com/tos-useast8-p-0068-tx2/example-cover~tplv-tiktokx-shrink-aq:360:360:q75.webp?x-expires=1783612800&x-signature=freshsig",
+        },
+        {
+          type: "image",
+          url: "https://p16-common-sign.tiktokcdn-us.com/tos-useast8-p-0068-tx2/example-cover~tplv-tiktokx-shrink-aq:360:360:q75.webp?x-expires=1783612800&x-signature=freshsig",
+        },
+      ], "https://p16-common-sign.tiktokcdn-eu.com/tos-useast8-p-0068-tx2/example-cover~tplv-tiktokx-origin.image?x-expires=1783285200&x-signature=stalesig&sc=cover")).toBe(
+        "https://p16-common-sign.tiktokcdn-us.com/tos-useast8-p-0068-tx2/example-cover~tplv-tiktokx-shrink-aq:360:360:q75.webp?x-expires=1783612800&x-signature=freshsig"
+      );
+    });
   });
 
   describe("TikTok proxy refresh", () => {
@@ -185,6 +216,10 @@ describe("proxy media helpers", () => {
       const fetchMock = vi.fn(async (input: string | URL | Request) => {
         const url = input.toString();
 
+        if (url.startsWith("https://www.tiktok.com/player/api/v1/items?item_ids=")) {
+          return new Response("not found", { status: 404 });
+        }
+
         if (url.startsWith("https://www.tikwm.com/api/?url=")) {
           return makeTikwmResponse(freshImageUrl);
         }
@@ -211,12 +246,16 @@ describe("proxy media helpers", () => {
       expect(response.status).toBe(200);
       expect(response.headers.get("Content-Type")).toBe("image/jpeg");
       await expect(response.text()).resolves.toBe("image-bytes");
-      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(fetchMock).toHaveBeenCalledTimes(3);
     });
 
     it("still streams the TikTok image when refresh resolves to the same url", async () => {
       const fetchMock = vi.fn(async (input: string | URL | Request) => {
         const url = input.toString();
+
+        if (url.startsWith("https://www.tiktok.com/player/api/v1/items?item_ids=")) {
+          return new Response("not found", { status: 404 });
+        }
 
         if (url.startsWith("https://www.tikwm.com/api/?url=")) {
           return makeTikwmResponse(staleImageUrl);
@@ -244,7 +283,7 @@ describe("proxy media helpers", () => {
       expect(response.status).toBe(200);
       expect(response.headers.get("Content-Type")).toBe("image/jpeg");
       await expect(response.text()).resolves.toBe("image-bytes");
-      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(fetchMock).toHaveBeenCalledTimes(3);
     });
 
     it("falls back to another refreshed TikTok image when the first refreshed image still 403s", async () => {
@@ -255,6 +294,10 @@ describe("proxy media helpers", () => {
 
       const fetchMock = vi.fn(async (input: string | URL | Request) => {
         const url = input.toString();
+
+        if (url.startsWith("https://www.tiktok.com/player/api/v1/items?item_ids=")) {
+          return new Response("not found", { status: 404 });
+        }
 
         if (url.startsWith("https://www.tikwm.com/api/?url=")) {
           return Response.json({
@@ -316,6 +359,9 @@ describe("proxy media helpers", () => {
         const url = input.toString();
         if (url.startsWith("https://www.tikwm.com/api/?url=")) {
           return makeTikwmResponse(freshImageUrl);
+        }
+        if (url.startsWith("https://www.tiktok.com/player/api/v1/items?item_ids=")) {
+          return new Response("not found", { status: 404 });
         }
         if (url === freshImageUrl) {
           return new Response("image-bytes", {
@@ -379,6 +425,10 @@ describe("proxy media helpers", () => {
       const fetchMock = vi.fn(async (input: string | URL | Request) => {
         const url = input.toString();
 
+        if (url.startsWith("https://www.tiktok.com/player/api/v1/items?item_ids=")) {
+          return new Response("not found", { status: 404 });
+        }
+
         if (url.startsWith("https://www.tikwm.com/api/?url=")) {
           return Response.json({
             code: 0,
@@ -416,7 +466,7 @@ describe("proxy media helpers", () => {
       expect(response.headers.get("Content-Type")).toBe("video/mp4");
       expect(response.headers.get("Cache-Control")).toBe("no-store");
       await expect(response.text()).resolves.toBe("video-bytes");
-      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(fetchMock).toHaveBeenCalledTimes(3);
     });
 
     it("uses an upstream GET for TikTok video HEAD requests so signed assets still resolve", async () => {
@@ -427,6 +477,10 @@ describe("proxy media helpers", () => {
 
       const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
         const url = input.toString();
+
+        if (url.startsWith("https://www.tiktok.com/player/api/v1/items?item_ids=")) {
+          return new Response("not found", { status: 404 });
+        }
 
         if (url.startsWith("https://www.tikwm.com/api/?url=")) {
           upstreamMethods.push(init?.method ?? "GET");

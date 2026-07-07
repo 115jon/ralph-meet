@@ -56,6 +56,50 @@ describe("share preview proxy", () => {
     });
   });
 
+  it("retries the alternate Tikwm host when the primary metadata request fails", async () => {
+    const fetchMock = vi.fn(async (input: string | URL | Request) => {
+      const url = input.toString();
+
+      if (url === "https://www.tiktok.com/player/api/v1/items?item_ids=123") {
+        return new Response("not found", { status: 404 });
+      }
+
+      if (url.startsWith("https://www.tikwm.com/api/?url=")) {
+        return new Response("forbidden", {
+          status: 403,
+          headers: {
+            "Content-Type": "text/html; charset=utf-8",
+          },
+        });
+      }
+
+      if (url.startsWith("https://tikwm.com/api/?url=")) {
+        return Response.json({
+          code: 0,
+          data: {
+            title: "hello",
+            cover: "https://p16-common-sign.tiktokcdn-us.com/fresh.jpeg",
+            play: "https://v19.tiktokcdn-us.com/video.mp4",
+            author: { nickname: "Johnny" },
+          },
+        });
+      }
+
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+
+    vi.stubGlobal("fetch", fetchMock as unknown as typeof fetch);
+
+    await expect(fetchTikTokProxyMetadata("https://www.tiktok.com/@johnny/video/123")).resolves.toMatchObject({
+      title: "hello",
+      coverUrl: "https://p16-common-sign.tiktokcdn-us.com/fresh.jpeg",
+      videoUrl: "https://v19.tiktokcdn-us.com/video.mp4",
+      authorName: "Johnny",
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
   it("proxies fetchable images with safe headers", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response("image-bytes", {
       status: 200,

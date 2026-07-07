@@ -25,7 +25,9 @@ describe("fetchTikTokProxyMetadata", () => {
   it("maps slideshow posts into image media and audio without mistaking the soundtrack for a video", async () => {
     vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => {
       const url = input.toString();
-      expect(url).toContain("https://www.tikwm.com/api/?url=");
+      if (!url.startsWith("https://www.tikwm.com/api/?url=")) {
+        return new Response("not found", { status: 404 });
+      }
 
       return Response.json({
         code: 0,
@@ -87,6 +89,87 @@ describe("fetchTikTokProxyMetadata", () => {
     expect(result?.media).toHaveLength(3);
     expect(result?.media?.every((item) => item.type === "image")).toBe(true);
     expect(result?.media?.map((item) => item.url)).toEqual(TIKTOK_IMAGE_URLS);
+  });
+
+  it("falls back to TikTok's player api for canonical video posts when tikwm misses", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => {
+      const url = input.toString();
+
+      if (url === "https://www.tiktok.com/player/api/v1/items?item_ids=7644940658603592973") {
+        return Response.json({
+          items: [{
+            id_str: "7644940658603592973",
+            desc: "LMAO",
+            author_info: {
+              unique_id: "irlquandale",
+              nickname: "Quandale Dingle",
+              avatar_url_list: [TIKTOK_AVATAR_URL],
+            },
+            statistics_info: {
+              comment_count: 103,
+              digg_count: 17284,
+              share_count: 2211,
+            },
+            video_info: {
+              cover: {
+                url_list: ["https://p19-common-sign.tiktokcdn-us.com/example/cropped-cover.jpeg"],
+              },
+              origin_cover: {
+                url_list: ["https://p16-common-sign.tiktokcdn-us.com/example/origin-cover.webp"],
+              },
+              meta: {
+                duration: 61667,
+                width: 576,
+                height: 1024,
+              },
+              url_list: [
+                "https://v16m.tiktokcdn-us.com/example/video.mp4?mime_type=video_mp4",
+              ],
+            },
+            music_info: {
+              title: "original sound - irlquandale",
+              author: "Quandale Dingle",
+            },
+          }],
+        });
+      }
+
+      if (url.startsWith("https://www.tikwm.com/api/?url=") || url.startsWith("https://tikwm.com/api/?url=")) {
+        return Response.json({ code: -1 });
+      }
+
+      return new Response("not found", { status: 404 });
+    }) as unknown as typeof fetch);
+
+    const result = await fetchTikTokProxyMetadata("https://www.tiktok.com/@irlquandale/video/7644940658603592973");
+
+    expect(result).toMatchObject({
+      id: "7644940658603592973",
+      canonicalUrl: "https://www.tiktok.com/@irlquandale/video/7644940658603592973",
+      postType: "video",
+      coverUrl: "https://p16-common-sign.tiktokcdn-us.com/example/origin-cover.webp",
+      title: "LMAO",
+      authorName: "Quandale Dingle",
+      authorHandle: "irlquandale",
+      authorAvatarUrl: TIKTOK_AVATAR_URL,
+      videoUrl: "https://v16m.tiktokcdn-us.com/example/video.mp4?mime_type=video_mp4",
+      likeCount: 17284,
+      commentCount: 103,
+      shareCount: 2211,
+      audio: {
+        title: "original sound - irlquandale",
+        artist: "Quandale Dingle",
+      },
+    });
+    expect(result?.media).toEqual([{
+      type: "video",
+      url: "https://v16m.tiktokcdn-us.com/example/video.mp4?mime_type=video_mp4",
+      thumbnailUrl: "https://p16-common-sign.tiktokcdn-us.com/example/origin-cover.webp",
+      width: 576,
+      height: 1024,
+      contentType: "video/mp4",
+      durationSeconds: 61.667,
+    }]);
   });
 
   it("prefers the uncropped TikTok origin cover for video posters", async () => {

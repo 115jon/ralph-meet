@@ -332,6 +332,55 @@ function buildInstagramIPhoneHeaders(canonicalUrl: string, secrets: InstagramSes
   };
 }
 
+async function fetchInstagramMediaInfoPayload(
+  canonicalUrl: string,
+  secrets: InstagramSessionSecrets,
+  options: {
+    mediaPk?: string | null;
+    shortcode?: string | null;
+  },
+): Promise<any> {
+  const candidateUrls = [
+    options.mediaPk ? `https://i.instagram.com/api/v1/media/${encodeURIComponent(options.mediaPk)}/info/` : null,
+    options.shortcode ? `https://i.instagram.com/api/v1/media/shortcode/${encodeURIComponent(options.shortcode)}/info/` : null,
+    options.shortcode ? `https://www.instagram.com/api/v1/media/shortcode/${encodeURIComponent(options.shortcode)}/info/` : null,
+  ].filter((value): value is string => typeof value === "string");
+
+  let lastError: Error | null = null;
+
+  for (const candidateUrl of candidateUrls) {
+    try {
+      const response = await fetch(candidateUrl, {
+        headers: buildInstagramIPhoneHeaders(canonicalUrl, secrets),
+        redirect: "manual",
+      });
+
+      if (!response.ok) {
+        const text = await response.text().catch(() => "");
+        lastError = new Error(`Instagram media info failed with ${response.status}: ${text.slice(0, 200)}`);
+        continue;
+      }
+
+      const contentType = response.headers.get("content-type") || "";
+      if (!contentType.includes("json")) {
+        const text = await response.text().catch(() => "");
+        lastError = new Error(`Instagram media info returned non-JSON content: ${text.slice(0, 200)}`);
+        continue;
+      }
+
+      return await response.json() as any;
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+    }
+  }
+
+  if (lastError) {
+    throw lastError;
+  }
+
+  throw new Error("Instagram media info could not be resolved");
+}
+
 async function fetchInstagramMedia(canonicalUrl: string): Promise<InstagramVideoResult> {
   const secrets = getInstagramSessionSecrets();
   if (!secrets) {
@@ -339,32 +388,17 @@ async function fetchInstagramMedia(canonicalUrl: string): Promise<InstagramVideo
   }
 
   const oembed = await fetchInstagramOEmbedMetadata(canonicalUrl);
-  if (!oembed?.mediaId) {
+  const mediaPk = normalizeInstagramMediaPk(oembed.mediaId);
+  const shortcode = extractInstagramShortcode(canonicalUrl);
+
+  if (!mediaPk && !shortcode) {
     throw new Error("Instagram oEmbed did not return a media id");
   }
 
-  const mediaPk = normalizeInstagramMediaPk(oembed.mediaId);
-  if (!mediaPk) {
-    throw new Error("Instagram oEmbed returned an invalid media id");
-  }
-
-  const iPhoneResponse = await fetch(`https://i.instagram.com/api/v1/media/${encodeURIComponent(mediaPk)}/info/`, {
-    headers: buildInstagramIPhoneHeaders(canonicalUrl, secrets),
-    redirect: "manual",
+  const iPhonePayload = await fetchInstagramMediaInfoPayload(canonicalUrl, secrets, {
+    mediaPk,
+    shortcode,
   });
-
-  if (!iPhoneResponse.ok) {
-    const text = await iPhoneResponse.text().catch(() => "");
-    throw new Error(`Instagram media info failed with ${iPhoneResponse.status}: ${text.slice(0, 200)}`);
-  }
-
-  const iPhoneContentType = iPhoneResponse.headers.get("content-type") || "";
-  if (!iPhoneContentType.includes("json")) {
-    const text = await iPhoneResponse.text().catch(() => "");
-    throw new Error(`Instagram media info returned non-JSON content: ${text.slice(0, 200)}`);
-  }
-
-  const iPhonePayload = await iPhoneResponse.json() as any;
   const item = Array.isArray(iPhonePayload?.items) ? iPhonePayload.items[0] : null;
   const media = collectInstagramMedia(item);
   const primaryVideo = media.find((entry) => entry.type === "video");

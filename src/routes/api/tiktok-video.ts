@@ -50,6 +50,16 @@ export function isTikTokShortLookupUrl(rawUrl: string): boolean {
   }
 }
 
+export function buildTikTokMetadataLookupUrls(initialLookupUrl: string, resolvedLookupUrl?: string | null): string[] {
+  const urls = [initialLookupUrl];
+
+  if (resolvedLookupUrl && resolvedLookupUrl !== initialLookupUrl) {
+    urls.push(resolvedLookupUrl);
+  }
+
+  return urls;
+}
+
 async function resolveTikTokLookupUrl(rawUrl: string): Promise<string> {
   if (!isTikTokShortLookupUrl(rawUrl)) return rawUrl;
 
@@ -104,23 +114,31 @@ const GET = async ({ request }: any) => {
   if (!initialLookupUrl) {
     return Response.json({ error: "Only TikTok URLs are supported" }, { status: 400 });
   }
-  const canonicalUrl = canonicalizeTikTokLookupUrl(await resolveTikTokLookupUrl(initialLookupUrl));
-  if (!canonicalUrl) {
+  const resolvedLookupUrl = canonicalizeTikTokLookupUrl(await resolveTikTokLookupUrl(initialLookupUrl));
+  if (!resolvedLookupUrl) {
     return Response.json({ error: "Only TikTok URLs are supported" }, { status: 400 });
   }
-  const cacheKey = `v1:tiktok-video:${canonicalUrl}`;
+  const lookupUrls = buildTikTokMetadataLookupUrls(initialLookupUrl, resolvedLookupUrl);
+  const cacheKeys = lookupUrls.map((lookupUrl) => `v1:tiktok-video:${lookupUrl}`);
 
   try {
-    const cached = await cacheGet<TikTokVideoResult>(cacheKey);
-    if (hasTikTokVideoResultContent(cached)) {
-      return Response.json(cached, {
-        headers: {
-          "Cache-Control": TIKTOK_VIDEO_CACHE_CONTROL,
-        },
-      });
+    for (const cacheKey of cacheKeys) {
+      const cached = await cacheGet<TikTokVideoResult>(cacheKey);
+      if (hasTikTokVideoResultContent(cached)) {
+        return Response.json(cached, {
+          headers: {
+            "Cache-Control": TIKTOK_VIDEO_CACHE_CONTROL,
+          },
+        });
+      }
     }
 
-    const meta = await fetchTikTokProxyMetadata(canonicalUrl);
+    let meta = null;
+    for (const lookupUrl of lookupUrls) {
+      meta = await fetchTikTokProxyMetadata(lookupUrl);
+      if (meta) break;
+    }
+
     const result: TikTokVideoResult = {
       videoUrl: meta?.videoUrl ?? null,
       coverUrl: meta?.coverUrl ?? null,
@@ -143,7 +161,14 @@ const GET = async ({ request }: any) => {
       return Response.json({ error: "Could not resolve TikTok media" }, { status: 404 });
     }
 
-    cacheSet(cacheKey, result, TIKTOK_VIDEO_TTL).catch(() => { });
+    const cacheLookupUrls = new Set<string>(lookupUrls);
+    if (meta?.canonicalUrl) {
+      cacheLookupUrls.add(meta.canonicalUrl);
+    }
+
+    for (const lookupUrl of cacheLookupUrls) {
+      cacheSet(`v1:tiktok-video:${lookupUrl}`, result, TIKTOK_VIDEO_TTL).catch(() => { });
+    }
 
     return Response.json(result, {
       headers: {

@@ -10,6 +10,7 @@ import { hasPermission, PERMISSIONS } from "@/lib/permissions";
 import { checkRateLimitDO, RATE_LIMITS } from "@/lib/rate-limit";
 import { requireChannelAccess } from "@/lib/require-channel-access";
 import { getUserPermissions } from "@/lib/require-permission";
+import { isTikTokMediaHostname } from "@/lib/tiktok-hosts";
 
 interface GifUploadBody {
   source_url: string;
@@ -77,12 +78,7 @@ function isAllowedExternalMediaUrl(url: URL) {
   const hostname = url.hostname.toLowerCase();
   if (EXTERNAL_MEDIA_HOSTS.has(hostname)) return true;
 
-  return (
-    hostname === "api16-normal-useast5.tiktokv.us" ||
-    hostname.endsWith(".tiktokv.us") ||
-    hostname.endsWith(".tiktokcdn-us.com") ||
-    hostname.endsWith(".tiktokcdn.com")
-  );
+  return isTikTokMediaHostname(hostname);
 }
 
 const POST = async ({ params, request }: any) => {

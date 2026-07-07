@@ -156,6 +156,9 @@ describe("hydrateInstagramEmbedsForShare", () => {
   it("hydrates stale TikTok player embeds into direct shareable media", async () => {
     vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => {
       const url = input.toString();
+      if (url === "https://www.tiktok.com/player/api/v1/items?item_ids=7644364274630020383") {
+        return new Response("not found", { status: 404 });
+      }
       if (!url.startsWith("https://www.tikwm.com/api/?url=")) {
         throw new Error(`Unexpected fetch: ${url}`);
       }
@@ -211,7 +214,7 @@ describe("hydrateInstagramEmbedsForShare", () => {
     const hydrated = await hydrateInstagramEmbedsForShare(share);
     const embed = hydrated.snapshot.embeds[0];
 
-    expect(embed.url).toBe("https://www.tiktok.com/@kingoftheskys1/video/7644364274630020383");
+    expect(embed.url).toBe("https://www.tiktok.com/@kingoftheskys1/video/7644364274630020383?is_from_webapp=1&sender_device=pc");
     expect(embed.video).toEqual({
       url: "https://v16m.tiktokcdn-us.com/example/video.mp4?mime_type=video_mp4",
       width: 720,
@@ -238,6 +241,49 @@ describe("hydrateInstagramEmbedsForShare", () => {
       comments: 363,
       likes: 17039,
       views: 183647,
+    });
+  });
+
+  it("falls back to the Instagram shortcode endpoint when oEmbed omits media_id", async () => {
+    workerEnv.INSTAGRAM_SESSIONID = "sessionid";
+    workerEnv.INSTAGRAM_CSRFTOKEN = "csrftoken";
+
+    vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => {
+      const url = input.toString();
+      if (url.startsWith("https://www.instagram.com/api/v1/oembed/")) {
+        return Response.json({
+          title: "craziest work",
+          thumbnail_url: "https://scontent-ord5-1.cdninstagram.com/thumb.jpg",
+        });
+      }
+      if (url.startsWith("https://i.instagram.com/api/v1/media/shortcode/DXU4PV2AGJU/info/")) {
+        return Response.json({
+          items: [{
+            video_versions: [
+              { url: "https://scontent-ord5-1.cdninstagram.com/video.mp4?sig=1", width: 720, height: 1280 },
+            ],
+            image_versions2: {
+              candidates: [
+                { url: "https://scontent-ord5-1.cdninstagram.com/thumb.jpg" },
+              ],
+            },
+            caption: { text: "craziest work" },
+            video_duration: 128.4,
+          }],
+        });
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    }));
+
+    const hydrated = await hydrateInstagramEmbedsForShare(makeShare());
+
+    expect(hydrated.snapshot.embeds[0].video).toEqual({
+      url: "https://scontent-ord5-1.cdninstagram.com/video.mp4?sig=1",
+      width: 720,
+      height: 1280,
+      kind: "direct",
+      contentType: "video/mp4",
+      durationSeconds: 128.4,
     });
   });
 

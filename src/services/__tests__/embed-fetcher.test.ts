@@ -1061,7 +1061,7 @@ describe("extractAndProcessEmbeds", () => {
 
     expect(embeds).toHaveLength(1);
     expect(embeds[0]).toMatchObject({
-      url: "https://www.tiktok.com/@feetlattee/photo/7649484991986027806",
+      url: "https://www.tiktok.com/t/ZTSBAR6M7/",
       type: "rich",
       provider: {
         name: "TikTok",
@@ -1159,7 +1159,7 @@ describe("extractAndProcessEmbeds", () => {
 
     expect(embeds).toHaveLength(1);
     expect(embeds[0]).toMatchObject({
-      url: "https://www.tiktok.com/@nt_hani/photo/7654964663997730066",
+      url: "https://www.tiktok.com/t/ZTSH56wLh/",
       type: "rich",
       provider: {
         name: "TikTok",

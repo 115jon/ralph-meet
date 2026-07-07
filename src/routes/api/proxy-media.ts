@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { cacheFetch, cacheGet, cacheSet } from "@/lib/cache";
 import { clog } from "@/lib/console-logger";
 import { fetchInstagramOEmbedMetadata, fetchInstagramVideoMetadata, fetchTikTokProxyMetadata } from "@/lib/share-preview-proxy";
+import { isTikTokMediaHostname } from "@/lib/tiktok-hosts";
 import type { EmbedInfo } from "@/lib/types";
 import { extractAndProcessEmbeds } from "@/services/embed-fetcher";
 
@@ -47,6 +48,7 @@ interface RefreshableMediaCandidate {
 
 interface ResolveRefreshedMediaOptions {
   forceRefresh?: boolean;
+  bypassCache?: boolean;
 }
 
 const TIKTOK_PROXY_RESPONSE_TTL = 5 * 60;
@@ -65,10 +67,7 @@ export function isAllowedMediaUrl(url: URL): boolean {
     hostname.endsWith(".tenor.com") ||
     hostname.endsWith(".googleusercontent.com") ||
     hostname.endsWith(".cdninstagram.com") ||
-    hostname === "api16-normal-useast5.tiktokv.us" ||
-    hostname.endsWith(".tiktokv.us") ||
-    hostname.endsWith(".tiktokcdn-us.com") ||
-    hostname.endsWith(".tiktokcdn.com") ||
+    isTikTokMediaHostname(hostname) ||
     hostname.includes("tiktok.com")
   );
 }
@@ -197,9 +196,7 @@ export function normalizeRefreshableMediaKey(rawUrl: string): string {
       hostname === "video.twimg.com" ||
       hostname === "pbs.twimg.com" ||
       hostname.endsWith(".cdninstagram.com") ||
-      hostname.endsWith(".tiktokcdn-us.com") ||
-      hostname.endsWith(".tiktokcdn.com") ||
-      hostname.endsWith(".tiktokv.us")
+      isTikTokMediaHostname(hostname)
     ) {
       return `${hostname}${parsed.pathname}`;
     }
@@ -210,15 +207,38 @@ export function normalizeRefreshableMediaKey(rawUrl: string): string {
   }
 }
 
+function isLikelyTikTokImageRequest(rawUrl: string): boolean {
+  try {
+    const parsed = new URL(rawUrl);
+    const hostname = parsed.hostname.toLowerCase();
+    if (!isTikTokMediaHostname(hostname)) return false;
+
+    const pathname = parsed.pathname.toLowerCase();
+    const scene = parsed.searchParams.get("sc")?.toLowerCase();
+    const mimeType = parsed.searchParams.get("mime_type")?.toLowerCase();
+
+    return (
+      mimeType?.startsWith("image/") === true
+      || scene === "avatar"
+      || scene === "cover"
+      || scene === "feed_cover"
+      || pathname.includes("origin.image")
+      || pathname.includes("photomode-image")
+      || pathname.includes("cropcenter")
+      || pathname.includes("shrink-aq")
+    );
+  } catch {
+    return false;
+  }
+}
+
 function normalizeRefreshableMediaLooseKey(rawUrl: string): string {
   try {
     const parsed = new URL(rawUrl);
     const hostname = parsed.hostname.toLowerCase();
 
     if (
-      hostname.endsWith(".tiktokcdn-us.com") ||
-      hostname.endsWith(".tiktokcdn.com") ||
-      hostname.endsWith(".tiktokv.us")
+      isTikTokMediaHostname(hostname)
     ) {
       return parsed.pathname;
     }
@@ -264,6 +284,9 @@ export function pickRefreshedMediaUrls(candidates: RefreshableMediaCandidate[], 
   }
 
   const requestedType = inferMediaContentType(null, requestUrl);
+  const shouldPreferImageCandidates = requestedType.startsWith("image/") || (
+    requestedType === "application/octet-stream" && isLikelyTikTokImageRequest(requestUrl)
+  );
   if (requestedType.startsWith("video/")) {
     for (const candidate of candidates) {
       if (candidate.type === "video") {
@@ -282,7 +305,7 @@ export function pickRefreshedMediaUrls(candidates: RefreshableMediaCandidate[], 
     return results;
   }
 
-  if (requestedType.startsWith("image/")) {
+  if (shouldPreferImageCandidates) {
     for (const candidate of candidates) {
       if (candidate.type === "image") {
         pushUniqueUrl(results, seen, candidate.url);
@@ -408,13 +431,7 @@ function getTikTokProxyCacheControl(rawUrl: string, status: number, contentType?
 }
 
 function isTikTokMediaUrl(url: URL): boolean {
-  const hostname = url.hostname.toLowerCase();
-  return (
-    hostname === "api16-normal-useast5.tiktokv.us" ||
-    hostname.endsWith(".tiktokv.us") ||
-    hostname.endsWith(".tiktokcdn-us.com") ||
-    hostname.endsWith(".tiktokcdn.com")
-  );
+  return isTikTokMediaHostname(url.hostname);
 }
 
 function isTikTokSourceUrl(url: URL): boolean {
@@ -564,8 +581,9 @@ async function getTikTokRefreshCandidates(
 ): Promise<RefreshableMediaCandidate[]> {
   const cacheKey = `v1:proxy-media:tiktok:${canonicalUrl}`;
   const cached = await cacheGet<RefreshableMediaCandidate[]>(cacheKey);
+  const cachedIsFresh = cached !== null && areTikTokRefreshCandidatesStillFresh(cached);
 
-  if (cached !== null && (!options?.forceRefresh || areTikTokRefreshCandidatesStillFresh(cached))) {
+  if (cachedIsFresh && !options?.bypassCache) {
     return cached;
   }
 
@@ -575,7 +593,7 @@ async function getTikTokRefreshCandidates(
     return freshCandidates;
   }
 
-  return cached ?? freshCandidates;
+  return cachedIsFresh ? cached : [];
 }
 
 async function resolveRefreshedMediaUrl(
@@ -755,6 +773,7 @@ export async function proxyMedia(request: Request, includeBody: boolean): Promis
     if (!upstream.ok && isTikTokProxyRequest) {
       const forcedRefreshUrls = await resolveRefreshedMediaUrls(refreshSource, mediaUrl.toString(), {
         forceRefresh: true,
+        bypassCache: true,
       });
 
       for (const candidateUrl of forcedRefreshUrls) {

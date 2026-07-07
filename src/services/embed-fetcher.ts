@@ -1174,7 +1174,7 @@ async function fetchTikTokDataRefreshed(url: string): Promise<EmbedInfo | null> 
 
   return {
     id: nextEmbedId(),
-    url: proxyData?.canonicalUrl || url,
+    url,
     type: postType === "slideshow" ? "rich" : "video",
     rawTitle: caption || `${postType === "slideshow" ? "TikTok slideshow" : "TikTok"} · ${authorName}`,
     rawDescription: caption || undefined,
