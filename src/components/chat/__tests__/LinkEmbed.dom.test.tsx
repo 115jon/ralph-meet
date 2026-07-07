@@ -583,6 +583,59 @@ describe("LinkEmbed DOM rendering", () => {
     expect(container.textContent?.match(/Giggle ✓/g)?.length ?? 0).toBe(1);
   });
 
+  it("renders TikTok author emoji through the embed text path", async () => {
+    vi.stubGlobal("IntersectionObserver", class {
+      observe = vi.fn();
+      disconnect = vi.fn();
+      unobserve = vi.fn();
+      takeRecords = vi.fn(() => []);
+      root = null;
+      rootMargin = "";
+      thresholds = [];
+    } as unknown as typeof IntersectionObserver);
+
+    vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => {
+      const url = input.toString();
+      if (!url.includes("/api/tiktok-video?videoUrl=")) {
+        return new Response("not found", { status: 404 });
+      }
+
+      return Response.json({
+        canonicalUrl: "https://www.tiktok.com/@dj.giggle/photo/7656952653510888717",
+        postType: "slideshow",
+        coverUrl: "https://p16-common-sign.tiktokcdn-us.com/example/cover.webp",
+        title: "still looping",
+        authorName: "Giggle \u2705",
+        authorHandle: "dj.giggle",
+        media: [
+          {
+            type: "image",
+            url: "https://p19-common-sign.tiktokcdn-us.com/example/photo-1.jpeg",
+          },
+        ],
+      });
+    }) as unknown as typeof fetch);
+
+    const { container } = render(
+      <LinkEmbed
+        embed={makeTikTokSlideshowEmbed({
+          author: {
+            name: "Giggle \u2705",
+            url: "https://www.tiktok.com/@dj.giggle",
+          },
+        })}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(container.textContent).toContain("Giggle");
+    });
+
+    const authorLink = container.querySelector('a[href="https://www.tiktok.com/@dj.giggle"]');
+    expect(authorLink).not.toBeNull();
+    expect(authorLink?.querySelector('[aria-label^=":"]')).not.toBeNull();
+  });
+
   it("uses each TikTok slideshow slide's natural aspect ratio", async () => {
     vi.stubGlobal("IntersectionObserver", class {
       observe = vi.fn();
@@ -711,6 +764,65 @@ describe("LinkEmbed DOM rendering", () => {
     expect(captionParagraph).toBeDefined();
     expect(container.textContent?.match(/Giggle ✓/g)?.length ?? 0).toBe(1);
     expect(captionParagraph?.querySelector('[aria-label^=":"]')).not.toBeNull();
+  });
+
+  it("renders TikTok audio metadata emoji through the embed text path", async () => {
+    vi.stubGlobal("IntersectionObserver", class {
+      observe = vi.fn();
+      disconnect = vi.fn();
+      unobserve = vi.fn();
+      takeRecords = vi.fn(() => []);
+      root = null;
+      rootMargin = "";
+      thresholds = [];
+    } as unknown as typeof IntersectionObserver);
+
+    vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => {
+      const url = input.toString();
+      if (!url.includes("/api/tiktok-video?videoUrl=")) {
+        return new Response("not found", { status: 404 });
+      }
+
+      return Response.json({
+        canonicalUrl: "https://www.tiktok.com/@dj.giggle/photo/7656952653510888717",
+        postType: "slideshow",
+        coverUrl: "https://p16-common-sign.tiktokcdn-us.com/example/cover.webp",
+        title: "still looping",
+        authorName: "Giggle \u2705",
+        authorHandle: "dj.giggle",
+        media: [
+          {
+            type: "image",
+            url: "https://p19-common-sign.tiktokcdn-us.com/example/photo-1.jpeg",
+          },
+        ],
+        audio: {
+          title: "original sound \u{1F525}",
+          artist: "DJ Echo \u{1F3A7}",
+          url: "https://v16-ies-music.tiktokcdn-us.com/example/audio-track/?mime_type=audio_mpeg",
+        },
+      });
+    }) as unknown as typeof fetch);
+
+    const { container } = render(
+      <LinkEmbed
+        embed={makeTikTokSlideshowEmbed({
+          author: {
+            name: "Giggle \u2705",
+            url: "https://www.tiktok.com/@dj.giggle",
+          },
+        })}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(container.textContent).toContain("original sound");
+      expect(container.querySelector("audio")).not.toBeNull();
+    });
+
+    const audioRow = container.querySelector("audio")?.closest("div");
+    expect(audioRow).not.toBeNull();
+    expect(audioRow?.querySelectorAll('[aria-label^=":"]').length ?? 0).toBeGreaterThanOrEqual(2);
   });
 
   it("keeps only TikTok hashtags when the caption candidate is author-prefixed", async () => {

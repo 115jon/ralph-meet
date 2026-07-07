@@ -242,7 +242,9 @@ const BaseEmbed = memo(({ embed, children, width, bare }: BaseEmbedProps) => {
             {embed.footer.iconURL && (
               <img src={embed.footer.iconURL} alt="" className="w-4 h-4 rounded-full" />
             )}
-            <span>{embed.footer.text}</span>
+            <span>
+              <EmbedInlineText text={embed.footer.text} keyPrefix={`${embed.id}-footer`} />
+            </span>
             {timestampText && (
               <>
                 <span className="opacity-50">·</span>
@@ -1394,12 +1396,18 @@ const TikTokEmbed = memo(({
                 <div className="min-w-0 flex-1 leading-tight">
                   {displayEmbed.audio.title && (
                     <div className="truncate font-semibold text-rm-text-primary">
-                      {displayEmbed.audio.title}
+                      <EmbedInlineText
+                        text={displayEmbed.audio.title}
+                        keyPrefix={`${embed.id}-tiktok-audio-title`}
+                      />
                     </div>
                   )}
                   {displayEmbed.audio.artist && (
                     <div className="truncate text-rm-text-muted/86">
-                      {displayEmbed.audio.artist}
+                      <EmbedInlineText
+                        text={displayEmbed.audio.artist}
+                        keyPrefix={`${embed.id}-tiktok-audio-artist`}
+                      />
                     </div>
                   )}
                 </div>
