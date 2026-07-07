@@ -24,88 +24,122 @@ const DEFAULT_INNERTUBE_CONTEXT = {
 
 const FALLBACK_INNERTUBE_API_KEY = "AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8";
 
+const WEB_SAFARI_INNERTUBE_ATTEMPT = {
+  name: "web_safari",
+  apiKey: FALLBACK_INNERTUBE_API_KEY,
+  userAgent: YOUTUBE_WEBPAGE_USER_AGENT,
+  context: {
+    client: {
+      clientName: "WEB",
+      clientVersion: "2.20260114.08.00",
+      userAgent: YOUTUBE_WEBPAGE_USER_AGENT,
+      hl: "en",
+      gl: "US",
+      utcOffsetMinutes: 0,
+    },
+  },
+  clientNameHeader: "1",
+  origin: "https://www.youtube.com",
+} as const;
+
+const TV_INNERTUBE_ATTEMPT = {
+  name: "tv",
+  apiKey: FALLBACK_INNERTUBE_API_KEY,
+  userAgent: "Mozilla/5.0 (ChromiumStylePlatform) Cobalt/25.lts.30.1034943-gold (unlike Gecko), Unknown_TV_Unknown_0/Unknown (Unknown, Unknown)",
+  context: {
+    client: {
+      clientName: "TVHTML5",
+      clientVersion: "7.20260114.12.00",
+      userAgent: "Mozilla/5.0 (ChromiumStylePlatform) Cobalt/25.lts.30.1034943-gold (unlike Gecko), Unknown_TV_Unknown_0/Unknown (Unknown, Unknown)",
+      hl: "en",
+      gl: "US",
+      timeZone: "UTC",
+      utcOffsetMinutes: 0,
+    },
+  },
+  clientNameHeader: "7",
+  origin: "https://www.youtube.com",
+} as const;
+
+const ANDROID_VR_INNERTUBE_ATTEMPT = {
+  name: "android_vr",
+  apiKey: FALLBACK_INNERTUBE_API_KEY,
+  userAgent: "com.google.android.apps.youtube.vr.oculus/1.65.10 (Linux; U; Android 12L; eureka-user Build/SQ3A.220605.009.A1) gzip",
+  context: {
+    client: {
+      clientName: "ANDROID_VR",
+      clientVersion: "1.65.10",
+      deviceMake: "Oculus",
+      deviceModel: "Quest 3",
+      androidSdkVersion: 32,
+      userAgent: "com.google.android.apps.youtube.vr.oculus/1.65.10 (Linux; U; Android 12L; eureka-user Build/SQ3A.220605.009.A1) gzip",
+      hl: "en",
+      osName: "Android",
+      osVersion: "12L",
+      timeZone: "UTC",
+      utcOffsetMinutes: 0,
+    },
+  },
+  clientNameHeader: "28",
+  origin: "https://www.youtube.com",
+} as const;
+
+const ANDROID_INNERTUBE_ATTEMPT = {
+  name: "android",
+  apiKey: FALLBACK_INNERTUBE_API_KEY,
+  userAgent: "com.google.android.youtube/21.02.35 (Linux; U; Android 11) gzip",
+  context: {
+    client: {
+      clientName: "ANDROID",
+      clientVersion: "21.02.35",
+      androidSdkVersion: 30,
+      userAgent: "com.google.android.youtube/21.02.35 (Linux; U; Android 11) gzip",
+      hl: "en",
+      osName: "Android",
+      osVersion: "11",
+      timeZone: "UTC",
+      utcOffsetMinutes: 0,
+    },
+  },
+  clientNameHeader: "3",
+  origin: "https://www.youtube.com",
+} as const;
+
+const IOS_INNERTUBE_ATTEMPT = {
+  name: "ios",
+  apiKey: FALLBACK_INNERTUBE_API_KEY,
+  userAgent: "com.google.ios.youtube/21.02.3 (iPhone16,2; U; CPU iOS 18_3_2 like Mac OS X;)",
+  context: {
+    client: {
+      clientName: "IOS",
+      clientVersion: "21.02.3",
+      deviceMake: "Apple",
+      deviceModel: "iPhone16,2",
+      userAgent: "com.google.ios.youtube/21.02.3 (iPhone16,2; U; CPU iOS 18_3_2 like Mac OS X;)",
+      hl: "en",
+      osName: "iPhone",
+      osVersion: "18.3.2.22D82",
+      timeZone: "UTC",
+      utcOffsetMinutes: 0,
+    },
+  },
+  clientNameHeader: "5",
+  origin: "https://www.youtube.com",
+} as const;
+
 const FALLBACK_INNERTUBE_ATTEMPTS = [
-  {
-    name: "tv",
-    apiKey: FALLBACK_INNERTUBE_API_KEY,
-    userAgent: "Mozilla/5.0 (ChromiumStylePlatform) Cobalt/25.lts.30.1034943-gold (unlike Gecko), Unknown_TV_Unknown_0/Unknown (Unknown, Unknown)",
-    context: {
-      client: {
-        clientName: "TVHTML5",
-        clientVersion: "7.20260114.12.00",
-        userAgent: "Mozilla/5.0 (ChromiumStylePlatform) Cobalt/25.lts.30.1034943-gold (unlike Gecko), Unknown_TV_Unknown_0/Unknown (Unknown, Unknown)",
-        hl: "en",
-        gl: "US",
-        timeZone: "UTC",
-        utcOffsetMinutes: 0,
-      },
-    },
-    clientNameHeader: "7",
-    origin: "https://www.youtube.com",
-  },
-  {
-    name: "android_vr",
-    apiKey: FALLBACK_INNERTUBE_API_KEY,
-    userAgent: "com.google.android.apps.youtube.vr.oculus/1.65.10 (Linux; U; Android 12L; eureka-user Build/SQ3A.220605.009.A1) gzip",
-    context: {
-      client: {
-        clientName: "ANDROID_VR",
-        clientVersion: "1.65.10",
-        deviceMake: "Oculus",
-        deviceModel: "Quest 3",
-        androidSdkVersion: 32,
-        userAgent: "com.google.android.apps.youtube.vr.oculus/1.65.10 (Linux; U; Android 12L; eureka-user Build/SQ3A.220605.009.A1) gzip",
-        hl: "en",
-        osName: "Android",
-        osVersion: "12L",
-        timeZone: "UTC",
-        utcOffsetMinutes: 0,
-      },
-    },
-    clientNameHeader: "28",
-    origin: "https://www.youtube.com",
-  },
-  {
-    name: "android",
-    apiKey: FALLBACK_INNERTUBE_API_KEY,
-    userAgent: "com.google.android.youtube/21.02.35 (Linux; U; Android 11) gzip",
-    context: {
-      client: {
-        clientName: "ANDROID",
-        clientVersion: "21.02.35",
-        androidSdkVersion: 30,
-        userAgent: "com.google.android.youtube/21.02.35 (Linux; U; Android 11) gzip",
-        hl: "en",
-        osName: "Android",
-        osVersion: "11",
-        timeZone: "UTC",
-        utcOffsetMinutes: 0,
-      },
-    },
-    clientNameHeader: "3",
-    origin: "https://www.youtube.com",
-  },
-  {
-    name: "ios",
-    apiKey: FALLBACK_INNERTUBE_API_KEY,
-    userAgent: "com.google.ios.youtube/21.02.3 (iPhone16,2; U; CPU iOS 18_3_2 like Mac OS X;)",
-    context: {
-      client: {
-        clientName: "IOS",
-        clientVersion: "21.02.3",
-        deviceMake: "Apple",
-        deviceModel: "iPhone16,2",
-        userAgent: "com.google.ios.youtube/21.02.3 (iPhone16,2; U; CPU iOS 18_3_2 like Mac OS X;)",
-        hl: "en",
-        osName: "iPhone",
-        osVersion: "18.3.2.22D82",
-        timeZone: "UTC",
-        utcOffsetMinutes: 0,
-      },
-    },
-    clientNameHeader: "5",
-    origin: "https://www.youtube.com",
-  },
+  TV_INNERTUBE_ATTEMPT,
+  ANDROID_VR_INNERTUBE_ATTEMPT,
+  ANDROID_INNERTUBE_ATTEMPT,
+  IOS_INNERTUBE_ATTEMPT,
+] as const;
+
+const PLAYBACK_INNERTUBE_ATTEMPTS = [
+  ANDROID_VR_INNERTUBE_ATTEMPT,
+  WEB_SAFARI_INNERTUBE_ATTEMPT,
+  TV_INNERTUBE_ATTEMPT,
+  ANDROID_INNERTUBE_ATTEMPT,
+  IOS_INNERTUBE_ATTEMPT,
 ] as const;
 
 interface PreparedFormatCandidate {
@@ -161,6 +195,10 @@ let cachedWebInnertubeConfig:
     expiresAt: number;
   }
   | null = null;
+
+export function __resetYouTubeInnertubeCacheForTests() {
+  cachedWebInnertubeConfig = null;
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === "object" && !Array.isArray(value);
@@ -698,6 +736,9 @@ async function fetchPlayerResponseFromInnertube(
   videoId: string,
   ytcfg: Record<string, unknown>,
   cookieHeader: string | null,
+  options?: {
+    includeFallbacks?: boolean;
+  },
 ): Promise<{
   payload: Record<string, unknown> | null;
   diagnostics: InnertubePlayerAttemptDiagnostic[];
@@ -725,12 +766,14 @@ async function fetchPlayerResponseFromInnertube(
     });
   }
 
-  for (const attempt of FALLBACK_INNERTUBE_ATTEMPTS) {
-    attempts.push({
-      ...attempt,
-      clientVersion: attempt.context.client.clientVersion,
-      visitorData,
-    });
+  if (options?.includeFallbacks !== false) {
+    for (const attempt of PLAYBACK_INNERTUBE_ATTEMPTS) {
+      attempts.push({
+        ...attempt,
+        clientVersion: attempt.context.client.clientVersion,
+        visitorData: null,
+      });
+    }
   }
 
   let lastSuccessfulPayload: Record<string, unknown> | null = null;
@@ -1034,23 +1077,38 @@ export async function resolveYouTubePlayback(
   const preferredKind = options.preferredKind ?? "audio";
   const preferredContainer = options.preferredContainer;
 
-  const [webConfig, upstream] = await Promise.all([
-    fetchWebInnertubeConfig().catch(() => null),
-    import("./upstream"),
-  ]);
+  const upstream = await import("./upstream");
   const solverBundle = await upstream.loadActiveSolverBundle();
-  let playerUrl = webConfig?.playerUrl ?? null;
+  let webConfig: WebInnertubeSession | null = null;
+  let playerUrl = null as string | null;
   let innertubeDiagnostics: InnertubePlayerAttemptDiagnostic[] = [];
   let playerResponse = null as Record<string, unknown> | null;
-  if (webConfig) {
-    const innertubeResult = await fetchPlayerResponseFromInnertube(
-      videoId,
-      webConfig.ytcfg,
-      webConfig.cookieHeader,
-    ).catch(() => null);
-    if (innertubeResult) {
-      playerResponse = innertubeResult.payload;
-      innertubeDiagnostics = innertubeResult.diagnostics;
+
+  const fallbackInnertubeResult = await fetchPlayerResponseFromInnertube(
+    videoId,
+    {},
+    null,
+  ).catch(() => null);
+  if (fallbackInnertubeResult) {
+    playerResponse = fallbackInnertubeResult.payload;
+    innertubeDiagnostics = fallbackInnertubeResult.diagnostics;
+  }
+
+  if (!playerResponse || !hasPlayableFormats(playerResponse)) {
+    webConfig = await fetchWebInnertubeConfig().catch(() => null);
+    playerUrl = webConfig?.playerUrl ?? null;
+
+    if (webConfig) {
+      const webInnertubeResult = await fetchPlayerResponseFromInnertube(
+        videoId,
+        webConfig.ytcfg,
+        webConfig.cookieHeader,
+        { includeFallbacks: false },
+      ).catch(() => null);
+      if (webInnertubeResult) {
+        playerResponse = webInnertubeResult.payload ?? playerResponse;
+        innertubeDiagnostics = [...innertubeDiagnostics, ...webInnertubeResult.diagnostics];
+      }
     }
   }
 
@@ -1077,16 +1135,18 @@ export async function resolveYouTubePlayback(
       videoId,
       watchYtcfg,
       watchPage.cookieHeader,
+      { includeFallbacks: false },
     ).catch(() => null);
     if (watchInnertubeResult) {
-      innertubeDiagnostics = watchInnertubeResult.diagnostics;
+      innertubeDiagnostics = [...innertubeDiagnostics, ...watchInnertubeResult.diagnostics];
     }
 
     playerResponse =
       (watchInnertubeResult?.payload && hasPlayableFormats(watchInnertubeResult.payload)
         ? watchInnertubeResult.payload
         : null)
-      ?? (initialPlayerResponse && hasPlayableFormats(initialPlayerResponse) ? initialPlayerResponse : null);
+      ?? (initialPlayerResponse && hasPlayableFormats(initialPlayerResponse) ? initialPlayerResponse : null)
+      ?? playerResponse;
   }
 
   if (!playerResponse) {
@@ -1128,6 +1188,11 @@ export async function resolveYouTubePlayback(
     n: {} as Record<string, string | null>,
     sig: {} as Record<string, string | null>,
   };
+
+  if ((sigChallenges.length > 0 || nChallenges.length > 0) && !playerUrl) {
+    webConfig = webConfig ?? await fetchWebInnertubeConfig().catch(() => null);
+    playerUrl = webConfig?.playerUrl ?? null;
+  }
 
   if ((sigChallenges.length > 0 || nChallenges.length > 0) && !playerUrl) {
     watchPage = watchPage ?? await fetchWatchPage(videoId);
