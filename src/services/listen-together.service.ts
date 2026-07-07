@@ -707,26 +707,40 @@ export async function searchListenTogether(
   const cached = await cacheGet<ListenTogetherSearchResponse>(cacheKey);
   if (cached) return cached;
 
-  let results: ListenTogetherSearchResult[] = [];
+  try {
+    let results: ListenTogetherSearchResult[] = [];
 
-  if (filter === "collection") {
-    const collections = await searchYouTubeCatalog(trimmed, "playlist", 10);
-    results = collections
-      .map((playlist) => mapYoutubePlaylistNode(playlist))
-      .filter((item): item is ListenTogetherSearchResult => !!item)
-      .slice(0, 10);
-  } else {
-    results = (await searchYoutubeTracks(trimmed, 12)).slice(0, 12);
+    if (filter === "collection") {
+      const collections = await searchYouTubeCatalog(trimmed, "playlist", 10);
+      results = collections
+        .map((playlist) => mapYoutubePlaylistNode(playlist))
+        .filter((item): item is ListenTogetherSearchResult => !!item)
+        .slice(0, 10);
+    } else {
+      results = (await searchYoutubeTracks(trimmed, 12)).slice(0, 12);
+    }
+
+    const response: ListenTogetherSearchResponse = {
+      filter,
+      results,
+      cursor: null,
+    };
+
+    cacheSet(cacheKey, response, LISTEN_TOGETHER_SEARCH_TTL_SECONDS).catch(() => {});
+    return response;
+  } catch (error) {
+    log.warn("listen-together search failed", {
+      query: trimmed,
+      filter,
+      error,
+    });
+
+    return {
+      filter,
+      results: [],
+      cursor: null,
+    };
   }
-
-  const response: ListenTogetherSearchResponse = {
-    filter,
-    results,
-    cursor: null,
-  };
-
-  cacheSet(cacheKey, response, LISTEN_TOGETHER_SEARCH_TTL_SECONDS).catch(() => {});
-  return response;
 }
 
 export async function resolveListenTogetherUrl(

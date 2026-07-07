@@ -1,5 +1,22 @@
-import { extractYouTubeVideoId, pickPreferredFormat } from "../ytdlp/youtube";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+vi.mock("../ytdlp/upstream", () => ({
+  loadActiveSolverBundle: vi.fn(async () => ({
+    version: "test-bundle",
+    source: "bundled",
+  })),
+}));
+
+import {
+  extractYouTubeVideoId,
+  pickPreferredFormat,
+  resolveYouTubePlayback,
+} from "../ytdlp/youtube";
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.clearAllMocks();
+});
 
 describe("yt-dlp YouTube helpers", () => {
   it("extracts video ids from common YouTube URL shapes", () => {
@@ -52,5 +69,72 @@ describe("yt-dlp YouTube helpers", () => {
     ], "audio", "mp4");
 
     expect(format?.itag).toBe(140);
+  });
+
+  it("resolves playback from the cached web innertube session without requiring the watch page", async () => {
+    const fetchMock = vi.fn(async (input: string | URL | Request) => {
+      const url = typeof input === "string"
+        ? input
+        : input instanceof URL
+          ? input.toString()
+          : input.url;
+
+      if (url === "https://www.youtube.com/?hl=en") {
+        return new Response(
+          [
+            "<!doctype html><html><head><script>",
+            'ytcfg.set({"INNERTUBE_API_KEY":"test-key","INNERTUBE_CONTEXT_CLIENT_NAME":1,"VISITOR_DATA":"visitor-data","STS":12345,"PLAYER_JS_URL":"\\/s\\/player\\/test-player\\/player_ias.vflset\\/en_US\\/base.js","INNERTUBE_CONTEXT":{"client":{"clientName":"WEB","clientVersion":"2.20260611.01.00","hl":"en","gl":"US","utcOffsetMinutes":0}}});',
+            "</script></head><body></body></html>",
+          ].join(""),
+          { status: 200, headers: { "Content-Type": "text/html" } },
+        );
+      }
+
+      if (url.startsWith("https://www.youtube.com/youtubei/v1/player?key=test-key")) {
+        return Response.json({
+          videoDetails: {
+            title: "Remote Safe Track",
+            author: "Resolver Test",
+            lengthSeconds: "123",
+            isLiveContent: false,
+          },
+          streamingData: {
+            adaptiveFormats: [
+              {
+                itag: 140,
+                url: "https://rr1---sn.example.googlevideo.com/videoplayback?expire=1893456000&itag=140",
+                mimeType: 'audio/mp4; codecs="mp4a.40.2"',
+                bitrate: 128000,
+                contentLength: "123456",
+                audioSampleRate: "44100",
+                audioChannels: 2,
+              },
+            ],
+          },
+        });
+      }
+
+      if (url.startsWith("https://www.youtube.com/watch?")) {
+        return new Response("Too Many Requests", { status: 429 });
+      }
+
+      throw new Error(`Unexpected fetch in test: ${url}`);
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    const resolved = await resolveYouTubePlayback("https://www.youtube.com/watch?v=dQw4w9WgXcQ", {
+      preferredKind: "audio",
+      preferredContainer: "mp4",
+      includeFormats: true,
+    });
+
+    expect(resolved.title).toBe("Remote Safe Track");
+    expect(resolved.playerUrl).toBe("https://www.youtube.com/s/player/test-player/player_ias.vflset/en_US/base.js");
+    expect(resolved.selectedFormat?.itag).toBe(140);
+    expect(fetchMock).not.toHaveBeenCalledWith(
+      expect.stringMatching(/^https:\/\/www\.youtube\.com\/watch\?/),
+      expect.anything(),
+    );
   });
 });
