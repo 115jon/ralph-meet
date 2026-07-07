@@ -43,10 +43,12 @@
     "allow-handle-preview-loopback-ice-candidate",
     "allow-stop-preview-loopback",
     "allow-get-hardware-acceleration",
+    "allow-set-open-on-startup",
     "allow-set-hardware-acceleration",
     "allow-set-close-to-tray",
     "allow-set-start-minimized",
     "allow-set-title-bar-dark-mode",
+    "allow-set-taskbar-notification-attention",
     "allow-fetch-update",
     "allow-install-update"
   ]

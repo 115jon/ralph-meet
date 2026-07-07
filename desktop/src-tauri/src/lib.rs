@@ -512,11 +512,6 @@ pub(crate) fn restore_main_window_geometry_from_state<R: tauri::Runtime>(
     Ok(())
 }
 
-#[tauri::command]
-fn restore_main_window_geometry<R: tauri::Runtime>(app: tauri::AppHandle<R>) -> Result<(), String> {
-    restore_main_window_geometry_from_state(&app, "command:restore_main_window_geometry")
-}
-
 pub(crate) fn log_window_snapshot<R: tauri::Runtime>(
     window: &tauri::WebviewWindow<R>,
     context: &str,
@@ -1009,7 +1004,6 @@ pub fn run() {
             set_hardware_acceleration,
             set_close_to_tray,
             set_start_minimized,
-            restore_main_window_geometry,
             window::set_title_bar_dark_mode,
             window::set_taskbar_notification_attention,
             // Updater commands — exposed so the Settings UI can trigger
