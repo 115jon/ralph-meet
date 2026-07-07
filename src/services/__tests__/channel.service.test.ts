@@ -100,14 +100,13 @@ describe("createChannel", () => {
     expect(result.channel.name).toBe("Voice Room");
   });
 
-  it("sanitizes text channel name", async () => {
+  it("preserves decorative unicode while normalizing text channel spacing", async () => {
     const result = await createChannel(db as any, SERVER_ID, USER_ID, {
-      name: "My Cool Channel!!!",
+      name: "「✨」 My Cool Channel!!!",
       channel_type: "text",
     });
 
-    // Text channels should be sanitized (lowercase, hyphens)
-    expect(result.channel.name).toBe("my-cool-channel");
+    expect(result.channel.name).toBe("「✨」-my-cool-channel!!!");
   });
 
   it("includes description and category_id when provided", async () => {
@@ -125,7 +124,7 @@ describe("createChannel", () => {
   it("throws when sanitized name is empty", async () => {
     await expect(
       createChannel(db as any, SERVER_ID, USER_ID, {
-        name: "!!!",
+        name: "   ",
         channel_type: "text",
       })
     ).rejects.toHaveProperty("status", 400);
@@ -161,6 +160,14 @@ describe("updateChannel", () => {
 
     expect(result.channel.name).toBe("renamed");
     expect((result.broadcast.data as any).channel).toEqual(result.channel);
+  });
+
+  it("keeps decorative unicode when renaming a text channel", async () => {
+    const result = await updateChannel(db as any, CHANNEL_ID, USER_ID, {
+      name: "「✨」chat",
+    });
+
+    expect(result.channel.name).toBe("「✨」chat");
   });
 });
 

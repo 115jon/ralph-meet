@@ -2,6 +2,7 @@ import { clog } from "@/lib/console-logger";
 import type { SFUClient, VoiceConnectionStats } from "@/lib/sfu-client";
 import { buildVoiceDiagnosticsBundle } from "@/lib/voice/diagnostics";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import InlineEmojiText from "@/components/chat/InlineEmojiText";
 
 const log = clog("VoiceDebug");
 
@@ -153,7 +154,7 @@ export function VoiceDebugScreen({ sfu, onClose, channelName = "Voice" }: VoiceD
         <div className="sm:w-52 shrink-0 sm:border-r border-b sm:border-b-0 border-rm-border bg-rm-bg-surface sm:p-4 sm:space-y-4 sm:overflow-y-auto">
           {/* Mobile: horizontal strip */}
           <div className="flex sm:hidden items-center gap-2 px-3 py-2 overflow-x-auto scrollbar-none">
-            <span className="text-[12px] font-bold text-rm-text shrink-0">{channelName}</span>
+            <InlineEmojiText text={channelName} className="text-[12px] font-bold text-rm-text shrink-0" />
             <span className={`text-[10px] font-semibold shrink-0 ${isConnected ? "text-rm-status-online" : "text-rm-status-idle"}`}>
               {isConnected ? "●" : "○"}
             </span>
@@ -170,7 +171,7 @@ export function VoiceDebugScreen({ sfu, onClose, channelName = "Voice" }: VoiceD
           {/* Desktop: vertical sidebar */}
           <div className="hidden sm:block space-y-4">
             <div className="space-y-1">
-              <span className="text-[14px] font-bold text-rm-text">{channelName}</span>
+              <InlineEmojiText text={channelName} className="text-[14px] font-bold text-rm-text" />
               <p className={`text-[11px] font-semibold ${isConnected ? "text-rm-status-online" : "text-rm-status-idle"}`}>
                 {formatConnectionStateLabel(sessionState)}
               </p>

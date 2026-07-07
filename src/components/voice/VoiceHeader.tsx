@@ -3,6 +3,7 @@ import type { StreamWatcherIdentity } from "@/lib/stream-watchers";
 import { StreamingStatsPanel } from "@/components/voice/StreamingStatsPanel";
 import { StreamWatcherList } from "@/components/voice/StreamWatcherList";
 import { AvatarImage } from "@/components/chat/AvatarImage";
+import InlineEmojiText from "@/components/chat/InlineEmojiText";
 import { getAuthAssetUrl } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 import { Menu, MessageSquare, Volume2 } from "../chat/Icons";
@@ -61,7 +62,10 @@ export function VoiceHeader({
         )}
         <div className={cn("flex items-center gap-2", focusedItem ? "text-white/80" : "text-rm-text-muted")}>
           <Volume2 size={18} />
-          <span className={cn("text-sm font-bold tracking-tight", focusedItem ? "text-white" : "text-rm-text")}>{channelName}</span>
+          <InlineEmojiText
+            text={channelName}
+            className={cn("text-sm font-bold tracking-tight", focusedItem ? "text-white" : "text-rm-text")}
+          />
         </div>
         <div className={cn("h-4 w-px", focusedItem ? "bg-white/20" : "bg-rm-border")} />
         <div className="flex items-center gap-2">

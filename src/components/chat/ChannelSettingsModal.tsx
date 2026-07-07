@@ -7,6 +7,7 @@ import { sanitizeChannelName } from '@/lib/validations';
 import { Hash, Loader2, Settings2, Shield, Volume2, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import ChannelPermissionsTab from './ChannelPermissionsTab';
+import InlineEmojiText from './InlineEmojiText';
 
 interface ChannelSettingsModalProps {
   serverId: string;
@@ -113,7 +114,7 @@ export default function ChannelSettingsModal({
           >
             <h2 className="text-[13px] font-bold tracking-widest text-rm-text-muted truncate">
               <ChannelTypeIcon className="inline h-3 w-3 mr-1 -mt-0.5 opacity-60" />
-              {channel.name}
+              <InlineEmojiText text={channel.name} />
             </h2>
             <button
               onClick={onClose}
@@ -128,7 +129,7 @@ export default function ChannelSettingsModal({
             <div className="hidden md:block mb-2 px-2">
               <h2 className="text-[11px] font-bold uppercase tracking-widest text-rm-text-muted truncate block w-[180px]" title={channel.name}>
                 <ChannelTypeIcon className="inline h-3 w-3 mr-1 -mt-0.5 opacity-60" />
-                {channel.name}
+                <InlineEmojiText text={channel.name} />
               </h2>
             </div>
             <button

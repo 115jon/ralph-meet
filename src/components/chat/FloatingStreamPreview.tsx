@@ -6,6 +6,7 @@ import { VideoPlayer } from "@/components/voice/VideoPlayer";
 import { cn } from "@/lib/utils";
 import { ArrowLeft, MonitorX, Settings2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import InlineEmojiText from "./InlineEmojiText";
 
 const DEFAULT_PREVIEW_SIZE = {
   width: 360,
@@ -169,7 +170,7 @@ export default function FloatingStreamPreview({
             className="absolute left-3 top-3 z-20 flex max-w-[70%] items-center gap-1.5 rounded-md bg-black/40 px-2.5 py-1 text-[15px] font-semibold tracking-tight text-white/90 transition hover:text-white hover:underline"
           >
             <ArrowLeft size={14} className="shrink-0" />
-            <span className="truncate">{channelName}</span>
+            <InlineEmojiText text={channelName} className="truncate" />
           </button>
 
           <div className="absolute bottom-3 left-3 z-20 max-w-[55%] rounded-md bg-black/40 px-2.5 py-1 text-sm font-bold tracking-tight text-white">

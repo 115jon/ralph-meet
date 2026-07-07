@@ -74,6 +74,7 @@ import UserProfilePopover from "./UserProfilePopover";
 import { VoiceStreamHoverCard } from "./VoiceStreamHoverCard";
 import VoiceChannelMediaStatusModal from "./VoiceChannelMediaStatusModal";
 import VoiceChannelTextStatusModal from "./VoiceChannelTextStatusModal";
+import InlineEmojiText from "./InlineEmojiText";
 import { useDelayUnmount, useDelayedUnmountValue } from "@/hooks/useDelayUnmount";
 
 const StreamContextMenu = lazy(() =>
@@ -414,9 +415,7 @@ function SortableChannelItem({
           <Hash className="h-4 w-4 shrink-0 opacity-60" />
         )}
 
-        <span className="flex-1 truncate text-[15px] font-medium">
-          {channel.name}
-        </span>
+        <InlineEmojiText text={channel.name} className="flex-1 truncate text-[15px] font-medium" />
 
         {/* Icons column */}
         <div className="flex items-center gap-1">

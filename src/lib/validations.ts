@@ -23,16 +23,16 @@ export const CreateCategorySchema = z.object({
 
 /**
  * Sanitizes a channel name based on its type.
- * Text channels: lowercase, no spaces (replaced with hyphens), no special chars.
+ * Text channels: lowercase, collapse whitespace into hyphens, preserve visible Unicode.
  * Voice channels: trimmed, allowed spaces and special chars.
  */
 export function sanitizeChannelName(name: string, type: "text" | "voice" | "dm", isFinal: boolean = false): string {
   if (type === "text") {
     let sanitized = name
       .toLowerCase()
-      .replace(/[^\w\s-]/g, "") // Remove special chars
-      .replace(/\s+/g, "-")      // Replace spaces with hyphens
-      .replace(/-+/g, "-");      // Collapse multiple hyphens
+      .replace(/\s+/gu, "-")         // Discord-style spacing for text channels
+      .replace(/[\u0000-\u001F\u007F-\u009F]/g, "") // Strip control chars but keep visible Unicode
+      .replace(/-+/g, "-");          // Collapse multiple hyphens
 
     if (isFinal) {
       sanitized = sanitized.replace(/^-+|-+$/g, ""); // Trim hyphens from ends if final

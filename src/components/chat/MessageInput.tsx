@@ -4,6 +4,7 @@ import { cn } from "@/lib/utils";
 import AttachmentList from "./AttachmentList";
 import { InputMentionOverlay } from "./InputMentionOverlay";
 import { useDelayUnmount } from "@/hooks/useDelayUnmount";
+import { MessageInputPlaceholder } from "./MessageInputPlaceholder";
 
 import { useMessageInput, type PendingUpload, type UploadedFile, type UploadedFileInfo } from "./useMessageInput";
 
@@ -117,6 +118,19 @@ export default function MessageInput({ channelId, channelName, onSend, onTyping,
           </button>
 
           <div className="relative flex-1 min-h-[32px] overflow-hidden">
+            {value.length === 0 && (
+              <div
+                aria-hidden="true"
+                className="absolute inset-0 z-0 overflow-y-hidden pointer-events-none custom-scrollbar"
+              >
+                <MessageInputPlaceholder
+                  channelName={channelName}
+                  replyDisplayName={replyDisplayName}
+                  className="py-1 text-[15px] font-medium leading-normal text-rm-text-muted/60"
+                />
+              </div>
+            )}
+
             <div
               ref={twinRef}
               aria-hidden="true"
@@ -133,6 +147,7 @@ export default function MessageInput({ channelId, channelName, onSend, onTyping,
               rows={1}
               value={value}
               aria-label={replyTo ? `Reply to ${replyDisplayName}` : `Message #${channelName}`}
+              aria-placeholder={replyTo ? `Reply to ${replyDisplayName}…` : `Message #${channelName}`}
               onChange={handleInput}
               onKeyDown={handleKeyDown}
               onPaste={handlePaste}
@@ -141,7 +156,7 @@ export default function MessageInput({ channelId, channelName, onSend, onTyping,
               onMouseLeave={() => setLocalState({ hoveredMention: null })}
               onSelect={enforceAtomicMentions}
               onClick={enforceAtomicMentions}
-              placeholder={replyTo ? `Reply to ${replyDisplayName}…` : `Message #${channelName}`}
+              placeholder=""
               className={cn(
                 "custom-scrollbar relative z-10 w-full resize-none overflow-y-auto bg-transparent py-1 text-[15px] font-medium leading-normal text-transparent outline-none placeholder:text-rm-text-muted/60 selection:bg-primary/30 selection:text-transparent"
               )}

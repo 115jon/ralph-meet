@@ -21,6 +21,7 @@ import { ArrowLeft, Bell, ChevronRight, Download, ExternalLink, Hash, Image, Ima
 import { useCallback, useEffect, useState } from "react";
 import ContextMenu from "./ContextMenu";
 import { AlertTriangle, AtSign, Copy, Crown, MessageSquare, Phone, Pin, User as UserIcon } from "./Icons";
+import InlineEmojiText from "./InlineEmojiText";
 import { MarkdownRenderer } from "./MarkdownRenderer";
 import MobileProfileSheet from "./MobileProfileSheet";
 import UserProfilePopover from "./UserProfilePopover";
@@ -513,7 +514,9 @@ function DesktopHeader({ channelName, onToggleDetails, isDM }: { channelName?: s
     <div className="hidden lg:flex items-center justify-between px-4 py-3 border-b border-rm-border bg-transparent shrink-0">
       <div className="flex items-center gap-2 min-w-0">
         {isDM ? <AtSign className="h-[18px] w-[18px] text-rm-text-muted shrink-0" /> : <Hash className="h-[18px] w-[18px] text-rm-text-muted shrink-0" />}
-        <h2 className="text-[15px] font-bold text-rm-text-primary truncate">{channelName || (isDM ? 'details' : 'general')}</h2>
+        <h2 className="text-[15px] font-bold text-rm-text-primary truncate">
+          <InlineEmojiText text={channelName || (isDM ? 'details' : 'general')} />
+        </h2>
       </div>
       <ButtonBase
         onClick={onToggleDetails}
@@ -532,7 +535,9 @@ function MemberListTabs({ channelName, activeTab, onTabChange, showDetails, isDM
       <div className="lg:hidden mb-6 shrink-0">
         <div className="flex items-center gap-2 mb-1">
           {isDM ? <AtSign className="h-[24px] w-[24px] text-rm-text-muted shrink-0" /> : <Hash className="h-[24px] w-[24px] text-rm-text-muted shrink-0" />}
-          <h1 className="text-[26px] font-extrabold text-rm-text-primary tracking-tight leading-none truncate">{channelName || (isDM ? 'details' : 'general')}</h1>
+          <h1 className="text-[26px] font-extrabold text-rm-text-primary tracking-tight leading-none truncate">
+            <InlineEmojiText text={channelName || (isDM ? 'details' : 'general')} />
+          </h1>
         </div>
         <p className="text-[13px] font-medium text-rm-text-muted mb-6 ml-8">{isDM ? "Direct Message" : "Text Channel"}</p>
 
@@ -920,7 +925,7 @@ function LinksTabContent({ loading, error, items, channelName, onRetry }: LinksT
                   <span className="text-rm-text-muted/30">·</span>
                   <span className="text-[11px] text-rm-text-muted flex items-center gap-0.5 shrink-0">
                     <Hash size={10} className="opacity-60" />
-                    {channelName}
+                    <InlineEmojiText text={channelName} />
                   </span>
                 </>
               )}
@@ -1008,7 +1013,7 @@ function FilesTabContent({ loading, error, items, channelName, onRetry, onJumpTo
                     <span className="text-rm-text-muted/30">·</span>
                     <span className="text-[11px] text-rm-text-muted flex items-center gap-0.5 shrink-0">
                       <Hash size={10} className="opacity-60" />
-                      {channelName}
+                      <InlineEmojiText text={channelName} />
                     </span>
                   </>
                 )}

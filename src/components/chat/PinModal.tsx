@@ -9,6 +9,7 @@ import { isPlayableVideo } from '@/lib/media';
 import React, { useEffect, useState } from 'react';
 import { AvatarImage } from './AvatarImage';
 import { ImageGrid } from './ImageGrid';
+import InlineEmojiText from './InlineEmojiText';
 import { MarkdownRenderer } from './MarkdownRenderer';
 import { UserDisplayName } from './UserDisplayName';
 import VideoAttachment from './VideoAttachment';
@@ -105,11 +106,11 @@ export const PinModal: React.FC<PinModalProps> = ({
               </button>
             </div>
 
-            <p className="text-rm-text-muted text-[14px] mb-6 leading-relaxed">
+            <div className="text-rm-text-muted text-[14px] mb-6 leading-relaxed">
               {isPin
-                ? `Hey, just double checking that you want to pin this message to #${channelName} for posterity and greatness?`
+                ? <InlineEmojiText text={`Hey, just double checking that you want to pin this message to #${channelName} for posterity and greatness?`} />
                 : "You sure you want to remove this pinned message?"}
-            </p>
+            </div>
 
             {/* Message Preview */}
             <div className="rounded-xl border border-rm-border bg-rm-bg-elevated/40 p-4 mb-6">

@@ -1,4 +1,5 @@
 import { IconButton } from "@/components/ui/IconButton";
+import InlineEmojiText from "@/components/chat/InlineEmojiText";
 import { getAuthAssetUrl } from "@/lib/platform";
 import { AvatarImage } from "../chat/AvatarImage";
 import { Menu, MessageSquare, Volume2 } from "../chat/Icons";
@@ -38,7 +39,7 @@ export function VoiceLanding({
             />
           )}
           <Volume2 size={18} />
-          <span className="text-sm font-bold text-rm-text tracking-tight">{channelName}</span>
+          <InlineEmojiText text={channelName} className="text-sm font-bold text-rm-text tracking-tight" />
         </div>
         {!showTextChat && (
           <IconButton icon={MessageSquare} variant="muted" size="sm" onClick={onToggleTextChat} />
@@ -46,7 +47,9 @@ export function VoiceLanding({
       </div>
 
       <div className="relative z-10 flex-1 flex flex-col items-center justify-center gap-4 px-6">
-        <h2 className="text-2xl font-bold text-rm-text/90 tracking-tight">{channelName}</h2>
+        <h2 className="text-2xl font-bold text-rm-text/90 tracking-tight">
+          <InlineEmojiText text={channelName} />
+        </h2>
         <p className="text-sm text-rm-text-muted font-medium">
           {vcMembers.length === 0
             ? 'No one is currently in voice'

@@ -3,6 +3,7 @@ import { useChatStore } from "@/stores/chat-store";
 import { memo, useMemo } from "react";
 import { AvatarImage } from "./AvatarImage";
 import { Hash } from "./Icons";
+import InlineEmojiText from "./InlineEmojiText";
 
 export const ChatWelcomeContent = memo(function ChatWelcomeContent({ isDM, channelName, channelId }: { isDM: boolean; channelName: string; channelId: string | null }) {
   const dmChannels = useChatStore(s => s.dmChannels);
@@ -57,10 +58,10 @@ export const ChatWelcomeContent = memo(function ChatWelcomeContent({ isDM, chann
             <Hash className="h-10 w-10 text-rm-accent opacity-80" />
           </div>
           <h3 className="mb-2 text-3xl font-semibold tracking-tight text-rm-text-primary">
-            Welcome to #{channelName}
+            <InlineEmojiText text={`Welcome to #${channelName}`} />
           </h3>
           <p className="max-w-lg text-sm font-medium leading-relaxed text-rm-text-muted">
-            This is the absolute beginning of the #{channelName} channel. Start a conversation, forge new paths, and let your frequencies align.
+            <InlineEmojiText text={`This is the absolute beginning of the #${channelName} channel. Start a conversation, forge new paths, and let your frequencies align.`} />
           </p>
         </>
       )}

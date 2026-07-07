@@ -5,6 +5,7 @@ import { useChatStore } from "@/stores/chat-store";
 import { useCallStore } from "@/stores/useCallStore";
 import { ArrowLeft, ChevronRight, Phone, Search } from "lucide-react";
 import { AtSign, Hash, Pin, Users, X } from "./Icons";
+import InlineEmojiText from "./InlineEmojiText";
 import { NotificationBell } from "./NotificationBell";
 
 interface ChatHeaderProps {
@@ -82,7 +83,7 @@ export function ChatHeader({
           {isDM ? <AtSign className="h-[22px] w-[22px] text-rm-text-muted shrink-0" /> : <Hash className="h-[22px] w-[22px] text-rm-text-muted shrink-0" />}
           <div className="flex flex-col min-w-0">
             <div className="flex items-center gap-0.5 text-[17px] font-extrabold text-rm-text tracking-tight leading-none truncate">
-              <span className="truncate">{channelName}</span>
+              <InlineEmojiText text={channelName} className="truncate" />
               <ChevronRight className="h-[14px] w-[14px] text-rm-text-muted shrink-0" />
             </div>
             {!isDM && (
@@ -115,7 +116,9 @@ export function ChatHeader({
                 <h2 className={cn(
                   "text-[15px] font-semibold text-rm-text-primary tracking-tight leading-none transition-all",
                   "group-hover/chname:underline underline-offset-2"
-                )}>{channelName}</h2>
+                )}>
+                  <InlineEmojiText text={channelName} />
+                </h2>
               </TooltipTrigger>
               <TooltipContent side="bottom" className="bg-rm-bg-floating border-none text-rm-text-primary text-[13px] font-medium shadow-xl px-3 py-2 rounded-lg">
                 @{dmUsername}
@@ -125,7 +128,9 @@ export function ChatHeader({
             <h2 className={cn(
               "text-[15px] font-semibold text-rm-text-primary tracking-tight leading-none transition-all",
               "group-hover/chname:underline underline-offset-2"
-            )}>{channelName}</h2>
+            )}>
+              <InlineEmojiText text={channelName} />
+            </h2>
           )}
           <ChevronRight className={cn(
             "h-3.5 w-3.5 transition-all shrink-0",

@@ -8,6 +8,7 @@ import { useChatStore } from '@/stores/chat-store';
 import { useEffect, useId, useMemo, useState } from 'react';
 import { AvatarImage } from './AvatarImage';
 import { Check, Copy, Hash, Loader2, Search, X } from './Icons';
+import InlineEmojiText from './InlineEmojiText';
 
 interface ChannelInviteModalProps {
   serverId: string;
@@ -124,7 +125,8 @@ export default function ChannelInviteModal({
               Invite friends to <span className="text-primary">{serverName}</span>
             </h2>
             <p className="mt-0.5 flex items-center gap-1 text-sm text-rm-text-muted">
-              Recipients will land in <Hash className="h-3 w-3" />{channel.name}
+              Recipients will land in <Hash className="h-3 w-3" />
+              <InlineEmojiText text={channel.name} />
             </p>
           </div>
 
