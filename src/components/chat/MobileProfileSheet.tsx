@@ -1,6 +1,7 @@
 import { ProfileAssetLayer } from "@/components/chat/ProfileAssetLayer";
 import { AvatarImage } from "@/components/chat/AvatarImage";
 import { BaseModal } from "@/components/ui/BaseModal";
+import { ButtonBase } from "@/components/ui/button-base";
 import { apiGet } from "@/lib/api-client";
 import { extractDominantColor } from "@/lib/color-utils";
 import { hasPermission, PERMISSIONS } from "@/lib/permissions";
@@ -31,6 +32,44 @@ interface MobileProfileSheetProps {
   onKick?: (userId: string, username: string) => void;
   isClosing?: boolean;
 }
+
+type MutualFriendSummary = {
+  count: number;
+  items: Array<{ id: string; username: string; avatar_url?: string | null }>;
+};
+
+type MutualServerSummary = {
+  count: number;
+  items: Array<{ id: string; name: string; icon_url?: string | null }>;
+};
+
+interface MobileProfileResponse {
+  user: User;
+  mutualFriends: MutualFriendSummary;
+  mutualServers: MutualServerSummary;
+}
+
+interface ProfileFetchState {
+  userId: string;
+  user: User | null;
+  mutualFriends: MutualFriendSummary;
+  mutualServers: MutualServerSummary;
+}
+
+interface BannerColorState {
+  avatarUrl: string;
+  color: string | null;
+}
+
+const EMPTY_MUTUAL_FRIENDS: MutualFriendSummary = {
+  count: 0,
+  items: [],
+};
+
+const EMPTY_MUTUAL_SERVERS: MutualServerSummary = {
+  count: 0,
+  items: [],
+};
 
 const statusColors: Record<string, string> = {
   online: "bg-primary",
@@ -65,21 +104,21 @@ function ProfileBanner({
       />
       <div className="absolute inset-0 bg-linear-to-r from-black/18 via-transparent to-black/28" />
       <div className="absolute top-0 inset-x-0 flex items-center justify-between p-3 z-10">
-        <button
+        <ButtonBase
           onClick={onClose}
           className="p-1.5 bg-black/30 hover:bg-black/50 rounded-full text-white backdrop-blur-sm transition-colors"
         >
           <ArrowLeft size={20} />
-        </button>
+        </ButtonBase>
         <div className="flex items-center gap-2">
           {!isMe && (
-            <button className="p-1.5 bg-black/30 hover:bg-black/50 rounded-full text-white backdrop-blur-sm transition-colors">
+            <ButtonBase className="p-1.5 bg-black/30 hover:bg-black/50 rounded-full text-white backdrop-blur-sm transition-colors">
               <UserPlus size={18} />
-            </button>
+            </ButtonBase>
           )}
-          <button className="p-1.5 bg-black/30 hover:bg-black/50 rounded-full text-white backdrop-blur-sm transition-colors">
+          <ButtonBase className="p-1.5 bg-black/30 hover:bg-black/50 rounded-full text-white backdrop-blur-sm transition-colors">
             <Settings size={18} />
-          </button>
+          </ButtonBase>
         </div>
       </div>
     </div>
@@ -163,18 +202,18 @@ function ProfileActions({ isMe, handleMessage }: { isMe: boolean, handleMessage:
     <div className="px-5 mt-5">
       {isMe ? (
         <div className="space-y-2.5">
-          <button className="w-full py-3 rounded-2xl bg-primary hover:bg-primary/90 text-primary-foreground font-bold text-[15px] transition-colors flex items-center justify-center gap-2">
+          <ButtonBase className="w-full py-3 rounded-2xl bg-primary hover:bg-primary/90 text-primary-foreground font-bold text-[15px] transition-colors flex items-center justify-center gap-2">
             <Settings size={18} />
             Edit Main Profile
-          </button>
-          <button className="w-full py-3 rounded-2xl bg-primary/20 hover:bg-primary/30 text-primary font-bold text-[15px] transition-colors flex items-center justify-center gap-2">
+          </ButtonBase>
+          <ButtonBase className="w-full py-3 rounded-2xl bg-primary/20 hover:bg-primary/30 text-primary font-bold text-[15px] transition-colors flex items-center justify-center gap-2">
             <Settings size={18} />
             Edit Per-server Profile
-          </button>
+          </ButtonBase>
         </div>
       ) : (
         <div className="flex items-center justify-center gap-8">
-          <button
+          <ButtonBase
             onClick={handleMessage}
             className="flex flex-col items-center gap-2"
           >
@@ -184,23 +223,23 @@ function ProfileActions({ isMe, handleMessage }: { isMe: boolean, handleMessage:
             <span className="text-[12px] font-semibold text-rm-text-muted">
               Message
             </span>
-          </button>
-          <button className="flex flex-col items-center gap-2">
+          </ButtonBase>
+          <ButtonBase className="flex flex-col items-center gap-2">
             <div className="h-14 w-14 rounded-full bg-rm-bg-elevated border border-rm-border flex items-center justify-center hover:bg-rm-bg-hover transition-colors">
               <Phone size={24} className="text-rm-text-primary" />
             </div>
             <span className="text-[12px] font-semibold text-rm-text-muted">
               Voice Call
             </span>
-          </button>
-          <button className="flex flex-col items-center gap-2">
+          </ButtonBase>
+          <ButtonBase className="flex flex-col items-center gap-2">
             <div className="h-14 w-14 rounded-full bg-rm-bg-elevated border border-rm-border flex items-center justify-center hover:bg-rm-bg-hover transition-colors">
               <Video size={24} className="text-rm-text-primary" />
             </div>
             <span className="text-[12px] font-semibold text-rm-text-muted">
               Video Call
             </span>
-          </button>
+          </ButtonBase>
         </div>
       )}
     </div>
@@ -278,7 +317,7 @@ function ProfileCards({ user, memberRoles, hasModActions, canManage, canKick, ca
           </h3>
           <div className="space-y-0.5">
             {canManage && (
-              <button disabled className="w-full flex items-center gap-4 px-2 py-3 rounded-xl opacity-60 cursor-not-allowed">
+              <ButtonBase disabled className="w-full flex items-center gap-4 px-2 py-3 rounded-xl opacity-60 cursor-not-allowed">
                 <Settings
                   size={22}
                   className="text-rm-text-muted shrink-0"
@@ -286,10 +325,10 @@ function ProfileCards({ user, memberRoles, hasModActions, canManage, canKick, ca
                 <span className="text-[15px] font-medium text-rm-text-primary">
                   Manage
                 </span>
-              </button>
+              </ButtonBase>
             )}
             {canKick && onKick && (
-              <button
+              <ButtonBase
                 onClick={() => {
                   onKick(user.id, user.username);
                   onClose();
@@ -303,10 +342,10 @@ function ProfileCards({ user, memberRoles, hasModActions, canManage, canKick, ca
                 <span className="text-[15px] font-medium text-destructive">
                   Kick
                 </span>
-              </button>
+              </ButtonBase>
             )}
             {canBanPerm && onBan && (
-              <button
+              <ButtonBase
                 onClick={() => {
                   onBan(user.id, user.username);
                   onClose();
@@ -317,7 +356,7 @@ function ProfileCards({ user, memberRoles, hasModActions, canManage, canKick, ca
                 <span className="text-[15px] font-medium text-destructive">
                   Ban
                 </span>
-              </button>
+              </ButtonBase>
             )}
           </div>
         </div>
@@ -348,19 +387,18 @@ export default function MobileProfileSheet({
     onlineUsers: s.onlineUsers,
   })));
   const { openDm, dispatch } = useChatActions();
-  const [bannerColor, setBannerColor] = useState<string | null>(null);
-  const [profileUser, setProfileUser] = useState<User | null>(null);
-  const [mutualFriends, setMutualFriends] = useState<{
-    count: number;
-    items: Array<{ id: string; username: string; avatar_url?: string | null }>;
-  }>({ count: 0, items: [] });
-  const [mutualServers, setMutualServers] = useState<{
-    count: number;
-    items: Array<{ id: string; name: string; icon_url?: string | null }>;
-  }>({ count: 0, items: [] });
+  const [bannerColorState, setBannerColorState] = useState<BannerColorState | null>(null);
+  const [profileData, setProfileData] = useState<ProfileFetchState | null>(null);
 
   const isMe = user.id === chatUser?.id;
-  const resolvedUser = profileUser ?? user;
+  const activeProfileData = profileData?.userId === user.id ? profileData : null;
+  const resolvedUser = activeProfileData?.user ?? user;
+  const mutualFriends = !isMe ? activeProfileData?.mutualFriends ?? EMPTY_MUTUAL_FRIENDS : EMPTY_MUTUAL_FRIENDS;
+  const mutualServers = !isMe ? activeProfileData?.mutualServers ?? EMPTY_MUTUAL_SERVERS : EMPTY_MUTUAL_SERVERS;
+  const bannerColor =
+    resolvedUser.avatar_url && bannerColorState?.avatarUrl === resolvedUser.avatar_url
+      ? bannerColorState.color
+      : null;
   const isOnline = onlineUsers.has(user.id);
   const member = members.find((m) => m.user.id === user.id);
   const memberRoles = roles || member?.roles;
@@ -375,47 +413,44 @@ export default function MobileProfileSheet({
     !isMe && (canKick || canBanPerm || canManage);
 
   useEffect(() => {
-    if (resolvedUser.avatar_url) {
-      extractDominantColor(getAuthAssetUrl(resolvedUser.avatar_url)).then((color) => {
-        if (color) setBannerColor(color);
-      });
-      return;
-    }
-    setBannerColor(null);
+    const avatarUrl = resolvedUser.avatar_url;
+    if (!avatarUrl) return;
+
+    let cancelled = false;
+
+    void extractDominantColor(getAuthAssetUrl(avatarUrl)).then((color) => {
+      if (!cancelled) {
+        setBannerColorState({ avatarUrl, color: color ?? null });
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
   }, [resolvedUser.avatar_url]);
 
   useEffect(() => {
-    setProfileUser(null);
-    setMutualFriends({ count: 0, items: [] });
-    setMutualServers({ count: 0, items: [] });
+    if (isMe || !user.id) return;
 
-    if (!isMe && user.id) {
-      apiGet<{
-        user: User;
-        mutualFriends: {
-          count: number;
-          items: Array<{
-            id: string;
-            username: string;
-            avatar_url?: string | null;
-          }>;
-        };
-        mutualServers: {
-          count: number;
-          items: Array<{
-            id: string;
-            name: string;
-            icon_url?: string | null;
-          }>;
-        };
-      }>(`/api/users/${user.id}/profile`)
-        .then((data) => {
-          setProfileUser(data.user ?? null);
-          setMutualFriends(data.mutualFriends ?? { count: 0, items: [] });
-          setMutualServers(data.mutualServers ?? { count: 0, items: [] });
-        })
-        .catch(console.error);
-    }
+    let cancelled = false;
+    const targetUserId = user.id;
+
+    void apiGet<MobileProfileResponse>(`/api/users/${targetUserId}/profile`)
+      .then((data) => {
+        if (cancelled) return;
+
+        setProfileData({
+          userId: targetUserId,
+          user: data.user ?? null,
+          mutualFriends: data.mutualFriends ?? EMPTY_MUTUAL_FRIENDS,
+          mutualServers: data.mutualServers ?? EMPTY_MUTUAL_SERVERS,
+        });
+      })
+      .catch(console.error);
+
+    return () => {
+      cancelled = true;
+    };
   }, [user.id, isMe]);
 
   const handleMessage = async () => {

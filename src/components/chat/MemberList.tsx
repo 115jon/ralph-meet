@@ -1,5 +1,6 @@
 import { getDisplayInitial, getDisplayName } from "@/lib/display-name";
 import { AvatarImage } from "@/components/chat/AvatarImage";
+import { ButtonBase } from "@/components/ui/button-base";
 
 import { useContextMenu } from "@/hooks/useContextMenu";
 import { apiDelete, apiGet } from "@/lib/api-client";
@@ -104,6 +105,13 @@ const getHighestRole = (roles?: Role[]) => {
     , roles[0]);
 };
 
+function compareMembersByRole(a: { user: User; roles?: Role[] }, b: { user: User; roles?: Role[] }) {
+  const roleA = getHighestRole(a.roles)?.position ?? -1;
+  const roleB = getHighestRole(b.roles)?.position ?? -1;
+  if (roleA !== roleB) return roleB - roleA;
+  return a.user.username.localeCompare(b.user.username);
+}
+
 const statusColors: Record<string, string> = {
   online: "bg-primary",
   idle: "bg-warning",
@@ -153,11 +161,11 @@ export default function MemberList({
   members, onlineUsers, typingUsers, currentUserId, onBan, onKick, onClose, channelName,
   channelId, serverId,
   onOpenSearch, onOpenSettings, onInviteClick,
-  pinnedMessages, loadingPins, canUnpin, onUnpin, onJumpToMessage,
+  pinnedMessages, loadingPins, canUnpin: _canUnpin, onUnpin: _onUnpin, onJumpToMessage,
   onOpenThread,
   showDetails, onToggleDetails, isDM
 }: MemberListProps) {
-  const { menu, openMenu, closeMenu, shouldRender, isClosing } = useContextMenu();
+  const { menu, openMenu, closeMenu, isClosing } = useContextMenu();
   const { openDm, dispatch, setProfileUser } = useChatActions();
   const { open: openImageViewer } = useImageViewerActions();
   const [state, setState] = useState({
@@ -254,15 +262,8 @@ export default function MemberList({
   const online = members.filter((m) => onlineUsers.has(m.user.id) && m.user.status !== 'offline');
   const offline = members.filter((m) => !onlineUsers.has(m.user.id) || m.user.status === 'offline');
 
-  const sortMembers = (a: { user: User; roles?: Role[] }, b: { user: User; roles?: Role[] }) => {
-    const roleA = getHighestRole(a.roles)?.position ?? -1;
-    const roleB = getHighestRole(b.roles)?.position ?? -1;
-    if (roleA !== roleB) return roleB - roleA;
-    return a.user.username.localeCompare(b.user.username);
-  };
-
-  const sortedOnline = online.toSorted(sortMembers);
-  const sortedOffline = offline.toSorted(sortMembers);
+  const sortedOnline = online.toSorted(compareMembersByRole);
+  const sortedOffline = offline.toSorted(compareMembersByRole);
 
   // Group online members by highest role
   const groups: { name: string; members: typeof sortedOnline }[] = [];
@@ -482,11 +483,11 @@ function MobileHeader({ onClose, onOpenSearch, onOpenSettings }: { onClose?: () 
       className="flex items-center justify-between pb-4 px-4 lg:hidden sticky top-0 bg-transparent z-10 shrink-0 border-b border-rm-border/30"
       style={{ paddingTop: 'calc(16px + var(--safe-area-top, 0px))' }}
     >
-      <button onClick={onClose} className="p-1 -ml-1 text-rm-text-muted hover:text-rm-text transition-colors">
+      <ButtonBase onClick={onClose} className="p-1 -ml-1 text-rm-text-muted hover:text-rm-text transition-colors">
         <ArrowLeft size={24} />
-      </button>
+      </ButtonBase>
       <div className="flex items-center gap-5 text-rm-text-muted">
-        <button
+        <ButtonBase
           className="hover:text-rm-text transition-colors"
           onClick={() => {
             onOpenSearch?.();
@@ -494,13 +495,13 @@ function MobileHeader({ onClose, onOpenSearch, onOpenSettings }: { onClose?: () 
           }}
         >
           <Search size={22} />
-        </button>
-        <button className="hover:text-rm-text transition-colors">
+        </ButtonBase>
+        <ButtonBase className="hover:text-rm-text transition-colors">
           <Bell size={22} />
-        </button>
-        <button className="hover:text-rm-text transition-colors" onClick={onOpenSettings}>
+        </ButtonBase>
+        <ButtonBase className="hover:text-rm-text transition-colors" onClick={onOpenSettings}>
           <Settings size={22} />
-        </button>
+        </ButtonBase>
       </div>
     </div>
   );
@@ -513,13 +514,13 @@ function DesktopHeader({ channelName, onToggleDetails, isDM }: { channelName?: s
         {isDM ? <AtSign className="h-[18px] w-[18px] text-rm-text-muted shrink-0" /> : <Hash className="h-[18px] w-[18px] text-rm-text-muted shrink-0" />}
         <h2 className="text-[15px] font-bold text-rm-text-primary truncate">{channelName || (isDM ? 'details' : 'general')}</h2>
       </div>
-      <button
+      <ButtonBase
         onClick={onToggleDetails}
         className="p-1.5 text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover rounded-lg transition-colors shrink-0"
         title="Close details"
       >
         <ArrowLeft size={18} />
-      </button>
+      </ButtonBase>
     </div>
   );
 }
@@ -599,7 +600,7 @@ function MemberListTabs({ channelName, activeTab, onTabChange, showDetails, isDM
 function MobileInviteButton({ onInviteClick, onClose }: { onInviteClick?: () => void, onClose?: () => void }) {
   return (
     <div className="lg:hidden mb-6 shrink-0 pt-2">
-      <button
+      <ButtonBase
         className="w-full flex items-center justify-between bg-rm-bg-elevated hover:bg-rm-bg-hover text-rm-text p-4 rounded-xl transition-colors ring-1 ring-rm-border shadow-sm"
         onClick={() => {
           onInviteClick?.();
@@ -613,7 +614,7 @@ function MobileInviteButton({ onInviteClick, onClose }: { onInviteClick?: () => 
           <span className="font-bold text-[16px] text-rm-text-primary">Invite Members</span>
         </div>
         <ChevronRight size={20} className="text-rm-text-muted" />
-      </button>
+      </ButtonBase>
     </div>
   );
 }
@@ -746,7 +747,7 @@ function MediaTabContent({ loading, error, items, openImageViewer, onRetry, onJu
         const isItemVideo = isVideo(item.content_type);
         const displayName = getDisplayName(item.author);
         return (
-          <button
+          <ButtonBase
             key={item.id}
             onClick={() => handleMediaClick(idx)}
             className="aspect-square rounded-xl overflow-hidden bg-rm-bg-elevated border border-rm-border/20 hover:border-primary/40 transition-all group relative"
@@ -778,7 +779,7 @@ function MediaTabContent({ loading, error, items, openImageViewer, onRetry, onJu
             <div className="absolute inset-0 bg-linear-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-2">
               <span className="text-[10px] font-bold text-white truncate">{item.filename}</span>
             </div>
-          </button>
+          </ButtonBase>
         );
       })}
     </div>
@@ -801,7 +802,7 @@ function PinsTabContent({ loading, messages, onJumpToMessage }: PinsTabContentPr
         (() => {
           const displayName = getDisplayName(msg.author);
           return (
-        <button
+        <ButtonBase
           key={msg.id}
           className="w-full text-left bg-rm-bg-elevated hover:bg-rm-bg-hover border border-rm-border/30 rounded-xl p-3.5 transition-colors group"
           onClick={() => onJumpToMessage(msg.id)}
@@ -826,7 +827,7 @@ function PinsTabContent({ loading, messages, onJumpToMessage }: PinsTabContentPr
               <span>{msg.attachments.length} attachment{msg.attachments.length > 1 ? 's' : ''}</span>
             </div>
           )}
-        </button>
+        </ButtonBase>
           );
         })()
       ))}
@@ -851,7 +852,7 @@ function ThreadsTabContent({ loading, error, threads, onOpenThread, onRetry }: T
         (() => {
           const displayName = getDisplayName(thread.author);
           return (
-        <button
+        <ButtonBase
           key={thread.id}
           className="w-full text-left bg-rm-bg-elevated hover:bg-rm-bg-hover border border-rm-border/30 rounded-xl p-3.5 transition-colors group"
           onClick={() => onOpenThread(thread.id)}
@@ -877,7 +878,7 @@ function ThreadsTabContent({ loading, error, threads, onOpenThread, onRetry }: T
             </div>
             <span className="text-[10px]">{formatRelativeTime(thread.last_reply_at)}</span>
           </div>
-        </button>
+        </ButtonBase>
           );
         })()
       ))}
@@ -972,8 +973,7 @@ function FilesTabContent({ loading, error, items, channelName, onRetry, onJumpTo
             key={item.id}
             className="group relative flex cursor-pointer items-center gap-3 rounded-xl border border-rm-border/30 bg-rm-bg-elevated p-3.5 transition-colors hover:bg-rm-bg-hover outline-none focus-within:ring-2 focus-within:ring-primary/20"
           >
-            <button
-              type="button"
+            <ButtonBase
               onClick={() => {
                 onClose?.();
                 setTimeout(() => onJumpToMessage?.(item.message_id), 150);
@@ -1197,13 +1197,13 @@ function TabErrorState({ message, onRetry }: { message: string; onRetry: () => v
         <p className="text-[12px] text-rm-text-muted max-w-[200px] leading-relaxed">{message}</p>
       </div>
 
-      <button
+      <ButtonBase
         onClick={onRetry}
         className="flex items-center gap-2 px-4 py-2 bg-rm-bg-elevated hover:bg-rm-bg-hover border border-rm-border rounded-xl text-[13px] font-bold text-rm-text-primary transition-colors"
       >
         <RefreshCw size={14} />
         Retry
-      </button>
+      </ButtonBase>
     </div>
   );
 }
@@ -1236,8 +1236,7 @@ function MemberItem({
   const displayName = getDisplayName(member.user);
 
   return (
-    <button
-      type="button"
+    <ButtonBase
       className={cn(
         "group relative flex w-full cursor-pointer items-center gap-3 overflow-hidden border-0 bg-transparent p-0 text-left transition-colors lg:gap-2.5",
         "bg-rm-bg-elevated px-3.5 py-3 mb-2 rounded-2xl shadow-sm border border-rm-border/30", // mobile
@@ -1305,7 +1304,7 @@ function MemberItem({
           </div>
         )}
       </div>
-    </button>
+    </ButtonBase>
   );
 }
 

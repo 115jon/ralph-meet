@@ -4,8 +4,9 @@ import { PERMISSIONS } from '@/lib/permissions';
 import type { Role, User } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { Check, Loader2, Plus, Slash, Trash2, X } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { AvatarImage } from './AvatarImage';
+import { ButtonBase } from "@/components/ui/button-base";
 
 interface Override {
   id?: string;
@@ -70,9 +71,9 @@ function PermissionsSidebar({
     <div className="w-56 bg-rm-bg-secondary border-r border-rm-border flex flex-col relative z-10">
       <div className="p-3 border-b border-rm-border flex justify-between items-center">
         <span className="text-xs font-bold uppercase tracking-widest text-rm-text-muted">Roles/Members</span>
-        <button onClick={() => setIsAddingTarget(!isAddingTarget)} className="p-1 hover:bg-rm-bg-hover rounded transition-colors text-rm-text-secondary hover:text-rm-text relative z-10">
+        <ButtonBase onClick={() => setIsAddingTarget(!isAddingTarget)} className="p-1 hover:bg-rm-bg-hover rounded transition-colors text-rm-text-secondary hover:text-rm-text relative z-10">
           {isAddingTarget ? <X className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
-        </button>
+        </ButtonBase>
       </div>
 
       {isAddingTarget ? (
@@ -82,14 +83,14 @@ function PermissionsSidebar({
               <span className="px-2 text-[10px] font-bold uppercase text-rm-text-muted">Roles</span>
               <div className="space-y-1 mt-1">
                 {availableRoles.map(role => (
-                  <button
+                  <ButtonBase
                     key={role.id}
                     onClick={() => handleAddOverride(role.id, 'role', role.name, role.color || undefined)}
                     className="w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-rm-bg-hover text-sm text-left"
                   >
                     <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: role.color || '#94a3b8' }} />
                     <span className="truncate">{role.name}</span>
-                  </button>
+                  </ButtonBase>
                 ))}
               </div>
             </div>
@@ -102,7 +103,7 @@ function PermissionsSidebar({
                 {availableMembers.map(m => {
                   const displayName = m.user.display_name?.trim() || m.user.username;
                   return (
-                    <button
+                    <ButtonBase
                       key={m.user.id}
                       onClick={() => handleAddOverride(m.user.id, 'user', displayName, undefined, m.user.avatar_url, m.user.avatar_display)}
                       className="w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-rm-bg-hover text-sm text-left"
@@ -115,7 +116,7 @@ function PermissionsSidebar({
                         )}
                       </div>
                       <span className="truncate">{displayName}</span>
-                    </button>
+                    </ButtonBase>
                   );
                 })}
               </div>
@@ -132,7 +133,7 @@ function PermissionsSidebar({
             const isDefault = roleInfo?.is_default;
 
             return (
-              <button
+              <ButtonBase
                 key={o.target_id}
                 onClick={() => setSelectedTargetId(o.target_id)}
                 className={cn(
@@ -158,7 +159,7 @@ function PermissionsSidebar({
                     onClick={(e) => { e.stopPropagation(); handleDeleteOverride(o.target_id); }}
                   />
                 )}
-              </button>
+              </ButtonBase>
             );
           })}
         </div>
@@ -206,7 +207,7 @@ function PermissionsEditor({
                   </div>
 
                   <div className="flex bg-rm-bg-elevated rounded-lg p-1 gap-1 border border-rm-border/50 shadow-inner">
-                    <button
+                    <ButtonBase
                       onClick={() => handleUpdatePermission(perm.mask, 'deny')}
                       className={cn(
                         "w-10 h-8 rounded flex items-center justify-center transition-colors shadow-sm",
@@ -214,8 +215,8 @@ function PermissionsEditor({
                       )}
                     >
                       <X className="h-4 w-4" />
-                    </button>
-                    <button
+                    </ButtonBase>
+                    <ButtonBase
                       onClick={() => handleUpdatePermission(perm.mask, 'inherit')}
                       className={cn(
                         "w-10 h-8 rounded flex items-center justify-center transition-colors shadow-sm",
@@ -223,8 +224,8 @@ function PermissionsEditor({
                       )}
                     >
                       <Slash className="h-4 w-4" />
-                    </button>
-                    <button
+                    </ButtonBase>
+                    <ButtonBase
                       onClick={() => handleUpdatePermission(perm.mask, 'allow')}
                       className={cn(
                         "w-10 h-8 rounded flex items-center justify-center transition-colors shadow-sm",
@@ -232,7 +233,7 @@ function PermissionsEditor({
                       )}
                     >
                       <Check className="h-4 w-4" />
-                    </button>
+                    </ButtonBase>
                   </div>
                 </div>
               );
@@ -261,7 +262,7 @@ export default function ChannelPermissionsTab({ serverId, channelId, isVoice }: 
 
   const permissionList = isVoice ? VOICE_PERMISSIONS : TEXT_PERMISSIONS;
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     try {
       setState(prev => ({ ...prev, loading: true }));
       const [overridesData, rolesData, membersData] = await Promise.all([
@@ -307,11 +308,11 @@ export default function ChannelPermissionsTab({ serverId, channelId, isVoice }: 
     } finally {
       setState(prev => ({ ...prev, loading: false }));
     }
-  };
+  }, [channelId, serverId]);
 
   useEffect(() => {
     fetchData();
-  }, [channelId]);
+  }, [fetchData]);
 
   const selectedOverride = state.overrides.find(o => o.target_id === state.selectedTargetId);
 

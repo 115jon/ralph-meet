@@ -10,8 +10,8 @@ import {
   VideoControlBar,
   VideoDownloadButton,
   VideoProgressBar,
-  formatDuration,
 } from "./VideoPlayerControls";
+import { formatDuration } from "./video-duration";
 
 const log = clog("VideoAttachment");
 

@@ -1,6 +1,7 @@
 import { ProfileAssetLayer } from "@/components/chat/ProfileAssetLayer";
 import { AvatarImage } from "@/components/chat/AvatarImage";
 import { ProfileCollectiblesLayer } from "@/components/chat/ProfileCollectiblesLayer";
+import { ButtonBase } from "@/components/ui/button-base";
 import { getDisplayInitial, getDisplayName } from "@/lib/display-name";
 import { apiGet, apiPut } from "@/lib/api-client";
 import { extractDominantColor } from "@/lib/color-utils";
@@ -85,20 +86,20 @@ function PopoverBanner({
         className="opacity-95"
       />
       <div className="absolute inset-0" style={{ background: "var(--rm-profile-banner-overlay)" }} />
-      <div className="absolute top-3 right-3 z-20 flex items-center gap-2 opacity-100">
-        {canManageRoles && (
-          <button className={POPOVER_ACTION_BUTTON_CLASS} title="Mod View">
+        <div className="absolute top-3 right-3 z-20 flex items-center gap-2 opacity-100">
+          {canManageRoles && (
+          <ButtonBase className={POPOVER_ACTION_BUTTON_CLASS} title="Mod View">
             <Swords size={16} />
-          </button>
+          </ButtonBase>
         )}
         {!isMe && (
-          <button className={POPOVER_ACTION_BUTTON_CLASS} title="Friends">
+          <ButtonBase className={POPOVER_ACTION_BUTTON_CLASS} title="Friends">
             <UserCheck size={16} />
-          </button>
+          </ButtonBase>
         )}
-        <button className={POPOVER_ACTION_BUTTON_CLASS} title="More Options">
+        <ButtonBase className={POPOVER_ACTION_BUTTON_CLASS} title="More Options">
           <MoreHorizontal size={16} />
-        </button>
+        </ButtonBase>
       </div>
     </div>
   );
@@ -138,12 +139,12 @@ function PopoverInfo({ displayName, username, isMe, loadingProfile, mutualFriend
 }) {
   return (
     <div className="relative z-20 px-4 pb-3 pt-1">
-      <div className="flex items-center gap-1.5">
-        <h3 className="text-xl font-bold text-rm-text leading-tight">{displayName || username}</h3>
-        {!isMe && (
-          <button className="text-rm-text-muted hover:text-rm-text mt-0.5">
+        <div className="flex items-center gap-1.5">
+          <h3 className="text-xl font-bold text-rm-text leading-tight">{displayName || username}</h3>
+          {!isMe && (
+          <ButtonBase className="text-rm-text-muted hover:text-rm-text mt-0.5">
             <FilePlus size={16} />
-          </button>
+          </ButtonBase>
         )}
       </div>
       <div className="text-sm font-medium text-rm-text-muted">@{username}</div>
@@ -217,7 +218,7 @@ function RoleAssignmentDropdown({ isAssigningRoles, loadingRoles, serverRoles, o
             assignableRoles.map((role: Role) => {
               const hasRole = optimisticRoles?.some((r: Role) => r.id === role.id);
               return (
-                <button
+                <ButtonBase
                   key={role.id}
                   onClick={(e) => {
                     e.stopPropagation();
@@ -235,7 +236,7 @@ function RoleAssignmentDropdown({ isAssigningRoles, loadingRoles, serverRoles, o
                   />
                   <span className="flex-1 truncate">{role.name}</span>
                   {hasRole && <Check size={14} className="text-primary" />}
-                </button>
+                </ButtonBase>
               );
             })
           )}
@@ -261,7 +262,7 @@ function PopoverRoles({ optimisticRoles, canManageRoles, assignRole, handleToggl
             />
             <span className="text-rm-text-secondary py-0.5 pr-1 truncate max-w-[120px]">{role.name}</span>
             {canManageRoles && (
-              <button
+              <ButtonBase
                 onClick={(e) => {
                   e.stopPropagation();
                   const currentRoles = optimisticRoles?.map((r: Role) => r.id) || [];
@@ -270,19 +271,19 @@ function PopoverRoles({ optimisticRoles, canManageRoles, assignRole, handleToggl
                 className="opacity-0 group-hover:opacity-100 p-0.5 hover:bg-rm-text-muted/20 rounded cursor-pointer text-rm-text-muted hover:text-rm-text transition-all"
               >
                 <X size={12} />
-              </button>
+              </ButtonBase>
             )}
           </div>
         ))}
 
         {canManageRoles && (
-          <button
+          <ButtonBase
             onClick={handleToggleAssignRoles}
             className="flex items-center justify-center w-6 h-6 text-rm-text-muted hover:bg-rm-bg-elevated hover:text-rm-text rounded transition-colors"
             title="Manage Roles"
           >
             <Plus size={14} />
-          </button>
+          </ButtonBase>
         )}
       </div>
 

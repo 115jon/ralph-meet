@@ -1,3 +1,4 @@
+import { ButtonBase } from "@/components/ui/button-base";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { getDownloadUrl } from "@/lib/platform";
 import { cn } from "@/lib/utils";
@@ -13,15 +14,7 @@ import {
   VolumeLowIcon,
   VolumeMuteIcon,
 } from "./VideoIcons";
-
-export function formatDuration(seconds: number): string {
-  if (!Number.isFinite(seconds)) return "0:00";
-  const h = Math.floor(seconds / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  const s = Math.floor(seconds % 60);
-  if (h > 0) return `${h}:${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
-  return `${m}:${s.toString().padStart(2, "0")}`;
-}
+import { formatDuration } from "./video-duration";
 
 // ── Tooltip button helper ────────────────────────────────────────
 
@@ -39,13 +32,13 @@ function TipButton({
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <button
+        <ButtonBase
           onClick={onClick}
           className={cn("p-1.5 rounded-md hover:bg-white/10 transition-colors", className)}
           aria-label={label}
         >
           {children}
-        </button>
+        </ButtonBase>
       </TooltipTrigger>
       <TooltipContent side="top" sideOffset={6}>{label}</TooltipContent>
     </Tooltip>
@@ -252,13 +245,13 @@ export function VideoControlBar({
     <TooltipProvider>
       <div className="flex items-center gap-0.5 text-white/90">
         {/* Play / Pause / Replay — no tooltip */}
-        <button
+        <ButtonBase
           onClick={togglePlay}
           className="p-1.5 rounded-md hover:bg-white/10 transition-colors"
           aria-label={ended ? "Replay" : playing ? "Pause" : "Play"}
         >
           {ended ? <PlayAgainIcon /> : playing ? <PauseIcon /> : <PlayIcon />}
-        </button>
+        </ButtonBase>
 
         <span className="text-[10px] font-medium tabular-nums text-white/60 ml-1">
           {formatDuration(displayTime)} / {formatDuration(duration)}
@@ -274,14 +267,14 @@ export function VideoControlBar({
           onFocusCapture={openVolumePopover}
           onBlurCapture={handleVolumeBlurCapture}
         >
-          <button
+          <ButtonBase
             onClick={toggleMute}
             className="p-1.5 rounded-md hover:bg-white/10 transition-colors"
             aria-label={muted ? "Unmute" : "Mute"}
             aria-expanded={volumePopoverOpen}
           >
             {muted || volume === 0 ? <VolumeMuteIcon /> : volume < 0.5 ? <VolumeLowIcon /> : <VolumeHighIcon />}
-          </button>
+          </ButtonBase>
 
           {/* Vertical volume slider – stays open briefly on leave so the handoff
               from the icon to the slider remains interactive. */}

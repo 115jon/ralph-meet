@@ -2,6 +2,7 @@
 import { AvatarImage } from "@/components/chat/AvatarImage";
 import { ProfileAssetLayer } from "@/components/chat/ProfileAssetLayer";
 import { BaseModal } from "@/components/ui/BaseModal";
+import { ButtonBase } from "@/components/ui/button-base";
 import { apiDelete, apiGet, apiPost, apiPut } from "@/lib/api-client";
 import { getAuthAssetUrl } from "@/lib/platform";
 import { User } from "@/lib/types";
@@ -129,12 +130,12 @@ export default function UserProfileModal({ user, onClose, isClosing }: Props) {
           </div>
 
           {/* Close Button */}
-          <button
+          <ButtonBase
             onClick={onClose}
             className="absolute right-4 top-4 z-20 rounded-full bg-black/20 p-1.5 text-rm-text-muted/70 backdrop-blur-md transition-all hover:bg-black/40 hover:text-rm-text outline-none"
           >
             <X className="h-5 w-5" />
-          </button>
+          </ButtonBase>
 
           <div className="relative px-6 pb-8">
             {/* Avatar */}
@@ -167,15 +168,15 @@ export default function UserProfileModal({ user, onClose, isClosing }: Props) {
 
                 {!isMe && (
                   <div className="ml-4 flex shrink-0 gap-2">
-                    <button
+                    <ButtonBase
                       onClick={handleMessage}
                       className="flex h-10 w-10 items-center justify-center rounded-xl border border-rm-border bg-rm-bg-elevated text-rm-text-muted transition-all hover:bg-rm-accent hover:text-white hover:border-rm-accent-hover outline-none"
                       title="Message"
                     >
                       <MessageSquare className="h-5 w-5" />
-                    </button>
+                    </ButtonBase>
                     <div className="relative">
-                      <button
+                      <ButtonBase
                         onClick={(e) => {
                           e.stopPropagation();
                           setShowOptions(!showOptions);
@@ -186,7 +187,7 @@ export default function UserProfileModal({ user, onClose, isClosing }: Props) {
                         )}
                       >
                         <MoreVertical className="h-5 w-5" />
-                      </button>
+                      </ButtonBase>
 
                       {showOptions && (
                         <div
@@ -196,7 +197,7 @@ export default function UserProfileModal({ user, onClose, isClosing }: Props) {
                           role="menu"
                           tabIndex={-1}
                         >
-                          <button
+                          <ButtonBase
                             onClick={() => {
                               navigator.clipboard.writeText(resolvedUser.id);
                               setShowOptions(false);
@@ -205,15 +206,15 @@ export default function UserProfileModal({ user, onClose, isClosing }: Props) {
                           >
                             <Copy className="h-4 w-4 opacity-60" />
                             Copy User ID
-                          </button>
+                          </ButtonBase>
                           <div className="my-1 h-px bg-rm-border" />
-                          <button
+                          <ButtonBase
                             onClick={() => handleAction('block')}
                             className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-[13px] font-medium text-rose-400 transition-all hover:bg-rose-500 hover:text-rm-text outline-none"
                           >
                             <Ban className="h-4 w-4" />
                             Block User
-                          </button>
+                          </ButtonBase>
                         </div>
                       )}
                     </div>
@@ -226,56 +227,56 @@ export default function UserProfileModal({ user, onClose, isClosing }: Props) {
                 {!isMe && (
                   <div className="flex flex-col gap-2">
                     {relationship?.type === 0 ? (
-                      <button
+                      <ButtonBase
                         disabled={loading}
                         onClick={() => handleAction('remove')}
                         className="flex w-full items-center justify-center gap-2 rounded-xl border border-rose-500/20 bg-rose-500/10 py-2.5 text-sm font-bold text-rose-400 transition-all hover:bg-rose-500 hover:text-white active:scale-95 disabled:opacity-50"
                       >
                         {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserMinus className="h-4 w-4" />}
                         Remove Friend
-                      </button>
+                      </ButtonBase>
                     ) : relationship?.type === 2 ? (
                       <div className="flex gap-2">
-                        <button
+                        <ButtonBase
                           disabled={loading}
                           onClick={() => handleAction('accept')}
                           className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-rm-accent py-2.5 text-sm font-bold text-white transition-all hover:bg-rm-accent-hover active:scale-95 disabled:opacity-50 shadow-[0_8px_16px_var(--rm-accent-dim)]"
                         >
                           {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
                           Accept
-                        </button>
-                        <button
+                        </ButtonBase>
+                        <ButtonBase
                           disabled={loading}
                           onClick={() => handleAction('remove')}
                           className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-rm-border bg-rm-bg-elevated py-2.5 text-sm font-bold text-rm-text-muted transition-all hover:bg-rm-bg-hover hover:text-rm-text active:scale-95 disabled:opacity-50 outline-none"
                         >
                           Decline
-                        </button>
+                        </ButtonBase>
                       </div>
                     ) : relationship?.type === 3 ? (
-                      <button
+                      <ButtonBase
                         disabled
                         className="flex w-full items-center justify-center gap-2 rounded-xl border border-rm-border bg-rm-bg-elevated/50 py-2.5 text-sm font-bold text-rm-text-muted opacity-50 outline-none"
                       >
                         Friend Request Sent
-                      </button>
+                      </ButtonBase>
                     ) : relationship?.type === 1 ? (
-                      <button
+                      <ButtonBase
                         disabled={loading}
                         onClick={() => handleAction('unblock')}
                         className="flex w-full items-center justify-center gap-2 rounded-xl border border-rm-border bg-rm-bg-elevated py-2.5 text-sm font-bold text-rm-text-muted transition-all hover:bg-rm-accent hover:text-white active:scale-95 outline-none"
                       >
                         Unblock User
-                      </button>
+                      </ButtonBase>
                     ) : (
-                      <button
+                      <ButtonBase
                         disabled={loading}
                         onClick={() => handleAction('add')}
                         className="flex w-full items-center justify-center gap-2 rounded-xl bg-rm-accent py-2.5 text-sm font-bold text-white transition-all hover:bg-rm-accent-hover shadow-[0_8px_20px_var(--rm-accent-dim)] active:scale-95 disabled:opacity-50"
                       >
                         {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserPlus className="h-4 w-4" />}
                         Add Friend
-                      </button>
+                      </ButtonBase>
                     )}
                   </div>
                 )}

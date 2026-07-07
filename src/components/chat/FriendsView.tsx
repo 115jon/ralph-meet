@@ -1,4 +1,5 @@
 import { getDisplayInitial, getDisplayName } from "@/lib/display-name";
+import { ButtonBase } from "@/components/ui/button-base";
 import { useContextMenu } from "@/hooks/useContextMenu";
 import { apiDelete, apiPost, apiPut } from "@/lib/api-client";
 import { getAuthAssetUrl } from "@/lib/platform";
@@ -169,12 +170,12 @@ export default function FriendsView({ onMenuClick, onSelectDm }: Props) {
     <div className="flex flex-1 flex-col bg-rm-bg-primary relative overflow-hidden">
       {/* Header */}
       <header className="h-12 flex shrink-0 items-center gap-3 border-b border-rm-border bg-rm-bg-primary/60 px-4 z-10 backdrop-blur-md">
-        <button
+        <ButtonBase
           className="cursor-pointer border-none bg-transparent p-1 text-rm-text-muted transition-colors hover:text-rm-text md:hidden"
           onClick={onMenuClick}
         >
           <Menu className="h-5 w-5" />
-        </button>
+        </ButtonBase>
 
         <Users className="h-5 w-5 text-rm-text-muted" />
         <span className="text-sm font-semibold text-rm-text">Friends</span>
@@ -183,7 +184,7 @@ export default function FriendsView({ onMenuClick, onSelectDm }: Props) {
 
         {/* Tabs in header */}
         {(["online", "all", "pending", "blocked"] as Tab[]).map((t) => (
-          <button
+          <ButtonBase
             key={t}
             className={cn(
               "relative cursor-pointer rounded-md border-none px-3 py-1 text-[13px] font-medium transition-colors outline-none",
@@ -199,10 +200,10 @@ export default function FriendsView({ onMenuClick, onSelectDm }: Props) {
                 {pendingCount}
               </span>
             )}
-          </button>
+          </ButtonBase>
         ))}
 
-        <button
+        <ButtonBase
           className={cn(
             "ml-auto cursor-pointer rounded-md border-none px-3 py-1.5 text-[13px] font-medium transition-colors outline-none",
             addFriendMode
@@ -213,7 +214,7 @@ export default function FriendsView({ onMenuClick, onSelectDm }: Props) {
         >
           <UserPlus className="mr-1.5 inline h-4 w-4" />
           Add Friend
-        </button>
+        </ButtonBase>
       </header>
 
       {/* Add friend form */}
@@ -230,13 +231,13 @@ export default function FriendsView({ onMenuClick, onSelectDm }: Props) {
               onChange={(e) => dispatch({ type: "SET_ADD_USERNAME", value: e.target.value })}
               onKeyDown={(e) => e.key === "Enter" && handleAddFriend()}
             />
-            <button
+            <ButtonBase
               className="rounded-lg bg-primary px-5 py-2 text-sm font-semibold text-primary-foreground transition-colors hover:brightness-110 disabled:opacity-40"
               onClick={handleAddFriend}
               disabled={!addUsername.trim()}
             >
               Send Request
-            </button>
+            </ButtonBase>
           </div>
           {addStatus && (
             <p className="mt-2 text-xs text-primary">{addStatus}</p>
@@ -288,16 +289,14 @@ export default function FriendsView({ onMenuClick, onSelectDm }: Props) {
               key={rel.user.id}
               className="group relative flex cursor-pointer items-center gap-3 rounded-lg border-b border-rm-border/30 px-3 py-2.5 transition-colors hover:bg-rm-bg-elevated/60 outline-none"
             >
-              <button
-                type="button"
+              <ButtonBase
                 onClick={() => handleOpenDm(rel.user.id)}
                 onContextMenu={(e) => handleFriendContextMenu(e, rel.user)}
                 aria-label={`Message ${displayName}`}
                 className="absolute inset-0 z-10 rounded-lg outline-none"
               />
               {/* Avatar */}
-              <button
-                type="button"
+              <ButtonBase
                 className="relative z-20 shrink-0 cursor-pointer outline-none"
                 onClick={(e) => {
                   e.stopPropagation();
@@ -322,7 +321,7 @@ export default function FriendsView({ onMenuClick, onSelectDm }: Props) {
                     rel.user.status === "idle" ? "bg-amber-500" :
                       rel.user.status === "dnd" ? "bg-rose-500" : "bg-zinc-500"
                 )} />
-              </button>
+              </ButtonBase>
 
               {/* Info */}
               <div className="min-w-0 flex-1">
@@ -341,30 +340,30 @@ export default function FriendsView({ onMenuClick, onSelectDm }: Props) {
               {/* Actions */}
               <div className="relative z-20 flex gap-1.5 opacity-0 transition-opacity group-hover:opacity-100">
                 {rel.type === 0 && (
-                  <button
+                  <ButtonBase
                     className="cursor-pointer rounded-full p-2 text-rm-text-muted transition-colors hover:bg-rm-bg-elevated hover:text-rm-text outline-none"
                     title="Message"
                     onClick={(e) => { e.stopPropagation(); handleOpenDm(rel.user.id); }}
                   >
                     <MessageSquare className="h-4 w-4" />
-                  </button>
+                  </ButtonBase>
                 )}
                 {rel.type === 2 && (
-                  <button
+                  <ButtonBase
                     className="cursor-pointer rounded-full p-2 text-emerald-400/60 transition-colors hover:bg-emerald-500/10 hover:text-emerald-400 outline-none"
                     title="Accept"
                     onClick={(e) => { e.stopPropagation(); handleAcceptFriend(rel.user.id); }}
                   >
                     <Check className="h-4 w-4" />
-                  </button>
+                  </ButtonBase>
                 )}
-                <button
+                <ButtonBase
                   className="cursor-pointer rounded-full p-2 text-rm-text-muted/40 transition-colors hover:bg-rose-500/10 hover:text-rose-400 outline-none"
                   title={rel.type === 0 ? "Remove Friend" : rel.type === 2 ? "Reject" : "Cancel"}
                   onClick={(e) => { e.stopPropagation(); handleRemoveFriend(rel.user.id); }}
                 >
                   <X className="h-4 w-4" />
-                </button>
+                </ButtonBase>
               </div>
             </div>
               );
