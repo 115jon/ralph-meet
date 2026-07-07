@@ -1268,4 +1268,84 @@ describe("extractAndProcessEmbeds", () => {
       },
     });
   });
+
+  it("builds Instagram post embeds when oEmbed is unavailable but resolver metadata exists", async () => {
+    hoisted.resolveInstagramVideoMetadataMock.mockResolvedValue({
+      videoUrl: null,
+      thumbnailUrl: "https://scontent-ord5-2.cdninstagram.com/slide-1.jpg?oe=6A53095B",
+      title: "rukia!",
+      durationSeconds: null,
+      media: [
+        {
+          type: "image",
+          url: "https://scontent-ord5-2.cdninstagram.com/slide-1.jpg?oe=6A53095B",
+          width: 2728,
+          height: 1817,
+        },
+        {
+          type: "image",
+          url: "https://scontent-ord5-1.cdninstagram.com/slide-2.jpg?oe=6A532925",
+          width: 2727,
+          height: 1816,
+        },
+      ],
+      authorAvatarUrl: "https://scontent-ord5-1.cdninstagram.com/avatar.jpg?oe=6A53095B",
+      authorVerified: true,
+      likeCount: 1073,
+      commentCount: 15,
+      viewCount: null,
+      timestamp: "2026-06-24T03:40:02.000Z",
+      audio: {
+        title: "My Destiny (2026 Edit)",
+        artist: "Delinquent, KCAT, Mike Delinquent Project",
+      },
+    });
+
+    vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => {
+      const url = input.toString();
+      if (url.startsWith("https://www.instagram.com/api/v1/oembed/")) {
+        return new Response("not found", { status: 404 });
+      }
+      return new Response("not found", { status: 404 });
+    }));
+
+    const embeds = await extractAndProcessEmbeds("https://www.instagram.com/p/DZ9DK2RgNSk/?igsh=MXV1bnhwem9iMmY4bA==");
+
+    expect(embeds).toHaveLength(1);
+    expect(embeds[0]).toMatchObject({
+      url: "https://www.instagram.com/p/DZ9DK2RgNSk/?igsh=MXV1bnhwem9iMmY4bA==",
+      type: "rich",
+      rawTitle: "rukia!",
+      provider: {
+        name: "Instagram",
+        url: "https://www.instagram.com",
+      },
+      thumbnail: {
+        url: "https://scontent-ord5-2.cdninstagram.com/slide-1.jpg?oe=6A53095B",
+        width: 2728,
+        height: 1817,
+      },
+      media: [
+        {
+          type: "image",
+          url: "https://scontent-ord5-2.cdninstagram.com/slide-1.jpg?oe=6A53095B",
+          width: 2728,
+          height: 1817,
+        },
+        {
+          type: "image",
+          url: "https://scontent-ord5-1.cdninstagram.com/slide-2.jpg?oe=6A532925",
+          width: 2727,
+          height: 1816,
+        },
+      ],
+      metrics: {
+        likes: 1073,
+        comments: 15,
+      },
+      footer: {
+        text: "Instagram",
+      },
+    });
+  });
 });

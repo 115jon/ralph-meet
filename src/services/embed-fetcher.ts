@@ -1071,18 +1071,17 @@ async function fetchInstagramData(url: string): Promise<EmbedInfo | null> {
     fetchInstagramOEmbedMetadata(url),
     resolveInstagramVideoMetadata(url),
   ]);
-  if (!data) return null;
 
   const media = videoData?.media?.length ? videoData.media : undefined;
   const firstVideo = media?.find((entry) => entry.type === "video");
   const firstMedia = media?.[0];
-  const thumbnailUrl = videoData?.thumbnailUrl ?? firstVideo?.thumbnailUrl ?? firstMedia?.url ?? data.thumbnailUrl;
+  const thumbnailUrl = videoData?.thumbnailUrl ?? firstVideo?.thumbnailUrl ?? firstMedia?.url ?? data?.thumbnailUrl;
   const thumbnailWidth = firstMedia?.type === "image"
     ? firstMedia.width
-    : firstVideo?.width ?? data.thumbnailWidth;
+    : firstVideo?.width ?? data?.thumbnailWidth;
   const thumbnailHeight = firstMedia?.type === "image"
     ? firstMedia.height
-    : firstVideo?.height ?? data.thumbnailHeight;
+    : firstVideo?.height ?? data?.thumbnailHeight;
   const authorIconUrl = videoData?.authorAvatarUrl ?? undefined;
   const authorVerified = videoData?.authorVerified ?? undefined;
   const videoDurationSeconds = videoData?.durationSeconds ?? undefined;
@@ -1097,21 +1096,26 @@ async function fetchInstagramData(url: string): Promise<EmbedInfo | null> {
     likes: videoData?.likeCount ?? undefined,
     views: videoData?.viewCount ?? undefined,
   } : undefined;
+  const rawTitle = videoData?.title ?? data?.title;
+
+  if (!rawTitle && !thumbnailUrl && !media?.length && !videoData?.videoUrl) {
+    return null;
+  }
 
   return {
     id: nextEmbedId(),
     url,
     type: "rich",
-    rawTitle: videoData?.title ?? data.title,
-    author: data.authorName ? {
+    rawTitle,
+    author: data?.authorName ? {
       name: data.authorName,
       url: data.authorUrl,
       iconURL: authorIconUrl,
       isVerified: authorVerified,
     } : undefined,
     provider: {
-      name: data.providerName || "Instagram",
-      url: data.providerUrl || "https://www.instagram.com",
+      name: data?.providerName || "Instagram",
+      url: data?.providerUrl || "https://www.instagram.com",
     },
     color: "#E1306C",
     thumbnail: thumbnailUrl ? {
