@@ -5,8 +5,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { EmbedInfo } from "@/lib/types";
 
-const { openImageViewerMock } = vi.hoisted(() => ({
+const { openImageViewerMock, videoAttachmentMock } = vi.hoisted(() => ({
   openImageViewerMock: vi.fn(),
+  videoAttachmentMock: vi.fn(),
 }));
 
 vi.mock("@/stores/useImageViewerStore", () => ({
@@ -14,6 +15,19 @@ vi.mock("@/stores/useImageViewerStore", () => ({
     open: openImageViewerMock,
   }),
 }));
+
+vi.mock("@/components/chat/VideoAttachment", async () => {
+  const actual = await vi.importActual<any>("@/components/chat/VideoAttachment");
+  const ActualVideoAttachment = actual.default;
+
+  return {
+    ...actual,
+    default: (props: any) => {
+      videoAttachmentMock(props);
+      return <ActualVideoAttachment {...props} />;
+    },
+  };
+});
 
 import { LinkEmbed } from "../LinkEmbed";
 
@@ -148,6 +162,7 @@ function makeTikTokVideoEmbed(overrides: Partial<EmbedInfo> = {}): EmbedInfo {
 describe("LinkEmbed DOM rendering", () => {
   afterEach(() => {
     openImageViewerMock.mockReset();
+    videoAttachmentMock.mockReset();
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
   });
@@ -329,6 +344,69 @@ describe("LinkEmbed DOM rendering", () => {
 
     expect(pauseMock).toHaveBeenCalled();
     expect(screen.getByRole("button", { name: "Play audio preview" })).toBeInTheDocument();
+  });
+
+  it("renders Instagram carousel video slides with the shared video attachment", () => {
+    const { container } = render(
+      <LinkEmbed
+        embed={makeInstagramCarouselEmbed({
+          media: [
+            {
+              type: "video",
+              url: "https://scontent-ord5-1.cdninstagram.com/clip-1.mp4?stp=dst-video",
+              thumbnailUrl: "https://scontent-ord5-1.cdninstagram.com/clip-1-cover.jpg",
+              width: 1080,
+              height: 1350,
+              contentType: "video/mp4",
+              durationSeconds: 12,
+            },
+            {
+              type: "image",
+              url: "https://scontent-ord5-1.cdninstagram.com/photo-2.jpg?stp=dst-jpg",
+              width: 1080,
+              height: 1350,
+              altText: "Slide two",
+            },
+          ],
+        })}
+      />,
+    );
+
+    expect(videoAttachmentMock).toHaveBeenCalledWith(expect.objectContaining({
+      filename: "instagram-1.mp4",
+      embeddedChrome: false,
+      playbackMode: "default",
+    }));
+    expect(container.querySelector("video.rm-custom-video")).not.toBeNull();
+    expect(screen.queryByRole("button", { name: "Open media 1 of 2" })).not.toBeInTheDocument();
+  });
+
+  it("renders Instagram animated carousel media with the shared video attachment", () => {
+    const { container } = render(
+      <LinkEmbed
+        embed={makeInstagramCarouselEmbed({
+          media: [
+            {
+              type: "image",
+              url: "https://scontent-ord5-1.cdninstagram.com/animated-1.mp4?stp=dst-video",
+              thumbnailUrl: "https://scontent-ord5-1.cdninstagram.com/animated-1-cover.jpg",
+              width: 1080,
+              height: 1350,
+              contentType: "video/mp4",
+              isGif: true,
+              altText: "Animated slide",
+            },
+          ],
+        })}
+      />,
+    );
+
+    expect(videoAttachmentMock).toHaveBeenCalledWith(expect.objectContaining({
+      filename: "instagram-animated-1.mp4",
+      playbackMode: "animated",
+    }));
+    expect(container.querySelector("video.rm-custom-video")).not.toBeNull();
+    expect(screen.queryByRole("button", { name: "Open media 1 of 1" })).not.toBeInTheDocument();
   });
 
   it("renders TikTok slideshow branding in the footer without the extra badge", async () => {

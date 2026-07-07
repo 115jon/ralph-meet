@@ -404,6 +404,7 @@ const DirectVideoEmbed = memo(({
   durationBadgeSeconds,
   embeddedChrome = true,
   onPlay,
+  playbackMode = "default",
 }: {
   src: string;
   filename: string;
@@ -420,6 +421,7 @@ const DirectVideoEmbed = memo(({
   durationBadgeSeconds?: number;
   embeddedChrome?: boolean;
   onPlay?: React.ReactEventHandler<HTMLVideoElement>;
+  playbackMode?: "default" | "animated";
 }) => (
   <VideoAttachment
     src={src}
@@ -438,6 +440,7 @@ const DirectVideoEmbed = memo(({
     durationBadgeSeconds={durationBadgeSeconds}
     embeddedChrome={embeddedChrome}
     onPlay={onPlay}
+    playbackMode={playbackMode}
   />
 ));
 
@@ -2778,6 +2781,23 @@ function getInstagramRenderableMedia(embed: EmbedInfo): EmbedMedia[] {
   return [];
 }
 
+function shouldRenderInstagramMediaAsVideo(item: EmbedMedia): boolean {
+  if (item.type === "video" || item.isGif === true) {
+    return true;
+  }
+
+  const contentType = item.contentType?.toLowerCase();
+  if (contentType?.startsWith("video/")) {
+    return true;
+  }
+
+  try {
+    return /\.(mp4|m4v|mov|webm)$/i.test(new URL(item.url).pathname);
+  } catch {
+    return /\.(mp4|m4v|mov|webm)(?:$|\?)/i.test(item.url);
+  }
+}
+
 function hydrateInstagramEmbed(embed: EmbedInfo, payload: InstagramHydrationPayload | null): EmbedInfo {
   if (!payload) return embed;
 
@@ -3212,6 +3232,8 @@ const InstagramEmbed = memo(({
                   : displayEmbed.thumbnail?.url
                     ? getAuthAssetUrl(buildProxyMediaPath(displayEmbed.thumbnail.url, embed.url))
                     : undefined;
+                const rendersAsVideo = shouldRenderInstagramMediaAsVideo(item);
+                const playbackMode = item.isGif ? "animated" : "default";
 
                 return (
                   <div
@@ -3219,16 +3241,29 @@ const InstagramEmbed = memo(({
                     className="relative h-full shrink-0 bg-black"
                     style={{ width: `${slideWidthPercent}%` }}
                   >
-                    {item.type === "video" ? (
-                      <video
-                        src={videoSrc}
-                        poster={posterSrc}
-                        className="h-full w-full object-cover"
-                        controls
-                        playsInline
-                        preload="metadata"
-                        onPlay={onMediaPlay}
-                      />
+                    {rendersAsVideo ? (
+                      <div
+                        className="flex h-full w-full items-center justify-center bg-black"
+                        onPointerDown={stopChromePointerPropagation}
+                      >
+                        <DirectVideoEmbed
+                          src={videoSrc}
+                          filename={item.isGif ? `instagram-animated-${index + 1}.mp4` : `instagram-${index + 1}.mp4`}
+                          maxWidth={4096}
+                          maxHeight={4096}
+                          aspectRatio={getAspectRatio(item.width, item.height)}
+                          poster={posterSrc}
+                          fallbackToPosterOnError={!!posterSrc}
+                          referrerPolicy="no-referrer"
+                          surfaceClassName="bg-black"
+                          mediaClassName="h-full w-full object-contain"
+                          showDurationBadge
+                          durationBadgeSeconds={item.durationSeconds}
+                          embeddedChrome={false}
+                          onPlay={onMediaPlay}
+                          playbackMode={playbackMode}
+                        />
+                      </div>
                     ) : (
                       <button
                         type="button"
