@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.18.0](https://github.com/115jon/ralph-meet/compare/v1.17.0...v1.18.0) (2026-07-08)
+
+
+### Features
+
+* **activities:** ✨ add warp rush 3d prototype ([b5af8e6](https://github.com/115jon/ralph-meet/commit/b5af8e6872fdaffd8952b2c9ad43fc6cdca313b2))
+
+
+### Bug Fixes
+
+* **chat:** 🐛 unify custom nameplate mask rendering ([1f1e2a5](https://github.com/115jon/ralph-meet/commit/1f1e2a5a121af414a846bccf8d5f4fd34c300dc5))
+* **profile:** 🐛 align profile effect preview typings ([34f555a](https://github.com/115jon/ralph-meet/commit/34f555aba9266c5cc8433df00400a8d01f8d4b09))
+* **profile:** 🐛 keep collectible edits local until save ([8c03e78](https://github.com/115jon/ralph-meet/commit/8c03e789a622e69437478a03c6918c4d4f7c5533))
+
 ## [1.17.0](https://github.com/115jon/ralph-meet/compare/v1.16.0...v1.17.0) (2026-07-08)
 
 
