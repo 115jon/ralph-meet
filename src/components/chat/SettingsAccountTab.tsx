@@ -4,11 +4,9 @@ import { AvatarImage } from "@/components/chat/AvatarImage";
 import { CollectiblesCatalogModal } from "@/components/chat/CollectiblesCatalogModal";
 import { ProfileCollectiblesLayer } from "@/components/chat/ProfileCollectiblesLayer";
 import { ProfileAssetLayer } from "@/components/chat/ProfileAssetLayer";
-import { getUserNameplatePresentation } from "@/components/chat/user-nameplate-presentation";
-import splashLogo from "@/assets/splash-logo.svg";
+import { getUserNameplatePresentation, shouldUseNameplateIdentityFade } from "@/components/chat/user-nameplate-presentation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { apiDelete, apiGet, apiPatch, apiPost, apiUpload } from "@/lib/api-client";
 import {
@@ -236,10 +234,12 @@ function ProfileRailCard({
   children,
   actions,
   className,
+  onHoverChange,
 }: {
   children: ReactNode;
   actions?: ReactNode;
   className?: string;
+  onHoverChange?: (hovered: boolean) => void;
 }) {
   return (
     <div
@@ -247,6 +247,8 @@ function ProfileRailCard({
         "group/rail relative overflow-hidden rounded-[14px] border border-rm-border/80 bg-rm-bg-surface/70 shadow-[inset_0_1px_0_rgba(255,255,255,0.03),0_14px_28px_rgba(0,0,0,0.22)] transition duration-200 hover:border-rm-border hover:bg-rm-bg-elevated/80",
         className,
       )}
+      onPointerEnter={onHoverChange ? () => onHoverChange(true) : undefined}
+      onPointerLeave={onHoverChange ? () => onHoverChange(false) : undefined}
     >
       {actions ? (
         <div className="absolute right-1.5 top-1.5 z-20 flex items-center gap-1 opacity-100 transition duration-200 md:opacity-0 md:group-hover/rail:opacity-100 md:group-focus-within/rail:opacity-100">
@@ -725,12 +727,9 @@ function DisplayNameStyleDialog({
     avatar_display: avatarDisplay ?? null,
     nameplate_url: nameplateUrl ?? null,
   });
-  const nameplatePreviewNeedsAssist = nameplatePreview.needsContrastAssist && Boolean(nameplatePreview.theme);
-  const nameplatePreviewBackground = nameplatePreviewNeedsAssist
-    ? (nameplatePreview.theme?.identityBackdropBg ?? nameplatePreview.theme?.accentHex ?? previewSurfaceBackground)
-    : (nameplatePreview.theme?.accentHex ?? previewSurfaceBackground);
-  const nameplatePreviewText = nameplatePreview.theme?.foregroundColor
-    ?? (nameplatePreview.theme?.isLightAccent ? "#1F2937" : "#F8FAFC");
+  const useNameplatePreviewIdentityFade = shouldUseNameplateIdentityFade(nameplatePreview.theme, {
+    needsContrastAssist: nameplatePreview.needsContrastAssist,
+  });
 
   const applyPresetColor = useCallback((preset: string) => {
     setDraftStyle((prev) => ({
@@ -1099,6 +1098,7 @@ function DisplayNameStyleDialog({
                       contentType={nameplateContentType}
                       alt=""
                       className="pointer-events-none absolute inset-0 opacity-[0.96]"
+                      maskPreset={useNameplatePreviewIdentityFade ? "nameplateIdentity" : undefined}
                     />
                   ) : null}
                   <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(5,7,11,0.10),rgba(5,7,11,0.32))]" />
@@ -1113,23 +1113,10 @@ function DisplayNameStyleDialog({
                       )}
                     </div>
                     <div className="relative min-w-0 flex-1">
-                      {nameplatePreviewNeedsAssist && nameplatePreview.theme ? (
-                        <div
-                          className="pointer-events-none absolute inset-y-[-4px] -left-2 right-0 rounded-[10px]"
-                          style={{
-                            border: `1px solid ${nameplatePreview.theme.identityBackdropBorder}`,
-                            background: nameplatePreview.theme.identityBackdropBg,
-                            backdropFilter: "blur(10px) saturate(1.05)",
-                            WebkitBackdropFilter: "blur(10px) saturate(1.05)",
-                          }}
-                        />
-                      ) : null}
                       <ProfileDisplayName
                         text={displayName}
                         displayNameStyle={draftStyle}
-                        className="relative block min-w-0 flex-1 truncate text-[17px] font-semibold"
-                        backgroundColor={nameplatePreviewBackground}
-                        readableFallbackColor={nameplatePreviewText}
+                        className="relative block min-w-0 flex-1 truncate text-[17px] font-semibold text-[color:var(--rm-profile-custom-text)]"
                         minContrastRatio={2.8}
                       />
                     </div>
@@ -1226,6 +1213,53 @@ function isManagedNameplateUrl(url: string | null | undefined) {
   return typeof url === "string" && url.startsWith("/api/profile-assets/nameplate/");
 }
 
+function removeCollectibleFromAvatarDisplay(
+  display: AvatarDisplay | string | null,
+  kind: CollectibleKind,
+): AvatarDisplay | null {
+  const normalizedDisplay = normalizeAvatarDisplay(display);
+  if (!normalizedDisplay?.collectibles) {
+    return normalizedDisplay ?? null;
+  }
+
+  switch (kind) {
+    case "avatar_decoration": {
+      if (!normalizedDisplay.collectibles.avatarDecoration) return normalizedDisplay;
+      const { avatarDecoration: _removedCollectible, ...remainingCollectibles } = normalizedDisplay.collectibles;
+      return {
+        ...normalizedDisplay,
+        collectibles: Object.keys(remainingCollectibles).length > 0 ? remainingCollectibles : undefined,
+      } satisfies AvatarDisplay;
+    }
+    case "profile_effect": {
+      if (!normalizedDisplay.collectibles.profileEffect) return normalizedDisplay;
+      const { profileEffect: _removedCollectible, ...remainingCollectibles } = normalizedDisplay.collectibles;
+      return {
+        ...normalizedDisplay,
+        collectibles: Object.keys(remainingCollectibles).length > 0 ? remainingCollectibles : undefined,
+      } satisfies AvatarDisplay;
+    }
+    case "nameplate": {
+      if (!normalizedDisplay.collectibles.nameplate) return normalizedDisplay;
+      const { nameplate: _removedCollectible, ...remainingCollectibles } = normalizedDisplay.collectibles;
+      return {
+        ...normalizedDisplay,
+        collectibles: Object.keys(remainingCollectibles).length > 0 ? remainingCollectibles : undefined,
+      } satisfies AvatarDisplay;
+    }
+    case "profile_frame": {
+      if (!normalizedDisplay.collectibles.profileFrame) return normalizedDisplay;
+      const { profileFrame: _removedCollectible, ...remainingCollectibles } = normalizedDisplay.collectibles;
+      return {
+        ...normalizedDisplay,
+        collectibles: Object.keys(remainingCollectibles).length > 0 ? remainingCollectibles : undefined,
+      } satisfies AvatarDisplay;
+    }
+    default:
+      return normalizedDisplay;
+  }
+}
+
 function useAccountState(user: any, chatUser: any) {
   const [displayName, setDisplayName] = useState(
     () =>
@@ -1241,9 +1275,6 @@ function useAccountState(user: any, chatUser: any) {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [usernameStatus, setUsernameStatus] = useState<
-    "idle" | "checking" | "available" | "taken" | "invalid" | "own"
-  >("idle");
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [bannerPreview, setBannerPreview] = useState<AssetPreview | null>(null);
@@ -1256,8 +1287,6 @@ function useAccountState(user: any, chatUser: any) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const bannerInputRef = useRef<HTMLInputElement>(null);
   const nameplateInputRef = useRef<HTMLInputElement>(null);
-  const checkTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const abortRef = useRef<AbortController | null>(null);
 
   const lastUserId = useRef(user?.id);
   if (user?.id !== lastUserId.current) {
@@ -1273,7 +1302,6 @@ function useAccountState(user: any, chatUser: any) {
     setBio(chatUser?.bio || "");
     setError(null);
     setSaved(false);
-    setUsernameStatus("idle");
     setAvatarPreview(null);
     setAvatarFile(null);
     setBannerPreview(null);
@@ -1294,7 +1322,6 @@ function useAccountState(user: any, chatUser: any) {
     saving, setSaving,
     saved, setSaved,
     error, setError,
-    usernameStatus, setUsernameStatus,
     avatarPreview, setAvatarPreview,
     avatarFile, setAvatarFile,
     bannerPreview, setBannerPreview,
@@ -1304,7 +1331,7 @@ function useAccountState(user: any, chatUser: any) {
     removeAvatar, setRemoveAvatar,
     removeBanner, setRemoveBanner,
     removeNameplate, setRemoveNameplate,
-    fileInputRef, checkTimeoutRef, abortRef,
+    fileInputRef,
     bannerInputRef,
     nameplateInputRef,
   };
@@ -1336,7 +1363,6 @@ export default function SettingsAccountTab({
     saving, setSaving,
     setSaved,
     error, setError,
-    usernameStatus, setUsernameStatus,
     avatarPreview, setAvatarPreview,
     avatarFile, setAvatarFile,
     bannerPreview, setBannerPreview,
@@ -1346,7 +1372,7 @@ export default function SettingsAccountTab({
     removeAvatar, setRemoveAvatar,
     removeBanner, setRemoveBanner,
     removeNameplate, setRemoveNameplate,
-    fileInputRef, checkTimeoutRef, abortRef,
+    fileInputRef,
     bannerInputRef,
     nameplateInputRef,
   } = useAccountState(user, chatUser);
@@ -1358,7 +1384,6 @@ export default function SettingsAccountTab({
   const [avatarDisplayChanged, setAvatarDisplayChanged] = useState(false);
   const [avatarEditor, setAvatarEditor] = useState<{ src: string; file?: File } | null>(null);
   const [collectiblesKind, setCollectiblesKind] = useState<CollectibleKind | null>(null);
-  const [collectibleActionKind, setCollectibleActionKind] = useState<CollectibleKind | null>(null);
   const [profileAccentColor, setProfileAccentColor] = useState<string | null>(() => normalizeHexColor(chatUser?.profile_accent_color) ?? null);
   const [profileBackgroundColor, setProfileBackgroundColor] = useState<string | null>(() => normalizeHexColor(chatUser?.profile_background_color) ?? null);
   const [profileBannerColor, setProfileBannerColor] = useState<string | null>(() => normalizeHexColor(chatUser?.profile_banner_color) ?? null);
@@ -1367,6 +1392,9 @@ export default function SettingsAccountTab({
   );
   const [displayNameStyleEditorOpen, setDisplayNameStyleEditorOpen] = useState(false);
   const [stylesCollapsed, setStylesCollapsed] = useState(false);
+  const [isNameplatePreviewHovered, setIsNameplatePreviewHovered] = useState(false);
+  const [isAvatarDecorationPreviewHovered, setIsAvatarDecorationPreviewHovered] = useState(false);
+  const [isProfileEffectPreviewHovered, setIsProfileEffectPreviewHovered] = useState(false);
   const [activePreviewField, setActivePreviewField] = useState<"pronouns" | "bio" | null>(null);
   const previewPronounsInputRef = useRef<HTMLInputElement | null>(null);
   const previewBioInputRef = useRef<HTMLTextAreaElement | null>(null);
@@ -1576,12 +1604,29 @@ export default function SettingsAccountTab({
       : currentBannerUrl
         ? "Profile banner active"
         : "No banner selected";
-  const nameplateAssetUrl = currentNameplateUrl || currentNameplateSelection?.staticUrl || null;
-  const profileEffectPosterUrl =
-    currentProfileEffect?.staticUrl
-    || currentProfileEffect?.previewUrl
-    || currentProfileEffect?.animatedUrl
+  const nameplateStaticPreviewUrl = currentNameplateUrl || currentNameplateSelection?.staticUrl || null;
+  const nameplateStaticPreviewContentType = currentNameplateUrl ? currentNameplateContentType : null;
+  const nameplateHoverPreviewUrl =
+    currentNameplateUrl
+    || currentNameplateSelection?.animatedUrl
+    || currentNameplateSelection?.staticUrl
     || null;
+  const nameplateHoverPreviewContentType = currentNameplateUrl
+    ? currentNameplateContentType
+    : currentNameplateSelection?.animatedUrl
+      ? "video/mp4"
+      : null;
+  const avatarDecorationPreviewArtUrl = currentAvatarDecoration?.asset
+    ? `https://cdn.discordapp.com/avatar-decoration-presets/${currentAvatarDecoration.asset}.png?size=240&passthrough=true`
+    : currentAvatarDecoration?.imageUrl ?? null;
+  const profileEffectPosterUrl =
+    currentProfileEffect?.staticFrameSrc
+    || currentProfileEffect?.thumbnailPreviewSrc
+    || currentProfileEffect?.reducedMotionSrc
+    || currentProfileEffect?.staticUrl
+    || currentProfileEffect?.previewUrl
+    || null;
+  const profileEffectPosterSrc = profileEffectPosterUrl ? getAuthAssetUrl(profileEffectPosterUrl) : null;
   const resetDraftState = useCallback(() => {
     setDisplayName(chatUser?.display_name || (user?.unsafeMetadata?.displayName as string) || user?.username || "");
     setUsername(chatUser?.username || user?.username || "");
@@ -1604,7 +1649,6 @@ export default function SettingsAccountTab({
     setDisplayNameStyle(normalizeDisplayNameStyle(chatUser?.display_name_style));
     setError(null);
     setSaved(false);
-    setUsernameStatus("idle");
   }, [
     chatUser?.avatar_display,
     chatUser?.bio,
@@ -1632,7 +1676,6 @@ export default function SettingsAccountTab({
     setRemoveNameplate,
     setSaved,
     setUsername,
-    setUsernameStatus,
     user?.unsafeMetadata?.displayName,
     user?.username,
   ]);
@@ -1657,52 +1700,6 @@ export default function SettingsAccountTab({
     setRemoveNameplate,
     user,
   ]);
-
-  const checkUsername = useCallback(
-    (value: string) => {
-      if (checkTimeoutRef.current) clearTimeout(checkTimeoutRef.current);
-      if (abortRef.current) abortRef.current.abort();
-
-      const trimmed = value.trim().toLowerCase();
-      if (trimmed === (user?.username || "")) {
-        setUsernameStatus("own");
-        return;
-      }
-      if (trimmed.length < 2) {
-        setUsernameStatus(trimmed.length > 0 ? "invalid" : "idle");
-        return;
-      }
-      if (!/^[a-z0-9._]+$/.test(trimmed)) {
-        setUsernameStatus("invalid");
-        return;
-      }
-
-      setUsernameStatus("checking");
-      checkTimeoutRef.current = setTimeout(async () => {
-        const controller = new AbortController();
-        abortRef.current = controller;
-        try {
-          const data = await apiGet<{ available: boolean }>(
-            `/api/check-username?username=${encodeURIComponent(trimmed)}`,
-            { signal: controller.signal },
-          );
-          setUsernameStatus(data.available ? "available" : "taken");
-        } catch (err) {
-          if ((err as Error).name !== "AbortError") {
-            setUsernameStatus("idle");
-          }
-        }
-      }, 400);
-    },
-    [user?.username, checkTimeoutRef, abortRef, setUsernameStatus],
-  );
-
-  const handleUsernameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const cleaned = e.target.value.toLowerCase().replace(/[^a-z0-9._]/g, "");
-    setUsername(cleaned);
-    setError(null);
-    checkUsername(cleaned);
-  };
 
   const handleAvatarSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -1779,82 +1776,62 @@ export default function SettingsAccountTab({
     setCollectiblesKind(kind);
   }, []);
 
-  const handleRemoveCollectible = useCallback(async (kind: CollectibleKind) => {
-    if (!user) return;
-    setCollectibleActionKind(kind);
-    setError(null);
-    try {
-      const data = await apiPatch<{ ok: true; user: CollectibleApplyUser }>("/api/collectibles/apply", {
-        kind,
-        skuId: null,
-        avatarDisplay: currentAvatarDisplay ?? null,
-      });
-      await syncCollectibleState(data.user);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to update profile collectible.");
-    } finally {
-      setCollectibleActionKind(null);
-    }
-  }, [currentAvatarDisplay, setCollectibleActionKind, setError, syncCollectibleState, user]);
-
-  const handleRemoveNameplate = useCallback(async () => {
-    if (nameplateFile || nameplatePreview) {
-      setRemoveNameplate(true);
-      setNameplateFile(null);
-      setNameplatePreview(null);
+  const handleRemoveCollectible = useCallback((kind: CollectibleKind) => {
+    const hasCollectible =
+      kind === "avatar_decoration"
+        ? Boolean(currentAvatarDecoration)
+        : kind === "profile_effect"
+          ? Boolean(currentProfileEffect)
+          : kind === "profile_frame"
+            ? Boolean(currentCollectibles?.profileFrame)
+            : Boolean(currentNameplateSelection);
+    if (!hasCollectible) {
       return;
     }
 
+    const nextAvatarDisplay = removeCollectibleFromAvatarDisplay(currentAvatarDisplay, kind);
+    setError(null);
+    setAvatarDisplay(nextAvatarDisplay);
+    setAvatarDisplayChanged(true);
+  }, [
+    currentAvatarDecoration,
+    currentAvatarDisplay,
+    currentCollectibles?.profileFrame,
+    currentNameplateSelection,
+    currentProfileEffect,
+    setAvatarDisplay,
+    setAvatarDisplayChanged,
+    setError,
+  ]);
+
+  const handleRemoveNameplate = useCallback(() => {
     const savedNameplateUrl = chatUser?.nameplate_url ?? null;
-    if (!savedNameplateUrl && !currentNameplateSelection) {
+    if (!savedNameplateUrl && !currentNameplateSelection && !nameplateFile && !nameplatePreview) {
       return;
     }
 
-    setCollectibleActionKind("nameplate");
     setError(null);
-    try {
-      if (savedNameplateUrl && isManagedNameplateUrl(savedNameplateUrl)) {
-        await apiDelete<{ ok: true }, { kind: "nameplate" }>("/api/profile-assets/manage", { kind: "nameplate" });
-      }
+    setRemoveNameplate(true);
+    setNameplateFile(null);
+    setNameplatePreview(null);
 
-      if (!savedNameplateUrl || !isManagedNameplateUrl(savedNameplateUrl) || currentNameplateSelection) {
-        const data = await apiPatch<{ ok: true; user: CollectibleApplyUser }>("/api/collectibles/apply", {
-          kind: "nameplate",
-          skuId: null,
-          avatarDisplay: currentAvatarDisplay ?? null,
-        });
-        await syncCollectibleState(data.user);
-      } else {
-        setRemoveNameplate(false);
-        setNameplateFile(null);
-        setNameplatePreview(null);
-        if (typeof user?.reload === "function") {
-          await user.reload();
-        }
-        await loadCurrentUser();
-        setAvatarDisplayChanged(Boolean(avatarFile));
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to remove nameplate.");
-    } finally {
-      setCollectibleActionKind(null);
+    if (currentNameplateSelection) {
+      const nextAvatarDisplay = removeCollectibleFromAvatarDisplay(currentAvatarDisplay, "nameplate");
+      setAvatarDisplay(nextAvatarDisplay);
+      setAvatarDisplayChanged(true);
     }
   }, [
-    avatarFile,
     chatUser?.nameplate_url,
     currentAvatarDisplay,
     currentNameplateSelection,
-    loadCurrentUser,
     nameplateFile,
     nameplatePreview,
-    setAvatarDisplayChanged,
-    setCollectibleActionKind,
+    setAvatarDisplay,
     setError,
     setNameplateFile,
     setNameplatePreview,
     setRemoveNameplate,
-    syncCollectibleState,
-    user,
+    setAvatarDisplayChanged,
   ]);
 
   const handleSaveProfile = useCallback(async () => {
@@ -2146,6 +2123,7 @@ export default function SettingsAccountTab({
                   <ProfileRailSection title="Nameplate">
                     <ProfileRailCard
                       className="p-2.5"
+                      onHoverChange={setIsNameplatePreviewHovered}
                       actions={(
                         <>
                           <AccountActionIconButton label="Browse nameplates" onClick={() => handleOpenCollectibles("nameplate")}>
@@ -2160,7 +2138,7 @@ export default function SettingsAccountTab({
                             disabled={!currentNameplateUrl && !currentNameplateSelection && !nameplateFile}
                             className="text-rose-300 hover:bg-rose-500/12 hover:text-rose-100"
                           >
-                            {collectibleActionKind === "nameplate" ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />}
+                            <Trash2 size={12} />
                           </AccountActionIconButton>
                         </>
                       )}
@@ -2169,43 +2147,26 @@ export default function SettingsAccountTab({
                           className="relative h-9 overflow-hidden rounded-[10px] border border-rm-border/70 bg-rm-bg-surface"
                           title={nameplateStatus}
                         >
-                        {nameplateAssetUrl ? (
+                        {nameplateStaticPreviewUrl ? (
                           <>
                             <div className="absolute inset-0 transition duration-300 group-hover/rail:opacity-0">
-                              {currentNameplateUrl ? (
-                                <ProfileAssetLayer
-                                  url={currentNameplateUrl}
-                                  contentType={currentNameplateContentType}
-                                  alt="Nameplate preview"
-                                  className="opacity-95"
-                                />
-                              ) : (
-                                <img
-                                  src={getAuthAssetUrl(nameplateAssetUrl)}
-                                  alt=""
-                                  className="absolute inset-0 h-full w-full object-cover opacity-92"
-                                  loading="lazy"
-                                  decoding="async"
-                                />
-                              )}
+                              <ProfileAssetLayer
+                                url={nameplateStaticPreviewUrl}
+                                contentType={nameplateStaticPreviewContentType}
+                                alt="Nameplate preview"
+                                className="opacity-95"
+                                playVideo={false}
+                              />
                             </div>
                             <div className="absolute inset-0 opacity-0 transition duration-300 group-hover/rail:opacity-100">
-                              {currentNameplateUrl ? (
+                              {isNameplatePreviewHovered && nameplateHoverPreviewUrl ? (
                                 <ProfileAssetLayer
-                                  url={currentNameplateUrl}
-                                  contentType={currentNameplateContentType}
+                                  url={nameplateHoverPreviewUrl}
+                                  contentType={nameplateHoverPreviewContentType}
                                   alt="Nameplate preview"
                                   className="opacity-95"
                                 />
-                              ) : (
-                                <img
-                                  src={getAuthAssetUrl(nameplateAssetUrl)}
-                                  alt=""
-                                  className="absolute inset-0 h-full w-full object-cover opacity-92"
-                                  loading="lazy"
-                                  decoding="async"
-                                />
-                              )}
+                              ) : null}
                               <div className="absolute inset-0 bg-[linear-gradient(90deg,_rgba(10,12,16,0.82)_0%,_rgba(10,12,16,0.28)_38%,_rgba(10,12,16,0.18)_68%,_rgba(10,12,16,0.82)_100%)]" />
                               <div className="absolute inset-y-0 left-2 flex items-center gap-2">
                                 <div className="h-6 w-6 overflow-hidden rounded-full border border-rm-border bg-rm-bg-surface/80">
@@ -2268,6 +2229,7 @@ export default function SettingsAccountTab({
 
                       <ProfileRailCard
                         className="flex h-[88px] items-center justify-center p-2.5"
+                        onHoverChange={setIsAvatarDecorationPreviewHovered}
                         actions={(
                           <>
                             <AccountActionIconButton label="Change decoration" onClick={() => handleOpenCollectibles("avatar_decoration")}>
@@ -2279,7 +2241,7 @@ export default function SettingsAccountTab({
                               disabled={!currentAvatarDecoration}
                               className="text-rose-300 hover:bg-rose-500/12 hover:text-rose-100"
                             >
-                              {collectibleActionKind === "avatar_decoration" ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />}
+                              <Trash2 size={12} />
                             </AccountActionIconButton>
                           </>
                         )}
@@ -2288,24 +2250,21 @@ export default function SettingsAccountTab({
                           {currentAvatarDecoration ? (
                             <>
                               <div className="absolute inset-0 transition duration-300 group-hover/rail:opacity-0">
-                                <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(109,124,255,0.22),_transparent_56%),linear-gradient(180deg,_rgba(9,11,17,0.98),_rgba(10,12,18,0.95))]" />
+                                <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_rgba(255,255,255,0.08),_rgba(255,255,255,0)_56%)]" />
                                 <div className="absolute inset-0 flex items-center justify-center">
-                                  <div className="relative h-[50px] w-[50px] overflow-visible rounded-full border border-rm-border bg-rm-bg-elevated/90 p-1.5 shadow-[0_12px_24px_rgba(0,0,0,0.3)]">
-                                    <img src={splashLogo} alt="" className="h-full w-full object-contain opacity-80" />
-                                    <img
-                                      src={currentAvatarDecoration.imageUrl}
-                                      alt=""
-                                      className="pointer-events-none absolute left-1/2 top-1/2 h-[124%] w-[124%] max-w-none -translate-x-1/2 -translate-y-1/2 object-contain"
-                                      loading="lazy"
-                                      decoding="async"
-                                    />
-                                  </div>
+                                  <img
+                                    src={avatarDecorationPreviewArtUrl ?? currentAvatarDecoration.imageUrl}
+                                    alt={currentAvatarDecoration.name}
+                                    className="h-[56px] w-[56px] object-contain opacity-95 drop-shadow-[0_12px_22px_rgba(0,0,0,0.34)]"
+                                    loading="lazy"
+                                    decoding="async"
+                                  />
                                 </div>
                               </div>
                               <div className="absolute inset-0 opacity-0 transition duration-300 group-hover/rail:opacity-100">
                                 <div className="absolute inset-0 flex items-center justify-center">
                                   <div className="relative h-[50px] w-[50px] overflow-visible rounded-full border border-rm-border bg-rm-bg-elevated/90 shadow-[0_12px_24px_rgba(0,0,0,0.3)]">
-                                    {currentAvatarSrc ? (
+                                    {isAvatarDecorationPreviewHovered && currentAvatarSrc ? (
                                       <AvatarImage src={currentAvatarSrc} alt="" display={currentAvatarDisplay} />
                                     ) : (
                                       <>
@@ -2486,60 +2445,89 @@ export default function SettingsAccountTab({
 
                   <ProfileRailSection title="Profile Effect">
                     <ProfileRailCard
-                      className="p-2"
+                      className="p-2.5"
+                      onHoverChange={setIsProfileEffectPreviewHovered}
                       actions={(
-                        <>
-                          <AccountActionIconButton label="Change profile effect" onClick={() => handleOpenCollectibles("profile_effect")}>
-                            <Sparkles size={12} />
-                          </AccountActionIconButton>
-                          <AccountActionIconButton
-                            label="Remove profile effect"
-                            onClick={() => handleRemoveCollectible("profile_effect")}
-                            disabled={!currentProfileEffect}
-                            className="text-rose-300 hover:bg-rose-500/12 hover:text-rose-100"
-                          >
-                            {collectibleActionKind === "profile_effect" ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />}
-                          </AccountActionIconButton>
-                        </>
+                        <AccountActionIconButton
+                          label="Remove profile effect"
+                          onClick={() => handleRemoveCollectible("profile_effect")}
+                          disabled={!currentProfileEffect}
+                          className="text-rose-300 hover:bg-rose-500/12 hover:text-rose-100"
+                        >
+                          <Trash2 size={12} />
+                        </AccountActionIconButton>
                       )}
                     >
-                        <div className="relative h-[84px] overflow-hidden rounded-[10px] border border-rm-border/70 bg-rm-bg-surface">
-                          <div className="absolute inset-0 flex items-center justify-center transition duration-300 group-hover/rail:opacity-0">
-                            <div className="relative h-[72px] overflow-hidden rounded-[10px] border border-rm-border/70 bg-rm-bg-elevated shadow-[0_16px_30px_rgba(0,0,0,0.28)]" style={{ aspectRatio: PROFILE_SURFACE_ASPECT_RATIO }}>
-                            {profileEffectPosterUrl ? (
-                              <img
-                                src={getAuthAssetUrl(profileEffectPosterUrl)}
-                                alt=""
-                                className="absolute inset-0 h-full w-full object-cover opacity-94"
-                                loading="lazy"
-                                decoding="async"
-                              />
+                      <div
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => handleOpenCollectibles("profile_effect")}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter" || event.key === " ") {
+                            event.preventDefault();
+                            handleOpenCollectibles("profile_effect");
+                          }
+                        }}
+                        className="group/profile-effect relative block h-[88px] w-full cursor-pointer overflow-hidden rounded-[12px] border border-rm-border/70 bg-rm-bg-surface text-left outline-none transition duration-200 hover:border-rm-border hover:shadow-[0_18px_32px_rgba(0,0,0,0.24)] focus-visible:border-primary/60 focus-visible:shadow-[0_0_0_1px_rgba(88,101,242,0.4),0_18px_32px_rgba(0,0,0,0.24)]"
+                        aria-label="Browse profile effects"
+                      >
+                        <div className="absolute inset-0 flex items-center justify-center px-2">
+                          <div className="relative h-[78px] w-[72px] overflow-hidden rounded-[14px] border border-rm-border/70 bg-rm-bg-elevated shadow-[0_18px_34px_rgba(0,0,0,0.3)]">
+                            {isProfileEffectPreviewHovered ? (
+                              <>
+                                <div
+                                  className="absolute inset-0"
+                                  style={{
+                                    ...previewThemeStyle,
+                                    backgroundColor: previewTheme.backgroundColor,
+                                    backgroundImage: "var(--rm-profile-custom-surface)",
+                                  }}
+                                />
+                                <div className="absolute left-2.5 top-[14px] z-20 h-6 w-6 overflow-hidden rounded-full border-2 border-rm-bg-elevated bg-rm-bg-surface shadow-[0_8px_16px_rgba(0,0,0,0.24)]">
+                                  {currentAvatarSrc ? (
+                                    <AvatarImage src={currentAvatarSrc} alt="" display={currentAvatarDisplayWithoutDecoration} />
+                                  ) : (
+                                    <div className="flex h-full w-full items-center justify-center text-[11px] font-bold text-white/80">
+                                      {getDisplayInitial({ name: currentDisplayName })}
+                                    </div>
+                                  )}
+                                </div>
+                                <div className="absolute inset-x-2.5 bottom-2.5 z-20 rounded-[10px] border border-white/8 bg-black/16 p-1.5">
+                                  <div className="h-1.5 w-12 rounded-full bg-white/18" />
+                                  <div className="mt-1.5 h-1.5 w-16 rounded-full bg-white/10" />
+                                </div>
+                                {currentProfileEffect ? (
+                                  <ProfileCollectiblesLayer display={currentAvatarDisplay} effectOpacity={1} fit="contain" className="z-10 opacity-100" />
+                                ) : null}
+                                <div className="absolute inset-0 z-0" style={{ background: "var(--rm-profile-custom-surface-overlay)" }} />
+                              </>
                             ) : (
-                              <div className="absolute inset-0" style={{ ...previewThemeStyle, background: "var(--rm-profile-custom-banner-fallback)" }} />
+                              <>
+                                {profileEffectPosterSrc ? (
+                                  <img
+                                    src={profileEffectPosterSrc}
+                                    alt=""
+                                    className="absolute inset-0 h-full w-full object-cover opacity-94"
+                                    loading="lazy"
+                                    decoding="async"
+                                  />
+                                ) : (
+                                  <div className="absolute inset-0" style={{ ...previewThemeStyle, background: "var(--rm-profile-custom-banner-fallback)" }} />
+                                )}
+                                <div className="absolute inset-0 bg-[linear-gradient(180deg,_rgba(0,0,0,0)_0%,_rgba(0,0,0,0.18)_56%,_rgba(0,0,0,0.42)_100%)]" />
+                                <div className="absolute inset-x-2.5 bottom-2.5 rounded-[10px] border border-white/8 bg-black/18 p-1.5">
+                                  <div className="h-1.5 w-12 rounded-full bg-white/22" />
+                                  <div className="mt-1.5 h-1.5 w-16 rounded-full bg-white/12" />
+                                </div>
+                              </>
                             )}
                           </div>
-                          </div>
-                          <div className="absolute inset-0 flex items-center justify-center opacity-0 transition duration-300 group-hover/rail:opacity-100">
-                            <div className="relative h-[72px] overflow-hidden rounded-[10px] border border-rm-border/70 bg-rm-bg-elevated shadow-[0_16px_30px_rgba(0,0,0,0.3)]" style={{ aspectRatio: PROFILE_SURFACE_ASPECT_RATIO }}>
-                              <div className="absolute inset-0" style={{ ...previewThemeStyle, background: "var(--rm-profile-custom-banner-fallback)" }} />
-                              <div className="absolute left-2.5 top-[14px] h-6 w-6 overflow-hidden rounded-full border-2 border-rm-bg-elevated bg-rm-bg-surface shadow-[0_8px_16px_rgba(0,0,0,0.24)]">
-                                {currentAvatarSrc ? (
-                                  <AvatarImage src={currentAvatarSrc} alt="" display={currentAvatarDisplayWithoutDecoration} />
-                                ) : (
-                                  <div className="flex h-full w-full items-center justify-center text-[11px] font-bold text-white/80">
-                                    {getDisplayInitial({ name: currentDisplayName })}
-                                  </div>
-                                )}
-                              </div>
-                              <div className="absolute inset-x-2.5 bottom-2.5 rounded-[10px] border border-white/8 bg-black/16 p-1.5">
-                                <div className="h-1.5 w-10 rounded-full bg-white/18" />
-                                <div className="mt-1.5 h-1.5 w-16 rounded-full bg-white/10" />
-                              </div>
-                              <ProfileCollectiblesLayer display={currentAvatarDisplay} effectOpacity={1} fit="contain" className="z-10 opacity-100" />
-                              <div className="absolute inset-0 z-0" style={{ background: "var(--rm-profile-custom-surface-overlay)" }} />
-                            </div>
-                          </div>
                         </div>
+                        <div
+                          className="pointer-events-none absolute inset-0 opacity-0 transition duration-200 group-hover/profile-effect:opacity-100"
+                          style={{ background: "var(--rm-profile-custom-surface-overlay-strong)" }}
+                        />
+                      </div>
                     </ProfileRailCard>
                   </ProfileRailSection>
 
@@ -2675,7 +2663,7 @@ export default function SettingsAccountTab({
                       aria-label="Change profile picture"
                     >
                       {currentAvatarSrc ? (
-                        <AvatarImage src={currentAvatarSrc} alt={currentDisplayName} display={currentAvatarDisplayWithoutDecoration} />
+                        <AvatarImage src={currentAvatarSrc} alt={currentDisplayName} display={currentAvatarDisplay} />
                       ) : (
                           <div className="flex h-full w-full items-center justify-center rounded-full text-3xl font-bold text-[color:var(--rm-profile-custom-text)]">
                             {getDisplayInitial({ name: currentDisplayName })}
@@ -2990,42 +2978,6 @@ export default function SettingsAccountTab({
               </div>
 
               <div className={cn("mt-4 space-y-4", asModal && "md:min-h-0 md:flex-1 md:overflow-y-auto md:pr-1")}>
-                <ProfilePreviewWidgetCard title="Featured Widget" subtitle="Example board card">
-                  <div className="flex gap-4">
-                    <div className="min-w-0 flex-1">
-                      <div className="text-[12px] font-semibold text-[color:var(--rm-profile-custom-muted)]">Ralph Meet</div>
-                      <ProfileDisplayName
-                        text={currentDisplayName}
-                        displayNameStyle={displayNameStyle}
-                        className="mt-3 text-[18px] font-semibold text-[color:var(--rm-profile-custom-text)]"
-                        backgroundColor={previewTheme.backgroundColor}
-                        readableFallbackColor={previewTheme.textColor}
-                      />
-                      <div className="mt-1 text-[13px] text-[color:var(--rm-profile-custom-muted)]">Season preview and profile card composition.</div>
-                    </div>
-                    <div className="relative hidden w-[150px] overflow-hidden rounded-[18px] border border-[color:var(--rm-profile-custom-card-border)] md:block" style={{ ...previewThemeStyle, background: "var(--rm-profile-custom-banner-fallback)" }}>
-                      <ProfileCollectiblesLayer display={currentAvatarDisplay} effectOpacity={0.82} fit="cover" className="opacity-[0.88]" />
-                      <div className="absolute bottom-3 right-3 h-16 w-16 overflow-hidden rounded-full border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg)]">
-                        {currentAvatarSrc ? (
-                          <AvatarImage src={currentAvatarSrc} alt="" display={currentAvatarDisplayWithoutDecoration} />
-                        ) : null}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="mt-4 grid grid-cols-3 gap-3 text-[12px]">
-                    {[
-                      { label: "Highlights", value: "2.1K" },
-                      { label: "Sessions", value: "665h" },
-                      { label: "Wins", value: "3.8K" },
-                    ].map((item) => (
-                      <div key={item.label}>
-                        <div className="font-semibold text-[color:var(--rm-profile-custom-text)]">{item.value}</div>
-                        <div className="mt-1 text-[color:var(--rm-profile-custom-muted)]">{item.label}</div>
-                      </div>
-                    ))}
-                  </div>
-                </ProfilePreviewWidgetCard>
-
                 <ProfilePreviewWidgetCard title="Favorite game" subtitle="Choose 1 game">
                   <div className="flex items-center gap-4">
                     <div className="h-[84px] w-[84px] shrink-0 overflow-hidden rounded-[18px] border border-white/8 bg-[linear-gradient(135deg,_#d8dde7,_#64748b_70%,_#1f2937)]" />
@@ -3061,87 +3013,12 @@ export default function SettingsAccountTab({
                     ))}
                   </div>
                 </ProfilePreviewWidgetCard>
-
-                <ProfilePreviewWidgetCard
-                  title="Profile Details"
-                  subtitle="Display names, pronouns, and bios update everywhere this account appears."
-                >
-                  <div className="space-y-4">
-                    <div className="space-y-2">
-                      <Label className="text-[11px] font-semibold uppercase tracking-[0.18em] text-rm-text-muted">Display Name</Label>
-                      <Input
-                        value={displayName}
-                        onChange={(event) => setDisplayName(event.target.value)}
-                        className="h-11 rounded-xl border-white/10 bg-white/[0.03] text-rm-text shadow-none placeholder:text-rm-text-muted focus-visible:ring-primary/40"
-                        placeholder="Add a display name"
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label className="text-[11px] font-semibold uppercase tracking-[0.18em] text-rm-text-muted">Username</Label>
-                      <div className="relative">
-                        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-sm text-rm-text-muted/50">@</span>
-                        <Input
-                          value={username}
-                          onChange={handleUsernameChange}
-                          className="h-11 rounded-xl border-white/10 bg-white/[0.03] pl-8 text-rm-text shadow-none placeholder:text-rm-text-muted focus-visible:ring-primary/40"
-                        />
-                      </div>
-                      {usernameStatus !== "idle" && usernameStatus !== "own" ? (
-                        <p
-                          className={cn(
-                            "flex items-center gap-1.5 text-[12px]",
-                            usernameStatus === "available" ? "text-primary" : "text-destructive",
-                          )}
-                        >
-                          {usernameStatus === "checking" ? <Loader2 size={12} className="animate-spin" /> : null}
-                          {usernameStatus === "available"
-                            ? "Username available!"
-                            : usernameStatus === "taken"
-                              ? "Username is already taken."
-                              : usernameStatus === "invalid"
-                                ? "Username is invalid."
-                                : ""}
-                        </p>
-                      ) : null}
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label className="text-[11px] font-semibold uppercase tracking-[0.18em] text-rm-text-muted">Email</Label>
-                      <div className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-rm-text-secondary">
-                        {user.primaryEmailAddress?.emailAddress || "No email on file"}
-                      </div>
-                      <p className="text-[12px] text-rm-text-muted">
-                        Pronouns and bio are edited directly on the profile preview card to match the live popover layout.
-                      </p>
-                    </div>
-
-                    <div className="rounded-[18px] border border-white/8 bg-black/16 p-4">
-                      <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-rm-text-muted">Current Setup</div>
-                      <div className="mt-3 space-y-2 text-sm text-rm-text-secondary">
-                        <div className="flex items-center justify-between gap-3">
-                          <span>Avatar decoration</span>
-                          <span className="truncate text-rm-text">{currentAvatarDecoration?.name ?? "None"}</span>
-                        </div>
-                        <div className="flex items-center justify-between gap-3">
-                          <span>Nameplate</span>
-                          <span className="truncate text-rm-text">{currentNameplateSelection?.name ?? (currentNameplateUrl ? "Custom upload" : "None")}</span>
-                        </div>
-                        <div className="flex items-center justify-between gap-3">
-                          <span>Profile effect</span>
-                          <span className="truncate text-rm-text">{currentProfileEffect?.name ?? "None"}</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    {error ? (
-                      <div className="flex items-center gap-2 rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-                        <AlertTriangle size={14} />
-                        <span>{error}</span>
-                      </div>
-                    ) : null}
+                {error ? (
+                  <div className="flex items-center gap-2 rounded-[20px] border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive shadow-[0_16px_32px_rgba(0,0,0,0.18)]">
+                    <AlertTriangle size={14} />
+                    <span>{error}</span>
                   </div>
-                </ProfilePreviewWidgetCard>
+                ) : null}
               </div>
             </aside>
             </div>

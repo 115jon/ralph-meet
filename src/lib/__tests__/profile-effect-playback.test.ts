@@ -142,6 +142,28 @@ describe("profile effect playback", () => {
     });
   });
 
+  it("keeps seamless loop keys stable so videos are not remounted every cycle", () => {
+    const layer = {
+      src: "https://cdn.discordapp.com/assets/content/seamless-loop",
+      loop: true,
+      duration: 3000,
+      start: 0,
+      loopDelay: 0,
+      zIndex: 100,
+    };
+
+    const firstCycle = getProfileEffectPlaybackSnapshot([layer], 1500);
+    const secondCycle = getProfileEffectPlaybackSnapshot([layer], 3000);
+
+    expect(firstCycle.activeLayers).toHaveLength(1);
+    expect(secondCycle.activeLayers).toHaveLength(1);
+    expect(secondCycle.activeLayers[0]).toMatchObject({
+      cycleIndex: 1,
+      activeOffsetMs: 0,
+    });
+    expect(secondCycle.activeLayers[0].renderKey).toBe(firstCycle.activeLayers[0].renderKey);
+  });
+
   it("resolves randomized sources one variant at a time for each invocation", () => {
     const layer = {
       src: "https://cdn.discordapp.com/assets/content/dice-roll-a",

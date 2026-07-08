@@ -22,6 +22,7 @@ export type ProfileEffectPlaybackLayerState = {
 
 export type ProfileEffectPlaybackSnapshot = {
   activeLayers: ProfileEffectPlaybackLayerState[];
+  renderedLayers: ProfileEffectPlaybackLayerState[];
   nextTransitionMs: number | null;
 };
 
@@ -55,6 +56,14 @@ function getLayerSourceOptions(layer: ProfileEffectLayer) {
   ].filter((src, index, entries) => Boolean(src) && entries.indexOf(src) === index);
 
   return sources.length ? sources : [layer.src];
+}
+
+function buildPlaybackRenderKey(
+  renderIndex: number,
+  resolvedSrc: string,
+  invocationSeed: number,
+) {
+  return `${renderIndex}:${resolvedSrc}:${invocationSeed}`;
 }
 
 export function resolveProfileEffectLayerSource(
@@ -143,7 +152,7 @@ export function getProfileEffectLayerState(
       layer,
       resolvedSrc: pendingSrc,
       renderIndex,
-      renderKey: `${renderIndex}:${pendingSrc}:pending:${invocationSeed}`,
+      renderKey: `${buildPlaybackRenderKey(renderIndex, pendingSrc, invocationSeed)}:pending`,
       active: false,
       cycleIndex: 0,
       startMs,
@@ -159,7 +168,7 @@ export function getProfileEffectLayerState(
       layer,
       resolvedSrc,
       renderIndex,
-      renderKey: `${renderIndex}:${resolvedSrc}:0:${invocationSeed}`,
+      renderKey: buildPlaybackRenderKey(renderIndex, resolvedSrc, invocationSeed),
       active: true,
       cycleIndex: 0,
       startMs,
@@ -176,7 +185,7 @@ export function getProfileEffectLayerState(
       layer,
       resolvedSrc,
       renderIndex,
-      renderKey: `${renderIndex}:${resolvedSrc}:0:${invocationSeed}`,
+      renderKey: buildPlaybackRenderKey(renderIndex, resolvedSrc, invocationSeed),
       active,
       cycleIndex: 0,
       startMs,
@@ -193,7 +202,7 @@ export function getProfileEffectLayerState(
       layer,
       resolvedSrc,
       renderIndex,
-      renderKey: `${renderIndex}:${resolvedSrc}:0:${invocationSeed}`,
+      renderKey: buildPlaybackRenderKey(renderIndex, resolvedSrc, invocationSeed),
       active: true,
       cycleIndex: 0,
       startMs,
@@ -214,7 +223,7 @@ export function getProfileEffectLayerState(
     layer,
     resolvedSrc,
     renderIndex,
-    renderKey: `${renderIndex}:${resolvedSrc}:${cycleIndex}:${invocationSeed}`,
+    renderKey: buildPlaybackRenderKey(renderIndex, resolvedSrc, invocationSeed),
     active,
     cycleIndex,
     startMs: cycleStartMs,
@@ -229,15 +238,17 @@ export function getProfileEffectPlaybackSnapshot(
   elapsedMs: number,
   invocationSeed = 0,
 ): ProfileEffectPlaybackSnapshot {
-  const states = layers.map((layer, index) => getProfileEffectLayerState(layer, elapsedMs, index, invocationSeed));
+  const safeElapsed = normalizeNonNegativeInt(elapsedMs);
+  const states = layers.map((layer, index) => getProfileEffectLayerState(layer, safeElapsed, index, invocationSeed));
   const nextTransitionMs = states.reduce<number | null>((soonest, state) => {
     if (state.nextTransitionMs == null) return soonest;
-    if (state.nextTransitionMs <= elapsedMs) return soonest;
+    if (state.nextTransitionMs <= safeElapsed) return soonest;
     return soonest == null ? state.nextTransitionMs : Math.min(soonest, state.nextTransitionMs);
   }, null);
 
   return {
     activeLayers: states.filter((state) => state.active),
+    renderedLayers: states.filter((state) => state.active || safeElapsed >= normalizeNonNegativeInt(state.layer.start)),
     nextTransitionMs,
   };
 }
