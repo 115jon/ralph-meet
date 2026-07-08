@@ -2,24 +2,6 @@ import { getAvatarCollectibles } from "@/lib/avatar-display";
 import { findCollectibleItem, type CollectiblesCatalog } from "@/lib/collectibles-catalog";
 import type { User } from "@/lib/types";
 
-const NAMEPLATE_SWATCHES: Record<string, string> = {
-  amethyst: "#9251ff",
-  arctic: "#cdddf2",
-  base: "#f5f5f5",
-  blue: "#60a5fa",
-  clouds: "#9ec9ff",
-  emerald: "#34d399",
-  gold: "#facc15",
-  green: "#4ade80",
-  indigo: "#818cf8",
-  orange: "#fb923c",
-  pink: "#ec7ed1",
-  purple: "#b58cff",
-  red: "#ef4444",
-  violet: "#8b7dff",
-  white: "#ffffff",
-  yellow: "#facc15",
-};
 
 function hslToHex(hue: number, saturation: number, lightness: number) {
   const s = saturation / 100;
@@ -84,12 +66,71 @@ function relativeLuminance(color: { r: number; g: number; b: number }) {
   return 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2];
 }
 
+/**
+ * Palette names that Discord uses which are NOT valid CSS named colors.
+ * Standard CSS color names (gold, blue, red, violet, orange, pink, purple,
+ * white, indigo, green, etc.) are resolved dynamically via CSS parsing below
+ * and do not need entries here.
+ */
+const DISCORD_PALETTE_OVERRIDES: Record<string, string> = {
+  // CSS has no "lemon" — bright warm yellow similar to Discord's Woody palette
+  lemon: "#facc15",
+  // CSS has no "arctic" — pale cool blue
+  arctic: "#cdddf2",
+  // CSS has no "clouds" — desaturated sky blue
+  clouds: "#9ec9ff",
+  // CSS has no "amethyst" — Discord's specific purple shade
+  amethyst: "#9251ff",
+  // CSS "base" would resolve to nothing — neutral light gray
+  base: "#f5f5f5",
+};
+
+/** Cached results for CSS name resolution so we only hit the DOM once per name. */
+const cssColorCache = new Map<string, string | null>();
+
+/**
+ * Attempts to resolve a color name using the browser's own CSS parser.
+ * Works for any valid CSS named color (gold, violet, coral, teal, lavender…).
+ * Returns null if the name is not a recognised CSS color or if DOM is unavailable.
+ */
+function tryResolveCssColor(name: string): string | null {
+  if (typeof document === "undefined") return null;
+  if (cssColorCache.has(name)) return cssColorCache.get(name)!;
+
+  const el = document.createElement("div");
+  el.style.color = name;
+  if (!el.style.color) {
+    cssColorCache.set(name, null);
+    return null;
+  }
+  document.body.appendChild(el);
+  const computed = getComputedStyle(el).color;
+  document.body.removeChild(el);
+  const m = computed.match(/\d+/g);
+  if (!m || m.length < 3) {
+    cssColorCache.set(name, null);
+    return null;
+  }
+  const hex = `#${Number(m[0]).toString(16).padStart(2, "0")}${Number(m[1]).toString(16).padStart(2, "0")}${Number(m[2]).toString(16).padStart(2, "0")}`;
+  cssColorCache.set(name, hex);
+  return hex;
+}
+
 function accentFromPalette(palette: string | null | undefined, seed: string) {
   const key = palette?.toLowerCase().trim() ?? "";
-  if (key && NAMEPLATE_SWATCHES[key]) {
-    return NAMEPLATE_SWATCHES[key];
+
+  // 1. Discord-specific names that aren't valid CSS colors
+  if (key && DISCORD_PALETTE_OVERRIDES[key]) {
+    return DISCORD_PALETTE_OVERRIDES[key];
   }
 
+  // 2. Standard CSS named colors (gold, blue, violet, coral, teal, etc.)
+  if (key) {
+    const cssHex = tryResolveCssColor(key);
+    if (cssHex) return cssHex;
+  }
+
+  // 3. Seed-based hash for completely unknown names
   let hash = 0;
   for (let index = 0; index < seed.length; index += 1) {
     hash = (hash << 5) - hash + seed.charCodeAt(index);
@@ -108,17 +149,22 @@ export interface NameplateTheme {
   metaFill: string;
   textShadow: string;
   identityFilter: string;
-  identityBackdropBg: string;
-  identityBackdropBorder: string;
   rowBorder: string;
   rowGlow: string;
-  buttonBg: string;
-  buttonHoverBg: string;
-  buttonActiveBg: string;
   buttonText: string;
   buttonMuted: string;
-  buttonFilter: string;
 }
+
+export interface NameplateTextColors {
+  foregroundColor?: string;
+  mutedForegroundColor?: string;
+  metaColor?: string;
+  readableFallbackColor?: string;
+}
+
+const SEMANTIC_NAMEPLATE_TEXT_PRIMARY = "var(--rm-text-primary)";
+const SEMANTIC_NAMEPLATE_TEXT_SECONDARY = "var(--rm-text-secondary)";
+const SEMANTIC_NAMEPLATE_TEXT_MUTED = "var(--rm-text-muted)";
 
 export function buildNameplateTheme(palette: string | null | undefined, seed: string): NameplateTheme {
   const accentHex = accentFromPalette(palette, seed);
@@ -136,20 +182,48 @@ export function buildNameplateTheme(palette: string | null | undefined, seed: st
     metaFill: rgba(foregroundRgb, isLightAccent ? 0.18 : 0.22),
     textShadow: "none",
     identityFilter: "none",
-    identityBackdropBg: isLightAccent ? "rgba(255,255,255,0.78)" : "rgba(7,10,16,0.74)",
-    identityBackdropBorder: rgba(foregroundRgb, isLightAccent ? 0.12 : 0.14),
     rowBorder: rgba(accentRgb, isLightAccent ? 0.18 : 0.34),
     rowGlow: rgba(accentRgb, isLightAccent ? 0.16 : 0.24),
-    buttonBg: rgba(foregroundRgb, isLightAccent ? 0.08 : 0.1),
-    buttonHoverBg: rgba(foregroundRgb, isLightAccent ? 0.12 : 0.14),
-    buttonActiveBg: rgba(foregroundRgb, isLightAccent ? 0.18 : 0.2),
     buttonText: foregroundColor,
-    buttonMuted: rgba(foregroundRgb, isLightAccent ? 0.74 : 0.8),
-    buttonFilter: "none",
+    buttonMuted: rgba(foregroundRgb, isLightAccent ? 0.78 : 0.84),
+  };
+}
+
+export function getNameplateTextColors(
+  theme: NameplateTheme | null | undefined,
+  options?: { useThemeSemanticColors?: boolean },
+): NameplateTextColors {
+  if (!theme) {
+    return {};
+  }
+
+  if (options?.useThemeSemanticColors) {
+    return {
+      foregroundColor: SEMANTIC_NAMEPLATE_TEXT_PRIMARY,
+      mutedForegroundColor: SEMANTIC_NAMEPLATE_TEXT_MUTED,
+      metaColor: SEMANTIC_NAMEPLATE_TEXT_SECONDARY,
+      readableFallbackColor: SEMANTIC_NAMEPLATE_TEXT_PRIMARY,
+    };
+  }
+
+  return {
+    foregroundColor: theme.foregroundColor,
+    mutedForegroundColor: theme.mutedForegroundColor,
+    metaColor: theme.metaColor,
+    readableFallbackColor: theme.foregroundColor,
   };
 }
 
 type NameplateSourceUser = Pick<User, "id" | "avatar_display" | "nameplate_url"> | null | undefined;
+
+export function shouldUseNameplateIdentityFade(
+  theme: NameplateTheme | null | undefined,
+  options: {
+    needsContrastAssist: boolean;
+  },
+) {
+  return Boolean(theme) && options.needsContrastAssist;
+}
 
 export function getUserNameplatePresentation(
   user: NameplateSourceUser,

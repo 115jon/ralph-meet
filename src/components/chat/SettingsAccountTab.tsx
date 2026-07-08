@@ -4,7 +4,7 @@ import { AvatarImage } from "@/components/chat/AvatarImage";
 import { CollectiblesCatalogModal } from "@/components/chat/CollectiblesCatalogModal";
 import { ProfileCollectiblesLayer } from "@/components/chat/ProfileCollectiblesLayer";
 import { ProfileAssetLayer } from "@/components/chat/ProfileAssetLayer";
-import { getUserNameplatePresentation, shouldUseNameplateIdentityFade } from "@/components/chat/user-nameplate-presentation";
+import { UserNameplateLayer } from "@/components/chat/UserNameplateLayer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -722,14 +722,6 @@ function DisplayNameStyleDialog({
     : (previewMode === "dark" ? "#F8FAFC" : "#1D2430");
   const chatPreviewBackground = previewMode === "dark" ? "#151922" : "#FFFFFF";
   const chatPreviewText = previewMode === "dark" ? "#F8FAFC" : "#1D2430";
-  const nameplatePreview = getUserNameplatePresentation({
-    id: username,
-    avatar_display: avatarDisplay ?? null,
-    nameplate_url: nameplateUrl ?? null,
-  });
-  const useNameplatePreviewIdentityFade = shouldUseNameplateIdentityFade(nameplatePreview.theme, {
-    needsContrastAssist: nameplatePreview.needsContrastAssist,
-  });
 
   const applyPresetColor = useCallback((preset: string) => {
     setDraftStyle((prev) => ({
@@ -1093,12 +1085,13 @@ function DisplayNameStyleDialog({
 
                 <div className="relative w-full max-w-[340px] overflow-hidden rounded-[18px] border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] px-4 py-3 shadow-[0_18px_40px_rgba(0,0,0,0.18)]">
                   {nameplateUrl ? (
-                    <ProfileAssetLayer
-                      url={nameplateUrl}
-                      contentType={nameplateContentType}
+                    <UserNameplateLayer
+                      nameplateUrl={nameplateUrl}
+                      nameplateContentType={nameplateContentType}
+                      avatarDisplay={avatarDisplay ?? null}
+                      seedId={username}
                       alt=""
                       className="pointer-events-none absolute inset-0 opacity-[0.96]"
-                      maskPreset={useNameplatePreviewIdentityFade ? "nameplateIdentity" : undefined}
                     />
                   ) : null}
                   <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(5,7,11,0.10),rgba(5,7,11,0.32))]" />
@@ -2150,9 +2143,11 @@ export default function SettingsAccountTab({
                         {nameplateStaticPreviewUrl ? (
                           <>
                             <div className="absolute inset-0 transition duration-300 group-hover/rail:opacity-0">
-                              <ProfileAssetLayer
-                                url={nameplateStaticPreviewUrl}
-                                contentType={nameplateStaticPreviewContentType}
+                              <UserNameplateLayer
+                                nameplateUrl={nameplateStaticPreviewUrl}
+                                nameplateContentType={nameplateStaticPreviewContentType}
+                                avatarDisplay={currentAvatarDisplay}
+                                seedId={currentUsername}
                                 alt="Nameplate preview"
                                 className="opacity-95"
                                 playVideo={false}
@@ -2160,9 +2155,11 @@ export default function SettingsAccountTab({
                             </div>
                             <div className="absolute inset-0 opacity-0 transition duration-300 group-hover/rail:opacity-100">
                               {isNameplatePreviewHovered && nameplateHoverPreviewUrl ? (
-                                <ProfileAssetLayer
-                                  url={nameplateHoverPreviewUrl}
-                                  contentType={nameplateHoverPreviewContentType}
+                                <UserNameplateLayer
+                                  nameplateUrl={nameplateHoverPreviewUrl}
+                                  nameplateContentType={nameplateHoverPreviewContentType}
+                                  avatarDisplay={currentAvatarDisplay}
+                                  seedId={currentUsername}
                                   alt="Nameplate preview"
                                   className="opacity-95"
                                 />
