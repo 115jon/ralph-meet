@@ -17,6 +17,7 @@ import { useChatActions, useChatStore } from "@/stores/chat-store";
 import { useCallStore } from "@/stores/useCallStore";
 import type { ViewerContext } from "@/stores/useImageViewerStore";
 import { useImageViewerActions } from "@/stores/useImageViewerStore";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { ArrowLeft, Bell, ChevronRight, Download, ExternalLink, Hash, Image, ImageOff, Link2, MessageCircle, RefreshCw, Search, Settings, TriangleAlert, UserPlus, WifiOff } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import ContextMenu from "./ContextMenu";
@@ -28,6 +29,7 @@ import UserProfilePopover from "./UserProfilePopover";
 import { clog } from "@/lib/console-logger";
 import { PlayIcon } from "./VideoIcons";
 import { ProfileAssetLayer } from "./ProfileAssetLayer";
+import { UserPlatformIndicators } from "./UserPlatformIndicators";
 import { UserDisplayName } from "./UserDisplayName";
 
 const log = clog("MemberList");
@@ -169,6 +171,7 @@ export default function MemberList({
 }: MemberListProps) {
   const { menu, openMenu, closeMenu, isClosing } = useContextMenu();
   const { openDm, dispatch, setProfileUser } = useChatActions();
+  const presencePlatformsByUserId = useChatStore((state) => state.presencePlatformsByUserId);
   const { open: openImageViewer } = useImageViewerActions();
   const [state, setState] = useState({
     popoverUser: null as User | null,
@@ -386,7 +389,8 @@ export default function MemberList({
 
 
   return (
-    <div
+    <TooltipProvider delayDuration={0}>
+      <div
       data-testid="members-list"
       className={cn(
         "fixed inset-y-0 right-0 z-100 flex h-full w-full shrink-0 flex-col overflow-hidden bg-rm-bg-primary shadow-2xl animate-in slide-in-from-right-full transition-all duration-300",
@@ -419,7 +423,7 @@ export default function MemberList({
         {/* Tab Content */}
         {(() => {
           switch (state.activeTab) {
-            case 'members': return <MembersTabContent groups={groups} sortedOffline={sortedOffline} sortedOnline={sortedOnline} typingUsers={typingUsers} currentUserId={currentUserId} onMemberClick={handleMemberClick} onMemberContext={handleMemberContext} />;
+            case 'members': return <MembersTabContent groups={groups} sortedOffline={sortedOffline} sortedOnline={sortedOnline} typingUsers={typingUsers} currentUserId={currentUserId} onMemberClick={handleMemberClick} onMemberContext={handleMemberContext} presencePlatformsByUserId={presencePlatformsByUserId} />;
             case 'media': return <MediaTabContent loading={state.tabLoading} error={state.tabError} items={state.mediaItems} openImageViewer={openImageViewer} onRetry={handleRetry} onJumpToMessage={onJumpToMessage} onClose={onClose} />;
             case 'pins': return <PinsTabContent loading={loadingPins} messages={pinnedMessages} onJumpToMessage={(id: string) => { onJumpToMessage?.(id); onClose?.(); }} />;
             case 'threads': return <ThreadsTabContent loading={state.tabLoading} error={state.tabError} threads={state.threads} onOpenThread={(id: string) => { onOpenThread?.(id); onClose?.(); }} onRetry={handleRetry} />;
@@ -473,7 +477,8 @@ export default function MemberList({
           onKick={handleKick}
         />
       )}
-    </div >
+      </div >
+    </TooltipProvider>
   );
 }
 
@@ -518,13 +523,19 @@ function DesktopHeader({ channelName, onToggleDetails, isDM }: { channelName?: s
           <InlineEmojiText text={channelName || (isDM ? 'details' : 'general')} />
         </h2>
       </div>
-      <ButtonBase
-        onClick={onToggleDetails}
-        className="p-1.5 text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover rounded-lg transition-colors shrink-0"
-        title="Close details"
-      >
-        <ArrowLeft size={18} />
-      </ButtonBase>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <ButtonBase
+            onClick={onToggleDetails}
+            className="p-1.5 text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover rounded-lg transition-colors shrink-0"
+          >
+            <ArrowLeft size={18} />
+          </ButtonBase>
+        </TooltipTrigger>
+        <TooltipContent side="top" sideOffset={10} className="rounded-lg border-none bg-rm-bg-floating px-3 py-2 text-[12px] font-bold text-rm-text-primary shadow-xl">
+          Close details
+        </TooltipContent>
+      </Tooltip>
     </div>
   );
 }
@@ -630,12 +641,22 @@ interface MembersTabContentProps {
   groups: { name: string; members: { user: User; roles?: Role[] }[] }[];
   sortedOffline: { user: User; roles?: Role[] }[];
   sortedOnline: { user: User; roles?: Role[] }[];
+  presencePlatformsByUserId: Record<string, User["presence_platforms"]>;
   typingUsers?: Set<string>;
   currentUserId?: string;
   onMemberClick: (e: React.MouseEvent<HTMLButtonElement>, user: User, roles?: Role[]) => void;
   onMemberContext: (e: React.MouseEvent, member: { user: User; roles?: Role[] }) => void;
 }
-function MembersTabContent({ groups, sortedOffline, sortedOnline, typingUsers, currentUserId, onMemberClick, onMemberContext }: MembersTabContentProps) {
+function MembersTabContent({
+  groups,
+  sortedOffline,
+  sortedOnline,
+  presencePlatformsByUserId,
+  typingUsers,
+  currentUserId,
+  onMemberClick,
+  onMemberContext,
+}: MembersTabContentProps) {
   return (
     <>
       {groups.map(group => (
@@ -651,8 +672,9 @@ function MembersTabContent({ groups, sortedOffline, sortedOnline, typingUsers, c
               isOnline={true}
               isTyping={typingUsers?.has(member.user.id)}
               isMe={member.user.id === currentUserId}
+              platforms={presencePlatformsByUserId[member.user.id] ?? member.user.presence_platforms}
               onClick={(e) => onMemberClick(e, member.user, member.roles)}
-          onContextMenu={(e) => onMemberContext(e, member)}
+              onContextMenu={(e) => onMemberContext(e, member)}
             />
           ))}
         </div>
@@ -671,6 +693,7 @@ function MembersTabContent({ groups, sortedOffline, sortedOnline, typingUsers, c
               isOnline={false}
               isTyping={typingUsers?.has(m.user.id)}
               isMe={m.user.id === currentUserId}
+              platforms={presencePlatformsByUserId[m.user.id] ?? m.user.presence_platforms}
               onClick={(e) => onMemberClick(e, m.user, m.roles)}
               onContextMenu={(e) => onMemberContext(e, m)}
             />
@@ -1019,15 +1042,21 @@ function FilesTabContent({ loading, error, items, channelName, onRetry, onJumpTo
                 )}
               </div>
             </div>
-            <a
-              href={getDownloadUrl(item.url)}
-              download={item.filename}
-              onClick={(e) => e.stopPropagation()}
-              className="relative z-20 shrink-0 rounded-lg p-2 text-rm-text-muted opacity-0 transition-all hover:bg-primary/10 hover:text-primary group-hover:opacity-100"
-              title="Download"
-            >
-              <Download size={16} />
-            </a>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <a
+                  href={getDownloadUrl(item.url)}
+                  download={item.filename}
+                  onClick={(e) => e.stopPropagation()}
+                  className="relative z-20 shrink-0 rounded-lg p-2 text-rm-text-muted opacity-0 transition-all hover:bg-primary/10 hover:text-primary group-hover:opacity-100"
+                >
+                  <Download size={16} />
+                </a>
+              </TooltipTrigger>
+              <TooltipContent side="top" sideOffset={10} className="rounded-lg border-none bg-rm-bg-floating px-3 py-2 text-[12px] font-bold text-rm-text-primary shadow-xl">
+                Download
+              </TooltipContent>
+            </Tooltip>
           </div>
         );
       })}
@@ -1229,6 +1258,7 @@ function MemberItem({
   isOnline,
   isTyping,
   isMe,
+  platforms,
   onClick,
   onContextMenu,
 }: {
@@ -1236,6 +1266,7 @@ function MemberItem({
   isOnline: boolean;
   isTyping?: boolean;
   isMe?: boolean;
+  platforms?: User["presence_platforms"];
   onClick?: (e: React.MouseEvent<HTMLButtonElement>) => void;
   onContextMenu?: (e: React.MouseEvent<HTMLButtonElement>) => void;
 }) {
@@ -1303,9 +1334,25 @@ function MemberItem({
                 : undefined,
             }}
           />
-          {(getHighestRole(member.roles)?.permissions ?? 0) & PERMISSIONS.ADMINISTRATOR ?
-            <Crown className="h-3 w-3 fill-primary/20 text-primary" /> : null
-          }
+          <UserPlatformIndicators
+            userId={member.user.id}
+            platforms={platforms}
+            status={member.user.status}
+            className="shrink-0"
+            iconClassName="h-3.5 w-3.5"
+          />
+          {(getHighestRole(member.roles)?.permissions ?? 0) & PERMISSIONS.ADMINISTRATOR ? (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className="flex shrink-0 items-center">
+                  <Crown className="h-3 w-3 fill-primary/20 text-primary" />
+                </span>
+              </TooltipTrigger>
+              <TooltipContent side="top" sideOffset={8} className="rounded-lg border-none bg-rm-bg-floating px-3 py-2 text-[12px] font-bold text-rm-text-primary shadow-xl">
+                Administrator
+              </TooltipContent>
+            </Tooltip>
+          ) : null}
         </div>
 
         {member.user.custom_status && (

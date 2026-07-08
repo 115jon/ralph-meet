@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 
 import { apiError, apiSuccess, getDB, requireAuth } from "@/lib/api-helpers";
+import { ensureUserProfileSchema } from "@/lib/ensure-user-profile-schema";
 import { getCurrentUser } from "@/lib/kova-auth-server";
 import { DEFAULT_MEDIA_CONTENT_FILTER } from "@/lib/media-content-filter";
 import type { DisplayNameStyle } from "@/lib/profile-customization";
@@ -30,6 +31,7 @@ type UserProfileRow = {
   media_content_filter: string;
   updated_at: string | null;
   bio: string | null;
+  pronouns: string | null;
   status: string;
   custom_status: string | null;
 };
@@ -59,6 +61,7 @@ const GET = async ({ request }: any) => {
   const { userId } = authResult;
 
   const db = getDB();
+  await ensureUserProfileSchema(db);
 
   try {
     const user = await getMe(db, userId);
@@ -164,6 +167,7 @@ async function syncUserFromRalphAuth(
     media_content_filter: DEFAULT_MEDIA_CONTENT_FILTER,
     updated_at: now,
     bio,
+    pronouns: null,
     status: "online",
     custom_status: null,
   };
@@ -212,7 +216,7 @@ async function claimLegacyIdentity(
   const placeholders = candidates.map(() => "?").join(", ");
   const { results = [] } = await db
     .prepare(
-      `SELECT id, username, display_name, avatar_url, avatar_display, updated_at, bio, status, custom_status
+      `SELECT id, username, display_name, avatar_url, avatar_display, updated_at, bio, pronouns, status, custom_status
             , banner_url, banner_content_type, nameplate_url, nameplate_content_type
             , profile_accent_color, profile_background_color, profile_banner_color, display_name_style
             , theme_preference, theme_sync_enabled, media_content_filter
@@ -235,8 +239,8 @@ async function claimLegacyIdentity(
   if (!existingNewUser) {
     await db
       .prepare(
-        `INSERT INTO users (id, username, display_name, avatar_url, avatar_display, banner_url, banner_content_type, nameplate_url, nameplate_content_type, profile_accent_color, profile_background_color, profile_banner_color, display_name_style, theme_preference, theme_sync_enabled, media_content_filter, bio, status, custom_status, created_at, updated_at)
-         SELECT ?, username, display_name, avatar_url, avatar_display, banner_url, banner_content_type, nameplate_url, nameplate_content_type, profile_accent_color, profile_background_color, profile_banner_color, display_name_style, theme_preference, theme_sync_enabled, media_content_filter, bio, status, custom_status, created_at, ?
+        `INSERT INTO users (id, username, display_name, avatar_url, avatar_display, banner_url, banner_content_type, nameplate_url, nameplate_content_type, profile_accent_color, profile_background_color, profile_banner_color, display_name_style, theme_preference, theme_sync_enabled, media_content_filter, bio, pronouns, status, custom_status, created_at, updated_at)
+         SELECT ?, username, display_name, avatar_url, avatar_display, banner_url, banner_content_type, nameplate_url, nameplate_content_type, profile_accent_color, profile_background_color, profile_banner_color, display_name_style, theme_preference, theme_sync_enabled, media_content_filter, bio, pronouns, status, custom_status, created_at, ?
          FROM users WHERE id = ?`
       )
       .bind(input.authUserId, input.now, legacy.id)

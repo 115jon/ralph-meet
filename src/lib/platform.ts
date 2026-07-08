@@ -7,6 +7,7 @@
 // ============================================================================
 import { getDesktopToken, getStoredKovaAuthSessionToken } from "./desktop-auth";
 import { clog } from "@/lib/console-logger";
+import type { PresencePlatform } from "@/lib/presence-platform";
 
 const log = clog("platform");
 
@@ -36,6 +37,12 @@ export function isDesktop(): boolean {
 /** True when running as a standard web app (SSR or SPA in browser). */
 export function isWeb(): boolean {
   return !isTauri();
+}
+
+export function getCurrentPresencePlatform(): PresencePlatform {
+  if (isDesktop()) return "desktop";
+  if (isMobile()) return "mobile";
+  return "web";
 }
 
 /** True when the client operating system is Windows */

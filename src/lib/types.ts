@@ -1,6 +1,7 @@
 import type { MediaContentFilter } from "@/lib/media-content-filter";
 import type { AvatarDisplay } from "@/lib/avatar-display";
 import type { DisplayNameStyle } from "@/lib/profile-customization";
+import type { PresencePlatform } from "@/lib/presence-platform";
 
 // ============================================================================
 // Discord-Style Voice Gateway Protocol — Type Definitions
@@ -418,6 +419,7 @@ export type DispatchEvent =
   | "REACTION_ADD"
   | "REACTION_REMOVE"
   | "PRESENCE_UPDATE"
+  | "PRESENCE_LIST"
   | "CHANNEL_UPDATE"
   | "CHANNEL_DELETE"
   | "GUILD_MEMBER_ADD"
@@ -453,9 +455,11 @@ export interface User {
   theme_sync_enabled?: boolean;
   media_content_filter?: MediaContentFilter | null;
   updated_at?: string;
-  bio?: string;
+  bio?: string | null;
+  pronouns?: string | null;
   status?: "online" | "idle" | "dnd" | "offline";
   custom_status?: string;
+  presence_platforms?: PresencePlatform[];
 }
 
 /** Server object */

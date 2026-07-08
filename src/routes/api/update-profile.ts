@@ -3,6 +3,7 @@ import { createFileRoute } from '@tanstack/react-router';
 import { apiError, apiSuccess, broadcastToAll, broadcastToUser, getDB, requireAuth } from "@/lib/api-helpers";
 import { cacheDel, CacheKey } from "@/lib/cache";
 import { clog } from "@/lib/console-logger";
+import { ensureUserProfileSchema } from "@/lib/ensure-user-profile-schema";
 import { parseMediaContentFilter } from "@/lib/media-content-filter";
 import {
   normalizeDisplayNameStyle,
@@ -31,6 +32,8 @@ const PATCH = async ({ request: req }: any) => {
     profileBackgroundColor?: string | null;
     profileBannerColor?: string | null;
     displayNameStyle?: unknown | null;
+    bio?: string | null;
+    pronouns?: string | null;
   };
 
   try {
@@ -51,6 +54,8 @@ const PATCH = async ({ request: req }: any) => {
     profileBackgroundColor,
     profileBannerColor,
     displayNameStyle,
+    bio,
+    pronouns,
   } = body;
 
   if (removeAvatar !== undefined && typeof removeAvatar !== "boolean") {
@@ -108,8 +113,28 @@ const PATCH = async ({ request: req }: any) => {
     return apiError("Invalid display name style", 400);
   }
 
+  if (bio !== undefined && bio !== null && typeof bio !== "string") {
+    return apiError("Invalid bio", 400);
+  }
+
+  if (pronouns !== undefined && pronouns !== null && typeof pronouns !== "string") {
+    return apiError("Invalid pronouns", 400);
+  }
+
+  const normalizedBio = bio === undefined
+    ? undefined
+    : bio === null
+      ? null
+      : bio.trim().slice(0, 190) || null;
+  const normalizedPronouns = pronouns === undefined
+    ? undefined
+    : pronouns === null
+      ? null
+      : pronouns.trim().slice(0, 40) || null;
+
   try {
     const db = getDB();
+    await ensureUserProfileSchema(db);
 
     // Update D1 (source of truth for profile data)
     const updates: string[] = [];
@@ -162,6 +187,16 @@ const PATCH = async ({ request: req }: any) => {
       binds.push(serializeDisplayNameStyle(normalizedDisplayNameStyle));
     }
 
+    if (normalizedBio !== undefined) {
+      updates.push("bio = ?");
+      binds.push(normalizedBio);
+    }
+
+    if (normalizedPronouns !== undefined) {
+      updates.push("pronouns = ?");
+      binds.push(normalizedPronouns);
+    }
+
     if (removeAvatar) {
       updates.push("avatar_url = NULL");
       if (normalizedAvatarDisplay !== undefined) {
@@ -186,7 +221,7 @@ const PATCH = async ({ request: req }: any) => {
 
     // Read back the updated profile
     const updatedUser = await db.prepare(
-      `SELECT id, username, display_name, avatar_url, avatar_display, banner_url, banner_content_type, nameplate_url, nameplate_content_type, profile_accent_color, profile_background_color, profile_banner_color, display_name_style, theme_preference, theme_sync_enabled, media_content_filter, updated_at FROM users WHERE id = ?`
+      `SELECT id, username, display_name, avatar_url, avatar_display, banner_url, banner_content_type, nameplate_url, nameplate_content_type, profile_accent_color, profile_background_color, profile_banner_color, display_name_style, theme_preference, theme_sync_enabled, media_content_filter, updated_at, bio, pronouns FROM users WHERE id = ?`
     ).bind(userId).first<{
       id: string;
       username: string;
@@ -205,6 +240,8 @@ const PATCH = async ({ request: req }: any) => {
       theme_sync_enabled: number;
       media_content_filter: string;
       updated_at: string | null;
+      bio: string | null;
+      pronouns: string | null;
     }>();
     const parsedDisplayNameStyle = normalizeDisplayNameStyle(updatedUser?.display_name_style ?? null);
 
@@ -243,6 +280,8 @@ const PATCH = async ({ request: req }: any) => {
       display_name_style: parsedDisplayNameStyle,
       theme_preference: updatedUser?.theme_preference ?? null,
       theme_sync_enabled: updatedUser?.theme_sync_enabled === 1,
+      bio: updatedUser?.bio ?? null,
+      pronouns: updatedUser?.pronouns ?? null,
       updated_at: updatedUser?.updated_at ?? null,
     });
 
@@ -271,6 +310,8 @@ const PATCH = async ({ request: req }: any) => {
         theme_preference: updatedUser?.theme_preference,
         theme_sync_enabled: updatedUser?.theme_sync_enabled === 1,
         media_content_filter: updatedUser?.media_content_filter,
+        bio: updatedUser?.bio,
+        pronouns: updatedUser?.pronouns,
         updated_at: updatedUser?.updated_at,
       },
     });

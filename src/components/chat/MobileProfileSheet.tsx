@@ -3,9 +3,11 @@ import { AvatarImage } from "@/components/chat/AvatarImage";
 import { ProfileDisplayName } from "@/components/chat/ProfileDisplayName";
 import { BaseModal } from "@/components/ui/BaseModal";
 import { ButtonBase } from "@/components/ui/button-base";
+import { UserPlatformIndicators } from "@/components/chat/UserPlatformIndicators";
 import { apiGet } from "@/lib/api-client";
 import { hasPermission, PERMISSIONS } from "@/lib/permissions";
 import { getAuthAssetUrl } from "@/lib/platform";
+import { dispatchOpenProfileEditorEvent } from "@/lib/profile-editor-events";
 import { getProfileThemeVariables } from "@/lib/profile-customization";
 import type { Role, User } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -163,6 +165,15 @@ function ProfileHeader({ user, isOnline, mutualFriends, mutualServers, isMe }: {
         <p className="text-[14px] text-rm-text-muted font-medium">
           @{user.username.toLowerCase()}
         </p>
+        <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-rm-text-muted">
+          {user.pronouns?.trim() ? <span>{user.pronouns.trim()}</span> : null}
+          <UserPlatformIndicators
+            userId={user.id}
+            platforms={user.presence_platforms}
+            status={user.status}
+            iconClassName="h-4 w-4"
+          />
+        </div>
 
         {user.custom_status && (
           <p className="text-[13px] text-rm-text-secondary mt-1 italic">
@@ -195,12 +206,26 @@ function ProfileHeader({ user, isOnline, mutualFriends, mutualServers, isMe }: {
   );
 }
 
-function ProfileActions({ isMe, handleMessage }: { isMe: boolean, handleMessage: () => void }) {
+function ProfileActions({
+  isMe,
+  handleMessage,
+  onClose,
+}: {
+  isMe: boolean;
+  handleMessage: () => void;
+  onClose: () => void;
+}) {
   return (
     <div className="px-5 mt-5">
       {isMe ? (
         <div className="space-y-2.5">
-          <ButtonBase className="w-full py-3 rounded-2xl bg-primary hover:bg-primary/90 text-primary-foreground font-bold text-[15px] transition-colors flex items-center justify-center gap-2">
+          <ButtonBase
+            onClick={() => {
+              dispatchOpenProfileEditorEvent();
+              onClose();
+            }}
+            className="w-full py-3 rounded-2xl bg-primary hover:bg-primary/90 text-primary-foreground font-bold text-[15px] transition-colors flex items-center justify-center gap-2"
+          >
             <Settings size={18} />
             Edit Main Profile
           </ButtonBase>
@@ -259,13 +284,13 @@ function ProfileCards({ user, memberRoles, hasModActions, canManage, canKick, ca
 
   return (
     <div className="px-5 mt-6 space-y-3 pb-10">
-      {user.custom_status && (
+      {user.bio?.trim() && (
         <div className="bg-rm-bg-elevated rounded-2xl border border-rm-border/30 p-4">
           <h3 className="text-[13px] font-bold text-rm-text-primary uppercase tracking-wide mb-2">
             Bio
           </h3>
           <p className="text-[14px] text-rm-text-secondary leading-relaxed">
-            {user.custom_status}
+            {user.bio.trim()}
           </p>
         </div>
       )}
@@ -462,7 +487,7 @@ export default function MobileProfileSheet({
             isMe={isMe}
           />
 
-          <ProfileActions isMe={isMe} handleMessage={handleMessage} />
+          <ProfileActions isMe={isMe} handleMessage={handleMessage} onClose={onClose} />
 
           <ProfileCards
             user={resolvedUser}

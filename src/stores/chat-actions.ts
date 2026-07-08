@@ -384,6 +384,8 @@ export function createChatActions(
         theme_sync_enabled: number;
         media_content_filter: string;
         updated_at?: string | null;
+        bio?: string | null;
+        pronouns?: string | null;
         status?: string;
         custom_status?: string;
       }>("/api/users/me");
@@ -409,6 +411,9 @@ export function createChatActions(
           theme_sync_enabled: profile.theme_sync_enabled === 1,
           media_content_filter: parseMediaContentFilter(profile.media_content_filter),
           updated_at: profile.updated_at ?? current?.updated_at,
+          bio: profile.bio ?? current?.bio,
+          pronouns: profile.pronouns ?? current?.pronouns,
+          presence_platforms: current?.presence_platforms,
           status: (profile.status as any) ?? current?.status ?? "online",
           custom_status: profile.custom_status ?? current?.custom_status,
         },
@@ -432,6 +437,8 @@ export function createChatActions(
         media_content_filter: parseMediaContentFilter(profile.media_content_filter),
         username: profile.username,
         display_name: profile.display_name,
+        bio: profile.bio ?? undefined,
+        pronouns: profile.pronouns ?? undefined,
         updated_at: profile.updated_at ?? undefined,
       });
       useMediaSafetySettingsStore.getState().setCurrentUser(profile.id);

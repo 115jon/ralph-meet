@@ -8,7 +8,8 @@ import {
 } from "@/lib/desktop-notifications";
 import { MOBILE_ACTION_TYPE_ID, showNativeDesktopToast, syncDesktopNotificationState } from "@/lib/desktop-native-sync";
 import { apiPut } from "@/lib/api-client";
-import { isTauri, wsUrl } from "@/lib/platform";
+import { getCurrentPresencePlatform, isTauri, wsUrl } from "@/lib/platform";
+import { normalizePresencePlatforms, type PresencePlatform } from "@/lib/presence-platform";
 import {
   areReconnectSoundsSuppressed,
   beginReconnectSoundSuppression,
@@ -255,7 +256,13 @@ export function createChatGateway(
         });
         break;
       case "PRESENCE_UPDATE":
-        dispatch({ type: "UPDATE_USER_STATUS", userId: d.data.user_id, status: d.data.status, customStatus: d.data.custom_status });
+        dispatch({
+          type: "UPDATE_USER_STATUS",
+          userId: d.data.user_id,
+          status: d.data.status,
+          customStatus: d.data.custom_status,
+          platforms: d.data.platforms ? normalizePresencePlatforms(d.data.platforms) : undefined,
+        });
         if (d.data.status === "offline") {
           dispatch({ type: "USER_OFFLINE", userId: d.data.user_id });
 
@@ -276,7 +283,24 @@ export function createChatGateway(
         }
         break;
       case "PRESENCE_LIST":
-        dispatch({ type: "SET_ONLINE_USERS", userIds: d.data.user_ids ?? [] });
+        if (Array.isArray(d.data.users)) {
+          dispatch({
+            type: "SET_PRESENCE_USERS",
+            users: d.data.users.map((user: {
+              user_id: string;
+              status?: "online" | "idle" | "dnd" | "offline";
+              custom_status?: string | null;
+              platforms?: PresencePlatform[];
+            }) => ({
+              userId: user.user_id,
+              status: user.status ?? "online",
+              customStatus: user.custom_status ?? undefined,
+              platforms: normalizePresencePlatforms(user.platforms),
+            })),
+          });
+        } else {
+          dispatch({ type: "SET_ONLINE_USERS", userIds: d.data.user_ids ?? [] });
+        }
         break;
       case "GUILD_MEMBER_ADD":
         dispatch({
@@ -333,6 +357,8 @@ export function createChatGateway(
           theme_preference?: string | null;
           theme_sync_enabled?: boolean;
           media_content_filter?: import("@/lib/media-content-filter").MediaContentFilter | null;
+          bio?: string | null;
+          pronouns?: string | null;
           updated_at?: string;
         };
         dispatch({
@@ -353,6 +379,8 @@ export function createChatGateway(
           theme_preference: p.theme_preference,
           theme_sync_enabled: p.theme_sync_enabled,
           media_content_filter: p.media_content_filter,
+          bio: p.bio ?? undefined,
+          pronouns: p.pronouns ?? undefined,
           updated_at: p.updated_at,
         });
         break;
@@ -599,7 +627,14 @@ export function createChatGateway(
       case 8: {
         const interval = msg.d?.heartbeat_interval ?? 45000;
         if (clerkUserId) {
-          sendGateway({ op: 0, d: { name: "ChatClient", clerk_user_id: clerkUserId } });
+          sendGateway({
+            op: 0,
+            d: {
+              name: "ChatClient",
+              clerk_user_id: clerkUserId,
+              platform: getCurrentPresencePlatform(),
+            },
+          });
           identified = true;
         }
         hb.start(interval);
@@ -760,7 +795,14 @@ export function createChatGateway(
         gatewayReady,
         readyState: ws.readyState,
       });
-      sendGateway({ op: 0, d: { name: "ChatClient", clerk_user_id: userId } });
+      sendGateway({
+        op: 0,
+        d: {
+          name: "ChatClient",
+          clerk_user_id: userId,
+          platform: getCurrentPresencePlatform(),
+        },
+      });
       identified = true;
     }
   };

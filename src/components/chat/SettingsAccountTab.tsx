@@ -1126,6 +1126,8 @@ function useAccountState(user: any, chatUser: any) {
       "",
   );
   const [username, setUsername] = useState(() => chatUser?.username || user?.username || "");
+  const [pronouns, setPronouns] = useState(() => chatUser?.pronouns || "");
+  const [bio, setBio] = useState(() => chatUser?.bio || "");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -1157,6 +1159,8 @@ function useAccountState(user: any, chatUser: any) {
       "",
     );
     setUsername(chatUser?.username || user?.username || "");
+    setPronouns(chatUser?.pronouns || "");
+    setBio(chatUser?.bio || "");
     setError(null);
     setSaved(false);
     setUsernameStatus("idle");
@@ -1175,6 +1179,8 @@ function useAccountState(user: any, chatUser: any) {
   return {
     displayName, setDisplayName,
     username, setUsername,
+    pronouns, setPronouns,
+    bio, setBio,
     saving, setSaving,
     saved, setSaved,
     error, setError,
@@ -1210,6 +1216,8 @@ export default function SettingsAccountTab({
   const {
     displayName, setDisplayName,
     username, setUsername,
+    pronouns, setPronouns,
+    bio, setBio,
     saving, setSaving,
     setSaved,
     error, setError,
@@ -1244,6 +1252,9 @@ export default function SettingsAccountTab({
   );
   const [displayNameStyleEditorOpen, setDisplayNameStyleEditorOpen] = useState(false);
   const [stylesCollapsed, setStylesCollapsed] = useState(false);
+  const [activePreviewField, setActivePreviewField] = useState<"pronouns" | "bio" | null>(null);
+  const previewPronounsInputRef = useRef<HTMLInputElement | null>(null);
+  const previewBioInputRef = useRef<HTMLTextAreaElement | null>(null);
 
   const savedDisplayNameStyle = normalizeDisplayNameStyle(chatUser?.display_name_style) ?? DEFAULT_DISPLAY_NAME_STYLE;
   const previewThemeStyle = getProfileThemeVariables({
@@ -1257,6 +1268,19 @@ export default function SettingsAccountTab({
       setAvatarDisplay(chatUser?.avatar_display ?? null);
     }
   }, [avatarDisplayChanged, avatarFile, chatUser?.avatar_display]);
+
+  useEffect(() => {
+    if (activePreviewField === "pronouns") {
+      previewPronounsInputRef.current?.focus();
+      previewPronounsInputRef.current?.select();
+      return;
+    }
+
+    if (activePreviewField === "bio") {
+      previewBioInputRef.current?.focus();
+      previewBioInputRef.current?.select();
+    }
+  }, [activePreviewField]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1295,6 +1319,8 @@ export default function SettingsAccountTab({
   const hasChanges =
     displayName !== (chatUser?.display_name || (user?.unsafeMetadata?.displayName as string) || user?.username || "") ||
     username !== (chatUser?.username || user?.username || "") ||
+    pronouns !== (chatUser?.pronouns || "") ||
+    bio !== (chatUser?.bio || "") ||
     avatarFile !== null ||
     removeAvatar ||
     avatarDisplayChanged ||
@@ -1333,6 +1359,8 @@ export default function SettingsAccountTab({
     : draftAvatarDisplay;
   const currentDisplayName = displayName.trim() || chatUser?.display_name || chatUser?.username || user?.username || "Profile";
   const currentUsername = username.trim() || chatUser?.username || user?.username || "profile";
+  const currentPronouns = pronouns.trim();
+  const currentBio = bio.trim();
   const currentCollectibles = getAvatarCollectibles(currentAvatarDisplay);
   const currentAvatarDecoration = currentCollectibles?.avatarDecoration;
   const currentProfileEffect = currentCollectibles?.profileEffect;
@@ -1390,6 +1418,8 @@ export default function SettingsAccountTab({
   const resetDraftState = useCallback(() => {
     setDisplayName(chatUser?.display_name || (user?.unsafeMetadata?.displayName as string) || user?.username || "");
     setUsername(chatUser?.username || user?.username || "");
+    setPronouns(chatUser?.pronouns || "");
+    setBio(chatUser?.bio || "");
     setAvatarFile(null);
     setAvatarPreview(null);
     setAvatarDisplay(chatUser?.avatar_display ?? null);
@@ -1410,11 +1440,13 @@ export default function SettingsAccountTab({
     setUsernameStatus("idle");
   }, [
     chatUser?.avatar_display,
+    chatUser?.bio,
     chatUser?.display_name,
     chatUser?.display_name_style,
     chatUser?.profile_accent_color,
     chatUser?.profile_background_color,
     chatUser?.profile_banner_color,
+    chatUser?.pronouns,
     chatUser?.username,
     setAvatarDisplay,
     setAvatarDisplayChanged,
@@ -1422,10 +1454,12 @@ export default function SettingsAccountTab({
     setAvatarPreview,
     setBannerFile,
     setBannerPreview,
+    setBio,
     setDisplayName,
     setError,
     setNameplateFile,
     setNameplatePreview,
+    setPronouns,
     setRemoveAvatar,
     setRemoveBanner,
     setRemoveNameplate,
@@ -1664,11 +1698,15 @@ export default function SettingsAccountTab({
 
     const trimmedName = displayName.trim();
     const trimmedUsername = username.trim().toLowerCase();
+    const trimmedPronouns = pronouns.trim();
+    const trimmedBio = bio.trim();
 
     try {
       await apiPatch("/api/update-profile", {
         displayName: trimmedName || trimmedUsername,
         username: trimmedUsername,
+        pronouns: trimmedPronouns || null,
+        bio: trimmedBio || null,
         profileAccentColor,
         profileBackgroundColor,
         profileBannerColor,
@@ -1752,6 +1790,8 @@ export default function SettingsAccountTab({
     user,
     displayName,
     username,
+    pronouns,
+    bio,
     avatarFile,
     avatarDisplay,
     avatarDisplayChanged,
@@ -2471,6 +2511,33 @@ export default function SettingsAccountTab({
                       />
                       <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-[color:var(--rm-profile-custom-muted)]">
                         <span>@{currentUsername}</span>
+                        <span aria-hidden="true" className="text-[color:var(--rm-profile-custom-muted)]/60">•</span>
+                        <button
+                          type="button"
+                          onClick={() => setActivePreviewField("pronouns")}
+                          className="group/preview-pronouns rounded-md px-1.5 py-0.5 -mx-1.5 text-left transition hover:bg-[var(--rm-profile-custom-card-bg-strong)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35"
+                        >
+                          {activePreviewField === "pronouns" ? (
+                            <input
+                              ref={previewPronounsInputRef}
+                              value={pronouns}
+                              onChange={(event) => setPronouns(event.target.value.slice(0, 40))}
+                              onBlur={() => setActivePreviewField((current) => current === "pronouns" ? null : current)}
+                              onKeyDown={(event) => {
+                                if (event.key === "Enter" || event.key === "Escape") {
+                                  event.preventDefault();
+                                  event.currentTarget.blur();
+                                }
+                              }}
+                              className="min-w-[88px] bg-transparent text-[13px] font-medium text-[color:var(--rm-profile-custom-text)] outline-none placeholder:text-[color:var(--rm-profile-custom-muted)]"
+                              placeholder="Add pronouns"
+                            />
+                          ) : (
+                            <span className="rounded-md border border-transparent px-1 py-0.5 text-[13px] font-medium text-[color:var(--rm-profile-custom-text)] transition group-hover/preview-pronouns:border-[color:var(--rm-profile-custom-card-border)] group-hover/preview-pronouns:bg-[var(--rm-profile-custom-card-bg-strong)]">
+                              {currentPronouns || "Add pronouns"}
+                            </span>
+                          )}
+                        </button>
                       </div>
                     </div>
                   </div>
@@ -2495,6 +2562,41 @@ export default function SettingsAccountTab({
                 </div>
 
                 <div className="mt-5 space-y-5">
+                  <button
+                    type="button"
+                    onClick={() => setActivePreviewField("bio")}
+                    className="group/preview-bio block w-full rounded-[18px] border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] px-4 py-3 text-left transition hover:border-[color:var(--rm-profile-custom-text)]/22 hover:bg-[var(--rm-profile-custom-card-bg)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35"
+                  >
+                    {activePreviewField === "bio" ? (
+                      <div>
+                        <textarea
+                          ref={previewBioInputRef}
+                          value={bio}
+                          onChange={(event) => setBio(event.target.value.slice(0, 190))}
+                          onBlur={() => setActivePreviewField((current) => current === "bio" ? null : current)}
+                          onKeyDown={(event) => {
+                            if (event.key === "Escape") {
+                              event.preventDefault();
+                              event.currentTarget.blur();
+                            }
+                          }}
+                          className="min-h-[74px] w-full resize-none bg-transparent text-[14px] leading-6 text-[color:var(--rm-profile-custom-text)] outline-none placeholder:text-[color:var(--rm-profile-custom-muted)]"
+                          placeholder="Add a bio here"
+                        />
+                        <div className="mt-2 text-right text-[11px] text-[color:var(--rm-profile-custom-muted)]">{bio.trim().length}/190</div>
+                      </div>
+                    ) : (
+                      <div className="space-y-1">
+                        <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[color:var(--rm-profile-custom-muted)]">Bio</div>
+                        <div className="rounded-[14px] border border-transparent px-0 py-0.5 text-[14px] leading-6 text-[color:var(--rm-profile-custom-text)] transition group-hover/preview-bio:border-[color:var(--rm-profile-custom-card-border)]">
+                          {currentBio || (
+                            <span className="text-[color:var(--rm-profile-custom-muted)]">Add a bio here</span>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </button>
+
                   <div>
                     <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[color:var(--rm-profile-custom-muted)]">Member Since</div>
                     <div className="mt-2 text-[14px] text-[color:var(--rm-profile-custom-text)]">Mar 5, 2016</div>
@@ -2602,82 +2704,86 @@ export default function SettingsAccountTab({
                   </div>
                 </ProfilePreviewWidgetCard>
 
-                {!asModal ? (
-                  <ProfilePreviewWidgetCard title="Profile Details" subtitle="Display names and usernames update everywhere this account appears.">
-                    <div className="space-y-4">
-                      <div className="space-y-2">
-                        <Label className="text-[11px] font-semibold uppercase tracking-[0.18em] text-rm-text-muted">Display Name</Label>
+                <ProfilePreviewWidgetCard
+                  title="Profile Details"
+                  subtitle="Display names, pronouns, and bios update everywhere this account appears."
+                >
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <Label className="text-[11px] font-semibold uppercase tracking-[0.18em] text-rm-text-muted">Display Name</Label>
+                      <Input
+                        value={displayName}
+                        onChange={(event) => setDisplayName(event.target.value)}
+                        className="h-11 rounded-xl border-white/10 bg-white/[0.03] text-rm-text shadow-none placeholder:text-rm-text-muted focus-visible:ring-primary/40"
+                        placeholder="Add a display name"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label className="text-[11px] font-semibold uppercase tracking-[0.18em] text-rm-text-muted">Username</Label>
+                      <div className="relative">
+                        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-sm text-rm-text-muted/50">@</span>
                         <Input
-                          value={displayName}
-                          onChange={(event) => setDisplayName(event.target.value)}
-                          className="h-11 rounded-xl border-white/10 bg-white/[0.03] text-rm-text shadow-none placeholder:text-rm-text-muted focus-visible:ring-primary/40"
-                          placeholder="Add a display name"
+                          value={username}
+                          onChange={handleUsernameChange}
+                          className="h-11 rounded-xl border-white/10 bg-white/[0.03] pl-8 text-rm-text shadow-none placeholder:text-rm-text-muted focus-visible:ring-primary/40"
                         />
                       </div>
-
-                      <div className="space-y-2">
-                        <Label className="text-[11px] font-semibold uppercase tracking-[0.18em] text-rm-text-muted">Username</Label>
-                        <div className="relative">
-                          <span className="absolute left-4 top-1/2 -translate-y-1/2 text-sm text-rm-text-muted/50">@</span>
-                          <Input
-                            value={username}
-                            onChange={handleUsernameChange}
-                            className="h-11 rounded-xl border-white/10 bg-white/[0.03] pl-8 text-rm-text shadow-none placeholder:text-rm-text-muted focus-visible:ring-primary/40"
-                          />
-                        </div>
-                        {usernameStatus !== "idle" && usernameStatus !== "own" ? (
-                          <p
-                            className={cn(
-                              "flex items-center gap-1.5 text-[12px]",
-                              usernameStatus === "available" ? "text-primary" : "text-destructive",
-                            )}
-                          >
-                            {usernameStatus === "checking" ? <Loader2 size={12} className="animate-spin" /> : null}
-                            {usernameStatus === "available"
-                              ? "Username available!"
-                              : usernameStatus === "taken"
-                                ? "Username is already taken."
-                                : usernameStatus === "invalid"
-                                  ? "Username is invalid."
-                                  : ""}
-                          </p>
-                        ) : null}
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label className="text-[11px] font-semibold uppercase tracking-[0.18em] text-rm-text-muted">Email</Label>
-                        <div className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-rm-text-secondary">
-                          {user.primaryEmailAddress?.emailAddress || "No email on file"}
-                        </div>
-                      </div>
-
-                      <div className="rounded-[18px] border border-white/8 bg-black/16 p-4">
-                        <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-rm-text-muted">Current Setup</div>
-                        <div className="mt-3 space-y-2 text-sm text-rm-text-secondary">
-                          <div className="flex items-center justify-between gap-3">
-                            <span>Avatar decoration</span>
-                            <span className="truncate text-rm-text">{currentAvatarDecoration?.name ?? "None"}</span>
-                          </div>
-                          <div className="flex items-center justify-between gap-3">
-                            <span>Nameplate</span>
-                            <span className="truncate text-rm-text">{currentNameplateSelection?.name ?? (currentNameplateUrl ? "Custom upload" : "None")}</span>
-                          </div>
-                          <div className="flex items-center justify-between gap-3">
-                            <span>Profile effect</span>
-                            <span className="truncate text-rm-text">{currentProfileEffect?.name ?? "None"}</span>
-                          </div>
-                        </div>
-                      </div>
-
-                      {error ? (
-                        <div className="flex items-center gap-2 rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-                          <AlertTriangle size={14} />
-                          <span>{error}</span>
-                        </div>
+                      {usernameStatus !== "idle" && usernameStatus !== "own" ? (
+                        <p
+                          className={cn(
+                            "flex items-center gap-1.5 text-[12px]",
+                            usernameStatus === "available" ? "text-primary" : "text-destructive",
+                          )}
+                        >
+                          {usernameStatus === "checking" ? <Loader2 size={12} className="animate-spin" /> : null}
+                          {usernameStatus === "available"
+                            ? "Username available!"
+                            : usernameStatus === "taken"
+                              ? "Username is already taken."
+                              : usernameStatus === "invalid"
+                                ? "Username is invalid."
+                                : ""}
+                        </p>
                       ) : null}
                     </div>
-                  </ProfilePreviewWidgetCard>
-                ) : null}
+
+                    <div className="space-y-2">
+                      <Label className="text-[11px] font-semibold uppercase tracking-[0.18em] text-rm-text-muted">Email</Label>
+                      <div className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-rm-text-secondary">
+                        {user.primaryEmailAddress?.emailAddress || "No email on file"}
+                      </div>
+                      <p className="text-[12px] text-rm-text-muted">
+                        Pronouns and bio are edited directly on the profile preview card to match the live popover layout.
+                      </p>
+                    </div>
+
+                    <div className="rounded-[18px] border border-white/8 bg-black/16 p-4">
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-rm-text-muted">Current Setup</div>
+                      <div className="mt-3 space-y-2 text-sm text-rm-text-secondary">
+                        <div className="flex items-center justify-between gap-3">
+                          <span>Avatar decoration</span>
+                          <span className="truncate text-rm-text">{currentAvatarDecoration?.name ?? "None"}</span>
+                        </div>
+                        <div className="flex items-center justify-between gap-3">
+                          <span>Nameplate</span>
+                          <span className="truncate text-rm-text">{currentNameplateSelection?.name ?? (currentNameplateUrl ? "Custom upload" : "None")}</span>
+                        </div>
+                        <div className="flex items-center justify-between gap-3">
+                          <span>Profile effect</span>
+                          <span className="truncate text-rm-text">{currentProfileEffect?.name ?? "None"}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {error ? (
+                      <div className="flex items-center gap-2 rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+                        <AlertTriangle size={14} />
+                        <span>{error}</span>
+                      </div>
+                    ) : null}
+                  </div>
+                </ProfilePreviewWidgetCard>
               </div>
             </aside>
             </div>

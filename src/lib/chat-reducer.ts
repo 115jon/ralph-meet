@@ -9,6 +9,7 @@ import type {
   User
 } from "@/lib/types";
 import { getDisplayName } from "@/lib/display-name";
+import type { PresencePlatform } from "@/lib/presence-platform";
 import type { SharedSpatialAudioState } from "@/lib/voice/spatial-audio";
 
 // ── State shape ─────────────────────────────────────────────────────────────
@@ -56,6 +57,8 @@ export interface ChatState {
   membersLoadedByServerId: Record<string, boolean>;
   /** Online user IDs (presence tracking) */
   onlineUsers: Set<string>;
+  /** Live platform presence per user (desktop/web/mobile) */
+  presencePlatformsByUserId: Record<string, PresencePlatform[]>;
   /** Read states: channelId → ISO timestamp of last read */
   readStates: Record<string, string>;
   /** Latest message timestamp per channel: channelId → ISO timestamp */
@@ -142,6 +145,7 @@ export const initialState: ChatState = {
   membersByServerId: {},
   membersLoadedByServerId: {},
   onlineUsers: new Set(),
+  presencePlatformsByUserId: {},
   readStates: {},
   lastMessageAt: {},
   dmChannels: [],
@@ -245,14 +249,31 @@ export type ChatAction =
     theme_preference?: string | null;
     theme_sync_enabled?: boolean;
     media_content_filter?: import("@/lib/media-content-filter").MediaContentFilter | null;
+    bio?: string | null;
+    pronouns?: string | null;
     updated_at?: string;
   }
   | { type: "ADD_REACTION"; messageId: string; emoji: string; userId: string }
   | { type: "REMOVE_REACTION"; messageId: string; emoji: string; userId: string }
   | { type: "SET_ONLINE_USERS"; userIds: string[] }
+  | {
+    type: "SET_PRESENCE_USERS";
+    users: Array<{
+      userId: string;
+      status: "online" | "idle" | "dnd" | "offline";
+      customStatus?: string | null;
+      platforms?: PresencePlatform[];
+    }>;
+  }
   | { type: "USER_ONLINE"; userId: string }
   | { type: "USER_OFFLINE"; userId: string }
-  | { type: "UPDATE_USER_STATUS"; userId: string; status: "online" | "idle" | "dnd" | "offline"; customStatus?: string }
+  | {
+    type: "UPDATE_USER_STATUS";
+    userId: string;
+    status: "online" | "idle" | "dnd" | "offline";
+    customStatus?: string;
+    platforms?: PresencePlatform[];
+  }
   | { type: "UPDATE_SERVER"; serverId: string; updates: Partial<Server> }
   | { type: "REMOVE_SERVER"; serverId: string }
   | { type: "SET_READ_STATES"; readStates: Record<string, string>; lastMessageAt: Record<string, string> }
@@ -777,6 +798,8 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
           if (action.theme_preference !== undefined) newUser.theme_preference = action.theme_preference;
           if (action.theme_sync_enabled !== undefined) newUser.theme_sync_enabled = action.theme_sync_enabled;
           if (action.media_content_filter !== undefined) newUser.media_content_filter = action.media_content_filter;
+          if (action.bio !== undefined) newUser.bio = action.bio;
+          if (action.pronouns !== undefined) newUser.pronouns = action.pronouns;
           if (action.updated_at !== undefined) newUser.updated_at = action.updated_at;
         }
 
@@ -799,6 +822,8 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         if (action.theme_preference !== undefined) newProfileUser.theme_preference = action.theme_preference;
         if (action.theme_sync_enabled !== undefined) newProfileUser.theme_sync_enabled = action.theme_sync_enabled;
         if (action.media_content_filter !== undefined) newProfileUser.media_content_filter = action.media_content_filter;
+        if (action.bio !== undefined) newProfileUser.bio = action.bio;
+        if (action.pronouns !== undefined) newProfileUser.pronouns = action.pronouns;
         if (action.updated_at !== undefined) newProfileUser.updated_at = action.updated_at;
       }
 
@@ -823,6 +848,8 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
           if (action.theme_preference !== undefined) updatedUser.theme_preference = action.theme_preference;
           if (action.theme_sync_enabled !== undefined) updatedUser.theme_sync_enabled = action.theme_sync_enabled;
           if (action.media_content_filter !== undefined) updatedUser.media_content_filter = action.media_content_filter;
+          if (action.bio !== undefined) updatedUser.bio = action.bio;
+          if (action.pronouns !== undefined) updatedUser.pronouns = action.pronouns;
           if (action.updated_at !== undefined) updatedUser.updated_at = action.updated_at;
           newMembers[idx] = { ...newMembers[idx], user: updatedUser };
         }
@@ -852,6 +879,8 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
             if (action.theme_preference !== undefined) updatedUser.theme_preference = action.theme_preference;
             if (action.theme_sync_enabled !== undefined) updatedUser.theme_sync_enabled = action.theme_sync_enabled;
             if (action.media_content_filter !== undefined) updatedUser.media_content_filter = action.media_content_filter;
+            if (action.bio !== undefined) updatedUser.bio = action.bio;
+            if (action.pronouns !== undefined) updatedUser.pronouns = action.pronouns;
             if (action.updated_at !== undefined) updatedUser.updated_at = action.updated_at;
             return { ...member, user: updatedUser };
           });
@@ -908,6 +937,8 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
           if (action.theme_preference !== undefined) updatedRecipient.theme_preference = action.theme_preference;
           if (action.theme_sync_enabled !== undefined) updatedRecipient.theme_sync_enabled = action.theme_sync_enabled;
           if (action.media_content_filter !== undefined) updatedRecipient.media_content_filter = action.media_content_filter;
+          if (action.bio !== undefined) updatedRecipient.bio = action.bio;
+          if (action.pronouns !== undefined) updatedRecipient.pronouns = action.pronouns;
           if (action.updated_at !== undefined) updatedRecipient.updated_at = action.updated_at;
           newDmChannels[dmIdx] = { ...newDmChannels[dmIdx], recipient: updatedRecipient };
         }
@@ -933,6 +964,8 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
           if (action.theme_preference !== undefined) updatedRelUser.theme_preference = action.theme_preference;
           if (action.theme_sync_enabled !== undefined) updatedRelUser.theme_sync_enabled = action.theme_sync_enabled;
           if (action.media_content_filter !== undefined) updatedRelUser.media_content_filter = action.media_content_filter;
+          if (action.bio !== undefined) updatedRelUser.bio = action.bio;
+          if (action.pronouns !== undefined) updatedRelUser.pronouns = action.pronouns;
           if (action.updated_at !== undefined) updatedRelUser.updated_at = action.updated_at;
           newRelationships[relIdx] = { ...newRelationships[relIdx], user: updatedRelUser };
         }
@@ -959,6 +992,8 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
           if (action.theme_preference !== undefined) updatedAuthor.theme_preference = action.theme_preference;
           if (action.theme_sync_enabled !== undefined) updatedAuthor.theme_sync_enabled = action.theme_sync_enabled;
           if (action.media_content_filter !== undefined) updatedAuthor.media_content_filter = action.media_content_filter;
+          if (action.bio !== undefined) updatedAuthor.bio = action.bio;
+          if (action.pronouns !== undefined) updatedAuthor.pronouns = action.pronouns;
           return { ...m, author: updatedAuthor };
         });
       }
@@ -982,6 +1017,8 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
           if (action.theme_preference !== undefined) updatedAuthor.theme_preference = action.theme_preference;
           if (action.theme_sync_enabled !== undefined) updatedAuthor.theme_sync_enabled = action.theme_sync_enabled;
           if (action.media_content_filter !== undefined) updatedAuthor.media_content_filter = action.media_content_filter;
+          if (action.bio !== undefined) updatedAuthor.bio = action.bio;
+          if (action.pronouns !== undefined) updatedAuthor.pronouns = action.pronouns;
           return { ...m, author: updatedAuthor };
         });
 
@@ -1052,6 +1089,89 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       };
     case "SET_ONLINE_USERS":
       return { ...state, onlineUsers: new Set(action.userIds) };
+    case "SET_PRESENCE_USERS": {
+      const nextOnlineUsers = new Set<string>();
+      const nextPresencePlatformsByUserId: Record<string, PresencePlatform[]> = {};
+
+      for (const user of action.users) {
+        if (user.status !== "offline") {
+          nextOnlineUsers.add(user.userId);
+        }
+        nextPresencePlatformsByUserId[user.userId] = user.platforms ?? [];
+      }
+
+      const applyPresenceToUser = (
+        input: User,
+        presence: (typeof action.users)[number] | undefined,
+      ): User => {
+        if (!presence) return input;
+        return {
+          ...input,
+          status: presence.status,
+          custom_status: presence.customStatus ?? input.custom_status,
+          presence_platforms: presence.platforms ?? [],
+        };
+      };
+
+      const presenceByUserId = new Map(action.users.map((user) => [user.userId, user]));
+      const updatedMembers = state.members.map((member) => {
+        const presence = presenceByUserId.get(member.user.id);
+        if (!presence) return member;
+        return { ...member, user: applyPresenceToUser(member.user, presence) };
+      });
+      const updatedMembersByServerId = Object.fromEntries(
+        Object.entries(state.membersByServerId).map(([serverId, members]) => [
+          serverId,
+          members.map((member) => {
+            const presence = presenceByUserId.get(member.user.id);
+            if (!presence) return member;
+            return { ...member, user: applyPresenceToUser(member.user, presence) };
+          }),
+        ]),
+      );
+      const updatedDmChannels = state.dmChannels.map((channel) => {
+        const presence = presenceByUserId.get(channel.recipient.id);
+        if (!presence) return channel;
+        return { ...channel, recipient: applyPresenceToUser(channel.recipient, presence) };
+      });
+      const updatedRelationships = state.relationships.map((relationship) => {
+        if (!relationship.user) return relationship;
+        const presence = presenceByUserId.get(relationship.user.id);
+        if (!presence) return relationship;
+        return { ...relationship, user: applyPresenceToUser(relationship.user, presence) };
+      });
+      const updatedMessages = state.messages.map((message) => {
+        if (!message.author) return message;
+        const presence = presenceByUserId.get(message.author.id);
+        if (!presence) return message;
+        return { ...message, author: applyPresenceToUser(message.author, presence) };
+      });
+      const updatedMessagesByChannelId = Object.fromEntries(
+        Object.entries(state.messagesByChannelId).map(([channelId, messages]) => [
+          channelId,
+          messages.map((message) => {
+            if (!message.author) return message;
+            const presence = presenceByUserId.get(message.author.id);
+            if (!presence) return message;
+            return { ...message, author: applyPresenceToUser(message.author, presence) };
+          }),
+        ]),
+      );
+
+      return {
+        ...state,
+        onlineUsers: nextOnlineUsers,
+        presencePlatformsByUserId: nextPresencePlatformsByUserId,
+        user: state.user ? applyPresenceToUser(state.user, presenceByUserId.get(state.user.id)) : state.user,
+        profileUser: state.profileUser ? applyPresenceToUser(state.profileUser, presenceByUserId.get(state.profileUser.id)) : state.profileUser,
+        members: updatedMembers,
+        membersByServerId: updatedMembersByServerId,
+        dmChannels: updatedDmChannels,
+        relationships: updatedRelationships,
+        messages: updatedMessages,
+        messagesByChannelId: updatedMessagesByChannelId,
+      };
+    }
     case "USER_ONLINE": {
       const updated = new Set(state.onlineUsers);
       updated.add(action.userId);
@@ -1064,13 +1184,84 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
     }
     case "UPDATE_USER_STATUS": {
       const isMe = state.user?.id === action.userId;
+      const nextPresencePlatformsByUserId = action.platforms === undefined
+        ? state.presencePlatformsByUserId
+        : {
+          ...state.presencePlatformsByUserId,
+          [action.userId]: action.platforms,
+        };
       const updatedMembers = state.members.map((m) =>
-        m.user.id === action.userId ? { ...m, user: { ...m.user, status: action.status, custom_status: action.customStatus ?? m.user.custom_status } } : m
+        m.user.id === action.userId
+          ? {
+            ...m,
+            user: {
+              ...m.user,
+              status: action.status,
+              custom_status: action.customStatus ?? m.user.custom_status,
+              presence_platforms: action.platforms ?? m.user.presence_platforms,
+            },
+          }
+          : m
       );
-      const updatedUser = isMe && state.user ? { ...state.user, status: action.status, custom_status: action.customStatus ?? state.user.custom_status } : state.user;
+      const updatedUser = isMe && state.user
+        ? {
+          ...state.user,
+          status: action.status,
+          custom_status: action.customStatus ?? state.user.custom_status,
+          presence_platforms: action.platforms ?? state.user.presence_platforms,
+        }
+        : state.user;
+      const updatedMembersByServerId = Object.fromEntries(
+        Object.entries(state.membersByServerId).map(([serverId, members]) => [
+          serverId,
+          members.map((member) =>
+            member.user.id === action.userId
+              ? {
+                ...member,
+                user: {
+                  ...member.user,
+                  status: action.status,
+                  custom_status: action.customStatus ?? member.user.custom_status,
+                  presence_platforms: action.platforms ?? member.user.presence_platforms,
+                },
+              }
+              : member,
+          ),
+        ]),
+      );
+      const updatedDmChannels = state.dmChannels.map((channel) =>
+        channel.recipient.id === action.userId
+          ? {
+            ...channel,
+            recipient: {
+              ...channel.recipient,
+              status: action.status,
+              custom_status: action.customStatus ?? channel.recipient.custom_status,
+              presence_platforms: action.platforms ?? channel.recipient.presence_platforms,
+            },
+          }
+          : channel,
+      );
+      const updatedRelationships = state.relationships.map((relationship) =>
+        relationship.user?.id === action.userId
+          ? {
+            ...relationship,
+            user: {
+              ...relationship.user,
+              status: action.status,
+              custom_status: action.customStatus ?? relationship.user.custom_status,
+              presence_platforms: action.platforms ?? relationship.user.presence_platforms,
+            },
+          }
+          : relationship,
+      );
       return {
         ...state,
         members: updatedMembers,
+        membersByServerId: updatedMembersByServerId,
+        dmChannels: updatedDmChannels,
+        relationships: updatedRelationships,
+        presencePlatformsByUserId: nextPresencePlatformsByUserId,
         user: updatedUser,
       };
     }

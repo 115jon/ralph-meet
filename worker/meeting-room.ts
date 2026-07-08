@@ -20,6 +20,7 @@ import {
   isReconnectWithinGrace,
   shouldKeepResumableSession,
 } from "../src/lib/voice/connection-generation";
+import { normalizePresencePlatform, type PresencePlatform } from "../src/lib/presence-platform";
 import { getNextVoicePresenceAlarmTime, refreshVoiceMemberIdentity } from "../src/lib/voice-presence";
 import { filterVoiceChannelStatesPayload } from "../src/lib/voice-channel-state-filter";
 
@@ -114,6 +115,7 @@ interface VoiceState {
   display_name?: string | null;
   avatar_url?: string;
   avatar_display?: string | null;
+  platform?: PresencePlatform;
   stream_preview_url?: string | null;
   self_mute: boolean;
   self_deaf: boolean;
@@ -147,6 +149,7 @@ interface WsAttachment {
   display_name?: string | null;
   avatar_url?: string | null;
   avatar_display?: string | null;
+  platform?: PresencePlatform;
   clerk_user_id?: string;
   stream_preview_url?: string | null;
   self_mute: boolean;
@@ -800,6 +803,60 @@ export class MeetingRoom extends DurableObject<Env> {
     if (wasEmpty) this.scheduleAlarm();
   }
 
+  private getPresencePlatformsForUser(clerkUserId: string, options?: { excludeWs?: WebSocket }): PresencePlatform[] {
+    const orderedPlatforms: PresencePlatform[] = [];
+    const seen = new Set<PresencePlatform>();
+
+    for (const [sessionWs, session] of this.sessions) {
+      if (options?.excludeWs && sessionWs === options.excludeWs) continue;
+      if (session.clerk_user_id !== clerkUserId) continue;
+      const platform = normalizePresencePlatform(session.platform);
+      if (!platform || seen.has(platform)) continue;
+      seen.add(platform);
+      orderedPlatforms.push(platform);
+    }
+
+    return orderedPlatforms;
+  }
+
+  private getPresenceStatusForUser(
+    clerkUserId: string,
+    options?: { excludeWs?: WebSocket },
+  ): "online" | "idle" | "dnd" | "offline" {
+    for (const [sessionWs, session] of this.sessions) {
+      if (options?.excludeWs && sessionWs === options.excludeWs) continue;
+      if (session.clerk_user_id !== clerkUserId) continue;
+      if (session.status) {
+        return session.status;
+      }
+    }
+    return "offline";
+  }
+
+  private buildPresenceSnapshotForUser(clerkUserId: string, options?: { excludeWs?: WebSocket }) {
+    return {
+      user_id: clerkUserId,
+      status: this.getPresenceStatusForUser(clerkUserId, options),
+      platforms: this.getPresencePlatformsForUser(clerkUserId, options),
+    };
+  }
+
+  private buildPresenceListPayload() {
+    const userIds = new Set<string>();
+
+    for (const [, session] of this.sessions) {
+      if (session.clerk_user_id) {
+        userIds.add(session.clerk_user_id);
+      }
+    }
+
+    const users = Array.from(userIds).map((userId) => this.buildPresenceSnapshotForUser(userId));
+    return {
+      user_ids: users.filter((user) => user.status !== "offline").map((user) => user.user_id),
+      users,
+    };
+  }
+
   /** Persist voice channel members to per-channel storage keys */
   private persistVoiceChannelMembers() {
     // Track which channels currently have entries
@@ -1129,6 +1186,7 @@ export class MeetingRoom extends DurableObject<Env> {
       display_name: data.display_name,
       avatar_url: data.avatar_url,
       avatar_display: data.avatar_display,
+      platform: data.platform,
       stream_preview_url: data.stream_preview_url,
       self_mute: data.self_mute,
       self_deaf: data.self_deaf,
@@ -1248,7 +1306,15 @@ export class MeetingRoom extends DurableObject<Env> {
 
   private async handleIdentify(
     ws: WebSocket,
-    d: { name: string; username?: string; display_name?: string | null; avatar_url?: string; clerk_user_id?: string }
+    d: {
+      name: string;
+      username?: string;
+      display_name?: string | null;
+      avatar_url?: string;
+      avatar_display?: string | null;
+      clerk_user_id?: string;
+      platform?: PresencePlatform;
+    }
   ) {
     if (this.getSession(ws)) {
       log.info(`AlreadyAuthenticated — session exists for this WS`);
@@ -1284,6 +1350,7 @@ export class MeetingRoom extends DurableObject<Env> {
       let resolvedAvatar = d.avatar_url;
       let resolvedAvatarDisplay = d.avatar_display ?? null;
       let resolvedStatus: "online" | "idle" | "dnd" | "offline" = "online";
+      const resolvedPlatform = normalizePresencePlatform(d.platform) ?? "web";
 
       if (profile) {
         resolvedName = profile.name;
@@ -1311,6 +1378,7 @@ export class MeetingRoom extends DurableObject<Env> {
         display_name: resolvedDisplayName,
         avatar_url: resolvedAvatar,
         avatar_display: resolvedAvatarDisplay,
+        platform: resolvedPlatform,
         clerk_user_id: d.clerk_user_id,
         stream_preview_url: null,
         self_mute: true,
@@ -1383,15 +1451,13 @@ export class MeetingRoom extends DurableObject<Env> {
 
       // Broadcast PRESENCE_UPDATE (online) to all clients if this user has a clerk_user_id
       if (attachment.clerk_user_id) {
+        const presenceSnapshot = this.buildPresenceSnapshotForUser(attachment.clerk_user_id);
         this.broadcast(
           {
             op: Op.Dispatch,
             d: {
               event: "PRESENCE_UPDATE",
-              data: {
-                user_id: attachment.clerk_user_id,
-                status: attachment.status,
-              },
+              data: presenceSnapshot,
             },
           },
           ws
@@ -1648,25 +1714,30 @@ export class MeetingRoom extends DurableObject<Env> {
 
     if (!["online", "idle", "dnd", "offline"].includes(d.status)) return;
 
-    session.status = d.status;
-    this.persist(ws, session);
-
     if (session.clerk_user_id) {
+      for (const [sessionWs, otherSession] of this.sessions) {
+        if (otherSession.clerk_user_id !== session.clerk_user_id) continue;
+        otherSession.status = d.status;
+        this.persist(sessionWs, otherSession);
+      }
+
       // 1. Debounced persist to D1 (coalesces rapid toggles into one write)
       this.debouncePersistPresence(session.clerk_user_id, d.status);
 
       // 3. Broadcast to all
+      const presenceSnapshot = this.buildPresenceSnapshotForUser(session.clerk_user_id);
       this.broadcast({
         op: Op.Dispatch,
         d: {
           event: "PRESENCE_UPDATE",
-          data: {
-            user_id: session.clerk_user_id,
-            status: d.status,
-          },
+          data: presenceSnapshot,
         },
       });
+      return;
     }
+
+    session.status = d.status;
+    this.persist(ws, session);
   }
 
   /** Debounce D1 presence writes — coalesces rapid status toggles into one write */
@@ -1773,31 +1844,30 @@ export class MeetingRoom extends DurableObject<Env> {
     const session = this.getSession(ws);
     if (!session) return;
 
-    // Broadcast PRESENCE_UPDATE (offline) before cleanup
+    // Broadcast updated presence/platform state before cleanup
     if (session.clerk_user_id) {
-      // Only broadcast offline if no other session has the same clerk_user_id
-      let otherSessionExists = false;
+      let nextSnapshot: { user_id: string; status: "online" | "idle" | "dnd" | "offline"; platforms: PresencePlatform[] } | null = null;
+
       for (const [otherWs, otherSession] of this.sessions) {
-        if (otherWs !== ws && otherSession.clerk_user_id === session.clerk_user_id) {
-          otherSessionExists = true;
-          break;
-        }
+        if (otherWs === ws || otherSession.clerk_user_id !== session.clerk_user_id) continue;
+        nextSnapshot = this.buildPresenceSnapshotForUser(session.clerk_user_id, { excludeWs: ws });
+        break;
       }
-      if (!otherSessionExists) {
-        this.broadcast(
-          {
-            op: Op.Dispatch,
-            d: {
-              event: "PRESENCE_UPDATE",
-              data: {
-                user_id: session.clerk_user_id,
-                status: "offline",
-              },
+
+      this.broadcast(
+        {
+          op: Op.Dispatch,
+          d: {
+            event: "PRESENCE_UPDATE",
+            data: nextSnapshot ?? {
+              user_id: session.clerk_user_id,
+              status: "offline",
+              platforms: [],
             },
           },
-          ws
-        );
-      }
+        },
+        ws
+      );
     }
 
     // For abrupt WebSocket closes (not intentional), defer voice channel cleanup
@@ -2102,18 +2172,12 @@ export class MeetingRoom extends DurableObject<Env> {
       this.persist(ws, session);
     }
 
-    // Send PRESENCE_LIST to the subscribing client — all online clerk user IDs
-    const onlineUserIds = new Set<string>();
-    for (const [, sess] of this.sessions) {
-      if (sess.clerk_user_id) {
-        onlineUserIds.add(sess.clerk_user_id);
-      }
-    }
+    // Send PRESENCE_LIST to the subscribing client with live platform/session metadata.
     this.sendTo(ws, {
       op: Op.Dispatch,
       d: {
         event: "PRESENCE_LIST",
-        data: { user_ids: Array.from(onlineUserIds) },
+        data: this.buildPresenceListPayload(),
       },
     });
 

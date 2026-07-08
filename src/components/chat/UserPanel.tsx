@@ -4,6 +4,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { getAvatarCollectibles } from "@/lib/avatar-display";
 import { findCollectibleItem } from "@/lib/collectibles-catalog";
 import { getCachedCollectiblesCatalog, subscribeCollectiblesCatalog } from "@/lib/collectibles-catalog-client";
+import { OPEN_PROFILE_EDITOR_EVENT } from "@/lib/profile-editor-events";
 import { useUserResolution } from "@/hooks/useUserResolution";
 import { getAuthAssetUrl } from "@/lib/platform";
 import type { ScreenShareOptions, ScreenShareSourceState } from "@/lib/screen-share-types";
@@ -424,6 +425,16 @@ export default function UserPanel({
       window.removeEventListener("open-shared-messages-settings", handleOpenShares);
     };
   }, [openSettings]);
+
+  useEffect(() => {
+    const handleOpenProfileEditor = () => {
+      openProfileEditor();
+    };
+    window.addEventListener(OPEN_PROFILE_EDITOR_EVENT, handleOpenProfileEditor);
+    return () => {
+      window.removeEventListener(OPEN_PROFILE_EDITOR_EVENT, handleOpenProfileEditor);
+    };
+  }, [openProfileEditor]);
 
   useEffect(() => subscribeCollectiblesCatalog((catalog) => setCollectiblesCatalog(catalog)), []);
 

@@ -208,6 +208,9 @@ export function useChatPageLogic() {
         deriveUsername(user) ||
         undefined,
       avatar_url: isR2Avatar ? existingAvatar : (existingAvatar || user.imageUrl || undefined),
+      bio: chatUser?.bio,
+      pronouns: chatUser?.pronouns,
+      presence_platforms: chatUser?.presence_platforms,
       status: chatUser?.status || (typeof window !== "undefined" ? localStorage.getItem("user-status") as any : null) || "online",
       custom_status: chatUser?.custom_status,
     };

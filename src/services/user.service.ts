@@ -3,6 +3,7 @@
  */
 
 import type { ProfileAssetKind } from "@/lib/profile-assets";
+import { ensureUserProfileSchema } from "@/lib/ensure-user-profile-schema";
 import { ServiceError } from "@/lib/service-error";
 import { withVersionedAssetUrl } from "@/lib/versioned-asset-url";
 import {
@@ -34,6 +35,7 @@ export interface UserProfile {
   media_content_filter: string;
   updated_at: string | null;
   bio: string | null;
+  pronouns: string | null;
   status: string;
   custom_status: string | null;
 }
@@ -56,8 +58,10 @@ export async function getMe(
   db: D1Database,
   userId: string
 ): Promise<UserProfile> {
+  await ensureUserProfileSchema(db);
+
   const user = await db
-    .prepare(`SELECT id, username, display_name, avatar_url, avatar_display, banner_url, banner_content_type, nameplate_url, nameplate_content_type, profile_accent_color, profile_background_color, profile_banner_color, display_name_style, theme_preference, theme_sync_enabled, media_content_filter, updated_at, bio, status, custom_status FROM users WHERE id = ?`)
+    .prepare(`SELECT id, username, display_name, avatar_url, avatar_display, banner_url, banner_content_type, nameplate_url, nameplate_content_type, profile_accent_color, profile_background_color, profile_banner_color, display_name_style, theme_preference, theme_sync_enabled, media_content_filter, updated_at, bio, pronouns, status, custom_status FROM users WHERE id = ?`)
     .bind(userId)
     .first<UserProfileRow>();
 
