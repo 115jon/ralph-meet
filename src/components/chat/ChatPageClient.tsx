@@ -22,7 +22,18 @@ import { useChatActions, useChatStore } from "@/stores/chat-store";
 import { useCallStore } from "@/stores/useCallStore";
 import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
 import { useShallow } from "zustand/shallow";
 
 const AudioInteractionModal = lazy(() =>
@@ -55,6 +66,20 @@ const VoiceListenTogetherManager = lazy(() =>
 );
 
 const EMPTY_GRID_ITEMS: never[] = [];
+const TAILWIND_SPACING_UNIT_PX = 4;
+const SERVER_RAIL_SPACING_UNITS = 18;
+const SERVER_RAIL_WIDTH_PX = SERVER_RAIL_SPACING_UNITS * TAILWIND_SPACING_UNIT_PX;
+const CHANNEL_SIDEBAR_MIN_SPACING_UNITS = 52;
+const CHANNEL_SIDEBAR_DEFAULT_SPACING_UNITS = 60;
+const CHANNEL_SIDEBAR_MAX_SPACING_UNITS = 92;
+const CHANNEL_SIDEBAR_RESIZE_STEP_PX = TAILWIND_SPACING_UNIT_PX * 2;
+const CHANNEL_SIDEBAR_MIN_WIDTH_PX = CHANNEL_SIDEBAR_MIN_SPACING_UNITS * TAILWIND_SPACING_UNIT_PX;
+const CHANNEL_SIDEBAR_DEFAULT_WIDTH_PX = CHANNEL_SIDEBAR_DEFAULT_SPACING_UNITS * TAILWIND_SPACING_UNIT_PX;
+const CHANNEL_SIDEBAR_MAX_WIDTH_PX = CHANNEL_SIDEBAR_MAX_SPACING_UNITS * TAILWIND_SPACING_UNIT_PX;
+
+function clampChannelSidebarWidth(width: number) {
+  return Math.min(CHANNEL_SIDEBAR_MAX_WIDTH_PX, Math.max(CHANNEL_SIDEBAR_MIN_WIDTH_PX, width));
+}
 
 function collectUnreadNotificationIds<T extends { id: string; is_read: boolean }>(
   notifications: readonly T[],
@@ -118,6 +143,17 @@ export default function ChatPage() {
   const shouldRenderVoiceAppsModal = useDelayUnmount(!!voiceAppsModal, 200);
   const { shouldRender: shouldRenderProfileUser, value: renderedProfileUser } = useDelayedUnmountValue(profileUser, 200);
   const [dmHomeView, setDmHomeView] = useState<"friends" | "shop">("friends");
+  const [channelSidebarWidth, setChannelSidebarWidth] = useState(CHANNEL_SIDEBAR_DEFAULT_WIDTH_PX);
+  const [isChannelSidebarResizing, setIsChannelSidebarResizing] = useState(false);
+  const channelSidebarResizeStateRef = useRef<{ startWidth: number; startX: number } | null>(null);
+
+  const channelSidebarStyle = useMemo(
+    () => ({
+      "--channel-sidebar-width": `${channelSidebarWidth}px`,
+      "--left-nav-width": `${SERVER_RAIL_WIDTH_PX + channelSidebarWidth}px`,
+    }) as CSSProperties,
+    [channelSidebarWidth],
+  );
 
   useEffect(() => {
     onSoundInteractionNeeded(() => setShowAudioModal(true));
@@ -169,6 +205,9 @@ export default function ChatPage() {
     ?? user?.display_name
     ?? user?.username
     ?? "You";
+  const setClampedChannelSidebarWidth = useCallback((nextWidth: number) => {
+    setChannelSidebarWidth(clampChannelSidebarWidth(nextWidth));
+  }, []);
 
   const voiceChannelName = voiceState.channelName ?? "Voice";
   const voiceServerName = useMemo(
@@ -380,11 +419,79 @@ export default function ChatPage() {
     attemptPendingStreamFocus();
   }, [attemptPendingStreamFocus]);
 
+  useEffect(() => {
+    if (!isChannelSidebarResizing) return;
+
+    const previousCursor = document.body.style.cursor;
+    const previousUserSelect = document.body.style.userSelect;
+    const stopResizing = () => {
+      setIsChannelSidebarResizing(false);
+      channelSidebarResizeStateRef.current = null;
+    };
+    const handlePointerMove = (event: PointerEvent) => {
+      const currentResizeState = channelSidebarResizeStateRef.current;
+      if (!currentResizeState) return;
+
+      setClampedChannelSidebarWidth(currentResizeState.startWidth + event.clientX - currentResizeState.startX);
+    };
+
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", stopResizing);
+    window.addEventListener("pointercancel", stopResizing);
+    window.addEventListener("blur", stopResizing);
+
+    return () => {
+      document.body.style.cursor = previousCursor;
+      document.body.style.userSelect = previousUserSelect;
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", stopResizing);
+      window.removeEventListener("pointercancel", stopResizing);
+      window.removeEventListener("blur", stopResizing);
+    };
+  }, [isChannelSidebarResizing, setClampedChannelSidebarWidth]);
+
   const handleWatchLiveStream = useCallback((channelId: string, userId: string) => {
     pendingStreamFocusRef.current = { channelId, userId };
     guardedSelectChannel(channelId, { forceVoiceJoin: true });
     attemptPendingStreamFocus();
   }, [attemptPendingStreamFocus, guardedSelectChannel]);
+
+  const handleChannelSidebarResizeStart = useCallback((event: ReactPointerEvent<HTMLButtonElement>) => {
+    if (event.button !== 0) return;
+
+    event.preventDefault();
+    channelSidebarResizeStateRef.current = {
+      startWidth: channelSidebarWidth,
+      startX: event.clientX,
+    };
+    setIsChannelSidebarResizing(true);
+  }, [channelSidebarWidth]);
+
+  const handleChannelSidebarResizeKeyDown = useCallback((event: ReactKeyboardEvent<HTMLButtonElement>) => {
+    switch (event.key) {
+      case "ArrowLeft":
+        event.preventDefault();
+        setClampedChannelSidebarWidth(channelSidebarWidth - CHANNEL_SIDEBAR_RESIZE_STEP_PX);
+        return;
+      case "ArrowRight":
+        event.preventDefault();
+        setClampedChannelSidebarWidth(channelSidebarWidth + CHANNEL_SIDEBAR_RESIZE_STEP_PX);
+        return;
+      case "Home":
+        event.preventDefault();
+        setChannelSidebarWidth(CHANNEL_SIDEBAR_MIN_WIDTH_PX);
+        return;
+      case "End":
+        event.preventDefault();
+        setChannelSidebarWidth(CHANNEL_SIDEBAR_MAX_WIDTH_PX);
+        return;
+      default:
+        return;
+    }
+  }, [channelSidebarWidth, setClampedChannelSidebarWidth]);
 
   const handleSwitchConfirm = useCallback(() => {
     const ps = pendingSwitchRef.current;
@@ -626,9 +733,9 @@ export default function ChatPage() {
         <div className="flex w-12" /> {/* Spacer for symmetry */}
       </div>
 
-      <div className="flex flex-1 overflow-hidden relative">
+      <div className="flex flex-1 overflow-hidden relative" style={channelSidebarStyle}>
         {/* Server icon strip */}
-        <div className={`z-50 flex w-[72px] shrink-0 flex-col items-center overflow-y-auto bg-rm-bg-floating scrollbar-none max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:z-[110] max-md:transition-transform max-md:duration-300 ${sidebarOpen ? "max-md:translate-x-0" : "max-md:-translate-x-full"}`}>
+        <div className={`z-50 flex w-[calc(var(--spacing)*18)] shrink-0 flex-col items-center overflow-y-auto bg-rm-bg-floating scrollbar-none max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:z-[110] max-md:transition-transform max-md:duration-300 ${sidebarOpen ? "max-md:translate-x-0" : "max-md:-translate-x-full"}`}>
           <ServerList
             servers={servers}
             activeServerId={activeServerId}
@@ -696,62 +803,90 @@ export default function ChatPage() {
 
         {/* Channel sidebar */}
         <div
-          className={`flex w-60 h-full shrink-0 flex-col overflow-hidden bg-rm-sidebar font-sans max-md:fixed max-md:inset-y-0 max-md:left-[72px] max-md:z-[105] max-md:w-[calc(100vw-72px)] max-md:max-w-72 max-md:shadow-2xl max-md:transition-transform max-md:duration-300 ${sidebarOpen ? "max-md:translate-x-0" : "max-md:-translate-x-[calc(100%+72px)]"
-            }`}
-        >
-          {isDmMode ? (
-            <DMSidebar
-              activeChannelId={activeChannelId}
-              activeView={dmHomeView}
-              onSelectDm={(channelId) => {
-                dispatch({ type: "SET_ACTIVE_CHANNEL", channelId });
-                uiDispatch({ type: 'SET_SIDEBAR', open: false });
-              }}
-              onShowFriends={() => {
-                setDmHomeView("friends");
-                uiDispatch({ type: 'SET_SIDEBAR', open: false });
-                dispatch({ type: "SET_ACTIVE_SERVER", serverId: "@me" });
-                dispatch({ type: "SET_ACTIVE_CHANNEL", channelId: null });
-              }}
-              onShowShop={() => {
-                setDmHomeView("shop");
-                uiDispatch({ type: 'SET_SIDEBAR', open: false });
-                dispatch({ type: "SET_ACTIVE_SERVER", serverId: "@me" });
-                dispatch({ type: "SET_ACTIVE_CHANNEL", channelId: null });
-              }}
-            />
-          ) : activeServerId ? (
-            <ChannelSidebar
-              channels={channels}
-              categories={categories}
-              activeChannelId={activeChannelId}
-              serverId={activeServerId}
-              serverName={activeServer?.name ?? "Server"}
-              currentUserId={user?.id ?? null}
-              onSelect={guardedSelectChannel}
-              onInviteClick={() => uiDispatch({ type: 'OPEN_MODAL', modal: 'invite' })}
-              onSettingsClick={() => uiDispatch({ type: 'OPEN_MODAL', modal: 'settings' })}
-              readStates={readStates}
-              lastMessageAt={lastMessageAt}
-              voiceChannelStates={voiceChannelStates}
-              localVoiceChannelId={voiceState.channelId}
-              localVoiceConnected={voiceState.joined}
-              localVoiceSessionId={localStreamState?.sfu?.getParticipantId?.() ?? null}
-              channelMentionCounts={channelMentionCounts}
-              streamPreviewChannelId={localStreamState?.channelId ?? null}
-              streamThumbnails={localStreamState?.streamThumbnails ?? {}}
-              onWatchStream={handleWatchLiveStream}
-              canReorder={hasPermission(currentUserPermissions, PERMISSIONS.MANAGE_CHANNELS) || hasPermission(currentUserPermissions, PERMISSIONS.ADMINISTRATOR)}
-              canManageChannels={hasPermission(currentUserPermissions, PERMISSIONS.MANAGE_CHANNELS) || hasPermission(currentUserPermissions, PERMISSIONS.ADMINISTRATOR)}
-            />
-          ) : (
-            <div className="flex w-60 flex-1 flex-col border-r border-rm-border bg-rm-sidebar">
-              <div className="p-4 text-[13px] text-white/40">
-                Select a server to get started
-              </div>
-            </div>
+          className={cn(
+            "relative flex h-full shrink-0 flex-col overflow-hidden bg-rm-sidebar font-sans md:w-[var(--channel-sidebar-width)] md:min-w-[calc(var(--spacing)*52)] md:max-w-[calc(var(--spacing)*92)] max-md:fixed max-md:inset-y-0 max-md:left-[calc(var(--spacing)*18)] max-md:z-[105] max-md:w-[calc(100vw-(var(--spacing)*18))] max-md:max-w-72 max-md:shadow-2xl max-md:transition-transform max-md:duration-300",
+            sidebarOpen ? "max-md:translate-x-0" : "max-md:-translate-x-[calc(100%+(var(--spacing)*18))]",
           )}
+        >
+          <div className="min-h-0 flex-1 overflow-hidden">
+            {isDmMode ? (
+              <DMSidebar
+                activeChannelId={activeChannelId}
+                activeView={dmHomeView}
+                onSelectDm={(channelId) => {
+                  dispatch({ type: "SET_ACTIVE_CHANNEL", channelId });
+                  uiDispatch({ type: 'SET_SIDEBAR', open: false });
+                }}
+                onShowFriends={() => {
+                  setDmHomeView("friends");
+                  uiDispatch({ type: 'SET_SIDEBAR', open: false });
+                  dispatch({ type: "SET_ACTIVE_SERVER", serverId: "@me" });
+                  dispatch({ type: "SET_ACTIVE_CHANNEL", channelId: null });
+                }}
+                onShowShop={() => {
+                  setDmHomeView("shop");
+                  uiDispatch({ type: 'SET_SIDEBAR', open: false });
+                  dispatch({ type: "SET_ACTIVE_SERVER", serverId: "@me" });
+                  dispatch({ type: "SET_ACTIVE_CHANNEL", channelId: null });
+                }}
+              />
+            ) : activeServerId ? (
+              <ChannelSidebar
+                channels={channels}
+                categories={categories}
+                activeChannelId={activeChannelId}
+                serverId={activeServerId}
+                serverName={activeServer?.name ?? "Server"}
+                currentUserId={user?.id ?? null}
+                onSelect={guardedSelectChannel}
+                onInviteClick={() => uiDispatch({ type: 'OPEN_MODAL', modal: 'invite' })}
+                onSettingsClick={() => uiDispatch({ type: 'OPEN_MODAL', modal: 'settings' })}
+                readStates={readStates}
+                lastMessageAt={lastMessageAt}
+                voiceChannelStates={voiceChannelStates}
+                localVoiceChannelId={voiceState.channelId}
+                localVoiceConnected={voiceState.joined}
+                localVoiceSessionId={localStreamState?.sfu?.getParticipantId?.() ?? null}
+                channelMentionCounts={channelMentionCounts}
+                streamPreviewChannelId={localStreamState?.channelId ?? null}
+                streamThumbnails={localStreamState?.streamThumbnails ?? {}}
+                onWatchStream={handleWatchLiveStream}
+                canReorder={hasPermission(currentUserPermissions, PERMISSIONS.MANAGE_CHANNELS) || hasPermission(currentUserPermissions, PERMISSIONS.ADMINISTRATOR)}
+                canManageChannels={hasPermission(currentUserPermissions, PERMISSIONS.MANAGE_CHANNELS) || hasPermission(currentUserPermissions, PERMISSIONS.ADMINISTRATOR)}
+              />
+            ) : (
+              <div className="flex h-full flex-col border-r border-rm-border bg-rm-sidebar">
+                <div className="p-4 text-[13px] text-white/40">
+                  Select a server to get started
+                </div>
+              </div>
+            )}
+          </div>
 
+          <button
+            type="button"
+            className={cn(
+              "group absolute inset-y-0 right-0 z-[125] hidden w-3 translate-x-1/2 cursor-col-resize items-center justify-center border-0 bg-transparent p-0 outline-none md:flex",
+              isChannelSidebarResizing && "translate-x-1/2",
+            )}
+            onPointerDown={handleChannelSidebarResizeStart}
+            onKeyDown={handleChannelSidebarResizeKeyDown}
+            role="separator"
+            aria-label="Resize sidebar"
+            aria-orientation="vertical"
+            aria-valuemin={CHANNEL_SIDEBAR_MIN_WIDTH_PX}
+            aria-valuemax={CHANNEL_SIDEBAR_MAX_WIDTH_PX}
+            aria-valuenow={channelSidebarWidth}
+          >
+            <span
+              className={cn(
+                "pointer-events-none h-20 w-px rounded-full transition-all duration-150",
+                isChannelSidebarResizing
+                  ? "bg-primary shadow-[0_0_18px_rgba(255,255,255,0.12)]"
+                  : "bg-white/10 group-hover:h-28 group-hover:bg-white/25 group-focus-visible:h-28 group-focus-visible:bg-primary/70",
+              )}
+            />
+          </button>
         </div>
 
         {/* Main content */}
@@ -946,8 +1081,8 @@ export default function ChatPage() {
 	          />
 	        ))}
 
-	        {/* Floating UI anchoring over the navbars */}
-	        <div className={`absolute bottom-0 left-0 z-[120] w-[312px] pointer-events-none p-0 flex justify-start items-end max-md:fixed max-md:w-[min(calc(100vw),360px)] max-md:transition-transform max-md:duration-300 ${sidebarOpen ? "max-md:translate-x-0" : "max-md:-translate-x-full"}`}>
+	        {/* Floating UI anchored over the left nav without changing its location */}
+	        <div className={`absolute bottom-0 left-0 z-[120] w-[var(--left-nav-width)] pointer-events-none p-0 flex justify-start items-end max-md:fixed max-md:w-[min(calc(100vw),360px)] max-md:transition-transform max-md:duration-300 ${sidebarOpen ? "max-md:translate-x-0" : "max-md:-translate-x-full"}`}>
 	          <div className="pointer-events-auto w-full">
 	            <UserPanel
               user={user}
@@ -958,7 +1093,6 @@ export default function ChatPage() {
               voiceChannelName={voiceChannelName}
 	              onVoiceDisconnect={handleVoiceDisconnect}
 	              onVoiceNavigate={handleVoiceNavigate}
-              // Streaming props
               isScreenSharing={localStreamState?.isScreenSharing}
               isStreamingAudio={localStreamState?.isStreamingAudio}
               screenQuality={localStreamState?.screenQuality}
@@ -996,6 +1130,7 @@ export default function ChatPage() {
               roomSlug={localStreamState?.roomSlug}
               voiceSessionId={localStreamState?.voiceSessionId}
               onOpenActivities={() => setVoiceAppsModal("activities")}
+              sidebarWidthPx={channelSidebarWidth}
             />
           </div>
         </div>

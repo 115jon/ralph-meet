@@ -31,6 +31,9 @@ const EMPTY_QUALITIES: string[] = [];
 const EMPTY_GRID_ITEMS: any[] = [];
 const EMPTY_WATCHERS_BY_STREAMER: StreamWatchersByStreamer = {};
 const SCREEN_SHARE_QUALITIES = getAvailableStreamQualities();
+const TAILWIND_SPACING_UNIT_PX = 4;
+const USER_PANEL_USERNAME_HIDE_WIDTH_PX = TAILWIND_SPACING_UNIT_PX * 56;
+const USER_PANEL_IDENTITY_HIDE_WIDTH_PX = TAILWIND_SPACING_UNIT_PX * 54;
 const VoiceDashboard = lazy(() =>
   import("@/components/chat/VoiceDashboard").then((mod) => ({ default: mod.VoiceDashboard }))
 );
@@ -78,6 +81,7 @@ interface Props {
   voiceSessionId?: string | null;
   onOpenActivities?: () => void;
   onOpenSoundboard?: () => void;
+  sidebarWidthPx?: number;
 }
 
 const statusColors: Record<string, string> = {
@@ -359,6 +363,7 @@ export default function UserPanel({
   voiceSessionId,
   onOpenActivities,
   onOpenSoundboard,
+  sidebarWidthPx,
 }: Props) {
   const { updateStatus } = useChatActions();
   const speakingUsers = useChatStore(s => s.speakingUsers);
@@ -443,6 +448,8 @@ export default function UserPanel({
   // When a VC IS active, the prop overrides (it comes from the same store anyway).
   const globalDevices = useDeviceAvailability();
   const effectiveHasMic = hasMicrophone ?? globalDevices.hasMicrophone;
+  const showIdentity = !sidebarWidthPx || sidebarWidthPx > USER_PANEL_IDENTITY_HIDE_WIDTH_PX;
+  const showUsername = !sidebarWidthPx || sidebarWidthPx > USER_PANEL_USERNAME_HIDE_WIDTH_PX;
 
   if (!user) return null;
 
@@ -525,6 +532,7 @@ export default function UserPanel({
         {/* User Info Bar */}
         <div className={cn(
           "flex items-center gap-2 p-1.5 relative z-10 overflow-hidden",
+          !showIdentity && "gap-1.5",
           hasNameplate && "isolate",
           (voiceConnected || callActive) && "border-t border-white/5"
         )}
@@ -608,40 +616,46 @@ export default function UserPanel({
             </TooltipContent>
           </Tooltip>
 
-          <div className={cn(
-            "relative z-10 min-w-0 flex-1 py-1 cursor-pointer group/name rounded-[12px] px-2 -ml-1 transition-colors",
-            hasNameplate ? "hover:bg-white/10" : "hover:bg-rm-bg-hover/50"
-          )}
-          style={hasNameplate && nameplateTheme ? {
-            backgroundColor: nameplateTheme.softCardBg,
-            border: `1px solid ${nameplateTheme.softCardBorder}`,
-            boxShadow: `0 10px 24px ${nameplateTheme.rowGlow}`,
-          } : undefined}>
-            <UserDisplayName
-              user={user}
-              className={cn(
-                "block truncate text-[13px] font-bold leading-tight",
-                hasNameplate
-                  ? "drop-shadow-none"
-                  : "text-rm-text-primary",
-              )}
-              style={hasNameplate && nameplateTheme
-                ? {
-                    color: user.display_name_style ? undefined : nameplateTheme.textStrong,
-                    textShadow: nameplateTheme.textShadow,
-                  }
-                : undefined}
-            />
-            <p className={cn(
-              "truncate text-[11px] leading-tight",
-              hasNameplate
-                ? "drop-shadow-none"
-                : "text-rm-text-muted"
+          {showIdentity ? (
+            <div className={cn(
+              "relative z-10 min-w-0 flex-1 py-1 cursor-pointer group/name rounded-[12px] px-2 -ml-1 transition-colors",
+              hasNameplate ? "hover:bg-white/10" : "hover:bg-rm-bg-hover/50"
             )}
-            style={hasNameplate && nameplateTheme ? { color: nameplateTheme.textMuted, textShadow: nameplateTheme.textShadow } : undefined}>
-              {userHandle}
-            </p>
-          </div>
+            style={hasNameplate && nameplateTheme ? {
+              backgroundColor: nameplateTheme.softCardBg,
+              border: `1px solid ${nameplateTheme.softCardBorder}`,
+              boxShadow: `0 10px 24px ${nameplateTheme.rowGlow}`,
+            } : undefined}>
+              <UserDisplayName
+                user={user}
+                className={cn(
+                  "block truncate text-[13px] font-bold leading-tight",
+                  hasNameplate
+                    ? "drop-shadow-none"
+                    : "text-rm-text-primary",
+                )}
+                style={hasNameplate && nameplateTheme
+                  ? {
+                      color: user.display_name_style ? undefined : nameplateTheme.textStrong,
+                      textShadow: nameplateTheme.textShadow,
+                    }
+                  : undefined}
+              />
+              {showUsername && (
+                <p className={cn(
+                  "truncate text-[11px] leading-tight",
+                  hasNameplate
+                    ? "drop-shadow-none"
+                    : "text-rm-text-muted"
+                )}
+                style={hasNameplate && nameplateTheme ? { color: nameplateTheme.textMuted, textShadow: nameplateTheme.textShadow } : undefined}>
+                  {userHandle}
+                </p>
+              )}
+            </div>
+          ) : (
+            <div className="flex-1" aria-hidden="true" />
+          )}
 
           <div className="relative z-10 flex items-center -mr-1">
             {/* Mic Group */}
