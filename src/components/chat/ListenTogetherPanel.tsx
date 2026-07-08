@@ -1,7 +1,6 @@
 import { AvatarImage } from "@/components/chat/AvatarImage";
 import { apiGet, apiPost } from "@/lib/api-client";
 import {
-  clampListenTogetherPosition,
   getListenTogetherInputMode,
   type ListenTogetherEnqueueMode,
   type ListenTogetherResolveResponse,
@@ -14,18 +13,20 @@ import { getAuthAssetUrl } from "@/lib/platform";
 import type { SFUClient } from "@/lib/sfu-client";
 import { cn } from "@/lib/utils";
 import { useChatStore } from "@/stores/chat-store";
-import { useListenTogetherStore } from "@/stores/useListenTogetherStore";
+import { ListenTogetherNowPlayingCard } from "./ListenTogetherNowPlayingCard";
 import {
-  ChevronRight,
+  formatListenTogetherDuration,
+  useListenTogetherPlaybackState,
+} from "./listen-together-playback";
+import {
   Headphones,
   Link2,
   Loader2,
-  Pause,
   Play,
   Search,
   Trash2,
 } from "lucide-react";
-import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 
 interface ListenTogetherPanelProps {
   sfu: SFUClient | null;
@@ -34,19 +35,6 @@ interface ListenTogetherPanelProps {
   serverId?: string | null;
   channelId?: string | null;
   localUserId?: string | null;
-}
-
-function formatDuration(durationMs?: number | null) {
-  if (!durationMs || durationMs <= 0) return "--:--";
-  const totalSeconds = Math.floor(durationMs / 1000);
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = totalSeconds % 60;
-
-  if (hours > 0) {
-    return `${hours}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
-  }
-  return `${minutes}:${String(seconds).padStart(2, "0")}`;
 }
 
 function buildResolveFeedback(response: ListenTogetherResolveResponse) {
@@ -65,16 +53,8 @@ export function ListenTogetherPanel({
   channelId,
   localUserId,
 }: ListenTogetherPanelProps) {
-  const snapshot = useListenTogetherStore((state) =>
-    roomSlug ? state.rooms[roomSlug]?.snapshot ?? null : null,
-  );
-  const localVolume = useListenTogetherStore((state) =>
-    roomSlug ? state.rooms[roomSlug]?.localVolume ?? 1 : 1,
-  );
-  const error = useListenTogetherStore((state) =>
-    roomSlug ? state.rooms[roomSlug]?.error ?? null : null,
-  );
-  const setLocalVolume = useListenTogetherStore((state) => state.setLocalVolume);
+  const playback = useListenTogetherPlaybackState(roomSlug);
+  const { error, snapshot } = playback;
   const currentUser = useChatStore((state) => state.user);
   const searchRequestIdRef = useRef(0);
 
@@ -84,8 +64,6 @@ export function ListenTogetherPanel({
   const [isSearching, setIsSearching] = useState(false);
   const [isResolving, setIsResolving] = useState(false);
   const [resolveFeedback, setResolveFeedback] = useState<string | null>(null);
-  const [snapshotReceivedAtMs, setSnapshotReceivedAtMs] = useState(() => Date.now());
-  const [playbackNowMs, setPlaybackNowMs] = useState(() => Date.now());
 
   const trimmedInput = inputValue.trim();
   const inputMode = useMemo(
@@ -120,24 +98,7 @@ export function ListenTogetherPanel({
     });
   }, [roomSlug, sfu]);
 
-  useEffect(() => {
-    setSnapshotReceivedAtMs(Date.now());
-    setPlaybackNowMs(Date.now());
-  }, [snapshot]);
-
-  useEffect(() => {
-    if (!snapshot?.currentEntry || snapshot.paused) return;
-
-    const interval = window.setInterval(() => {
-      setPlaybackNowMs(Date.now());
-    }, 250);
-
-    return () => {
-      window.clearInterval(interval);
-    };
-  }, [snapshot?.currentEntry, snapshot?.paused]);
-
-  const runSearch = async (query: string, signal?: AbortSignal) => {
+  const runSearch = useCallback(async (query: string, signal?: AbortSignal) => {
     if (!roomSlug || !voiceSessionHeaders || !query) {
       if (!signal?.aborted) {
         setSearchResults([]);
@@ -179,7 +140,7 @@ export function ListenTogetherPanel({
         setIsSearching(false);
       }
     }
-  };
+  }, [channelId, roomSlug, searchFilter, serverId, voiceSessionHeaders]);
 
   useEffect(() => {
     if (!roomSlug || !voiceSessionHeaders) {
@@ -206,7 +167,7 @@ export function ListenTogetherPanel({
       controller.abort();
       window.clearTimeout(timer);
     };
-  }, [deferredSearchQuery, roomSlug, searchFilter, voiceSessionHeaders, serverId, channelId]);
+  }, [deferredSearchQuery, roomSlug, runSearch, voiceSessionHeaders]);
 
   const sendCommand = (payload: Record<string, unknown>) => {
     if (!sfu || !roomSlug) return;
@@ -278,15 +239,6 @@ export function ListenTogetherPanel({
     }
   };
 
-  const currentEntry = snapshot?.currentEntry ?? null;
-  const durationMs = snapshot?.durationMs ?? currentEntry?.track.durationMs ?? 0;
-  const effectiveSeekValue = snapshot
-    ? clampListenTogetherPosition(
-      snapshot.positionMs + (snapshot.paused ? 0 : Math.max(0, playbackNowMs - snapshotReceivedAtMs)),
-      durationMs,
-    )
-    : 0;
-  const progressMax = Math.max(1, durationMs);
   const isResolveMode = inputMode === "resolve";
 
   return (
@@ -418,11 +370,11 @@ export function ListenTogetherPanel({
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="truncate text-sm font-bold text-rm-text">{result.title}</div>
-                      <div className="mt-1 truncate text-xs text-rm-text-muted">
-                        {isTrack
-                          ? [result.artist, formatDuration(result.durationMs)].filter(Boolean).join(" • ")
-                          : [result.subtitle, `${result.itemCount} items`].filter(Boolean).join(" • ")}
-                      </div>
+                        <div className="mt-1 truncate text-xs text-rm-text-muted">
+                          {isTrack
+                            ? [result.artist, formatListenTogetherDuration(result.durationMs)].filter(Boolean).join(" • ")
+                            : [result.subtitle, `${result.itemCount} items`].filter(Boolean).join(" • ")}
+                        </div>
                       <div className="mt-3 flex flex-wrap gap-2">
                         {isTrack ? (
                           <>
@@ -466,146 +418,12 @@ export function ListenTogetherPanel({
             Now Playing
           </div>
           <div className="p-4">
-            {currentEntry ? (
-              <div className="space-y-4">
-                <div className="flex gap-3">
-                  <div className="h-16 w-16 shrink-0 overflow-hidden rounded-[20px] bg-rm-bg-elevated/60">
-                    {currentEntry.track.artworkUrl ? (
-                      <img src={currentEntry.track.artworkUrl} alt="" className="h-full w-full object-cover" />
-                    ) : (
-                      <div className="flex h-full w-full items-center justify-center text-rm-text-muted">
-                        <Headphones className="h-5 w-5" />
-                      </div>
-                    )}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate text-base font-black text-rm-text">{currentEntry.track.title}</div>
-                    <div className="mt-1 truncate text-sm text-rm-text-muted">
-                      {[currentEntry.track.artist, currentEntry.track.album].filter(Boolean).join(" • ") || currentEntry.track.sourceLabel}
-                    </div>
-                    <div className="mt-3 flex items-center gap-2 text-xs text-rm-text-muted">
-                      <div className="h-6 w-6 overflow-hidden rounded-full bg-rm-bg-hover">
-                        {currentEntry.requester.avatarUrl ? (
-                          <AvatarImage
-                            src={getAuthAssetUrl(currentEntry.requester.avatarUrl)}
-                            alt=""
-                            display={currentEntry.requester.avatarDisplay}
-                          />
-                        ) : null}
-                      </div>
-                      <span className="truncate">Requested by {currentEntry.requester.displayName}</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div>
-                  <div className="mb-2 flex items-center justify-between text-xs text-rm-text-muted">
-                    <span>{formatDuration(effectiveSeekValue)}</span>
-                    <span>{formatDuration(durationMs)}</span>
-                  </div>
-                  <input
-                    type="range"
-                    min={0}
-                    max={progressMax}
-                    value={Math.min(effectiveSeekValue, progressMax)}
-                    onChange={(event) => {
-                      if (!roomSlug) return;
-                      sendCommand({
-                        type: "listen_together.seek",
-                        room_slug: roomSlug,
-                        positionMs: Number(event.currentTarget.value),
-                      });
-                    }}
-                    className="h-1.5 w-full cursor-pointer accent-primary"
-                  />
-                </div>
-
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (!roomSlug) return;
-                      sendCommand({
-                        type: "listen_together.pause",
-                        room_slug: roomSlug,
-                        paused: !snapshot?.paused,
-                      });
-                    }}
-                    className="inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/15 px-3 py-2 text-xs font-bold text-primary transition hover:bg-primary/20"
-                  >
-                    {snapshot?.paused ? <Play className="h-3.5 w-3.5" /> : <Pause className="h-3.5 w-3.5" />}
-                    {snapshot?.paused ? "Resume" : "Pause"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (!roomSlug) return;
-                      sendCommand({
-                        type: "listen_together.skip",
-                        room_slug: roomSlug,
-                      });
-                    }}
-                    className="inline-flex items-center gap-2 rounded-full border border-rm-border bg-rm-bg-elevated/60 px-3 py-2 text-xs font-bold text-rm-text transition hover:bg-rm-bg-active"
-                  >
-                    <ChevronRight className="h-3.5 w-3.5" />
-                    Skip
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (!roomSlug || !currentEntry) return;
-                      sendCommand({
-                        type: "listen_together.remove",
-                        room_slug: roomSlug,
-                        entryId: currentEntry.entryId,
-                      });
-                    }}
-                    className="inline-flex items-center gap-2 rounded-full border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs font-bold text-red-300 transition hover:bg-red-500/15"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                    Remove
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (!roomSlug) return;
-                      sendCommand({
-                        type: "listen_together.clear",
-                        room_slug: roomSlug,
-                      });
-                    }}
-                    className="inline-flex items-center gap-2 rounded-full border border-rm-border bg-rm-bg-hover px-3 py-2 text-xs font-bold text-rm-text-muted transition hover:text-rm-text"
-                  >
-                    Clear Queue
-                  </button>
-                </div>
-
-                <label className="block rounded-[20px] border border-rm-border bg-rm-bg-hover/40 px-3 py-3">
-                  <div className="mb-2 flex items-center justify-between text-[11px] font-black uppercase tracking-[0.16em] text-rm-text-muted">
-                    <span>Your Volume</span>
-                    <span>{Math.round(localVolume * 100)}%</span>
-                  </div>
-                  <div className="mb-2 text-[11px] text-rm-text-muted/80">
-                    Local only. This changes how you hear the shared player.
-                  </div>
-                  <input
-                    type="range"
-                    min={0}
-                    max={100}
-                    value={Math.round(localVolume * 100)}
-                    onChange={(event) => {
-                      if (!roomSlug) return;
-                      setLocalVolume(roomSlug, Number(event.currentTarget.value) / 100);
-                    }}
-                    className="h-1.5 w-full cursor-pointer accent-primary"
-                  />
-                </label>
-              </div>
-            ) : (
-              <div className="rounded-[22px] border border-dashed border-rm-border bg-rm-bg-hover/30 px-4 py-10 text-center text-sm text-rm-text-muted">
-                Queue a track to start listening together.
-              </div>
-            )}
+            <ListenTogetherNowPlayingCard
+              playback={playback}
+              sfu={sfu}
+              roomSlug={roomSlug}
+              variant="panel"
+            />
           </div>
         </div>
 
@@ -647,7 +465,7 @@ export function ListenTogetherPanel({
                             {[entry.track.artist, entry.requester.displayName].filter(Boolean).join(" • ")}
                           </div>
                           <div className="mt-1 truncate text-xs text-rm-text-muted">
-                            {[entry.track.artist, formatDuration(entry.track.durationMs)].filter(Boolean).join(" • ")
+                            {[entry.track.artist, formatListenTogetherDuration(entry.track.durationMs)].filter(Boolean).join(" • ")
                               || entry.track.sourceLabel}
                           </div>
                           <div className="hidden">
@@ -655,7 +473,7 @@ export function ListenTogetherPanel({
                               {entry.track.sourceLabel}
                             </span>
                             <span className="rounded-full border border-rm-border bg-rm-bg-elevated/40 px-2 py-1">
-                              {formatDuration(entry.track.durationMs)}
+                              {formatListenTogetherDuration(entry.track.durationMs)}
                             </span>
                             {entry.importBatchLabel && (
                               <span className="rounded-full border border-rm-border bg-rm-bg-elevated/40 px-2 py-1">
@@ -669,7 +487,7 @@ export function ListenTogetherPanel({
                                 {entry.requester.avatarUrl ? (
                                   <AvatarImage
                                     src={getAuthAssetUrl(entry.requester.avatarUrl)}
-                                    alt=""
+                                    alt={`${entry.requester.displayName} avatar`}
                                     display={entry.requester.avatarDisplay}
                                   />
                                 ) : (

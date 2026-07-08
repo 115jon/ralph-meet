@@ -14,6 +14,8 @@ import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, lazy, Suspense } from "react";
 import { createPortal } from "react-dom";
 import { useDelayUnmount } from "@/hooks/useDelayUnmount";
+import { ListenTogetherNowPlayingCard } from "./ListenTogetherNowPlayingCard";
+import { useListenTogetherPlaybackState } from "./listen-together-playback";
 import { AppWindow, AudioWaveform } from "lucide-react";
 import {
   Gamepad2,
@@ -125,7 +127,7 @@ export function VoiceDashboard({
   voiceSessionId,
   serverId,
   onOpenActivities,
-  onOpenSoundboard: _onOpenSoundboard,
+  onOpenSoundboard,
   showNoiseReductionShortcut = true,
 }: VoiceDashboardProps) {
   const [isStreamMenuOpen, setIsStreamMenuOpen] = useState(false);
@@ -138,6 +140,7 @@ export function VoiceDashboard({
   const shouldRenderStickerPicker = useDelayUnmount(isStickerPickerOpen, 200);
   const [isSoundboardPickerOpen, setIsSoundboardPickerOpen] = useState(false);
   const shouldRenderSoundboardPicker = useDelayUnmount(isSoundboardPickerOpen, 200);
+  const [soundboardInitialView, setSoundboardInitialView] = useState<"soundboard" | "listenTogether">("soundboard");
   const [isNoiseReductionOpen, setIsNoiseReductionOpen] = useState(false);
   const shouldRenderNoiseReduction = useDelayUnmount(isNoiseReductionOpen, 200);
   const stickerBtnRef = useRef<HTMLButtonElement>(null);
@@ -155,6 +158,7 @@ export function VoiceDashboard({
   const spatialBtnRef = useRef<HTMLButtonElement>(null);
   const settings = useVoiceSettingsStore((s) => s.getSettings(voiceSettingsUserId));
   const updateUserSettings = useVoiceSettingsStore((s) => s.updateUserSettings);
+  const listenTogetherPlayback = useListenTogetherPlaybackState(roomSlug);
   const localStreamWatchers = localUserId ? (watchersByStreamer[localUserId] ?? []) : [];
   const streamQualityBadge = formatScreenQualityBadge(screenQuality);
   const hasSpecificStreamSource = !!(
@@ -185,6 +189,16 @@ export function VoiceDashboard({
   const streamSourceIcon = currentScreenSource?.sourceIcon?.trim() || null;
   const alwaysShowStreamPreview = !!settings.alwaysShowStreamPreview;
   const gifPickerVoiceMode = useMemo(() => (sfu ? { sfu } : null), [sfu]);
+  const toggleSoundboardPicker = () => {
+    onOpenSoundboard?.();
+    setSoundboardInitialView("soundboard");
+    setIsSoundboardPickerOpen((value) => !value);
+  };
+  const openListenTogetherPicker = () => {
+    onOpenSoundboard?.();
+    setSoundboardInitialView("listenTogether");
+    setIsSoundboardPickerOpen(true);
+  };
 
   useLayoutEffect(() => {
     if (!shouldRenderNoiseReduction || !noiseReductionBtnRef.current || !noiseReductionPanelRef.current) {
@@ -259,9 +273,19 @@ export function VoiceDashboard({
 
   return (
     <TooltipProvider delayDuration={0}>
-      <div className="p-2 space-y-2 animate-in slide-in-from-bottom-5 duration-300">
-        {/* VOICE CONNECTED HEADER */}
-        <div className="group/voice-status mx-1 flex items-center gap-2 rounded-lg px-1.5 py-1">
+      <div className="animate-in slide-in-from-bottom-5 duration-300">
+        <ListenTogetherNowPlayingCard
+          playback={listenTogetherPlayback}
+          sfu={sfu}
+          roomSlug={roomSlug}
+          variant="mini"
+          onOpenQueue={openListenTogetherPicker}
+          className="mx-2 mt-2 mb-1"
+        />
+
+        <div className="p-2 space-y-2">
+          {/* VOICE CONNECTED HEADER */}
+          <div className="group/voice-status mx-1 flex items-center gap-2 rounded-lg px-1.5 py-1">
           <div className="flex shrink-0 items-center">
             <div className="relative">
               <Tooltip>
@@ -407,9 +431,9 @@ export function VoiceDashboard({
               </TooltipContent>
             </Tooltip>
           </div>
-        </div>
+          </div>
 
-        {shouldRenderNoiseReduction && createPortal(
+          {shouldRenderNoiseReduction && createPortal(
           <>
             <button
               type="button"
@@ -442,11 +466,11 @@ export function VoiceDashboard({
             </div>
           </>,
           document.body
-        )}
+          )}
 
-        {/* STREAMING STATUS */}
-        {isScreenSharing && (
-          <div className="bg-rm-bg-elevated/50 rounded-lg p-2.5 border border-rm-border shadow-xl space-y-3 mx-1 mt-1">
+          {/* STREAMING STATUS */}
+          {isScreenSharing && (
+            <div className="bg-rm-bg-elevated/50 rounded-lg p-2.5 border border-rm-border shadow-xl space-y-3 mx-1 mt-1">
             <div className="flex items-start gap-2.5">
               <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/15 text-primary ring-1 ring-primary/20 overflow-hidden">
                 {streamSourceIcon ? (
@@ -588,12 +612,12 @@ export function VoiceDashboard({
                 )}
               </div>
             </div>
-          </div>
-        )}
+            </div>
+          )}
 
-        {/* ACTION BUTTON GRID */}
-        <div className="px-3 pt-1 pb-2">
-          <div className="flex items-center justify-between gap-2">
+          {/* ACTION BUTTON GRID */}
+          <div className="px-3 pt-1 pb-2">
+            <div className="flex items-center justify-between gap-2">
             <Tooltip>
               <TooltipTrigger asChild>
                 <button
@@ -675,14 +699,12 @@ export function VoiceDashboard({
             <div className="relative flex-1">
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <button
-                    type="button"
-                    ref={soundboardBtnRef}
-                    onClick={() => {
-                      setIsSoundboardPickerOpen((v) => !v);
-                    }}
-                    className={cn(
-                      "flex w-full h-8 items-center justify-center rounded-[8px] transition-all outline-none border group",
+                    <button
+                      type="button"
+                      ref={soundboardBtnRef}
+                      onClick={toggleSoundboardPicker}
+                      className={cn(
+                        "flex w-full h-8 items-center justify-center rounded-[8px] transition-all outline-none border group",
                       isSoundboardPickerOpen
                         ? "bg-[#5865f2]/20 border-[#5865f2]/40 text-[#5865f2]"
                         : "bg-rm-bg-elevated/40 border-white/5 text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover"
@@ -701,6 +723,7 @@ export function VoiceDashboard({
                     onClose={() => setIsSoundboardPickerOpen(false)}
                     placement="top-start"
                     markerRef={soundboardBtnRef}
+                    initialView={soundboardInitialView}
                     sfu={sfu}
                     serverId={serverId}
                     channelId={voiceChannelId}
@@ -738,6 +761,7 @@ export function VoiceDashboard({
                 </TooltipContent>
               </Tooltip>
             )}
+            </div>
           </div>
         </div>
 

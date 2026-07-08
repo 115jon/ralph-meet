@@ -54,6 +54,7 @@ interface Props {
   onClose: () => void;
   placement?: "top-start" | "top-end" | "bottom-start" | "bottom-end";
   markerRef?: React.RefObject<HTMLElement | null>;
+  initialView?: SoundboardView;
   sfu: SFUClient | null;
   serverId?: string | null;
   channelId?: string | null;
@@ -256,6 +257,7 @@ export default function SoundboardPicker({
   onClose,
   placement = "top-start",
   markerRef,
+  initialView = "soundboard",
   sfu,
   serverId,
   channelId,
@@ -263,7 +265,7 @@ export default function SoundboardPicker({
   voiceSessionId,
   localUserId,
 }: Props) {
-  const [activeView, setActiveView] = useState<SoundboardView>("soundboard");
+  const [activeView, setActiveView] = useState<SoundboardView>(initialView);
   const [dynamicStyle, setDynamicStyle] = useState<React.CSSProperties>({ opacity: 0 });
   const [search, setSearch] = useState("");
   const deferredSearch = useDeferredValue(search.trim());
@@ -288,6 +290,10 @@ export default function SoundboardPicker({
   });
   const [activeCategory, setActiveCategory] = useState<string>(FAVORITES_SECTION_ID);
   const pendingJumpIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    setActiveView(initialView);
+  }, [initialView]);
 
   const [myInstantsQuery, setMyInstantsQuery] = useState("");
   const [myInstantsResults, setMyInstantsResults] = useState<MyInstantsSound[]>([]);
@@ -578,7 +584,6 @@ export default function SoundboardPicker({
   };
 
   useEffect(() => {
-    let frameId: number;
     const updatePosition = () => {
       if (!markerRef?.current) {
         setDynamicStyle({ opacity: 1 });
@@ -628,7 +633,7 @@ export default function SoundboardPicker({
       setDynamicStyle(style);
     };
 
-    frameId = window.requestAnimationFrame(updatePosition);
+    const frameId = window.requestAnimationFrame(updatePosition);
     window.addEventListener("resize", updatePosition);
     return () => {
       window.removeEventListener("resize", updatePosition);
