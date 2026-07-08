@@ -1,8 +1,8 @@
 import type { SFUClient } from "@/lib/sfu-client";
 import { cn } from "@/lib/utils";
-import { useVoiceActivityStore } from "@/stores/useVoiceActivityStore";
+import { type VoiceActivityType, useVoiceActivityStore } from "@/stores/useVoiceActivityStore";
 import { ChevronLeft, Gamepad2, X } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 
 type Tab = "menu" | "activities";
 
@@ -34,6 +34,18 @@ function WordleLogo() {
   );
 }
 
+function WarpRushLogo() {
+  return (
+    <div className="relative h-11 w-11 overflow-hidden rounded-xl border border-cyan-300/40 bg-[radial-gradient(circle_at_top,#34d399_0%,#0f172a_45%,#020617_100%)] shadow-[0_0_28px_rgba(56,189,248,0.28)]">
+      <div className="absolute inset-x-2 top-2 h-[2px] rotate-[-14deg] bg-cyan-200/90 shadow-[0_0_10px_rgba(34,211,238,0.95)]" />
+      <div className="absolute inset-x-3 top-4 h-[2px] rotate-[-14deg] bg-sky-400/80 shadow-[0_0_12px_rgba(56,189,248,0.9)]" />
+      <div className="absolute bottom-2 left-1/2 h-5 w-5 -translate-x-1/2 rounded-full border border-cyan-300/50 bg-cyan-400/10" />
+      <div className="absolute bottom-3 left-1/2 h-3 w-3 -translate-x-1/2 rounded-full border border-cyan-200/70" />
+      <div className="absolute inset-x-4 bottom-2 h-[2px] rounded-full bg-amber-300/80 shadow-[0_0_14px_rgba(251,191,36,0.9)]" />
+    </div>
+  );
+}
+
 export function VoiceAppsModal({
   isOpen,
   isClosing,
@@ -55,17 +67,17 @@ export function VoiceAppsModal({
     return [...byId.values()];
   }, [gridItems]);
 
-  useEffect(() => {
-    if (!isOpen) return;
+  const handleClose = () => {
     setTab(initialTab);
-  }, [initialTab, isOpen]);
+    onClose();
+  };
 
-  const startWordle = () => {
+  const startActivity = (activity: VoiceActivityType) => {
     if (!localUserId || !channelId) return;
-    const presence = { userId: localUserId, channelId, activity: "wordle" as const, startedAt: Date.now() };
+    const presence = { userId: localUserId, channelId, activity, startedAt: Date.now() };
     setUserActivity(presence);
     sfu?.voiceGW.sendAppEvent({ type: "activity.start", ...presence });
-    onClose();
+    handleClose();
   };
 
   if (!isOpen) return null;
@@ -76,8 +88,8 @@ export function VoiceAppsModal({
         <div className="flex shrink-0 items-center justify-between border-b border-rm-border px-4 py-3 bg-rm-bg-surface/50 backdrop-blur-md">
           <div className="flex items-center gap-2">
             {tab !== "menu" && (
-              <button 
-                onClick={() => setTab("menu")} 
+              <button
+                onClick={() => setTab("menu")}
                 className="rounded-md p-1 -ml-1 text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text transition-colors"
               >
                 <ChevronLeft size={20} />
@@ -87,7 +99,7 @@ export function VoiceAppsModal({
               {tab === "menu" ? "Voice Apps" : "Activities"}
             </h2>
           </div>
-          <button onClick={onClose} className="rounded-md p-1.5 -mr-1.5 text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text transition-colors">
+          <button onClick={handleClose} className="rounded-md p-1.5 -mr-1.5 text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text transition-colors">
             <X size={20} />
           </button>
         </div>
@@ -115,7 +127,7 @@ export function VoiceAppsModal({
           {tab === "activities" && (
             <div className="p-4">
               <button
-                onClick={startWordle}
+                onClick={() => startActivity("wordle")}
                 className="flex w-full items-center gap-4 rounded-lg border border-rm-border bg-rm-bg-surface p-4 text-left hover:bg-rm-bg-hover"
               >
                 <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-white">
@@ -125,6 +137,25 @@ export function VoiceAppsModal({
                   <div className="text-sm font-black text-rm-text">Daily Wordle</div>
                   <div className="mt-1 text-xs leading-5 text-rm-text-muted">
                     Play the shared daily puzzle in the voice stage with group progress and streaks.
+                  </div>
+                </div>
+              </button>
+              <button
+                onClick={() => startActivity("warp-rush")}
+                className="mt-3 flex w-full items-center gap-4 rounded-lg border border-cyan-400/20 bg-[linear-gradient(135deg,rgba(14,116,144,0.16),rgba(15,23,42,0.9))] p-4 text-left hover:border-cyan-300/40 hover:bg-[linear-gradient(135deg,rgba(8,145,178,0.18),rgba(15,23,42,0.98))]"
+              >
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-slate-950/80">
+                  <WarpRushLogo />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2 text-sm font-black text-rm-text">
+                    Warp Rush 3D
+                    <span className="rounded-full border border-cyan-300/40 bg-cyan-400/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.18em] text-cyan-100">
+                      GPU Stress
+                    </span>
+                  </div>
+                  <div className="mt-1 text-xs leading-5 text-rm-text-muted">
+                    A hardware-acceleration workout with instanced debris, bloom, live FPS telemetry, and a shared voice-session leaderboard.
                   </div>
                 </div>
               </button>

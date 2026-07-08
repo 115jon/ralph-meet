@@ -1,6 +1,12 @@
 import { create } from "zustand";
 
-export type VoiceActivityType = "wordle";
+export const VOICE_ACTIVITY_TYPES = ["wordle", "warp-rush"] as const;
+
+export type VoiceActivityType = (typeof VOICE_ACTIVITY_TYPES)[number];
+
+export function isVoiceActivityType(value: unknown): value is VoiceActivityType {
+  return typeof value === "string" && VOICE_ACTIVITY_TYPES.includes(value as VoiceActivityType);
+}
 
 export interface VoiceActivityPresence {
   userId: string;
