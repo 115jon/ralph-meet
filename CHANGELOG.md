@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.17.0](https://github.com/115jon/ralph-meet/compare/v1.16.0...v1.17.0) (2026-07-08)
+
+
+### Features
+
+* **chat:** ✨ add resizable left sidebar ([7562ace](https://github.com/115jon/ralph-meet/commit/7562ace2ea2b6ff4680050dbee85020da0cfe0b4))
+* **profile:** ✨ add live profile metadata and presence surfaces ([7c7c3a8](https://github.com/115jon/ralph-meet/commit/7c7c3a8ea97cdb169abb6aaf45f630e00c78e959))
+
+
+### Bug Fixes
+
+* **channels:** 🐛 preserve decorated names across chat ui ([80cf37b](https://github.com/115jon/ralph-meet/commit/80cf37b8b5c464f622f3644e5ce1809d3cf253f1))
+* **chat:** 🐛 render TikTok embed emoji inline ([8a2d78c](https://github.com/115jon/ralph-meet/commit/8a2d78ccc0f27a83fa5c15d9239efdb14d3aa5ff))
+* **profile:** 🐛 fix themed profile previews and status actions ([ca873ad](https://github.com/115jon/ralph-meet/commit/ca873adeba74fb33ec201426456a33570514e206))
+
 ## [1.16.0](https://github.com/115jon/ralph-meet/compare/v1.15.0...v1.16.0) (2026-07-07)
 
 
