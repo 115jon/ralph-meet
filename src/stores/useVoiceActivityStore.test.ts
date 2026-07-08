@@ -41,4 +41,18 @@ describe("useVoiceActivityStore", () => {
     expect(store.getChannelActivity("voice-1")?.userId).toBe("host");
     expect(store.getUserActivity("guest", "voice-1")).toBeNull();
   });
+
+  it("stores additional activity types without affecting lookup behavior", () => {
+    const store = useVoiceActivityStore.getState();
+
+    store.setUserActivity({
+      userId: "pilot",
+      channelId: "voice-2",
+      activity: "warp-rush",
+      startedAt: 3,
+    });
+
+    expect(store.getChannelActivity("voice-2")?.activity).toBe("warp-rush");
+    expect(store.getUserActivity("pilot", "voice-2")?.activity).toBe("warp-rush");
+  });
 });

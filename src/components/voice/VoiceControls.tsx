@@ -1,6 +1,7 @@
 import { cn } from "@/lib/utils";
 import { lazy, Suspense, useCallback, useMemo, useRef, useState } from "react";
 import type { SFUClient } from "@/lib/sfu-client";
+import type { VoiceActivityType } from "@/stores/useVoiceActivityStore";
 import { CameraSettingsModal } from "../CameraSettingsModal";
 import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
 import { Gamepad2, Headphones, Maximize2, MessageSquare, Mic, MicOff, Minimize, Monitor, MonitorX, Phone, Sticker, Video, VideoOff, X } from "../chat/Icons";
@@ -23,7 +24,7 @@ interface VoiceControlsProps {
   focusedItem: any;
   setFocusedId: (id: string | null) => void;
   handleLeave: () => void;
-  activeActivity?: "wordle" | null;
+  activeActivity?: VoiceActivityType | null;
   leaveActivity?: () => void;
   isFullscreen: boolean;
   toggleFs: () => void;

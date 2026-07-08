@@ -3,7 +3,7 @@ import type { ScreenShareOptions, ScreenShareSourceState } from "@/lib/screen-sh
 import type { StreamWatchersByStreamer } from "@/lib/stream-watchers";
 import { cn } from "@/lib/utils";
 import { getAvailableStreamQualities } from "@/lib/voice/utils";
-import { useVoiceActivityStore } from "@/stores/useVoiceActivityStore";
+import { isVoiceActivityType, useVoiceActivityStore } from "@/stores/useVoiceActivityStore";
 
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ParticipantCard } from "../voice/ParticipantCard";
@@ -12,10 +12,15 @@ import { VoiceGrid } from "../voice/VoiceGrid";
 import { VoiceHeader } from "../voice/VoiceHeader";
 import { VoiceLanding } from "../voice/VoiceLanding";
 import { ChevronUp } from "./Icons";
-import { WordleActivityStage } from "./WordleActivityStage";
 
 const UnifiedScreenShareModal = lazy(() =>
   import("@/components/UnifiedScreenShareModal").then((mod) => ({ default: mod.UnifiedScreenShareModal }))
+);
+const WordleActivityStage = lazy(() =>
+  import("./WordleActivityStage").then((mod) => ({ default: mod.WordleActivityStage }))
+);
+const WarpRushActivityStage = lazy(() =>
+  import("./WarpRushActivityStage").then((mod) => ({ default: mod.WarpRushActivityStage }))
 );
 
 export interface VoiceSessionStreamState {
@@ -171,11 +176,16 @@ export default function VoiceChannelView({
   useEffect(() => {
     if (!sfu) return;
     return sfu.on("app-event", (event) => {
-      if (event.type === "activity.start" && event.channelId === channelId && typeof event.userId === "string") {
+      if (
+        event.type === "activity.start"
+        && event.channelId === channelId
+        && typeof event.userId === "string"
+        && isVoiceActivityType(event.activity)
+      ) {
         setUserActivity({
           userId: event.userId,
           channelId,
-          activity: "wordle",
+          activity: event.activity,
           startedAt: typeof event.startedAt === "number" ? event.startedAt : Date.now(),
         });
       }
@@ -308,6 +318,25 @@ export default function VoiceChannelView({
     }
     return participants;
   }, [gridItems]);
+  const activityStage = activeActivity?.activity === "wordle"
+    ? (
+        <WordleActivityStage
+          sfu={sfu}
+          channelId={channelId}
+          localUserId={localUserId}
+          participants={wordleParticipants}
+        />
+      )
+    : activeActivity?.activity === "warp-rush"
+      ? (
+          <WarpRushActivityStage
+            sfu={sfu}
+            channelId={channelId}
+            localUserId={localUserId}
+            participants={wordleParticipants}
+          />
+        )
+      : null;
 
   // ── Not-connected landing page ──
   if (!joined) {
@@ -367,14 +396,20 @@ export default function VoiceChannelView({
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-h-0 relative">
         <div className="flex-1 relative min-h-0 bg-rm-bg-primary overflow-hidden flex items-center justify-center">
-          {activeActivity?.activity === "wordle" ? (
+          {activityStage ? (
             <div className="h-full w-full pt-16">
-              <WordleActivityStage
-                sfu={sfu}
-                channelId={channelId}
-                localUserId={localUserId}
-                participants={wordleParticipants}
-              />
+              <Suspense
+                fallback={
+                  <div className="flex h-full w-full items-center justify-center bg-[radial-gradient(circle_at_top,rgba(34,211,238,0.18),rgba(2,6,23,0.98)_55%)] px-6 text-center text-rm-text">
+                    <div>
+                      <div className="text-xs uppercase tracking-[0.28em] text-cyan-200/80">Loading Activity</div>
+                      <div className="mt-3 text-2xl font-black">Preparing the stage...</div>
+                    </div>
+                  </div>
+                }
+              >
+                {activityStage}
+              </Suspense>
             </div>
           ) : (
             <VoiceGrid
