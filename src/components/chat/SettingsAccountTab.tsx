@@ -2476,7 +2476,7 @@ export default function SettingsAccountTab({
                                   className="absolute inset-0"
                                   style={{
                                     ...previewThemeStyle,
-                                    backgroundColor: previewTheme.backgroundColor,
+                                    backgroundColor: previewTheme.backgroundColor ?? undefined,
                                     backgroundImage: "var(--rm-profile-custom-surface)",
                                   }}
                                 />

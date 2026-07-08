@@ -365,6 +365,7 @@ export function ProfileCollectiblesLayer({
           key={`fallback:${fallbackAsset.kind}:${fallbackAsset.src}`}
           src={fallbackAsset.src}
           fit={fit}
+          active={playAnimation && !prefersReducedMotion}
           preferredKind={fallbackAsset.kind}
           loop={playAnimation && !prefersReducedMotion && fallbackAsset.kind === "video"}
           style={buildLayerMediaStyle(fit, effectOpacity, blendMode)}
