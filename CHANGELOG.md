@@ -1,5 +1,26 @@
 # Changelog
 
+## [1.16.0](https://github.com/115jon/ralph-meet/compare/v1.15.0...v1.16.0) (2026-07-07)
+
+
+### Features
+
+* **profile:** ✨ add profile themes and display name styling ([7256f48](https://github.com/115jon/ralph-meet/commit/7256f485ee89bbaa79eabe03879d4d31674f4177))
+
+
+### Bug Fixes
+
+* **chat:** 🐛 render styled display names in member lists ([f4bf588](https://github.com/115jon/ralph-meet/commit/f4bf588e0e16388c1f5acefa072e735d0006c275))
+* **desktop:** 🐛 restore desktop command permissions ([3269c51](https://github.com/115jon/ralph-meet/commit/3269c512a89c39ee58c63dda6e2933e7816e57c5))
+* **embeds:** 🐛 build instagram embeds without oembed ([a9badfb](https://github.com/115jon/ralph-meet/commit/a9badfb02abfeb732a64bf71c24c0918e2641445))
+* **embeds:** 🐛 refresh stale Instagram and TikTok embeds ([896663b](https://github.com/115jon/ralph-meet/commit/896663b3ba9a97f0d581156e8890d236005f29b3))
+* **embeds:** 🐛 refresh tiktok assets and share hydration ([0ad1565](https://github.com/115jon/ralph-meet/commit/0ad1565ec16c8baa4b8df6459ff708c09b7a43f4))
+* **embeds:** 🐛 restore Instagram author metadata ([eecb625](https://github.com/115jon/ralph-meet/commit/eecb625ee3a4df778cadc26f31d0f867a6a8eb20))
+* **embeds:** 🐛 use video attachments for instagram media ([fd9d654](https://github.com/115jon/ralph-meet/commit/fd9d654d918d98387af13d81b5d78e6ddc8a633f))
+* **listen-together:** 🐛 harden remote youtube resolution ([2f6d3b5](https://github.com/115jon/ralph-meet/commit/2f6d3b5b8997e2191d9de65382c686a8bd8ecb1f))
+* **listen-together:** 🐛 isolate youtube fallback clients ([b037f27](https://github.com/115jon/ralph-meet/commit/b037f2709268a2997f4102ba810f3acd3b5001b4))
+* **voice:** 🐛 stabilize dashboard overlays and diagnostics ([ab9f394](https://github.com/115jon/ralph-meet/commit/ab9f394cb40e7d841e9e6e4518163e6d9893ab36))
+
 ## [1.15.0](https://github.com/115jon/ralph-meet/compare/v1.14.1...v1.15.0) (2026-07-07)
 
 
