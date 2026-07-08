@@ -119,6 +119,7 @@ function EffectVideo({
   src,
   fit,
   style,
+  active,
   activeOffsetMs = 0,
   loop = false,
   onFallbackToImage,
@@ -126,6 +127,7 @@ function EffectVideo({
   src: string;
   fit: "contain" | "cover";
   style: CSSProperties;
+  active: boolean;
   activeOffsetMs?: number;
   loop?: boolean;
   onFallbackToImage: () => void;
@@ -156,6 +158,11 @@ function EffectVideo({
         }
       }
 
+      if (!active) {
+        video.pause();
+        return;
+      }
+
       const playPromise = video.play();
       if (playPromise && typeof playPromise.catch === "function") {
         playPromise.catch(() => {});
@@ -174,7 +181,7 @@ function EffectVideo({
       cancelled = true;
       video.removeEventListener("loadedmetadata", syncPlayback);
     };
-  }, [activeOffsetMs, src]);
+  }, [active, activeOffsetMs, src]);
 
   return (
     <video
@@ -196,6 +203,7 @@ function EffectMedia({
   src,
   fit,
   style,
+  active,
   preferredKind,
   activeOffsetMs = 0,
   loop = false,
@@ -203,6 +211,7 @@ function EffectMedia({
   src: string;
   fit: "contain" | "cover";
   style: CSSProperties;
+  active: boolean;
   preferredKind: MediaKind;
   activeOffsetMs?: number;
   loop?: boolean;
@@ -223,6 +232,7 @@ function EffectMedia({
         src={src}
         fit={fit}
         style={style}
+        active={active}
         activeOffsetMs={activeOffsetMs}
         loop={loop}
         onFallbackToImage={handleMediaError}
@@ -292,7 +302,7 @@ export function ProfileCollectiblesLayer({
     () => (
       shouldAnimateLayers
         ? getProfileEffectPlaybackSnapshot(effectLayers, elapsedMs, playbackSeed)
-        : { activeLayers: [], nextTransitionMs: null }
+        : { activeLayers: [], renderedLayers: [], nextTransitionMs: null }
     ),
     [effectLayers, elapsedMs, playbackSeed, shouldAnimateLayers],
   );
@@ -362,15 +372,25 @@ export function ProfileCollectiblesLayer({
       ) : null}
 
       {shouldAnimateLayers
-        ? playbackSnapshot.activeLayers.map((state) => (
+        ? playbackSnapshot.renderedLayers.map((state) => (
             <EffectMedia
               key={state.renderKey}
               src={state.resolvedSrc}
               fit={fit}
+              active={state.active}
               preferredKind="video"
               activeOffsetMs={state.activeOffsetMs}
               loop={state.layer.loop === true && (state.layer.duration == null || !Number.isFinite(state.layer.duration))}
-              style={buildLayerMediaStyle(fit, effectOpacity, blendMode, state.zIndex, state.layer)}
+              style={{
+                ...buildLayerMediaStyle(
+                  fit,
+                  state.active ? effectOpacity : 0,
+                  blendMode,
+                  state.zIndex,
+                  state.layer,
+                ),
+                visibility: state.active ? "visible" : "hidden",
+              }}
             />
           ))
         : null}
