@@ -1387,7 +1387,6 @@ export default function SettingsAccountTab({
   const [stylesCollapsed, setStylesCollapsed] = useState(false);
   const [isNameplatePreviewHovered, setIsNameplatePreviewHovered] = useState(false);
   const [isAvatarDecorationPreviewHovered, setIsAvatarDecorationPreviewHovered] = useState(false);
-  const [isProfileEffectPreviewHovered, setIsProfileEffectPreviewHovered] = useState(false);
   const [activePreviewField, setActivePreviewField] = useState<"pronouns" | "bio" | null>(null);
   const previewPronounsInputRef = useRef<HTMLInputElement | null>(null);
   const previewBioInputRef = useRef<HTMLTextAreaElement | null>(null);
@@ -1527,6 +1526,14 @@ export default function SettingsAccountTab({
   const currentAvatarDecoration = currentCollectibles?.avatarDecoration;
   const currentProfileEffect = currentCollectibles?.profileEffect;
   const currentNameplateSelection = currentCollectibles?.nameplate;
+  const currentProfileEffectDisplay = currentProfileEffect
+    ? normalizeAvatarDisplay({
+      version: 1,
+      collectibles: {
+        profileEffect: currentProfileEffect,
+      },
+    })
+    : null;
   const hasPersistedUploadedAvatar = Boolean(chatUser?.avatar_url?.startsWith("/api/avatars/"));
   const hasAvatarCrop = Boolean(normalizeAvatarDisplay(draftAvatarDisplay)?.crop);
   const hasRemovableAvatar = Boolean(avatarFile || avatarPreview || hasPersistedUploadedAvatar || hasAvatarCrop);
@@ -1612,14 +1619,6 @@ export default function SettingsAccountTab({
   const avatarDecorationPreviewArtUrl = currentAvatarDecoration?.asset
     ? `https://cdn.discordapp.com/avatar-decoration-presets/${currentAvatarDecoration.asset}.png?size=240&passthrough=true`
     : currentAvatarDecoration?.imageUrl ?? null;
-  const profileEffectPosterUrl =
-    currentProfileEffect?.staticFrameSrc
-    || currentProfileEffect?.thumbnailPreviewSrc
-    || currentProfileEffect?.reducedMotionSrc
-    || currentProfileEffect?.staticUrl
-    || currentProfileEffect?.previewUrl
-    || null;
-  const profileEffectPosterSrc = profileEffectPosterUrl ? getAuthAssetUrl(profileEffectPosterUrl) : null;
   const resetDraftState = useCallback(() => {
     setDisplayName(chatUser?.display_name || (user?.unsafeMetadata?.displayName as string) || user?.username || "");
     setUsername(chatUser?.username || user?.username || "");
@@ -2289,6 +2288,39 @@ export default function SettingsAccountTab({
                     </div>
                   </ProfileRailSection>
 
+                  <ProfileRailSection title="Display Name Style">
+                    <ProfileRailCard
+                      className="p-2.5"
+                      actions={(
+                        <AccountActionIconButton
+                          label={hasDisplayNameStyle ? "Clear display name style" : "Add display name style"}
+                          onClick={() => {
+                            if (hasDisplayNameStyle) {
+                              setDisplayNameStyle(null);
+                              return;
+                            }
+                            setDisplayNameStyleEditorOpen(true);
+                          }}
+                        >
+                          {hasDisplayNameStyle ? <Trash2 size={14} /> : <Plus size={14} />}
+                        </AccountActionIconButton>
+                      )}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => setDisplayNameStyleEditorOpen(true)}
+                        className="flex h-[48px] w-full items-center justify-center rounded-[14px] border border-rm-border bg-rm-bg-surface/60 px-4 pr-11 text-center outline-none transition-transform duration-200 hover:scale-[1.03] hover:bg-rm-bg-elevated/80 focus-visible:border-primary/60 focus-visible:shadow-[0_0_0_1px_rgba(88,101,242,0.4),0_12px_26px_rgba(0,0,0,0.2)]"
+                        aria-label={hasDisplayNameStyle ? "Edit display name style" : "Add display name style"}
+                      >
+                        <ProfileDisplayName
+                          text={currentDisplayName}
+                          displayNameStyle={displayNameStyle}
+                          className="block max-w-full truncate text-[15px] font-semibold leading-none tracking-[-0.04em] md:text-[16px]"
+                        />
+                      </button>
+                    </ProfileRailCard>
+                  </ProfileRailSection>
+
                   <ProfileRailSection title="Theme & Banner">
                     <ProfileRailCard className="overflow-visible p-2.5">
                       <div className="grid grid-cols-2 gap-2.5">
@@ -2443,7 +2475,6 @@ export default function SettingsAccountTab({
                   <ProfileRailSection title="Profile Effect">
                     <ProfileRailCard
                       className="p-2.5"
-                      onHoverChange={setIsProfileEffectPreviewHovered}
                       actions={(
                         <AccountActionIconButton
                           label="Remove profile effect"
@@ -2455,130 +2486,46 @@ export default function SettingsAccountTab({
                         </AccountActionIconButton>
                       )}
                     >
-                      <div
-                        role="button"
-                        tabIndex={0}
+                      <button
+                        type="button"
                         onClick={() => handleOpenCollectibles("profile_effect")}
-                        onKeyDown={(event) => {
-                          if (event.key === "Enter" || event.key === " ") {
-                            event.preventDefault();
-                            handleOpenCollectibles("profile_effect");
-                          }
-                        }}
                         className="group/profile-effect relative block h-[88px] w-full cursor-pointer overflow-hidden rounded-[12px] border border-rm-border/70 bg-rm-bg-surface text-left outline-none transition duration-200 hover:border-rm-border hover:shadow-[0_18px_32px_rgba(0,0,0,0.24)] focus-visible:border-primary/60 focus-visible:shadow-[0_0_0_1px_rgba(88,101,242,0.4),0_18px_32px_rgba(0,0,0,0.24)]"
                         aria-label="Browse profile effects"
                       >
-                        <div className="absolute inset-0 flex items-center justify-center px-2">
-                          <div className="relative h-[78px] w-[72px] overflow-hidden rounded-[14px] border border-rm-border/70 bg-rm-bg-elevated shadow-[0_18px_34px_rgba(0,0,0,0.3)]">
-                            {isProfileEffectPreviewHovered ? (
-                              <>
-                                <div
-                                  className="absolute inset-0"
-                                  style={{
-                                    ...previewThemeStyle,
-                                    backgroundColor: previewTheme.backgroundColor ?? undefined,
-                                    backgroundImage: "var(--rm-profile-custom-surface)",
-                                  }}
-                                />
-                                <div className="absolute left-2.5 top-[14px] z-20 h-6 w-6 overflow-hidden rounded-full border-2 border-rm-bg-elevated bg-rm-bg-surface shadow-[0_8px_16px_rgba(0,0,0,0.24)]">
-                                  {currentAvatarSrc ? (
-                                    <AvatarImage src={currentAvatarSrc} alt="" display={currentAvatarDisplayWithoutDecoration} />
-                                  ) : (
-                                    <div className="flex h-full w-full items-center justify-center text-[11px] font-bold text-white/80">
-                                      {getDisplayInitial({ name: currentDisplayName })}
-                                    </div>
-                                  )}
-                                </div>
-                                <div className="absolute inset-x-2.5 bottom-2.5 z-20 rounded-[10px] border border-white/8 bg-black/16 p-1.5">
-                                  <div className="h-1.5 w-12 rounded-full bg-white/18" />
-                                  <div className="mt-1.5 h-1.5 w-16 rounded-full bg-white/10" />
-                                </div>
-                                {currentProfileEffect ? (
-                                  <ProfileCollectiblesLayer display={currentAvatarDisplay} effectOpacity={1} fit="contain" className="z-10 opacity-100" />
-                                ) : null}
-                                <div className="absolute inset-0 z-0" style={{ background: "var(--rm-profile-custom-surface-overlay)" }} />
-                              </>
+                        <div className="absolute inset-0 flex items-center justify-center px-3">
+                          <div
+                            className="relative h-[74px] overflow-hidden rounded-[12px] border border-rm-border/70 bg-rm-bg-elevated shadow-[0_18px_34px_rgba(0,0,0,0.3)] transition-transform duration-200 group-hover/profile-effect:scale-[1.03]"
+                            style={{ aspectRatio: "450 / 880" }}
+                          >
+                            <div
+                              className="absolute inset-0"
+                              style={{
+                                ...previewThemeStyle,
+                                backgroundColor: previewTheme.backgroundColor ?? undefined,
+                                backgroundImage: "var(--rm-profile-custom-surface)",
+                              }}
+                            />
+                            {currentProfileEffectDisplay ? (
+                              <ProfileCollectiblesLayer
+                                display={currentProfileEffectDisplay}
+                                effectOpacity={1}
+                                fit="contain"
+                                className="z-10 opacity-100"
+                                playAnimation={false}
+                              />
                             ) : (
-                              <>
-                                {profileEffectPosterSrc ? (
-                                  <img
-                                    src={profileEffectPosterSrc}
-                                    alt=""
-                                    className="absolute inset-0 h-full w-full object-cover opacity-94"
-                                    loading="lazy"
-                                    decoding="async"
-                                  />
-                                ) : (
-                                  <div className="absolute inset-0" style={{ ...previewThemeStyle, background: "var(--rm-profile-custom-banner-fallback)" }} />
-                                )}
-                                <div className="absolute inset-0 bg-[linear-gradient(180deg,_rgba(0,0,0,0)_0%,_rgba(0,0,0,0.18)_56%,_rgba(0,0,0,0.42)_100%)]" />
-                                <div className="absolute inset-x-2.5 bottom-2.5 rounded-[10px] border border-white/8 bg-black/18 p-1.5">
-                                  <div className="h-1.5 w-12 rounded-full bg-white/22" />
-                                  <div className="mt-1.5 h-1.5 w-16 rounded-full bg-white/12" />
-                                </div>
-                              </>
+                              <div className="absolute inset-0 z-10 flex items-center justify-center px-2 text-center text-[11px] font-semibold text-rm-text-muted">
+                                None
+                              </div>
                             )}
+                            <div className="absolute inset-0 bg-[linear-gradient(180deg,_rgba(255,255,255,0.12)_0%,_rgba(255,255,255,0.04)_42%,_rgba(0,0,0,0.16)_100%)]" />
                           </div>
                         </div>
                         <div
                           className="pointer-events-none absolute inset-0 opacity-0 transition duration-200 group-hover/profile-effect:opacity-100"
                           style={{ background: "var(--rm-profile-custom-surface-overlay-strong)" }}
                         />
-                      </div>
-                    </ProfileRailCard>
-                  </ProfileRailSection>
-
-                  <ProfileRailSection title="Display Name Style">
-                    <ProfileRailCard
-                      className="space-y-2.5 p-2.5"
-                      actions={(
-                        <AccountActionIconButton
-                          label={hasDisplayNameStyle ? "Clear display name style" : "Add display name style"}
-                          onClick={() => {
-                            if (hasDisplayNameStyle) {
-                              setDisplayNameStyle(null);
-                              return;
-                            }
-                            setDisplayNameStyleEditorOpen(true);
-                          }}
-                        >
-                          {hasDisplayNameStyle ? <Trash2 size={14} /> : <Plus size={14} />}
-                        </AccountActionIconButton>
-                      )}
-                    >
-                      <button
-                        type="button"
-                        onClick={() => setDisplayNameStyleEditorOpen(true)}
-                        className="flex w-full items-center justify-between gap-2.5 rounded-[14px] border border-rm-border bg-rm-bg-surface/60 px-2.5 py-3 pr-11 text-left transition hover:bg-rm-bg-elevated/80"
-                      >
-                        <div className="min-w-0 flex-1">
-                          <ProfileDisplayName
-                            text={currentDisplayName}
-                            displayNameStyle={displayNameStyle}
-                            className="block truncate text-[15px] font-semibold leading-[1.15] tracking-[-0.03em] md:text-[16px]"
-                          />
-                          <div className="mt-1 text-[11px] text-rm-text-muted">
-                            {hasDisplayNameStyle ? "Tap to edit the current style." : "Use theme-aware colors and effects for your display name."}
-                          </div>
-                        </div>
                       </button>
-
-                      {displayNameStyle ? (
-                        <div className="flex items-center gap-2">
-                          <div className="flex flex-1 items-center gap-2 rounded-[14px] border border-rm-border bg-rm-bg-surface/60 px-2.5 py-2">
-                            <div className="h-5 w-5 rounded-[8px] border border-rm-border" style={{ background: displayNameStyle.primaryColor }} />
-                            <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-rm-text-muted">Base</span>
-                          </div>
-                          <div className="flex flex-1 items-center gap-2 rounded-[14px] border border-rm-border bg-rm-bg-surface/60 px-2.5 py-2">
-                            <div className="h-5 w-5 rounded-[8px] border border-rm-border" style={{ background: displayNameStyle.secondaryColor }} />
-                            <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-rm-text-muted">Glow</span>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="rounded-[14px] border border-dashed border-rm-border bg-rm-bg-surface/40 px-3 py-3 text-[12px] text-rm-text-muted">
-                          No custom style set. Your display name will use the normal theme text color until you add one.
-                        </div>
-                      )}
                     </ProfileRailCard>
                   </ProfileRailSection>
                 </div>
