@@ -22,8 +22,8 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } fro
 import { useShallow } from "zustand/shallow";
 import { ChevronDown, Headphones, Mic, MicOff, Settings } from "./Icons";
 import { useDelayUnmount } from "@/hooks/useDelayUnmount";
-import { ProfileAssetLayer } from "./ProfileAssetLayer";
 import { UserDisplayName } from "./UserDisplayName";
+import { UserNameplateLayer } from "./UserNameplateLayer";
 import { getUserNameplatePresentation } from "./user-nameplate-presentation";
 
 const EMPTY_QUALITIES: string[] = [];
@@ -309,9 +309,10 @@ export default function UserPanel({
   const displayName = getDisplayName(user);
   const userHandle = user.username ? `@${user.username}` : displayName;
   const hasNameplate = nameplatePresentation.hasNameplate;
-  const needsNameplateContrastAssist = nameplatePresentation.needsContrastAssist;
   const nameplateTheme = nameplatePresentation.theme;
-  const showNameplateIdentityBackdrop = hasNameplate && needsNameplateContrastAssist && Boolean(nameplateTheme);
+  const nameplateDangerColor = hasNameplate && nameplateTheme
+    ? (nameplateTheme.isLightAccent ? "#991B1B" : "#FECACA")
+    : undefined;
 
   return (
     <TooltipProvider delayDuration={0}>
@@ -396,9 +397,8 @@ export default function UserPanel({
         } : undefined}>
           {hasNameplate && (
             <>
-              <ProfileAssetLayer
-                url={user.nameplate_url}
-                contentType={user.nameplate_content_type}
+              <UserNameplateLayer
+                user={user}
                 alt={`${displayName} nameplate`}
                 className="pointer-events-none z-0 opacity-[0.98]"
               />
@@ -445,47 +445,16 @@ export default function UserPanel({
           {showIdentity ? (
             <div className={cn(
               "relative z-10 min-w-0 flex-1 py-1 cursor-pointer group/name rounded-[12px] px-2 -ml-1 transition-colors",
-              showNameplateIdentityBackdrop
-                ? "hover:bg-transparent"
-                : hasNameplate
-                  ? "hover:bg-white/10"
-                  : "hover:bg-rm-bg-hover/50",
+              hasNameplate ? "hover:bg-white/10" : "hover:bg-rm-bg-hover/50",
             )}>
-              {showNameplateIdentityBackdrop && nameplateTheme && (
-                <div
-                  className="pointer-events-none absolute inset-y-0 left-0 right-2 rounded-[10px] shadow-[0_8px_18px_rgba(0,0,0,0.14)]"
-                  style={{
-                    border: `1px solid ${nameplateTheme.identityBackdropBorder}`,
-                    background: nameplateTheme.identityBackdropBg,
-                    backdropFilter: "blur(10px) saturate(1.05)",
-                    WebkitBackdropFilter: "blur(10px) saturate(1.05)",
-                    maskImage: "linear-gradient(90deg, black 0%, black 74%, transparent 100%)",
-                    WebkitMaskImage: "linear-gradient(90deg, black 0%, black 74%, transparent 100%)",
-                  }}
-                />
-              )}
               <div className="relative min-w-0">
                 <UserDisplayName
                   user={user}
                   className="block truncate text-[13px] font-bold leading-tight text-rm-text-primary"
-                  backgroundColor={
-                    showNameplateIdentityBackdrop
-                      ? nameplateTheme?.identityBackdropBg
-                      : hasNameplate
-                        ? nameplateTheme?.accentHex
-                        : undefined
-                  }
-                  readableFallbackColor={nameplateTheme?.foregroundColor}
                   minContrastRatio={hasNameplate ? 2.8 : undefined}
-                  style={hasNameplate && !user.display_name_style && nameplateTheme
-                    ? { color: nameplateTheme.foregroundColor }
-                    : undefined}
                 />
                 {showUsername && (
-                  <p
-                    className="truncate text-[11px] leading-tight text-rm-text-muted"
-                    style={hasNameplate && nameplateTheme ? { color: nameplateTheme.mutedForegroundColor } : undefined}
-                  >
+                  <p className="truncate text-[11px] leading-tight text-rm-text-muted">
                     {userHandle}
                   </p>
                 )}
@@ -517,13 +486,11 @@ export default function UserPanel({
                       "rounded-[10px] p-1.5 transition-all outline-none flex items-center justify-center group",
                       (settings.isMuted || !effectiveHasMic)
                         ? (hasNameplate ? "text-red-300 hover:text-red-200" : "text-destructive hover:bg-rm-bg-hover")
-                        : (hasNameplate ? "hover:text-inherit" : "text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text-secondary"),
+                        : (hasNameplate ? "text-rm-text-primary/85 hover:text-rm-text-primary" : "text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text-secondary"),
                       !effectiveHasMic && "cursor-not-allowed"
                     )}
                     style={hasNameplate && nameplateTheme ? {
-                      backgroundColor: nameplateTheme.buttonBg,
-                      color: settings.isMuted || !effectiveHasMic ? undefined : nameplateTheme.buttonText,
-                      filter: nameplateTheme.buttonFilter,
+                      color: settings.isMuted || !effectiveHasMic ? nameplateDangerColor : nameplateTheme.buttonText,
                     } : undefined}
                   >
                     {(settings.isMuted || !effectiveHasMic)
@@ -545,13 +512,11 @@ export default function UserPanel({
                       className={cn(
                         "rounded-[10px] p-0.5 transition-all outline-none mr-0.5 group",
                         activeDeviceMenu === 'input'
-                          ? (hasNameplate ? "" : "text-rm-text-muted bg-rm-bg-hover")
-                          : (hasNameplate ? "" : "text-rm-text-muted/80 dark:text-rm-text-muted/60 hover:text-rm-text")
+                          ? (hasNameplate ? "text-rm-text-primary" : "text-rm-text-muted bg-rm-bg-hover")
+                          : (hasNameplate ? "text-rm-text-muted hover:text-rm-text-primary" : "text-rm-text-muted/80 dark:text-rm-text-muted/60 hover:text-rm-text")
                       )}
                       style={hasNameplate && nameplateTheme ? {
-                        backgroundColor: activeDeviceMenu === "input" ? nameplateTheme.buttonActiveBg : nameplateTheme.buttonBg,
                         color: activeDeviceMenu === "input" ? nameplateTheme.buttonText : nameplateTheme.buttonMuted,
-                        filter: nameplateTheme.buttonFilter,
                       } : undefined}
                     >
                       <ChevronDown size={12} strokeWidth={3} />
@@ -594,12 +559,10 @@ export default function UserPanel({
                       "rounded-[10px] p-1.5 transition-all outline-none flex items-center justify-center group",
                       settings.isDeafened
                         ? (hasNameplate ? "text-red-300 hover:text-red-200" : "text-destructive hover:bg-rm-bg-hover")
-                        : (hasNameplate ? "hover:text-inherit" : "text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text-secondary")
+                        : (hasNameplate ? "text-rm-text-primary/85 hover:text-rm-text-primary" : "text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text-secondary")
                     )}
                     style={hasNameplate && nameplateTheme ? {
-                      backgroundColor: nameplateTheme.buttonBg,
-                      color: settings.isDeafened ? undefined : nameplateTheme.buttonText,
-                      filter: nameplateTheme.buttonFilter,
+                      color: settings.isDeafened ? nameplateDangerColor : nameplateTheme.buttonText,
                     } : undefined}
                   >
                     <Headphones size={18} className="group-hover:animate-clack" />
@@ -619,13 +582,11 @@ export default function UserPanel({
                       className={cn(
                         "rounded-[10px] p-0.5 transition-all outline-none mr-0.5 group",
                         activeDeviceMenu === 'output'
-                          ? (hasNameplate ? "" : "text-rm-text-muted bg-rm-bg-hover")
-                          : (hasNameplate ? "" : "text-rm-text-muted/80 dark:text-rm-text-muted/60 hover:text-rm-text")
+                          ? (hasNameplate ? "text-rm-text-primary" : "text-rm-text-muted bg-rm-bg-hover")
+                          : (hasNameplate ? "text-rm-text-muted hover:text-rm-text-primary" : "text-rm-text-muted/80 dark:text-rm-text-muted/60 hover:text-rm-text")
                       )}
                       style={hasNameplate && nameplateTheme ? {
-                        backgroundColor: activeDeviceMenu === "output" ? nameplateTheme.buttonActiveBg : nameplateTheme.buttonBg,
                         color: activeDeviceMenu === "output" ? nameplateTheme.buttonText : nameplateTheme.buttonMuted,
-                        filter: nameplateTheme.buttonFilter,
                       } : undefined}
                     >
                       <ChevronDown size={12} strokeWidth={3} />
@@ -660,14 +621,11 @@ export default function UserPanel({
                   className={cn(
                     "rounded-[8px] p-1.5 transition-all outline-none flex items-center justify-center group",
                     hasNameplate
-                      ? "hover:brightness-110"
+                      ? "text-rm-text-primary/85 hover:text-rm-text-primary"
                       : "text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text-secondary"
                   )}
                   style={hasNameplate && nameplateTheme ? {
-                    backgroundColor: nameplateTheme.buttonBg,
                     color: nameplateTheme.buttonText,
-                    textShadow: nameplateTheme.textShadow,
-                    filter: nameplateTheme.buttonFilter,
                   } : undefined}
                 >
                   <Settings size={18} className="transition-transform duration-500 ease-[cubic-bezier(0.175,0.885,0.32,1.275)] group-hover:rotate-90" />
