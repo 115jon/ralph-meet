@@ -49,12 +49,45 @@ jobs:
         with:
           components: llvm-tools
 
-      # Cache Cargo registry + build artifacts keyed to Cargo.lock.
-      # On Windows this alone saves ~10 min per run after the first.
+      - name: Capture Rust version
+        id: rust-version
+        shell: pwsh
+        run: |
+          $release = ((rustc -Vv | Select-String '^release:').ToString().Split(':', 2)[1]).Trim()
+          "release=$release" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+      # Cache Cargo home / registry state separately from the local target dir.
+      # The heavyweight target artifacts for the Tauri fork and other in-repo
+      # path crates are restored by a source-keyed cache below.
       - name: Rust cache
         uses: swatinem/rust-cache@v2
         with:
           workspaces: desktop/src-tauri -> target
+          # Keep rust-cache focused on Cargo home / registry state. The expensive
+          # local path crates (tauri-fork, cef-fork, vendored plugins, app code)
+          # are cached separately with a source-keyed target snapshot below.
+          cache-targets: false
+          cache-bin: false
+
+      - name: Restore desktop Rust target cache
+        id: restore-desktop-target
+        uses: actions/cache/restore@v4
+        with:
+          path: desktop/src-tauri/target
+          key: >-
+            desktop-target-${{ runner.os }}-${{ runner.arch }}-rust-${{ steps.rust-version.outputs.release }}-${{ hashFiles(
+              'desktop/src-tauri/Cargo.lock',
+              'desktop/src-tauri/Cargo.toml',
+              'desktop/src-tauri/build.rs',
+              'desktop/src-tauri/tauri.conf.json',
+              'desktop/src-tauri/tauri.deployed.conf.json',
+              'desktop/src-tauri/src/**/*.rs',
+              'desktop/src-tauri/vendor/**/*',
+              'desktop/src-tauri/cef-fork/**/*',
+              'desktop/src-tauri/tauri-fork/**/*'
+            ) }}
+          restore-keys: |
+            desktop-target-${{ runner.os }}-${{ runner.arch }}-rust-${{ steps.rust-version.outputs.release }}-
 
       # ── Node.js + pnpm ──────────────────────────────────────────────
       # pnpm must be set up BEFORE setup-node so that the node cache
@@ -172,6 +205,13 @@ jobs:
         run: |
           Set-Location desktop
           cargo tauri build --config src-tauri/tauri.deployed.conf.json --features cef,native-screen-share,game-capture-hook --no-bundle
+
+      - name: Save desktop Rust target cache
+        if: steps.restore-desktop-target.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: desktop/src-tauri/target
+          key: ${{ steps.restore-desktop-target.outputs.cache-primary-key }}
 
       - name: Build Tauri app payload
         shell: pwsh
