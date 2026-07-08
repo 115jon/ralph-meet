@@ -4,6 +4,7 @@ import { AvatarImage } from "@/components/chat/AvatarImage";
 import { CollectiblesCatalogModal } from "@/components/chat/CollectiblesCatalogModal";
 import { ProfileCollectiblesLayer } from "@/components/chat/ProfileCollectiblesLayer";
 import { ProfileAssetLayer } from "@/components/chat/ProfileAssetLayer";
+import { getUserNameplatePresentation } from "@/components/chat/user-nameplate-presentation";
 import splashLogo from "@/assets/splash-logo.svg";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,6 +20,7 @@ import {
 import type { CollectibleKind } from "@/lib/collectibles-catalog";
 import { getDisplayInitial } from "@/lib/display-name";
 import { getAuthAssetUrl } from "@/lib/platform";
+import { resolveProfileReferenceDate } from "@/lib/profile-dates";
 import {
   createRandomDisplayNameStyle,
   DEFAULT_DISPLAY_NAME_STYLE,
@@ -26,14 +28,15 @@ import {
   DISPLAY_NAME_EFFECT_OPTIONS,
   DISPLAY_NAME_FONT_OPTIONS,
   getContrastTextColor,
-  getProfileThemeVariables,
   hexToHsv,
   hsvToHex,
   normalizeDisplayNameStyle,
   normalizeHexColor,
   PROFILE_COLOR_SWATCHES,
+  resolveProfileTheme,
   type DisplayNameStyle,
 } from "@/lib/profile-customization";
+import type { User } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useChatStore } from "@/stores/chat-store";
 import { useUser } from "@kova/react";
@@ -44,6 +47,7 @@ import {
   Crop,
   Loader2,
   Moon,
+  Paintbrush,
   Pencil,
   Pipette,
   Plus,
@@ -60,6 +64,12 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProp
 import { createPortal } from "react-dom";
 
 const log = clog("Profile");
+
+type JoinedMemberPreview = {
+  user: User;
+  roles?: unknown[];
+  joined_at?: string | number | null;
+};
 
 type ClaimCandidate = {
   id: string;
@@ -85,6 +95,7 @@ type CollectibleApplyUser = {
 const SETTINGS_TOOLTIP_CONTENT_CLASS =
   "bg-rm-bg-floating border border-rm-border text-rm-text-primary text-[12px] font-bold shadow-xl px-3 py-2 rounded-lg";
 const PROFILE_SURFACE_ASPECT_RATIO = "450 / 880";
+const SHOW_LEGACY_PREVIEW_IDENTITY = false;
 const COLOR_PICKER_HUE_GRADIENT =
   "linear-gradient(90deg, #FF0000 0%, #FFFF00 16.66%, #00FF00 33.33%, #00FFFF 50%, #0000FF 66.66%, #FF00FF 83.33%, #FF0000 100%)";
 const COLOR_PICKER_EMPTY_PATTERN =
@@ -158,8 +169,13 @@ function areDisplayNameStylesEqual(
   left: DisplayNameStyle | string | null | undefined,
   right: DisplayNameStyle | string | null | undefined,
 ) {
-  const leftStyle = normalizeDisplayNameStyle(left) ?? DEFAULT_DISPLAY_NAME_STYLE;
-  const rightStyle = normalizeDisplayNameStyle(right) ?? DEFAULT_DISPLAY_NAME_STYLE;
+  const leftStyle = normalizeDisplayNameStyle(left);
+  const rightStyle = normalizeDisplayNameStyle(right);
+
+  if (!leftStyle || !rightStyle) {
+    return leftStyle === rightStyle;
+  }
+
   return JSON.stringify(leftStyle) === JSON.stringify(rightStyle);
 }
 
@@ -468,7 +484,7 @@ function ColorField({
   const popoverContent = open && typeof document !== "undefined" ? createPortal(
     <div
       ref={popoverRef}
-      className="fixed z-[1450] w-[calc(100vw-1rem)] max-w-[320px] rounded-[24px] border border-white/10 bg-[#111216]/96 p-4 shadow-[0_32px_80px_rgba(0,0,0,0.45)] backdrop-blur-xl"
+      className="fixed z-[1450] w-[calc(100vw-1rem)] max-w-[320px] rounded-[24px] border border-rm-border bg-rm-bg-floating/96 p-4 text-rm-text shadow-[0_32px_80px_rgba(0,0,0,0.45)] backdrop-blur-xl"
       style={{
         left: popoverPosition?.left ?? 8,
         top: popoverPosition?.top ?? 8,
@@ -479,7 +495,7 @@ function ColorField({
       <div
         ref={saturationRef}
         onPointerDown={(event) => startDrag(event, updateSaturationFromPointer)}
-        className="relative h-[160px] cursor-crosshair overflow-hidden rounded-[18px] border border-white/10"
+        className="relative h-[160px] cursor-crosshair overflow-hidden rounded-[18px] border border-rm-border"
         style={{ background: `hsl(${hsv.h} 100% 50%)` }}
         aria-label={`${label} saturation and brightness picker`}
       >
@@ -498,7 +514,7 @@ function ColorField({
       <div
         ref={hueRef}
         onPointerDown={(event) => startDrag(event, (clientX) => updateHueFromPointer(clientX))}
-        className="relative mt-4 h-4 cursor-ew-resize overflow-hidden rounded-full border border-white/10"
+        className="relative mt-4 h-4 cursor-ew-resize overflow-hidden rounded-full border border-rm-border"
         style={{ background: COLOR_PICKER_HUE_GRADIENT }}
         aria-label={`${label} hue picker`}
       >
@@ -509,9 +525,9 @@ function ColorField({
       </div>
 
       <div className="mt-4">
-        <div className="flex items-center gap-2 rounded-[14px] border border-[#6D74FF] bg-[#0A0C11] px-2.5 py-2 shadow-[0_0_0_1px_rgba(109,116,255,0.14)]">
+        <div className="flex items-center gap-2 rounded-[14px] border border-primary/35 bg-rm-bg-surface px-2.5 py-2 shadow-[0_0_0_1px_rgba(88,101,242,0.12)]">
           <div
-            className="h-8 w-8 shrink-0 rounded-[10px] border border-white/10"
+            className="h-8 w-8 shrink-0 rounded-[10px] border border-rm-border"
             style={getPickerSurfaceStyle({
               fill: value ?? resolvedColor,
               showEmptyPattern: !value,
@@ -519,7 +535,7 @@ function ColorField({
               patternPosition: "0 0, 7px 7px",
             })}
           />
-          <span className="shrink-0 text-[18px] font-medium text-white/40">#</span>
+          <span className="shrink-0 text-[18px] font-medium text-rm-text-muted">#</span>
           <Input
             value={draft.startsWith("#") ? draft.slice(1) : draft}
             onChange={(event) => setDraft(event.target.value.startsWith("#") ? event.target.value : `#${event.target.value}`)}
@@ -535,7 +551,7 @@ function ColorField({
                 event.currentTarget.blur();
               }
             }}
-            className="h-8 border-0 bg-transparent px-1 py-0 text-[15px] font-medium tracking-[0.04em] text-white shadow-none placeholder:text-white/28 focus-visible:ring-0"
+            className="h-8 border-0 bg-transparent px-1 py-0 text-[15px] font-medium tracking-[0.04em] text-rm-text shadow-none placeholder:text-rm-text-muted focus-visible:ring-0"
             placeholder={resolvedColor.slice(1)}
             spellCheck={false}
           />
@@ -544,7 +560,7 @@ function ColorField({
             onClick={handleEyeDropperPick}
             disabled={!supportsEyeDropper || eyeDropperPending}
             className={cn(
-              "flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] border border-white/10 bg-white/[0.04] text-white/76 transition hover:bg-white/[0.08] hover:text-white",
+              "flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] border border-rm-border bg-rm-bg-elevated text-rm-text-muted transition hover:bg-rm-bg-hover hover:text-rm-text",
               (!supportsEyeDropper || eyeDropperPending) && "cursor-not-allowed opacity-45",
             )}
             aria-label="Pick color from screen"
@@ -555,7 +571,7 @@ function ColorField({
         </div>
 
         <div className="mt-2 flex items-center justify-between gap-3 px-1">
-          <div className="text-[11px] text-white/40">
+          <div className="text-[11px] text-rm-text-muted">
             {supportsEyeDropper ? "Sample any color on screen." : "Eyedropper is not available here."}
           </div>
           <Button
@@ -565,7 +581,7 @@ function ColorField({
               setDraft("");
               onChange(null);
             }}
-            className="h-7 rounded-[10px] px-2.5 text-[11px] font-semibold text-white/70 hover:bg-white/[0.08] hover:text-white"
+            className="h-7 rounded-[10px] px-2.5 text-[11px] font-semibold text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text"
           >
             Reset
           </Button>
@@ -661,6 +677,8 @@ function DisplayNameStyleDialog({
   bannerContentType,
   nameplateUrl,
   nameplateContentType,
+  profileThemeBackgroundColor,
+  profileThemeTextColor,
   onClose,
   onApply,
 }: {
@@ -675,14 +693,44 @@ function DisplayNameStyleDialog({
   bannerContentType?: string | null;
   nameplateUrl?: string | null;
   nameplateContentType?: string | null;
+  profileThemeBackgroundColor?: string | null;
+  profileThemeTextColor?: string | null;
   onClose: () => void;
-  onApply: (style: DisplayNameStyle) => void;
+  onApply: (style: DisplayNameStyle | null) => void;
 }) {
   const [draftStyle, setDraftStyle] = useState<DisplayNameStyle>(
     () => normalizeDisplayNameStyle(initialStyle) ?? DEFAULT_DISPLAY_NAME_STYLE,
   );
   const [activeColorSlot, setActiveColorSlot] = useState<"primary" | "secondary">("primary");
-  const [previewMode, setPreviewMode] = useState<"dark" | "light">("dark");
+  const actualProfileThemeMode =
+    profileThemeBackgroundColor
+      ? (getContrastTextColor(profileThemeBackgroundColor) === "#12131A" ? "light" : "dark")
+      : null;
+  const [previewMode, setPreviewMode] = useState<"dark" | "light">(
+    () => actualProfileThemeMode ?? "dark",
+  );
+  const useActualProfileThemePreview =
+    Boolean(profileThemeBackgroundColor)
+    && actualProfileThemeMode === previewMode;
+  const previewSurfaceBackground = useActualProfileThemePreview
+    ? (profileThemeBackgroundColor ?? (previewMode === "dark" ? "#0C0F14" : "#FBF4EE"))
+    : (previewMode === "dark" ? "#0C0F14" : "#FBF4EE");
+  const previewSurfaceText = useActualProfileThemePreview
+    ? (profileThemeTextColor ?? (previewMode === "dark" ? "#F8FAFC" : "#1D2430"))
+    : (previewMode === "dark" ? "#F8FAFC" : "#1D2430");
+  const chatPreviewBackground = previewMode === "dark" ? "#151922" : "#FFFFFF";
+  const chatPreviewText = previewMode === "dark" ? "#F8FAFC" : "#1D2430";
+  const nameplatePreview = getUserNameplatePresentation({
+    id: username,
+    avatar_display: avatarDisplay ?? null,
+    nameplate_url: nameplateUrl ?? null,
+  });
+  const nameplatePreviewNeedsAssist = nameplatePreview.needsContrastAssist && Boolean(nameplatePreview.theme);
+  const nameplatePreviewBackground = nameplatePreviewNeedsAssist
+    ? (nameplatePreview.theme?.identityBackdropBg ?? nameplatePreview.theme?.accentHex ?? previewSurfaceBackground)
+    : (nameplatePreview.theme?.accentHex ?? previewSurfaceBackground);
+  const nameplatePreviewText = nameplatePreview.theme?.foregroundColor
+    ?? (nameplatePreview.theme?.isLightAccent ? "#1F2937" : "#F8FAFC");
 
   const applyPresetColor = useCallback((preset: string) => {
     setDraftStyle((prev) => ({
@@ -696,7 +744,7 @@ function DisplayNameStyleDialog({
   return (
     <div className="fixed inset-0 z-[1200] flex items-center justify-center bg-black/58 p-4" onClick={onClose}>
       <div
-        className="grid w-full max-w-[920px] max-h-[min(760px,calc(100dvh-1.5rem))] gap-0 overflow-hidden rounded-[30px] border border-rm-border bg-[#101115] shadow-[0_32px_96px_rgba(0,0,0,0.48)] lg:grid-cols-[minmax(0,308px)_minmax(0,1fr)]"
+        className="grid w-full max-w-[920px] max-h-[min(760px,calc(100dvh-1.5rem))] gap-0 overflow-hidden rounded-[30px] border border-rm-border bg-rm-bg-elevated text-rm-text shadow-[0_32px_96px_rgba(0,0,0,0.48)] lg:grid-cols-[minmax(0,308px)_minmax(0,1fr)]"
         onClick={(event) => event.stopPropagation()}
       >
         <div className="overflow-y-auto border-b border-rm-border p-4 lg:border-b-0 lg:border-r lg:p-5">
@@ -737,10 +785,8 @@ function DisplayNameStyleDialog({
                         <ProfileDisplayName
                           text={DISPLAY_NAME_FONT_TILE_SAMPLE}
                           displayNameStyle={{
-                            ...DEFAULT_DISPLAY_NAME_STYLE,
+                            ...draftStyle,
                             font: option.id,
-                            primaryColor: "#F8FAFC",
-                            secondaryColor: "#F8FAFC",
                           }}
                           className={cn(
                             "flex h-full items-center justify-center overflow-hidden text-center font-bold leading-none",
@@ -825,7 +871,7 @@ function DisplayNameStyleDialog({
                           <span
                             className={cn(
                               "h-9 w-9 rounded-[12px] border border-white/10 shadow-[0_10px_24px_rgba(0,0,0,0.28)] transition group-hover:-translate-y-[1px]",
-                              activeColorSlot === "primary" ? "ring-2 ring-primary/70 ring-offset-2 ring-offset-[#101115]" : "ring-1 ring-transparent",
+                              activeColorSlot === "primary" ? "ring-2 ring-primary/70 ring-offset-2 ring-offset-[color:var(--rm-bg-elevated)]" : "ring-1 ring-transparent",
                             )}
                             style={{ background: triggerBackground }}
                           />
@@ -860,7 +906,7 @@ function DisplayNameStyleDialog({
                           <span
                             className={cn(
                               "h-9 w-9 rounded-[12px] border border-white/10 shadow-[0_10px_24px_rgba(0,0,0,0.28)] transition group-hover:-translate-y-[1px]",
-                              activeColorSlot === "secondary" ? "ring-2 ring-primary/70 ring-offset-2 ring-offset-[#101115]" : "ring-1 ring-transparent",
+                              activeColorSlot === "secondary" ? "ring-2 ring-primary/70 ring-offset-2 ring-offset-[color:var(--rm-bg-elevated)]" : "ring-1 ring-transparent",
                             )}
                             style={{ background: triggerBackground }}
                           />
@@ -896,16 +942,14 @@ function DisplayNameStyleDialog({
           </div>
         </div>
 
-        <div className="flex min-h-[420px] flex-col bg-[#0d0f13]">
+        <div className="flex min-h-[420px] flex-col bg-rm-bg-primary">
           <div className="flex-1 p-4 lg:p-5">
             <div
-              className={cn(
-                "relative flex min-h-[100%] items-center justify-center overflow-hidden rounded-[26px] border border-[color:var(--rm-profile-custom-card-border)]",
-                previewMode === "dark" ? "bg-[#0c0f14]" : "bg-[#fbf4ee]",
-              )}
+              className="relative flex min-h-[100%] items-center justify-center overflow-hidden rounded-[26px] border border-[color:var(--rm-profile-custom-card-border)]"
               style={{
                 ...profileThemeStyle,
-                backgroundImage: "var(--rm-profile-custom-surface)",
+                backgroundColor: previewSurfaceBackground,
+                backgroundImage: useActualProfileThemePreview ? "var(--rm-profile-custom-surface)" : "none",
               }}
             >
               {bannerUrl ? (
@@ -919,15 +963,20 @@ function DisplayNameStyleDialog({
               <div
                 className="absolute inset-0"
                 style={{
-                  background: previewMode === "dark"
-                    ? "linear-gradient(180deg, rgba(7,10,16,0.28), rgba(7,10,16,0.78))"
-                    : "linear-gradient(180deg, rgba(255,255,255,0.24), rgba(246,232,222,0.70))",
+                  background: useActualProfileThemePreview
+                    ? "var(--rm-profile-custom-surface-overlay-strong)"
+                    : (previewMode === "dark"
+                      ? "linear-gradient(180deg, rgba(7,10,16,0.28), rgba(7,10,16,0.78))"
+                      : "linear-gradient(180deg, rgba(255,255,255,0.24), rgba(246,232,222,0.70))"),
                 }}
               />
               <div className="relative z-10 flex w-full max-w-[430px] flex-col items-center gap-4 px-4 py-6">
                 <div
                   className="relative w-full max-w-[318px] overflow-hidden rounded-[28px] border border-[color:var(--rm-profile-custom-card-border)] shadow-[0_24px_60px_rgba(0,0,0,0.26)]"
-                  style={{ backgroundImage: "var(--rm-profile-custom-surface)" }}
+                  style={{
+                    backgroundColor: previewSurfaceBackground,
+                    backgroundImage: useActualProfileThemePreview ? "var(--rm-profile-custom-surface)" : "none",
+                  }}
                 >
                   {bannerUrl ? (
                     <ProfileAssetLayer
@@ -937,10 +986,37 @@ function DisplayNameStyleDialog({
                       className="pointer-events-none absolute inset-x-0 top-0 h-[118px]"
                     />
                   ) : (
-                    <div className="absolute inset-x-0 top-0 h-[118px]" style={{ background: "var(--rm-profile-custom-banner-fallback)" }} />
+                    <div
+                      className="absolute inset-x-0 top-0 h-[118px]"
+                      style={{
+                        background: useActualProfileThemePreview
+                          ? "var(--rm-profile-custom-banner-fallback)"
+                          : (previewMode === "dark"
+                            ? "linear-gradient(135deg, rgba(88,101,242,0.30), rgba(15,23,42,0.92) 68%)"
+                            : "linear-gradient(135deg, rgba(96,165,250,0.30), rgba(255,255,255,0.94) 68%)"),
+                      }}
+                    />
                   )}
-                  <div className="absolute inset-x-0 top-0 h-[118px]" style={{ background: "var(--rm-profile-custom-banner-overlay)" }} />
-                  <div className="absolute inset-0" style={{ background: "var(--rm-profile-custom-surface-overlay-strong)" }} />
+                  <div
+                    className="absolute inset-x-0 top-0 h-[118px]"
+                    style={{
+                      background: useActualProfileThemePreview
+                        ? "var(--rm-profile-custom-banner-overlay)"
+                        : (previewMode === "dark"
+                          ? "linear-gradient(180deg, rgba(0,0,0,0.06), rgba(0,0,0,0.28))"
+                          : "linear-gradient(180deg, rgba(255,255,255,0.06), rgba(0,0,0,0.08))"),
+                    }}
+                  />
+                  <div
+                    className="absolute inset-0"
+                    style={{
+                      background: useActualProfileThemePreview
+                        ? "var(--rm-profile-custom-surface-overlay-strong)"
+                        : (previewMode === "dark"
+                          ? "linear-gradient(180deg, rgba(255,255,255,0.02), rgba(0,0,0,0.22))"
+                          : "linear-gradient(180deg, rgba(255,255,255,0.12), rgba(255,255,255,0.02))"),
+                    }}
+                  />
 
                   <div className="relative">
                     <div className="h-[118px]" />
@@ -962,6 +1038,8 @@ function DisplayNameStyleDialog({
                           text={displayName}
                           displayNameStyle={draftStyle}
                           className="block truncate text-[22px] font-semibold tracking-[-0.035em]"
+                          backgroundColor={previewSurfaceBackground}
+                          readableFallbackColor={previewSurfaceText}
                         />
                         <div className="mt-1 text-[12px] text-[color:var(--rm-profile-custom-muted)]">@{username}</div>
                       </div>
@@ -979,12 +1057,12 @@ function DisplayNameStyleDialog({
                 </div>
 
                 <div
-                  className={cn(
-                    "w-full max-w-[340px] rounded-[22px] border px-3.5 py-3 shadow-[0_18px_40px_rgba(0,0,0,0.18)]",
-                    previewMode === "dark"
-                      ? "border-white/8 bg-[#151922]/90 text-white"
-                      : "border-black/8 bg-white/88 text-[#1d2430]",
-                  )}
+                  className="w-full max-w-[340px] rounded-[22px] border px-3.5 py-3 shadow-[0_18px_40px_rgba(0,0,0,0.18)]"
+                  style={{
+                    borderColor: previewMode === "dark" ? "rgba(255,255,255,0.08)" : "rgba(15,23,42,0.08)",
+                    backgroundColor: previewMode === "dark" ? "rgba(21,25,34,0.90)" : "rgba(255,255,255,0.88)",
+                    color: chatPreviewText,
+                  }}
                 >
                   <div className="flex items-start gap-2.5">
                     <div className="h-9 w-9 shrink-0 overflow-hidden rounded-full border border-white/10 bg-rm-bg-elevated">
@@ -1002,6 +1080,8 @@ function DisplayNameStyleDialog({
                           text={displayName}
                           displayNameStyle={draftStyle}
                           className="block truncate text-[14px] font-semibold"
+                          backgroundColor={chatPreviewBackground}
+                          readableFallbackColor={chatPreviewText}
                         />
                         <span className={cn("text-[11px]", previewMode === "dark" ? "text-white/38" : "text-black/38")}>10:08 AM</span>
                       </div>
@@ -1032,11 +1112,27 @@ function DisplayNameStyleDialog({
                         </div>
                       )}
                     </div>
-                    <ProfileDisplayName
-                      text={displayName}
-                      displayNameStyle={draftStyle}
-                      className="block min-w-0 flex-1 truncate text-[17px] font-semibold"
-                    />
+                    <div className="relative min-w-0 flex-1">
+                      {nameplatePreviewNeedsAssist && nameplatePreview.theme ? (
+                        <div
+                          className="pointer-events-none absolute inset-y-[-4px] -left-2 right-0 rounded-[10px]"
+                          style={{
+                            border: `1px solid ${nameplatePreview.theme.identityBackdropBorder}`,
+                            background: nameplatePreview.theme.identityBackdropBg,
+                            backdropFilter: "blur(10px) saturate(1.05)",
+                            WebkitBackdropFilter: "blur(10px) saturate(1.05)",
+                          }}
+                        />
+                      ) : null}
+                      <ProfileDisplayName
+                        text={displayName}
+                        displayNameStyle={draftStyle}
+                        className="relative block min-w-0 flex-1 truncate text-[17px] font-semibold"
+                        backgroundColor={nameplatePreviewBackground}
+                        readableFallbackColor={nameplatePreviewText}
+                        minContrastRatio={2.8}
+                      />
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1085,6 +1181,20 @@ function DisplayNameStyleDialog({
                 Surprise Me
               </Button>
               <div className="flex items-center gap-3">
+                {normalizeDisplayNameStyle(initialStyle) ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={() => {
+                      onApply(null);
+                      onClose();
+                    }}
+                    className="h-11 rounded-xl border border-rm-border bg-rm-bg-surface/60 px-4 text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text"
+                  >
+                    <Trash2 size={15} />
+                    Clear style
+                  </Button>
+                ) : null}
                 <Button
                   type="button"
                   variant="ghost"
@@ -1212,6 +1322,11 @@ export default function SettingsAccountTab({
   const { user } = useUser();
   const chatUser = useChatStore(s => s.user);
   const loadCurrentUser = useChatStore(s => s.actions.loadCurrentUser);
+  const updateStatus = useChatStore(s => s.actions.updateStatus);
+  const activeServerId = useChatStore(s => s.activeServerId);
+  const previewMemberRecord = useChatStore((state) => (
+    (state.members as JoinedMemberPreview[]).find((member) => member.user.id === state.user?.id) ?? null
+  ));
 
   const {
     displayName, setDisplayName,
@@ -1247,27 +1362,38 @@ export default function SettingsAccountTab({
   const [profileAccentColor, setProfileAccentColor] = useState<string | null>(() => normalizeHexColor(chatUser?.profile_accent_color) ?? null);
   const [profileBackgroundColor, setProfileBackgroundColor] = useState<string | null>(() => normalizeHexColor(chatUser?.profile_background_color) ?? null);
   const [profileBannerColor, setProfileBannerColor] = useState<string | null>(() => normalizeHexColor(chatUser?.profile_banner_color) ?? null);
-  const [displayNameStyle, setDisplayNameStyle] = useState<DisplayNameStyle>(
-    () => normalizeDisplayNameStyle(chatUser?.display_name_style) ?? DEFAULT_DISPLAY_NAME_STYLE,
+  const [displayNameStyle, setDisplayNameStyle] = useState<DisplayNameStyle | null>(
+    () => normalizeDisplayNameStyle(chatUser?.display_name_style),
   );
   const [displayNameStyleEditorOpen, setDisplayNameStyleEditorOpen] = useState(false);
   const [stylesCollapsed, setStylesCollapsed] = useState(false);
   const [activePreviewField, setActivePreviewField] = useState<"pronouns" | "bio" | null>(null);
   const previewPronounsInputRef = useRef<HTMLInputElement | null>(null);
   const previewBioInputRef = useRef<HTMLTextAreaElement | null>(null);
+  const [isCustomStatusEditing, setIsCustomStatusEditing] = useState(false);
+  const [customStatusDraft, setCustomStatusDraft] = useState(() => chatUser?.custom_status ?? "");
+  const previewCustomStatusInputRef = useRef<HTMLInputElement | null>(null);
 
-  const savedDisplayNameStyle = normalizeDisplayNameStyle(chatUser?.display_name_style) ?? DEFAULT_DISPLAY_NAME_STYLE;
-  const previewThemeStyle = getProfileThemeVariables({
+  const savedDisplayNameStyle = normalizeDisplayNameStyle(chatUser?.display_name_style);
+  const previewTheme = resolveProfileTheme({
     profile_accent_color: profileAccentColor,
     profile_background_color: profileBackgroundColor,
     profile_banner_color: profileBannerColor,
   });
+  const previewThemeStyle = previewTheme.variables;
+  const hasDisplayNameStyle = Boolean(displayNameStyle);
 
   useEffect(() => {
     if (!avatarDisplayChanged && !avatarFile) {
       setAvatarDisplay(chatUser?.avatar_display ?? null);
     }
   }, [avatarDisplayChanged, avatarFile, chatUser?.avatar_display]);
+
+  useEffect(() => {
+    if (!isCustomStatusEditing) {
+      setCustomStatusDraft(chatUser?.custom_status ?? "");
+    }
+  }, [chatUser?.custom_status, isCustomStatusEditing]);
 
   useEffect(() => {
     if (activePreviewField === "pronouns") {
@@ -1281,6 +1407,13 @@ export default function SettingsAccountTab({
       previewBioInputRef.current?.select();
     }
   }, [activePreviewField]);
+
+  useEffect(() => {
+    if (!isCustomStatusEditing) return;
+
+    previewCustomStatusInputRef.current?.focus();
+    previewCustomStatusInputRef.current?.select();
+  }, [isCustomStatusEditing]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1361,6 +1494,14 @@ export default function SettingsAccountTab({
   const currentUsername = username.trim() || chatUser?.username || user?.username || "profile";
   const currentPronouns = pronouns.trim();
   const currentBio = bio.trim();
+  const currentCustomStatus = customStatusDraft.trim();
+  const visibleCustomStatus = currentCustomStatus || chatUser?.custom_status?.trim() || "";
+  const hasCustomStatus = Boolean(visibleCustomStatus);
+  const currentPresenceStatus = chatUser?.status ?? "online";
+  const previewReferenceDate = resolveProfileReferenceDate({
+    joinedAt: activeServerId && activeServerId !== "@me" ? previewMemberRecord?.joined_at : null,
+    createdAt: chatUser?.created_at ?? user?.createdAt ?? null,
+  });
   const currentCollectibles = getAvatarCollectibles(currentAvatarDisplay);
   const currentAvatarDecoration = currentCollectibles?.avatarDecoration;
   const currentProfileEffect = currentCollectibles?.profileEffect;
@@ -1393,6 +1534,32 @@ export default function SettingsAccountTab({
   const currentNameplateContentType = removeNameplate
     ? null
     : nameplatePreview?.contentType || chatUser?.nameplate_content_type || null;
+  const handleOpenCustomStatusEditor = useCallback(() => {
+    setIsCustomStatusEditing(true);
+  }, []);
+  const handleSaveCustomStatus = useCallback(() => {
+    const trimmedStatus = customStatusDraft.trim();
+    const persistedStatus = chatUser?.custom_status?.trim() ?? "";
+
+    setIsCustomStatusEditing(false);
+    setCustomStatusDraft(trimmedStatus);
+
+    if (trimmedStatus === persistedStatus) {
+      return;
+    }
+
+    updateStatus(currentPresenceStatus, trimmedStatus || null);
+  }, [chatUser?.custom_status, currentPresenceStatus, customStatusDraft, updateStatus]);
+  const handleClearCustomStatus = useCallback(() => {
+    if (!currentCustomStatus && !chatUser?.custom_status?.trim()) {
+      setIsCustomStatusEditing(false);
+      return;
+    }
+
+    setCustomStatusDraft("");
+    setIsCustomStatusEditing(false);
+    updateStatus(currentPresenceStatus, null);
+  }, [chatUser?.custom_status, currentCustomStatus, currentPresenceStatus, updateStatus]);
   const nameplateStatus = removeNameplate
     ? "Nameplate will be removed when you save."
     : nameplateFile
@@ -1434,7 +1601,7 @@ export default function SettingsAccountTab({
     setProfileAccentColor(normalizeHexColor(chatUser?.profile_accent_color) ?? null);
     setProfileBackgroundColor(normalizeHexColor(chatUser?.profile_background_color) ?? null);
     setProfileBannerColor(normalizeHexColor(chatUser?.profile_banner_color) ?? null);
-    setDisplayNameStyle(normalizeDisplayNameStyle(chatUser?.display_name_style) ?? DEFAULT_DISPLAY_NAME_STYLE);
+    setDisplayNameStyle(normalizeDisplayNameStyle(chatUser?.display_name_style));
     setError(null);
     setSaved(false);
     setUsernameStatus("idle");
@@ -2377,11 +2544,27 @@ export default function SettingsAccountTab({
                   </ProfileRailSection>
 
                   <ProfileRailSection title="Display Name Style">
-                    <ProfileRailCard className="space-y-2.5 p-2.5">
+                    <ProfileRailCard
+                      className="space-y-2.5 p-2.5"
+                      actions={(
+                        <AccountActionIconButton
+                          label={hasDisplayNameStyle ? "Clear display name style" : "Add display name style"}
+                          onClick={() => {
+                            if (hasDisplayNameStyle) {
+                              setDisplayNameStyle(null);
+                              return;
+                            }
+                            setDisplayNameStyleEditorOpen(true);
+                          }}
+                        >
+                          {hasDisplayNameStyle ? <Trash2 size={14} /> : <Plus size={14} />}
+                        </AccountActionIconButton>
+                      )}
+                    >
                       <button
                         type="button"
                         onClick={() => setDisplayNameStyleEditorOpen(true)}
-                        className="flex w-full items-center justify-between gap-2.5 rounded-[14px] border border-rm-border bg-rm-bg-surface/60 px-2.5 py-3 text-left transition hover:bg-rm-bg-elevated/80"
+                        className="flex w-full items-center justify-between gap-2.5 rounded-[14px] border border-rm-border bg-rm-bg-surface/60 px-2.5 py-3 pr-11 text-left transition hover:bg-rm-bg-elevated/80"
                       >
                         <div className="min-w-0 flex-1">
                           <ProfileDisplayName
@@ -2389,22 +2572,28 @@ export default function SettingsAccountTab({
                             displayNameStyle={displayNameStyle}
                             className="block truncate text-[15px] font-semibold leading-[1.15] tracking-[-0.03em] md:text-[16px]"
                           />
-                        </div>
-                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-rm-border bg-rm-bg-floating/90 text-rm-text-muted">
-                          <Plus size={14} />
+                          <div className="mt-1 text-[11px] text-rm-text-muted">
+                            {hasDisplayNameStyle ? "Tap to edit the current style." : "Use theme-aware colors and effects for your display name."}
+                          </div>
                         </div>
                       </button>
 
-                      <div className="flex items-center gap-2">
-                        <div className="flex flex-1 items-center gap-2 rounded-[14px] border border-rm-border bg-rm-bg-surface/60 px-2.5 py-2">
-                          <div className="h-5 w-5 rounded-[8px] border border-rm-border" style={{ background: displayNameStyle.primaryColor }} />
-                          <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-rm-text-muted">Base</span>
+                      {displayNameStyle ? (
+                        <div className="flex items-center gap-2">
+                          <div className="flex flex-1 items-center gap-2 rounded-[14px] border border-rm-border bg-rm-bg-surface/60 px-2.5 py-2">
+                            <div className="h-5 w-5 rounded-[8px] border border-rm-border" style={{ background: displayNameStyle.primaryColor }} />
+                            <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-rm-text-muted">Base</span>
+                          </div>
+                          <div className="flex flex-1 items-center gap-2 rounded-[14px] border border-rm-border bg-rm-bg-surface/60 px-2.5 py-2">
+                            <div className="h-5 w-5 rounded-[8px] border border-rm-border" style={{ background: displayNameStyle.secondaryColor }} />
+                            <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-rm-text-muted">Glow</span>
+                          </div>
                         </div>
-                        <div className="flex flex-1 items-center gap-2 rounded-[14px] border border-rm-border bg-rm-bg-surface/60 px-2.5 py-2">
-                          <div className="h-5 w-5 rounded-[8px] border border-rm-border" style={{ background: displayNameStyle.secondaryColor }} />
-                          <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-rm-text-muted">Glow</span>
+                      ) : (
+                        <div className="rounded-[14px] border border-dashed border-rm-border bg-rm-bg-surface/40 px-3 py-3 text-[12px] text-rm-text-muted">
+                          No custom style set. Your display name will use the normal theme text color until you add one.
                         </div>
-                      </div>
+                      )}
                     </ProfileRailCard>
                   </ProfileRailSection>
                 </div>
@@ -2453,7 +2642,9 @@ export default function SettingsAccountTab({
               }}
             >
               <div className="pointer-events-none absolute inset-0 z-0" style={{ background: "var(--rm-profile-custom-surface-overlay)" }} />
-              <ProfileCollectiblesLayer display={currentAvatarDisplay} effectOpacity={1} fit="contain" className="z-10 opacity-100" />
+              <div className="pointer-events-none absolute inset-0 z-30">
+                <ProfileCollectiblesLayer display={currentAvatarDisplay} effectOpacity={1} fit="contain" className="z-10 opacity-100" />
+              </div>
               <button
                 type="button"
                 onClick={() => bannerInputRef.current?.click()}
@@ -2474,9 +2665,9 @@ export default function SettingsAccountTab({
                 </span>
               </button>
 
-              <div className="relative z-10 px-6 pb-7">
-                <div className="-mt-9 flex items-start gap-4">
-                  <div className="flex min-w-0 gap-4">
+              <div className="relative z-20 px-6 pb-7">
+                <div className="-mt-9">
+                  <div className="flex items-start justify-between gap-4">
                     <button
                       type="button"
                       onClick={() => fileInputRef.current?.click()}
@@ -2498,7 +2689,107 @@ export default function SettingsAccountTab({
                       </span>
                     </button>
 
-                    <div className="min-w-0 pt-11">
+                    <div className="relative ml-auto flex w-full min-w-0 max-w-[220px] justify-end pt-10">
+                      {isCustomStatusEditing ? (
+                        <div className="relative z-50 flex h-[42px] w-full min-w-0 items-center rounded-full border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] p-1 shadow-[0_18px_40px_rgba(0,0,0,0.28)] backdrop-blur-xl animate-in fade-in zoom-in-95">
+                          <input
+                            ref={previewCustomStatusInputRef}
+                            type="text"
+                            value={customStatusDraft}
+                            onChange={(event) => setCustomStatusDraft(event.target.value.slice(0, 128))}
+                            onClick={(event) => event.stopPropagation()}
+                            onBlur={handleSaveCustomStatus}
+                            onKeyDown={(event) => {
+                              if (event.key === "Enter") {
+                                event.preventDefault();
+                                handleSaveCustomStatus();
+                              }
+
+                              if (event.key === "Escape") {
+                                event.preventDefault();
+                                setCustomStatusDraft(chatUser?.custom_status ?? "");
+                                setIsCustomStatusEditing(false);
+                              }
+                            }}
+                            className="min-w-0 flex-1 rounded-full bg-white/10 px-3 py-2 text-[13px] text-[color:var(--rm-profile-custom-text)] outline-none placeholder:text-[color:var(--rm-profile-custom-muted)]"
+                            aria-label="Custom status"
+                            placeholder="Support custom status!"
+                            maxLength={128}
+                          />
+                        </div>
+                      ) : hasCustomStatus ? (
+                        <div className="group/preview-status inline-flex max-w-full min-w-0 items-center gap-2 rounded-full border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] pl-3 pr-2 py-1.5 text-left shadow-[0_12px_28px_rgba(0,0,0,0.22)] backdrop-blur-md transition-colors hover:bg-[var(--rm-profile-custom-card-bg)]">
+                          <button
+                            type="button"
+                            className="min-w-0 flex-1 rounded-full text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35"
+                            aria-label="Edit custom status"
+                            onClick={handleOpenCustomStatusEditor}
+                          >
+                            <span className="block min-w-0 truncate text-[13px] italic font-medium text-[color:var(--rm-profile-custom-text)]">
+                              {visibleCustomStatus}
+                            </span>
+                          </button>
+                          <span className="flex shrink-0 items-center gap-1 pl-1">
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <button
+                                  type="button"
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    handleOpenCustomStatusEditor();
+                                  }}
+                                  className="pointer-events-none flex h-7 w-7 items-center justify-center rounded-full border border-transparent text-[color:var(--rm-profile-custom-muted)] opacity-0 transition hover:border-[color:var(--rm-profile-custom-card-border)] hover:bg-[var(--rm-profile-custom-card-bg-strong)] hover:text-[color:var(--rm-profile-custom-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35 group-hover/preview-status:pointer-events-auto group-hover/preview-status:opacity-100 group-focus-within/preview-status:pointer-events-auto group-focus-within/preview-status:opacity-100"
+                                  aria-label="Edit custom status"
+                                >
+                                  <Pencil size={14} />
+                                </button>
+                              </TooltipTrigger>
+                              <TooltipContent side="top" sideOffset={8} className={SETTINGS_TOOLTIP_CONTENT_CLASS}>
+                                Edit custom status
+                              </TooltipContent>
+                            </Tooltip>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <button
+                                  type="button"
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    handleClearCustomStatus();
+                                  }}
+                                  className="pointer-events-none flex h-7 w-7 items-center justify-center rounded-full border border-transparent text-[color:var(--rm-profile-custom-muted)] opacity-0 transition hover:border-[color:var(--rm-profile-custom-card-border)] hover:bg-[var(--rm-profile-custom-card-bg-strong)] hover:text-[color:var(--rm-profile-custom-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35 group-hover/preview-status:pointer-events-auto group-hover/preview-status:opacity-100 group-focus-within/preview-status:pointer-events-auto group-focus-within/preview-status:opacity-100"
+                                  aria-label="Clear custom status"
+                                >
+                                  <Trash2 size={14} />
+                                </button>
+                              </TooltipTrigger>
+                              <TooltipContent side="top" sideOffset={8} className={SETTINGS_TOOLTIP_CONTENT_CLASS}>
+                                Clear custom status
+                              </TooltipContent>
+                            </Tooltip>
+                          </span>
+                        </div>
+                      ) : (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <button
+                              type="button"
+                              className="inline-flex max-w-full min-w-0 items-center gap-1.5 rounded-full border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] px-3 py-1.5 text-left shadow-[0_12px_28px_rgba(0,0,0,0.22)] backdrop-blur-md transition-colors hover:bg-[var(--rm-profile-custom-card-bg)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35"
+                              aria-label="Add custom status"
+                              onClick={handleOpenCustomStatusEditor}
+                            >
+                              <Plus size={14} className="shrink-0 text-[color:var(--rm-profile-custom-muted)]" />
+                              <span className="min-w-0 truncate text-[13px] italic font-medium text-[color:var(--rm-profile-custom-text)]">
+                                Today I learned...
+                              </span>
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent side="top" sideOffset={8} className={SETTINGS_TOOLTIP_CONTENT_CLASS}>
+                            Add custom status
+                          </TooltipContent>
+                        </Tooltip>
+                      )}
+
+                      {SHOW_LEGACY_PREVIEW_IDENTITY ? (<>
                       {chatUser?.custom_status ? (
                         <div className="mb-3 inline-flex max-w-[180px] items-center rounded-full border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] px-3.5 py-2 text-[12px] font-medium text-[color:var(--rm-profile-custom-text)] shadow-[0_14px_28px_rgba(0,0,0,0.22)] backdrop-blur-sm">
                           <span className="truncate">{chatUser.custom_status}</span>
@@ -2508,6 +2799,8 @@ export default function SettingsAccountTab({
                         text={currentDisplayName}
                         displayNameStyle={displayNameStyle}
                         className="truncate text-[20px] font-semibold tracking-[-0.03em] text-[color:var(--rm-profile-custom-text)]"
+                        backgroundColor={previewTheme.backgroundColor}
+                        readableFallbackColor={previewTheme.textColor}
                       />
                       <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-[color:var(--rm-profile-custom-muted)]">
                         <span>@{currentUsername}</span>
@@ -2539,8 +2832,71 @@ export default function SettingsAccountTab({
                           )}
                         </button>
                       </div>
-                    </div>
+                    </>) : null}
                   </div>
+                </div>
+
+                <div className="mt-4">
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        type="button"
+                        className="group/preview-display-name relative -mx-3 inline-flex max-w-full items-center rounded-[18px] border border-transparent px-3 py-2 pr-12 text-left transition hover:border-[color:var(--rm-profile-custom-card-border)] hover:bg-[var(--rm-profile-custom-card-bg-strong)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35"
+                        aria-label={hasDisplayNameStyle ? "Edit display name style" : "Add display name style"}
+                        onClick={() => setDisplayNameStyleEditorOpen(true)}
+                      >
+                        <span className="pointer-events-none absolute right-3 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] text-[color:var(--rm-profile-custom-text)] opacity-0 shadow-[0_12px_24px_rgba(0,0,0,0.2)] transition group-hover/preview-display-name:opacity-100 group-focus-within/preview-display-name:opacity-100">
+                          <Paintbrush size={14} />
+                        </span>
+                        <ProfileDisplayName
+                          text={currentDisplayName}
+                          displayNameStyle={displayNameStyle}
+                          className="truncate text-[20px] font-semibold tracking-[-0.03em] text-[color:var(--rm-profile-custom-text)]"
+                          backgroundColor={previewTheme.backgroundColor}
+                          readableFallbackColor={previewTheme.textColor}
+                        />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" sideOffset={8} className={SETTINGS_TOOLTIP_CONTENT_CLASS}>
+                      {hasDisplayNameStyle ? "Edit display name style" : "Add display name style"}
+                    </TooltipContent>
+                  </Tooltip>
+                  <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-[color:var(--rm-profile-custom-muted)]">
+                    <span>@{currentUsername}</span>
+                    <span aria-hidden="true" className="text-[color:var(--rm-profile-custom-muted)]/60">•</span>
+                    <button
+                      type="button"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        setActivePreviewField("pronouns");
+                      }}
+                      className="group/preview-pronouns -mx-1.5 rounded-md px-1.5 py-0.5 text-left transition hover:bg-[var(--rm-profile-custom-card-bg)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35"
+                    >
+                      {activePreviewField === "pronouns" ? (
+                        <input
+                          ref={previewPronounsInputRef}
+                          value={pronouns}
+                          onClick={(event) => event.stopPropagation()}
+                          onChange={(event) => setPronouns(event.target.value.slice(0, 40))}
+                          onBlur={() => setActivePreviewField((current) => current === "pronouns" ? null : current)}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter" || event.key === "Escape") {
+                              event.preventDefault();
+                              event.currentTarget.blur();
+                            }
+                          }}
+                          className="min-w-[88px] bg-transparent text-[13px] font-medium text-[color:var(--rm-profile-custom-text)] outline-none placeholder:text-[color:var(--rm-profile-custom-muted)]"
+                          placeholder="Add pronouns"
+                        />
+                      ) : (
+                        <span className="rounded-md border border-transparent px-1 py-0.5 text-[13px] font-medium text-[color:var(--rm-profile-custom-text)] transition group-hover/preview-pronouns:border-[color:var(--rm-profile-custom-card-border)] group-hover/preview-pronouns:bg-[var(--rm-profile-custom-card-bg)]">
+                          {currentPronouns || "Add pronouns"}
+                        </span>
+                      )}
+                    </button>
+                  </div>
+                </div>
+
                 </div>
 
                 <div className="mt-5 flex items-center gap-2">
@@ -2598,8 +2954,8 @@ export default function SettingsAccountTab({
                   </button>
 
                   <div>
-                    <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[color:var(--rm-profile-custom-muted)]">Member Since</div>
-                    <div className="mt-2 text-[14px] text-[color:var(--rm-profile-custom-text)]">Mar 5, 2016</div>
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[color:var(--rm-profile-custom-muted)]">{previewReferenceDate.label}</div>
+                    <div className="mt-2 text-[14px] text-[color:var(--rm-profile-custom-text)]">{previewReferenceDate.value}</div>
                   </div>
                 </div>
               </div>
@@ -2642,6 +2998,8 @@ export default function SettingsAccountTab({
                         text={currentDisplayName}
                         displayNameStyle={displayNameStyle}
                         className="mt-3 text-[18px] font-semibold text-[color:var(--rm-profile-custom-text)]"
+                        backgroundColor={previewTheme.backgroundColor}
+                        readableFallbackColor={previewTheme.textColor}
                       />
                       <div className="mt-1 text-[13px] text-[color:var(--rm-profile-custom-muted)]">Season preview and profile card composition.</div>
                     </div>
@@ -2926,6 +3284,8 @@ export default function SettingsAccountTab({
         bannerContentType={currentBannerContentType}
         nameplateUrl={currentNameplateUrl}
         nameplateContentType={currentNameplateContentType}
+        profileThemeBackgroundColor={previewTheme.backgroundColor}
+        profileThemeTextColor={previewTheme.textColor}
         onClose={() => setDisplayNameStyleEditorOpen(false)}
         onApply={setDisplayNameStyle}
       />

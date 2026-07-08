@@ -911,7 +911,7 @@ export default function ChannelSidebar({
       }
       {
         popoverUser && popoverAnchor && (
-          <UserProfilePopover userId={popoverUser.id} username={popoverUser.username} displayName={popoverUser.display_name} avatarUrl={popoverUser.avatar_url} avatarDisplay={popoverUser.avatar_display} anchorEl={popoverAnchor} side="right" onClose={() => uiDispatch({ type: 'SET_POPOVER_USER', user: null, anchor: null })} />
+          <UserProfilePopover userId={popoverUser.id} username={popoverUser.username} displayName={popoverUser.display_name} avatarUrl={popoverUser.avatar_url} avatarDisplay={popoverUser.avatar_display} seedUser={popoverUser} anchorEl={popoverAnchor} side="right" onClose={() => uiDispatch({ type: 'SET_POPOVER_USER', user: null, anchor: null })} />
         )
       }
 
@@ -1309,12 +1309,6 @@ function VoiceChannelMemberRow({
 
     setStreamPreviewPosition({ left, top });
   }, [clearPreviewCloseTimeout, shouldShowStreamState]);
-
-  useEffect(() => {
-    if (!shouldShowStreamState && streamPreviewPosition) {
-      setStreamPreviewPosition(null);
-    }
-  }, [shouldShowStreamState, streamPreviewPosition]);
 
   useEffect(() => clearPreviewCloseTimeout, [clearPreviewCloseTimeout]);
 

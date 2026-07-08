@@ -294,7 +294,7 @@ export function createChatGateway(
             }) => ({
               userId: user.user_id,
               status: user.status ?? "online",
-              customStatus: user.custom_status ?? undefined,
+              customStatus: user.custom_status,
               platforms: normalizePresencePlatforms(user.platforms),
             })),
           });

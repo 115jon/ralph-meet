@@ -455,10 +455,11 @@ export interface User {
   theme_sync_enabled?: boolean;
   media_content_filter?: MediaContentFilter | null;
   updated_at?: string;
+  created_at?: string | null;
   bio?: string | null;
   pronouns?: string | null;
   status?: "online" | "idle" | "dnd" | "offline";
-  custom_status?: string;
+  custom_status?: string | null;
   presence_platforms?: PresencePlatform[];
 }
 

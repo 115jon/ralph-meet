@@ -7,8 +7,9 @@ import { UserPlatformIndicators } from "@/components/chat/UserPlatformIndicators
 import { apiGet } from "@/lib/api-client";
 import { hasPermission, PERMISSIONS } from "@/lib/permissions";
 import { getAuthAssetUrl } from "@/lib/platform";
+import { resolveProfileReferenceDate } from "@/lib/profile-dates";
 import { dispatchOpenProfileEditorEvent } from "@/lib/profile-editor-events";
-import { getProfileThemeVariables } from "@/lib/profile-customization";
+import { resolveProfileTheme } from "@/lib/profile-customization";
 import type { Role, User } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useChatActions, useChatStore } from "@/stores/chat-store";
@@ -129,6 +130,7 @@ function ProfileHeader({ user, isOnline, mutualFriends, mutualServers, isMe }: {
   isMe: boolean
 }) {
   const displayName = user.display_name?.trim() || user.username;
+  const profileTheme = resolveProfileTheme(user);
 
   return (
     <>
@@ -160,6 +162,8 @@ function ProfileHeader({ user, isOnline, mutualFriends, mutualServers, isMe }: {
             text={displayName}
             displayNameStyle={user.display_name_style}
             className="text-rm-text-primary"
+            backgroundColor={profileTheme.backgroundColor}
+            readableFallbackColor={profileTheme.textColor}
           />
         </div>
         <p className="text-[14px] text-rm-text-muted font-medium">
@@ -172,6 +176,8 @@ function ProfileHeader({ user, isOnline, mutualFriends, mutualServers, isMe }: {
             platforms={user.presence_platforms}
             status={user.status}
             iconClassName="h-4 w-4"
+            color="var(--rm-profile-custom-muted)"
+            offlineColor="var(--rm-profile-custom-ghost)"
           />
         </div>
 
@@ -269,9 +275,10 @@ function ProfileActions({
   );
 }
 
-function ProfileCards({ user, memberRoles, hasModActions, canManage, canKick, canBanPerm, onBan, onKick, onClose }: {
+function ProfileCards({ user, memberRoles, profileReferenceDate, hasModActions, canManage, canKick, canBanPerm, onBan, onKick, onClose }: {
   user: User,
   memberRoles: Role[] | undefined,
+  profileReferenceDate: { label: string; value: string },
   hasModActions: boolean,
   canManage: boolean,
   canKick: boolean,
@@ -297,12 +304,12 @@ function ProfileCards({ user, memberRoles, hasModActions, canManage, canKick, ca
 
       <div className="bg-rm-bg-elevated rounded-2xl border border-rm-border/30 p-4">
         <h3 className="text-[13px] font-bold text-rm-text-primary uppercase tracking-wide mb-3">
-          Member Since
+          {profileReferenceDate.label}
         </h3>
         <div className="flex items-center gap-3 text-[13px] text-rm-text-secondary">
           <div className="flex items-center gap-2">
             <Calendar size={16} className="text-rm-text-muted" />
-            <span>Member</span>
+            <span>{profileReferenceDate.value}</span>
           </div>
         </div>
       </div>
@@ -417,10 +424,14 @@ export default function MobileProfileSheet({
   const resolvedUser = activeProfileData?.user ?? user;
   const mutualFriends = !isMe ? activeProfileData?.mutualFriends ?? EMPTY_MUTUAL_FRIENDS : EMPTY_MUTUAL_FRIENDS;
   const mutualServers = !isMe ? activeProfileData?.mutualServers ?? EMPTY_MUTUAL_SERVERS : EMPTY_MUTUAL_SERVERS;
-  const profileThemeStyle = getProfileThemeVariables(resolvedUser);
+  const profileThemeStyle = resolveProfileTheme(resolvedUser).variables;
   const isOnline = onlineUsers.has(user.id);
   const member = members.find((m) => m.user.id === user.id);
   const memberRoles = roles || member?.roles;
+  const profileReferenceDate = resolveProfileReferenceDate({
+    joinedAt: member?.joined_at,
+    createdAt: resolvedUser.created_at ?? null,
+  });
 
   const myMember = members.find((m) => m.user.id === chatUser?.id);
   const myTotalPerms =
@@ -492,6 +503,7 @@ export default function MobileProfileSheet({
           <ProfileCards
             user={resolvedUser}
             memberRoles={memberRoles}
+            profileReferenceDate={profileReferenceDate}
             hasModActions={hasModActions}
             canManage={canManage}
             canKick={canKick}

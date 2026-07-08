@@ -30,6 +30,7 @@ type UserProfileRow = {
   theme_sync_enabled: number;
   media_content_filter: string;
   updated_at: string | null;
+  created_at: string | null;
   bio: string | null;
   pronouns: string | null;
   status: string;
@@ -166,6 +167,7 @@ async function syncUserFromRalphAuth(
     theme_sync_enabled: 0,
     media_content_filter: DEFAULT_MEDIA_CONTENT_FILTER,
     updated_at: now,
+    created_at: now,
     bio,
     pronouns: null,
     status: "online",

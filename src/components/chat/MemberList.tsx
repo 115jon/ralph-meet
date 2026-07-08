@@ -31,6 +31,7 @@ import { PlayIcon } from "./VideoIcons";
 import { ProfileAssetLayer } from "./ProfileAssetLayer";
 import { UserPlatformIndicators } from "./UserPlatformIndicators";
 import { UserDisplayName } from "./UserDisplayName";
+import { getUserNameplatePresentation } from "./user-nameplate-presentation";
 
 const log = clog("MemberList");
 
@@ -455,6 +456,7 @@ export default function MemberList({
             displayName={state.popoverUser.display_name}
             avatarUrl={state.popoverUser.avatar_url}
             avatarDisplay={state.popoverUser.avatar_display}
+            seedUser={state.popoverUser}
             anchorEl={state.popoverAnchor}
             side="left"
             onClose={closePopover}
@@ -1271,28 +1273,44 @@ function MemberItem({
   onContextMenu?: (e: React.MouseEvent<HTMLButtonElement>) => void;
 }) {
   const displayName = getDisplayName(member.user);
+  const nameplatePresentation = getUserNameplatePresentation(member.user);
+  const hasNameplate = nameplatePresentation.hasNameplate;
+  const needsNameplateContrastAssist = nameplatePresentation.needsContrastAssist;
+  const nameplateTheme = nameplatePresentation.theme;
+  const nameplateForegroundColor = hasNameplate ? nameplateTheme?.foregroundColor : undefined;
+  const nameplateMutedColor = hasNameplate ? nameplateTheme?.mutedForegroundColor : undefined;
+  const nameplateMetaColor = hasNameplate ? nameplateTheme?.metaColor : undefined;
+  const showNameplateIdentityBackdrop = hasNameplate && needsNameplateContrastAssist && Boolean(nameplateTheme);
 
   return (
     <ButtonBase
       className={cn(
         "group relative flex w-full cursor-pointer items-center gap-3 overflow-hidden border-0 bg-transparent p-0 text-left transition-colors lg:gap-2.5",
-        "bg-rm-bg-elevated px-3.5 py-3 mb-2 rounded-2xl shadow-sm border border-rm-border/30", // mobile
-        "lg:bg-transparent lg:px-2 lg:py-1.5 lg:mb-0 lg:rounded-md lg:shadow-none lg:border-transparent lg:hover:bg-rm-bg-hover", // desktop
+        "bg-rm-bg-elevated px-3.5 py-3 mb-2 rounded-2xl", // mobile
+        hasNameplate ? "border border-transparent" : "border border-rm-border/30",
+        hasNameplate && "isolate",
+        showNameplateIdentityBackdrop
+          ? "lg:bg-transparent lg:px-2 lg:py-1.5 lg:mb-0 lg:rounded-md lg:border-transparent lg:hover:bg-transparent"
+          : hasNameplate
+          ? "lg:bg-transparent lg:px-2 lg:py-1.5 lg:mb-0 lg:rounded-md lg:border-transparent lg:hover:bg-white/8"
+          : "lg:bg-transparent lg:px-2 lg:py-1.5 lg:mb-0 lg:rounded-md lg:border-transparent lg:hover:bg-rm-bg-hover", // desktop
         !isOnline && "opacity-60 grayscale hover:opacity-100 hover:grayscale-0"
       )}
+      style={hasNameplate && nameplateTheme ? {
+        boxShadow: `inset 0 1px 0 ${nameplateTheme.rowBorder}, 0 0 0 1px ${nameplateTheme.rowBorder}, 0 14px 28px ${nameplateTheme.rowGlow}`,
+      } : undefined}
       onClick={(e) => { if (e.button === 0) onClick?.(e); }}
       onContextMenu={onContextMenu}
       aria-label={`${displayName} (${isOnline ? 'Online' : 'Offline'})`}
     >
-      {member.user.nameplate_url && (
+      {hasNameplate && (
         <>
           <ProfileAssetLayer
             url={member.user.nameplate_url}
             contentType={member.user.nameplate_content_type}
             alt={`${displayName} nameplate`}
-            className="opacity-40 transition-opacity duration-200 group-hover:opacity-55"
+            className="pointer-events-none z-0 opacity-[0.98]"
           />
-          <div className="absolute inset-0 bg-linear-to-r from-black/55 via-black/38 to-black/58 opacity-100" />
         </>
       )}
       <div className="relative z-10">
@@ -1319,47 +1337,103 @@ function MemberItem({
           )} />
         )}
       </div>
-      <div className="min-w-0 flex-1 z-10">
-        <div className="flex min-w-0 items-center gap-1.5">
-          <UserDisplayName
-            user={member.user}
-            text={displayName}
-            className={cn(
-              "block min-w-0 flex-1 truncate text-[15px] lg:text-[13px] font-bold lg:font-medium leading-[1.1] transition-colors",
-              !isOnline ? "text-rm-text-secondary" : "group-hover:text-rm-text",
-            )}
-            style={{
-              color: isOnline && !member.user.display_name_style
-                ? (getHighestRole(member.roles)?.color || undefined)
-                : undefined,
-            }}
-          />
-          <UserPlatformIndicators
-            userId={member.user.id}
-            platforms={platforms}
-            status={member.user.status}
-            className="shrink-0"
-            iconClassName="h-3.5 w-3.5"
-          />
-          {(getHighestRole(member.roles)?.permissions ?? 0) & PERMISSIONS.ADMINISTRATOR ? (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <span className="flex shrink-0 items-center">
-                  <Crown className="h-3 w-3 fill-primary/20 text-primary" />
-                </span>
-              </TooltipTrigger>
-              <TooltipContent side="top" sideOffset={8} className="rounded-lg border-none bg-rm-bg-floating px-3 py-2 text-[12px] font-bold text-rm-text-primary shadow-xl">
-                Administrator
-              </TooltipContent>
-            </Tooltip>
-          ) : null}
-        </div>
+      <div className="relative z-10 min-w-0 flex-1">
+            <div className={cn(
+              "relative min-w-0 rounded-[12px] px-2 -ml-1 py-1 transition-colors",
+              showNameplateIdentityBackdrop
+                ? "hover:bg-transparent"
+                : hasNameplate
+                  ? "hover:bg-white/10"
+                  : "hover:bg-transparent",
+            )}>
+          {showNameplateIdentityBackdrop && nameplateTheme && (
+            <div
+              className="pointer-events-none absolute inset-y-0 left-0 right-0 rounded-[10px] shadow-[0_8px_18px_rgba(0,0,0,0.14)]"
+              style={{
+                border: `1px solid ${nameplateTheme.identityBackdropBorder}`,
+                background: nameplateTheme.identityBackdropBg,
+                backdropFilter: "blur(10px) saturate(1.05)",
+                WebkitBackdropFilter: "blur(10px) saturate(1.05)",
+                maskImage: "linear-gradient(90deg, black 0%, black 84%, transparent 100%)",
+                WebkitMaskImage: "linear-gradient(90deg, black 0%, black 84%, transparent 100%)",
+              }}
+            />
+          )}
+          <div className="relative min-w-0">
+            <div className="flex min-w-0 items-center gap-1.5">
+              <div className="min-w-0 shrink">
+                <UserDisplayName
+                  user={member.user}
+                  text={displayName}
+                  className={cn(
+                    "block min-w-0 truncate text-[15px] lg:text-[13px] font-bold lg:font-medium leading-[1.1] transition-colors",
+                    hasNameplate
+                      ? "text-rm-text-primary"
+                      : !isOnline
+                        ? "text-rm-text-secondary"
+                        : "group-hover:text-rm-text",
+                  )}
+                  backgroundColor={
+                    showNameplateIdentityBackdrop
+                      ? nameplateTheme?.identityBackdropBg
+                      : hasNameplate
+                        ? nameplateTheme?.accentHex
+                        : undefined
+                  }
+                  readableFallbackColor={nameplateForegroundColor}
+                  minContrastRatio={hasNameplate ? 2.8 : undefined}
+                  style={hasNameplate
+                    ? (!member.user.display_name_style && nameplateForegroundColor
+                      ? { color: nameplateForegroundColor }
+                      : undefined)
+                    : (isOnline && !member.user.display_name_style
+                      ? { color: getHighestRole(member.roles)?.color || undefined }
+                      : undefined)}
+                />
+              </div>
+              <div className="flex shrink-0 items-center gap-1.5 pl-0.5">
+                <UserPlatformIndicators
+                  userId={member.user.id}
+                  platforms={platforms}
+                  status={member.user.status}
+                  className="shrink-0"
+                  iconClassName="h-3.5 w-3.5"
+                  variant={hasNameplate ? "nameplate" : "default"}
+                  color={nameplateMetaColor}
+                  offlineColor={nameplateMutedColor}
+                />
+                {(getHighestRole(member.roles)?.permissions ?? 0) & PERMISSIONS.ADMINISTRATOR ? (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span className="flex shrink-0 items-center">
+                        <Crown
+                          className={cn("h-3 w-3", hasNameplate ? undefined : "fill-primary/20 text-primary")}
+                          style={hasNameplate && nameplateTheme ? {
+                            color: nameplateMetaColor,
+                            fill: showNameplateIdentityBackdrop ? "transparent" : nameplateTheme.metaFill,
+                          } : undefined}
+                        />
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" sideOffset={8} className="rounded-lg border-none bg-rm-bg-floating px-3 py-2 text-[12px] font-bold text-rm-text-primary shadow-xl">
+                      Administrator
+                    </TooltipContent>
+                  </Tooltip>
+                ) : null}
+              </div>
+            </div>
 
-        {member.user.custom_status && (
-          <div className="truncate text-[11px] font-medium italic text-rm-text-muted mt-0.5">
-            {member.user.custom_status}
+            {member.user.custom_status && (
+              <div className={cn(
+                "mt-0.5 truncate text-[11px] font-medium italic",
+                hasNameplate ? "text-rm-text-secondary" : "text-rm-text-muted",
+              )}
+              style={hasNameplate && nameplateMutedColor ? { color: nameplateMutedColor } : undefined}>
+                {member.user.custom_status}
+              </div>
+            )}
           </div>
-        )}
+        </div>
       </div>
     </ButtonBase>
   );

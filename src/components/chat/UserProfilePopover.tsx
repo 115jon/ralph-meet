@@ -13,7 +13,7 @@ import { getDisplayInitial, getDisplayName } from "@/lib/display-name";
 import { hasPermission, PERMISSIONS } from "@/lib/permissions";
 import { getAuthAssetUrl } from "@/lib/platform";
 import { dispatchOpenProfileEditorEvent } from "@/lib/profile-editor-events";
-import { getProfileThemeVariables } from "@/lib/profile-customization";
+import { resolveProfileTheme } from "@/lib/profile-customization";
 import type { Role, User } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useChatStore } from "@/stores/chat-store";
@@ -48,6 +48,7 @@ interface Props {
   displayName?: string | null;
   avatarUrl?: string | null;
   avatarDisplay?: User["avatar_display"];
+  seedUser?: User | null;
   anchorEl: HTMLElement;
   onClose: () => void;
   side?: "left" | "right" | "top" | "bottom";
@@ -175,7 +176,7 @@ function PopoverAvatar({
 }) {
   return (
     <div className="relative z-30 -mt-12 px-4">
-      <div className="relative inline-block rounded-full bg-rm-bg-primary p-1.5">
+      <div className="relative inline-block rounded-full bg-[var(--rm-profile-custom-card-bg-strong)] p-1.5 shadow-[0_10px_28px_rgba(0,0,0,0.24)]">
         <div className="relative flex h-[84px] w-[84px] items-center justify-center rounded-full bg-[var(--rm-profile-custom-button-bg)] text-2xl font-bold text-[color:var(--rm-profile-custom-button-text)] shadow-[0_12px_30px_rgba(0,0,0,0.34)]">
           {avatarUrl ? (
             <AvatarImage src={getAuthAssetUrl(avatarUrl)} alt={displayName} display={avatarDisplay} />
@@ -183,7 +184,7 @@ function PopoverAvatar({
             getDisplayInitial({ name: displayName })
           )}
         </div>
-        <div className="absolute bottom-1 right-1 z-20 rounded-full bg-rm-bg-primary p-1">
+        <div className="absolute bottom-1 right-1 z-20 rounded-full bg-[var(--rm-profile-custom-card-bg-strong)] p-1">
           <span
             className={cn(
               "block h-5 w-5 rounded-full border-rm-bg-primary",
@@ -416,6 +417,7 @@ export default function UserProfilePopover({
   displayName,
   avatarUrl,
   avatarDisplay,
+  seedUser,
   anchorEl,
   onClose,
   side = "bottom",
@@ -456,15 +458,18 @@ export default function UserProfilePopover({
   const [optimisticRoles, setOptimisticRoles] = useState<Role[] | undefined>(member?.roles);
 
   const fallbackUser = {
+    ...seedUser,
     id: userId,
-    username,
-    display_name: displayName ?? null,
-    avatar_url: avatarUrl ?? null,
-    avatar_display: avatarDisplay ?? null,
-    status: state.onlineUsers.has(userId) ? "online" : "offline",
+    username: seedUser?.username ?? username,
+    display_name: displayName ?? seedUser?.display_name ?? null,
+    avatar_url: avatarUrl ?? seedUser?.avatar_url ?? null,
+    avatar_display: avatarDisplay ?? seedUser?.avatar_display ?? null,
+    status: state.onlineUsers.has(userId) ? "online" : seedUser?.status ?? "offline",
   } as User;
 
-  const resolvedUser = localState.profileUser ?? member?.user ?? (isMe ? state.user : null) ?? fallbackUser;
+  const seededUser = member?.user ?? seedUser ?? (isMe ? state.user : null) ?? fallbackUser;
+  const liveProfileUser = localState.profileUser?.id === userId ? localState.profileUser : null;
+  const resolvedUser = liveProfileUser ?? seededUser;
   const resolvedUsername = resolvedUser.username ?? username;
   const resolvedDisplayName = resolvedUser.display_name?.trim() || displayName || resolvedUsername;
   const resolvedAvatarUrl = resolvedUser.avatar_url ?? avatarUrl;
@@ -474,7 +479,8 @@ export default function UserProfilePopover({
     state.presencePlatformsByUserId[userId]?.length
       ? state.presencePlatformsByUserId[userId]
       : resolvedUser.presence_platforms;
-  const profileThemeStyle = getProfileThemeVariables(resolvedUser);
+  const profileTheme = resolveProfileTheme(resolvedUser);
+  const profileThemeStyle = profileTheme.variables;
   const isOnline = state.onlineUsers.has(userId) && resolvedStatus !== "offline";
   const surfaceWidth = typeof surfaceStyle.width === "number" ? surfaceStyle.width : 340;
   const profileEffectStageHeight = getProfileEffectStageHeight(surfaceWidth);
@@ -486,7 +492,11 @@ export default function UserProfilePopover({
   const fetchUserProfile = useCallback(() => {
     if (!userId || isMe) return;
 
-    setLocalState({ loadingProfile: true, profileUser: null });
+    setLocalState({
+      loadingProfile: true,
+      mutualFriends: INITIAL_STATE.mutualFriends,
+      mutualServers: INITIAL_STATE.mutualServers,
+    });
     apiGet<{
       user: User;
       mutualFriends: LocalState["mutualFriends"];
@@ -778,6 +788,8 @@ export default function UserProfilePopover({
                           text={resolvedDisplayName}
                           displayNameStyle={resolvedUser.display_name_style}
                           className="text-xl font-bold leading-tight text-[color:var(--rm-profile-custom-text)]"
+                          backgroundColor={profileTheme.backgroundColor}
+                          readableFallbackColor={profileTheme.textColor}
                         />
                       </button>
                     ) : (
@@ -785,6 +797,8 @@ export default function UserProfilePopover({
                         text={resolvedDisplayName}
                         displayNameStyle={resolvedUser.display_name_style}
                         className="text-xl font-bold leading-tight text-[color:var(--rm-profile-custom-text)]"
+                        backgroundColor={profileTheme.backgroundColor}
+                        readableFallbackColor={profileTheme.textColor}
                       />
                     )}
 
@@ -794,6 +808,8 @@ export default function UserProfilePopover({
                       status={resolvedStatus}
                       className="shrink-0"
                       iconClassName="h-4 w-4"
+                      color="var(--rm-profile-custom-muted)"
+                      offlineColor="var(--rm-profile-custom-ghost)"
                     />
 
                     {!isMe ? (

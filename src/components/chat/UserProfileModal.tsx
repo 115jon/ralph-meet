@@ -6,7 +6,8 @@ import { BaseModal } from "@/components/ui/BaseModal";
 import { ButtonBase } from "@/components/ui/button-base";
 import { apiDelete, apiGet, apiPost, apiPut } from "@/lib/api-client";
 import { getAuthAssetUrl } from "@/lib/platform";
-import { getProfileThemeVariables } from "@/lib/profile-customization";
+import { resolveProfileReferenceDate } from "@/lib/profile-dates";
+import { resolveProfileTheme } from "@/lib/profile-customization";
 import { User } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useChatActions, useChatStore } from "@/stores/chat-store";
@@ -30,19 +31,35 @@ interface Props {
   isClosing?: boolean;
 }
 
+type JoinedMemberRecord = {
+  user: User;
+  joined_at?: string | number | null;
+};
+
 export default function UserProfileModal({ user, onClose, isClosing }: Props) {
   const relationships = useChatStore(s => s.relationships);
   const currentUser = useChatStore(s => s.user);
+  const memberRecord = useChatStore((state) =>
+    (state.members as JoinedMemberRecord[]).find((member) => member.user.id === user.id) ?? null,
+  );
   const { openDm, loadRelationships, dispatch } = useChatActions();
   const [loading, setLoading] = useState(false);
   const [showOptions, setShowOptions] = useState(false);
   const [profileUser, setProfileUser] = useState<User | null>(null);
 
   const relationship = relationships.find((r: any) => r.user.id === user.id);
-  const resolvedUser = profileUser ?? user;
+  const memberUser = memberRecord?.user ?? null;
+  const seedUser = memberUser ?? (currentUser?.id === user.id ? currentUser : user);
+  const liveProfileUser = profileUser?.id === user.id ? profileUser : null;
+  const resolvedUser = liveProfileUser ?? seedUser;
   const isMe = currentUser?.id === resolvedUser.id;
   const displayName = resolvedUser.display_name?.trim() || resolvedUser.username;
-  const profileThemeStyle = getProfileThemeVariables(resolvedUser);
+  const profileTheme = resolveProfileTheme(resolvedUser);
+  const profileThemeStyle = profileTheme.variables;
+  const profileReferenceDate = resolveProfileReferenceDate({
+    joinedAt: memberRecord?.joined_at,
+    createdAt: resolvedUser.created_at ?? null,
+  });
 
   // Handle outside click for options menu
   useEffect(() => {
@@ -51,15 +68,12 @@ export default function UserProfileModal({ user, onClose, isClosing }: Props) {
 
   useEffect(() => {
     let cancelled = false;
-    setProfileUser(null);
 
     apiGet<{ user: User }>(`/api/users/${user.id}/profile`)
       .then((data) => {
         if (!cancelled) setProfileUser(data.user ?? null);
       })
-      .catch(() => {
-        if (!cancelled) setProfileUser(null);
-      });
+      .catch(() => undefined);
 
     return () => {
       cancelled = true;
@@ -139,7 +153,7 @@ export default function UserProfileModal({ user, onClose, isClosing }: Props) {
           {/* Close Button */}
           <ButtonBase
             onClick={onClose}
-            className="absolute right-4 top-4 z-20 rounded-full bg-black/20 p-1.5 text-rm-text-muted/70 backdrop-blur-md transition-all hover:bg-black/40 hover:text-rm-text outline-none"
+            className="absolute right-4 top-4 z-20 rounded-full border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] p-1.5 text-[color:var(--rm-profile-custom-muted)] backdrop-blur-md transition-all hover:bg-[var(--rm-profile-custom-card-bg)] hover:text-[color:var(--rm-profile-custom-text)] outline-none"
           >
             <X className="h-5 w-5" />
           </ButtonBase>
@@ -148,17 +162,17 @@ export default function UserProfileModal({ user, onClose, isClosing }: Props) {
             {/* Avatar */}
             <div className="absolute -top-12 left-6">
               <div className="relative">
-                <div className="relative h-24 w-24 rounded-full border-[6px] border-rm-bg-primary bg-rm-accent shadow-xl overflow-hidden">
+                <div className="relative h-24 w-24 overflow-hidden rounded-full border-[6px] border-[var(--rm-profile-custom-card-bg-strong)] bg-[var(--rm-profile-custom-button-bg)] shadow-xl">
                   {resolvedUser.avatar_url ? (
                     <AvatarImage src={getAuthAssetUrl(resolvedUser.avatar_url)} alt={displayName} display={resolvedUser.avatar_display} />
                   ) : (
-                    <div className="flex h-full w-full items-center justify-center text-3xl font-bold text-rm-text shadow-inner">
+                    <div className="flex h-full w-full items-center justify-center text-3xl font-bold text-[color:var(--rm-profile-custom-button-text)] shadow-inner">
                       {displayName[0].toUpperCase()}
                     </div>
                   )}
                 </div>
                 <div className={cn(
-                  "absolute bottom-2 right-2 h-6 w-6 rounded-full border-4 border-rm-bg-primary shadow-md",
+                  "absolute bottom-2 right-2 h-6 w-6 rounded-full border-4 border-[var(--rm-profile-custom-card-bg-strong)] shadow-md",
                   resolvedUser.status === 'online' ? "bg-emerald-500" :
                     resolvedUser.status === 'idle' ? "bg-amber-500" :
                       resolvedUser.status === 'dnd' ? "bg-rose-500" : "bg-rm-text-muted/40"
@@ -174,6 +188,8 @@ export default function UserProfileModal({ user, onClose, isClosing }: Props) {
                       text={displayName}
                       displayNameStyle={resolvedUser.display_name_style}
                       className="truncate text-[color:var(--rm-profile-custom-text)]"
+                      backgroundColor={profileTheme.backgroundColor}
+                      readableFallbackColor={profileTheme.textColor}
                     />
                   </h2>
                   <p className="mt-1 text-xs font-medium uppercase tracking-widest text-[color:var(--rm-profile-custom-muted)]">@{resolvedUser.username.toLowerCase()}</p>
@@ -183,7 +199,7 @@ export default function UserProfileModal({ user, onClose, isClosing }: Props) {
                   <div className="ml-4 flex shrink-0 gap-2">
                     <ButtonBase
                       onClick={handleMessage}
-                      className="flex h-10 w-10 items-center justify-center rounded-xl border border-rm-border bg-rm-bg-elevated text-rm-text-muted transition-all hover:bg-rm-accent hover:text-white hover:border-rm-accent-hover outline-none"
+                      className="flex h-10 w-10 items-center justify-center rounded-xl border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] text-[color:var(--rm-profile-custom-muted)] transition-all hover:bg-[var(--rm-profile-custom-button-bg)] hover:text-[color:var(--rm-profile-custom-button-text)] outline-none"
                       title="Message"
                     >
                       <MessageSquare className="h-5 w-5" />
@@ -195,8 +211,8 @@ export default function UserProfileModal({ user, onClose, isClosing }: Props) {
                           setShowOptions(!showOptions);
                         }}
                         className={cn(
-                          "flex h-10 w-10 items-center justify-center rounded-xl border border-rm-border bg-rm-bg-elevated text-rm-text-muted transition-all hover:bg-rm-bg-hover hover:text-rm-text outline-none",
-                          showOptions && "bg-rm-bg-active text-rm-text border-rm-bg-active"
+                          "flex h-10 w-10 items-center justify-center rounded-xl border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] text-[color:var(--rm-profile-custom-muted)] transition-all hover:bg-[var(--rm-profile-custom-card-bg)] hover:text-[color:var(--rm-profile-custom-text)] outline-none",
+                          showOptions && "bg-[var(--rm-profile-custom-card-bg)] text-[color:var(--rm-profile-custom-text)]"
                         )}
                       >
                         <MoreVertical className="h-5 w-5" />
@@ -204,7 +220,7 @@ export default function UserProfileModal({ user, onClose, isClosing }: Props) {
 
                       {showOptions && (
                         <div
-                          className="absolute right-0 top-12 z-50 w-48 overflow-hidden rounded-xl border border-rm-border bg-rm-bg-elevated p-1.5 shadow-2xl backdrop-blur-xl animate-in fade-in zoom-in-95 duration-100"
+                          className="absolute right-0 top-12 z-50 w-48 overflow-hidden rounded-xl border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] p-1.5 text-[color:var(--rm-profile-custom-text)] shadow-2xl backdrop-blur-xl animate-in fade-in zoom-in-95 duration-100"
                           onClick={e => e.stopPropagation()}
                           onKeyDown={e => e.stopPropagation()}
                           role="menu"
@@ -215,12 +231,12 @@ export default function UserProfileModal({ user, onClose, isClosing }: Props) {
                               navigator.clipboard.writeText(resolvedUser.id);
                               setShowOptions(false);
                             }}
-                            className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-[13px] font-medium text-rm-text-secondary transition-all hover:bg-rm-accent hover:text-rm-text outline-none"
+                            className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-[13px] font-medium text-[color:var(--rm-profile-custom-muted)] transition-all hover:bg-[var(--rm-profile-custom-card-bg)] hover:text-[color:var(--rm-profile-custom-text)] outline-none"
                           >
                             <Copy className="h-4 w-4 opacity-60" />
                             Copy User ID
                           </ButtonBase>
-                          <div className="my-1 h-px bg-rm-border" />
+                          <div className="my-1 h-px bg-[color:var(--rm-profile-custom-card-border)]" />
                           <ButtonBase
                             onClick={() => handleAction('block')}
                             className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-[13px] font-medium text-rose-400 transition-all hover:bg-rose-500 hover:text-rm-text outline-none"
@@ -243,7 +259,7 @@ export default function UserProfileModal({ user, onClose, isClosing }: Props) {
                       <ButtonBase
                         disabled={loading}
                         onClick={() => handleAction('remove')}
-                        className="flex w-full items-center justify-center gap-2 rounded-xl border border-rose-500/20 bg-rose-500/10 py-2.5 text-sm font-bold text-rose-400 transition-all hover:bg-rose-500 hover:text-white active:scale-95 disabled:opacity-50"
+                        className="flex w-full items-center justify-center gap-2 rounded-xl border border-rose-500/25 bg-rose-500/12 py-2.5 text-sm font-bold text-rose-300 transition-all hover:bg-rose-500 hover:text-white active:scale-95 disabled:opacity-50"
                       >
                         {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserMinus className="h-4 w-4" />}
                         Remove Friend
@@ -251,17 +267,17 @@ export default function UserProfileModal({ user, onClose, isClosing }: Props) {
                     ) : relationship?.type === 2 ? (
                       <div className="flex gap-2">
                         <ButtonBase
-                          disabled={loading}
-                          onClick={() => handleAction('accept')}
-                          className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-rm-accent py-2.5 text-sm font-bold text-white transition-all hover:bg-rm-accent-hover active:scale-95 disabled:opacity-50 shadow-[0_8px_16px_var(--rm-accent-dim)]"
+                        disabled={loading}
+                        onClick={() => handleAction('accept')}
+                          className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-[var(--rm-profile-custom-button-bg)] py-2.5 text-sm font-bold text-[color:var(--rm-profile-custom-button-text)] transition-all active:scale-95 disabled:opacity-50 shadow-[0_8px_16px_var(--rm-profile-custom-button-shadow)] hover:brightness-105"
                         >
                           {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
                           Accept
                         </ButtonBase>
                         <ButtonBase
-                          disabled={loading}
-                          onClick={() => handleAction('remove')}
-                          className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-rm-border bg-rm-bg-elevated py-2.5 text-sm font-bold text-rm-text-muted transition-all hover:bg-rm-bg-hover hover:text-rm-text active:scale-95 disabled:opacity-50 outline-none"
+                        disabled={loading}
+                        onClick={() => handleAction('remove')}
+                          className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] py-2.5 text-sm font-bold text-[color:var(--rm-profile-custom-muted)] transition-all hover:bg-[var(--rm-profile-custom-card-bg)] hover:text-[color:var(--rm-profile-custom-text)] active:scale-95 disabled:opacity-50 outline-none"
                         >
                           Decline
                         </ButtonBase>
@@ -269,7 +285,7 @@ export default function UserProfileModal({ user, onClose, isClosing }: Props) {
                     ) : relationship?.type === 3 ? (
                       <ButtonBase
                         disabled
-                        className="flex w-full items-center justify-center gap-2 rounded-xl border border-rm-border bg-rm-bg-elevated/50 py-2.5 text-sm font-bold text-rm-text-muted opacity-50 outline-none"
+                        className="flex w-full items-center justify-center gap-2 rounded-xl border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)]/70 py-2.5 text-sm font-bold text-[color:var(--rm-profile-custom-muted)] opacity-50 outline-none"
                       >
                         Friend Request Sent
                       </ButtonBase>
@@ -277,7 +293,7 @@ export default function UserProfileModal({ user, onClose, isClosing }: Props) {
                       <ButtonBase
                         disabled={loading}
                         onClick={() => handleAction('unblock')}
-                        className="flex w-full items-center justify-center gap-2 rounded-xl border border-rm-border bg-rm-bg-elevated py-2.5 text-sm font-bold text-rm-text-muted transition-all hover:bg-rm-accent hover:text-white active:scale-95 outline-none"
+                        className="flex w-full items-center justify-center gap-2 rounded-xl border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] py-2.5 text-sm font-bold text-[color:var(--rm-profile-custom-muted)] transition-all hover:bg-[var(--rm-profile-custom-button-bg)] hover:text-[color:var(--rm-profile-custom-button-text)] active:scale-95 outline-none"
                       >
                         Unblock User
                       </ButtonBase>
@@ -285,7 +301,7 @@ export default function UserProfileModal({ user, onClose, isClosing }: Props) {
                       <ButtonBase
                         disabled={loading}
                         onClick={() => handleAction('add')}
-                        className="flex w-full items-center justify-center gap-2 rounded-xl bg-rm-accent py-2.5 text-sm font-bold text-white transition-all hover:bg-rm-accent-hover shadow-[0_8px_20px_var(--rm-accent-dim)] active:scale-95 disabled:opacity-50"
+                        className="flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--rm-profile-custom-button-bg)] py-2.5 text-sm font-bold text-[color:var(--rm-profile-custom-button-text)] transition-all shadow-[0_8px_20px_var(--rm-profile-custom-button-shadow)] hover:brightness-105 active:scale-95 disabled:opacity-50"
                       >
                         {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserPlus className="h-4 w-4" />}
                         Add Friend
@@ -295,26 +311,26 @@ export default function UserProfileModal({ user, onClose, isClosing }: Props) {
                 )}
 
                 <div className="space-y-4">
-                  <div className="rounded-xl border border-rm-border bg-rm-bg-primary/30 p-4 transition-colors hover:bg-rm-bg-primary/50">
-                    <h3 className="text-[11px] font-bold uppercase tracking-widest text-rm-text-muted">About Me</h3>
-                    <p className="mt-2 text-[13px] leading-relaxed text-rm-text-secondary">
+                  <div className="rounded-xl border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)]/92 p-4 transition-colors hover:bg-[var(--rm-profile-custom-card-bg)]">
+                    <h3 className="text-[11px] font-bold uppercase tracking-widest text-[color:var(--rm-profile-custom-muted)]">About Me</h3>
+                    <p className="mt-2 text-[13px] leading-relaxed text-[color:var(--rm-profile-custom-text)]">
                       This user hasn't added a bio yet. They are probably too busy chatting on Ralph Meet!
                     </p>
                   </div>
 
-                  <div className="rounded-xl border border-rm-border bg-rm-bg-primary/30 p-4 transition-colors hover:bg-rm-bg-primary/50">
-                    <h3 className="text-[11px] font-bold uppercase tracking-widest text-rm-text-muted">Note</h3>
+                  <div className="rounded-xl border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)]/92 p-4 transition-colors hover:bg-[var(--rm-profile-custom-card-bg)]">
+                    <h3 className="text-[11px] font-bold uppercase tracking-widest text-[color:var(--rm-profile-custom-muted)]">Note</h3>
                     <textarea
                       aria-label="Note about this user"
                       placeholder="Click to add a note"
-                      className="mt-2 w-full resize-none border-none bg-transparent p-0 text-[12px] text-rm-text-secondary outline-none placeholder:text-rm-text-muted/20"
+                      className="mt-2 w-full resize-none border-none bg-transparent p-0 text-[12px] text-[color:var(--rm-profile-custom-text)] outline-none placeholder:text-[color:var(--rm-profile-custom-muted)]/45"
                       rows={1}
                     />
                   </div>
 
                   <div className="flex items-center justify-between px-1">
-                    <span className="text-[11px] font-bold uppercase tracking-widest text-rm-text-muted/40">Member Since</span>
-                    <span className="text-[11px] font-medium text-rm-text-muted">Jan 1, 2024</span>
+                    <span className="text-[11px] font-bold uppercase tracking-widest text-[color:var(--rm-profile-custom-muted)]/60">{profileReferenceDate.label}</span>
+                    <span className="text-[11px] font-medium text-[color:var(--rm-profile-custom-muted)]">{profileReferenceDate.value}</span>
                   </div>
                 </div>
               </div>

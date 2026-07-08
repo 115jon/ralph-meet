@@ -53,6 +53,20 @@ export interface ProfileCustomizationInput {
   profile_banner_color?: string | null;
 }
 
+export interface DisplayNameContrastOptions {
+  backgroundColor?: string | null;
+  fallbackTextColor?: string | null;
+  minContrastRatio?: number;
+}
+
+export interface ResolvedProfileTheme {
+  variables: CSSProperties;
+  backgroundColor: string | null;
+  textColor: string | null;
+  accentColor: string | null;
+  isLightSurface: boolean | null;
+}
+
 export const DEFAULT_DISPLAY_NAME_STYLE: DisplayNameStyle = {
   font: "gg-sans",
   effect: "solid",
@@ -80,6 +94,8 @@ const DISPLAY_NAME_EFFECT_SET = new Set<DisplayNameEffectId>([
 ]);
 
 const HEX_COLOR_RE = /^#?(?:[0-9a-f]{3}|[0-9a-f]{6})$/i;
+const RGB_COLOR_RE =
+  /^rgba?\(\s*(\d{1,3})(?:\s*,\s*|\s+)(\d{1,3})(?:\s*,\s*|\s+)(\d{1,3})(?:(?:\s*,\s*|\s*\/\s*)([\d.]+%?))?\s*\)$/i;
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
@@ -94,6 +110,68 @@ export function normalizeHexColor(value: unknown): string | null {
     ? hex.split("").map(char => `${char}${char}`).join("")
     : hex;
   return `#${expanded.toUpperCase()}`;
+}
+
+function normalizeBrowserComputedColor(value: string) {
+  if (typeof document === "undefined" || typeof window === "undefined") {
+    return null;
+  }
+
+  const body = document.body;
+  if (!body) return null;
+
+  const probe = document.createElement("span");
+  probe.style.color = "";
+  probe.style.color = value;
+
+  if (!probe.style.color) {
+    return null;
+  }
+
+  probe.style.position = "fixed";
+  probe.style.inset = "0";
+  probe.style.opacity = "0";
+  probe.style.pointerEvents = "none";
+  body.appendChild(probe);
+
+  const computedColor = window.getComputedStyle(probe).color;
+  probe.remove();
+
+  return computedColor && computedColor !== value
+    ? computedColor
+    : null;
+}
+
+export function normalizeDisplayColor(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  const normalizedHex = normalizeHexColor(trimmed);
+  if (normalizedHex) return normalizedHex;
+
+  const rgbMatch = trimmed.match(RGB_COLOR_RE);
+  if (rgbMatch) {
+    const [, red, green, blue, alpha] = rgbMatch;
+    const alphaValue = alpha?.endsWith("%")
+      ? Number.parseFloat(alpha) / 100
+      : alpha
+        ? Number.parseFloat(alpha)
+        : 1;
+
+    if (!Number.isFinite(alphaValue) || alphaValue <= 0) {
+      return null;
+    }
+
+    return rgbToHex(
+      Number.parseInt(red, 10),
+      Number.parseInt(green, 10),
+      Number.parseInt(blue, 10),
+    );
+  }
+
+  const browserComputedColor = normalizeBrowserComputedColor(trimmed);
+  return browserComputedColor
+    ? normalizeDisplayColor(browserComputedColor)
+    : null;
 }
 
 function hexToRgb(hex: string) {
@@ -215,8 +293,96 @@ function getRelativeLuminance(hex: string) {
   return (0.2126 * channels[0]) + (0.7152 * channels[1]) + (0.0722 * channels[2]);
 }
 
+export function getContrastRatio(foreground: string, background: string) {
+  const foregroundHex = normalizeDisplayColor(foreground);
+  const backgroundHex = normalizeDisplayColor(background);
+
+  if (!foregroundHex || !backgroundHex) {
+    return 1;
+  }
+
+  const brighter = Math.max(
+    getRelativeLuminance(foregroundHex),
+    getRelativeLuminance(backgroundHex),
+  );
+  const darker = Math.min(
+    getRelativeLuminance(foregroundHex),
+    getRelativeLuminance(backgroundHex),
+  );
+
+  return (brighter + 0.05) / (darker + 0.05);
+}
+
 export function getContrastTextColor(hex: string) {
   return getRelativeLuminance(hex) > 0.47 ? "#12131A" : "#F8FAFC";
+}
+
+function pickReadableDisplayNameColor(
+  desiredColor: string,
+  backgroundColor: string,
+  fallbackTextColor: string,
+  minContrastRatio: number,
+) {
+  const normalizedDesired = normalizeDisplayColor(desiredColor) ?? fallbackTextColor;
+  const normalizedFallback = normalizeDisplayColor(fallbackTextColor) ?? getContrastTextColor(backgroundColor);
+  const contrastAnchor = getContrastTextColor(backgroundColor);
+
+  const candidates = [
+    normalizedDesired,
+    mixHexColors(normalizedDesired, contrastAnchor, 0.18),
+    mixHexColors(normalizedDesired, contrastAnchor, 0.34),
+    mixHexColors(normalizedDesired, contrastAnchor, 0.52),
+    normalizedFallback,
+    contrastAnchor,
+  ];
+
+  let bestCandidate = normalizedDesired;
+  let bestContrast = getContrastRatio(normalizedDesired, backgroundColor);
+
+  for (const candidate of candidates) {
+    const contrast = getContrastRatio(candidate, backgroundColor);
+    if (contrast > bestContrast) {
+      bestCandidate = candidate;
+      bestContrast = contrast;
+    }
+    if (contrast >= minContrastRatio) {
+      return candidate;
+    }
+  }
+
+  return bestCandidate;
+}
+
+export function resolveReadableDisplayNameStyle(
+  style: DisplayNameStyle | string | null | undefined,
+  options: DisplayNameContrastOptions = {},
+) {
+  const normalizedStyle = normalizeDisplayNameStyle(style);
+  if (!normalizedStyle) return null;
+
+  const backgroundColor = normalizeDisplayColor(options.backgroundColor);
+  if (!backgroundColor) return normalizedStyle;
+
+  const fallbackTextColor =
+    normalizeDisplayColor(options.fallbackTextColor)
+    ?? getContrastTextColor(backgroundColor);
+  const minContrastRatio = options.minContrastRatio ?? 3;
+
+  return {
+    ...normalizedStyle,
+    primaryColor: pickReadableDisplayNameColor(
+      normalizedStyle.primaryColor,
+      backgroundColor,
+      fallbackTextColor,
+      minContrastRatio,
+    ),
+    secondaryColor: pickReadableDisplayNameColor(
+      normalizedStyle.secondaryColor,
+      backgroundColor,
+      fallbackTextColor,
+      minContrastRatio,
+    ),
+  } satisfies DisplayNameStyle;
 }
 
 export function normalizeDisplayNameStyle(value: unknown): DisplayNameStyle | null {
@@ -375,45 +541,46 @@ export function getDisplayNameFontStyle(font: DisplayNameFontId): CSSProperties 
 export function getDisplayNameEffectStyle(style: DisplayNameStyle): CSSProperties {
   const primaryColor = normalizeHexColor(style.primaryColor) ?? DEFAULT_DISPLAY_NAME_STYLE.primaryColor;
   const secondaryColor = normalizeHexColor(style.secondaryColor) ?? DEFAULT_DISPLAY_NAME_STYLE.secondaryColor;
-  const darkOutline = withAlpha("#111827", 0.38);
-  const subtleOutline = withAlpha("#FFFFFF", 0.18);
-  const brightPrimary = mixHexColors(primaryColor, "#FFFFFF", 0.18);
-  const brightSecondary = mixHexColors(secondaryColor, "#FFFFFF", 0.14);
-  const frostedSecondary = mixHexColors(secondaryColor, "#FFFFFF", 0.34);
+  const primaryHighlightAnchor = getRelativeLuminance(primaryColor) > 0.62 ? "#111827" : "#FFFFFF";
+  const secondaryHighlightAnchor = getRelativeLuminance(secondaryColor) > 0.62 ? "#111827" : "#FFFFFF";
+  const darkOutline = withAlpha("#111827", 0.24);
+  const subtleOutline = withAlpha("#FFFFFF", 0.12);
+  const brightPrimary = mixHexColors(primaryColor, primaryHighlightAnchor, 0.08);
+  const brightSecondary = mixHexColors(secondaryColor, secondaryHighlightAnchor, 0.06);
+  const frostedSecondary = mixHexColors(secondaryColor, secondaryHighlightAnchor, 0.18);
 
   switch (style.effect) {
     case "gradient":
       return {
         color: "transparent",
-        backgroundImage: `linear-gradient(135deg, ${brightPrimary} 0%, ${primaryColor} 28%, ${mixHexColors(primaryColor, secondaryColor, 0.46)} 58%, ${brightSecondary} 100%)`,
+        backgroundImage: `linear-gradient(135deg, ${brightPrimary} 0%, ${primaryColor} 24%, ${mixHexColors(primaryColor, secondaryColor, 0.52)} 58%, ${secondaryColor} 82%, ${brightSecondary} 100%)`,
         backgroundSize: "180% 180%",
         WebkitBackgroundClip: "text",
         backgroundClip: "text",
         WebkitTextFillColor: "transparent",
-        textShadow: `0 1px 0 ${withAlpha("#FFFFFF", 0.06)}`,
-        filter: `drop-shadow(0 1px 1px ${withAlpha("#000000", 0.12)})`,
+        textShadow: `0 1px 0 ${withAlpha("#FFFFFF", 0.04)}`,
         animation: "rm-display-name-gradient 7.5s ease-in-out infinite",
         willChange: "background-position",
       };
     case "neon":
       return {
-        color: mixHexColors(primaryColor, "#FFFFFF", 0.26),
-        textShadow: `0 0 5px ${withAlpha(primaryColor, 0.58)}, 0 0 12px ${withAlpha(primaryColor, 0.34)}, 0 0 20px ${withAlpha(secondaryColor, 0.18)}, 0 1px 6px ${withAlpha("#000000", 0.18)}`,
+        color: mixHexColors(primaryColor, primaryHighlightAnchor, 0.12),
+        textShadow: `0 0 5px ${withAlpha(primaryColor, 0.54)}, 0 0 12px ${withAlpha(primaryColor, 0.3)}, 0 0 20px ${withAlpha(secondaryColor, 0.16)}, 0 1px 4px ${withAlpha("#000000", 0.14)}`,
         filter: "brightness(1.02)",
         animation: "rm-display-name-neon 2.9s ease-in-out infinite",
         willChange: "filter, opacity",
       };
     case "toon":
       return {
-        color: mixHexColors(primaryColor, "#FFFFFF", 0.08),
+        color: mixHexColors(primaryColor, primaryHighlightAnchor, 0.04),
         WebkitTextStroke: `1.15px ${withAlpha(frostedSecondary, 0.98)}`,
         paintOrder: "stroke fill",
-        textShadow: `0 1px 0 ${withAlpha("#FFFFFF", 0.18)}, 1px 2px 0 ${secondaryColor}, 2px 3px 0 ${withAlpha(secondaryColor, 0.7)}, 0 7px 16px ${withAlpha("#000000", 0.16)}`,
+        textShadow: `0 1px 0 ${withAlpha("#FFFFFF", 0.14)}, 1px 2px 0 ${secondaryColor}, 2px 3px 0 ${withAlpha(secondaryColor, 0.64)}, 0 6px 14px ${withAlpha("#000000", 0.14)}`,
       };
     case "pop":
       return {
-        color: mixHexColors(primaryColor, "#FFFFFF", 0.22),
-        textShadow: `0 1px 0 ${subtleOutline}, 0 2px 0 ${withAlpha(secondaryColor, 0.94)}, 0 4px 0 ${withAlpha(secondaryColor, 0.58)}, 0 8px 16px ${withAlpha(secondaryColor, 0.22)}, 0 2px 10px ${withAlpha("#000000", 0.16)}`,
+        color: mixHexColors(primaryColor, primaryHighlightAnchor, 0.1),
+        textShadow: `0 1px 0 ${subtleOutline}, 0 2px 0 ${withAlpha(secondaryColor, 0.88)}, 0 4px 0 ${withAlpha(secondaryColor, 0.52)}, 0 8px 16px ${withAlpha(secondaryColor, 0.18)}, 0 2px 8px ${withAlpha("#000000", 0.14)}`,
         animation: "rm-display-name-pop 2.35s cubic-bezier(0.33, 1, 0.68, 1) infinite",
         willChange: "translate",
       };
@@ -421,7 +588,7 @@ export function getDisplayNameEffectStyle(style: DisplayNameStyle): CSSPropertie
     default:
       return {
         color: primaryColor,
-        textShadow: `0 1px 0 ${darkOutline}, 0 6px 14px ${withAlpha(secondaryColor, 0.14)}`,
+        textShadow: `0 1px 0 ${darkOutline}, 0 4px 10px ${withAlpha(secondaryColor, 0.1)}`,
       };
   }
 }
@@ -453,30 +620,36 @@ export function createRandomDisplayNameStyle() {
   } satisfies DisplayNameStyle;
 }
 
-export function getProfileThemeVariables(input: ProfileCustomizationInput): CSSProperties {
+export function resolveProfileTheme(input: ProfileCustomizationInput): ResolvedProfileTheme {
   const accent = normalizeHexColor(input.profile_accent_color);
   const background = normalizeHexColor(input.profile_background_color);
   const banner = normalizeHexColor(input.profile_banner_color);
 
   if (!accent && !background) {
     return {
-      "--rm-profile-custom-accent": "var(--rm-accent)",
-      "--rm-profile-custom-accent-muted": "var(--rm-accent-dim)",
-      "--rm-profile-custom-text": "var(--rm-text-primary)",
-      "--rm-profile-custom-muted": "var(--rm-text-secondary)",
-      "--rm-profile-custom-ghost": "var(--rm-text-muted)",
-      "--rm-profile-custom-card-bg": "rgba(0, 0, 0, 0.16)",
-      "--rm-profile-custom-card-bg-strong": "rgba(0, 0, 0, 0.22)",
-      "--rm-profile-custom-card-border": "rgba(255, 255, 255, 0.08)",
-      "--rm-profile-custom-button-bg": "var(--rm-accent)",
-      "--rm-profile-custom-button-text": "white",
-      "--rm-profile-custom-button-shadow": "var(--rm-accent-dim)",
-      "--rm-profile-custom-surface": "linear-gradient(180deg, transparent, transparent)",
-      "--rm-profile-custom-surface-overlay": "var(--rm-profile-surface-overlay)",
-      "--rm-profile-custom-surface-overlay-strong": "var(--rm-profile-surface-overlay-strong)",
-      "--rm-profile-custom-banner-fallback": banner ?? "var(--rm-profile-banner-fallback)",
-      "--rm-profile-custom-banner-overlay": "var(--rm-profile-banner-overlay)",
-    } as CSSProperties;
+      variables: {
+        "--rm-profile-custom-accent": "var(--rm-accent)",
+        "--rm-profile-custom-accent-muted": "var(--rm-accent-dim)",
+        "--rm-profile-custom-text": "var(--rm-text-primary)",
+        "--rm-profile-custom-muted": "var(--rm-text-secondary)",
+        "--rm-profile-custom-ghost": "var(--rm-text-muted)",
+        "--rm-profile-custom-card-bg": "rgba(0, 0, 0, 0.16)",
+        "--rm-profile-custom-card-bg-strong": "rgba(0, 0, 0, 0.22)",
+        "--rm-profile-custom-card-border": "rgba(255, 255, 255, 0.08)",
+        "--rm-profile-custom-button-bg": "var(--rm-accent)",
+        "--rm-profile-custom-button-text": "white",
+        "--rm-profile-custom-button-shadow": "var(--rm-accent-dim)",
+        "--rm-profile-custom-surface": "linear-gradient(180deg, transparent, transparent)",
+        "--rm-profile-custom-surface-overlay": "var(--rm-profile-surface-overlay)",
+        "--rm-profile-custom-surface-overlay-strong": "var(--rm-profile-surface-overlay-strong)",
+        "--rm-profile-custom-banner-fallback": banner ?? "var(--rm-profile-banner-fallback)",
+        "--rm-profile-custom-banner-overlay": "var(--rm-profile-banner-overlay)",
+      } as CSSProperties,
+      backgroundColor: null,
+      textColor: null,
+      accentColor: null,
+      isLightSurface: null,
+    };
   }
 
   const resolvedBackground = background ?? "#161A22";
@@ -493,21 +666,31 @@ export function getProfileThemeVariables(input: ProfileCustomizationInput): CSSP
     ?? `linear-gradient(135deg, ${mixHexColors(resolvedAccent, "#FFFFFF", isLightSurface ? 0.22 : 0.08)}, ${mixHexColors(resolvedBackground, resolvedAccent, isLightSurface ? 0.34 : 0.18)} 58%, ${mixHexColors(resolvedBackground, "#000000", 0.14)} 100%)`;
 
   return {
-    "--rm-profile-custom-accent": resolvedAccent,
-    "--rm-profile-custom-accent-muted": withAlpha(resolvedAccent, isLightSurface ? 0.16 : 0.24),
-    "--rm-profile-custom-text": text,
-    "--rm-profile-custom-muted": withAlpha(text, 0.74),
-    "--rm-profile-custom-ghost": withAlpha(text, 0.52),
-    "--rm-profile-custom-card-bg": withAlpha(panelBase, isLightSurface ? 0.56 : 0.26),
-    "--rm-profile-custom-card-bg-strong": withAlpha(panelBase, isLightSurface ? 0.68 : 0.34),
-    "--rm-profile-custom-card-border": withAlpha(text, isLightSurface ? 0.1 : 0.12),
-    "--rm-profile-custom-button-bg": resolvedAccent,
-    "--rm-profile-custom-button-text": getContrastTextColor(resolvedAccent),
-    "--rm-profile-custom-button-shadow": withAlpha(resolvedAccent, isLightSurface ? 0.28 : 0.34),
-    "--rm-profile-custom-surface": `linear-gradient(180deg, ${surfaceTop} 0%, ${surfaceMid} 56%, ${surfaceBottom} 100%)`,
-    "--rm-profile-custom-surface-overlay": `radial-gradient(circle at top, ${withAlpha("#FFFFFF", isLightSurface ? 0.36 : 0.08)}, transparent 34%), linear-gradient(180deg, ${withAlpha("#FFFFFF", isLightSurface ? 0.08 : 0.02)}, ${withAlpha("#000000", isLightSurface ? 0.04 : 0.2)} 100%)`,
-    "--rm-profile-custom-surface-overlay-strong": `radial-gradient(circle at top, ${withAlpha("#FFFFFF", isLightSurface ? 0.42 : 0.1)}, transparent 32%), linear-gradient(180deg, ${withAlpha("#FFFFFF", isLightSurface ? 0.12 : 0.04)}, ${withAlpha("#000000", isLightSurface ? 0.06 : 0.28)} 100%)`,
-    "--rm-profile-custom-banner-fallback": bannerFallback,
-    "--rm-profile-custom-banner-overlay": `linear-gradient(180deg, ${withAlpha("#FFFFFF", isLightSurface ? 0.04 : 0.02)}, ${withAlpha("#000000", isLightSurface ? 0.18 : 0.28)}), linear-gradient(90deg, ${withAlpha("#000000", isLightSurface ? 0.1 : 0.18)}, transparent 56%, ${withAlpha("#000000", isLightSurface ? 0.16 : 0.24)})`,
-  } as CSSProperties;
+    variables: {
+      "--rm-profile-custom-accent": resolvedAccent,
+      "--rm-profile-custom-accent-muted": withAlpha(resolvedAccent, isLightSurface ? 0.16 : 0.24),
+      "--rm-profile-custom-text": text,
+      "--rm-profile-custom-muted": withAlpha(text, 0.74),
+      "--rm-profile-custom-ghost": withAlpha(text, 0.52),
+      "--rm-profile-custom-card-bg": withAlpha(panelBase, isLightSurface ? 0.56 : 0.26),
+      "--rm-profile-custom-card-bg-strong": withAlpha(panelBase, isLightSurface ? 0.68 : 0.34),
+      "--rm-profile-custom-card-border": withAlpha(text, isLightSurface ? 0.1 : 0.12),
+      "--rm-profile-custom-button-bg": resolvedAccent,
+      "--rm-profile-custom-button-text": getContrastTextColor(resolvedAccent),
+      "--rm-profile-custom-button-shadow": withAlpha(resolvedAccent, isLightSurface ? 0.28 : 0.34),
+      "--rm-profile-custom-surface": `linear-gradient(180deg, ${surfaceTop} 0%, ${surfaceMid} 56%, ${surfaceBottom} 100%)`,
+      "--rm-profile-custom-surface-overlay": `radial-gradient(circle at top, ${withAlpha("#FFFFFF", isLightSurface ? 0.36 : 0.08)}, transparent 34%), linear-gradient(180deg, ${withAlpha("#FFFFFF", isLightSurface ? 0.08 : 0.02)}, ${withAlpha("#000000", isLightSurface ? 0.04 : 0.2)} 100%)`,
+      "--rm-profile-custom-surface-overlay-strong": `radial-gradient(circle at top, ${withAlpha("#FFFFFF", isLightSurface ? 0.42 : 0.1)}, transparent 32%), linear-gradient(180deg, ${withAlpha("#FFFFFF", isLightSurface ? 0.12 : 0.04)}, ${withAlpha("#000000", isLightSurface ? 0.06 : 0.28)} 100%)`,
+      "--rm-profile-custom-banner-fallback": bannerFallback,
+      "--rm-profile-custom-banner-overlay": `linear-gradient(180deg, ${withAlpha("#FFFFFF", isLightSurface ? 0.04 : 0.02)}, ${withAlpha("#000000", isLightSurface ? 0.18 : 0.28)}), linear-gradient(90deg, ${withAlpha("#000000", isLightSurface ? 0.1 : 0.18)}, transparent 56%, ${withAlpha("#000000", isLightSurface ? 0.16 : 0.24)})`,
+    } as CSSProperties,
+    backgroundColor: mixedSurface,
+    textColor: text,
+    accentColor: resolvedAccent,
+    isLightSurface,
+  };
+}
+
+export function getProfileThemeVariables(input: ProfileCustomizationInput): CSSProperties {
+  return resolveProfileTheme(input).variables;
 }

@@ -1,8 +1,6 @@
 import { getDisplayInitial, getDisplayName } from "@/lib/display-name";
 import { AvatarImage } from "@/components/chat/AvatarImage";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { getAvatarCollectibles } from "@/lib/avatar-display";
-import { findCollectibleItem } from "@/lib/collectibles-catalog";
 import { getCachedCollectiblesCatalog, subscribeCollectiblesCatalog } from "@/lib/collectibles-catalog-client";
 import { OPEN_PROFILE_EDITOR_EVENT } from "@/lib/profile-editor-events";
 import { useUserResolution } from "@/hooks/useUserResolution";
@@ -26,6 +24,7 @@ import { ChevronDown, Headphones, Mic, MicOff, Settings } from "./Icons";
 import { useDelayUnmount } from "@/hooks/useDelayUnmount";
 import { ProfileAssetLayer } from "./ProfileAssetLayer";
 import { UserDisplayName } from "./UserDisplayName";
+import { getUserNameplatePresentation } from "./user-nameplate-presentation";
 
 const EMPTY_QUALITIES: string[] = [];
 const EMPTY_GRID_ITEMS: any[] = [];
@@ -90,144 +89,6 @@ const statusColors: Record<string, string> = {
   dnd: "bg-destructive",
   offline: "bg-rm-text-muted/40",
 };
-
-const NAMEPLATE_SWATCHES: Record<string, string> = {
-  amethyst: "#9251ff",
-  arctic: "#cdddf2",
-  base: "#f5f5f5",
-  blue: "#60a5fa",
-  clouds: "#9ec9ff",
-  emerald: "#34d399",
-  gold: "#facc15",
-  green: "#4ade80",
-  indigo: "#818cf8",
-  orange: "#fb923c",
-  pink: "#ec7ed1",
-  purple: "#b58cff",
-  red: "#ef4444",
-  violet: "#8b7dff",
-  white: "#ffffff",
-  yellow: "#facc15",
-};
-
-function hslToHex(hue: number, saturation: number, lightness: number) {
-  const s = saturation / 100;
-  const l = lightness / 100;
-  const c = (1 - Math.abs(2 * l - 1)) * s;
-  const x = c * (1 - Math.abs((hue / 60) % 2 - 1));
-  const m = l - c / 2;
-
-  let red = 0;
-  let green = 0;
-  let blue = 0;
-
-  if (hue < 60) {
-    red = c;
-    green = x;
-  } else if (hue < 120) {
-    red = x;
-    green = c;
-  } else if (hue < 180) {
-    green = c;
-    blue = x;
-  } else if (hue < 240) {
-    green = x;
-    blue = c;
-  } else if (hue < 300) {
-    red = x;
-    blue = c;
-  } else {
-    red = c;
-    blue = x;
-  }
-
-  const toHex = (value: number) => Math.round((value + m) * 255).toString(16).padStart(2, "0");
-  return `#${toHex(red)}${toHex(green)}${toHex(blue)}`;
-}
-
-function hexToRgb(hex: string) {
-  const normalized = hex.replace("#", "");
-  const expanded = normalized.length === 3
-    ? normalized.split("").map((part) => `${part}${part}`).join("")
-    : normalized;
-  const value = Number.parseInt(expanded, 16);
-
-  return {
-    r: (value >> 16) & 255,
-    g: (value >> 8) & 255,
-    b: value & 255,
-  };
-}
-
-function rgba(color: { r: number; g: number; b: number }, alpha: number) {
-  return `rgba(${color.r}, ${color.g}, ${color.b}, ${alpha})`;
-}
-
-function mix(
-  left: { r: number; g: number; b: number },
-  right: { r: number; g: number; b: number },
-  amount: number,
-) {
-  return {
-    r: Math.round(left.r + (right.r - left.r) * amount),
-    g: Math.round(left.g + (right.g - left.g) * amount),
-    b: Math.round(left.b + (right.b - left.b) * amount),
-  };
-}
-
-function relativeLuminance(color: { r: number; g: number; b: number }) {
-  const channels = [color.r, color.g, color.b].map((channel) => {
-    const normalized = channel / 255;
-    return normalized <= 0.03928
-      ? normalized / 12.92
-      : ((normalized + 0.055) / 1.055) ** 2.4;
-  });
-  return 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2];
-}
-
-function accentFromPalette(palette: string | null | undefined, seed: string) {
-  const key = palette?.toLowerCase().trim() ?? "";
-  if (key && NAMEPLATE_SWATCHES[key]) {
-    return NAMEPLATE_SWATCHES[key];
-  }
-
-  let hash = 0;
-  for (let index = 0; index < seed.length; index += 1) {
-    hash = (hash << 5) - hash + seed.charCodeAt(index);
-    hash |= 0;
-  }
-
-  return hslToHex(Math.abs(hash) % 360, 72, 62);
-}
-
-function buildNameplateTheme(palette: string | null | undefined, seed: string) {
-  const accentHex = accentFromPalette(palette, seed);
-  const accentRgb = hexToRgb(accentHex);
-  const isLightAccent = relativeLuminance(accentRgb) > 0.36;
-  const inkRgb = isLightAccent ? { r: 11, g: 16, b: 24 } : { r: 255, g: 255, b: 255 };
-  const shadeRgb = isLightAccent ? { r: 9, g: 13, b: 20 } : { r: 8, g: 11, b: 18 };
-  const cardRgb = isLightAccent ? mix(accentRgb, { r: 255, g: 255, b: 255 }, 0.78) : mix(accentRgb, shadeRgb, 0.58);
-
-  return {
-    accentHex,
-    isLightAccent,
-    textStrong: isLightAccent ? "#0b1018" : "#ffffff",
-    textMuted: isLightAccent ? "rgba(11, 16, 24, 0.76)" : "rgba(255, 255, 255, 0.82)",
-    textShadow: isLightAccent ? "0 1px 1px rgba(255,255,255,0.4)" : "0 1px 2px rgba(0,0,0,0.88)",
-    rowBorder: rgba(accentRgb, isLightAccent ? 0.18 : 0.34),
-    rowGlow: rgba(accentRgb, isLightAccent ? 0.16 : 0.24),
-    softCardBg: rgba(cardRgb, isLightAccent ? 0.72 : 0.4),
-    softCardBorder: rgba(inkRgb, isLightAccent ? 0.12 : 0.16),
-    buttonBg: "transparent",
-    buttonHoverBg: "transparent",
-    buttonActiveBg: "transparent",
-    buttonText: "rgba(255, 255, 255, 0.96)",
-    buttonMuted: "rgba(255, 255, 255, 0.8)",
-    buttonFilter: "drop-shadow(0 1px 1px rgba(0,0,0,0.92)) drop-shadow(0 2px 6px rgba(0,0,0,0.55))",
-    statusBack: isLightAccent ? "rgba(255,255,255,0.82)" : "rgba(6,10,16,0.68)",
-    statusGlyph: isLightAccent ? "#0b1018" : "#060a10",
-  };
-}
 
 function CallDashboardSection({
   serverId,
@@ -395,19 +256,10 @@ export default function UserPanel({
       }];
     }));
   }, [gridItems, voiceChannelId]);
-  const nameplateSelection = useMemo(
-    () => getAvatarCollectibles(user?.avatar_display)?.nameplate,
-    [user?.avatar_display],
+  const nameplatePresentation = useMemo(
+    () => getUserNameplatePresentation(user, collectiblesCatalog),
+    [collectiblesCatalog, user],
   );
-  const nameplateTheme = useMemo(() => {
-    if (!user?.nameplate_url) return null;
-    const paletteFromDisplay = nameplateSelection?.palette;
-    const paletteFromCatalog = collectiblesCatalog && nameplateSelection?.skuId
-      ? findCollectibleItem(collectiblesCatalog, nameplateSelection.skuId)?.palette
-      : undefined;
-    const seed = nameplateSelection?.skuId ?? user.nameplate_url ?? user.id ?? "nameplate";
-    return buildNameplateTheme(paletteFromDisplay ?? paletteFromCatalog, seed);
-  }, [collectiblesCatalog, nameplateSelection?.palette, nameplateSelection?.skuId, user?.id, user?.nameplate_url]);
 
   const openSettings = useCallback((tab: "account" | "voice" | "shares" | "appearance" = "account") => {
     setSettingsStartInProfileEditor(false);
@@ -456,7 +308,10 @@ export default function UserPanel({
   const currentStatus = user.status ?? "online";
   const displayName = getDisplayName(user);
   const userHandle = user.username ? `@${user.username}` : displayName;
-  const hasNameplate = Boolean(user.nameplate_url);
+  const hasNameplate = nameplatePresentation.hasNameplate;
+  const needsNameplateContrastAssist = nameplatePresentation.needsContrastAssist;
+  const nameplateTheme = nameplatePresentation.theme;
+  const showNameplateIdentityBackdrop = hasNameplate && needsNameplateContrastAssist && Boolean(nameplateTheme);
 
   return (
     <TooltipProvider delayDuration={0}>
@@ -545,18 +400,8 @@ export default function UserPanel({
                 url={user.nameplate_url}
                 contentType={user.nameplate_content_type}
                 alt={`${displayName} nameplate`}
-                className="pointer-events-none z-0 opacity-[0.94] saturate-[1.14] contrast-[1.08] brightness-[1.03]"
+                className="pointer-events-none z-0 opacity-[0.98]"
               />
-              <div
-                className="pointer-events-none absolute inset-0 z-0"
-                style={{
-                  background: nameplateTheme
-                    ? `linear-gradient(90deg, ${nameplateTheme.softCardBg}, transparent 38%, rgba(4,7,11,0.14) 72%, rgba(4,7,11,0.38) 100%)`
-                    : "linear-gradient(90deg, rgba(0,0,0,0.62), rgba(0,0,0,0.28) 46%, rgba(0,0,0,0.58))",
-                }}
-              />
-              <div className="pointer-events-none absolute inset-0 z-0 bg-[radial-gradient(circle_at_top_left,_rgba(255,255,255,0.20),_transparent_42%),linear-gradient(180deg,_rgba(255,255,255,0.05),_transparent_62%)]" />
-              <div className="pointer-events-none absolute inset-y-0 right-0 z-0 w-28 bg-linear-to-l from-black/30 to-transparent" />
             </>
           )}
           <Tooltip>
@@ -583,32 +428,13 @@ export default function UserPanel({
                     )}
                   </div>
                 </div>
-                <div className={cn(
-                  "absolute -bottom-0.5 -right-0.5 z-20 rounded-full p-[2.5px]",
-                  !hasNameplate && "bg-rm-bg-elevated"
-                )}
-                style={hasNameplate && nameplateTheme ? {
-                  backgroundColor: nameplateTheme.statusBack,
-                  boxShadow: `0 0 0 1px ${nameplateTheme.softCardBorder}`,
-                } : undefined}>
-                  <div className={cn(
-                    "flex h-[11px] w-[11px] items-center justify-center rounded-full",
-                    statusColors[currentStatus]
-                  )}>
-                    {currentStatus === "offline" && (
-                      <div
-                        className={cn("h-[5px] w-[5px] rounded-full", !hasNameplate && "bg-rm-bg-elevated")}
-                        style={hasNameplate && nameplateTheme ? { backgroundColor: nameplateTheme.statusGlyph } : undefined}
-                      />
-                    )}
-                    {currentStatus === "dnd" && (
-                      <div
-                        className={cn("h-[2px] w-[6px] rounded-sm", !hasNameplate && "bg-rm-bg-elevated")}
-                        style={hasNameplate && nameplateTheme ? { backgroundColor: nameplateTheme.statusGlyph } : undefined}
-                      />
-                    )}
-                  </div>
-                </div>
+                <div
+                  className={cn(
+                    "absolute -bottom-0.5 -right-0.5 z-20 h-3.5 w-3.5 rounded-full border-2 transition-colors",
+                    statusColors[currentStatus],
+                    "border-rm-bg-elevated",
+                  )}
+                />
               </button>
             </TooltipTrigger>
             <TooltipContent side="top" sideOffset={12} className="bg-rm-bg-floating border-none text-rm-text-primary text-[13px] font-bold shadow-xl px-3 py-2 rounded-lg">
@@ -619,39 +445,51 @@ export default function UserPanel({
           {showIdentity ? (
             <div className={cn(
               "relative z-10 min-w-0 flex-1 py-1 cursor-pointer group/name rounded-[12px] px-2 -ml-1 transition-colors",
-              hasNameplate ? "hover:bg-white/10" : "hover:bg-rm-bg-hover/50"
-            )}
-            style={hasNameplate && nameplateTheme ? {
-              backgroundColor: nameplateTheme.softCardBg,
-              border: `1px solid ${nameplateTheme.softCardBorder}`,
-              boxShadow: `0 10px 24px ${nameplateTheme.rowGlow}`,
-            } : undefined}>
-              <UserDisplayName
-                user={user}
-                className={cn(
-                  "block truncate text-[13px] font-bold leading-tight",
-                  hasNameplate
-                    ? "drop-shadow-none"
-                    : "text-rm-text-primary",
-                )}
-                style={hasNameplate && nameplateTheme
-                  ? {
-                      color: user.display_name_style ? undefined : nameplateTheme.textStrong,
-                      textShadow: nameplateTheme.textShadow,
-                    }
-                  : undefined}
-              />
-              {showUsername && (
-                <p className={cn(
-                  "truncate text-[11px] leading-tight",
-                  hasNameplate
-                    ? "drop-shadow-none"
-                    : "text-rm-text-muted"
-                )}
-                style={hasNameplate && nameplateTheme ? { color: nameplateTheme.textMuted, textShadow: nameplateTheme.textShadow } : undefined}>
-                  {userHandle}
-                </p>
+              showNameplateIdentityBackdrop
+                ? "hover:bg-transparent"
+                : hasNameplate
+                  ? "hover:bg-white/10"
+                  : "hover:bg-rm-bg-hover/50",
+            )}>
+              {showNameplateIdentityBackdrop && nameplateTheme && (
+                <div
+                  className="pointer-events-none absolute inset-y-0 left-0 right-2 rounded-[10px] shadow-[0_8px_18px_rgba(0,0,0,0.14)]"
+                  style={{
+                    border: `1px solid ${nameplateTheme.identityBackdropBorder}`,
+                    background: nameplateTheme.identityBackdropBg,
+                    backdropFilter: "blur(10px) saturate(1.05)",
+                    WebkitBackdropFilter: "blur(10px) saturate(1.05)",
+                    maskImage: "linear-gradient(90deg, black 0%, black 74%, transparent 100%)",
+                    WebkitMaskImage: "linear-gradient(90deg, black 0%, black 74%, transparent 100%)",
+                  }}
+                />
               )}
+              <div className="relative min-w-0">
+                <UserDisplayName
+                  user={user}
+                  className="block truncate text-[13px] font-bold leading-tight text-rm-text-primary"
+                  backgroundColor={
+                    showNameplateIdentityBackdrop
+                      ? nameplateTheme?.identityBackdropBg
+                      : hasNameplate
+                        ? nameplateTheme?.accentHex
+                        : undefined
+                  }
+                  readableFallbackColor={nameplateTheme?.foregroundColor}
+                  minContrastRatio={hasNameplate ? 2.8 : undefined}
+                  style={hasNameplate && !user.display_name_style && nameplateTheme
+                    ? { color: nameplateTheme.foregroundColor }
+                    : undefined}
+                />
+                {showUsername && (
+                  <p
+                    className="truncate text-[11px] leading-tight text-rm-text-muted"
+                    style={hasNameplate && nameplateTheme ? { color: nameplateTheme.mutedForegroundColor } : undefined}
+                  >
+                    {userHandle}
+                  </p>
+                )}
+              </div>
             </div>
           ) : (
             <div className="flex-1" aria-hidden="true" />

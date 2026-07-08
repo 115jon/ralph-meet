@@ -12,6 +12,8 @@ import { getDisplayName } from "@/lib/display-name";
 import type { PresencePlatform } from "@/lib/presence-platform";
 import type { SharedSpatialAudioState } from "@/lib/voice/spatial-audio";
 
+export type ChatMember = { user: User; roles?: Role[]; joined_at?: string | null };
+
 // ── State shape ─────────────────────────────────────────────────────────────
 
 export interface ChatState {
@@ -50,9 +52,9 @@ export interface ChatState {
   /** Typing users per channel: channelId → Set<userId> */
   typingUsers: Record<string, Set<string>>;
   /** Members of the active server */
-  members: Array<{ user: User; roles?: Role[] }>;
+  members: ChatMember[];
   /** Cached members per server */
-  membersByServerId: Record<string, Array<{ user: User; roles?: Role[] }>>;
+  membersByServerId: Record<string, ChatMember[]>;
   /** Whether members have loaded for a server */
   membersLoadedByServerId: Record<string, boolean>;
   /** Online user IDs (presence tracking) */
@@ -205,7 +207,7 @@ export type ChatAction =
   | { type: "SET_CONNECTED"; connected: boolean }
   | { type: "SET_RECONNECT_ATTEMPT"; attempt: number }
   | { type: "SET_USER"; user: User }
-  | { type: "SET_STATUS"; status: "online" | "idle" | "dnd" | "offline"; customStatus?: string }
+  | { type: "SET_STATUS"; status: "online" | "idle" | "dnd" | "offline"; customStatus?: string | null }
   | { type: "SET_SERVERS"; servers: Server[] }
   | { type: "ADD_SERVER"; server: Server }
   | { type: "SET_CHANNELS"; channels: Channel[]; serverId?: string }
@@ -227,8 +229,8 @@ export type ChatAction =
   | { type: "PREPEND_MESSAGES"; messages: Message[]; channelId?: string; hasMoreBefore?: boolean }
   | { type: "SET_TYPING"; channelId: string; userId: string }
   | { type: "CLEAR_TYPING"; channelId: string; userId: string }
-  | { type: "SET_MEMBERS"; members: Array<{ user: User; roles?: Role[] }>; serverId?: string }
-  | { type: "ADD_MEMBER"; member: { user: User; roles?: Role[] }; serverId?: string }
+  | { type: "SET_MEMBERS"; members: ChatMember[]; serverId?: string }
+  | { type: "ADD_MEMBER"; member: ChatMember; serverId?: string }
   | { type: "REMOVE_MEMBER"; userId: string; serverId?: string }
   | { type: "UPDATE_MEMBER_ROLES"; userId: string; roles?: Role[]; serverId?: string }
   | {
@@ -252,6 +254,7 @@ export type ChatAction =
     bio?: string | null;
     pronouns?: string | null;
     updated_at?: string;
+    created_at?: string | null;
   }
   | { type: "ADD_REACTION"; messageId: string; emoji: string; userId: string }
   | { type: "REMOVE_REACTION"; messageId: string; emoji: string; userId: string }
@@ -271,7 +274,7 @@ export type ChatAction =
     type: "UPDATE_USER_STATUS";
     userId: string;
     status: "online" | "idle" | "dnd" | "offline";
-    customStatus?: string;
+    customStatus?: string | null;
     platforms?: PresencePlatform[];
   }
   | { type: "UPDATE_SERVER"; serverId: string; updates: Partial<Server> }
@@ -417,7 +420,16 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       };
     }
     case "SET_STATUS":
-      return { ...state, user: state.user ? { ...state.user, status: action.status, custom_status: action.customStatus ?? state.user.custom_status } : state.user };
+      return {
+        ...state,
+        user: state.user
+          ? {
+            ...state.user,
+            status: action.status,
+            custom_status: action.customStatus === undefined ? state.user.custom_status : action.customStatus,
+          }
+          : state.user,
+      };
     case "SET_SERVERS":
       return { ...state, servers: action.servers };
     case "ADD_SERVER":
@@ -801,6 +813,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
           if (action.bio !== undefined) newUser.bio = action.bio;
           if (action.pronouns !== undefined) newUser.pronouns = action.pronouns;
           if (action.updated_at !== undefined) newUser.updated_at = action.updated_at;
+          if (action.created_at !== undefined) newUser.created_at = action.created_at;
         }
 
       // 2. Update member list
@@ -825,6 +838,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         if (action.bio !== undefined) newProfileUser.bio = action.bio;
         if (action.pronouns !== undefined) newProfileUser.pronouns = action.pronouns;
         if (action.updated_at !== undefined) newProfileUser.updated_at = action.updated_at;
+        if (action.created_at !== undefined) newProfileUser.created_at = action.created_at;
       }
 
       // 2. Update member list
@@ -851,6 +865,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
           if (action.bio !== undefined) updatedUser.bio = action.bio;
           if (action.pronouns !== undefined) updatedUser.pronouns = action.pronouns;
           if (action.updated_at !== undefined) updatedUser.updated_at = action.updated_at;
+          if (action.created_at !== undefined) updatedUser.created_at = action.created_at;
           newMembers[idx] = { ...newMembers[idx], user: updatedUser };
         }
 
@@ -882,6 +897,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
             if (action.bio !== undefined) updatedUser.bio = action.bio;
             if (action.pronouns !== undefined) updatedUser.pronouns = action.pronouns;
             if (action.updated_at !== undefined) updatedUser.updated_at = action.updated_at;
+            if (action.created_at !== undefined) updatedUser.created_at = action.created_at;
             return { ...member, user: updatedUser };
           });
 
@@ -940,6 +956,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
           if (action.bio !== undefined) updatedRecipient.bio = action.bio;
           if (action.pronouns !== undefined) updatedRecipient.pronouns = action.pronouns;
           if (action.updated_at !== undefined) updatedRecipient.updated_at = action.updated_at;
+          if (action.created_at !== undefined) updatedRecipient.created_at = action.created_at;
           newDmChannels[dmIdx] = { ...newDmChannels[dmIdx], recipient: updatedRecipient };
         }
 
@@ -967,6 +984,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
           if (action.bio !== undefined) updatedRelUser.bio = action.bio;
           if (action.pronouns !== undefined) updatedRelUser.pronouns = action.pronouns;
           if (action.updated_at !== undefined) updatedRelUser.updated_at = action.updated_at;
+          if (action.created_at !== undefined) updatedRelUser.created_at = action.created_at;
           newRelationships[relIdx] = { ...newRelationships[relIdx], user: updatedRelUser };
         }
 
@@ -1108,7 +1126,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         return {
           ...input,
           status: presence.status,
-          custom_status: presence.customStatus ?? input.custom_status,
+          custom_status: presence.customStatus === undefined ? input.custom_status : presence.customStatus,
           presence_platforms: presence.platforms ?? [],
         };
       };
@@ -1197,7 +1215,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
             user: {
               ...m.user,
               status: action.status,
-              custom_status: action.customStatus ?? m.user.custom_status,
+              custom_status: action.customStatus === undefined ? m.user.custom_status : action.customStatus,
               presence_platforms: action.platforms ?? m.user.presence_platforms,
             },
           }
@@ -1207,7 +1225,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         ? {
           ...state.user,
           status: action.status,
-          custom_status: action.customStatus ?? state.user.custom_status,
+          custom_status: action.customStatus === undefined ? state.user.custom_status : action.customStatus,
           presence_platforms: action.platforms ?? state.user.presence_platforms,
         }
         : state.user;
@@ -1221,7 +1239,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
                 user: {
                   ...member.user,
                   status: action.status,
-                  custom_status: action.customStatus ?? member.user.custom_status,
+                  custom_status: action.customStatus === undefined ? member.user.custom_status : action.customStatus,
                   presence_platforms: action.platforms ?? member.user.presence_platforms,
                 },
               }
@@ -1236,7 +1254,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
             recipient: {
               ...channel.recipient,
               status: action.status,
-              custom_status: action.customStatus ?? channel.recipient.custom_status,
+              custom_status: action.customStatus === undefined ? channel.recipient.custom_status : action.customStatus,
               presence_platforms: action.platforms ?? channel.recipient.presence_platforms,
             },
           }
@@ -1249,7 +1267,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
             user: {
               ...relationship.user,
               status: action.status,
-              custom_status: action.customStatus ?? relationship.user.custom_status,
+              custom_status: action.customStatus === undefined ? relationship.user.custom_status : action.customStatus,
               presence_platforms: action.platforms ?? relationship.user.presence_platforms,
             },
           }

@@ -4,6 +4,7 @@ import { cn } from "@/lib/utils";
 import { useChatStore } from "@/stores/chat-store";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Globe, Monitor, Smartphone } from "lucide-react";
+import type { CSSProperties } from "react";
 
 const PLATFORM_ORDER: PresencePlatform[] = ["desktop", "mobile", "web"];
 
@@ -22,6 +23,10 @@ interface UserPlatformIndicatorsProps {
   status?: User["status"] | null;
   className?: string;
   iconClassName?: string;
+  variant?: "default" | "nameplate";
+  color?: string | null;
+  offlineColor?: string | null;
+  style?: CSSProperties;
 }
 
 export function UserPlatformIndicators({
@@ -30,6 +35,10 @@ export function UserPlatformIndicators({
   status,
   className,
   iconClassName,
+  variant: _variant = "default",
+  color,
+  offlineColor,
+  style,
 }: UserPlatformIndicatorsProps) {
   const livePlatforms = useChatStore((state) =>
     userId ? state.presencePlatformsByUserId[userId] : undefined,
@@ -44,14 +53,25 @@ export function UserPlatformIndicators({
   if (resolvedPlatforms.length === 0) return null;
 
   const isOffline = status === "offline";
+  const hasExplicitColor = Boolean(color || offlineColor);
+  const toneClassName = hasExplicitColor
+    ? undefined
+    : isOffline
+      ? "text-rm-text-muted/75"
+      : "text-primary";
+  const resolvedColor = isOffline ? offlineColor ?? color : color;
 
   return (
     <div
       className={cn(
         "flex items-center gap-1.5",
-        isOffline ? "text-rm-text-muted/75" : "text-primary",
+        toneClassName,
         className,
       )}
+      style={{
+        ...(resolvedColor ? { color: resolvedColor } : {}),
+        ...style,
+      }}
       aria-label={`Active on ${resolvedPlatforms
         .map((platform) => PLATFORM_META[platform].label.toLowerCase())
         .join(", ")}`}

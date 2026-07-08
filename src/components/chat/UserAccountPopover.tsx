@@ -3,7 +3,7 @@ import { ProfileDisplayName } from "@/components/chat/ProfileDisplayName";
 import { ProfileAssetLayer } from "@/components/chat/ProfileAssetLayer";
 import { ProfileCollectiblesLayer } from "@/components/chat/ProfileCollectiblesLayer";
 import { getAuthAssetUrl } from "@/lib/platform";
-import { getProfileThemeVariables } from "@/lib/profile-customization";
+import { resolveProfileTheme } from "@/lib/profile-customization";
 import type { User } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { ChevronLeft, ChevronRight, Copy, Edit2, Plus, User as UserIcon } from "lucide-react";
@@ -13,7 +13,7 @@ import { createPortal } from "react-dom";
 interface Props {
   user: User;
   onClose: () => void;
-  updateStatus: (status: "online" | "idle" | "dnd" | "offline", custom_status?: string) => void;
+  updateStatus: (status: "online" | "idle" | "dnd" | "offline", custom_status?: string | null) => void;
   onOpenProfileEditor: () => void;
   anchorEl: HTMLElement;
 }
@@ -111,7 +111,8 @@ export default function UserAccountPopover({
 
   const currentStatus = user.status ?? "online";
   const displayName = user.display_name?.trim() || user.username;
-  const profileThemeStyle = getProfileThemeVariables(user);
+  const profileTheme = resolveProfileTheme(user);
+  const profileThemeStyle = profileTheme.variables;
   const currentStatusLabel =
     STATUS_OPTIONS.find((option) => option.value === currentStatus)?.label ?? "Online";
 
@@ -322,6 +323,8 @@ export default function UserAccountPopover({
                   text={displayName}
                   displayNameStyle={user.display_name_style}
                   className="truncate text-[20px] font-semibold tracking-[-0.03em] text-[color:var(--rm-profile-custom-text)]"
+                  backgroundColor={profileTheme.backgroundColor}
+                  readableFallbackColor={profileTheme.textColor}
                 />
                 <p className="mt-1 text-[13px] text-[color:var(--rm-profile-custom-muted)]">@{user.username}</p>
               </div>

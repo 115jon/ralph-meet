@@ -393,6 +393,7 @@ export default function FriendsView({ onMenuClick, onSelectDm }: Props) {
           displayName={popoverUser.display_name}
           avatarUrl={popoverUser.avatar_url}
           avatarDisplay={popoverUser.avatar_display}
+          seedUser={popoverUser}
           anchorEl={popoverAnchor}
           side="right"
           onClose={() => dispatch({ type: "SET_POPOVER", user: null, anchor: null })}

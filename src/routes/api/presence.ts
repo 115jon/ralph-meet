@@ -26,7 +26,7 @@ const POST = async ({ request, params }: any) => {
 
   const body = (await request.json()) as {
     status: "online" | "idle" | "dnd" | "offline";
-    custom_status?: string;
+    custom_status?: string | null;
   };
 
   const db = getDB();

@@ -36,6 +36,10 @@ function memberRow(overrides: Record<string, unknown> = {}) {
     display_name: "Test User",
     display_name_style: null,
     avatar_url: null,
+    created_at: NOW,
+    profile_accent_color: null,
+    profile_background_color: null,
+    profile_banner_color: null,
     bio: null,
     status: "online",
     custom_status: null,
@@ -279,6 +283,8 @@ describe("listServerMembers", () => {
     expect(result[0].user.username).toBe("testuser");
     expect(result[0].user.display_name).toBe("Test User");
     expect(result[0].user.display_name_style).toContain("\"effect\":\"gradient\"");
+    expect(result[0].user.created_at).toBe(NOW);
+    expect(result[0].user.profile_background_color).toBeNull();
     expect(result[0].roles).toEqual([]);
     expect(result[1].user.id).toBe("u2");
   });

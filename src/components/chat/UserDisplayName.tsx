@@ -17,6 +17,9 @@ interface UserDisplayNameProps {
   displayNameStyle?: DisplayNameStyle | string | null;
   className?: string;
   style?: CSSProperties;
+  backgroundColor?: string | null;
+  readableFallbackColor?: string | null;
+  minContrastRatio?: number;
 }
 
 export function UserDisplayName({
@@ -26,6 +29,9 @@ export function UserDisplayName({
   displayNameStyle,
   className,
   style,
+  backgroundColor,
+  readableFallbackColor,
+  minContrastRatio,
 }: UserDisplayNameProps) {
   const resolvedText = text ?? getDisplayName(user, fallback ?? "Unknown");
   const resolvedStyle = displayNameStyle ?? user?.display_name_style ?? null;
@@ -36,6 +42,9 @@ export function UserDisplayName({
       displayNameStyle={resolvedStyle}
       className={className}
       style={style}
+      backgroundColor={backgroundColor}
+      readableFallbackColor={readableFallbackColor}
+      minContrastRatio={minContrastRatio}
     />
   );
 }

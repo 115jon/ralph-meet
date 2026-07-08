@@ -35,7 +35,7 @@ export interface ChatRestActions {
   deleteChannel: (channelId: string) => Promise<void>;
   createCategory: (serverId: string, name: string) => Promise<Category | null>;
   deleteCategory: (serverId: string, categoryId: string) => Promise<void>;
-  updateStatus: (status: "online" | "idle" | "dnd" | "offline", custom_status?: string) => void;
+  updateStatus: (status: "online" | "idle" | "dnd" | "offline", custom_status?: string | null) => void;
   loadProfile: () => Promise<void>;
   loadCurrentUser: () => Promise<void>;
   loadReadStates: () => Promise<void>;
@@ -347,7 +347,7 @@ export function createChatActions(
     await apiDelete(`/api/servers/${serverId}/categories/${categoryId}`);
   };
 
-  const updateStatus = (status: "online" | "idle" | "dnd" | "offline", custom_status?: string) => {
+  const updateStatus = (status: "online" | "idle" | "dnd" | "offline", custom_status?: string | null) => {
     dispatch({ type: "SET_STATUS", status, customStatus: custom_status });
 
     if (typeof window !== 'undefined') {
@@ -384,6 +384,7 @@ export function createChatActions(
         theme_sync_enabled: number;
         media_content_filter: string;
         updated_at?: string | null;
+        created_at?: string | null;
         bio?: string | null;
         pronouns?: string | null;
         status?: string;
@@ -411,6 +412,7 @@ export function createChatActions(
           theme_sync_enabled: profile.theme_sync_enabled === 1,
           media_content_filter: parseMediaContentFilter(profile.media_content_filter),
           updated_at: profile.updated_at ?? current?.updated_at,
+          created_at: profile.created_at ?? current?.created_at,
           bio: profile.bio ?? current?.bio,
           pronouns: profile.pronouns ?? current?.pronouns,
           presence_platforms: current?.presence_platforms,
@@ -435,6 +437,7 @@ export function createChatActions(
         theme_preference: profile.theme_preference,
         theme_sync_enabled: profile.theme_sync_enabled === 1,
         media_content_filter: parseMediaContentFilter(profile.media_content_filter),
+        created_at: profile.created_at,
         username: profile.username,
         display_name: profile.display_name,
         bio: profile.bio ?? undefined,
