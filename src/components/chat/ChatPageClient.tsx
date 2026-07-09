@@ -18,6 +18,7 @@ import { getAuthAssetUrl } from "@/lib/platform";
 import { dispatchOpenProfileEditorEvent } from "@/lib/profile-editor-events";
 import { resolveStreamPreviewAutomation, type StreamPreviewAutomationState } from "@/lib/stream-preview-automation";
 import { onSoundInteractionNeeded, resumeSoundContext } from "@/lib/sounds";
+import type { User } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { prewarmAudioContext } from "@/lib/voice/audio-pipeline";
 import { useChatActions, useChatStore } from "@/stores/chat-store";
@@ -120,7 +121,7 @@ export default function ChatPage() {
     relationships: s.relationships,
     notifications: s.notifications,
   })));
-  const { dispatch, markChannelRead, markNotificationsRead, sendMessage } = useChatActions();
+  const { dispatch, markChannelRead, markNotificationsRead, openDm, sendMessage } = useChatActions();
 
   const {
     ui,
@@ -201,12 +202,61 @@ export default function ChatPage() {
     ),
     [localStreamState?.gridItems, localStreamState?.watchedStreams],
   );
-  const floatingPreviewUserId = localScreenItem?.userId ?? user?.id ?? "me";
+  const floatingPreviewUserId = user?.id ?? localScreenItem?.userId ?? "me";
   const floatingPreviewStream = localScreenItem?.stream ?? null;
   const floatingPreviewDisplayName = localScreenItem?.name
     ?? user?.display_name
     ?? user?.username
     ?? "You";
+  const resolveVoiceContextUser = useCallback((targetUserId: string): User | null => {
+    if (targetUserId === user?.id && user) {
+      return user;
+    }
+
+    const memberUser = members.find((member) => member.user.id === targetUserId)?.user;
+    if (memberUser) {
+      return memberUser;
+    }
+
+    const voiceParticipant = voiceState.channelId
+      ? (voiceChannelStates[voiceState.channelId] ?? []).find((member) => member.clerk_user_id === targetUserId)
+      : null;
+    if (voiceParticipant) {
+      return {
+        id: targetUserId,
+        username: voiceParticipant.username ?? voiceParticipant.display_name ?? voiceParticipant.name ?? targetUserId,
+        display_name: voiceParticipant.display_name ?? voiceParticipant.name ?? null,
+        avatar_url: voiceParticipant.avatar_url ?? null,
+        avatar_display: voiceParticipant.avatar_display ?? null,
+      };
+    }
+
+    const gridItem = localStreamState?.gridItems.find((item) => item.userId === targetUserId);
+    if (gridItem) {
+      const baseName = gridItem.name.replace(/'s Stream$/, "");
+      return {
+        id: targetUserId,
+        username: baseName || targetUserId,
+        display_name: baseName || null,
+        avatar_url: gridItem.avatar ?? null,
+        avatar_display: gridItem.avatarDisplay ?? null,
+      };
+    }
+
+    return {
+      id: targetUserId,
+      username: targetUserId,
+    };
+  }, [localStreamState?.gridItems, members, user, voiceChannelStates, voiceState.channelId]);
+  const handleOpenVoiceProfile = useCallback((targetUserId: string) => {
+    const targetUser = resolveVoiceContextUser(targetUserId);
+    if (targetUser) {
+      setProfileUser(targetUser);
+    }
+  }, [resolveVoiceContextUser, setProfileUser]);
+  const handleOpenVoiceMessage = useCallback((targetUserId: string) => {
+    void openDm(targetUserId);
+  }, [openDm]);
   const setClampedChannelSidebarWidth = useCallback((nextWidth: number) => {
     setChannelSidebarWidth(clampChannelSidebarWidth(nextWidth));
   }, []);
@@ -217,7 +267,6 @@ export default function ChatPage() {
     [servers, voiceState.serverId]
   );
   const voiceSettings = useVoiceSettingsStore((s) => s.getSettings(user?.id));
-  const updateVoiceSettings = useVoiceSettingsStore((s) => s.updateUserSettings);
   const alwaysShowStreamPreview = !!voiceSettings.alwaysShowStreamPreview;
 
   const callActive = useCallStore((s) => s.status === "active");
@@ -357,13 +406,6 @@ export default function ChatPage() {
     handleVoiceNavigate();
     attemptPendingStreamFocus();
   }, [attemptPendingStreamFocus, handleVoiceNavigate, voiceState.channelId]);
-
-  const handleToggleAlwaysShowStreamPreview = useCallback(() => {
-    updateVoiceSettings((current) => ({
-      ...current,
-      alwaysShowStreamPreview: !current.alwaysShowStreamPreview,
-    }), user?.id ?? undefined);
-  }, [updateVoiceSettings, user?.id]);
 
   const syncPreviewAutomation = useCallback(() => {
     if (!localStreamState?.togglePreviewHidden) {
@@ -916,6 +958,8 @@ export default function ChatPage() {
                   onLeft={onVoiceLeave}
                   onStreamStateUpdate={setLocalStreamState}
                   autoJoin={shouldAutoJoinVoice}
+                  onOpenProfileUser={handleOpenVoiceProfile}
+                  onOpenMessageUser={handleOpenVoiceMessage}
                   onMenuClick={() => uiDispatch({ type: 'SET_SIDEBAR', open: true })}
                 />
               </Suspense>
@@ -983,6 +1027,8 @@ export default function ChatPage() {
                   onLeft={onVoiceLeave}
                   onStreamStateUpdate={setLocalStreamState}
                   autoJoin={false}
+                  onOpenProfileUser={handleOpenVoiceProfile}
+                  onOpenMessageUser={handleOpenVoiceMessage}
                   onMenuClick={() => uiDispatch({ type: 'SET_SIDEBAR', open: true })}
                   onBeforeJoin={isInVoiceSession ? handleEphemeralVoiceBeforeJoin : undefined}
                 />
@@ -1059,8 +1105,8 @@ export default function ChatPage() {
 	              onToggleStreamAudio: localStreamState.toggleStreamAudio,
 	              onChangeSource: localStreamState.openScreenShareModal,
 	              showDisconnect: false,
-	              alwaysShowStreamPreview,
-	              onToggleAlwaysShowStreamPreview: handleToggleAlwaysShowStreamPreview,
+	              alwaysShowStreamPreview: localStreamState.alwaysShowStreamPreview,
+	              onToggleAlwaysShowStreamPreview: localStreamState.onToggleAlwaysShowStreamPreview,
 	            }}
 	          />
 	        )}
@@ -1079,13 +1125,15 @@ export default function ChatPage() {
 	            primaryActionAriaLabel={`Stop watching ${item.name.replace(/'s Stream$/, "")}`}
 	            onPrimaryAction={() => localStreamState.onToggleWatch(item.userId)}
 	            onNavigateToVoiceChannel={() => handleVoiceNavigateToStream(item.userId)}
-	            menuProps={{
-	              isStreaming: true,
-	              watchedStreams: localStreamState.watchedStreams,
-	              onToggleWatch: localStreamState.onToggleWatch,
-	              showDisconnect: false,
-	              serverId: voiceState.serverId ?? activeServerId,
-	              localUserId: user?.id ?? null,
+            menuProps={{
+              isStreaming: true,
+              watchedStreams: localStreamState.watchedStreams,
+              onToggleWatch: localStreamState.onToggleWatch,
+              onOpenProfileUser: handleOpenVoiceProfile,
+              onOpenMessageUser: handleOpenVoiceMessage,
+              showDisconnect: false,
+              serverId: voiceState.serverId ?? activeServerId,
+              localUserId: user?.id ?? null,
 	            }}
 	          />
 	        ))}

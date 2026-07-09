@@ -409,6 +409,8 @@ function RoomVoiceView({
     audioStalled,
     togglePreviewHidden,
     isPreviewHidden,
+    alwaysShowStreamPreview,
+    onToggleAlwaysShowStreamPreview,
   } = useVoiceChannel({
     mode: "room",
     roomSlug: slug,
@@ -496,6 +498,8 @@ function RoomVoiceView({
     watchersByStreamer,
     togglePreviewHidden,
     isPreviewHidden,
+    alwaysShowStreamPreview,
+    onToggleAlwaysShowStreamPreview,
     sfu,
   };
 

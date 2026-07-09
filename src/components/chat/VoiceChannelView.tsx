@@ -27,6 +27,7 @@ export interface VoiceSessionStreamState {
   joined: boolean;
   isScreenSharing: boolean;
   isStreamingAudio: boolean;
+  alwaysShowStreamPreview: boolean;
   screenQuality: string;
   currentScreenSource: ScreenShareSourceState | null;
   availableQualities: string[];
@@ -57,6 +58,7 @@ export interface VoiceSessionStreamState {
   voiceSessionId: string | null;
   isPreviewHidden: boolean;
   togglePreviewHidden: () => Promise<void> | void;
+  onToggleAlwaysShowStreamPreview: () => void;
 }
 
 interface VoiceChannelViewProps {
@@ -71,6 +73,8 @@ interface VoiceChannelViewProps {
   onLeft?: () => void;
   onStreamStateUpdate?: (state: VoiceSessionStreamState) => void;
   autoJoin?: boolean;
+  onOpenProfileUser?: (userId: string) => void;
+  onOpenMessageUser?: (userId: string) => void;
   /**
    * Optional guard called when the user attempts to join this voice channel.
    * If provided, the landing page's "Join Voice" button will call this instead
@@ -92,6 +96,8 @@ export default function VoiceChannelView({
   onLeft,
   onStreamStateUpdate,
   autoJoin,
+  onOpenProfileUser,
+  onOpenMessageUser,
   onBeforeJoin,
 }: VoiceChannelViewProps) {
   const {
@@ -131,6 +137,8 @@ export default function VoiceChannelView({
     voiceSessionId,
     togglePreviewHidden,
     isPreviewHidden,
+    alwaysShowStreamPreview,
+    onToggleAlwaysShowStreamPreview,
   } = useVoiceChannel({ channelId, serverId, onJoined, onLeft, autoJoin });
 
   const [isScreenModalOpen, setIsScreenModalOpen] = useState(false);
@@ -138,6 +146,9 @@ export default function VoiceChannelView({
   const [isFullscreen, setIsFullscreen] = useState(false);
   const gridItemsRef = useRef(gridItems);
   const watchedStreamsRef = useRef(watchedStreams);
+  const openScreenShareModal = useCallback(() => {
+    setIsScreenModalOpen(true);
+  }, []);
   const localUserId = useMemo(
     () => gridItems.find((item) => item.isLocal)?.userId ?? settingsUserId ?? null,
     [gridItems, settingsUserId]
@@ -148,6 +159,20 @@ export default function VoiceChannelView({
 
   const containerRef = useRef<HTMLDivElement>(null);
   const lastUpdateRef = useRef<string>("");
+  const lastActionRefs = useRef<null | {
+    toggleMic: VoiceSessionStreamState["toggleMic"];
+    toggleDeafen: VoiceSessionStreamState["toggleDeafen"];
+    toggleScreenShare: VoiceSessionStreamState["toggleScreenShare"];
+    toggleStreamAudio: VoiceSessionStreamState["toggleStreamAudio"];
+    toggleCamera: VoiceSessionStreamState["toggleCamera"];
+    handleLeave: VoiceSessionStreamState["handleLeave"];
+    openScreenShareModal: VoiceSessionStreamState["openScreenShareModal"];
+    onToggleWatch: VoiceSessionStreamState["onToggleWatch"];
+    watchAndFocusStreamByUserId: VoiceSessionStreamState["watchAndFocusStreamByUserId"];
+    updateSharedSpatialAudioState: VoiceSessionStreamState["updateSharedSpatialAudioState"];
+    togglePreviewHidden: VoiceSessionStreamState["togglePreviewHidden"];
+    onToggleAlwaysShowStreamPreview: VoiceSessionStreamState["onToggleAlwaysShowStreamPreview"];
+  }>(null);
 
   const availableQualities = useMemo(() => getAvailableStreamQualities(), []);
 
@@ -219,6 +244,8 @@ export default function VoiceChannelView({
       gridSignature: JSON.stringify(
         gridItems.map((item) => ({
           id: item.id,
+          userId: item.userId,
+          name: item.name,
           type: item.type,
           isLocal: item.isLocal,
           hasStream: !!item.stream,
@@ -245,15 +272,44 @@ export default function VoiceChannelView({
         : null,
       spatialUpdatedAt: spatialAudioState?.updatedAt,
       isPreviewHidden,
+      alwaysShowStreamPreview,
     };
     const stateHash = JSON.stringify(currentState);
-    if (stateHash === lastUpdateRef.current) return;
+    const callbacksChanged = !lastActionRefs.current
+      || lastActionRefs.current.toggleMic !== toggleMic
+      || lastActionRefs.current.toggleDeafen !== toggleDeafen
+      || lastActionRefs.current.toggleScreenShare !== toggleScreenShare
+      || lastActionRefs.current.toggleStreamAudio !== onToggleStreamAudio
+      || lastActionRefs.current.toggleCamera !== toggleCamera
+      || lastActionRefs.current.handleLeave !== handleLeave
+      || lastActionRefs.current.openScreenShareModal !== openScreenShareModal
+      || lastActionRefs.current.onToggleWatch !== onToggleWatch
+      || lastActionRefs.current.watchAndFocusStreamByUserId !== watchAndFocusStreamByUserId
+      || lastActionRefs.current.updateSharedSpatialAudioState !== updateSharedSpatialAudioState
+      || lastActionRefs.current.togglePreviewHidden !== togglePreviewHidden
+      || lastActionRefs.current.onToggleAlwaysShowStreamPreview !== onToggleAlwaysShowStreamPreview;
+    if (stateHash === lastUpdateRef.current && !callbacksChanged) return;
     lastUpdateRef.current = stateHash;
+    lastActionRefs.current = {
+      toggleMic,
+      toggleDeafen,
+      toggleScreenShare,
+      toggleStreamAudio: onToggleStreamAudio,
+      toggleCamera,
+      handleLeave,
+      openScreenShareModal,
+      onToggleWatch,
+      watchAndFocusStreamByUserId,
+      updateSharedSpatialAudioState,
+      togglePreviewHidden,
+      onToggleAlwaysShowStreamPreview,
+    };
 
     onStreamStateUpdate?.({
       joined,
       isScreenSharing,
       isStreamingAudio,
+      alwaysShowStreamPreview,
       screenQuality: currentScreenQuality,
       currentScreenSource: currentScreenSource ?? null,
       isMicOn,
@@ -278,7 +334,7 @@ export default function VoiceChannelView({
       toggleStreamAudio: onToggleStreamAudio,
       toggleCamera,
       handleLeave,
-      openScreenShareModal: () => setIsScreenModalOpen(true),
+      openScreenShareModal,
       sfu,
       gridItems,
       streamThumbnails,
@@ -294,8 +350,9 @@ export default function VoiceChannelView({
       voiceSessionId,
       isPreviewHidden,
       togglePreviewHidden,
+      onToggleAlwaysShowStreamPreview,
     });
-  }, [joined, isScreenSharing, isStreamingAudio, currentScreenQuality, currentScreenSource, toggleMic, toggleDeafen, toggleScreenShare, onToggleStreamAudio, isMicOn, isDeafened, isCameraActive, hasCamera, hasMicrophone, toggleCamera, handleLeave, onStreamStateUpdate, availableQualities, sfu, gridItems, streamThumbnails, watchedStreams, watchersByStreamer, onToggleWatch, watchAndFocusStreamByUserId, spatialAudioState, updateSharedSpatialAudioState, settingsUserId, channelId, roomSlug, voiceSessionId, isPreviewHidden, togglePreviewHidden]);
+  }, [joined, isScreenSharing, isStreamingAudio, alwaysShowStreamPreview, currentScreenQuality, currentScreenSource, toggleMic, toggleDeafen, toggleScreenShare, onToggleStreamAudio, isMicOn, isDeafened, isCameraActive, hasCamera, hasMicrophone, toggleCamera, handleLeave, openScreenShareModal, onStreamStateUpdate, availableQualities, sfu, gridItems, streamThumbnails, watchedStreams, watchersByStreamer, onToggleWatch, watchAndFocusStreamByUserId, spatialAudioState, updateSharedSpatialAudioState, settingsUserId, channelId, roomSlug, voiceSessionId, isPreviewHidden, togglePreviewHidden, onToggleAlwaysShowStreamPreview]);
 
 
   // Fullscreen change listener
@@ -373,6 +430,8 @@ export default function VoiceChannelView({
     isStreamingAudio: isStreamingAudio,
     onToggleStreamAudio: onToggleStreamAudio,
     onToggleWatch: onToggleWatch,
+    onOpenProfileUser,
+    onOpenMessageUser,
     watchedStreams: watchedStreams,
     availableQualities: getAvailableStreamQualities(),
     onLeave: handleLeave,
@@ -384,6 +443,8 @@ export default function VoiceChannelView({
     watchersByStreamer,
     togglePreviewHidden,
     isPreviewHidden,
+    alwaysShowStreamPreview,
+    onToggleAlwaysShowStreamPreview,
     sfu,
     serverId,
     localUserId,

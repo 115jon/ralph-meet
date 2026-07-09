@@ -42,6 +42,8 @@ export interface StreamContextMenuProps {
   onToggleWatch?: (userId: string) => void;
   onOpenProfile?: () => void;
   onOpenMessage?: () => void;
+  onOpenProfileUser?: (userId: string) => void;
+  onOpenMessageUser?: (userId: string) => void;
   showDisconnect?: boolean;
   sfu?: SFUClient | null;
   serverId?: string | null;
@@ -73,6 +75,8 @@ export const StreamContextMenu: React.FC<StreamContextMenuProps> = ({
   onToggleWatch,
   onOpenProfile,
   onOpenMessage,
+  onOpenProfileUser,
+  onOpenMessageUser,
   showDisconnect = true,
   sfu,
   serverId,
@@ -98,6 +102,7 @@ export const StreamContextMenu: React.FC<StreamContextMenuProps> = ({
 
   const myClerkId = clerkUser?.id;
   const isLocal = userId === "me" || userId === myClerkId;
+  const resolvedTargetUserId = userId === "me" ? (myClerkId ?? null) : userId;
 
   const myMember = members.find((m: any) => m.user.id === myClerkId);
   const myTotalPerms = myMember?.roles?.reduce((acc: number, r: any) => acc | r.permissions, 0) ?? 0;
@@ -247,14 +252,22 @@ export const StreamContextMenu: React.FC<StreamContextMenuProps> = ({
   }, [userId, onClose]);
 
   const handleProfile = useCallback(() => {
-    onOpenProfile?.();
+    if (resolvedTargetUserId && onOpenProfileUser) {
+      onOpenProfileUser?.(resolvedTargetUserId);
+    } else {
+      onOpenProfile?.();
+    }
     onClose();
-  }, [onClose, onOpenProfile]);
+  }, [onClose, onOpenProfile, onOpenProfileUser, resolvedTargetUserId]);
 
   const handleMessage = useCallback(() => {
-    onOpenMessage?.();
+    if (resolvedTargetUserId && onOpenMessageUser) {
+      onOpenMessageUser?.(resolvedTargetUserId);
+    } else {
+      onOpenMessage?.();
+    }
     onClose();
-  }, [onClose, onOpenMessage]);
+  }, [onClose, onOpenMessage, onOpenMessageUser, resolvedTargetUserId]);
 
   const clearSubmenu = useCallback(() => handleMouseEnterRoot(null), [handleMouseEnterRoot]);
 
@@ -262,6 +275,10 @@ export const StreamContextMenu: React.FC<StreamContextMenuProps> = ({
     <div
       ref={containerRef}
       style={{ top: pos.top, left: pos.left }}
+      data-stream-preview-interactive="true"
+      onPointerDown={(event) => event.stopPropagation()}
+      onPointerUp={(event) => event.stopPropagation()}
+      onContextMenu={(event) => event.stopPropagation()}
       onMouseLeave={clearSubmenu}
       onMouseMove={handleMouseMove}
       className="fixed z-[9999] w-[210px] bg-rm-bg-elevated border border-rm-border shadow-2xl rounded-lg p-1 pb-2 animate-in fade-in zoom-in-95 duration-100 backdrop-blur-xl flex flex-col"

@@ -4,6 +4,7 @@ import { useDelayedUnmountValue } from "@/hooks/useDelayUnmount";
 import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
 import { cn } from "@/lib/utils";
 import {
+  EyeOff,
   Headphones,
   MicOff,
   Volume2,
@@ -95,8 +96,15 @@ export const VoiceGrid = React.memo(({
   if (focusedId && focusedItem) {
     const isFocusedScreen = focusedItem.type === 'screen';
     const isFocusedCamera = focusedItem.type === 'camera';
-    const isStreaming = (isFocusedCamera || isFocusedScreen) && !!focusedItem.stream;
-    const isLoadingStream = (isFocusedCamera || isFocusedScreen) && !focusedItem.stream;
+    const isPreviewHidden = isFocusedScreen && focusedItem.isLocal && !!voiceActions?.isPreviewHidden;
+    const focusedThumbnailPoster = isFocusedScreen && !isPreviewHidden
+      ? streamThumbnails[focusedItem.userId]
+      : null;
+    const isStreaming = (isFocusedCamera || isFocusedScreen) && !!focusedItem.stream && !isPreviewHidden;
+    const isLoadingStream = (isFocusedCamera || isFocusedScreen)
+      && !focusedItem.stream
+      && !isPreviewHidden
+      && !focusedThumbnailPoster;
     const focusedLabel = getFocusedItemLabel(focusedItem);
     const showFocusedVolume = !focusedItem.isLocal && (isFocusedScreen || isFocusedCamera) && hasLiveAudioTrack(focusedItem.stream);
 
@@ -107,7 +115,7 @@ export const VoiceGrid = React.memo(({
           type="button"
           data-focused-bg="true"
           className="absolute inset-0 z-0 border-0 p-0 transition-colors duration-500"
-          style={{ backgroundColor: isStreaming ? 'black' : (dominantColor || 'var(--rm-bg-primary)') }}
+          style={{ backgroundColor: isStreaming || focusedThumbnailPoster ? 'black' : (dominantColor || 'var(--rm-bg-primary)') }}
           aria-label="Clear focused participant"
           onClick={() => onFocus(null)}
           onContextMenu={(e) => {
@@ -124,6 +132,24 @@ export const VoiceGrid = React.memo(({
             isLocal={focusedItem.isLocal && focusedItem.type === 'camera'}
             className="w-full h-full object-contain relative z-10 pointer-events-none"
           />
+        ) : focusedThumbnailPoster ? (
+          <div className="relative z-10 h-full w-full overflow-hidden">
+            <img
+              src={focusedThumbnailPoster}
+              alt={`${focusedItem.name} stream thumbnail`}
+              className="h-full w-full object-contain"
+            />
+            <div className="absolute inset-0 bg-linear-to-t from-black/35 via-black/10 to-transparent" />
+          </div>
+        ) : isPreviewHidden ? (
+          <div className="relative z-10 flex h-full w-full items-center justify-center bg-black/75">
+            <div className="flex flex-col items-center gap-3 text-center">
+              <EyeOff size={28} className="text-white/60" />
+              <span className="text-xs font-bold uppercase tracking-[0.24em] text-white/45">
+                Preview paused
+              </span>
+            </div>
+          </div>
         ) : (
           <div className="w-full h-full flex items-center justify-center relative overflow-hidden z-10">
             <div className="flex flex-col items-center justify-center animate-in fade-in zoom-in-95 duration-700 relative z-10 w-full h-full p-8 md:p-16">
@@ -158,21 +184,7 @@ export const VoiceGrid = React.memo(({
               isStreaming={focusedItem.type === 'screen'}
               onClose={() => setContextMenu(null)}
               isClosing={!contextMenu}
-              onToggleScreenShare={voiceActions?.onToggleScreenShare}
-              isCurrentUserStreaming={voiceActions?.isCurrentUserStreaming}
-              currentScreenQuality={voiceActions?.currentScreenQuality}
-              availableQualities={voiceActions?.availableQualities}
-              isStreamingAudio={voiceActions?.isStreamingAudio}
-              onToggleStreamAudio={voiceActions?.onToggleStreamAudio}
-              onChangeSource={voiceActions?.onChangeSource}
-              onLeave={voiceActions?.onLeave}
-              isMuted={voiceActions?.isMuted}
-              onToggleMute={voiceActions?.onToggleMute}
-              isDeafened={voiceActions?.isDeafened}
-              onToggleDeafen={voiceActions?.onToggleDeafen}
-              watchedStreams={voiceActions?.watchedStreams}
-              onToggleWatch={voiceActions?.onToggleWatch}
-              currentScreenSource={voiceActions?.currentScreenSource}
+              {...(voiceActions ?? {})}
             />
           </Suspense>
         )}

@@ -1,7 +1,6 @@
 // Feature: screen-share-zero-overhead, Property 9: Preview is paused on native
-// start and shown for CEF — preview is paused (`isPreviewHidden` true with no CEF
-// preview session opened for the shared source) if and only if the share is a
-// native share; CEF (non-native) shares always start with the preview shown.
+// start and shown for CEF unless the user explicitly enables Always Show Stream
+// Preview.
 //
 // Validates: Requirements 5.1, 5.4
 
@@ -22,38 +21,43 @@ const previewKindArb: fc.Arbitrary<ScreenSharePreviewKind> = fc.constantFrom(
 );
 
 describe("resolvePreviewStartState — Property 9 (preview-default decision)", () => {
-  it("pauses preview (and opens no CEF preview) iff the share is native", () => {
+  it("pauses preview on native shares iff Always Show Stream Preview is disabled", () => {
     fc.assert(
-      fc.property(previewKindArb, (kind) => {
-        const decision = resolvePreviewStartState(kind);
-        const isNative = kind === "native";
+      fc.property(previewKindArb, fc.boolean(), (kind, alwaysShowPreview) => {
+        const decision = resolvePreviewStartState(kind, alwaysShowPreview);
+        const shouldPausePreview = kind === "native" && !alwaysShowPreview;
 
         // The "paused state" is precisely: preview hidden AND no CEF preview
         // session opened for the shared source (Req 5.1).
         const isPausedState = decision.isPreviewHidden && !decision.openCefPreview;
 
-        // iff: paused state holds exactly when the share is native.
-        expect(isPausedState).toBe(isNative);
+        expect(isPausedState).toBe(shouldPausePreview);
 
         // Component invariants that make up the iff, stated explicitly so a
         // counterexample localizes the break.
-        expect(decision.isPreviewHidden).toBe(isNative);
-        expect(decision.openCefPreview).toBe(!isNative);
+        expect(decision.isPreviewHidden).toBe(shouldPausePreview);
+        expect(decision.openCefPreview).toBe(!shouldPausePreview);
       }),
       { numRuns: 100 },
     );
   });
 
-  // Concrete anchors documenting the two endpoints of the iff.
-  it("native => paused, no CEF preview", () => {
-    expect(resolvePreviewStartState("native")).toEqual({
+  it("native + disabled override => paused, no CEF preview", () => {
+    expect(resolvePreviewStartState("native", false)).toEqual({
       isPreviewHidden: true,
       openCefPreview: false,
     });
   });
 
+  it("native + enabled override => preview shown, CEF preview opened", () => {
+    expect(resolvePreviewStartState("native", true)).toEqual({
+      isPreviewHidden: false,
+      openCefPreview: true,
+    });
+  });
+
   it("cef => preview shown, CEF preview opened", () => {
-    expect(resolvePreviewStartState("cef")).toEqual({
+    expect(resolvePreviewStartState("cef", false)).toEqual({
       isPreviewHidden: false,
       openCefPreview: true,
     });

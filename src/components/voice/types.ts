@@ -37,8 +37,14 @@ export interface VoiceActions {
   watchedStreams?: Record<string, boolean>;
   watchersByStreamer?: StreamWatchersByStreamer;
   onToggleWatch?: (userId: string) => void;
+  onOpenProfileUser?: (userId: string) => void;
+  onOpenMessageUser?: (userId: string) => void;
   onChangeSource?: () => void;
   togglePreviewHidden?: () => void;
   isPreviewHidden?: boolean;
+  alwaysShowStreamPreview?: boolean;
+  onToggleAlwaysShowStreamPreview?: () => void;
   sfu?: any; // SFUClient
+  serverId?: string | null;
+  localUserId?: string | null;
 }

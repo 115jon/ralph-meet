@@ -178,18 +178,24 @@ export interface PreviewStartDecision {
  *
  * Native (hardware) shares default to PAUSED so a second WGC/getDisplayMedia
  * session is not opened on the same source, which would add capture overhead
- * (Req 5.1). CEF (non-native) shares keep the existing default of showing the
- * preview (Req 5.4). The resume control later reopens the preview through the
- * existing `togglePreviewHidden` flow (Req 5.3).
+ * (Req 5.1). If the user explicitly enables "Always Show Stream Preview", that
+ * preference overrides the native default and opens the preview immediately.
+ * CEF (non-native) shares keep the existing default of showing the preview
+ * (Req 5.4). The resume control later reopens the preview through the existing
+ * `togglePreviewHidden` flow (Req 5.3).
  *
  * Preview is paused (and no CEF preview session is opened) if and only if the
- * share is native — this is the property-tested invariant (Property 9).
+ * share is native and the user has not opted into always showing the preview.
  */
-export function resolvePreviewStartState(kind: ScreenSharePreviewKind): PreviewStartDecision {
+export function resolvePreviewStartState(
+  kind: ScreenSharePreviewKind,
+  alwaysShowPreview = false,
+): PreviewStartDecision {
   const isNative = kind === "native";
+  const shouldPausePreview = isNative && !alwaysShowPreview;
   return {
-    isPreviewHidden: isNative,
-    openCefPreview: !isNative,
+    isPreviewHidden: shouldPausePreview,
+    openCefPreview: !shouldPausePreview,
   };
 }
 
@@ -779,7 +785,7 @@ export function useVoiceChannel({
   const { hasMicrophone, hasCamera } = useMediaDevices();
 
   const settingsUserId = mode === "room" ? ROOM_GUEST_SETTINGS_USER_ID : (user?.id || "guest");
-  const { isMuted: settingsMuted, isDeafened: settingsDeafened, inputDeviceId, inputDeviceLabel, inputDeviceGroupId, videoDeviceId, videoDeviceLabel, videoDeviceGroupId, cameraQuality, cameraBackground, customCameraBackgrounds, noiseSuppression, noiseReductionEnabled, noiseReductionProvider, echoCancellation, autoSensitivity, sensitivity, streamHighFidelity, outputVolume, outputDeviceId, spatialAudioEnabled } = useVoiceSettingsStore(useShallow(s => {
+  const { isMuted: settingsMuted, isDeafened: settingsDeafened, inputDeviceId, inputDeviceLabel, inputDeviceGroupId, videoDeviceId, videoDeviceLabel, videoDeviceGroupId, cameraQuality, cameraBackground, customCameraBackgrounds, noiseSuppression, noiseReductionEnabled, noiseReductionProvider, echoCancellation, autoSensitivity, sensitivity, streamHighFidelity, outputVolume, outputDeviceId, spatialAudioEnabled, alwaysShowStreamPreview } = useVoiceSettingsStore(useShallow(s => {
     const st = s.getSettings(settingsUserId);
     return {
       isMuted: st.isMuted,
@@ -803,6 +809,7 @@ export function useVoiceChannel({
       spatialAudioEnabled: st.spatialAudioEnabled,
       outputVolume: st.outputVolume,
       outputDeviceId: st.outputDeviceId,
+      alwaysShowStreamPreview: !!st.alwaysShowStreamPreview,
     };
   }));
   const audioProcessingSettings: VoiceAudioProcessingSettings = {
@@ -818,6 +825,7 @@ export function useVoiceChannel({
   const setIsMuted = useVoiceSettingsStore(s => s.setIsMuted);
   const setIsDeafened = useVoiceSettingsStore(s => s.setIsDeafened);
   const setDevice = useVoiceSettingsStore(s => s.setDevice);
+  const updateUserSettings = useVoiceSettingsStore(s => s.updateUserSettings);
 
   const peerSettings = useVoiceSettingsStore(s => s.getSettings(settingsUserId).peerSettings);
 
@@ -2168,17 +2176,50 @@ export function useVoiceChannel({
             // ── Preview-paused default for native shares (Req 5.1, 5.2) ────
             // Native hardware capture already runs a WGC session on the source.
             // Opening a second CEF/getDisplayMedia preview on the same source
-            // adds capture overhead, so default the local preview to PAUSED:
-            // do NOT open a CEF preview stream here. The local tile shows the
-            // existing "Preview paused" placeholder until the user resumes via
-            // togglePreviewHidden (Req 5.3), which reopens the CEF preview from
-            // currentScreenSource.
-            const previewDecision = resolvePreviewStartState("native");
+            // adds capture overhead, so default the local preview to PAUSED
+            // unless the user explicitly opted into always showing it.
+            const previewDecision = resolvePreviewStartState("native", alwaysShowStreamPreview);
+            let previewStream: MediaStream | null = null;
+            if (previewDecision.openCefPreview) {
+              try {
+                previewStream = await getCustomPickerDesktopStream({
+                  sourceId: effectiveOptions.sourceId,
+                  captureId: effectiveOptions.captureId ?? undefined,
+                  sourceKind: effectiveOptions.sourceKind ?? undefined,
+                  withAudio: false,
+                  videoConstraints: browserVideoConstraints,
+                  desktopMandatoryConstraints,
+                });
+              } catch (error) {
+                previewLog.warn("Failed to open native share preview on start", error);
+              }
+            }
 
-            screenStreamRef.current = null;
+            if (previewStream) {
+              screenStreamRef.current = previewStream;
+              const videoTrack = previewStream.getVideoTracks()[0];
+              if (videoTrack) {
+                videoTrack.onended = async () => {
+                  if (screenStreamRef.current !== previewStream) return;
+                  screenStreamRef.current = null;
+                  await sfuRef.current?.stopNativeScreenShare();
+                  if (sfuRef.current && myIdRef.current) {
+                    sfuRef.current.stopTracks([`screen-video-${myIdRef.current}`, `screen-audio-${myIdRef.current}`]);
+                  }
+                  voiceDispatch({ type: 'SET_SCREEN_SHARING', payload: false, stream: null, audio: false });
+                  voiceDispatch({ type: 'SET_SCREEN_SOURCE', payload: null });
+                };
+              }
+            } else {
+              screenStreamRef.current = null;
+            }
 
-            voiceDispatch({ type: 'SET_SCREEN_SHARING', payload: true, stream: null, audio: targetAudio });
-            voiceDispatch({ type: 'SET_PREVIEW_HIDDEN', payload: previewDecision.isPreviewHidden, stream: null });
+            const isPreviewHidden = previewDecision.openCefPreview
+              ? !previewStream
+              : previewDecision.isPreviewHidden;
+
+            voiceDispatch({ type: 'SET_SCREEN_SHARING', payload: true, stream: previewStream, audio: targetAudio });
+            voiceDispatch({ type: 'SET_PREVIEW_HIDDEN', payload: isPreviewHidden, stream: previewStream });
             voiceDispatch({ type: 'SET_SCREEN_QUALITY', payload: targetQuality });
             voiceDispatch({
               type: 'SET_SCREEN_SOURCE',
@@ -2382,7 +2423,7 @@ export function useVoiceChannel({
         screenLog.error("Screen share failed:", err);
       }
     }
-  }, [isScreenSharing, currentScreenQuality, isStreamingAudio, localScreenStream]);
+  }, [isScreenSharing, currentScreenQuality, isStreamingAudio, localScreenStream, alwaysShowStreamPreview]);
 
   // ── Auto-stop when the shared source goes away (desktop native share) ──────
   // The backend emits `native-screen-share-ended` when the captured window is
@@ -2523,6 +2564,27 @@ export function useVoiceChannel({
       voiceDispatch({ type: 'SET_PREVIEW_HIDDEN', payload: outcome.isPreviewHidden, stream: outcome.stream });
     }
   }, [isPreviewHidden, isScreenSharing, currentScreenSource, currentScreenQuality, isHookActive, localScreenStream]);
+
+  const onToggleAlwaysShowStreamPreview = useCallback(() => {
+    const nextAlwaysShowStreamPreview = !alwaysShowStreamPreview;
+    updateUserSettings((current) => ({
+      ...current,
+      alwaysShowStreamPreview: nextAlwaysShowStreamPreview,
+    }), settingsUserId);
+
+    if (nextAlwaysShowStreamPreview && isScreenSharing && isPreviewHidden) {
+      void Promise.resolve(togglePreviewHidden()).catch((error) => {
+        previewLog.warn("Failed to resume preview after enabling Always Show Stream Preview", error);
+      });
+    }
+  }, [
+    alwaysShowStreamPreview,
+    updateUserSettings,
+    settingsUserId,
+    isScreenSharing,
+    isPreviewHidden,
+    togglePreviewHidden,
+  ]);
 
   const onToggleStreamAudio = useCallback(async () => {
     const next = !isStreamingAudio;
@@ -2865,6 +2927,8 @@ export function useVoiceChannel({
     toggleScreenShare,
     onToggleStreamAudio,
     togglePreviewHidden,
+    alwaysShowStreamPreview,
+    onToggleAlwaysShowStreamPreview,
     onToggleWatch,
     currentSettings: {
       isMuted: settingsMuted,

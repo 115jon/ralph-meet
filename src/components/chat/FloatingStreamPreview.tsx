@@ -69,6 +69,10 @@ export default function FloatingStreamPreview({
   const [position, setPosition] = useState(() => getDefaultPosition(slotIndex));
   const [menuPosition, setMenuPosition] = useState<{ x: number; y: number } | null>(null);
 
+  const openMenuAt = (x: number, y: number) => {
+    setMenuPosition({ x, y });
+  };
+
   useEffect(() => {
     const clampToViewport = () => {
       const rect = containerRef.current?.getBoundingClientRect();
@@ -87,6 +91,14 @@ export default function FloatingStreamPreview({
   }, []);
 
   const handlePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (!event.currentTarget.contains(event.target as Node)) {
+      return;
+    }
+
+    if (event.button !== 0) {
+      return;
+    }
+
     if ((event.target as HTMLElement).closest("[data-stream-preview-interactive='true']")) {
       return;
     }
@@ -131,6 +143,16 @@ export default function FloatingStreamPreview({
     }
   };
 
+  const handleContextMenu = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (!event.currentTarget.contains(event.target as Node)) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    openMenuAt(event.clientX, event.clientY);
+  };
+
   return (
     <TooltipProvider delayDuration={0}>
       <div
@@ -141,6 +163,7 @@ export default function FloatingStreamPreview({
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerUp}
+        onContextMenu={handleContextMenu}
       >
         <div className="group relative aspect-video overflow-hidden rounded-[14px] border border-white/10 bg-[#06070a]/95 shadow-[0_24px_80px_rgba(0,0,0,0.55)] backdrop-blur-xl">
           {!isPreviewPaused && previewStream && (
@@ -187,9 +210,9 @@ export default function FloatingStreamPreview({
               className="border border-white/10 bg-black/55 text-white/85 hover:bg-black/70 hover:text-white"
               onClick={(event) => {
                 const rect = event.currentTarget.getBoundingClientRect();
-                setMenuPosition((current) =>
-                  current ? null : { x: rect.right + 4, y: rect.top - 4 },
-                );
+                setMenuPosition((current) => (
+                  current ? null : { x: rect.right + 4, y: rect.top - 4 }
+                ));
               }}
             />
             <IconButton
