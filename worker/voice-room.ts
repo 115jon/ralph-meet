@@ -37,6 +37,7 @@ import {
   skipListenTogether,
 } from "../src/lib/voice/listen-together-state";
 import { getNextVoicePresenceAlarmTime } from "../src/lib/voice-presence";
+import { toSafeSfuFailure } from "./sfu-diagnostics";
 
 const log = clog("VoiceGW");
 const roomLog = clog("VoiceRoom");
@@ -104,6 +105,12 @@ interface PushTrackDescriptor {
   kind: "audio" | "video";
 }
 
+interface SfuTrackCloseRow {
+  mid: string;
+  session_id: string | null;
+  track_name: string;
+}
+
 interface GatewayMessage {
   op: number;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -143,7 +150,7 @@ interface VoiceAttachment {
 const VOICE_HEARTBEAT_INTERVAL_MS = 15_000;
 const VOICE_ZOMBIE_TIMEOUT_MS = VOICE_HEARTBEAT_INTERVAL_MS * 6;
 const VOICE_PRUNE_ALARM_INTERVAL_MS = 300_000;
-const VOICE_RECONNECT_GRACE_MS = 30_000;
+const SFU_SESSION_REUSE_GRACE_MS = 20_000;
 const DEMO_CHAT_TTL_MS = 10 * 60 * 1000;
 const DEMO_CHAT_MAX_MESSAGES = 75;
 const DEMO_CHAT_MAX_CONTENT_LENGTH = 1_000;
@@ -462,7 +469,7 @@ export class VoiceRoom extends DurableObject<Env> {
       const pid = row.participant_id as string;
       const disconnectedAt = row.disconnected_at as number;
 
-      if (now - disconnectedAt >= VOICE_RECONNECT_GRACE_MS) {
+      if (now - disconnectedAt >= SFU_SESSION_REUSE_GRACE_MS) {
         roomLog.info(`Grace period expired for ${pid}, cleaning up SFU`);
         await this.purgeParticipantState(pid);
       }
@@ -498,7 +505,7 @@ export class VoiceRoom extends DurableObject<Env> {
       deadlines.push((row.last_heartbeat as number) + VOICE_ZOMBIE_TIMEOUT_MS);
     }
     for (const row of this.sql.exec(`SELECT disconnected_at FROM pending_reconnects`)) {
-      deadlines.push((row.disconnected_at as number) + VOICE_RECONNECT_GRACE_MS);
+      deadlines.push((row.disconnected_at as number) + SFU_SESSION_REUSE_GRACE_MS);
     }
     for (const row of this.sql.exec(`SELECT MIN(expires_at) as expires_at FROM demo_chat_messages`)) {
       if (row.expires_at) deadlines.push(row.expires_at as number);
@@ -1130,7 +1137,7 @@ export class VoiceRoom extends DurableObject<Env> {
     if (pendingRows.length > 0) {
       const pending = pendingRows[0];
       const disconnectedAt = pending.disconnected_at as number;
-      if (isReconnectWithinGrace(disconnectedAt, Date.now(), VOICE_RECONNECT_GRACE_MS)) {
+      if (isReconnectWithinGrace(disconnectedAt, Date.now(), SFU_SESSION_REUSE_GRACE_MS)) {
         const pRows = [...this.sql.exec("SELECT push_session_cam, push_session_screen FROM participants WHERE id = ?", d.participant_id)];
         if (pRows.length > 0) {
           push_session_cam = pRows[0].push_session_cam as string;
@@ -1635,8 +1642,8 @@ export class VoiceRoom extends DurableObject<Env> {
           tracks: tracksToClose,
           force: true,
         });
-      } catch (err) {
-        sfuLog.warn("tracks/close failed (non-fatal):", err);
+      } catch {
+        sfuLog.warn("tracks/close failed (non-fatal)");
       }
     }
   }
@@ -2314,13 +2321,23 @@ export class VoiceRoom extends DurableObject<Env> {
     const push_session_cam = p.push_session_cam as string | null;
     const push_session_screen = p.push_session_screen as string | null;
 
-    const tRows = [...this.sql.exec("SELECT track_name, session_id, mid FROM tracks WHERE participant_id = ?", participantId)];
+    const tRows: SfuTrackCloseRow[] = [];
+    for (const row of this.sql.exec("SELECT track_name, session_id, mid FROM tracks WHERE participant_id = ?", participantId)) {
+      if (typeof row.mid !== "string" || !row.mid) continue;
+      tRows.push({
+        mid: row.mid,
+        session_id: typeof row.session_id === "string" ? row.session_id : null,
+        track_name: String(row.track_name),
+      });
+    }
 
-    const camTracks = tRows.filter(t => t.session_id === push_session_cam && t.mid);
-    const screenTracks = tRows.filter(t => t.session_id === push_session_screen && t.mid);
+    const camTracks = tRows.filter(t => t.session_id === push_session_cam);
+    const screenTracks = tRows.filter(t => t.session_id === push_session_screen);
 
-    const closeSession = async (sessionId: string, tracks: any[]) => {
-      const url = `https://rtc.live.cloudflare.com/v1/apps/${this.env.CALLS_APP_ID}/sessions/${sessionId}/tracks/close`;
+    const closeSession = async (sessionId: string, tracks: SfuTrackCloseRow[]) => {
+      const path = `sessions/${sessionId}/tracks/close`;
+      const operation = `PUT ${path}`;
+      const url = `https://rtc.live.cloudflare.com/v1/apps/${this.env.CALLS_APP_ID}/${path}`;
       try {
         const resp = await fetch(url, {
           method: "PUT",
@@ -2335,10 +2352,19 @@ export class VoiceRoom extends DurableObject<Env> {
           sfuLog.warn(`tracks/close 410 for session ${sessionId.slice(0, 8)}... — PC already disconnected, session evicted by SFU (expected)`);
           return;
         }
-        const body = await resp.text().catch(() => "(unreadable)");
-        sfuLog.warn(`tracks/close ${resp.status} for session ${sessionId.slice(0, 8)}...:`, body);
+        sfuLog.warn("SFU tracks/close failed", toSafeSfuFailure({
+          attempt: 0,
+          operation,
+          requestId: resp.headers.get("cf-ray"),
+          status: resp.status,
+        }));
       } catch (err) {
-        sfuLog.warn(`tracks/close network error for session ${sessionId.slice(0, 8)}...:`, err);
+        sfuLog.warn("SFU tracks/close failed", toSafeSfuFailure({
+          attempt: 0,
+          operation,
+          status: null,
+          timedOut: err instanceof DOMException && err.name === "AbortError",
+        }));
       }
     };
 
@@ -2383,14 +2409,13 @@ export class VoiceRoom extends DurableObject<Env> {
           continue;
         }
 
-        sfuLog.error(`${method} ${path} failed (${resp.status}):`,
-          text,
-          `| APP_ID=${this.env.CALLS_APP_ID}`,
-          `| SECRET defined=${!!this.env.CALLS_APP_SECRET}`,
-          `| SECRET length=${this.env.CALLS_APP_SECRET?.length ?? 0}`,
-          `| SECRET prefix=${this.env.CALLS_APP_SECRET?.slice(0, 6) ?? "N/A"}...`
-        );
-        throw new Error(`SFU ${method} ${path} failed (${resp.status}): ${text}`);
+        sfuLog.error("SFU request failed", toSafeSfuFailure({
+          attempt,
+          operation: `${method} ${path}`,
+          requestId: resp.headers.get("cf-ray"),
+          status: resp.status,
+        }));
+        throw new Error(`SFU ${method} ${path} failed (${resp.status})`);
       } finally {
         clearTimeout(timer);
       }
@@ -2440,14 +2465,13 @@ export class VoiceRoom extends DurableObject<Env> {
           continue;
         }
 
-        sfuLog.error(`${method} ${path} failed (${resp.status}):`,
-          text,
-          `| APP_ID=${this.env.CALLS_APP_ID}`,
-          `| SECRET defined=${!!this.env.CALLS_APP_SECRET}`,
-          `| SECRET length=${this.env.CALLS_APP_SECRET?.length ?? 0}`,
-          `| SECRET prefix=${this.env.CALLS_APP_SECRET?.slice(0, 6) ?? "N/A"}...`
-        );
-        throw new Error(`SFU ${method} ${path} failed (${resp.status}): ${text}`);
+        sfuLog.error("SFU request failed", toSafeSfuFailure({
+          attempt,
+          operation: `${method} ${path}`,
+          requestId: resp.headers.get("cf-ray"),
+          status: resp.status,
+        }));
+        throw new Error(`SFU ${method} ${path} failed (${resp.status})`);
       } finally {
         clearTimeout(timer);
       }

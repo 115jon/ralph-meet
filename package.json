@@ -15,6 +15,7 @@
     "deploy": "pnpm run deploy:do && pnpm run deploy:main",
     "lint": "eslint",
     "test": "vitest run",
+    "test:worker": "vitest run --config worker/vitest.config.ts",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "typecheck": "tsc --noEmit",
@@ -63,6 +64,7 @@
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "^1.40.2",
+    "@cloudflare/vitest-pool-workers": "0.18.4",
     "@cloudflare/workers-types": "^4.20260612.1",
     "@eslint/js": "^9.39.3",
     "@tanstack/eslint-plugin-router": "^1.161.4",

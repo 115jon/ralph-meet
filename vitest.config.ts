@@ -7,7 +7,7 @@ export default defineConfig({
     environment: "node",
     setupFiles: ["./src/test/setup-dom.ts"],
     include: ["src/**/*.test.ts", "src/**/*.test.tsx", "worker/**/*.test.ts"],
-    exclude: ["node_modules", ".next", ".open-next"],
+    exclude: ["node_modules", ".next", ".open-next", "worker/__tests__/**/*.worker.test.ts"],
     coverage: {
       provider: "v8",
       include: ["src/lib/**/*.ts", "worker/**/*.ts"],
