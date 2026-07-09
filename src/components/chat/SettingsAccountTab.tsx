@@ -1,5 +1,10 @@
 import { AvatarFrameEditor } from "@/components/chat/AvatarFrameEditor";
 import { ProfileDisplayName } from "@/components/chat/ProfileDisplayName";
+import {
+  PROFILE_SURFACE_ASPECT_RATIO,
+  ProfilePreviewWidgetCard,
+  ProfileSurfaceBackdrop,
+} from "@/components/chat/ProfilePreviewPrimitives";
 import { AvatarImage } from "@/components/chat/AvatarImage";
 import { CollectiblesCatalogModal } from "@/components/chat/CollectiblesCatalogModal";
 import { ProfileCollectiblesLayer } from "@/components/chat/ProfileCollectiblesLayer";
@@ -32,6 +37,7 @@ import {
   normalizeHexColor,
   PROFILE_COLOR_SWATCHES,
   resolveProfileTheme,
+  sanitizeProfileCustomizationInput,
   type DisplayNameStyle,
 } from "@/lib/profile-customization";
 import type { User } from "@/lib/types";
@@ -58,7 +64,18 @@ import {
   X,
 } from "lucide-react";
 import { clog } from "@/lib/console-logger";
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type PointerEvent as ReactPointerEvent,
+  type ReactNode,
+} from "react";
 import { createPortal } from "react-dom";
 
 const log = clog("Profile");
@@ -92,14 +109,21 @@ type CollectibleApplyUser = {
 
 const SETTINGS_TOOLTIP_CONTENT_CLASS =
   "bg-rm-bg-floating border border-rm-border text-rm-text-primary text-[12px] font-bold shadow-xl px-3 py-2 rounded-lg";
-const PROFILE_SURFACE_ASPECT_RATIO = "450 / 880";
 const SHOW_LEGACY_PREVIEW_IDENTITY = false;
 const COLOR_PICKER_HUE_GRADIENT =
   "linear-gradient(90deg, #FF0000 0%, #FFFF00 16.66%, #00FF00 33.33%, #00FFFF 50%, #0000FF 66.66%, #FF00FF 83.33%, #FF0000 100%)";
 const COLOR_PICKER_EMPTY_PATTERN =
   "linear-gradient(45deg, rgba(255,255,255,0.08) 25%, transparent 25%, transparent 75%, rgba(255,255,255,0.08) 75%), linear-gradient(45deg, rgba(255,255,255,0.08) 25%, transparent 25%, transparent 75%, rgba(255,255,255,0.08) 75%)";
 const DISPLAY_NAME_FONT_TILE_SAMPLE = "Ag";
-const DISPLAY_NAME_EFFECT_TILE_SAMPLE = "Style";
+const FOCUSABLE_CONTROL_SELECTOR = [
+  "a[href]",
+  "button:not([disabled])",
+  "input:not([disabled])",
+  "select:not([disabled])",
+  "textarea:not([disabled])",
+  "[tabindex]:not([tabindex=\"-1\"])",
+].join(", ");
+const DISPLAY_NAME_STYLE_COLOR_POPOVER_SELECTOR = "[data-display-name-style-color-popover='true']";
 
 type EyeDropperApi = {
   open: () => Promise<{ sRGBHex: string }>;
@@ -175,6 +199,22 @@ function areDisplayNameStylesEqual(
   }
 
   return JSON.stringify(leftStyle) === JSON.stringify(rightStyle);
+}
+
+function getFocusableElements(container: ParentNode | null | undefined) {
+  if (!container) return [];
+
+  return Array.from(container.querySelectorAll<HTMLElement>(FOCUSABLE_CONTROL_SELECTOR)).filter(
+    (element) => element.getAttribute("aria-hidden") !== "true" && element.getClientRects().length > 0,
+  );
+}
+
+function getDialogFocusableElements(dialog: HTMLElement) {
+  const auxiliaryRoots = typeof document === "undefined"
+    ? []
+    : Array.from(document.querySelectorAll<HTMLElement>(DISPLAY_NAME_STYLE_COLOR_POPOVER_SELECTOR));
+
+  return Array.from(new Set([dialog, ...auxiliaryRoots].flatMap((root) => getFocusableElements(root))));
 }
 
 function AccountActionIconButton({
@@ -260,33 +300,6 @@ function ProfileRailCard({
   );
 }
 
-function ProfilePreviewWidgetCard({
-  title,
-  subtitle,
-  children,
-  className,
-}: {
-  title: string;
-  subtitle?: string;
-  children: ReactNode;
-  className?: string;
-}) {
-  return (
-    <section
-      className={cn(
-        "rounded-[24px] border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg)] p-4 shadow-[0_16px_40px_rgba(0,0,0,0.22)]",
-        className,
-      )}
-    >
-      <div className="mb-4">
-        <div className="text-[13px] font-semibold text-[color:var(--rm-profile-custom-text)]">{title}</div>
-        {subtitle ? <div className="mt-1 text-[12px] text-[color:var(--rm-profile-custom-muted)]">{subtitle}</div> : null}
-      </div>
-      {children}
-    </section>
-  );
-}
-
 function ColorField({
   label,
   value,
@@ -315,6 +328,7 @@ function ColorField({
     resolvedColor: string;
     triggerBackground: string;
     triggerTextColor: string;
+    popoverId: string;
   }) => ReactNode;
 }) {
   const [draft, setDraft] = useState(value ?? "");
@@ -322,9 +336,16 @@ function ColorField({
   const [eyeDropperPending, setEyeDropperPending] = useState(false);
   const pickerRef = useRef<HTMLDivElement | null>(null);
   const popoverRef = useRef<HTMLDivElement | null>(null);
+  const hexInputRef = useRef<HTMLInputElement | null>(null);
   const saturationRef = useRef<HTMLDivElement | null>(null);
   const hueRef = useRef<HTMLDivElement | null>(null);
+  const wasOpenRef = useRef(false);
   const [popoverPosition, setPopoverPosition] = useState<{ left: number; top: number; width: number } | null>(null);
+  const labelId = useId();
+  const helperTextId = useId();
+  const popoverId = useId();
+  const eyedropperHintId = useId();
+  const saturationInstructionsId = useId();
   const resolvedColor = normalizeHexColor(value) ?? normalizeHexColor(defaultColor) ?? "#5865F2";
   const hsv = hexToHsv(resolvedColor);
   const triggerBackground = value ?? previewBackground ?? resolvedColor;
@@ -408,6 +429,66 @@ function ColorField({
     setColorValue(hsvToHex(nextHue, hsv.s, hsv.v));
   };
 
+  const handleSaturationKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    const step = event.shiftKey ? 0.1 : 0.02;
+
+    switch (event.key) {
+      case "ArrowLeft":
+        event.preventDefault();
+        setColorValue(hsvToHex(hsv.h, clampColorPickerValue(hsv.s - step, 0, 1), hsv.v));
+        break;
+      case "ArrowRight":
+        event.preventDefault();
+        setColorValue(hsvToHex(hsv.h, clampColorPickerValue(hsv.s + step, 0, 1), hsv.v));
+        break;
+      case "ArrowUp":
+        event.preventDefault();
+        setColorValue(hsvToHex(hsv.h, hsv.s, clampColorPickerValue(hsv.v + step, 0, 1)));
+        break;
+      case "ArrowDown":
+        event.preventDefault();
+        setColorValue(hsvToHex(hsv.h, hsv.s, clampColorPickerValue(hsv.v - step, 0, 1)));
+        break;
+      case "Home":
+        event.preventDefault();
+        setColorValue(hsvToHex(hsv.h, 0, hsv.v));
+        break;
+      case "End":
+        event.preventDefault();
+        setColorValue(hsvToHex(hsv.h, 1, hsv.v));
+        break;
+      default:
+        break;
+    }
+  };
+
+  const handleHueKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    const step = event.shiftKey ? 30 : 10;
+
+    switch (event.key) {
+      case "ArrowLeft":
+      case "ArrowDown":
+        event.preventDefault();
+        setColorValue(hsvToHex(hsv.h - step, hsv.s, hsv.v));
+        break;
+      case "ArrowRight":
+      case "ArrowUp":
+        event.preventDefault();
+        setColorValue(hsvToHex(hsv.h + step, hsv.s, hsv.v));
+        break;
+      case "Home":
+        event.preventDefault();
+        setColorValue(hsvToHex(0, hsv.s, hsv.v));
+        break;
+      case "End":
+        event.preventDefault();
+        setColorValue(hsvToHex(360, hsv.s, hsv.v));
+        break;
+      default:
+        break;
+    }
+  };
+
   const startDrag = (event: ReactPointerEvent<HTMLDivElement>, onMove: (clientX: number, clientY: number) => void) => {
     event.preventDefault();
     onMove(event.clientX, event.clientY);
@@ -483,9 +564,33 @@ function ColorField({
     };
   }, [open]);
 
+  useEffect(() => {
+    let rafId: number | null = null;
+
+    if (open) {
+      rafId = window.requestAnimationFrame(() => {
+        hexInputRef.current?.focus();
+      });
+    } else if (wasOpenRef.current) {
+      pickerRef.current?.querySelector<HTMLButtonElement>("button")?.focus();
+    }
+
+    wasOpenRef.current = open;
+    return () => {
+      if (rafId !== null) {
+        window.cancelAnimationFrame(rafId);
+      }
+    };
+  }, [open]);
+
   const popoverContent = open && typeof document !== "undefined" ? createPortal(
     <div
+      id={popoverId}
       ref={popoverRef}
+      role="dialog"
+      aria-modal="false"
+      aria-label={`${label} color picker`}
+      data-display-name-style-color-popover="true"
       className="fixed z-[1450] w-[calc(100vw-1rem)] max-w-[320px] rounded-[24px] border border-rm-border bg-rm-bg-floating/96 p-4 text-rm-text shadow-[0_32px_80px_rgba(0,0,0,0.45)] backdrop-blur-xl"
       style={{
         left: popoverPosition?.left ?? 8,
@@ -494,12 +599,20 @@ function ColorField({
         visibility: popoverPosition ? "visible" : "hidden",
       }}
     >
+      <p id={saturationInstructionsId} className="sr-only">
+        Use left and right arrow keys to adjust saturation. Use up and down arrow keys to adjust brightness.
+      </p>
       <div
         ref={saturationRef}
         onPointerDown={(event) => startDrag(event, updateSaturationFromPointer)}
+        onKeyDown={handleSaturationKeyDown}
+        tabIndex={0}
+        role="group"
+        aria-roledescription="2D color picker"
         className="relative h-[160px] cursor-crosshair overflow-hidden rounded-[18px] border border-rm-border"
         style={{ background: `hsl(${hsv.h} 100% 50%)` }}
         aria-label={`${label} saturation and brightness picker`}
+        aria-describedby={saturationInstructionsId}
       >
         <div className="absolute inset-0 bg-[linear-gradient(90deg,#FFFFFF,rgba(255,255,255,0))]" />
         <div className="absolute inset-0 bg-[linear-gradient(0deg,#000000,rgba(0,0,0,0))]" />
@@ -516,6 +629,14 @@ function ColorField({
       <div
         ref={hueRef}
         onPointerDown={(event) => startDrag(event, (clientX) => updateHueFromPointer(clientX))}
+        onKeyDown={handleHueKeyDown}
+        tabIndex={0}
+        role="slider"
+        aria-orientation="horizontal"
+        aria-valuemin={0}
+        aria-valuemax={360}
+        aria-valuenow={Math.round(hsv.h)}
+        aria-valuetext={`${Math.round(hsv.h)} degrees`}
         className="relative mt-4 h-4 cursor-ew-resize overflow-hidden rounded-full border border-rm-border"
         style={{ background: COLOR_PICKER_HUE_GRADIENT }}
         aria-label={`${label} hue picker`}
@@ -530,8 +651,9 @@ function ColorField({
         <div className="flex items-center gap-2 rounded-[14px] border border-primary/35 bg-rm-bg-surface px-2.5 py-2 shadow-[0_0_0_1px_rgba(88,101,242,0.12)]">
           <div
             className="h-8 w-8 shrink-0 rounded-[10px] border border-rm-border"
+            aria-hidden="true"
             style={getPickerSurfaceStyle({
-              fill: value ?? resolvedColor,
+              fill: value,
               showEmptyPattern: !value,
               patternSize: "14px 14px",
               patternPosition: "0 0, 7px 7px",
@@ -539,6 +661,7 @@ function ColorField({
           />
           <span className="shrink-0 text-[18px] font-medium text-rm-text-muted">#</span>
           <Input
+            ref={hexInputRef}
             value={draft.startsWith("#") ? draft.slice(1) : draft}
             onChange={(event) => setDraft(event.target.value.startsWith("#") ? event.target.value : `#${event.target.value}`)}
             onBlur={commitDraft}
@@ -556,6 +679,8 @@ function ColorField({
             className="h-8 border-0 bg-transparent px-1 py-0 text-[15px] font-medium tracking-[0.04em] text-rm-text shadow-none placeholder:text-rm-text-muted focus-visible:ring-0"
             placeholder={resolvedColor.slice(1)}
             spellCheck={false}
+            aria-label={`${label} hex color value`}
+            aria-describedby={eyedropperHintId}
           />
           <button
             type="button"
@@ -566,6 +691,7 @@ function ColorField({
               (!supportsEyeDropper || eyeDropperPending) && "cursor-not-allowed opacity-45",
             )}
             aria-label="Pick color from screen"
+            aria-describedby={eyedropperHintId}
             title={supportsEyeDropper ? "Pick color from screen" : "Eyedropper unavailable in this browser"}
           >
             {eyeDropperPending ? <Loader2 size={14} className="animate-spin" /> : <Pipette size={14} />}
@@ -573,8 +699,10 @@ function ColorField({
         </div>
 
         <div className="mt-2 flex items-center justify-between gap-3 px-1">
-          <div className="text-[11px] text-rm-text-muted">
-            {supportsEyeDropper ? "Sample any color on screen." : "Eyedropper is not available here."}
+          <div id={eyedropperHintId} className="text-[11px] text-rm-text-muted">
+            {!value
+              ? "Using the app default until you pick a custom color."
+              : (supportsEyeDropper ? "Sample any color on screen." : "Eyedropper is not available here.")}
           </div>
           <Button
             type="button"
@@ -584,13 +712,14 @@ function ColorField({
               onChange(null);
             }}
             className="h-7 rounded-[10px] px-2.5 text-[11px] font-semibold text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text"
+            aria-label={`Use the default ${label.toLowerCase()}`}
           >
-            Reset
+            Use default
           </Button>
         </div>
       </div>
 
-      <div className="mt-4 grid grid-cols-5 gap-2">
+      <div className="mt-4 grid grid-cols-5 gap-2" role="group" aria-label={`${label} preset colors`}>
         {presets.map((preset) => (
           <button
             key={preset}
@@ -602,6 +731,7 @@ function ColorField({
             )}
             style={{ background: preset }}
             aria-label={`Select ${label.toLowerCase()} preset ${preset}`}
+            aria-pressed={value === preset}
           />
         ))}
       </div>
@@ -619,13 +749,14 @@ function ColorField({
           resolvedColor,
           triggerBackground,
           triggerTextColor,
+          popoverId,
         })
       ) : (
         <>
           <div className="flex items-center justify-between gap-3">
             <div>
-              <div className="text-[12px] font-semibold text-rm-text">{label}</div>
-              {helperText ? <div className="mt-1 text-[11px] text-rm-text-muted">{helperText}</div> : null}
+              <div id={labelId} className="text-[12px] font-semibold text-rm-text">{label}</div>
+              {helperText ? <div id={helperTextId} className="mt-1 text-[11px] text-rm-text-muted">{helperText}</div> : null}
             </div>
           </div>
 
@@ -633,8 +764,11 @@ function ColorField({
             type="button"
             onClick={toggleOpen}
             className="group relative block h-[46px] w-full overflow-hidden rounded-[16px] border border-rm-border bg-rm-bg-surface shadow-[0_16px_30px_rgba(0,0,0,0.24)] transition hover:-translate-y-[1px] hover:border-white/14"
-            aria-label={`Choose ${label.toLowerCase()}`}
+            aria-labelledby={labelId}
+            aria-describedby={helperText ? helperTextId : undefined}
             aria-expanded={open}
+            aria-haspopup="dialog"
+            aria-controls={popoverId}
           >
             <div
               className="absolute inset-0"
@@ -722,6 +856,15 @@ function DisplayNameStyleDialog({
     : (previewMode === "dark" ? "#F8FAFC" : "#1D2430");
   const chatPreviewBackground = previewMode === "dark" ? "#151922" : "#FFFFFF";
   const chatPreviewText = previewMode === "dark" ? "#F8FAFC" : "#1D2430";
+  const dialogRef = useRef<HTMLElement | null>(null);
+  const previousFocusRef = useRef<HTMLElement | null>(null);
+  const dialogTitleId = useId();
+  const dialogDescriptionId = useId();
+  const fontSectionId = useId();
+  const effectSectionId = useId();
+  const colorSectionId = useId();
+  const previewRegionId = useId();
+  const previewModeSectionId = useId();
 
   const applyPresetColor = useCallback((preset: string) => {
     setDraftStyle((prev) => ({
@@ -730,18 +873,92 @@ function DisplayNameStyleDialog({
     }));
   }, [activeColorSlot]);
 
+  useEffect(() => {
+    if (!open || typeof document === "undefined") return undefined;
+
+    previousFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+
+    const rafId = window.requestAnimationFrame(() => {
+      const dialog = dialogRef.current;
+      if (!dialog) return;
+
+      const [firstFocusable] = getDialogFocusableElements(dialog);
+      (firstFocusable ?? dialog).focus();
+    });
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        if (document.querySelector(DISPLAY_NAME_STYLE_COLOR_POPOVER_SELECTOR)) return;
+        event.preventDefault();
+        onClose();
+        return;
+      }
+
+      if (event.key !== "Tab") return;
+
+      const dialog = dialogRef.current;
+      if (!dialog) return;
+
+      const focusable = getDialogFocusableElements(dialog);
+      if (focusable.length === 0) {
+        event.preventDefault();
+        dialog.focus();
+        return;
+      }
+
+      const activeElement = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+      if (!activeElement || !focusable.includes(activeElement)) {
+        event.preventDefault();
+        (event.shiftKey ? focusable[focusable.length - 1] : focusable[0])?.focus();
+        return;
+      }
+
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+
+      if (event.shiftKey && activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.cancelAnimationFrame(rafId);
+      document.removeEventListener("keydown", handleKeyDown);
+      previousFocusRef.current?.focus();
+    };
+  }, [onClose, open]);
+
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[1200] flex items-center justify-center bg-black/58 p-4" onClick={onClose}>
-      <div
-        className="grid w-full max-w-[920px] max-h-[min(760px,calc(100dvh-1.5rem))] gap-0 overflow-hidden rounded-[30px] border border-rm-border bg-rm-bg-elevated text-rm-text shadow-[0_32px_96px_rgba(0,0,0,0.48)] lg:grid-cols-[minmax(0,308px)_minmax(0,1fr)]"
-        onClick={(event) => event.stopPropagation()}
+    <div
+      className="fixed inset-0 z-[1200] flex items-center justify-center bg-black/58 p-4"
+      onClick={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+      role="presentation"
+    >
+      <section
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={dialogTitleId}
+        aria-describedby={dialogDescriptionId}
+        tabIndex={-1}
+        className="grid w-full max-w-[920px] max-h-[min(760px,calc(100dvh-1.5rem))] gap-0 overflow-hidden rounded-[30px] border border-rm-border bg-rm-bg-elevated text-rm-text shadow-[0_32px_96px_rgba(0,0,0,0.48)] outline-none lg:grid-cols-[minmax(0,308px)_minmax(0,1fr)]"
       >
         <div className="overflow-y-auto border-b border-rm-border p-4 lg:border-b-0 lg:border-r lg:p-5">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <h3 className="text-xl font-semibold text-rm-text">Change display name style</h3>
+              <h2 id={dialogTitleId} className="text-xl font-semibold text-rm-text">Change display name style</h2>
+              <p id={dialogDescriptionId} className="sr-only">
+                Choose a font, effect, and colors, then review the preview before you apply your display name style.
+              </p>
             </div>
             <Button
               type="button"
@@ -757,8 +974,8 @@ function DisplayNameStyleDialog({
 
           <div className="mt-4 space-y-4">
             <div>
-              <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-rm-text-muted">Choose font</div>
-              <div className="grid grid-cols-4 gap-2">
+              <h3 id={fontSectionId} className="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-rm-text-muted">Choose font</h3>
+              <div className="grid grid-cols-4 gap-2" role="group" aria-labelledby={fontSectionId}>
                 {DISPLAY_NAME_FONT_OPTIONS.map((option) => (
                   <Tooltip key={option.id}>
                     <TooltipTrigger asChild>
@@ -772,6 +989,7 @@ function DisplayNameStyleDialog({
                             : "border-rm-border bg-rm-bg-surface/70 hover:border-rm-border hover:bg-rm-bg-elevated/70",
                         )}
                         aria-label={`Select ${option.label} font`}
+                        aria-pressed={draftStyle.font === option.id}
                       >
                         <ProfileDisplayName
                           text={DISPLAY_NAME_FONT_TILE_SAMPLE}
@@ -795,44 +1013,39 @@ function DisplayNameStyleDialog({
             </div>
 
             <div>
-              <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-rm-text-muted">Choose effect</div>
-              <div className="grid grid-cols-3 gap-2">
+              <h3 id={effectSectionId} className="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-rm-text-muted">Choose effect</h3>
+              <div className="grid grid-cols-3 gap-2" role="group" aria-labelledby={effectSectionId}>
                 {DISPLAY_NAME_EFFECT_OPTIONS.map((option) => (
-                  <Tooltip key={option.id}>
-                    <TooltipTrigger asChild>
-                      <button
-                        type="button"
-                        onClick={() => setDraftStyle((prev) => ({ ...prev, effect: option.id }))}
-                        className={cn(
-                          "aspect-square min-w-0 rounded-[15px] border p-0 transition hover:-translate-y-[1px]",
-                          draftStyle.effect === option.id
-                            ? "border-primary bg-primary/10 shadow-[0_16px_32px_rgba(88,101,242,0.14)]"
-                            : "border-rm-border bg-rm-bg-surface/70 hover:border-rm-border hover:bg-rm-bg-elevated/70",
-                        )}
-                        aria-label={`Select ${option.label} effect`}
-                      >
-                        <ProfileDisplayName
-                          text={DISPLAY_NAME_EFFECT_TILE_SAMPLE}
-                          displayNameStyle={{
-                            ...draftStyle,
-                            font: DEFAULT_DISPLAY_NAME_STYLE.font,
-                            effect: option.id,
-                          }}
-                          className="flex h-full items-center justify-center overflow-hidden text-center text-[15px] font-semibold"
-                        />
-                      </button>
-                    </TooltipTrigger>
-                    <TooltipContent side="top" sideOffset={8} className={SETTINGS_TOOLTIP_CONTENT_CLASS}>
-                      {option.label}
-                    </TooltipContent>
-                  </Tooltip>
+                  <button
+                    key={option.id}
+                    type="button"
+                    onClick={() => setDraftStyle((prev) => ({ ...prev, effect: option.id }))}
+                    className={cn(
+                      "aspect-square min-w-0 rounded-[15px] border p-0 transition hover:-translate-y-[1px]",
+                      draftStyle.effect === option.id
+                        ? "border-primary bg-primary/10 shadow-[0_16px_32px_rgba(88,101,242,0.14)]"
+                        : "border-rm-border bg-rm-bg-surface/70 hover:border-rm-border hover:bg-rm-bg-elevated/70",
+                    )}
+                    aria-label={`Select ${option.label} effect`}
+                    aria-pressed={draftStyle.effect === option.id}
+                  >
+                    <ProfileDisplayName
+                      text={option.label}
+                      displayNameStyle={{
+                        ...draftStyle,
+                        font: DEFAULT_DISPLAY_NAME_STYLE.font,
+                        effect: option.id,
+                      }}
+                      className="flex h-full items-center justify-center overflow-hidden px-2 text-center text-[13px] font-semibold sm:text-[14px]"
+                    />
+                  </button>
                 ))}
               </div>
             </div>
 
             <div>
-              <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-rm-text-muted">Choose colors</div>
-              <div className="rounded-[18px] border border-rm-border bg-rm-bg-surface/60 p-2.5">
+              <h3 id={colorSectionId} className="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-rm-text-muted">Choose colors</h3>
+              <div className="rounded-[18px] border border-rm-border bg-rm-bg-surface/60 p-2.5" role="group" aria-labelledby={colorSectionId}>
                 <div className="grid grid-cols-[auto_minmax(0,1fr)] items-start gap-2.5">
                   <div className="flex shrink-0 gap-1.5">
                     <ColorField
@@ -845,7 +1058,7 @@ function DisplayNameStyleDialog({
                       presets={DISPLAY_NAME_COLOR_SWATCHES}
                       defaultColor={DEFAULT_DISPLAY_NAME_STYLE.primaryColor}
                       containerClassName="shrink-0"
-                      renderTrigger={({ open, toggleOpen, triggerBackground }) => (
+                      renderTrigger={({ open, toggleOpen, triggerBackground, popoverId }) => (
                         <button
                           type="button"
                           onClick={() => {
@@ -858,6 +1071,9 @@ function DisplayNameStyleDialog({
                           )}
                           aria-label="Choose base name color"
                           aria-expanded={open}
+                          aria-controls={popoverId}
+                          aria-haspopup="dialog"
+                          aria-pressed={activeColorSlot === "primary"}
                         >
                           <span
                             className={cn(
@@ -880,7 +1096,7 @@ function DisplayNameStyleDialog({
                       presets={DISPLAY_NAME_COLOR_SWATCHES}
                       defaultColor={DEFAULT_DISPLAY_NAME_STYLE.secondaryColor}
                       containerClassName="shrink-0"
-                      renderTrigger={({ open, toggleOpen, triggerBackground }) => (
+                      renderTrigger={({ open, toggleOpen, triggerBackground, popoverId }) => (
                         <button
                           type="button"
                           onClick={() => {
@@ -893,6 +1109,9 @@ function DisplayNameStyleDialog({
                           )}
                           aria-label="Choose highlight name color"
                           aria-expanded={open}
+                          aria-controls={popoverId}
+                          aria-haspopup="dialog"
+                          aria-pressed={activeColorSlot === "secondary"}
                         >
                           <span
                             className={cn(
@@ -908,7 +1127,7 @@ function DisplayNameStyleDialog({
                   </div>
 
                   <div className="min-w-0 flex-1">
-                    <div className="grid grid-cols-6 gap-1.5">
+                    <div className="grid grid-cols-6 gap-1.5" role="group" aria-label={`${activeColorSlot === "primary" ? "Base" : "Highlight"} color presets`}>
                       {DISPLAY_NAME_COLOR_SWATCHES.map((preset) => (
                         <button
                           key={`${activeColorSlot}-${preset}`}
@@ -922,6 +1141,7 @@ function DisplayNameStyleDialog({
                           )}
                           style={{ background: preset }}
                           aria-label={`Set ${activeColorSlot === "primary" ? "base" : "highlight"} color to ${preset}`}
+                          aria-pressed={(activeColorSlot === "primary" ? draftStyle.primaryColor : draftStyle.secondaryColor) === preset}
                         />
                       ))}
                     </div>
@@ -933,7 +1153,8 @@ function DisplayNameStyleDialog({
           </div>
         </div>
 
-        <div className="flex min-h-[420px] flex-col bg-rm-bg-primary">
+        <div className="flex min-h-[420px] flex-col bg-rm-bg-primary" role="region" aria-labelledby={previewRegionId}>
+          <h3 id={previewRegionId} className="sr-only">Style preview</h3>
           <div className="flex-1 p-4 lg:p-5">
             <div
               className="relative flex min-h-[100%] items-center justify-center overflow-hidden rounded-[26px] border border-[color:var(--rm-profile-custom-card-border)]"
@@ -1124,7 +1345,8 @@ function DisplayNameStyleDialog({
               <p className="max-w-[34ch] text-[12px] leading-relaxed text-rm-text-muted">
                 Display name colors and effects can shift a little between light and dark surfaces.
               </p>
-              <div className="inline-flex items-center gap-1 rounded-full border border-rm-border bg-rm-bg-surface/70 p-1">
+              <div className="inline-flex items-center gap-1 rounded-full border border-rm-border bg-rm-bg-surface/70 p-1" role="group" aria-labelledby={previewModeSectionId}>
+                <span id={previewModeSectionId} className="sr-only">Preview surface</span>
                 <button
                   type="button"
                   onClick={() => setPreviewMode("dark")}
@@ -1133,6 +1355,7 @@ function DisplayNameStyleDialog({
                     previewMode === "dark" ? "bg-rm-bg-hover text-rm-text shadow-sm" : "text-rm-text-muted hover:text-rm-text",
                   )}
                   aria-label="Show dark preview"
+                  aria-pressed={previewMode === "dark"}
                 >
                   <Moon size={15} />
                 </button>
@@ -1144,6 +1367,7 @@ function DisplayNameStyleDialog({
                     previewMode === "light" ? "bg-rm-bg-hover text-rm-text shadow-sm" : "text-rm-text-muted hover:text-rm-text",
                   )}
                   aria-label="Show light preview"
+                  aria-pressed={previewMode === "light"}
                 >
                   <Sun size={15} />
                 </button>
@@ -1197,7 +1421,7 @@ function DisplayNameStyleDialog({
             </div>
           </div>
         </div>
-      </div>
+      </section>
     </div>
   );
 }
@@ -1369,6 +1593,11 @@ export default function SettingsAccountTab({
     bannerInputRef,
     nameplateInputRef,
   } = useAccountState(user, chatUser);
+  const storedProfileTheme = sanitizeProfileCustomizationInput({
+    profile_accent_color: chatUser?.profile_accent_color,
+    profile_background_color: chatUser?.profile_background_color,
+    profile_banner_color: chatUser?.profile_banner_color,
+  });
   const [claimCandidates, setClaimCandidates] = useState<ClaimCandidate[]>([]);
   const [claimLoading, setClaimLoading] = useState(false);
   const [claimingId, setClaimingId] = useState<string | null>(null);
@@ -1377,9 +1606,9 @@ export default function SettingsAccountTab({
   const [avatarDisplayChanged, setAvatarDisplayChanged] = useState(false);
   const [avatarEditor, setAvatarEditor] = useState<{ src: string; file?: File } | null>(null);
   const [collectiblesKind, setCollectiblesKind] = useState<CollectibleKind | null>(null);
-  const [profileAccentColor, setProfileAccentColor] = useState<string | null>(() => normalizeHexColor(chatUser?.profile_accent_color) ?? null);
-  const [profileBackgroundColor, setProfileBackgroundColor] = useState<string | null>(() => normalizeHexColor(chatUser?.profile_background_color) ?? null);
-  const [profileBannerColor, setProfileBannerColor] = useState<string | null>(() => normalizeHexColor(chatUser?.profile_banner_color) ?? null);
+  const [profileAccentColor, setProfileAccentColor] = useState<string | null>(() => storedProfileTheme.profile_accent_color);
+  const [profileBackgroundColor, setProfileBackgroundColor] = useState<string | null>(() => storedProfileTheme.profile_background_color);
+  const [profileBannerColor, setProfileBannerColor] = useState<string | null>(() => storedProfileTheme.profile_banner_color);
   const [displayNameStyle, setDisplayNameStyle] = useState<DisplayNameStyle | null>(
     () => normalizeDisplayNameStyle(chatUser?.display_name_style),
   );
@@ -1481,9 +1710,9 @@ export default function SettingsAccountTab({
     nameplateFile !== null ||
     removeBanner ||
     removeNameplate ||
-    (normalizeHexColor(chatUser?.profile_accent_color) ?? null) !== profileAccentColor ||
-    (normalizeHexColor(chatUser?.profile_background_color) ?? null) !== profileBackgroundColor ||
-    (normalizeHexColor(chatUser?.profile_banner_color) ?? null) !== profileBannerColor ||
+    storedProfileTheme.profile_accent_color !== profileAccentColor ||
+    storedProfileTheme.profile_background_color !== profileBackgroundColor ||
+    storedProfileTheme.profile_banner_color !== profileBannerColor ||
     !areDisplayNameStylesEqual(displayNameStyle, savedDisplayNameStyle);
 
   const persistedAvatarSrc = chatUser?.avatar_url ? getAuthAssetUrl(chatUser.avatar_url) : null;
@@ -1635,9 +1864,9 @@ export default function SettingsAccountTab({
     setNameplatePreview(null);
     setRemoveBanner(false);
     setRemoveNameplate(false);
-    setProfileAccentColor(normalizeHexColor(chatUser?.profile_accent_color) ?? null);
-    setProfileBackgroundColor(normalizeHexColor(chatUser?.profile_background_color) ?? null);
-    setProfileBannerColor(normalizeHexColor(chatUser?.profile_banner_color) ?? null);
+    setProfileAccentColor(storedProfileTheme.profile_accent_color);
+    setProfileBackgroundColor(storedProfileTheme.profile_background_color);
+    setProfileBannerColor(storedProfileTheme.profile_banner_color);
     setDisplayNameStyle(normalizeDisplayNameStyle(chatUser?.display_name_style));
     setError(null);
     setSaved(false);
@@ -1646,9 +1875,9 @@ export default function SettingsAccountTab({
     chatUser?.bio,
     chatUser?.display_name,
     chatUser?.display_name_style,
-    chatUser?.profile_accent_color,
-    chatUser?.profile_background_color,
-    chatUser?.profile_banner_color,
+    storedProfileTheme.profile_accent_color,
+    storedProfileTheme.profile_background_color,
+    storedProfileTheme.profile_banner_color,
     chatUser?.pronouns,
     chatUser?.username,
     setAvatarDisplay,
@@ -2345,7 +2574,7 @@ export default function SettingsAccountTab({
                             presets={PROFILE_COLOR_SWATCHES}
                             defaultColor="#161A22"
                             containerClassName="absolute inset-x-0 top-2 z-30 flex justify-center"
-                            renderTrigger={({ open, toggleOpen, value, resolvedColor }) => (
+                            renderTrigger={({ open, toggleOpen, value }) => (
                               <Tooltip>
                                 <TooltipTrigger asChild>
                                   <button
@@ -2361,7 +2590,7 @@ export default function SettingsAccountTab({
                                       <span
                                         className="h-full w-full rounded-[8px] border border-black/10"
                                         style={getPickerSurfaceStyle({
-                                          fill: value ?? resolvedColor,
+                                          fill: value,
                                           showEmptyPattern: !value,
                                           patternSize: "12px 12px",
                                           patternPosition: "0 0, 6px 6px",
@@ -2384,7 +2613,7 @@ export default function SettingsAccountTab({
                             defaultColor="#5865F2"
                             containerClassName="absolute inset-x-0 bottom-2 z-30 flex justify-center"
                             popoverSide="top"
-                            renderTrigger={({ open, toggleOpen, value, resolvedColor }) => (
+                            renderTrigger={({ open, toggleOpen, value }) => (
                               <Tooltip>
                                 <TooltipTrigger asChild>
                                   <button
@@ -2400,7 +2629,7 @@ export default function SettingsAccountTab({
                                       <span
                                         className="h-full w-full rounded-[8px] border border-black/10"
                                         style={getPickerSurfaceStyle({
-                                          fill: value ?? resolvedColor,
+                                          fill: value,
                                           showEmptyPattern: !value,
                                           patternSize: "12px 12px",
                                           patternPosition: "0 0, 6px 6px",
@@ -2544,7 +2773,11 @@ export default function SettingsAccountTab({
                 backgroundImage: "var(--rm-profile-custom-surface)",
               }}
             >
-              <div className="pointer-events-none absolute inset-0 z-0" style={{ background: "var(--rm-profile-custom-surface-overlay-strong)" }} />
+              <ProfileSurfaceBackdrop
+                bannerUrl={currentBannerUrl}
+                bannerContentType={currentBannerContentType}
+              />
+              <div className="pointer-events-none absolute inset-0 z-[2]" style={{ background: "var(--rm-profile-custom-surface-overlay-strong)" }} />
               {asModal && stylesCollapsed ? (
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -2567,13 +2800,12 @@ export default function SettingsAccountTab({
               ) : null}
 
             <section
-              className="relative mx-auto w-full max-w-[400px] self-start overflow-hidden rounded-[28px] border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg)] shadow-[0_26px_64px_rgba(0,0,0,0.26)]"
+              className="relative z-10 mx-auto w-full max-w-[400px] self-start overflow-hidden rounded-[28px] border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg)] shadow-[0_26px_64px_rgba(0,0,0,0.26)] backdrop-blur-[18px]"
               style={{
                 aspectRatio: PROFILE_SURFACE_ASPECT_RATIO,
-                backgroundColor: "transparent",
               }}
             >
-              <div className="pointer-events-none absolute inset-0 z-0" style={{ background: "var(--rm-profile-custom-surface-overlay)" }} />
+              <div className="pointer-events-none absolute inset-0 z-[2]" style={{ background: "var(--rm-profile-custom-surface-overlay)" }} />
               <div className="pointer-events-none absolute inset-0 z-30">
                 <ProfileCollectiblesLayer display={currentAvatarDisplay} effectOpacity={1} fit="contain" className="z-10 opacity-100" />
               </div>

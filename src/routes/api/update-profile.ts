@@ -8,6 +8,7 @@ import { parseMediaContentFilter } from "@/lib/media-content-filter";
 import {
   normalizeDisplayNameStyle,
   normalizeHexColor,
+  sanitizeProfileCustomizationInput,
   serializeDisplayNameStyle,
 } from "@/lib/profile-customization";
 import { isAppTheme } from "@/lib/theme-preferences";
@@ -87,6 +88,11 @@ const PATCH = async ({ request: req }: any) => {
     : profileBannerColor === null
       ? null
       : normalizeHexColor(profileBannerColor);
+  const sanitizedSubmittedProfileTheme = sanitizeProfileCustomizationInput({
+    profile_accent_color: normalizedProfileAccentColor ?? null,
+    profile_background_color: normalizedProfileBackgroundColor ?? null,
+    profile_banner_color: normalizedProfileBannerColor ?? null,
+  });
   const normalizedDisplayNameStyle = displayNameStyle === undefined
     ? undefined
     : displayNameStyle === null
@@ -169,17 +175,17 @@ const PATCH = async ({ request: req }: any) => {
 
     if (normalizedProfileAccentColor !== undefined) {
       updates.push("profile_accent_color = ?");
-      binds.push(normalizedProfileAccentColor);
+      binds.push(sanitizedSubmittedProfileTheme.profile_accent_color);
     }
 
     if (normalizedProfileBackgroundColor !== undefined) {
       updates.push("profile_background_color = ?");
-      binds.push(normalizedProfileBackgroundColor);
+      binds.push(sanitizedSubmittedProfileTheme.profile_background_color);
     }
 
     if (normalizedProfileBannerColor !== undefined) {
       updates.push("profile_banner_color = ?");
-      binds.push(normalizedProfileBannerColor);
+      binds.push(sanitizedSubmittedProfileTheme.profile_banner_color);
     }
 
     if (normalizedDisplayNameStyle !== undefined) {
@@ -244,6 +250,11 @@ const PATCH = async ({ request: req }: any) => {
       pronouns: string | null;
     }>();
     const parsedDisplayNameStyle = normalizeDisplayNameStyle(updatedUser?.display_name_style ?? null);
+    const sanitizedTheme = sanitizeProfileCustomizationInput({
+      profile_accent_color: updatedUser?.profile_accent_color,
+      profile_background_color: updatedUser?.profile_background_color,
+      profile_banner_color: updatedUser?.profile_banner_color,
+    });
 
     // Cache invalidation
     await Promise.all([
@@ -274,9 +285,9 @@ const PATCH = async ({ request: req }: any) => {
       banner_content_type: updatedUser?.banner_content_type ?? null,
       nameplate_url: updatedUser?.nameplate_url ?? null,
       nameplate_content_type: updatedUser?.nameplate_content_type ?? null,
-      profile_accent_color: updatedUser?.profile_accent_color ?? null,
-      profile_background_color: updatedUser?.profile_background_color ?? null,
-      profile_banner_color: updatedUser?.profile_banner_color ?? null,
+      profile_accent_color: sanitizedTheme.profile_accent_color,
+      profile_background_color: sanitizedTheme.profile_background_color,
+      profile_banner_color: sanitizedTheme.profile_banner_color,
       display_name_style: parsedDisplayNameStyle,
       theme_preference: updatedUser?.theme_preference ?? null,
       theme_sync_enabled: updatedUser?.theme_sync_enabled === 1,
@@ -303,9 +314,9 @@ const PATCH = async ({ request: req }: any) => {
         banner_content_type: updatedUser?.banner_content_type,
         nameplate_url: updatedUser?.nameplate_url,
         nameplate_content_type: updatedUser?.nameplate_content_type,
-        profile_accent_color: updatedUser?.profile_accent_color,
-        profile_background_color: updatedUser?.profile_background_color,
-        profile_banner_color: updatedUser?.profile_banner_color,
+        profile_accent_color: sanitizedTheme.profile_accent_color,
+        profile_background_color: sanitizedTheme.profile_background_color,
+        profile_banner_color: sanitizedTheme.profile_banner_color,
         display_name_style: parsedDisplayNameStyle,
         theme_preference: updatedUser?.theme_preference,
         theme_sync_enabled: updatedUser?.theme_sync_enabled === 1,

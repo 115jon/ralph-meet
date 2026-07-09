@@ -67,6 +67,11 @@ export interface ResolvedProfileTheme {
   isLightSurface: boolean | null;
 }
 
+const LEGACY_DEFAULT_PROFILE_THEME = {
+  accent: "#0B0BE6",
+  background: "#0055FE",
+} as const;
+
 export const DEFAULT_DISPLAY_NAME_STYLE: DisplayNameStyle = {
   font: "gg-sans",
   effect: "solid",
@@ -110,6 +115,31 @@ export function normalizeHexColor(value: unknown): string | null {
     ? hex.split("").map(char => `${char}${char}`).join("")
     : hex;
   return `#${expanded.toUpperCase()}`;
+}
+
+export function sanitizeProfileCustomizationInput(
+  input: ProfileCustomizationInput,
+): Required<ProfileCustomizationInput> {
+  const accent = normalizeHexColor(input.profile_accent_color);
+  const background = normalizeHexColor(input.profile_background_color);
+  const banner = normalizeHexColor(input.profile_banner_color);
+
+  if (
+    accent === LEGACY_DEFAULT_PROFILE_THEME.accent
+    && background === LEGACY_DEFAULT_PROFILE_THEME.background
+  ) {
+    return {
+      profile_accent_color: null,
+      profile_background_color: null,
+      profile_banner_color: banner,
+    };
+  }
+
+  return {
+    profile_accent_color: accent,
+    profile_background_color: background,
+    profile_banner_color: banner,
+  };
 }
 
 function normalizeBrowserComputedColor(value: string) {
@@ -621,9 +651,11 @@ export function createRandomDisplayNameStyle() {
 }
 
 export function resolveProfileTheme(input: ProfileCustomizationInput): ResolvedProfileTheme {
-  const accent = normalizeHexColor(input.profile_accent_color);
-  const background = normalizeHexColor(input.profile_background_color);
-  const banner = normalizeHexColor(input.profile_banner_color);
+  const {
+    profile_accent_color: accent,
+    profile_background_color: background,
+    profile_banner_color: banner,
+  } = sanitizeProfileCustomizationInput(input);
 
   if (!accent && !background) {
     return {

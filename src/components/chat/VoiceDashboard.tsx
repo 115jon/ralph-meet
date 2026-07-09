@@ -9,6 +9,7 @@ import type { SFUClient } from "@/lib/sfu-client";
 import type { ScreenShareSourceState } from "@/lib/screen-share-types";
 import type { StreamWatchersByStreamer } from "@/lib/stream-watchers";
 import { cn } from "@/lib/utils";
+import { handleVoiceCameraToggle } from "@/lib/voice/camera-toggle";
 import type { SharedSpatialAudioState } from "@/lib/voice/spatial-audio";
 import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, lazy, Suspense } from "react";
@@ -623,15 +624,13 @@ export function VoiceDashboard({
                 <button
                   type="button"
                   onClick={() => {
-                    if (isCameraActive) {
-                      onToggleCamera?.();
-                    } else {
-                      if (settings?.alwaysPreviewVideo === false) {
-                        onToggleCamera?.();
-                      } else {
-                        setIsCameraModalOpen(true);
-                      }
-                    }
+                    void handleVoiceCameraToggle({
+                      hasCamera: !!hasCamera,
+                      isCameraActive: !!isCameraActive,
+                      alwaysPreviewVideo: settings?.alwaysPreviewVideo,
+                      onToggleCamera,
+                      onOpenPreviewModal: () => setIsCameraModalOpen(true),
+                    });
                   }}
                   disabled={!hasCamera}
                   className={cn(

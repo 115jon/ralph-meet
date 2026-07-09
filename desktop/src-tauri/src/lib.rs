@@ -63,6 +63,7 @@ mod hardware_encoder;
 mod media_devices;
 mod permissions;
 mod screen_capture;
+mod thumbnail_toolbar;
 mod tray;
 mod window;
 mod window_icon;
@@ -893,6 +894,9 @@ pub fn run() {
                 }
             }
 
+            #[cfg(target_os = "windows")]
+            thumbnail_toolbar::setup_taskbar_thumbnail_toolbar(app)?;
+
             Ok(())
         })
         // ── Minimize to tray on close ────────────────────────────────────
@@ -1004,6 +1008,7 @@ pub fn run() {
             set_hardware_acceleration,
             set_close_to_tray,
             set_start_minimized,
+            thumbnail_toolbar::sync_taskbar_thumbnail_toolbar,
             window::set_title_bar_dark_mode,
             window::set_taskbar_notification_attention,
             // Updater commands — exposed so the Settings UI can trigger

@@ -49,6 +49,7 @@
     "allow-set-start-minimized",
     "allow-set-title-bar-dark-mode",
     "allow-set-taskbar-notification-attention",
+    "allow-sync-taskbar-thumbnail-toolbar",
     "allow-fetch-update",
     "allow-install-update"
   ]

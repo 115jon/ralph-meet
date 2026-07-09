@@ -199,6 +199,16 @@ description = "Denies flashing or clearing the Windows taskbar button for unread
 commands.deny = ["set_taskbar_notification_attention"]
 
 [[permission]]
+identifier = "allow-sync-taskbar-thumbnail-toolbar"
+description = "Allows the frontend to sync the Windows taskbar thumbnail toolbar state."
+commands.allow = ["sync_taskbar_thumbnail_toolbar"]
+
+[[permission]]
+identifier = "deny-sync-taskbar-thumbnail-toolbar"
+description = "Denies syncing the Windows taskbar thumbnail toolbar state."
+commands.deny = ["sync_taskbar_thumbnail_toolbar"]
+
+[[permission]]
 identifier = "allow-fetch-update"
 description = "Allows the frontend to check for app updates."
 commands.allow = ["fetch_update"]

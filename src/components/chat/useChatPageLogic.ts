@@ -117,6 +117,10 @@ export function useChatPageLogic() {
   const lastActiveChannels = useRef<Record<string, string>>({});
 
   const [localStreamState, setLocalStreamState] = useState<VoiceSessionStreamState | null>(null);
+  const handleLocalStreamStateUpdate = useCallback((state: VoiceSessionStreamState) => {
+    if (!state.joined) return;
+    setLocalStreamState(state);
+  }, []);
 
   const slug = useMemo(
     () => typeof window !== "undefined"
@@ -506,7 +510,7 @@ export function useChatPageLogic() {
     voiceState,
     setVoiceState,
     localStreamState,
-    setLocalStreamState,
+    setLocalStreamState: handleLocalStreamStateUpdate,
     handleSelectServer,
     handleSelectChannel,
     handleToggleVoiceTextChat,

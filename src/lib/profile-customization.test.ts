@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  sanitizeProfileCustomizationInput,
   normalizeDisplayColor,
   resolveProfileTheme,
   resolveReadableDisplayNameStyle,
@@ -69,6 +70,30 @@ describe("normalizeDisplayColor", () => {
 });
 
 describe("resolveProfileTheme", () => {
+  it("treats the legacy default theme pair as an unset profile theme", () => {
+    expect(sanitizeProfileCustomizationInput({
+      profile_accent_color: "#0B0BE6",
+      profile_background_color: "#0055FE",
+      profile_banner_color: null,
+    })).toEqual({
+      profile_accent_color: null,
+      profile_background_color: null,
+      profile_banner_color: null,
+    });
+  });
+
+  it("ignores alpha colors because profile themes only support opaque hex values", () => {
+    expect(sanitizeProfileCustomizationInput({
+      profile_accent_color: "#123456",
+      profile_background_color: "#0055FE80",
+      profile_banner_color: "#ABCDEFCC",
+    })).toEqual({
+      profile_accent_color: "#123456",
+      profile_background_color: null,
+      profile_banner_color: null,
+    });
+  });
+
   it("returns contrast metadata for custom profile themes", () => {
     const theme = resolveProfileTheme({
       profile_accent_color: "#60A5FA",

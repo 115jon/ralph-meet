@@ -1,5 +1,6 @@
 import ChannelSidebar from "@/components/chat/ChannelSidebar";
 import ChatArea from "@/components/chat/ChatArea";
+import { DesktopThumbnailToolbarSync } from "@/components/chat/DesktopThumbnailToolbarSync";
 import DMSidebar from "@/components/chat/DMSidebar";
 import FloatingStreamPreview from "@/components/chat/FloatingStreamPreview";
 import FriendsView from "@/components/chat/FriendsView";
@@ -14,6 +15,7 @@ import { getUnreadChannelState } from "@/lib/desktop-notifications";
 import { MOBILE_ACTION_TYPE_ID, syncDesktopNotificationState } from "@/lib/desktop-native-sync";
 import { hasPermission, PERMISSIONS } from "@/lib/permissions";
 import { getAuthAssetUrl } from "@/lib/platform";
+import { dispatchOpenProfileEditorEvent } from "@/lib/profile-editor-events";
 import { resolveStreamPreviewAutomation, type StreamPreviewAutomationState } from "@/lib/stream-preview-automation";
 import { onSoundInteractionNeeded, resumeSoundContext } from "@/lib/sounds";
 import { cn } from "@/lib/utils";
@@ -228,6 +230,13 @@ export default function ChatPage() {
   const pendingStreamFocusRef = useRef<{ channelId: string; userId: string } | null>(null);
   const isAppInactiveRef = useRef(false);
   const previewAutomationStateRef = useRef<StreamPreviewAutomationState>("idle");
+
+  useEffect(() => {
+    if (!profileUser || profileUser.id !== user?.id) return;
+
+    dispatchOpenProfileEditorEvent();
+    setProfileUser(null);
+  }, [profileUser, setProfileUser, user?.id]);
   const previewToggleInFlightRef = useRef(false);
 
   // ── Voice Switch Confirmation ─────────────────────────────────────────────
@@ -1081,6 +1090,12 @@ export default function ChatPage() {
 	          />
 	        ))}
 
+        <DesktopThumbnailToolbarSync
+          currentUserId={user?.id ?? null}
+          localStreamState={localStreamState}
+          voiceJoined={voiceState.joined}
+        />
+
 	        {/* Floating UI anchored over the left nav without changing its location */}
 	        <div className={`absolute bottom-0 left-0 z-[120] w-[var(--left-nav-width)] pointer-events-none p-0 flex justify-start items-end max-md:fixed max-md:w-[min(calc(100vw),360px)] max-md:transition-transform max-md:duration-300 ${sidebarOpen ? "max-md:translate-x-0" : "max-md:-translate-x-full"}`}>
 	          <div className="pointer-events-auto w-full">
@@ -1213,7 +1228,7 @@ export default function ChatPage() {
           </Suspense>
         )}
 
-        {shouldRenderProfileUser && renderedProfileUser && (
+        {shouldRenderProfileUser && renderedProfileUser && renderedProfileUser.id !== user?.id && (
           <Suspense fallback={null}>
             <UserProfileModal
               user={renderedProfileUser}

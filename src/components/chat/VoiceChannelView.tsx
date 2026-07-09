@@ -24,11 +24,16 @@ const WarpRushActivityStage = lazy(() =>
 );
 
 export interface VoiceSessionStreamState {
+  joined: boolean;
   isScreenSharing: boolean;
   isStreamingAudio: boolean;
   screenQuality: string;
   currentScreenSource: ScreenShareSourceState | null;
   availableQualities: string[];
+  isMicOn: boolean;
+  isDeafened: boolean;
+  toggleMic: () => void;
+  toggleDeafen: () => void;
   toggleScreenShare: (options?: ScreenShareOptions) => void;
   toggleStreamAudio: () => void;
   isCameraActive: boolean;
@@ -199,9 +204,12 @@ export default function VoiceChannelView({
   // Expose local stream state to parent
   useEffect(() => {
     const currentState = {
+      joined,
       isScreenSharing,
       isStreamingAudio,
       screenQuality: currentScreenQuality,
+      isMicOn,
+      isDeafened,
       isCameraActive,
       hasCamera,
       hasMicrophone,
@@ -243,14 +251,19 @@ export default function VoiceChannelView({
     lastUpdateRef.current = stateHash;
 
     onStreamStateUpdate?.({
+      joined,
       isScreenSharing,
       isStreamingAudio,
       screenQuality: currentScreenQuality,
       currentScreenSource: currentScreenSource ?? null,
+      isMicOn,
+      isDeafened,
       isCameraActive,
       hasCamera,
       hasMicrophone,
       availableQualities,
+      toggleMic,
+      toggleDeafen,
       toggleScreenShare: (options) => {
         if (!options) {
           toggleScreenShare();
@@ -282,7 +295,7 @@ export default function VoiceChannelView({
       isPreviewHidden,
       togglePreviewHidden,
     });
-  }, [isScreenSharing, isStreamingAudio, currentScreenQuality, currentScreenSource, toggleScreenShare, onToggleStreamAudio, isCameraActive, hasCamera, hasMicrophone, toggleCamera, handleLeave, onStreamStateUpdate, availableQualities, sfu, gridItems, streamThumbnails, watchedStreams, watchersByStreamer, onToggleWatch, watchAndFocusStreamByUserId, spatialAudioState, updateSharedSpatialAudioState, settingsUserId, channelId, roomSlug, voiceSessionId, isPreviewHidden, togglePreviewHidden]);
+  }, [joined, isScreenSharing, isStreamingAudio, currentScreenQuality, currentScreenSource, toggleMic, toggleDeafen, toggleScreenShare, onToggleStreamAudio, isMicOn, isDeafened, isCameraActive, hasCamera, hasMicrophone, toggleCamera, handleLeave, onStreamStateUpdate, availableQualities, sfu, gridItems, streamThumbnails, watchedStreams, watchersByStreamer, onToggleWatch, watchAndFocusStreamByUserId, spatialAudioState, updateSharedSpatialAudioState, settingsUserId, channelId, roomSlug, voiceSessionId, isPreviewHidden, togglePreviewHidden]);
 
 
   // Fullscreen change listener
