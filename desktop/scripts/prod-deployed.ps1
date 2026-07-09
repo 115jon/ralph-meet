@@ -15,8 +15,8 @@
     - packaged Tauri layout
     - full CEF payload next to the executable
 
-    Capture configuration mirrors dev-deployed.ps1:
-      (no switches)   Hook compiled in + ENABLED, hook-exclusive
+    Capture configuration mirrors the installed production app:
+      (no switches)   Hook compiled in + ENABLED, WGC fallback allowed
       -Wgc            Hook compiled in + ENABLED, WGC fallback allowed
       -NoHook         Hook disabled, WGC only
 
@@ -123,10 +123,10 @@ if ($NoHook) {
 } else {
     $cargoFeatures = "cef,native-screen-share,game-capture-hook"
     $env:RALPH_GAME_CAPTURE_HOOK = "1"
-    $env:RALPH_CAPTURE_POLICY = "hook-exclusive"
-    $env:VITE_RALPH_CAPTURE_POLICY = "hook-exclusive"
+    $env:RALPH_CAPTURE_POLICY = "wgc-enabled"
+    $env:VITE_RALPH_CAPTURE_POLICY = "wgc-enabled"
     $hookState = "ENABLED (game-capture-hook feature + RALPH_GAME_CAPTURE_HOOK=1)"
-    $capturePolicy = "hook-exclusive"
+    $capturePolicy = "wgc-enabled"
 }
 
 Write-Host "==> Prod PID       : $PID" -ForegroundColor Cyan

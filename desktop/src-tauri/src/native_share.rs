@@ -1666,14 +1666,14 @@ fn runtime_capture_policy() -> Option<CapturePolicy> {
 
 /// The build-feature default `Capture_Policy` (Req 5.1).
 ///
-/// When the `game-capture-hook` feature is compiled in, the production default
-/// is `HookExclusive` — the zero-copy hook is the primary path. The runtime env
-/// var `RALPH_CAPTURE_POLICY` (set by dev scripts) still wins when present, so
-/// dev/CI can override without a rebuild. Without the feature the default
-/// remains `None` and [`resolve_capture_policy`] falls through to `wgc-enabled`.
+/// Production installs should keep the hook available while still allowing the
+/// guaranteed WGC fallback. The runtime env var `RALPH_CAPTURE_POLICY` (set by
+/// dev scripts) still wins when present, so dev/CI can override without a
+/// rebuild. Without the feature the default remains `None` and
+/// [`resolve_capture_policy`] falls through to `wgc-enabled`.
 fn feature_default_capture_policy() -> Option<CapturePolicy> {
     if cfg!(feature = "game-capture-hook") {
-        Some(CapturePolicy::HookExclusive)
+        Some(CapturePolicy::WgcEnabled)
     } else {
         None
     }
@@ -4928,18 +4928,14 @@ mod stats_snapshot_tests {
         assert_eq!(
             feature_default_capture_policy(),
             if cfg!(feature = "game-capture-hook") {
-                Some(CapturePolicy::HookExclusive)
+                Some(CapturePolicy::WgcEnabled)
             } else {
                 None
             }
         );
         assert_eq!(
             resolve_capture_policy(None, feature_default_capture_policy()),
-            if cfg!(feature = "game-capture-hook") {
-                CapturePolicy::HookExclusive
-            } else {
-                CapturePolicy::WgcEnabled
-            }
+            CapturePolicy::WgcEnabled
         );
     }
 

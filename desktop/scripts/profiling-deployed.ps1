@@ -85,20 +85,23 @@ if ($NoHook) {
     $cargoFeatures = "cef,native-screen-share"
     Remove-Item Env:\RALPH_GAME_CAPTURE_HOOK -ErrorAction SilentlyContinue
     $env:RALPH_CAPTURE_POLICY = "wgc-enabled"
+    $env:VITE_RALPH_CAPTURE_POLICY = "wgc-enabled"
     $hookState     = "DISABLED (WGC only)"
     $capturePolicy = "wgc-enabled"
 } elseif ($Wgc) {
     $cargoFeatures = "cef,native-screen-share,game-capture-hook"
     $env:RALPH_GAME_CAPTURE_HOOK  = "1"
     $env:RALPH_CAPTURE_POLICY     = "wgc-enabled"
+    $env:VITE_RALPH_CAPTURE_POLICY = "wgc-enabled"
     $hookState     = "ENABLED (game-capture-hook + RALPH_GAME_CAPTURE_HOOK=1)"
     $capturePolicy = "wgc-enabled"
 } else {
     $cargoFeatures = "cef,native-screen-share,game-capture-hook"
     $env:RALPH_GAME_CAPTURE_HOOK  = "1"
-    $env:RALPH_CAPTURE_POLICY     = "hook-exclusive"
+    $env:RALPH_CAPTURE_POLICY     = "wgc-enabled"
+    $env:VITE_RALPH_CAPTURE_POLICY = "wgc-enabled"
     $hookState     = "ENABLED (game-capture-hook + RALPH_GAME_CAPTURE_HOOK=1)"
-    $capturePolicy = "hook-exclusive"
+    $capturePolicy = "wgc-enabled"
 }
 
 Write-Host "==> Profiling build" -ForegroundColor Magenta
