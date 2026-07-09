@@ -2158,6 +2158,7 @@ const XMediaGrid = memo(({
   };
 
   const handleKeyDown = (event: React.KeyboardEvent, index: number) => {
+    if (event.target !== event.currentTarget) return;
     if (event.key !== "Enter" && event.key !== " ") return;
     event.preventDefault();
     openViewer(index);
@@ -2320,7 +2321,7 @@ const XMediaTile = memo(({
     className
   );
 
-  if (!isVideo || isGif) {
+  if (!isVideo) {
     return (
       <button
         type="button"
@@ -2338,6 +2339,31 @@ const XMediaTile = memo(({
           </div>
         )}
       </button>
+    );
+  }
+
+  if (isGif) {
+    return (
+      <div
+        role="button"
+        tabIndex={0}
+        className={cn(
+          wrapperClassName,
+          "text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80 focus-visible:ring-offset-0"
+        )}
+        onClick={() => openViewerSafely(onOpen, index)}
+        onKeyDown={(event) => onKeyDown(event, index)}
+        aria-label="Open GIF viewer"
+        title={url ? "Open GIF viewer" : undefined}
+      >
+        {content}
+        {overlay}
+        {extraCount > 0 && (
+          <div className="absolute inset-0 flex items-center justify-center bg-black/55 text-2xl font-bold text-white">
+            +{extraCount}
+          </div>
+        )}
+      </div>
     );
   }
 
