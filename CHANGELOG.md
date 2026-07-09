@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.19.0](https://github.com/115jon/ralph-meet/compare/v1.18.0...v1.19.0) (2026-07-09)
+
+
+### Features
+
+* **chat:** ✨ unify profile previews and add thumbnail call controls ([f02184b](https://github.com/115jon/ralph-meet/commit/f02184bee866226426d202e254ea0444fbce0e76))
+* **voice:** ✨ add compact listen together player ([a694e04](https://github.com/115jon/ralph-meet/commit/a694e04e2f573c4d3faf49c120856374c443683e))
+
+
+### Bug Fixes
+
+* **profile:** 🐛 correct edit modal profile previews ([293ebac](https://github.com/115jon/ralph-meet/commit/293ebacce518163f81e6ef0fe9c6591e7bd79c6e))
+
 ## [1.18.0](https://github.com/115jon/ralph-meet/compare/v1.17.0...v1.18.0) (2026-07-08)
 
 
