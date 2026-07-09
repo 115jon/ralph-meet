@@ -113,13 +113,7 @@ function RootComponent() {
   }, []);
 
   const content = (
-    <ThemeProvider
-      attribute="class"
-      defaultTheme="dark"
-      enableSystem
-      disableTransitionOnChange
-      themes={["light", "dark", "miku-light", "miku-dark", "spiderman-light", "spiderman-dark"]}
-    >
+    <ThemeProvider>
       <TooltipProvider delayDuration={200}>
         <Outlet />
       </TooltipProvider>

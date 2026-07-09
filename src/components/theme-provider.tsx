@@ -1,15 +1,24 @@
 
 import { isDesktop, isTauri } from "@/lib/platform";
+import { isDarkAppTheme, NEXT_THEME_NAMES } from "@/lib/theme-preferences";
 import { useAppearanceTheme } from "@/components/chat/useAppearanceTheme";
 import { ThemeProvider as NextThemesProvider, useTheme } from "next-themes";
 import * as React from "react";
+
+const DEFAULT_THEME_PROVIDER_PROPS = {
+  attribute: "class",
+  defaultTheme: "dark",
+  enableSystem: true,
+  disableTransitionOnChange: true,
+  themes: NEXT_THEME_NAMES,
+} satisfies React.ComponentProps<typeof NextThemesProvider>;
 
 export function ThemeProvider({
   children,
   ...props
 }: React.ComponentProps<typeof NextThemesProvider>) {
   return (
-    <NextThemesProvider {...props}>
+    <NextThemesProvider {...DEFAULT_THEME_PROVIDER_PROPS} {...props}>
       <ThemePreferenceBootstrap />
       <NativeTitleBarSync />
       {children}
@@ -38,7 +47,7 @@ function NativeTitleBarSync() {
   React.useEffect(() => {
     if (!isTauri()) return;
 
-    const dark = resolvedTheme === "dark";
+    const dark = isDarkAppTheme(resolvedTheme);
     if (isDesktop()) {
       import("@tauri-apps/api/core")
         .then(({ invoke }) => invoke("set_title_bar_dark_mode", { dark }))

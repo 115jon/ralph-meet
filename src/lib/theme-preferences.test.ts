@@ -1,5 +1,6 @@
 import {
   getThemePreferenceSeed,
+  isDarkAppTheme,
   normalizeThemePreferences,
   shouldApplySyncedTheme,
   type AppTheme,
@@ -69,5 +70,14 @@ describe("theme preference helpers", () => {
       themePreference: savedTheme,
       themeSyncEnabled: false,
     })).toBe(false);
+  });
+
+  it("treats built-in and custom dark themes as dark", () => {
+    expect(isDarkAppTheme("dark")).toBe(true);
+    expect(isDarkAppTheme("miku-dark")).toBe(true);
+    expect(isDarkAppTheme("spiderman-dark")).toBe(true);
+    expect(isDarkAppTheme("light")).toBe(false);
+    expect(isDarkAppTheme("miku-light")).toBe(false);
+    expect(isDarkAppTheme(undefined)).toBe(false);
   });
 });

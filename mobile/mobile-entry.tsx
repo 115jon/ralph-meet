@@ -7,8 +7,6 @@
 import "./styles.css";
 
 import { SplashScreen } from "@/components/SplashScreen";
-import { ThemeProvider } from "@/components/theme-provider";
-import { TooltipProvider } from "@/components/ui/tooltip";
 import { routeTree } from "@/routeTree.gen";
 import { invoke } from "@tauri-apps/api/core";
 import { createRouter, RouterProvider } from "@tanstack/react-router";
@@ -44,20 +42,9 @@ void invoke<{ top: number; bottom: number; left: number; right: number }>("plugi
 function MobileApp() {
   return (
     <StrictMode>
-      <ThemeProvider
-        attribute="class"
-        defaultTheme="dark"
-        enableSystem
-        disableTransitionOnChange
-      >
-        <div className="flex h-dvh w-full flex-col bg-rm-bg-primary">
-          <Suspense fallback={<SplashScreen />}>
-            <TooltipProvider delayDuration={200}>
-              <RouterProvider router={router} />
-            </TooltipProvider>
-          </Suspense>
-        </div>
-      </ThemeProvider>
+      <Suspense fallback={<SplashScreen />}>
+        <RouterProvider router={router} />
+      </Suspense>
     </StrictMode>
   );
 }

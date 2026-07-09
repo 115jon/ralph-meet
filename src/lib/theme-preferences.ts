@@ -10,6 +10,10 @@ export const APP_THEMES = [
 
 export type AppTheme = (typeof APP_THEMES)[number];
 
+export const NEXT_THEME_NAMES = APP_THEMES.filter(
+  (theme): theme is Exclude<AppTheme, "system"> => theme !== "system",
+);
+
 export type ThemePreferences = {
   themePreference: AppTheme | null;
   themeSyncEnabled: boolean;
@@ -22,6 +26,10 @@ type RawThemePreferences = {
 
 export function isAppTheme(value: string | null | undefined): value is AppTheme {
   return typeof value === "string" && APP_THEMES.includes(value as AppTheme);
+}
+
+export function isDarkAppTheme(theme: string | null | undefined): boolean {
+  return typeof theme === "string" && (theme === "dark" || theme.endsWith("-dark"));
 }
 
 export function normalizeThemePreferences(raw: RawThemePreferences | null | undefined): ThemePreferences {

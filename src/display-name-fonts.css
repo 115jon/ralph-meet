@@ -1,0 +1,9 @@
+/* Bundle the custom display-name fonts so style previews and rendered names
+   do not depend on runtime Google Fonts fetches. */
+@import "@fontsource/bungee/400.css";
+@import "@fontsource/permanent-marker/400.css";
+@import "@fontsource/fredoka/700.css";
+@import "@fontsource/cormorant-garamond/700-italic.css";
+@import "@fontsource/cinzel/700.css";
+@import "@fontsource/press-start-2p/400.css";
+@import "@fontsource/unifrakturmaguntia/400.css";

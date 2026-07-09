@@ -10,7 +10,6 @@ import { SplashScreen } from "@/components/SplashScreen";
 import { StandaloneUpdater } from "@/components/StandaloneUpdater";
 import { UpdateChecker } from "@/components/UpdateChecker";
 import { ThemeProvider } from "@/components/theme-provider";
-import { TooltipProvider } from "@/components/ui/tooltip";
 import { routeTree } from "@/routeTree.gen";
 import { createRouter, RouterProvider } from "@tanstack/react-router";
 import { StrictMode, Suspense } from "react";
@@ -35,25 +34,18 @@ function DesktopApp() {
 
   return (
     <StrictMode>
-      <ThemeProvider
-        attribute="class"
-        defaultTheme="dark"
-        enableSystem
-        disableTransitionOnChange
-      >
-        <TooltipProvider delayDuration={200}>
-          {isUpdater ? (
-            <StandaloneUpdater />
-          ) : (
-            <Suspense fallback={<SplashScreen />}>
-              <>
-                <RouterProvider router={router} />
-                <UpdateChecker />
-              </>
-            </Suspense>
-          )}
-        </TooltipProvider>
-      </ThemeProvider>
+      {isUpdater ? (
+        <ThemeProvider>
+          <StandaloneUpdater />
+        </ThemeProvider>
+      ) : (
+        <Suspense fallback={<SplashScreen />}>
+          <>
+            <RouterProvider router={router} />
+            <UpdateChecker />
+          </>
+        </Suspense>
+      )}
     </StrictMode>
   );
 }
