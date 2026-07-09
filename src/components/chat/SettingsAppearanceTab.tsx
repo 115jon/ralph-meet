@@ -2,6 +2,7 @@ import { BaseModal } from "@/components/ui/BaseModal";
 import { SettingsToggleRow } from "@/components/ui/SettingsToggleRow";
 import { isDesktop } from "@/lib/platform";
 import { APP_THEMES, type AppTheme } from "@/lib/theme-preferences";
+import { restartDesktopApp } from "@/lib/desktop-restart";
 import { cn } from "@/lib/utils";
 import { useDesktopSettingsStore } from "@/stores/useDesktopSettingsStore";
 import { Cpu, Eye, RefreshCw } from "lucide-react";
@@ -157,13 +158,9 @@ export default function SettingsAppearanceTab({ onOpenPreview }: SettingsAppeara
     if (pendingHardwareAcceleration === null) return;
     updateDesktopSettings({ hardwareAcceleration: pendingHardwareAcceleration });
     try {
-      // react-doctor-disable-next-line react-doctor/async-parallel -- relaunch must wait until the desktop setting is persisted
-      const [{ invoke }, { relaunch }] = await Promise.all([
-        import("@tauri-apps/api/core"),
-        import("@tauri-apps/plugin-process"),
-      ]);
+      const { invoke } = await import("@tauri-apps/api/core");
       await invoke("set_hardware_acceleration", { enabled: pendingHardwareAcceleration });
-      await relaunch();
+      await restartDesktopApp();
     } catch (error) {
       log.error("Failed to change hardware acceleration:", error);
       setPendingHardwareAcceleration(null);

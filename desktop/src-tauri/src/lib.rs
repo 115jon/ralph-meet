@@ -105,6 +105,14 @@ fn default_hardware_acceleration() -> bool {
 
 const APP_DATA_DIRECTORY_NAME: &str = "RalphMeet";
 const LEGACY_WINDOWS_APP_DATA_DIRECTORY_NAME: &str = "dev.jontitor.ralph-meet";
+#[cfg(target_os = "windows")]
+const WINDOWS_RESTART_HELPER_ARG: &str = "--ralph-restart-helper";
+#[cfg(target_os = "windows")]
+const WINDOWS_RESTART_HELPER_POLL_INTERVAL_MS: u64 = 150;
+#[cfg(target_os = "windows")]
+const WINDOWS_RESTART_HELPER_TIMEOUT_MS: u64 = 10_000;
+#[cfg(target_os = "windows")]
+const WINDOWS_RESTART_HELPER_SETTLE_DELAY_MS: u64 = 300;
 
 impl Default for DesktopRuntimeSettings {
     fn default() -> Self {
@@ -190,11 +198,21 @@ fn build_windows_startup_command_for_executable(
     is_update_launcher: bool,
 ) -> String {
     let mut command = format!("\"{}\"", executable.display());
-    if is_update_launcher {
-        command.push_str(" --processStart RalphMeet.exe");
+    for argument in windows_startup_arguments(is_update_launcher) {
+        command.push(' ');
+        command.push_str(argument);
     }
 
     command
+}
+
+#[cfg(target_os = "windows")]
+fn windows_startup_arguments(is_update_launcher: bool) -> &'static [&'static str] {
+    if is_update_launcher {
+        &["--processStart", "RalphMeet.exe"]
+    } else {
+        &[]
+    }
 }
 
 #[cfg(target_os = "windows")]
@@ -204,6 +222,105 @@ fn build_windows_startup_command() -> Result<String, String> {
         &executable,
         is_update_launcher,
     ))
+}
+
+#[cfg(target_os = "windows")]
+fn parse_windows_restart_helper_parent_pid<I>(args: I) -> Result<Option<u32>, String>
+where
+    I: IntoIterator<Item = String>,
+{
+    let mut args = args.into_iter();
+    while let Some(arg) = args.next() {
+        if arg != WINDOWS_RESTART_HELPER_ARG {
+            continue;
+        }
+
+        let parent_pid = args
+            .next()
+            .ok_or_else(|| format!("{WINDOWS_RESTART_HELPER_ARG} missing parent pid"))?;
+        let parsed_parent_pid = parent_pid
+            .parse::<u32>()
+            .map_err(|err| format!("invalid restart helper parent pid `{parent_pid}`: {err}"))?;
+        return Ok(Some(parsed_parent_pid));
+    }
+
+    Ok(None)
+}
+
+#[cfg(target_os = "windows")]
+fn wait_for_windows_process_exit(parent_pid: u32) -> Result<(), String> {
+    use windows::Win32::Foundation::CloseHandle;
+    use windows::Win32::System::Threading::{OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION};
+
+    let deadline = std::time::Instant::now()
+        + std::time::Duration::from_millis(WINDOWS_RESTART_HELPER_TIMEOUT_MS);
+
+    std::thread::sleep(std::time::Duration::from_millis(
+        WINDOWS_RESTART_HELPER_POLL_INTERVAL_MS,
+    ));
+
+    loop {
+        match unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false.into(), parent_pid) } {
+            Ok(handle) => {
+                let _ = unsafe { CloseHandle(handle) };
+                if std::time::Instant::now() >= deadline {
+                    return Err(format!(
+                        "timed out waiting for pid {parent_pid} to exit before relaunch"
+                    ));
+                }
+                std::thread::sleep(std::time::Duration::from_millis(
+                    WINDOWS_RESTART_HELPER_POLL_INTERVAL_MS,
+                ));
+            }
+            Err(_) => break,
+        }
+    }
+
+    std::thread::sleep(std::time::Duration::from_millis(
+        WINDOWS_RESTART_HELPER_SETTLE_DELAY_MS,
+    ));
+    Ok(())
+}
+
+#[cfg(target_os = "windows")]
+fn launch_windows_restart_target() -> Result<(), String> {
+    let (executable, is_update_launcher) = resolve_windows_startup_executable()?;
+    std::process::Command::new(&executable)
+        .args(windows_startup_arguments(is_update_launcher))
+        .spawn()
+        .map_err(|err| format!("failed to launch {}: {err}", executable.display()))?;
+    Ok(())
+}
+
+#[cfg(target_os = "windows")]
+fn spawn_windows_restart_helper(parent_pid: u32) -> Result<u32, String> {
+    let current_exe = std::env::current_exe().map_err(|err| err.to_string())?;
+    let parent_pid = parent_pid.to_string();
+    let helper = std::process::Command::new(&current_exe)
+        .arg(WINDOWS_RESTART_HELPER_ARG)
+        .arg(parent_pid)
+        .spawn()
+        .map_err(|err| {
+            format!(
+                "failed to spawn restart helper {}: {err}",
+                current_exe.display()
+            )
+        })?;
+    Ok(helper.id())
+}
+
+#[cfg(target_os = "windows")]
+fn maybe_run_windows_restart_helper() -> Result<bool, String> {
+    let Some(parent_pid) = parse_windows_restart_helper_parent_pid(std::env::args())? else {
+        return Ok(false);
+    };
+
+    if let Err(err) = wait_for_windows_process_exit(parent_pid) {
+        eprintln!("[RestartHelper] {err}");
+    }
+
+    launch_windows_restart_target()?;
+    Ok(true)
 }
 
 #[cfg(target_os = "windows")]
@@ -557,10 +674,7 @@ fn log_window_snapshot_by_label<R: tauri::Runtime>(
 }
 
 #[cfg(feature = "native-screen-share")]
-fn shutdown_native_share_blocking<R: tauri::Runtime>(
-    app: &tauri::AppHandle<R>,
-    context: &str,
-) {
+fn shutdown_native_share_blocking<R: tauri::Runtime>(app: &tauri::AppHandle<R>, context: &str) {
     let prep = tauri::async_runtime::block_on(async {
         let state = app.state::<native_share::NativeShareState>();
         native_share::prepare_native_share_for_update(state.inner()).await
@@ -574,11 +688,7 @@ fn shutdown_native_share_blocking<R: tauri::Runtime>(
 }
 
 #[cfg(not(feature = "native-screen-share"))]
-fn shutdown_native_share_blocking<R: tauri::Runtime>(
-    _app: &tauri::AppHandle<R>,
-    _context: &str,
-) {
-}
+fn shutdown_native_share_blocking<R: tauri::Runtime>(_app: &tauri::AppHandle<R>, _context: &str) {}
 
 fn spawn_window_state_diagnostics<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
@@ -619,6 +729,16 @@ type TauriRuntime = tauri::Wry;
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 #[cfg_attr(feature = "cef", tauri::cef_entry_point)]
 pub fn run() {
+    #[cfg(target_os = "windows")]
+    match maybe_run_windows_restart_helper() {
+        Ok(true) => return,
+        Ok(false) => {}
+        Err(err) => {
+            eprintln!("[RestartHelper] {err}");
+            std::process::exit(1);
+        }
+    }
+
     // Install the rustls ring crypto provider before anything touches TLS.
     let _ = rustls::crypto::ring::default_provider().install_default();
 
@@ -1004,6 +1124,7 @@ pub fn run() {
             #[cfg(feature = "native-screen-share")]
             native_share::stop_preview_loopback,
             get_hardware_acceleration,
+            restart_app,
             set_open_on_startup,
             set_hardware_acceleration,
             set_close_to_tray,
@@ -1073,6 +1194,28 @@ fn get_hardware_acceleration() -> bool {
 }
 
 #[tauri::command]
+fn restart_app(app: tauri::AppHandle<TauriRuntime>) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        let parent_pid = std::process::id();
+        let helper_pid = spawn_windows_restart_helper(parent_pid)?;
+        log::info!(
+            "[DesktopRuntime] restart requested helper_pid={} parent_pid={}",
+            helper_pid,
+            parent_pid
+        );
+        app.exit(0);
+        return Ok(());
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        app.request_restart();
+        Ok(())
+    }
+}
+
+#[tauri::command]
 fn set_hardware_acceleration(enabled: bool) -> Result<(), String> {
     let mut settings = read_runtime_settings();
     settings.hardware_acceleration = enabled;
@@ -1087,7 +1230,8 @@ fn set_hardware_acceleration(enabled: bool) -> Result<(), String> {
 #[cfg(all(test, target_os = "windows"))]
 mod windows_startup_registration_tests {
     use super::{
-        build_windows_startup_command_for_executable, versioned_windows_install_root_from_exe_path,
+        build_windows_startup_command_for_executable, parse_windows_restart_helper_parent_pid,
+        versioned_windows_install_root_from_exe_path,
     };
     use std::path::Path;
 
@@ -1132,5 +1276,27 @@ mod windows_startup_registration_tests {
             command,
             "\"C:\\Users\\jon\\AppData\\Local\\RalphMeet\\RalphMeet.exe\""
         );
+    }
+
+    #[test]
+    fn restart_helper_parent_pid_parser_extracts_pid() {
+        let parent_pid = parse_windows_restart_helper_parent_pid([
+            "RalphMeet.exe".to_string(),
+            "--flag".to_string(),
+            "--ralph-restart-helper".to_string(),
+            "12345".to_string(),
+        ])
+        .unwrap();
+        assert_eq!(parent_pid, Some(12345));
+    }
+
+    #[test]
+    fn restart_helper_parent_pid_parser_ignores_regular_launches() {
+        let parent_pid = parse_windows_restart_helper_parent_pid([
+            "RalphMeet.exe".to_string(),
+            "--type=gpu-process".to_string(),
+        ])
+        .unwrap();
+        assert_eq!(parent_pid, None);
     }
 }

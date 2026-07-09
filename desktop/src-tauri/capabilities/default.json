@@ -45,6 +45,7 @@
     "allow-get-hardware-acceleration",
     "allow-set-open-on-startup",
     "allow-set-hardware-acceleration",
+    "allow-restart-app",
     "allow-set-close-to-tray",
     "allow-set-start-minimized",
     "allow-set-title-bar-dark-mode",

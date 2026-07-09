@@ -1,4 +1,5 @@
 import splashLogo from "@/assets/splash-logo.svg";
+import { restartDesktopApp } from "@/lib/desktop-restart";
 import { useEffect, useState } from "react";
 
 type StandaloneUpdaterStatus = "checking" | "downloading" | "installing" | "starting" | "error";
@@ -56,8 +57,7 @@ export function StandaloneUpdater() {
           // Fallback auto-relaunch if the installer doesn't do it
           setTimeout(async () => {
             try {
-              const { relaunch } = await import("@tauri-apps/plugin-process");
-              await relaunch();
+              await restartDesktopApp();
             } catch (e) {
               console.error("Relaunch failed", e);
             }

@@ -18,16 +18,16 @@ use windows::core::{w, HRESULT};
 use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, WPARAM};
 #[cfg(target_os = "windows")]
 use windows::Win32::Graphics::Gdi::{
-    BI_BITFIELDS, BITMAPINFO, BITMAPV5HEADER, CreateBitmap, CreateDIBSection, DIB_RGB_COLORS,
-    DeleteObject, GetDC, ReleaseDC,
+    CreateBitmap, CreateDIBSection, DeleteObject, GetDC, ReleaseDC, BITMAPINFO, BITMAPV5HEADER,
+    BI_BITFIELDS, DIB_RGB_COLORS,
 };
 #[cfg(target_os = "windows")]
 use windows::Win32::System::Com::{CoCreateInstance, CoInitializeEx, CLSCTX_INPROC_SERVER};
 #[cfg(target_os = "windows")]
 use windows::Win32::UI::Shell::{
     DefSubclassProc, ITaskbarList3, RemoveWindowSubclass, SetWindowSubclass, TaskbarList,
-    THBF_DISABLED, THBF_HIDDEN, THBF_NOBACKGROUND, THBF_NONINTERACTIVE, THBN_CLICKED,
-    THB_FLAGS, THB_ICON, THB_TOOLTIP, THUMBBUTTON, THUMBBUTTONFLAGS,
+    THBF_DISABLED, THBF_HIDDEN, THBF_NOBACKGROUND, THBF_NONINTERACTIVE, THBN_CLICKED, THB_FLAGS,
+    THB_ICON, THB_TOOLTIP, THUMBBUTTON, THUMBBUTTONFLAGS,
 };
 #[cfg(target_os = "windows")]
 use windows::Win32::UI::WindowsAndMessaging::{
@@ -41,14 +41,12 @@ const DESKTOP_THUMBNAIL_TOOLBAR_ACTION_EVENT: &str = "desktop-thumbnail-toolbar-
 const CAMERA_OFF_ICON_BYTES: &[u8] =
     include_bytes!("../resources/thumbnail-toolbar/camera-off.png");
 #[cfg(target_os = "windows")]
-const CAMERA_ON_ICON_BYTES: &[u8] =
-    include_bytes!("../resources/thumbnail-toolbar/camera-on.png");
+const CAMERA_ON_ICON_BYTES: &[u8] = include_bytes!("../resources/thumbnail-toolbar/camera-on.png");
 #[cfg(target_os = "windows")]
 const DEAFEN_OFF_ICON_BYTES: &[u8] =
     include_bytes!("../resources/thumbnail-toolbar/deafen-off.png");
 #[cfg(target_os = "windows")]
-const DEAFEN_ON_ICON_BYTES: &[u8] =
-    include_bytes!("../resources/thumbnail-toolbar/deafen-on.png");
+const DEAFEN_ON_ICON_BYTES: &[u8] = include_bytes!("../resources/thumbnail-toolbar/deafen-on.png");
 #[cfg(target_os = "windows")]
 const DISCONNECT_ICON_BYTES: &[u8] =
     include_bytes!("../resources/thumbnail-toolbar/disconnect.png");
@@ -56,8 +54,7 @@ const DISCONNECT_ICON_BYTES: &[u8] =
 const MICROPHONE_OFF_ICON_BYTES: &[u8] =
     include_bytes!("../resources/thumbnail-toolbar/mic-off.png");
 #[cfg(target_os = "windows")]
-const MICROPHONE_ON_ICON_BYTES: &[u8] =
-    include_bytes!("../resources/thumbnail-toolbar/mic-on.png");
+const MICROPHONE_ON_ICON_BYTES: &[u8] = include_bytes!("../resources/thumbnail-toolbar/mic-on.png");
 
 #[derive(Clone, Debug, Default, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -128,10 +125,7 @@ impl ThumbnailToolbarIcons {
                 icon_size,
                 MICROPHONE_OFF_ICON_BYTES,
             )?,
-            microphone_on: create_toolbar_icon_from_png_bytes(
-                icon_size,
-                MICROPHONE_ON_ICON_BYTES,
-            )?,
+            microphone_on: create_toolbar_icon_from_png_bytes(icon_size, MICROPHONE_ON_ICON_BYTES)?,
             separator: create_toolbar_icon(icon_size, ThumbnailIconKind::Separator)?,
         })
     }
@@ -182,7 +176,9 @@ impl ThumbnailToolbarManager {
             hwnd,
             icons: ThumbnailToolbarIcons::new(icon_size)?,
             state: Mutex::new(ThumbnailToolbarState::default()),
-            taskbar_button_created_message: unsafe { RegisterWindowMessageW(w!("TaskbarButtonCreated")) },
+            taskbar_button_created_message: unsafe {
+                RegisterWindowMessageW(w!("TaskbarButtonCreated"))
+            },
         })
     }
 
@@ -204,14 +200,18 @@ impl ThumbnailToolbarManager {
     }
 
     fn update_state(&self, state: ThumbnailToolbarState) -> windows::core::Result<()> {
-        *self.state.lock().expect("thumbnail toolbar state lock poisoned") = state;
+        *self
+            .state
+            .lock()
+            .expect("thumbnail toolbar state lock poisoned") = state;
         self.apply_current_state()
     }
 
     fn emit_action(&self, action: &'static str) {
-        let _ = self
-            .app
-            .emit(DESKTOP_THUMBNAIL_TOOLBAR_ACTION_EVENT, ThumbnailToolbarActionEvent { action });
+        let _ = self.app.emit(
+            DESKTOP_THUMBNAIL_TOOLBAR_ACTION_EVENT,
+            ThumbnailToolbarActionEvent { action },
+        );
     }
 
     fn mark_taskbar_button_recreated(&self) {
@@ -222,7 +222,8 @@ impl ThumbnailToolbarManager {
     fn apply_current_state(&self) -> windows::core::Result<()> {
         ensure_com_initialized();
 
-        let taskbar: ITaskbarList3 = unsafe { CoCreateInstance(&TaskbarList, None, CLSCTX_INPROC_SERVER)? };
+        let taskbar: ITaskbarList3 =
+            unsafe { CoCreateInstance(&TaskbarList, None, CLSCTX_INPROC_SERVER)? };
         unsafe {
             taskbar.HrInit()?;
         }
@@ -292,7 +293,11 @@ impl ThumbnailToolbarManager {
                 } else {
                     self.icons.deafen_off
                 },
-                Some(if state.is_deafened { "Undeafen" } else { "Deafen" }),
+                Some(if state.is_deafened {
+                    "Undeafen"
+                } else {
+                    "Deafen"
+                }),
                 visibility_flags(all_hidden, false),
             ),
             self.make_button(
@@ -433,7 +438,11 @@ fn hiword(value: u32) -> u16 {
 #[cfg(target_os = "windows")]
 fn encode_wide_tooltip(text: &str) -> [u16; 260] {
     let mut tooltip = [0u16; 260];
-    for (index, code_unit) in text.encode_utf16().take(tooltip.len().saturating_sub(1)).enumerate() {
+    for (index, code_unit) in text
+        .encode_utf16()
+        .take(tooltip.len().saturating_sub(1))
+        .enumerate()
+    {
         tooltip[index] = code_unit;
     }
     tooltip
@@ -513,7 +522,15 @@ fn draw_icon(canvas: &mut RgbaImage, kind: ThumbnailIconKind) {
 #[cfg(target_os = "windows")]
 fn draw_camera_icon(canvas: &mut RgbaImage, color: Rgba<u8>) {
     let s = canvas.width() as f32;
-    fill_rounded_rect(canvas, 0.17 * s, 0.30 * s, 0.43 * s, 0.28 * s, 0.06 * s, color);
+    fill_rounded_rect(
+        canvas,
+        0.17 * s,
+        0.30 * s,
+        0.43 * s,
+        0.28 * s,
+        0.06 * s,
+        color,
+    );
     fill_triangle(
         canvas,
         (0.58 * s, 0.36 * s),
@@ -526,7 +543,15 @@ fn draw_camera_icon(canvas: &mut RgbaImage, color: Rgba<u8>) {
 #[cfg(target_os = "windows")]
 fn draw_microphone_icon(canvas: &mut RgbaImage, color: Rgba<u8>) {
     let s = canvas.width() as f32;
-    fill_rounded_rect(canvas, 0.37 * s, 0.16 * s, 0.18 * s, 0.30 * s, 0.09 * s, color);
+    fill_rounded_rect(
+        canvas,
+        0.37 * s,
+        0.16 * s,
+        0.18 * s,
+        0.30 * s,
+        0.09 * s,
+        color,
+    );
     draw_line(
         canvas,
         0.46 * s,
@@ -550,9 +575,34 @@ fn draw_microphone_icon(canvas: &mut RgbaImage, color: Rgba<u8>) {
 #[cfg(target_os = "windows")]
 fn draw_headphones_icon(canvas: &mut RgbaImage, color: Rgba<u8>) {
     let s = canvas.width() as f32;
-    stroke_arc(canvas, 0.5 * s, 0.5 * s, 0.23 * s, 0.08 * s, PI, 2.0 * PI, color);
-    fill_rounded_rect(canvas, 0.18 * s, 0.42 * s, 0.11 * s, 0.24 * s, 0.05 * s, color);
-    fill_rounded_rect(canvas, 0.71 * s, 0.42 * s, 0.11 * s, 0.24 * s, 0.05 * s, color);
+    stroke_arc(
+        canvas,
+        0.5 * s,
+        0.5 * s,
+        0.23 * s,
+        0.08 * s,
+        PI,
+        2.0 * PI,
+        color,
+    );
+    fill_rounded_rect(
+        canvas,
+        0.18 * s,
+        0.42 * s,
+        0.11 * s,
+        0.24 * s,
+        0.05 * s,
+        color,
+    );
+    fill_rounded_rect(
+        canvas,
+        0.71 * s,
+        0.42 * s,
+        0.11 * s,
+        0.24 * s,
+        0.05 * s,
+        color,
+    );
 }
 
 #[cfg(target_os = "windows")]
@@ -568,15 +618,47 @@ fn draw_disconnect_icon(canvas: &mut RgbaImage, color: Rgba<u8>) {
         1.83 * PI,
         color,
     );
-    fill_rounded_rect(canvas, 0.19 * s, 0.49 * s, 0.10 * s, 0.15 * s, 0.05 * s, color);
-    fill_rounded_rect(canvas, 0.71 * s, 0.49 * s, 0.10 * s, 0.15 * s, 0.05 * s, color);
+    fill_rounded_rect(
+        canvas,
+        0.19 * s,
+        0.49 * s,
+        0.10 * s,
+        0.15 * s,
+        0.05 * s,
+        color,
+    );
+    fill_rounded_rect(
+        canvas,
+        0.71 * s,
+        0.49 * s,
+        0.10 * s,
+        0.15 * s,
+        0.05 * s,
+        color,
+    );
 }
 
 #[cfg(target_os = "windows")]
 fn draw_pause_icon(canvas: &mut RgbaImage, color: Rgba<u8>) {
     let s = canvas.width() as f32;
-    fill_rounded_rect(canvas, 0.28 * s, 0.20 * s, 0.13 * s, 0.60 * s, 0.04 * s, color);
-    fill_rounded_rect(canvas, 0.59 * s, 0.20 * s, 0.13 * s, 0.60 * s, 0.04 * s, color);
+    fill_rounded_rect(
+        canvas,
+        0.28 * s,
+        0.20 * s,
+        0.13 * s,
+        0.60 * s,
+        0.04 * s,
+        color,
+    );
+    fill_rounded_rect(
+        canvas,
+        0.59 * s,
+        0.20 * s,
+        0.13 * s,
+        0.60 * s,
+        0.04 * s,
+        color,
+    );
 }
 
 #[cfg(target_os = "windows")]
@@ -601,13 +683,29 @@ fn draw_skip_icon(canvas: &mut RgbaImage, color: Rgba<u8>) {
         (0.56 * s, 0.50 * s),
         color,
     );
-    fill_rounded_rect(canvas, 0.65 * s, 0.20 * s, 0.10 * s, 0.60 * s, 0.03 * s, color);
+    fill_rounded_rect(
+        canvas,
+        0.65 * s,
+        0.20 * s,
+        0.10 * s,
+        0.60 * s,
+        0.03 * s,
+        color,
+    );
 }
 
 #[cfg(target_os = "windows")]
 fn draw_separator_icon(canvas: &mut RgbaImage, color: Rgba<u8>) {
     let s = canvas.width() as f32;
-    fill_rounded_rect(canvas, 0.48 * s, 0.20 * s, 0.04 * s, 0.60 * s, 0.02 * s, color);
+    fill_rounded_rect(
+        canvas,
+        0.48 * s,
+        0.20 * s,
+        0.04 * s,
+        0.60 * s,
+        0.02 * s,
+        color,
+    );
 }
 
 #[cfg(target_os = "windows")]
@@ -659,10 +757,8 @@ fn is_point_inside_triangle(
         return false;
     }
 
-    let alpha =
-        ((b.1 - c.1) * (point.0 - c.0) + (c.0 - b.0) * (point.1 - c.1)) / denominator;
-    let beta =
-        ((c.1 - a.1) * (point.0 - c.0) + (a.0 - c.0) * (point.1 - c.1)) / denominator;
+    let alpha = ((b.1 - c.1) * (point.0 - c.0) + (c.0 - b.0) * (point.1 - c.1)) / denominator;
+    let beta = ((c.1 - a.1) * (point.0 - c.0) + (a.0 - c.0) * (point.1 - c.1)) / denominator;
     let gamma = 1.0 - alpha - beta;
 
     alpha >= 0.0 && beta >= 0.0 && gamma >= 0.0
@@ -717,9 +813,13 @@ fn draw_line(
     color: Rgba<u8>,
 ) {
     let min_x = start_x.min(end_x).floor().max(0.0) as u32;
-    let max_x = (start_x.max(end_x) + thickness).ceil().min(canvas.width() as f32) as u32;
+    let max_x = (start_x.max(end_x) + thickness)
+        .ceil()
+        .min(canvas.width() as f32) as u32;
     let min_y = start_y.min(end_y).floor().max(0.0) as u32;
-    let max_y = (start_y.max(end_y) + thickness).ceil().min(canvas.height() as f32) as u32;
+    let max_y = (start_y.max(end_y) + thickness)
+        .ceil()
+        .min(canvas.height() as f32) as u32;
     let radius = thickness / 2.0;
 
     for py in min_y..max_y {
@@ -873,11 +973,8 @@ pub fn setup_taskbar_thumbnail_toolbar(
         let manager = THUMBNAIL_TOOLBAR_MANAGER
             .get_or_init(|| {
                 Arc::new(
-                    ThumbnailToolbarManager::new(
-                        app.handle().clone(),
-                        HWND(hwnd.0 as _),
-                    )
-                    .expect("failed to initialize thumbnail toolbar manager"),
+                    ThumbnailToolbarManager::new(app.handle().clone(), HWND(hwnd.0 as _))
+                        .expect("failed to initialize thumbnail toolbar manager"),
                 )
             })
             .clone();
@@ -907,7 +1004,9 @@ pub async fn sync_taskbar_thumbnail_toolbar(state: ThumbnailToolbarState) -> Res
             state.is_media_paused
         );
         if let Some(manager) = THUMBNAIL_TOOLBAR_MANAGER.get() {
-            manager.update_state(state).map_err(|error| error.to_string())?;
+            manager
+                .update_state(state)
+                .map_err(|error| error.to_string())?;
         } else {
             log::warn!("[ThumbnailToolbar] Ignoring sync because the toolbar manager is not ready");
         }

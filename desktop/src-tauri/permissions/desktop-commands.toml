@@ -149,6 +149,16 @@ description = "Denies updating the desktop renderer hardware acceleration prefer
 commands.deny = ["set_hardware_acceleration"]
 
 [[permission]]
+identifier = "allow-restart-app"
+description = "Allows the frontend to restart the desktop application through the backend relaunch helper."
+commands.allow = ["restart_app"]
+
+[[permission]]
+identifier = "deny-restart-app"
+description = "Denies backend-managed desktop restarts."
+commands.deny = ["restart_app"]
+
+[[permission]]
 identifier = "allow-set-close-to-tray"
 description = "Allows the frontend to sync the close-to-tray desktop preference."
 commands.allow = ["set_close_to_tray"]

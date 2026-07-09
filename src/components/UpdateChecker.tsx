@@ -1,4 +1,5 @@
 import { isDesktop } from "@/lib/platform";
+import { restartDesktopApp } from "@/lib/desktop-restart";
 import { clog } from "@/lib/console-logger";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -89,8 +90,7 @@ export function UpdateChecker() {
       // Auto-relaunch after a brief moment
       setTimeout(async () => {
         try {
-          const { relaunch } = await import("@tauri-apps/plugin-process");
-          await relaunch();
+          await restartDesktopApp();
         } catch {
           // If relaunch fails, user can still manually restart
         }

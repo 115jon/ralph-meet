@@ -33,6 +33,10 @@ interface DesktopSettingsState extends DesktopSettings {
   syncToBackend: () => Promise<void>;
 }
 
+type SyncDesktopSettingsOptions = {
+  includeHardwareAcceleration?: boolean;
+};
+
 const defaults: DesktopSettings = {
   openOnStartup: false,
   startMinimized: false,
@@ -96,7 +100,9 @@ export const useDesktopSettingsStore = create<DesktopSettingsState>()(
         set(updates);
         // Fire-and-forget sync to Rust backend
         const state = { ...get(), ...updates };
-        syncSettingsToRust(state);
+        syncSettingsToRust(state, {
+          includeHardwareAcceleration: Object.prototype.hasOwnProperty.call(updates, "hardwareAcceleration"),
+        });
       },
 
       syncToBackend: async () => {
@@ -116,7 +122,10 @@ export const useDesktopSettingsStore = create<DesktopSettingsState>()(
  * This ensures the Rust close-interceptor and other native
  * event handlers are aware of the current preferences.
  */
-async function syncSettingsToRust(settings: DesktopSettings) {
+async function syncSettingsToRust(
+  settings: DesktopSettings,
+  options: SyncDesktopSettingsOptions = {},
+) {
   if (!isDesktop()) return;
 
   if (isWindowsDesktop()) {
@@ -144,6 +153,10 @@ async function syncSettingsToRust(settings: DesktopSettings) {
   // Sync start-minimized preference to Rust AtomicBool
   await tauriInvoke("set_start_minimized", { enabled: settings.startMinimized });
 
-  // Persist renderer acceleration preference for the next desktop launch.
-  await tauriInvoke("set_hardware_acceleration", { enabled: settings.hardwareAcceleration });
+  if (options.includeHardwareAcceleration) {
+    // Persist renderer acceleration preference only during the explicit restart flow.
+    await tauriInvoke("set_hardware_acceleration", { enabled: settings.hardwareAcceleration });
+  }
 }
+
+export { syncSettingsToRust };

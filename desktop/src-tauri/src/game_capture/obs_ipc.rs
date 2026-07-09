@@ -2372,7 +2372,10 @@ mod tests {
             HookUnloadState::WaitingVulkanIdle
         );
         assert_eq!(HookUnloadState::from_raw(3), HookUnloadState::DetachFailed);
-        assert_eq!(HookUnloadState::from_raw(4), HookUnloadState::SelfPinMissing);
+        assert_eq!(
+            HookUnloadState::from_raw(4),
+            HookUnloadState::SelfPinMissing
+        );
         assert_eq!(HookUnloadState::from_raw(5), HookUnloadState::Exiting);
         assert_eq!(HookUnloadState::from_raw(99), HookUnloadState::Unknown(99));
     }
