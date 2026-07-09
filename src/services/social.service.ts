@@ -388,7 +388,7 @@ export async function getOrCreateDM(
 ): Promise<{
   isNew: boolean;
   dm: Record<string, unknown>;
-  broadcast?: BroadcastDescriptor;
+  broadcasts?: BroadcastDescriptor[];
 }> {
   if (targetUserId === userId) {
     throw ServiceError.badRequest("Cannot DM yourself");
@@ -468,35 +468,49 @@ export async function getOrCreateDM(
       created_at: now,
       recipient: target,
     },
-    broadcast: {
-      type: "user",
-      target: targetUserId,
-      event: "DM_CHANNEL_CREATE",
-      data: {
-        id: channelId,
-        channel_type: "dm",
-        name:
-          (currentUser as Record<string, unknown>)?.display_name ??
-          (currentUser as Record<string, unknown>)?.username ??
-          "Unknown",
-        created_at: now,
-        recipient: {
-          id: userId,
-          username:
-            (currentUser as Record<string, unknown>)?.username ?? "Unknown",
-          display_name:
-            (currentUser as Record<string, unknown>)?.display_name ?? null,
-          avatar_url:
-            (currentUser as Record<string, unknown>)?.avatar_url ?? null,
-          avatar_display:
-            (currentUser as Record<string, unknown>)?.avatar_display ?? null,
-          status:
-            (currentUser as Record<string, unknown>)?.status ?? "online",
-          custom_status:
-            (currentUser as Record<string, unknown>)?.custom_status ?? null,
+    broadcasts: [
+      {
+        type: "user",
+        target: userId,
+        event: "DM_CHANNEL_CREATE",
+        data: {
+          id: channelId,
+          channel_type: "dm",
+          name: target.display_name ?? target.username,
+          created_at: now,
+          recipient: target,
         },
       },
-    },
+      {
+        type: "user",
+        target: targetUserId,
+        event: "DM_CHANNEL_CREATE",
+        data: {
+          id: channelId,
+          channel_type: "dm",
+          name:
+            (currentUser as Record<string, unknown>)?.display_name ??
+            (currentUser as Record<string, unknown>)?.username ??
+            "Unknown",
+          created_at: now,
+          recipient: {
+            id: userId,
+            username:
+              (currentUser as Record<string, unknown>)?.username ?? "Unknown",
+            display_name:
+              (currentUser as Record<string, unknown>)?.display_name ?? null,
+            avatar_url:
+              (currentUser as Record<string, unknown>)?.avatar_url ?? null,
+            avatar_display:
+              (currentUser as Record<string, unknown>)?.avatar_display ?? null,
+            status:
+              (currentUser as Record<string, unknown>)?.status ?? "online",
+            custom_status:
+              (currentUser as Record<string, unknown>)?.custom_status ?? null,
+          },
+        },
+      },
+    ],
   };
 }
 
@@ -696,6 +710,15 @@ export async function joinServer(
       CacheKey.invite(code),
     ],
     broadcasts: [
+      {
+        type: "user",
+        target: userId,
+        event: "USER_SERVERS_UPDATE",
+        data: {
+          action: "upsert",
+          server,
+        },
+      },
       {
         type: "all",
         event: "GUILD_MEMBER_ADD",

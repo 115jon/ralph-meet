@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router';
 
-import { apiSuccess, getDB, requireAuth } from "@/lib/api-helpers";
+import { apiSuccess, broadcastToUser, getDB, requireAuth } from "@/lib/api-helpers";
 import { requireChannelAccess } from "@/lib/require-channel-access";
 import { markChannelAsRead, markChannelUnreadFromMessage } from "@/services/message.service";
 
@@ -18,6 +18,7 @@ const PUT = async ({ params }: any) => {
 
   const db = getDB();
   const result = await markChannelAsRead(db, userId, channelId);
+  await broadcastToUser(userId, "READ_STATE_UPDATE", result);
 
   return apiSuccess(result);
 }
@@ -44,6 +45,7 @@ const PATCH = async ({ request, params }: any) => {
 
   const db = getDB();
   const result = await markChannelUnreadFromMessage(db, userId, channelId, messageId);
+  await broadcastToUser(userId, "READ_STATE_UPDATE", result);
 
   return apiSuccess(result);
 }

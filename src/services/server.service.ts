@@ -83,11 +83,15 @@ export async function createServer(
   userId: string,
   input: CreateServerInput
 ): Promise<{
-  id: string;
-  name: string;
-  owner_id: string;
-  icon_url: string | null;
-  created_at: string;
+  server: {
+    id: string;
+    name: string;
+    owner_id: string;
+    icon_url: string | null;
+    created_at: string;
+  };
+  cacheKeysToInvalidate: string[];
+  broadcasts: BroadcastDescriptor[];
 }> {
   const name = input.name.trim();
   const iconUrl = input.icon_url ?? null;
@@ -156,12 +160,34 @@ export async function createServer(
       .bind(voiceChannelId, serverId, voiceCategoryId, now),
   ]);
 
-  return {
+  const server: {
+    id: string;
+    name: string;
+    owner_id: string;
+    icon_url: string | null;
+    created_at: string;
+  } = {
     id: serverId,
     name,
     owner_id: userId,
     icon_url: iconUrl,
     created_at: now,
+  };
+
+  return {
+    server,
+    cacheKeysToInvalidate: [CacheKey.userServers(userId)],
+    broadcasts: [
+      {
+        type: "user",
+        target: userId,
+        event: "USER_SERVERS_UPDATE",
+        data: {
+          action: "upsert",
+          server,
+        },
+      },
+    ],
   };
 }
 

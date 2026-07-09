@@ -432,8 +432,15 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       };
     case "SET_SERVERS":
       return { ...state, servers: action.servers };
-    case "ADD_SERVER":
-      return { ...state, servers: [...state.servers, action.server] };
+    case "ADD_SERVER": {
+      const existingIndex = state.servers.findIndex((server) => server.id === action.server.id);
+      return {
+        ...state,
+        servers: existingIndex === -1
+          ? [...state.servers, action.server]
+          : state.servers.map((server) => server.id === action.server.id ? { ...server, ...action.server } : server),
+      };
+    }
     case "SET_CHANNELS": {
       const serverId = action.serverId ?? state.activeServerId ?? undefined;
       return {
@@ -1292,9 +1299,19 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       };
     case "REMOVE_SERVER": {
       const isActive = state.activeServerId === action.serverId;
+      const { [action.serverId]: _removedChannels, ...channelsByServerId } = state.channelsByServerId;
+      const { [action.serverId]: _removedCategories, ...categoriesByServerId } = state.categoriesByServerId;
+      const { [action.serverId]: _removedChannelsLoaded, ...channelsLoadedByServerId } = state.channelsLoadedByServerId;
+      const { [action.serverId]: _removedMembers, ...membersByServerId } = state.membersByServerId;
+      const { [action.serverId]: _removedMembersLoaded, ...membersLoadedByServerId } = state.membersLoadedByServerId;
       return {
         ...state,
         servers: state.servers.filter((s) => s.id !== action.serverId),
+        channelsByServerId,
+        categoriesByServerId,
+        channelsLoadedByServerId,
+        membersByServerId,
+        membersLoadedByServerId,
         // If the removed server was active, clear all server-scoped state
         activeServerId: isActive ? "@me" : state.activeServerId,
         activeChannelId: isActive ? null : state.activeChannelId,

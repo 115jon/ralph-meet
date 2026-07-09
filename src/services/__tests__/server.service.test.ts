@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
+import { CacheKey } from "../../lib/cache";
 import { DEFAULT_PROFILE_THEME } from "../../lib/profile-customization";
 import { createMockD1 } from "../../lib/__tests__/mock-d1";
 import { ServiceError } from "../../lib/service-error";
@@ -91,11 +92,11 @@ describe("createServer", () => {
       name: "New Server",
     });
 
-    expect(result.name).toBe("New Server");
-    expect(result.owner_id).toBe(USER_ID);
-    expect(result.icon_url).toBeNull();
-    expect(result.id).toBeDefined();
-    expect(result.created_at).toBeDefined();
+    expect(result.server.name).toBe("New Server");
+    expect(result.server.owner_id).toBe(USER_ID);
+    expect(result.server.icon_url).toBeNull();
+    expect(result.server.id).toBeDefined();
+    expect(result.server.created_at).toBeDefined();
 
     // Should have made a batch call (server + member + roles + categories + channels)
     db.assertCalled(/INSERT INTO servers/);
@@ -111,14 +112,14 @@ describe("createServer", () => {
       icon_url: "/api/server-icons/123.png",
     });
 
-    expect(result.icon_url).toBe("/api/server-icons/123.png");
+    expect(result.server.icon_url).toBe("/api/server-icons/123.png");
   });
 
   it("trims server name", async () => {
     const result = await createServer(db as any, USER_ID, {
       name: "  Padded Name  ",
     });
-    expect(result.name).toBe("Padded Name");
+    expect(result.server.name).toBe("Padded Name");
   });
 
   it("returns the expected server shape", async () => {
@@ -126,11 +127,30 @@ describe("createServer", () => {
       name: "Test",
     });
 
-    expect(result).toHaveProperty("id");
-    expect(result).toHaveProperty("name");
-    expect(result).toHaveProperty("owner_id");
-    expect(result).toHaveProperty("icon_url");
-    expect(result).toHaveProperty("created_at");
+    expect(result.server).toHaveProperty("id");
+    expect(result.server).toHaveProperty("name");
+    expect(result.server).toHaveProperty("owner_id");
+    expect(result.server).toHaveProperty("icon_url");
+    expect(result.server).toHaveProperty("created_at");
+  });
+
+  it("returns cache invalidation and same-user sync broadcasts", async () => {
+    const result = await createServer(db as any, USER_ID, {
+      name: "Sync Test",
+    });
+
+    expect(result.cacheKeysToInvalidate).toEqual([CacheKey.userServers(USER_ID)]);
+    expect(result.broadcasts).toEqual([
+      expect.objectContaining({
+        type: "user",
+        target: USER_ID,
+        event: "USER_SERVERS_UPDATE",
+        data: {
+          action: "upsert",
+          server: result.server,
+        },
+      }),
+    ]);
   });
 });
 

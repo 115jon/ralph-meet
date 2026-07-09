@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router';
 
-import { apiSuccess, getDB, requireAuth } from "@/lib/api-helpers";
+import { apiSuccess, broadcastToUser, getDB, requireAuth } from "@/lib/api-helpers";
 import { ServiceError } from "@/lib/service-error";
 import {
   clearNotifications,
@@ -43,6 +43,10 @@ const PATCH = async ({ request, params }: any) => {
 
   try {
     await markNotificationsRead(db, userId, body);
+    await broadcastToUser(userId, "NOTIFICATIONS_READ", {
+      ids: body.ids,
+      all: !!body.all,
+    });
     return apiSuccess({ success: true });
   } catch (e) {
     if (e instanceof ServiceError) {
@@ -60,6 +64,7 @@ const DELETE = async ({ request, params }: any) => {
 
   const db = getDB();
   await clearNotifications(db, userId);
+  await broadcastToUser(userId, "NOTIFICATIONS_CLEAR", {});
 
   return apiSuccess({ cleared: true });
 }

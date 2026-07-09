@@ -233,6 +233,22 @@ describe("getOrCreateDM", () => {
     const result = await getOrCreateDM(db as any, USER_ID, TARGET_ID);
     expect(result.isNew).toBe(true);
     expect(result.dm.channel_type).toBe("dm");
+    expect(result.broadcasts).toHaveLength(2);
+    expect(result.broadcasts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: "user",
+          target: USER_ID,
+          event: "DM_CHANNEL_CREATE",
+          data: result.dm,
+        }),
+        expect.objectContaining({
+          type: "user",
+          target: TARGET_ID,
+          event: "DM_CHANNEL_CREATE",
+        }),
+      ]),
+    );
     db.assertCalled(/INSERT INTO channels/);
   });
 
@@ -346,8 +362,22 @@ describe("joinServer", () => {
     db.assertCalled(/INSERT INTO member_roles/);
     db.assertCalled(/UPDATE invites SET uses/);
     expect(result.cacheKeysToInvalidate.length).toBeGreaterThan(0);
-    expect(result.broadcasts!.length).toBeGreaterThanOrEqual(1);
-    expect((result.broadcasts?.[0].data as any).roles[0]).toMatchObject({
+    expect(result.broadcasts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: "user",
+          target: USER_ID,
+          event: "USER_SERVERS_UPDATE",
+          data: {
+            action: "upsert",
+            server: result.server,
+          },
+        }),
+      ]),
+    );
+    const memberAdd = result.broadcasts?.find((broadcast) => broadcast.event === "GUILD_MEMBER_ADD");
+    expect(memberAdd).toBeDefined();
+    expect((memberAdd?.data as any).roles[0]).toMatchObject({
       id: "role_everyone",
       is_default: true,
       name: "@everyone",

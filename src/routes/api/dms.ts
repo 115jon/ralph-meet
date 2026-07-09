@@ -33,8 +33,10 @@ const POST = async ({ request, params }: any) => {
   try {
     const result = await getOrCreateDM(db, userId, body.target_user_id);
 
-    if (result.broadcast) {
-      await executeBroadcast(result.broadcast);
+    if (result.broadcasts) {
+      for (const broadcast of result.broadcasts) {
+        await executeBroadcast(broadcast);
+      }
     }
 
     return apiSuccess(result.dm, result.isNew ? 201 : 200);

@@ -114,6 +114,27 @@ describe("chatStore logic equivalence", () => {
 
   // ── REMOVE_SERVER ──────────────────────────────────────────────────────
 
+  describe("ADD_SERVER", () => {
+    it("deduplicates an existing server and refreshes its fields", () => {
+      useChatStore.setState(stateWith({
+        servers: [{ id: "srv-1", name: "Old", owner_id: "u1", created_at: "" }],
+      }));
+
+      useChatStore.getState().dispatch({
+        type: "ADD_SERVER",
+        server: { id: "srv-1", name: "New", owner_id: "u1", icon_url: "/icon.png", created_at: "" },
+      });
+
+      const next = useChatStore.getState();
+      expect(next.servers).toHaveLength(1);
+      expect(next.servers[0]).toMatchObject({
+        id: "srv-1",
+        name: "New",
+        icon_url: "/icon.png",
+      });
+    });
+  });
+
   describe("REMOVE_SERVER", () => {
     it("clears server-scoped state when removing the active server", () => {
       useChatStore.setState(stateWith({
@@ -123,6 +144,11 @@ describe("chatStore logic equivalence", () => {
         channels: [{ id: "ch-1", name: "general", channel_type: "text", position: 0, created_at: "" }],
         messages: [makeMessage()],
         members: [{ user: { id: "u1", username: "alice" } }],
+        channelsByServerId: { "srv-1": [makeChannel()] },
+        categoriesByServerId: { "srv-1": [makeCategory()] },
+        channelsLoadedByServerId: { "srv-1": true },
+        membersByServerId: { "srv-1": [{ user: { id: "u1", username: "alice" } }] },
+        membersLoadedByServerId: { "srv-1": true },
       }));
       useChatStore.getState().dispatch({ type: "REMOVE_SERVER", serverId: "srv-1" });
 
@@ -133,6 +159,11 @@ describe("chatStore logic equivalence", () => {
       expect(next.channels).toHaveLength(0);
       expect(next.messages).toHaveLength(0);
       expect(next.members).toHaveLength(0);
+      expect(next.channelsByServerId["srv-1"]).toBeUndefined();
+      expect(next.categoriesByServerId["srv-1"]).toBeUndefined();
+      expect(next.channelsLoadedByServerId["srv-1"]).toBeUndefined();
+      expect(next.membersByServerId["srv-1"]).toBeUndefined();
+      expect(next.membersLoadedByServerId["srv-1"]).toBeUndefined();
     });
 
     it("preserves state when removing a non-active server", () => {

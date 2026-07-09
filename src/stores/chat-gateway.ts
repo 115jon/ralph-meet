@@ -26,7 +26,7 @@ import {
   playVoiceJoin,
   playVoiceLeave
 } from "@/lib/sounds";
-import type { Channel, Notification as AppNotification, Message, Role } from "@/lib/types";
+import type { Channel, Notification as AppNotification, Message, Role, Server } from "@/lib/types";
 import { HeartbeatManager } from "@/lib/voice/heartbeat-manager";
 import type { ChatRestActions } from "./chat-actions";
 import { useCallStore } from "./useCallStore";
@@ -303,6 +303,12 @@ export function createChatGateway(
         }
         break;
       case "GUILD_MEMBER_ADD":
+        if (d.data.user?.id === get().user?.id && d.data.server_id) {
+          sendWhenReady({ op: 35, d: { server_id: d.data.server_id } });
+          void actions.loadServers();
+          void actions.loadChannels(d.data.server_id, { force: true });
+          void actions.loadMembers(d.data.server_id, { force: true });
+        }
         dispatch({
           type: "ADD_MEMBER",
           serverId: d.data.server_id,
@@ -337,6 +343,32 @@ export function createChatGateway(
           userId: p.user_id,
           roles: p.roles,
         });
+        break;
+      }
+      case "USER_SERVERS_UPDATE": {
+        const payload = d.data as {
+          action?: "upsert" | "remove" | "refresh";
+          server?: Server;
+          server_id?: string;
+        };
+        const serverId = payload.server?.id ?? payload.server_id ?? null;
+
+        if (payload.action === "remove" && serverId) {
+          dispatch({ type: "REMOVE_SERVER", serverId });
+          break;
+        }
+
+        if (payload.server) {
+          dispatch({ type: "ADD_SERVER", server: payload.server });
+        }
+
+        if (serverId) {
+          sendWhenReady({ op: 35, d: { server_id: serverId } });
+          void actions.loadChannels(serverId, { force: true });
+          void actions.loadMembers(serverId, { force: true });
+        }
+
+        void actions.loadServers();
         break;
       }
       case "USER_PROFILE_UPDATE": {
@@ -399,7 +431,7 @@ export function createChatGateway(
         const { server_id, channel } = d.data as { server_id?: string; channel?: Channel };
         if (channel?.id) {
           dispatch({ type: "UPSERT_CHANNEL", channel });
-        } else if (server_id && get().activeServerId === server_id) {
+        } else if (server_id) {
           actions.loadChannels(server_id, { force: true });
         }
         break;
@@ -423,6 +455,26 @@ export function createChatGateway(
         break;
       case "DM_CHANNEL_CREATE":
         dispatch({ type: "ADD_DM_CHANNEL", dmChannel: d.data });
+        void syncDesktopState();
+        break;
+      case "READ_STATE_UPDATE":
+        dispatch({
+          type: "UPDATE_READ_STATE",
+          channelId: d.data.channel_id,
+          timestamp: d.data.last_read_at,
+        });
+        void syncDesktopState();
+        break;
+      case "NOTIFICATIONS_READ":
+        dispatch({
+          type: "MARK_NOTIFICATIONS_READ",
+          ids: Array.isArray(d.data.ids) ? d.data.ids : undefined,
+          all: !!d.data.all,
+        });
+        void syncDesktopState();
+        break;
+      case "NOTIFICATIONS_CLEAR":
+        dispatch({ type: "CLEAR_NOTIFICATIONS" });
         void syncDesktopState();
         break;
       case "MESSAGE_PIN":

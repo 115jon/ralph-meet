@@ -1,10 +1,11 @@
 import { createFileRoute } from '@tanstack/react-router';
 
 import { apiError, apiSuccess, getDB, requireAuth } from "@/lib/api-helpers";
-import { cacheDel, cacheFetch, CacheKey, CacheTTL } from "@/lib/cache";
+import { cacheFetch, CacheKey, CacheTTL } from "@/lib/cache";
 import { checkRateLimitDO, RATE_LIMITS } from "@/lib/rate-limit";
 import { ServiceError } from "@/lib/service-error";
 import { CreateServerSchema } from "@/lib/validations";
+import { executeBroadcast, executeInvalidation } from "@/services/service-helpers";
 import { createServer, listUserServers } from "@/services/server.service";
 
 
@@ -59,12 +60,13 @@ const POST = async ({ request, params }: any) => {
   }
 
   try {
-    const server = await createServer(db, userId, parsed.data);
+    const result = await createServer(db, userId, parsed.data);
+    await executeInvalidation(result.cacheKeysToInvalidate);
+    for (const broadcast of result.broadcasts) {
+      await executeBroadcast(broadcast);
+    }
 
-    // Cache invalidation
-    await cacheDel(CacheKey.userServers(userId));
-
-    return apiSuccess(server, 201);
+    return apiSuccess(result.server, 201);
   } catch (e) {
     if (e instanceof ServiceError) {
       return Response.json({ error: e.message, code: e.code }, { status: e.status });
