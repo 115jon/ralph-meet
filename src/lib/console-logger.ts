@@ -50,6 +50,11 @@ const TAG_COLORS: Record<string, string> = {
   // ── API / Network tags ────────────────────────────────────────────────
   "api-client": "color: #0ea5e9; font-weight: bold", // sky
   "requireAuth": "color: #e11d48; font-weight: bold", // rose
+  "voice-session": "color: #dc2626; font-weight: bold", // red-dark
+  "listen-together": "color: #f59e0b; font-weight: bold", // amber
+  "listen-together:search": "color: #f97316; font-weight: bold", // orange
+  "listen-together:resolve": "color: #ea580c; font-weight: bold", // orange-dark
+  "listen-together:stream": "color: #c2410c; font-weight: bold", // burnt orange
   broadcast: "color: #d946ef; font-weight: bold", // fuchsia
   notifications: "color: #f43f5e; font-weight: bold", // pink
   "presence.service": "color: #ec4899; font-weight: bold", // pink-light
@@ -64,6 +69,7 @@ const TAG_COLORS: Record<string, string> = {
   MicTest: "color: #f472b6; font-weight: bold", // pink
   VoiceDetails: "color: #a78bfa; font-weight: bold", // violet-light
   VoiceDebug: "color: #818cf8; font-weight: bold", // indigo-light
+  ListenTogether: "color: #f59e0b; font-weight: bold", // amber
   UpdateChecker: "color: #34d399; font-weight: bold", // emerald-light
   Settings: "color: #fbbf24; font-weight: bold", // amber-light
   Profile: "color: #fb7185; font-weight: bold", // rose-light

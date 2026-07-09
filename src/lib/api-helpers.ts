@@ -7,6 +7,7 @@ import { clog } from "@/lib/console-logger";
 export { genId } from "@/lib/id";
 
 const authLog = clog("requireAuth");
+const voiceSessionLog = clog("voice-session");
 const broadcastLog = clog("broadcast");
 const broadcastAllLog = clog("broadcastAll");
 const broadcastServerLog = clog("broadcastToServerMembers");
@@ -66,6 +67,47 @@ type VoiceSessionCheckResponse = {
   exact_session_matched?: boolean;
 };
 
+function getRequestLogContext(request?: Request) {
+  if (!request) {
+    return {
+      method: null,
+      path: null,
+      origin: null,
+      country: null,
+      regionCode: null,
+      colo: null,
+      hasVoiceSessionHeader: false,
+      hasGatewaySessionHeader: false,
+    };
+  }
+
+  let path = request.url;
+  try {
+    path = new URL(request.url).pathname;
+  } catch {
+    // Fall back to the raw request URL if parsing somehow fails.
+  }
+
+  const cf = (request as Request & {
+    cf?: {
+      country?: string;
+      regionCode?: string;
+      colo?: string;
+    };
+  }).cf;
+
+  return {
+    method: request.method,
+    path,
+    origin: request.headers.get("origin") ?? null,
+    country: cf?.country ?? null,
+    regionCode: cf?.regionCode ?? null,
+    colo: cf?.colo ?? null,
+    hasVoiceSessionHeader: !!request.headers.get("X-Voice-Session-Id"),
+    hasGatewaySessionHeader: !!request.headers.get("X-Gateway-Session-Id"),
+  };
+}
+
 async function fetchVoiceSessionCheck(
   roomSlug: string,
   payload: {
@@ -117,8 +159,18 @@ export async function requireActiveVoiceRoomSession(
   const sessionId = getVoiceSessionIdFromRequest(request);
   const errorMessage = options?.errorMessage
     ?? "You must be actively connected to this voice room to use this feature.";
+  const requestContext = getRequestLogContext(request);
+  const channelId = options?.channelId?.trim() || null;
+  const serverId = options?.serverId?.trim() || null;
 
   if (!sessionId) {
+    voiceSessionLog.warn("Rejecting voice-room request without a local session id", {
+      ...requestContext,
+      userId,
+      roomSlug,
+      serverId,
+      channelId,
+    });
     return apiError(
       "Reconnect to this voice room from this client before using this feature.",
       403,
@@ -128,9 +180,6 @@ export async function requireActiveVoiceRoomSession(
   }
 
   try {
-    const channelId = options?.channelId?.trim();
-    const serverId = options?.serverId?.trim();
-
     if (channelId && serverId) {
       const globalSessionData = await fetchVoiceSessionCheck("global-gateway", {
         user_id: userId,
@@ -140,10 +189,27 @@ export async function requireActiveVoiceRoomSession(
       });
 
       if (!globalSessionData) {
+        voiceSessionLog.warn("Voice session lookup failed for the global gateway", {
+          ...requestContext,
+          userId,
+          roomSlug,
+          serverId,
+          channelId,
+          sessionId,
+        });
         return apiError("Could not verify your voice session right now.", 503, "VOICE_SESSION_CHECK_FAILED", request);
       }
 
       if (!globalSessionData.allowed) {
+        voiceSessionLog.warn("Voice session rejected by the global gateway", {
+          ...requestContext,
+          userId,
+          roomSlug,
+          serverId,
+          channelId,
+          sessionId,
+          connected: globalSessionData.connected ?? null,
+        });
         return apiError(errorMessage, 403, "VOICE_STATUS_REQUIRES_ACTIVE_SESSION", request);
       }
     }
@@ -156,11 +222,41 @@ export async function requireActiveVoiceRoomSession(
     });
 
     if (!localRoomSessionData) {
+      voiceSessionLog.warn("Voice session lookup failed for the room", {
+        ...requestContext,
+        userId,
+        roomSlug,
+        serverId,
+        channelId,
+        sessionId,
+      });
       return apiError("Could not verify your voice session right now.", 503, "VOICE_SESSION_CHECK_FAILED", request);
     }
 
     if (!localRoomSessionData.allowed) {
+      voiceSessionLog.warn("Voice session rejected by the room check", {
+        ...requestContext,
+        userId,
+        roomSlug,
+        serverId,
+        channelId,
+        sessionId,
+        connected: localRoomSessionData.connected ?? null,
+        exactSessionMatched: !!localRoomSessionData.exact_session_matched,
+      });
       return apiError(errorMessage, 403, "VOICE_STATUS_REQUIRES_ACTIVE_SESSION", request);
+    }
+
+    if (!localRoomSessionData.exact_session_matched) {
+      voiceSessionLog.warn("Voice session was allowed without an exact room-session match", {
+        ...requestContext,
+        userId,
+        roomSlug,
+        serverId,
+        channelId,
+        sessionId,
+        connected: localRoomSessionData.connected ?? null,
+      });
     }
 
     return {
@@ -168,7 +264,15 @@ export async function requireActiveVoiceRoomSession(
       exactSessionMatched: !!localRoomSessionData.exact_session_matched,
     };
   } catch (error) {
-    authLog.error("Voice session verification failed:", error);
+    voiceSessionLog.error("Voice session verification failed", {
+      ...requestContext,
+      userId,
+      roomSlug,
+      serverId,
+      channelId,
+      sessionId,
+      error,
+    });
     return apiError("Could not verify your voice session right now.", 503, "VOICE_SESSION_CHECK_FAILED", request);
   }
 }
@@ -194,6 +298,7 @@ export async function requireActiveVoiceChannelSession(
 
 export async function requireAuth(req?: Request): Promise<{ userId: string } | Response> {
   const { auth, verifyToken } = await import("@/lib/kova-auth-server");
+  const requestContext = getRequestLogContext(req);
   try {
     const authState = await auth();
 
@@ -208,11 +313,14 @@ export async function requireAuth(req?: Request): Promise<{ userId: string } | R
     const authHeader =
       req?.headers.get("authorization") ?? getRequestHeader("authorization");
 
-    let token = authHeader && authHeader.startsWith("Bearer ") ? authHeader.substring(7) : null;
+    const bearerToken = authHeader && authHeader.startsWith("Bearer ") ? authHeader.substring(7) : null;
+    let token = bearerToken;
+    let hasQueryToken = false;
 
     if (!token && req?.url) {
       const url = new URL(req.url);
       token = url.searchParams.get("token");
+      hasQueryToken = !!token;
     }
 
     if (token) {
@@ -222,13 +330,28 @@ export async function requireAuth(req?: Request): Promise<{ userId: string } | R
           return { userId: claims.sub };
         }
       } catch (e) {
-        console.error("Custom desktop token validation failed:", e);
+        authLog.warn("Custom desktop token validation failed", {
+          ...requestContext,
+          hasAuthorizationHeader: !!authHeader,
+          hasQueryToken,
+          error: e,
+        });
       }
     }
 
+    authLog.warn("Unauthorized request", {
+      ...requestContext,
+      hasAuthorizationHeader: !!authHeader,
+      hasBearerToken: !!bearerToken,
+      hasQueryToken,
+    });
+
     return Response.json({ error: "Unauthorized" }, { status: 401, headers: getCorsHeaders(req) });
-  } catch (error: any) {
-    authLog.error("Error:", error?.message || error);
+  } catch (error: unknown) {
+    authLog.error("Authorization check failed", {
+      ...requestContext,
+      error,
+    });
     return Response.json({ error: "Unauthorized" }, { status: 401, headers: getCorsHeaders(req) });
   }
 }

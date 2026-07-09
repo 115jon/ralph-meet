@@ -3,6 +3,7 @@ import {
   requireActiveVoiceRoomSession,
   requireAuth,
 } from "@/lib/api-helpers";
+import { clog } from "@/lib/console-logger";
 import { resolveListenTogetherAudioStream } from "@/services/listen-together.service";
 
 // Googlevideo rejects very large tail ranges, but 64 KB slices trigger too
@@ -14,6 +15,7 @@ const LISTEN_TOGETHER_UPSTREAM_USER_AGENT =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36";
 const LISTEN_TOGETHER_IN_MEMORY_MAX_BYTES = 24 * 1024 * 1024;
 const LISTEN_TOGETHER_IN_MEMORY_TTL_MS = 5 * 60 * 1000;
+const streamLog = clog("listen-together:stream");
 
 const listenTogetherInMemoryStreamCache = new Map<string, {
   bytes: Uint8Array;
@@ -298,8 +300,27 @@ export async function proxyListenTogetherStream(request: Request, includeBody: b
   const preferredFormat = url.searchParams.get("format") === "webm" ? "webm" : "mp4";
   const serverId = url.searchParams.get("serverId")?.trim() ?? null;
   const channelId = url.searchParams.get("channelId")?.trim() ?? null;
+  const cf = (request as Request & {
+    cf?: {
+      country?: string;
+      regionCode?: string;
+      colo?: string;
+    };
+  }).cf;
 
   if (!roomSlug || !videoId) {
+    streamLog.warn("Rejecting listen together stream request without required parameters", {
+      userId: auth.userId,
+      roomSlug: roomSlug ?? null,
+      videoId: videoId ?? null,
+      preferredFormat,
+      includeBody,
+      serverId,
+      channelId,
+      country: cf?.country ?? null,
+      regionCode: cf?.regionCode ?? null,
+      colo: cf?.colo ?? null,
+    });
     return Response.json({ error: "Missing roomSlug or videoId" }, { status: 400 });
   }
 
@@ -316,11 +337,32 @@ export async function proxyListenTogetherStream(request: Request, includeBody: b
   if (sessionCheck instanceof Response) return sessionCheck;
 
   try {
+    const range = request.headers.get("Range");
+    streamLog.debug("Proxy request accepted", {
+      userId: auth.userId,
+      roomSlug,
+      videoId,
+      preferredFormat,
+      includeBody,
+      hasRange: !!range,
+      exactSessionMatched: sessionCheck.exactSessionMatched,
+      country: cf?.country ?? null,
+      regionCode: cf?.regionCode ?? null,
+      colo: cf?.colo ?? null,
+    });
+
     const memoryCacheKey = getListenTogetherMemoryCacheKey(videoId, preferredFormat);
     const memoryCached = readListenTogetherMemoryStream(memoryCacheKey);
     if (memoryCached) {
+      streamLog.debug("Serving listen together audio from in-memory cache", {
+        roomSlug,
+        videoId,
+        preferredFormat,
+        includeBody,
+        hasRange: !!range,
+      });
       const response = buildRangeResponseFromBuffer(memoryCached.bytes, {
-        requestedRange: request.headers.get("Range"),
+        requestedRange: range,
         contentLength: memoryCached.contentLength,
         mimeType: memoryCached.mimeType,
         includeBody,
@@ -331,15 +373,21 @@ export async function proxyListenTogetherStream(request: Request, includeBody: b
     let resolved = await resolveListenTogetherAudioStream(videoId, preferredFormat);
     let upstreamUrl = new URL(resolved.url);
     if (!upstreamUrl.hostname.toLowerCase().includes("googlevideo.com")) {
+      streamLog.error("Resolved listen together stream host is not allowed", {
+        roomSlug,
+        videoId,
+        preferredFormat,
+        host: upstreamUrl.hostname.toLowerCase(),
+      });
       return Response.json({ error: "Resolved stream host is not allowed" }, { status: 502 });
     }
 
-    const range = request.headers.get("Range");
     const upstreamRange = normalizeListenTogetherUpstreamRange(range, { includeBody });
     let upstream = await fetchListenTogetherUpstream(upstreamUrl, upstreamRange, "header");
 
     if (!upstream.ok) {
-      console.warn("listen-together upstream fetch failed; refreshing stream URL", {
+      streamLog.warn("Upstream fetch failed; refreshing resolved stream URL", {
+        roomSlug,
         videoId,
         preferredFormat,
         upstreamRange,
@@ -348,6 +396,12 @@ export async function proxyListenTogetherStream(request: Request, includeBody: b
       resolved = await resolveListenTogetherAudioStream(videoId, preferredFormat, { forceRefresh: true });
       upstreamUrl = new URL(resolved.url);
       if (!upstreamUrl.hostname.toLowerCase().includes("googlevideo.com")) {
+        streamLog.error("Refreshed listen together stream host is not allowed", {
+          roomSlug,
+          videoId,
+          preferredFormat,
+          host: upstreamUrl.hostname.toLowerCase(),
+        });
         return Response.json({ error: "Resolved stream host is not allowed" }, { status: 502 });
       }
 
@@ -355,7 +409,8 @@ export async function proxyListenTogetherStream(request: Request, includeBody: b
     }
 
     if (!upstream.ok && upstreamRange) {
-      console.warn("listen-together upstream retry failed; retrying with query range", {
+      streamLog.warn("Header range retry failed; retrying with query range", {
+        roomSlug,
         videoId,
         preferredFormat,
         upstreamRange,
@@ -373,6 +428,12 @@ export async function proxyListenTogetherStream(request: Request, includeBody: b
         ? await fetchListenTogetherUpstream(upstreamUrl, null, "header")
         : null;
       if (fullStream?.ok) {
+        streamLog.warn("Falling back to buffered upstream response", {
+          roomSlug,
+          videoId,
+          preferredFormat,
+          upstreamRange,
+        });
         const bytes = new Uint8Array(await fullStream.arrayBuffer());
         const totalLength = Number(fullStream.headers.get("Content-Length")) || bytes.byteLength;
         const mimeType = fullStream.headers.get("Content-Type") || resolved.mimeType || "application/octet-stream";
@@ -396,6 +457,13 @@ export async function proxyListenTogetherStream(request: Request, includeBody: b
         }
       }
 
+      streamLog.error("All upstream audio fetch strategies failed", {
+        roomSlug,
+        videoId,
+        preferredFormat,
+        upstreamRange,
+        canAttemptBufferedFallback,
+      });
       return Response.json({ error: "Failed to fetch upstream audio stream" }, { status: 502 });
     }
 
@@ -430,6 +498,13 @@ export async function proxyListenTogetherStream(request: Request, includeBody: b
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to proxy audio stream";
+    streamLog.error("Listen together proxy failed", {
+      roomSlug,
+      videoId,
+      preferredFormat,
+      includeBody,
+      message,
+    });
     return Response.json({ error: message }, { status: 502 });
   }
 }

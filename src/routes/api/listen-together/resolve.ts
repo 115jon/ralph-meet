@@ -3,9 +3,21 @@ import {
   requireActiveVoiceRoomSession,
   requireAuth,
 } from "@/lib/api-helpers";
+import { clog } from "@/lib/console-logger";
 import { resolveListenTogetherUrl } from "@/services/listen-together.service";
 
+const resolveLog = clog("listen-together:resolve");
+
+function getListenTogetherSourceHost(rawUrl: string) {
+  try {
+    return new URL(rawUrl).hostname.toLowerCase();
+  } catch {
+    return null;
+  }
+}
+
 const POST = async ({ request }: any) => {
+  const startedAt = Date.now();
   const auth = await requireAuth(request);
   if (auth instanceof Response) return auth;
 
@@ -20,8 +32,25 @@ const POST = async ({ request }: any) => {
   const sourceUrl = body.url?.trim();
   const serverId = body.serverId?.trim() ?? null;
   const channelId = body.channelId?.trim() ?? null;
+  const cf = (request as Request & {
+    cf?: {
+      country?: string;
+      regionCode?: string;
+      colo?: string;
+    };
+  }).cf;
 
   if (!roomSlug || !sourceUrl) {
+    resolveLog.warn("Rejecting listen together resolve without required parameters", {
+      userId: auth.userId,
+      roomSlug: roomSlug ?? null,
+      hasUrl: !!sourceUrl,
+      serverId,
+      channelId,
+      country: cf?.country ?? null,
+      regionCode: cf?.regionCode ?? null,
+      colo: cf?.colo ?? null,
+    });
     return Response.json({ error: "Missing roomSlug or url" }, { status: 400 });
   }
 
@@ -39,6 +68,21 @@ const POST = async ({ request }: any) => {
 
   try {
     const resolved = await resolveListenTogetherUrl(sourceUrl);
+    resolveLog.info("Listen together resolve completed", {
+      userId: auth.userId,
+      roomSlug,
+      sourceHost: getListenTogetherSourceHost(sourceUrl),
+      serverId,
+      channelId,
+      exactSessionMatched: sessionCheck.exactSessionMatched,
+      kind: resolved.kind,
+      resolvedCount: resolved.resolvedCount,
+      skippedCount: resolved.skippedCount,
+      country: cf?.country ?? null,
+      regionCode: cf?.regionCode ?? null,
+      colo: cf?.colo ?? null,
+      durationMs: Date.now() - startedAt,
+    });
     return Response.json(resolved, {
       headers: {
         "Cache-Control": "private, max-age=30",
@@ -46,6 +90,19 @@ const POST = async ({ request }: any) => {
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to resolve media";
+    resolveLog.warn("Listen together resolve failed", {
+      userId: auth.userId,
+      roomSlug,
+      sourceHost: getListenTogetherSourceHost(sourceUrl),
+      serverId,
+      channelId,
+      exactSessionMatched: sessionCheck.exactSessionMatched,
+      country: cf?.country ?? null,
+      regionCode: cf?.regionCode ?? null,
+      colo: cf?.colo ?? null,
+      durationMs: Date.now() - startedAt,
+      message,
+    });
     return Response.json({ error: message }, { status: 400 });
   }
 };
