@@ -25,6 +25,8 @@ import { getDisplayInitial } from "@/lib/display-name";
 import { getAuthAssetUrl } from "@/lib/platform";
 import { resolveProfileReferenceDate } from "@/lib/profile-dates";
 import {
+  applyProfileThemeDefaults,
+  DEFAULT_PROFILE_THEME,
   createRandomDisplayNameStyle,
   DEFAULT_DISPLAY_NAME_STYLE,
   DISPLAY_NAME_COLOR_SWATCHES,
@@ -37,7 +39,6 @@ import {
   normalizeHexColor,
   PROFILE_COLOR_SWATCHES,
   resolveProfileTheme,
-  sanitizeProfileCustomizationInput,
   type DisplayNameStyle,
 } from "@/lib/profile-customization";
 import type { User } from "@/lib/types";
@@ -1593,7 +1594,7 @@ export default function SettingsAccountTab({
     bannerInputRef,
     nameplateInputRef,
   } = useAccountState(user, chatUser);
-  const storedProfileTheme = sanitizeProfileCustomizationInput({
+  const storedProfileTheme = applyProfileThemeDefaults({
     profile_accent_color: chatUser?.profile_accent_color,
     profile_background_color: chatUser?.profile_background_color,
     profile_banner_color: chatUser?.profile_banner_color,
@@ -2570,9 +2571,9 @@ export default function SettingsAccountTab({
                           <ColorField
                             label="Profile background"
                             value={profileBackgroundColor}
-                            onChange={setProfileBackgroundColor}
+                            onChange={(value) => setProfileBackgroundColor(value ?? DEFAULT_PROFILE_THEME.background)}
                             presets={PROFILE_COLOR_SWATCHES}
-                            defaultColor="#161A22"
+                            defaultColor={DEFAULT_PROFILE_THEME.background}
                             containerClassName="absolute inset-x-0 top-2 z-30 flex justify-center"
                             renderTrigger={({ open, toggleOpen, value }) => (
                               <Tooltip>
@@ -2608,9 +2609,9 @@ export default function SettingsAccountTab({
                           <ColorField
                             label="Profile accent"
                             value={profileAccentColor}
-                            onChange={setProfileAccentColor}
+                            onChange={(value) => setProfileAccentColor(value ?? DEFAULT_PROFILE_THEME.accent)}
                             presets={PROFILE_COLOR_SWATCHES}
-                            defaultColor="#5865F2"
+                            defaultColor={DEFAULT_PROFILE_THEME.accent}
                             containerClassName="absolute inset-x-0 bottom-2 z-30 flex justify-center"
                             popoverSide="top"
                             renderTrigger={({ open, toggleOpen, value }) => (

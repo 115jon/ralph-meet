@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
+import { DEFAULT_PROFILE_THEME } from "../../lib/profile-customization";
 import { createMockD1 } from "../../lib/__tests__/mock-d1";
 import { ServiceError } from "../../lib/service-error";
 import {
@@ -37,8 +38,8 @@ function memberRow(overrides: Record<string, unknown> = {}) {
     display_name_style: null,
     avatar_url: null,
     created_at: NOW,
-    profile_accent_color: null,
-    profile_background_color: null,
+    profile_accent_color: DEFAULT_PROFILE_THEME.accent,
+    profile_background_color: DEFAULT_PROFILE_THEME.background,
     profile_banner_color: null,
     bio: null,
     status: "online",
@@ -284,7 +285,7 @@ describe("listServerMembers", () => {
     expect(result[0].user.display_name).toBe("Test User");
     expect(result[0].user.display_name_style).toContain("\"effect\":\"gradient\"");
     expect(result[0].user.created_at).toBe(NOW);
-    expect(result[0].user.profile_background_color).toBeNull();
+    expect(result[0].user.profile_background_color).toBe(DEFAULT_PROFILE_THEME.background);
     expect(result[0].roles).toEqual([]);
     expect(result[1].user.id).toBe("u2");
   });

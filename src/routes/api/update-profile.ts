@@ -6,9 +6,9 @@ import { clog } from "@/lib/console-logger";
 import { ensureUserProfileSchema } from "@/lib/ensure-user-profile-schema";
 import { parseMediaContentFilter } from "@/lib/media-content-filter";
 import {
+  applyProfileThemeDefaults,
   normalizeDisplayNameStyle,
   normalizeHexColor,
-  sanitizeProfileCustomizationInput,
   serializeDisplayNameStyle,
 } from "@/lib/profile-customization";
 import { isAppTheme } from "@/lib/theme-preferences";
@@ -88,7 +88,7 @@ const PATCH = async ({ request: req }: any) => {
     : profileBannerColor === null
       ? null
       : normalizeHexColor(profileBannerColor);
-  const sanitizedSubmittedProfileTheme = sanitizeProfileCustomizationInput({
+  const resolvedSubmittedProfileTheme = applyProfileThemeDefaults({
     profile_accent_color: normalizedProfileAccentColor ?? null,
     profile_background_color: normalizedProfileBackgroundColor ?? null,
     profile_banner_color: normalizedProfileBannerColor ?? null,
@@ -175,17 +175,17 @@ const PATCH = async ({ request: req }: any) => {
 
     if (normalizedProfileAccentColor !== undefined) {
       updates.push("profile_accent_color = ?");
-      binds.push(sanitizedSubmittedProfileTheme.profile_accent_color);
+      binds.push(resolvedSubmittedProfileTheme.profile_accent_color);
     }
 
     if (normalizedProfileBackgroundColor !== undefined) {
       updates.push("profile_background_color = ?");
-      binds.push(sanitizedSubmittedProfileTheme.profile_background_color);
+      binds.push(resolvedSubmittedProfileTheme.profile_background_color);
     }
 
     if (normalizedProfileBannerColor !== undefined) {
       updates.push("profile_banner_color = ?");
-      binds.push(sanitizedSubmittedProfileTheme.profile_banner_color);
+      binds.push(resolvedSubmittedProfileTheme.profile_banner_color);
     }
 
     if (normalizedDisplayNameStyle !== undefined) {
@@ -250,7 +250,7 @@ const PATCH = async ({ request: req }: any) => {
       pronouns: string | null;
     }>();
     const parsedDisplayNameStyle = normalizeDisplayNameStyle(updatedUser?.display_name_style ?? null);
-    const sanitizedTheme = sanitizeProfileCustomizationInput({
+    const resolvedTheme = applyProfileThemeDefaults({
       profile_accent_color: updatedUser?.profile_accent_color,
       profile_background_color: updatedUser?.profile_background_color,
       profile_banner_color: updatedUser?.profile_banner_color,
@@ -285,9 +285,9 @@ const PATCH = async ({ request: req }: any) => {
       banner_content_type: updatedUser?.banner_content_type ?? null,
       nameplate_url: updatedUser?.nameplate_url ?? null,
       nameplate_content_type: updatedUser?.nameplate_content_type ?? null,
-      profile_accent_color: sanitizedTheme.profile_accent_color,
-      profile_background_color: sanitizedTheme.profile_background_color,
-      profile_banner_color: sanitizedTheme.profile_banner_color,
+      profile_accent_color: resolvedTheme.profile_accent_color,
+      profile_background_color: resolvedTheme.profile_background_color,
+      profile_banner_color: resolvedTheme.profile_banner_color,
       display_name_style: parsedDisplayNameStyle,
       theme_preference: updatedUser?.theme_preference ?? null,
       theme_sync_enabled: updatedUser?.theme_sync_enabled === 1,
@@ -314,9 +314,9 @@ const PATCH = async ({ request: req }: any) => {
         banner_content_type: updatedUser?.banner_content_type,
         nameplate_url: updatedUser?.nameplate_url,
         nameplate_content_type: updatedUser?.nameplate_content_type,
-        profile_accent_color: sanitizedTheme.profile_accent_color,
-        profile_background_color: sanitizedTheme.profile_background_color,
-        profile_banner_color: sanitizedTheme.profile_banner_color,
+        profile_accent_color: resolvedTheme.profile_accent_color,
+        profile_background_color: resolvedTheme.profile_background_color,
+        profile_banner_color: resolvedTheme.profile_banner_color,
         display_name_style: parsedDisplayNameStyle,
         theme_preference: updatedUser?.theme_preference,
         theme_sync_enabled: updatedUser?.theme_sync_enabled === 1,

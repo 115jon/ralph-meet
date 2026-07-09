@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 
 import { apiError, apiSuccess, getDB, requireAuth } from "@/lib/api-helpers";
 import { getCurrentUser } from "@/lib/kova-auth-server";
+import { applyProfileThemeDefaults } from "@/lib/profile-customization";
 import { getMe } from "@/services/user.service";
 
 type ClaimCandidate = {
@@ -125,6 +126,7 @@ const POST = async ({ request }: any) => {
   const authUser = await getCurrentUser(request.headers);
   const email = authUser?.email ?? authUser?.primaryEmailAddress?.emailAddress ?? null;
   const now = new Date().toISOString();
+  const legacyProfileTheme = applyProfileThemeDefaults(legacy);
 
   const references = await getExistingUserIdReferences(db);
   const legacyHoldingUsername = `${legacy.username}__claimed__${Date.now()}`;
@@ -150,9 +152,9 @@ const POST = async ({ request }: any) => {
         legacy.banner_content_type,
         legacy.nameplate_url,
         legacy.nameplate_content_type,
-        legacy.profile_accent_color,
-        legacy.profile_background_color,
-        legacy.profile_banner_color,
+        legacyProfileTheme.profile_accent_color,
+        legacyProfileTheme.profile_background_color,
+        legacyProfileTheme.profile_banner_color,
         legacy.display_name_style,
         legacy.theme_preference,
         legacy.theme_sync_enabled,

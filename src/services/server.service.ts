@@ -11,6 +11,7 @@
 import { AuditLogAction } from "@/lib/audit-logger";
 import { CacheKey } from "@/lib/cache";
 import { calculatePermissions, DEFAULT_EVERYONE_PERMISSIONS, hasPermission, PERMISSIONS } from "@/lib/permissions";
+import { applyProfileThemeDefaults } from "@/lib/profile-customization";
 import { ServiceError } from "@/lib/service-error";
 import type { D1Database } from "@cloudflare/workers-types";
 
@@ -379,7 +380,14 @@ export async function listServerMembers(
     .bind(serverId)
     .all();
 
-  return (results ?? []).map((row: Record<string, unknown>) => ({
+  return (results ?? []).map((row: Record<string, unknown>) => {
+    const profileTheme = applyProfileThemeDefaults({
+      profile_accent_color: row.profile_accent_color as string | null | undefined,
+      profile_background_color: row.profile_background_color as string | null | undefined,
+      profile_banner_color: row.profile_banner_color as string | null | undefined,
+    });
+
+    return ({
     joined_at: row.joined_at,
     roles: JSON.parse((row.roles_json as string) || "[]").map(
       (r: Record<string, unknown>) => ({
@@ -398,15 +406,15 @@ export async function listServerMembers(
       banner_content_type: row.banner_content_type,
       nameplate_url: row.nameplate_url,
       nameplate_content_type: row.nameplate_content_type,
-      profile_accent_color: row.profile_accent_color,
-      profile_background_color: row.profile_background_color,
-      profile_banner_color: row.profile_banner_color,
+      profile_accent_color: profileTheme.profile_accent_color,
+      profile_background_color: profileTheme.profile_background_color,
+      profile_banner_color: profileTheme.profile_banner_color,
       created_at: row.created_at,
       bio: row.bio,
       status: (row.status as string) ?? "offline",
       custom_status: row.custom_status,
     },
-  }));
+  })});
 }
 
 // ─── searchMessages ──────────────────────────────────────────────────────────

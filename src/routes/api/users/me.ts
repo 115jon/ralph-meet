@@ -4,7 +4,10 @@ import { apiError, apiSuccess, getDB, requireAuth } from "@/lib/api-helpers";
 import { ensureUserProfileSchema } from "@/lib/ensure-user-profile-schema";
 import { getCurrentUser } from "@/lib/kova-auth-server";
 import { DEFAULT_MEDIA_CONTENT_FILTER } from "@/lib/media-content-filter";
-import type { DisplayNameStyle } from "@/lib/profile-customization";
+import {
+  applyProfileThemeDefaults,
+  type DisplayNameStyle,
+} from "@/lib/profile-customization";
 import { ServiceError } from "@/lib/service-error";
 import { getMe } from "@/services/user.service";
 import { clog } from "@/lib/console-logger";
@@ -115,6 +118,7 @@ async function syncUserFromRalphAuth(
   const avatarUrl = authUser.imageUrl ?? authUser.image ?? null;
   const bio = authUser.bio ?? null;
   const now = new Date().toISOString();
+  const defaultProfileTheme = applyProfileThemeDefaults({});
 
   await ensureIdentityClaimsTable(db);
 
@@ -132,8 +136,8 @@ async function syncUserFromRalphAuth(
 
   await db
     .prepare(
-      `INSERT INTO users (id, username, display_name, avatar_url, bio, status, created_at)
-       VALUES (?, ?, ?, ?, ?, 'online', ?)
+      `INSERT INTO users (id, username, display_name, avatar_url, bio, status, profile_accent_color, profile_background_color, created_at)
+       VALUES (?, ?, ?, ?, ?, 'online', ?, ?, ?)
        ON CONFLICT(id) DO UPDATE SET
          username = excluded.username,
          display_name = CASE
@@ -144,9 +148,20 @@ async function syncUserFromRalphAuth(
            WHEN users.avatar_url LIKE '/api/avatars/%' THEN users.avatar_url
            ELSE excluded.avatar_url
          END,
-         bio = COALESCE(users.bio, excluded.bio)`
+         bio = COALESCE(users.bio, excluded.bio),
+         profile_accent_color = COALESCE(users.profile_accent_color, excluded.profile_accent_color),
+         profile_background_color = COALESCE(users.profile_background_color, excluded.profile_background_color)`
     )
-    .bind(userId, username, displayName, avatarUrl, bio, now)
+    .bind(
+      userId,
+      username,
+      displayName,
+      avatarUrl,
+      bio,
+      defaultProfileTheme.profile_accent_color,
+      defaultProfileTheme.profile_background_color,
+      now,
+    )
     .run();
 
   return {
@@ -159,8 +174,8 @@ async function syncUserFromRalphAuth(
     banner_content_type: null,
     nameplate_url: null,
     nameplate_content_type: null,
-    profile_accent_color: null,
-    profile_background_color: null,
+    profile_accent_color: defaultProfileTheme.profile_accent_color,
+    profile_background_color: defaultProfileTheme.profile_background_color,
     profile_banner_color: null,
     display_name_style: null,
     theme_preference: null,
@@ -239,13 +254,36 @@ async function claimLegacyIdentity(
     .catch(() => null) as { id: string } | null;
 
   if (!existingNewUser) {
+    const legacyProfileTheme = applyProfileThemeDefaults(legacy);
     await db
       .prepare(
         `INSERT INTO users (id, username, display_name, avatar_url, avatar_display, banner_url, banner_content_type, nameplate_url, nameplate_content_type, profile_accent_color, profile_background_color, profile_banner_color, display_name_style, theme_preference, theme_sync_enabled, media_content_filter, bio, pronouns, status, custom_status, created_at, updated_at)
-         SELECT ?, username, display_name, avatar_url, avatar_display, banner_url, banner_content_type, nameplate_url, nameplate_content_type, profile_accent_color, profile_background_color, profile_banner_color, display_name_style, theme_preference, theme_sync_enabled, media_content_filter, bio, pronouns, status, custom_status, created_at, ?
-         FROM users WHERE id = ?`
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
-      .bind(input.authUserId, input.now, legacy.id)
+      .bind(
+        input.authUserId,
+        legacy.username,
+        legacy.display_name,
+        legacy.avatar_url,
+        legacy.avatar_display ?? null,
+        legacy.banner_url,
+        legacy.banner_content_type,
+        legacy.nameplate_url,
+        legacy.nameplate_content_type,
+        legacyProfileTheme.profile_accent_color,
+        legacyProfileTheme.profile_background_color,
+        legacyProfileTheme.profile_banner_color,
+        legacy.display_name_style,
+        legacy.theme_preference,
+        legacy.theme_sync_enabled,
+        legacy.media_content_filter,
+        legacy.bio,
+        legacy.pronouns,
+        legacy.status,
+        legacy.custom_status,
+        legacy.created_at ?? input.now,
+        input.now,
+      )
       .run();
   }
 

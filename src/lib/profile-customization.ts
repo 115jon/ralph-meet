@@ -67,6 +67,11 @@ export interface ResolvedProfileTheme {
   isLightSurface: boolean | null;
 }
 
+export const DEFAULT_PROFILE_THEME = {
+  accent: "#5865F2",
+  background: "#161A22",
+} as const;
+
 const LEGACY_DEFAULT_PROFILE_THEME = {
   accent: "#0B0BE6",
   background: "#0055FE",
@@ -139,6 +144,22 @@ export function sanitizeProfileCustomizationInput(
     profile_accent_color: accent,
     profile_background_color: background,
     profile_banner_color: banner,
+  };
+}
+
+export function applyProfileThemeDefaults(
+  input: ProfileCustomizationInput,
+): {
+  profile_accent_color: string;
+  profile_background_color: string;
+  profile_banner_color: string | null;
+} {
+  const sanitized = sanitizeProfileCustomizationInput(input);
+
+  return {
+    profile_accent_color: sanitized.profile_accent_color ?? DEFAULT_PROFILE_THEME.accent,
+    profile_background_color: sanitized.profile_background_color ?? DEFAULT_PROFILE_THEME.background,
+    profile_banner_color: sanitized.profile_banner_color,
   };
 }
 
@@ -652,40 +673,10 @@ export function createRandomDisplayNameStyle() {
 
 export function resolveProfileTheme(input: ProfileCustomizationInput): ResolvedProfileTheme {
   const {
-    profile_accent_color: accent,
-    profile_background_color: background,
+    profile_accent_color: resolvedAccent,
+    profile_background_color: resolvedBackground,
     profile_banner_color: banner,
-  } = sanitizeProfileCustomizationInput(input);
-
-  if (!accent && !background) {
-    return {
-      variables: {
-        "--rm-profile-custom-accent": "var(--rm-accent)",
-        "--rm-profile-custom-accent-muted": "var(--rm-accent-dim)",
-        "--rm-profile-custom-text": "var(--rm-text-primary)",
-        "--rm-profile-custom-muted": "var(--rm-text-secondary)",
-        "--rm-profile-custom-ghost": "var(--rm-text-muted)",
-        "--rm-profile-custom-card-bg": "rgba(0, 0, 0, 0.16)",
-        "--rm-profile-custom-card-bg-strong": "rgba(0, 0, 0, 0.22)",
-        "--rm-profile-custom-card-border": "rgba(255, 255, 255, 0.08)",
-        "--rm-profile-custom-button-bg": "var(--rm-accent)",
-        "--rm-profile-custom-button-text": "white",
-        "--rm-profile-custom-button-shadow": "var(--rm-accent-dim)",
-        "--rm-profile-custom-surface": "linear-gradient(180deg, transparent, transparent)",
-        "--rm-profile-custom-surface-overlay": "var(--rm-profile-surface-overlay)",
-        "--rm-profile-custom-surface-overlay-strong": "var(--rm-profile-surface-overlay-strong)",
-        "--rm-profile-custom-banner-fallback": banner ?? "var(--rm-profile-banner-fallback)",
-        "--rm-profile-custom-banner-overlay": "var(--rm-profile-banner-overlay)",
-      } as CSSProperties,
-      backgroundColor: null,
-      textColor: null,
-      accentColor: null,
-      isLightSurface: null,
-    };
-  }
-
-  const resolvedBackground = background ?? "#161A22";
-  const resolvedAccent = accent ?? "#5865F2";
+  } = applyProfileThemeDefaults(input);
   const mixedSurface = mixHexColors(resolvedBackground, resolvedAccent, 0.22);
   const isLightSurface = getRelativeLuminance(mixedSurface) > 0.46;
   const text = isLightSurface ? "#16161F" : "#F8FAFC";

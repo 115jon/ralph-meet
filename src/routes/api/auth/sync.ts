@@ -4,6 +4,7 @@ import { env } from "cloudflare:workers";
 import { apiError, apiSuccess, broadcastToAll, getDB } from "@/lib/api-helpers";
 import { cacheDel, CacheKey } from "@/lib/cache";
 import { logger } from "@/lib/logger";
+import { applyProfileThemeDefaults } from "@/lib/profile-customization";
 import { checkRateLimitDO, RATE_LIMITS } from "@/lib/rate-limit";
 import type { D1Database } from "@cloudflare/workers-types";
 
@@ -119,14 +120,15 @@ const POST = async ({ request }: any) => {
     (fullName || username);
   const avatarUrl = user.avatarUrl ?? user.imageUrl ?? user.image ?? null;
   const bio = user.bio ?? null;
+  const defaultProfileTheme = applyProfileThemeDefaults({});
 
   switch (event) {
     case "user.created":
     case "user.signUp":
     case "user.signed_up": {
       await db.prepare(
-        `INSERT INTO users (id, username, display_name, avatar_url, bio, status, created_at)
-         VALUES (?, ?, ?, ?, ?, 'online', ?)
+        `INSERT INTO users (id, username, display_name, avatar_url, bio, status, profile_accent_color, profile_background_color, created_at)
+         VALUES (?, ?, ?, ?, ?, 'online', ?, ?, ?)
          ON CONFLICT(id) DO UPDATE SET
            username = excluded.username,
            display_name = COALESCE(users.display_name, excluded.display_name),
@@ -134,8 +136,19 @@ const POST = async ({ request }: any) => {
              WHEN users.avatar_url LIKE '/api/avatars/%' THEN users.avatar_url
              ELSE excluded.avatar_url
            END,
-           bio = COALESCE(users.bio, excluded.bio)`,
-      ).bind(userId, username, displayName, avatarUrl, bio, new Date().toISOString()).run();
+           bio = COALESCE(users.bio, excluded.bio),
+           profile_accent_color = COALESCE(users.profile_accent_color, excluded.profile_accent_color),
+           profile_background_color = COALESCE(users.profile_background_color, excluded.profile_background_color)`,
+      ).bind(
+        userId,
+        username,
+        displayName,
+        avatarUrl,
+        bio,
+        defaultProfileTheme.profile_accent_color,
+        defaultProfileTheme.profile_background_color,
+        new Date().toISOString(),
+      ).run();
 
       await syncCachesAndBroadcast(db, userId, username, event);
       break;

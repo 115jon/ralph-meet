@@ -12,8 +12,8 @@ import {
   type AvatarDisplay,
 } from "@/lib/avatar-display";
 import {
+  applyProfileThemeDefaults,
   normalizeDisplayNameStyle,
-  sanitizeProfileCustomizationInput,
   type DisplayNameStyle,
 } from "@/lib/profile-customization";
 import type { D1Database } from "@cloudflare/workers-types";
@@ -74,13 +74,13 @@ export async function getMe(
     throw ServiceError.notFound("User not found");
   }
 
-  const sanitizedTheme = sanitizeProfileCustomizationInput(user);
+  const resolvedTheme = applyProfileThemeDefaults(user);
 
   return {
     ...user,
-    profile_accent_color: sanitizedTheme.profile_accent_color,
-    profile_background_color: sanitizedTheme.profile_background_color,
-    profile_banner_color: sanitizedTheme.profile_banner_color,
+    profile_accent_color: resolvedTheme.profile_accent_color,
+    profile_background_color: resolvedTheme.profile_background_color,
+    profile_banner_color: resolvedTheme.profile_banner_color,
     avatar_display: normalizeAvatarDisplay(user.avatar_display),
     display_name_style: normalizeDisplayNameStyle(user.display_name_style),
   };
