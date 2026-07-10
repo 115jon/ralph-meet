@@ -11,9 +11,13 @@ export default tseslint.config(
     ignores: [
       "node_modules/",
       "dist/",
+      "coverage/",
       ".output/",
       ".vinxi/",
       ".wrangler/",
+      "target-test/",
+      "public/mediapipe/",
+      "packages/*/dist/",
       "worker/",
       "desktop/",
       "mobile/",
@@ -26,6 +30,17 @@ export default tseslint.config(
 
   // ── TypeScript ────────────────────────────────────────────────────────
   ...tseslint.configs.recommended,
+
+  // ── Node.js tooling ──────────────────────────────────────────────────
+  {
+    files: [
+      "*.{js,cjs,mjs,ts,cts,mts}",
+      "scripts/**/*.{js,cjs,mjs,ts,cts,mts}",
+    ],
+    languageOptions: {
+      globals: globals.node,
+    },
+  },
 
   // ── TanStack Router ───────────────────────────────────────────────────
   ...pluginRouter.configs["flat/recommended"],

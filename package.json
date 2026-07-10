@@ -14,13 +14,16 @@
     "deploy:main": "vite build && wrangler deploy",
     "deploy": "pnpm run deploy:do && pnpm run deploy:main",
     "lint": "eslint",
+    "lint:fix": "eslint --fix",
+    "format": "prettier --write --ignore-unknown --no-error-on-unmatched-pattern .github src scripts packages/kova-react/src desktop/desktop-entry.tsx desktop/index.html desktop/styles.css desktop/package.json desktop/tsconfig.json desktop/vite.config.ts mobile/mobile-entry.tsx mobile/index.html mobile/styles.css mobile/package.json mobile/tsconfig.json mobile/vite.config.ts *.json *.js *.mjs *.cjs *.ts *.tsx *.md",
+    "format:check": "prettier --check --ignore-unknown --no-error-on-unmatched-pattern .github src scripts packages/kova-react/src desktop/desktop-entry.tsx desktop/index.html desktop/styles.css desktop/package.json desktop/tsconfig.json desktop/vite.config.ts mobile/mobile-entry.tsx mobile/index.html mobile/styles.css mobile/package.json mobile/tsconfig.json mobile/vite.config.ts *.json *.js *.mjs *.cjs *.ts *.tsx *.md",
     "test": "vitest run",
     "test:worker": "vitest run --config worker/vitest.config.ts",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "typecheck": "tsc --noEmit",
     "logs": "node scripts/query-logs.mjs",
-    "prepare": "node scripts/copy-mediapipe.mjs",
+    "prepare": "node scripts/copy-mediapipe.mjs && simple-git-hooks",
     "bump": "node scripts/bump-version.mjs"
   },
   "dependencies": {
@@ -85,6 +88,9 @@
     "globals": "^17.4.0",
     "jsdom": "^29.1.1",
     "react-doctor": "^0.5.8",
+    "lint-staged": "^16.2.7",
+    "prettier": "3.8.1",
+    "simple-git-hooks": "^2.11.1",
     "react-scan": "^0.5.7",
     "shadcn": "^3.8.4",
     "tailwindcss": "^4.1.18",
@@ -95,5 +101,15 @@
     "vite-plugin-killer-instincts": "^1.0.0",
     "vitest": "^4.1.9",
     "wrangler": "^4.100.0"
+  },
+  "simple-git-hooks": {
+    "pre-commit": "pnpm exec lint-staged"
+  },
+  "lint-staged": {
+    "*.{js,jsx,ts,tsx,cjs,mjs,cts,mts}": [
+      "eslint --fix --no-warn-ignored",
+      "prettier --write"
+    ],
+    "*.{json,md,yml,yaml,css,scss,html}": "prettier --write"
   }
 }
