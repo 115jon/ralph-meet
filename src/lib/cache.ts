@@ -37,43 +37,38 @@ const CACHE_VERSION = "v1";
 
 export const CacheTTL = {
   /** User's server list — moderate change frequency */
-  USER_SERVERS: 300,      // 5 minutes
+  USER_SERVERS: 300, // 5 minutes
   /** Server metadata — rarely changes */
-  SERVER: 600,            // 10 minutes
+  SERVER: 600, // 10 minutes
   /** Server soundboard catalog — low write frequency */
   SERVER_SOUNDBOARD: 300, // 5 minutes
   /** Channel list for a server — rarely changes */
-  SERVER_CHANNELS: 300,   // 5 minutes
+  SERVER_CHANNELS: 300, // 5 minutes
   /** Member list for a server — moderately changes */
-  SERVER_MEMBERS: 120,    // 2 minutes
+  SERVER_MEMBERS: 120, // 2 minutes
   /** User profile data — rarely changes */
-  USER_PROFILE: 600,      // 10 minutes
+  USER_PROFILE: 600, // 10 minutes
   /** Invite code lookup — rarely changes, expires naturally */
-  INVITE: 300,            // 5 minutes
+  INVITE: 300, // 5 minutes
 } as const;
 
 // ── Cache key builders ──────────────────────────────────────────────────
 
 export const CacheKey = {
-  userServers: (userId: string) =>
-    `${CACHE_VERSION}:user:servers:${userId}`,
-  server: (serverId: string) =>
-    `${CACHE_VERSION}:server:${serverId}`,
+  userServers: (userId: string) => `${CACHE_VERSION}:user:servers:${userId}`,
+  server: (serverId: string) => `${CACHE_VERSION}:server:${serverId}`,
   serverSoundboard: (serverId: string) =>
     `${CACHE_VERSION}:server:soundboard:${serverId}`,
   serverChannels: (serverId: string) =>
     `${CACHE_VERSION}:server:channels:${serverId}`,
   serverMembers: (serverId: string) =>
     `${CACHE_VERSION}:server:members:${serverId}`,
-  userProfile: (userId: string) =>
-    `${CACHE_VERSION}:user:${userId}`,
-  invite: (code: string) =>
-    `${CACHE_VERSION}:invite:${code}`,
+  userProfile: (userId: string) => `${CACHE_VERSION}:user:${userId}`,
+  invite: (code: string) => `${CACHE_VERSION}:invite:${code}`,
 } as const;
 
 // ── KV accessor ─────────────────────────────────────────────────────────
 
- 
 function getKV(): any {
   try {
     return env.CACHE;
@@ -110,7 +105,7 @@ export async function cacheGet<T>(key: string): Promise<T | null> {
 export async function cacheSet(
   key: string,
   value: unknown,
-  ttlSeconds: number
+  ttlSeconds: number,
 ): Promise<void> {
   try {
     const kv = getKV();
@@ -174,7 +169,7 @@ export async function cacheDelMany(keys: string[]): Promise<void> {
 export async function cacheFetch<T>(
   key: string,
   ttl: number,
-  fetcher: () => Promise<T>
+  fetcher: () => Promise<T>,
 ): Promise<T> {
   // 1. Try cache
   const cached = await cacheGet<T>(key);
@@ -187,7 +182,7 @@ export async function cacheFetch<T>(
 
   // 3. Populate cache (fire-and-forget to avoid blocking the response)
   // We don't await this — the response goes out immediately
-  cacheSet(key, fresh, ttl).catch(() => { });
+  cacheSet(key, fresh, ttl).catch(() => {});
 
   return fresh;
 }
@@ -208,7 +203,7 @@ export async function cacheStaleWhileRevalidate<T>(
   key: string,
   ttl: number,
   fetcher: () => Promise<T>,
-  ctx?: { waitUntil: (p: Promise<unknown>) => void }
+  ctx?: { waitUntil: (p: Promise<unknown>) => void },
 ): Promise<T> {
   const cached = await cacheGet<T>(key);
 
@@ -218,7 +213,7 @@ export async function cacheStaleWhileRevalidate<T>(
       ctx.waitUntil(
         fetcher()
           .then((fresh) => cacheSet(key, fresh, ttl))
-          .catch(() => { })
+          .catch(() => {}),
       );
     }
     return cached;

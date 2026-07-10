@@ -17,9 +17,24 @@ describe("avatar display metadata", () => {
       crop: { x: 12.35, y: 0, width: 75.56, height: 75.56 },
     });
 
-    expect(normalizeAvatarDisplay({ version: 2, crop: { x: 0, y: 0, width: 50, height: 50 } })).toBeNull();
-    expect(normalizeAvatarDisplay({ version: 1, crop: { x: -1, y: 0, width: 50, height: 50 } })).toBeNull();
-    expect(normalizeAvatarDisplay({ version: 1, crop: { x: 60, y: 0, width: 50, height: 50 } })).toBeNull();
+    expect(
+      normalizeAvatarDisplay({
+        version: 2,
+        crop: { x: 0, y: 0, width: 50, height: 50 },
+      }),
+    ).toBeNull();
+    expect(
+      normalizeAvatarDisplay({
+        version: 1,
+        crop: { x: -1, y: 0, width: 50, height: 50 },
+      }),
+    ).toBeNull();
+    expect(
+      normalizeAvatarDisplay({
+        version: 1,
+        crop: { x: 60, y: 0, width: 50, height: 50 },
+      }),
+    ).toBeNull();
     expect(normalizeAvatarDisplay("not-json")).toBeNull();
   });
 
@@ -32,13 +47,17 @@ describe("avatar display metadata", () => {
             skuId: "123",
             name: "Spark Ring",
             asset: "a_deadbeef",
-            imageUrl: "https://cdn.discordapp.com/avatar-decoration-presets/a_deadbeef.png?size=240&passthrough=true",
+            imageUrl:
+              "https://cdn.discordapp.com/avatar-decoration-presets/a_deadbeef.png?size=240&passthrough=true",
           },
           profileEffect: {
             skuId: "456",
             name: "Glow",
-            previewUrl: "https://cdn.discordapp.com/media/v1/collectibles-shop/effect/static",
-            effectUrls: ["https://cdn.discordapp.com/media/v1/collectibles-shop/effect/layer"],
+            previewUrl:
+              "https://cdn.discordapp.com/media/v1/collectibles-shop/effect/static",
+            effectUrls: [
+              "https://cdn.discordapp.com/media/v1/collectibles-shop/effect/layer",
+            ],
           },
         },
       }),
@@ -49,13 +68,17 @@ describe("avatar display metadata", () => {
           skuId: "123",
           name: "Spark Ring",
           asset: "a_deadbeef",
-          imageUrl: "https://cdn.discordapp.com/avatar-decoration-presets/a_deadbeef.png?size=240&passthrough=true",
+          imageUrl:
+            "https://cdn.discordapp.com/avatar-decoration-presets/a_deadbeef.png?size=240&passthrough=true",
         },
         profileEffect: {
           skuId: "456",
           name: "Glow",
-          previewUrl: "https://cdn.discordapp.com/media/v1/collectibles-shop/effect/static",
-          effectUrls: ["https://cdn.discordapp.com/media/v1/collectibles-shop/effect/layer"],
+          previewUrl:
+            "https://cdn.discordapp.com/media/v1/collectibles-shop/effect/static",
+          effectUrls: [
+            "https://cdn.discordapp.com/media/v1/collectibles-shop/effect/layer",
+          ],
         },
       },
     });
@@ -84,10 +107,14 @@ describe("avatar display metadata", () => {
             skuId: "789",
             name: "Cycling Lights",
             animationType: 2,
-            previewUrl: "https://cdn.discordapp.com/media/v1/collectibles-shop/effect/preview",
-            thumbnailPreviewSrc: "https://cdn.discordapp.com/media/v1/collectibles-shop/effect/thumb",
-            reducedMotionSrc: "https://cdn.discordapp.com/media/v1/collectibles-shop/effect/reduced",
-            staticFrameSrc: "https://cdn.discordapp.com/media/v1/collectibles-shop/effect/static-frame",
+            previewUrl:
+              "https://cdn.discordapp.com/media/v1/collectibles-shop/effect/preview",
+            thumbnailPreviewSrc:
+              "https://cdn.discordapp.com/media/v1/collectibles-shop/effect/thumb",
+            reducedMotionSrc:
+              "https://cdn.discordapp.com/media/v1/collectibles-shop/effect/reduced",
+            staticFrameSrc:
+              "https://cdn.discordapp.com/media/v1/collectibles-shop/effect/static-frame",
             effects: [
               {
                 src: "https://cdn.discordapp.com/media/v1/collectibles-shop/effect/layer-a",
@@ -126,10 +153,14 @@ describe("avatar display metadata", () => {
           skuId: "789",
           name: "Cycling Lights",
           animationType: 2,
-          previewUrl: "https://cdn.discordapp.com/media/v1/collectibles-shop/effect/preview",
-          thumbnailPreviewSrc: "https://cdn.discordapp.com/media/v1/collectibles-shop/effect/thumb",
-          reducedMotionSrc: "https://cdn.discordapp.com/media/v1/collectibles-shop/effect/reduced",
-          staticFrameSrc: "https://cdn.discordapp.com/media/v1/collectibles-shop/effect/static-frame",
+          previewUrl:
+            "https://cdn.discordapp.com/media/v1/collectibles-shop/effect/preview",
+          thumbnailPreviewSrc:
+            "https://cdn.discordapp.com/media/v1/collectibles-shop/effect/thumb",
+          reducedMotionSrc:
+            "https://cdn.discordapp.com/media/v1/collectibles-shop/effect/reduced",
+          staticFrameSrc:
+            "https://cdn.discordapp.com/media/v1/collectibles-shop/effect/static-frame",
           effectUrls: [
             "https://cdn.discordapp.com/media/v1/collectibles-shop/effect/layer-a",
             "https://cdn.discordapp.com/media/v1/collectibles-shop/effect/layer-b",
@@ -175,8 +206,10 @@ describe("avatar display metadata", () => {
           nameplate: {
             skuId: "1513664911819931859",
             name: "Buzz Lightyear",
-            staticUrl: "https://cdn.discordapp.com/assets/collectibles/buzzstatic.png",
-            animatedUrl: "https://cdn.discordapp.com/assets/collectibles/buzzasset.webm",
+            staticUrl:
+              "https://cdn.discordapp.com/assets/collectibles/buzzstatic.png",
+            animatedUrl:
+              "https://cdn.discordapp.com/assets/collectibles/buzzasset.webm",
             palette: "violet",
           },
         },
@@ -187,8 +220,10 @@ describe("avatar display metadata", () => {
         nameplate: {
           skuId: "1513664911819931859",
           name: "Buzz Lightyear",
-          staticUrl: "https://cdn.discordapp.com/assets/collectibles/buzzstatic.png",
-          animatedUrl: "https://cdn.discordapp.com/assets/collectibles/buzzasset.webm",
+          staticUrl:
+            "https://cdn.discordapp.com/assets/collectibles/buzzstatic.png",
+          animatedUrl:
+            "https://cdn.discordapp.com/assets/collectibles/buzzasset.webm",
           palette: "violet",
         },
       },

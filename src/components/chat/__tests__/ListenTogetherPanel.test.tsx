@@ -3,7 +3,13 @@
 import { apiGet, apiPost } from "@/lib/api-client";
 import type { ListenTogetherStateSnapshot } from "@/lib/listen-together";
 import { useListenTogetherStore } from "@/stores/useListenTogetherStore";
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ListenTogetherPanel } from "../ListenTogetherPanel";
 
@@ -91,8 +97,14 @@ describe("ListenTogetherPanel", () => {
     expect(screen.getByText("Alice")).toBeInTheDocument();
     expect(screen.getAllByText("Playlist A").length).toBeGreaterThan(0);
     expect(screen.getAllByText("YouTube").length).toBeGreaterThan(0);
-    expect(container.querySelectorAll('img[src="https://img.example/track-1.jpg"]').length).toBeGreaterThanOrEqual(2);
-    expect(container.querySelectorAll('img[src="https://img.example/avatar-1.png"]').length).toBeGreaterThanOrEqual(2);
+    expect(
+      container.querySelectorAll('img[src="https://img.example/track-1.jpg"]')
+        .length,
+    ).toBeGreaterThanOrEqual(2);
+    expect(
+      container.querySelectorAll('img[src="https://img.example/avatar-1.png"]')
+        .length,
+    ).toBeGreaterThanOrEqual(2);
   });
 
   it("advances the displayed progress locally while playback is active", async () => {
@@ -137,7 +149,9 @@ describe("ListenTogetherPanel", () => {
       />,
     );
 
-    const input = screen.getByPlaceholderText("Search or paste YouTube / Spotify links");
+    const input = screen.getByPlaceholderText(
+      "Search or paste YouTube / Spotify links",
+    );
     fireEvent.change(input, { target: { value: "oui" } });
 
     await act(async () => {
@@ -145,7 +159,9 @@ describe("ListenTogetherPanel", () => {
     });
 
     expect(apiGet).toHaveBeenCalledTimes(1);
-    expect(String(vi.mocked(apiGet).mock.calls[0]?.[0] ?? "")).toContain("q=oui");
+    expect(String(vi.mocked(apiGet).mock.calls[0]?.[0] ?? "")).toContain(
+      "q=oui",
+    );
     expect(apiPost).not.toHaveBeenCalled();
   });
 
@@ -168,9 +184,14 @@ describe("ListenTogetherPanel", () => {
       />,
     );
 
-    const input = screen.getByPlaceholderText("Search or paste YouTube / Spotify links");
+    const input = screen.getByPlaceholderText(
+      "Search or paste YouTube / Spotify links",
+    );
     fireEvent.change(input, {
-      target: { value: "https://open.spotify.com/track/3rdhviQpre30wOnZuE3oWu?si=42dbff3a4b6d420d" },
+      target: {
+        value:
+          "https://open.spotify.com/track/3rdhviQpre30wOnZuE3oWu?si=42dbff3a4b6d420d",
+      },
     });
 
     fireEvent.click(screen.getByRole("button", { name: "Resolve & Queue" }));

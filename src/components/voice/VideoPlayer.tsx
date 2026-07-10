@@ -1,4 +1,3 @@
-
 import { cn } from "@/lib/utils";
 import React, { useEffect, useRef } from "react";
 
@@ -15,7 +14,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
   muted,
   className,
   label,
-  isLocal
+  isLocal,
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
 
@@ -27,7 +26,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
       if (video.srcObject !== stream) {
         video.srcObject = stream;
       }
-      video.play().catch(() => { });
+      video.play().catch(() => {});
     } else {
       video.srcObject = null;
     }

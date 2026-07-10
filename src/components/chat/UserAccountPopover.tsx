@@ -6,14 +6,30 @@ import { getAuthAssetUrl } from "@/lib/platform";
 import { resolveProfileTheme } from "@/lib/profile-customization";
 import type { User } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { ChevronLeft, ChevronRight, Copy, Edit2, Plus, User as UserIcon } from "lucide-react";
-import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  Copy,
+  Edit2,
+  Plus,
+  User as UserIcon,
+} from "lucide-react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from "react";
 import { createPortal } from "react-dom";
 
 interface Props {
   user: User;
   onClose: () => void;
-  updateStatus: (status: "online" | "idle" | "dnd" | "offline", custom_status?: string | null) => void;
+  updateStatus: (
+    status: "online" | "idle" | "dnd" | "offline",
+    custom_status?: string | null,
+  ) => void;
   onOpenProfileEditor: () => void;
   anchorEl: HTMLElement;
 }
@@ -29,7 +45,11 @@ const STATUS_OPTIONS = [
   { value: "online" as const, label: "Online", color: "bg-primary" },
   { value: "idle" as const, label: "Idle", color: "bg-warning" },
   { value: "dnd" as const, label: "Do Not Disturb", color: "bg-destructive" },
-  { value: "offline" as const, label: "Invisible", color: "bg-rm-text-muted/40" },
+  {
+    value: "offline" as const,
+    label: "Invisible",
+    color: "bg-rm-text-muted/40",
+  },
 ];
 
 const PROFILE_SURFACE_RATIO = 450 / 880;
@@ -50,12 +70,25 @@ function StatusDot({
   innerClassName?: string;
 }) {
   return (
-    <span className={cn("relative flex items-center justify-center rounded-full", statusColors[status], className)}>
+    <span
+      className={cn(
+        "relative flex items-center justify-center rounded-full",
+        statusColors[status],
+        className,
+      )}
+    >
       {status === "offline" ? (
-        <span className={cn("absolute h-[42%] w-[42%] rounded-full", innerClassName)} />
+        <span
+          className={cn(
+            "absolute h-[42%] w-[42%] rounded-full",
+            innerClassName,
+          )}
+        />
       ) : null}
       {status === "dnd" ? (
-        <span className={cn("absolute h-[18%] w-[55%] rounded-sm", innerClassName)} />
+        <span
+          className={cn("absolute h-[18%] w-[55%] rounded-sm", innerClassName)}
+        />
       ) : null}
     </span>
   );
@@ -83,13 +116,15 @@ function ActionRow({
         ACTION_ROW_CLASS,
         disabled && "cursor-not-allowed opacity-60 hover:bg-transparent",
       )}
-      >
+    >
       <span className="flex h-4 w-4 shrink-0 items-center justify-center text-[color:var(--rm-profile-custom-muted)] group-hover/item:text-[color:var(--rm-profile-custom-text)]">
         {icon}
       </span>
       <span className="truncate">{label}</span>
       {trailing ? (
-        <span className="ml-auto text-[color:var(--rm-profile-custom-muted)] group-hover/item:text-[color:var(--rm-profile-custom-text)]">{trailing}</span>
+        <span className="ml-auto text-[color:var(--rm-profile-custom-muted)] group-hover/item:text-[color:var(--rm-profile-custom-text)]">
+          {trailing}
+        </span>
       ) : null}
     </button>
   );
@@ -104,21 +139,29 @@ export default function UserAccountPopover({
   isClosing,
 }: Props & { isClosing?: boolean }) {
   const popoverRef = useRef<HTMLDivElement>(null);
-  const [dynamicStyle, setDynamicStyle] = useState<CSSProperties>({ opacity: 0 });
+  const [dynamicStyle, setDynamicStyle] = useState<CSSProperties>({
+    opacity: 0,
+  });
   const [showStatusMenu, setShowStatusMenu] = useState(false);
   const [isEditingCustomStatus, setIsEditingCustomStatus] = useState(false);
-  const [customStatusInput, setCustomStatusInput] = useState(user.custom_status || "");
+  const [customStatusInput, setCustomStatusInput] = useState(
+    user.custom_status || "",
+  );
 
   const currentStatus = user.status ?? "online";
   const displayName = user.display_name?.trim() || user.username;
   const profileTheme = resolveProfileTheme(user);
   const profileThemeStyle = profileTheme.variables;
   const currentStatusLabel =
-    STATUS_OPTIONS.find((option) => option.value === currentStatus)?.label ?? "Online";
+    STATUS_OPTIONS.find((option) => option.value === currentStatus)?.label ??
+    "Online";
 
   useEffect(() => {
     if (!isEditingCustomStatus) {
-      const timeout = setTimeout(() => setCustomStatusInput(user.custom_status || ""), 0);
+      const timeout = setTimeout(
+        () => setCustomStatusInput(user.custom_status || ""),
+        0,
+      );
       return () => clearTimeout(timeout);
     }
   }, [user.custom_status, isEditingCustomStatus]);
@@ -152,7 +195,10 @@ export default function UserAccountPopover({
 
       if (isMobile) {
         style.left = Math.max(viewportPadding, (window.innerWidth - width) / 2);
-        style.top = Math.max(viewportPadding, (window.innerHeight - height) / 2);
+        style.top = Math.max(
+          viewportPadding,
+          (window.innerHeight - height) / 2,
+        );
         setDynamicStyle(style);
         return;
       }
@@ -161,11 +207,20 @@ export default function UserAccountPopover({
       let top = rect.top - height - 12;
 
       if (top < viewportPadding) {
-        top = Math.min(window.innerHeight - height - viewportPadding, rect.bottom + 12);
+        top = Math.min(
+          window.innerHeight - height - viewportPadding,
+          rect.bottom + 12,
+        );
       }
 
-      style.left = Math.max(viewportPadding, Math.min(left, window.innerWidth - width - viewportPadding));
-      style.top = Math.max(viewportPadding, Math.min(top, window.innerHeight - height - viewportPadding));
+      style.left = Math.max(
+        viewportPadding,
+        Math.min(left, window.innerWidth - width - viewportPadding),
+      );
+      style.top = Math.max(
+        viewportPadding,
+        Math.min(top, window.innerHeight - height - viewportPadding),
+      );
 
       setDynamicStyle(style);
     };
@@ -241,7 +296,12 @@ export default function UserAccountPopover({
         aria-label="User Account Options"
         tabIndex={-1}
       >
-        <div className="absolute inset-0 z-0" style={{ background: "var(--rm-profile-custom-surface-overlay-strong)" }} />
+        <div
+          className="absolute inset-0 z-0"
+          style={{
+            background: "var(--rm-profile-custom-surface-overlay-strong)",
+          }}
+        />
         <ProfileCollectiblesLayer
           display={user.avatar_display}
           effectOpacity={1}
@@ -251,14 +311,22 @@ export default function UserAccountPopover({
 
         <div className="relative flex h-full flex-col overflow-hidden">
           <div className="flex-1 overflow-y-auto custom-scrollbar">
-            <div className="relative h-[18%] min-h-[118px] overflow-hidden" style={{ background: "var(--rm-profile-custom-banner-fallback)" }}>
+            <div
+              className="relative h-[18%] min-h-[118px] overflow-hidden"
+              style={{ background: "var(--rm-profile-custom-banner-fallback)" }}
+            >
               <ProfileAssetLayer
                 url={user.banner_url}
                 contentType={user.banner_content_type}
                 alt="Profile banner"
                 className="opacity-95"
               />
-              <div className="absolute inset-0" style={{ background: "var(--rm-profile-custom-banner-overlay)" }} />
+              <div
+                className="absolute inset-0"
+                style={{
+                  background: "var(--rm-profile-custom-banner-overlay)",
+                }}
+              />
             </div>
 
             <div className="relative z-20 px-4 pb-4">
@@ -266,7 +334,11 @@ export default function UserAccountPopover({
                 <div className="relative shrink-0">
                   <div className="relative z-30 flex h-[84px] w-[84px] items-center justify-center overflow-visible rounded-full border-[6px] border-rm-bg-elevated bg-[var(--rm-profile-custom-button-bg)] text-2xl font-bold text-[color:var(--rm-profile-custom-button-text)] shadow-[0_18px_46px_rgba(0,0,0,0.42)]">
                     {user.avatar_url ? (
-                      <AvatarImage src={getAuthAssetUrl(user.avatar_url)} alt={displayName} display={user.avatar_display} />
+                      <AvatarImage
+                        src={getAuthAssetUrl(user.avatar_url)}
+                        alt={displayName}
+                        display={user.avatar_display}
+                      />
                     ) : (
                       displayName[0]?.toUpperCase()
                     )}
@@ -287,7 +359,10 @@ export default function UserAccountPopover({
                     aria-label="Edit custom status"
                     onClick={() => setIsEditingCustomStatus(true)}
                   >
-                    <Plus size={14} className="shrink-0 text-[color:var(--rm-profile-custom-muted)]" />
+                    <Plus
+                      size={14}
+                      className="shrink-0 text-[color:var(--rm-profile-custom-muted)]"
+                    />
                     <span className="truncate text-[13px] italic font-medium text-[color:var(--rm-profile-custom-text)]">
                       {user.custom_status || "Today I learned..."}
                     </span>
@@ -300,7 +375,9 @@ export default function UserAccountPopover({
                         className="flex-1 rounded-xl bg-white/10 px-3 py-2 text-[13px] text-[color:var(--rm-profile-custom-text)] outline-none placeholder:text-[color:var(--rm-profile-custom-muted)]"
                         aria-label="Custom status"
                         value={customStatusInput}
-                        onChange={(event) => setCustomStatusInput(event.target.value)}
+                        onChange={(event) =>
+                          setCustomStatusInput(event.target.value)
+                        }
                         onKeyDown={(event) => {
                           if (event.key === "Enter") handleCustomStatusSave();
                           if (event.key === "Escape") {
@@ -326,7 +403,9 @@ export default function UserAccountPopover({
                   backgroundColor={profileTheme.backgroundColor}
                   readableFallbackColor={profileTheme.textColor}
                 />
-                <p className="mt-1 text-[13px] text-[color:var(--rm-profile-custom-muted)]">@{user.username}</p>
+                <p className="mt-1 text-[13px] text-[color:var(--rm-profile-custom-muted)]">
+                  @{user.username}
+                </p>
               </div>
 
               <div className="mt-5 space-y-3">
@@ -341,7 +420,9 @@ export default function UserAccountPopover({
                       >
                         <ChevronLeft size={16} />
                       </button>
-                      <span className="text-xs font-bold uppercase tracking-[0.18em] text-[color:var(--rm-profile-custom-muted)]">Status</span>
+                      <span className="text-xs font-bold uppercase tracking-[0.18em] text-[color:var(--rm-profile-custom-muted)]">
+                        Status
+                      </span>
                     </div>
                     <div className="mx-2 my-1 h-px bg-[color:var(--rm-profile-custom-card-border)]" />
                     {STATUS_OPTIONS.map((option) => (

@@ -12,7 +12,10 @@ import {
 } from "@/lib/native-auth-handoff";
 import { buildAuthRouteUrl } from "@/lib/auth-route-urls";
 import { isTauri } from "@/lib/platform";
-import { getKovaAuthUrl, KOVA_AUTH_PUBLISHABLE_KEY } from "@/lib/kova-auth-config";
+import {
+  getKovaAuthUrl,
+  KOVA_AUTH_PUBLISHABLE_KEY,
+} from "@/lib/kova-auth-config";
 import { SignIn, useAuth } from "@kova/react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { Radio } from "lucide-react";
@@ -58,25 +61,36 @@ function SignInPage() {
 }
 
 function WebSignInPage() {
-  const { redirect_url, kova_auth_code, ralph_auth_code, native_handoff } = Route.useSearch();
+  const { redirect_url, kova_auth_code, ralph_auth_code, native_handoff } =
+    Route.useSearch();
   const { getToken, isLoaded, isSignedIn } = useAuth();
   const navigate = useNavigate();
   const afterSignInUrl = redirect_url || "/chat";
-  const signUpUrl = buildAuthRouteUrl("/sign-up", { redirect_url, native_handoff });
+  const signUpUrl = buildAuthRouteUrl("/sign-up", {
+    redirect_url,
+    native_handoff,
+  });
   const oauthCallbackUrl = isNativeDeepLink(afterSignInUrl)
     ? afterSignInUrl
     : buildWebOauthCallbackUrl(afterSignInUrl);
-  const isNativeHandoff = isNativeDeepLink(afterSignInUrl) || native_handoff === "1";
+  const isNativeHandoff =
+    isNativeDeepLink(afterSignInUrl) || native_handoff === "1";
   const hasAuthTransferCode = !!(kova_auth_code || ralph_auth_code);
   const [suppressStoredBrowserToken] = useState(() => {
     if (isNativeHandoff || !consumeAuthLogoutIntent()) return false;
     clearStoredKovaAuthSessionToken();
     return true;
   });
-  const storedBrowserToken = isNativeHandoff || suppressStoredBrowserToken ? null : getStoredKovaAuthSessionToken();
+  const storedBrowserToken =
+    isNativeHandoff || suppressStoredBrowserToken
+      ? null
+      : getStoredKovaAuthSessionToken();
   const didRedirectRef = useRef(false);
-  const [nativeRedirectTarget, setNativeRedirectTarget] = useState<string | null>(null);
-  const [nativeCookieHandoffChecked, setNativeCookieHandoffChecked] = useState(false);
+  const [nativeRedirectTarget, setNativeRedirectTarget] = useState<
+    string | null
+  >(null);
+  const [nativeCookieHandoffChecked, setNativeCookieHandoffChecked] =
+    useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -100,11 +114,16 @@ function WebSignInPage() {
           tokenLength: token?.length ?? 0,
         });
         if (token) setStoredKovaAuthSessionToken(token);
-        void navigate({ to: afterSignInUrl as any, replace: true } as any)
-          .catch((error) => {
-            log.warn("Router navigation failed; falling back to hard redirect", error);
-            window.location.replace(afterSignInUrl);
-          });
+        void navigate({
+          to: afterSignInUrl as any,
+          replace: true,
+        } as any).catch((error) => {
+          log.warn(
+            "Router navigation failed; falling back to hard redirect",
+            error,
+          );
+          window.location.replace(afterSignInUrl);
+        });
         return;
       }
 
@@ -114,7 +133,12 @@ function WebSignInPage() {
         });
       }
 
-      const target = await withSessionToken(afterSignInUrl, getToken, storedBrowserToken, isNativeHandoff);
+      const target = await withSessionToken(
+        afterSignInUrl,
+        getToken,
+        storedBrowserToken,
+        isNativeHandoff,
+      );
       if (!cancelled) {
         if (didRedirectRef.current) return;
         didRedirectRef.current = true;
@@ -125,7 +149,9 @@ function WebSignInPage() {
           });
           setNativeRedirectTarget(target);
           if (!markNativeRedirectAttempt(target)) {
-            log.info("Native redirect already attempted in this tab; showing fallback button");
+            log.info(
+              "Native redirect already attempted in this tab; showing fallback button",
+            );
             return;
           }
         }
@@ -162,7 +188,12 @@ function WebSignInPage() {
   ]);
 
   useEffect(() => {
-    if (!isNativeHandoff || nativeCookieHandoffChecked || didRedirectRef.current) return;
+    if (
+      !isNativeHandoff ||
+      nativeCookieHandoffChecked ||
+      didRedirectRef.current
+    )
+      return;
 
     let cancelled = false;
 
@@ -226,7 +257,10 @@ function WebSignInPage() {
 
       <main className="relative z-10 flex w-full max-w-[420px] flex-col items-center gap-8">
         {/* Logo */}
-        <Link to="/" className="group flex flex-col items-center gap-4 no-underline outline-none hover:no-underline focus-visible:ring-2 focus-visible:ring-rm-accent/50 focus-visible:ring-offset-2 focus-visible:ring-offset-black rounded-3xl">
+        <Link
+          to="/"
+          className="group flex flex-col items-center gap-4 no-underline outline-none hover:no-underline focus-visible:ring-2 focus-visible:ring-rm-accent/50 focus-visible:ring-offset-2 focus-visible:ring-offset-black rounded-3xl"
+        >
           <div className="relative flex h-20 w-20 items-center justify-center rounded-[1.5rem] bg-rm-bg-elevated/40 border border-rm-border shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] transition-all duration-500 group-hover:scale-105 group-hover:border-rm-accent/50 group-hover:shadow-[0_0_30px_-5px_var(--rm-accent)] animate-[float_4s_ease-in-out_infinite]">
             <div className="absolute inset-0 rounded-[1.5rem] bg-gradient-to-br from-white/5 to-transparent opacity-0 transition-opacity duration-500 group-hover:opacity-100" />
             <Radio className="relative z-10 h-8 w-8 text-rm-accent transition-colors duration-300 group-hover:text-rm-accent-hover" />
@@ -264,9 +298,12 @@ function NativeRedirectPreparing() {
           <Radio className="h-7 w-7 text-rm-accent" />
         </div>
         <div className="space-y-2">
-          <h1 className="text-2xl font-extrabold tracking-tight text-white">Preparing Ralph Meet</h1>
+          <h1 className="text-2xl font-extrabold tracking-tight text-white">
+            Preparing Ralph Meet
+          </h1>
           <p className="text-sm leading-6 text-[var(--rm-text-secondary)]">
-            We are attaching your signed-in Ralph Auth session before opening the desktop app.
+            We are attaching your signed-in Ralph Auth session before opening
+            the desktop app.
           </p>
         </div>
       </main>
@@ -289,14 +326,16 @@ function NativeRedirectFallback({ target }: { target: string }) {
           <Radio className="h-7 w-7 text-rm-accent" />
         </div>
         <div className="space-y-2">
-          <h1 className="text-2xl font-extrabold tracking-tight text-white">Return to Ralph Meet</h1>
+          <h1 className="text-2xl font-extrabold tracking-tight text-white">
+            Return to Ralph Meet
+          </h1>
           <p className="text-sm leading-6 text-[var(--rm-text-secondary)]">
             {hasToken
               ? "Your signed-in session is attached. Use the button below to open the desktop app."
               : "The desktop app link is ready, but no session token was attached yet. The app may open without being signed in."}
           </p>
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--rm-text-muted)]">
-             Auth token: {hasToken ? "attached" : "missing"}
+            Auth token: {hasToken ? "attached" : "missing"}
           </p>
         </div>
         <a
@@ -380,14 +419,22 @@ async function withSessionToken(
   isNativeHandoff: boolean,
 ): Promise<string> {
   log.info("Requesting Ralph Auth session token");
-      const providerToken = isNativeHandoff
-        ? null
-        : storedBrowserToken ?? await withTimeout(getToken(), 2500).catch(() => null);
-  const token = await getAppScopedSessionToken(providerToken, !isNativeHandoff && !!storedBrowserToken);
+  const providerToken = isNativeHandoff
+    ? null
+    : (storedBrowserToken ??
+      (await withTimeout(getToken(), 2500).catch(() => null)));
+  const token = await getAppScopedSessionToken(
+    providerToken,
+    !isNativeHandoff && !!storedBrowserToken,
+  );
   log.info("Token lookup finished", {
     hasToken: !!token,
     tokenLength: token?.length ?? 0,
-    source: storedBrowserToken ? "stored-browser" : providerToken ? "provider" : "cookie",
+    source: storedBrowserToken
+      ? "stored-browser"
+      : providerToken
+        ? "provider"
+        : "cookie",
   });
   if (!token) return target;
 
@@ -417,11 +464,16 @@ function attachSessionToken(target: string, token: string): string {
   return target;
 }
 
-async function getAppScopedSessionToken(providerToken: string | null, clearProviderOnFailure = false): Promise<string | null> {
+async function getAppScopedSessionToken(
+  providerToken: string | null,
+  clearProviderOnFailure = false,
+): Promise<string | null> {
   if (!KOVA_AUTH_PUBLISHABLE_KEY) return providerToken;
 
   const requestSessionToken = async (token: string | null) => {
-    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
     if (token) {
       headers.Authorization = `Bearer ${token}`;
     }
@@ -436,7 +488,9 @@ async function getAppScopedSessionToken(providerToken: string | null, clearProvi
     );
 
     if (!response.ok) {
-      log.warn("Failed to mint app-scoped session token", { status: response.status });
+      log.warn("Failed to mint app-scoped session token", {
+        status: response.status,
+      });
       return null;
     }
 
@@ -465,7 +519,10 @@ async function getAppScopedSessionToken(providerToken: string | null, clearProvi
   return null;
 }
 
-function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T | null> {
+function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+): Promise<T | null> {
   return new Promise((resolve) => {
     const timeout = window.setTimeout(() => resolve(null), timeoutMs);
     promise

@@ -43,7 +43,8 @@ describe("AvatarImage", () => {
               skuId: "decor-1",
               name: "Halo",
               asset: "halo",
-              imageUrl: "https://cdn.discordapp.com/avatar-decoration-presets/halo.png",
+              imageUrl:
+                "https://cdn.discordapp.com/avatar-decoration-presets/halo.png",
             },
           },
         }}

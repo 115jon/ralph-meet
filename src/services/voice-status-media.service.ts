@@ -4,7 +4,10 @@ import {
   buildVoiceStatusMediaAsset,
   buildVoiceStatusMediaStorageKey,
 } from "@/lib/voice-status-media";
-import type { VoiceChannelStatusMedia, VoiceChannelStatusMediaAsset } from "@/lib/types";
+import type {
+  VoiceChannelStatusMedia,
+  VoiceChannelStatusMediaAsset,
+} from "@/lib/types";
 
 type VoiceStatusMediaAssetRow = {
   id: string;
@@ -20,7 +23,9 @@ type VoiceStatusMediaAssetRow = {
   created_at: string;
 };
 
-function mapVoiceStatusMediaAsset(row: VoiceStatusMediaAssetRow): VoiceChannelStatusMediaAsset {
+function mapVoiceStatusMediaAsset(
+  row: VoiceStatusMediaAssetRow,
+): VoiceChannelStatusMediaAsset {
   return buildVoiceStatusMediaAsset({
     id: row.id,
     server_id: row.server_id,
@@ -54,10 +59,13 @@ export async function createVoiceStatusMediaAsset(
 ): Promise<VoiceChannelStatusMediaAsset & { fileKey: string }> {
   const id = input.assetId ?? genId();
   const createdAt = input.createdAt ?? new Date().toISOString();
-  const fileKey = input.fileKey ?? buildVoiceStatusMediaStorageKey(input.serverId, id, input.filename);
+  const fileKey =
+    input.fileKey ??
+    buildVoiceStatusMediaStorageKey(input.serverId, id, input.filename);
 
-  await db.prepare(
-    `INSERT INTO voice_status_media_assets (
+  await db
+    .prepare(
+      `INSERT INTO voice_status_media_assets (
       id,
       server_id,
       channel_id,
@@ -69,20 +77,22 @@ export async function createVoiceStatusMediaAsset(
       preview_height,
       size_bytes,
       created_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-  ).bind(
-    id,
-    input.serverId,
-    input.channelId,
-    input.userId,
-    input.filename,
-    fileKey,
-    input.contentType,
-    Math.max(1, Math.round(input.previewWidth)),
-    Math.max(1, Math.round(input.previewHeight)),
-    input.sizeBytes,
-    createdAt,
-  ).run();
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    )
+    .bind(
+      id,
+      input.serverId,
+      input.channelId,
+      input.userId,
+      input.filename,
+      fileKey,
+      input.contentType,
+      Math.max(1, Math.round(input.previewWidth)),
+      Math.max(1, Math.round(input.previewHeight)),
+      input.sizeBytes,
+      createdAt,
+    )
+    .run();
 
   return {
     ...buildVoiceStatusMediaAsset({
@@ -107,8 +117,9 @@ export async function listRecentVoiceStatusMediaAssets(
   serverId: string,
   limit: number,
 ): Promise<VoiceChannelStatusMediaAsset[]> {
-  const { results } = await db.prepare(
-    `SELECT
+  const { results } = await db
+    .prepare(
+      `SELECT
       id,
       server_id,
       channel_id,
@@ -123,18 +134,23 @@ export async function listRecentVoiceStatusMediaAssets(
      FROM voice_status_media_assets
      WHERE server_id = ?
      ORDER BY created_at DESC
-     LIMIT ?`
-  ).bind(serverId, limit).all();
+     LIMIT ?`,
+    )
+    .bind(serverId, limit)
+    .all();
 
-  return ((results ?? []) as VoiceStatusMediaAssetRow[]).map(mapVoiceStatusMediaAsset);
+  return ((results ?? []) as VoiceStatusMediaAssetRow[]).map(
+    mapVoiceStatusMediaAsset,
+  );
 }
 
 export async function getVoiceStatusMediaAssetById(
   db: D1Database,
   assetId: string,
 ): Promise<(VoiceChannelStatusMediaAsset & { fileKey: string }) | null> {
-  const row = await db.prepare(
-    `SELECT
+  const row = await db
+    .prepare(
+      `SELECT
       id,
       server_id,
       channel_id,
@@ -147,8 +163,10 @@ export async function getVoiceStatusMediaAssetById(
       size_bytes,
       created_at
      FROM voice_status_media_assets
-     WHERE id = ?`
-  ).bind(assetId).first<VoiceStatusMediaAssetRow>();
+     WHERE id = ?`,
+    )
+    .bind(assetId)
+    .first<VoiceStatusMediaAssetRow>();
 
   if (!row) return null;
 
@@ -162,8 +180,9 @@ export async function getVoiceStatusMediaAssetByFileKey(
   db: D1Database,
   fileKey: string,
 ): Promise<(VoiceChannelStatusMediaAsset & { fileKey: string }) | null> {
-  const row = await db.prepare(
-    `SELECT
+  const row = await db
+    .prepare(
+      `SELECT
       id,
       server_id,
       channel_id,
@@ -176,8 +195,10 @@ export async function getVoiceStatusMediaAssetByFileKey(
       size_bytes,
       created_at
      FROM voice_status_media_assets
-     WHERE file_key = ?`
-  ).bind(fileKey).first<VoiceStatusMediaAssetRow>();
+     WHERE file_key = ?`,
+    )
+    .bind(fileKey)
+    .first<VoiceStatusMediaAssetRow>();
 
   if (!row) return null;
 

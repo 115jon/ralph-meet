@@ -36,7 +36,11 @@ function round(value: number): number {
   return Math.round(value * 100) / 100;
 }
 
-function getBaseScale(naturalWidth: number, naturalHeight: number, viewportSize: number) {
+function getBaseScale(
+  naturalWidth: number,
+  naturalHeight: number,
+  viewportSize: number,
+) {
   return Math.max(viewportSize / naturalWidth, viewportSize / naturalHeight);
 }
 
@@ -63,7 +67,12 @@ function clampOffset(
   viewportSize: number,
   zoom: number,
 ) {
-  const bounds = getOffsetBounds(naturalWidth, naturalHeight, viewportSize, zoom);
+  const bounds = getOffsetBounds(
+    naturalWidth,
+    naturalHeight,
+    viewportSize,
+    zoom,
+  );
   return {
     x: clamp(offset.x, -bounds.x, bounds.x),
     y: clamp(offset.y, -bounds.y, bounds.y),
@@ -104,8 +113,13 @@ function viewportFromDisplay(
 ) {
   const cropWidthPx = (display.crop.width / 100) * naturalWidth;
   const scale = viewportSize / cropWidthPx;
-  const zoom = clamp(scale / getBaseScale(naturalWidth, naturalHeight, viewportSize), MIN_ZOOM, MAX_ZOOM);
-  const actualScale = getBaseScale(naturalWidth, naturalHeight, viewportSize) * zoom;
+  const zoom = clamp(
+    scale / getBaseScale(naturalWidth, naturalHeight, viewportSize),
+    MIN_ZOOM,
+    MAX_ZOOM,
+  );
+  const actualScale =
+    getBaseScale(naturalWidth, naturalHeight, viewportSize) * zoom;
   const displayedWidth = naturalWidth * actualScale;
   const displayedHeight = naturalHeight * actualScale;
   const desiredLeft = -((display.crop.x / 100) * naturalWidth * actualScale);
@@ -134,9 +148,18 @@ export function AvatarFrameEditor({
   onConfirm,
 }: AvatarFrameEditorProps) {
   const viewportRef = useRef<HTMLDivElement>(null);
-  const dragRef = useRef<{ pointerId: number; startX: number; startY: number; offsetX: number; offsetY: number } | null>(null);
+  const dragRef = useRef<{
+    pointerId: number;
+    startX: number;
+    startY: number;
+    offsetX: number;
+    offsetY: number;
+  } | null>(null);
   const [viewportSize, setViewportSize] = useState(DEFAULT_VIEWPORT_SIZE);
-  const [naturalSize, setNaturalSize] = useState<{ width: number; height: number } | null>(null);
+  const [naturalSize, setNaturalSize] = useState<{
+    width: number;
+    height: number;
+  } | null>(null);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(MIN_ZOOM);
   const [didApplyInitial, setDidApplyInitial] = useState(false);
@@ -187,12 +210,19 @@ export function AvatarFrameEditor({
 
   const currentDisplay = useMemo(() => {
     if (!naturalSize) return null;
-    return displayFromViewport(naturalSize.width, naturalSize.height, viewportSize, zoom, offset);
+    return displayFromViewport(
+      naturalSize.width,
+      naturalSize.height,
+      viewportSize,
+      zoom,
+      offset,
+    );
   }, [naturalSize, offset, viewportSize, zoom]);
 
   const previewStyle = useMemo(() => {
     if (!naturalSize) return undefined;
-    const scale = getBaseScale(naturalSize.width, naturalSize.height, viewportSize) * zoom;
+    const scale =
+      getBaseScale(naturalSize.width, naturalSize.height, viewportSize) * zoom;
     return {
       width: naturalSize.width * scale,
       height: naturalSize.height * scale,
@@ -204,7 +234,15 @@ export function AvatarFrameEditor({
     if (!naturalSize) return;
     const nextZoom = clamp(value, MIN_ZOOM, MAX_ZOOM);
     setZoom(nextZoom);
-    setOffset((current) => clampOffset(current, naturalSize.width, naturalSize.height, viewportSize, nextZoom));
+    setOffset((current) =>
+      clampOffset(
+        current,
+        naturalSize.width,
+        naturalSize.height,
+        viewportSize,
+        nextZoom,
+      ),
+    );
   };
 
   const reset = () => {
@@ -277,7 +315,10 @@ export function AvatarFrameEditor({
               <Camera size={16} />
             </div>
             <div className="min-w-0">
-              <h2 id="avatar-frame-title" className="truncate text-sm font-bold text-rm-text">
+              <h2
+                id="avatar-frame-title"
+                className="truncate text-sm font-bold text-rm-text"
+              >
                 Frame avatar
               </h2>
               <p className="text-xs text-rm-text-muted">
@@ -335,7 +376,9 @@ export function AvatarFrameEditor({
               max={MAX_ZOOM}
               step={0.01}
               value={zoom}
-              onChange={(event) => updateZoom(Number(event.currentTarget.value))}
+              onChange={(event) =>
+                updateZoom(Number(event.currentTarget.value))
+              }
               className="h-2 flex-1 accent-primary"
               aria-label="Avatar zoom"
             />
@@ -354,9 +397,15 @@ export function AvatarFrameEditor({
             </Button>
             {currentDisplay && (
               <div className="flex items-center gap-2">
-                <span className="text-xs font-semibold text-rm-text-muted">Preview</span>
+                <span className="text-xs font-semibold text-rm-text-muted">
+                  Preview
+                </span>
                 <div className="h-10 w-10 overflow-hidden rounded-full bg-primary text-xs font-bold text-primary-foreground">
-                  <AvatarImage src={image.src} alt={`${displayName} preview`} display={currentDisplay} />
+                  <AvatarImage
+                    src={image.src}
+                    alt={`${displayName} preview`}
+                    display={currentDisplay}
+                  />
                 </div>
               </div>
             )}
@@ -375,7 +424,10 @@ export function AvatarFrameEditor({
           <Button
             type="button"
             disabled={!currentDisplay}
-            className={cn("bg-primary text-primary-foreground hover:brightness-110", !currentDisplay && "opacity-50")}
+            className={cn(
+              "bg-primary text-primary-foreground hover:brightness-110",
+              !currentDisplay && "opacity-50",
+            )}
             onClick={handleConfirm}
           >
             <Check size={16} />

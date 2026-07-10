@@ -156,7 +156,7 @@ describe("formatMessageRow", () => {
       rawMessageRow(),
       USER_ID,
       reactions,
-      attachments
+      attachments,
     );
 
     expect(result.id).toBe("msg_1");
@@ -196,7 +196,7 @@ describe("formatMessageRow", () => {
           },
           attachment_count: 2,
         },
-      }
+      },
     );
 
     expect(result.attachment_count).toBe(2);
@@ -208,7 +208,7 @@ describe("formatMessageRow", () => {
       rawMessageRow({ is_pinned: 1 }),
       USER_ID,
       {},
-      {}
+      {},
     );
     expect(pinned.is_pinned).toBe(true);
 
@@ -216,7 +216,7 @@ describe("formatMessageRow", () => {
       rawMessageRow({ is_pinned: 0 }),
       USER_ID,
       {},
-      {}
+      {},
     );
     expect(unpinned.is_pinned).toBe(false);
   });
@@ -237,7 +237,7 @@ describe("addReaction", () => {
       CHANNEL_ID,
       USER_ID,
       "msg_1",
-      "👍"
+      "👍",
     );
 
     db.assertCalled(/INSERT INTO message_reactions/);
@@ -266,7 +266,7 @@ describe("removeReaction", () => {
       CHANNEL_ID,
       USER_ID,
       "msg_1",
-      "👍"
+      "👍",
     );
 
     db.assertCalled(/DELETE FROM message_reactions/);
@@ -319,7 +319,7 @@ describe("pinMessage", () => {
 
   it("throws 404 when message not found", async () => {
     await expect(
-      pinMessage(db as any, CHANNEL_ID, "nonexistent")
+      pinMessage(db as any, CHANNEL_ID, "nonexistent"),
     ).rejects.toHaveProperty("status", 404);
   });
 
@@ -332,7 +332,7 @@ describe("pinMessage", () => {
     db.mockQuery("COUNT(*) as count", { results: [{ count: 50 }] });
 
     await expect(
-      pinMessage(db as any, CHANNEL_ID, "msg_1")
+      pinMessage(db as any, CHANNEL_ID, "msg_1"),
     ).rejects.toHaveProperty("status", 400);
   });
 });

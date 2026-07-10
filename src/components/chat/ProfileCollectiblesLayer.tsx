@@ -9,7 +9,14 @@ import {
   getProfileEffectPlaybackSnapshot,
 } from "@/lib/profile-effect-playback";
 import { cn } from "@/lib/utils";
-import { startTransition, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import {
+  startTransition,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react";
 
 interface ProfileCollectiblesLayerProps {
   display?: AvatarDisplay | string | null;
@@ -33,7 +40,11 @@ function usePrefersReducedMotion() {
   const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
 
   useEffect(() => {
-    if (typeof window === "undefined" || typeof window.matchMedia !== "function") return;
+    if (
+      typeof window === "undefined" ||
+      typeof window.matchMedia !== "function"
+    )
+      return;
 
     const mediaQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
     const update = () => setPrefersReducedMotion(mediaQuery.matches);
@@ -80,7 +91,10 @@ function inferMediaKind(url: string, preferredKind: MediaKind): MediaKind {
 }
 
 function buildMediaClassName(fit: "contain" | "cover") {
-  return cn("pointer-events-none absolute", fit === "cover" ? "object-cover" : "object-contain");
+  return cn(
+    "pointer-events-none absolute",
+    fit === "cover" ? "object-cover" : "object-contain",
+  );
 }
 
 function formatStagePercent(value: number, max: number) {
@@ -101,16 +115,30 @@ function buildLayerMediaStyle(
     };
   },
 ): CSSProperties {
-  const hasExplicitBounds = Boolean(layer?.position || layer?.width != null || layer?.height != null);
+  const hasExplicitBounds = Boolean(
+    layer?.position || layer?.width != null || layer?.height != null,
+  );
 
   return {
-    left: layer?.position ? formatStagePercent(layer.position.x, PROFILE_EFFECT_STAGE_WIDTH) : 0,
-    top: layer?.position ? formatStagePercent(layer.position.y, PROFILE_EFFECT_STAGE_HEIGHT) : 0,
-    width: layer?.width ? formatStagePercent(layer.width, PROFILE_EFFECT_STAGE_WIDTH) : "100%",
-    height: layer?.height ? formatStagePercent(layer.height, PROFILE_EFFECT_STAGE_HEIGHT) : "100%",
+    left: layer?.position
+      ? formatStagePercent(layer.position.x, PROFILE_EFFECT_STAGE_WIDTH)
+      : 0,
+    top: layer?.position
+      ? formatStagePercent(layer.position.y, PROFILE_EFFECT_STAGE_HEIGHT)
+      : 0,
+    width: layer?.width
+      ? formatStagePercent(layer.width, PROFILE_EFFECT_STAGE_WIDTH)
+      : "100%",
+    height: layer?.height
+      ? formatStagePercent(layer.height, PROFILE_EFFECT_STAGE_HEIGHT)
+      : "100%",
     opacity: effectOpacity,
     mixBlendMode: blendMode,
-    objectFit: hasExplicitBounds ? "fill" : fit === "cover" ? "cover" : "contain",
+    objectFit: hasExplicitBounds
+      ? "fill"
+      : fit === "cover"
+        ? "cover"
+        : "contain",
     zIndex,
   };
 }
@@ -146,9 +174,10 @@ function EffectVideo({
 
       if (desiredTime > 0) {
         try {
-          const maxTime = Number.isFinite(video.duration) && video.duration > 0
-            ? Math.max(0, video.duration - 0.05)
-            : desiredTime;
+          const maxTime =
+            Number.isFinite(video.duration) && video.duration > 0
+              ? Math.max(0, video.duration - 0.05)
+              : desiredTime;
           const targetTime = Math.min(desiredTime, maxTime);
           if (Math.abs(video.currentTime - targetTime) > 0.2) {
             video.currentTime = targetTime;
@@ -216,7 +245,10 @@ function EffectMedia({
   activeOffsetMs?: number;
   loop?: boolean;
 }) {
-  const guessedKind = useMemo(() => inferMediaKind(src, preferredKind), [preferredKind, src]);
+  const guessedKind = useMemo(
+    () => inferMediaKind(src, preferredKind),
+    [preferredKind, src],
+  );
   const [kind, setKind] = useState<MediaKind>(() => guessedKind);
   const [hasRetried, setHasRetried] = useState(false);
 
@@ -286,24 +318,35 @@ export function ProfileCollectiblesLayer({
 }: ProfileCollectiblesLayerProps) {
   const prefersReducedMotion = usePrefersReducedMotion();
   const effect = useMemo(() => getProfileEffect(display), [display]);
-  const effectLayers = useMemo(() => getProfileEffectLayers(display), [display]);
+  const effectLayers = useMemo(
+    () => getProfileEffectLayers(display),
+    [display],
+  );
   const frame = useMemo(() => getProfileFrame(display), [display]);
   const timelineKey = useMemo(() => buildTimelineKey(display), [display]);
   const timelineStartRef = useRef(0);
   const [elapsedMs, setElapsedMs] = useState(0);
   const [playbackSeed, setPlaybackSeed] = useState(0);
 
-  const shouldAnimateLayers = playAnimation && !prefersReducedMotion && effectLayers.length > 0;
+  const shouldAnimateLayers =
+    playAnimation && !prefersReducedMotion && effectLayers.length > 0;
   const fallbackAsset = useMemo(
-    () => getProfileEffectFallbackAsset(effect, { playAnimation, prefersReducedMotion }),
+    () =>
+      getProfileEffectFallbackAsset(effect, {
+        playAnimation,
+        prefersReducedMotion,
+      }),
     [effect, playAnimation, prefersReducedMotion],
   );
   const playbackSnapshot = useMemo(
-    () => (
+    () =>
       shouldAnimateLayers
-        ? getProfileEffectPlaybackSnapshot(effectLayers, elapsedMs, playbackSeed)
-        : { activeLayers: [], renderedLayers: [], nextTransitionMs: null }
-    ),
+        ? getProfileEffectPlaybackSnapshot(
+            effectLayers,
+            elapsedMs,
+            playbackSeed,
+          )
+        : { activeLayers: [], renderedLayers: [], nextTransitionMs: null },
     [effectLayers, elapsedMs, playbackSeed, shouldAnimateLayers],
   );
 
@@ -316,7 +359,8 @@ export function ProfileCollectiblesLayer({
       return;
     }
 
-    const now = typeof performance !== "undefined" ? performance.now() : Date.now();
+    const now =
+      typeof performance !== "undefined" ? performance.now() : Date.now();
     timelineStartRef.current = now;
     startTransition(() => {
       setPlaybackSeed(Math.max(1, Math.round(now * 1000)));
@@ -328,13 +372,20 @@ export function ProfileCollectiblesLayer({
     if (!shouldAnimateLayers) return;
     if (playbackSnapshot.nextTransitionMs == null) return;
 
-    const now = typeof performance !== "undefined" ? performance.now() : Date.now();
+    const now =
+      typeof performance !== "undefined" ? performance.now() : Date.now();
     const currentElapsedMs = Math.max(0, now - timelineStartRef.current);
-    const delayMs = Math.max(16, Math.ceil(playbackSnapshot.nextTransitionMs - currentElapsedMs));
+    const delayMs = Math.max(
+      16,
+      Math.ceil(playbackSnapshot.nextTransitionMs - currentElapsedMs),
+    );
 
     const timer = window.setTimeout(() => {
-      const tickNow = typeof performance !== "undefined" ? performance.now() : Date.now();
-      startTransition(() => setElapsedMs(Math.max(0, tickNow - timelineStartRef.current)));
+      const tickNow =
+        typeof performance !== "undefined" ? performance.now() : Date.now();
+      startTransition(() =>
+        setElapsedMs(Math.max(0, tickNow - timelineStartRef.current)),
+      );
     }, delayMs);
 
     return () => window.clearTimeout(timer);
@@ -344,8 +395,11 @@ export function ProfileCollectiblesLayer({
     if (!shouldAnimateLayers || typeof document === "undefined") return;
 
     const sync = () => {
-      const now = typeof performance !== "undefined" ? performance.now() : Date.now();
-      startTransition(() => setElapsedMs(Math.max(0, now - timelineStartRef.current)));
+      const now =
+        typeof performance !== "undefined" ? performance.now() : Date.now();
+      startTransition(() =>
+        setElapsedMs(Math.max(0, now - timelineStartRef.current)),
+      );
     };
 
     document.addEventListener("visibilitychange", sync);
@@ -359,7 +413,13 @@ export function ProfileCollectiblesLayer({
   if (!fallbackAsset.src && !effectLayers.length && !frame) return null;
 
   return (
-    <div className={cn("pointer-events-none absolute inset-0 overflow-hidden", className)} aria-hidden="true">
+    <div
+      className={cn(
+        "pointer-events-none absolute inset-0 overflow-hidden",
+        className,
+      )}
+      aria-hidden="true"
+    >
       {!shouldAnimateLayers && fallbackAsset.src ? (
         <EffectMedia
           key={`fallback:${fallbackAsset.kind}:${fallbackAsset.src}`}
@@ -367,7 +427,11 @@ export function ProfileCollectiblesLayer({
           fit={fit}
           active={playAnimation && !prefersReducedMotion}
           preferredKind={fallbackAsset.kind}
-          loop={playAnimation && !prefersReducedMotion && fallbackAsset.kind === "video"}
+          loop={
+            playAnimation &&
+            !prefersReducedMotion &&
+            fallbackAsset.kind === "video"
+          }
           style={buildLayerMediaStyle(fit, effectOpacity, blendMode)}
         />
       ) : null}
@@ -381,7 +445,11 @@ export function ProfileCollectiblesLayer({
               active={state.active}
               preferredKind="video"
               activeOffsetMs={state.activeOffsetMs}
-              loop={state.layer.loop === true && (state.layer.duration == null || !Number.isFinite(state.layer.duration))}
+              loop={
+                state.layer.loop === true &&
+                (state.layer.duration == null ||
+                  !Number.isFinite(state.layer.duration))
+              }
               style={{
                 ...buildLayerMediaStyle(
                   fit,

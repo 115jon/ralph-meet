@@ -1,10 +1,16 @@
-import { VoiceOpcode, type IceServer, type ServerMessage, type TrackInfo, type VoiceState } from "@/lib/types";
+import {
+  VoiceOpcode,
+  type IceServer,
+  type ServerMessage,
+  type TrackInfo,
+  type VoiceState,
+} from "@/lib/types";
 import { fetchSocketProtocols } from "@/lib/voice/socket-ticket-client";
 import type { SharedSpatialAudioState } from "@/lib/voice/spatial-audio";
 import { BaseGateway, type BaseGatewayEvents } from "./base-gateway";
 
 export interface RoomGatewayEvents extends BaseGatewayEvents {
-  "ready": {
+  ready: {
     participantId: string;
     sessionId: string;
     iceServers: IceServer[];
@@ -13,13 +19,32 @@ export interface RoomGatewayEvents extends BaseGatewayEvents {
     participants: VoiceState[];
     spatialAudioState?: SharedSpatialAudioState;
   };
-  "resumed": { voiceToken?: string; iceServers?: IceServer[]; participants?: VoiceState[]; spatialAudioState?: SharedSpatialAudioState };
+  resumed: {
+    voiceToken?: string;
+    iceServers?: IceServer[];
+    participants?: VoiceState[];
+    spatialAudioState?: SharedSpatialAudioState;
+  };
   "participant-joined": { participant: any };
   "participant-left": { participantId: string };
-  "voice-state-update": { participant: any; action: string; spatialAudioState?: SharedSpatialAudioState };
-  "speaking": { participantId: string; speaking: number };
-  "profile-update": { participantId: string; name: string; username?: string; displayName?: string | null; avatarUrl?: string; avatarDisplay?: import("@/lib/avatar-display").AvatarDisplay | string | null };
-  "error": { message: string, code?: number };
+  "voice-state-update": {
+    participant: any;
+    action: string;
+    spatialAudioState?: SharedSpatialAudioState;
+  };
+  speaking: { participantId: string; speaking: number };
+  "profile-update": {
+    participantId: string;
+    name: string;
+    username?: string;
+    displayName?: string | null;
+    avatarUrl?: string;
+    avatarDisplay?:
+      | import("@/lib/avatar-display").AvatarDisplay
+      | string
+      | null;
+  };
+  error: { message: string; code?: number };
 }
 
 export interface ConnectOptions {
@@ -61,22 +86,30 @@ export class RoomGateway extends BaseGateway<RoomGatewayEvents> {
     this.connecting = true;
     const requestGeneration = ++this.connectionRequestGeneration;
     try {
-      const audience = this.options.roomSlug === "global-gateway" ? "global" : "room";
+      const audience =
+        this.options.roomSlug === "global-gateway" ? "global" : "room";
       const protocols = await fetchSocketProtocols({
         audience,
         channelId: this.options.channelId,
         roomSlug: this.options.roomSlug,
         serverId: this.options.serverId,
       });
-      if (this.isLeaving || requestGeneration !== this.connectionRequestGeneration) return;
-      const path = audience === "global"
-        ? "/api/gateway"
-        : `/api/channels/${this.options.roomSlug}/ws?v=1`;
+      if (
+        this.isLeaving ||
+        requestGeneration !== this.connectionRequestGeneration
+      )
+        return;
+      const path =
+        audience === "global"
+          ? "/api/gateway"
+          : `/api/channels/${this.options.roomSlug}/ws?v=1`;
       const url = this.options.wsUrlGenerator(path);
       super.connect(url, resetReconnectAttempt, protocols);
     } catch (error) {
       this.log.error("Failed to open room socket", error);
-      this.emit("error", { message: "Could not open room socket" } as RoomGatewayEvents["error"]);
+      this.emit("error", {
+        message: "Could not open room socket",
+      } as RoomGatewayEvents["error"]);
       this.scheduleReconnect();
     } finally {
       this.connecting = false;
@@ -113,22 +146,28 @@ export class RoomGateway extends BaseGateway<RoomGatewayEvents> {
 
         if (this.sessionId && this.participantId) {
           this.log.info(`Attempting resume for session ${this.participantId}`);
-          this.send({
-            op: VoiceOpcode.Resume,
-            d: { session_id: this.participantId, seq_ack: this.lastSeqAck },
-          }, true);
-        } else {
-          this.send({
-            op: VoiceOpcode.Identify,
-            d: {
-              name: this.options?.name || "Guest",
-              username: this.options?.username,
-              display_name: this.options?.displayName,
-              avatar_url: this.options?.avatarUrl,
-              avatar_display: this.options?.avatarDisplay,
-              clerk_user_id: this.options?.clerkUserId,
+          this.send(
+            {
+              op: VoiceOpcode.Resume,
+              d: { session_id: this.participantId, seq_ack: this.lastSeqAck },
             },
-          }, true);
+            true,
+          );
+        } else {
+          this.send(
+            {
+              op: VoiceOpcode.Identify,
+              d: {
+                name: this.options?.name || "Guest",
+                username: this.options?.username,
+                display_name: this.options?.displayName,
+                avatar_url: this.options?.avatarUrl,
+                avatar_display: this.options?.avatarDisplay,
+                clerk_user_id: this.options?.clerkUserId,
+              },
+            },
+            true,
+          );
         }
         break;
       }
@@ -189,9 +228,15 @@ export class RoomGateway extends BaseGateway<RoomGatewayEvents> {
 
       case VoiceOpcode.VoiceStateUpdate: {
         const vsu = msg.d as any;
-        this.emit("voice-state-update", { participant: vsu.participant, action: vsu.action, spatialAudioState: vsu.spatial_audio_state });
-        if (vsu.action === "join") this.emit("participant-joined", { participant: vsu.participant });
-        else if (vsu.action === "leave") this.emit("participant-left", { participantId: vsu.participant.id });
+        this.emit("voice-state-update", {
+          participant: vsu.participant,
+          action: vsu.action,
+          spatialAudioState: vsu.spatial_audio_state,
+        });
+        if (vsu.action === "join")
+          this.emit("participant-joined", { participant: vsu.participant });
+        else if (vsu.action === "leave")
+          this.emit("participant-left", { participantId: vsu.participant.id });
         break;
       }
 
@@ -217,17 +262,20 @@ export class RoomGateway extends BaseGateway<RoomGatewayEvents> {
           this.sessionId = null;
           this.participantId = null;
           this.lastSeqAck = -1;
-          this.send({
-            op: VoiceOpcode.Identify,
-            d: {
-              name: this.options?.name || "Guest",
-              username: this.options?.username,
-              display_name: this.options?.displayName,
-              avatar_url: this.options?.avatarUrl,
-              avatar_display: this.options?.avatarDisplay,
-              clerk_user_id: this.options?.clerkUserId,
+          this.send(
+            {
+              op: VoiceOpcode.Identify,
+              d: {
+                name: this.options?.name || "Guest",
+                username: this.options?.username,
+                display_name: this.options?.displayName,
+                avatar_url: this.options?.avatarUrl,
+                avatar_display: this.options?.avatarDisplay,
+                clerk_user_id: this.options?.clerkUserId,
+              },
             },
-          }, true);
+            true,
+          );
           break;
         }
 

@@ -4,7 +4,10 @@ type DisplayNameSource = {
   name?: string | null;
 };
 
-export function getDisplayName(source?: DisplayNameSource | null, fallback = "Unknown"): string {
+export function getDisplayName(
+  source?: DisplayNameSource | null,
+  fallback = "Unknown",
+): string {
   const displayName = source?.display_name?.trim();
   if (displayName) return displayName;
 
@@ -17,6 +20,9 @@ export function getDisplayName(source?: DisplayNameSource | null, fallback = "Un
   return fallback;
 }
 
-export function getDisplayInitial(source?: DisplayNameSource | null, fallback = "?"): string {
+export function getDisplayInitial(
+  source?: DisplayNameSource | null,
+  fallback = "?",
+): string {
   return getDisplayName(source, fallback).charAt(0).toUpperCase() || fallback;
 }

@@ -220,7 +220,9 @@ function StreamingStatsContent({
       {showFallback && (
         <>
           <Divider className={dividerClass} />
-          <span className="text-amber-600 dark:text-amber-400">{data.fallback_reason}</span>
+          <span className="text-amber-600 dark:text-amber-400">
+            {data.fallback_reason}
+          </span>
         </>
       )}
 
@@ -228,7 +230,10 @@ function StreamingStatsContent({
       {stale && (
         <>
           <Divider className={dividerClass} />
-          <span className="text-amber-600 dark:text-amber-400/80" title="Stats refresh failed — showing last known values">
+          <span
+            className="text-amber-600 dark:text-amber-400/80"
+            title="Stats refresh failed — showing last known values"
+          >
             stale
           </span>
         </>

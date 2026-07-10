@@ -40,7 +40,9 @@ export function resolveVisibleChannelPermissions<T extends { id: string }>(
   }
 
   const roleIds = new Set(userRoles.map((role) => role.id));
-  const overridesByChannel = overrides.reduce<Record<string, ChannelVisibilityOverride[]>>((acc, override) => {
+  const overridesByChannel = overrides.reduce<
+    Record<string, ChannelVisibilityOverride[]>
+  >((acc, override) => {
     if (!acc[override.channel_id]) {
       acc[override.channel_id] = [];
     }
@@ -53,13 +55,19 @@ export function resolveVisibleChannelPermissions<T extends { id: string }>(
     const channelOverrides = overridesByChannel[channel.id] ?? [];
 
     const everyoneOverride = channelOverrides.find(
-      (override) => override.target_type === "role" && override.target_id === everyoneRoleId,
+      (override) =>
+        override.target_type === "role" &&
+        override.target_id === everyoneRoleId,
     );
     const roleOverrides = channelOverrides.filter(
-      (override) => override.target_type === "role" && roleIds.has(override.target_id) && override.target_id !== everyoneRoleId,
+      (override) =>
+        override.target_type === "role" &&
+        roleIds.has(override.target_id) &&
+        override.target_id !== everyoneRoleId,
     );
     const userOverride = channelOverrides.find(
-      (override) => override.target_type === "user" && override.target_id === userId,
+      (override) =>
+        override.target_type === "user" && override.target_id === userId,
     );
 
     if (everyoneOverride) {

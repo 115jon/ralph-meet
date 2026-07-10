@@ -11,19 +11,33 @@ export interface VideoPlaybackAvailabilityRequest {
   isAnimated?: boolean;
 }
 
-type ResolvedVideoPlaybackAvailability = Exclude<VideoPlaybackAvailability, "checking">;
+type ResolvedVideoPlaybackAvailability = Exclude<
+  VideoPlaybackAvailability,
+  "checking"
+>;
 
-const resolvedAvailabilityCache = new Map<string, ResolvedVideoPlaybackAvailability>();
-const pendingAvailabilityChecks = new Map<string, Promise<ResolvedVideoPlaybackAvailability>>();
+const resolvedAvailabilityCache = new Map<
+  string,
+  ResolvedVideoPlaybackAvailability
+>();
+const pendingAvailabilityChecks = new Map<
+  string,
+  Promise<ResolvedVideoPlaybackAvailability>
+>();
 const availabilityListeners = new Map<string, Set<() => void>>();
 
 function isProxyMediaUrl(url: string): boolean {
   try {
     const parsed = new URL(
       url,
-      typeof window !== "undefined" ? window.location.origin : "https://localhost",
+      typeof window !== "undefined"
+        ? window.location.origin
+        : "https://localhost",
     );
-    return parsed.pathname === "/api/proxy-media" || parsed.pathname.endsWith("/api/proxy-media");
+    return (
+      parsed.pathname === "/api/proxy-media" ||
+      parsed.pathname.endsWith("/api/proxy-media")
+    );
   } catch {
     return url.includes("/api/proxy-media?");
   }
@@ -39,8 +53,11 @@ export function shouldProbeVideoPlaybackAvailability(
   return isProxyMediaUrl(request.src);
 }
 
-function getAvailabilityCacheKey(request: VideoPlaybackAvailabilityRequest): string | null {
-  if (!shouldProbeVideoPlaybackAvailability(request) || !request.src) return null;
+function getAvailabilityCacheKey(
+  request: VideoPlaybackAvailabilityRequest,
+): string | null {
+  if (!shouldProbeVideoPlaybackAvailability(request) || !request.src)
+    return null;
   return request.src;
 }
 
@@ -79,8 +96,15 @@ async function probeVideoPlaybackAvailability(
         Range: "bytes=0-0",
       },
     });
-    const contentType = response.headers.get("content-type")?.split(";")[0].trim().toLowerCase() ?? "";
-    return response.ok && contentType.startsWith("video/") ? "playable" : "poster";
+    const contentType =
+      response.headers
+        .get("content-type")
+        ?.split(";")[0]
+        .trim()
+        .toLowerCase() ?? "";
+    return response.ok && contentType.startsWith("video/")
+      ? "playable"
+      : "poster";
   } catch {
     return "poster";
   }
@@ -100,19 +124,20 @@ export async function primeVideoPlaybackAvailability(
 
   notifyAvailabilityListeners(key);
 
-  const check: Promise<ResolvedVideoPlaybackAvailability> = probeVideoPlaybackAvailability(request)
-    .then((availability) => {
-      resolvedAvailabilityCache.set(key, availability);
-      pendingAvailabilityChecks.delete(key);
-      notifyAvailabilityListeners(key);
-      return availability;
-    })
-    .catch(() => {
-      resolvedAvailabilityCache.set(key, "poster");
-      pendingAvailabilityChecks.delete(key);
-      notifyAvailabilityListeners(key);
-      return "poster" as const;
-    });
+  const check: Promise<ResolvedVideoPlaybackAvailability> =
+    probeVideoPlaybackAvailability(request)
+      .then((availability) => {
+        resolvedAvailabilityCache.set(key, availability);
+        pendingAvailabilityChecks.delete(key);
+        notifyAvailabilityListeners(key);
+        return availability;
+      })
+      .catch(() => {
+        resolvedAvailabilityCache.set(key, "poster");
+        pendingAvailabilityChecks.delete(key);
+        notifyAvailabilityListeners(key);
+        return "poster" as const;
+      });
 
   pendingAvailabilityChecks.set(key, check);
   return check;
@@ -132,13 +157,16 @@ function getAvailabilitySnapshot(
 export function useVideoPlaybackAvailability(
   request: VideoPlaybackAvailabilityRequest,
 ): VideoPlaybackAvailability {
-  const cacheKey = useMemo(() => getAvailabilityCacheKey(request), [
-    request.contentType,
-    request.isAnimated,
-    request.posterUrl,
-    request.sourceUrl,
-    request.src,
-  ]);
+  const cacheKey = useMemo(
+    () => getAvailabilityCacheKey(request),
+    [
+      request.contentType,
+      request.isAnimated,
+      request.posterUrl,
+      request.sourceUrl,
+      request.src,
+    ],
+  );
   const [availability, setAvailability] = useState<VideoPlaybackAvailability>(
     () => getAvailabilitySnapshot(request),
   );

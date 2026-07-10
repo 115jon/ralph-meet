@@ -1,9 +1,16 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { normalizePeerSettings, useVoiceSettingsStore } from "./useVoiceSettingsStore";
+import {
+  normalizePeerSettings,
+  useVoiceSettingsStore,
+} from "./useVoiceSettingsStore";
 
 describe("useVoiceSettingsStore peer volume settings", () => {
   beforeEach(() => {
-    useVoiceSettingsStore.setState({ currentUser: null, userSettings: {}, _cache: {} });
+    useVoiceSettingsStore.setState({
+      currentUser: null,
+      userSettings: {},
+      _cache: {},
+    });
   });
 
   it("preserves explicit peer stream volume independently from voice volume", () => {
@@ -12,7 +19,8 @@ describe("useVoiceSettingsStore peer volume settings", () => {
     store.setPeerVolume("user-2", 55);
     store.setPeerStreamVolume("user-2", 25);
 
-    const peer = useVoiceSettingsStore.getState().getSettings("viewer").peerSettings["user-2"];
+    const peer = useVoiceSettingsStore.getState().getSettings("viewer")
+      .peerSettings["user-2"];
     expect(peer.volume).toBe(55);
     expect(peer.streamVolume).toBe(25);
   });
@@ -34,7 +42,9 @@ describe("useVoiceSettingsStore peer volume settings", () => {
       _cache: {},
     });
 
-    expect(useVoiceSettingsStore.getState().getSettings("viewer")).toMatchObject({
+    expect(
+      useVoiceSettingsStore.getState().getSettings("viewer"),
+    ).toMatchObject({
       cameraQuality: "720p30",
       cameraBackground: { type: "none" },
       customCameraBackgrounds: [],
@@ -47,7 +57,9 @@ describe("useVoiceSettingsStore peer volume settings", () => {
 
     store.setScreenShareDefaults({ quality: "1080p60", withAudio: false });
 
-    expect(useVoiceSettingsStore.getState().getSettings("viewer")).toMatchObject({
+    expect(
+      useVoiceSettingsStore.getState().getSettings("viewer"),
+    ).toMatchObject({
       screenShareQuality: "1080p60",
       screenShareWithAudio: false,
     });

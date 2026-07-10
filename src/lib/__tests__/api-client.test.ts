@@ -55,11 +55,14 @@ describe("api-client HTTP failure handling", () => {
 
   it("throws for failed upload responses that only include a message field", async () => {
     vi.mocked(fetch).mockResolvedValueOnce(
-      new Response(JSON.stringify({ status: 500, message: "Upload exploded" }), {
-        status: 500,
-        statusText: "Internal Server Error",
-        headers: { "Content-Type": "application/json" },
-      }),
+      new Response(
+        JSON.stringify({ status: 500, message: "Upload exploded" }),
+        {
+          status: 500,
+          statusText: "Internal Server Error",
+          headers: { "Content-Type": "application/json" },
+        },
+      ),
     );
 
     const formData = new FormData();

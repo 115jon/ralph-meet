@@ -78,7 +78,9 @@ describe("reconnect sound guard", () => {
       makeMessage({ id: "msg-2", author_id: "user-2" }),
     ];
 
-    expect(shouldPlayCurrentChannelMessageSound(previous, next, "user-1")).toBe(true);
+    expect(shouldPlayCurrentChannelMessageSound(previous, next, "user-1")).toBe(
+      true,
+    );
   });
 
   it("does not treat a reconnect replacement as a new live message", () => {
@@ -88,7 +90,9 @@ describe("reconnect sound guard", () => {
       makeMessage({ id: "msg-10", author_id: "user-2" }),
     ];
 
-    expect(shouldPlayCurrentChannelMessageSound(previous, next, "user-1")).toBe(false);
+    expect(shouldPlayCurrentChannelMessageSound(previous, next, "user-1")).toBe(
+      false,
+    );
   });
 
   it("does not play for your own appended messages", () => {
@@ -98,6 +102,8 @@ describe("reconnect sound guard", () => {
       makeMessage({ id: "msg-2", author_id: "user-1" }),
     ];
 
-    expect(shouldPlayCurrentChannelMessageSound(previous, next, "user-1")).toBe(false);
+    expect(shouldPlayCurrentChannelMessageSound(previous, next, "user-1")).toBe(
+      false,
+    );
   });
 });

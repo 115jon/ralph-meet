@@ -1,4 +1,4 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute } from "@tanstack/react-router";
 
 import { apiSuccess, getDB, requireAuth } from "@/lib/api-helpers";
 import { requireChannelAccess } from "@/lib/require-channel-access";
@@ -25,10 +25,10 @@ const GET = async ({ request, params }: any) => {
   return apiSuccess({ threads });
 };
 
-export const Route = createFileRoute('/api/channels/$id/threads')({
+export const Route = createFileRoute("/api/channels/$id/threads")({
   server: {
     handlers: {
       GET,
-    }
-  }
+    },
+  },
 });

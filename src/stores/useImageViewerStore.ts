@@ -1,6 +1,6 @@
-import type { Attachment } from '@/lib/types';
-import type { AvatarDisplay } from '@/lib/avatar-display';
-import { create } from 'zustand';
+import type { Attachment } from "@/lib/types";
+import type { AvatarDisplay } from "@/lib/avatar-display";
+import { create } from "zustand";
 
 export interface ViewerContext {
   username?: string;
@@ -18,7 +18,11 @@ interface ImageViewerState {
   images: Attachment[];
   context?: ViewerContext;
   actions: {
-    open: (images: Attachment[], initialIndex?: number, context?: ViewerContext) => void;
+    open: (
+      images: Attachment[],
+      initialIndex?: number,
+      context?: ViewerContext,
+    ) => void;
     close: () => void;
   };
 }
@@ -29,9 +33,12 @@ export const useImageViewerStore = create<ImageViewerState>((set) => ({
   images: [],
   context: undefined,
   actions: {
-    open: (images, initialIndex = 0, context) => set({ isOpen: true, images, initialIndex, context }),
-    close: () => set({ isOpen: false, images: [], initialIndex: 0, context: undefined }),
+    open: (images, initialIndex = 0, context) =>
+      set({ isOpen: true, images, initialIndex, context }),
+    close: () =>
+      set({ isOpen: false, images: [], initialIndex: 0, context: undefined }),
   },
 }));
 
-export const useImageViewerActions = () => useImageViewerStore((state) => state.actions);
+export const useImageViewerActions = () =>
+  useImageViewerStore((state) => state.actions);

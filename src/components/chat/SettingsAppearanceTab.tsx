@@ -23,7 +23,11 @@ type ThemeChoice = {
 const CLASSIC_THEMES: ThemeChoice[] = [
   { id: "light", label: "Light", previewClass: "bg-[#f2f3f5]" },
   { id: "dark", label: "Midnight", previewClass: "bg-[#0f0f11]" },
-  { id: "system", label: "System", previewClass: "bg-gradient-to-br from-[#0f0f11] to-[#f2f3f5]" },
+  {
+    id: "system",
+    label: "System",
+    previewClass: "bg-gradient-to-br from-[#0f0f11] to-[#f2f3f5]",
+  },
 ];
 
 const COLLAB_THEMES: Array<{
@@ -41,25 +45,52 @@ const COLLAB_THEMES: Array<{
     eyebrow: "Special Collab",
     description: "High-contrast pastel and dark themes featuring Miku artwork.",
     borderClass: "border-[#f872a5]/30",
-    backgroundClass: "bg-gradient-to-br from-[#f872a5]/5 via-[#39c5bb]/5 to-transparent",
+    backgroundClass:
+      "bg-gradient-to-br from-[#f872a5]/5 via-[#39c5bb]/5 to-transparent",
     glowPrimary: "bg-[#39c5bb]/10",
     glowSecondary: "bg-[#f872a5]/10",
     themes: [
-      { id: "miku-light", label: "Light", previewClass: "bg-gradient-to-br from-[#ffffff] via-[#e8f4fd] to-[#f872a5]", badge: "01" },
-      { id: "miku-dark", label: "Dark", previewClass: "bg-gradient-to-br from-[#13111f] via-[#0f0d19] to-[#f872a5]", badge: "01" },
+      {
+        id: "miku-light",
+        label: "Light",
+        previewClass:
+          "bg-gradient-to-br from-[#ffffff] via-[#e8f4fd] to-[#f872a5]",
+        badge: "01",
+      },
+      {
+        id: "miku-dark",
+        label: "Dark",
+        previewClass:
+          "bg-gradient-to-br from-[#13111f] via-[#0f0d19] to-[#f872a5]",
+        badge: "01",
+      },
     ],
   },
   {
     title: "Spider-Man",
     eyebrow: "Special Edition",
-    description: "Sleek red and dark navy themes featuring custom web vector grids.",
+    description:
+      "Sleek red and dark navy themes featuring custom web vector grids.",
     borderClass: "border-[#E50914]/30",
-    backgroundClass: "bg-gradient-to-br from-[#E50914]/5 via-[#1a73e8]/5 to-transparent",
+    backgroundClass:
+      "bg-gradient-to-br from-[#E50914]/5 via-[#1a73e8]/5 to-transparent",
     glowPrimary: "bg-[#E50914]/15",
     glowSecondary: "bg-[#1a73e8]/10",
     themes: [
-      { id: "spiderman-light", label: "Light", previewClass: "bg-gradient-to-br from-[#ffffff] via-[#eef0f6] to-[#E50914]", badge: "WEB" },
-      { id: "spiderman-dark", label: "Dark", previewClass: "bg-gradient-to-br from-[#06050a] via-[#0b0a10] to-[#E50914]", badge: "WEB" },
+      {
+        id: "spiderman-light",
+        label: "Light",
+        previewClass:
+          "bg-gradient-to-br from-[#ffffff] via-[#eef0f6] to-[#E50914]",
+        badge: "WEB",
+      },
+      {
+        id: "spiderman-dark",
+        label: "Dark",
+        previewClass:
+          "bg-gradient-to-br from-[#06050a] via-[#0b0a10] to-[#E50914]",
+        badge: "WEB",
+      },
     ],
   },
 ];
@@ -131,12 +162,20 @@ interface SettingsAppearanceTabProps {
   onOpenPreview?: () => void;
 }
 
-export default function SettingsAppearanceTab({ onOpenPreview }: SettingsAppearanceTabProps) {
-  const { theme, preferences, setAppearanceTheme, setThemeSyncEnabled } = useAppearanceTheme();
+export default function SettingsAppearanceTab({
+  onOpenPreview,
+}: SettingsAppearanceTabProps) {
+  const { theme, preferences, setAppearanceTheme, setThemeSyncEnabled } =
+    useAppearanceTheme();
   const isDesktopApp = isDesktop();
-  const hardwareAcceleration = useDesktopSettingsStore((s) => s.hardwareAcceleration);
-  const updateDesktopSettings = useDesktopSettingsStore((s) => s.updateSettings);
-  const [pendingHardwareAcceleration, setPendingHardwareAcceleration] = useState<boolean | null>(null);
+  const hardwareAcceleration = useDesktopSettingsStore(
+    (s) => s.hardwareAcceleration,
+  );
+  const updateDesktopSettings = useDesktopSettingsStore(
+    (s) => s.updateSettings,
+  );
+  const [pendingHardwareAcceleration, setPendingHardwareAcceleration] =
+    useState<boolean | null>(null);
 
   useEffect(() => {
     if (!isDesktopApp) return;
@@ -144,11 +183,17 @@ export default function SettingsAppearanceTab({ onOpenPreview }: SettingsAppeara
     import("@tauri-apps/api/core")
       .then(({ invoke }) => invoke<boolean>("get_hardware_acceleration"))
       .then((enabled) => {
-        if (!cancelled && typeof enabled === "boolean" && enabled !== hardwareAcceleration) {
+        if (
+          !cancelled &&
+          typeof enabled === "boolean" &&
+          enabled !== hardwareAcceleration
+        ) {
           updateDesktopSettings({ hardwareAcceleration: enabled });
         }
       })
-      .catch((error) => log.warn("Failed to read hardware acceleration setting:", error));
+      .catch((error) =>
+        log.warn("Failed to read hardware acceleration setting:", error),
+      );
     return () => {
       cancelled = true;
     };
@@ -156,10 +201,14 @@ export default function SettingsAppearanceTab({ onOpenPreview }: SettingsAppeara
 
   const confirmHardwareAccelerationChange = async () => {
     if (pendingHardwareAcceleration === null) return;
-    updateDesktopSettings({ hardwareAcceleration: pendingHardwareAcceleration });
+    updateDesktopSettings({
+      hardwareAcceleration: pendingHardwareAcceleration,
+    });
     try {
       const { invoke } = await import("@tauri-apps/api/core");
-      await invoke("set_hardware_acceleration", { enabled: pendingHardwareAcceleration });
+      await invoke("set_hardware_acceleration", {
+        enabled: pendingHardwareAcceleration,
+      });
       await restartDesktopApp();
     } catch (error) {
       log.error("Failed to change hardware acceleration:", error);
@@ -176,9 +225,12 @@ export default function SettingsAppearanceTab({ onOpenPreview }: SettingsAppeara
 
   return (
     <div className="animate-in slide-in-from-right-4 fade-in duration-300">
-      <h1 className="hidden w-full text-2xl font-bold text-rm-text md:block">Appearance</h1>
+      <h1 className="hidden w-full text-2xl font-bold text-rm-text md:block">
+        Appearance
+      </h1>
       <p className="mb-6 hidden w-full text-sm text-rm-text-muted md:block">
-        Customize how Ralph Meet looks across this device and, if you want, across your other devices too.
+        Customize how Ralph Meet looks across this device and, if you want,
+        across your other devices too.
       </p>
 
       <div className="mx-auto w-full max-w-[720px] space-y-8">
@@ -187,7 +239,8 @@ export default function SettingsAppearanceTab({ onOpenPreview }: SettingsAppeara
             <div>
               <h2 className="text-lg font-bold text-rm-text">Theme</h2>
               <p className="mt-1 text-sm text-rm-text-muted">
-                Pick a theme, then preview it against your current chat layout before you commit to browsing with it.
+                Pick a theme, then preview it against your current chat layout
+                before you commit to browsing with it.
               </p>
             </div>
             <button
@@ -214,7 +267,9 @@ export default function SettingsAppearanceTab({ onOpenPreview }: SettingsAppeara
                     active={visibleTheme === choice.id}
                     onClick={() => void setAppearanceTheme(choice.id)}
                   />
-                  <span className="mt-1.5 text-[11px] font-semibold text-rm-text-muted">{choice.label}</span>
+                  <span className="mt-1.5 text-[11px] font-semibold text-rm-text-muted">
+                    {choice.label}
+                  </span>
                 </div>
               ))}
             </div>
@@ -229,14 +284,26 @@ export default function SettingsAppearanceTab({ onOpenPreview }: SettingsAppeara
                 group.backgroundClass,
               )}
             >
-              <div className={cn("pointer-events-none absolute right-0 top-0 -mr-16 -mt-16 h-32 w-32 rounded-full blur-2xl", group.glowPrimary)} />
-              <div className={cn("pointer-events-none absolute bottom-0 right-12 -mb-16 -mr-12 h-32 w-32 rounded-full blur-2xl", group.glowSecondary)} />
+              <div
+                className={cn(
+                  "pointer-events-none absolute right-0 top-0 -mr-16 -mt-16 h-32 w-32 rounded-full blur-2xl",
+                  group.glowPrimary,
+                )}
+              />
+              <div
+                className={cn(
+                  "pointer-events-none absolute bottom-0 right-12 -mb-16 -mr-12 h-32 w-32 rounded-full blur-2xl",
+                  group.glowSecondary,
+                )}
+              />
               <div className="relative flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                 <div className="min-w-0">
                   <span className="mb-1.5 inline-block rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-rm-text-muted">
                     {group.eyebrow}
                   </span>
-                  <h3 className="text-[14px] font-extrabold tracking-wide text-rm-text">{group.title}</h3>
+                  <h3 className="text-[14px] font-extrabold tracking-wide text-rm-text">
+                    {group.title}
+                  </h3>
                   <p className="mt-0.5 max-w-[260px] text-[11px] leading-relaxed text-rm-text-muted">
                     {group.description}
                   </p>
@@ -249,7 +316,9 @@ export default function SettingsAppearanceTab({ onOpenPreview }: SettingsAppeara
                         active={visibleTheme === choice.id}
                         onClick={() => void setAppearanceTheme(choice.id)}
                       />
-                      <span className="mt-1.5 text-[11px] font-semibold text-rm-text-muted">{choice.label}</span>
+                      <span className="mt-1.5 text-[11px] font-semibold text-rm-text-muted">
+                        {choice.label}
+                      </span>
                     </div>
                   ))}
                 </div>
@@ -264,20 +333,26 @@ export default function SettingsAppearanceTab({ onOpenPreview }: SettingsAppeara
             label="Sync theme across my devices"
             description="Store your chosen theme on your account and apply it when you sign in on another device."
             checked={preferences.themeSyncEnabled}
-            onChange={() => void setThemeSyncEnabled(!preferences.themeSyncEnabled)}
+            onChange={() =>
+              void setThemeSyncEnabled(!preferences.themeSyncEnabled)
+            }
           />
         </section>
 
         {isDesktopApp && (
           <section className="border-t border-rm-border pt-6">
-            <h2 className="px-1 text-[12px] font-bold uppercase tracking-wider text-rm-text-muted">Advanced</h2>
+            <h2 className="px-1 text-[12px] font-bold uppercase tracking-wider text-rm-text-muted">
+              Advanced
+            </h2>
             <div className="mt-3 overflow-hidden rounded-xl border border-rm-border bg-rm-bg-surface">
               <SettingsToggleRow
                 icon={<Cpu size={20} />}
                 label="Enable hardware acceleration"
                 description="Uses your GPU to make Ralph Meet run more smoothly. Turn this off if you're experiencing visual glitches or poor performance."
                 checked={hardwareAcceleration}
-                onChange={() => setPendingHardwareAcceleration(!hardwareAcceleration)}
+                onChange={() =>
+                  setPendingHardwareAcceleration(!hardwareAcceleration)
+                }
               />
             </div>
           </section>
@@ -292,7 +367,10 @@ export default function SettingsAppearanceTab({ onOpenPreview }: SettingsAppeara
               className="relative m-0 w-full max-w-[420px] rounded-xl border border-rm-border bg-rm-bg-primary p-5 shadow-2xl outline-none"
               aria-labelledby="hardware-acceleration-title"
             >
-              <h2 id="hardware-acceleration-title" className="text-lg font-bold text-rm-text">
+              <h2
+                id="hardware-acceleration-title"
+                className="text-lg font-bold text-rm-text"
+              >
                 Change Hardware Acceleration
               </h2>
               <p className="mt-2 text-sm leading-relaxed text-rm-text-muted">

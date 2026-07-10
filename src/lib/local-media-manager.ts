@@ -18,9 +18,7 @@ import {
   getMediaDeviceSnapshot,
   type MediaDeviceInfo_Custom,
 } from "@/lib/media-device-snapshot";
-import {
-  useMediaDeviceStore,
-} from "@/lib/useMediaDevices";
+import { useMediaDeviceStore } from "@/lib/useMediaDevices";
 
 const lmLog = clog("LocalMedia");
 
@@ -81,11 +79,11 @@ function applyActiveAudioTrackLabel(devices: MediaDeviceInfo_Custom[]) {
 
   if (applied) return labeled;
 
-  return devices.map((device, index) => (
+  return devices.map((device, index) =>
     index === 0 && device.kind === "audioinput"
       ? { ...device, label: trackLabel }
-      : device
-  ));
+      : device,
+  );
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────
@@ -93,7 +91,7 @@ function applyActiveAudioTrackLabel(devices: MediaDeviceInfo_Custom[]) {
 /** True if the track's current settings match the given constraints */
 function audioConstraintsMatch(
   track: MediaStreamTrack,
-  c: LocalAudioConstraints
+  c: LocalAudioConstraints,
 ): boolean {
   const s = track.getSettings();
   const idMatch =
@@ -108,10 +106,11 @@ function audioConstraintsMatch(
 
 function videoConstraintsMatch(
   track: MediaStreamTrack,
-  c: LocalVideoConstraints
+  c: LocalVideoConstraints,
 ): boolean {
   const s = track.getSettings();
-  const idMatch = !c.deviceId || c.deviceId === "default" || s.deviceId === c.deviceId;
+  const idMatch =
+    !c.deviceId || c.deviceId === "default" || s.deviceId === c.deviceId;
   const qualityMatch = activeVideoRequestKey === videoRequestKey(c);
   return idMatch && qualityMatch;
 }
@@ -125,7 +124,7 @@ function mediaConstraints(
   audio: LocalAudioConstraints,
   video: LocalVideoConstraints | null,
   exactAudio: boolean,
-  exactVideo: boolean
+  exactVideo: boolean,
 ): MediaStreamConstraints {
   return {
     audio: {
@@ -139,14 +138,13 @@ function mediaConstraints(
       googNoiseSuppression: audio.noiseSuppression,
       channelCount: audio.stereo !== false ? 2 : 1,
     } as any,
-    video:
-      video
-        ? buildCameraVideoConstraints({
+    video: video
+      ? buildCameraVideoConstraints({
           deviceId: video.deviceId,
           exactDevice: exactVideo,
           qualityId: video.qualityId,
         })
-        : false,
+      : false,
   };
 }
 
@@ -155,18 +153,26 @@ async function resolveStoredDeviceId(
   deviceId?: string,
   deviceLabel?: string,
   groupId?: string,
-  log = lmLog
+  log = lmLog,
 ): Promise<string | undefined> {
   if (!deviceId || deviceId === "default") return deviceId;
   if (!navigator.mediaDevices?.enumerateDevices) return deviceId;
 
   const devices = await navigator.mediaDevices.enumerateDevices();
   const candidates = devices.filter((d) => d.kind === kind);
-  if (!deviceId.startsWith("native:") && candidates.some((d) => d.deviceId === deviceId)) return deviceId;
+  if (
+    !deviceId.startsWith("native:") &&
+    candidates.some((d) => d.deviceId === deviceId)
+  )
+    return deviceId;
 
-  const byGroup = groupId ? candidates.find((d) => d.groupId && d.groupId === groupId) : undefined;
+  const byGroup = groupId
+    ? candidates.find((d) => d.groupId && d.groupId === groupId)
+    : undefined;
   if (byGroup) {
-    log.info(`Resolved stale ${kind} deviceId by groupId: ${byGroup.label || "unlabeled device"}`);
+    log.info(
+      `Resolved stale ${kind} deviceId by groupId: ${byGroup.label || "unlabeled device"}`,
+    );
     return byGroup.deviceId;
   }
 
@@ -180,7 +186,9 @@ async function resolveStoredDeviceId(
   }
 
   if (deviceId.startsWith("native:")) {
-    log.warn(`Native ${kind} endpoint is not exposed by CEF; falling back to system default`);
+    log.warn(
+      `Native ${kind} endpoint is not exposed by CEF; falling back to system default`,
+    );
     return "default";
   }
 
@@ -203,7 +211,7 @@ async function resolveStoredDeviceId(
 export async function acquireLocalStream(
   audio: LocalAudioConstraints,
   videoConstraint: LocalVideoConstraints | null,
-  logPrefix = "LocalMedia"
+  logPrefix = "LocalMedia",
 ): Promise<MediaStream> {
   const log = clog(logPrefix);
 
@@ -236,25 +244,31 @@ export async function acquireLocalStream(
     audio.deviceId,
     audio.deviceLabel,
     audio.groupId,
-    log
+    log,
   );
   const resolvedVideoId = videoConstraint
     ? await resolveStoredDeviceId(
-      "videoinput",
-      videoConstraint.deviceId,
-      videoConstraint.deviceLabel,
-      videoConstraint.groupId,
-      log
-    )
+        "videoinput",
+        videoConstraint.deviceId,
+        videoConstraint.deviceLabel,
+        videoConstraint.groupId,
+        log,
+      )
     : undefined;
   const resolvedAudio = { ...audio, deviceId: resolvedAudioId };
-  const resolvedVideo = videoConstraint ? { ...videoConstraint, deviceId: resolvedVideoId } : null;
-  const useResolvedExactAudio = !!(resolvedAudio.deviceId && resolvedAudio.deviceId !== "default");
-  const useResolvedExactVideo = !!(resolvedVideo?.deviceId && resolvedVideo.deviceId !== "default");
+  const resolvedVideo = videoConstraint
+    ? { ...videoConstraint, deviceId: resolvedVideoId }
+    : null;
+  const useResolvedExactAudio = !!(
+    resolvedAudio.deviceId && resolvedAudio.deviceId !== "default"
+  );
+  const useResolvedExactVideo = !!(
+    resolvedVideo?.deviceId && resolvedVideo.deviceId !== "default"
+  );
 
   const doGetUserMedia = async (exactAudio: boolean, exactVideo: boolean) => {
     return navigator.mediaDevices.getUserMedia(
-      mediaConstraints(resolvedAudio, resolvedVideo, exactAudio, exactVideo)
+      mediaConstraints(resolvedAudio, resolvedVideo, exactAudio, exactVideo),
     );
   };
 
@@ -262,18 +276,17 @@ export async function acquireLocalStream(
   try {
     stream = await doGetUserMedia(useResolvedExactAudio, useResolvedExactVideo);
   } catch (err: any) {
-    if (
-      err.name === "OverconstrainedError" ||
-      err.name === "NotFoundError"
-    ) {
-      log.warn(`Exact device unavailable (${err.constraint ?? "unknown"}), retrying with system default`);
+    if (err.name === "OverconstrainedError" || err.name === "NotFoundError") {
+      log.warn(
+        `Exact device unavailable (${err.constraint ?? "unknown"}), retrying with system default`,
+      );
       stream = await navigator.mediaDevices.getUserMedia(
         mediaConstraints(
           { ...resolvedAudio, deviceId: "default" },
           resolvedVideo ? { ...resolvedVideo, deviceId: "default" } : null,
           false,
-          false
-        )
+          false,
+        ),
       );
     } else if (err.name === "NotAllowedError") {
       // Permission denied — surface, don't swallow
@@ -295,7 +308,7 @@ export async function acquireLocalStream(
   refreshDeviceLabels();
 
   log.info(
-    `Stream acquired — audio: ${stream.getAudioTracks()[0]?.label ?? "none"}`
+    `Stream acquired — audio: ${stream.getAudioTracks()[0]?.label ?? "none"}`,
   );
   return stream;
 }
@@ -306,14 +319,30 @@ export async function acquireLocalStream(
  * The in-flight promise is stored so acquireLocalStream() can await it
  * rather than spawning a second call.
  */
-export function startEarlyMic(audio: LocalAudioConstraints): Promise<MediaStream | null> {
+export function startEarlyMic(
+  audio: LocalAudioConstraints,
+): Promise<MediaStream | null> {
   if (streamPromise) return streamPromise; // already in-flight
 
   lmLog.debug("Starting early mic acquisition...");
   const useExact = !!(audio.deviceId && audio.deviceId !== "default");
-  streamPromise = resolveStoredDeviceId("audioinput", audio.deviceId, audio.deviceLabel, audio.groupId, lmLog)
-    .then((resolvedId) => navigator.mediaDevices
-      .getUserMedia(mediaConstraints({ ...audio, deviceId: resolvedId }, null, !!(resolvedId && resolvedId !== "default"), false)))
+  streamPromise = resolveStoredDeviceId(
+    "audioinput",
+    audio.deviceId,
+    audio.deviceLabel,
+    audio.groupId,
+    lmLog,
+  )
+    .then((resolvedId) =>
+      navigator.mediaDevices.getUserMedia(
+        mediaConstraints(
+          { ...audio, deviceId: resolvedId },
+          null,
+          !!(resolvedId && resolvedId !== "default"),
+          false,
+        ),
+      ),
+    )
     .then((stream) => {
       lmLog.info(`Early mic acquired: ${stream.getAudioTracks()[0]?.label}`);
       activeStream = stream;
@@ -324,7 +353,10 @@ export function startEarlyMic(audio: LocalAudioConstraints): Promise<MediaStream
       return stream;
     })
     .catch((err) => {
-      lmLog.warn("Early mic acquisition failed — will retry in swapDevices:", err.name);
+      lmLog.warn(
+        "Early mic acquisition failed — will retry in swapDevices:",
+        err.name,
+      );
       streamPromise = null;
       return null;
     });
@@ -353,7 +385,8 @@ async function refreshDeviceLabels(): Promise<void> {
   if (
     typeof navigator === "undefined" ||
     !navigator.mediaDevices?.enumerateDevices
-  ) return;
+  )
+    return;
 
   try {
     const snapshot = await getMediaDeviceSnapshot();
@@ -368,7 +401,7 @@ async function refreshDeviceLabels(): Promise<void> {
     });
 
     lmLog.debug(
-      `Labels refreshed: ${resolvedMics.length} mics, ${snapshot.videoInputs.length} cams, ${snapshot.audioOutputs.length} outputs, ${snapshot.nativeAudioDevices.length} native audio devices`
+      `Labels refreshed: ${resolvedMics.length} mics, ${snapshot.videoInputs.length} cams, ${snapshot.audioOutputs.length} outputs, ${snapshot.nativeAudioDevices.length} native audio devices`,
     );
   } catch {
     // Not critical — labels stay stale from the slow initial enumerate

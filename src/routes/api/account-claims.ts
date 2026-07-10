@@ -58,7 +58,9 @@ const GET = async ({ request }: any) => {
   await ensureIdentityClaimsTable(db);
 
   const existingClaim = await db
-    .prepare("SELECT legacy_user_id FROM user_identity_claims WHERE auth_user_id = ? LIMIT 1")
+    .prepare(
+      "SELECT legacy_user_id FROM user_identity_claims WHERE auth_user_id = ? LIMIT 1",
+    )
     .bind(authResult.userId)
     .first<{ legacy_user_id: string }>()
     .catch(() => null);
@@ -67,7 +69,11 @@ const GET = async ({ request }: any) => {
     return apiSuccess({ claimed: true, candidates: [] });
   }
 
-  const candidates = await findClaimCandidates(db, authResult.userId, request.headers);
+  const candidates = await findClaimCandidates(
+    db,
+    authResult.userId,
+    request.headers,
+  );
   return apiSuccess({ claimed: false, candidates });
 };
 
@@ -92,7 +98,9 @@ const POST = async ({ request }: any) => {
   await ensureIdentityClaimsTable(db);
 
   const existingClaim = await db
-    .prepare("SELECT legacy_user_id FROM user_identity_claims WHERE auth_user_id = ? OR legacy_user_id = ? LIMIT 1")
+    .prepare(
+      "SELECT legacy_user_id FROM user_identity_claims WHERE auth_user_id = ? OR legacy_user_id = ? LIMIT 1",
+    )
     .bind(userId, legacyUserId)
     .first<{ legacy_user_id: string }>()
     .catch(() => null);
@@ -115,7 +123,7 @@ const POST = async ({ request }: any) => {
             , theme_preference, theme_sync_enabled, media_content_filter
         FROM users
         WHERE id = ?
-       LIMIT 1`
+       LIMIT 1`,
     )
     .bind(legacyUserId)
     .first<UserProfileRow>()
@@ -124,7 +132,8 @@ const POST = async ({ request }: any) => {
   if (!legacy) return apiError("Legacy account not found", 404);
 
   const authUser = await getCurrentUser(request.headers);
-  const email = authUser?.email ?? authUser?.primaryEmailAddress?.emailAddress ?? null;
+  const email =
+    authUser?.email ?? authUser?.primaryEmailAddress?.emailAddress ?? null;
   const now = new Date().toISOString();
   const legacyProfileTheme = applyProfileThemeDefaults(legacy);
 
@@ -133,11 +142,13 @@ const POST = async ({ request }: any) => {
   const statements = [
     db.prepare("PRAGMA defer_foreign_keys = ON"),
     db.prepare("DELETE FROM users WHERE id = ?").bind(userId),
-    db.prepare("UPDATE users SET username = ?, updated_at = ? WHERE id = ?").bind(legacyHoldingUsername, now, legacyUserId),
+    db
+      .prepare("UPDATE users SET username = ?, updated_at = ? WHERE id = ?")
+      .bind(legacyHoldingUsername, now, legacyUserId),
     db
       .prepare(
         `INSERT INTO users (id, username, display_name, avatar_url, avatar_display, bio, status, custom_status, banner_url, banner_content_type, nameplate_url, nameplate_content_type, profile_accent_color, profile_background_color, profile_banner_color, display_name_style, theme_preference, theme_sync_enabled, media_content_filter, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .bind(
         userId,
@@ -160,18 +171,20 @@ const POST = async ({ request }: any) => {
         legacy.theme_sync_enabled,
         legacy.media_content_filter,
         now,
-        now
+        now,
       ),
     ...references.map(([table, column]) =>
-      db.prepare(`UPDATE ${table} SET ${column} = ? WHERE ${column} = ?`).bind(userId, legacyUserId)
+      db
+        .prepare(`UPDATE ${table} SET ${column} = ? WHERE ${column} = ?`)
+        .bind(userId, legacyUserId),
     ),
-    ...(await tableExists(db, "channel_permission_overrides")
+    ...((await tableExists(db, "channel_permission_overrides"))
       ? [
           db
             .prepare(
               `UPDATE channel_permission_overrides
                SET target_id = ?
-               WHERE target_type = 'user' AND target_id = ?`
+               WHERE target_type = 'user' AND target_id = ?`,
             )
             .bind(userId, legacyUserId),
         ]
@@ -180,7 +193,7 @@ const POST = async ({ request }: any) => {
     db
       .prepare(
         `INSERT INTO user_identity_claims (auth_user_id, legacy_user_id, email, match_method, claimed_at)
-         VALUES (?, ?, ?, ?, ?)`
+         VALUES (?, ?, ?, ?, ?)`,
       )
       .bind(userId, legacyUserId, email, candidate.match_method, now),
   ];
@@ -198,7 +211,7 @@ async function ensureIdentityClaimsTable(db: any) {
         email TEXT,
         match_method TEXT NOT NULL,
         claimed_at TEXT NOT NULL DEFAULT (datetime('now'))
-      )`
+      )`,
     )
     .run();
 }
@@ -207,7 +220,10 @@ async function getExistingUserIdReferences(db: any) {
   const references: (typeof USER_ID_REFERENCES)[number][] = [];
   for (const reference of USER_ID_REFERENCES) {
     const [table, column] = reference;
-    if ((await tableExists(db, table)) && (await columnExists(db, table, column))) {
+    if (
+      (await tableExists(db, table)) &&
+      (await columnExists(db, table, column))
+    ) {
       references.push(reference);
     }
   }
@@ -216,7 +232,9 @@ async function getExistingUserIdReferences(db: any) {
 
 async function tableExists(db: any, table: string) {
   const row = await db
-    .prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ? LIMIT 1")
+    .prepare(
+      "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ? LIMIT 1",
+    )
     .bind(table)
     .first()
     .catch(() => null);
@@ -224,16 +242,26 @@ async function tableExists(db: any, table: string) {
 }
 
 async function columnExists(db: any, table: string, column: string) {
-  const { results = [] } = await db.prepare(`PRAGMA table_info(${table})`).all().catch(() => ({ results: [] }));
+  const { results = [] } = await db
+    .prepare(`PRAGMA table_info(${table})`)
+    .all()
+    .catch(() => ({ results: [] }));
   return results.some((row: { name?: string }) => row.name === column);
 }
 
-async function findClaimCandidates(db: any, authUserId: string, headers: Headers): Promise<ClaimCandidate[]> {
+async function findClaimCandidates(
+  db: any,
+  authUserId: string,
+  headers: Headers,
+): Promise<ClaimCandidate[]> {
   const authUser = await getCurrentUser(headers);
   if (!authUser) return [];
 
-  const email = authUser.email ?? authUser.primaryEmailAddress?.emailAddress ?? null;
-  const fullName = [authUser.firstName, authUser.lastName].filter(Boolean).join(" ");
+  const email =
+    authUser.email ?? authUser.primaryEmailAddress?.emailAddress ?? null;
+  const fullName = [authUser.firstName, authUser.lastName]
+    .filter(Boolean)
+    .join(" ");
   const displayName = authUser.name ?? fullName;
   const candidateValues = buildClaimCandidates({
     email,
@@ -252,7 +280,7 @@ async function findClaimCandidates(db: any, authUserId: string, headers: Headers
          AND id NOT IN (SELECT legacy_user_id FROM user_identity_claims)
          AND lower(username) IN (${placeholders})
        ORDER BY created_at ASC
-       LIMIT 5`
+       LIMIT 5`,
     )
     .bind(authUserId, ...candidateValues)
     .all()
@@ -260,7 +288,9 @@ async function findClaimCandidates(db: any, authUserId: string, headers: Headers
 
   return (results as ClaimCandidate[]).map((row) => ({
     ...row,
-    match_method: candidateValues.includes(row.username.toLowerCase()) ? "username" : "profile",
+    match_method: candidateValues.includes(row.username.toLowerCase())
+      ? "username"
+      : "profile",
   }));
 }
 

@@ -1,8 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import {
-  requireActiveVoiceRoomSession,
-  requireAuth,
-} from "@/lib/api-helpers";
+import { requireActiveVoiceRoomSession, requireAuth } from "@/lib/api-helpers";
 import { clog } from "@/lib/console-logger";
 import { resolveListenTogetherUrl } from "@/services/listen-together.service";
 
@@ -21,7 +18,7 @@ const POST = async ({ request }: any) => {
   const auth = await requireAuth(request);
   if (auth instanceof Response) return auth;
 
-  const body = await request.json() as {
+  const body = (await request.json()) as {
     roomSlug?: string;
     serverId?: string | null;
     channelId?: string | null;
@@ -32,25 +29,30 @@ const POST = async ({ request }: any) => {
   const sourceUrl = body.url?.trim();
   const serverId = body.serverId?.trim() ?? null;
   const channelId = body.channelId?.trim() ?? null;
-  const cf = (request as Request & {
-    cf?: {
-      country?: string;
-      regionCode?: string;
-      colo?: string;
-    };
-  }).cf;
+  const cf = (
+    request as Request & {
+      cf?: {
+        country?: string;
+        regionCode?: string;
+        colo?: string;
+      };
+    }
+  ).cf;
 
   if (!roomSlug || !sourceUrl) {
-    resolveLog.warn("Rejecting listen together resolve without required parameters", {
-      userId: auth.userId,
-      roomSlug: roomSlug ?? null,
-      hasUrl: !!sourceUrl,
-      serverId,
-      channelId,
-      country: cf?.country ?? null,
-      regionCode: cf?.regionCode ?? null,
-      colo: cf?.colo ?? null,
-    });
+    resolveLog.warn(
+      "Rejecting listen together resolve without required parameters",
+      {
+        userId: auth.userId,
+        roomSlug: roomSlug ?? null,
+        hasUrl: !!sourceUrl,
+        serverId,
+        channelId,
+        country: cf?.country ?? null,
+        regionCode: cf?.regionCode ?? null,
+        colo: cf?.colo ?? null,
+      },
+    );
     return Response.json({ error: "Missing roomSlug or url" }, { status: 400 });
   }
 
@@ -61,7 +63,8 @@ const POST = async ({ request }: any) => {
     {
       serverId,
       channelId,
-      errorMessage: "You must be actively connected to this voice room to resolve media.",
+      errorMessage:
+        "You must be actively connected to this voice room to resolve media.",
     },
   );
   if (sessionCheck instanceof Response) return sessionCheck;
@@ -89,7 +92,8 @@ const POST = async ({ request }: any) => {
       },
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Failed to resolve media";
+    const message =
+      error instanceof Error ? error.message : "Failed to resolve media";
     resolveLog.warn("Listen together resolve failed", {
       userId: auth.userId,
       roomSlug,

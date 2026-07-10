@@ -6,13 +6,17 @@ import type {
   Relationship,
   Role,
   Server,
-  User
+  User,
 } from "@/lib/types";
 import { getDisplayName } from "@/lib/display-name";
 import type { PresencePlatform } from "@/lib/presence-platform";
 import type { SharedSpatialAudioState } from "@/lib/voice/spatial-audio";
 
-export type ChatMember = { user: User; roles?: Role[]; joined_at?: string | null };
+export type ChatMember = {
+  user: User;
+  roles?: Role[];
+  joined_at?: string | null;
+};
 
 // ── State shape ─────────────────────────────────────────────────────────────
 
@@ -107,7 +111,10 @@ export interface VoiceChannelMember {
   name: string;
   username?: string;
   display_name?: string | null;
-  display_name_style?: import("@/lib/profile-customization").DisplayNameStyle | string | null;
+  display_name_style?:
+    | import("@/lib/profile-customization").DisplayNameStyle
+    | string
+    | null;
   avatar_url?: string | null;
   avatar_display?: import("@/lib/avatar-display").AvatarDisplay | string | null;
   stream_preview_url?: string | null;
@@ -170,7 +177,11 @@ export const initialState: ChatState = {
   jumpAnchors: {},
 };
 
-function reconcileChannelIdentity(channels: Channel[], oldId: string, newChannel: Channel): Channel[] {
+function reconcileChannelIdentity(
+  channels: Channel[],
+  oldId: string,
+  newChannel: Channel,
+): Channel[] {
   const nextChannels: Channel[] = [];
   let inserted = false;
 
@@ -207,12 +218,21 @@ export type ChatAction =
   | { type: "SET_CONNECTED"; connected: boolean }
   | { type: "SET_RECONNECT_ATTEMPT"; attempt: number }
   | { type: "SET_USER"; user: User }
-  | { type: "SET_STATUS"; status: "online" | "idle" | "dnd" | "offline"; customStatus?: string | null }
+  | {
+      type: "SET_STATUS";
+      status: "online" | "idle" | "dnd" | "offline";
+      customStatus?: string | null;
+    }
   | { type: "SET_SERVERS"; servers: Server[] }
   | { type: "ADD_SERVER"; server: Server }
   | { type: "SET_CHANNELS"; channels: Channel[]; serverId?: string }
   | { type: "SET_CATEGORIES"; categories: Category[]; serverId?: string }
-  | { type: "SET_CHANNELS_AND_CATEGORIES"; channels: Channel[]; categories: Category[]; serverId?: string }
+  | {
+      type: "SET_CHANNELS_AND_CATEGORIES";
+      channels: Channel[];
+      categories: Category[];
+      serverId?: string;
+    }
   | { type: "ADD_CHANNEL"; channel: Channel }
   | { type: "UPSERT_CHANNEL"; channel: Channel }
   | { type: "ADD_CHANNEL_OPTIMISTIC"; channel: Channel }
@@ -220,73 +240,145 @@ export type ChatAction =
   | { type: "REMOVE_CHANNEL"; channelId: string }
   | { type: "SET_ACTIVE_SERVER"; serverId: string | null }
   | { type: "SET_ACTIVE_CHANNEL"; channelId: string | null }
-  | { type: "SET_MESSAGES"; messages: Message[]; channelId?: string; hasMoreBefore?: boolean; hasMoreAfter?: boolean }
-  | { type: "REPLACE_MESSAGES"; messages: Message[]; channelId?: string; hasMoreBefore?: boolean; hasMoreAfter?: boolean }
+  | {
+      type: "SET_MESSAGES";
+      messages: Message[];
+      channelId?: string;
+      hasMoreBefore?: boolean;
+      hasMoreAfter?: boolean;
+    }
+  | {
+      type: "REPLACE_MESSAGES";
+      messages: Message[];
+      channelId?: string;
+      hasMoreBefore?: boolean;
+      hasMoreAfter?: boolean;
+    }
   | { type: "APPEND_MESSAGE"; message: Message }
-  | { type: "APPEND_MESSAGES_AFTER"; messages: Message[]; channelId?: string; hasMoreAfter?: boolean }
-  | { type: "UPDATE_MESSAGE"; id: string; content?: string; updated_at?: string; embeds?: import("@/lib/types").EmbedInfo[] }
+  | {
+      type: "APPEND_MESSAGES_AFTER";
+      messages: Message[];
+      channelId?: string;
+      hasMoreAfter?: boolean;
+    }
+  | {
+      type: "UPDATE_MESSAGE";
+      id: string;
+      content?: string;
+      updated_at?: string;
+      embeds?: import("@/lib/types").EmbedInfo[];
+    }
   | { type: "DELETE_MESSAGE"; id: string }
-  | { type: "PREPEND_MESSAGES"; messages: Message[]; channelId?: string; hasMoreBefore?: boolean }
+  | {
+      type: "PREPEND_MESSAGES";
+      messages: Message[];
+      channelId?: string;
+      hasMoreBefore?: boolean;
+    }
   | { type: "SET_TYPING"; channelId: string; userId: string }
   | { type: "CLEAR_TYPING"; channelId: string; userId: string }
   | { type: "SET_MEMBERS"; members: ChatMember[]; serverId?: string }
   | { type: "ADD_MEMBER"; member: ChatMember; serverId?: string }
   | { type: "REMOVE_MEMBER"; userId: string; serverId?: string }
-  | { type: "UPDATE_MEMBER_ROLES"; userId: string; roles?: Role[]; serverId?: string }
   | {
-    type: "UPDATE_MEMBER_PROFILE";
-    userId: string;
-    username?: string;
-    display_name?: string | null;
-    avatar_url?: string | null;
-    avatar_display?: import("@/lib/avatar-display").AvatarDisplay | string | null;
-    banner_url?: string | null;
-    banner_content_type?: string | null;
-    nameplate_url?: string | null;
-    nameplate_content_type?: string | null;
-    profile_accent_color?: string | null;
-    profile_background_color?: string | null;
-    profile_banner_color?: string | null;
-    display_name_style?: import("@/lib/profile-customization").DisplayNameStyle | string | null;
-    theme_preference?: string | null;
-    theme_sync_enabled?: boolean;
-    media_content_filter?: import("@/lib/media-content-filter").MediaContentFilter | null;
-    bio?: string | null;
-    pronouns?: string | null;
-    updated_at?: string;
-    created_at?: string | null;
-  }
+      type: "UPDATE_MEMBER_ROLES";
+      userId: string;
+      roles?: Role[];
+      serverId?: string;
+    }
+  | {
+      type: "UPDATE_MEMBER_PROFILE";
+      userId: string;
+      username?: string;
+      display_name?: string | null;
+      avatar_url?: string | null;
+      avatar_display?:
+        | import("@/lib/avatar-display").AvatarDisplay
+        | string
+        | null;
+      banner_url?: string | null;
+      banner_content_type?: string | null;
+      nameplate_url?: string | null;
+      nameplate_content_type?: string | null;
+      profile_accent_color?: string | null;
+      profile_background_color?: string | null;
+      profile_banner_color?: string | null;
+      display_name_style?:
+        | import("@/lib/profile-customization").DisplayNameStyle
+        | string
+        | null;
+      theme_preference?: string | null;
+      theme_sync_enabled?: boolean;
+      media_content_filter?:
+        | import("@/lib/media-content-filter").MediaContentFilter
+        | null;
+      bio?: string | null;
+      pronouns?: string | null;
+      updated_at?: string;
+      created_at?: string | null;
+    }
   | { type: "ADD_REACTION"; messageId: string; emoji: string; userId: string }
-  | { type: "REMOVE_REACTION"; messageId: string; emoji: string; userId: string }
+  | {
+      type: "REMOVE_REACTION";
+      messageId: string;
+      emoji: string;
+      userId: string;
+    }
   | { type: "SET_ONLINE_USERS"; userIds: string[] }
   | {
-    type: "SET_PRESENCE_USERS";
-    users: Array<{
+      type: "SET_PRESENCE_USERS";
+      users: Array<{
+        userId: string;
+        status: "online" | "idle" | "dnd" | "offline";
+        customStatus?: string | null;
+        platforms?: PresencePlatform[];
+      }>;
+    }
+  | { type: "USER_ONLINE"; userId: string }
+  | { type: "USER_OFFLINE"; userId: string }
+  | {
+      type: "UPDATE_USER_STATUS";
       userId: string;
       status: "online" | "idle" | "dnd" | "offline";
       customStatus?: string | null;
       platforms?: PresencePlatform[];
-    }>;
-  }
-  | { type: "USER_ONLINE"; userId: string }
-  | { type: "USER_OFFLINE"; userId: string }
-  | {
-    type: "UPDATE_USER_STATUS";
-    userId: string;
-    status: "online" | "idle" | "dnd" | "offline";
-    customStatus?: string | null;
-    platforms?: PresencePlatform[];
-  }
+    }
   | { type: "UPDATE_SERVER"; serverId: string; updates: Partial<Server> }
   | { type: "REMOVE_SERVER"; serverId: string }
-  | { type: "SET_READ_STATES"; readStates: Record<string, string>; lastMessageAt: Record<string, string> }
+  | {
+      type: "SET_READ_STATES";
+      readStates: Record<string, string>;
+      lastMessageAt: Record<string, string>;
+    }
   | { type: "UPDATE_READ_STATE"; channelId: string; timestamp: string }
   | { type: "UPDATE_LAST_MESSAGE"; channelId: string; timestamp: string }
-  | { type: "PIN_MESSAGE"; messageId: string; pinned: boolean; fullMessage?: Message }
-  | { type: "SET_DM_CHANNELS"; dmChannels: Array<{ id: string; name: string; recipient: User }> }
-  | { type: "ADD_DM_CHANNEL"; dmChannel: { id: string; name: string; recipient: User } }
-  | { type: "SET_VOICE_CHANNEL_STATES"; states: Record<string, VoiceChannelMember[]>; startedAt: Record<string, number>; spatialStates?: Record<string, SharedSpatialAudioState> }
-  | { type: "UPDATE_VOICE_CHANNEL_STATE"; channelId: string; members: VoiceChannelMember[]; startedAt: number | null; spatialAudioState?: SharedSpatialAudioState }
+  | {
+      type: "PIN_MESSAGE";
+      messageId: string;
+      pinned: boolean;
+      fullMessage?: Message;
+    }
+  | {
+      type: "SET_DM_CHANNELS";
+      dmChannels: Array<{ id: string; name: string; recipient: User }>;
+    }
+  | {
+      type: "ADD_DM_CHANNEL";
+      dmChannel: { id: string; name: string; recipient: User };
+    }
+  | {
+      type: "SET_VOICE_CHANNEL_STATES";
+      states: Record<string, VoiceChannelMember[]>;
+      startedAt: Record<string, number>;
+      spatialStates?: Record<string, SharedSpatialAudioState>;
+    }
+  | {
+      type: "UPDATE_VOICE_CHANNEL_STATE";
+      channelId: string;
+      members: VoiceChannelMember[];
+      startedAt: number | null;
+      spatialAudioState?: SharedSpatialAudioState;
+    }
   | { type: "SET_PINNED_MESSAGES"; messages: Message[]; channelId: string }
   | { type: "SET_LOADING_PINS"; loading: boolean }
   | { type: "ADD_CATEGORY"; category: Category }
@@ -296,7 +388,11 @@ export type ChatAction =
   | { type: "REMOVE_RELATIONSHIP"; userId: string }
   | { type: "SET_PROFILE_USER"; user: User | null }
   | { type: "SET_SPEAKING_USERS"; speakingUsers: Record<string, boolean> }
-  | { type: "SET_NOTIFICATIONS"; notifications: Notification[]; unreadCount: number }
+  | {
+      type: "SET_NOTIFICATIONS";
+      notifications: Notification[];
+      unreadCount: number;
+    }
   | { type: "ADD_NOTIFICATION"; notification: Notification }
   | { type: "MARK_NOTIFICATIONS_READ"; ids?: string[]; all?: boolean }
   | { type: "CLEAR_NOTIFICATIONS" }
@@ -320,12 +416,14 @@ function computeMentionCounts(notifications: Notification[]): {
   for (const n of notifications) {
     if (n.is_read) continue;
     // Count mentions and replies (not plain DMs — those use the read-state unread dot)
-    if (n.type !== 'mention' && n.type !== 'reply') continue;
+    if (n.type !== "mention" && n.type !== "reply") continue;
 
     if (n.server_id) {
-      serverMentionCounts[n.server_id] = (serverMentionCounts[n.server_id] ?? 0) + 1;
+      serverMentionCounts[n.server_id] =
+        (serverMentionCounts[n.server_id] ?? 0) + 1;
     }
-    channelMentionCounts[n.channel_id] = (channelMentionCounts[n.channel_id] ?? 0) + 1;
+    channelMentionCounts[n.channel_id] =
+      (channelMentionCounts[n.channel_id] ?? 0) + 1;
   }
 
   return { serverMentionCounts, channelMentionCounts };
@@ -339,23 +437,28 @@ function computeMentionCounts(notifications: Notification[]): {
 function findKnownUser(state: ChatState, userId: string): User | undefined {
   if (state.user?.id === userId) return state.user;
 
-  const activeMember = state.members.find(sm => sm.user.id === userId);
+  const activeMember = state.members.find((sm) => sm.user.id === userId);
   if (activeMember) return activeMember.user;
 
   for (const members of Object.values(state.membersByServerId)) {
-    const cachedMember = members.find(sm => sm.user.id === userId);
+    const cachedMember = members.find((sm) => sm.user.id === userId);
     if (cachedMember) return cachedMember.user;
   }
 
-  const relationship = state.relationships.find(r => r.user.id === userId);
+  const relationship = state.relationships.find((r) => r.user.id === userId);
   if (relationship) return relationship.user;
 
-  const dm = state.dmChannels.find(channel => channel.recipient?.id === userId);
+  const dm = state.dmChannels.find(
+    (channel) => channel.recipient?.id === userId,
+  );
   return dm?.recipient;
 }
 
-function enrichVoiceMembers(members: VoiceChannelMember[], state: ChatState): VoiceChannelMember[] {
-  return members.map(m => {
+function enrichVoiceMembers(
+  members: VoiceChannelMember[],
+  state: ChatState,
+): VoiceChannelMember[] {
+  return members.map((m) => {
     const knownUser = findKnownUser(state, m.clerk_user_id);
     const displayName = getDisplayName(knownUser, getDisplayName(m, m.name));
 
@@ -364,7 +467,8 @@ function enrichVoiceMembers(members: VoiceChannelMember[], state: ChatState): Vo
       name: displayName,
       username: knownUser?.username ?? m.username ?? m.name,
       display_name: knownUser?.display_name ?? m.display_name ?? null,
-      display_name_style: knownUser?.display_name_style ?? m.display_name_style ?? null,
+      display_name_style:
+        knownUser?.display_name_style ?? m.display_name_style ?? null,
       avatar_url: m.avatar_url || knownUser?.avatar_url || null,
       avatar_display: m.avatar_display ?? knownUser?.avatar_display ?? null,
     };
@@ -373,7 +477,7 @@ function enrichVoiceMembers(members: VoiceChannelMember[], state: ChatState): Vo
 
 function enrichVoiceChannelStates(
   states: Record<string, VoiceChannelMember[]>,
-  state: ChatState
+  state: ChatState,
 ): Record<string, VoiceChannelMember[]> {
   const enriched: Record<string, VoiceChannelMember[]> = {};
   for (const [channelId, members] of Object.entries(states)) {
@@ -382,7 +486,11 @@ function enrichVoiceChannelStates(
   return enriched;
 }
 
-function replaceMessageById(messages: Message[], id: string, update: (message: Message) => Message): Message[] {
+function replaceMessageById(
+  messages: Message[],
+  id: string,
+  update: (message: Message) => Message,
+): Message[] {
   let changed = false;
   const next = messages.map((message) => {
     if (message.id !== id) return message;
@@ -394,7 +502,7 @@ function replaceMessageById(messages: Message[], id: string, update: (message: M
 
 function mapMessageCaches(
   caches: Record<string, Message[]>,
-  mapper: (messages: Message[]) => Message[]
+  mapper: (messages: Message[]) => Message[],
 ): Record<string, Message[]> {
   let changed = false;
   const next: Record<string, Message[]> = {};
@@ -409,14 +517,21 @@ function mapMessageCaches(
 export function chatReducer(state: ChatState, action: ChatAction): ChatState {
   switch (action.type) {
     case "SET_CONNECTED":
-      return { ...state, connected: action.connected, reconnectAttempt: action.connected ? 0 : state.reconnectAttempt };
+      return {
+        ...state,
+        connected: action.connected,
+        reconnectAttempt: action.connected ? 0 : state.reconnectAttempt,
+      };
     case "SET_RECONNECT_ATTEMPT":
       return { ...state, reconnectAttempt: action.attempt };
     case "SET_USER": {
       const nextState = { ...state, user: action.user };
       return {
         ...nextState,
-        voiceChannelStates: enrichVoiceChannelStates(nextState.voiceChannelStates, nextState),
+        voiceChannelStates: enrichVoiceChannelStates(
+          nextState.voiceChannelStates,
+          nextState,
+        ),
       };
     }
     case "SET_STATUS":
@@ -424,38 +539,60 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         ...state,
         user: state.user
           ? {
-            ...state.user,
-            status: action.status,
-            custom_status: action.customStatus === undefined ? state.user.custom_status : action.customStatus,
-          }
+              ...state.user,
+              status: action.status,
+              custom_status:
+                action.customStatus === undefined
+                  ? state.user.custom_status
+                  : action.customStatus,
+            }
           : state.user,
       };
     case "SET_SERVERS":
       return { ...state, servers: action.servers };
     case "ADD_SERVER": {
-      const existingIndex = state.servers.findIndex((server) => server.id === action.server.id);
+      const existingIndex = state.servers.findIndex(
+        (server) => server.id === action.server.id,
+      );
       return {
         ...state,
-        servers: existingIndex === -1
-          ? [...state.servers, action.server]
-          : state.servers.map((server) => server.id === action.server.id ? { ...server, ...action.server } : server),
+        servers:
+          existingIndex === -1
+            ? [...state.servers, action.server]
+            : state.servers.map((server) =>
+                server.id === action.server.id
+                  ? { ...server, ...action.server }
+                  : server,
+              ),
       };
     }
     case "SET_CHANNELS": {
       const serverId = action.serverId ?? state.activeServerId ?? undefined;
       return {
         ...state,
-        channels: !serverId || state.activeServerId === serverId ? action.channels : state.channels,
-        channelsByServerId: serverId ? { ...state.channelsByServerId, [serverId]: action.channels } : state.channelsByServerId,
-        channelsLoadedByServerId: serverId ? { ...state.channelsLoadedByServerId, [serverId]: true } : state.channelsLoadedByServerId,
+        channels:
+          !serverId || state.activeServerId === serverId
+            ? action.channels
+            : state.channels,
+        channelsByServerId: serverId
+          ? { ...state.channelsByServerId, [serverId]: action.channels }
+          : state.channelsByServerId,
+        channelsLoadedByServerId: serverId
+          ? { ...state.channelsLoadedByServerId, [serverId]: true }
+          : state.channelsLoadedByServerId,
       };
     }
     case "SET_CATEGORIES": {
       const serverId = action.serverId ?? state.activeServerId ?? undefined;
       return {
         ...state,
-        categories: !serverId || state.activeServerId === serverId ? action.categories : state.categories,
-        categoriesByServerId: serverId ? { ...state.categoriesByServerId, [serverId]: action.categories } : state.categoriesByServerId,
+        categories:
+          !serverId || state.activeServerId === serverId
+            ? action.categories
+            : state.categories,
+        categoriesByServerId: serverId
+          ? { ...state.categoriesByServerId, [serverId]: action.categories }
+          : state.categoriesByServerId,
       };
     }
     case "SET_CHANNELS_AND_CATEGORIES": {
@@ -465,80 +602,141 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         ...state,
         channels: isActive ? action.channels : state.channels,
         categories: isActive ? action.categories : state.categories,
-        channelsByServerId: serverId ? { ...state.channelsByServerId, [serverId]: action.channels } : state.channelsByServerId,
-        categoriesByServerId: serverId ? { ...state.categoriesByServerId, [serverId]: action.categories } : state.categoriesByServerId,
-        channelsLoadedByServerId: serverId ? { ...state.channelsLoadedByServerId, [serverId]: true } : state.channelsLoadedByServerId,
+        channelsByServerId: serverId
+          ? { ...state.channelsByServerId, [serverId]: action.channels }
+          : state.channelsByServerId,
+        categoriesByServerId: serverId
+          ? { ...state.categoriesByServerId, [serverId]: action.categories }
+          : state.categoriesByServerId,
+        channelsLoadedByServerId: serverId
+          ? { ...state.channelsLoadedByServerId, [serverId]: true }
+          : state.channelsLoadedByServerId,
       };
     }
     case "ADD_CHANNEL": {
       // Deduplicate in case WebSocket beats the REST response
       const serverId = action.channel.server_id ?? state.activeServerId;
-      const cachedChannels = serverId ? state.channelsByServerId[serverId] ?? state.channels : state.channels;
+      const cachedChannels = serverId
+        ? (state.channelsByServerId[serverId] ?? state.channels)
+        : state.channels;
       if (cachedChannels.some((c) => c.id === action.channel.id)) return state;
       const nextChannels = [...cachedChannels, action.channel];
       return {
         ...state,
-        channels: serverId === state.activeServerId || !serverId ? nextChannels : state.channels,
-        channelsByServerId: serverId ? { ...state.channelsByServerId, [serverId]: nextChannels } : state.channelsByServerId,
+        channels:
+          serverId === state.activeServerId || !serverId
+            ? nextChannels
+            : state.channels,
+        channelsByServerId: serverId
+          ? { ...state.channelsByServerId, [serverId]: nextChannels }
+          : state.channelsByServerId,
       };
     }
     case "UPSERT_CHANNEL": {
       const serverId = action.channel.server_id ?? state.activeServerId;
-      const cachedChannels = serverId ? state.channelsByServerId[serverId] ?? [] : state.channels;
-      const existingIndex = cachedChannels.findIndex((c) => c.id === action.channel.id);
-      const nextChannels = existingIndex === -1
-        ? [...cachedChannels, action.channel]
-        : cachedChannels.map((c) => c.id === action.channel.id ? action.channel : c);
+      const cachedChannels = serverId
+        ? (state.channelsByServerId[serverId] ?? [])
+        : state.channels;
+      const existingIndex = cachedChannels.findIndex(
+        (c) => c.id === action.channel.id,
+      );
+      const nextChannels =
+        existingIndex === -1
+          ? [...cachedChannels, action.channel]
+          : cachedChannels.map((c) =>
+              c.id === action.channel.id ? action.channel : c,
+            );
       return {
         ...state,
-        channels: serverId === state.activeServerId || !serverId ? nextChannels : state.channels,
-        channelsByServerId: serverId ? { ...state.channelsByServerId, [serverId]: nextChannels } : state.channelsByServerId,
+        channels:
+          serverId === state.activeServerId || !serverId
+            ? nextChannels
+            : state.channels,
+        channelsByServerId: serverId
+          ? { ...state.channelsByServerId, [serverId]: nextChannels }
+          : state.channelsByServerId,
       };
     }
     case "ADD_CHANNEL_OPTIMISTIC": {
       const serverId = action.channel.server_id ?? state.activeServerId;
-      const cachedChannels = serverId ? state.channelsByServerId[serverId] ?? state.channels : state.channels;
+      const cachedChannels = serverId
+        ? (state.channelsByServerId[serverId] ?? state.channels)
+        : state.channels;
       const nextChannels = [...cachedChannels, action.channel];
       return {
         ...state,
-        channels: serverId === state.activeServerId || !serverId ? nextChannels : state.channels,
-        channelsByServerId: serverId ? { ...state.channelsByServerId, [serverId]: nextChannels } : state.channelsByServerId,
+        channels:
+          serverId === state.activeServerId || !serverId
+            ? nextChannels
+            : state.channels,
+        channelsByServerId: serverId
+          ? { ...state.channelsByServerId, [serverId]: nextChannels }
+          : state.channelsByServerId,
       };
     }
     case "UPDATE_CHANNEL_ID": {
       const serverId = action.newChannel.server_id ?? state.activeServerId;
-      const cachedChannels = serverId ? state.channelsByServerId[serverId] ?? state.channels : state.channels;
-      const updatedChannels = reconcileChannelIdentity(cachedChannels, action.oldId, action.newChannel);
+      const cachedChannels = serverId
+        ? (state.channelsByServerId[serverId] ?? state.channels)
+        : state.channels;
+      const updatedChannels = reconcileChannelIdentity(
+        cachedChannels,
+        action.oldId,
+        action.newChannel,
+      );
       // If the active channel was the temp one, point it to the new Real ID
-      const newActiveChannelId = state.activeChannelId === action.oldId ? action.newChannel.id : state.activeChannelId;
+      const newActiveChannelId =
+        state.activeChannelId === action.oldId
+          ? action.newChannel.id
+          : state.activeChannelId;
       return {
         ...state,
-        channels: serverId === state.activeServerId || !serverId ? updatedChannels : state.channels,
-        channelsByServerId: serverId ? { ...state.channelsByServerId, [serverId]: updatedChannels } : state.channelsByServerId,
+        channels:
+          serverId === state.activeServerId || !serverId
+            ? updatedChannels
+            : state.channels,
+        channelsByServerId: serverId
+          ? { ...state.channelsByServerId, [serverId]: updatedChannels }
+          : state.channelsByServerId,
         activeChannelId: newActiveChannelId,
       };
     }
     case "REMOVE_CHANNEL": {
-      const removedChannel = state.channels.find(c => c.id === action.channelId)
-        ?? Object.values(state.channelsByServerId).flat().find(c => c.id === action.channelId);
+      const removedChannel =
+        state.channels.find((c) => c.id === action.channelId) ??
+        Object.values(state.channelsByServerId)
+          .flat()
+          .find((c) => c.id === action.channelId);
       const serverId = removedChannel?.server_id ?? state.activeServerId;
       const channelsByServerId = serverId
-        ? { ...state.channelsByServerId, [serverId]: (state.channelsByServerId[serverId] ?? state.channels).filter(c => c.id !== action.channelId) }
+        ? {
+            ...state.channelsByServerId,
+            [serverId]: (
+              state.channelsByServerId[serverId] ?? state.channels
+            ).filter((c) => c.id !== action.channelId),
+          }
         : state.channelsByServerId;
       return {
         ...state,
-        channels: state.channels.filter(c => c.id !== action.channelId),
+        channels: state.channels.filter((c) => c.id !== action.channelId),
         channelsByServerId,
       };
     }
     case "ADD_CATEGORY": {
       const serverId = action.category.server_id ?? state.activeServerId;
-      const cachedCategories = serverId ? state.categoriesByServerId[serverId] ?? state.categories : state.categories;
+      const cachedCategories = serverId
+        ? (state.categoriesByServerId[serverId] ?? state.categories)
+        : state.categories;
       const nextCategories = [...cachedCategories, action.category];
       return {
         ...state,
-        categories: serverId === state.activeServerId || !serverId ? nextCategories : state.categories,
-        categoriesByServerId: serverId ? { ...state.categoriesByServerId, [serverId]: nextCategories } : state.categoriesByServerId,
+        categories:
+          serverId === state.activeServerId || !serverId
+            ? nextCategories
+            : state.categories,
+        categoriesByServerId: serverId
+          ? { ...state.categoriesByServerId, [serverId]: nextCategories }
+          : state.categoriesByServerId,
       };
     }
     case "SET_ACTIVE_SERVER":
@@ -549,22 +747,49 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       return {
         ...state,
         activeChannelId: action.channelId,
-        messages: action.channelId ? state.messagesByChannelId[action.channelId] ?? [] : [],
-        pinnedMessages: action.channelId ? state.pinnedMessagesByChannelId[action.channelId] ?? [] : [],
-        pinsLoadedFor: action.channelId && state.pinsLoadedByChannelId[action.channelId] ? action.channelId : null,
+        messages: action.channelId
+          ? (state.messagesByChannelId[action.channelId] ?? [])
+          : [],
+        pinnedMessages: action.channelId
+          ? (state.pinnedMessagesByChannelId[action.channelId] ?? [])
+          : [],
+        pinsLoadedFor:
+          action.channelId && state.pinsLoadedByChannelId[action.channelId]
+            ? action.channelId
+            : null,
       };
     case "SWITCH_SERVER":
-      if (state.activeServerId === action.serverId && state.activeChannelId === action.channelId) return state;
+      if (
+        state.activeServerId === action.serverId &&
+        state.activeChannelId === action.channelId
+      )
+        return state;
       return {
         ...state,
         activeServerId: action.serverId,
         activeChannelId: action.channelId,
-        channels: action.serverId === "@me" ? state.channels : state.channelsByServerId[action.serverId] ?? [],
-        categories: action.serverId === "@me" ? state.categories : state.categoriesByServerId[action.serverId] ?? [],
-        members: action.serverId === "@me" ? state.members : state.membersByServerId[action.serverId] ?? [],
-        messages: action.channelId ? state.messagesByChannelId[action.channelId] ?? [] : [],
-        pinnedMessages: action.channelId ? state.pinnedMessagesByChannelId[action.channelId] ?? [] : [],
-        pinsLoadedFor: action.channelId && state.pinsLoadedByChannelId[action.channelId] ? action.channelId : null,
+        channels:
+          action.serverId === "@me"
+            ? state.channels
+            : (state.channelsByServerId[action.serverId] ?? []),
+        categories:
+          action.serverId === "@me"
+            ? state.categories
+            : (state.categoriesByServerId[action.serverId] ?? []),
+        members:
+          action.serverId === "@me"
+            ? state.members
+            : (state.membersByServerId[action.serverId] ?? []),
+        messages: action.channelId
+          ? (state.messagesByChannelId[action.channelId] ?? [])
+          : [],
+        pinnedMessages: action.channelId
+          ? (state.pinnedMessagesByChannelId[action.channelId] ?? [])
+          : [],
+        pinsLoadedFor:
+          action.channelId && state.pinsLoadedByChannelId[action.channelId]
+            ? action.channelId
+            : null,
       };
     case "SET_MESSAGES": {
       const channelId = action.channelId ?? state.activeChannelId;
@@ -573,67 +798,102 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       return {
         ...state,
         messages: isActive ? action.messages : state.messages,
-        messagesByChannelId: { ...state.messagesByChannelId, [channelId]: action.messages },
-        messagesLoadedByChannelId: { ...state.messagesLoadedByChannelId, [channelId]: true },
-        messageHasMoreBeforeByChannelId: action.hasMoreBefore === undefined
-          ? state.messageHasMoreBeforeByChannelId
-          : { ...state.messageHasMoreBeforeByChannelId, [channelId]: action.hasMoreBefore },
-        messageHasMoreAfterByChannelId: action.hasMoreAfter === undefined
-          ? state.messageHasMoreAfterByChannelId
-          : { ...state.messageHasMoreAfterByChannelId, [channelId]: action.hasMoreAfter },
+        messagesByChannelId: {
+          ...state.messagesByChannelId,
+          [channelId]: action.messages,
+        },
+        messagesLoadedByChannelId: {
+          ...state.messagesLoadedByChannelId,
+          [channelId]: true,
+        },
+        messageHasMoreBeforeByChannelId:
+          action.hasMoreBefore === undefined
+            ? state.messageHasMoreBeforeByChannelId
+            : {
+                ...state.messageHasMoreBeforeByChannelId,
+                [channelId]: action.hasMoreBefore,
+              },
+        messageHasMoreAfterByChannelId:
+          action.hasMoreAfter === undefined
+            ? state.messageHasMoreAfterByChannelId
+            : {
+                ...state.messageHasMoreAfterByChannelId,
+                [channelId]: action.hasMoreAfter,
+              },
       };
     }
     case "REPLACE_MESSAGES": {
       // Replace the loaded slice (anchor fetch / context window).
       // Unlike SET_MESSAGES this preserves any pending optimistic messages.
       const channelId = action.channelId ?? state.activeChannelId;
-      const previousMessages = channelId ? state.messagesByChannelId[channelId] ?? [] : state.messages;
+      const previousMessages = channelId
+        ? (state.messagesByChannelId[channelId] ?? [])
+        : state.messages;
       const nextMessages = [
         ...action.messages,
         ...previousMessages.filter((m) => m.pending),
       ];
       return {
         ...state,
-        messages: channelId === state.activeChannelId ? nextMessages : state.messages,
+        messages:
+          channelId === state.activeChannelId ? nextMessages : state.messages,
         messagesByChannelId: channelId
           ? { ...state.messagesByChannelId, [channelId]: nextMessages }
           : state.messagesByChannelId,
         messagesLoadedByChannelId: channelId
           ? { ...state.messagesLoadedByChannelId, [channelId]: true }
           : state.messagesLoadedByChannelId,
-        messageHasMoreBeforeByChannelId: channelId && action.hasMoreBefore !== undefined
-          ? { ...state.messageHasMoreBeforeByChannelId, [channelId]: action.hasMoreBefore }
-          : state.messageHasMoreBeforeByChannelId,
-        messageHasMoreAfterByChannelId: channelId && action.hasMoreAfter !== undefined
-          ? { ...state.messageHasMoreAfterByChannelId, [channelId]: action.hasMoreAfter }
-          : state.messageHasMoreAfterByChannelId,
+        messageHasMoreBeforeByChannelId:
+          channelId && action.hasMoreBefore !== undefined
+            ? {
+                ...state.messageHasMoreBeforeByChannelId,
+                [channelId]: action.hasMoreBefore,
+              }
+            : state.messageHasMoreBeforeByChannelId,
+        messageHasMoreAfterByChannelId:
+          channelId && action.hasMoreAfter !== undefined
+            ? {
+                ...state.messageHasMoreAfterByChannelId,
+                [channelId]: action.hasMoreAfter,
+              }
+            : state.messageHasMoreAfterByChannelId,
       };
     }
     case "APPEND_MESSAGES_AFTER": {
       // Append a forward page of messages to the bottom, deduplicating by ID.
       const channelId = action.channelId ?? state.activeChannelId;
-      const currentMessages = channelId ? state.messagesByChannelId[channelId] ?? [] : state.messages;
+      const currentMessages = channelId
+        ? (state.messagesByChannelId[channelId] ?? [])
+        : state.messages;
       const existingIds = new Set(currentMessages.map((m) => m.id));
       const newMsgs = action.messages.filter((m) => !existingIds.has(m.id));
       const nextMessages = [...currentMessages, ...newMsgs];
       return {
         ...state,
-        messages: channelId === state.activeChannelId ? nextMessages : state.messages,
-        messagesByChannelId: channelId ? { ...state.messagesByChannelId, [channelId]: nextMessages } : state.messagesByChannelId,
-        messageHasMoreAfterByChannelId: channelId && action.hasMoreAfter !== undefined
-          ? { ...state.messageHasMoreAfterByChannelId, [channelId]: action.hasMoreAfter }
-          : state.messageHasMoreAfterByChannelId,
+        messages:
+          channelId === state.activeChannelId ? nextMessages : state.messages,
+        messagesByChannelId: channelId
+          ? { ...state.messagesByChannelId, [channelId]: nextMessages }
+          : state.messagesByChannelId,
+        messageHasMoreAfterByChannelId:
+          channelId && action.hasMoreAfter !== undefined
+            ? {
+                ...state.messageHasMoreAfterByChannelId,
+                [channelId]: action.hasMoreAfter,
+              }
+            : state.messageHasMoreAfterByChannelId,
       };
     }
     case "APPEND_MESSAGE": {
       const incoming = action.message;
-      const currentMessages = state.messagesByChannelId[incoming.channel_id] ?? [];
+      const currentMessages =
+        state.messagesByChannelId[incoming.channel_id] ?? [];
       // Deduplicate by ID (late echo)
       if (currentMessages.some((m) => m.id === incoming.id)) return state;
       // Deduplicate by nonce — replace optimistic (pending) with server-confirmed
       if (incoming.nonce) {
         const pendingIdx = currentMessages.findIndex(
-          (m) => m.nonce === incoming.nonce && m.pending
+          (m) => m.nonce === incoming.nonce && m.pending,
         );
         if (pendingIdx !== -1) {
           const updated = [...currentMessages];
@@ -642,77 +902,115 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
           // append (below) already incremented it on the parent message.
           return {
             ...state,
-            messages: incoming.channel_id === state.activeChannelId ? updated : state.messages,
-            messagesByChannelId: { ...state.messagesByChannelId, [incoming.channel_id]: updated },
+            messages:
+              incoming.channel_id === state.activeChannelId
+                ? updated
+                : state.messages,
+            messagesByChannelId: {
+              ...state.messagesByChannelId,
+              [incoming.channel_id]: updated,
+            },
           };
         }
       }
       // Increment reply_count on the parent message if this is a reply
       const messages = [...currentMessages];
       if (incoming.reply_to_id) {
-        const parentIdx = messages.findIndex((m) => m.id === incoming.reply_to_id);
+        const parentIdx = messages.findIndex(
+          (m) => m.id === incoming.reply_to_id,
+        );
         if (parentIdx !== -1) {
-          messages[parentIdx] = { ...messages[parentIdx], reply_count: (messages[parentIdx].reply_count ?? 0) + 1 };
+          messages[parentIdx] = {
+            ...messages[parentIdx],
+            reply_count: (messages[parentIdx].reply_count ?? 0) + 1,
+          };
         }
       }
       messages.push(incoming);
       return {
         ...state,
-        messages: incoming.channel_id === state.activeChannelId ? messages : state.messages,
-        messagesByChannelId: { ...state.messagesByChannelId, [incoming.channel_id]: messages },
+        messages:
+          incoming.channel_id === state.activeChannelId
+            ? messages
+            : state.messages,
+        messagesByChannelId: {
+          ...state.messagesByChannelId,
+          [incoming.channel_id]: messages,
+        },
       };
     }
     case "UPDATE_MESSAGE": {
       const updateMessage = (m: Message) => ({
         ...m,
         ...(action.content !== undefined ? { content: action.content } : {}),
-        ...(action.updated_at !== undefined ? { updated_at: action.updated_at } : {}),
+        ...(action.updated_at !== undefined
+          ? { updated_at: action.updated_at }
+          : {}),
         ...(action.embeds !== undefined ? { embeds: action.embeds } : {}),
       });
-      const nextMessageCaches = mapMessageCaches(state.messagesByChannelId, (messages) =>
-        replaceMessageById(messages, action.id, updateMessage)
+      const nextMessageCaches = mapMessageCaches(
+        state.messagesByChannelId,
+        (messages) => replaceMessageById(messages, action.id, updateMessage),
       );
-      const nextPinnedCaches = mapMessageCaches(state.pinnedMessagesByChannelId, (messages) =>
-        replaceMessageById(messages, action.id, updateMessage)
+      const nextPinnedCaches = mapMessageCaches(
+        state.pinnedMessagesByChannelId,
+        (messages) => replaceMessageById(messages, action.id, updateMessage),
       );
       return {
         ...state,
         messages: replaceMessageById(state.messages, action.id, updateMessage),
-        pinnedMessages: replaceMessageById(state.pinnedMessages, action.id, updateMessage),
+        pinnedMessages: replaceMessageById(
+          state.pinnedMessages,
+          action.id,
+          updateMessage,
+        ),
         messagesByChannelId: nextMessageCaches,
         pinnedMessagesByChannelId: nextPinnedCaches,
       };
     }
     case "DELETE_MESSAGE": {
       let deletedChannelId: string | null = null;
-      const nextMessageCaches = mapMessageCaches(state.messagesByChannelId, (messages) => {
-        const msgToDelete = messages.find((m) => m.id === action.id);
-        if (!msgToDelete) return messages;
-        deletedChannelId = msgToDelete.channel_id;
-        const nextMessages = messages.filter((m) => m.id !== action.id);
+      const nextMessageCaches = mapMessageCaches(
+        state.messagesByChannelId,
+        (messages) => {
+          const msgToDelete = messages.find((m) => m.id === action.id);
+          if (!msgToDelete) return messages;
+          deletedChannelId = msgToDelete.channel_id;
+          const nextMessages = messages.filter((m) => m.id !== action.id);
 
-        // Decrement reply_count on the parent if this was a reply
-        if (msgToDelete.reply_to_id) {
-          const parentIdx = nextMessages.findIndex(m => m.id === msgToDelete.reply_to_id);
-          if (parentIdx !== -1) {
-            nextMessages[parentIdx] = {
-              ...nextMessages[parentIdx],
-              reply_count: Math.max(0, (nextMessages[parentIdx].reply_count ?? 1) - 1)
-            };
+          // Decrement reply_count on the parent if this was a reply
+          if (msgToDelete.reply_to_id) {
+            const parentIdx = nextMessages.findIndex(
+              (m) => m.id === msgToDelete.reply_to_id,
+            );
+            if (parentIdx !== -1) {
+              nextMessages[parentIdx] = {
+                ...nextMessages[parentIdx],
+                reply_count: Math.max(
+                  0,
+                  (nextMessages[parentIdx].reply_count ?? 1) - 1,
+                ),
+              };
+            }
           }
-        }
 
-        return nextMessages;
-      });
-      const nextPinnedCaches = mapMessageCaches(state.pinnedMessagesByChannelId, (messages) =>
-        messages.some((m) => m.id === action.id) ? messages.filter((m) => m.id !== action.id) : messages
+          return nextMessages;
+        },
+      );
+      const nextPinnedCaches = mapMessageCaches(
+        state.pinnedMessagesByChannelId,
+        (messages) =>
+          messages.some((m) => m.id === action.id)
+            ? messages.filter((m) => m.id !== action.id)
+            : messages,
       );
 
       return {
         ...state,
-        messages: deletedChannelId && deletedChannelId === state.activeChannelId
-          ? nextMessageCaches[deletedChannelId] ?? []
-          : state.messages.filter((m) => m.id !== action.id),
+        messages:
+          deletedChannelId && deletedChannelId === state.activeChannelId
+            ? (nextMessageCaches[deletedChannelId] ?? [])
+            : state.messages.filter((m) => m.id !== action.id),
         pinnedMessages: state.pinnedMessages.filter((m) => m.id !== action.id),
         messagesByChannelId: nextMessageCaches,
         pinnedMessagesByChannelId: nextPinnedCaches,
@@ -720,73 +1018,111 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
     }
     case "PREPEND_MESSAGES": {
       const channelId = action.channelId ?? state.activeChannelId;
-      const currentMessages = channelId ? state.messagesByChannelId[channelId] ?? [] : state.messages;
+      const currentMessages = channelId
+        ? (state.messagesByChannelId[channelId] ?? [])
+        : state.messages;
       const existingIds = new Set(currentMessages.map((m) => m.id));
       const newMessages = action.messages.filter((m) => !existingIds.has(m.id));
       const nextMessages = [...newMessages, ...currentMessages];
       return {
         ...state,
-        messages: channelId === state.activeChannelId ? nextMessages : state.messages,
-        messagesByChannelId: channelId ? { ...state.messagesByChannelId, [channelId]: nextMessages } : state.messagesByChannelId,
-        messageHasMoreBeforeByChannelId: channelId && action.hasMoreBefore !== undefined
-          ? { ...state.messageHasMoreBeforeByChannelId, [channelId]: action.hasMoreBefore }
-          : state.messageHasMoreBeforeByChannelId,
+        messages:
+          channelId === state.activeChannelId ? nextMessages : state.messages,
+        messagesByChannelId: channelId
+          ? { ...state.messagesByChannelId, [channelId]: nextMessages }
+          : state.messagesByChannelId,
+        messageHasMoreBeforeByChannelId:
+          channelId && action.hasMoreBefore !== undefined
+            ? {
+                ...state.messageHasMoreBeforeByChannelId,
+                [channelId]: action.hasMoreBefore,
+              }
+            : state.messageHasMoreBeforeByChannelId,
       };
     }
     case "SET_TYPING": {
       const current = state.typingUsers[action.channelId] ?? new Set<string>();
       const updated = new Set(current);
       updated.add(action.userId);
-      return { ...state, typingUsers: { ...state.typingUsers, [action.channelId]: updated } };
+      return {
+        ...state,
+        typingUsers: { ...state.typingUsers, [action.channelId]: updated },
+      };
     }
     case "CLEAR_TYPING": {
       const current = state.typingUsers[action.channelId];
       if (!current) return state;
       const updated = new Set(current);
       updated.delete(action.userId);
-      return { ...state, typingUsers: { ...state.typingUsers, [action.channelId]: updated } };
+      return {
+        ...state,
+        typingUsers: { ...state.typingUsers, [action.channelId]: updated },
+      };
     }
     case "SET_MEMBERS": {
       const serverId = action.serverId ?? state.activeServerId ?? undefined;
       const nextState = {
         ...state,
-        members: !serverId || state.activeServerId === serverId ? action.members : state.members,
-        membersByServerId: serverId ? { ...state.membersByServerId, [serverId]: action.members } : state.membersByServerId,
-        membersLoadedByServerId: serverId ? { ...state.membersLoadedByServerId, [serverId]: true } : state.membersLoadedByServerId,
+        members:
+          !serverId || state.activeServerId === serverId
+            ? action.members
+            : state.members,
+        membersByServerId: serverId
+          ? { ...state.membersByServerId, [serverId]: action.members }
+          : state.membersByServerId,
+        membersLoadedByServerId: serverId
+          ? { ...state.membersLoadedByServerId, [serverId]: true }
+          : state.membersLoadedByServerId,
       };
       return {
         ...nextState,
-        voiceChannelStates: enrichVoiceChannelStates(nextState.voiceChannelStates, nextState),
+        voiceChannelStates: enrichVoiceChannelStates(
+          nextState.voiceChannelStates,
+          nextState,
+        ),
       };
     }
     case "ADD_MEMBER": {
       const serverId = action.serverId ?? state.activeServerId ?? undefined;
       const isActive = !serverId || state.activeServerId === serverId;
-      const currentMembers = serverId ? state.membersByServerId[serverId] ?? (isActive ? state.members : []) : state.members;
+      const currentMembers = serverId
+        ? (state.membersByServerId[serverId] ?? (isActive ? state.members : []))
+        : state.members;
       // Don't add duplicates
-      if (currentMembers.some((m) => m.user.id === action.member.user.id)) return state;
+      if (currentMembers.some((m) => m.user.id === action.member.user.id))
+        return state;
       const nextMembers = [...currentMembers, action.member];
       return {
         ...state,
         members: isActive ? nextMembers : state.members,
-        membersByServerId: serverId ? { ...state.membersByServerId, [serverId]: nextMembers } : state.membersByServerId,
+        membersByServerId: serverId
+          ? { ...state.membersByServerId, [serverId]: nextMembers }
+          : state.membersByServerId,
       };
     }
     case "REMOVE_MEMBER": {
       const serverId = action.serverId ?? state.activeServerId ?? undefined;
       const isActive = !serverId || state.activeServerId === serverId;
-      const currentMembers = serverId ? state.membersByServerId[serverId] ?? (isActive ? state.members : []) : state.members;
-      const nextMembers = currentMembers.filter((m) => m.user.id !== action.userId);
+      const currentMembers = serverId
+        ? (state.membersByServerId[serverId] ?? (isActive ? state.members : []))
+        : state.members;
+      const nextMembers = currentMembers.filter(
+        (m) => m.user.id !== action.userId,
+      );
       return {
         ...state,
         members: isActive ? nextMembers : state.members,
-        membersByServerId: serverId ? { ...state.membersByServerId, [serverId]: nextMembers } : state.membersByServerId,
+        membersByServerId: serverId
+          ? { ...state.membersByServerId, [serverId]: nextMembers }
+          : state.membersByServerId,
       };
     }
     case "UPDATE_MEMBER_ROLES": {
       const serverId = action.serverId ?? state.activeServerId ?? undefined;
       const isActive = !serverId || state.activeServerId === serverId;
-      const currentMembers = serverId ? state.membersByServerId[serverId] ?? (isActive ? state.members : []) : state.members;
+      const currentMembers = serverId
+        ? (state.membersByServerId[serverId] ?? (isActive ? state.members : []))
+        : state.members;
       const idx = currentMembers.findIndex((m) => m.user.id === action.userId);
       if (idx === -1) return state;
       const newMembers = [...currentMembers];
@@ -794,87 +1130,143 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       return {
         ...state,
         members: isActive ? newMembers : state.members,
-        membersByServerId: serverId ? { ...state.membersByServerId, [serverId]: newMembers } : state.membersByServerId,
+        membersByServerId: serverId
+          ? { ...state.membersByServerId, [serverId]: newMembers }
+          : state.membersByServerId,
       };
     }
     case "UPDATE_MEMBER_PROFILE": {
       // 1. Update local user if it matches
-        let newUser = state.user;
-        if (newUser && newUser.id === action.userId) {
-          newUser = { ...newUser };
-          if (action.username !== undefined) newUser.username = action.username;
-          if (action.display_name !== undefined) newUser.display_name = action.display_name;
-          if (action.avatar_url !== undefined) newUser.avatar_url = action.avatar_url;
-          if (action.avatar_display !== undefined) newUser.avatar_display = action.avatar_display;
-          if (action.banner_url !== undefined) newUser.banner_url = action.banner_url;
-          if (action.banner_content_type !== undefined) newUser.banner_content_type = action.banner_content_type;
-          if (action.nameplate_url !== undefined) newUser.nameplate_url = action.nameplate_url;
-          if (action.nameplate_content_type !== undefined) newUser.nameplate_content_type = action.nameplate_content_type;
-          if (action.profile_accent_color !== undefined) newUser.profile_accent_color = action.profile_accent_color;
-          if (action.profile_background_color !== undefined) newUser.profile_background_color = action.profile_background_color;
-          if (action.profile_banner_color !== undefined) newUser.profile_banner_color = action.profile_banner_color;
-          if (action.display_name_style !== undefined) newUser.display_name_style = action.display_name_style;
-          if (action.theme_preference !== undefined) newUser.theme_preference = action.theme_preference;
-          if (action.theme_sync_enabled !== undefined) newUser.theme_sync_enabled = action.theme_sync_enabled;
-          if (action.media_content_filter !== undefined) newUser.media_content_filter = action.media_content_filter;
-          if (action.bio !== undefined) newUser.bio = action.bio;
-          if (action.pronouns !== undefined) newUser.pronouns = action.pronouns;
-          if (action.updated_at !== undefined) newUser.updated_at = action.updated_at;
-          if (action.created_at !== undefined) newUser.created_at = action.created_at;
-        }
+      let newUser = state.user;
+      if (newUser && newUser.id === action.userId) {
+        newUser = { ...newUser };
+        if (action.username !== undefined) newUser.username = action.username;
+        if (action.display_name !== undefined)
+          newUser.display_name = action.display_name;
+        if (action.avatar_url !== undefined)
+          newUser.avatar_url = action.avatar_url;
+        if (action.avatar_display !== undefined)
+          newUser.avatar_display = action.avatar_display;
+        if (action.banner_url !== undefined)
+          newUser.banner_url = action.banner_url;
+        if (action.banner_content_type !== undefined)
+          newUser.banner_content_type = action.banner_content_type;
+        if (action.nameplate_url !== undefined)
+          newUser.nameplate_url = action.nameplate_url;
+        if (action.nameplate_content_type !== undefined)
+          newUser.nameplate_content_type = action.nameplate_content_type;
+        if (action.profile_accent_color !== undefined)
+          newUser.profile_accent_color = action.profile_accent_color;
+        if (action.profile_background_color !== undefined)
+          newUser.profile_background_color = action.profile_background_color;
+        if (action.profile_banner_color !== undefined)
+          newUser.profile_banner_color = action.profile_banner_color;
+        if (action.display_name_style !== undefined)
+          newUser.display_name_style = action.display_name_style;
+        if (action.theme_preference !== undefined)
+          newUser.theme_preference = action.theme_preference;
+        if (action.theme_sync_enabled !== undefined)
+          newUser.theme_sync_enabled = action.theme_sync_enabled;
+        if (action.media_content_filter !== undefined)
+          newUser.media_content_filter = action.media_content_filter;
+        if (action.bio !== undefined) newUser.bio = action.bio;
+        if (action.pronouns !== undefined) newUser.pronouns = action.pronouns;
+        if (action.updated_at !== undefined)
+          newUser.updated_at = action.updated_at;
+        if (action.created_at !== undefined)
+          newUser.created_at = action.created_at;
+      }
 
       // 2. Update member list
       let newProfileUser = state.profileUser;
       if (newProfileUser && newProfileUser.id === action.userId) {
         newProfileUser = { ...newProfileUser };
-        if (action.username !== undefined) newProfileUser.username = action.username;
-        if (action.display_name !== undefined) newProfileUser.display_name = action.display_name;
-        if (action.avatar_url !== undefined) newProfileUser.avatar_url = action.avatar_url;
-        if (action.avatar_display !== undefined) newProfileUser.avatar_display = action.avatar_display;
-        if (action.banner_url !== undefined) newProfileUser.banner_url = action.banner_url;
-        if (action.banner_content_type !== undefined) newProfileUser.banner_content_type = action.banner_content_type;
-        if (action.nameplate_url !== undefined) newProfileUser.nameplate_url = action.nameplate_url;
-        if (action.nameplate_content_type !== undefined) newProfileUser.nameplate_content_type = action.nameplate_content_type;
-        if (action.profile_accent_color !== undefined) newProfileUser.profile_accent_color = action.profile_accent_color;
-        if (action.profile_background_color !== undefined) newProfileUser.profile_background_color = action.profile_background_color;
-        if (action.profile_banner_color !== undefined) newProfileUser.profile_banner_color = action.profile_banner_color;
-        if (action.display_name_style !== undefined) newProfileUser.display_name_style = action.display_name_style;
-        if (action.theme_preference !== undefined) newProfileUser.theme_preference = action.theme_preference;
-        if (action.theme_sync_enabled !== undefined) newProfileUser.theme_sync_enabled = action.theme_sync_enabled;
-        if (action.media_content_filter !== undefined) newProfileUser.media_content_filter = action.media_content_filter;
+        if (action.username !== undefined)
+          newProfileUser.username = action.username;
+        if (action.display_name !== undefined)
+          newProfileUser.display_name = action.display_name;
+        if (action.avatar_url !== undefined)
+          newProfileUser.avatar_url = action.avatar_url;
+        if (action.avatar_display !== undefined)
+          newProfileUser.avatar_display = action.avatar_display;
+        if (action.banner_url !== undefined)
+          newProfileUser.banner_url = action.banner_url;
+        if (action.banner_content_type !== undefined)
+          newProfileUser.banner_content_type = action.banner_content_type;
+        if (action.nameplate_url !== undefined)
+          newProfileUser.nameplate_url = action.nameplate_url;
+        if (action.nameplate_content_type !== undefined)
+          newProfileUser.nameplate_content_type = action.nameplate_content_type;
+        if (action.profile_accent_color !== undefined)
+          newProfileUser.profile_accent_color = action.profile_accent_color;
+        if (action.profile_background_color !== undefined)
+          newProfileUser.profile_background_color =
+            action.profile_background_color;
+        if (action.profile_banner_color !== undefined)
+          newProfileUser.profile_banner_color = action.profile_banner_color;
+        if (action.display_name_style !== undefined)
+          newProfileUser.display_name_style = action.display_name_style;
+        if (action.theme_preference !== undefined)
+          newProfileUser.theme_preference = action.theme_preference;
+        if (action.theme_sync_enabled !== undefined)
+          newProfileUser.theme_sync_enabled = action.theme_sync_enabled;
+        if (action.media_content_filter !== undefined)
+          newProfileUser.media_content_filter = action.media_content_filter;
         if (action.bio !== undefined) newProfileUser.bio = action.bio;
-        if (action.pronouns !== undefined) newProfileUser.pronouns = action.pronouns;
-        if (action.updated_at !== undefined) newProfileUser.updated_at = action.updated_at;
-        if (action.created_at !== undefined) newProfileUser.created_at = action.created_at;
+        if (action.pronouns !== undefined)
+          newProfileUser.pronouns = action.pronouns;
+        if (action.updated_at !== undefined)
+          newProfileUser.updated_at = action.updated_at;
+        if (action.created_at !== undefined)
+          newProfileUser.created_at = action.created_at;
       }
 
       // 2. Update member list
       const idx = state.members.findIndex((m) => m.user.id === action.userId);
       let newMembers = state.members;
-        if (idx !== -1) {
-          newMembers = [...state.members];
-          const updatedUser = { ...newMembers[idx].user };
-          if (action.username !== undefined) updatedUser.username = action.username;
-          if (action.display_name !== undefined) updatedUser.display_name = action.display_name;
-          if (action.avatar_url !== undefined) updatedUser.avatar_url = action.avatar_url;
-          if (action.avatar_display !== undefined) updatedUser.avatar_display = action.avatar_display;
-          if (action.banner_url !== undefined) updatedUser.banner_url = action.banner_url;
-          if (action.banner_content_type !== undefined) updatedUser.banner_content_type = action.banner_content_type;
-          if (action.nameplate_url !== undefined) updatedUser.nameplate_url = action.nameplate_url;
-          if (action.nameplate_content_type !== undefined) updatedUser.nameplate_content_type = action.nameplate_content_type;
-          if (action.profile_accent_color !== undefined) updatedUser.profile_accent_color = action.profile_accent_color;
-          if (action.profile_background_color !== undefined) updatedUser.profile_background_color = action.profile_background_color;
-          if (action.profile_banner_color !== undefined) updatedUser.profile_banner_color = action.profile_banner_color;
-          if (action.display_name_style !== undefined) updatedUser.display_name_style = action.display_name_style;
-          if (action.theme_preference !== undefined) updatedUser.theme_preference = action.theme_preference;
-          if (action.theme_sync_enabled !== undefined) updatedUser.theme_sync_enabled = action.theme_sync_enabled;
-          if (action.media_content_filter !== undefined) updatedUser.media_content_filter = action.media_content_filter;
-          if (action.bio !== undefined) updatedUser.bio = action.bio;
-          if (action.pronouns !== undefined) updatedUser.pronouns = action.pronouns;
-          if (action.updated_at !== undefined) updatedUser.updated_at = action.updated_at;
-          if (action.created_at !== undefined) updatedUser.created_at = action.created_at;
-          newMembers[idx] = { ...newMembers[idx], user: updatedUser };
-        }
+      if (idx !== -1) {
+        newMembers = [...state.members];
+        const updatedUser = { ...newMembers[idx].user };
+        if (action.username !== undefined)
+          updatedUser.username = action.username;
+        if (action.display_name !== undefined)
+          updatedUser.display_name = action.display_name;
+        if (action.avatar_url !== undefined)
+          updatedUser.avatar_url = action.avatar_url;
+        if (action.avatar_display !== undefined)
+          updatedUser.avatar_display = action.avatar_display;
+        if (action.banner_url !== undefined)
+          updatedUser.banner_url = action.banner_url;
+        if (action.banner_content_type !== undefined)
+          updatedUser.banner_content_type = action.banner_content_type;
+        if (action.nameplate_url !== undefined)
+          updatedUser.nameplate_url = action.nameplate_url;
+        if (action.nameplate_content_type !== undefined)
+          updatedUser.nameplate_content_type = action.nameplate_content_type;
+        if (action.profile_accent_color !== undefined)
+          updatedUser.profile_accent_color = action.profile_accent_color;
+        if (action.profile_background_color !== undefined)
+          updatedUser.profile_background_color =
+            action.profile_background_color;
+        if (action.profile_banner_color !== undefined)
+          updatedUser.profile_banner_color = action.profile_banner_color;
+        if (action.display_name_style !== undefined)
+          updatedUser.display_name_style = action.display_name_style;
+        if (action.theme_preference !== undefined)
+          updatedUser.theme_preference = action.theme_preference;
+        if (action.theme_sync_enabled !== undefined)
+          updatedUser.theme_sync_enabled = action.theme_sync_enabled;
+        if (action.media_content_filter !== undefined)
+          updatedUser.media_content_filter = action.media_content_filter;
+        if (action.bio !== undefined) updatedUser.bio = action.bio;
+        if (action.pronouns !== undefined)
+          updatedUser.pronouns = action.pronouns;
+        if (action.updated_at !== undefined)
+          updatedUser.updated_at = action.updated_at;
+        if (action.created_at !== undefined)
+          updatedUser.created_at = action.created_at;
+        newMembers[idx] = { ...newMembers[idx], user: updatedUser };
+      }
 
       // 2b. Update cached per-server member lists
       let membersByServerChanged = false;
@@ -886,31 +1278,51 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
 
             changed = true;
             const updatedUser = { ...member.user };
-            if (action.username !== undefined) updatedUser.username = action.username;
-            if (action.display_name !== undefined) updatedUser.display_name = action.display_name;
-            if (action.avatar_url !== undefined) updatedUser.avatar_url = action.avatar_url;
-            if (action.avatar_display !== undefined) updatedUser.avatar_display = action.avatar_display;
-            if (action.banner_url !== undefined) updatedUser.banner_url = action.banner_url;
-            if (action.banner_content_type !== undefined) updatedUser.banner_content_type = action.banner_content_type;
-            if (action.nameplate_url !== undefined) updatedUser.nameplate_url = action.nameplate_url;
-            if (action.nameplate_content_type !== undefined) updatedUser.nameplate_content_type = action.nameplate_content_type;
-            if (action.profile_accent_color !== undefined) updatedUser.profile_accent_color = action.profile_accent_color;
-            if (action.profile_background_color !== undefined) updatedUser.profile_background_color = action.profile_background_color;
-            if (action.profile_banner_color !== undefined) updatedUser.profile_banner_color = action.profile_banner_color;
-            if (action.display_name_style !== undefined) updatedUser.display_name_style = action.display_name_style;
-            if (action.theme_preference !== undefined) updatedUser.theme_preference = action.theme_preference;
-            if (action.theme_sync_enabled !== undefined) updatedUser.theme_sync_enabled = action.theme_sync_enabled;
-            if (action.media_content_filter !== undefined) updatedUser.media_content_filter = action.media_content_filter;
+            if (action.username !== undefined)
+              updatedUser.username = action.username;
+            if (action.display_name !== undefined)
+              updatedUser.display_name = action.display_name;
+            if (action.avatar_url !== undefined)
+              updatedUser.avatar_url = action.avatar_url;
+            if (action.avatar_display !== undefined)
+              updatedUser.avatar_display = action.avatar_display;
+            if (action.banner_url !== undefined)
+              updatedUser.banner_url = action.banner_url;
+            if (action.banner_content_type !== undefined)
+              updatedUser.banner_content_type = action.banner_content_type;
+            if (action.nameplate_url !== undefined)
+              updatedUser.nameplate_url = action.nameplate_url;
+            if (action.nameplate_content_type !== undefined)
+              updatedUser.nameplate_content_type =
+                action.nameplate_content_type;
+            if (action.profile_accent_color !== undefined)
+              updatedUser.profile_accent_color = action.profile_accent_color;
+            if (action.profile_background_color !== undefined)
+              updatedUser.profile_background_color =
+                action.profile_background_color;
+            if (action.profile_banner_color !== undefined)
+              updatedUser.profile_banner_color = action.profile_banner_color;
+            if (action.display_name_style !== undefined)
+              updatedUser.display_name_style = action.display_name_style;
+            if (action.theme_preference !== undefined)
+              updatedUser.theme_preference = action.theme_preference;
+            if (action.theme_sync_enabled !== undefined)
+              updatedUser.theme_sync_enabled = action.theme_sync_enabled;
+            if (action.media_content_filter !== undefined)
+              updatedUser.media_content_filter = action.media_content_filter;
             if (action.bio !== undefined) updatedUser.bio = action.bio;
-            if (action.pronouns !== undefined) updatedUser.pronouns = action.pronouns;
-            if (action.updated_at !== undefined) updatedUser.updated_at = action.updated_at;
-            if (action.created_at !== undefined) updatedUser.created_at = action.created_at;
+            if (action.pronouns !== undefined)
+              updatedUser.pronouns = action.pronouns;
+            if (action.updated_at !== undefined)
+              updatedUser.updated_at = action.updated_at;
+            if (action.created_at !== undefined)
+              updatedUser.created_at = action.created_at;
             return { ...member, user: updatedUser };
           });
 
           if (changed) membersByServerChanged = true;
           return [serverId, changed ? nextMembersForServer : members];
-        })
+        }),
       );
 
       // 3. Update voice channel states
@@ -918,21 +1330,33 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       let voiceChanged = false;
       for (const channelId of Object.keys(newVoiceStates)) {
         const members = newVoiceStates[channelId];
-        const vcIdx = members.findIndex((m) => m.clerk_user_id === action.userId);
+        const vcIdx = members.findIndex(
+          (m) => m.clerk_user_id === action.userId,
+        );
         if (vcIdx !== -1) {
           const updated = { ...members[vcIdx] };
           if (action.username !== undefined) updated.username = action.username;
-          if (action.display_name !== undefined) updated.display_name = action.display_name;
-          if (action.display_name_style !== undefined) updated.display_name_style = action.display_name_style;
-          if (action.display_name !== undefined || action.username !== undefined) {
-            updated.name = getDisplayName({
-              display_name: updated.display_name,
-              username: updated.username,
-              name: updated.name,
-            }, updated.name);
+          if (action.display_name !== undefined)
+            updated.display_name = action.display_name;
+          if (action.display_name_style !== undefined)
+            updated.display_name_style = action.display_name_style;
+          if (
+            action.display_name !== undefined ||
+            action.username !== undefined
+          ) {
+            updated.name = getDisplayName(
+              {
+                display_name: updated.display_name,
+                username: updated.username,
+                name: updated.name,
+              },
+              updated.name,
+            );
           }
-          if (action.avatar_url !== undefined) updated.avatar_url = action.avatar_url;
-          if (action.avatar_display !== undefined) updated.avatar_display = action.avatar_display as any;
+          if (action.avatar_url !== undefined)
+            updated.avatar_url = action.avatar_url;
+          if (action.avatar_display !== undefined)
+            updated.avatar_display = action.avatar_display as any;
           newVoiceStates[channelId] = [...members];
           newVoiceStates[channelId][vcIdx] = updated;
           voiceChanged = true;
@@ -941,84 +1365,153 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
 
       // 4. Update DM channel recipients
       let newDmChannels = state.dmChannels;
-      const dmIdx = state.dmChannels.findIndex((dm) => dm.recipient?.id === action.userId);
-        if (dmIdx !== -1) {
-          newDmChannels = [...state.dmChannels];
-          const updatedRecipient = { ...newDmChannels[dmIdx].recipient };
-          if (action.username !== undefined) updatedRecipient.username = action.username;
-          if (action.display_name !== undefined) updatedRecipient.display_name = action.display_name;
-          if (action.avatar_url !== undefined) updatedRecipient.avatar_url = action.avatar_url;
-          if (action.avatar_display !== undefined) updatedRecipient.avatar_display = action.avatar_display;
-          if (action.banner_url !== undefined) updatedRecipient.banner_url = action.banner_url;
-          if (action.banner_content_type !== undefined) updatedRecipient.banner_content_type = action.banner_content_type;
-          if (action.nameplate_url !== undefined) updatedRecipient.nameplate_url = action.nameplate_url;
-          if (action.nameplate_content_type !== undefined) updatedRecipient.nameplate_content_type = action.nameplate_content_type;
-          if (action.profile_accent_color !== undefined) updatedRecipient.profile_accent_color = action.profile_accent_color;
-          if (action.profile_background_color !== undefined) updatedRecipient.profile_background_color = action.profile_background_color;
-          if (action.profile_banner_color !== undefined) updatedRecipient.profile_banner_color = action.profile_banner_color;
-          if (action.display_name_style !== undefined) updatedRecipient.display_name_style = action.display_name_style;
-          if (action.theme_preference !== undefined) updatedRecipient.theme_preference = action.theme_preference;
-          if (action.theme_sync_enabled !== undefined) updatedRecipient.theme_sync_enabled = action.theme_sync_enabled;
-          if (action.media_content_filter !== undefined) updatedRecipient.media_content_filter = action.media_content_filter;
-          if (action.bio !== undefined) updatedRecipient.bio = action.bio;
-          if (action.pronouns !== undefined) updatedRecipient.pronouns = action.pronouns;
-          if (action.updated_at !== undefined) updatedRecipient.updated_at = action.updated_at;
-          if (action.created_at !== undefined) updatedRecipient.created_at = action.created_at;
-          newDmChannels[dmIdx] = { ...newDmChannels[dmIdx], recipient: updatedRecipient };
-        }
+      const dmIdx = state.dmChannels.findIndex(
+        (dm) => dm.recipient?.id === action.userId,
+      );
+      if (dmIdx !== -1) {
+        newDmChannels = [...state.dmChannels];
+        const updatedRecipient = { ...newDmChannels[dmIdx].recipient };
+        if (action.username !== undefined)
+          updatedRecipient.username = action.username;
+        if (action.display_name !== undefined)
+          updatedRecipient.display_name = action.display_name;
+        if (action.avatar_url !== undefined)
+          updatedRecipient.avatar_url = action.avatar_url;
+        if (action.avatar_display !== undefined)
+          updatedRecipient.avatar_display = action.avatar_display;
+        if (action.banner_url !== undefined)
+          updatedRecipient.banner_url = action.banner_url;
+        if (action.banner_content_type !== undefined)
+          updatedRecipient.banner_content_type = action.banner_content_type;
+        if (action.nameplate_url !== undefined)
+          updatedRecipient.nameplate_url = action.nameplate_url;
+        if (action.nameplate_content_type !== undefined)
+          updatedRecipient.nameplate_content_type =
+            action.nameplate_content_type;
+        if (action.profile_accent_color !== undefined)
+          updatedRecipient.profile_accent_color = action.profile_accent_color;
+        if (action.profile_background_color !== undefined)
+          updatedRecipient.profile_background_color =
+            action.profile_background_color;
+        if (action.profile_banner_color !== undefined)
+          updatedRecipient.profile_banner_color = action.profile_banner_color;
+        if (action.display_name_style !== undefined)
+          updatedRecipient.display_name_style = action.display_name_style;
+        if (action.theme_preference !== undefined)
+          updatedRecipient.theme_preference = action.theme_preference;
+        if (action.theme_sync_enabled !== undefined)
+          updatedRecipient.theme_sync_enabled = action.theme_sync_enabled;
+        if (action.media_content_filter !== undefined)
+          updatedRecipient.media_content_filter = action.media_content_filter;
+        if (action.bio !== undefined) updatedRecipient.bio = action.bio;
+        if (action.pronouns !== undefined)
+          updatedRecipient.pronouns = action.pronouns;
+        if (action.updated_at !== undefined)
+          updatedRecipient.updated_at = action.updated_at;
+        if (action.created_at !== undefined)
+          updatedRecipient.created_at = action.created_at;
+        newDmChannels[dmIdx] = {
+          ...newDmChannels[dmIdx],
+          recipient: updatedRecipient,
+        };
+      }
 
       // 5. Update relationships
       let newRelationships = state.relationships;
-      const relIdx = state.relationships.findIndex((r) => r.user?.id === action.userId);
-        if (relIdx !== -1) {
-          newRelationships = [...state.relationships];
-          const updatedRelUser = { ...newRelationships[relIdx].user } as User;
-          if (action.username !== undefined) updatedRelUser.username = action.username;
-          if (action.display_name !== undefined) updatedRelUser.display_name = action.display_name;
-          if (action.avatar_url !== undefined) updatedRelUser.avatar_url = action.avatar_url;
-          if (action.avatar_display !== undefined) updatedRelUser.avatar_display = action.avatar_display;
-          if (action.banner_url !== undefined) updatedRelUser.banner_url = action.banner_url;
-          if (action.banner_content_type !== undefined) updatedRelUser.banner_content_type = action.banner_content_type;
-          if (action.nameplate_url !== undefined) updatedRelUser.nameplate_url = action.nameplate_url;
-          if (action.nameplate_content_type !== undefined) updatedRelUser.nameplate_content_type = action.nameplate_content_type;
-          if (action.profile_accent_color !== undefined) updatedRelUser.profile_accent_color = action.profile_accent_color;
-          if (action.profile_background_color !== undefined) updatedRelUser.profile_background_color = action.profile_background_color;
-          if (action.profile_banner_color !== undefined) updatedRelUser.profile_banner_color = action.profile_banner_color;
-          if (action.display_name_style !== undefined) updatedRelUser.display_name_style = action.display_name_style;
-          if (action.theme_preference !== undefined) updatedRelUser.theme_preference = action.theme_preference;
-          if (action.theme_sync_enabled !== undefined) updatedRelUser.theme_sync_enabled = action.theme_sync_enabled;
-          if (action.media_content_filter !== undefined) updatedRelUser.media_content_filter = action.media_content_filter;
-          if (action.bio !== undefined) updatedRelUser.bio = action.bio;
-          if (action.pronouns !== undefined) updatedRelUser.pronouns = action.pronouns;
-          if (action.updated_at !== undefined) updatedRelUser.updated_at = action.updated_at;
-          if (action.created_at !== undefined) updatedRelUser.created_at = action.created_at;
-          newRelationships[relIdx] = { ...newRelationships[relIdx], user: updatedRelUser };
-        }
+      const relIdx = state.relationships.findIndex(
+        (r) => r.user?.id === action.userId,
+      );
+      if (relIdx !== -1) {
+        newRelationships = [...state.relationships];
+        const updatedRelUser = { ...newRelationships[relIdx].user } as User;
+        if (action.username !== undefined)
+          updatedRelUser.username = action.username;
+        if (action.display_name !== undefined)
+          updatedRelUser.display_name = action.display_name;
+        if (action.avatar_url !== undefined)
+          updatedRelUser.avatar_url = action.avatar_url;
+        if (action.avatar_display !== undefined)
+          updatedRelUser.avatar_display = action.avatar_display;
+        if (action.banner_url !== undefined)
+          updatedRelUser.banner_url = action.banner_url;
+        if (action.banner_content_type !== undefined)
+          updatedRelUser.banner_content_type = action.banner_content_type;
+        if (action.nameplate_url !== undefined)
+          updatedRelUser.nameplate_url = action.nameplate_url;
+        if (action.nameplate_content_type !== undefined)
+          updatedRelUser.nameplate_content_type = action.nameplate_content_type;
+        if (action.profile_accent_color !== undefined)
+          updatedRelUser.profile_accent_color = action.profile_accent_color;
+        if (action.profile_background_color !== undefined)
+          updatedRelUser.profile_background_color =
+            action.profile_background_color;
+        if (action.profile_banner_color !== undefined)
+          updatedRelUser.profile_banner_color = action.profile_banner_color;
+        if (action.display_name_style !== undefined)
+          updatedRelUser.display_name_style = action.display_name_style;
+        if (action.theme_preference !== undefined)
+          updatedRelUser.theme_preference = action.theme_preference;
+        if (action.theme_sync_enabled !== undefined)
+          updatedRelUser.theme_sync_enabled = action.theme_sync_enabled;
+        if (action.media_content_filter !== undefined)
+          updatedRelUser.media_content_filter = action.media_content_filter;
+        if (action.bio !== undefined) updatedRelUser.bio = action.bio;
+        if (action.pronouns !== undefined)
+          updatedRelUser.pronouns = action.pronouns;
+        if (action.updated_at !== undefined)
+          updatedRelUser.updated_at = action.updated_at;
+        if (action.created_at !== undefined)
+          updatedRelUser.created_at = action.created_at;
+        newRelationships[relIdx] = {
+          ...newRelationships[relIdx],
+          user: updatedRelUser,
+        };
+      }
 
       // 6. Update message authors in current view
       let newMessages = state.messages;
-      const hasAuthorMatch = state.messages.some((m) => m.author_id === action.userId);
+      const hasAuthorMatch = state.messages.some(
+        (m) => m.author_id === action.userId,
+      );
       if (hasAuthorMatch) {
         newMessages = state.messages.map((m) => {
           if (m.author_id !== action.userId || !m.author) return m;
           const updatedAuthor = { ...m.author };
-          if (action.username !== undefined) updatedAuthor.username = action.username;
-          if (action.display_name !== undefined) updatedAuthor.display_name = action.display_name;
-          if (action.avatar_url !== undefined) updatedAuthor.avatar_url = action.avatar_url;
-          if (action.avatar_display !== undefined) updatedAuthor.avatar_display = action.avatar_display;
-          if (action.banner_url !== undefined) updatedAuthor.banner_url = action.banner_url;
-          if (action.banner_content_type !== undefined) updatedAuthor.banner_content_type = action.banner_content_type;
-          if (action.nameplate_url !== undefined) updatedAuthor.nameplate_url = action.nameplate_url;
-          if (action.nameplate_content_type !== undefined) updatedAuthor.nameplate_content_type = action.nameplate_content_type;
-          if (action.profile_accent_color !== undefined) updatedAuthor.profile_accent_color = action.profile_accent_color;
-          if (action.profile_background_color !== undefined) updatedAuthor.profile_background_color = action.profile_background_color;
-          if (action.profile_banner_color !== undefined) updatedAuthor.profile_banner_color = action.profile_banner_color;
-          if (action.display_name_style !== undefined) updatedAuthor.display_name_style = action.display_name_style;
-          if (action.theme_preference !== undefined) updatedAuthor.theme_preference = action.theme_preference;
-          if (action.theme_sync_enabled !== undefined) updatedAuthor.theme_sync_enabled = action.theme_sync_enabled;
-          if (action.media_content_filter !== undefined) updatedAuthor.media_content_filter = action.media_content_filter;
+          if (action.username !== undefined)
+            updatedAuthor.username = action.username;
+          if (action.display_name !== undefined)
+            updatedAuthor.display_name = action.display_name;
+          if (action.avatar_url !== undefined)
+            updatedAuthor.avatar_url = action.avatar_url;
+          if (action.avatar_display !== undefined)
+            updatedAuthor.avatar_display = action.avatar_display;
+          if (action.banner_url !== undefined)
+            updatedAuthor.banner_url = action.banner_url;
+          if (action.banner_content_type !== undefined)
+            updatedAuthor.banner_content_type = action.banner_content_type;
+          if (action.nameplate_url !== undefined)
+            updatedAuthor.nameplate_url = action.nameplate_url;
+          if (action.nameplate_content_type !== undefined)
+            updatedAuthor.nameplate_content_type =
+              action.nameplate_content_type;
+          if (action.profile_accent_color !== undefined)
+            updatedAuthor.profile_accent_color = action.profile_accent_color;
+          if (action.profile_background_color !== undefined)
+            updatedAuthor.profile_background_color =
+              action.profile_background_color;
+          if (action.profile_banner_color !== undefined)
+            updatedAuthor.profile_banner_color = action.profile_banner_color;
+          if (action.display_name_style !== undefined)
+            updatedAuthor.display_name_style = action.display_name_style;
+          if (action.theme_preference !== undefined)
+            updatedAuthor.theme_preference = action.theme_preference;
+          if (action.theme_sync_enabled !== undefined)
+            updatedAuthor.theme_sync_enabled = action.theme_sync_enabled;
+          if (action.media_content_filter !== undefined)
+            updatedAuthor.media_content_filter = action.media_content_filter;
           if (action.bio !== undefined) updatedAuthor.bio = action.bio;
-          if (action.pronouns !== undefined) updatedAuthor.pronouns = action.pronouns;
+          if (action.pronouns !== undefined)
+            updatedAuthor.pronouns = action.pronouns;
           return { ...m, author: updatedAuthor };
         });
       }
@@ -1027,31 +1520,55 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         messages.map((m) => {
           if (m.author_id !== action.userId || !m.author) return m;
           const updatedAuthor = { ...m.author };
-          if (action.username !== undefined) updatedAuthor.username = action.username;
-          if (action.display_name !== undefined) updatedAuthor.display_name = action.display_name;
-          if (action.avatar_url !== undefined) updatedAuthor.avatar_url = action.avatar_url;
-          if (action.avatar_display !== undefined) updatedAuthor.avatar_display = action.avatar_display;
-          if (action.banner_url !== undefined) updatedAuthor.banner_url = action.banner_url;
-          if (action.banner_content_type !== undefined) updatedAuthor.banner_content_type = action.banner_content_type;
-          if (action.nameplate_url !== undefined) updatedAuthor.nameplate_url = action.nameplate_url;
-          if (action.nameplate_content_type !== undefined) updatedAuthor.nameplate_content_type = action.nameplate_content_type;
-          if (action.profile_accent_color !== undefined) updatedAuthor.profile_accent_color = action.profile_accent_color;
-          if (action.profile_background_color !== undefined) updatedAuthor.profile_background_color = action.profile_background_color;
-          if (action.profile_banner_color !== undefined) updatedAuthor.profile_banner_color = action.profile_banner_color;
-          if (action.display_name_style !== undefined) updatedAuthor.display_name_style = action.display_name_style;
-          if (action.theme_preference !== undefined) updatedAuthor.theme_preference = action.theme_preference;
-          if (action.theme_sync_enabled !== undefined) updatedAuthor.theme_sync_enabled = action.theme_sync_enabled;
-          if (action.media_content_filter !== undefined) updatedAuthor.media_content_filter = action.media_content_filter;
+          if (action.username !== undefined)
+            updatedAuthor.username = action.username;
+          if (action.display_name !== undefined)
+            updatedAuthor.display_name = action.display_name;
+          if (action.avatar_url !== undefined)
+            updatedAuthor.avatar_url = action.avatar_url;
+          if (action.avatar_display !== undefined)
+            updatedAuthor.avatar_display = action.avatar_display;
+          if (action.banner_url !== undefined)
+            updatedAuthor.banner_url = action.banner_url;
+          if (action.banner_content_type !== undefined)
+            updatedAuthor.banner_content_type = action.banner_content_type;
+          if (action.nameplate_url !== undefined)
+            updatedAuthor.nameplate_url = action.nameplate_url;
+          if (action.nameplate_content_type !== undefined)
+            updatedAuthor.nameplate_content_type =
+              action.nameplate_content_type;
+          if (action.profile_accent_color !== undefined)
+            updatedAuthor.profile_accent_color = action.profile_accent_color;
+          if (action.profile_background_color !== undefined)
+            updatedAuthor.profile_background_color =
+              action.profile_background_color;
+          if (action.profile_banner_color !== undefined)
+            updatedAuthor.profile_banner_color = action.profile_banner_color;
+          if (action.display_name_style !== undefined)
+            updatedAuthor.display_name_style = action.display_name_style;
+          if (action.theme_preference !== undefined)
+            updatedAuthor.theme_preference = action.theme_preference;
+          if (action.theme_sync_enabled !== undefined)
+            updatedAuthor.theme_sync_enabled = action.theme_sync_enabled;
+          if (action.media_content_filter !== undefined)
+            updatedAuthor.media_content_filter = action.media_content_filter;
           if (action.bio !== undefined) updatedAuthor.bio = action.bio;
-          if (action.pronouns !== undefined) updatedAuthor.pronouns = action.pronouns;
+          if (action.pronouns !== undefined)
+            updatedAuthor.pronouns = action.pronouns;
           return { ...m, author: updatedAuthor };
         });
 
-      const nextMessageCaches = mapMessageCaches(state.messagesByChannelId, updateMessageAuthor);
-      const nextPinnedCaches = mapMessageCaches(state.pinnedMessagesByChannelId, updateMessageAuthor);
+      const nextMessageCaches = mapMessageCaches(
+        state.messagesByChannelId,
+        updateMessageAuthor,
+      );
+      const nextPinnedCaches = mapMessageCaches(
+        state.pinnedMessagesByChannelId,
+        updateMessageAuthor,
+      );
 
       const nextPinnedMessages = state.activeChannelId
-        ? nextPinnedCaches[state.activeChannelId] ?? state.pinnedMessages
+        ? (nextPinnedCaches[state.activeChannelId] ?? state.pinnedMessages)
         : state.pinnedMessages;
 
       return {
@@ -1059,8 +1576,12 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         user: newUser,
         profileUser: newProfileUser,
         members: newMembers,
-        membersByServerId: membersByServerChanged ? nextMembersByServerId : state.membersByServerId,
-        voiceChannelStates: voiceChanged ? newVoiceStates : state.voiceChannelStates,
+        membersByServerId: membersByServerChanged
+          ? nextMembersByServerId
+          : state.membersByServerId,
+        voiceChannelStates: voiceChanged
+          ? newVoiceStates
+          : state.voiceChannelStates,
         dmChannels: newDmChannels,
         relationships: newRelationships,
         messages: newMessages,
@@ -1084,7 +1605,12 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
               existing.count = nextUsers.length;
             }
           } else {
-            reactions.push({ emoji: action.emoji, count: 1, me: false, users: [action.userId] });
+            reactions.push({
+              emoji: action.emoji,
+              count: 1,
+              me: false,
+              users: [action.userId],
+            });
           }
           return { ...m, reactions };
         }),
@@ -1116,7 +1642,8 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       return { ...state, onlineUsers: new Set(action.userIds) };
     case "SET_PRESENCE_USERS": {
       const nextOnlineUsers = new Set<string>();
-      const nextPresencePlatformsByUserId: Record<string, PresencePlatform[]> = {};
+      const nextPresencePlatformsByUserId: Record<string, PresencePlatform[]> =
+        {};
 
       for (const user of action.users) {
         if (user.status !== "offline") {
@@ -1133,12 +1660,17 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         return {
           ...input,
           status: presence.status,
-          custom_status: presence.customStatus === undefined ? input.custom_status : presence.customStatus,
+          custom_status:
+            presence.customStatus === undefined
+              ? input.custom_status
+              : presence.customStatus,
           presence_platforms: presence.platforms ?? [],
         };
       };
 
-      const presenceByUserId = new Map(action.users.map((user) => [user.userId, user]));
+      const presenceByUserId = new Map(
+        action.users.map((user) => [user.userId, user]),
+      );
       const updatedMembers = state.members.map((member) => {
         const presence = presenceByUserId.get(member.user.id);
         if (!presence) return member;
@@ -1150,45 +1682,69 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
           members.map((member) => {
             const presence = presenceByUserId.get(member.user.id);
             if (!presence) return member;
-            return { ...member, user: applyPresenceToUser(member.user, presence) };
+            return {
+              ...member,
+              user: applyPresenceToUser(member.user, presence),
+            };
           }),
         ]),
       );
       const updatedDmChannels = state.dmChannels.map((channel) => {
         const presence = presenceByUserId.get(channel.recipient.id);
         if (!presence) return channel;
-        return { ...channel, recipient: applyPresenceToUser(channel.recipient, presence) };
+        return {
+          ...channel,
+          recipient: applyPresenceToUser(channel.recipient, presence),
+        };
       });
       const updatedRelationships = state.relationships.map((relationship) => {
         if (!relationship.user) return relationship;
         const presence = presenceByUserId.get(relationship.user.id);
         if (!presence) return relationship;
-        return { ...relationship, user: applyPresenceToUser(relationship.user, presence) };
+        return {
+          ...relationship,
+          user: applyPresenceToUser(relationship.user, presence),
+        };
       });
       const updatedMessages = state.messages.map((message) => {
         if (!message.author) return message;
         const presence = presenceByUserId.get(message.author.id);
         if (!presence) return message;
-        return { ...message, author: applyPresenceToUser(message.author, presence) };
+        return {
+          ...message,
+          author: applyPresenceToUser(message.author, presence),
+        };
       });
       const updatedMessagesByChannelId = Object.fromEntries(
-        Object.entries(state.messagesByChannelId).map(([channelId, messages]) => [
-          channelId,
-          messages.map((message) => {
-            if (!message.author) return message;
-            const presence = presenceByUserId.get(message.author.id);
-            if (!presence) return message;
-            return { ...message, author: applyPresenceToUser(message.author, presence) };
-          }),
-        ]),
+        Object.entries(state.messagesByChannelId).map(
+          ([channelId, messages]) => [
+            channelId,
+            messages.map((message) => {
+              if (!message.author) return message;
+              const presence = presenceByUserId.get(message.author.id);
+              if (!presence) return message;
+              return {
+                ...message,
+                author: applyPresenceToUser(message.author, presence),
+              };
+            }),
+          ],
+        ),
       );
 
       return {
         ...state,
         onlineUsers: nextOnlineUsers,
         presencePlatformsByUserId: nextPresencePlatformsByUserId,
-        user: state.user ? applyPresenceToUser(state.user, presenceByUserId.get(state.user.id)) : state.user,
-        profileUser: state.profileUser ? applyPresenceToUser(state.profileUser, presenceByUserId.get(state.profileUser.id)) : state.profileUser,
+        user: state.user
+          ? applyPresenceToUser(state.user, presenceByUserId.get(state.user.id))
+          : state.user,
+        profileUser: state.profileUser
+          ? applyPresenceToUser(
+              state.profileUser,
+              presenceByUserId.get(state.profileUser.id),
+            )
+          : state.profileUser,
         members: updatedMembers,
         membersByServerId: updatedMembersByServerId,
         dmChannels: updatedDmChannels,
@@ -1209,47 +1765,61 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
     }
     case "UPDATE_USER_STATUS": {
       const isMe = state.user?.id === action.userId;
-      const nextPresencePlatformsByUserId = action.platforms === undefined
-        ? state.presencePlatformsByUserId
-        : {
-          ...state.presencePlatformsByUserId,
-          [action.userId]: action.platforms,
-        };
+      const nextPresencePlatformsByUserId =
+        action.platforms === undefined
+          ? state.presencePlatformsByUserId
+          : {
+              ...state.presencePlatformsByUserId,
+              [action.userId]: action.platforms,
+            };
       const updatedMembers = state.members.map((m) =>
         m.user.id === action.userId
           ? {
-            ...m,
-            user: {
-              ...m.user,
-              status: action.status,
-              custom_status: action.customStatus === undefined ? m.user.custom_status : action.customStatus,
-              presence_platforms: action.platforms ?? m.user.presence_platforms,
-            },
-          }
-          : m
+              ...m,
+              user: {
+                ...m.user,
+                status: action.status,
+                custom_status:
+                  action.customStatus === undefined
+                    ? m.user.custom_status
+                    : action.customStatus,
+                presence_platforms:
+                  action.platforms ?? m.user.presence_platforms,
+              },
+            }
+          : m,
       );
-      const updatedUser = isMe && state.user
-        ? {
-          ...state.user,
-          status: action.status,
-          custom_status: action.customStatus === undefined ? state.user.custom_status : action.customStatus,
-          presence_platforms: action.platforms ?? state.user.presence_platforms,
-        }
-        : state.user;
+      const updatedUser =
+        isMe && state.user
+          ? {
+              ...state.user,
+              status: action.status,
+              custom_status:
+                action.customStatus === undefined
+                  ? state.user.custom_status
+                  : action.customStatus,
+              presence_platforms:
+                action.platforms ?? state.user.presence_platforms,
+            }
+          : state.user;
       const updatedMembersByServerId = Object.fromEntries(
         Object.entries(state.membersByServerId).map(([serverId, members]) => [
           serverId,
           members.map((member) =>
             member.user.id === action.userId
               ? {
-                ...member,
-                user: {
-                  ...member.user,
-                  status: action.status,
-                  custom_status: action.customStatus === undefined ? member.user.custom_status : action.customStatus,
-                  presence_platforms: action.platforms ?? member.user.presence_platforms,
-                },
-              }
+                  ...member,
+                  user: {
+                    ...member.user,
+                    status: action.status,
+                    custom_status:
+                      action.customStatus === undefined
+                        ? member.user.custom_status
+                        : action.customStatus,
+                    presence_platforms:
+                      action.platforms ?? member.user.presence_platforms,
+                  },
+                }
               : member,
           ),
         ]),
@@ -1257,27 +1827,35 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       const updatedDmChannels = state.dmChannels.map((channel) =>
         channel.recipient.id === action.userId
           ? {
-            ...channel,
-            recipient: {
-              ...channel.recipient,
-              status: action.status,
-              custom_status: action.customStatus === undefined ? channel.recipient.custom_status : action.customStatus,
-              presence_platforms: action.platforms ?? channel.recipient.presence_platforms,
-            },
-          }
+              ...channel,
+              recipient: {
+                ...channel.recipient,
+                status: action.status,
+                custom_status:
+                  action.customStatus === undefined
+                    ? channel.recipient.custom_status
+                    : action.customStatus,
+                presence_platforms:
+                  action.platforms ?? channel.recipient.presence_platforms,
+              },
+            }
           : channel,
       );
       const updatedRelationships = state.relationships.map((relationship) =>
         relationship.user?.id === action.userId
           ? {
-            ...relationship,
-            user: {
-              ...relationship.user,
-              status: action.status,
-              custom_status: action.customStatus === undefined ? relationship.user.custom_status : action.customStatus,
-              presence_platforms: action.platforms ?? relationship.user.presence_platforms,
-            },
-          }
+              ...relationship,
+              user: {
+                ...relationship.user,
+                status: action.status,
+                custom_status:
+                  action.customStatus === undefined
+                    ? relationship.user.custom_status
+                    : action.customStatus,
+                presence_platforms:
+                  action.platforms ?? relationship.user.presence_platforms,
+              },
+            }
           : relationship,
       );
       return {
@@ -1294,16 +1872,25 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       return {
         ...state,
         servers: state.servers.map((s) =>
-          s.id === action.serverId ? { ...s, ...action.updates } : s
+          s.id === action.serverId ? { ...s, ...action.updates } : s,
         ),
       };
     case "REMOVE_SERVER": {
       const isActive = state.activeServerId === action.serverId;
-      const { [action.serverId]: _removedChannels, ...channelsByServerId } = state.channelsByServerId;
-      const { [action.serverId]: _removedCategories, ...categoriesByServerId } = state.categoriesByServerId;
-      const { [action.serverId]: _removedChannelsLoaded, ...channelsLoadedByServerId } = state.channelsLoadedByServerId;
-      const { [action.serverId]: _removedMembers, ...membersByServerId } = state.membersByServerId;
-      const { [action.serverId]: _removedMembersLoaded, ...membersLoadedByServerId } = state.membersLoadedByServerId;
+      const { [action.serverId]: _removedChannels, ...channelsByServerId } =
+        state.channelsByServerId;
+      const { [action.serverId]: _removedCategories, ...categoriesByServerId } =
+        state.categoriesByServerId;
+      const {
+        [action.serverId]: _removedChannelsLoaded,
+        ...channelsLoadedByServerId
+      } = state.channelsLoadedByServerId;
+      const { [action.serverId]: _removedMembers, ...membersByServerId } =
+        state.membersByServerId;
+      const {
+        [action.serverId]: _removedMembersLoaded,
+        ...membersLoadedByServerId
+      } = state.membersLoadedByServerId;
       return {
         ...state,
         servers: state.servers.filter((s) => s.id !== action.serverId),
@@ -1333,64 +1920,106 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
     case "UPDATE_READ_STATE":
       return {
         ...state,
-        readStates: { ...state.readStates, [action.channelId]: action.timestamp },
+        readStates: {
+          ...state.readStates,
+          [action.channelId]: action.timestamp,
+        },
       };
     case "UPDATE_LAST_MESSAGE":
       return {
         ...state,
-        lastMessageAt: { ...state.lastMessageAt, [action.channelId]: action.timestamp },
+        lastMessageAt: {
+          ...state.lastMessageAt,
+          [action.channelId]: action.timestamp,
+        },
       };
     case "PIN_MESSAGE": {
       const isPinned = action.pinned;
-      const targetChannelId = action.fullMessage?.channel_id
-        ?? state.messages.find((m) => m.id === action.messageId)?.channel_id
-        ?? Object.entries(state.messagesByChannelId).find(([, messages]) => messages.some((m) => m.id === action.messageId))?.[0]
-        ?? state.activeChannelId;
+      const targetChannelId =
+        action.fullMessage?.channel_id ??
+        state.messages.find((m) => m.id === action.messageId)?.channel_id ??
+        Object.entries(state.messagesByChannelId).find(([, messages]) =>
+          messages.some((m) => m.id === action.messageId),
+        )?.[0] ??
+        state.activeChannelId;
       const updatePinnedFlag = (messages: Message[]) =>
-        replaceMessageById(messages, action.messageId, (message) => ({ ...message, is_pinned: isPinned }));
-      const nextMessageCaches = mapMessageCaches(state.messagesByChannelId, updatePinnedFlag);
+        replaceMessageById(messages, action.messageId, (message) => ({
+          ...message,
+          is_pinned: isPinned,
+        }));
+      const nextMessageCaches = mapMessageCaches(
+        state.messagesByChannelId,
+        updatePinnedFlag,
+      );
       // Update the main messages list
       const updatedMessages = updatePinnedFlag(state.messages);
 
       // Update the pinned messages list
       const existingPinned = targetChannelId
-        ? state.pinnedMessagesByChannelId[targetChannelId] ?? []
+        ? (state.pinnedMessagesByChannelId[targetChannelId] ?? [])
         : state.pinnedMessages;
       let updatedPinned = [...existingPinned];
       if (isPinned) {
         // If it's not already in the list, we try to find it
-        if (!updatedPinned.some(m => m.id === action.messageId)) {
+        if (!updatedPinned.some((m) => m.id === action.messageId)) {
           // Priority: 1. Full message from action, 2. Message from current list
-          const fullMsg = action.fullMessage
-            || state.messages.find(m => m.id === action.messageId)
-            || (targetChannelId ? state.messagesByChannelId[targetChannelId]?.find(m => m.id === action.messageId) : undefined);
+          const fullMsg =
+            action.fullMessage ||
+            state.messages.find((m) => m.id === action.messageId) ||
+            (targetChannelId
+              ? state.messagesByChannelId[targetChannelId]?.find(
+                  (m) => m.id === action.messageId,
+                )
+              : undefined);
           if (fullMsg) {
             updatedPinned.push({ ...fullMsg, is_pinned: true });
             // Sort by creation date
-            updatedPinned.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+            updatedPinned.sort(
+              (a, b) =>
+                new Date(b.created_at).getTime() -
+                new Date(a.created_at).getTime(),
+            );
           }
         }
       } else {
-        updatedPinned = updatedPinned.filter(m => m.id !== action.messageId);
+        updatedPinned = updatedPinned.filter((m) => m.id !== action.messageId);
       }
 
       return {
         ...state,
         messages: updatedMessages,
-        pinnedMessages: targetChannelId === state.activeChannelId || !state.activeChannelId ? updatedPinned : state.pinnedMessages,
+        pinnedMessages:
+          targetChannelId === state.activeChannelId || !state.activeChannelId
+            ? updatedPinned
+            : state.pinnedMessages,
         messagesByChannelId: nextMessageCaches,
         pinnedMessagesByChannelId: targetChannelId
-          ? { ...state.pinnedMessagesByChannelId, [targetChannelId]: updatedPinned }
+          ? {
+              ...state.pinnedMessagesByChannelId,
+              [targetChannelId]: updatedPinned,
+            }
           : state.pinnedMessagesByChannelId,
       };
     }
     case "SET_PINNED_MESSAGES":
       return {
         ...state,
-        pinnedMessages: state.activeChannelId === action.channelId ? action.messages : state.pinnedMessages,
-        pinnedMessagesByChannelId: { ...state.pinnedMessagesByChannelId, [action.channelId]: action.messages },
-        pinsLoadedByChannelId: { ...state.pinsLoadedByChannelId, [action.channelId]: true },
-        pinsLoadedFor: state.activeChannelId === action.channelId ? action.channelId : state.pinsLoadedFor,
+        pinnedMessages:
+          state.activeChannelId === action.channelId
+            ? action.messages
+            : state.pinnedMessages,
+        pinnedMessagesByChannelId: {
+          ...state.pinnedMessagesByChannelId,
+          [action.channelId]: action.messages,
+        },
+        pinsLoadedByChannelId: {
+          ...state.pinsLoadedByChannelId,
+          [action.channelId]: true,
+        },
+        pinsLoadedFor:
+          state.activeChannelId === action.channelId
+            ? action.channelId
+            : state.pinsLoadedFor,
         loadingPins: false,
       };
     case "SET_LOADING_PINS":
@@ -1399,15 +2028,22 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       return {
         ...state,
         dmChannels: action.dmChannels,
-        voiceChannelStates: enrichVoiceChannelStates(state.voiceChannelStates, { ...state, dmChannels: action.dmChannels }),
+        voiceChannelStates: enrichVoiceChannelStates(state.voiceChannelStates, {
+          ...state,
+          dmChannels: action.dmChannels,
+        }),
       };
     case "ADD_DM_CHANNEL":
       // Add if not already present
-      if (state.dmChannels.some((d) => d.id === action.dmChannel.id)) return state;
+      if (state.dmChannels.some((d) => d.id === action.dmChannel.id))
+        return state;
       return {
         ...state,
         dmChannels: [action.dmChannel, ...state.dmChannels],
-        voiceChannelStates: enrichVoiceChannelStates(state.voiceChannelStates, { ...state, dmChannels: [action.dmChannel, ...state.dmChannels] }),
+        voiceChannelStates: enrichVoiceChannelStates(state.voiceChannelStates, {
+          ...state,
+          dmChannels: [action.dmChannel, ...state.dmChannels],
+        }),
       };
     case "SET_VOICE_CHANNEL_STATES": {
       // Enrich voice members with avatars from the members/relationships stores
@@ -1421,7 +2057,9 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
           .map((m) => m.joined_at)
           .filter((ts): ts is number => typeof ts === "number" && ts > 0)
           .sort((a, b) => a - b)[0];
-        const candidates = [incoming, previous, memberJoinedAt].filter((ts): ts is number => typeof ts === "number" && ts > 0);
+        const candidates = [incoming, previous, memberJoinedAt].filter(
+          (ts): ts is number => typeof ts === "number" && ts > 0,
+        );
         if (candidates.length > 0) {
           nextStartedAt[channelId] = Math.min(...candidates);
         }
@@ -1430,7 +2068,8 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         ...state,
         voiceChannelStates: enriched,
         voiceChannelStartedAt: nextStartedAt,
-        voiceChannelSpatialAudioStates: action.spatialStates ?? state.voiceChannelSpatialAudioStates,
+        voiceChannelSpatialAudioStates:
+          action.spatialStates ?? state.voiceChannelSpatialAudioStates,
       };
     }
     case "UPDATE_VOICE_CHANNEL_STATE": {
@@ -1446,7 +2085,9 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
           .filter((ts): ts is number => typeof ts === "number" && ts > 0)
           .sort((a, b) => a - b)[0];
         const previous = nextStartedAt[action.channelId];
-        const candidates = [action.startedAt, previous, memberJoinedAt].filter((ts): ts is number => typeof ts === "number" && ts > 0);
+        const candidates = [action.startedAt, previous, memberJoinedAt].filter(
+          (ts): ts is number => typeof ts === "number" && ts > 0,
+        );
         if (candidates.length > 0) {
           nextStartedAt[action.channelId] = Math.min(...candidates);
         }
@@ -1456,7 +2097,10 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         voiceChannelStates: next,
         voiceChannelStartedAt: nextStartedAt,
         voiceChannelSpatialAudioStates: action.spatialAudioState
-          ? { ...state.voiceChannelSpatialAudioStates, [action.channelId]: action.spatialAudioState }
+          ? {
+              ...state.voiceChannelSpatialAudioStates,
+              [action.channelId]: action.spatialAudioState,
+            }
           : state.voiceChannelSpatialAudioStates,
       };
     }
@@ -1464,7 +2108,10 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       return {
         ...state,
         relationships: action.relationships,
-        voiceChannelStates: enrichVoiceChannelStates(state.voiceChannelStates, { ...state, relationships: action.relationships }),
+        voiceChannelStates: enrichVoiceChannelStates(state.voiceChannelStates, {
+          ...state,
+          relationships: action.relationships,
+        }),
       };
     case "ADD_RELATIONSHIP":
       // Replace if present, else add
@@ -1472,13 +2119,17 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         ...state,
         relationships: [
           action.relationship,
-          ...state.relationships.filter((r) => r.user.id !== action.relationship.user.id),
+          ...state.relationships.filter(
+            (r) => r.user.id !== action.relationship.user.id,
+          ),
         ],
       };
     case "REMOVE_RELATIONSHIP":
       return {
         ...state,
-        relationships: state.relationships.filter((r) => r.user.id !== action.userId),
+        relationships: state.relationships.filter(
+          (r) => r.user.id !== action.userId,
+        ),
       };
     case "SET_PROFILE_USER":
       return { ...state, profileUser: action.user };
@@ -1487,14 +2138,22 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       const next = action.speakingUsers;
       const prevKeys = Object.keys(prev);
       const nextKeys = Object.keys(next);
-      if (prevKeys.length === nextKeys.length && prevKeys.every(k => prev[k] === next[k])) {
+      if (
+        prevKeys.length === nextKeys.length &&
+        prevKeys.every((k) => prev[k] === next[k])
+      ) {
         return state;
       }
       return { ...state, speakingUsers: next };
     }
     case "SET_NOTIFICATIONS": {
       const counts = computeMentionCounts(action.notifications);
-      return { ...state, notifications: action.notifications, unreadNotificationCount: action.unreadCount, ...counts };
+      return {
+        ...state,
+        notifications: action.notifications,
+        unreadNotificationCount: action.unreadCount,
+        ...counts,
+      };
     }
     case "ADD_NOTIFICATION": {
       const nextNotifs = [action.notification, ...state.notifications];
@@ -1524,7 +2183,12 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         });
       }
       const counts = computeMentionCounts(nextNotifs);
-      return { ...state, notifications: nextNotifs, unreadNotificationCount: Math.max(0, newUnread), ...counts };
+      return {
+        ...state,
+        notifications: nextNotifs,
+        unreadNotificationCount: Math.max(0, newUnread),
+        ...counts,
+      };
     }
     case "CLEAR_NOTIFICATIONS": {
       return {
@@ -1532,7 +2196,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         notifications: [],
         unreadNotificationCount: 0,
         serverMentionCounts: {},
-        channelMentionCounts: {}
+        channelMentionCounts: {},
       };
     }
 
@@ -1541,8 +2205,8 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         ...state,
         scrollPositions: {
           ...state.scrollPositions,
-          [action.channelId]: action.messageId
-        }
+          [action.channelId]: action.messageId,
+        },
       };
     }
 
@@ -1551,8 +2215,8 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         ...state,
         jumpAnchors: {
           ...state.jumpAnchors,
-          [action.channelId]: action.messageId
-        }
+          [action.channelId]: action.messageId,
+        },
       };
     }
 
@@ -1560,7 +2224,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       const { [action.channelId]: _, ...rest } = state.jumpAnchors;
       return {
         ...state,
-        jumpAnchors: rest
+        jumpAnchors: rest,
       };
     }
 

@@ -12,8 +12,18 @@ import { ProfileAssetLayer } from "@/components/chat/ProfileAssetLayer";
 import { UserNameplateLayer } from "@/components/chat/UserNameplateLayer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { apiDelete, apiGet, apiPatch, apiPost, apiUpload } from "@/lib/api-client";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
+  apiDelete,
+  apiGet,
+  apiPatch,
+  apiPost,
+  apiUpload,
+} from "@/lib/api-client";
 import {
   getAvatarCollectibles,
   normalizeAvatarDisplay,
@@ -122,9 +132,10 @@ const FOCUSABLE_CONTROL_SELECTOR = [
   "input:not([disabled])",
   "select:not([disabled])",
   "textarea:not([disabled])",
-  "[tabindex]:not([tabindex=\"-1\"])",
+  '[tabindex]:not([tabindex="-1"])',
 ].join(", ");
-const DISPLAY_NAME_STYLE_COLOR_POPOVER_SELECTOR = "[data-display-name-style-color-popover='true']";
+const DISPLAY_NAME_STYLE_COLOR_POPOVER_SELECTOR =
+  "[data-display-name-style-color-popover='true']";
 
 type EyeDropperApi = {
   open: () => Promise<{ sRGBHex: string }>;
@@ -175,7 +186,7 @@ function getPickerSurfaceStyle({
     style.backgroundColor =
       normalizedFill && !isBackgroundImageValue(normalizedFill)
         ? normalizedFill
-        : style.backgroundColor ?? "#111216";
+        : (style.backgroundColor ?? "#111216");
     style.backgroundImage = COLOR_PICKER_EMPTY_PATTERN;
     if (patternSize) {
       style.backgroundSize = patternSize;
@@ -205,17 +216,30 @@ function areDisplayNameStylesEqual(
 function getFocusableElements(container: ParentNode | null | undefined) {
   if (!container) return [];
 
-  return Array.from(container.querySelectorAll<HTMLElement>(FOCUSABLE_CONTROL_SELECTOR)).filter(
-    (element) => element.getAttribute("aria-hidden") !== "true" && element.getClientRects().length > 0,
+  return Array.from(
+    container.querySelectorAll<HTMLElement>(FOCUSABLE_CONTROL_SELECTOR),
+  ).filter(
+    (element) =>
+      element.getAttribute("aria-hidden") !== "true" &&
+      element.getClientRects().length > 0,
   );
 }
 
 function getDialogFocusableElements(dialog: HTMLElement) {
-  const auxiliaryRoots = typeof document === "undefined"
-    ? []
-    : Array.from(document.querySelectorAll<HTMLElement>(DISPLAY_NAME_STYLE_COLOR_POPOVER_SELECTOR));
+  const auxiliaryRoots =
+    typeof document === "undefined"
+      ? []
+      : Array.from(
+          document.querySelectorAll<HTMLElement>(
+            DISPLAY_NAME_STYLE_COLOR_POPOVER_SELECTOR,
+          ),
+        );
 
-  return Array.from(new Set([dialog, ...auxiliaryRoots].flatMap((root) => getFocusableElements(root))));
+  return Array.from(
+    new Set(
+      [dialog, ...auxiliaryRoots].flatMap((root) => getFocusableElements(root)),
+    ),
+  );
 }
 
 function AccountActionIconButton({
@@ -249,7 +273,11 @@ function AccountActionIconButton({
           {children}
         </Button>
       </TooltipTrigger>
-      <TooltipContent side="top" sideOffset={10} className={SETTINGS_TOOLTIP_CONTENT_CLASS}>
+      <TooltipContent
+        side="top"
+        sideOffset={10}
+        className={SETTINGS_TOOLTIP_CONTENT_CLASS}
+      >
         {label}
       </TooltipContent>
     </Tooltip>
@@ -265,7 +293,9 @@ function ProfileRailSection({
 }) {
   return (
     <section>
-      <div className="mb-2 text-[10px] font-semibold tracking-[0.08em] text-rm-text-muted/88">{title}</div>
+      <div className="mb-2 text-[10px] font-semibold tracking-[0.08em] text-rm-text-muted/88">
+        {title}
+      </div>
       {children}
     </section>
   );
@@ -341,18 +371,25 @@ function ColorField({
   const saturationRef = useRef<HTMLDivElement | null>(null);
   const hueRef = useRef<HTMLDivElement | null>(null);
   const wasOpenRef = useRef(false);
-  const [popoverPosition, setPopoverPosition] = useState<{ left: number; top: number; width: number } | null>(null);
+  const [popoverPosition, setPopoverPosition] = useState<{
+    left: number;
+    top: number;
+    width: number;
+  } | null>(null);
   const labelId = useId();
   const helperTextId = useId();
   const popoverId = useId();
   const eyedropperHintId = useId();
   const saturationInstructionsId = useId();
-  const resolvedColor = normalizeHexColor(value) ?? normalizeHexColor(defaultColor) ?? "#5865F2";
+  const resolvedColor =
+    normalizeHexColor(value) ?? normalizeHexColor(defaultColor) ?? "#5865F2";
   const hsv = hexToHsv(resolvedColor);
   const triggerBackground = value ?? previewBackground ?? resolvedColor;
   const triggerTextColor = value ? getContrastTextColor(value) : "#F8FAFC";
   const toggleOpen = () => setOpen((current) => !current);
-  const supportsEyeDropper = typeof window !== "undefined" && Boolean((window as EyeDropperWindow).EyeDropper);
+  const supportsEyeDropper =
+    typeof window !== "undefined" &&
+    Boolean((window as EyeDropperWindow).EyeDropper);
 
   const updatePopoverPosition = useCallback(() => {
     if (typeof window === "undefined" || !pickerRef.current) return;
@@ -360,41 +397,62 @@ function ColorField({
     const rect = pickerRef.current.getBoundingClientRect();
     const viewportPadding = 8;
     const gap = 12;
-    const popoverWidth = Math.min(320, Math.max(260, window.innerWidth - (viewportPadding * 2)));
+    const popoverWidth = Math.min(
+      320,
+      Math.max(260, window.innerWidth - viewportPadding * 2),
+    );
     const measuredHeight = popoverRef.current?.offsetHeight ?? 372;
     const availableBottom = window.innerHeight - rect.bottom - viewportPadding;
     const availableTop = rect.top - viewportPadding;
 
     let preferredSide = popoverSide;
-    if (popoverSide === "bottom" && availableBottom < measuredHeight && availableTop > availableBottom) {
+    if (
+      popoverSide === "bottom" &&
+      availableBottom < measuredHeight &&
+      availableTop > availableBottom
+    ) {
       preferredSide = "top";
-    } else if (popoverSide === "top" && availableTop < measuredHeight && availableBottom > availableTop) {
+    } else if (
+      popoverSide === "top" &&
+      availableTop < measuredHeight &&
+      availableBottom > availableTop
+    ) {
       preferredSide = "bottom";
     }
 
     const unclampedLeft = rect.left;
-    const maxLeft = Math.max(viewportPadding, window.innerWidth - popoverWidth - viewportPadding);
+    const maxLeft = Math.max(
+      viewportPadding,
+      window.innerWidth - popoverWidth - viewportPadding,
+    );
     const left = clampColorPickerValue(unclampedLeft, viewportPadding, maxLeft);
-    const unclampedTop = preferredSide === "top"
-      ? rect.top - measuredHeight - gap
-      : rect.bottom + gap;
-    const maxTop = Math.max(viewportPadding, window.innerHeight - measuredHeight - viewportPadding);
+    const unclampedTop =
+      preferredSide === "top"
+        ? rect.top - measuredHeight - gap
+        : rect.bottom + gap;
+    const maxTop = Math.max(
+      viewportPadding,
+      window.innerHeight - measuredHeight - viewportPadding,
+    );
     const top = clampColorPickerValue(unclampedTop, viewportPadding, maxTop);
 
     setPopoverPosition({ left, top, width: popoverWidth });
   }, [popoverSide]);
 
-  const setColorValue = useCallback((nextValue: string | null) => {
-    const normalized = normalizeHexColor(nextValue);
-    if (!normalized) {
-      setDraft("");
-      onChange(null);
-      return;
-    }
+  const setColorValue = useCallback(
+    (nextValue: string | null) => {
+      const normalized = normalizeHexColor(nextValue);
+      if (!normalized) {
+        setDraft("");
+        onChange(null);
+        return;
+      }
 
-    setDraft(normalized);
-    onChange(normalized);
-  }, [onChange]);
+      setDraft(normalized);
+      onChange(normalized);
+    },
+    [onChange],
+  );
 
   const commitDraft = useCallback(() => {
     if (!draft.trim()) {
@@ -416,8 +474,16 @@ function ColorField({
     const rect = saturationRef.current?.getBoundingClientRect();
     if (!rect) return;
 
-    const nextSaturation = clampColorPickerValue((clientX - rect.left) / rect.width, 0, 1);
-    const nextValue = clampColorPickerValue(1 - ((clientY - rect.top) / rect.height), 0, 1);
+    const nextSaturation = clampColorPickerValue(
+      (clientX - rect.left) / rect.width,
+      0,
+      1,
+    );
+    const nextValue = clampColorPickerValue(
+      1 - (clientY - rect.top) / rect.height,
+      0,
+      1,
+    );
     setColorValue(hsvToHex(hsv.h, nextSaturation, nextValue));
   };
 
@@ -425,30 +491,44 @@ function ColorField({
     const rect = hueRef.current?.getBoundingClientRect();
     if (!rect) return;
 
-    const hueProgress = clampColorPickerValue((clientX - rect.left) / rect.width, 0, 1);
+    const hueProgress = clampColorPickerValue(
+      (clientX - rect.left) / rect.width,
+      0,
+      1,
+    );
     const nextHue = hueProgress * 360;
     setColorValue(hsvToHex(nextHue, hsv.s, hsv.v));
   };
 
-  const handleSaturationKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+  const handleSaturationKeyDown = (
+    event: ReactKeyboardEvent<HTMLDivElement>,
+  ) => {
     const step = event.shiftKey ? 0.1 : 0.02;
 
     switch (event.key) {
       case "ArrowLeft":
         event.preventDefault();
-        setColorValue(hsvToHex(hsv.h, clampColorPickerValue(hsv.s - step, 0, 1), hsv.v));
+        setColorValue(
+          hsvToHex(hsv.h, clampColorPickerValue(hsv.s - step, 0, 1), hsv.v),
+        );
         break;
       case "ArrowRight":
         event.preventDefault();
-        setColorValue(hsvToHex(hsv.h, clampColorPickerValue(hsv.s + step, 0, 1), hsv.v));
+        setColorValue(
+          hsvToHex(hsv.h, clampColorPickerValue(hsv.s + step, 0, 1), hsv.v),
+        );
         break;
       case "ArrowUp":
         event.preventDefault();
-        setColorValue(hsvToHex(hsv.h, hsv.s, clampColorPickerValue(hsv.v + step, 0, 1)));
+        setColorValue(
+          hsvToHex(hsv.h, hsv.s, clampColorPickerValue(hsv.v + step, 0, 1)),
+        );
         break;
       case "ArrowDown":
         event.preventDefault();
-        setColorValue(hsvToHex(hsv.h, hsv.s, clampColorPickerValue(hsv.v - step, 0, 1)));
+        setColorValue(
+          hsvToHex(hsv.h, hsv.s, clampColorPickerValue(hsv.v - step, 0, 1)),
+        );
         break;
       case "Home":
         event.preventDefault();
@@ -490,7 +570,10 @@ function ColorField({
     }
   };
 
-  const startDrag = (event: ReactPointerEvent<HTMLDivElement>, onMove: (clientX: number, clientY: number) => void) => {
+  const startDrag = (
+    event: ReactPointerEvent<HTMLDivElement>,
+    onMove: (clientX: number, clientY: number) => void,
+  ) => {
     event.preventDefault();
     onMove(event.clientX, event.clientY);
 
@@ -507,9 +590,10 @@ function ColorField({
   };
 
   const handleEyeDropperPick = useCallback(async () => {
-    const EyeDropperConstructor = typeof window !== "undefined"
-      ? (window as EyeDropperWindow).EyeDropper
-      : undefined;
+    const EyeDropperConstructor =
+      typeof window !== "undefined"
+        ? (window as EyeDropperWindow).EyeDropper
+        : undefined;
 
     if (!EyeDropperConstructor || eyeDropperPending) return;
 
@@ -548,7 +632,11 @@ function ColorField({
     if (!open) return undefined;
 
     const handlePointerDown = (event: PointerEvent) => {
-      if (pickerRef.current?.contains(event.target as Node) || popoverRef.current?.contains(event.target as Node)) return;
+      if (
+        pickerRef.current?.contains(event.target as Node) ||
+        popoverRef.current?.contains(event.target as Node)
+      )
+        return;
       setOpen(false);
     };
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -584,164 +672,208 @@ function ColorField({
     };
   }, [open]);
 
-  const popoverContent = open && typeof document !== "undefined" ? createPortal(
-    <div
-      id={popoverId}
-      ref={popoverRef}
-      role="dialog"
-      aria-modal="false"
-      aria-label={`${label} color picker`}
-      data-display-name-style-color-popover="true"
-      className="fixed z-[1450] w-[calc(100vw-1rem)] max-w-[320px] rounded-[24px] border border-rm-border bg-rm-bg-floating/96 p-4 text-rm-text shadow-[0_32px_80px_rgba(0,0,0,0.45)] backdrop-blur-xl"
-      style={{
-        left: popoverPosition?.left ?? 8,
-        top: popoverPosition?.top ?? 8,
-        width: popoverPosition?.width,
-        visibility: popoverPosition ? "visible" : "hidden",
-      }}
-    >
-      <p id={saturationInstructionsId} className="sr-only">
-        Use left and right arrow keys to adjust saturation. Use up and down arrow keys to adjust brightness.
-      </p>
-      <div
-        ref={saturationRef}
-        onPointerDown={(event) => startDrag(event, updateSaturationFromPointer)}
-        onKeyDown={handleSaturationKeyDown}
-        tabIndex={0}
-        role="group"
-        aria-roledescription="2D color picker"
-        className="relative h-[160px] cursor-crosshair overflow-hidden rounded-[18px] border border-rm-border"
-        style={{ background: `hsl(${hsv.h} 100% 50%)` }}
-        aria-label={`${label} saturation and brightness picker`}
-        aria-describedby={saturationInstructionsId}
-      >
-        <div className="absolute inset-0 bg-[linear-gradient(90deg,#FFFFFF,rgba(255,255,255,0))]" />
-        <div className="absolute inset-0 bg-[linear-gradient(0deg,#000000,rgba(0,0,0,0))]" />
-        <div
-          className="pointer-events-none absolute h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white shadow-[0_0_0_1px_rgba(0,0,0,0.22),0_4px_16px_rgba(0,0,0,0.4)]"
-          style={{
-            left: `${hsv.s * 100}%`,
-            top: `${(1 - hsv.v) * 100}%`,
-            background: resolvedColor,
-          }}
-        />
-      </div>
-
-      <div
-        ref={hueRef}
-        onPointerDown={(event) => startDrag(event, (clientX) => updateHueFromPointer(clientX))}
-        onKeyDown={handleHueKeyDown}
-        tabIndex={0}
-        role="slider"
-        aria-orientation="horizontal"
-        aria-valuemin={0}
-        aria-valuemax={360}
-        aria-valuenow={Math.round(hsv.h)}
-        aria-valuetext={`${Math.round(hsv.h)} degrees`}
-        className="relative mt-4 h-4 cursor-ew-resize overflow-hidden rounded-full border border-rm-border"
-        style={{ background: COLOR_PICKER_HUE_GRADIENT }}
-        aria-label={`${label} hue picker`}
-      >
-        <div
-          className="pointer-events-none absolute top-1/2 h-5 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-transparent shadow-[0_0_0_1px_rgba(0,0,0,0.2)]"
-          style={{ left: `${(hsv.h / 360) * 100}%` }}
-        />
-      </div>
-
-      <div className="mt-4">
-        <div className="flex items-center gap-2 rounded-[14px] border border-primary/35 bg-rm-bg-surface px-2.5 py-2 shadow-[0_0_0_1px_rgba(88,101,242,0.12)]">
+  const popoverContent =
+    open && typeof document !== "undefined"
+      ? createPortal(
           <div
-            className="h-8 w-8 shrink-0 rounded-[10px] border border-rm-border"
-            aria-hidden="true"
-            style={getPickerSurfaceStyle({
-              fill: value,
-              showEmptyPattern: !value,
-              patternSize: "14px 14px",
-              patternPosition: "0 0, 7px 7px",
-            })}
-          />
-          <span className="shrink-0 text-[18px] font-medium text-rm-text-muted">#</span>
-          <Input
-            ref={hexInputRef}
-            value={draft.startsWith("#") ? draft.slice(1) : draft}
-            onChange={(event) => setDraft(event.target.value.startsWith("#") ? event.target.value : `#${event.target.value}`)}
-            onBlur={commitDraft}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") {
-                commitDraft();
-                event.currentTarget.blur();
-              }
-              if (event.key === "Escape") {
-                setDraft(value ?? "");
-                setOpen(false);
-                event.currentTarget.blur();
-              }
+            id={popoverId}
+            ref={popoverRef}
+            role="dialog"
+            aria-modal="false"
+            aria-label={`${label} color picker`}
+            data-display-name-style-color-popover="true"
+            className="fixed z-[1450] w-[calc(100vw-1rem)] max-w-[320px] rounded-[24px] border border-rm-border bg-rm-bg-floating/96 p-4 text-rm-text shadow-[0_32px_80px_rgba(0,0,0,0.45)] backdrop-blur-xl"
+            style={{
+              left: popoverPosition?.left ?? 8,
+              top: popoverPosition?.top ?? 8,
+              width: popoverPosition?.width,
+              visibility: popoverPosition ? "visible" : "hidden",
             }}
-            className="h-8 border-0 bg-transparent px-1 py-0 text-[15px] font-medium tracking-[0.04em] text-rm-text shadow-none placeholder:text-rm-text-muted focus-visible:ring-0"
-            placeholder={resolvedColor.slice(1)}
-            spellCheck={false}
-            aria-label={`${label} hex color value`}
-            aria-describedby={eyedropperHintId}
-          />
-          <button
-            type="button"
-            onClick={handleEyeDropperPick}
-            disabled={!supportsEyeDropper || eyeDropperPending}
-            className={cn(
-              "flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] border border-rm-border bg-rm-bg-elevated text-rm-text-muted transition hover:bg-rm-bg-hover hover:text-rm-text",
-              (!supportsEyeDropper || eyeDropperPending) && "cursor-not-allowed opacity-45",
-            )}
-            aria-label="Pick color from screen"
-            aria-describedby={eyedropperHintId}
-            title={supportsEyeDropper ? "Pick color from screen" : "Eyedropper unavailable in this browser"}
           >
-            {eyeDropperPending ? <Loader2 size={14} className="animate-spin" /> : <Pipette size={14} />}
-          </button>
-        </div>
+            <p id={saturationInstructionsId} className="sr-only">
+              Use left and right arrow keys to adjust saturation. Use up and
+              down arrow keys to adjust brightness.
+            </p>
+            <div
+              ref={saturationRef}
+              onPointerDown={(event) =>
+                startDrag(event, updateSaturationFromPointer)
+              }
+              onKeyDown={handleSaturationKeyDown}
+              tabIndex={0}
+              role="group"
+              aria-roledescription="2D color picker"
+              className="relative h-[160px] cursor-crosshair overflow-hidden rounded-[18px] border border-rm-border"
+              style={{ background: `hsl(${hsv.h} 100% 50%)` }}
+              aria-label={`${label} saturation and brightness picker`}
+              aria-describedby={saturationInstructionsId}
+            >
+              <div className="absolute inset-0 bg-[linear-gradient(90deg,#FFFFFF,rgba(255,255,255,0))]" />
+              <div className="absolute inset-0 bg-[linear-gradient(0deg,#000000,rgba(0,0,0,0))]" />
+              <div
+                className="pointer-events-none absolute h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white shadow-[0_0_0_1px_rgba(0,0,0,0.22),0_4px_16px_rgba(0,0,0,0.4)]"
+                style={{
+                  left: `${hsv.s * 100}%`,
+                  top: `${(1 - hsv.v) * 100}%`,
+                  background: resolvedColor,
+                }}
+              />
+            </div>
 
-        <div className="mt-2 flex items-center justify-between gap-3 px-1">
-          <div id={eyedropperHintId} className="text-[11px] text-rm-text-muted">
-            {!value
-              ? "Using the app default until you pick a custom color."
-              : (supportsEyeDropper ? "Sample any color on screen." : "Eyedropper is not available here.")}
-          </div>
-          <Button
-            type="button"
-            variant="ghost"
-            onClick={() => {
-              setDraft("");
-              onChange(null);
-            }}
-            className="h-7 rounded-[10px] px-2.5 text-[11px] font-semibold text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text"
-            aria-label={`Use the default ${label.toLowerCase()}`}
-          >
-            Use default
-          </Button>
-        </div>
-      </div>
+            <div
+              ref={hueRef}
+              onPointerDown={(event) =>
+                startDrag(event, (clientX) => updateHueFromPointer(clientX))
+              }
+              onKeyDown={handleHueKeyDown}
+              tabIndex={0}
+              role="slider"
+              aria-orientation="horizontal"
+              aria-valuemin={0}
+              aria-valuemax={360}
+              aria-valuenow={Math.round(hsv.h)}
+              aria-valuetext={`${Math.round(hsv.h)} degrees`}
+              className="relative mt-4 h-4 cursor-ew-resize overflow-hidden rounded-full border border-rm-border"
+              style={{ background: COLOR_PICKER_HUE_GRADIENT }}
+              aria-label={`${label} hue picker`}
+            >
+              <div
+                className="pointer-events-none absolute top-1/2 h-5 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-transparent shadow-[0_0_0_1px_rgba(0,0,0,0.2)]"
+                style={{ left: `${(hsv.h / 360) * 100}%` }}
+              />
+            </div>
 
-      <div className="mt-4 grid grid-cols-5 gap-2" role="group" aria-label={`${label} preset colors`}>
-        {presets.map((preset) => (
-          <button
-            key={preset}
-            type="button"
-            onClick={() => setColorValue(preset)}
-            className={cn(
-              "h-9 rounded-[12px] border transition duration-150 hover:-translate-y-[1px]",
-              value === preset ? "border-white/90 shadow-[0_0_0_1px_rgba(255,255,255,0.25)]" : "border-white/10",
-            )}
-            style={{ background: preset }}
-            aria-label={`Select ${label.toLowerCase()} preset ${preset}`}
-            aria-pressed={value === preset}
-          />
-        ))}
-      </div>
-    </div>,
-    document.body,
-  ) : null;
+            <div className="mt-4">
+              <div className="flex items-center gap-2 rounded-[14px] border border-primary/35 bg-rm-bg-surface px-2.5 py-2 shadow-[0_0_0_1px_rgba(88,101,242,0.12)]">
+                <div
+                  className="h-8 w-8 shrink-0 rounded-[10px] border border-rm-border"
+                  aria-hidden="true"
+                  style={getPickerSurfaceStyle({
+                    fill: value,
+                    showEmptyPattern: !value,
+                    patternSize: "14px 14px",
+                    patternPosition: "0 0, 7px 7px",
+                  })}
+                />
+                <span className="shrink-0 text-[18px] font-medium text-rm-text-muted">
+                  #
+                </span>
+                <Input
+                  ref={hexInputRef}
+                  value={draft.startsWith("#") ? draft.slice(1) : draft}
+                  onChange={(event) =>
+                    setDraft(
+                      event.target.value.startsWith("#")
+                        ? event.target.value
+                        : `#${event.target.value}`,
+                    )
+                  }
+                  onBlur={commitDraft}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      commitDraft();
+                      event.currentTarget.blur();
+                    }
+                    if (event.key === "Escape") {
+                      setDraft(value ?? "");
+                      setOpen(false);
+                      event.currentTarget.blur();
+                    }
+                  }}
+                  className="h-8 border-0 bg-transparent px-1 py-0 text-[15px] font-medium tracking-[0.04em] text-rm-text shadow-none placeholder:text-rm-text-muted focus-visible:ring-0"
+                  placeholder={resolvedColor.slice(1)}
+                  spellCheck={false}
+                  aria-label={`${label} hex color value`}
+                  aria-describedby={eyedropperHintId}
+                />
+                <button
+                  type="button"
+                  onClick={handleEyeDropperPick}
+                  disabled={!supportsEyeDropper || eyeDropperPending}
+                  className={cn(
+                    "flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] border border-rm-border bg-rm-bg-elevated text-rm-text-muted transition hover:bg-rm-bg-hover hover:text-rm-text",
+                    (!supportsEyeDropper || eyeDropperPending) &&
+                      "cursor-not-allowed opacity-45",
+                  )}
+                  aria-label="Pick color from screen"
+                  aria-describedby={eyedropperHintId}
+                  title={
+                    supportsEyeDropper
+                      ? "Pick color from screen"
+                      : "Eyedropper unavailable in this browser"
+                  }
+                >
+                  {eyeDropperPending ? (
+                    <Loader2 size={14} className="animate-spin" />
+                  ) : (
+                    <Pipette size={14} />
+                  )}
+                </button>
+              </div>
+
+              <div className="mt-2 flex items-center justify-between gap-3 px-1">
+                <div
+                  id={eyedropperHintId}
+                  className="text-[11px] text-rm-text-muted"
+                >
+                  {!value
+                    ? "Using the app default until you pick a custom color."
+                    : supportsEyeDropper
+                      ? "Sample any color on screen."
+                      : "Eyedropper is not available here."}
+                </div>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => {
+                    setDraft("");
+                    onChange(null);
+                  }}
+                  className="h-7 rounded-[10px] px-2.5 text-[11px] font-semibold text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text"
+                  aria-label={`Use the default ${label.toLowerCase()}`}
+                >
+                  Use default
+                </Button>
+              </div>
+            </div>
+
+            <div
+              className="mt-4 grid grid-cols-5 gap-2"
+              role="group"
+              aria-label={`${label} preset colors`}
+            >
+              {presets.map((preset) => (
+                <button
+                  key={preset}
+                  type="button"
+                  onClick={() => setColorValue(preset)}
+                  className={cn(
+                    "h-9 rounded-[12px] border transition duration-150 hover:-translate-y-[1px]",
+                    value === preset
+                      ? "border-white/90 shadow-[0_0_0_1px_rgba(255,255,255,0.25)]"
+                      : "border-white/10",
+                  )}
+                  style={{ background: preset }}
+                  aria-label={`Select ${label.toLowerCase()} preset ${preset}`}
+                  aria-pressed={value === preset}
+                />
+              ))}
+            </div>
+          </div>,
+          document.body,
+        )
+      : null;
 
   return (
-    <div ref={pickerRef} className={cn("relative", open && "z-[220]", !renderTrigger && "space-y-3", containerClassName)}>
+    <div
+      ref={pickerRef}
+      className={cn(
+        "relative",
+        open && "z-[220]",
+        !renderTrigger && "space-y-3",
+        containerClassName,
+      )}
+    >
       {renderTrigger ? (
         renderTrigger({
           open,
@@ -756,8 +888,20 @@ function ColorField({
         <>
           <div className="flex items-center justify-between gap-3">
             <div>
-              <div id={labelId} className="text-[12px] font-semibold text-rm-text">{label}</div>
-              {helperText ? <div id={helperTextId} className="mt-1 text-[11px] text-rm-text-muted">{helperText}</div> : null}
+              <div
+                id={labelId}
+                className="text-[12px] font-semibold text-rm-text"
+              >
+                {label}
+              </div>
+              {helperText ? (
+                <div
+                  id={helperTextId}
+                  className="mt-1 text-[11px] text-rm-text-muted"
+                >
+                  {helperText}
+                </div>
+              ) : null}
             </div>
           </div>
 
@@ -783,10 +927,20 @@ function ColorField({
             <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.12),rgba(255,255,255,0.02)_42%,rgba(0,0,0,0.22))]" />
             <div className="relative flex h-full items-center justify-between gap-3 px-4">
               <div className="min-w-0 text-left">
-                <div className="truncate text-[13px] font-semibold" style={{ color: triggerTextColor }}>
+                <div
+                  className="truncate text-[13px] font-semibold"
+                  style={{ color: triggerTextColor }}
+                >
                   {value ?? "Auto"}
                 </div>
-                <div className="mt-0.5 text-[11px]" style={{ color: value ? `${triggerTextColor}CC` : "rgba(248,250,252,0.76)" }}>
+                <div
+                  className="mt-0.5 text-[11px]"
+                  style={{
+                    color: value
+                      ? `${triggerTextColor}CC`
+                      : "rgba(248,250,252,0.76)",
+                  }}
+                >
                   {value ? "Custom color" : "Using generated fallback"}
                 </div>
               </div>
@@ -838,23 +992,32 @@ function DisplayNameStyleDialog({
   const [draftStyle, setDraftStyle] = useState<DisplayNameStyle>(
     () => normalizeDisplayNameStyle(initialStyle) ?? DEFAULT_DISPLAY_NAME_STYLE,
   );
-  const [activeColorSlot, setActiveColorSlot] = useState<"primary" | "secondary">("primary");
-  const actualProfileThemeMode =
-    profileThemeBackgroundColor
-      ? (getContrastTextColor(profileThemeBackgroundColor) === "#12131A" ? "light" : "dark")
-      : null;
+  const [activeColorSlot, setActiveColorSlot] = useState<
+    "primary" | "secondary"
+  >("primary");
+  const actualProfileThemeMode = profileThemeBackgroundColor
+    ? getContrastTextColor(profileThemeBackgroundColor) === "#12131A"
+      ? "light"
+      : "dark"
+    : null;
   const [previewMode, setPreviewMode] = useState<"dark" | "light">(
     () => actualProfileThemeMode ?? "dark",
   );
   const useActualProfileThemePreview =
-    Boolean(profileThemeBackgroundColor)
-    && actualProfileThemeMode === previewMode;
+    Boolean(profileThemeBackgroundColor) &&
+    actualProfileThemeMode === previewMode;
   const previewSurfaceBackground = useActualProfileThemePreview
-    ? (profileThemeBackgroundColor ?? (previewMode === "dark" ? "#0C0F14" : "#FBF4EE"))
-    : (previewMode === "dark" ? "#0C0F14" : "#FBF4EE");
+    ? (profileThemeBackgroundColor ??
+      (previewMode === "dark" ? "#0C0F14" : "#FBF4EE"))
+    : previewMode === "dark"
+      ? "#0C0F14"
+      : "#FBF4EE";
   const previewSurfaceText = useActualProfileThemePreview
-    ? (profileThemeTextColor ?? (previewMode === "dark" ? "#F8FAFC" : "#1D2430"))
-    : (previewMode === "dark" ? "#F8FAFC" : "#1D2430");
+    ? (profileThemeTextColor ??
+      (previewMode === "dark" ? "#F8FAFC" : "#1D2430"))
+    : previewMode === "dark"
+      ? "#F8FAFC"
+      : "#1D2430";
   const chatPreviewBackground = previewMode === "dark" ? "#151922" : "#FFFFFF";
   const chatPreviewText = previewMode === "dark" ? "#F8FAFC" : "#1D2430";
   const dialogRef = useRef<HTMLElement | null>(null);
@@ -867,17 +1030,24 @@ function DisplayNameStyleDialog({
   const previewRegionId = useId();
   const previewModeSectionId = useId();
 
-  const applyPresetColor = useCallback((preset: string) => {
-    setDraftStyle((prev) => ({
-      ...prev,
-      [activeColorSlot === "primary" ? "primaryColor" : "secondaryColor"]: preset,
-    }));
-  }, [activeColorSlot]);
+  const applyPresetColor = useCallback(
+    (preset: string) => {
+      setDraftStyle((prev) => ({
+        ...prev,
+        [activeColorSlot === "primary" ? "primaryColor" : "secondaryColor"]:
+          preset,
+      }));
+    },
+    [activeColorSlot],
+  );
 
   useEffect(() => {
     if (!open || typeof document === "undefined") return undefined;
 
-    previousFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    previousFocusRef.current =
+      document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
 
     const rafId = window.requestAnimationFrame(() => {
       const dialog = dialogRef.current;
@@ -889,7 +1059,8 @@ function DisplayNameStyleDialog({
 
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
-        if (document.querySelector(DISPLAY_NAME_STYLE_COLOR_POPOVER_SELECTOR)) return;
+        if (document.querySelector(DISPLAY_NAME_STYLE_COLOR_POPOVER_SELECTOR))
+          return;
         event.preventDefault();
         onClose();
         return;
@@ -907,10 +1078,16 @@ function DisplayNameStyleDialog({
         return;
       }
 
-      const activeElement = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+      const activeElement =
+        document.activeElement instanceof HTMLElement
+          ? document.activeElement
+          : null;
       if (!activeElement || !focusable.includes(activeElement)) {
         event.preventDefault();
-        (event.shiftKey ? focusable[focusable.length - 1] : focusable[0])?.focus();
+        (event.shiftKey
+          ? focusable[focusable.length - 1]
+          : focusable[0]
+        )?.focus();
         return;
       }
 
@@ -956,9 +1133,15 @@ function DisplayNameStyleDialog({
         <div className="overflow-y-auto border-b border-rm-border p-4 lg:border-b-0 lg:border-r lg:p-5">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <h2 id={dialogTitleId} className="text-xl font-semibold text-rm-text">Change display name style</h2>
+              <h2
+                id={dialogTitleId}
+                className="text-xl font-semibold text-rm-text"
+              >
+                Change display name style
+              </h2>
               <p id={dialogDescriptionId} className="sr-only">
-                Choose a font, effect, and colors, then review the preview before you apply your display name style.
+                Choose a font, effect, and colors, then review the preview
+                before you apply your display name style.
               </p>
             </div>
             <Button
@@ -975,14 +1158,28 @@ function DisplayNameStyleDialog({
 
           <div className="mt-4 space-y-4">
             <div>
-              <h3 id={fontSectionId} className="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-rm-text-muted">Choose font</h3>
-              <div className="grid grid-cols-4 gap-2" role="group" aria-labelledby={fontSectionId}>
+              <h3
+                id={fontSectionId}
+                className="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-rm-text-muted"
+              >
+                Choose font
+              </h3>
+              <div
+                className="grid grid-cols-4 gap-2"
+                role="group"
+                aria-labelledby={fontSectionId}
+              >
                 {DISPLAY_NAME_FONT_OPTIONS.map((option) => (
                   <Tooltip key={option.id}>
                     <TooltipTrigger asChild>
                       <button
                         type="button"
-                        onClick={() => setDraftStyle((prev) => ({ ...prev, font: option.id }))}
+                        onClick={() =>
+                          setDraftStyle((prev) => ({
+                            ...prev,
+                            font: option.id,
+                          }))
+                        }
                         className={cn(
                           "aspect-square min-w-0 rounded-[15px] border p-0 transition hover:-translate-y-[1px]",
                           draftStyle.font === option.id
@@ -1000,12 +1197,18 @@ function DisplayNameStyleDialog({
                           }}
                           className={cn(
                             "flex h-full items-center justify-center overflow-hidden text-center font-bold leading-none",
-                            option.id === "eight-bit" ? "text-[9px] tracking-[0.02em] sm:text-[10px]" : "text-[20px] sm:text-[21px]",
+                            option.id === "eight-bit"
+                              ? "text-[9px] tracking-[0.02em] sm:text-[10px]"
+                              : "text-[20px] sm:text-[21px]",
                           )}
                         />
                       </button>
                     </TooltipTrigger>
-                    <TooltipContent side="top" sideOffset={8} className={SETTINGS_TOOLTIP_CONTENT_CLASS}>
+                    <TooltipContent
+                      side="top"
+                      sideOffset={8}
+                      className={SETTINGS_TOOLTIP_CONTENT_CLASS}
+                    >
                       {option.label}
                     </TooltipContent>
                   </Tooltip>
@@ -1014,13 +1217,24 @@ function DisplayNameStyleDialog({
             </div>
 
             <div>
-              <h3 id={effectSectionId} className="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-rm-text-muted">Choose effect</h3>
-              <div className="grid grid-cols-3 gap-2" role="group" aria-labelledby={effectSectionId}>
+              <h3
+                id={effectSectionId}
+                className="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-rm-text-muted"
+              >
+                Choose effect
+              </h3>
+              <div
+                className="grid grid-cols-3 gap-2"
+                role="group"
+                aria-labelledby={effectSectionId}
+              >
                 {DISPLAY_NAME_EFFECT_OPTIONS.map((option) => (
                   <button
                     key={option.id}
                     type="button"
-                    onClick={() => setDraftStyle((prev) => ({ ...prev, effect: option.id }))}
+                    onClick={() =>
+                      setDraftStyle((prev) => ({ ...prev, effect: option.id }))
+                    }
                     className={cn(
                       "aspect-square min-w-0 rounded-[15px] border p-0 transition hover:-translate-y-[1px]",
                       draftStyle.effect === option.id
@@ -1045,8 +1259,17 @@ function DisplayNameStyleDialog({
             </div>
 
             <div>
-              <h3 id={colorSectionId} className="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-rm-text-muted">Choose colors</h3>
-              <div className="rounded-[18px] border border-rm-border bg-rm-bg-surface/60 p-2.5" role="group" aria-labelledby={colorSectionId}>
+              <h3
+                id={colorSectionId}
+                className="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-rm-text-muted"
+              >
+                Choose colors
+              </h3>
+              <div
+                className="rounded-[18px] border border-rm-border bg-rm-bg-surface/60 p-2.5"
+                role="group"
+                aria-labelledby={colorSectionId}
+              >
                 <div className="grid grid-cols-[auto_minmax(0,1fr)] items-start gap-2.5">
                   <div className="flex shrink-0 gap-1.5">
                     <ColorField
@@ -1054,12 +1277,21 @@ function DisplayNameStyleDialog({
                       value={draftStyle.primaryColor}
                       onChange={(value) => {
                         setActiveColorSlot("primary");
-                        setDraftStyle((prev) => ({ ...prev, primaryColor: value ?? DEFAULT_DISPLAY_NAME_STYLE.primaryColor }));
+                        setDraftStyle((prev) => ({
+                          ...prev,
+                          primaryColor:
+                            value ?? DEFAULT_DISPLAY_NAME_STYLE.primaryColor,
+                        }));
                       }}
                       presets={DISPLAY_NAME_COLOR_SWATCHES}
                       defaultColor={DEFAULT_DISPLAY_NAME_STYLE.primaryColor}
                       containerClassName="shrink-0"
-                      renderTrigger={({ open, toggleOpen, triggerBackground, popoverId }) => (
+                      renderTrigger={({
+                        open,
+                        toggleOpen,
+                        triggerBackground,
+                        popoverId,
+                      }) => (
                         <button
                           type="button"
                           onClick={() => {
@@ -1079,11 +1311,15 @@ function DisplayNameStyleDialog({
                           <span
                             className={cn(
                               "h-9 w-9 rounded-[12px] border border-white/10 shadow-[0_10px_24px_rgba(0,0,0,0.28)] transition group-hover:-translate-y-[1px]",
-                              activeColorSlot === "primary" ? "ring-2 ring-primary/70 ring-offset-2 ring-offset-[color:var(--rm-bg-elevated)]" : "ring-1 ring-transparent",
+                              activeColorSlot === "primary"
+                                ? "ring-2 ring-primary/70 ring-offset-2 ring-offset-[color:var(--rm-bg-elevated)]"
+                                : "ring-1 ring-transparent",
                             )}
                             style={{ background: triggerBackground }}
                           />
-                          <span className="text-[9px] font-semibold uppercase tracking-[0.12em] text-rm-text-muted">Base</span>
+                          <span className="text-[9px] font-semibold uppercase tracking-[0.12em] text-rm-text-muted">
+                            Base
+                          </span>
                         </button>
                       )}
                     />
@@ -1092,12 +1328,21 @@ function DisplayNameStyleDialog({
                       value={draftStyle.secondaryColor}
                       onChange={(value) => {
                         setActiveColorSlot("secondary");
-                        setDraftStyle((prev) => ({ ...prev, secondaryColor: value ?? DEFAULT_DISPLAY_NAME_STYLE.secondaryColor }));
+                        setDraftStyle((prev) => ({
+                          ...prev,
+                          secondaryColor:
+                            value ?? DEFAULT_DISPLAY_NAME_STYLE.secondaryColor,
+                        }));
                       }}
                       presets={DISPLAY_NAME_COLOR_SWATCHES}
                       defaultColor={DEFAULT_DISPLAY_NAME_STYLE.secondaryColor}
                       containerClassName="shrink-0"
-                      renderTrigger={({ open, toggleOpen, triggerBackground, popoverId }) => (
+                      renderTrigger={({
+                        open,
+                        toggleOpen,
+                        triggerBackground,
+                        popoverId,
+                      }) => (
                         <button
                           type="button"
                           onClick={() => {
@@ -1117,18 +1362,26 @@ function DisplayNameStyleDialog({
                           <span
                             className={cn(
                               "h-9 w-9 rounded-[12px] border border-white/10 shadow-[0_10px_24px_rgba(0,0,0,0.28)] transition group-hover:-translate-y-[1px]",
-                              activeColorSlot === "secondary" ? "ring-2 ring-primary/70 ring-offset-2 ring-offset-[color:var(--rm-bg-elevated)]" : "ring-1 ring-transparent",
+                              activeColorSlot === "secondary"
+                                ? "ring-2 ring-primary/70 ring-offset-2 ring-offset-[color:var(--rm-bg-elevated)]"
+                                : "ring-1 ring-transparent",
                             )}
                             style={{ background: triggerBackground }}
                           />
-                          <span className="text-[9px] font-semibold uppercase tracking-[0.12em] text-rm-text-muted">Glow</span>
+                          <span className="text-[9px] font-semibold uppercase tracking-[0.12em] text-rm-text-muted">
+                            Glow
+                          </span>
                         </button>
                       )}
                     />
                   </div>
 
                   <div className="min-w-0 flex-1">
-                    <div className="grid grid-cols-6 gap-1.5" role="group" aria-label={`${activeColorSlot === "primary" ? "Base" : "Highlight"} color presets`}>
+                    <div
+                      className="grid grid-cols-6 gap-1.5"
+                      role="group"
+                      aria-label={`${activeColorSlot === "primary" ? "Base" : "Highlight"} color presets`}
+                    >
                       {DISPLAY_NAME_COLOR_SWATCHES.map((preset) => (
                         <button
                           key={`${activeColorSlot}-${preset}`}
@@ -1136,13 +1389,19 @@ function DisplayNameStyleDialog({
                           onClick={() => applyPresetColor(preset)}
                           className={cn(
                             "aspect-square w-full rounded-[12px] border transition duration-150 hover:-translate-y-[1px]",
-                            (activeColorSlot === "primary" ? draftStyle.primaryColor : draftStyle.secondaryColor) === preset
+                            (activeColorSlot === "primary"
+                              ? draftStyle.primaryColor
+                              : draftStyle.secondaryColor) === preset
                               ? "border-white/90 shadow-[0_0_0_1px_rgba(255,255,255,0.25)]"
                               : "border-white/10",
                           )}
                           style={{ background: preset }}
                           aria-label={`Set ${activeColorSlot === "primary" ? "base" : "highlight"} color to ${preset}`}
-                          aria-pressed={(activeColorSlot === "primary" ? draftStyle.primaryColor : draftStyle.secondaryColor) === preset}
+                          aria-pressed={
+                            (activeColorSlot === "primary"
+                              ? draftStyle.primaryColor
+                              : draftStyle.secondaryColor) === preset
+                          }
                         />
                       ))}
                     </div>
@@ -1150,19 +1409,26 @@ function DisplayNameStyleDialog({
                 </div>
               </div>
             </div>
-
           </div>
         </div>
 
-        <div className="flex min-h-[420px] flex-col bg-rm-bg-primary" role="region" aria-labelledby={previewRegionId}>
-          <h3 id={previewRegionId} className="sr-only">Style preview</h3>
+        <div
+          className="flex min-h-[420px] flex-col bg-rm-bg-primary"
+          role="region"
+          aria-labelledby={previewRegionId}
+        >
+          <h3 id={previewRegionId} className="sr-only">
+            Style preview
+          </h3>
           <div className="flex-1 p-4 lg:p-5">
             <div
               className="relative flex min-h-[100%] items-center justify-center overflow-hidden rounded-[26px] border border-[color:var(--rm-profile-custom-card-border)]"
               style={{
                 ...profileThemeStyle,
                 backgroundColor: previewSurfaceBackground,
-                backgroundImage: useActualProfileThemePreview ? "var(--rm-profile-custom-surface)" : "none",
+                backgroundImage: useActualProfileThemePreview
+                  ? "var(--rm-profile-custom-surface)"
+                  : "none",
               }}
             >
               {bannerUrl ? (
@@ -1178,9 +1444,9 @@ function DisplayNameStyleDialog({
                 style={{
                   background: useActualProfileThemePreview
                     ? "var(--rm-profile-custom-surface-overlay-strong)"
-                    : (previewMode === "dark"
+                    : previewMode === "dark"
                       ? "linear-gradient(180deg, rgba(7,10,16,0.28), rgba(7,10,16,0.78))"
-                      : "linear-gradient(180deg, rgba(255,255,255,0.24), rgba(246,232,222,0.70))"),
+                      : "linear-gradient(180deg, rgba(255,255,255,0.24), rgba(246,232,222,0.70))",
                 }}
               />
               <div className="relative z-10 flex w-full max-w-[430px] flex-col items-center gap-4 px-4 py-6">
@@ -1188,7 +1454,9 @@ function DisplayNameStyleDialog({
                   className="relative w-full max-w-[318px] overflow-hidden rounded-[28px] border border-[color:var(--rm-profile-custom-card-border)] shadow-[0_24px_60px_rgba(0,0,0,0.26)]"
                   style={{
                     backgroundColor: previewSurfaceBackground,
-                    backgroundImage: useActualProfileThemePreview ? "var(--rm-profile-custom-surface)" : "none",
+                    backgroundImage: useActualProfileThemePreview
+                      ? "var(--rm-profile-custom-surface)"
+                      : "none",
                   }}
                 >
                   {bannerUrl ? (
@@ -1204,9 +1472,9 @@ function DisplayNameStyleDialog({
                       style={{
                         background: useActualProfileThemePreview
                           ? "var(--rm-profile-custom-banner-fallback)"
-                          : (previewMode === "dark"
+                          : previewMode === "dark"
                             ? "linear-gradient(135deg, rgba(88,101,242,0.30), rgba(15,23,42,0.92) 68%)"
-                            : "linear-gradient(135deg, rgba(96,165,250,0.30), rgba(255,255,255,0.94) 68%)"),
+                            : "linear-gradient(135deg, rgba(96,165,250,0.30), rgba(255,255,255,0.94) 68%)",
                       }}
                     />
                   )}
@@ -1215,9 +1483,9 @@ function DisplayNameStyleDialog({
                     style={{
                       background: useActualProfileThemePreview
                         ? "var(--rm-profile-custom-banner-overlay)"
-                        : (previewMode === "dark"
+                        : previewMode === "dark"
                           ? "linear-gradient(180deg, rgba(0,0,0,0.06), rgba(0,0,0,0.28))"
-                          : "linear-gradient(180deg, rgba(255,255,255,0.06), rgba(0,0,0,0.08))"),
+                          : "linear-gradient(180deg, rgba(255,255,255,0.06), rgba(0,0,0,0.08))",
                     }}
                   />
                   <div
@@ -1225,9 +1493,9 @@ function DisplayNameStyleDialog({
                     style={{
                       background: useActualProfileThemePreview
                         ? "var(--rm-profile-custom-surface-overlay-strong)"
-                        : (previewMode === "dark"
+                        : previewMode === "dark"
                           ? "linear-gradient(180deg, rgba(255,255,255,0.02), rgba(0,0,0,0.22))"
-                          : "linear-gradient(180deg, rgba(255,255,255,0.12), rgba(255,255,255,0.02))"),
+                          : "linear-gradient(180deg, rgba(255,255,255,0.12), rgba(255,255,255,0.02))",
                     }}
                   />
 
@@ -1237,7 +1505,11 @@ function DisplayNameStyleDialog({
                       <div className="absolute left-5 top-0 -translate-y-1/2">
                         <div className="relative h-[74px] w-[74px] rounded-full border-[5px] border-[rgba(10,12,18,0.68)] bg-[var(--rm-profile-custom-card-bg-strong)] shadow-[0_14px_34px_rgba(0,0,0,0.30)]">
                           {avatarSrc ? (
-                            <AvatarImage src={avatarSrc} alt={displayName} display={avatarDisplay} />
+                            <AvatarImage
+                              src={avatarSrc}
+                              alt={displayName}
+                              display={avatarDisplay}
+                            />
                           ) : (
                             <div className="flex h-full w-full items-center justify-center rounded-full bg-[var(--rm-profile-custom-button-bg)] text-[28px] font-bold text-[color:var(--rm-profile-custom-button-text)]">
                               {displayName.charAt(0).toUpperCase()}
@@ -1254,7 +1526,9 @@ function DisplayNameStyleDialog({
                           backgroundColor={previewSurfaceBackground}
                           readableFallbackColor={previewSurfaceText}
                         />
-                        <div className="mt-1 text-[12px] text-[color:var(--rm-profile-custom-muted)]">@{username}</div>
+                        <div className="mt-1 text-[12px] text-[color:var(--rm-profile-custom-muted)]">
+                          @{username}
+                        </div>
                       </div>
 
                       <div className="mt-4 flex items-center gap-2">
@@ -1272,15 +1546,25 @@ function DisplayNameStyleDialog({
                 <div
                   className="w-full max-w-[340px] rounded-[22px] border px-3.5 py-3 shadow-[0_18px_40px_rgba(0,0,0,0.18)]"
                   style={{
-                    borderColor: previewMode === "dark" ? "rgba(255,255,255,0.08)" : "rgba(15,23,42,0.08)",
-                    backgroundColor: previewMode === "dark" ? "rgba(21,25,34,0.90)" : "rgba(255,255,255,0.88)",
+                    borderColor:
+                      previewMode === "dark"
+                        ? "rgba(255,255,255,0.08)"
+                        : "rgba(15,23,42,0.08)",
+                    backgroundColor:
+                      previewMode === "dark"
+                        ? "rgba(21,25,34,0.90)"
+                        : "rgba(255,255,255,0.88)",
                     color: chatPreviewText,
                   }}
                 >
                   <div className="flex items-start gap-2.5">
                     <div className="h-9 w-9 shrink-0 overflow-hidden rounded-full border border-white/10 bg-rm-bg-elevated">
                       {avatarSrc ? (
-                        <AvatarImage src={avatarSrc} alt={displayName} display={avatarDisplay} />
+                        <AvatarImage
+                          src={avatarSrc}
+                          alt={displayName}
+                          display={avatarDisplay}
+                        />
                       ) : (
                         <div className="flex h-full w-full items-center justify-center bg-[var(--rm-profile-custom-button-bg)] text-[13px] font-bold text-[color:var(--rm-profile-custom-button-text)]">
                           {displayName.charAt(0).toUpperCase()}
@@ -1296,9 +1580,25 @@ function DisplayNameStyleDialog({
                           backgroundColor={chatPreviewBackground}
                           readableFallbackColor={chatPreviewText}
                         />
-                        <span className={cn("text-[11px]", previewMode === "dark" ? "text-white/38" : "text-black/38")}>10:08 AM</span>
+                        <span
+                          className={cn(
+                            "text-[11px]",
+                            previewMode === "dark"
+                              ? "text-white/38"
+                              : "text-black/38",
+                          )}
+                        >
+                          10:08 AM
+                        </span>
                       </div>
-                      <div className={cn("mt-1 text-[13px]", previewMode === "dark" ? "text-white/78" : "text-black/72")}>
+                      <div
+                        className={cn(
+                          "mt-1 text-[13px]",
+                          previewMode === "dark"
+                            ? "text-white/78"
+                            : "text-black/72",
+                        )}
+                      >
                         does anyone read this?
                       </div>
                     </div>
@@ -1320,7 +1620,11 @@ function DisplayNameStyleDialog({
                   <div className="relative z-10 flex items-center gap-3">
                     <div className="h-9 w-9 shrink-0 overflow-hidden rounded-full border border-white/12 bg-rm-bg-elevated">
                       {avatarSrc ? (
-                        <AvatarImage src={avatarSrc} alt={displayName} display={avatarDisplay} />
+                        <AvatarImage
+                          src={avatarSrc}
+                          alt={displayName}
+                          display={avatarDisplay}
+                        />
                       ) : (
                         <div className="flex h-full w-full items-center justify-center bg-[var(--rm-profile-custom-button-bg)] text-[13px] font-bold text-[color:var(--rm-profile-custom-button-text)]">
                           {displayName.charAt(0).toUpperCase()}
@@ -1344,16 +1648,25 @@ function DisplayNameStyleDialog({
           <div className="flex flex-col gap-3 border-t border-rm-border px-4 py-3 sm:gap-4 lg:px-5">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <p className="max-w-[34ch] text-[12px] leading-relaxed text-rm-text-muted">
-                Display name colors and effects can shift a little between light and dark surfaces.
+                Display name colors and effects can shift a little between light
+                and dark surfaces.
               </p>
-              <div className="inline-flex items-center gap-1 rounded-full border border-rm-border bg-rm-bg-surface/70 p-1" role="group" aria-labelledby={previewModeSectionId}>
-                <span id={previewModeSectionId} className="sr-only">Preview surface</span>
+              <div
+                className="inline-flex items-center gap-1 rounded-full border border-rm-border bg-rm-bg-surface/70 p-1"
+                role="group"
+                aria-labelledby={previewModeSectionId}
+              >
+                <span id={previewModeSectionId} className="sr-only">
+                  Preview surface
+                </span>
                 <button
                   type="button"
                   onClick={() => setPreviewMode("dark")}
                   className={cn(
                     "flex h-8 w-8 items-center justify-center rounded-full transition",
-                    previewMode === "dark" ? "bg-rm-bg-hover text-rm-text shadow-sm" : "text-rm-text-muted hover:text-rm-text",
+                    previewMode === "dark"
+                      ? "bg-rm-bg-hover text-rm-text shadow-sm"
+                      : "text-rm-text-muted hover:text-rm-text",
                   )}
                   aria-label="Show dark preview"
                   aria-pressed={previewMode === "dark"}
@@ -1365,7 +1678,9 @@ function DisplayNameStyleDialog({
                   onClick={() => setPreviewMode("light")}
                   className={cn(
                     "flex h-8 w-8 items-center justify-center rounded-full transition",
-                    previewMode === "light" ? "bg-rm-bg-hover text-rm-text shadow-sm" : "text-rm-text-muted hover:text-rm-text",
+                    previewMode === "light"
+                      ? "bg-rm-bg-hover text-rm-text shadow-sm"
+                      : "text-rm-text-muted hover:text-rm-text",
                   )}
                   aria-label="Show light preview"
                   aria-pressed={previewMode === "light"}
@@ -1428,7 +1743,9 @@ function DisplayNameStyleDialog({
 }
 
 function isManagedNameplateUrl(url: string | null | undefined) {
-  return typeof url === "string" && url.startsWith("/api/profile-assets/nameplate/");
+  return (
+    typeof url === "string" && url.startsWith("/api/profile-assets/nameplate/")
+  );
 }
 
 function removeCollectibleFromAvatarDisplay(
@@ -1442,35 +1759,56 @@ function removeCollectibleFromAvatarDisplay(
 
   switch (kind) {
     case "avatar_decoration": {
-      if (!normalizedDisplay.collectibles.avatarDecoration) return normalizedDisplay;
-      const { avatarDecoration: _removedCollectible, ...remainingCollectibles } = normalizedDisplay.collectibles;
+      if (!normalizedDisplay.collectibles.avatarDecoration)
+        return normalizedDisplay;
+      const {
+        avatarDecoration: _removedCollectible,
+        ...remainingCollectibles
+      } = normalizedDisplay.collectibles;
       return {
         ...normalizedDisplay,
-        collectibles: Object.keys(remainingCollectibles).length > 0 ? remainingCollectibles : undefined,
+        collectibles:
+          Object.keys(remainingCollectibles).length > 0
+            ? remainingCollectibles
+            : undefined,
       } satisfies AvatarDisplay;
     }
     case "profile_effect": {
-      if (!normalizedDisplay.collectibles.profileEffect) return normalizedDisplay;
-      const { profileEffect: _removedCollectible, ...remainingCollectibles } = normalizedDisplay.collectibles;
+      if (!normalizedDisplay.collectibles.profileEffect)
+        return normalizedDisplay;
+      const { profileEffect: _removedCollectible, ...remainingCollectibles } =
+        normalizedDisplay.collectibles;
       return {
         ...normalizedDisplay,
-        collectibles: Object.keys(remainingCollectibles).length > 0 ? remainingCollectibles : undefined,
+        collectibles:
+          Object.keys(remainingCollectibles).length > 0
+            ? remainingCollectibles
+            : undefined,
       } satisfies AvatarDisplay;
     }
     case "nameplate": {
       if (!normalizedDisplay.collectibles.nameplate) return normalizedDisplay;
-      const { nameplate: _removedCollectible, ...remainingCollectibles } = normalizedDisplay.collectibles;
+      const { nameplate: _removedCollectible, ...remainingCollectibles } =
+        normalizedDisplay.collectibles;
       return {
         ...normalizedDisplay,
-        collectibles: Object.keys(remainingCollectibles).length > 0 ? remainingCollectibles : undefined,
+        collectibles:
+          Object.keys(remainingCollectibles).length > 0
+            ? remainingCollectibles
+            : undefined,
       } satisfies AvatarDisplay;
     }
     case "profile_frame": {
-      if (!normalizedDisplay.collectibles.profileFrame) return normalizedDisplay;
-      const { profileFrame: _removedCollectible, ...remainingCollectibles } = normalizedDisplay.collectibles;
+      if (!normalizedDisplay.collectibles.profileFrame)
+        return normalizedDisplay;
+      const { profileFrame: _removedCollectible, ...remainingCollectibles } =
+        normalizedDisplay.collectibles;
       return {
         ...normalizedDisplay,
-        collectibles: Object.keys(remainingCollectibles).length > 0 ? remainingCollectibles : undefined,
+        collectibles:
+          Object.keys(remainingCollectibles).length > 0
+            ? remainingCollectibles
+            : undefined,
       } satisfies AvatarDisplay;
     }
     default:
@@ -1487,7 +1825,9 @@ function useAccountState(user: any, chatUser: any) {
       user?.firstName ||
       "",
   );
-  const [username, setUsername] = useState(() => chatUser?.username || user?.username || "");
+  const [username, setUsername] = useState(
+    () => chatUser?.username || user?.username || "",
+  );
   const [pronouns, setPronouns] = useState(() => chatUser?.pronouns || "");
   const [bio, setBio] = useState(() => chatUser?.bio || "");
   const [saving, setSaving] = useState(false);
@@ -1497,7 +1837,9 @@ function useAccountState(user: any, chatUser: any) {
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [bannerPreview, setBannerPreview] = useState<AssetPreview | null>(null);
   const [bannerFile, setBannerFile] = useState<File | null>(null);
-  const [nameplatePreview, setNameplatePreview] = useState<AssetPreview | null>(null);
+  const [nameplatePreview, setNameplatePreview] = useState<AssetPreview | null>(
+    null,
+  );
   const [nameplateFile, setNameplateFile] = useState<File | null>(null);
   const [removeAvatar, setRemoveAvatar] = useState(false);
   const [removeBanner, setRemoveBanner] = useState(false);
@@ -1510,10 +1852,10 @@ function useAccountState(user: any, chatUser: any) {
   if (user?.id !== lastUserId.current) {
     setDisplayName(
       chatUser?.display_name ||
-      (user?.unsafeMetadata?.displayName as string) ||
-      user?.fullName ||
-      user?.firstName ||
-      "",
+        (user?.unsafeMetadata?.displayName as string) ||
+        user?.fullName ||
+        user?.firstName ||
+        "",
     );
     setUsername(chatUser?.username || user?.username || "");
     setPronouns(chatUser?.pronouns || "");
@@ -1533,22 +1875,38 @@ function useAccountState(user: any, chatUser: any) {
   }
 
   return {
-    displayName, setDisplayName,
-    username, setUsername,
-    pronouns, setPronouns,
-    bio, setBio,
-    saving, setSaving,
-    saved, setSaved,
-    error, setError,
-    avatarPreview, setAvatarPreview,
-    avatarFile, setAvatarFile,
-    bannerPreview, setBannerPreview,
-    bannerFile, setBannerFile,
-    nameplatePreview, setNameplatePreview,
-    nameplateFile, setNameplateFile,
-    removeAvatar, setRemoveAvatar,
-    removeBanner, setRemoveBanner,
-    removeNameplate, setRemoveNameplate,
+    displayName,
+    setDisplayName,
+    username,
+    setUsername,
+    pronouns,
+    setPronouns,
+    bio,
+    setBio,
+    saving,
+    setSaving,
+    saved,
+    setSaved,
+    error,
+    setError,
+    avatarPreview,
+    setAvatarPreview,
+    avatarFile,
+    setAvatarFile,
+    bannerPreview,
+    setBannerPreview,
+    bannerFile,
+    setBannerFile,
+    nameplatePreview,
+    setNameplatePreview,
+    nameplateFile,
+    setNameplateFile,
+    removeAvatar,
+    setRemoveAvatar,
+    removeBanner,
+    setRemoveBanner,
+    removeNameplate,
+    setRemoveNameplate,
     fileInputRef,
     bannerInputRef,
     nameplateInputRef,
@@ -1565,31 +1923,49 @@ export default function SettingsAccountTab({
   onClose?: () => void;
 }) {
   const { user } = useUser();
-  const chatUser = useChatStore(s => s.user);
-  const loadCurrentUser = useChatStore(s => s.actions.loadCurrentUser);
-  const updateStatus = useChatStore(s => s.actions.updateStatus);
-  const activeServerId = useChatStore(s => s.activeServerId);
-  const previewMemberRecord = useChatStore((state) => (
-    (state.members as JoinedMemberPreview[]).find((member) => member.user.id === state.user?.id) ?? null
-  ));
+  const chatUser = useChatStore((s) => s.user);
+  const loadCurrentUser = useChatStore((s) => s.actions.loadCurrentUser);
+  const updateStatus = useChatStore((s) => s.actions.updateStatus);
+  const activeServerId = useChatStore((s) => s.activeServerId);
+  const previewMemberRecord = useChatStore(
+    (state) =>
+      (state.members as JoinedMemberPreview[]).find(
+        (member) => member.user.id === state.user?.id,
+      ) ?? null,
+  );
 
   const {
-    displayName, setDisplayName,
-    username, setUsername,
-    pronouns, setPronouns,
-    bio, setBio,
-    saving, setSaving,
+    displayName,
+    setDisplayName,
+    username,
+    setUsername,
+    pronouns,
+    setPronouns,
+    bio,
+    setBio,
+    saving,
+    setSaving,
     setSaved,
-    error, setError,
-    avatarPreview, setAvatarPreview,
-    avatarFile, setAvatarFile,
-    bannerPreview, setBannerPreview,
-    bannerFile, setBannerFile,
-    nameplatePreview, setNameplatePreview,
-    nameplateFile, setNameplateFile,
-    removeAvatar, setRemoveAvatar,
-    removeBanner, setRemoveBanner,
-    removeNameplate, setRemoveNameplate,
+    error,
+    setError,
+    avatarPreview,
+    setAvatarPreview,
+    avatarFile,
+    setAvatarFile,
+    bannerPreview,
+    setBannerPreview,
+    bannerFile,
+    setBannerFile,
+    nameplatePreview,
+    setNameplatePreview,
+    nameplateFile,
+    setNameplateFile,
+    removeAvatar,
+    setRemoveAvatar,
+    removeBanner,
+    setRemoveBanner,
+    removeNameplate,
+    setRemoveNameplate,
     fileInputRef,
     bannerInputRef,
     nameplateInputRef,
@@ -1603,28 +1979,52 @@ export default function SettingsAccountTab({
   const [claimLoading, setClaimLoading] = useState(false);
   const [claimingId, setClaimingId] = useState<string | null>(null);
   const [claimError, setClaimError] = useState<string | null>(null);
-  const [avatarDisplay, setAvatarDisplay] = useState<AvatarDisplay | string | null>(() => chatUser?.avatar_display ?? null);
+  const [avatarDisplay, setAvatarDisplay] = useState<
+    AvatarDisplay | string | null
+  >(() => chatUser?.avatar_display ?? null);
   const [avatarDisplayChanged, setAvatarDisplayChanged] = useState(false);
-  const [avatarEditor, setAvatarEditor] = useState<{ src: string; file?: File } | null>(null);
-  const [collectiblesKind, setCollectiblesKind] = useState<CollectibleKind | null>(null);
-  const [profileAccentColor, setProfileAccentColor] = useState<string | null>(() => storedProfileTheme.profile_accent_color);
-  const [profileBackgroundColor, setProfileBackgroundColor] = useState<string | null>(() => storedProfileTheme.profile_background_color);
-  const [profileBannerColor, setProfileBannerColor] = useState<string | null>(() => storedProfileTheme.profile_banner_color);
-  const [displayNameStyle, setDisplayNameStyle] = useState<DisplayNameStyle | null>(
-    () => normalizeDisplayNameStyle(chatUser?.display_name_style),
+  const [avatarEditor, setAvatarEditor] = useState<{
+    src: string;
+    file?: File;
+  } | null>(null);
+  const [collectiblesKind, setCollectiblesKind] =
+    useState<CollectibleKind | null>(null);
+  const [profileAccentColor, setProfileAccentColor] = useState<string | null>(
+    () => storedProfileTheme.profile_accent_color,
   );
-  const [displayNameStyleEditorOpen, setDisplayNameStyleEditorOpen] = useState(false);
+  const [profileBackgroundColor, setProfileBackgroundColor] = useState<
+    string | null
+  >(() => storedProfileTheme.profile_background_color);
+  const [profileBannerColor, setProfileBannerColor] = useState<string | null>(
+    () => storedProfileTheme.profile_banner_color,
+  );
+  const [displayNameStyle, setDisplayNameStyle] =
+    useState<DisplayNameStyle | null>(() =>
+      normalizeDisplayNameStyle(chatUser?.display_name_style),
+    );
+  const [displayNameStyleEditorOpen, setDisplayNameStyleEditorOpen] =
+    useState(false);
   const [stylesCollapsed, setStylesCollapsed] = useState(false);
-  const [isNameplatePreviewHovered, setIsNameplatePreviewHovered] = useState(false);
-  const [isAvatarDecorationPreviewHovered, setIsAvatarDecorationPreviewHovered] = useState(false);
-  const [activePreviewField, setActivePreviewField] = useState<"pronouns" | "bio" | null>(null);
+  const [isNameplatePreviewHovered, setIsNameplatePreviewHovered] =
+    useState(false);
+  const [
+    isAvatarDecorationPreviewHovered,
+    setIsAvatarDecorationPreviewHovered,
+  ] = useState(false);
+  const [activePreviewField, setActivePreviewField] = useState<
+    "pronouns" | "bio" | null
+  >(null);
   const previewPronounsInputRef = useRef<HTMLInputElement | null>(null);
   const previewBioInputRef = useRef<HTMLTextAreaElement | null>(null);
   const [isCustomStatusEditing, setIsCustomStatusEditing] = useState(false);
-  const [customStatusDraft, setCustomStatusDraft] = useState(() => chatUser?.custom_status ?? "");
+  const [customStatusDraft, setCustomStatusDraft] = useState(
+    () => chatUser?.custom_status ?? "",
+  );
   const previewCustomStatusInputRef = useRef<HTMLInputElement | null>(null);
 
-  const savedDisplayNameStyle = normalizeDisplayNameStyle(chatUser?.display_name_style);
+  const savedDisplayNameStyle = normalizeDisplayNameStyle(
+    chatUser?.display_name_style,
+  );
   const previewTheme = resolveProfileTheme({
     profile_accent_color: profileAccentColor,
     profile_background_color: profileBackgroundColor,
@@ -1669,12 +2069,19 @@ export default function SettingsAccountTab({
     let cancelled = false;
     setClaimLoading(true);
     setClaimError(null);
-    apiGet<{ claimed: boolean; candidates: ClaimCandidate[] }>("/api/account-claims")
+    apiGet<{ claimed: boolean; candidates: ClaimCandidate[] }>(
+      "/api/account-claims",
+    )
       .then((data) => {
         if (!cancelled) setClaimCandidates(data.claimed ? [] : data.candidates);
       })
       .catch((err) => {
-        if (!cancelled) setClaimError(err instanceof Error ? err.message : "Unable to check claimable accounts.");
+        if (!cancelled)
+          setClaimError(
+            err instanceof Error
+              ? err.message
+              : "Unable to check claimable accounts.",
+          );
       })
       .finally(() => {
         if (!cancelled) setClaimLoading(false);
@@ -1700,7 +2107,11 @@ export default function SettingsAccountTab({
   }, [nameplatePreview]);
 
   const hasChanges =
-    displayName !== (chatUser?.display_name || (user?.unsafeMetadata?.displayName as string) || user?.username || "") ||
+    displayName !==
+      (chatUser?.display_name ||
+        (user?.unsafeMetadata?.displayName as string) ||
+        user?.username ||
+        "") ||
     username !== (chatUser?.username || user?.username || "") ||
     pronouns !== (chatUser?.pronouns || "") ||
     bio !== (chatUser?.bio || "") ||
@@ -1716,11 +2127,14 @@ export default function SettingsAccountTab({
     storedProfileTheme.profile_banner_color !== profileBannerColor ||
     !areDisplayNameStylesEqual(displayNameStyle, savedDisplayNameStyle);
 
-  const persistedAvatarSrc = chatUser?.avatar_url ? getAuthAssetUrl(chatUser.avatar_url) : null;
+  const persistedAvatarSrc = chatUser?.avatar_url
+    ? getAuthAssetUrl(chatUser.avatar_url)
+    : null;
   const fallbackAvatarSrc = user?.imageUrl || undefined;
-  const draftAvatarDisplay = avatarDisplayChanged || avatarFile
-    ? avatarDisplay
-    : chatUser?.avatar_display ?? null;
+  const draftAvatarDisplay =
+    avatarDisplayChanged || avatarFile
+      ? avatarDisplay
+      : (chatUser?.avatar_display ?? null);
   const avatarDisplayWithoutCrop = (() => {
     const normalizedDisplay = normalizeAvatarDisplay(draftAvatarDisplay);
     if (!normalizedDisplay?.crop) {
@@ -1729,9 +2143,9 @@ export default function SettingsAccountTab({
 
     return normalizedDisplay.collectibles
       ? ({
-        version: 1,
-        collectibles: normalizedDisplay.collectibles,
-      } satisfies AvatarDisplay)
+          version: 1,
+          collectibles: normalizedDisplay.collectibles,
+        } satisfies AvatarDisplay)
       : null;
   })();
   const currentAvatarSrc = removeAvatar
@@ -1740,16 +2154,26 @@ export default function SettingsAccountTab({
   const currentAvatarDisplay = removeAvatar
     ? avatarDisplayWithoutCrop
     : draftAvatarDisplay;
-  const currentDisplayName = displayName.trim() || chatUser?.display_name || chatUser?.username || user?.username || "Profile";
-  const currentUsername = username.trim() || chatUser?.username || user?.username || "profile";
+  const currentDisplayName =
+    displayName.trim() ||
+    chatUser?.display_name ||
+    chatUser?.username ||
+    user?.username ||
+    "Profile";
+  const currentUsername =
+    username.trim() || chatUser?.username || user?.username || "profile";
   const currentPronouns = pronouns.trim();
   const currentBio = bio.trim();
   const currentCustomStatus = customStatusDraft.trim();
-  const visibleCustomStatus = currentCustomStatus || chatUser?.custom_status?.trim() || "";
+  const visibleCustomStatus =
+    currentCustomStatus || chatUser?.custom_status?.trim() || "";
   const hasCustomStatus = Boolean(visibleCustomStatus);
   const currentPresenceStatus = chatUser?.status ?? "online";
   const previewReferenceDate = resolveProfileReferenceDate({
-    joinedAt: activeServerId && activeServerId !== "@me" ? previewMemberRecord?.joined_at : null,
+    joinedAt:
+      activeServerId && activeServerId !== "@me"
+        ? previewMemberRecord?.joined_at
+        : null,
     createdAt: chatUser?.created_at ?? user?.createdAt ?? null,
   });
   const currentCollectibles = getAvatarCollectibles(currentAvatarDisplay);
@@ -1758,25 +2182,35 @@ export default function SettingsAccountTab({
   const currentNameplateSelection = currentCollectibles?.nameplate;
   const currentProfileEffectDisplay = currentProfileEffect
     ? normalizeAvatarDisplay({
-      version: 1,
-      collectibles: {
-        profileEffect: currentProfileEffect,
-      },
-    })
+        version: 1,
+        collectibles: {
+          profileEffect: currentProfileEffect,
+        },
+      })
     : null;
-  const hasPersistedUploadedAvatar = Boolean(chatUser?.avatar_url?.startsWith("/api/avatars/"));
-  const hasAvatarCrop = Boolean(normalizeAvatarDisplay(draftAvatarDisplay)?.crop);
-  const hasRemovableAvatar = Boolean(avatarFile || avatarPreview || hasPersistedUploadedAvatar || hasAvatarCrop);
+  const hasPersistedUploadedAvatar = Boolean(
+    chatUser?.avatar_url?.startsWith("/api/avatars/"),
+  );
+  const hasAvatarCrop = Boolean(
+    normalizeAvatarDisplay(draftAvatarDisplay)?.crop,
+  );
+  const hasRemovableAvatar = Boolean(
+    avatarFile || avatarPreview || hasPersistedUploadedAvatar || hasAvatarCrop,
+  );
   const currentAvatarDisplayWithoutDecoration = (() => {
     const normalizedDisplay = normalizeAvatarDisplay(currentAvatarDisplay);
     if (!normalizedDisplay?.collectibles?.avatarDecoration) {
       return normalizedDisplay ?? currentAvatarDisplay;
     }
 
-    const { avatarDecoration: _avatarDecoration, ...remainingCollectibles } = normalizedDisplay.collectibles;
+    const { avatarDecoration: _avatarDecoration, ...remainingCollectibles } =
+      normalizedDisplay.collectibles;
     return {
       ...normalizedDisplay,
-      collectibles: Object.keys(remainingCollectibles).length > 0 ? remainingCollectibles : undefined,
+      collectibles:
+        Object.keys(remainingCollectibles).length > 0
+          ? remainingCollectibles
+          : undefined,
     } satisfies AvatarDisplay;
   })();
 
@@ -1807,7 +2241,12 @@ export default function SettingsAccountTab({
     }
 
     updateStatus(currentPresenceStatus, trimmedStatus || null);
-  }, [chatUser?.custom_status, currentPresenceStatus, customStatusDraft, updateStatus]);
+  }, [
+    chatUser?.custom_status,
+    currentPresenceStatus,
+    customStatusDraft,
+    updateStatus,
+  ]);
   const handleClearCustomStatus = useCallback(() => {
     if (!currentCustomStatus && !chatUser?.custom_status?.trim()) {
       setIsCustomStatusEditing(false);
@@ -1817,7 +2256,12 @@ export default function SettingsAccountTab({
     setCustomStatusDraft("");
     setIsCustomStatusEditing(false);
     updateStatus(currentPresenceStatus, null);
-  }, [chatUser?.custom_status, currentCustomStatus, currentPresenceStatus, updateStatus]);
+  }, [
+    chatUser?.custom_status,
+    currentCustomStatus,
+    currentPresenceStatus,
+    updateStatus,
+  ]);
   const nameplateStatus = removeNameplate
     ? "Nameplate will be removed when you save."
     : nameplateFile
@@ -1834,13 +2278,16 @@ export default function SettingsAccountTab({
       : currentBannerUrl
         ? "Profile banner active"
         : "No banner selected";
-  const nameplateStaticPreviewUrl = currentNameplateUrl || currentNameplateSelection?.staticUrl || null;
-  const nameplateStaticPreviewContentType = currentNameplateUrl ? currentNameplateContentType : null;
+  const nameplateStaticPreviewUrl =
+    currentNameplateUrl || currentNameplateSelection?.staticUrl || null;
+  const nameplateStaticPreviewContentType = currentNameplateUrl
+    ? currentNameplateContentType
+    : null;
   const nameplateHoverPreviewUrl =
-    currentNameplateUrl
-    || currentNameplateSelection?.animatedUrl
-    || currentNameplateSelection?.staticUrl
-    || null;
+    currentNameplateUrl ||
+    currentNameplateSelection?.animatedUrl ||
+    currentNameplateSelection?.staticUrl ||
+    null;
   const nameplateHoverPreviewContentType = currentNameplateUrl
     ? currentNameplateContentType
     : currentNameplateSelection?.animatedUrl
@@ -1848,9 +2295,14 @@ export default function SettingsAccountTab({
       : null;
   const avatarDecorationPreviewArtUrl = currentAvatarDecoration?.asset
     ? `https://cdn.discordapp.com/avatar-decoration-presets/${currentAvatarDecoration.asset}.png?size=240&passthrough=true`
-    : currentAvatarDecoration?.imageUrl ?? null;
+    : (currentAvatarDecoration?.imageUrl ?? null);
   const resetDraftState = useCallback(() => {
-    setDisplayName(chatUser?.display_name || (user?.unsafeMetadata?.displayName as string) || user?.username || "");
+    setDisplayName(
+      chatUser?.display_name ||
+        (user?.unsafeMetadata?.displayName as string) ||
+        user?.username ||
+        "",
+    );
     setUsername(chatUser?.username || user?.username || "");
     setPronouns(chatUser?.pronouns || "");
     setBio(chatUser?.bio || "");
@@ -1868,7 +2320,9 @@ export default function SettingsAccountTab({
     setProfileAccentColor(storedProfileTheme.profile_accent_color);
     setProfileBackgroundColor(storedProfileTheme.profile_background_color);
     setProfileBannerColor(storedProfileTheme.profile_banner_color);
-    setDisplayNameStyle(normalizeDisplayNameStyle(chatUser?.display_name_style));
+    setDisplayNameStyle(
+      normalizeDisplayNameStyle(chatUser?.display_name_style),
+    );
     setError(null);
     setSaved(false);
   }, [
@@ -1902,26 +2356,29 @@ export default function SettingsAccountTab({
     user?.username,
   ]);
 
-  const syncCollectibleState = useCallback(async (updatedUser: CollectibleApplyUser) => {
-    setAvatarDisplay(updatedUser.avatar_display);
-    setRemoveNameplate(false);
-    setNameplateFile(null);
-    setNameplatePreview(null);
-    if (typeof user?.reload === "function") {
-      await user.reload();
-    }
-    await loadCurrentUser();
-    setAvatarDisplayChanged(Boolean(avatarFile));
-  }, [
-    avatarFile,
-    loadCurrentUser,
-    setAvatarDisplay,
-    setAvatarDisplayChanged,
-    setNameplateFile,
-    setNameplatePreview,
-    setRemoveNameplate,
-    user,
-  ]);
+  const syncCollectibleState = useCallback(
+    async (updatedUser: CollectibleApplyUser) => {
+      setAvatarDisplay(updatedUser.avatar_display);
+      setRemoveNameplate(false);
+      setNameplateFile(null);
+      setNameplatePreview(null);
+      if (typeof user?.reload === "function") {
+        await user.reload();
+      }
+      await loadCurrentUser();
+      setAvatarDisplayChanged(Boolean(avatarFile));
+    },
+    [
+      avatarFile,
+      loadCurrentUser,
+      setAvatarDisplay,
+      setAvatarDisplayChanged,
+      setNameplateFile,
+      setNameplatePreview,
+      setRemoveNameplate,
+      user,
+    ],
+  );
 
   const handleAvatarSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -1994,41 +2451,55 @@ export default function SettingsAccountTab({
     setNameplatePreview(createAssetPreview(file));
   };
 
-  const handleOpenCollectibles = useCallback((kind: CollectibleKind = "avatar_decoration") => {
-    setCollectiblesKind(kind);
-  }, []);
+  const handleOpenCollectibles = useCallback(
+    (kind: CollectibleKind = "avatar_decoration") => {
+      setCollectiblesKind(kind);
+    },
+    [],
+  );
 
-  const handleRemoveCollectible = useCallback((kind: CollectibleKind) => {
-    const hasCollectible =
-      kind === "avatar_decoration"
-        ? Boolean(currentAvatarDecoration)
-        : kind === "profile_effect"
-          ? Boolean(currentProfileEffect)
-          : kind === "profile_frame"
-            ? Boolean(currentCollectibles?.profileFrame)
-            : Boolean(currentNameplateSelection);
-    if (!hasCollectible) {
-      return;
-    }
+  const handleRemoveCollectible = useCallback(
+    (kind: CollectibleKind) => {
+      const hasCollectible =
+        kind === "avatar_decoration"
+          ? Boolean(currentAvatarDecoration)
+          : kind === "profile_effect"
+            ? Boolean(currentProfileEffect)
+            : kind === "profile_frame"
+              ? Boolean(currentCollectibles?.profileFrame)
+              : Boolean(currentNameplateSelection);
+      if (!hasCollectible) {
+        return;
+      }
 
-    const nextAvatarDisplay = removeCollectibleFromAvatarDisplay(currentAvatarDisplay, kind);
-    setError(null);
-    setAvatarDisplay(nextAvatarDisplay);
-    setAvatarDisplayChanged(true);
-  }, [
-    currentAvatarDecoration,
-    currentAvatarDisplay,
-    currentCollectibles?.profileFrame,
-    currentNameplateSelection,
-    currentProfileEffect,
-    setAvatarDisplay,
-    setAvatarDisplayChanged,
-    setError,
-  ]);
+      const nextAvatarDisplay = removeCollectibleFromAvatarDisplay(
+        currentAvatarDisplay,
+        kind,
+      );
+      setError(null);
+      setAvatarDisplay(nextAvatarDisplay);
+      setAvatarDisplayChanged(true);
+    },
+    [
+      currentAvatarDecoration,
+      currentAvatarDisplay,
+      currentCollectibles?.profileFrame,
+      currentNameplateSelection,
+      currentProfileEffect,
+      setAvatarDisplay,
+      setAvatarDisplayChanged,
+      setError,
+    ],
+  );
 
   const handleRemoveNameplate = useCallback(() => {
     const savedNameplateUrl = chatUser?.nameplate_url ?? null;
-    if (!savedNameplateUrl && !currentNameplateSelection && !nameplateFile && !nameplatePreview) {
+    if (
+      !savedNameplateUrl &&
+      !currentNameplateSelection &&
+      !nameplateFile &&
+      !nameplatePreview
+    ) {
       return;
     }
 
@@ -2038,7 +2509,10 @@ export default function SettingsAccountTab({
     setNameplatePreview(null);
 
     if (currentNameplateSelection) {
-      const nextAvatarDisplay = removeCollectibleFromAvatarDisplay(currentAvatarDisplay, "nameplate");
+      const nextAvatarDisplay = removeCollectibleFromAvatarDisplay(
+        currentAvatarDisplay,
+        "nameplate",
+      );
       setAvatarDisplay(nextAvatarDisplay);
       setAvatarDisplayChanged(true);
     }
@@ -2078,9 +2552,11 @@ export default function SettingsAccountTab({
         profileBannerColor,
         displayNameStyle,
         ...(removeAvatar ? { removeAvatar: true } : {}),
-        ...((removeAvatar && currentAvatarDisplay)
+        ...(removeAvatar && currentAvatarDisplay
           ? { avatarDisplay: currentAvatarDisplay }
-          : (avatarDisplayChanged && !avatarFile ? { avatarDisplay } : {})),
+          : avatarDisplayChanged && !avatarFile
+            ? { avatarDisplay }
+            : {}),
       });
 
       if (removeAvatar) {
@@ -2093,8 +2569,12 @@ export default function SettingsAccountTab({
         const formData = new FormData();
         formData.append("file", avatarFile);
         const serializedDisplay = serializeAvatarDisplay(avatarDisplay);
-        if (serializedDisplay) formData.append("avatar_display", serializedDisplay);
-        const uploaded = await apiUpload<{ url: string; avatar_display: AvatarDisplay | null }>("/api/avatar-upload", formData);
+        if (serializedDisplay)
+          formData.append("avatar_display", serializedDisplay);
+        const uploaded = await apiUpload<{
+          url: string;
+          avatar_display: AvatarDisplay | null;
+        }>("/api/avatar-upload", formData);
         setAvatarFile(null);
         setAvatarPreview(null);
         setAvatarDisplay(uploaded.avatar_display);
@@ -2107,12 +2587,18 @@ export default function SettingsAccountTab({
         const formData = new FormData();
         formData.append("kind", "banner");
         formData.append("file", bannerFile);
-        await apiUpload<{ url: string; content_type: string }>("/api/profile-assets/manage", formData);
+        await apiUpload<{ url: string; content_type: string }>(
+          "/api/profile-assets/manage",
+          formData,
+        );
         setBannerFile(null);
         setBannerPreview(null);
         setRemoveBanner(false);
       } else if (removeBanner && chatUser?.banner_url) {
-        await apiDelete<{ ok: true }, { kind: "banner" }>("/api/profile-assets/manage", { kind: "banner" });
+        await apiDelete<{ ok: true }, { kind: "banner" }>(
+          "/api/profile-assets/manage",
+          { kind: "banner" },
+        );
         setRemoveBanner(false);
       }
 
@@ -2120,21 +2606,34 @@ export default function SettingsAccountTab({
         const formData = new FormData();
         formData.append("kind", "nameplate");
         formData.append("file", nameplateFile);
-        await apiUpload<{ url: string; content_type: string }>("/api/profile-assets/manage", formData);
+        await apiUpload<{ url: string; content_type: string }>(
+          "/api/profile-assets/manage",
+          formData,
+        );
         setNameplateFile(null);
         setNameplatePreview(null);
         setRemoveNameplate(false);
       } else if (removeNameplate) {
         const savedNameplateUrl = chatUser?.nameplate_url ?? null;
         if (savedNameplateUrl && isManagedNameplateUrl(savedNameplateUrl)) {
-          await apiDelete<{ ok: true }, { kind: "nameplate" }>("/api/profile-assets/manage", { kind: "nameplate" });
+          await apiDelete<{ ok: true }, { kind: "nameplate" }>(
+            "/api/profile-assets/manage",
+            { kind: "nameplate" },
+          );
         }
-        if (!savedNameplateUrl || !isManagedNameplateUrl(savedNameplateUrl) || currentNameplateSelection) {
-          const data = await apiPatch<{ ok: true; user: CollectibleApplyUser }>("/api/collectibles/apply", {
-            kind: "nameplate",
-            skuId: null,
-            avatarDisplay: currentAvatarDisplay ?? null,
-          });
+        if (
+          !savedNameplateUrl ||
+          !isManagedNameplateUrl(savedNameplateUrl) ||
+          currentNameplateSelection
+        ) {
+          const data = await apiPatch<{ ok: true; user: CollectibleApplyUser }>(
+            "/api/collectibles/apply",
+            {
+              kind: "nameplate",
+              skuId: null,
+              avatarDisplay: currentAvatarDisplay ?? null,
+            },
+          );
           setAvatarDisplay(data.user.avatar_display);
         }
         setRemoveNameplate(false);
@@ -2148,7 +2647,11 @@ export default function SettingsAccountTab({
       setTimeout(() => setSaved(false), 2000);
     } catch (err) {
       log.error("Failed to save:", err);
-      setError(err instanceof Error ? err.message : "Failed to save profile. Please try again.");
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Failed to save profile. Please try again.",
+      );
     } finally {
       setSaving(false);
     }
@@ -2189,20 +2692,25 @@ export default function SettingsAccountTab({
     setRemoveNameplate,
   ]);
 
-  const handleClaimAccount = useCallback(async (legacyUserId: string) => {
-    setClaimingId(legacyUserId);
-    setClaimError(null);
-    try {
-      await apiPost("/api/account-claims", { legacyUserId });
-      await loadCurrentUser();
-      setClaimCandidates([]);
-      window.location.reload();
-    } catch (err) {
-      setClaimError(err instanceof Error ? err.message : "Unable to claim that account.");
-    } finally {
-      setClaimingId(null);
-    }
-  }, [loadCurrentUser]);
+  const handleClaimAccount = useCallback(
+    async (legacyUserId: string) => {
+      setClaimingId(legacyUserId);
+      setClaimError(null);
+      try {
+        await apiPost("/api/account-claims", { legacyUserId });
+        await loadCurrentUser();
+        setClaimCandidates([]);
+        window.location.reload();
+      } catch (err) {
+        setClaimError(
+          err instanceof Error ? err.message : "Unable to claim that account.",
+        );
+      } finally {
+        setClaimingId(null);
+      }
+    },
+    [loadCurrentUser],
+  );
 
   if (!user) {
     return (
@@ -2213,11 +2721,17 @@ export default function SettingsAccountTab({
         <div className="rounded-xl border border-rm-border bg-rm-bg-surface p-6">
           <div className="flex items-start gap-3">
             <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-rm-accent/15 text-rm-accent">
-              {authUserLoaded ? <AlertTriangle size={18} /> : <Loader2 size={18} className="animate-spin" />}
+              {authUserLoaded ? (
+                <AlertTriangle size={18} />
+              ) : (
+                <Loader2 size={18} className="animate-spin" />
+              )}
             </div>
             <div>
               <h2 className="text-sm font-bold text-rm-text">
-                {authUserLoaded ? "Account profile unavailable" : "Loading account profile"}
+                {authUserLoaded
+                  ? "Account profile unavailable"
+                  : "Loading account profile"}
               </h2>
               <p className="mt-1 text-sm leading-6 text-rm-text-secondary">
                 {authUserLoaded
@@ -2232,7 +2746,13 @@ export default function SettingsAccountTab({
   }
 
   return (
-    <div className={cn("animate-in fade-in slide-in-from-right-4 duration-300", asModal && "relative flex h-full min-h-0 flex-col overflow-hidden bg-rm-bg-primary")}>
+    <div
+      className={cn(
+        "animate-in fade-in slide-in-from-right-4 duration-300",
+        asModal &&
+          "relative flex h-full min-h-0 flex-col overflow-hidden bg-rm-bg-primary",
+      )}
+    >
       {asModal ? (
         onClose ? (
           <div className="pointer-events-none absolute right-5 top-5 z-30">
@@ -2252,7 +2772,8 @@ export default function SettingsAccountTab({
         <div className="mb-6">
           <h1 className="text-2xl font-bold text-rm-text">Edit Profile</h1>
           <p className="mt-2 text-sm text-rm-text-muted">
-            Update your identity, collectibles, and profile surfaces in one place.
+            Update your identity, collectibles, and profile surfaces in one
+            place.
           </p>
         </div>
       )}
@@ -2282,8 +2803,20 @@ export default function SettingsAccountTab({
         aria-label="Upload member nameplate"
       />
 
-      <div className={cn(asModal ? "min-h-0 flex-1 overflow-y-auto bg-rm-bg-primary custom-scrollbar" : "bg-transparent")}>
-        <div className={cn(asModal ? "h-full pb-24 md:pb-28 lg:pb-8" : "px-4 pb-6 pt-2 md:px-6 md:pb-8 md:pt-4")}>
+      <div
+        className={cn(
+          asModal
+            ? "min-h-0 flex-1 overflow-y-auto bg-rm-bg-primary custom-scrollbar"
+            : "bg-transparent",
+        )}
+      >
+        <div
+          className={cn(
+            asModal
+              ? "h-full pb-24 md:pb-28 lg:pb-8"
+              : "px-4 pb-6 pt-2 md:px-6 md:pb-8 md:pt-4",
+          )}
+        >
           {asModal && error ? (
             <div className="m-4 mb-0 flex items-center gap-2 rounded-2xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
               <AlertTriangle size={14} />
@@ -2294,16 +2827,27 @@ export default function SettingsAccountTab({
           <div
             className={cn(
               "grid gap-6 lg:grid-cols-[228px_minmax(0,1fr)]",
-              asModal && "min-h-full gap-0 lg:h-full lg:min-h-0 lg:grid-cols-[228px_minmax(0,1fr)] lg:items-start",
+              asModal &&
+                "min-h-full gap-0 lg:h-full lg:min-h-0 lg:grid-cols-[228px_minmax(0,1fr)] lg:items-start",
             )}
-            style={asModal ? ({ gridTemplateColumns: stylesCollapsed ? "0px minmax(0,1fr)" : "228px minmax(0,1fr)" } as CSSProperties) : undefined}
+            style={
+              asModal
+                ? ({
+                    gridTemplateColumns: stylesCollapsed
+                      ? "0px minmax(0,1fr)"
+                      : "228px minmax(0,1fr)",
+                  } as CSSProperties)
+                : undefined
+            }
           >
             <aside
               className={cn(
                 "self-start transition-[opacity,transform,max-width] duration-300",
                 asModal && "relative z-[140] min-h-0",
                 !stylesCollapsed && "overflow-visible",
-                asModal && stylesCollapsed && "pointer-events-none max-w-0 -translate-x-5 opacity-0 overflow-hidden",
+                asModal &&
+                  stylesCollapsed &&
+                  "pointer-events-none max-w-0 -translate-x-5 opacity-0 overflow-hidden",
               )}
             >
               <div
@@ -2314,7 +2858,12 @@ export default function SettingsAccountTab({
                     : "overflow-hidden rounded-[22px] border border-rm-border",
                 )}
               >
-                <div className={cn("flex items-center justify-between border-b border-rm-border", asModal ? "px-3 py-2.5" : "px-4 py-3.5")}>
+                <div
+                  className={cn(
+                    "flex items-center justify-between border-b border-rm-border",
+                    asModal ? "px-3 py-2.5" : "px-4 py-3.5",
+                  )}
+                >
                   <button
                     type="button"
                     className="inline-flex items-center gap-1.5 rounded-lg border border-rm-border bg-rm-bg-surface px-2 py-1 text-[13px] font-semibold text-rm-text transition hover:bg-rm-bg-hover"
@@ -2330,51 +2879,74 @@ export default function SettingsAccountTab({
                           if (asModal) setStylesCollapsed(true);
                         }}
                         className="rounded-lg border border-transparent bg-transparent p-1.5 text-rm-text-muted transition hover:border-rm-border hover:bg-rm-bg-hover hover:text-rm-text"
-                        aria-label={asModal ? "Hide styles" : "View profile variants"}
+                        aria-label={
+                          asModal ? "Hide styles" : "View profile variants"
+                        }
                       >
                         <ChevronsRight size={16} />
                       </button>
                     </TooltipTrigger>
-                    <TooltipContent side="top" sideOffset={8} className={SETTINGS_TOOLTIP_CONTENT_CLASS}>
+                    <TooltipContent
+                      side="top"
+                      sideOffset={8}
+                      className={SETTINGS_TOOLTIP_CONTENT_CLASS}
+                    >
                       {asModal ? "Hide styles" : "View profile variants"}
                     </TooltipContent>
                   </Tooltip>
                 </div>
 
-                <div className={cn("space-y-3", asModal ? "overflow-visible px-3 pb-3 pt-2.5" : "p-4")}>
+                <div
+                  className={cn(
+                    "space-y-3",
+                    asModal ? "overflow-visible px-3 pb-3 pt-2.5" : "p-4",
+                  )}
+                >
                   <ProfileRailSection title="Nameplate">
                     <ProfileRailCard
                       className="p-2.5"
                       onHoverChange={setIsNameplatePreviewHovered}
-                      actions={(
+                      actions={
                         <>
-                          <AccountActionIconButton label="Browse nameplates" onClick={() => handleOpenCollectibles("nameplate")}>
+                          <AccountActionIconButton
+                            label="Browse nameplates"
+                            onClick={() => handleOpenCollectibles("nameplate")}
+                          >
                             <Sparkles size={12} />
                           </AccountActionIconButton>
-                          <AccountActionIconButton label="Upload nameplate" onClick={() => nameplateInputRef.current?.click()}>
+                          <AccountActionIconButton
+                            label="Upload nameplate"
+                            onClick={() => nameplateInputRef.current?.click()}
+                          >
                             <Upload size={12} />
                           </AccountActionIconButton>
                           <AccountActionIconButton
                             label="Remove nameplate"
                             onClick={handleRemoveNameplate}
-                            disabled={!currentNameplateUrl && !currentNameplateSelection && !nameplateFile}
+                            disabled={
+                              !currentNameplateUrl &&
+                              !currentNameplateSelection &&
+                              !nameplateFile
+                            }
                             className="text-rose-300 hover:bg-rose-500/12 hover:text-rose-100"
                           >
                             <Trash2 size={12} />
                           </AccountActionIconButton>
                         </>
-                      )}
+                      }
                     >
-                        <div
-                          className="relative h-9 overflow-hidden rounded-[10px] border border-rm-border/70 bg-rm-bg-surface"
-                          title={nameplateStatus}
-                        >
+                      <div
+                        className="relative h-9 overflow-hidden rounded-[10px] border border-rm-border/70 bg-rm-bg-surface"
+                        title={nameplateStatus}
+                      >
                         {nameplateStaticPreviewUrl ? (
                           <>
                             <div className="absolute inset-0 transition duration-300 group-hover/rail:opacity-0">
                               <UserNameplateLayer
                                 nameplateUrl={nameplateStaticPreviewUrl}
-                                nameplateContentType={nameplateStaticPreviewContentType}
+                                nameplateContentType={
+                                  nameplateStaticPreviewContentType
+                                }
                                 avatarDisplay={currentAvatarDisplay}
                                 seedId={currentUsername}
                                 alt="Nameplate preview"
@@ -2383,10 +2955,13 @@ export default function SettingsAccountTab({
                               />
                             </div>
                             <div className="absolute inset-0 opacity-0 transition duration-300 group-hover/rail:opacity-100">
-                              {isNameplatePreviewHovered && nameplateHoverPreviewUrl ? (
+                              {isNameplatePreviewHovered &&
+                              nameplateHoverPreviewUrl ? (
                                 <UserNameplateLayer
                                   nameplateUrl={nameplateHoverPreviewUrl}
-                                  nameplateContentType={nameplateHoverPreviewContentType}
+                                  nameplateContentType={
+                                    nameplateHoverPreviewContentType
+                                  }
                                   avatarDisplay={currentAvatarDisplay}
                                   seedId={currentUsername}
                                   alt="Nameplate preview"
@@ -2397,19 +2972,31 @@ export default function SettingsAccountTab({
                               <div className="absolute inset-y-0 left-2 flex items-center gap-2">
                                 <div className="h-6 w-6 overflow-hidden rounded-full border border-rm-border bg-rm-bg-surface/80">
                                   {currentAvatarSrc ? (
-                                    <AvatarImage src={currentAvatarSrc} alt="" display={currentAvatarDisplayWithoutDecoration} />
+                                    <AvatarImage
+                                      src={currentAvatarSrc}
+                                      alt=""
+                                      display={
+                                        currentAvatarDisplayWithoutDecoration
+                                      }
+                                    />
                                   ) : (
                                     <div className="flex h-full w-full items-center justify-center text-[10px] font-bold text-white/80">
-                                      {getDisplayInitial({ name: currentDisplayName })}
+                                      {getDisplayInitial({
+                                        name: currentDisplayName,
+                                      })}
                                     </div>
                                   )}
                                 </div>
-                                <span className="max-w-[90px] truncate text-[11px] font-semibold text-white/88">{currentDisplayName}</span>
+                                <span className="max-w-[90px] truncate text-[11px] font-semibold text-white/88">
+                                  {currentDisplayName}
+                                </span>
                               </div>
                             </div>
                           </>
                         ) : (
-                          <div className="flex h-full items-center justify-center text-[11px] text-rm-text-muted">No nameplate selected</div>
+                          <div className="flex h-full items-center justify-center text-[11px] text-rm-text-muted">
+                            No nameplate selected
+                          </div>
                         )}
                       </div>
                     </ProfileRailCard>
@@ -2419,9 +3006,13 @@ export default function SettingsAccountTab({
                     <div className="grid grid-cols-2 gap-2.5">
                       <ProfileRailCard
                         className="flex h-[88px] items-center justify-center p-2.5"
-                        actions={(
+                        actions={
                           <>
-                            <AccountActionIconButton label="Crop avatar" onClick={handleEditAvatarFrame} disabled={!currentAvatarSrc}>
+                            <AccountActionIconButton
+                              label="Crop avatar"
+                              onClick={handleEditAvatarFrame}
+                              disabled={!currentAvatarSrc}
+                            >
                               <Crop size={12} />
                             </AccountActionIconButton>
                             <AccountActionIconButton
@@ -2433,7 +3024,7 @@ export default function SettingsAccountTab({
                               <Trash2 size={12} />
                             </AccountActionIconButton>
                           </>
-                        )}
+                        }
                       >
                         <button
                           type="button"
@@ -2443,10 +3034,16 @@ export default function SettingsAccountTab({
                         >
                           <div className="relative h-[50px] w-[50px] overflow-hidden rounded-full border border-rm-border/80 bg-rm-bg-elevated shadow-[0_12px_24px_rgba(0,0,0,0.22)]">
                             {currentAvatarSrc ? (
-                              <AvatarImage src={currentAvatarSrc} alt={currentDisplayName} display={currentAvatarDisplayWithoutDecoration} />
+                              <AvatarImage
+                                src={currentAvatarSrc}
+                                alt={currentDisplayName}
+                                display={currentAvatarDisplayWithoutDecoration}
+                              />
                             ) : (
                               <div className="flex h-full w-full items-center justify-center bg-rm-bg-elevated text-xl font-bold text-rm-text">
-                                {getDisplayInitial({ name: currentDisplayName })}
+                                {getDisplayInitial({
+                                  name: currentDisplayName,
+                                })}
                               </div>
                             )}
                           </div>
@@ -2456,21 +3053,28 @@ export default function SettingsAccountTab({
                       <ProfileRailCard
                         className="flex h-[88px] items-center justify-center p-2.5"
                         onHoverChange={setIsAvatarDecorationPreviewHovered}
-                        actions={(
+                        actions={
                           <>
-                            <AccountActionIconButton label="Change decoration" onClick={() => handleOpenCollectibles("avatar_decoration")}>
+                            <AccountActionIconButton
+                              label="Change decoration"
+                              onClick={() =>
+                                handleOpenCollectibles("avatar_decoration")
+                              }
+                            >
                               <Sparkles size={12} />
                             </AccountActionIconButton>
                             <AccountActionIconButton
                               label="Remove decoration"
-                              onClick={() => handleRemoveCollectible("avatar_decoration")}
+                              onClick={() =>
+                                handleRemoveCollectible("avatar_decoration")
+                              }
                               disabled={!currentAvatarDecoration}
                               className="text-rose-300 hover:bg-rose-500/12 hover:text-rose-100"
                             >
                               <Trash2 size={12} />
                             </AccountActionIconButton>
                           </>
-                        )}
+                        }
                       >
                         <div className="relative flex h-[64px] w-[64px] items-center justify-center overflow-hidden rounded-[16px] border border-rm-border bg-rm-bg-surface/70">
                           {currentAvatarDecoration ? (
@@ -2479,7 +3083,10 @@ export default function SettingsAccountTab({
                                 <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_rgba(255,255,255,0.08),_rgba(255,255,255,0)_56%)]" />
                                 <div className="absolute inset-0 flex items-center justify-center">
                                   <img
-                                    src={avatarDecorationPreviewArtUrl ?? currentAvatarDecoration.imageUrl}
+                                    src={
+                                      avatarDecorationPreviewArtUrl ??
+                                      currentAvatarDecoration.imageUrl
+                                    }
                                     alt={currentAvatarDecoration.name}
                                     className="h-[56px] w-[56px] object-contain opacity-95 drop-shadow-[0_12px_22px_rgba(0,0,0,0.34)]"
                                     loading="lazy"
@@ -2490,12 +3097,19 @@ export default function SettingsAccountTab({
                               <div className="absolute inset-0 opacity-0 transition duration-300 group-hover/rail:opacity-100">
                                 <div className="absolute inset-0 flex items-center justify-center">
                                   <div className="relative h-[50px] w-[50px] overflow-visible rounded-full border border-rm-border bg-rm-bg-elevated/90 shadow-[0_12px_24px_rgba(0,0,0,0.3)]">
-                                    {isAvatarDecorationPreviewHovered && currentAvatarSrc ? (
-                                      <AvatarImage src={currentAvatarSrc} alt="" display={currentAvatarDisplay} />
+                                    {isAvatarDecorationPreviewHovered &&
+                                    currentAvatarSrc ? (
+                                      <AvatarImage
+                                        src={currentAvatarSrc}
+                                        alt=""
+                                        display={currentAvatarDisplay}
+                                      />
                                     ) : (
                                       <>
                                         <div className="flex h-full w-full items-center justify-center rounded-full bg-rm-bg-elevated text-xl font-bold text-white/80">
-                                          {getDisplayInitial({ name: currentDisplayName })}
+                                          {getDisplayInitial({
+                                            name: currentDisplayName,
+                                          })}
                                         </div>
                                         <img
                                           src={currentAvatarDecoration.imageUrl}
@@ -2511,7 +3125,9 @@ export default function SettingsAccountTab({
                               </div>
                             </>
                           ) : (
-                            <div className="absolute inset-0 flex items-center justify-center text-[11px] font-semibold text-rm-text-muted">None</div>
+                            <div className="absolute inset-0 flex items-center justify-center text-[11px] font-semibold text-rm-text-muted">
+                              None
+                            </div>
                           )}
                         </div>
                       </ProfileRailCard>
@@ -2521,9 +3137,13 @@ export default function SettingsAccountTab({
                   <ProfileRailSection title="Display Name Style">
                     <ProfileRailCard
                       className="p-2.5"
-                      actions={(
+                      actions={
                         <AccountActionIconButton
-                          label={hasDisplayNameStyle ? "Clear display name style" : "Add display name style"}
+                          label={
+                            hasDisplayNameStyle
+                              ? "Clear display name style"
+                              : "Add display name style"
+                          }
                           onClick={() => {
                             if (hasDisplayNameStyle) {
                               setDisplayNameStyle(null);
@@ -2532,15 +3152,23 @@ export default function SettingsAccountTab({
                             setDisplayNameStyleEditorOpen(true);
                           }}
                         >
-                          {hasDisplayNameStyle ? <Trash2 size={14} /> : <Plus size={14} />}
+                          {hasDisplayNameStyle ? (
+                            <Trash2 size={14} />
+                          ) : (
+                            <Plus size={14} />
+                          )}
                         </AccountActionIconButton>
-                      )}
+                      }
                     >
                       <button
                         type="button"
                         onClick={() => setDisplayNameStyleEditorOpen(true)}
                         className="flex h-[48px] w-full items-center justify-center rounded-[14px] border border-rm-border bg-rm-bg-surface/60 px-4 pr-11 text-center outline-none transition-transform duration-200 hover:scale-[1.03] hover:bg-rm-bg-elevated/80 focus-visible:border-primary/60 focus-visible:shadow-[0_0_0_1px_rgba(88,101,242,0.4),0_12px_26px_rgba(0,0,0,0.2)]"
-                        aria-label={hasDisplayNameStyle ? "Edit display name style" : "Add display name style"}
+                        aria-label={
+                          hasDisplayNameStyle
+                            ? "Edit display name style"
+                            : "Add display name style"
+                        }
                       >
                         <ProfileDisplayName
                           text={currentDisplayName}
@@ -2560,9 +3188,10 @@ export default function SettingsAccountTab({
                               className="absolute inset-0"
                               style={{
                                 ...previewThemeStyle,
-                                background: (profileAccentColor || profileBackgroundColor)
-                                  ? "var(--rm-profile-custom-surface)"
-                                  : "var(--rm-profile-banner-fallback)",
+                                background:
+                                  profileAccentColor || profileBackgroundColor
+                                    ? "var(--rm-profile-custom-surface)"
+                                    : "var(--rm-profile-banner-fallback)",
                               }}
                             />
                             <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.14),rgba(255,255,255,0.04)_38%,rgba(0,0,0,0.16)_100%)]" />
@@ -2571,7 +3200,11 @@ export default function SettingsAccountTab({
                           <ColorField
                             label="Profile background"
                             value={profileBackgroundColor}
-                            onChange={(value) => setProfileBackgroundColor(value ?? DEFAULT_PROFILE_THEME.background)}
+                            onChange={(value) =>
+                              setProfileBackgroundColor(
+                                value ?? DEFAULT_PROFILE_THEME.background,
+                              )
+                            }
                             presets={PROFILE_COLOR_SWATCHES}
                             defaultColor={DEFAULT_PROFILE_THEME.background}
                             containerClassName="absolute inset-x-0 top-2 z-30 flex justify-center"
@@ -2583,23 +3216,28 @@ export default function SettingsAccountTab({
                                     onClick={toggleOpen}
                                     className={cn(
                                       "flex h-7 w-7 items-center justify-center rounded-[10px] border-2 border-white bg-white/92 p-[3px] shadow-[0_10px_20px_rgba(0,0,0,0.24)] transition hover:scale-[1.03]",
-                                      open && "shadow-[0_0_0_1px_rgba(255,255,255,0.38),0_12px_26px_rgba(0,0,0,0.28)]",
+                                      open &&
+                                        "shadow-[0_0_0_1px_rgba(255,255,255,0.38),0_12px_26px_rgba(0,0,0,0.28)]",
                                     )}
                                     aria-label="Choose profile background color"
                                     aria-expanded={open}
                                   >
-                                      <span
-                                        className="h-full w-full rounded-[8px] border border-black/10"
-                                        style={getPickerSurfaceStyle({
-                                          fill: value,
-                                          showEmptyPattern: !value,
-                                          patternSize: "12px 12px",
-                                          patternPosition: "0 0, 6px 6px",
-                                        })}
-                                      />
+                                    <span
+                                      className="h-full w-full rounded-[8px] border border-black/10"
+                                      style={getPickerSurfaceStyle({
+                                        fill: value,
+                                        showEmptyPattern: !value,
+                                        patternSize: "12px 12px",
+                                        patternPosition: "0 0, 6px 6px",
+                                      })}
+                                    />
                                   </button>
                                 </TooltipTrigger>
-                                <TooltipContent side="top" sideOffset={8} className={SETTINGS_TOOLTIP_CONTENT_CLASS}>
+                                <TooltipContent
+                                  side="top"
+                                  sideOffset={8}
+                                  className={SETTINGS_TOOLTIP_CONTENT_CLASS}
+                                >
                                   Theme background
                                 </TooltipContent>
                               </Tooltip>
@@ -2609,7 +3247,11 @@ export default function SettingsAccountTab({
                           <ColorField
                             label="Profile accent"
                             value={profileAccentColor}
-                            onChange={(value) => setProfileAccentColor(value ?? DEFAULT_PROFILE_THEME.accent)}
+                            onChange={(value) =>
+                              setProfileAccentColor(
+                                value ?? DEFAULT_PROFILE_THEME.accent,
+                              )
+                            }
                             presets={PROFILE_COLOR_SWATCHES}
                             defaultColor={DEFAULT_PROFILE_THEME.accent}
                             containerClassName="absolute inset-x-0 bottom-2 z-30 flex justify-center"
@@ -2622,23 +3264,28 @@ export default function SettingsAccountTab({
                                     onClick={toggleOpen}
                                     className={cn(
                                       "flex h-7 w-7 items-center justify-center rounded-[10px] border-2 border-white bg-white/92 p-[3px] shadow-[0_10px_20px_rgba(0,0,0,0.24)] transition hover:scale-[1.03]",
-                                      open && "shadow-[0_0_0_1px_rgba(255,255,255,0.38),0_12px_26px_rgba(0,0,0,0.28)]",
+                                      open &&
+                                        "shadow-[0_0_0_1px_rgba(255,255,255,0.38),0_12px_26px_rgba(0,0,0,0.28)]",
                                     )}
                                     aria-label="Choose profile accent color"
                                     aria-expanded={open}
                                   >
-                                      <span
-                                        className="h-full w-full rounded-[8px] border border-black/10"
-                                        style={getPickerSurfaceStyle({
-                                          fill: value,
-                                          showEmptyPattern: !value,
-                                          patternSize: "12px 12px",
-                                          patternPosition: "0 0, 6px 6px",
-                                        })}
-                                      />
+                                    <span
+                                      className="h-full w-full rounded-[8px] border border-black/10"
+                                      style={getPickerSurfaceStyle({
+                                        fill: value,
+                                        showEmptyPattern: !value,
+                                        patternSize: "12px 12px",
+                                        patternPosition: "0 0, 6px 6px",
+                                      })}
+                                    />
                                   </button>
                                 </TooltipTrigger>
-                                <TooltipContent side="top" sideOffset={8} className={SETTINGS_TOOLTIP_CONTENT_CLASS}>
+                                <TooltipContent
+                                  side="top"
+                                  sideOffset={8}
+                                  className={SETTINGS_TOOLTIP_CONTENT_CLASS}
+                                >
                                   Theme accent
                                 </TooltipContent>
                               </Tooltip>
@@ -2664,14 +3311,27 @@ export default function SettingsAccountTab({
                                 aria-expanded={open}
                                 title={bannerStatus}
                               >
-                                <div className="absolute inset-0" style={{ ...previewThemeStyle, background: "var(--rm-profile-custom-banner-fallback)" }} />
+                                <div
+                                  className="absolute inset-0"
+                                  style={{
+                                    ...previewThemeStyle,
+                                    background:
+                                      "var(--rm-profile-custom-banner-fallback)",
+                                  }}
+                                />
                                 <ProfileAssetLayer
                                   url={currentBannerUrl}
                                   contentType={currentBannerContentType}
                                   alt="Banner preview"
                                   className="opacity-95"
                                 />
-                                <div className="absolute inset-0" style={{ background: "var(--rm-profile-custom-banner-overlay)" }} />
+                                <div
+                                  className="absolute inset-0"
+                                  style={{
+                                    background:
+                                      "var(--rm-profile-custom-banner-overlay)",
+                                  }}
+                                />
                                 <div className="absolute inset-0 bg-black/0 transition group-hover/theme-banner:bg-black/10" />
                                 <div className="absolute bottom-2 right-2 flex h-7 w-7 items-center justify-center rounded-[10px] border border-white/16 bg-black/20 text-white/88 opacity-0 shadow-[0_10px_22px_rgba(0,0,0,0.24)] backdrop-blur-sm transition group-hover/theme-banner:opacity-100">
                                   <Pipette size={12} />
@@ -2681,7 +3341,10 @@ export default function SettingsAccountTab({
                           />
 
                           <div className="absolute right-1.5 top-1.5 z-20 flex items-center gap-1 opacity-100 transition duration-200 md:opacity-0 md:group-hover/theme-banner:opacity-100">
-                            <AccountActionIconButton label="Upload banner" onClick={() => bannerInputRef.current?.click()}>
+                            <AccountActionIconButton
+                              label="Upload banner"
+                              onClick={() => bannerInputRef.current?.click()}
+                            >
                               <Upload size={12} />
                             </AccountActionIconButton>
                             <AccountActionIconButton
@@ -2705,16 +3368,18 @@ export default function SettingsAccountTab({
                   <ProfileRailSection title="Profile Effect">
                     <ProfileRailCard
                       className="p-2.5"
-                      actions={(
+                      actions={
                         <AccountActionIconButton
                           label="Remove profile effect"
-                          onClick={() => handleRemoveCollectible("profile_effect")}
+                          onClick={() =>
+                            handleRemoveCollectible("profile_effect")
+                          }
                           disabled={!currentProfileEffect}
                           className="text-rose-300 hover:bg-rose-500/12 hover:text-rose-100"
                         >
                           <Trash2 size={12} />
                         </AccountActionIconButton>
-                      )}
+                      }
                     >
                       <button
                         type="button"
@@ -2731,8 +3396,10 @@ export default function SettingsAccountTab({
                               className="absolute inset-0"
                               style={{
                                 ...previewThemeStyle,
-                                backgroundColor: previewTheme.backgroundColor ?? undefined,
-                                backgroundImage: "var(--rm-profile-custom-surface)",
+                                backgroundColor:
+                                  previewTheme.backgroundColor ?? undefined,
+                                backgroundImage:
+                                  "var(--rm-profile-custom-surface)",
                               }}
                             />
                             {currentProfileEffectDisplay ? (
@@ -2753,7 +3420,10 @@ export default function SettingsAccountTab({
                         </div>
                         <div
                           className="pointer-events-none absolute inset-0 opacity-0 transition duration-200 group-hover/profile-effect:opacity-100"
-                          style={{ background: "var(--rm-profile-custom-surface-overlay-strong)" }}
+                          style={{
+                            background:
+                              "var(--rm-profile-custom-surface-overlay-strong)",
+                          }}
                         />
                       </button>
                     </ProfileRailCard>
@@ -2766,7 +3436,8 @@ export default function SettingsAccountTab({
               className={cn(
                 "relative z-0 min-w-0 overflow-hidden bg-rm-bg-elevated md:grid md:justify-center md:gap-6 md:px-5 md:py-5 lg:gap-8 lg:px-8 lg:py-8",
                 "md:grid-cols-[minmax(0,388px)_minmax(0,520px)] lg:grid-cols-[minmax(0,400px)_minmax(0,540px)]",
-                !asModal && "border border-[color:var(--rm-profile-custom-card-border)] shadow-[0_26px_80px_rgba(0,0,0,0.34)]",
+                !asModal &&
+                  "border border-[color:var(--rm-profile-custom-card-border)] shadow-[0_26px_80px_rgba(0,0,0,0.34)]",
                 asModal && stylesCollapsed && "md:mx-auto md:max-w-[1080px]",
               )}
               style={{
@@ -2778,7 +3449,12 @@ export default function SettingsAccountTab({
                 bannerUrl={currentBannerUrl}
                 bannerContentType={currentBannerContentType}
               />
-              <div className="pointer-events-none absolute inset-0 z-[2]" style={{ background: "var(--rm-profile-custom-surface-overlay-strong)" }} />
+              <div
+                className="pointer-events-none absolute inset-0 z-[2]"
+                style={{
+                  background: "var(--rm-profile-custom-surface-overlay-strong)",
+                }}
+              />
               {asModal && stylesCollapsed ? (
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -2794,195 +3470,350 @@ export default function SettingsAccountTab({
                       </span>
                     </button>
                   </TooltipTrigger>
-                  <TooltipContent side="right" sideOffset={10} className={SETTINGS_TOOLTIP_CONTENT_CLASS}>
+                  <TooltipContent
+                    side="right"
+                    sideOffset={10}
+                    className={SETTINGS_TOOLTIP_CONTENT_CLASS}
+                  >
                     Show styles
                   </TooltipContent>
                 </Tooltip>
               ) : null}
 
-            <section
-              className="relative z-10 mx-auto w-full max-w-[400px] self-start overflow-hidden rounded-[28px] border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg)] shadow-[0_26px_64px_rgba(0,0,0,0.26)] backdrop-blur-[18px]"
-              style={{
-                aspectRatio: PROFILE_SURFACE_ASPECT_RATIO,
-              }}
-            >
-              <div className="pointer-events-none absolute inset-0 z-[2]" style={{ background: "var(--rm-profile-custom-surface-overlay)" }} />
-              <div className="pointer-events-none absolute inset-0 z-30">
-                <ProfileCollectiblesLayer display={currentAvatarDisplay} effectOpacity={1} fit="contain" className="z-10 opacity-100" />
-              </div>
-              <button
-                type="button"
-                onClick={() => bannerInputRef.current?.click()}
-                className="group/preview-banner relative block h-[18%] min-h-[128px] w-full overflow-hidden text-left"
-                style={{ background: "var(--rm-profile-custom-banner-fallback)" }}
-                aria-label="Change profile banner"
+              <section
+                className="relative z-10 mx-auto w-full max-w-[400px] self-start overflow-hidden rounded-[28px] border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg)] shadow-[0_26px_64px_rgba(0,0,0,0.26)] backdrop-blur-[18px]"
+                style={{
+                  aspectRatio: PROFILE_SURFACE_ASPECT_RATIO,
+                }}
               >
-                <ProfileAssetLayer
-                  url={currentBannerUrl}
-                  contentType={currentBannerContentType}
-                  alt="Profile banner"
-                  className="opacity-94"
+                <div
+                  className="pointer-events-none absolute inset-0 z-[2]"
+                  style={{
+                    background: "var(--rm-profile-custom-surface-overlay)",
+                  }}
                 />
-                <div className="absolute inset-0" style={{ background: "var(--rm-profile-custom-banner-overlay)" }} />
-                <div className="absolute inset-0 bg-black/0 transition group-hover/preview-banner:bg-black/28" />
-                <span className="absolute right-4 top-4 z-20 flex h-9 w-9 items-center justify-center rounded-full border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] text-[color:var(--rm-profile-custom-text)] opacity-0 shadow-[0_14px_28px_rgba(0,0,0,0.24)] backdrop-blur-sm transition group-hover/preview-banner:opacity-100">
-                  <Pencil size={15} />
-                </span>
-              </button>
+                <div className="pointer-events-none absolute inset-0 z-30">
+                  <ProfileCollectiblesLayer
+                    display={currentAvatarDisplay}
+                    effectOpacity={1}
+                    fit="contain"
+                    className="z-10 opacity-100"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => bannerInputRef.current?.click()}
+                  className="group/preview-banner relative block h-[18%] min-h-[128px] w-full overflow-hidden text-left"
+                  style={{
+                    background: "var(--rm-profile-custom-banner-fallback)",
+                  }}
+                  aria-label="Change profile banner"
+                >
+                  <ProfileAssetLayer
+                    url={currentBannerUrl}
+                    contentType={currentBannerContentType}
+                    alt="Profile banner"
+                    className="opacity-94"
+                  />
+                  <div
+                    className="absolute inset-0"
+                    style={{
+                      background: "var(--rm-profile-custom-banner-overlay)",
+                    }}
+                  />
+                  <div className="absolute inset-0 bg-black/0 transition group-hover/preview-banner:bg-black/28" />
+                  <span className="absolute right-4 top-4 z-20 flex h-9 w-9 items-center justify-center rounded-full border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] text-[color:var(--rm-profile-custom-text)] opacity-0 shadow-[0_14px_28px_rgba(0,0,0,0.24)] backdrop-blur-sm transition group-hover/preview-banner:opacity-100">
+                    <Pencil size={15} />
+                  </span>
+                </button>
 
-              <div className="relative z-20 px-6 pb-7">
-                <div className="-mt-9">
-                  <div className="flex items-start justify-between gap-4">
-                    <button
-                      type="button"
-                      onClick={() => fileInputRef.current?.click()}
+                <div className="relative z-20 px-6 pb-7">
+                  <div className="-mt-9">
+                    <div className="flex items-start justify-between gap-4">
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
                         className="group/preview-avatar relative h-28 w-28 shrink-0 rounded-full border-[6px] border-rm-bg-elevated bg-[var(--rm-profile-custom-card-bg-strong)] shadow-[0_18px_46px_rgba(0,0,0,0.42)]"
-                      aria-label="Change profile picture"
-                    >
-                      {currentAvatarSrc ? (
-                        <AvatarImage src={currentAvatarSrc} alt={currentDisplayName} display={currentAvatarDisplay} />
-                      ) : (
+                        aria-label="Change profile picture"
+                      >
+                        {currentAvatarSrc ? (
+                          <AvatarImage
+                            src={currentAvatarSrc}
+                            alt={currentDisplayName}
+                            display={currentAvatarDisplay}
+                          />
+                        ) : (
                           <div className="flex h-full w-full items-center justify-center rounded-full text-3xl font-bold text-[color:var(--rm-profile-custom-text)]">
                             {getDisplayInitial({ name: currentDisplayName })}
                           </div>
                         )}
-                      <span className="absolute inset-0 rounded-full bg-black/0 transition group-hover/preview-avatar:bg-black/36" />
+                        <span className="absolute inset-0 rounded-full bg-black/0 transition group-hover/preview-avatar:bg-black/36" />
                         <span className="absolute inset-0 z-10 flex items-center justify-center opacity-0 transition group-hover/preview-avatar:opacity-100">
-                        <span className="flex h-10 w-10 items-center justify-center rounded-full border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] text-[color:var(--rm-profile-custom-text)] shadow-[0_14px_28px_rgba(0,0,0,0.24)] backdrop-blur-sm">
-                          <Pencil size={16} />
-                        </span>
-                      </span>
-                    </button>
-
-                    <div className="relative ml-auto flex w-full min-w-0 max-w-[220px] justify-end pt-10">
-                      {isCustomStatusEditing ? (
-                        <div className="relative z-50 flex h-[42px] w-full min-w-0 items-center rounded-full border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] p-1 shadow-[0_18px_40px_rgba(0,0,0,0.28)] backdrop-blur-xl animate-in fade-in zoom-in-95">
-                          <input
-                            ref={previewCustomStatusInputRef}
-                            type="text"
-                            value={customStatusDraft}
-                            onChange={(event) => setCustomStatusDraft(event.target.value.slice(0, 128))}
-                            onClick={(event) => event.stopPropagation()}
-                            onBlur={handleSaveCustomStatus}
-                            onKeyDown={(event) => {
-                              if (event.key === "Enter") {
-                                event.preventDefault();
-                                handleSaveCustomStatus();
-                              }
-
-                              if (event.key === "Escape") {
-                                event.preventDefault();
-                                setCustomStatusDraft(chatUser?.custom_status ?? "");
-                                setIsCustomStatusEditing(false);
-                              }
-                            }}
-                            className="min-w-0 flex-1 rounded-full bg-white/10 px-3 py-2 text-[13px] text-[color:var(--rm-profile-custom-text)] outline-none placeholder:text-[color:var(--rm-profile-custom-muted)]"
-                            aria-label="Custom status"
-                            placeholder="Support custom status!"
-                            maxLength={128}
-                          />
-                        </div>
-                      ) : hasCustomStatus ? (
-                        <div className="group/preview-status inline-flex max-w-full min-w-0 items-center gap-2 rounded-full border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] pl-3 pr-2 py-1.5 text-left shadow-[0_12px_28px_rgba(0,0,0,0.22)] backdrop-blur-md transition-colors hover:bg-[var(--rm-profile-custom-card-bg)]">
-                          <button
-                            type="button"
-                            className="min-w-0 flex-1 rounded-full text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35"
-                            aria-label="Edit custom status"
-                            onClick={handleOpenCustomStatusEditor}
-                          >
-                            <span className="block min-w-0 truncate text-[13px] italic font-medium text-[color:var(--rm-profile-custom-text)]">
-                              {visibleCustomStatus}
-                            </span>
-                          </button>
-                          <span className="flex shrink-0 items-center gap-1 pl-1">
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <button
-                                  type="button"
-                                  onClick={(event) => {
-                                    event.stopPropagation();
-                                    handleOpenCustomStatusEditor();
-                                  }}
-                                  className="pointer-events-none flex h-7 w-7 items-center justify-center rounded-full border border-transparent text-[color:var(--rm-profile-custom-muted)] opacity-0 transition hover:border-[color:var(--rm-profile-custom-card-border)] hover:bg-[var(--rm-profile-custom-card-bg-strong)] hover:text-[color:var(--rm-profile-custom-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35 group-hover/preview-status:pointer-events-auto group-hover/preview-status:opacity-100 group-focus-within/preview-status:pointer-events-auto group-focus-within/preview-status:opacity-100"
-                                  aria-label="Edit custom status"
-                                >
-                                  <Pencil size={14} />
-                                </button>
-                              </TooltipTrigger>
-                              <TooltipContent side="top" sideOffset={8} className={SETTINGS_TOOLTIP_CONTENT_CLASS}>
-                                Edit custom status
-                              </TooltipContent>
-                            </Tooltip>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <button
-                                  type="button"
-                                  onClick={(event) => {
-                                    event.stopPropagation();
-                                    handleClearCustomStatus();
-                                  }}
-                                  className="pointer-events-none flex h-7 w-7 items-center justify-center rounded-full border border-transparent text-[color:var(--rm-profile-custom-muted)] opacity-0 transition hover:border-[color:var(--rm-profile-custom-card-border)] hover:bg-[var(--rm-profile-custom-card-bg-strong)] hover:text-[color:var(--rm-profile-custom-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35 group-hover/preview-status:pointer-events-auto group-hover/preview-status:opacity-100 group-focus-within/preview-status:pointer-events-auto group-focus-within/preview-status:opacity-100"
-                                  aria-label="Clear custom status"
-                                >
-                                  <Trash2 size={14} />
-                                </button>
-                              </TooltipTrigger>
-                              <TooltipContent side="top" sideOffset={8} className={SETTINGS_TOOLTIP_CONTENT_CLASS}>
-                                Clear custom status
-                              </TooltipContent>
-                            </Tooltip>
+                          <span className="flex h-10 w-10 items-center justify-center rounded-full border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] text-[color:var(--rm-profile-custom-text)] shadow-[0_14px_28px_rgba(0,0,0,0.24)] backdrop-blur-sm">
+                            <Pencil size={16} />
                           </span>
-                        </div>
-                      ) : (
-                        <Tooltip>
-                          <TooltipTrigger asChild>
+                        </span>
+                      </button>
+
+                      <div className="relative ml-auto flex w-full min-w-0 max-w-[220px] justify-end pt-10">
+                        {isCustomStatusEditing ? (
+                          <div className="relative z-50 flex h-[42px] w-full min-w-0 items-center rounded-full border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] p-1 shadow-[0_18px_40px_rgba(0,0,0,0.28)] backdrop-blur-xl animate-in fade-in zoom-in-95">
+                            <input
+                              ref={previewCustomStatusInputRef}
+                              type="text"
+                              value={customStatusDraft}
+                              onChange={(event) =>
+                                setCustomStatusDraft(
+                                  event.target.value.slice(0, 128),
+                                )
+                              }
+                              onClick={(event) => event.stopPropagation()}
+                              onBlur={handleSaveCustomStatus}
+                              onKeyDown={(event) => {
+                                if (event.key === "Enter") {
+                                  event.preventDefault();
+                                  handleSaveCustomStatus();
+                                }
+
+                                if (event.key === "Escape") {
+                                  event.preventDefault();
+                                  setCustomStatusDraft(
+                                    chatUser?.custom_status ?? "",
+                                  );
+                                  setIsCustomStatusEditing(false);
+                                }
+                              }}
+                              className="min-w-0 flex-1 rounded-full bg-white/10 px-3 py-2 text-[13px] text-[color:var(--rm-profile-custom-text)] outline-none placeholder:text-[color:var(--rm-profile-custom-muted)]"
+                              aria-label="Custom status"
+                              placeholder="Support custom status!"
+                              maxLength={128}
+                            />
+                          </div>
+                        ) : hasCustomStatus ? (
+                          <div className="group/preview-status inline-flex max-w-full min-w-0 items-center gap-2 rounded-full border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] pl-3 pr-2 py-1.5 text-left shadow-[0_12px_28px_rgba(0,0,0,0.22)] backdrop-blur-md transition-colors hover:bg-[var(--rm-profile-custom-card-bg)]">
                             <button
                               type="button"
-                              className="inline-flex max-w-full min-w-0 items-center gap-1.5 rounded-full border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] px-3 py-1.5 text-left shadow-[0_12px_28px_rgba(0,0,0,0.22)] backdrop-blur-md transition-colors hover:bg-[var(--rm-profile-custom-card-bg)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35"
-                              aria-label="Add custom status"
+                              className="min-w-0 flex-1 rounded-full text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35"
+                              aria-label="Edit custom status"
                               onClick={handleOpenCustomStatusEditor}
                             >
-                              <Plus size={14} className="shrink-0 text-[color:var(--rm-profile-custom-muted)]" />
-                              <span className="min-w-0 truncate text-[13px] italic font-medium text-[color:var(--rm-profile-custom-text)]">
-                                Today I learned...
+                              <span className="block min-w-0 truncate text-[13px] italic font-medium text-[color:var(--rm-profile-custom-text)]">
+                                {visibleCustomStatus}
                               </span>
                             </button>
-                          </TooltipTrigger>
-                          <TooltipContent side="top" sideOffset={8} className={SETTINGS_TOOLTIP_CONTENT_CLASS}>
-                            Add custom status
-                          </TooltipContent>
-                        </Tooltip>
-                      )}
+                            <span className="flex shrink-0 items-center gap-1 pl-1">
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <button
+                                    type="button"
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                      handleOpenCustomStatusEditor();
+                                    }}
+                                    className="pointer-events-none flex h-7 w-7 items-center justify-center rounded-full border border-transparent text-[color:var(--rm-profile-custom-muted)] opacity-0 transition hover:border-[color:var(--rm-profile-custom-card-border)] hover:bg-[var(--rm-profile-custom-card-bg-strong)] hover:text-[color:var(--rm-profile-custom-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35 group-hover/preview-status:pointer-events-auto group-hover/preview-status:opacity-100 group-focus-within/preview-status:pointer-events-auto group-focus-within/preview-status:opacity-100"
+                                    aria-label="Edit custom status"
+                                  >
+                                    <Pencil size={14} />
+                                  </button>
+                                </TooltipTrigger>
+                                <TooltipContent
+                                  side="top"
+                                  sideOffset={8}
+                                  className={SETTINGS_TOOLTIP_CONTENT_CLASS}
+                                >
+                                  Edit custom status
+                                </TooltipContent>
+                              </Tooltip>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <button
+                                    type="button"
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                      handleClearCustomStatus();
+                                    }}
+                                    className="pointer-events-none flex h-7 w-7 items-center justify-center rounded-full border border-transparent text-[color:var(--rm-profile-custom-muted)] opacity-0 transition hover:border-[color:var(--rm-profile-custom-card-border)] hover:bg-[var(--rm-profile-custom-card-bg-strong)] hover:text-[color:var(--rm-profile-custom-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35 group-hover/preview-status:pointer-events-auto group-hover/preview-status:opacity-100 group-focus-within/preview-status:pointer-events-auto group-focus-within/preview-status:opacity-100"
+                                    aria-label="Clear custom status"
+                                  >
+                                    <Trash2 size={14} />
+                                  </button>
+                                </TooltipTrigger>
+                                <TooltipContent
+                                  side="top"
+                                  sideOffset={8}
+                                  className={SETTINGS_TOOLTIP_CONTENT_CLASS}
+                                >
+                                  Clear custom status
+                                </TooltipContent>
+                              </Tooltip>
+                            </span>
+                          </div>
+                        ) : (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <button
+                                type="button"
+                                className="inline-flex max-w-full min-w-0 items-center gap-1.5 rounded-full border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] px-3 py-1.5 text-left shadow-[0_12px_28px_rgba(0,0,0,0.22)] backdrop-blur-md transition-colors hover:bg-[var(--rm-profile-custom-card-bg)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35"
+                                aria-label="Add custom status"
+                                onClick={handleOpenCustomStatusEditor}
+                              >
+                                <Plus
+                                  size={14}
+                                  className="shrink-0 text-[color:var(--rm-profile-custom-muted)]"
+                                />
+                                <span className="min-w-0 truncate text-[13px] italic font-medium text-[color:var(--rm-profile-custom-text)]">
+                                  Today I learned...
+                                </span>
+                              </button>
+                            </TooltipTrigger>
+                            <TooltipContent
+                              side="top"
+                              sideOffset={8}
+                              className={SETTINGS_TOOLTIP_CONTENT_CLASS}
+                            >
+                              Add custom status
+                            </TooltipContent>
+                          </Tooltip>
+                        )}
 
-                      {SHOW_LEGACY_PREVIEW_IDENTITY ? (<>
-                      {chatUser?.custom_status ? (
-                        <div className="mb-3 inline-flex max-w-[180px] items-center rounded-full border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] px-3.5 py-2 text-[12px] font-medium text-[color:var(--rm-profile-custom-text)] shadow-[0_14px_28px_rgba(0,0,0,0.22)] backdrop-blur-sm">
-                          <span className="truncate">{chatUser.custom_status}</span>
-                        </div>
-                      ) : null}
-                      <ProfileDisplayName
-                        text={currentDisplayName}
-                        displayNameStyle={displayNameStyle}
-                        className="truncate text-[20px] font-semibold tracking-[-0.03em] text-[color:var(--rm-profile-custom-text)]"
-                        backgroundColor={previewTheme.backgroundColor}
-                        readableFallbackColor={previewTheme.textColor}
-                      />
+                        {SHOW_LEGACY_PREVIEW_IDENTITY ? (
+                          <>
+                            {chatUser?.custom_status ? (
+                              <div className="mb-3 inline-flex max-w-[180px] items-center rounded-full border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] px-3.5 py-2 text-[12px] font-medium text-[color:var(--rm-profile-custom-text)] shadow-[0_14px_28px_rgba(0,0,0,0.22)] backdrop-blur-sm">
+                                <span className="truncate">
+                                  {chatUser.custom_status}
+                                </span>
+                              </div>
+                            ) : null}
+                            <ProfileDisplayName
+                              text={currentDisplayName}
+                              displayNameStyle={displayNameStyle}
+                              className="truncate text-[20px] font-semibold tracking-[-0.03em] text-[color:var(--rm-profile-custom-text)]"
+                              backgroundColor={previewTheme.backgroundColor}
+                              readableFallbackColor={previewTheme.textColor}
+                            />
+                            <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-[color:var(--rm-profile-custom-muted)]">
+                              <span>@{currentUsername}</span>
+                              <span
+                                aria-hidden="true"
+                                className="text-[color:var(--rm-profile-custom-muted)]/60"
+                              >
+                                •
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setActivePreviewField("pronouns")
+                                }
+                                className="group/preview-pronouns rounded-md px-1.5 py-0.5 -mx-1.5 text-left transition hover:bg-[var(--rm-profile-custom-card-bg-strong)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35"
+                              >
+                                {activePreviewField === "pronouns" ? (
+                                  <input
+                                    ref={previewPronounsInputRef}
+                                    value={pronouns}
+                                    onChange={(event) =>
+                                      setPronouns(
+                                        event.target.value.slice(0, 40),
+                                      )
+                                    }
+                                    onBlur={() =>
+                                      setActivePreviewField((current) =>
+                                        current === "pronouns" ? null : current,
+                                      )
+                                    }
+                                    onKeyDown={(event) => {
+                                      if (
+                                        event.key === "Enter" ||
+                                        event.key === "Escape"
+                                      ) {
+                                        event.preventDefault();
+                                        event.currentTarget.blur();
+                                      }
+                                    }}
+                                    className="min-w-[88px] bg-transparent text-[13px] font-medium text-[color:var(--rm-profile-custom-text)] outline-none placeholder:text-[color:var(--rm-profile-custom-muted)]"
+                                    placeholder="Add pronouns"
+                                  />
+                                ) : (
+                                  <span className="rounded-md border border-transparent px-1 py-0.5 text-[13px] font-medium text-[color:var(--rm-profile-custom-text)] transition group-hover/preview-pronouns:border-[color:var(--rm-profile-custom-card-border)] group-hover/preview-pronouns:bg-[var(--rm-profile-custom-card-bg-strong)]">
+                                    {currentPronouns || "Add pronouns"}
+                                  </span>
+                                )}
+                              </button>
+                            </div>
+                          </>
+                        ) : null}
+                      </div>
+                    </div>
+
+                    <div className="mt-4">
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <button
+                            type="button"
+                            className="group/preview-display-name relative -mx-3 inline-flex max-w-full items-center rounded-[18px] border border-transparent px-3 py-2 pr-12 text-left transition hover:border-[color:var(--rm-profile-custom-card-border)] hover:bg-[var(--rm-profile-custom-card-bg-strong)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35"
+                            aria-label={
+                              hasDisplayNameStyle
+                                ? "Edit display name style"
+                                : "Add display name style"
+                            }
+                            onClick={() => setDisplayNameStyleEditorOpen(true)}
+                          >
+                            <span className="pointer-events-none absolute right-3 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] text-[color:var(--rm-profile-custom-text)] opacity-0 shadow-[0_12px_24px_rgba(0,0,0,0.2)] transition group-hover/preview-display-name:opacity-100 group-focus-within/preview-display-name:opacity-100">
+                              <Paintbrush size={14} />
+                            </span>
+                            <ProfileDisplayName
+                              text={currentDisplayName}
+                              displayNameStyle={displayNameStyle}
+                              className="truncate text-[20px] font-semibold tracking-[-0.03em] text-[color:var(--rm-profile-custom-text)]"
+                              backgroundColor={previewTheme.backgroundColor}
+                              readableFallbackColor={previewTheme.textColor}
+                            />
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent
+                          side="top"
+                          sideOffset={8}
+                          className={SETTINGS_TOOLTIP_CONTENT_CLASS}
+                        >
+                          {hasDisplayNameStyle
+                            ? "Edit display name style"
+                            : "Add display name style"}
+                        </TooltipContent>
+                      </Tooltip>
                       <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-[color:var(--rm-profile-custom-muted)]">
                         <span>@{currentUsername}</span>
-                        <span aria-hidden="true" className="text-[color:var(--rm-profile-custom-muted)]/60">•</span>
+                        <span
+                          aria-hidden="true"
+                          className="text-[color:var(--rm-profile-custom-muted)]/60"
+                        >
+                          •
+                        </span>
                         <button
                           type="button"
-                          onClick={() => setActivePreviewField("pronouns")}
-                          className="group/preview-pronouns rounded-md px-1.5 py-0.5 -mx-1.5 text-left transition hover:bg-[var(--rm-profile-custom-card-bg-strong)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            setActivePreviewField("pronouns");
+                          }}
+                          className="group/preview-pronouns -mx-1.5 rounded-md px-1.5 py-0.5 text-left transition hover:bg-[var(--rm-profile-custom-card-bg)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35"
                         >
                           {activePreviewField === "pronouns" ? (
                             <input
                               ref={previewPronounsInputRef}
                               value={pronouns}
-                              onChange={(event) => setPronouns(event.target.value.slice(0, 40))}
-                              onBlur={() => setActivePreviewField((current) => current === "pronouns" ? null : current)}
+                              onClick={(event) => event.stopPropagation()}
+                              onChange={(event) =>
+                                setPronouns(event.target.value.slice(0, 40))
+                              }
+                              onBlur={() =>
+                                setActivePreviewField((current) =>
+                                  current === "pronouns" ? null : current,
+                                )
+                              }
                               onKeyDown={(event) => {
-                                if (event.key === "Enter" || event.key === "Escape") {
+                                if (
+                                  event.key === "Enter" ||
+                                  event.key === "Escape"
+                                ) {
                                   event.preventDefault();
                                   event.currentTarget.blur();
                                 }
@@ -2991,226 +3822,221 @@ export default function SettingsAccountTab({
                               placeholder="Add pronouns"
                             />
                           ) : (
-                            <span className="rounded-md border border-transparent px-1 py-0.5 text-[13px] font-medium text-[color:var(--rm-profile-custom-text)] transition group-hover/preview-pronouns:border-[color:var(--rm-profile-custom-card-border)] group-hover/preview-pronouns:bg-[var(--rm-profile-custom-card-bg-strong)]">
+                            <span className="rounded-md border border-transparent px-1 py-0.5 text-[13px] font-medium text-[color:var(--rm-profile-custom-text)] transition group-hover/preview-pronouns:border-[color:var(--rm-profile-custom-card-border)] group-hover/preview-pronouns:bg-[var(--rm-profile-custom-card-bg)]">
                               {currentPronouns || "Add pronouns"}
                             </span>
                           )}
                         </button>
                       </div>
-                    </>) : null}
+                    </div>
                   </div>
-                </div>
 
-                <div className="mt-4">
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <button
-                        type="button"
-                        className="group/preview-display-name relative -mx-3 inline-flex max-w-full items-center rounded-[18px] border border-transparent px-3 py-2 pr-12 text-left transition hover:border-[color:var(--rm-profile-custom-card-border)] hover:bg-[var(--rm-profile-custom-card-bg-strong)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35"
-                        aria-label={hasDisplayNameStyle ? "Edit display name style" : "Add display name style"}
-                        onClick={() => setDisplayNameStyleEditorOpen(true)}
-                      >
-                        <span className="pointer-events-none absolute right-3 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] text-[color:var(--rm-profile-custom-text)] opacity-0 shadow-[0_12px_24px_rgba(0,0,0,0.2)] transition group-hover/preview-display-name:opacity-100 group-focus-within/preview-display-name:opacity-100">
-                          <Paintbrush size={14} />
-                        </span>
-                        <ProfileDisplayName
-                          text={currentDisplayName}
-                          displayNameStyle={displayNameStyle}
-                          className="truncate text-[20px] font-semibold tracking-[-0.03em] text-[color:var(--rm-profile-custom-text)]"
-                          backgroundColor={previewTheme.backgroundColor}
-                          readableFallbackColor={previewTheme.textColor}
-                        />
-                      </button>
-                    </TooltipTrigger>
-                    <TooltipContent side="top" sideOffset={8} className={SETTINGS_TOOLTIP_CONTENT_CLASS}>
-                      {hasDisplayNameStyle ? "Edit display name style" : "Add display name style"}
-                    </TooltipContent>
-                  </Tooltip>
-                  <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-[color:var(--rm-profile-custom-muted)]">
-                    <span>@{currentUsername}</span>
-                    <span aria-hidden="true" className="text-[color:var(--rm-profile-custom-muted)]/60">•</span>
+                  <div className="mt-5 flex items-center gap-2">
+                    <Button
+                      type="button"
+                      className="h-10 rounded-xl bg-[var(--rm-profile-custom-button-bg)] px-4 text-[color:var(--rm-profile-custom-button-text)] shadow-[0_14px_28px_var(--rm-profile-custom-button-shadow)] hover:opacity-95"
+                    >
+                      Message
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="icon"
+                      className="h-9 w-9 rounded-xl border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] text-[color:var(--rm-profile-custom-muted)] shadow-[0_12px_24px_rgba(0,0,0,0.22)] hover:bg-[var(--rm-profile-custom-card-bg)] hover:text-[color:var(--rm-profile-custom-text)]"
+                      aria-label="Open profile shop"
+                    >
+                      <ShoppingBag size={16} />
+                    </Button>
+                  </div>
+
+                  <div className="mt-5 space-y-5">
                     <button
                       type="button"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        setActivePreviewField("pronouns");
-                      }}
-                      className="group/preview-pronouns -mx-1.5 rounded-md px-1.5 py-0.5 text-left transition hover:bg-[var(--rm-profile-custom-card-bg)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35"
+                      onClick={() => setActivePreviewField("bio")}
+                      className="group/preview-bio block w-full rounded-[18px] border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] px-4 py-3 text-left transition hover:border-[color:var(--rm-profile-custom-text)]/22 hover:bg-[var(--rm-profile-custom-card-bg)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35"
                     >
-                      {activePreviewField === "pronouns" ? (
-                        <input
-                          ref={previewPronounsInputRef}
-                          value={pronouns}
-                          onClick={(event) => event.stopPropagation()}
-                          onChange={(event) => setPronouns(event.target.value.slice(0, 40))}
-                          onBlur={() => setActivePreviewField((current) => current === "pronouns" ? null : current)}
-                          onKeyDown={(event) => {
-                            if (event.key === "Enter" || event.key === "Escape") {
-                              event.preventDefault();
-                              event.currentTarget.blur();
+                      {activePreviewField === "bio" ? (
+                        <div>
+                          <textarea
+                            ref={previewBioInputRef}
+                            value={bio}
+                            onChange={(event) =>
+                              setBio(event.target.value.slice(0, 190))
                             }
-                          }}
-                          className="min-w-[88px] bg-transparent text-[13px] font-medium text-[color:var(--rm-profile-custom-text)] outline-none placeholder:text-[color:var(--rm-profile-custom-muted)]"
-                          placeholder="Add pronouns"
-                        />
+                            onBlur={() =>
+                              setActivePreviewField((current) =>
+                                current === "bio" ? null : current,
+                              )
+                            }
+                            onKeyDown={(event) => {
+                              if (event.key === "Escape") {
+                                event.preventDefault();
+                                event.currentTarget.blur();
+                              }
+                            }}
+                            className="min-h-[74px] w-full resize-none bg-transparent text-[14px] leading-6 text-[color:var(--rm-profile-custom-text)] outline-none placeholder:text-[color:var(--rm-profile-custom-muted)]"
+                            placeholder="Add a bio here"
+                          />
+                          <div className="mt-2 text-right text-[11px] text-[color:var(--rm-profile-custom-muted)]">
+                            {bio.trim().length}/190
+                          </div>
+                        </div>
                       ) : (
-                        <span className="rounded-md border border-transparent px-1 py-0.5 text-[13px] font-medium text-[color:var(--rm-profile-custom-text)] transition group-hover/preview-pronouns:border-[color:var(--rm-profile-custom-card-border)] group-hover/preview-pronouns:bg-[var(--rm-profile-custom-card-bg)]">
-                          {currentPronouns || "Add pronouns"}
-                        </span>
+                        <div className="space-y-1">
+                          <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[color:var(--rm-profile-custom-muted)]">
+                            Bio
+                          </div>
+                          <div className="rounded-[14px] border border-transparent px-0 py-0.5 text-[14px] leading-6 text-[color:var(--rm-profile-custom-text)] transition group-hover/preview-bio:border-[color:var(--rm-profile-custom-card-border)]">
+                            {currentBio || (
+                              <span className="text-[color:var(--rm-profile-custom-muted)]">
+                                Add a bio here
+                              </span>
+                            )}
+                          </div>
+                        </div>
                       )}
                     </button>
-                  </div>
-                </div>
 
-                </div>
-
-                <div className="mt-5 flex items-center gap-2">
-                  <Button
-                    type="button"
-                    className="h-10 rounded-xl bg-[var(--rm-profile-custom-button-bg)] px-4 text-[color:var(--rm-profile-custom-button-text)] shadow-[0_14px_28px_var(--rm-profile-custom-button-shadow)] hover:opacity-95"
-                  >
-                    Message
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    size="icon"
-                    className="h-9 w-9 rounded-xl border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] text-[color:var(--rm-profile-custom-muted)] shadow-[0_12px_24px_rgba(0,0,0,0.22)] hover:bg-[var(--rm-profile-custom-card-bg)] hover:text-[color:var(--rm-profile-custom-text)]"
-                    aria-label="Open profile shop"
-                  >
-                    <ShoppingBag size={16} />
-                  </Button>
-                </div>
-
-                <div className="mt-5 space-y-5">
-                  <button
-                    type="button"
-                    onClick={() => setActivePreviewField("bio")}
-                    className="group/preview-bio block w-full rounded-[18px] border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] px-4 py-3 text-left transition hover:border-[color:var(--rm-profile-custom-text)]/22 hover:bg-[var(--rm-profile-custom-card-bg)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35"
-                  >
-                    {activePreviewField === "bio" ? (
-                      <div>
-                        <textarea
-                          ref={previewBioInputRef}
-                          value={bio}
-                          onChange={(event) => setBio(event.target.value.slice(0, 190))}
-                          onBlur={() => setActivePreviewField((current) => current === "bio" ? null : current)}
-                          onKeyDown={(event) => {
-                            if (event.key === "Escape") {
-                              event.preventDefault();
-                              event.currentTarget.blur();
-                            }
-                          }}
-                          className="min-h-[74px] w-full resize-none bg-transparent text-[14px] leading-6 text-[color:var(--rm-profile-custom-text)] outline-none placeholder:text-[color:var(--rm-profile-custom-muted)]"
-                          placeholder="Add a bio here"
-                        />
-                        <div className="mt-2 text-right text-[11px] text-[color:var(--rm-profile-custom-muted)]">{bio.trim().length}/190</div>
+                    <div>
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[color:var(--rm-profile-custom-muted)]">
+                        {previewReferenceDate.label}
                       </div>
-                    ) : (
-                      <div className="space-y-1">
-                        <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[color:var(--rm-profile-custom-muted)]">Bio</div>
-                        <div className="rounded-[14px] border border-transparent px-0 py-0.5 text-[14px] leading-6 text-[color:var(--rm-profile-custom-text)] transition group-hover/preview-bio:border-[color:var(--rm-profile-custom-card-border)]">
-                          {currentBio || (
-                            <span className="text-[color:var(--rm-profile-custom-muted)]">Add a bio here</span>
-                          )}
-                        </div>
-                      </div>
-                    )}
-                  </button>
-
-                  <div>
-                    <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[color:var(--rm-profile-custom-muted)]">{previewReferenceDate.label}</div>
-                    <div className="mt-2 text-[14px] text-[color:var(--rm-profile-custom-text)]">{previewReferenceDate.value}</div>
-                  </div>
-                </div>
-              </div>
-            </section>
-
-            <aside className={cn("relative z-10 w-full max-w-[540px] self-start justify-self-center", asModal && "min-h-0 md:flex md:h-full md:flex-col")}>
-              <div className="flex items-center gap-5 border-b border-[color:var(--rm-profile-custom-card-border)] pb-3" style={previewThemeStyle}>
-                {["Board", "Activity", "Wishlist"].map((tab) => (
-                  <button
-                    key={tab}
-                    type="button"
-                    className={cn(
-                      "pb-2 text-[13px] font-semibold text-[color:var(--rm-profile-custom-muted)] transition",
-                      tab === "Board" && "border-b-2 border-[color:var(--rm-profile-custom-text)] text-[color:var(--rm-profile-custom-text)]",
-                    )}
-                  >
-                    {tab}
-                  </button>
-                ))}
-              </div>
-
-              <div className="mt-4 flex items-center justify-between">
-                <div className="text-[13px] font-medium text-[color:var(--rm-profile-custom-muted)]" style={previewThemeStyle}>Your Widgets</div>
-                <button
-                  type="button"
-                  className="inline-flex items-center gap-2 rounded-xl border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] px-3 py-2 text-[14px] font-semibold text-[color:var(--rm-profile-custom-text)] transition hover:bg-[var(--rm-profile-custom-card-bg)]"
-                  style={previewThemeStyle}
-                >
-                  <Plus size={15} />
-                  Add Widget
-                </button>
-              </div>
-
-              <div className={cn("mt-4 space-y-4", asModal && "md:min-h-0 md:flex-1 md:overflow-y-auto md:pr-1")}>
-                <ProfilePreviewWidgetCard title="Favorite game" subtitle="Choose 1 game">
-                  <div className="flex items-center gap-4">
-                    <div className="h-[84px] w-[84px] shrink-0 overflow-hidden rounded-[18px] border border-white/8 bg-[linear-gradient(135deg,_#d8dde7,_#64748b_70%,_#1f2937)]" />
-                    <div className="min-w-0">
-                      <div className="truncate text-[16px] font-semibold text-[color:var(--rm-profile-custom-text)]">Your featured title goes here</div>
-                      <div className="mt-2 text-[13px] italic text-[color:var(--rm-profile-custom-muted)]">
-                        Let everyone know why this is your favorite.
-                      </div>
-                      <div className="mt-3 inline-flex rounded-full border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg)] px-2 py-1 text-[11px] text-[color:var(--rm-profile-custom-muted)]">
-                        + Tags
+                      <div className="mt-2 text-[14px] text-[color:var(--rm-profile-custom-text)]">
+                        {previewReferenceDate.value}
                       </div>
                     </div>
                   </div>
-                </ProfilePreviewWidgetCard>
+                </div>
+              </section>
 
-                <ProfilePreviewWidgetCard title="Games in rotation" subtitle="Add up to 5 games">
-                  <div className="space-y-3">
-                    {[1, 2].map((item) => (
-                      <div key={item} className="flex items-center gap-3 rounded-[18px] border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg)] p-3">
-                        <div className="h-[54px] w-[54px] shrink-0 overflow-hidden rounded-[14px] bg-[linear-gradient(135deg,_#f2c94c,_#f97316_72%,_#7c2d12)]" />
-                        <div className="min-w-0 flex-1">
-                          <div className="truncate text-[14px] font-semibold text-[color:var(--rm-profile-custom-text)]">Rotating game slot {item}</div>
-                          <div className="mt-1 text-[12px] text-[color:var(--rm-profile-custom-muted)]">Add art, tags, and quick notes here.</div>
+              <aside
+                className={cn(
+                  "relative z-10 w-full max-w-[540px] self-start justify-self-center",
+                  asModal && "min-h-0 md:flex md:h-full md:flex-col",
+                )}
+              >
+                <div
+                  className="flex items-center gap-5 border-b border-[color:var(--rm-profile-custom-card-border)] pb-3"
+                  style={previewThemeStyle}
+                >
+                  {["Board", "Activity", "Wishlist"].map((tab) => (
+                    <button
+                      key={tab}
+                      type="button"
+                      className={cn(
+                        "pb-2 text-[13px] font-semibold text-[color:var(--rm-profile-custom-muted)] transition",
+                        tab === "Board" &&
+                          "border-b-2 border-[color:var(--rm-profile-custom-text)] text-[color:var(--rm-profile-custom-text)]",
+                      )}
+                    >
+                      {tab}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="mt-4 flex items-center justify-between">
+                  <div
+                    className="text-[13px] font-medium text-[color:var(--rm-profile-custom-muted)]"
+                    style={previewThemeStyle}
+                  >
+                    Your Widgets
+                  </div>
+                  <button
+                    type="button"
+                    className="inline-flex items-center gap-2 rounded-xl border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] px-3 py-2 text-[14px] font-semibold text-[color:var(--rm-profile-custom-text)] transition hover:bg-[var(--rm-profile-custom-card-bg)]"
+                    style={previewThemeStyle}
+                  >
+                    <Plus size={15} />
+                    Add Widget
+                  </button>
+                </div>
+
+                <div
+                  className={cn(
+                    "mt-4 space-y-4",
+                    asModal &&
+                      "md:min-h-0 md:flex-1 md:overflow-y-auto md:pr-1",
+                  )}
+                >
+                  <ProfilePreviewWidgetCard
+                    title="Favorite game"
+                    subtitle="Choose 1 game"
+                  >
+                    <div className="flex items-center gap-4">
+                      <div className="h-[84px] w-[84px] shrink-0 overflow-hidden rounded-[18px] border border-white/8 bg-[linear-gradient(135deg,_#d8dde7,_#64748b_70%,_#1f2937)]" />
+                      <div className="min-w-0">
+                        <div className="truncate text-[16px] font-semibold text-[color:var(--rm-profile-custom-text)]">
+                          Your featured title goes here
                         </div>
-                        <button
-                          type="button"
-                          className="flex h-8 w-8 items-center justify-center rounded-lg border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] text-[color:var(--rm-profile-custom-muted)] transition hover:bg-[var(--rm-profile-custom-card-bg)] hover:text-[color:var(--rm-profile-custom-text)]"
-                          aria-label={`Remove rotating game slot ${item}`}
-                        >
-                          <Trash2 size={14} />
-                        </button>
+                        <div className="mt-2 text-[13px] italic text-[color:var(--rm-profile-custom-muted)]">
+                          Let everyone know why this is your favorite.
+                        </div>
+                        <div className="mt-3 inline-flex rounded-full border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg)] px-2 py-1 text-[11px] text-[color:var(--rm-profile-custom-muted)]">
+                          + Tags
+                        </div>
                       </div>
-                    ))}
-                  </div>
-                </ProfilePreviewWidgetCard>
-                {error ? (
-                  <div className="flex items-center gap-2 rounded-[20px] border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive shadow-[0_16px_32px_rgba(0,0,0,0.18)]">
-                    <AlertTriangle size={14} />
-                    <span>{error}</span>
-                  </div>
-                ) : null}
-              </div>
-            </aside>
+                    </div>
+                  </ProfilePreviewWidgetCard>
+
+                  <ProfilePreviewWidgetCard
+                    title="Games in rotation"
+                    subtitle="Add up to 5 games"
+                  >
+                    <div className="space-y-3">
+                      {[1, 2].map((item) => (
+                        <div
+                          key={item}
+                          className="flex items-center gap-3 rounded-[18px] border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg)] p-3"
+                        >
+                          <div className="h-[54px] w-[54px] shrink-0 overflow-hidden rounded-[14px] bg-[linear-gradient(135deg,_#f2c94c,_#f97316_72%,_#7c2d12)]" />
+                          <div className="min-w-0 flex-1">
+                            <div className="truncate text-[14px] font-semibold text-[color:var(--rm-profile-custom-text)]">
+                              Rotating game slot {item}
+                            </div>
+                            <div className="mt-1 text-[12px] text-[color:var(--rm-profile-custom-muted)]">
+                              Add art, tags, and quick notes here.
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            className="flex h-8 w-8 items-center justify-center rounded-lg border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] text-[color:var(--rm-profile-custom-muted)] transition hover:bg-[var(--rm-profile-custom-card-bg)] hover:text-[color:var(--rm-profile-custom-text)]"
+                            aria-label={`Remove rotating game slot ${item}`}
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </ProfilePreviewWidgetCard>
+                  {error ? (
+                    <div className="flex items-center gap-2 rounded-[20px] border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive shadow-[0_16px_32px_rgba(0,0,0,0.18)]">
+                      <AlertTriangle size={14} />
+                      <span>{error}</span>
+                    </div>
+                  ) : null}
+                </div>
+              </aside>
             </div>
           </div>
 
-          {!asModal && (claimLoading || claimCandidates.length > 0 || claimError) ? (
+          {!asModal &&
+          (claimLoading || claimCandidates.length > 0 || claimError) ? (
             <section className="mt-6 rounded-[32px] border border-amber-500/25 bg-amber-500/10 p-5 shadow-[0_20px_60px_rgba(0,0,0,0.20)]">
               <div className="flex items-start gap-3">
                 <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-amber-500/15 text-amber-300">
-                  {claimLoading ? <Loader2 size={18} className="animate-spin" /> : <UserRoundCheck size={18} />}
+                  {claimLoading ? (
+                    <Loader2 size={18} className="animate-spin" />
+                  ) : (
+                    <UserRoundCheck size={18} />
+                  )}
                 </div>
                 <div className="min-w-0 flex-1">
-                  <h3 className="text-sm font-bold text-rm-text">Claim Existing Ralph Meet Account</h3>
+                  <h3 className="text-sm font-bold text-rm-text">
+                    Claim Existing Ralph Meet Account
+                  </h3>
                   <p className="mt-1 text-sm leading-6 text-rm-text-secondary">
-                    Pull your servers, messages, DMs, and profile history into this Ralph Auth login.
+                    Pull your servers, messages, DMs, and profile history into
+                    this Ralph Auth login.
                   </p>
                   {claimError ? (
                     <div className="mt-3 flex items-center gap-2 rounded-xl border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
@@ -3228,7 +4054,11 @@ export default function SettingsAccountTab({
                           <div className="flex min-w-0 items-center gap-3">
                             <div className="relative h-10 w-10 shrink-0 rounded-full bg-white/6">
                               {candidate.avatar_url ? (
-                                <AvatarImage src={candidate.avatar_url} alt="" display={candidate.avatar_display} />
+                                <AvatarImage
+                                  src={candidate.avatar_url}
+                                  alt=""
+                                  display={candidate.avatar_display}
+                                />
                               ) : (
                                 <div className="flex h-full w-full items-center justify-center text-sm font-bold text-rm-text-muted">
                                   {getDisplayInitial(candidate)}
@@ -3239,7 +4069,9 @@ export default function SettingsAccountTab({
                               <p className="truncate text-sm font-bold text-rm-text">
                                 {candidate.display_name || candidate.username}
                               </p>
-                              <p className="truncate text-xs text-rm-text-muted">@{candidate.username}</p>
+                              <p className="truncate text-xs text-rm-text-muted">
+                                @{candidate.username}
+                              </p>
                             </div>
                           </div>
                           <Button
@@ -3247,7 +4079,11 @@ export default function SettingsAccountTab({
                             disabled={claimingId !== null}
                             className="bg-amber-500 text-black hover:bg-amber-400"
                           >
-                            {claimingId === candidate.id ? <Loader2 size={16} className="animate-spin" /> : "Claim"}
+                            {claimingId === candidate.id ? (
+                              <Loader2 size={16} className="animate-spin" />
+                            ) : (
+                              "Claim"
+                            )}
                           </Button>
                         </div>
                       ))}
@@ -3261,8 +4097,12 @@ export default function SettingsAccountTab({
           {!asModal && hasChanges ? (
             <div className="mt-6 flex flex-col gap-3 rounded-[24px] border border-rm-border bg-rm-bg-elevated/92 p-4 shadow-[0_24px_80px_rgba(0,0,0,0.24)] sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <p className="text-sm font-semibold text-rm-text">Don&apos;t forget to save your changes.</p>
-                <p className="mt-1 text-xs text-rm-text-muted">Reset this draft or save it when you&apos;re ready.</p>
+                <p className="text-sm font-semibold text-rm-text">
+                  Don&apos;t forget to save your changes.
+                </p>
+                <p className="mt-1 text-xs text-rm-text-muted">
+                  Reset this draft or save it when you&apos;re ready.
+                </p>
               </div>
               <div className="flex items-center gap-3">
                 <Button
@@ -3279,7 +4119,11 @@ export default function SettingsAccountTab({
                   disabled={saving}
                   className="h-10 rounded-xl bg-primary px-4 text-primary-foreground hover:bg-primary/90"
                 >
-                  {saving ? <Loader2 size={16} className="animate-spin" /> : "Save Changes"}
+                  {saving ? (
+                    <Loader2 size={16} className="animate-spin" />
+                  ) : (
+                    "Save Changes"
+                  )}
                 </Button>
               </div>
             </div>
@@ -3291,8 +4135,12 @@ export default function SettingsAccountTab({
         <div className="pointer-events-none fixed inset-x-0 bottom-5 z-[120] flex justify-center px-4 md:bottom-6 animate-in fade-in slide-in-from-bottom-4 duration-300">
           <div className="pointer-events-auto flex w-full max-w-[520px] flex-col gap-3 rounded-[24px] border border-rm-border bg-rm-bg-elevated/94 px-4 py-4 shadow-[0_24px_80px_rgba(0,0,0,0.45)] backdrop-blur-xl sm:flex-row sm:items-center sm:justify-between">
             <div className="min-w-0">
-              <p className="text-sm font-semibold text-rm-text">Don&apos;t forget to save your changes.</p>
-              <p className="mt-1 text-xs text-rm-text-muted">Reset this draft or save it when you&apos;re ready.</p>
+              <p className="text-sm font-semibold text-rm-text">
+                Don&apos;t forget to save your changes.
+              </p>
+              <p className="mt-1 text-xs text-rm-text-muted">
+                Reset this draft or save it when you&apos;re ready.
+              </p>
             </div>
             <div className="flex items-center gap-3">
               <Button
@@ -3309,7 +4157,11 @@ export default function SettingsAccountTab({
                 disabled={saving}
                 className="h-10 rounded-xl bg-primary px-4 text-primary-foreground hover:bg-primary/90"
               >
-                {saving ? <Loader2 size={16} className="animate-spin" /> : "Save Changes"}
+                {saving ? (
+                  <Loader2 size={16} className="animate-spin" />
+                ) : (
+                  "Save Changes"
+                )}
               </Button>
             </div>
           </div>
@@ -3320,13 +4172,22 @@ export default function SettingsAccountTab({
         <AvatarFrameEditor
           image={avatarEditor}
           initialDisplay={currentAvatarDisplay}
-          displayName={chatUser?.display_name || chatUser?.username || user.username || "Profile"}
+          displayName={
+            chatUser?.display_name ||
+            chatUser?.username ||
+            user.username ||
+            "Profile"
+          }
           onCancel={handleAvatarFrameCancel}
           onConfirm={handleAvatarFrameConfirm}
         />
       )}
       <DisplayNameStyleDialog
-        key={displayNameStyleEditorOpen ? JSON.stringify(displayNameStyle) : "display-name-style-closed"}
+        key={
+          displayNameStyleEditorOpen
+            ? JSON.stringify(displayNameStyle)
+            : "display-name-style-closed"
+        }
         open={displayNameStyleEditorOpen}
         displayName={currentDisplayName}
         username={currentUsername}

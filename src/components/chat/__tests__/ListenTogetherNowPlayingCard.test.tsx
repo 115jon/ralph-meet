@@ -82,15 +82,22 @@ describe("ListenTogetherNowPlayingCard", () => {
       />,
     );
 
-    await user.click(screen.getByRole("switch", { name: "Turn off loudness control" }));
-    await user.click(screen.getByRole("button", { name: "Use night loudness control" }));
-
-    expect(screen.getByRole("button", { name: "Use balanced loudness control" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
+    await user.click(
+      screen.getByRole("switch", { name: "Turn off loudness control" }),
     );
-    expect(playback.updateLoudnessSettings).toHaveBeenCalledWith({ enabled: false });
-    expect(playback.updateLoudnessSettings).toHaveBeenCalledWith({ preset: "night" });
+    await user.click(
+      screen.getByRole("button", { name: "Use night loudness control" }),
+    );
+
+    expect(
+      screen.getByRole("button", { name: "Use balanced loudness control" }),
+    ).toHaveAttribute("aria-pressed", "true");
+    expect(playback.updateLoudnessSettings).toHaveBeenCalledWith({
+      enabled: false,
+    });
+    expect(playback.updateLoudnessSettings).toHaveBeenCalledWith({
+      preset: "night",
+    });
     expect(sendAppEvent).not.toHaveBeenCalled();
   });
   it("renders a compact mini player and forwards control actions", () => {
@@ -110,10 +117,14 @@ describe("ListenTogetherNowPlayingCard", () => {
     expect(screen.getByText("Track One")).toBeInTheDocument();
     expect(screen.getByText("Requested by Alice")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Open listen together queue" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Open listen together queue" }),
+    );
     expect(onOpenQueue).toHaveBeenCalledTimes(1);
 
-    fireEvent.click(screen.getByRole("button", { name: "Pause shared playback" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Pause shared playback" }),
+    );
     expect(sendAppEvent).toHaveBeenCalledWith({
       type: "listen_together.pause",
       room_slug: "room-1",

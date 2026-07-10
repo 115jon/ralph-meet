@@ -1,7 +1,10 @@
 import { getDisplayInitial } from "@/lib/display-name";
 import { IconButton } from "@/components/ui/IconButton";
 import { useUserResolution } from "@/hooks/useUserResolution";
-import { getDesktopNotificationBadgeState, getUnreadDocumentTitle } from "@/lib/desktop-notifications";
+import {
+  getDesktopNotificationBadgeState,
+  getUnreadDocumentTitle,
+} from "@/lib/desktop-notifications";
 import { getAuthAssetUrl } from "@/lib/platform";
 import type { Notification as AppNotification } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -13,8 +16,8 @@ import { Bell, Hash, X } from "./Icons";
 // ── Notification Bell — toolbar icon + dropdown ─────────────────────────────
 
 export const NotificationBell = memo(function NotificationBell() {
-  const unreadCount = useChatStore(s => s.unreadNotificationCount);
-  const notifications = useChatStore(s => s.notifications);
+  const unreadCount = useChatStore((s) => s.unreadNotificationCount);
+  const notifications = useChatStore((s) => s.notifications);
   const { loadNotifications, markNotificationsRead } = useChatActions();
   const [open, setOpen] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -88,12 +91,12 @@ export const NotificationBell = memo(function NotificationBell() {
               messageId: notif.message_id,
               serverId: notif.server_id,
             },
-          })
+          }),
         );
       }
       setOpen(false);
     },
-    [markNotificationsRead]
+    [markNotificationsRead],
   );
 
   return (
@@ -111,7 +114,7 @@ export const NotificationBell = memo(function NotificationBell() {
             "h-[14px] w-[14px] transition-colors",
             open
               ? "text-rm-accent"
-              : "text-rm-text-muted group-hover:text-rm-text"
+              : "text-rm-text-muted group-hover:text-rm-text",
           )}
         />
         {unreadCount > 0 && (
@@ -158,7 +161,12 @@ export const NotificationBell = memo(function NotificationBell() {
                     Mark all read
                   </button>
                 )}
-                <IconButton icon={X} size="xs" className="md:h-5 md:w-5" onClick={() => setOpen(false)} />
+                <IconButton
+                  icon={X}
+                  size="xs"
+                  className="md:h-5 md:w-5"
+                  onClick={() => setOpen(false)}
+                />
               </div>
             </div>
 
@@ -204,7 +212,10 @@ const NotificationRow = memo(function NotificationRow({
         ? "replied to you"
         : "sent a message";
 
-  const authorInfo = useUserResolution(notification.from_user?.id, notification.from_user);
+  const authorInfo = useUserResolution(
+    notification.from_user?.id,
+    notification.from_user,
+  );
   const timeAgo = getTimeAgo(notification.created_at);
 
   return (
@@ -212,7 +223,7 @@ const NotificationRow = memo(function NotificationRow({
       type="button"
       className={cn(
         "flex w-full items-start gap-2.5 px-3 py-2.5 text-left transition-colors hover:bg-rm-bg-hover border-b border-rm-border/50 last:border-0",
-        !notification.is_read && "bg-rm-accent/5"
+        !notification.is_read && "bg-rm-accent/5",
       )}
       onClick={() => onClick(notification)}
     >
@@ -220,11 +231,18 @@ const NotificationRow = memo(function NotificationRow({
       <div className="shrink-0 mt-0.5">
         {authorInfo.avatarUrl ? (
           <div className="h-8 w-8 overflow-visible rounded-full">
-            <AvatarImage src={getAuthAssetUrl(authorInfo.avatarUrl)} alt="" display={authorInfo.avatarDisplay} />
+            <AvatarImage
+              src={getAuthAssetUrl(authorInfo.avatarUrl)}
+              alt=""
+              display={authorInfo.avatarDisplay}
+            />
           </div>
         ) : (
           <div className="flex h-8 w-8 items-center justify-center rounded-full bg-rm-accent/20 text-[11px] font-bold text-rm-accent">
-            {getDisplayInitial({ display_name: authorInfo.displayName, username: authorInfo.username })}
+            {getDisplayInitial({
+              display_name: authorInfo.displayName,
+              username: authorInfo.username,
+            })}
           </div>
         )}
       </div>

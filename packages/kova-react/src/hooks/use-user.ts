@@ -31,30 +31,35 @@ export function useUser(): UseUserReturn {
   // through a plain Record to avoid DTS type-overlap errors.
   const user: KovaUser | null = rawUser
     ? (() => {
-      const u = rawUser as unknown as Record<string, unknown>;
-      const toDate = (v: unknown) =>
-        v instanceof Date ? v : new Date((v as number | string | undefined) ?? Date.now());
-      return {
-        id: rawUser.id,
-        name: rawUser.name,
-        fullName: rawUser.name ?? null,
-        email: rawUser.email,
-        emailVerified: !!(u["emailVerified"] as boolean | undefined),
-        image: (u["image"] as string | null | undefined) ?? null,
-        imageUrl: (u["image"] as string | null | undefined) ?? undefined,
-        role: (u["role"] as string | null | undefined) ?? null,
-        banned: !!(u["banned"] as boolean | undefined),
-        createdAt: toDate(u["createdAt"]),
-        updatedAt: toDate(u["updatedAt"]),
-        username: (u["username"] as string | null | undefined) ?? null,
-        twoFactorEnabled: !!(u["twoFactorEnabled"] as boolean | undefined),
-        primaryEmailAddress: rawUser.email ? { emailAddress: rawUser.email } : null,
-        unsafeMetadata: (u["unsafeMetadata"] as Record<string, unknown> | undefined) ?? {},
-        reload: async () => {
-          await result.refetch();
-        },
-      };
-    })()
+        const u = rawUser as unknown as Record<string, unknown>;
+        const toDate = (v: unknown) =>
+          v instanceof Date
+            ? v
+            : new Date((v as number | string | undefined) ?? Date.now());
+        return {
+          id: rawUser.id,
+          name: rawUser.name,
+          fullName: rawUser.name ?? null,
+          email: rawUser.email,
+          emailVerified: !!(u["emailVerified"] as boolean | undefined),
+          image: (u["image"] as string | null | undefined) ?? null,
+          imageUrl: (u["image"] as string | null | undefined) ?? undefined,
+          role: (u["role"] as string | null | undefined) ?? null,
+          banned: !!(u["banned"] as boolean | undefined),
+          createdAt: toDate(u["createdAt"]),
+          updatedAt: toDate(u["updatedAt"]),
+          username: (u["username"] as string | null | undefined) ?? null,
+          twoFactorEnabled: !!(u["twoFactorEnabled"] as boolean | undefined),
+          primaryEmailAddress: rawUser.email
+            ? { emailAddress: rawUser.email }
+            : null,
+          unsafeMetadata:
+            (u["unsafeMetadata"] as Record<string, unknown> | undefined) ?? {},
+          reload: async () => {
+            await result.refetch();
+          },
+        };
+      })()
     : null;
 
   const updateUser = useCallback(
@@ -62,7 +67,7 @@ export function useUser(): UseUserReturn {
       await client.updateUser(data);
       result.refetch();
     },
-    [client, result]
+    [client, result],
   );
 
   return {

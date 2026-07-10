@@ -11,7 +11,12 @@ const POST = async ({ request }: any) => {
     const catalog = await syncCollectiblesCatalog(getDB());
     return apiSuccess({ catalog }, 200, request);
   } catch {
-    return apiError("Unable to sync collectibles catalog", 503, "COLLECTIBLES_SYNC_FAILED", request);
+    return apiError(
+      "Unable to sync collectibles catalog",
+      503,
+      "COLLECTIBLES_SYNC_FAILED",
+      request,
+    );
   }
 };
 

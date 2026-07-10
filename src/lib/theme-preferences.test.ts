@@ -32,44 +32,59 @@ describe("theme preference helpers", () => {
 
   it("seeds the synced theme from the current local theme when sync is enabled without a saved preference", () => {
     expect(
-      getThemePreferenceSeed({
-        themePreference: null,
-        themeSyncEnabled: true,
-      }, "spiderman-dark"),
+      getThemePreferenceSeed(
+        {
+          themePreference: null,
+          themeSyncEnabled: true,
+        },
+        "spiderman-dark",
+      ),
     ).toBe("spiderman-dark");
 
     expect(
-      getThemePreferenceSeed({
-        themePreference: null,
-        themeSyncEnabled: true,
-      }, "unknown-theme"),
+      getThemePreferenceSeed(
+        {
+          themePreference: null,
+          themeSyncEnabled: true,
+        },
+        "unknown-theme",
+      ),
     ).toBeNull();
 
     expect(
-      getThemePreferenceSeed({
-        themePreference: "dark",
-        themeSyncEnabled: true,
-      }, "light"),
+      getThemePreferenceSeed(
+        {
+          themePreference: "dark",
+          themeSyncEnabled: true,
+        },
+        "light",
+      ),
     ).toBeNull();
   });
 
   it("only applies the synced theme when sync is enabled and the saved theme differs", () => {
     const savedTheme: AppTheme = "miku-light";
 
-    expect(shouldApplySyncedTheme("dark", {
-      themePreference: savedTheme,
-      themeSyncEnabled: true,
-    })).toBe(true);
+    expect(
+      shouldApplySyncedTheme("dark", {
+        themePreference: savedTheme,
+        themeSyncEnabled: true,
+      }),
+    ).toBe(true);
 
-    expect(shouldApplySyncedTheme(savedTheme, {
-      themePreference: savedTheme,
-      themeSyncEnabled: true,
-    })).toBe(false);
+    expect(
+      shouldApplySyncedTheme(savedTheme, {
+        themePreference: savedTheme,
+        themeSyncEnabled: true,
+      }),
+    ).toBe(false);
 
-    expect(shouldApplySyncedTheme("dark", {
-      themePreference: savedTheme,
-      themeSyncEnabled: false,
-    })).toBe(false);
+    expect(
+      shouldApplySyncedTheme("dark", {
+        themePreference: savedTheme,
+        themeSyncEnabled: false,
+      }),
+    ).toBe(false);
   });
 
   it("treats built-in and custom dark themes as dark", () => {

@@ -59,17 +59,27 @@ function StartCallModalContent({
     if (dontAskAgain) {
       try {
         localStorage.setItem(DONT_ASK_KEY, "true");
-      } catch { /* quota / private-mode — silently ignore */ }
+      } catch {
+        /* quota / private-mode — silently ignore */
+      }
     }
     onConfirm();
   }, [dontAskAgain, onConfirm]);
 
   return (
     <BaseModal onClose={onCancel}>
-      <div className={cn("fixed inset-0 z-[200] flex items-center justify-center bg-black/60 backdrop-blur-[2px] animate-in fade-in duration-200", isClosing && "animate-out fade-out")}>
+      <div
+        className={cn(
+          "fixed inset-0 z-[200] flex items-center justify-center bg-black/60 backdrop-blur-[2px] animate-in fade-in duration-200",
+          isClosing && "animate-out fade-out",
+        )}
+      >
         <dialog
           open
-          className={cn("relative m-0 w-[calc(100%-2rem)] max-w-[440px] rounded-lg border-0 bg-rm-bg-surface p-0 shadow-2xl outline-none animate-in fade-in zoom-in-95 duration-200", isClosing && "animate-out zoom-out-95 fade-out")}
+          className={cn(
+            "relative m-0 w-[calc(100%-2rem)] max-w-[440px] rounded-lg border-0 bg-rm-bg-surface p-0 shadow-2xl outline-none animate-in fade-in zoom-in-95 duration-200",
+            isClosing && "animate-out zoom-out-95 fade-out",
+          )}
           aria-labelledby="start-call-title"
           aria-describedby="start-call-description"
         >
@@ -81,7 +91,8 @@ function StartCallModalContent({
             >
               Ready to start a call?
             </h2>
-            <button type="button"
+            <button
+              type="button"
               onClick={onCancel}
               className="flex h-6 w-6 items-center justify-center rounded-sm text-rm-text-muted hover:text-rm-text transition-colors"
               aria-label="Close"
@@ -91,7 +102,10 @@ function StartCallModalContent({
           </div>
 
           {/* ── Body ───────────────────────────────────────────── */}
-          <div id="start-call-description" className="px-4 pt-3 pb-5 text-sm text-rm-text-secondary leading-relaxed">
+          <div
+            id="start-call-description"
+            className="px-4 pt-3 pb-5 text-sm text-rm-text-secondary leading-relaxed"
+          >
             You&apos;re about to call{" "}
             <span className="font-semibold text-rm-text">{targetName}</span>.
             Jump in when you&apos;re ready.
@@ -102,10 +116,11 @@ function StartCallModalContent({
             {/* Checkbox */}
             <label className="flex items-center gap-2 select-none cursor-pointer group">
               <span
-                className={`flex h-[18px] w-[18px] items-center justify-center rounded-[4px] border transition-colors ${dontAskAgain
-                  ? "border-primary bg-primary"
-                  : "border-rm-text-muted/40 bg-transparent group-hover:border-rm-text-muted/60"
-                  }`}
+                className={`flex h-[18px] w-[18px] items-center justify-center rounded-[4px] border transition-colors ${
+                  dontAskAgain
+                    ? "border-primary bg-primary"
+                    : "border-rm-text-muted/40 bg-transparent group-hover:border-rm-text-muted/60"
+                }`}
               >
                 {dontAskAgain && (
                   <svg
@@ -135,13 +150,15 @@ function StartCallModalContent({
 
             {/* Buttons */}
             <div className="flex items-center gap-2">
-              <button type="button"
+              <button
+                type="button"
                 onClick={onCancel}
                 className="px-4 py-1.5 text-sm font-medium text-rm-text-muted hover:text-rm-text hover:underline transition-colors rounded"
               >
                 Cancel
               </button>
-              <button type="button"
+              <button
+                type="button"
                 onClick={handleConfirm}
                 className="px-4 py-1.5 text-sm font-bold rounded bg-emerald-600 text-white hover:bg-emerald-500 transition-colors"
               >

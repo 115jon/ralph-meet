@@ -30,9 +30,11 @@ export function subscribeCollectiblesCatalog(listener: CatalogListener) {
   };
 }
 
-export async function loadCollectiblesCatalog(options: {
-  forceRefresh?: boolean;
-} = {}) {
+export async function loadCollectiblesCatalog(
+  options: {
+    forceRefresh?: boolean;
+  } = {},
+) {
   if (!options.forceRefresh && cachedCatalog) {
     return cachedCatalog;
   }
@@ -62,7 +64,10 @@ export async function syncCollectiblesCatalogClient() {
     return syncPromise;
   }
 
-  const request = apiPost<{ catalog: CollectiblesCatalog }>("/api/collectibles/sync", {})
+  const request = apiPost<{ catalog: CollectiblesCatalog }>(
+    "/api/collectibles/sync",
+    {},
+  )
     .then((data) => publishCatalog(data.catalog))
     .finally(() => {
       if (syncPromise === request) {

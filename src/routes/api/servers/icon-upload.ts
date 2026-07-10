@@ -1,10 +1,15 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute } from "@tanstack/react-router";
 
-import { apiError, apiSuccess, genId, getBucket, requireAuth } from "@/lib/api-helpers";
+import {
+  apiError,
+  apiSuccess,
+  genId,
+  getBucket,
+  requireAuth,
+} from "@/lib/api-helpers";
 import { MAX_IMAGE_SIZE, validateImageBuffer } from "@/lib/image-validation";
 import { logger } from "@/lib/logger";
 import { checkRateLimitDO, RATE_LIMITS } from "@/lib/rate-limit";
-
 
 // POST /api/servers/icon-upload — upload a server icon to R2
 const POST = async ({ request, params }: any) => {
@@ -13,7 +18,11 @@ const POST = async ({ request, params }: any) => {
   const { userId } = authResult;
 
   // Rate limit: reuse file upload limits (global DO limit)
-  const rl = await checkRateLimitDO(userId, "icon-upload", RATE_LIMITS.FILE_UPLOAD);
+  const rl = await checkRateLimitDO(
+    userId,
+    "icon-upload",
+    RATE_LIMITS.FILE_UPLOAD,
+  );
   if (rl) return rl;
 
   const formData = await request.formData();
@@ -54,15 +63,14 @@ const POST = async ({ request, params }: any) => {
       url: `/api/server-icons/${iconId}.${validation.ext}`,
       key,
     },
-    201
+    201,
   );
-}
+};
 
-
-export const Route = createFileRoute('/api/servers/icon-upload')({
+export const Route = createFileRoute("/api/servers/icon-upload")({
   server: {
     handlers: {
       POST,
-    }
-  }
+    },
+  },
 });

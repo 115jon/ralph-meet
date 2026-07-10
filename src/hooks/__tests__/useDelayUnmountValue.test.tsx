@@ -59,11 +59,15 @@ describe("useDelayedUnmountValue", () => {
     };
 
     const initialValue: ChannelValue = { id: "channel-1", name: "general" };
-    const savedValue: ChannelValue = { id: "channel-1", name: "renamed-channel" };
+    const savedValue: ChannelValue = {
+      id: "channel-1",
+      name: "renamed-channel",
+    };
     const initialProps: HookProps = { value: initialValue, isMounted: true };
 
     const { result, rerender } = renderHook(
-      ({ value, isMounted }: HookProps) => useDelayedUnmountValue(value, 200, isMounted),
+      ({ value, isMounted }: HookProps) =>
+        useDelayedUnmountValue(value, 200, isMounted),
       { initialProps },
     );
 

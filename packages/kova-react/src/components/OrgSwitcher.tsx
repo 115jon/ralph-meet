@@ -13,13 +13,7 @@
  * ```
  */
 
-import React, {
-  useCallback,
-  useEffect,
-  useId,
-  useRef,
-  useState,
-} from "react";
+import React, { useCallback, useEffect, useId, useRef, useState } from "react";
 import { mergeAppearance, useKovaAuth } from "../context";
 import { useOrganization } from "../hooks/use-organization";
 import type { OrgSwitcherProps, KovaOrganization } from "../types";
@@ -59,7 +53,12 @@ function OrgAvatar({
           alt={name}
           width={size}
           height={size}
-          style={{ width: size, height: size, objectFit: "cover", borderRadius: 4 }}
+          style={{
+            width: size,
+            height: size,
+            objectFit: "cover",
+            borderRadius: 4,
+          }}
           onError={() => setImgError(true)}
           referrerPolicy="no-referrer"
         />
@@ -113,7 +112,7 @@ export function OrgSwitcher({
             logo?: string | null;
             metadata?: unknown;
             createdAt?: number | string;
-          }> | null
+          }> | null;
         }>;
       };
     };
@@ -129,7 +128,7 @@ export function OrgSwitcher({
             logo: o.logo ?? null,
             metadata: (o.metadata as Record<string, unknown> | null) ?? null,
             createdAt: new Date(o.createdAt ?? Date.now()),
-          }))
+          })),
         );
       })
       .catch(() => setOrgs([]));
@@ -141,7 +140,8 @@ export function OrgSwitcher({
   useEffect(() => {
     if (!open) return;
     const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+      if (ref.current && !ref.current.contains(e.target as Node))
+        setOpen(false);
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
@@ -154,7 +154,9 @@ export function OrgSwitcher({
       try {
         const orgClient = client as unknown as {
           organization?: {
-            setActive: (o: { organizationId: string | null }) => Promise<unknown>;
+            setActive: (o: {
+              organizationId: string | null;
+            }) => Promise<unknown>;
           };
         };
         await orgClient.organization?.setActive({ organizationId: orgId });
@@ -165,7 +167,7 @@ export function OrgSwitcher({
         setOpen(false);
       }
     },
-    [client, activeOrg?.id, switching]
+    [client, activeOrg?.id, switching],
   );
 
   // Loading state
@@ -175,7 +177,11 @@ export function OrgSwitcher({
       <div
         data-ra-root
         data-ra-element="skeleton"
-        style={{ height: 38, borderRadius: "var(--ra-radius-sm)", width: "100%" }}
+        style={{
+          height: 38,
+          borderRadius: "var(--ra-radius-sm)",
+          width: "100%",
+        }}
       />
     );
   }
@@ -229,7 +235,10 @@ export function OrgSwitcher({
               justifyContent: "center",
             }}
           >
-            <BuildingIcon size={12} style={{ color: "var(--ra-color-text-tertiary)" }} />
+            <BuildingIcon
+              size={12}
+              style={{ color: "var(--ra-color-text-tertiary)" }}
+            />
           </span>
         )}
 
@@ -315,7 +324,12 @@ export function OrgSwitcher({
             sublabel="No organization"
             isActive={activeOrg === null}
             isSwitching={switching === "__personal__"}
-            icon={<UserIcon size={13} style={{ color: "var(--ra-color-text-tertiary)" }} />}
+            icon={
+              <UserIcon
+                size={13}
+                style={{ color: "var(--ra-color-text-tertiary)" }}
+              />
+            }
             onSelect={() => void handleSetActive(null)}
             el={el}
           />
@@ -411,7 +425,9 @@ function OrgOption({
             fontFamily: "var(--ra-font-mono)",
             fontSize: "0.78rem",
             fontWeight: 600,
-            color: isActive ? "var(--ra-color-primary)" : "var(--ra-color-text)",
+            color: isActive
+              ? "var(--ra-color-primary)"
+              : "var(--ra-color-text)",
             overflow: "hidden",
             textOverflow: "ellipsis",
             whiteSpace: "nowrap",
@@ -438,7 +454,10 @@ function OrgOption({
         )}
       </div>
       {isActive && (
-        <CheckIcon size={11} style={{ color: "var(--ra-color-primary)", flexShrink: 0 }} />
+        <CheckIcon
+          size={11}
+          style={{ color: "var(--ra-color-primary)", flexShrink: 0 }}
+        />
       )}
     </button>
   );

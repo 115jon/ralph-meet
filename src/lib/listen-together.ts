@@ -100,8 +100,7 @@ export interface ListenTogetherPersistentState {
   lastUpdatedAt: number;
 }
 
-export interface ListenTogetherStateSnapshot
-  extends ListenTogetherPersistentState {
+export interface ListenTogetherStateSnapshot extends ListenTogetherPersistentState {
   queue: ListenTogetherQueueEntry[];
   currentEntry: ListenTogetherQueueEntry | null;
   positionMs: number;
@@ -251,7 +250,10 @@ export function buildListenTogetherSnapshot(
   queue: ListenTogetherQueueEntry[],
   now = Date.now(),
 ): ListenTogetherStateSnapshot {
-  const currentEntry = getListenTogetherCurrentEntry(queue, state.currentEntryId);
+  const currentEntry = getListenTogetherCurrentEntry(
+    queue,
+    state.currentEntryId,
+  );
   const durationMs = currentEntry?.track.durationMs ?? null;
   return {
     ...state,
@@ -280,20 +282,22 @@ export function isListenTogetherResolvableUrl(input: string): boolean {
     const parsed = new URL(input.trim());
     const hostname = parsed.hostname.toLowerCase();
     return (
-      hostname === "youtube.com"
-      || hostname === "www.youtube.com"
-      || hostname === "m.youtube.com"
-      || hostname === "music.youtube.com"
-      || hostname === "youtu.be"
-      || hostname === "open.spotify.com"
-      || hostname === "play.spotify.com"
+      hostname === "youtube.com" ||
+      hostname === "www.youtube.com" ||
+      hostname === "m.youtube.com" ||
+      hostname === "music.youtube.com" ||
+      hostname === "youtu.be" ||
+      hostname === "open.spotify.com" ||
+      hostname === "play.spotify.com"
     );
   } catch {
     return false;
   }
 }
 
-export function getListenTogetherInputMode(input: string): "empty" | "search" | "resolve" {
+export function getListenTogetherInputMode(
+  input: string,
+): "empty" | "search" | "resolve" {
   const trimmed = input.trim();
   if (!trimmed) return "empty";
   return isListenTogetherResolvableUrl(trimmed) ? "resolve" : "search";

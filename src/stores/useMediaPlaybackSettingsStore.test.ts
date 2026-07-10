@@ -8,7 +8,9 @@ import {
 
 describe("useMediaPlaybackSettingsStore", () => {
   beforeEach(() => {
-    useMediaPlaybackSettingsStore.setState({ ...DEFAULT_MEDIA_PLAYBACK_SETTINGS });
+    useMediaPlaybackSettingsStore.setState({
+      ...DEFAULT_MEDIA_PLAYBACK_SETTINGS,
+    });
   });
 
   it("defaults to full volume and sound enabled", () => {
@@ -17,12 +19,16 @@ describe("useMediaPlaybackSettingsStore", () => {
   });
 
   it("clamps persisted volume values into the valid range", () => {
-    expect(normalizeMediaPlaybackSettings({ videoVolume: 2.2, videoMuted: false })).toEqual({
+    expect(
+      normalizeMediaPlaybackSettings({ videoVolume: 2.2, videoMuted: false }),
+    ).toEqual({
       videoVolume: 1,
       videoMuted: false,
     });
 
-    expect(normalizeMediaPlaybackSettings({ videoVolume: -0.25, videoMuted: false })).toEqual({
+    expect(
+      normalizeMediaPlaybackSettings({ videoVolume: -0.25, videoMuted: false }),
+    ).toEqual({
       videoVolume: 0,
       videoMuted: true,
     });
@@ -44,7 +50,9 @@ describe("useMediaPlaybackSettingsStore", () => {
       videoMuted: true,
     });
 
-    useMediaPlaybackSettingsStore.getState().updateSettings({ videoMuted: false });
+    useMediaPlaybackSettingsStore
+      .getState()
+      .updateSettings({ videoMuted: false });
 
     expect(useMediaPlaybackSettingsStore.getState().videoVolume).toBe(0.35);
     expect(useMediaPlaybackSettingsStore.getState().videoMuted).toBe(false);

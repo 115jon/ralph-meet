@@ -51,7 +51,9 @@ function redactDiagnosticsValue(value: unknown): unknown {
     return Object.fromEntries(
       Object.entries(value as Record<string, unknown>).map(([key, entry]) => [
         key,
-        SENSITIVE_KEY_PATTERN.test(key) ? "[redacted]" : redactDiagnosticsValue(entry),
+        SENSITIVE_KEY_PATTERN.test(key)
+          ? "[redacted]"
+          : redactDiagnosticsValue(entry),
       ]),
     );
   }

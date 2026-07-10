@@ -1,4 +1,8 @@
-export function ChatTypingIndicator({ typingUsers }: { typingUsers: string[] }) {
+export function ChatTypingIndicator({
+  typingUsers,
+}: {
+  typingUsers: string[];
+}) {
   if (typingUsers.length === 0) return null;
 
   return (

@@ -29,7 +29,8 @@ describe("resolvePreviewStartState — Property 9 (preview-default decision)", (
 
         // The "paused state" is precisely: preview hidden AND no CEF preview
         // session opened for the shared source (Req 5.1).
-        const isPausedState = decision.isPreviewHidden && !decision.openCefPreview;
+        const isPausedState =
+          decision.isPreviewHidden && !decision.openCefPreview;
 
         expect(isPausedState).toBe(shouldPausePreview);
 
@@ -68,7 +69,9 @@ describe("resolveScreenVideoSubscription", () => {
   it("keeps screen video subscribed even when stream audio is always-heard", () => {
     fc.assert(
       fc.property(fc.boolean(), fc.boolean(), (alwaysHear, isWatched) => {
-        expect(resolveScreenVideoSubscription({ alwaysHear, isWatched })).toBe(true);
+        expect(resolveScreenVideoSubscription({ alwaysHear, isWatched })).toBe(
+          true,
+        );
       }),
       { numRuns: 20 },
     );

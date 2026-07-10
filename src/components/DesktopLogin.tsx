@@ -1,8 +1,15 @@
 import { SplashScreen } from "@/components/SplashScreen";
-import { clearDesktopAuthSession, setDesktopAuthSession, waitForDesktopToken } from "@/lib/desktop-auth";
+import {
+  clearDesktopAuthSession,
+  setDesktopAuthSession,
+  waitForDesktopToken,
+} from "@/lib/desktop-auth";
 import { apiUrl, getPublicWebUrl, isMobile } from "@/lib/platform";
 import { buildDesktopSignInUrl } from "@/lib/auth-route-urls";
-import { getKovaAuthUrl, KOVA_AUTH_PUBLISHABLE_KEY } from "@/lib/kova-auth-config";
+import {
+  getKovaAuthUrl,
+  KOVA_AUTH_PUBLISHABLE_KEY,
+} from "@/lib/kova-auth-config";
 import { useAuth } from "@kova/react";
 import { Navigate, useNavigate } from "@tanstack/react-router";
 import { Radio } from "lucide-react";
@@ -21,8 +28,12 @@ const DESKTOP_LOGIN_WAIT_TIMEOUT_MS = 120_000;
  * swaps for a persisted Ralph Meet session token.
  */
 export default function DesktopLogin() {
-  const [status, setStatus] = useState<"resolving" | "idle" | "waiting" | "timed-out" | "error">("resolving");
-  const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
+  const [status, setStatus] = useState<
+    "resolving" | "idle" | "waiting" | "timed-out" | "error"
+  >("resolving");
+  const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">(
+    "idle",
+  );
   const { isSignedIn } = useAuth();
   const navigate = useNavigate();
   const loginWaitTimeoutRef = useRef<number | null>(null);
@@ -151,12 +162,19 @@ export default function DesktopLogin() {
 
           const inviteCode = extractInviteCode(payload);
           if (inviteCode) {
-            navigate({ to: "/invite/$code", params: { code: inviteCode } } as any);
+            navigate({
+              to: "/invite/$code",
+              params: { code: inviteCode },
+            } as any);
           }
         };
 
-        unlistenDeepLink = await listen("deep-link", (event) => handleDeepLink(event.payload));
-        unlistenNewUrl = await listen("deep-link://new-url", (event) => handleDeepLink(event.payload));
+        unlistenDeepLink = await listen("deep-link", (event) =>
+          handleDeepLink(event.payload),
+        );
+        unlistenNewUrl = await listen("deep-link://new-url", (event) =>
+          handleDeepLink(event.payload),
+        );
       } catch (e) {
         log.error("Failed to set up deep link listener:", e);
       }
@@ -187,7 +205,10 @@ export default function DesktopLogin() {
           await openUrl(signInUrl);
           return;
         } catch (err) {
-          log.warn("Tauri plugin-opener failed on mobile, falling back to window.location", err);
+          log.warn(
+            "Tauri plugin-opener failed on mobile, falling back to window.location",
+            err,
+          );
           window.location.href = signInUrl;
           return;
         }
@@ -210,7 +231,9 @@ export default function DesktopLogin() {
 
   const handleCopySignInLink = useCallback(async () => {
     try {
-      await navigator.clipboard.writeText(buildDesktopSignInUrl(getPublicWebUrl()));
+      await navigator.clipboard.writeText(
+        buildDesktopSignInUrl(getPublicWebUrl()),
+      );
       setCopyState("copied");
     } catch (error) {
       log.warn("Failed to copy desktop sign-in link:", error);
@@ -280,14 +303,19 @@ export default function DesktopLogin() {
         {status === "timed-out" && (
           <div className="space-y-3 text-center">
             <p className="text-xs text-amber-800 dark:text-amber-300">
-              Sign-in timed out. You can try again, or finish the browser sign-in if it is still open.
+              Sign-in timed out. You can try again, or finish the browser
+              sign-in if it is still open.
             </p>
             <button
               type="button"
               onClick={handleCopySignInLink}
               className="text-xs font-bold text-rm-accent hover:text-rm-accent-hover"
             >
-              {copyState === "copied" ? "Copied sign-in link" : copyState === "failed" ? "Copy failed" : "Copy sign-in link"}
+              {copyState === "copied"
+                ? "Copied sign-in link"
+                : copyState === "failed"
+                  ? "Copy failed"
+                  : "Copy sign-in link"}
             </button>
           </div>
         )}
@@ -302,7 +330,11 @@ export default function DesktopLogin() {
               onClick={handleCopySignInLink}
               className="text-xs font-bold text-rm-accent hover:text-rm-accent-hover"
             >
-              {copyState === "copied" ? "Copied sign-in link" : copyState === "failed" ? "Copy failed" : "Copy sign-in link"}
+              {copyState === "copied"
+                ? "Copied sign-in link"
+                : copyState === "failed"
+                  ? "Copy failed"
+                  : "Copy sign-in link"}
             </button>
           </div>
         )}

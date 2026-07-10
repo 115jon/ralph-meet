@@ -28,7 +28,7 @@ export async function createCategory(
   db: D1Database,
   serverId: string,
   actorId: string,
-  input: CreateCategoryInput
+  input: CreateCategoryInput,
 ): Promise<
   ServiceResult<{
     id: string;
@@ -46,7 +46,7 @@ export async function createCategory(
 
   const rankRow = (await db
     .prepare(
-      `SELECT COALESCE(MAX(rank), -1) + 1 as next_rank FROM categories WHERE server_id = ?`
+      `SELECT COALESCE(MAX(rank), -1) + 1 as next_rank FROM categories WHERE server_id = ?`,
     )
     .bind(serverId)
     .first()) as { next_rank: number } | null;
@@ -55,7 +55,7 @@ export async function createCategory(
 
   await db
     .prepare(
-      `INSERT INTO categories (id, server_id, name, rank) VALUES (?, ?, ?, ?)`
+      `INSERT INTO categories (id, server_id, name, rank) VALUES (?, ?, ?, ?)`,
     )
     .bind(categoryId, serverId, name, rank)
     .run();
@@ -82,7 +82,7 @@ export async function deleteCategory(
   db: D1Database,
   serverId: string,
   actorId: string,
-  categoryId: string
+  categoryId: string,
 ): Promise<{
   cacheKeysToInvalidate: string[];
   broadcast: BroadcastDescriptor;

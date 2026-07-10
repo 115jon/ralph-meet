@@ -1,4 +1,3 @@
-
 import { useChatActions, useChatStore } from "@/stores/chat-store";
 import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
 import { Command } from "cmdk";
@@ -23,9 +22,9 @@ export default function CommandMenu() {
   const [search, setSearch] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const channels = useChatStore(s => s.channels);
-  const servers = useChatStore(s => s.servers);
-  const dmChannels = useChatStore(s => s.dmChannels);
+  const channels = useChatStore((s) => s.channels);
+  const servers = useChatStore((s) => s.servers);
+  const dmChannels = useChatStore((s) => s.dmChannels);
   const { dispatch } = useChatActions();
   const { theme, setAppearanceTheme } = useAppearanceTheme();
 
@@ -81,22 +80,18 @@ export default function CommandMenu() {
       }
       setOpen(false);
     },
-    [dispatch]
+    [dispatch],
   );
 
   const navigateToChannel = useCallback(
     (serverId: string, channelId: string) => {
       dispatch({ type: "SWITCH_SERVER", serverId, channelId });
       if (typeof window !== "undefined") {
-        window.history.replaceState(
-          null,
-          "",
-          `/chat/${serverId}/${channelId}`
-        );
+        window.history.replaceState(null, "", `/chat/${serverId}/${channelId}`);
       }
       setOpen(false);
     },
-    [dispatch]
+    [dispatch],
   );
 
   const navigateToDm = useCallback(
@@ -107,25 +102,20 @@ export default function CommandMenu() {
       }
       setOpen(false);
     },
-    [dispatch]
+    [dispatch],
   );
 
   // ── Computed data ──────────────────────────────────────────────────────
 
   const textChannels = useMemo(
-    () =>
-      channels.filter(
-        (c: any) => c.channel_type === "text" && c.server_id
-      ),
-    [channels]
+    () => channels.filter((c: any) => c.channel_type === "text" && c.server_id),
+    [channels],
   );
 
   const voiceChannels = useMemo(
     () =>
-      channels.filter(
-        (c: any) => c.channel_type === "voice" && c.server_id
-      ),
-    [channels]
+      channels.filter((c: any) => c.channel_type === "voice" && c.server_id),
+    [channels],
   );
 
   // Map server IDs to names for display
@@ -189,10 +179,24 @@ export default function CommandMenu() {
               No results found.
             </Command.Empty>
 
-            <CommandMenuServersGroup servers={servers} navigateToServer={navigateToServer} />
-            <CommandMenuTextChannelsGroup channels={textChannels} serverMap={serverMap} navigateToChannel={navigateToChannel} />
-            <CommandMenuVoiceChannelsGroup channels={voiceChannels} serverMap={serverMap} navigateToChannel={navigateToChannel} />
-            <CommandMenuDMsGroup dmChannels={dmChannels} navigateToDm={navigateToDm} />
+            <CommandMenuServersGroup
+              servers={servers}
+              navigateToServer={navigateToServer}
+            />
+            <CommandMenuTextChannelsGroup
+              channels={textChannels}
+              serverMap={serverMap}
+              navigateToChannel={navigateToChannel}
+            />
+            <CommandMenuVoiceChannelsGroup
+              channels={voiceChannels}
+              serverMap={serverMap}
+              navigateToChannel={navigateToChannel}
+            />
+            <CommandMenuDMsGroup
+              dmChannels={dmChannels}
+              navigateToDm={navigateToDm}
+            />
             <CommandMenuActionsGroup
               isMuted={isMuted}
               setIsMuted={setIsMuted}

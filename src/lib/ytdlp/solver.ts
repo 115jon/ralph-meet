@@ -55,7 +55,9 @@ return jsc;`,
   )();
 
   if (typeof compiled !== "function") {
-    throw new Error(`yt-dlp solver bundle ${bundle.version} did not compile into a function`);
+    throw new Error(
+      `yt-dlp solver bundle ${bundle.version} did not compile into a function`,
+    );
   }
 
   solverCache.set(cacheKey, compiled as CompiledSolver);
@@ -70,8 +72,14 @@ export function assertSolverBundleUsable(bundle: YtDlpSolverBundle) {
     requests: [],
   });
 
-  if (!isSolverOutput(output) || output.type !== "result" || !Array.isArray(output.responses)) {
-    throw new Error(`yt-dlp solver bundle ${bundle.version} failed its smoke test`);
+  if (
+    !isSolverOutput(output) ||
+    output.type !== "result" ||
+    !Array.isArray(output.responses)
+  ) {
+    throw new Error(
+      `yt-dlp solver bundle ${bundle.version} failed its smoke test`,
+    );
   }
 }
 
@@ -85,7 +93,8 @@ export function solvePlayerChallenges(
 ) {
   const requests: SolverRequest[] = [];
   if (input.n.length > 0) requests.push({ type: "n", challenges: input.n });
-  if (input.sig.length > 0) requests.push({ type: "sig", challenges: input.sig });
+  if (input.sig.length > 0)
+    requests.push({ type: "sig", challenges: input.sig });
 
   const solved = {
     n: {} as Record<string, string | null>,
@@ -120,7 +129,9 @@ export function solvePlayerChallenges(
   for (const [index, response] of responses.entries()) {
     const request = requests[index];
     if (response.type === "error") {
-      throw new Error(`yt-dlp solver could not resolve ${request.type}: ${response.error}`);
+      throw new Error(
+        `yt-dlp solver could not resolve ${request.type}: ${response.error}`,
+      );
     }
 
     for (const challenge of request.challenges) {

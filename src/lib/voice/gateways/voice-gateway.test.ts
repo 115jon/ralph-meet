@@ -45,9 +45,11 @@ describe("VoiceGateway", () => {
 
   it("opens a new socket after a prior disconnect while ticket acquisition is asynchronous", async () => {
     let resolveTicket: ((protocols: string[]) => void) | undefined;
-    mocks.fetchSocketProtocols.mockReturnValue(new Promise<string[]>((resolve) => {
-      resolveTicket = resolve;
-    }));
+    mocks.fetchSocketProtocols.mockReturnValue(
+      new Promise<string[]>((resolve) => {
+        resolveTicket = resolve;
+      }),
+    );
     const gateway = new VoiceGateway();
 
     gateway.disconnect();

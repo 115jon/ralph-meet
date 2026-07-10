@@ -50,7 +50,9 @@ export class HeartbeatManager {
     this.timer = setInterval(() => {
       if (!this.lastAckReceived) {
         this.missedBeats++;
-        this.log.warn(`Heartbeat not ACK'd (missed ${this.missedBeats}/${this.maxMissed})`);
+        this.log.warn(
+          `Heartbeat not ACK'd (missed ${this.missedBeats}/${this.maxMissed})`,
+        );
         if (this.missedBeats >= this.maxMissed) {
           this.log.error(`Zombie connection detected — triggering reconnect`);
           this.stop();

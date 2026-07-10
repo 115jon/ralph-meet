@@ -168,7 +168,7 @@ jobs:
         run: |
           $TargetDir = "desktop/src-tauri/target/release"
           New-Item -ItemType Directory -Force -Path $TargetDir | Out-Null
-          
+
           # Copy CEF files
           $cefFiles = @(
               "libcef.dll",
@@ -189,11 +189,11 @@ jobs:
               "bootstrap.exe",
               "bootstrapc.exe"
           )
-          
+
           foreach ($file in $cefFiles) {
               Copy-Item -Path "D:\cef\$file" -Destination "$TargetDir\$file" -Force
           }
-          
+
           # Copy locales
           $dstLocales = "$TargetDir\locales"
           New-Item -ItemType Directory -Force -Path $dstLocales | Out-Null
@@ -330,7 +330,7 @@ jobs:
           # Get version from tauri.conf.json
           $TauriConf = Get-Content -Raw -Path "desktop/src-tauri/tauri.conf.json" | ConvertFrom-Json
           $Version = $TauriConf.version
-          
+
           # Construct the latest.json updater metadata
           $TagName = $env:RELEASE_TAG
           $Repo = "${{ github.repository }}"

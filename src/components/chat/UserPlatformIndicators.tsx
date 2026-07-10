@@ -1,8 +1,15 @@
-import { type PresencePlatform, normalizePresencePlatforms } from "@/lib/presence-platform";
+import {
+  type PresencePlatform,
+  normalizePresencePlatforms,
+} from "@/lib/presence-platform";
 import type { User } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useChatStore } from "@/stores/chat-store";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { Globe, Monitor, Smartphone } from "lucide-react";
 import type { CSSProperties } from "react";
 
@@ -45,7 +52,7 @@ export function UserPlatformIndicators({
   );
 
   const resolvedPlatforms = normalizePresencePlatforms(
-    livePlatforms?.length ? livePlatforms : platforms ?? [],
+    livePlatforms?.length ? livePlatforms : (platforms ?? []),
   ).sort((left, right) => {
     return PLATFORM_ORDER.indexOf(left) - PLATFORM_ORDER.indexOf(right);
   });
@@ -59,15 +66,11 @@ export function UserPlatformIndicators({
     : isOffline
       ? "text-rm-text-muted/75"
       : "text-primary";
-  const resolvedColor = isOffline ? offlineColor ?? color : color;
+  const resolvedColor = isOffline ? (offlineColor ?? color) : color;
 
   return (
     <div
-      className={cn(
-        "flex items-center gap-1.5",
-        toneClassName,
-        className,
-      )}
+      className={cn("flex items-center gap-1.5", toneClassName, className)}
       style={{
         ...(resolvedColor ? { color: resolvedColor } : {}),
         ...style,
@@ -83,7 +86,10 @@ export function UserPlatformIndicators({
           <Tooltip key={platform}>
             <TooltipTrigger asChild>
               <span className="flex items-center justify-center">
-                <Icon className={cn("h-3.5 w-3.5", iconClassName)} aria-hidden="true" />
+                <Icon
+                  className={cn("h-3.5 w-3.5", iconClassName)}
+                  aria-hidden="true"
+                />
               </span>
             </TooltipTrigger>
             <TooltipContent

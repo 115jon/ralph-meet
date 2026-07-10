@@ -24,26 +24,28 @@ export function useOrganization(): UseOrganizationReturn {
   const { client } = useKovaAuth();
 
   // useActiveOrganization is provided by organizationClient plugin
-  const orgResult = (client as unknown as {
-    useActiveOrganization: () => {
-      data: null | {
-        id: string;
-        name: string;
-        slug: string;
-        logo?: string | null;
-        metadata?: Record<string, unknown> | null;
-        createdAt?: number | string;
-        membership?: {
+  const orgResult = (
+    client as unknown as {
+      useActiveOrganization: () => {
+        data: null | {
           id: string;
-          userId: string;
-          organizationId: string;
-          role: string;
+          name: string;
+          slug: string;
+          logo?: string | null;
+          metadata?: Record<string, unknown> | null;
           createdAt?: number | string;
+          membership?: {
+            id: string;
+            userId: string;
+            organizationId: string;
+            role: string;
+            createdAt?: number | string;
+          };
         };
+        isPending: boolean;
       };
-      isPending: boolean;
-    };
-  }).useActiveOrganization?.();
+    }
+  ).useActiveOrganization?.();
 
   if (!orgResult) {
     // Plugin not enabled
@@ -55,23 +57,23 @@ export function useOrganization(): UseOrganizationReturn {
 
   const organization: KovaOrganization | null = raw
     ? {
-      id: raw.id,
-      name: raw.name,
-      slug: raw.slug,
-      logo: raw.logo ?? null,
-      metadata: raw.metadata ?? null,
-      createdAt: new Date(raw.createdAt ?? Date.now()),
-    }
+        id: raw.id,
+        name: raw.name,
+        slug: raw.slug,
+        logo: raw.logo ?? null,
+        metadata: raw.metadata ?? null,
+        createdAt: new Date(raw.createdAt ?? Date.now()),
+      }
     : null;
 
   const membership: KovaMembership | null = raw?.membership
     ? {
-      id: raw.membership.id,
-      userId: raw.membership.userId,
-      organizationId: raw.membership.organizationId,
-      role: raw.membership.role,
-      createdAt: new Date(raw.membership.createdAt ?? Date.now()),
-    }
+        id: raw.membership.id,
+        userId: raw.membership.userId,
+        organizationId: raw.membership.organizationId,
+        role: raw.membership.role,
+        createdAt: new Date(raw.membership.createdAt ?? Date.now()),
+      }
     : null;
 
   return { organization, membership, isLoaded };

@@ -13,7 +13,9 @@ interface StreamWatcherListProps {
 }
 
 function formatWatcherSummary(watchers: StreamWatcherIdentity[]) {
-  const visibleNames = watchers.slice(0, MAX_VISIBLE_NAMES).map((watcher) => watcher.name);
+  const visibleNames = watchers
+    .slice(0, MAX_VISIBLE_NAMES)
+    .map((watcher) => watcher.name);
   const remainingNames = watchers.length - visibleNames.length;
 
   if (visibleNames.length === 0) return "";
@@ -31,7 +33,8 @@ export function StreamWatcherList({
   const visibleWatchers = watchers.slice(0, MAX_VISIBLE_AVATARS);
   const overflowCount = watchers.length - visibleWatchers.length;
   const namesLabel = formatWatcherSummary(watchers);
-  const viewerLabel = watchers.length === 1 ? "1 viewer" : `${watchers.length} viewers`;
+  const viewerLabel =
+    watchers.length === 1 ? "1 viewer" : `${watchers.length} viewers`;
   const isInline = variant === "inline";
 
   return (
@@ -44,7 +47,12 @@ export function StreamWatcherList({
         className,
       )}
     >
-      <div className={cn("flex shrink-0", isInline ? "-space-x-1.5" : "-space-x-2")}>
+      <div
+        className={cn(
+          "flex shrink-0",
+          isInline ? "-space-x-1.5" : "-space-x-2",
+        )}
+      >
         {visibleWatchers.map((watcher) => (
           <div
             key={watcher.userId}
@@ -55,7 +63,11 @@ export function StreamWatcherList({
             title={watcher.name}
           >
             {watcher.avatar ? (
-              <AvatarImage src={getAuthAssetUrl(watcher.avatar)} alt="" display={watcher.avatarDisplay} />
+              <AvatarImage
+                src={getAuthAssetUrl(watcher.avatar)}
+                alt=""
+                display={watcher.avatarDisplay}
+              />
             ) : (
               <div className="flex h-full w-full items-center justify-center text-[10px] font-black text-rm-text">
                 {watcher.name[0]?.toUpperCase() ?? "?"}
@@ -78,16 +90,20 @@ export function StreamWatcherList({
         )}
       </div>
       <div className="min-w-0">
-        <div className={cn(
-          "font-black uppercase tracking-[0.18em]",
-          isInline ? "text-[8px] text-white/55" : "text-[9px] text-primary",
-        )}>
+        <div
+          className={cn(
+            "font-black uppercase tracking-[0.18em]",
+            isInline ? "text-[8px] text-white/55" : "text-[9px] text-primary",
+          )}
+        >
           {viewerLabel}
         </div>
-        <div className={cn(
-          "truncate font-semibold",
-          isInline ? "text-[11px] text-white" : "text-[11px] text-rm-text",
-        )}>
+        <div
+          className={cn(
+            "truncate font-semibold",
+            isInline ? "text-[11px] text-white" : "text-[11px] text-rm-text",
+          )}
+        >
           {namesLabel}
         </div>
       </div>

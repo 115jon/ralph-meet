@@ -2,19 +2,38 @@ import { useVoiceStats } from "@/hooks/useVoiceStats";
 import { clog } from "@/lib/console-logger";
 import type { SFUClient, VoiceConnectionStats } from "@/lib/sfu-client";
 import { buildVoiceDiagnosticsBundle } from "@/lib/voice/diagnostics";
-import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { cn } from "@/lib/utils";
 import { createPortal } from "react-dom";
 import { VoiceDebugScreen } from "./VoiceDebugScreen";
 
 const log = clog("VoiceDetails");
 
-const AreaChart = lazy(() => import("recharts").then(m => ({ default: m.AreaChart })));
-const Area = lazy(() => import("recharts").then(m => ({ default: m.Area })));
-const ResponsiveContainer = lazy(() => import("recharts").then(m => ({ default: m.ResponsiveContainer })));
-const XAxis = lazy(() => import("recharts").then(m => ({ default: m.XAxis })));
-const YAxis = lazy(() => import("recharts").then(m => ({ default: m.YAxis })));
-const ReTooltip = lazy(() => import("recharts").then(m => ({ default: m.Tooltip })));
+const AreaChart = lazy(() =>
+  import("recharts").then((m) => ({ default: m.AreaChart })),
+);
+const Area = lazy(() => import("recharts").then((m) => ({ default: m.Area })));
+const ResponsiveContainer = lazy(() =>
+  import("recharts").then((m) => ({ default: m.ResponsiveContainer })),
+);
+const XAxis = lazy(() =>
+  import("recharts").then((m) => ({ default: m.XAxis })),
+);
+const YAxis = lazy(() =>
+  import("recharts").then((m) => ({ default: m.YAxis })),
+);
+const ReTooltip = lazy(() =>
+  import("recharts").then((m) => ({ default: m.Tooltip })),
+);
 const CHART_MARGIN = { top: 4, right: 4, bottom: 0, left: 0 };
 const AXIS_TICK_STYLE = { fontSize: 9, fill: "var(--rm-text-muted)" };
 const TOOLTIP_CONTENT_STYLE = {
@@ -56,11 +75,20 @@ function getLiveConnectionSnapshot(sfu: SFUClient | null) {
   };
 }
 
-export function VoiceDetailsPanel({ sfu, isOpen, onClose, triggerRef, channelName, isClosing }: VoiceDetailsPanelProps) {
+export function VoiceDetailsPanel({
+  sfu,
+  isOpen,
+  onClose,
+  triggerRef,
+  channelName,
+  isClosing,
+}: VoiceDetailsPanelProps) {
   const [activeTab, setActiveTab] = useState<TabId>("connection");
   const [copyFeedback, setCopyFeedback] = useState(false);
   const [showDebugScreen, setShowDebugScreen] = useState(false);
-  const [liveSnapshot, setLiveSnapshot] = useState(() => getLiveConnectionSnapshot(sfu));
+  const [liveSnapshot, setLiveSnapshot] = useState(() =>
+    getLiveConnectionSnapshot(sfu),
+  );
   const [panelPosition, setPanelPosition] = useState({
     top: 0,
     left: 0,
@@ -71,15 +99,17 @@ export function VoiceDetailsPanel({ sfu, isOpen, onClose, triggerRef, channelNam
   const stats = useVoiceStats(sfu, isOpen);
   const connectionSnapshot = stats
     ? {
-      connectionState: stats.connectionState,
-      publishConnectionState: stats.publishConnectionState,
-      subscribeConnectionState: stats.subscribeConnectionState,
-    }
+        connectionState: stats.connectionState,
+        publishConnectionState: stats.publishConnectionState,
+        subscribeConnectionState: stats.subscribeConnectionState,
+      }
     : liveSnapshot;
 
   useEffect(() => {
     if (isOpen) return;
-    setPanelPosition((current) => (current.ready ? { ...current, ready: false } : current));
+    setPanelPosition((current) =>
+      current.ready ? { ...current, ready: false } : current,
+    );
   }, [isOpen]);
 
   useEffect(() => {
@@ -88,7 +118,10 @@ export function VoiceDetailsPanel({ sfu, isOpen, onClose, triggerRef, channelNam
 
     if (!isOpen || !sfu) return;
 
-    const intervalId = window.setInterval(syncSnapshot, LIVE_CONNECTION_POLL_MS);
+    const intervalId = window.setInterval(
+      syncSnapshot,
+      LIVE_CONNECTION_POLL_MS,
+    );
     return () => {
       window.clearInterval(intervalId);
     };
@@ -113,10 +146,12 @@ export function VoiceDetailsPanel({ sfu, isOpen, onClose, triggerRef, channelNam
       );
 
       const spaceAbove = anchorTop - DETAILS_PANEL_VIEWPORT_PADDING;
-      const spaceBelow = window.innerHeight - anchorBottom - DETAILS_PANEL_VIEWPORT_PADDING;
-      const openAbove = !anchorRect
-        || spaceAbove >= (panelRect.height + DETAILS_PANEL_GAP)
-        || spaceAbove >= spaceBelow;
+      const spaceBelow =
+        window.innerHeight - anchorBottom - DETAILS_PANEL_VIEWPORT_PADDING;
+      const openAbove =
+        !anchorRect ||
+        spaceAbove >= panelRect.height + DETAILS_PANEL_GAP ||
+        spaceAbove >= spaceBelow;
 
       let top = openAbove
         ? anchorTop - panelRect.height - DETAILS_PANEL_GAP
@@ -138,9 +173,10 @@ export function VoiceDetailsPanel({ sfu, isOpen, onClose, triggerRef, channelNam
     window.addEventListener("resize", updatePosition);
     window.addEventListener("scroll", updatePosition, true);
 
-    const resizeObserver = typeof ResizeObserver !== "undefined"
-      ? new ResizeObserver(() => updatePosition())
-      : null;
+    const resizeObserver =
+      typeof ResizeObserver !== "undefined"
+        ? new ResizeObserver(() => updatePosition())
+        : null;
 
     resizeObserver?.observe(panelRef.current);
     if (triggerRef?.current) {
@@ -159,13 +195,19 @@ export function VoiceDetailsPanel({ sfu, isOpen, onClose, triggerRef, channelNam
     if (!isOpen) return;
     const handler = (e: MouseEvent) => {
       const target = e.target as Node;
-      if (panelRef.current && !panelRef.current.contains(target) &&
-        (!triggerRef?.current || !triggerRef.current.contains(target))) {
+      if (
+        panelRef.current &&
+        !panelRef.current.contains(target) &&
+        (!triggerRef?.current || !triggerRef.current.contains(target))
+      ) {
         onClose();
       }
     };
     // Delay to avoid immediate close from the same click that opened it
-    const timer = setTimeout(() => document.addEventListener("mousedown", handler), 50);
+    const timer = setTimeout(
+      () => document.addEventListener("mousedown", handler),
+      50,
+    );
     return () => {
       clearTimeout(timer);
       document.removeEventListener("mousedown", handler);
@@ -210,99 +252,117 @@ export function VoiceDetailsPanel({ sfu, isOpen, onClose, triggerRef, channelNam
   // a child of the sidebar container that has `transform` applied on mobile.
   // A CSS transform on an ancestor breaks `position: fixed` — the fixed
   // element would be confined to the transformed box rather than the viewport.
-  const debugPortal = showDebugScreen && typeof document !== "undefined"
-    ? createPortal(
-      <VoiceDebugScreen
-        sfu={sfu}
-        onClose={() => setShowDebugScreen(false)}
-        channelName={channelName}
-      />,
-      document.body
-    )
-    : null;
+  const debugPortal =
+    showDebugScreen && typeof document !== "undefined"
+      ? createPortal(
+          <VoiceDebugScreen
+            sfu={sfu}
+            onClose={() => setShowDebugScreen(false)}
+            channelName={channelName}
+          />,
+          document.body,
+        )
+      : null;
 
-  const panelPortal = isOpen && typeof document !== "undefined"
-    ? createPortal(
-      <aside
-        ref={panelRef}
-        className={cn(
-          "fixed z-[1000] w-[min(320px,calc(100vw-24px))] overflow-hidden rounded-xl border border-rm-border bg-rm-bg-floating shadow-2xl",
-          panelPosition.placement === "top"
-            ? (isClosing
-              ? "origin-bottom-left animate-out fade-out slide-out-to-bottom-2 zoom-out-95 duration-200"
-              : "origin-bottom-left animate-in fade-in slide-in-from-bottom-2 duration-200")
-            : (isClosing
-              ? "origin-top-left animate-out fade-out slide-out-to-top-2 zoom-out-95 duration-200"
-              : "origin-top-left animate-in fade-in slide-in-from-top-2 duration-200"),
-        )}
-        style={{
-          top: panelPosition.top,
-          left: panelPosition.left,
-          visibility: panelPosition.ready ? "visible" : "hidden",
-        }}
-        aria-label="Voice Details"
-      >
-        {/* Header */}
-        <div className="px-4 pt-4 pb-2">
-          <h3 className="text-[15px] font-bold text-rm-text tracking-tight">Voice Details</h3>
-        </div>
+  const panelPortal =
+    isOpen && typeof document !== "undefined"
+      ? createPortal(
+          <aside
+            ref={panelRef}
+            className={cn(
+              "fixed z-[1000] w-[min(320px,calc(100vw-24px))] overflow-hidden rounded-xl border border-rm-border bg-rm-bg-floating shadow-2xl",
+              panelPosition.placement === "top"
+                ? isClosing
+                  ? "origin-bottom-left animate-out fade-out slide-out-to-bottom-2 zoom-out-95 duration-200"
+                  : "origin-bottom-left animate-in fade-in slide-in-from-bottom-2 duration-200"
+                : isClosing
+                  ? "origin-top-left animate-out fade-out slide-out-to-top-2 zoom-out-95 duration-200"
+                  : "origin-top-left animate-in fade-in slide-in-from-top-2 duration-200",
+            )}
+            style={{
+              top: panelPosition.top,
+              left: panelPosition.left,
+              visibility: panelPosition.ready ? "visible" : "hidden",
+            }}
+            aria-label="Voice Details"
+          >
+            {/* Header */}
+            <div className="px-4 pt-4 pb-2">
+              <h3 className="text-[15px] font-bold text-rm-text tracking-tight">
+                Voice Details
+              </h3>
+            </div>
 
-        {/* Tabs */}
-        <div className="flex px-4 gap-4 border-b border-rm-border">
-          <TabButton id="connection" label="Connection" active={activeTab} onSelect={setActiveTab} />
-          <TabButton id="privacy" label="Privacy" active={activeTab} onSelect={setActiveTab} />
-        </div>
+            {/* Tabs */}
+            <div className="flex px-4 gap-4 border-b border-rm-border">
+              <TabButton
+                id="connection"
+                label="Connection"
+                active={activeTab}
+                onSelect={setActiveTab}
+              />
+              <TabButton
+                id="privacy"
+                label="Privacy"
+                active={activeTab}
+                onSelect={setActiveTab}
+              />
+            </div>
 
-        {/* Tab content */}
-        <div className="px-4 py-3">
-          {activeTab === "connection" ? (
-            <ConnectionTab
-              stats={stats}
-              connectionState={connectionSnapshot.connectionState}
-              publishConnectionState={connectionSnapshot.publishConnectionState}
-              subscribeConnectionState={connectionSnapshot.subscribeConnectionState}
-            />
-          ) : (
-            <PrivacyTab />
-          )}
-        </div>
+            {/* Tab content */}
+            <div className="px-4 py-3">
+              {activeTab === "connection" ? (
+                <ConnectionTab
+                  stats={stats}
+                  connectionState={connectionSnapshot.connectionState}
+                  publishConnectionState={
+                    connectionSnapshot.publishConnectionState
+                  }
+                  subscribeConnectionState={
+                    connectionSnapshot.subscribeConnectionState
+                  }
+                />
+              ) : (
+                <PrivacyTab />
+              )}
+            </div>
 
-        {/* Footer */}
-        <div className="px-4 py-3 border-t border-rm-border flex items-center gap-3 text-[12px] font-medium">
-          <span className="flex items-center gap-1.5 text-[#23a559]">
-            <LockIcon />
-            End-to-end encrypted
-          </span>
-          <span className="flex-1" />
-          {stats ? (
-            <>
-              <button
-                type="button"
-                onClick={handleDebug}
-                className="text-rm-text-link hover:underline transition-colors flex items-center gap-1 outline-none"
-              >
-                Debug <ExternalLinkIcon />
-              </button>
-              <button
-                type="button"
-                onClick={handleCopyStats}
-                className="text-rm-text-link hover:underline transition-colors flex items-center gap-1 outline-none"
-              >
-                {copyFeedback ? "Copied!" : "Copy Stats"} <ClipboardIcon />
-              </button>
-            </>
-          ) : (
-            <span className="text-rm-text-muted/70 text-[11px]">
-              {connectionSnapshot.connectionState === "connected"
-                ? "Connected · gathering live metrics…"
-                : `${formatConnectionStateLabel(connectionSnapshot.connectionState)}…`}
-            </span>
-          )}
-        </div>
-      </aside>,
-      document.body,
-    )
-    : null;
+            {/* Footer */}
+            <div className="px-4 py-3 border-t border-rm-border flex items-center gap-3 text-[12px] font-medium">
+              <span className="flex items-center gap-1.5 text-[#23a559]">
+                <LockIcon />
+                End-to-end encrypted
+              </span>
+              <span className="flex-1" />
+              {stats ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={handleDebug}
+                    className="text-rm-text-link hover:underline transition-colors flex items-center gap-1 outline-none"
+                  >
+                    Debug <ExternalLinkIcon />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleCopyStats}
+                    className="text-rm-text-link hover:underline transition-colors flex items-center gap-1 outline-none"
+                  >
+                    {copyFeedback ? "Copied!" : "Copy Stats"} <ClipboardIcon />
+                  </button>
+                </>
+              ) : (
+                <span className="text-rm-text-muted/70 text-[11px]">
+                  {connectionSnapshot.connectionState === "connected"
+                    ? "Connected · gathering live metrics…"
+                    : `${formatConnectionStateLabel(connectionSnapshot.connectionState)}…`}
+                </span>
+              )}
+            </div>
+          </aside>,
+          document.body,
+        )
+      : null;
 
   if (!panelPortal && !debugPortal) return null;
 
@@ -316,7 +376,12 @@ export function VoiceDetailsPanel({ sfu, isOpen, onClose, triggerRef, channelNam
 
 // ── Tab Button ──────────────────────────────────────────────────────────────
 
-function TabButton({ id, label, active, onSelect }: {
+function TabButton({
+  id,
+  label,
+  active,
+  onSelect,
+}: {
   id: TabId;
   label: string;
   active: TabId;
@@ -327,10 +392,11 @@ function TabButton({ id, label, active, onSelect }: {
     <button
       type="button"
       onClick={() => onSelect(id)}
-      className={`pb-2 text-[13px] font-semibold border-b-2 transition-colors outline-none ${isActive
-        ? "text-rm-text-link border-rm-text-link"
-        : "text-rm-text-muted border-transparent hover:text-rm-text hover:border-rm-text-muted/30"
-        }`}
+      className={`pb-2 text-[13px] font-semibold border-b-2 transition-colors outline-none ${
+        isActive
+          ? "text-rm-text-link border-rm-text-link"
+          : "text-rm-text-muted border-transparent hover:text-rm-text hover:border-rm-text-muted/30"
+      }`}
     >
       {label}
     </button>
@@ -352,8 +418,14 @@ function ConnectionTab({
 }) {
   const summaryCards = [
     { label: "Session", value: formatConnectionStateLabel(connectionState) },
-    { label: "Publish", value: formatConnectionStateLabel(publishConnectionState) },
-    { label: "Receive", value: formatConnectionStateLabel(subscribeConnectionState) },
+    {
+      label: "Publish",
+      value: formatConnectionStateLabel(publishConnectionState),
+    },
+    {
+      label: "Receive",
+      value: formatConnectionStateLabel(subscribeConnectionState),
+    },
   ];
 
   if (!stats) {
@@ -361,9 +433,16 @@ function ConnectionTab({
       <div className="space-y-3">
         <div className="grid grid-cols-3 gap-2">
           {summaryCards.map((card) => (
-            <div key={card.label} className="rounded-lg border border-rm-border bg-rm-bg-surface/70 px-3 py-2">
-              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-rm-text-muted/70">{card.label}</p>
-              <p className="mt-1 text-[12px] font-bold text-rm-text">{card.value}</p>
+            <div
+              key={card.label}
+              className="rounded-lg border border-rm-border bg-rm-bg-surface/70 px-3 py-2"
+            >
+              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-rm-text-muted/70">
+                {card.label}
+              </p>
+              <p className="mt-1 text-[12px] font-bold text-rm-text">
+                {card.value}
+              </p>
             </div>
           ))}
         </div>
@@ -376,32 +455,49 @@ function ConnectionTab({
     );
   }
 
-  const chartData = stats.pingHistory.length > 0
-    ? stats.pingHistory
-    : [{ time: "now", ping: 0 }];
+  const chartData =
+    stats.pingHistory.length > 0
+      ? stats.pingHistory
+      : [{ time: "now", ping: 0 }];
 
-  const maxPing = Math.max(...chartData.map(d => d.ping), 20);
+  const maxPing = Math.max(...chartData.map((d) => d.ping), 20);
   const yMax = Math.ceil(maxPing / 10) * 10;
   const yDomain = useMemo(() => [0, yMax] as const, [yMax]);
-  const formatPing = useCallback((value: number | string | readonly (number | string)[] | undefined) => {
-    const pingValue = Array.isArray(value) ? (value[0] ?? 0) : (value ?? 0);
-    return [`${pingValue} ms`, "Ping"] as const;
-  }, []);
+  const formatPing = useCallback(
+    (value: number | string | readonly (number | string)[] | undefined) => {
+      const pingValue = Array.isArray(value) ? (value[0] ?? 0) : (value ?? 0);
+      return [`${pingValue} ms`, "Ping"] as const;
+    },
+    [],
+  );
 
   return (
     <div className="space-y-3">
       <div className="grid grid-cols-3 gap-2">
         {summaryCards.map((card) => (
-          <div key={card.label} className="rounded-lg border border-rm-border bg-rm-bg-surface/70 px-3 py-2">
-            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-rm-text-muted/70">{card.label}</p>
-            <p className="mt-1 text-[12px] font-bold text-rm-text">{card.value}</p>
+          <div
+            key={card.label}
+            className="rounded-lg border border-rm-border bg-rm-bg-surface/70 px-3 py-2"
+          >
+            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-rm-text-muted/70">
+              {card.label}
+            </p>
+            <p className="mt-1 text-[12px] font-bold text-rm-text">
+              {card.value}
+            </p>
           </div>
         ))}
       </div>
 
       {/* Ping Chart */}
       <div className="bg-rm-bg-surface rounded-lg p-2 border border-rm-border">
-        <Suspense fallback={<div className="h-[80px] w-full flex items-center justify-center text-[10px] text-rm-text-muted">Loading chart...</div>}>
+        <Suspense
+          fallback={
+            <div className="h-[80px] w-full flex items-center justify-center text-[10px] text-rm-text-muted">
+              Loading chart...
+            </div>
+          }
+        >
           <ResponsiveContainer width="100%" height={80}>
             <AreaChart data={chartData} margin={CHART_MARGIN}>
               <defs>
@@ -462,19 +558,24 @@ function ConnectionTab({
           </p>
           <p>
             <span className="font-semibold">Outbound packet loss rate:</span>{" "}
-            <span className="font-bold text-rm-text">{(stats.packetLossRate * 100).toFixed(1)}%</span>
+            <span className="font-bold text-rm-text">
+              {(stats.packetLossRate * 100).toFixed(1)}%
+            </span>
           </p>
           <p>
             <span className="font-semibold">Remote tracks:</span>{" "}
-            <span className="font-bold text-rm-text">{stats.remoteTrackCount}</span>
+            <span className="font-bold text-rm-text">
+              {stats.remoteTrackCount}
+            </span>
           </p>
         </div>
       </div>
 
       {/* Info Blurb */}
       <div className="text-[11px] text-rm-text-muted leading-relaxed bg-rm-bg-surface/50 rounded-lg p-2.5 border border-rm-border">
-        You may notice delayed audio at 250 ms or higher. You may sound robotic if your
-        packet loss rate is over 10%. If the problem persists, disconnect and try again.
+        You may notice delayed audio at 250 ms or higher. You may sound robotic
+        if your packet loss rate is over 10%. If the problem persists,
+        disconnect and try again.
       </div>
     </div>
   );
@@ -490,15 +591,17 @@ function PrivacyTab() {
           <LockIcon className="text-[#23a559]" size={20} />
         </div>
         <div>
-          <p className="text-[14px] font-bold text-rm-text">End-to-End Encrypted</p>
+          <p className="text-[14px] font-bold text-rm-text">
+            End-to-End Encrypted
+          </p>
           <p className="text-[12px] text-rm-text-muted">
             Your voice connection is secured with DTLS-SRTP encryption.
           </p>
         </div>
       </div>
       <div className="text-[11px] text-rm-text-muted leading-relaxed bg-rm-bg-surface/50 rounded-lg p-2.5 border border-rm-border">
-        Audio and video data is encrypted in transit using DTLS-SRTP. Only participants
-        in this voice channel can hear or see your media.
+        Audio and video data is encrypted in transit using DTLS-SRTP. Only
+        participants in this voice channel can hear or see your media.
       </div>
     </div>
   );
@@ -506,7 +609,13 @@ function PrivacyTab() {
 
 // ── Inline SVG Icons ────────────────────────────────────────────────────────
 
-function LockIcon({ className = "", size = 14 }: { className?: string; size?: number }) {
+function LockIcon({
+  className = "",
+  size = 14,
+}: {
+  className?: string;
+  size?: number;
+}) {
   return (
     <svg
       xmlns="http://www.w3.org/2000/svg"
@@ -528,7 +637,17 @@ function LockIcon({ className = "", size = 14 }: { className?: string; size?: nu
 
 function ExternalLinkIcon() {
   return (
-    <svg xmlns="http://www.w3.org/2000/svg" width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width={12}
+      height={12}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
       <polyline points="15,3 21,3 21,9" />
       <line x1="10" y1="14" x2="21" y2="3" />
@@ -538,7 +657,17 @@ function ExternalLinkIcon() {
 
 function ClipboardIcon() {
   return (
-    <svg xmlns="http://www.w3.org/2000/svg" width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width={12}
+      height={12}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <rect width="8" height="4" x="8" y="2" rx="1" ry="1" />
       <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
     </svg>

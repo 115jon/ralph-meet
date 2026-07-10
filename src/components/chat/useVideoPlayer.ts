@@ -20,7 +20,7 @@ export interface VideoPlayerState {
   /** Brief splash animation key – incremented on each play/pause toggle */
   splashKey: number;
   /** Which icon to show in the splash: 'play' | 'pause' */
-  splashIcon: 'play' | 'pause';
+  splashIcon: "play" | "pause";
 }
 
 const initialState: VideoPlayerState = {
@@ -39,7 +39,7 @@ const initialState: VideoPlayerState = {
   dragProgress: 0,
   isFullscreen: false,
   splashKey: 0,
-  splashIcon: 'play',
+  splashIcon: "play",
 };
 
 /**
@@ -52,17 +52,21 @@ interface UseVideoPlayerOptions {
 
 export function useVideoPlayer(
   isViewer: boolean,
-  {
-    persistVolumePreference = true,
-  }: UseVideoPlayerOptions = {},
+  { persistVolumePreference = true }: UseVideoPlayerOptions = {},
 ) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const progressRef = useRef<HTMLDivElement>(null);
   /** Outer container – used for custom fullscreen instead of native video fullscreen */
   const containerRef = useRef<HTMLDivElement>(null);
-  const preferredVolume = useMediaPlaybackSettingsStore((state) => state.videoVolume);
-  const preferredMuted = useMediaPlaybackSettingsStore((state) => state.videoMuted);
-  const updatePlaybackSettings = useMediaPlaybackSettingsStore((state) => state.updateSettings);
+  const preferredVolume = useMediaPlaybackSettingsStore(
+    (state) => state.videoVolume,
+  );
+  const preferredMuted = useMediaPlaybackSettingsStore(
+    (state) => state.videoMuted,
+  );
+  const updatePlaybackSettings = useMediaPlaybackSettingsStore(
+    (state) => state.updateSettings,
+  );
 
   const [state, dispatch] = useReducer(
     (s: VideoPlayerState, a: Partial<VideoPlayerState>) => ({ ...s, ...a }),
@@ -70,28 +74,46 @@ export function useVideoPlayer(
     () => ({
       ...initialState,
       volume: persistVolumePreference ? preferredVolume : initialState.volume,
-      muted: persistVolumePreference ? (preferredMuted || preferredVolume === 0) : initialState.muted,
+      muted: persistVolumePreference
+        ? preferredMuted || preferredVolume === 0
+        : initialState.muted,
     }),
   );
 
   const {
-    playing, currentTime, duration, progress, buffered,
-    volume, muted, showControls, hovering, dragging, dragProgress, splashKey
+    playing,
+    currentTime,
+    duration,
+    progress,
+    buffered,
+    volume,
+    muted,
+    showControls,
+    hovering,
+    dragging,
+    dragProgress,
+    splashKey,
   } = state;
 
   const hideTimerRef = useRef<ReturnType<typeof setTimeout>>(null);
 
-  const shouldPersistPreference = useCallback(() => (
-    persistVolumePreference && !(videoRef.current?.defaultMuted ?? false)
-  ), [persistVolumePreference]);
+  const shouldPersistPreference = useCallback(
+    () => persistVolumePreference && !(videoRef.current?.defaultMuted ?? false),
+    [persistVolumePreference],
+  );
 
-  const persistPlaybackSettings = useCallback((updates: { volume?: number; muted?: boolean }) => {
-    if (!shouldPersistPreference()) return;
-    updatePlaybackSettings({
-      ...(updates.volume !== undefined ? { videoVolume: updates.volume } : {}),
-      ...(updates.muted !== undefined ? { videoMuted: updates.muted } : {}),
-    });
-  }, [shouldPersistPreference, updatePlaybackSettings]);
+  const persistPlaybackSettings = useCallback(
+    (updates: { volume?: number; muted?: boolean }) => {
+      if (!shouldPersistPreference()) return;
+      updatePlaybackSettings({
+        ...(updates.volume !== undefined
+          ? { videoVolume: updates.volume }
+          : {}),
+        ...(updates.muted !== undefined ? { videoMuted: updates.muted } : {}),
+      });
+    },
+    [shouldPersistPreference, updatePlaybackSettings],
+  );
 
   useEffect(() => {
     const v = videoRef.current;
@@ -137,14 +159,14 @@ export function useVideoPlayer(
     if (!v) return;
     if (v.ended) {
       v.currentTime = 0;
-      v.play().catch(() => { });
-      dispatch({ splashKey: splashKey + 1, splashIcon: 'play' });
+      v.play().catch(() => {});
+      dispatch({ splashKey: splashKey + 1, splashIcon: "play" });
     } else if (v.paused) {
-      v.play().catch(() => { });
-      dispatch({ splashKey: splashKey + 1, splashIcon: 'play' });
+      v.play().catch(() => {});
+      dispatch({ splashKey: splashKey + 1, splashIcon: "play" });
     } else {
       v.pause();
-      dispatch({ splashKey: splashKey + 1, splashIcon: 'pause' });
+      dispatch({ splashKey: splashKey + 1, splashIcon: "pause" });
     }
   }, [splashKey]);
 
@@ -157,16 +179,19 @@ export function useVideoPlayer(
     persistPlaybackSettings({ muted: nextMuted });
   }, [persistPlaybackSettings]);
 
-  const handleVolumeChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const v = videoRef.current;
-    if (!v) return;
-    const val = Math.min(1, Math.max(0, parseFloat(e.target.value)));
-    const nextMuted = val === 0;
-    v.volume = val;
-    v.muted = nextMuted;
-    dispatch({ volume: val, muted: nextMuted });
-    persistPlaybackSettings({ volume: val, muted: nextMuted });
-  }, [persistPlaybackSettings]);
+  const handleVolumeChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const v = videoRef.current;
+      if (!v) return;
+      const val = Math.min(1, Math.max(0, parseFloat(e.target.value)));
+      const nextMuted = val === 0;
+      v.volume = val;
+      v.muted = nextMuted;
+      dispatch({ volume: val, muted: nextMuted });
+      persistPlaybackSettings({ volume: val, muted: nextMuted });
+    },
+    [persistPlaybackSettings],
+  );
 
   // ── Custom fullscreen (container, not <video>) ─────────────────
   const toggleFullscreen = useCallback(() => {
@@ -174,10 +199,10 @@ export function useVideoPlayer(
     if (!el) return;
 
     if (document.fullscreenElement) {
-      document.exitFullscreen().catch(() => { });
+      document.exitFullscreen().catch(() => {});
     } else {
       if (el.requestFullscreen) {
-        el.requestFullscreen().catch(() => { });
+        el.requestFullscreen().catch(() => {});
       } else if ((el as any).webkitRequestFullscreen) {
         (el as any).webkitRequestFullscreen();
       }
@@ -189,8 +214,8 @@ export function useVideoPlayer(
     const onFsChange = () => {
       dispatch({ isFullscreen: !!document.fullscreenElement });
     };
-    document.addEventListener('fullscreenchange', onFsChange);
-    return () => document.removeEventListener('fullscreenchange', onFsChange);
+    document.addEventListener("fullscreenchange", onFsChange);
+    return () => document.removeEventListener("fullscreenchange", onFsChange);
   }, []);
 
   // ── Seek / drag ────────────────────────────────────────────────
@@ -201,19 +226,25 @@ export function useVideoPlayer(
     return Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
   }, []);
 
-  const handleSeekClick = useCallback((e: React.MouseEvent<HTMLElement>) => {
-    if (dragging) return;
-    const v = videoRef.current;
-    if (!v || !duration) return;
-    const ratio = getRatioFromEvent(e.clientX);
-    v.currentTime = ratio * duration;
-  }, [duration, dragging, getRatioFromEvent]);
+  const handleSeekClick = useCallback(
+    (e: React.MouseEvent<HTMLElement>) => {
+      if (dragging) return;
+      const v = videoRef.current;
+      if (!v || !duration) return;
+      const ratio = getRatioFromEvent(e.clientX);
+      v.currentTime = ratio * duration;
+    },
+    [duration, dragging, getRatioFromEvent],
+  );
 
-  const handleDragStart = useCallback((e: React.MouseEvent<HTMLElement>) => {
-    e.preventDefault();
-    const ratio = getRatioFromEvent(e.clientX);
-    dispatch({ dragging: true, dragProgress: ratio * 100 });
-  }, [getRatioFromEvent]);
+  const handleDragStart = useCallback(
+    (e: React.MouseEvent<HTMLElement>) => {
+      e.preventDefault();
+      const ratio = getRatioFromEvent(e.clientX);
+      dispatch({ dragging: true, dragProgress: ratio * 100 });
+    },
+    [getRatioFromEvent],
+  );
 
   useEffect(() => {
     if (!dragging) return;
@@ -245,19 +276,23 @@ export function useVideoPlayer(
     const v = videoRef.current;
     if (!v) return;
 
-    const onPlay = () => dispatch({ playing: true, ended: false, hasStarted: true });
+    const onPlay = () =>
+      dispatch({ playing: true, ended: false, hasStarted: true });
     const onPause = () => dispatch({ playing: false });
-    const onEnded = () => dispatch({ playing: false, ended: true, showControls: true });
+    const onEnded = () =>
+      dispatch({ playing: false, ended: true, showControls: true });
     const onTimeUpdate = () => {
       dispatch({
         currentTime: v.currentTime,
-        ...(v.duration && { progress: (v.currentTime / v.duration) * 100 })
+        ...(v.duration && { progress: (v.currentTime / v.duration) * 100 }),
       });
     };
     const onDurationChange = () => dispatch({ duration: v.duration || 0 });
     const onProgress = () => {
       if (v.buffered.length > 0 && v.duration) {
-        dispatch({ buffered: (v.buffered.end(v.buffered.length - 1) / v.duration) * 100 });
+        dispatch({
+          buffered: (v.buffered.end(v.buffered.length - 1) / v.duration) * 100,
+        });
       }
     };
 
@@ -284,27 +319,27 @@ export function useVideoPlayer(
     const handleKey = (e: KeyboardEvent) => {
       const v = videoRef.current;
       if (!v) return;
-      if (e.key === ' ' || e.key === 'k') {
+      if (e.key === " " || e.key === "k") {
         e.preventDefault();
         e.stopPropagation();
         togglePlay();
-      } else if (e.key === 'm') {
+      } else if (e.key === "m") {
         const nextMuted = !v.muted;
         v.muted = nextMuted;
         dispatch({ muted: nextMuted });
         persistPlaybackSettings({ muted: nextMuted });
-      } else if (e.key === 'f') {
+      } else if (e.key === "f") {
         toggleFullscreen();
-      } else if (e.key === 'ArrowRight') {
+      } else if (e.key === "ArrowRight") {
         e.stopPropagation();
         v.currentTime = Math.min(v.duration || 0, v.currentTime + 5);
-      } else if (e.key === 'ArrowLeft') {
+      } else if (e.key === "ArrowLeft") {
         e.stopPropagation();
         v.currentTime = Math.max(0, v.currentTime - 5);
       }
     };
-    window.addEventListener('keydown', handleKey);
-    return () => window.removeEventListener('keydown', handleKey);
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
   }, [isViewer, persistPlaybackSettings, togglePlay, toggleFullscreen]);
 
   // ── Derived values ─────────────────────────────────────────────

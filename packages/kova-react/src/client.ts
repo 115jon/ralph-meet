@@ -72,7 +72,13 @@ export interface ClientOptions {
  * Call once at module level and share the result via context.
  */
 export function createKovaAuthClient(opts: ClientOptions) {
-  const { authUrl, publishableKey, plugins = {}, fetchOptions = {}, sessionOptions } = opts;
+  const {
+    authUrl,
+    publishableKey,
+    plugins = {},
+    fetchOptions = {},
+    sessionOptions,
+  } = opts;
 
   // Merge in the X-Publishable-Key header when a key is provided.
   // This is how the server identifies which registered application is making
@@ -99,7 +105,7 @@ export function createKovaAuthClient(opts: ClientOptions) {
       ...fetchOptions,
       headers: {
         ...sdkHeaders,
-        ...(fetchOptions.headers as Record<string, string> | undefined ?? {}),
+        ...((fetchOptions.headers as Record<string, string> | undefined) ?? {}),
       },
     },
   });
@@ -139,8 +145,8 @@ function buildPluginList(cfg: PluginConfig) {
       typeof tfCfg === "object" && tfCfg !== null && tfCfg.onTwoFactorRedirect
         ? tfCfg.onTwoFactorRedirect
         : () => {
-          // No-op: allow the calling component to manage the 2FA flow
-        };
+            // No-op: allow the calling component to manage the 2FA flow
+          };
     plugins.push(twoFactorClient({ onTwoFactorRedirect: onRedirect }));
   }
 
@@ -159,7 +165,7 @@ function buildPluginList(cfg: PluginConfig) {
       organizationClient({
         teams: { enabled: teams },
         dynamicAccessControl: { enabled: dac },
-      })
+      }),
     );
   }
 

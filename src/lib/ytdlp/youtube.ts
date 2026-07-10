@@ -47,12 +47,14 @@ const WEB_SAFARI_INNERTUBE_ATTEMPT = {
 const TV_INNERTUBE_ATTEMPT = {
   name: "tv",
   apiKey: FALLBACK_INNERTUBE_API_KEY,
-  userAgent: "Mozilla/5.0 (ChromiumStylePlatform) Cobalt/25.lts.30.1034943-gold (unlike Gecko), Unknown_TV_Unknown_0/Unknown (Unknown, Unknown)",
+  userAgent:
+    "Mozilla/5.0 (ChromiumStylePlatform) Cobalt/25.lts.30.1034943-gold (unlike Gecko), Unknown_TV_Unknown_0/Unknown (Unknown, Unknown)",
   context: {
     client: {
       clientName: "TVHTML5",
       clientVersion: "7.20260114.12.00",
-      userAgent: "Mozilla/5.0 (ChromiumStylePlatform) Cobalt/25.lts.30.1034943-gold (unlike Gecko), Unknown_TV_Unknown_0/Unknown (Unknown, Unknown)",
+      userAgent:
+        "Mozilla/5.0 (ChromiumStylePlatform) Cobalt/25.lts.30.1034943-gold (unlike Gecko), Unknown_TV_Unknown_0/Unknown (Unknown, Unknown)",
       hl: "en",
       gl: "US",
       timeZone: "UTC",
@@ -68,7 +70,8 @@ const TV_INNERTUBE_ATTEMPT = {
 const ANDROID_VR_INNERTUBE_ATTEMPT = {
   name: "android_vr",
   apiKey: FALLBACK_INNERTUBE_API_KEY,
-  userAgent: "com.google.android.apps.youtube.vr.oculus/1.65.10 (Linux; U; Android 12L; eureka-user Build/SQ3A.220605.009.A1) gzip",
+  userAgent:
+    "com.google.android.apps.youtube.vr.oculus/1.65.10 (Linux; U; Android 12L; eureka-user Build/SQ3A.220605.009.A1) gzip",
   context: {
     client: {
       clientName: "ANDROID_VR",
@@ -76,7 +79,8 @@ const ANDROID_VR_INNERTUBE_ATTEMPT = {
       deviceMake: "Oculus",
       deviceModel: "Quest 3",
       androidSdkVersion: 32,
-      userAgent: "com.google.android.apps.youtube.vr.oculus/1.65.10 (Linux; U; Android 12L; eureka-user Build/SQ3A.220605.009.A1) gzip",
+      userAgent:
+        "com.google.android.apps.youtube.vr.oculus/1.65.10 (Linux; U; Android 12L; eureka-user Build/SQ3A.220605.009.A1) gzip",
       hl: "en",
       osName: "Android",
       osVersion: "12L",
@@ -99,7 +103,8 @@ const ANDROID_INNERTUBE_ATTEMPT = {
       clientName: "ANDROID",
       clientVersion: "21.02.35",
       androidSdkVersion: 30,
-      userAgent: "com.google.android.youtube/21.02.35 (Linux; U; Android 11) gzip",
+      userAgent:
+        "com.google.android.youtube/21.02.35 (Linux; U; Android 11) gzip",
       hl: "en",
       osName: "Android",
       osVersion: "11",
@@ -116,14 +121,16 @@ const ANDROID_INNERTUBE_ATTEMPT = {
 const IOS_INNERTUBE_ATTEMPT = {
   name: "ios",
   apiKey: FALLBACK_INNERTUBE_API_KEY,
-  userAgent: "com.google.ios.youtube/21.02.3 (iPhone16,2; U; CPU iOS 18_3_2 like Mac OS X;)",
+  userAgent:
+    "com.google.ios.youtube/21.02.3 (iPhone16,2; U; CPU iOS 18_3_2 like Mac OS X;)",
   context: {
     client: {
       clientName: "IOS",
       clientVersion: "21.02.3",
       deviceMake: "Apple",
       deviceModel: "iPhone16,2",
-      userAgent: "com.google.ios.youtube/21.02.3 (iPhone16,2; U; CPU iOS 18_3_2 like Mac OS X;)",
+      userAgent:
+        "com.google.ios.youtube/21.02.3 (iPhone16,2; U; CPU iOS 18_3_2 like Mac OS X;)",
       hl: "en",
       osName: "iPhone",
       osVersion: "18.3.2.22D82",
@@ -194,17 +201,16 @@ export interface YouTubePlaylistBrowseResult {
 
 const WEB_INNERTUBE_CONFIG_TTL_MS = 10 * 60 * 1000;
 
-const YOUTUBE_SEARCH_FILTER_PARAMS: Record<YouTubeCatalogSearchFilter, string> = {
-  video: "EgIQAQ%3D%3D",
-  playlist: "EgIQAw%3D%3D",
-};
+const YOUTUBE_SEARCH_FILTER_PARAMS: Record<YouTubeCatalogSearchFilter, string> =
+  {
+    video: "EgIQAQ%3D%3D",
+    playlist: "EgIQAw%3D%3D",
+  };
 
-let cachedWebInnertubeConfig:
-  | {
-    value: WebInnertubeSession;
-    expiresAt: number;
-  }
-  | null = null;
+let cachedWebInnertubeConfig: {
+  value: WebInnertubeSession;
+  expiresAt: number;
+} | null = null;
 
 export function __resetYouTubeInnertubeCacheForTests() {
   cachedWebInnertubeConfig = null;
@@ -227,7 +233,10 @@ function toStringValue(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value : null;
 }
 
-function deepMerge(base: Record<string, unknown>, incoming: Record<string, unknown>) {
+function deepMerge(
+  base: Record<string, unknown>,
+  incoming: Record<string, unknown>,
+) {
   const merged: Record<string, unknown> = { ...base };
 
   for (const [key, value] of Object.entries(incoming)) {
@@ -265,7 +274,7 @@ function parseJsonObjectAt(source: string, openingBraceIndex: number) {
       continue;
     }
 
-    if (character === "\"" || character === "'") {
+    if (character === '"' || character === "'") {
       inString = true;
       quote = character;
       continue;
@@ -364,7 +373,10 @@ function findStringDeep(value: unknown, key: string): string | null {
   return null;
 }
 
-function firstObjectByKey(value: unknown, key: string): Record<string, unknown> | null {
+function firstObjectByKey(
+  value: unknown,
+  key: string,
+): Record<string, unknown> | null {
   if (!value) return null;
 
   if (Array.isArray(value)) {
@@ -433,7 +445,10 @@ function getMimeCodecs(mimeType: string | null) {
   if (!mimeType) return [];
   const match = mimeType.match(/codecs="([^"]+)"/i);
   if (!match?.[1]) return [];
-  return match[1].split(",").map((codec) => codec.trim()).filter(Boolean);
+  return match[1]
+    .split(",")
+    .map((codec) => codec.trim())
+    .filter(Boolean);
 }
 
 function getStreamFormats(playerResponse: Record<string, unknown>) {
@@ -442,14 +457,22 @@ function getStreamFormats(playerResponse: Record<string, unknown>) {
     : null;
   if (!streamingData) return [];
 
-  const formats = Array.isArray(streamingData.formats) ? streamingData.formats : [];
-  const adaptiveFormats = Array.isArray(streamingData.adaptiveFormats) ? streamingData.adaptiveFormats : [];
+  const formats = Array.isArray(streamingData.formats)
+    ? streamingData.formats
+    : [];
+  const adaptiveFormats = Array.isArray(streamingData.adaptiveFormats)
+    ? streamingData.adaptiveFormats
+    : [];
   return [...formats, ...adaptiveFormats].filter(isRecord);
 }
 
-function prepareFormatCandidate(input: Record<string, unknown>): PreparedFormatCandidate | null {
+function prepareFormatCandidate(
+  input: Record<string, unknown>,
+): PreparedFormatCandidate | null {
   const signatureCipher = toStringValue(input.signatureCipher);
-  const cipherParams = signatureCipher ? new URLSearchParams(signatureCipher) : null;
+  const cipherParams = signatureCipher
+    ? new URLSearchParams(signatureCipher)
+    : null;
   const baseUrl = toStringValue(input.url) ?? cipherParams?.get("url") ?? null;
   if (!baseUrl) return null;
 
@@ -457,8 +480,14 @@ function prepareFormatCandidate(input: Record<string, unknown>): PreparedFormatC
   const mimeType = toStringValue(input.mimeType);
   const container = getMimeContainer(mimeType);
   const codecs = getMimeCodecs(mimeType);
-  const hasAudio = !!input.audioQuality || mimeType?.startsWith("audio/") || !!input.audioChannels;
-  const hasVideo = !!input.qualityLabel || mimeType?.startsWith("video/") || (!!input.width && !!input.height);
+  const hasAudio =
+    !!input.audioQuality ||
+    mimeType?.startsWith("audio/") ||
+    !!input.audioChannels;
+  const hasVideo =
+    !!input.qualityLabel ||
+    mimeType?.startsWith("video/") ||
+    (!!input.width && !!input.height);
 
   return {
     url: parsedUrl.toString(),
@@ -482,7 +511,9 @@ function prepareFormatCandidate(input: Record<string, unknown>): PreparedFormatC
       hasAudio,
       hasVideo,
       projectionType: toStringValue(input.projectionType),
-      expiresAt: toNumber(parsedUrl.searchParams.get("expire")) ? Number(parsedUrl.searchParams.get("expire")) * 1000 : null,
+      expiresAt: toNumber(parsedUrl.searchParams.get("expire"))
+        ? Number(parsedUrl.searchParams.get("expire")) * 1000
+        : null,
     },
   };
 }
@@ -502,7 +533,9 @@ function scoreFormat(
     if (!format.hasAudio) return -1;
     score += format.hasVideo ? 40 : 140;
     score += Math.floor((format.bitrate ?? 0) / 1000);
-    score += format.audioSampleRate ? Math.floor(format.audioSampleRate / 1000) : 0;
+    score += format.audioSampleRate
+      ? Math.floor(format.audioSampleRate / 1000)
+      : 0;
     return score;
   }
 
@@ -535,13 +568,15 @@ export function pickPreferredFormat(
   preferredKind: PreferredPlaybackKind,
   preferredContainer?: "mp4" | "webm",
 ) {
-  return [...formats]
-    .map((format) => ({
-      format,
-      score: scoreFormat(format, preferredKind, preferredContainer),
-    }))
-    .filter((entry) => entry.score >= 0)
-    .sort((left, right) => right.score - left.score)[0]?.format ?? null;
+  return (
+    [...formats]
+      .map((format) => ({
+        format,
+        score: scoreFormat(format, preferredKind, preferredContainer),
+      }))
+      .filter((entry) => entry.score >= 0)
+      .sort((left, right) => right.score - left.score)[0]?.format ?? null
+  );
 }
 
 function sanitizeInnertubeContext(ytcfg: Record<string, unknown>) {
@@ -567,12 +602,15 @@ function splitCombinedSetCookieHeader(headerValue: string) {
 
 function extractCookieHeaderFromResponse(response: Response) {
   const cookieValues =
-    typeof (response.headers as Headers & { getSetCookie?: () => string[] }).getSetCookie === "function"
-      ? (response.headers as Headers & { getSetCookie: () => string[] }).getSetCookie()
+    typeof (response.headers as Headers & { getSetCookie?: () => string[] })
+      .getSetCookie === "function"
+      ? (
+          response.headers as Headers & { getSetCookie: () => string[] }
+        ).getSetCookie()
       : (() => {
-        const combined = response.headers.get("set-cookie");
-        return combined ? splitCombinedSetCookieHeader(combined) : [];
-      })();
+          const combined = response.headers.get("set-cookie");
+          return combined ? splitCombinedSetCookieHeader(combined) : [];
+        })();
 
   const cookieMap = new Map<string, string>();
 
@@ -631,8 +669,14 @@ async function fetchWatchPage(videoId: string) {
   };
 }
 
-async function fetchWebInnertubeConfig(forceRefresh = false): Promise<WebInnertubeSession> {
-  if (!forceRefresh && cachedWebInnertubeConfig && cachedWebInnertubeConfig.expiresAt > Date.now()) {
+async function fetchWebInnertubeConfig(
+  forceRefresh = false,
+): Promise<WebInnertubeSession> {
+  if (
+    !forceRefresh &&
+    cachedWebInnertubeConfig &&
+    cachedWebInnertubeConfig.expiresAt > Date.now()
+  ) {
     return cachedWebInnertubeConfig.value;
   }
 
@@ -653,14 +697,18 @@ async function fetchWebInnertubeConfig(forceRefresh = false): Promise<WebInnertu
   const config: WebInnertubeSession = {
     attempt: {
       name: "web",
-      apiKey: findStringDeep(ytcfg, "INNERTUBE_API_KEY") ?? FALLBACK_INNERTUBE_API_KEY,
+      apiKey:
+        findStringDeep(ytcfg, "INNERTUBE_API_KEY") ??
+        FALLBACK_INNERTUBE_API_KEY,
       userAgent: YOUTUBE_USER_AGENT,
       context,
       clientVersion:
-        findStringDeep(ytcfg, "INNERTUBE_CLIENT_VERSION")
-        ?? findStringDeep(context, "clientVersion")
-        ?? DEFAULT_INNERTUBE_CONTEXT.client.clientVersion,
-      clientNameHeader: String(toNumber(ytcfg.INNERTUBE_CONTEXT_CLIENT_NAME) ?? 1),
+        findStringDeep(ytcfg, "INNERTUBE_CLIENT_VERSION") ??
+        findStringDeep(context, "clientVersion") ??
+        DEFAULT_INNERTUBE_CONTEXT.client.clientVersion,
+      clientNameHeader: String(
+        toNumber(ytcfg.INNERTUBE_CONTEXT_CLIENT_NAME) ?? 1,
+      ),
       visitorData: findStringDeep(ytcfg, "VISITOR_DATA"),
       origin: "https://www.youtube.com",
     },
@@ -709,7 +757,7 @@ async function postWebInnertubeRequest(
     try {
       const headers = new Headers({
         "Content-Type": "application/json",
-        "Origin": attempt.origin,
+        Origin: attempt.origin,
         "User-Agent": attempt.userAgent,
         "X-YouTube-Client-Name": attempt.clientNameHeader,
         "X-YouTube-Client-Version": attempt.clientVersion,
@@ -719,21 +767,26 @@ async function postWebInnertubeRequest(
         headers.set("X-Goog-Visitor-Id", attempt.visitorData);
       }
 
-      const response = await fetch(`https://www.youtube.com/youtubei/v1/${endpoint}?key=${encodeURIComponent(attempt.apiKey)}`, {
-        method: "POST",
-        headers,
-        body: JSON.stringify({
-          context: attempt.context,
-          ...body,
-        }),
-      });
+      const response = await fetch(
+        `https://www.youtube.com/youtubei/v1/${endpoint}?key=${encodeURIComponent(attempt.apiKey)}`,
+        {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            context: attempt.context,
+            ...body,
+          }),
+        },
+      );
 
       if (!response.ok) {
-        lastError = new Error(`YouTube ${endpoint} request failed (${response.status})`);
+        lastError = new Error(
+          `YouTube ${endpoint} request failed (${response.status})`,
+        );
         continue;
       }
 
-      return await response.json() as Record<string, unknown>;
+      return (await response.json()) as Record<string, unknown>;
     } catch (error) {
       lastError = error;
     }
@@ -756,9 +809,11 @@ async function fetchPlayerResponseFromInnertube(
   const apiKey = findStringDeep(ytcfg, "INNERTUBE_API_KEY");
   const context = sanitizeInnertubeContext(ytcfg);
   const clientVersion =
-    findStringDeep(context, "clientVersion")
-    ?? DEFAULT_INNERTUBE_CONTEXT.client.clientVersion;
-  const clientNameHeader = String(toNumber(ytcfg.INNERTUBE_CONTEXT_CLIENT_NAME) ?? 1);
+    findStringDeep(context, "clientVersion") ??
+    DEFAULT_INNERTUBE_CONTEXT.client.clientVersion;
+  const clientNameHeader = String(
+    toNumber(ytcfg.INNERTUBE_CONTEXT_CLIENT_NAME) ?? 1,
+  );
   const visitorData = findStringDeep(ytcfg, "VISITOR_DATA");
   const sts = toNumber(findStringDeep(ytcfg, "STS"));
   const attempts: InnertubeRequestAttempt[] = [];
@@ -794,7 +849,7 @@ async function fetchPlayerResponseFromInnertube(
       Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
       "Accept-Language": "en-us,en;q=0.5",
       "Content-Type": "application/json",
-      "Origin": attempt.origin,
+      Origin: attempt.origin,
       "Sec-Fetch-Mode": "navigate",
       "User-Agent": attempt.userAgent,
       "X-YouTube-Client-Name": attempt.clientNameHeader,
@@ -823,16 +878,20 @@ async function fetchPlayerResponseFromInnertube(
 
     if (sts) {
       const playbackContext = body.playbackContext as Record<string, unknown>;
-      const contentPlaybackContext = playbackContext.contentPlaybackContext as Record<string, unknown>;
+      const contentPlaybackContext =
+        playbackContext.contentPlaybackContext as Record<string, unknown>;
       contentPlaybackContext.signatureTimestamp = sts;
     }
 
     try {
-      const response = await fetch(`https://www.youtube.com/youtubei/v1/player?key=${encodeURIComponent(attempt.apiKey)}`, {
-        method: "POST",
-        headers,
-        body: JSON.stringify(body),
-      });
+      const response = await fetch(
+        `https://www.youtube.com/youtubei/v1/player?key=${encodeURIComponent(attempt.apiKey)}`,
+        {
+          method: "POST",
+          headers,
+          body: JSON.stringify(body),
+        },
+      );
 
       if (!response.ok) {
         diagnostics.push({
@@ -844,7 +903,7 @@ async function fetchPlayerResponseFromInnertube(
         continue;
       }
 
-      const payload = await response.json() as Record<string, unknown>;
+      const payload = (await response.json()) as Record<string, unknown>;
       lastSuccessfulPayload = payload;
       const formatCount = getStreamFormats(payload).length;
       diagnostics.push({
@@ -884,7 +943,9 @@ async function fetchPlayerCode(playerUrl: string) {
   });
 
   if (!response.ok) {
-    throw new Error(`YouTube player script request failed (${response.status})`);
+    throw new Error(
+      `YouTube player script request failed (${response.status})`,
+    );
   }
 
   return response.text();
@@ -921,37 +982,48 @@ function hasPlayableFormats(playerResponse: Record<string, unknown>) {
   return getStreamFormats(playerResponse).length > 0;
 }
 
-function describePlayabilityStatus(playerResponse: Record<string, unknown> | null | undefined) {
+function describePlayabilityStatus(
+  playerResponse: Record<string, unknown> | null | undefined,
+) {
   if (!playerResponse || !isRecord(playerResponse.playabilityStatus)) {
     return null;
   }
 
   const playabilityStatus = playerResponse.playabilityStatus;
-  const errorScreen = isRecord(playabilityStatus.errorScreen) ? playabilityStatus.errorScreen : null;
-  const playerErrorMessageRenderer = errorScreen && isRecord(errorScreen.playerErrorMessageRenderer)
-    ? errorScreen.playerErrorMessageRenderer
+  const errorScreen = isRecord(playabilityStatus.errorScreen)
+    ? playabilityStatus.errorScreen
     : null;
-  const playerErrorReason = playerErrorMessageRenderer && isRecord(playerErrorMessageRenderer.reason)
-    ? playerErrorMessageRenderer.reason
-    : null;
-  const playerLegacyDesktopYpcOfferRenderer = errorScreen && isRecord(errorScreen.playerLegacyDesktopYpcOfferRenderer)
-    ? errorScreen.playerLegacyDesktopYpcOfferRenderer
-    : null;
+  const playerErrorMessageRenderer =
+    errorScreen && isRecord(errorScreen.playerErrorMessageRenderer)
+      ? errorScreen.playerErrorMessageRenderer
+      : null;
+  const playerErrorReason =
+    playerErrorMessageRenderer && isRecord(playerErrorMessageRenderer.reason)
+      ? playerErrorMessageRenderer.reason
+      : null;
+  const playerLegacyDesktopYpcOfferRenderer =
+    errorScreen && isRecord(errorScreen.playerLegacyDesktopYpcOfferRenderer)
+      ? errorScreen.playerLegacyDesktopYpcOfferRenderer
+      : null;
   const status = toStringValue(playabilityStatus.status);
   const reason =
-    toStringValue(playabilityStatus.reason)
-    ?? toStringValue(playerErrorReason?.simpleText)
-    ?? toStringValue(playerLegacyDesktopYpcOfferRenderer?.itemTitle);
+    toStringValue(playabilityStatus.reason) ??
+    toStringValue(playerErrorReason?.simpleText) ??
+    toStringValue(playerLegacyDesktopYpcOfferRenderer?.itemTitle);
 
   return [status, reason].filter(Boolean).join(": ") || null;
 }
 
-function summarizeInnertubeDiagnostics(diagnostics: InnertubePlayerAttemptDiagnostic[]) {
+function summarizeInnertubeDiagnostics(
+  diagnostics: InnertubePlayerAttemptDiagnostic[],
+) {
   return diagnostics
     .map((diagnostic) =>
       [
         diagnostic.client,
-        diagnostic.httpStatus !== null ? `http ${diagnostic.httpStatus}` : "http ?",
+        diagnostic.httpStatus !== null
+          ? `http ${diagnostic.httpStatus}`
+          : "http ?",
         diagnostic.playability ?? "playability unknown",
         `${diagnostic.formatCount} formats`,
       ].join(", "),
@@ -967,7 +1039,9 @@ function getPlayerUrlFromYtCfg(ytcfg: Record<string, unknown>, html: string) {
   if (fromConfig) return fromConfig;
 
   const regexMatch = html.match(/"jsUrl":"([^"]+)"/);
-  return toAbsolutePlayerUrl(regexMatch?.[1] ? regexMatch[1].replace(/\\u0026/g, "&") : null);
+  return toAbsolutePlayerUrl(
+    regexMatch?.[1] ? regexMatch[1].replace(/\\u0026/g, "&") : null,
+  );
 }
 
 export async function searchYouTubeCatalog(
@@ -987,19 +1061,20 @@ export async function searchYouTubeCatalog(
     filter === "video"
       ? findObjectsByKey(payload, "videoRenderer")
       : [
-        ...findObjectsByKey(payload, "lockupViewModel")
-          .filter((node) => node.contentType === "LOCKUP_CONTENT_TYPE_PLAYLIST"),
-        ...findObjectsByKey(payload, "playlistRenderer"),
-      ];
+          ...findObjectsByKey(payload, "lockupViewModel").filter(
+            (node) => node.contentType === "LOCKUP_CONTENT_TYPE_PLAYLIST",
+          ),
+          ...findObjectsByKey(payload, "playlistRenderer"),
+        ];
 
   const deduped: Record<string, unknown>[] = [];
   const seen = new Set<string>();
 
   for (const node of nodes) {
     const key =
-      toStringValue(node.contentId)
-      ?? toStringValue(node.playlistId)
-      ?? toStringValue(node.videoId);
+      toStringValue(node.contentId) ??
+      toStringValue(node.playlistId) ??
+      toStringValue(node.videoId);
     if (!key || seen.has(key)) continue;
     seen.add(key);
     deduped.push(node);
@@ -1058,17 +1133,20 @@ export function extractYouTubeVideoId(input: string) {
     }
 
     if (
-      hostname === "youtube.com"
-      || hostname === "www.youtube.com"
-      || hostname === "m.youtube.com"
-      || hostname === "music.youtube.com"
+      hostname === "youtube.com" ||
+      hostname === "www.youtube.com" ||
+      hostname === "m.youtube.com" ||
+      hostname === "music.youtube.com"
     ) {
       if (url.pathname === "/watch") {
         const candidate = url.searchParams.get("v")?.trim() ?? "";
         return /^[\w-]{6,20}$/.test(candidate) ? candidate : null;
       }
 
-      if (url.pathname.startsWith("/shorts/") || url.pathname.startsWith("/live/")) {
+      if (
+        url.pathname.startsWith("/shorts/") ||
+        url.pathname.startsWith("/live/")
+      ) {
         const candidate = url.pathname.split("/")[2] ?? "";
         return /^[\w-]{6,20}$/.test(candidate) ? candidate : null;
       }
@@ -1127,7 +1205,10 @@ export async function resolveYouTubePlayback(
       ).catch(() => null);
       if (webInnertubeResult) {
         playerResponse = webInnertubeResult.payload ?? playerResponse;
-        innertubeDiagnostics = [...innertubeDiagnostics, ...webInnertubeResult.diagnostics];
+        innertubeDiagnostics = [
+          ...innertubeDiagnostics,
+          ...webInnertubeResult.diagnostics,
+        ];
       }
     }
   }
@@ -1139,13 +1220,19 @@ export async function resolveYouTubePlayback(
     try {
       watchPage = await fetchWatchPage(videoId);
     } catch (error) {
-      const diagnosticsSummary = summarizeInnertubeDiagnostics(innertubeDiagnostics);
-      const errorMessage = error instanceof Error ? error.message : String(error);
+      const diagnosticsSummary =
+        summarizeInnertubeDiagnostics(innertubeDiagnostics);
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
       throw new Error(
         [
           errorMessage,
-          diagnosticsSummary ? `Innertube attempts: ${diagnosticsSummary}` : null,
-        ].filter(Boolean).join(" | "),
+          diagnosticsSummary
+            ? `Innertube attempts: ${diagnosticsSummary}`
+            : null,
+        ]
+          .filter(Boolean)
+          .join(" | "),
       );
     }
     const watchYtcfg = collectYtCfg(watchPage.html);
@@ -1158,27 +1245,38 @@ export async function resolveYouTubePlayback(
       { includeFallbacks: false },
     ).catch(() => null);
     if (watchInnertubeResult) {
-      innertubeDiagnostics = [...innertubeDiagnostics, ...watchInnertubeResult.diagnostics];
+      innertubeDiagnostics = [
+        ...innertubeDiagnostics,
+        ...watchInnertubeResult.diagnostics,
+      ];
     }
 
     playerResponse =
-      (watchInnertubeResult?.payload && hasPlayableFormats(watchInnertubeResult.payload)
+      (watchInnertubeResult?.payload &&
+      hasPlayableFormats(watchInnertubeResult.payload)
         ? watchInnertubeResult.payload
-        : null)
-      ?? (initialPlayerResponse && hasPlayableFormats(initialPlayerResponse) ? initialPlayerResponse : null)
-      ?? playerResponse;
+        : null) ??
+      (initialPlayerResponse && hasPlayableFormats(initialPlayerResponse)
+        ? initialPlayerResponse
+        : null) ??
+      playerResponse;
   }
 
   if (!playerResponse) {
-    const playabilityDescription = describePlayabilityStatus(initialPlayerResponse);
-    const diagnosticsSummary = summarizeInnertubeDiagnostics(innertubeDiagnostics);
+    const playabilityDescription = describePlayabilityStatus(
+      initialPlayerResponse,
+    );
+    const diagnosticsSummary =
+      summarizeInnertubeDiagnostics(innertubeDiagnostics);
     throw new Error(
       [
         playabilityDescription
           ? `Could not extract YouTube streaming data from the watch page or Innertube (${playabilityDescription})`
           : "Could not extract YouTube streaming data from the watch page or Innertube",
         diagnosticsSummary ? `Innertube attempts: ${diagnosticsSummary}` : null,
-      ].filter(Boolean).join(" | "),
+      ]
+        .filter(Boolean)
+        .join(" | "),
     );
   }
 
@@ -1188,21 +1286,36 @@ export async function resolveYouTubePlayback(
 
   if (candidates.length === 0) {
     const playabilityDescription =
-      describePlayabilityStatus(playerResponse)
-      ?? describePlayabilityStatus(initialPlayerResponse);
-    const diagnosticsSummary = summarizeInnertubeDiagnostics(innertubeDiagnostics);
+      describePlayabilityStatus(playerResponse) ??
+      describePlayabilityStatus(initialPlayerResponse);
+    const diagnosticsSummary =
+      summarizeInnertubeDiagnostics(innertubeDiagnostics);
     throw new Error(
       [
         playabilityDescription
           ? `YouTube returned no playable formats (${playabilityDescription})`
           : "YouTube returned no playable formats",
         diagnosticsSummary ? `Innertube attempts: ${diagnosticsSummary}` : null,
-      ].filter(Boolean).join(" | "),
+      ]
+        .filter(Boolean)
+        .join(" | "),
     );
   }
 
-  const sigChallenges = [...new Set(candidates.map((candidate) => candidate.sigChallenge).filter((value): value is string => !!value))];
-  const nChallenges = [...new Set(candidates.map((candidate) => candidate.nChallenge).filter((value): value is string => !!value))];
+  const sigChallenges = [
+    ...new Set(
+      candidates
+        .map((candidate) => candidate.sigChallenge)
+        .filter((value): value is string => !!value),
+    ),
+  ];
+  const nChallenges = [
+    ...new Set(
+      candidates
+        .map((candidate) => candidate.nChallenge)
+        .filter((value): value is string => !!value),
+    ),
+  ];
 
   let solvedChallenges = {
     n: {} as Record<string, string | null>,
@@ -1210,12 +1323,13 @@ export async function resolveYouTubePlayback(
   };
 
   if ((sigChallenges.length > 0 || nChallenges.length > 0) && !playerUrl) {
-    webConfig = webConfig ?? await fetchWebInnertubeConfig().catch(() => null);
+    webConfig =
+      webConfig ?? (await fetchWebInnertubeConfig().catch(() => null));
     playerUrl = webConfig?.playerUrl ?? null;
   }
 
   if ((sigChallenges.length > 0 || nChallenges.length > 0) && !playerUrl) {
-    watchPage = watchPage ?? await fetchWatchPage(videoId);
+    watchPage = watchPage ?? (await fetchWatchPage(videoId));
     const watchYtcfg = collectYtCfg(watchPage.html);
     playerUrl = getPlayerUrlFromYtCfg(watchYtcfg, watchPage.html);
   }
@@ -1228,33 +1342,45 @@ export async function resolveYouTubePlayback(
     });
   }
 
-  const resolvedFormats = dedupeFormats(candidates.map((candidate) => {
-    const url = new URL(candidate.url);
+  const resolvedFormats = dedupeFormats(
+    candidates.map((candidate) => {
+      const url = new URL(candidate.url);
 
-    if (candidate.sigChallenge) {
-      const solvedSig = solvedChallenges.sig[candidate.sigChallenge];
-      if (!solvedSig) {
-        throw new Error("yt-dlp solver could not decode a YouTube signature challenge");
+      if (candidate.sigChallenge) {
+        const solvedSig = solvedChallenges.sig[candidate.sigChallenge];
+        if (!solvedSig) {
+          throw new Error(
+            "yt-dlp solver could not decode a YouTube signature challenge",
+          );
+        }
+        url.searchParams.set(candidate.sigParameter ?? "signature", solvedSig);
       }
-      url.searchParams.set(candidate.sigParameter ?? "signature", solvedSig);
-    }
 
-    if (candidate.nChallenge) {
-      const solvedN = solvedChallenges.n[candidate.nChallenge];
-      if (!solvedN) {
-        throw new Error("yt-dlp solver could not decode a YouTube n challenge");
+      if (candidate.nChallenge) {
+        const solvedN = solvedChallenges.n[candidate.nChallenge];
+        if (!solvedN) {
+          throw new Error(
+            "yt-dlp solver could not decode a YouTube n challenge",
+          );
+        }
+        url.searchParams.set("n", solvedN);
       }
-      url.searchParams.set("n", solvedN);
-    }
 
-    return {
-      ...candidate.format,
-      url: url.toString(),
-      expiresAt: toNumber(url.searchParams.get("expire")) ? Number(url.searchParams.get("expire")) * 1000 : candidate.format.expiresAt,
-    };
-  }));
+      return {
+        ...candidate.format,
+        url: url.toString(),
+        expiresAt: toNumber(url.searchParams.get("expire"))
+          ? Number(url.searchParams.get("expire")) * 1000
+          : candidate.format.expiresAt,
+      };
+    }),
+  );
 
-  const selectedFormat = pickPreferredFormat(resolvedFormats, preferredKind, preferredContainer);
+  const selectedFormat = pickPreferredFormat(
+    resolvedFormats,
+    preferredKind,
+    preferredContainer,
+  );
   const meta = resolveVideoMeta(playerResponse);
 
   return {

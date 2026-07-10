@@ -53,7 +53,10 @@ function extractMessage(err: unknown): string {
   if (err instanceof Error) return err.message;
   if (typeof (err as { message?: unknown }).message === "string")
     return (err as { message: string }).message;
-  if (typeof (err as { error?: { message?: unknown } }).error?.message === "string")
+  if (
+    typeof (err as { error?: { message?: unknown } }).error?.message ===
+    "string"
+  )
     return (err as { error: { message: string } }).error.message;
   return "An unexpected error occurred.";
 }
@@ -76,7 +79,9 @@ export function useSignUp(): UseSignUpReturn {
   const [isLoading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [verificationPending, setVerificationPending] = useState(false);
-  const [retryAfterSeconds, setRetryAfterSeconds] = useState<number | null>(null);
+  const [retryAfterSeconds, setRetryAfterSeconds] = useState<number | null>(
+    null,
+  );
 
   const clearError = useCallback(() => setError(null), []);
 
@@ -96,7 +101,9 @@ export function useSignUp(): UseSignUpReturn {
 
         // Better Auth sets `requireEmailVerification` — the response body
         // won't contain a session token; it returns a redirect or empty body.
-        const data = (res as unknown as { data?: { requiresEmailVerification?: boolean } })?.data;
+        const data = (
+          res as unknown as { data?: { requiresEmailVerification?: boolean } }
+        )?.data;
         if (data?.requiresEmailVerification) {
           setVerificationPending(true);
         }
@@ -116,7 +123,7 @@ export function useSignUp(): UseSignUpReturn {
         setLoading(false);
       }
     },
-    [client, afterSignUpUrl]
+    [client, afterSignUpUrl],
   );
 
   return {

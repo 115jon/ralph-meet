@@ -21,7 +21,10 @@ const stereoLog = clog("SFU:Stereo");
 /** True when the browser is Chromium-based (Chrome, Edge, Opera, Brave). */
 function isChromium(): boolean {
   if (typeof navigator === "undefined") return false;
-  return navigator.userAgent.includes("Chrome") || navigator.userAgent.includes("Edg");
+  return (
+    navigator.userAgent.includes("Chrome") ||
+    navigator.userAgent.includes("Edg")
+  );
 }
 
 export function createTrueStereoStream(rawStream: MediaStream): MediaStream {
@@ -30,14 +33,15 @@ export function createTrueStereoStream(rawStream: MediaStream): MediaStream {
 
   // Log the actual channel count from getUserMedia
   const settings = rawAudioTrack.getSettings();
-  stereoLog.info(`Raw mic track: channelCount=${settings.channelCount ?? 'unknown'}, sampleRate=${settings.sampleRate}, label="${rawAudioTrack.label}"`);
+  stereoLog.info(
+    `Raw mic track: channelCount=${settings.channelCount ?? "unknown"}, sampleRate=${settings.sampleRate}, label="${rawAudioTrack.label}"`,
+  );
 
   // Firefox/Safari natively support stereo WebRTC and do not need the Web Audio bypass.
   // Applying it on Firefox breaks the audio track on initial load (suspended AudioContext without user gesture).
   if (!isChromium()) {
     return rawStream;
   }
-
 
   // Create a Web Audio graph to produce a non-getUserMedia stereo track.
   // PeerConnection does NOT apply its internal APM to tracks from
@@ -48,23 +52,25 @@ export function createTrueStereoStream(rawStream: MediaStream): MediaStream {
 
   // Critical: set ALL channel properties on the destination BEFORE connecting
   destination.channelCount = 2;
-  destination.channelCountMode = 'explicit';
-  destination.channelInterpretation = 'discrete';  // Don't mix channels!
+  destination.channelCountMode = "explicit";
+  destination.channelInterpretation = "discrete"; // Don't mix channels!
 
   // Force source to output as many channels as it has
   source.channelCount = settings.channelCount ?? 2;
-  source.channelCountMode = 'max';
-  source.channelInterpretation = 'discrete';
+  source.channelCountMode = "max";
+  source.channelInterpretation = "discrete";
 
   source.connect(destination);
-  ctx.resume().catch(() => { });
+  ctx.resume().catch(() => {});
 
   const outTrack = destination.stream.getAudioTracks()[0];
-  stereoLog.info(`Web Audio bypass active — output track channelCount=${outTrack?.getSettings?.()?.channelCount ?? 'unknown'}`);
+  stereoLog.info(
+    `Web Audio bypass active — output track channelCount=${outTrack?.getSettings?.()?.channelCount ?? "unknown"}`,
+  );
 
   // Build a new stream with the bypassed audio + any video tracks
   const result = new MediaStream([outTrack]);
-  rawStream.getVideoTracks().forEach(t => result.addTrack(t));
+  rawStream.getVideoTracks().forEach((t) => result.addTrack(t));
   return result;
 }
 
@@ -78,12 +84,15 @@ export function createTrueStereoStream(rawStream: MediaStream): MediaStream {
  * keeps DTX=1 for bandwidth savings during silence.
  */
 export function mungeStereoOpus(sdp: string, prefix?: string): string {
-  const lines = sdp.split('\r\n');
+  const lines = sdp.split("\r\n");
   let opusPayload: string | null = null;
 
   // Find opus payload type
   for (const line of lines) {
-    if (line.toLowerCase().includes('a=rtpmap:') && line.toLowerCase().includes('opus/48000/2')) {
+    if (
+      line.toLowerCase().includes("a=rtpmap:") &&
+      line.toLowerCase().includes("opus/48000/2")
+    ) {
       const match = line.match(/a=rtpmap:(\d+) opus\/48000\/2/i);
       if (match) opusPayload = match[1];
     }
@@ -93,14 +102,16 @@ export function mungeStereoOpus(sdp: string, prefix?: string): string {
 
   // Use higher bitrate for screen sharing and keep screen/system audio continuous.
   // Voice keeps DTX for bandwidth savings during silence.
-  const isScreen = prefix === 'screen';
+  const isScreen = prefix === "screen";
   const bitrate = isScreen ? 192000 : 128000;
   const dtx = isScreen ? 0 : 1;
 
-  return lines.map(line => {
-    if (line.startsWith(`a=fmtp:${opusPayload}`)) {
-      return `a=fmtp:${opusPayload} minptime=10;useinbandfec=1;stereo=1;sprop-stereo=1;maxaveragebitrate=${bitrate};maxplaybackrate=48000;usedtx=${dtx};cbr=0`;
-    }
-    return line;
-  }).join('\r\n');
+  return lines
+    .map((line) => {
+      if (line.startsWith(`a=fmtp:${opusPayload}`)) {
+        return `a=fmtp:${opusPayload} minptime=10;useinbandfec=1;stereo=1;sprop-stereo=1;maxaveragebitrate=${bitrate};maxplaybackrate=48000;usedtx=${dtx};cbr=0`;
+      }
+      return line;
+    })
+    .join("\r\n");
 }

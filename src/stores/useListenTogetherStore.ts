@@ -13,7 +13,10 @@ export interface ListenTogetherRoomState {
 interface ListenTogetherStoreState {
   rooms: Record<string, ListenTogetherRoomState>;
   ensureRoom: (roomSlug: string) => void;
-  setSnapshot: (roomSlug: string, snapshot: ListenTogetherStateSnapshot) => void;
+  setSnapshot: (
+    roomSlug: string,
+    snapshot: ListenTogetherStateSnapshot,
+  ) => void;
   setLocalVolume: (roomSlug: string, volume: number) => void;
   setError: (roomSlug: string, error: ListenTogetherRoomState["error"]) => void;
   clearRoom: (roomSlug: string) => void;
@@ -31,7 +34,9 @@ function getListenTogetherVolumeStorageKey(roomSlug: string) {
 
 function readStoredListenTogetherVolume(roomSlug: string) {
   if (typeof window === "undefined") return DEFAULT_ROOM_STATE.localVolume;
-  const rawValue = localStorage.getItem(getListenTogetherVolumeStorageKey(roomSlug));
+  const rawValue = localStorage.getItem(
+    getListenTogetherVolumeStorageKey(roomSlug),
+  );
   const volume = rawValue ? Number(rawValue) : NaN;
   if (!Number.isFinite(volume)) return DEFAULT_ROOM_STATE.localVolume;
   return Math.max(0, Math.min(1, volume));
@@ -39,64 +44,69 @@ function readStoredListenTogetherVolume(roomSlug: string) {
 
 function writeStoredListenTogetherVolume(roomSlug: string, volume: number) {
   if (typeof window === "undefined") return;
-  localStorage.setItem(getListenTogetherVolumeStorageKey(roomSlug), volume.toString());
+  localStorage.setItem(
+    getListenTogetherVolumeStorageKey(roomSlug),
+    volume.toString(),
+  );
 }
 
-export const useListenTogetherStore = create<ListenTogetherStoreState>()((set) => ({
-  rooms: {},
-  ensureRoom: (roomSlug) =>
-    set((state) => {
-      if (!roomSlug || state.rooms[roomSlug]) return state;
-      return {
-        rooms: {
-          ...state.rooms,
-          [roomSlug]: {
-            ...DEFAULT_ROOM_STATE,
-            localVolume: readStoredListenTogetherVolume(roomSlug),
+export const useListenTogetherStore = create<ListenTogetherStoreState>()(
+  (set) => ({
+    rooms: {},
+    ensureRoom: (roomSlug) =>
+      set((state) => {
+        if (!roomSlug || state.rooms[roomSlug]) return state;
+        return {
+          rooms: {
+            ...state.rooms,
+            [roomSlug]: {
+              ...DEFAULT_ROOM_STATE,
+              localVolume: readStoredListenTogetherVolume(roomSlug),
+            },
           },
-        },
-      };
-    }),
-  setSnapshot: (roomSlug, snapshot) =>
-    set((state) => ({
-      rooms: {
-        ...state.rooms,
-        [roomSlug]: {
-          ...(state.rooms[roomSlug] ?? DEFAULT_ROOM_STATE),
-          snapshot,
-          error: null,
-        },
-      },
-    })),
-  setLocalVolume: (roomSlug, volume) =>
-    set((state) => {
-      const nextVolume = Math.max(0, Math.min(1, volume));
-      writeStoredListenTogetherVolume(roomSlug, nextVolume);
-      return {
+        };
+      }),
+    setSnapshot: (roomSlug, snapshot) =>
+      set((state) => ({
         rooms: {
           ...state.rooms,
           [roomSlug]: {
             ...(state.rooms[roomSlug] ?? DEFAULT_ROOM_STATE),
-            localVolume: nextVolume,
+            snapshot,
+            error: null,
           },
         },
-      };
-    }),
-  setError: (roomSlug, error) =>
-    set((state) => ({
-      rooms: {
-        ...state.rooms,
-        [roomSlug]: {
-          ...(state.rooms[roomSlug] ?? DEFAULT_ROOM_STATE),
-          error,
+      })),
+    setLocalVolume: (roomSlug, volume) =>
+      set((state) => {
+        const nextVolume = Math.max(0, Math.min(1, volume));
+        writeStoredListenTogetherVolume(roomSlug, nextVolume);
+        return {
+          rooms: {
+            ...state.rooms,
+            [roomSlug]: {
+              ...(state.rooms[roomSlug] ?? DEFAULT_ROOM_STATE),
+              localVolume: nextVolume,
+            },
+          },
+        };
+      }),
+    setError: (roomSlug, error) =>
+      set((state) => ({
+        rooms: {
+          ...state.rooms,
+          [roomSlug]: {
+            ...(state.rooms[roomSlug] ?? DEFAULT_ROOM_STATE),
+            error,
+          },
         },
-      },
-    })),
-  clearRoom: (roomSlug) =>
-    set((state) => {
-      if (!state.rooms[roomSlug]) return state;
-      const rooms = { ...state.rooms };
-      delete rooms[roomSlug];
-      return { rooms };
-    }),
-}));
+      })),
+    clearRoom: (roomSlug) =>
+      set((state) => {
+        if (!state.rooms[roomSlug]) return state;
+        const rooms = { ...state.rooms };
+        delete rooms[roomSlug];
+        return { rooms };
+      }),
+  }),
+);

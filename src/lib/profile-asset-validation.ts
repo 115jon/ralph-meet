@@ -45,27 +45,32 @@ function detectNameplateVideoType(bytes: Uint8Array): string | null {
   return null;
 }
 
-export function validateProfileBannerBuffer(buffer: ArrayBuffer):
-  | { ok: true; mimeType: string; ext: string }
-  | { ok: false; error: string } {
+export function validateProfileBannerBuffer(
+  buffer: ArrayBuffer,
+): { ok: true; mimeType: string; ext: string } | { ok: false; error: string } {
   return validateImageBuffer(buffer);
 }
 
-export function validateProfileNameplateBuffer(buffer: ArrayBuffer):
-  | { ok: true; mimeType: string; ext: string }
-  | { ok: false; error: string } {
+export function validateProfileNameplateBuffer(
+  buffer: ArrayBuffer,
+): { ok: true; mimeType: string; ext: string } | { ok: false; error: string } {
   const imageValidation = validateImageBuffer(buffer);
   if (imageValidation.ok) {
     return imageValidation;
   }
 
-  const headerBytes = new Uint8Array(buffer, 0, Math.min(buffer.byteLength, 64));
+  const headerBytes = new Uint8Array(
+    buffer,
+    0,
+    Math.min(buffer.byteLength, 64),
+  );
   const detectedType = detectNameplateVideoType(headerBytes);
 
   if (!detectedType || !ALLOWED_NAMEPLATE_VIDEO_TYPES.has(detectedType)) {
     return {
       ok: false,
-      error: "Invalid nameplate file. Only PNG, JPEG, GIF, WebP, AVIF, MP4, WebM, and OGG are allowed.",
+      error:
+        "Invalid nameplate file. Only PNG, JPEG, GIF, WebP, AVIF, MP4, WebM, and OGG are allowed.",
     };
   }
 

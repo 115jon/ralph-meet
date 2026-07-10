@@ -17,7 +17,9 @@ describe("media content filter helpers", () => {
 
   it("falls back safely for unsupported values", () => {
     expect(isMediaContentFilter("wild-west")).toBe(false);
-    expect(parseMediaContentFilter("wild-west")).toBe(DEFAULT_MEDIA_CONTENT_FILTER);
+    expect(parseMediaContentFilter("wild-west")).toBe(
+      DEFAULT_MEDIA_CONTENT_FILTER,
+    );
     expect(parseMediaContentFilter(null, "low")).toBe("low");
   });
 

@@ -5,17 +5,19 @@ export interface SensitiveAttachmentLike {
   is_nsfw?: boolean | null;
 }
 
-export function isVisualSensitiveAttachment(attachment: SensitiveAttachmentLike): boolean {
+export function isVisualSensitiveAttachment(
+  attachment: SensitiveAttachmentLike,
+): boolean {
   const contentType = attachment.content_type ?? "";
-  return !!attachment.is_nsfw && (
-    contentType.startsWith("image/") ||
-    contentType.startsWith("video/")
+  return (
+    !!attachment.is_nsfw &&
+    (contentType.startsWith("image/") || contentType.startsWith("video/"))
   );
 }
 
 export function shouldBlurSensitiveAttachment(
   attachment: SensitiveAttachmentLike,
-  contentFilter: MediaContentFilter
+  contentFilter: MediaContentFilter,
 ): boolean {
   return contentFilter === "high" && isVisualSensitiveAttachment(attachment);
 }

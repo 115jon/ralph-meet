@@ -91,7 +91,14 @@ type ShopGridContext = {
   header?: ReactNode;
 };
 
-const SHOP_PAGE_ORDER: ShopPage[] = ["featured", "all", "frames", "badges", "orbs", "misc"];
+const SHOP_PAGE_ORDER: ShopPage[] = [
+  "featured",
+  "all",
+  "frames",
+  "badges",
+  "orbs",
+  "misc",
+];
 const FEATURED_CATEGORY_PRIORITY = [
   "Flux Vol. 2",
   "Toy Story",
@@ -134,15 +141,24 @@ const PAGE_COPY: Record<ShopPage, { label: string; description: string }> = {
   },
 };
 
-const SHOP_PANEL_CLASS = "rounded-[24px] border border-rm-border bg-rm-bg-surface/90 shadow-[0_24px_80px_rgba(0,0,0,0.18)]";
-const SHOP_STATIC_GRID_CLASS = "grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(min(100%,17rem),1fr))]";
-const SHOP_FIELD_LABEL_CLASS = "mb-1 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-rm-text-muted";
-const SHOP_META_PILL_CLASS = "inline-flex items-center rounded-full border border-rm-border bg-rm-bg-surface/70 px-2.5 py-0.5 text-[11px] text-rm-text-muted backdrop-blur-sm";
-const SHOP_INPUT_CLASS = "h-10 rounded-2xl border-rm-border bg-rm-bg-surface/80 text-sm text-rm-text shadow-none placeholder:text-rm-text-muted focus-visible:border-primary/50 focus-visible:ring-primary/15";
-const SHOP_SELECT_TRIGGER_CLASS = "h-10 rounded-2xl border-rm-border bg-rm-bg-surface/80 px-4 py-0 text-sm font-medium text-rm-text shadow-none hover:bg-rm-bg-hover focus:border-primary/50";
-const SHOP_SELECT_MENU_CLASS = "rounded-2xl border-rm-border bg-rm-bg-floating/95 p-1.5 shadow-2xl backdrop-blur-xl";
-const SHOP_RAIL_SHELL_CLASS = "relative overflow-visible rounded-[2rem] border border-rm-border/80 bg-rm-bg-hover/25 p-1.5 shadow-[0_18px_45px_rgba(0,0,0,0.12)]";
-const SHOP_RAIL_CORE_CLASS = "relative overflow-visible rounded-[calc(2rem-0.375rem)] border border-white/5 bg-rm-bg-surface/92 p-3 sm:p-3.5";
+const SHOP_PANEL_CLASS =
+  "rounded-[24px] border border-rm-border bg-rm-bg-surface/90 shadow-[0_24px_80px_rgba(0,0,0,0.18)]";
+const SHOP_STATIC_GRID_CLASS =
+  "grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(min(100%,17rem),1fr))]";
+const SHOP_FIELD_LABEL_CLASS =
+  "mb-1 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-rm-text-muted";
+const SHOP_META_PILL_CLASS =
+  "inline-flex items-center rounded-full border border-rm-border bg-rm-bg-surface/70 px-2.5 py-0.5 text-[11px] text-rm-text-muted backdrop-blur-sm";
+const SHOP_INPUT_CLASS =
+  "h-10 rounded-2xl border-rm-border bg-rm-bg-surface/80 text-sm text-rm-text shadow-none placeholder:text-rm-text-muted focus-visible:border-primary/50 focus-visible:ring-primary/15";
+const SHOP_SELECT_TRIGGER_CLASS =
+  "h-10 rounded-2xl border-rm-border bg-rm-bg-surface/80 px-4 py-0 text-sm font-medium text-rm-text shadow-none hover:bg-rm-bg-hover focus:border-primary/50";
+const SHOP_SELECT_MENU_CLASS =
+  "rounded-2xl border-rm-border bg-rm-bg-floating/95 p-1.5 shadow-2xl backdrop-blur-xl";
+const SHOP_RAIL_SHELL_CLASS =
+  "relative overflow-visible rounded-[2rem] border border-rm-border/80 bg-rm-bg-hover/25 p-1.5 shadow-[0_18px_45px_rgba(0,0,0,0.12)]";
+const SHOP_RAIL_CORE_CLASS =
+  "relative overflow-visible rounded-[calc(2rem-0.375rem)] border border-white/5 bg-rm-bg-surface/92 p-3 sm:p-3.5";
 
 function pageIcon(page: ShopPage) {
   if (page === "featured") return Sparkles;
@@ -154,43 +170,50 @@ function pageIcon(page: ShopPage) {
 }
 
 const SHOP_GRID_COMPONENTS: GridComponents<ShopGridContext> = {
-  Header: ({ context }) => context.header ? <div className="pb-2">{context.header}</div> : null,
-  List: forwardRef<HTMLDivElement, ComponentPropsWithoutRef<"div">>(function ShopGridList(
-    { children, className, style, ...props },
-    ref,
-  ) {
-    return (
-      <div
-        ref={ref}
-        {...props}
-        className={cn(
-          "mx-auto flex w-full max-w-[1480px] flex-wrap content-start items-stretch px-3 py-4 sm:px-5 sm:py-5 lg:px-6 lg:py-6",
-          className
-        )}
-        style={style}
-      >
-        {children}
-      </div>
-    );
-  }),
-  Item: forwardRef<HTMLDivElement, ComponentPropsWithoutRef<"div">>(function ShopGridItem(
-    { children, className, style, ...props },
-    ref,
-  ) {
-    return (
-      <div
-        ref={ref}
-        {...props}
-        className={cn("flex h-[368px] min-w-0 w-full p-1.5 min-[420px]:h-[392px] min-[420px]:w-1/2 sm:p-2 lg:w-1/3 xl:h-[426px] 2xl:w-1/4", className)}
-        style={style}
-      >
-        {children}
-      </div>
-    );
-  }),
+  Header: ({ context }) =>
+    context.header ? <div className="pb-2">{context.header}</div> : null,
+  List: forwardRef<HTMLDivElement, ComponentPropsWithoutRef<"div">>(
+    function ShopGridList({ children, className, style, ...props }, ref) {
+      return (
+        <div
+          ref={ref}
+          {...props}
+          className={cn(
+            "mx-auto flex w-full max-w-[1480px] flex-wrap content-start items-stretch px-3 py-4 sm:px-5 sm:py-5 lg:px-6 lg:py-6",
+            className,
+          )}
+          style={style}
+        >
+          {children}
+        </div>
+      );
+    },
+  ),
+  Item: forwardRef<HTMLDivElement, ComponentPropsWithoutRef<"div">>(
+    function ShopGridItem({ children, className, style, ...props }, ref) {
+      return (
+        <div
+          ref={ref}
+          {...props}
+          className={cn(
+            "flex h-[368px] min-w-0 w-full p-1.5 min-[420px]:h-[392px] min-[420px]:w-1/2 sm:p-2 lg:w-1/3 xl:h-[426px] 2xl:w-1/4",
+            className,
+          )}
+          style={style}
+        >
+          {children}
+        </div>
+      );
+    },
+  ),
   ScrollSeekPlaceholder: function ShopGridPlaceholder() {
     return (
-      <div className={cn(SHOP_PANEL_CLASS, "h-full w-full overflow-hidden p-3 sm:p-4")}>
+      <div
+        className={cn(
+          SHOP_PANEL_CLASS,
+          "h-full w-full overflow-hidden p-3 sm:p-4",
+        )}
+      >
         <div className="h-52 animate-pulse rounded-[18px] bg-rm-bg-hover sm:h-60 sm:rounded-[22px]" />
         <div className="mt-3 h-5 w-2/3 animate-pulse rounded bg-rm-bg-hover sm:mt-4" />
         <div className="mt-2 h-4 w-1/2 animate-pulse rounded bg-rm-bg-hover" />
@@ -265,7 +288,8 @@ function detailStageClass(item: CollectibleCatalogItem) {
 }
 
 function paletteToSwatch(item: CollectibleCatalogItem, index: number) {
-  const key = `${item.palette ?? variantLabel(item) ?? item.name}`.toLowerCase();
+  const key =
+    `${item.palette ?? variantLabel(item) ?? item.name}`.toLowerCase();
   const swatches: Record<string, string> = {
     amethyst: "#9251ff",
     arctic: "#cdddf2",
@@ -279,7 +303,8 @@ function paletteToSwatch(item: CollectibleCatalogItem, index: number) {
     orange: "#fb923c",
     pink: "#ec7ed1",
     purple: "#b58cff",
-    rainbow: "linear-gradient(135deg, #ff5d6c, #c966ff 35%, #62b7ff 68%, #9cf08f)",
+    rainbow:
+      "linear-gradient(135deg, #ff5d6c, #c966ff 35%, #62b7ff 68%, #9cf08f)",
     red: "#ef4444",
     rgb: "linear-gradient(135deg, #ef4444, #d946ef 38%, #60a5fa 68%, #9ae66e)",
     white: "#ffffff",
@@ -304,7 +329,9 @@ function mergeCollectiblePreview(
 ) {
   const normalized = normalizeAvatarDisplay(display);
   const nextDisplay: AvatarDisplay = normalized ?? { version: 1 };
-  const collectibles: AvatarCollectibles = { ...(nextDisplay.collectibles ?? {}) };
+  const collectibles: AvatarCollectibles = {
+    ...(nextDisplay.collectibles ?? {}),
+  };
 
   if (!item) {
     if (kind === "avatar_decoration") delete collectibles.avatarDecoration;
@@ -334,13 +361,17 @@ function mergeCollectiblePreview(
 function groupCatalogItems(catalog: CollectiblesCatalog | null): ShopGroup[] {
   if (!catalog) return [];
 
-  const categoryById = new Map(catalog.categories.map((category) => [category.id, category] as const));
-  const categoryRank = new Map(catalog.categories.map((category, index) => [category.id, index] as const));
+  const categoryById = new Map(
+    catalog.categories.map((category) => [category.id, category] as const),
+  );
+  const categoryRank = new Map(
+    catalog.categories.map((category, index) => [category.id, index] as const),
+  );
   const groups = new Map<string, ShopGroup>();
 
   for (const item of catalog.items) {
     const title = normalizeBaseName(item.name);
-      const isItemBundle = isBundleCollectible(item);
+    const isItemBundle = isBundleCollectible(item);
     const key = isItemBundle
       ? `bundle|${item.categoryId}|${item.productId}`
       : `${item.kind}|${item.categoryId}|${title.toLowerCase()}`;
@@ -371,8 +402,9 @@ function groupCatalogItems(catalog: CollectiblesCatalog | null): ShopGroup[] {
       }),
     }))
     .sort((left, right) => {
-      const categoryOrder = (categoryRank.get(left.categoryId) ?? Number.MAX_SAFE_INTEGER)
-        - (categoryRank.get(right.categoryId) ?? Number.MAX_SAFE_INTEGER);
+      const categoryOrder =
+        (categoryRank.get(left.categoryId) ?? Number.MAX_SAFE_INTEGER) -
+        (categoryRank.get(right.categoryId) ?? Number.MAX_SAFE_INTEGER);
       if (categoryOrder !== 0) return categoryOrder;
       return left.title.localeCompare(right.title);
     });
@@ -383,14 +415,20 @@ function matchesQuery(group: ShopGroup, query: string) {
   const haystack = [
     group.title,
     group.categoryName,
-    ...group.items.map((item) => `${item.name} ${item.label ?? ""} ${item.summary}`),
-  ].join(" ").toLowerCase();
+    ...group.items.map(
+      (item) => `${item.name} ${item.label ?? ""} ${item.summary}`,
+    ),
+  ]
+    .join(" ")
+    .toLowerCase();
   return haystack.includes(query);
 }
 
 function heroCategory(catalog: CollectiblesCatalog | null) {
   if (!catalog) return null;
-  const byName = new Map(catalog.categories.map((category) => [category.name, category] as const));
+  const byName = new Map(
+    catalog.categories.map((category) => [category.name, category] as const),
+  );
   for (const name of FEATURED_CATEGORY_PRIORITY) {
     const match = byName.get(name);
     if (match?.bannerUrl) return match;
@@ -398,16 +436,23 @@ function heroCategory(catalog: CollectiblesCatalog | null) {
   return catalog.categories.find((category) => category.bannerUrl) ?? null;
 }
 
-function buildFeaturedSections(catalog: CollectiblesCatalog | null, groups: ShopGroup[]) {
+function buildFeaturedSections(
+  catalog: CollectiblesCatalog | null,
+  groups: ShopGroup[],
+) {
   if (!catalog) return [];
   const sections: ShopCollectionSection[] = [];
-  const byName = new Map(catalog.categories.map((category) => [category.name, category] as const));
+  const byName = new Map(
+    catalog.categories.map((category) => [category.name, category] as const),
+  );
   const seen = new Set<string>();
 
   for (const name of FEATURED_CATEGORY_PRIORITY) {
     const category = byName.get(name);
     if (!category) continue;
-    const sectionGroups = groups.filter((group) => group.categoryId === category.id);
+    const sectionGroups = groups.filter(
+      (group) => group.categoryId === category.id,
+    );
     if (!sectionGroups.length) continue;
     sections.push({ category, groups: sectionGroups });
     seen.add(category.id);
@@ -415,7 +460,9 @@ function buildFeaturedSections(catalog: CollectiblesCatalog | null, groups: Shop
 
   for (const category of catalog.categories) {
     if (seen.has(category.id)) continue;
-    const sectionGroups = groups.filter((group) => group.categoryId === category.id);
+    const sectionGroups = groups.filter(
+      (group) => group.categoryId === category.id,
+    );
     if (!sectionGroups.length) continue;
     sections.push({ category, groups: sectionGroups });
   }
@@ -423,7 +470,10 @@ function buildFeaturedSections(catalog: CollectiblesCatalog | null, groups: Shop
   return sections.slice(0, 10);
 }
 
-function previewCategoryForPage(catalog: CollectiblesCatalog | null, page: ShopPage) {
+function previewCategoryForPage(
+  catalog: CollectiblesCatalog | null,
+  page: ShopPage,
+) {
   if (!catalog) return null;
   const categories = catalog.categories;
 
@@ -431,18 +481,29 @@ function previewCategoryForPage(catalog: CollectiblesCatalog | null, page: ShopP
     return categories.find((category) => category.bannerUrl) ?? null;
   }
   if (page === "frames") {
-    return categories.find((category) => category.name === "Frames") ?? categories.find((category) => category.bannerUrl) ?? null;
+    return (
+      categories.find((category) => category.name === "Frames") ??
+      categories.find((category) => category.bannerUrl) ??
+      null
+    );
   }
   if (page === "badges") {
-    return categories.find((category) => category.name.includes("Nameplate")) ?? categories.find((category) => category.name === "Nameplates") ?? null;
+    return (
+      categories.find((category) => category.name.includes("Nameplate")) ??
+      categories.find((category) => category.name === "Nameplates") ??
+      null
+    );
   }
   if (page === "orbs") {
     return categories.find((category) => category.name === "Orb") ?? null;
   }
   if (page === "misc") {
-    return categories.find((category) => category.name === "Fruitables")
-      ?? categories.find((category) => category.name === "Fantasy")
-      ?? categories.find((category) => category.bannerUrl) ?? null;
+    return (
+      categories.find((category) => category.name === "Fruitables") ??
+      categories.find((category) => category.name === "Fantasy") ??
+      categories.find((category) => category.bannerUrl) ??
+      null
+    );
   }
   return heroCategory(catalog);
 }
@@ -469,7 +530,11 @@ function ShopPreview({
   playAnimation?: boolean;
   catalog?: CollectiblesCatalog | null;
 }) {
-  const previewDisplay = mergeCollectiblePreview(currentDisplay, item.kind, item);
+  const previewDisplay = mergeCollectiblePreview(
+    currentDisplay,
+    item.kind,
+    item,
+  );
 
   if (isBundleCollectible(item)) {
     const fg = item.previewAssets?.fg_static;
@@ -504,38 +569,47 @@ function ShopPreview({
     const frameItem = constituents.find((c) => c.kind === "profile_frame");
     const effectItem = constituents.find((c) => c.kind === "profile_effect");
 
-    const decorationUrl = decoration?.staticUrl ?? decoration?.previewUrl ?? decoration?.animatedUrl;
+    const decorationUrl =
+      decoration?.staticUrl ??
+      decoration?.previewUrl ??
+      decoration?.animatedUrl;
     const nameplateUrl = nameplate?.staticUrl ?? nameplate?.previewUrl;
 
-    const frameSelection = frameItem ? collectibleItemToSelection(frameItem).profileFrame : undefined;
-    const frameDisplay = frameSelection ? normalizeAvatarDisplay({
-      version: 1,
-      collectibles: {
-        profileFrame: frameSelection,
-      },
-    }) : null;
+    const frameSelection = frameItem
+      ? collectibleItemToSelection(frameItem).profileFrame
+      : undefined;
+    const frameDisplay = frameSelection
+      ? normalizeAvatarDisplay({
+          version: 1,
+          collectibles: {
+            profileFrame: frameSelection,
+          },
+        })
+      : null;
 
-    const effectSelection = effectItem ? collectibleItemToSelection(effectItem).profileEffect : undefined;
-    const effectDisplay = effectSelection ? normalizeAvatarDisplay({
-      version: 1,
-      collectibles: {
-        profileEffect: effectSelection,
-      },
-    }) : null;
+    const effectSelection = effectItem
+      ? collectibleItemToSelection(effectItem).profileEffect
+      : undefined;
+    const effectDisplay = effectSelection
+      ? normalizeAvatarDisplay({
+          version: 1,
+          collectibles: {
+            profileEffect: effectSelection,
+          },
+        })
+      : null;
 
     return (
       <div className="relative flex h-full items-center justify-center overflow-hidden rounded-[22px] bg-rm-bg-floating p-3 select-none">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.03),_transparent_55%)]" />
-        
+
         {/* 1. Profile Card (angled/skewed on the right) */}
         {effectItem && (
-          <div 
-            className="absolute top-4 -right-2 h-[190px] w-[114px] origin-top-right rotate-[4deg] overflow-hidden rounded-[12px] border border-rm-border bg-rm-bg-surface shadow-[0_16px_40px_rgba(0,0,0,0.5)]"
-          >
+          <div className="absolute top-4 -right-2 h-[190px] w-[114px] origin-top-right rotate-[4deg] overflow-hidden rounded-[12px] border border-rm-border bg-rm-bg-surface shadow-[0_16px_40px_rgba(0,0,0,0.5)]">
             {/* Banner */}
             <div className="absolute left-0 right-0 top-0 h-10 border-b border-rm-border bg-rm-bg-hover" />
             <div className="absolute inset-0 bg-[linear-gradient(180deg,_transparent,_rgba(17,20,27,0.96)_34%,_rgba(11,13,18,0.98))]" />
-            
+
             {/* Avatar Placeholder */}
             <div className="absolute left-2.5 top-6 z-10 flex h-7 w-7 items-center justify-center overflow-hidden rounded-full border border-rm-border bg-rm-bg-hover shadow-[0_6px_12px_rgba(0,0,0,0.3)]">
               <HomeIcon className="h-4.5 w-4.5 text-rm-text-muted" />
@@ -550,21 +624,37 @@ function ShopPreview({
 
             {/* Profile Effect Layer (Still frame/static version by default, no hover play) */}
             {effectDisplay && (
-              <ProfileCollectiblesLayer display={effectDisplay} effectOpacity={1} fit="cover" className="opacity-100" playAnimation={false} />
+              <ProfileCollectiblesLayer
+                display={effectDisplay}
+                effectOpacity={1}
+                fit="cover"
+                className="opacity-100"
+                playAnimation={false}
+              />
             )}
           </div>
         )}
 
         {/* 2. Avatar Decoration / Frame (top-left floating circle) */}
-        <div className={cn(
-          "absolute flex items-center justify-center rounded-full border border-rm-border bg-rm-bg-floating/80 shadow-[0_12px_32px_rgba(0,0,0,0.4)]",
-          effectItem ? "left-6 top-6 h-20 w-20" : "h-28 w-28"
-        )}>
-          <div className={cn(
-            "relative flex items-center justify-center overflow-visible rounded-full bg-rm-bg-hover",
-            effectItem ? "h-14 w-14" : "h-20 w-20"
-          )}>
-            <HomeIcon className={effectItem ? "h-7 w-7 text-rm-text-muted" : "h-10 w-10 text-rm-text-muted"} />
+        <div
+          className={cn(
+            "absolute flex items-center justify-center rounded-full border border-rm-border bg-rm-bg-floating/80 shadow-[0_12px_32px_rgba(0,0,0,0.4)]",
+            effectItem ? "left-6 top-6 h-20 w-20" : "h-28 w-28",
+          )}
+        >
+          <div
+            className={cn(
+              "relative flex items-center justify-center overflow-visible rounded-full bg-rm-bg-hover",
+              effectItem ? "h-14 w-14" : "h-20 w-20",
+            )}
+          >
+            <HomeIcon
+              className={
+                effectItem
+                  ? "h-7 w-7 text-rm-text-muted"
+                  : "h-10 w-10 text-rm-text-muted"
+              }
+            />
             {decorationUrl && (
               <img
                 src={decorationUrl}
@@ -573,29 +663,54 @@ function ShopPreview({
               />
             )}
             {frameDisplay && (
-              <ProfileCollectiblesLayer display={frameDisplay} className="absolute inset-0 z-20 scale-[1.1]" playAnimation={false} />
+              <ProfileCollectiblesLayer
+                display={frameDisplay}
+                className="absolute inset-0 z-20 scale-[1.1]"
+                playAnimation={false}
+              />
             )}
           </div>
         </div>
 
         {/* 3. Nameplate Bar (bottom-left floating bar) */}
         {nameplateUrl && (
-          <div className={cn(
-            "absolute flex items-center overflow-hidden rounded-[8px] border border-rm-border bg-rm-bg-floating shadow-[0_8px_24px_rgba(0,0,0,0.4)]",
-            effectItem ? "left-4 bottom-5 w-[120px] h-[34px] px-2.5 gap-2" : "bottom-6 w-[160px] h-[40px] px-3 gap-2.5"
-          )}>
+          <div
+            className={cn(
+              "absolute flex items-center overflow-hidden rounded-[8px] border border-rm-border bg-rm-bg-floating shadow-[0_8px_24px_rgba(0,0,0,0.4)]",
+              effectItem
+                ? "left-4 bottom-5 w-[120px] h-[34px] px-2.5 gap-2"
+                : "bottom-6 w-[160px] h-[40px] px-3 gap-2.5",
+            )}
+          >
             {/* Nameplate image background */}
-            <img src={nameplateUrl} alt="" className="absolute inset-0 h-full w-full object-cover opacity-85" />
+            <img
+              src={nameplateUrl}
+              alt=""
+              className="absolute inset-0 h-full w-full object-cover opacity-85"
+            />
             <div className="absolute inset-0 bg-[linear-gradient(90deg,_rgba(0,0,0,0.65),_rgba(0,0,0,0.38)_50%,_rgba(0,0,0,0.58))]" />
             {/* Avatar inside nameplate */}
-            <div className={cn(
-              "relative z-10 flex shrink-0 items-center justify-center rounded-full border border-rm-border bg-rm-bg-hover shadow-[0_2px_6px_rgba(0,0,0,0.3)]",
-              effectItem ? "h-[18px] w-[18px]" : "h-[22px] w-[22px]"
-            )}>
-              <HomeIcon className={effectItem ? "h-2.5 w-2.5 text-rm-text-secondary" : "h-3 w-3 text-rm-text-secondary"} />
+            <div
+              className={cn(
+                "relative z-10 flex shrink-0 items-center justify-center rounded-full border border-rm-border bg-rm-bg-hover shadow-[0_2px_6px_rgba(0,0,0,0.3)]",
+                effectItem ? "h-[18px] w-[18px]" : "h-[22px] w-[22px]",
+              )}
+            >
+              <HomeIcon
+                className={
+                  effectItem
+                    ? "h-2.5 w-2.5 text-rm-text-secondary"
+                    : "h-3 w-3 text-rm-text-secondary"
+                }
+              />
             </div>
             {/* Skeleton text bar */}
-            <div className={cn("rounded-full bg-white/25 z-10", effectItem ? "h-2 w-12" : "h-2.5 w-16")} />
+            <div
+              className={cn(
+                "rounded-full bg-white/25 z-10",
+                effectItem ? "h-2 w-12" : "h-2.5 w-16",
+              )}
+            />
           </div>
         )}
       </div>
@@ -619,13 +734,11 @@ function ShopPreview({
     );
   }
 
-
-
   if (item.kind === "nameplate") {
     return (
       <div className="relative flex h-full flex-col justify-center overflow-hidden rounded-[22px] bg-rm-bg-floating p-4 font-sans select-none">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.02),_transparent_60%)]" />
-        
+
         <div className="mx-auto flex w-full max-w-[280px] flex-col gap-2.5">
           {/* Row 1 (Skeleton) */}
           <div className="flex items-center opacity-[0.25]">
@@ -668,7 +781,11 @@ function ShopPreview({
             <div className="relative z-10 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white/5 border border-white/10 overflow-hidden">
               {playAnimation ? (
                 avatarSrc ? (
-                  <AvatarImage src={avatarSrc} alt="" display={previewDisplay} />
+                  <AvatarImage
+                    src={avatarSrc}
+                    alt=""
+                    display={previewDisplay}
+                  />
                 ) : (
                   <div className="flex h-full w-full items-center justify-center rounded-full text-[10px] font-bold text-rm-text-secondary">
                     {getDisplayInitial({ name: displayName })}
@@ -716,7 +833,7 @@ function ShopPreview({
           {/* Mock profile background banner / skeleton */}
           <div className="absolute left-0 right-0 top-0 h-10 border-b border-rm-border bg-rm-bg-hover" />
           <div className="absolute inset-0 bg-[linear-gradient(180deg,_transparent,_rgba(17,20,27,0.96)_34%,_rgba(11,13,18,0.98))]" />
-          
+
           {/* Mock small avatar placeholder with logo (no user avatar) */}
           <div className="absolute left-2 top-6 z-10 flex h-7 w-7 items-center justify-center overflow-hidden rounded-full border border-rm-border bg-rm-bg-hover shadow-[0_6px_12px_rgba(0,0,0,0.3)]">
             <HomeIcon className="h-4.5 w-4.5 text-rm-text-secondary" />
@@ -749,10 +866,16 @@ function ShopPreview({
             <div className="h-1.5 w-10 rounded-full bg-white/18 animate-pulse" />
             <div className="mt-1 h-1 w-14 rounded-full bg-white/10 animate-pulse" />
           </div>
-          
+
           {/* Profile effect overlay layer */}
-          <ProfileCollectiblesLayer display={previewDisplay} effectOpacity={1} fit="cover" className="opacity-100" playAnimation={playAnimation} />
-          
+          <ProfileCollectiblesLayer
+            display={previewDisplay}
+            effectOpacity={1}
+            fit="cover"
+            className="opacity-100"
+            playAnimation={playAnimation}
+          />
+
           {/* Subtle surface highlights */}
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.05),_transparent_42%),linear-gradient(180deg,_rgba(6,7,10,0.04),_rgba(6,7,10,0.18))]" />
         </div>
@@ -762,7 +885,7 @@ function ShopPreview({
 
   // Fallback return
   return (
-      <div className="relative h-full overflow-hidden rounded-[22px] bg-rm-bg-primary">
+    <div className="relative h-full overflow-hidden rounded-[22px] bg-rm-bg-primary">
       {item.previewUrl && (
         <img
           src={item.previewUrl}
@@ -772,7 +895,10 @@ function ShopPreview({
           decoding="async"
         />
       )}
-      <ProfileCollectiblesLayer display={previewDisplay} className="opacity-95" />
+      <ProfileCollectiblesLayer
+        display={previewDisplay}
+        className="opacity-95"
+      />
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.16),_transparent_45%),linear-gradient(180deg,_rgba(0,0,0,0.18),_rgba(0,0,0,0.52))]" />
       <div className="absolute bottom-4 left-4 z-10 h-20 w-20 rounded-full bg-white/5 shadow-[0_0_0_1px_rgba(255,255,255,0.08)]">
         {avatarSrc ? (
@@ -868,15 +994,16 @@ function CollectibleDetailModal({
   const showBundleStrip = isBundleCollectible(item) && previewItems.length > 1;
   const currentVariant = variantLabel(item);
   const previewBackdrop =
-    previewItem.previewAssets?.bg_static
-    ?? item.previewAssets?.bg_static
-    ?? group.category?.bannerUrl
-    ?? previewItem.previewUrl
-    ?? item.previewUrl
-    ?? null;
-  const previewDescriptor = previewItem.id === item.id && isBundleCollectible(item)
-    ? "Bundle scene"
-    : `${KIND_LABELS[previewItem.kind]} preview`;
+    previewItem.previewAssets?.bg_static ??
+    item.previewAssets?.bg_static ??
+    group.category?.bannerUrl ??
+    previewItem.previewUrl ??
+    item.previewUrl ??
+    null;
+  const previewDescriptor =
+    previewItem.id === item.id && isBundleCollectible(item)
+      ? "Bundle scene"
+      : `${KIND_LABELS[previewItem.kind]} preview`;
 
   return (
     <BaseModal onClose={onClose}>
@@ -898,7 +1025,12 @@ function CollectibleDetailModal({
             <div className="space-y-5">
               <div className={SHOP_RAIL_SHELL_CLASS}>
                 <div className={cn(SHOP_RAIL_CORE_CLASS, "p-2.5")}>
-                  <div className={cn("relative mx-auto w-full overflow-hidden rounded-[calc(2rem-0.5rem)] border border-white/8 bg-rm-bg-primary", detailStageClass(previewItem))}>
+                  <div
+                    className={cn(
+                      "relative mx-auto w-full overflow-hidden rounded-[calc(2rem-0.5rem)] border border-white/8 bg-rm-bg-primary",
+                      detailStageClass(previewItem),
+                    )}
+                  >
                     <ShopPreview
                       item={previewItem}
                       currentDisplay={currentDisplay}
@@ -913,9 +1045,15 @@ function CollectibleDetailModal({
 
               <div className="space-y-3">
                 <div className="flex flex-wrap gap-2">
-                  <span className={SHOP_META_PILL_CLASS}>{group.categoryName}</span>
-                  <span className={SHOP_META_PILL_CLASS}>{KIND_LABELS[item.kind]}</span>
-                  <span className={SHOP_META_PILL_CLASS}>Source {item.source}</span>
+                  <span className={SHOP_META_PILL_CLASS}>
+                    {group.categoryName}
+                  </span>
+                  <span className={SHOP_META_PILL_CLASS}>
+                    {KIND_LABELS[item.kind]}
+                  </span>
+                  <span className={SHOP_META_PILL_CLASS}>
+                    Source {item.source}
+                  </span>
                 </div>
 
                 <div>
@@ -926,10 +1064,14 @@ function CollectibleDetailModal({
                     {group.title}
                   </h2>
                   <p className="mt-1 text-sm text-rm-text-secondary">
-                    {currentVariant ? `${KIND_LABELS[item.kind]} / ${currentVariant}` : KIND_LABELS[item.kind]}
+                    {currentVariant
+                      ? `${KIND_LABELS[item.kind]} / ${currentVariant}`
+                      : KIND_LABELS[item.kind]}
                   </p>
                   <p className="mt-3 max-w-[30ch] text-sm leading-6 text-rm-text-muted">
-                    {showBundleStrip ? `Bundle includes ${previewItems.length} pieces. ${item.summary}` : item.summary}
+                    {showBundleStrip
+                      ? `Bundle includes ${previewItems.length} pieces. ${item.summary}`
+                      : item.summary}
                   </p>
                 </div>
               </div>
@@ -996,7 +1138,10 @@ function CollectibleDetailModal({
                     })}
                   </div>
                   <p className="text-xs text-rm-text-muted">
-                    Previewing {previewItem.id === item.id && isBundleCollectible(item) ? "the full bundle scene" : normalizeBaseName(previewItem.name)}
+                    Previewing{" "}
+                    {previewItem.id === item.id && isBundleCollectible(item)
+                      ? "the full bundle scene"
+                      : normalizeBaseName(previewItem.name)}
                   </p>
                 </div>
               ) : null}
@@ -1005,8 +1150,12 @@ function CollectibleDetailModal({
             <div className="mt-5 space-y-3 pt-1">
               <div className="rounded-[1.4rem] border border-rm-border bg-rm-bg-hover/70 px-4 py-3.5">
                 <div className="flex items-center justify-between gap-3 text-[11px] uppercase tracking-[0.14em] text-rm-text-muted">
-                  <span>{isOrbsExclusive(item) ? "Using Orbs" : "Archive access"}</span>
-                  <span className="truncate text-rm-text-secondary">{sourcePrice ?? "Free drop"}</span>
+                  <span>
+                    {isOrbsExclusive(item) ? "Using Orbs" : "Archive access"}
+                  </span>
+                  <span className="truncate text-rm-text-secondary">
+                    {sourcePrice ?? "Free drop"}
+                  </span>
                 </div>
                 <div className="mt-2 flex items-end justify-between gap-3">
                   <div>
@@ -1014,7 +1163,9 @@ function CollectibleDetailModal({
                       {sourcePrice ?? "Free"}
                     </div>
                     <p className="text-xs text-rm-text-muted">
-                      {isEquipped ? "Already applied to your profile." : "Redeem it, then equip it instantly."}
+                      {isEquipped
+                        ? "Already applied to your profile."
+                        : "Redeem it, then equip it instantly."}
                     </p>
                   </div>
                   {isEquipped ? (
@@ -1033,7 +1184,11 @@ function CollectibleDetailModal({
                   disabled={isApplying}
                   className="h-11 rounded-2xl bg-primary text-primary-foreground shadow-[0_16px_40px_var(--rm-glow)] transition-transform duration-200 hover:-translate-y-0.5 hover:bg-primary/90"
                 >
-                  {isApplying ? <Loader2 className="h-4 w-4 animate-spin" /> : <Gem className="h-4 w-4" />}
+                  {isApplying ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Gem className="h-4 w-4" />
+                  )}
                   {redeemButtonLabel(item)}
                 </Button>
                 <Button
@@ -1043,10 +1198,15 @@ function CollectibleDetailModal({
                   disabled={isApplying || isEquipped}
                   className={cn(
                     "h-11 rounded-2xl border-rm-border bg-rm-bg-hover/70 text-rm-text transition-all duration-200 hover:bg-rm-bg-hover",
-                    isEquipped && "border-primary/25 bg-primary/10 text-primary hover:bg-primary/10",
+                    isEquipped &&
+                      "border-primary/25 bg-primary/10 text-primary hover:bg-primary/10",
                   )}
                 >
-                  {isApplying ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+                  {isApplying ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Sparkles className="h-4 w-4" />
+                  )}
                   {isEquipped ? "Equipped" : "Equip now"}
                 </Button>
               </div>
@@ -1067,7 +1227,9 @@ function CollectibleDetailModal({
             <div className="relative flex h-full flex-col p-4 sm:p-6 lg:p-8">
               <div className="flex items-start justify-between gap-3">
                 <div className="flex flex-wrap gap-2">
-                  <span className={cn(SHOP_META_PILL_CLASS, "bg-rm-bg-floating/70")}>
+                  <span
+                    className={cn(SHOP_META_PILL_CLASS, "bg-rm-bg-floating/70")}
+                  >
                     {previewDescriptor}
                   </span>
                 </div>
@@ -1082,8 +1244,18 @@ function CollectibleDetailModal({
               </div>
 
               <div className="flex flex-1 items-center justify-center py-6">
-                <div className={cn(SHOP_RAIL_SHELL_CLASS, "w-full max-w-[760px] bg-black/15 p-2 shadow-[0_25px_80px_rgba(0,0,0,0.28)]")}>
-                  <div className={cn("relative mx-auto w-full overflow-hidden rounded-[calc(2rem-0.5rem)] border border-white/8 bg-rm-bg-floating/80", detailStageClass(previewItem))}>
+                <div
+                  className={cn(
+                    SHOP_RAIL_SHELL_CLASS,
+                    "w-full max-w-[760px] bg-black/15 p-2 shadow-[0_25px_80px_rgba(0,0,0,0.28)]",
+                  )}
+                >
+                  <div
+                    className={cn(
+                      "relative mx-auto w-full overflow-hidden rounded-[calc(2rem-0.5rem)] border border-white/8 bg-rm-bg-floating/80",
+                      detailStageClass(previewItem),
+                    )}
+                  >
                     <ShopPreview
                       item={previewItem}
                       currentDisplay={currentDisplay}
@@ -1099,7 +1271,9 @@ function CollectibleDetailModal({
               <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
                 <div>
                   <p className="text-sm font-semibold tracking-[-0.03em] text-rm-text">
-                    {previewItem.id === item.id && isBundleCollectible(item) ? item.name : normalizeBaseName(previewItem.name)}
+                    {previewItem.id === item.id && isBundleCollectible(item)
+                      ? item.name
+                      : normalizeBaseName(previewItem.name)}
                   </p>
                   <p className="text-xs text-rm-text-muted">
                     {previewItem.id === item.id && isBundleCollectible(item)
@@ -1219,7 +1393,7 @@ function ShopCard({
                       "h-5 w-5 rounded-[6px] border-2 transition-transform duration-200",
                       selected
                         ? "scale-105 border-white shadow-[0_0_0_1px_rgba(0,0,0,0.2)]"
-                        : "border-transparent hover:scale-105"
+                        : "border-transparent hover:scale-105",
                     )}
                     style={{ background: swatch }}
                     aria-label={variantLabel(variant) ?? variant.name}
@@ -1258,10 +1432,16 @@ function ShopCard({
               "h-10 w-full rounded-full px-4 text-sm font-semibold transition-all duration-200 sm:w-auto",
               isEquipped
                 ? "cursor-default border-primary/25 bg-primary/10 text-primary hover:bg-primary/10"
-                : "bg-primary text-primary-foreground shadow-[0_10px_30px_var(--rm-glow)] hover:-translate-y-0.5 hover:bg-primary/90"
+                : "bg-primary text-primary-foreground shadow-[0_10px_30px_var(--rm-glow)] hover:-translate-y-0.5 hover:bg-primary/90",
             )}
           >
-            {isApplying ? <Loader2 className="h-4 w-4 animate-spin" /> : isEquipped ? "Equipped" : "Equip free"}
+            {isApplying ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : isEquipped ? (
+              "Equipped"
+            ) : (
+              "Equip free"
+            )}
           </Button>
         </div>
       </div>
@@ -1275,7 +1455,10 @@ function LoadingCards() {
       {Array.from({ length: 8 }).map((_, index) => (
         <div
           key={index}
-          className={cn(SHOP_PANEL_CLASS, "overflow-hidden p-3 sm:rounded-[26px] sm:p-4")}
+          className={cn(
+            SHOP_PANEL_CLASS,
+            "overflow-hidden p-3 sm:rounded-[26px] sm:p-4",
+          )}
         >
           <div className="h-52 animate-pulse rounded-[18px] bg-rm-bg-hover sm:h-60 sm:rounded-[22px]" />
           <div className="mt-3 h-5 w-2/3 animate-pulse rounded bg-rm-bg-hover sm:mt-4" />
@@ -1290,16 +1473,24 @@ function LoadingCards() {
 export default function ShopView({ onMenuClick }: ShopViewProps) {
   const chatUser = useChatStore((state) => state.user);
   const { dispatch } = useChatActions();
-  const [catalog, setCatalog] = useState<CollectiblesCatalog | null>(() => getCachedCollectiblesCatalog());
+  const [catalog, setCatalog] = useState<CollectiblesCatalog | null>(() =>
+    getCachedCollectiblesCatalog(),
+  );
   const [activePage, setActivePage] = useState<ShopPage>("featured");
   const [featuredFocus, setFeaturedFocus] = useState<string | null>(null);
   const [query, setQuery] = useState("");
-  const [loading, setLoading] = useState(() => getCachedCollectiblesCatalog() == null);
+  const [loading, setLoading] = useState(
+    () => getCachedCollectiblesCatalog() == null,
+  );
   const [error, setError] = useState<string | null>(null);
   const [applyingId, setApplyingId] = useState<string | null>(null);
-  const [variantSelection, setVariantSelection] = useState<Record<string, string>>({});
+  const [variantSelection, setVariantSelection] = useState<
+    Record<string, string>
+  >({});
   const [detailGroupKey, setDetailGroupKey] = useState<string | null>(null);
-  const [detailPreviewItemId, setDetailPreviewItemId] = useState<string | null>(null);
+  const [detailPreviewItemId, setDetailPreviewItemId] = useState<string | null>(
+    null,
+  );
   const featuredScrollRef = useRef<HTMLDivElement | null>(null);
   const deferredQuery = useDeferredValue(query.trim().toLowerCase());
 
@@ -1330,7 +1521,9 @@ export default function ShopView({ onMenuClick }: ShopViewProps) {
       })
       .catch((err) => {
         if (cancelled) return;
-        setError(err instanceof Error ? err.message : "Unable to load the shop.");
+        setError(
+          err instanceof Error ? err.message : "Unable to load the shop.",
+        );
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -1343,27 +1536,48 @@ export default function ShopView({ onMenuClick }: ShopViewProps) {
   }, []);
 
   const groupedItems = useMemo(() => groupCatalogItems(catalog), [catalog]);
-  const featuredSections = useMemo(() => buildFeaturedSections(catalog, groupedItems), [catalog, groupedItems]);
+  const featuredSections = useMemo(
+    () => buildFeaturedSections(catalog, groupedItems),
+    [catalog, groupedItems],
+  );
   const spotlightCategory = useMemo(() => heroCategory(catalog), [catalog]);
   const spotlightSection = useMemo(
-    () => featuredSections.find((section) => section.category.id === spotlightCategory?.id) ?? null,
+    () =>
+      featuredSections.find(
+        (section) => section.category.id === spotlightCategory?.id,
+      ) ?? null,
     [featuredSections, spotlightCategory?.id],
   );
-  const previewCategory = useMemo(() => previewCategoryForPage(catalog, activePage), [activePage, catalog]);
+  const previewCategory = useMemo(
+    () => previewCategoryForPage(catalog, activePage),
+    [activePage, catalog],
+  );
   const currentDisplayName = getDisplayName(chatUser, "You");
-  const currentAvatarSrc = chatUser?.avatar_url ? getAuthAssetUrl(chatUser.avatar_url) : undefined;
+  const currentAvatarSrc = chatUser?.avatar_url
+    ? getAuthAssetUrl(chatUser.avatar_url)
+    : undefined;
 
   const pageGroups = useMemo(() => {
-    const filtered = groupedItems.filter((group) => matchesQuery(group, deferredQuery));
+    const filtered = groupedItems.filter((group) =>
+      matchesQuery(group, deferredQuery),
+    );
 
     const isBundleGroup = (group: ShopGroup) =>
       group.items.some((item) => isBundleCollectible(item));
 
     return {
       all: filtered,
-      frames: filtered.filter((group) => group.kind === "avatar_decoration" && !isBundleGroup(group)),
-      badges: filtered.filter((group) => group.kind === "nameplate" && !isBundleGroup(group)),
-      orbs: filtered.filter((group) => (group.kind === "profile_effect" || group.kind === "profile_frame") && !isBundleGroup(group)),
+      frames: filtered.filter(
+        (group) => group.kind === "avatar_decoration" && !isBundleGroup(group),
+      ),
+      badges: filtered.filter(
+        (group) => group.kind === "nameplate" && !isBundleGroup(group),
+      ),
+      orbs: filtered.filter(
+        (group) =>
+          (group.kind === "profile_effect" || group.kind === "profile_frame") &&
+          !isBundleGroup(group),
+      ),
       misc: filtered.filter((group) => isBundleGroup(group)),
     };
   }, [deferredQuery, groupedItems]);
@@ -1372,18 +1586,28 @@ export default function ShopView({ onMenuClick }: ShopViewProps) {
     const sections = featuredSections
       .map((section) => ({
         ...section,
-        groups: section.groups.filter((group) => matchesQuery(group, deferredQuery)),
+        groups: section.groups.filter((group) =>
+          matchesQuery(group, deferredQuery),
+        ),
       }))
       .filter((section) => section.groups.length > 0);
 
     if (!featuredFocus) return sections;
 
-    const focused = sections.find((section) => section.category.name === featuredFocus);
+    const focused = sections.find(
+      (section) => section.category.name === featuredFocus,
+    );
     if (!focused) return sections;
-    return [focused, ...sections.filter((section) => section.category.name !== featuredFocus)];
+    return [
+      focused,
+      ...sections.filter((section) => section.category.name !== featuredFocus),
+    ];
   }, [deferredQuery, featuredFocus, featuredSections]);
   const remainingFeaturedResults = useMemo(
-    () => featuredResults.filter((section) => section.category.id !== spotlightCategory?.id),
+    () =>
+      featuredResults.filter(
+        (section) => section.category.id !== spotlightCategory?.id,
+      ),
     [featuredResults, spotlightCategory?.id],
   );
   const featuredCollectionOptions = useMemo(
@@ -1391,26 +1615,45 @@ export default function ShopView({ onMenuClick }: ShopViewProps) {
     [featuredSections],
   );
   const detailGroup = useMemo(
-    () => (detailGroupKey ? groupedItems.find((group) => group.key === detailGroupKey) ?? null : null),
+    () =>
+      detailGroupKey
+        ? (groupedItems.find((group) => group.key === detailGroupKey) ?? null)
+        : null,
     [detailGroupKey, groupedItems],
   );
   const detailItem = useMemo(() => {
     if (!detailGroup) return null;
     const selectedId = variantSelection[detailGroup.key];
-    return detailGroup.items.find((candidate) => candidate.id === selectedId) ?? detailGroup.items[0] ?? null;
+    return (
+      detailGroup.items.find((candidate) => candidate.id === selectedId) ??
+      detailGroup.items[0] ??
+      null
+    );
   }, [detailGroup, variantSelection]);
   const detailPreviewItems = useMemo(
-    () => (detailItem && isBundleCollectible(detailItem) ? getBundleConstituentItems(catalog, detailItem) : []),
+    () =>
+      detailItem && isBundleCollectible(detailItem)
+        ? getBundleConstituentItems(catalog, detailItem)
+        : [],
     [catalog, detailItem],
   );
   const detailPreviewItem = useMemo(() => {
     if (!detailItem) return null;
     if (!detailPreviewItems.length) return detailItem;
-    return detailPreviewItems.find((candidate) => candidate.id === detailPreviewItemId) ?? detailPreviewItems[0] ?? detailItem;
+    return (
+      detailPreviewItems.find(
+        (candidate) => candidate.id === detailPreviewItemId,
+      ) ??
+      detailPreviewItems[0] ??
+      detailItem
+    );
   }, [detailItem, detailPreviewItems, detailPreviewItemId]);
   const pageItemCounts = useMemo(
     () => ({
-      featured: featuredSections.reduce((count, section) => count + section.groups.length, 0),
+      featured: featuredSections.reduce(
+        (count, section) => count + section.groups.length,
+        0,
+      ),
       all: pageGroups.all.length,
       frames: pageGroups.frames.length,
       badges: pageGroups.badges.length,
@@ -1420,10 +1663,11 @@ export default function ShopView({ onMenuClick }: ShopViewProps) {
     [featuredSections, pageGroups],
   );
   const pageSelectOptions = useMemo<SelectOption[]>(
-    () => SHOP_PAGE_ORDER.map((page) => ({
-      value: page,
-      label: `${PAGE_COPY[page].label} (${pageItemCounts[page]})`,
-    })),
+    () =>
+      SHOP_PAGE_ORDER.map((page) => ({
+        value: page,
+        label: `${PAGE_COPY[page].label} (${pageItemCounts[page]})`,
+      })),
     [pageItemCounts],
   );
   const featuredSelectOptions = useMemo<SelectOption[]>(
@@ -1444,15 +1688,18 @@ export default function ShopView({ onMenuClick }: ShopViewProps) {
 
     try {
       const bundleSelections = getCollectibleApplySelections(catalog, item);
-      const data = await apiPatch<{ ok: true; user: ApplyResponseUser }>("/api/collectibles/apply", {
-        ...(bundleSelections.length > 1
-          ? { selections: bundleSelections }
-          : {
-              kind: item.kind,
-              skuId: item.skuId,
-            }),
-        avatarDisplay: chatUser.avatar_display ?? null,
-      });
+      const data = await apiPatch<{ ok: true; user: ApplyResponseUser }>(
+        "/api/collectibles/apply",
+        {
+          ...(bundleSelections.length > 1
+            ? { selections: bundleSelections }
+            : {
+                kind: item.kind,
+                skuId: item.skuId,
+              }),
+          avatarDisplay: chatUser.avatar_display ?? null,
+        },
+      );
 
       dispatch({
         type: "SET_USER",
@@ -1473,18 +1720,26 @@ export default function ShopView({ onMenuClick }: ShopViewProps) {
         updated_at: data.user.updated_at ?? undefined,
       });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to equip that collectible.");
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Unable to equip that collectible.",
+      );
     } finally {
       setApplyingId(null);
     }
   };
 
   const renderEmptyState = () => (
-    <div className={cn(SHOP_PANEL_CLASS, "border-dashed px-6 py-12 text-center")}>
+    <div
+      className={cn(SHOP_PANEL_CLASS, "border-dashed px-6 py-12 text-center")}
+    >
       <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full border border-rm-border bg-rm-bg-hover text-rm-text-muted">
         <ShoppingBag className="h-5 w-5" />
       </div>
-      <h3 className="text-lg font-semibold tracking-[-0.03em] text-rm-text">Nothing matched this filter.</h3>
+      <h3 className="text-lg font-semibold tracking-[-0.03em] text-rm-text">
+        Nothing matched this filter.
+      </h3>
       <p className="mt-2 text-sm text-rm-text-muted">
         Try another search or switch to a different collection rail.
       </p>
@@ -1493,8 +1748,13 @@ export default function ShopView({ onMenuClick }: ShopViewProps) {
 
   const renderGroupCard = (group: ShopGroup) => {
     const selectedId = variantSelection[group.key];
-    const activeItem = group.items.find((item) => item.id === selectedId) ?? group.items[0];
-    const isEquipped = isCollectibleEquipped(chatUser?.avatar_display, catalog, activeItem);
+    const activeItem =
+      group.items.find((item) => item.id === selectedId) ?? group.items[0];
+    const isEquipped = isCollectibleEquipped(
+      chatUser?.avatar_display,
+      catalog,
+      activeItem,
+    );
 
     return (
       <ShopCard
@@ -1512,7 +1772,10 @@ export default function ShopView({ onMenuClick }: ShopViewProps) {
           setDetailPreviewItemId(null);
         }}
         onSelectVariant={(itemId) => {
-          setVariantSelection((current) => ({ ...current, [group.key]: itemId }));
+          setVariantSelection((current) => ({
+            ...current,
+            [group.key]: itemId,
+          }));
           if (detailGroupKey === group.key) {
             setDetailPreviewItemId(null);
           }
@@ -1568,9 +1831,12 @@ export default function ShopView({ onMenuClick }: ShopViewProps) {
   const catalogSummary = catalog
     ? `${catalog.items.length.toLocaleString()} items / ${catalog.categories.length.toLocaleString()} collections`
     : "Fetching the latest mirrored catalog";
-  const catalogMeta = catalog ? `${catalogSummary} / Source ${catalog.source}` : "Syncing catalog";
+  const catalogMeta = catalog
+    ? `${catalogSummary} / Source ${catalog.source}`
+    : "Syncing catalog";
   const ActivePageIcon = pageIcon(activePage);
-  const showCollectionSelect = activePage === "featured" && featuredCollectionOptions.length > 0;
+  const showCollectionSelect =
+    activePage === "featured" && featuredCollectionOptions.length > 0;
   const selectPage = (page: ShopPage) => {
     startTransition(() => {
       setActivePage(page);
@@ -1618,7 +1884,12 @@ export default function ShopView({ onMenuClick }: ShopViewProps) {
             </div>
 
             <div className="grid gap-2 md:grid-cols-12">
-              <label className={cn("w-full min-w-0", showCollectionSelect ? "md:col-span-3" : "md:col-span-4")}>
+              <label
+                className={cn(
+                  "w-full min-w-0",
+                  showCollectionSelect ? "md:col-span-3" : "md:col-span-4",
+                )}
+              >
                 <span className={SHOP_FIELD_LABEL_CLASS}>
                   <ActivePageIcon className="h-3 w-3 text-primary/75" />
                   Category
@@ -1657,7 +1928,12 @@ export default function ShopView({ onMenuClick }: ShopViewProps) {
                 </label>
               ) : null}
 
-              <label className={cn("min-w-0", showCollectionSelect ? "md:col-span-6" : "md:col-span-8")}>
+              <label
+                className={cn(
+                  "min-w-0",
+                  showCollectionSelect ? "md:col-span-6" : "md:col-span-8",
+                )}
+              >
                 <span className={SHOP_FIELD_LABEL_CLASS}>
                   <Search className="h-3 w-3 text-primary/75" />
                   Search
@@ -1700,8 +1976,13 @@ export default function ShopView({ onMenuClick }: ShopViewProps) {
                 <LoadingCards />
               ) : featuredFocus ? (
                 (() => {
-                  const focusedSection = (featuredSections || []).find((section) => section.category.name === featuredFocus)
-                    || (spotlightCategory?.name === featuredFocus ? spotlightSection : null);
+                  const focusedSection =
+                    (featuredSections || []).find(
+                      (section) => section.category.name === featuredFocus,
+                    ) ||
+                    (spotlightCategory?.name === featuredFocus
+                      ? spotlightSection
+                      : null);
                   if (!focusedSection) return renderEmptyState();
                   return (
                     <div className="space-y-6">
@@ -1725,7 +2006,12 @@ export default function ShopView({ onMenuClick }: ShopViewProps) {
               ) : (
                 <>
                   {spotlightCategory && spotlightSection && (
-                    <section className={cn(SHOP_PANEL_CLASS, "relative overflow-hidden sm:rounded-[28px]")}>
+                    <section
+                      className={cn(
+                        SHOP_PANEL_CLASS,
+                        "relative overflow-hidden sm:rounded-[28px]",
+                      )}
+                    >
                       <div className="absolute inset-0 bg-[radial-gradient(circle_at_left,var(--rm-accent-dim),transparent_35%)]" />
                       {spotlightCategory.bannerUrl && (
                         <img
@@ -1740,7 +2026,9 @@ export default function ShopView({ onMenuClick }: ShopViewProps) {
                       <div className="relative flex min-h-[220px] flex-col justify-end gap-4 px-5 py-5 sm:min-h-[320px] sm:px-8 sm:py-8">
                         <Button
                           type="button"
-                          onClick={() => openFeaturedCollection(spotlightCategory.name)}
+                          onClick={() =>
+                            openFeaturedCollection(spotlightCategory.name)
+                          }
                           className="w-fit rounded-2xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow-[0_16px_40px_var(--rm-glow)] transition-transform duration-200 hover:-translate-y-0.5 hover:bg-primary/90 sm:absolute sm:right-8 sm:top-8"
                         >
                           Shop the collection
@@ -1749,7 +2037,10 @@ export default function ShopView({ onMenuClick }: ShopViewProps) {
                       <div className="relative px-3 pb-3 sm:px-6 sm:pb-6">
                         <div className="flex gap-3 overflow-x-auto pb-1 custom-scrollbar sm:gap-4">
                           {spotlightSection.groups.map((group) => (
-                            <div key={group.key} className="w-[82vw] max-w-[260px] shrink-0 sm:w-[260px]">
+                            <div
+                              key={group.key}
+                              className="w-[82vw] max-w-[260px] shrink-0 sm:w-[260px]"
+                            >
                               {renderGroupCard(group)}
                             </div>
                           ))}
@@ -1765,34 +2056,39 @@ export default function ShopView({ onMenuClick }: ShopViewProps) {
                           key={section.category.id}
                           section={section}
                           ctaLabel="Take me there"
-                          onClick={() => openFeaturedCollection(section.category.name)}
+                          onClick={() =>
+                            openFeaturedCollection(section.category.name)
+                          }
                         />
                       ))}
                     </div>
                   )}
 
-                  {remainingFeaturedResults.length > 0 ? (
-                    remainingFeaturedResults.map((section) => (
-                      <section key={section.category.id} className="space-y-4">
-                        <div className="flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-center">
-                          <h3 className="text-2xl font-semibold tracking-[-0.04em] text-rm-text">
-                            {section.category.name}
-                          </h3>
-                          <Button
-                            type="button"
-                            onClick={() => openFeaturedCollection(section.category.name)}
-                            variant="outline"
-                            className="w-full rounded-xl border-rm-border bg-rm-bg-surface/80 px-3.5 py-2 text-sm font-medium text-rm-text-secondary hover:bg-rm-bg-hover hover:text-rm-text sm:w-auto"
-                          >
-                            Take me there
-                          </Button>
-                        </div>
-                        {renderStaticGroups(section.groups.slice(0, 4))}
-                      </section>
-                    ))
-                  ) : (
-                    renderEmptyState()
-                  )}
+                  {remainingFeaturedResults.length > 0
+                    ? remainingFeaturedResults.map((section) => (
+                        <section
+                          key={section.category.id}
+                          className="space-y-4"
+                        >
+                          <div className="flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-center">
+                            <h3 className="text-2xl font-semibold tracking-[-0.04em] text-rm-text">
+                              {section.category.name}
+                            </h3>
+                            <Button
+                              type="button"
+                              onClick={() =>
+                                openFeaturedCollection(section.category.name)
+                              }
+                              variant="outline"
+                              className="w-full rounded-xl border-rm-border bg-rm-bg-surface/80 px-3.5 py-2 text-sm font-medium text-rm-text-secondary hover:bg-rm-bg-hover hover:text-rm-text sm:w-auto"
+                            >
+                              Take me there
+                            </Button>
+                          </div>
+                          {renderStaticGroups(section.groups.slice(0, 4))}
+                        </section>
+                      ))
+                    : renderEmptyState()}
                 </>
               )}
             </div>
@@ -1809,7 +2105,9 @@ export default function ShopView({ onMenuClick }: ShopViewProps) {
 
             {loading ? (
               <div className="flex flex-1 flex-col overflow-y-auto custom-scrollbar">
-                {renderArchiveRail("mx-auto w-full max-w-[1480px] px-3 pt-4 sm:px-5 lg:px-6")}
+                {renderArchiveRail(
+                  "mx-auto w-full max-w-[1480px] px-3 pt-4 sm:px-5 lg:px-6",
+                )}
                 <div className="mx-auto w-full max-w-[1600px] px-4 py-5 sm:px-5 lg:px-6">
                   <LoadingCards />
                 </div>
@@ -1818,9 +2116,16 @@ export default function ShopView({ onMenuClick }: ShopViewProps) {
               renderVirtualizedGroups(
                 pageGroups[activePage as Exclude<ShopPage, "featured">],
                 <>
-                  {renderArchiveRail("mx-auto w-full max-w-[1480px] px-3 pt-4 sm:px-5 lg:px-6")}
+                  {renderArchiveRail(
+                    "mx-auto w-full max-w-[1480px] px-3 pt-4 sm:px-5 lg:px-6",
+                  )}
                   {previewCategory?.bannerUrl ? (
-                    <div className={cn(SHOP_PANEL_CLASS, "relative mx-3 mt-4 overflow-hidden sm:mx-4 sm:mt-5 sm:rounded-[26px]")}>
+                    <div
+                      className={cn(
+                        SHOP_PANEL_CLASS,
+                        "relative mx-3 mt-4 overflow-hidden sm:mx-4 sm:mt-5 sm:rounded-[26px]",
+                      )}
+                    >
                       <div className="absolute inset-0 bg-[radial-gradient(circle_at_left,var(--rm-accent-dim),transparent_30%)]" />
                       <img
                         src={previewCategory.bannerUrl}
@@ -1853,7 +2158,11 @@ export default function ShopView({ onMenuClick }: ShopViewProps) {
           currentDisplay={chatUser?.avatar_display}
           avatarSrc={currentAvatarSrc}
           displayName={currentDisplayName}
-          isEquipped={isCollectibleEquipped(chatUser?.avatar_display, catalog, detailItem)}
+          isEquipped={isCollectibleEquipped(
+            chatUser?.avatar_display,
+            catalog,
+            detailItem,
+          )}
           isApplying={applyingId === detailItem.id}
           onClose={() => {
             setDetailGroupKey(null);
@@ -1862,7 +2171,10 @@ export default function ShopView({ onMenuClick }: ShopViewProps) {
           onRedeem={() => applyCollectible(detailItem)}
           onEquip={() => applyCollectible(detailItem)}
           onSelectVariant={(itemId) => {
-            setVariantSelection((current) => ({ ...current, [detailGroup.key]: itemId }));
+            setVariantSelection((current) => ({
+              ...current,
+              [detailGroup.key]: itemId,
+            }));
             setDetailPreviewItemId(null);
           }}
           onSelectPreviewItem={setDetailPreviewItemId}

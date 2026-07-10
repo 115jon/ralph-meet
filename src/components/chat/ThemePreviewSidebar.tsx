@@ -10,11 +10,31 @@ const THEME_OPTIONS: Array<{
 }> = [
   { id: "light", label: "Light", previewClass: "bg-[#f2f3f5]" },
   { id: "dark", label: "Midnight", previewClass: "bg-[#0f0f11]" },
-  { id: "system", label: "System", previewClass: "bg-gradient-to-br from-[#0f0f11] to-[#f2f3f5]" },
-  { id: "miku-light", label: "Miku Light", previewClass: "bg-gradient-to-br from-[#ffffff] via-[#e8f4fd] to-[#f872a5]" },
-  { id: "miku-dark", label: "Miku Dark", previewClass: "bg-gradient-to-br from-[#13111f] via-[#0f0d19] to-[#f872a5]" },
-  { id: "spiderman-light", label: "Spider-Man Light", previewClass: "bg-gradient-to-br from-[#ffffff] via-[#eef0f6] to-[#E50914]" },
-  { id: "spiderman-dark", label: "Spider-Man Dark", previewClass: "bg-gradient-to-br from-[#06050a] via-[#0b0a10] to-[#E50914]" },
+  {
+    id: "system",
+    label: "System",
+    previewClass: "bg-gradient-to-br from-[#0f0f11] to-[#f2f3f5]",
+  },
+  {
+    id: "miku-light",
+    label: "Miku Light",
+    previewClass: "bg-gradient-to-br from-[#ffffff] via-[#e8f4fd] to-[#f872a5]",
+  },
+  {
+    id: "miku-dark",
+    label: "Miku Dark",
+    previewClass: "bg-gradient-to-br from-[#13111f] via-[#0f0d19] to-[#f872a5]",
+  },
+  {
+    id: "spiderman-light",
+    label: "Spider-Man Light",
+    previewClass: "bg-gradient-to-br from-[#ffffff] via-[#eef0f6] to-[#E50914]",
+  },
+  {
+    id: "spiderman-dark",
+    label: "Spider-Man Dark",
+    previewClass: "bg-gradient-to-br from-[#06050a] via-[#0b0a10] to-[#E50914]",
+  },
 ];
 
 interface ThemePreviewSidebarProps {
@@ -47,7 +67,9 @@ export default function ThemePreviewSidebar({
         </div>
         <div className="min-w-0 flex-1">
           <h2 className="text-lg font-bold text-rm-text">Preview Theme</h2>
-          <p className="text-xs text-rm-text-muted">Switch themes and see the current screen update live.</p>
+          <p className="text-xs text-rm-text-muted">
+            Switch themes and see the current screen update live.
+          </p>
         </div>
         <button
           type="button"
@@ -74,8 +96,17 @@ export default function ThemePreviewSidebar({
                     : "border-rm-border bg-rm-bg-elevated/40 hover:bg-rm-bg-hover",
                 )}
               >
-                <div className={cn("mb-2 h-20 rounded-xl", option.previewClass)} />
-                <span className={cn("text-xs font-bold", active ? "text-primary" : "text-rm-text")}>{option.label}</span>
+                <div
+                  className={cn("mb-2 h-20 rounded-xl", option.previewClass)}
+                />
+                <span
+                  className={cn(
+                    "text-xs font-bold",
+                    active ? "text-primary" : "text-rm-text",
+                  )}
+                >
+                  {option.label}
+                </span>
               </button>
             );
           })}

@@ -7,16 +7,31 @@ import FriendsView from "@/components/chat/FriendsView";
 import ShopView from "@/components/chat/ShopView";
 import ServerList from "@/components/chat/ServerList";
 import UserPanel from "@/components/chat/UserPanel";
-import { silentPush, useChatPageLogic } from "@/components/chat/useChatPageLogic";
-import { useDelayUnmount, useDelayedUnmountValue } from "@/hooks/useDelayUnmount";
-import { shouldShowStartCallModal, shouldShowVoiceSwitchModal } from "@/components/chat/voice-confirmation-preferences";
+import {
+  silentPush,
+  useChatPageLogic,
+} from "@/components/chat/useChatPageLogic";
+import {
+  useDelayUnmount,
+  useDelayedUnmountValue,
+} from "@/hooks/useDelayUnmount";
+import {
+  shouldShowStartCallModal,
+  shouldShowVoiceSwitchModal,
+} from "@/components/chat/voice-confirmation-preferences";
 import { useBackButton } from "@/hooks/useBackButton";
 import { getUnreadChannelState } from "@/lib/desktop-notifications";
-import { MOBILE_ACTION_TYPE_ID, syncDesktopNotificationState } from "@/lib/desktop-native-sync";
+import {
+  MOBILE_ACTION_TYPE_ID,
+  syncDesktopNotificationState,
+} from "@/lib/desktop-native-sync";
 import { hasPermission, PERMISSIONS } from "@/lib/permissions";
 import { getAuthAssetUrl } from "@/lib/platform";
 import { dispatchOpenProfileEditorEvent } from "@/lib/profile-editor-events";
-import { resolveStreamPreviewAutomation, type StreamPreviewAutomationState } from "@/lib/stream-preview-automation";
+import {
+  resolveStreamPreviewAutomation,
+  type StreamPreviewAutomationState,
+} from "@/lib/stream-preview-automation";
 import { onSoundInteractionNeeded, resumeSoundContext } from "@/lib/sounds";
 import type { User } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -40,51 +55,82 @@ import {
 import { useShallow } from "zustand/shallow";
 
 const AudioInteractionModal = lazy(() =>
-  import("@/components/voice/AudioInteractionModal").then((mod) => ({ default: mod.AudioInteractionModal }))
+  import("@/components/voice/AudioInteractionModal").then((mod) => ({
+    default: mod.AudioInteractionModal,
+  })),
 );
 const CallVoiceManager = lazy(() =>
-  import("@/components/chat/CallVoiceManager").then((mod) => ({ default: mod.CallVoiceManager }))
+  import("@/components/chat/CallVoiceManager").then((mod) => ({
+    default: mod.CallVoiceManager,
+  })),
 );
 const IncomingCallModal = lazy(() =>
-  import("@/components/chat/IncomingCallModal").then((mod) => ({ default: mod.IncomingCallModal }))
+  import("@/components/chat/IncomingCallModal").then((mod) => ({
+    default: mod.IncomingCallModal,
+  })),
 );
 const InviteModal = lazy(() => import("@/components/chat/InviteModal"));
-const ServerSettingsModal = lazy(() => import("@/components/chat/ServerSettingsModal"));
-const StartCallModal = lazy(() =>
-  import("@/components/chat/StartCallModal").then((mod) => ({ default: mod.StartCallModal }))
+const ServerSettingsModal = lazy(
+  () => import("@/components/chat/ServerSettingsModal"),
 );
-const UserProfileModal = lazy(() => import("@/components/chat/UserProfileModal"));
-const VoiceChannelView = lazy(() => import("@/components/chat/VoiceChannelView"));
+const StartCallModal = lazy(() =>
+  import("@/components/chat/StartCallModal").then((mod) => ({
+    default: mod.StartCallModal,
+  })),
+);
+const UserProfileModal = lazy(
+  () => import("@/components/chat/UserProfileModal"),
+);
+const VoiceChannelView = lazy(
+  () => import("@/components/chat/VoiceChannelView"),
+);
 const VoiceSwitchModal = lazy(() =>
-  import("@/components/chat/VoiceSwitchModal").then((mod) => ({ default: mod.VoiceSwitchModal }))
+  import("@/components/chat/VoiceSwitchModal").then((mod) => ({
+    default: mod.VoiceSwitchModal,
+  })),
 );
 const VoiceAppsModal = lazy(() =>
-  import("@/components/chat/VoiceAppsModal").then((mod) => ({ default: mod.VoiceAppsModal }))
+  import("@/components/chat/VoiceAppsModal").then((mod) => ({
+    default: mod.VoiceAppsModal,
+  })),
 );
 const VoiceSoundboardManager = lazy(() =>
-  import("@/components/chat/VoiceSoundboardManager").then((mod) => ({ default: mod.VoiceSoundboardManager }))
+  import("@/components/chat/VoiceSoundboardManager").then((mod) => ({
+    default: mod.VoiceSoundboardManager,
+  })),
 );
 const VoiceListenTogetherManager = lazy(() =>
-  import("@/components/chat/VoiceListenTogetherManager").then((mod) => ({ default: mod.VoiceListenTogetherManager }))
+  import("@/components/chat/VoiceListenTogetherManager").then((mod) => ({
+    default: mod.VoiceListenTogetherManager,
+  })),
 );
 
 const EMPTY_GRID_ITEMS: never[] = [];
 const TAILWIND_SPACING_UNIT_PX = 4;
 const SERVER_RAIL_SPACING_UNITS = 18;
-const SERVER_RAIL_WIDTH_PX = SERVER_RAIL_SPACING_UNITS * TAILWIND_SPACING_UNIT_PX;
+const SERVER_RAIL_WIDTH_PX =
+  SERVER_RAIL_SPACING_UNITS * TAILWIND_SPACING_UNIT_PX;
 const CHANNEL_SIDEBAR_MIN_SPACING_UNITS = 52;
 const CHANNEL_SIDEBAR_DEFAULT_SPACING_UNITS = 60;
 const CHANNEL_SIDEBAR_MAX_SPACING_UNITS = 92;
 const CHANNEL_SIDEBAR_RESIZE_STEP_PX = TAILWIND_SPACING_UNIT_PX * 2;
-const CHANNEL_SIDEBAR_MIN_WIDTH_PX = CHANNEL_SIDEBAR_MIN_SPACING_UNITS * TAILWIND_SPACING_UNIT_PX;
-const CHANNEL_SIDEBAR_DEFAULT_WIDTH_PX = CHANNEL_SIDEBAR_DEFAULT_SPACING_UNITS * TAILWIND_SPACING_UNIT_PX;
-const CHANNEL_SIDEBAR_MAX_WIDTH_PX = CHANNEL_SIDEBAR_MAX_SPACING_UNITS * TAILWIND_SPACING_UNIT_PX;
+const CHANNEL_SIDEBAR_MIN_WIDTH_PX =
+  CHANNEL_SIDEBAR_MIN_SPACING_UNITS * TAILWIND_SPACING_UNIT_PX;
+const CHANNEL_SIDEBAR_DEFAULT_WIDTH_PX =
+  CHANNEL_SIDEBAR_DEFAULT_SPACING_UNITS * TAILWIND_SPACING_UNIT_PX;
+const CHANNEL_SIDEBAR_MAX_WIDTH_PX =
+  CHANNEL_SIDEBAR_MAX_SPACING_UNITS * TAILWIND_SPACING_UNIT_PX;
 
 function clampChannelSidebarWidth(width: number) {
-  return Math.min(CHANNEL_SIDEBAR_MAX_WIDTH_PX, Math.max(CHANNEL_SIDEBAR_MIN_WIDTH_PX, width));
+  return Math.min(
+    CHANNEL_SIDEBAR_MAX_WIDTH_PX,
+    Math.max(CHANNEL_SIDEBAR_MIN_WIDTH_PX, width),
+  );
 }
 
-function collectUnreadNotificationIds<T extends { id: string; is_read: boolean }>(
+function collectUnreadNotificationIds<
+  T extends { id: string; is_read: boolean },
+>(
   notifications: readonly T[],
   predicate: (notification: T) => boolean,
 ): string[] {
@@ -99,29 +145,51 @@ function collectUnreadNotificationIds<T extends { id: string; is_read: boolean }
 
 export default function ChatPage() {
   const {
-    servers, activeServerId, activeChannelId, channels, categories,
-    members, user, readStates, lastMessageAt, voiceChannelStates, channelsByServerId,
-    dmChannels, profileUser, serverMentionCounts, channelMentionCounts, relationships, notifications,
-  } = useChatStore(useShallow(s => ({
-    servers: s.servers,
-    activeServerId: s.activeServerId,
-    activeChannelId: s.activeChannelId,
-    channels: s.channels,
-    categories: s.categories,
-    members: s.members,
-    user: s.user,
-    readStates: s.readStates,
-    lastMessageAt: s.lastMessageAt,
-    voiceChannelStates: s.voiceChannelStates,
-    channelsByServerId: s.channelsByServerId,
-    dmChannels: s.dmChannels,
-    profileUser: s.profileUser,
-    serverMentionCounts: s.serverMentionCounts,
-    channelMentionCounts: s.channelMentionCounts,
-    relationships: s.relationships,
-    notifications: s.notifications,
-  })));
-  const { dispatch, markChannelRead, markNotificationsRead, openDm, sendMessage } = useChatActions();
+    servers,
+    activeServerId,
+    activeChannelId,
+    channels,
+    categories,
+    members,
+    user,
+    readStates,
+    lastMessageAt,
+    voiceChannelStates,
+    channelsByServerId,
+    dmChannels,
+    profileUser,
+    serverMentionCounts,
+    channelMentionCounts,
+    relationships,
+    notifications,
+  } = useChatStore(
+    useShallow((s) => ({
+      servers: s.servers,
+      activeServerId: s.activeServerId,
+      activeChannelId: s.activeChannelId,
+      channels: s.channels,
+      categories: s.categories,
+      members: s.members,
+      user: s.user,
+      readStates: s.readStates,
+      lastMessageAt: s.lastMessageAt,
+      voiceChannelStates: s.voiceChannelStates,
+      channelsByServerId: s.channelsByServerId,
+      dmChannels: s.dmChannels,
+      profileUser: s.profileUser,
+      serverMentionCounts: s.serverMentionCounts,
+      channelMentionCounts: s.channelMentionCounts,
+      relationships: s.relationships,
+      notifications: s.notifications,
+    })),
+  );
+  const {
+    dispatch,
+    markChannelRead,
+    markNotificationsRead,
+    openDm,
+    sendMessage,
+  } = useChatActions();
 
   const {
     ui,
@@ -142,19 +210,29 @@ export default function ChatPage() {
   // ── Unified audio interaction modal ──────────────────────────────────────
   const [showAudioModal, setShowAudioModal] = useState(false);
   const shouldRenderAudioModal = useDelayUnmount(showAudioModal, 200);
-  const [voiceAppsModal, setVoiceAppsModal] = useState<null | "activities">(null);
+  const [voiceAppsModal, setVoiceAppsModal] = useState<null | "activities">(
+    null,
+  );
   const shouldRenderVoiceAppsModal = useDelayUnmount(!!voiceAppsModal, 200);
-  const { shouldRender: shouldRenderProfileUser, value: renderedProfileUser } = useDelayedUnmountValue(profileUser, 200);
+  const { shouldRender: shouldRenderProfileUser, value: renderedProfileUser } =
+    useDelayedUnmountValue(profileUser, 200);
   const [dmHomeView, setDmHomeView] = useState<"friends" | "shop">("friends");
-  const [channelSidebarWidth, setChannelSidebarWidth] = useState(CHANNEL_SIDEBAR_DEFAULT_WIDTH_PX);
-  const [isChannelSidebarResizing, setIsChannelSidebarResizing] = useState(false);
-  const channelSidebarResizeStateRef = useRef<{ startWidth: number; startX: number } | null>(null);
+  const [channelSidebarWidth, setChannelSidebarWidth] = useState(
+    CHANNEL_SIDEBAR_DEFAULT_WIDTH_PX,
+  );
+  const [isChannelSidebarResizing, setIsChannelSidebarResizing] =
+    useState(false);
+  const channelSidebarResizeStateRef = useRef<{
+    startWidth: number;
+    startX: number;
+  } | null>(null);
 
   const channelSidebarStyle = useMemo(
-    () => ({
-      "--channel-sidebar-width": `${channelSidebarWidth}px`,
-      "--left-nav-width": `${SERVER_RAIL_WIDTH_PX + channelSidebarWidth}px`,
-    }) as CSSProperties,
+    () =>
+      ({
+        "--channel-sidebar-width": `${channelSidebarWidth}px`,
+        "--left-nav-width": `${SERVER_RAIL_WIDTH_PX + channelSidebarWidth}px`,
+      }) as CSSProperties,
     [channelSidebarWidth],
   );
 
@@ -163,100 +241,153 @@ export default function ChatPage() {
     return () => onSoundInteractionNeeded(null);
   }, []);
 
-  const { sidebarOpen, activeModal, showMembers, showVoiceTextChat, voiceJoinOnSelectChannelId, pendingJump } = ui;
+  const {
+    sidebarOpen,
+    activeModal,
+    showMembers,
+    showVoiceTextChat,
+    voiceJoinOnSelectChannelId,
+    pendingJump,
+  } = ui;
 
-  const shouldRenderInviteModal = useDelayUnmount(activeModal === 'invite', 200);
-  const shouldRenderSettingsModal = useDelayUnmount(activeModal === 'settings', 200);
+  const shouldRenderInviteModal = useDelayUnmount(
+    activeModal === "invite",
+    200,
+  );
+  const shouldRenderSettingsModal = useDelayUnmount(
+    activeModal === "settings",
+    200,
+  );
   const shouldRenderVoiceTextChat = useDelayUnmount(showVoiceTextChat, 200);
   const voiceTextChatVisible = showVoiceTextChat || shouldRenderVoiceTextChat;
 
-  const activeServer = useMemo(() => servers.find((s) => s.id === activeServerId), [servers, activeServerId]);
+  const activeServer = useMemo(
+    () => servers.find((s) => s.id === activeServerId),
+    [servers, activeServerId],
+  );
   const activeChannel = useMemo(
-    () => isDmMode ? null : channels.find((c) => c.id === activeChannelId),
-    [isDmMode, channels, activeChannelId]
+    () => (isDmMode ? null : channels.find((c) => c.id === activeChannelId)),
+    [isDmMode, channels, activeChannelId],
   );
   const isVoiceChannel = activeChannel?.channel_type === "voice";
 
   const activeDm = useMemo(
-    () => isDmMode ? dmChannels.find((d) => d.id === activeChannelId) : null,
-    [isDmMode, dmChannels, activeChannelId]
+    () => (isDmMode ? dmChannels.find((d) => d.id === activeChannelId) : null),
+    [isDmMode, dmChannels, activeChannelId],
   );
   const channelDisplayName = isDmMode
-    ? (activeDm?.recipient?.display_name ?? activeDm?.recipient?.username ?? activeDm?.name ?? "")
+    ? (activeDm?.recipient?.display_name ??
+      activeDm?.recipient?.username ??
+      activeDm?.name ??
+      "")
     : (activeChannel?.name ?? "");
   const channelUsername = isDmMode
     ? (activeDm?.recipient?.username ?? "")
     : undefined;
 
   const currentUserPermissions = useMemo(
-    () => members.find((m) => m.user.id === user?.id)?.roles?.reduce((total, r) => total | r.permissions, 0) ?? 0,
-    [members, user?.id]
+    () =>
+      members
+        .find((m) => m.user.id === user?.id)
+        ?.roles?.reduce((total, r) => total | r.permissions, 0) ?? 0,
+    [members, user?.id],
   );
   const localScreenItem = useMemo(
-    () => localStreamState?.gridItems.find((item) => item.isLocal && item.type === "screen") ?? null,
+    () =>
+      localStreamState?.gridItems.find(
+        (item) => item.isLocal && item.type === "screen",
+      ) ?? null,
     [localStreamState?.gridItems],
   );
   const watchedRemoteScreenItems = useMemo(
-    () => (localStreamState?.gridItems ?? []).filter(
-      (item) => item.type === "screen" && !item.isLocal && !!localStreamState?.watchedStreams?.[item.userId],
-    ),
+    () =>
+      (localStreamState?.gridItems ?? []).filter(
+        (item) =>
+          item.type === "screen" &&
+          !item.isLocal &&
+          !!localStreamState?.watchedStreams?.[item.userId],
+      ),
     [localStreamState?.gridItems, localStreamState?.watchedStreams],
   );
   const floatingPreviewUserId = user?.id ?? localScreenItem?.userId ?? "me";
   const floatingPreviewStream = localScreenItem?.stream ?? null;
-  const floatingPreviewDisplayName = localScreenItem?.name
-    ?? user?.display_name
-    ?? user?.username
-    ?? "You";
-  const resolveVoiceContextUser = useCallback((targetUserId: string): User | null => {
-    if (targetUserId === user?.id && user) {
-      return user;
-    }
+  const floatingPreviewDisplayName =
+    localScreenItem?.name ?? user?.display_name ?? user?.username ?? "You";
+  const resolveVoiceContextUser = useCallback(
+    (targetUserId: string): User | null => {
+      if (targetUserId === user?.id && user) {
+        return user;
+      }
 
-    const memberUser = members.find((member) => member.user.id === targetUserId)?.user;
-    if (memberUser) {
-      return memberUser;
-    }
+      const memberUser = members.find(
+        (member) => member.user.id === targetUserId,
+      )?.user;
+      if (memberUser) {
+        return memberUser;
+      }
 
-    const voiceParticipant = voiceState.channelId
-      ? (voiceChannelStates[voiceState.channelId] ?? []).find((member) => member.clerk_user_id === targetUserId)
-      : null;
-    if (voiceParticipant) {
+      const voiceParticipant = voiceState.channelId
+        ? (voiceChannelStates[voiceState.channelId] ?? []).find(
+            (member) => member.clerk_user_id === targetUserId,
+          )
+        : null;
+      if (voiceParticipant) {
+        return {
+          id: targetUserId,
+          username:
+            voiceParticipant.username ??
+            voiceParticipant.display_name ??
+            voiceParticipant.name ??
+            targetUserId,
+          display_name:
+            voiceParticipant.display_name ?? voiceParticipant.name ?? null,
+          avatar_url: voiceParticipant.avatar_url ?? null,
+          avatar_display: voiceParticipant.avatar_display ?? null,
+        };
+      }
+
+      const gridItem = localStreamState?.gridItems.find(
+        (item) => item.userId === targetUserId,
+      );
+      if (gridItem) {
+        const baseName = gridItem.name.replace(/'s Stream$/, "");
+        return {
+          id: targetUserId,
+          username: baseName || targetUserId,
+          display_name: baseName || null,
+          avatar_url: gridItem.avatar ?? null,
+          avatar_display: gridItem.avatarDisplay ?? null,
+        };
+      }
+
       return {
         id: targetUserId,
-        username: voiceParticipant.username ?? voiceParticipant.display_name ?? voiceParticipant.name ?? targetUserId,
-        display_name: voiceParticipant.display_name ?? voiceParticipant.name ?? null,
-        avatar_url: voiceParticipant.avatar_url ?? null,
-        avatar_display: voiceParticipant.avatar_display ?? null,
+        username: targetUserId,
       };
-    }
-
-    const gridItem = localStreamState?.gridItems.find((item) => item.userId === targetUserId);
-    if (gridItem) {
-      const baseName = gridItem.name.replace(/'s Stream$/, "");
-      return {
-        id: targetUserId,
-        username: baseName || targetUserId,
-        display_name: baseName || null,
-        avatar_url: gridItem.avatar ?? null,
-        avatar_display: gridItem.avatarDisplay ?? null,
-      };
-    }
-
-    return {
-      id: targetUserId,
-      username: targetUserId,
-    };
-  }, [localStreamState?.gridItems, members, user, voiceChannelStates, voiceState.channelId]);
-  const handleOpenVoiceProfile = useCallback((targetUserId: string) => {
-    const targetUser = resolveVoiceContextUser(targetUserId);
-    if (targetUser) {
-      setProfileUser(targetUser);
-    }
-  }, [resolveVoiceContextUser, setProfileUser]);
-  const handleOpenVoiceMessage = useCallback((targetUserId: string) => {
-    void openDm(targetUserId);
-  }, [openDm]);
+    },
+    [
+      localStreamState?.gridItems,
+      members,
+      user,
+      voiceChannelStates,
+      voiceState.channelId,
+    ],
+  );
+  const handleOpenVoiceProfile = useCallback(
+    (targetUserId: string) => {
+      const targetUser = resolveVoiceContextUser(targetUserId);
+      if (targetUser) {
+        setProfileUser(targetUser);
+      }
+    },
+    [resolveVoiceContextUser, setProfileUser],
+  );
+  const handleOpenVoiceMessage = useCallback(
+    (targetUserId: string) => {
+      void openDm(targetUserId);
+    },
+    [openDm],
+  );
   const setClampedChannelSidebarWidth = useCallback((nextWidth: number) => {
     setChannelSidebarWidth(clampChannelSidebarWidth(nextWidth));
   }, []);
@@ -264,21 +395,36 @@ export default function ChatPage() {
   const voiceChannelName = voiceState.channelName ?? "Voice";
   const voiceServerName = useMemo(
     () => servers.find((s) => s.id === voiceState.serverId)?.name ?? "Server",
-    [servers, voiceState.serverId]
+    [servers, voiceState.serverId],
   );
   const voiceSettings = useVoiceSettingsStore((s) => s.getSettings(user?.id));
   const alwaysShowStreamPreview = !!voiceSettings.alwaysShowStreamPreview;
 
   const callActive = useCallStore((s) => s.status === "active");
-  const isViewingCurrentVoiceChannel = voiceState.joined && voiceState.channelId === activeChannelId;
-  const showVoiceAsMain = !!(isVoiceChannel && activeChannelId && activeServerId && !callActive) &&
+  const isViewingCurrentVoiceChannel =
+    voiceState.joined && voiceState.channelId === activeChannelId;
+  const showVoiceAsMain =
+    !!(isVoiceChannel && activeChannelId && activeServerId && !callActive) &&
     (!voiceState.joined || isViewingCurrentVoiceChannel);
-  const shouldAutoJoinVoice = !!showVoiceAsMain && voiceJoinOnSelectChannelId === activeChannelId;
-  const shouldRenderFloatingStreamPreview = !!(voiceState.joined && localStreamState?.isScreenSharing && !showVoiceAsMain);
-  const shouldRenderWatchedStreamPreviews = !!(voiceState.joined && watchedRemoteScreenItems.length > 0 && !showVoiceAsMain);
-  const pendingStreamFocusRef = useRef<{ channelId: string; userId: string } | null>(null);
+  const shouldAutoJoinVoice =
+    !!showVoiceAsMain && voiceJoinOnSelectChannelId === activeChannelId;
+  const shouldRenderFloatingStreamPreview = !!(
+    voiceState.joined &&
+    localStreamState?.isScreenSharing &&
+    !showVoiceAsMain
+  );
+  const shouldRenderWatchedStreamPreviews = !!(
+    voiceState.joined &&
+    watchedRemoteScreenItems.length > 0 &&
+    !showVoiceAsMain
+  );
+  const pendingStreamFocusRef = useRef<{
+    channelId: string;
+    userId: string;
+  } | null>(null);
   const isAppInactiveRef = useRef(false);
-  const previewAutomationStateRef = useRef<StreamPreviewAutomationState>("idle");
+  const previewAutomationStateRef =
+    useRef<StreamPreviewAutomationState>("idle");
 
   useEffect(() => {
     if (!profileUser || profileUser.id !== user?.id) return;
@@ -292,9 +438,16 @@ export default function ChatPage() {
   // When a user is already in a voice channel or call and tries to join/switch
   // to another, we show a confirmation modal before proceeding.
   type PendingSwitch =
-    | { type: "voice"; channelId: string; channelName: string; doJoin: () => void }
+    | {
+        type: "voice";
+        channelId: string;
+        channelName: string;
+        doJoin: () => void;
+      }
     | { type: "call"; action: () => void };
-  const [pendingSwitch, setPendingSwitch] = useState<PendingSwitch | null>(null);
+  const [pendingSwitch, setPendingSwitch] = useState<PendingSwitch | null>(
+    null,
+  );
   const shouldRenderVoiceSwitchModal = useDelayUnmount(!!pendingSwitch, 200);
   const pendingSwitchRef = useRef(pendingSwitch);
   useEffect(() => {
@@ -318,46 +471,58 @@ export default function ChatPage() {
    * Wraps `handleSelectChannel` — if the target is a voice channel and we are
    * already in a voice session, shows a confirmation modal first.
    */
-  const guardedSelectChannel = useCallback((channelId: string, options?: { forceVoiceJoin?: boolean }) => {
-    const targetChannel = channels.find((c) => c.id === channelId);
-    const isTargetVoice = targetChannel?.channel_type === "voice";
+  const guardedSelectChannel = useCallback(
+    (channelId: string, options?: { forceVoiceJoin?: boolean }) => {
+      const targetChannel = channels.find((c) => c.id === channelId);
+      const isTargetVoice = targetChannel?.channel_type === "voice";
 
-    // Only guard voice-channel targets while already in a voice session
-    if (isTargetVoice && isInVoiceSession) {
-      // Don't prompt if switching to the same channel we're already in
-      if (voiceState.channelId === channelId) {
-        handleSelectChannel(channelId, options);
+      // Only guard voice-channel targets while already in a voice session
+      if (isTargetVoice && isInVoiceSession) {
+        // Don't prompt if switching to the same channel we're already in
+        if (voiceState.channelId === channelId) {
+          handleSelectChannel(channelId, options);
+          return;
+        }
+
+        if (shouldShowVoiceSwitchModal()) {
+          setPendingSwitch({
+            type: "voice",
+            channelId,
+            channelName: targetChannel?.name ?? "Voice",
+            doJoin: () => handleSelectChannel(channelId, options),
+          });
+        } else {
+          leaveCurrentVoiceSession();
+          handleSelectChannel(channelId, options);
+        }
         return;
       }
 
-      if (shouldShowVoiceSwitchModal()) {
-        setPendingSwitch({
-          type: "voice",
-          channelId,
-          channelName: targetChannel?.name ?? "Voice",
-          doJoin: () => handleSelectChannel(channelId, options),
-        });
-      } else {
-        leaveCurrentVoiceSession();
-        handleSelectChannel(channelId, options);
-      }
-      return;
-    }
-
-    handleSelectChannel(channelId, options);
-  }, [channels, isInVoiceSession, voiceState.channelId, handleSelectChannel, leaveCurrentVoiceSession]);
+      handleSelectChannel(channelId, options);
+    },
+    [
+      channels,
+      isInVoiceSession,
+      voiceState.channelId,
+      handleSelectChannel,
+      leaveCurrentVoiceSession,
+    ],
+  );
 
   /**
    * Wraps the call initiation — if the user is in a voice session, shows
    * a confirmation modal first.
    */
-  const guardedCallInitiate = useCallback((action: () => void) => {
-    if (isInVoiceSession && shouldShowVoiceSwitchModal()) {
-      setPendingSwitch({ type: "call", action });
-      return;
-    }
-    action();
-  }, [isInVoiceSession]);
+  const guardedCallInitiate = useCallback(
+    (action: () => void) => {
+      if (isInVoiceSession && shouldShowVoiceSwitchModal()) {
+        setPendingSwitch({ type: "call", action });
+        return;
+      }
+      action();
+    },
+    [isInVoiceSession],
+  );
 
   const handleVoiceDisconnect = useCallback(() => {
     if (localStreamState) {
@@ -371,24 +536,38 @@ export default function ChatPage() {
   const handleVoiceNavigate = useCallback(() => {
     if (voiceState.channelId && voiceState.serverId) {
       if (activeServerId !== voiceState.serverId) {
-        dispatch({ type: "SWITCH_SERVER", serverId: voiceState.serverId, channelId: voiceState.channelId });
+        dispatch({
+          type: "SWITCH_SERVER",
+          serverId: voiceState.serverId,
+          channelId: voiceState.channelId,
+        });
       } else {
         handleSelectChannel(voiceState.channelId);
       }
     }
-  }, [activeServerId, dispatch, handleSelectChannel, voiceState.channelId, voiceState.serverId]);
+  }, [
+    activeServerId,
+    dispatch,
+    handleSelectChannel,
+    voiceState.channelId,
+    voiceState.serverId,
+  ]);
 
   const attemptPendingStreamFocus = useCallback(() => {
     const pendingStreamFocus = pendingStreamFocusRef.current;
-    if (!pendingStreamFocus || !localStreamState?.watchAndFocusStreamByUserId) return;
+    if (!pendingStreamFocus || !localStreamState?.watchAndFocusStreamByUserId)
+      return;
     if (localStreamState.channelId !== pendingStreamFocus.channelId) return;
 
-    if (localStreamState.watchAndFocusStreamByUserId(pendingStreamFocus.userId)) {
+    if (
+      localStreamState.watchAndFocusStreamByUserId(pendingStreamFocus.userId)
+    ) {
       queueMicrotask(() => {
         const currentPendingStreamFocus = pendingStreamFocusRef.current;
         if (
-          currentPendingStreamFocus?.channelId === pendingStreamFocus.channelId
-          && currentPendingStreamFocus.userId === pendingStreamFocus.userId
+          currentPendingStreamFocus?.channelId ===
+            pendingStreamFocus.channelId &&
+          currentPendingStreamFocus.userId === pendingStreamFocus.userId
         ) {
           pendingStreamFocusRef.current = null;
         }
@@ -396,16 +575,22 @@ export default function ChatPage() {
     }
   }, [localStreamState]);
 
-  const handleVoiceNavigateToStream = useCallback((userId: string) => {
-    if (!voiceState.channelId) {
-      handleVoiceNavigate();
-      return;
-    }
+  const handleVoiceNavigateToStream = useCallback(
+    (userId: string) => {
+      if (!voiceState.channelId) {
+        handleVoiceNavigate();
+        return;
+      }
 
-    pendingStreamFocusRef.current = { channelId: voiceState.channelId, userId };
-    handleVoiceNavigate();
-    attemptPendingStreamFocus();
-  }, [attemptPendingStreamFocus, handleVoiceNavigate, voiceState.channelId]);
+      pendingStreamFocusRef.current = {
+        channelId: voiceState.channelId,
+        userId,
+      };
+      handleVoiceNavigate();
+      attemptPendingStreamFocus();
+    },
+    [attemptPendingStreamFocus, handleVoiceNavigate, voiceState.channelId],
+  );
 
   const syncPreviewAutomation = useCallback(() => {
     if (!localStreamState?.togglePreviewHidden) {
@@ -483,7 +668,11 @@ export default function ChatPage() {
       const currentResizeState = channelSidebarResizeStateRef.current;
       if (!currentResizeState) return;
 
-      setClampedChannelSidebarWidth(currentResizeState.startWidth + event.clientX - currentResizeState.startX);
+      setClampedChannelSidebarWidth(
+        currentResizeState.startWidth +
+          event.clientX -
+          currentResizeState.startX,
+      );
     };
 
     document.body.style.cursor = "col-resize";
@@ -504,45 +693,58 @@ export default function ChatPage() {
     };
   }, [isChannelSidebarResizing, setClampedChannelSidebarWidth]);
 
-  const handleWatchLiveStream = useCallback((channelId: string, userId: string) => {
-    pendingStreamFocusRef.current = { channelId, userId };
-    guardedSelectChannel(channelId, { forceVoiceJoin: true });
-    attemptPendingStreamFocus();
-  }, [attemptPendingStreamFocus, guardedSelectChannel]);
+  const handleWatchLiveStream = useCallback(
+    (channelId: string, userId: string) => {
+      pendingStreamFocusRef.current = { channelId, userId };
+      guardedSelectChannel(channelId, { forceVoiceJoin: true });
+      attemptPendingStreamFocus();
+    },
+    [attemptPendingStreamFocus, guardedSelectChannel],
+  );
 
-  const handleChannelSidebarResizeStart = useCallback((event: ReactPointerEvent<HTMLButtonElement>) => {
-    if (event.button !== 0) return;
+  const handleChannelSidebarResizeStart = useCallback(
+    (event: ReactPointerEvent<HTMLButtonElement>) => {
+      if (event.button !== 0) return;
 
-    event.preventDefault();
-    channelSidebarResizeStateRef.current = {
-      startWidth: channelSidebarWidth,
-      startX: event.clientX,
-    };
-    setIsChannelSidebarResizing(true);
-  }, [channelSidebarWidth]);
+      event.preventDefault();
+      channelSidebarResizeStateRef.current = {
+        startWidth: channelSidebarWidth,
+        startX: event.clientX,
+      };
+      setIsChannelSidebarResizing(true);
+    },
+    [channelSidebarWidth],
+  );
 
-  const handleChannelSidebarResizeKeyDown = useCallback((event: ReactKeyboardEvent<HTMLButtonElement>) => {
-    switch (event.key) {
-      case "ArrowLeft":
-        event.preventDefault();
-        setClampedChannelSidebarWidth(channelSidebarWidth - CHANNEL_SIDEBAR_RESIZE_STEP_PX);
-        return;
-      case "ArrowRight":
-        event.preventDefault();
-        setClampedChannelSidebarWidth(channelSidebarWidth + CHANNEL_SIDEBAR_RESIZE_STEP_PX);
-        return;
-      case "Home":
-        event.preventDefault();
-        setChannelSidebarWidth(CHANNEL_SIDEBAR_MIN_WIDTH_PX);
-        return;
-      case "End":
-        event.preventDefault();
-        setChannelSidebarWidth(CHANNEL_SIDEBAR_MAX_WIDTH_PX);
-        return;
-      default:
-        return;
-    }
-  }, [channelSidebarWidth, setClampedChannelSidebarWidth]);
+  const handleChannelSidebarResizeKeyDown = useCallback(
+    (event: ReactKeyboardEvent<HTMLButtonElement>) => {
+      switch (event.key) {
+        case "ArrowLeft":
+          event.preventDefault();
+          setClampedChannelSidebarWidth(
+            channelSidebarWidth - CHANNEL_SIDEBAR_RESIZE_STEP_PX,
+          );
+          return;
+        case "ArrowRight":
+          event.preventDefault();
+          setClampedChannelSidebarWidth(
+            channelSidebarWidth + CHANNEL_SIDEBAR_RESIZE_STEP_PX,
+          );
+          return;
+        case "Home":
+          event.preventDefault();
+          setChannelSidebarWidth(CHANNEL_SIDEBAR_MIN_WIDTH_PX);
+          return;
+        case "End":
+          event.preventDefault();
+          setChannelSidebarWidth(CHANNEL_SIDEBAR_MAX_WIDTH_PX);
+          return;
+        default:
+          return;
+      }
+    },
+    [channelSidebarWidth, setClampedChannelSidebarWidth],
+  );
 
   const handleSwitchConfirm = useCallback(() => {
     const ps = pendingSwitchRef.current;
@@ -563,29 +765,37 @@ export default function ChatPage() {
 
   // ── Start Call confirmation modal ─────────────────────────────────────────
   // Context menus fire `request-start-call` events → we show a confirmation.
-  type PendingCallTarget = { userId: string; displayName: string; channelId: string };
-  const [pendingCallTarget, setPendingCallTarget] = useState<PendingCallTarget | null>(null);
+  type PendingCallTarget = {
+    userId: string;
+    displayName: string;
+    channelId: string;
+  };
+  const [pendingCallTarget, setPendingCallTarget] =
+    useState<PendingCallTarget | null>(null);
   const shouldRenderStartCallModal = useDelayUnmount(!!pendingCallTarget, 200);
 
-  const executeStartCall = useCallback((target: PendingCallTarget) => {
-    const doCall = () => {
-      prewarmAudioContext();
-      resumeSoundContext();
-      // Leave current voice channel if needed
-      if (voiceState.joined && localStreamState) {
-        localStreamState.handleLeave();
-      }
-      const gateway = useChatStore.getState().gateway;
-      gateway?.sendCallInitiate(target.userId, target.channelId);
-    };
+  const executeStartCall = useCallback(
+    (target: PendingCallTarget) => {
+      const doCall = () => {
+        prewarmAudioContext();
+        resumeSoundContext();
+        // Leave current voice channel if needed
+        if (voiceState.joined && localStreamState) {
+          localStreamState.handleLeave();
+        }
+        const gateway = useChatStore.getState().gateway;
+        gateway?.sendCallInitiate(target.userId, target.channelId);
+      };
 
-    // If already in a voice session, use the switch guard
-    if (isInVoiceSession && shouldShowVoiceSwitchModal()) {
-      setPendingSwitch({ type: "call", action: doCall });
-    } else {
-      doCall();
-    }
-  }, [voiceState.joined, localStreamState, isInVoiceSession]);
+      // If already in a voice session, use the switch guard
+      if (isInVoiceSession && shouldShowVoiceSwitchModal()) {
+        setPendingSwitch({ type: "call", action: doCall });
+      } else {
+        doCall();
+      }
+    },
+    [voiceState.joined, localStreamState, isInVoiceSession],
+  );
 
   const executeStartCallRef = useRef(executeStartCall);
   useEffect(() => {
@@ -619,20 +829,23 @@ export default function ChatPage() {
     setPendingCallTarget(null);
   }, []);
 
-  const handleEphemeralVoiceBeforeJoin = useCallback((doJoin: () => void) => {
-    if (shouldShowVoiceSwitchModal() && activeChannelId) {
-      setPendingSwitch({
-        type: "voice",
-        channelId: activeChannelId,
-        channelName: channelDisplayName,
-        doJoin,
-      });
-      return;
-    }
+  const handleEphemeralVoiceBeforeJoin = useCallback(
+    (doJoin: () => void) => {
+      if (shouldShowVoiceSwitchModal() && activeChannelId) {
+        setPendingSwitch({
+          type: "voice",
+          channelId: activeChannelId,
+          channelName: channelDisplayName,
+          doJoin,
+        });
+        return;
+      }
 
-    leaveCurrentVoiceSession();
-    doJoin();
-  }, [activeChannelId, channelDisplayName, leaveCurrentVoiceSession]);
+      leaveCurrentVoiceSession();
+      doJoin();
+    },
+    [activeChannelId, channelDisplayName, leaveCurrentVoiceSession],
+  );
 
   // Compute homepage badge: unread DMs + pending friend requests
   const unreadDms = useMemo(() => {
@@ -644,7 +857,16 @@ export default function ChatPage() {
         dmNotifCounts[n.channel_id] = (dmNotifCounts[n.channel_id] ?? 0) + 1;
       }
     }
-    const dms: Array<{ channelId: string; recipient: { id: string; username: string; display_name?: string | null; avatar_url?: string | null }; unreadCount: number }> = [];
+    const dms: Array<{
+      channelId: string;
+      recipient: {
+        id: string;
+        username: string;
+        display_name?: string | null;
+        avatar_url?: string | null;
+      };
+      unreadCount: number;
+    }> = [];
     for (const dm of dmChannels) {
       const lastMsg = lastMessageAt[dm.id];
       if (!lastMsg) continue;
@@ -660,20 +882,27 @@ export default function ChatPage() {
     return dms;
   }, [dmChannels, readStates, lastMessageAt, notifications]);
 
-  const pendingFriendCount = useMemo(() => relationships.filter((r) => r.type === 2).length, [relationships]);
+  const pendingFriendCount = useMemo(
+    () => relationships.filter((r) => r.type === 2).length,
+    [relationships],
+  );
   // Home badge: only count overflow DMs (beyond the 3 visible avatars) + pending friend requests
   const homeBadgeCount = Math.max(0, unreadDms.length - 3) + pendingFriendCount;
   const railChannels = useMemo(
-    () => Object.values(channelsByServerId).flatMap((serverChannels) => serverChannels),
+    () =>
+      Object.values(channelsByServerId).flatMap(
+        (serverChannels) => serverChannels,
+      ),
     [channelsByServerId],
   );
 
   useEffect(() => {
-    const { unreadDmChannelIds, unreadServerChannelIds } = getUnreadChannelState({
-      lastMessageAt,
-      readStates,
-      dmChannelIds: dmChannels.map((dm) => dm.id),
-    });
+    const { unreadDmChannelIds, unreadServerChannelIds } =
+      getUnreadChannelState({
+        lastMessageAt,
+        readStates,
+        dmChannelIds: dmChannels.map((dm) => dm.id),
+      });
 
     void syncDesktopNotificationState({
       notifications,
@@ -684,7 +913,9 @@ export default function ChatPage() {
 
   useEffect(() => {
     const handleMarkRead = (event: Event) => {
-      const detail = (event as CustomEvent<{ channelId?: string; messageId?: string }>).detail;
+      const detail = (
+        event as CustomEvent<{ channelId?: string; messageId?: string }>
+      ).detail;
       if (!detail?.channelId) return;
 
       const notifIds = collectUnreadNotificationIds(
@@ -698,35 +929,64 @@ export default function ChatPage() {
     };
 
     const handleReply = (event: Event) => {
-      const detail = (event as CustomEvent<{ channelId?: string; content?: string; messageId?: string }>).detail;
+      const detail = (
+        event as CustomEvent<{
+          channelId?: string;
+          content?: string;
+          messageId?: string;
+        }>
+      ).detail;
       if (!detail?.channelId || !detail.content?.trim()) return;
-      void sendMessage(detail.channelId, detail.content.trim(), detail.messageId);
+      void sendMessage(
+        detail.channelId,
+        detail.content.trim(),
+        detail.messageId,
+      );
     };
 
-    window.addEventListener("notification-mark-read", handleMarkRead as EventListener);
+    window.addEventListener(
+      "notification-mark-read",
+      handleMarkRead as EventListener,
+    );
     window.addEventListener("notification-reply", handleReply as EventListener);
     return () => {
-      window.removeEventListener("notification-mark-read", handleMarkRead as EventListener);
-      window.removeEventListener("notification-reply", handleReply as EventListener);
+      window.removeEventListener(
+        "notification-mark-read",
+        handleMarkRead as EventListener,
+      );
+      window.removeEventListener(
+        "notification-reply",
+        handleReply as EventListener,
+      );
     };
   }, [markChannelRead, markNotificationsRead, notifications, sendMessage]);
 
-  const onSelectDm = useCallback((channelId: string) => {
-    // Switch to @me mode first if not already there, then select the DM channel
-    if (activeServerId !== "@me") {
-      handleSelectServer("@me");
-    }
-    dispatch({ type: "SET_ACTIVE_CHANNEL", channelId });
-    // Mark any notifications for this DM channel as read
-    const dmNotifIds = collectUnreadNotificationIds(
+  const onSelectDm = useCallback(
+    (channelId: string) => {
+      // Switch to @me mode first if not already there, then select the DM channel
+      if (activeServerId !== "@me") {
+        handleSelectServer("@me");
+      }
+      dispatch({ type: "SET_ACTIVE_CHANNEL", channelId });
+      // Mark any notifications for this DM channel as read
+      const dmNotifIds = collectUnreadNotificationIds(
+        notifications,
+        (notification) => notification.channel_id === channelId,
+      );
+      if (dmNotifIds.length > 0) {
+        markNotificationsRead(dmNotifIds);
+      }
+      uiDispatch({ type: "SET_SIDEBAR", open: false });
+    },
+    [
+      activeServerId,
+      handleSelectServer,
+      dispatch,
+      uiDispatch,
+      markNotificationsRead,
       notifications,
-      (notification) => notification.channel_id === channelId,
-    );
-    if (dmNotifIds.length > 0) {
-      markNotificationsRead(dmNotifIds);
-    }
-    uiDispatch({ type: 'SET_SIDEBAR', open: false });
-  }, [activeServerId, handleSelectServer, dispatch, uiDispatch, markNotificationsRead, notifications]);
+    ],
+  );
   useBackButton(
     useCallback(() => {
       // Hardware back button behavior for the base layer (behind all modals/panels).
@@ -741,19 +1001,25 @@ export default function ChatPage() {
         return false;
       } else {
         // If we are in the main chat area (sidebar closed), pressing back should open the sidebar.
-        uiDispatch({ type: 'SET_SIDEBAR', open: true });
+        uiDispatch({ type: "SET_SIDEBAR", open: true });
         return true; // Consume event
       }
     }, [sidebarOpen, uiDispatch]),
-    true // Always register this base handler
+    true, // Always register this base handler
   );
 
   return (
-    <div className="flex h-full flex-col overflow-hidden bg-rm-bg-primary" data-app-layout="true">
+    <div
+      className="flex h-full flex-col overflow-hidden bg-rm-bg-primary"
+      data-app-layout="true"
+    >
       {/* OS-level Title Bar (Mock Discord Topbar) */}
       <div
         className="hidden md:flex w-full shrink-0 flex-row items-center justify-between bg-rm-bg-secondary px-2 border-b border-rm-border/30 drag-region"
-        style={{ height: 'calc(24px + var(--safe-area-top, 0px))', paddingTop: 'var(--safe-area-top, 0px)' }}
+        style={{
+          height: "calc(24px + var(--safe-area-top, 0px))",
+          paddingTop: "var(--safe-area-top, 0px)",
+        }}
       >
         <div className="flex items-center gap-2 no-drag ml-1">
           <button
@@ -773,7 +1039,11 @@ export default function ChatPage() {
           {activeServer && (
             <div className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-rm-bg-elevated text-[9px] font-bold text-rm-text overflow-hidden">
               {activeServer.icon_url ? (
-                <img src={getAuthAssetUrl(activeServer.icon_url)} alt="" className="h-full w-full object-cover" />
+                <img
+                  src={getAuthAssetUrl(activeServer.icon_url)}
+                  alt=""
+                  className="h-full w-full object-cover"
+                />
               ) : (
                 activeServer.name.charAt(0).toUpperCase()
               )}
@@ -784,9 +1054,14 @@ export default function ChatPage() {
         <div className="flex w-12" /> {/* Spacer for symmetry */}
       </div>
 
-      <div className="flex flex-1 overflow-hidden relative" style={channelSidebarStyle}>
+      <div
+        className="flex flex-1 overflow-hidden relative"
+        style={channelSidebarStyle}
+      >
         {/* Server icon strip */}
-        <div className={`z-50 flex w-[calc(var(--spacing)*18)] shrink-0 flex-col items-center overflow-y-auto bg-rm-bg-floating scrollbar-none max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:z-[110] max-md:transition-transform max-md:duration-300 ${sidebarOpen ? "max-md:translate-x-0" : "max-md:-translate-x-full"}`}>
+        <div
+          className={`z-50 flex w-[calc(var(--spacing)*18)] shrink-0 flex-col items-center overflow-y-auto bg-rm-bg-floating scrollbar-none max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:z-[110] max-md:transition-transform max-md:duration-300 ${sidebarOpen ? "max-md:translate-x-0" : "max-md:-translate-x-full"}`}
+        >
           <ServerList
             servers={servers}
             activeServerId={activeServerId}
@@ -804,7 +1079,9 @@ export default function ChatPage() {
             onSelectDm={onSelectDm}
             onMarkServerRead={(serverId) => {
               // Mark all channels in this server as read
-              const serverChannels = channels.filter((c) => c.server_id === serverId);
+              const serverChannels = channels.filter(
+                (c) => c.server_id === serverId,
+              );
               for (const ch of serverChannels) {
                 const lastMsg = lastMessageAt[ch.id];
                 const lastRead = readStates[ch.id];
@@ -844,10 +1121,16 @@ export default function ChatPage() {
 
         {/* Mobile overlay */}
         <div
-          className={`fixed inset-0 z-[104] bg-black/50 transition-opacity duration-300 ${sidebarOpen ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0"
-            } md:hidden`}
-          onClick={() => uiDispatch({ type: 'SET_SIDEBAR', open: false })}
-          onKeyDown={(e) => { if (e.key === "Enter" || e.key === " " || e.key === "Escape") uiDispatch({ type: 'SET_SIDEBAR', open: false }); }}
+          className={`fixed inset-0 z-[104] bg-black/50 transition-opacity duration-300 ${
+            sidebarOpen
+              ? "pointer-events-auto opacity-100"
+              : "pointer-events-none opacity-0"
+          } md:hidden`}
+          onClick={() => uiDispatch({ type: "SET_SIDEBAR", open: false })}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " " || e.key === "Escape")
+              uiDispatch({ type: "SET_SIDEBAR", open: false });
+          }}
           role="presentation"
           aria-hidden="true"
         />
@@ -856,7 +1139,9 @@ export default function ChatPage() {
         <div
           className={cn(
             "relative flex h-full shrink-0 flex-col overflow-hidden bg-rm-sidebar font-sans md:w-[var(--channel-sidebar-width)] md:min-w-[calc(var(--spacing)*52)] md:max-w-[calc(var(--spacing)*92)] max-md:fixed max-md:inset-y-0 max-md:left-[calc(var(--spacing)*18)] max-md:z-[105] max-md:w-[calc(100vw-(var(--spacing)*18))] max-md:max-w-72 max-md:shadow-2xl max-md:transition-transform max-md:duration-300",
-            sidebarOpen ? "max-md:translate-x-0" : "max-md:-translate-x-[calc(100%+(var(--spacing)*18))]",
+            sidebarOpen
+              ? "max-md:translate-x-0"
+              : "max-md:-translate-x-[calc(100%+(var(--spacing)*18))]",
           )}
         >
           <div className="min-h-0 flex-1 overflow-hidden">
@@ -866,17 +1151,17 @@ export default function ChatPage() {
                 activeView={dmHomeView}
                 onSelectDm={(channelId) => {
                   dispatch({ type: "SET_ACTIVE_CHANNEL", channelId });
-                  uiDispatch({ type: 'SET_SIDEBAR', open: false });
+                  uiDispatch({ type: "SET_SIDEBAR", open: false });
                 }}
                 onShowFriends={() => {
                   setDmHomeView("friends");
-                  uiDispatch({ type: 'SET_SIDEBAR', open: false });
+                  uiDispatch({ type: "SET_SIDEBAR", open: false });
                   dispatch({ type: "SET_ACTIVE_SERVER", serverId: "@me" });
                   dispatch({ type: "SET_ACTIVE_CHANNEL", channelId: null });
                 }}
                 onShowShop={() => {
                   setDmHomeView("shop");
-                  uiDispatch({ type: 'SET_SIDEBAR', open: false });
+                  uiDispatch({ type: "SET_SIDEBAR", open: false });
                   dispatch({ type: "SET_ACTIVE_SERVER", serverId: "@me" });
                   dispatch({ type: "SET_ACTIVE_CHANNEL", channelId: null });
                 }}
@@ -890,20 +1175,44 @@ export default function ChatPage() {
                 serverName={activeServer?.name ?? "Server"}
                 currentUserId={user?.id ?? null}
                 onSelect={guardedSelectChannel}
-                onInviteClick={() => uiDispatch({ type: 'OPEN_MODAL', modal: 'invite' })}
-                onSettingsClick={() => uiDispatch({ type: 'OPEN_MODAL', modal: 'settings' })}
+                onInviteClick={() =>
+                  uiDispatch({ type: "OPEN_MODAL", modal: "invite" })
+                }
+                onSettingsClick={() =>
+                  uiDispatch({ type: "OPEN_MODAL", modal: "settings" })
+                }
                 readStates={readStates}
                 lastMessageAt={lastMessageAt}
                 voiceChannelStates={voiceChannelStates}
                 localVoiceChannelId={voiceState.channelId}
                 localVoiceConnected={voiceState.joined}
-                localVoiceSessionId={localStreamState?.sfu?.getParticipantId?.() ?? null}
+                localVoiceSessionId={
+                  localStreamState?.sfu?.getParticipantId?.() ?? null
+                }
                 channelMentionCounts={channelMentionCounts}
                 streamPreviewChannelId={localStreamState?.channelId ?? null}
                 streamThumbnails={localStreamState?.streamThumbnails ?? {}}
                 onWatchStream={handleWatchLiveStream}
-                canReorder={hasPermission(currentUserPermissions, PERMISSIONS.MANAGE_CHANNELS) || hasPermission(currentUserPermissions, PERMISSIONS.ADMINISTRATOR)}
-                canManageChannels={hasPermission(currentUserPermissions, PERMISSIONS.MANAGE_CHANNELS) || hasPermission(currentUserPermissions, PERMISSIONS.ADMINISTRATOR)}
+                canReorder={
+                  hasPermission(
+                    currentUserPermissions,
+                    PERMISSIONS.MANAGE_CHANNELS,
+                  ) ||
+                  hasPermission(
+                    currentUserPermissions,
+                    PERMISSIONS.ADMINISTRATOR,
+                  )
+                }
+                canManageChannels={
+                  hasPermission(
+                    currentUserPermissions,
+                    PERMISSIONS.MANAGE_CHANNELS,
+                  ) ||
+                  hasPermission(
+                    currentUserPermissions,
+                    PERMISSIONS.ADMINISTRATOR,
+                  )
+                }
               />
             ) : (
               <div className="flex h-full flex-col border-r border-rm-border bg-rm-sidebar">
@@ -944,13 +1253,24 @@ export default function ChatPage() {
         <div className="flex-1 flex flex-col min-w-0 bg-rm-bg-primary overflow-hidden relative chat-main-content">
           {/* Unified Voice Session: survives navigation by staying mounted (hidden when not active) */}
           {(voiceState.joined || showVoiceAsMain) && (
-            <div className={cn("relative flex min-h-0 flex-1 min-w-0", !showVoiceAsMain && "hidden")}>
+            <div
+              className={cn(
+                "relative flex min-h-0 flex-1 min-w-0",
+                !showVoiceAsMain && "hidden",
+              )}
+            >
               <Suspense fallback={null}>
                 <VoiceChannelView
                   key={`persistent-voice-session-${showVoiceAsMain ? activeServerId : voiceState.serverId}-${showVoiceAsMain ? activeChannelId : voiceState.channelId}`}
-                  channelId={(showVoiceAsMain ? activeChannelId : voiceState.channelId)!}
-                  channelName={showVoiceAsMain ? channelDisplayName : voiceChannelName}
-                  serverId={(showVoiceAsMain ? activeServerId : voiceState.serverId)!}
+                  channelId={
+                    (showVoiceAsMain ? activeChannelId : voiceState.channelId)!
+                  }
+                  channelName={
+                    showVoiceAsMain ? channelDisplayName : voiceChannelName
+                  }
+                  serverId={
+                    (showVoiceAsMain ? activeServerId : voiceState.serverId)!
+                  }
                   onToggleTextChat={handleToggleVoiceTextChat}
                   showTextChat={showVoiceTextChat}
                   onOpenActivities={() => setVoiceAppsModal("activities")}
@@ -960,7 +1280,9 @@ export default function ChatPage() {
                   autoJoin={shouldAutoJoinVoice}
                   onOpenProfileUser={handleOpenVoiceProfile}
                   onOpenMessageUser={handleOpenVoiceMessage}
-                  onMenuClick={() => uiDispatch({ type: 'SET_SIDEBAR', open: true })}
+                  onMenuClick={() =>
+                    uiDispatch({ type: "SET_SIDEBAR", open: true })
+                  }
                 />
               </Suspense>
               {showVoiceAsMain && voiceTextChatVisible && (
@@ -969,7 +1291,9 @@ export default function ChatPage() {
                     type="button"
                     className={cn(
                       "absolute inset-0 z-[105] bg-black/45 backdrop-blur-[2px] cursor-default",
-                      showVoiceTextChat ? "animate-in fade-in duration-200" : "animate-out fade-out duration-200"
+                      showVoiceTextChat
+                        ? "animate-in fade-in duration-200"
+                        : "animate-out fade-out duration-200",
                     )}
                     onClick={handleToggleVoiceTextChat}
                     aria-label="Close voice chat"
@@ -979,18 +1303,26 @@ export default function ChatPage() {
                       "absolute inset-y-0 right-0 z-[110] flex w-full max-w-[420px] sm:w-[420px] flex-col border-l border-white/10 bg-rm-bg-primary shadow-[-20px_0_40px_rgba(0,0,0,0.4)]",
                       showVoiceTextChat
                         ? "animate-in fade-in slide-in-from-right duration-200"
-                        : "animate-out fade-out slide-out-to-right duration-200"
+                        : "animate-out fade-out slide-out-to-right duration-200",
                     )}
                   >
                     <ChatArea
                       key={`voice-${activeChannelId}`}
                       channelId={activeChannelId!}
                       channelName={channelDisplayName}
-                      onMenuClick={() => uiDispatch({ type: 'SET_SIDEBAR', open: true })}
+                      onMenuClick={() =>
+                        uiDispatch({ type: "SET_SIDEBAR", open: true })
+                      }
                       showMembers={false}
                       isDM={isDmMode}
-                      jumpToMessageId={pendingJump?.channelId === activeChannelId ? pendingJump.messageId : null}
-                      onJumped={() => uiDispatch({ type: 'SET_PENDING_JUMP', jump: null })}
+                      jumpToMessageId={
+                        pendingJump?.channelId === activeChannelId
+                          ? pendingJump.messageId
+                          : null
+                      }
+                      onJumped={() =>
+                        uiDispatch({ type: "SET_PENDING_JUMP", jump: null })
+                      }
                       onClose={handleToggleVoiceTextChat}
                     />
                   </div>
@@ -1000,15 +1332,19 @@ export default function ChatPage() {
           )}
 
           {/* Regular Chat/Friends Area: shown when not in full-screen voice */}
-          {!showVoiceAsMain && (
-            isDmMode && !activeChannelId ? (
+          {!showVoiceAsMain &&
+            (isDmMode && !activeChannelId ? (
               dmHomeView === "shop" ? (
                 <ShopView
-                  onMenuClick={() => uiDispatch({ type: 'SET_SIDEBAR', open: true })}
+                  onMenuClick={() =>
+                    uiDispatch({ type: "SET_SIDEBAR", open: true })
+                  }
                 />
               ) : (
                 <FriendsView
-                  onMenuClick={() => uiDispatch({ type: 'SET_SIDEBAR', open: true })}
+                  onMenuClick={() =>
+                    uiDispatch({ type: "SET_SIDEBAR", open: true })
+                  }
                   onSelectDm={onSelectDm}
                 />
               )
@@ -1029,8 +1365,14 @@ export default function ChatPage() {
                   autoJoin={false}
                   onOpenProfileUser={handleOpenVoiceProfile}
                   onOpenMessageUser={handleOpenVoiceMessage}
-                  onMenuClick={() => uiDispatch({ type: 'SET_SIDEBAR', open: true })}
-                  onBeforeJoin={isInVoiceSession ? handleEphemeralVoiceBeforeJoin : undefined}
+                  onMenuClick={() =>
+                    uiDispatch({ type: "SET_SIDEBAR", open: true })
+                  }
+                  onBeforeJoin={
+                    isInVoiceSession
+                      ? handleEphemeralVoiceBeforeJoin
+                      : undefined
+                  }
                 />
               </Suspense>
             ) : (
@@ -1038,105 +1380,138 @@ export default function ChatPage() {
                 key={activeChannelId}
                 channelId={activeChannelId}
                 channelName={channelDisplayName}
-                onMenuClick={() => uiDispatch({ type: 'SET_SIDEBAR', open: true })}
-                onMembersClick={() => uiDispatch({ type: 'TOGGLE_MEMBERS' })}
+                onMenuClick={() =>
+                  uiDispatch({ type: "SET_SIDEBAR", open: true })
+                }
+                onMembersClick={() => uiDispatch({ type: "TOGGLE_MEMBERS" })}
                 showMembers={showMembers}
                 isDM={isDmMode}
-                jumpToMessageId={pendingJump?.channelId === activeChannelId ? pendingJump.messageId : null}
-                onJumped={() => uiDispatch({ type: 'SET_PENDING_JUMP', jump: null })}
-                onInviteClick={activeServerId && !isDmMode ? () => uiDispatch({ type: 'OPEN_MODAL', modal: 'invite' }) : undefined}
+                jumpToMessageId={
+                  pendingJump?.channelId === activeChannelId
+                    ? pendingJump.messageId
+                    : null
+                }
+                onJumped={() =>
+                  uiDispatch({ type: "SET_PENDING_JUMP", jump: null })
+                }
+                onInviteClick={
+                  activeServerId && !isDmMode
+                    ? () => uiDispatch({ type: "OPEN_MODAL", modal: "invite" })
+                    : undefined
+                }
                 serverId={activeServerId}
-                onCall={isDmMode && activeDm?.recipient?.id && activeChannelId ? () => {
-                  // Prewarm AudioContext during this user gesture
-                  prewarmAudioContext();
-                  resumeSoundContext();
+                onCall={
+                  isDmMode && activeDm?.recipient?.id && activeChannelId
+                    ? () => {
+                        // Prewarm AudioContext during this user gesture
+                        prewarmAudioContext();
+                        resumeSoundContext();
 
-                  // If there's already an active call for this DM channel, rejoin instead of starting a new one
-                  const callState = useCallStore.getState();
-                  if (callState.status === "active" && callState.channelId === activeChannelId) {
-                    // Rejoin the existing call SFU
-                    window.dispatchEvent(new CustomEvent("force-voice-disconnect"));
-                    callState.joinSFU();
-                    return;
-                  }
+                        // If there's already an active call for this DM channel, rejoin instead of starting a new one
+                        const callState = useCallStore.getState();
+                        if (
+                          callState.status === "active" &&
+                          callState.channelId === activeChannelId
+                        ) {
+                          // Rejoin the existing call SFU
+                          window.dispatchEvent(
+                            new CustomEvent("force-voice-disconnect"),
+                          );
+                          callState.joinSFU();
+                          return;
+                        }
 
-                  const doCall = () => {
-                    // Mutual exclusion: leave voice channel before calling
-                    if (voiceState.joined && localStreamState) {
-                      localStreamState.handleLeave();
-                    }
-                    const gateway = useChatStore.getState().gateway;
-                    if (gateway && activeDm?.recipient?.id && activeChannelId) {
-                      gateway.sendCallInitiate(activeDm.recipient.id, activeChannelId);
-                    }
-                  };
+                        const doCall = () => {
+                          // Mutual exclusion: leave voice channel before calling
+                          if (voiceState.joined && localStreamState) {
+                            localStreamState.handleLeave();
+                          }
+                          const gateway = useChatStore.getState().gateway;
+                          if (
+                            gateway &&
+                            activeDm?.recipient?.id &&
+                            activeChannelId
+                          ) {
+                            gateway.sendCallInitiate(
+                              activeDm.recipient.id,
+                              activeChannelId,
+                            );
+                          }
+                        };
 
-                  // Guard with confirmation if already in a voice session
-                  guardedCallInitiate(doCall);
-                } : undefined}
+                        // Guard with confirmation if already in a voice session
+                        guardedCallInitiate(doCall);
+                      }
+                    : undefined
+                }
                 dmUsername={isDmMode ? channelUsername : undefined}
               />
-            )
-          )}
+            ))}
         </div>
 
-
-	        {shouldRenderFloatingStreamPreview && localStreamState && (
-	          <FloatingStreamPreview
-	            userId={floatingPreviewUserId}
-	            channelName={voiceChannelName}
-	            displayName={floatingPreviewDisplayName}
-	            previewStream={floatingPreviewStream}
-	            slotIndex={0}
-	            isPreviewPaused={!!localStreamState.isPreviewHidden}
-	            pausedTitle="Your stream is still running!"
-	            pausedDescription="We've paused this preview to save your resources."
-	            primaryActionTooltip="Stop Streaming"
-	            primaryActionAriaLabel="Stop streaming"
-	            onPrimaryAction={() => localStreamState.toggleScreenShare()}
-	            onNavigateToVoiceChannel={handleVoiceNavigate}
-	            menuProps={{
-	              isStreaming: true,
-	              onToggleScreenShare: localStreamState.toggleScreenShare,
-	              currentScreenQuality: localStreamState.screenQuality,
-	              currentScreenSource: localStreamState.currentScreenSource,
-	              availableQualities: localStreamState.availableQualities,
-	              isStreamingAudio: localStreamState.isStreamingAudio,
-	              onToggleStreamAudio: localStreamState.toggleStreamAudio,
-	              onChangeSource: localStreamState.openScreenShareModal,
-	              showDisconnect: false,
-	              alwaysShowStreamPreview: localStreamState.alwaysShowStreamPreview,
-	              onToggleAlwaysShowStreamPreview: localStreamState.onToggleAlwaysShowStreamPreview,
-	            }}
-	          />
-	        )}
-
-	        {shouldRenderWatchedStreamPreviews && localStreamState && watchedRemoteScreenItems.map((item, index) => (
-	          <FloatingStreamPreview
-	            key={`watched-stream-preview-${item.userId}`}
-	            userId={item.userId}
-	            channelName={voiceChannelName}
-	            displayName={item.name.replace(/'s Stream$/, "")}
-	            previewStream={item.stream}
-	            slotIndex={(localStreamState.isScreenSharing ? 1 : 0) + index}
-	            pausedTitle={`${item.name.replace(/'s Stream$/, "")} is still live`}
-	            pausedDescription="We're waiting for this stream preview to be available again."
-	            primaryActionTooltip="Stop Watching"
-	            primaryActionAriaLabel={`Stop watching ${item.name.replace(/'s Stream$/, "")}`}
-	            onPrimaryAction={() => localStreamState.onToggleWatch(item.userId)}
-	            onNavigateToVoiceChannel={() => handleVoiceNavigateToStream(item.userId)}
+        {shouldRenderFloatingStreamPreview && localStreamState && (
+          <FloatingStreamPreview
+            userId={floatingPreviewUserId}
+            channelName={voiceChannelName}
+            displayName={floatingPreviewDisplayName}
+            previewStream={floatingPreviewStream}
+            slotIndex={0}
+            isPreviewPaused={!!localStreamState.isPreviewHidden}
+            pausedTitle="Your stream is still running!"
+            pausedDescription="We've paused this preview to save your resources."
+            primaryActionTooltip="Stop Streaming"
+            primaryActionAriaLabel="Stop streaming"
+            onPrimaryAction={() => localStreamState.toggleScreenShare()}
+            onNavigateToVoiceChannel={handleVoiceNavigate}
             menuProps={{
               isStreaming: true,
-              watchedStreams: localStreamState.watchedStreams,
-              onToggleWatch: localStreamState.onToggleWatch,
-              onOpenProfileUser: handleOpenVoiceProfile,
-              onOpenMessageUser: handleOpenVoiceMessage,
+              onToggleScreenShare: localStreamState.toggleScreenShare,
+              currentScreenQuality: localStreamState.screenQuality,
+              currentScreenSource: localStreamState.currentScreenSource,
+              availableQualities: localStreamState.availableQualities,
+              isStreamingAudio: localStreamState.isStreamingAudio,
+              onToggleStreamAudio: localStreamState.toggleStreamAudio,
+              onChangeSource: localStreamState.openScreenShareModal,
               showDisconnect: false,
-              serverId: voiceState.serverId ?? activeServerId,
-              localUserId: user?.id ?? null,
-	            }}
-	          />
-	        ))}
+              alwaysShowStreamPreview: localStreamState.alwaysShowStreamPreview,
+              onToggleAlwaysShowStreamPreview:
+                localStreamState.onToggleAlwaysShowStreamPreview,
+            }}
+          />
+        )}
+
+        {shouldRenderWatchedStreamPreviews &&
+          localStreamState &&
+          watchedRemoteScreenItems.map((item, index) => (
+            <FloatingStreamPreview
+              key={`watched-stream-preview-${item.userId}`}
+              userId={item.userId}
+              channelName={voiceChannelName}
+              displayName={item.name.replace(/'s Stream$/, "")}
+              previewStream={item.stream}
+              slotIndex={(localStreamState.isScreenSharing ? 1 : 0) + index}
+              pausedTitle={`${item.name.replace(/'s Stream$/, "")} is still live`}
+              pausedDescription="We're waiting for this stream preview to be available again."
+              primaryActionTooltip="Stop Watching"
+              primaryActionAriaLabel={`Stop watching ${item.name.replace(/'s Stream$/, "")}`}
+              onPrimaryAction={() =>
+                localStreamState.onToggleWatch(item.userId)
+              }
+              onNavigateToVoiceChannel={() =>
+                handleVoiceNavigateToStream(item.userId)
+              }
+              menuProps={{
+                isStreaming: true,
+                watchedStreams: localStreamState.watchedStreams,
+                onToggleWatch: localStreamState.onToggleWatch,
+                onOpenProfileUser: handleOpenVoiceProfile,
+                onOpenMessageUser: handleOpenVoiceMessage,
+                showDisconnect: false,
+                serverId: voiceState.serverId ?? activeServerId,
+                localUserId: user?.id ?? null,
+              }}
+            />
+          ))}
 
         <DesktopThumbnailToolbarSync
           currentUserId={user?.id ?? null}
@@ -1144,18 +1519,20 @@ export default function ChatPage() {
           voiceJoined={voiceState.joined}
         />
 
-	        {/* Floating UI anchored over the left nav without changing its location */}
-	        <div className={`absolute bottom-0 left-0 z-[120] w-[var(--left-nav-width)] pointer-events-none p-0 flex justify-start items-end max-md:fixed max-md:w-[min(calc(100vw),360px)] max-md:transition-transform max-md:duration-300 ${sidebarOpen ? "max-md:translate-x-0" : "max-md:-translate-x-full"}`}>
-	          <div className="pointer-events-auto w-full">
-	            <UserPanel
+        {/* Floating UI anchored over the left nav without changing its location */}
+        <div
+          className={`absolute bottom-0 left-0 z-[120] w-[var(--left-nav-width)] pointer-events-none p-0 flex justify-start items-end max-md:fixed max-md:w-[min(calc(100vw),360px)] max-md:transition-transform max-md:duration-300 ${sidebarOpen ? "max-md:translate-x-0" : "max-md:-translate-x-full"}`}
+        >
+          <div className="pointer-events-auto w-full">
+            <UserPanel
               user={user}
               serverId={voiceState.serverId ?? activeServerId}
               serverName={voiceServerName}
               voiceConnected={voiceState.joined}
               voiceChannelId={voiceState.channelId}
               voiceChannelName={voiceChannelName}
-	              onVoiceDisconnect={handleVoiceDisconnect}
-	              onVoiceNavigate={handleVoiceNavigate}
+              onVoiceDisconnect={handleVoiceDisconnect}
+              onVoiceNavigate={handleVoiceNavigate}
               isScreenSharing={localStreamState?.isScreenSharing}
               isStreamingAudio={localStreamState?.isStreamingAudio}
               screenQuality={localStreamState?.screenQuality}
@@ -1166,7 +1543,16 @@ export default function ChatPage() {
               onChangeStreamSource={() => {
                 localStreamState?.openScreenShareModal();
               }}
-              onStartScreenShare={({ quality, withAudio, sourceId, captureId, sourceName, sourceKind, sourceAppName, sourceIcon }) =>
+              onStartScreenShare={({
+                quality,
+                withAudio,
+                sourceId,
+                captureId,
+                sourceName,
+                sourceKind,
+                sourceAppName,
+                sourceIcon,
+              }) =>
                 localStreamState?.toggleScreenShare({
                   quality,
                   withAudio,
@@ -1179,7 +1565,9 @@ export default function ChatPage() {
                   changeSource: true,
                 })
               }
-              onStreamQualityChange={(q: string) => localStreamState?.toggleScreenShare({ quality: q })}
+              onStreamQualityChange={(q: string) =>
+                localStreamState?.toggleScreenShare({ quality: q })
+              }
               isCameraActive={localStreamState?.isCameraActive}
               hasCamera={localStreamState?.hasCamera}
               hasMicrophone={localStreamState?.hasMicrophone}
@@ -1188,7 +1576,9 @@ export default function ChatPage() {
               gridItems={localStreamState?.gridItems ?? []}
               watchersByStreamer={localStreamState?.watchersByStreamer ?? {}}
               spatialAudioState={localStreamState?.spatialAudioState}
-              onUpdateSpatialAudioState={localStreamState?.updateSharedSpatialAudioState}
+              onUpdateSpatialAudioState={
+                localStreamState?.updateSharedSpatialAudioState
+              }
               voiceSettingsUserId={localStreamState?.settingsUserId}
               roomSlug={localStreamState?.roomSlug}
               voiceSessionId={localStreamState?.voiceSessionId}
@@ -1237,8 +1627,8 @@ export default function ChatPage() {
             <InviteModal
               serverId={activeServerId}
               serverName={activeServer.name}
-              onClose={() => uiDispatch({ type: 'CLOSE_MODAL' })}
-              isClosing={activeModal !== 'invite'}
+              onClose={() => uiDispatch({ type: "CLOSE_MODAL" })}
+              isClosing={activeModal !== "invite"}
             />
           </Suspense>
         )}
@@ -1255,7 +1645,7 @@ export default function ChatPage() {
               showSourceInShares={activeServer.show_source_in_shares ?? false}
               allowShareIndexing={activeServer.allow_share_indexing ?? false}
               userPermissions={currentUserPermissions}
-              onClose={() => uiDispatch({ type: 'CLOSE_MODAL' })}
+              onClose={() => uiDispatch({ type: "CLOSE_MODAL" })}
               onUpdated={(updates) => {
                 dispatch({
                   type: "UPDATE_SERVER",
@@ -1268,23 +1658,25 @@ export default function ChatPage() {
                   type: "REMOVE_SERVER",
                   serverId: activeServerId!,
                 });
-                uiDispatch({ type: 'CLOSE_MODAL' });
+                uiDispatch({ type: "CLOSE_MODAL" });
                 silentPush("/chat");
               }}
-              isClosing={activeModal !== 'settings'}
+              isClosing={activeModal !== "settings"}
             />
           </Suspense>
         )}
 
-        {shouldRenderProfileUser && renderedProfileUser && renderedProfileUser.id !== user?.id && (
-          <Suspense fallback={null}>
-            <UserProfileModal
-              user={renderedProfileUser}
-              onClose={() => setProfileUser(null)}
-              isClosing={!profileUser}
-            />
-          </Suspense>
-        )}
+        {shouldRenderProfileUser &&
+          renderedProfileUser &&
+          renderedProfileUser.id !== user?.id && (
+            <Suspense fallback={null}>
+              <UserProfileModal
+                user={renderedProfileUser}
+                onClose={() => setProfileUser(null)}
+                isClosing={!profileUser}
+              />
+            </Suspense>
+          )}
 
         {shouldRenderAudioModal && (
           <Suspense fallback={null}>
@@ -1306,7 +1698,6 @@ export default function ChatPage() {
           <IncomingCallModal />
         </Suspense>
 
-
         {/* Voice Switch Confirmation */}
         {shouldRenderVoiceSwitchModal && (
           <Suspense fallback={null}>
@@ -1315,7 +1706,9 @@ export default function ChatPage() {
               targetName={
                 pendingSwitch?.type === "voice"
                   ? pendingSwitch.channelName
-                  : activeDm?.recipient?.display_name ?? activeDm?.recipient?.username ?? "call"
+                  : (activeDm?.recipient?.display_name ??
+                    activeDm?.recipient?.username ??
+                    "call")
               }
               currentType={callActive ? "call" : "voice"}
               isClosing={!pendingSwitch}
@@ -1330,7 +1723,7 @@ export default function ChatPage() {
           <Suspense fallback={null}>
             <StartCallModal
               open
-              targetName={pendingCallTarget?.displayName ?? ''}
+              targetName={pendingCallTarget?.displayName ?? ""}
               onConfirm={handleCallConfirm}
               onCancel={handleCallCancel}
               isClosing={!pendingCallTarget}

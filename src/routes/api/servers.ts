@@ -1,13 +1,15 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute } from "@tanstack/react-router";
 
 import { apiError, apiSuccess, getDB, requireAuth } from "@/lib/api-helpers";
 import { cacheFetch, CacheKey, CacheTTL } from "@/lib/cache";
 import { checkRateLimitDO, RATE_LIMITS } from "@/lib/rate-limit";
 import { ServiceError } from "@/lib/service-error";
 import { CreateServerSchema } from "@/lib/validations";
-import { executeBroadcast, executeInvalidation } from "@/services/service-helpers";
+import {
+  executeBroadcast,
+  executeInvalidation,
+} from "@/services/service-helpers";
 import { createServer, listUserServers } from "@/services/server.service";
-
 
 // GET /api/servers — list servers the current user is a member of
 const GET = async ({ request, params }: any) => {
@@ -21,11 +23,11 @@ const GET = async ({ request, params }: any) => {
   const results = await cacheFetch(
     CacheKey.userServers(userId),
     CacheTTL.USER_SERVERS,
-    () => listUserServers(db, userId)
+    () => listUserServers(db, userId),
   );
 
   return apiSuccess(results);
-}
+};
 
 // POST /api/servers — create a new server
 const POST = async ({ request, params }: any) => {
@@ -34,7 +36,11 @@ const POST = async ({ request, params }: any) => {
   const { userId } = authResult;
 
   // Rate limit: 5 servers per hour (using global DO token bucket)
-  const rl = await checkRateLimitDO(userId, "server-create", RATE_LIMITS.SERVER_CREATE);
+  const rl = await checkRateLimitDO(
+    userId,
+    "server-create",
+    RATE_LIMITS.SERVER_CREATE,
+  );
   if (rl) return rl;
 
   // Validate input with Zod
@@ -43,7 +49,7 @@ const POST = async ({ request, params }: any) => {
   if (!parsed.success) {
     return Response.json(
       { error: parsed.error.issues[0]?.message ?? "Invalid input" },
-      { status: 400 }
+      { status: 400 },
     );
   }
 
@@ -56,7 +62,10 @@ const POST = async ({ request, params }: any) => {
     .bind(userId)
     .first();
   if (!userExists) {
-    return apiError("User profile not synced yet. Please reload the page.", 409);
+    return apiError(
+      "User profile not synced yet. Please reload the page.",
+      409,
+    );
   }
 
   try {
@@ -69,18 +78,20 @@ const POST = async ({ request, params }: any) => {
     return apiSuccess(result.server, 201);
   } catch (e) {
     if (e instanceof ServiceError) {
-      return Response.json({ error: e.message, code: e.code }, { status: e.status });
+      return Response.json(
+        { error: e.message, code: e.code },
+        { status: e.status },
+      );
     }
     throw e;
   }
-}
+};
 
-
-export const Route = createFileRoute('/api/servers')({
+export const Route = createFileRoute("/api/servers")({
   server: {
     handlers: {
       GET,
       POST,
-    }
-  }
+    },
+  },
 });

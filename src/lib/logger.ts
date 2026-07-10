@@ -25,7 +25,7 @@ const LOG_LEVELS: Record<LogLevel, number> = {
 
 // Environment-based minimum level: default "info" in production, "debug" in dev
 const MIN_LEVEL: LogLevel =
-  (typeof process !== "undefined" && process.env?.NODE_ENV === "development")
+  typeof process !== "undefined" && process.env?.NODE_ENV === "development"
     ? "debug"
     : "info";
 
@@ -33,7 +33,11 @@ function shouldLog(level: LogLevel): boolean {
   return LOG_LEVELS[level] >= LOG_LEVELS[MIN_LEVEL];
 }
 
-function formatEntry(level: LogLevel, message: string, data?: Record<string, unknown>): string {
+function formatEntry(
+  level: LogLevel,
+  message: string,
+  data?: Record<string, unknown>,
+): string {
   const entry: LogEntry = {
     level,
     message,
@@ -61,7 +65,13 @@ export const logger = {
   },
 
   /** Log an API request for observability */
-  request(method: string, path: string, statusCode: number, durationMs: number, data?: Record<string, unknown>) {
+  request(
+    method: string,
+    path: string,
+    statusCode: number,
+    durationMs: number,
+    data?: Record<string, unknown>,
+  ) {
     this.info("API request", {
       method,
       path,

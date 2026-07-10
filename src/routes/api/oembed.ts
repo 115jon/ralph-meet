@@ -6,7 +6,10 @@ import { getPublicWebUrl } from "@/lib/platform";
 import { getPublicMessageShare } from "@/services/message-share.service";
 import { createFileRoute } from "@tanstack/react-router";
 
-function getShareTokenFromUrl(value: string, requestOrigin: string): string | null {
+function getShareTokenFromUrl(
+  value: string,
+  requestOrigin: string,
+): string | null {
   let url: URL;
   try {
     url = new URL(value);
@@ -15,7 +18,11 @@ function getShareTokenFromUrl(value: string, requestOrigin: string): string | nu
   }
 
   const publicOrigin = getPublicWebUrl();
-  const allowedOrigins = new Set([requestOrigin, publicOrigin, "https://meet.115jon.site"]);
+  const allowedOrigins = new Set([
+    requestOrigin,
+    publicOrigin,
+    "https://meet.115jon.site",
+  ]);
   if (!allowedOrigins.has(url.origin)) return null;
 
   const match = url.pathname.match(/^\/share\/([^/?#]+)$/);
@@ -36,14 +43,18 @@ const GET = async ({ request }: { request: Request }) => {
 
   try {
     const share = await hydrateInstagramEmbedsForShare(
-      await getPublicMessageShare(getDB(), token, new Date(), { incrementView: false }),
+      await getPublicMessageShare(getDB(), token, new Date(), {
+        incrementView: false,
+      }),
     );
     const metadata = buildShareMetadata(getPublicWebUrl(), share);
     return Response.json(buildShareOEmbed(metadata), {
       headers: {
         "Cache-Control": "no-store",
         "Content-Type": "application/json+oembed; charset=utf-8",
-        "X-Robots-Tag": share.allow_indexing ? "index, follow" : "noindex, nofollow",
+        "X-Robots-Tag": share.allow_indexing
+          ? "index, follow"
+          : "noindex, nofollow",
       },
     });
   } catch (error) {

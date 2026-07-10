@@ -33,21 +33,32 @@ function createAuthRequiredError(): Error {
 const inFlightGetRequests = new Map<string, Promise<unknown>>();
 let inFlightDesktopTokenRefresh: Promise<string | null> | null = null;
 
-function createHttpResponseError(res: Response, json: any, fallbackMessage: string): Error {
+function createHttpResponseError(
+  res: Response,
+  json: any,
+  fallbackMessage: string,
+): Error {
   const message =
-    (json && typeof json === 'object' && typeof json.error === 'string' && json.error) ||
-    (json && typeof json === 'object' && typeof json.message === 'string' && json.message) ||
+    (json &&
+      typeof json === "object" &&
+      typeof json.error === "string" &&
+      json.error) ||
+    (json &&
+      typeof json === "object" &&
+      typeof json.message === "string" &&
+      json.message) ||
     fallbackMessage;
 
   const error = new Error(message);
-  (error as any).code = json && typeof json === 'object' ? json.code : undefined;
+  (error as any).code =
+    json && typeof json === "object" ? json.code : undefined;
   (error as any).status = res.status;
   return error;
 }
 
 async function getInitialBearerToken(): Promise<string | null> {
   if (!isTauri()) {
-    return getStoredKovaAuthSessionToken() ?? await waitForDesktopToken(750);
+    return getStoredKovaAuthSessionToken() ?? (await waitForDesktopToken(750));
   }
 
   const existing = getDesktopAuthHandoffToken();
@@ -58,10 +69,11 @@ async function getInitialBearerToken(): Promise<string | null> {
 
 async function refreshDesktopTokenOnce(): Promise<string | null> {
   if (!inFlightDesktopTokenRefresh) {
-    inFlightDesktopTokenRefresh = refreshDesktopToken({ force: true })
-      .finally(() => {
+    inFlightDesktopTokenRefresh = refreshDesktopToken({ force: true }).finally(
+      () => {
         inFlightDesktopTokenRefresh = null;
-      });
+      },
+    );
   }
   return inFlightDesktopTokenRefresh;
 }
@@ -90,12 +102,14 @@ interface ApiFetchInit extends RequestInit {
   skipAuth?: boolean;
 }
 
-export async function apiFetch<T>(input: RequestInfo | URL, init?: ApiFetchInit): Promise<T> {
+export async function apiFetch<T>(
+  input: RequestInfo | URL,
+  init?: ApiFetchInit,
+): Promise<T> {
   const { skipAuth = false, ...fetchInit } = init ?? {};
   // Prefix relative paths with the platform-appropriate base URL
-  const resolved = typeof input === "string" && input.startsWith("/")
-    ? apiUrl(input)
-    : input;
+  const resolved =
+    typeof input === "string" && input.startsWith("/") ? apiUrl(input) : input;
   const initialToken = skipAuth ? null : await getInitialBearerToken();
 
   if (!skipAuth && isTauri() && !initialToken) {
@@ -107,7 +121,7 @@ export async function apiFetch<T>(input: RequestInfo | URL, init?: ApiFetchInit)
 
   const doFetch = (token?: string | null) => {
     const authHeaders: Record<string, string> = {};
-    const t = skipAuth ? null : token ?? getClientBearerToken();
+    const t = skipAuth ? null : (token ?? getClientBearerToken());
     if (t) {
       authHeaders["Authorization"] = `Bearer ${t}`;
     }
@@ -124,10 +138,10 @@ export async function apiFetch<T>(input: RequestInfo | URL, init?: ApiFetchInit)
     return fetch(resolved, {
       ...fetchInit,
       headers: {
-        'Content-Type': 'application/json',
+        "Content-Type": "application/json",
         ...authHeaders,
         ...fetchInit.headers,
-      }
+      },
     });
   };
 
@@ -152,8 +166,8 @@ export async function apiFetch<T>(input: RequestInfo | URL, init?: ApiFetchInit)
   }
 
   // Handle empty responses (204 No Content, etc.) without attempting JSON parse
-  const contentLength = res.headers.get('content-length');
-  if (res.status === 204 || contentLength === '0') {
+  const contentLength = res.headers.get("content-length");
+  if (res.status === 204 || contentLength === "0") {
     if (!res.ok) {
       throw new Error(`HTTP Error ${res.status}: ${res.statusText}`);
     }
@@ -169,16 +183,25 @@ export async function apiFetch<T>(input: RequestInfo | URL, init?: ApiFetchInit)
       throw new Error(`HTTP Error ${res.status}: ${res.statusText}`);
     }
     log.error(`Parse error on ${resolved}`, err);
-    throw new Error('Failed to parse API response');
+    throw new Error("Failed to parse API response");
   }
 
   if (!res.ok) {
     log.error(`Failed ${resolved} with status ${res.status}:`, json);
-    throw createHttpResponseError(res, json, `HTTP Error ${res.status}: ${res.statusText}`);
+    throw createHttpResponseError(
+      res,
+      json,
+      `HTTP Error ${res.status}: ${res.statusText}`,
+    );
   }
 
-  if (json && typeof json === 'object' && 'error' in json && typeof json.error === 'string') {
-    const error = new Error(json.error || 'Unknown API Error');
+  if (
+    json &&
+    typeof json === "object" &&
+    "error" in json &&
+    typeof json.error === "string"
+  ) {
+    const error = new Error(json.error || "Unknown API Error");
     (error as any).code = json.code;
     (error as any).status = res.status;
     throw error;
@@ -199,17 +222,25 @@ interface ApiOptions {
  */
 export async function apiGet<T>(url: string, opts?: ApiOptions): Promise<T> {
   if (opts?.signal) {
-    return apiFetch<T>(url, { method: 'GET', signal: opts.signal, headers: opts.headers, skipAuth: opts.skipAuth });
+    return apiFetch<T>(url, {
+      method: "GET",
+      signal: opts.signal,
+      headers: opts.headers,
+      skipAuth: opts.skipAuth,
+    });
   }
 
   const key = apiGetDedupeKey(url, opts);
   const existing = inFlightGetRequests.get(key);
   if (existing) return existing as Promise<T>;
 
-  const request = apiFetch<T>(url, { method: 'GET', headers: opts?.headers, skipAuth: opts?.skipAuth })
-    .finally(() => {
-      inFlightGetRequests.delete(key);
-    });
+  const request = apiFetch<T>(url, {
+    method: "GET",
+    headers: opts?.headers,
+    skipAuth: opts?.skipAuth,
+  }).finally(() => {
+    inFlightGetRequests.delete(key);
+  });
   inFlightGetRequests.set(key, request);
   return request;
 }
@@ -217,9 +248,13 @@ export async function apiGet<T>(url: string, opts?: ApiOptions): Promise<T> {
 /**
  * POST request helper (JSON body).
  */
-export async function apiPost<T, B = unknown>(url: string, body: B, opts?: ApiOptions): Promise<T> {
+export async function apiPost<T, B = unknown>(
+  url: string,
+  body: B,
+  opts?: ApiOptions,
+): Promise<T> {
   return apiFetch<T>(url, {
-    method: 'POST',
+    method: "POST",
     body: JSON.stringify(body),
     signal: opts?.signal,
     headers: opts?.headers,
@@ -230,9 +265,13 @@ export async function apiPost<T, B = unknown>(url: string, body: B, opts?: ApiOp
 /**
  * PUT request helper (JSON body).
  */
-export async function apiPut<T, B = unknown>(url: string, body: B, opts?: ApiOptions): Promise<T> {
+export async function apiPut<T, B = unknown>(
+  url: string,
+  body: B,
+  opts?: ApiOptions,
+): Promise<T> {
   return apiFetch<T>(url, {
-    method: 'PUT',
+    method: "PUT",
     body: JSON.stringify(body),
     signal: opts?.signal,
     headers: opts?.headers,
@@ -243,9 +282,13 @@ export async function apiPut<T, B = unknown>(url: string, body: B, opts?: ApiOpt
 /**
  * PATCH request helper (JSON body).
  */
-export async function apiPatch<T, B = unknown>(url: string, body: B, opts?: ApiOptions): Promise<T> {
+export async function apiPatch<T, B = unknown>(
+  url: string,
+  body: B,
+  opts?: ApiOptions,
+): Promise<T> {
   return apiFetch<T>(url, {
-    method: 'PATCH',
+    method: "PATCH",
     body: JSON.stringify(body),
     signal: opts?.signal,
     headers: opts?.headers,
@@ -256,9 +299,13 @@ export async function apiPatch<T, B = unknown>(url: string, body: B, opts?: ApiO
 /**
  * DELETE request helper (optional JSON body).
  */
-export async function apiDelete<T, B = unknown>(url: string, body?: B, opts?: ApiOptions): Promise<T> {
+export async function apiDelete<T, B = unknown>(
+  url: string,
+  body?: B,
+  opts?: ApiOptions,
+): Promise<T> {
   return apiFetch<T>(url, {
-    method: 'DELETE',
+    method: "DELETE",
     ...(body ? { body: JSON.stringify(body) } : {}),
     signal: opts?.signal,
     headers: opts?.headers,
@@ -271,7 +318,11 @@ export async function apiDelete<T, B = unknown>(url: string, body?: B, opts?: Ap
  * Does NOT set Content-Type header — the browser sets it automatically
  * with the correct boundary.
  */
-export async function apiUpload<T>(url: string, formData: FormData, opts?: ApiOptions): Promise<T> {
+export async function apiUpload<T>(
+  url: string,
+  formData: FormData,
+  opts?: ApiOptions,
+): Promise<T> {
   const resolved = url.startsWith("/") ? apiUrl(url) : url;
   const initialToken = await getInitialBearerToken();
 
@@ -293,7 +344,7 @@ export async function apiUpload<T>(url: string, formData: FormData, opts?: ApiOp
     }
 
     return fetch(resolved, {
-      method: 'POST',
+      method: "POST",
       body: formData,
       signal: opts?.signal,
       headers,
@@ -320,15 +371,24 @@ export async function apiUpload<T>(url: string, formData: FormData, opts?: ApiOp
     if (!res.ok) {
       throw new Error(`Upload failed: HTTP ${res.status}`);
     }
-    throw new Error('Failed to parse upload response');
+    throw new Error("Failed to parse upload response");
   }
 
   if (!res.ok) {
-    throw createHttpResponseError(res, json, `Upload failed: HTTP ${res.status}`);
+    throw createHttpResponseError(
+      res,
+      json,
+      `Upload failed: HTTP ${res.status}`,
+    );
   }
 
-  if (json && typeof json === 'object' && 'error' in json && typeof json.error === 'string') {
-    const error = new Error(json.error || 'Upload failed');
+  if (
+    json &&
+    typeof json === "object" &&
+    "error" in json &&
+    typeof json.error === "string"
+  ) {
+    const error = new Error(json.error || "Upload failed");
     (error as any).code = json.code;
     (error as any).status = res.status;
     throw error;

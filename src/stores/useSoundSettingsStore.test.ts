@@ -1,16 +1,25 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { isSoundEnabled, useSoundSettingsStore } from "@/stores/useSoundSettingsStore";
+import {
+  isSoundEnabled,
+  useSoundSettingsStore,
+} from "@/stores/useSoundSettingsStore";
 
 describe("useSoundSettingsStore", () => {
   beforeEach(() => {
-    useSoundSettingsStore.setState({ currentUser: null, userSettings: {}, _cache: {} });
+    useSoundSettingsStore.setState({
+      currentUser: null,
+      userSettings: {},
+      _cache: {},
+    });
   });
 
   it("enables stream watcher activity sounds by default", () => {
     useSoundSettingsStore.getState().setCurrentUser("user-1");
 
-    expect(useSoundSettingsStore.getState().getSettings().streamWatcherActivity).toBe(true);
+    expect(
+      useSoundSettingsStore.getState().getSettings().streamWatcherActivity,
+    ).toBe(true);
     expect(isSoundEnabled("streamWatcherActivity")).toBe(true);
   });
 
@@ -33,6 +42,8 @@ describe("useSoundSettingsStore", () => {
       _cache: {},
     });
 
-    expect(useSoundSettingsStore.getState().getSettings().streamWatcherActivity).toBe(true);
+    expect(
+      useSoundSettingsStore.getState().getSettings().streamWatcherActivity,
+    ).toBe(true);
   });
 });

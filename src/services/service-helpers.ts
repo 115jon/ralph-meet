@@ -5,22 +5,38 @@
  * audit logs) returned by service functions.
  */
 
-import { broadcastToAll, broadcastToChannel, broadcastToServerMembers, broadcastToUser } from "@/lib/api-helpers";
+import {
+  broadcastToAll,
+  broadcastToChannel,
+  broadcastToServerMembers,
+  broadcastToUser,
+} from "@/lib/api-helpers";
 import { logAuditAction, type AuditLogAction } from "@/lib/audit-logger";
 import { cacheDel, cacheDelMany } from "@/lib/cache";
-import type { AuditLogDescriptor, BroadcastDescriptor } from "@/services/server.service";
+import type {
+  AuditLogDescriptor,
+  BroadcastDescriptor,
+} from "@/services/server.service";
 import type { D1Database } from "@cloudflare/workers-types";
 
 /** Execute a broadcast descriptor */
 export async function executeBroadcast(
-  broadcast: BroadcastDescriptor
+  broadcast: BroadcastDescriptor,
 ): Promise<void> {
   switch (broadcast.type) {
     case "channel":
-      await broadcastToChannel(broadcast.target!, broadcast.event, broadcast.data);
+      await broadcastToChannel(
+        broadcast.target!,
+        broadcast.event,
+        broadcast.data,
+      );
       break;
     case "server":
-      await broadcastToServerMembers(broadcast.target!, broadcast.event, broadcast.data);
+      await broadcastToServerMembers(
+        broadcast.target!,
+        broadcast.event,
+        broadcast.data,
+      );
       break;
     case "user":
       await broadcastToUser(broadcast.target!, broadcast.event, broadcast.data);
@@ -44,7 +60,7 @@ export async function executeInvalidation(keys: string[]): Promise<void> {
 /** Execute an audit log descriptor */
 export async function executeAuditLog(
   db: D1Database,
-  descriptor: AuditLogDescriptor
+  descriptor: AuditLogDescriptor,
 ): Promise<void> {
   await logAuditAction({
     db,

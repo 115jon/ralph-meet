@@ -29,7 +29,8 @@ describe("fetchChannelMedia", () => {
         {
           id: "a_proxy",
           filename: "clip.mp4",
-          file_key: "/api/proxy-media?url=https%3A%2F%2Fvideo.twimg.com%2Ftweet_video%2Ftest.mp4",
+          file_key:
+            "/api/proxy-media?url=https%3A%2F%2Fvideo.twimg.com%2Ftweet_video%2Ftest.mp4",
           content_type: "video/mp4",
           size_bytes: 4096,
           created_at: "2026-06-19T04:59:00.000Z",
@@ -52,7 +53,8 @@ describe("fetchChannelMedia", () => {
       source_kind: "attachment",
     });
     expect(items.find((item) => item.id === "a_proxy")).toMatchObject({
-      file_key: "/api/proxy-media?url=https%3A%2F%2Fvideo.twimg.com%2Ftweet_video%2Ftest.mp4",
+      file_key:
+        "/api/proxy-media?url=https%3A%2F%2Fvideo.twimg.com%2Ftweet_video%2Ftest.mp4",
       url: "/api/proxy-media?url=https%3A%2F%2Fvideo.twimg.com%2Ftweet_video%2Ftest.mp4",
       source_kind: "attachment",
     });
@@ -100,7 +102,8 @@ describe("fetchChannelMedia", () => {
                 {
                   type: "video",
                   url: "https://video.twimg.com/tweet_video/example.mp4",
-                  thumbnailUrl: "https://pbs.twimg.com/tweet_video_thumb/example.jpg",
+                  thumbnailUrl:
+                    "https://pbs.twimg.com/tweet_video_thumb/example.jpg",
                   contentType: "video/mp4",
                   isGif: true,
                 },
@@ -128,14 +131,21 @@ describe("fetchChannelMedia", () => {
     const items = await fetchChannelMedia(db as any, "channel_1");
 
     expect(items[0]?.message_id).toBe("m_embed");
-    expect(items.map((item) => item.url)).toEqual(expect.arrayContaining([
-      "https://pbs.twimg.com/media/one.jpg?name=orig",
-      "https://video.twimg.com/tweet_video/example.mp4",
-      "https://pbs.twimg.com/media/quoted.jpg",
-      "/api/attachments/channel/a_old/older.png",
-    ]));
+    expect(items.map((item) => item.url)).toEqual(
+      expect.arrayContaining([
+        "https://pbs.twimg.com/media/one.jpg?name=orig",
+        "https://video.twimg.com/tweet_video/example.mp4",
+        "https://pbs.twimg.com/media/quoted.jpg",
+        "/api/attachments/channel/a_old/older.png",
+      ]),
+    );
 
-    expect(items.find((item) => item.url === "https://video.twimg.com/tweet_video/example.mp4")).toMatchObject({
+    expect(
+      items.find(
+        (item) =>
+          item.url === "https://video.twimg.com/tweet_video/example.mp4",
+      ),
+    ).toMatchObject({
       message_id: "m_embed",
       source_kind: "embed",
       source_url: "https://x.com/example/status/1",

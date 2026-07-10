@@ -1,5 +1,6 @@
 const DEFAULT_CHANNEL_ID = "1518521479438794874";
-const DEFAULT_SHARE_URL = "https://meet.115jon.site/share/9DgdJGfGYzSScaEdVQ8ZzRPp6h0uQH_D";
+const DEFAULT_SHARE_URL =
+  "https://meet.115jon.site/share/9DgdJGfGYzSScaEdVQ8ZzRPp6h0uQH_D";
 const DISCORD_API_BASE = "https://discord.com/api/v10";
 
 function parseArgs(argv) {
@@ -17,7 +18,8 @@ function parseArgs(argv) {
     if (arg === "--url") options.shareUrl = argv[index + 1];
     if (arg === "--version") options.version = argv[index + 1];
     if (arg === "--wait-ms") options.waitMs = Number(argv[index + 1]);
-    if (arg === "--poll-interval-ms") options.pollIntervalMs = Number(argv[index + 1]);
+    if (arg === "--poll-interval-ms")
+      options.pollIntervalMs = Number(argv[index + 1]);
   }
 
   return options;
@@ -45,7 +47,7 @@ async function discordRequest(path, token, init = {}) {
   const response = await fetch(`${DISCORD_API_BASE}${path}`, {
     ...init,
     headers: {
-      "Authorization": `Bot ${token}`,
+      Authorization: `Bot ${token}`,
       "Content-Type": "application/json",
       ...(init.headers ?? {}),
     },
@@ -60,22 +62,34 @@ async function discordRequest(path, token, init = {}) {
   }
 
   if (!response.ok) {
-    throw new Error(`Discord API ${response.status}: ${typeof payload === "string" ? payload : JSON.stringify(payload)}`);
+    throw new Error(
+      `Discord API ${response.status}: ${typeof payload === "string" ? payload : JSON.stringify(payload)}`,
+    );
   }
 
   return payload;
 }
 
-async function waitForEmbed(channelId, messageId, token, waitMs, pollIntervalMs) {
+async function waitForEmbed(
+  channelId,
+  messageId,
+  token,
+  waitMs,
+  pollIntervalMs,
+) {
   const deadline = Date.now() + waitMs;
 
   while (Date.now() < deadline) {
-    const message = await discordRequest(`/channels/${channelId}/messages/${messageId}`, token, {
-      method: "GET",
-      headers: {
-        "Content-Type": "application/json",
+    const message = await discordRequest(
+      `/channels/${channelId}/messages/${messageId}`,
+      token,
+      {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+        },
       },
-    });
+    );
 
     if (Array.isArray(message.embeds) && message.embeds.length > 0) {
       return message;
@@ -84,7 +98,9 @@ async function waitForEmbed(channelId, messageId, token, waitMs, pollIntervalMs)
     await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
   }
 
-  throw new Error(`Timed out waiting for Discord to resolve embeds for message ${messageId}`);
+  throw new Error(
+    `Timed out waiting for Discord to resolve embeds for message ${messageId}`,
+  );
 }
 
 async function main() {
@@ -96,20 +112,30 @@ async function main() {
   const options = parseArgs(process.argv.slice(2));
   const content = buildCacheBustedUrl(options.shareUrl, options.version);
 
-  const message = await discordRequest(`/channels/${options.channelId}/messages`, token, {
-    method: "POST",
-    body: JSON.stringify({
-      content,
-      allowed_mentions: { parse: [] },
-    }),
-  });
+  const message = await discordRequest(
+    `/channels/${options.channelId}/messages`,
+    token,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        content,
+        allowed_mentions: { parse: [] },
+      }),
+    },
+  );
 
-  console.log(JSON.stringify({
-    action: "message_sent",
-    channelId: options.channelId,
-    messageId: message.id,
-    content,
-  }, null, 2));
+  console.log(
+    JSON.stringify(
+      {
+        action: "message_sent",
+        channelId: options.channelId,
+        messageId: message.id,
+        content,
+      },
+      null,
+      2,
+    ),
+  );
 
   const resolved = await waitForEmbed(
     options.channelId,
@@ -119,12 +145,18 @@ async function main() {
     options.pollIntervalMs,
   );
 
-  console.log(JSON.stringify({
-    action: "embed_resolved",
-    channelId: options.channelId,
-    messageId: resolved.id,
-    embeds: resolved.embeds.map(summarizeEmbed),
-  }, null, 2));
+  console.log(
+    JSON.stringify(
+      {
+        action: "embed_resolved",
+        channelId: options.channelId,
+        messageId: resolved.id,
+        embeds: resolved.embeds.map(summarizeEmbed),
+      },
+      null,
+      2,
+    ),
+  );
 }
 
 main().catch((error) => {

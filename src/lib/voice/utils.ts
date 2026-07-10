@@ -1,7 +1,12 @@
 export const formatQuality = (
   q: string | null | undefined,
   track?: MediaStreamTrack | null,
-  stats?: { fps: number; bitrate: number; width?: number; height?: number } | null
+  stats?: {
+    fps: number;
+    bitrate: number;
+    width?: number;
+    height?: number;
+  } | null,
 ) => {
   // Prefer inbound-rtp stats for remote tracks (track.getSettings() is unreliable in Chrome)
   const statsH = stats?.height && stats.height > 0 ? stats.height : null;
@@ -20,14 +25,16 @@ export const formatQuality = (
   }
 
   if (h && w) {
-    let res = '';
-    if (h >= 2160 || w >= 3840) res = '4K';
-    else if (h >= 1440 || w >= 2560) res = '1440';
-    else if (h >= 1080 || w >= 1920) res = '1080';
-    else if (h >= 720 || w >= 1280) res = '720';
+    let res = "";
+    if (h >= 2160 || w >= 3840) res = "4K";
+    else if (h >= 1440 || w >= 2560) res = "1440";
+    else if (h >= 1080 || w >= 1920) res = "1080";
+    else if (h >= 720 || w >= 1280) res = "720";
     else res = h.toString();
 
-    let fps = track?.getSettings().frameRate ? Math.round(track.getSettings().frameRate!) : null;
+    let fps = track?.getSettings().frameRate
+      ? Math.round(track.getSettings().frameRate!)
+      : null;
     // If hardware FPS is missing (common for remote tracks), use stats-based FPS
     if (!fps && stats?.fps) fps = Math.round(stats.fps);
 
@@ -36,12 +43,12 @@ export const formatQuality = (
   }
 
   // Fallback to signaled quality string
-  if (!q) return 'HD';
-  if (q && q.includes('p')) {
-    const [res, fps] = q.split('p');
+  if (!q) return "HD";
+  if (q && q.includes("p")) {
+    const [res, fps] = q.split("p");
     return `${res.toUpperCase()}P / ${fps} FPS`;
   }
-  return q?.toUpperCase() || 'HD';
+  return q?.toUpperCase() || "HD";
 };
 
 export interface StreamQualityProfile {
@@ -74,4 +81,4 @@ export const STREAMING_PROFILES: StreamQualityProfile[] = [
  *   tier, not local hardware).
  */
 export const getAvailableStreamQualities = (): string[] =>
-  STREAMING_PROFILES.map(p => p.id);
+  STREAMING_PROFILES.map((p) => p.id);

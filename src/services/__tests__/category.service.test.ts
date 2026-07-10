@@ -47,7 +47,7 @@ describe("createCategory", () => {
   it("throws 400 when name is empty", async () => {
     const { ServiceError } = await import("../../lib/service-error");
     await expect(
-      createCategory(db as any, SERVER_ID, USER_ID, { name: "  " })
+      createCategory(db as any, SERVER_ID, USER_ID, { name: "  " }),
     ).rejects.toHaveProperty("status", 400);
   });
 
@@ -76,7 +76,7 @@ describe("deleteCategory", () => {
       db as any,
       SERVER_ID,
       USER_ID,
-      CATEGORY_ID
+      CATEGORY_ID,
     );
 
     db.assertCalled(/UPDATE channels SET category_id = NULL/);
@@ -88,7 +88,9 @@ describe("deleteCategory", () => {
   it("passes the correct categoryId to the cascade nullify", async () => {
     await deleteCategory(db as any, SERVER_ID, USER_ID, CATEGORY_ID);
 
-    db.assertCalledWith(/UPDATE channels SET category_id = NULL/, [CATEGORY_ID]);
+    db.assertCalledWith(/UPDATE channels SET category_id = NULL/, [
+      CATEGORY_ID,
+    ]);
   });
 
   it("passes the correct categoryId and serverId to DELETE", async () => {

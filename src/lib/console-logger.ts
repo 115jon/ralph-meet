@@ -11,10 +11,10 @@
 function elapsed(): string {
   // Use local time formatted similar to ISO but more readable
   const now = new Date();
-  const h = String(now.getHours()).padStart(2, '0');
-  const m = String(now.getMinutes()).padStart(2, '0');
-  const s = String(now.getSeconds()).padStart(2, '0');
-  const ms = String(now.getMilliseconds()).padStart(3, '0');
+  const h = String(now.getHours()).padStart(2, "0");
+  const m = String(now.getMinutes()).padStart(2, "0");
+  const s = String(now.getSeconds()).padStart(2, "0");
+  const ms = String(now.getMilliseconds()).padStart(3, "0");
   return `${h}:${m}:${s}.${ms}`;
 }
 
@@ -49,7 +49,7 @@ const TAG_COLORS: Record<string, string> = {
   embed: "color: #7c3aed; font-weight: bold", // purple-dark
   // ── API / Network tags ────────────────────────────────────────────────
   "api-client": "color: #0ea5e9; font-weight: bold", // sky
-  "requireAuth": "color: #e11d48; font-weight: bold", // rose
+  requireAuth: "color: #e11d48; font-weight: bold", // rose
   "voice-session": "color: #dc2626; font-weight: bold", // red-dark
   "listen-together": "color: #f59e0b; font-weight: bold", // amber
   "listen-together:search": "color: #f97316; font-weight: bold", // orange
@@ -154,11 +154,7 @@ export interface ScopedLogger {
 export function clog(tag: string): ScopedLogger {
   const tagStyle = getTagStyle(tag);
 
-  function emit(
-    fn: (...a: unknown[]) => void,
-    msg: string,
-    args: unknown[],
-  ) {
+  function emit(fn: (...a: unknown[]) => void, msg: string, args: unknown[]) {
     const serializedArgs = args.map(serializeArg);
     // Format: [+0.123s] [Tag] message  ...extraArgs
     fn(

@@ -1,4 +1,4 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute } from "@tanstack/react-router";
 
 import { apiError, apiSuccess, getDB, requireAuth } from "@/lib/api-helpers";
 import { requireChannelAccess } from "@/lib/require-channel-access";
@@ -7,7 +7,6 @@ import {
   batchFetchReactions,
   formatMessageRow,
 } from "@/services/message.service";
-
 
 // GET /api/channels/:id/thread?message_id=X
 // Returns the root message + all replies to it
@@ -31,25 +30,31 @@ const GET = async ({ request, params }: any) => {
   const db = getDB();
 
   // Fetch the root message
-  const root = await db.prepare(
-    `SELECT m.*, u.username as author_username, u.display_name as author_display_name, u.avatar_url as author_avatar_url, u.avatar_display as author_avatar_display
+  const root = await db
+    .prepare(
+      `SELECT m.*, u.username as author_username, u.display_name as author_display_name, u.avatar_url as author_avatar_url, u.avatar_display as author_avatar_display
      FROM messages m
      LEFT JOIN users u ON u.id = m.author_id
-     WHERE m.id = ? AND m.channel_id = ?`
-  ).bind(messageId, channelId).first();
+     WHERE m.id = ? AND m.channel_id = ?`,
+    )
+    .bind(messageId, channelId)
+    .first();
 
   if (!root) {
     return apiError("Message not found", 404);
   }
 
   // Fetch all replies to this message
-  const { results: replyRows } = await db.prepare(
-    `SELECT m.*, u.username as author_username, u.display_name as author_display_name, u.avatar_url as author_avatar_url, u.avatar_display as author_avatar_display
+  const { results: replyRows } = await db
+    .prepare(
+      `SELECT m.*, u.username as author_username, u.display_name as author_display_name, u.avatar_url as author_avatar_url, u.avatar_display as author_avatar_display
      FROM messages m
      LEFT JOIN users u ON u.id = m.author_id
      WHERE m.reply_to_id = ? AND m.channel_id = ?
-     ORDER BY m.created_at ASC`
-  ).bind(messageId, channelId).all();
+     ORDER BY m.created_at ASC`,
+    )
+    .bind(messageId, channelId)
+    .all();
 
   const allRows = [root, ...(replyRows ?? [])] as Record<string, unknown>[];
   const messageIds = allRows.map((r) => r.id as string);
@@ -68,13 +73,12 @@ const GET = async ({ request, params }: any) => {
     replies: (replyRows ?? []).map(format),
     reply_count: (replyRows ?? []).length,
   });
-}
+};
 
-
-export const Route = createFileRoute('/api/channels/$id/thread')({
+export const Route = createFileRoute("/api/channels/$id/thread")({
   server: {
     handlers: {
       GET,
-    }
-  }
+    },
+  },
 });

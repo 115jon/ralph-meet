@@ -154,7 +154,10 @@ export const RemoteMenu: React.FC<RemoteMenuProps> = ({
 
         <SubMenuItem
           label="More Options"
-          active={activeSubmenu === "More Options" || activeSubmenu === "StreamingApps"}
+          active={
+            activeSubmenu === "More Options" ||
+            activeSubmenu === "StreamingApps"
+          }
           onMouseEnter={() => handleMouseEnterRoot("More Options")}
           submenu={
             <>
@@ -172,16 +175,30 @@ export const RemoteMenu: React.FC<RemoteMenuProps> = ({
                 <>
                   {toggleServerSoundboardMute && (
                     <MenuItem
-                      label={serverSoundboardMuted ? "Unmute Soundboard for Server" : "Mute Soundboard for Server"}
+                      label={
+                        serverSoundboardMuted
+                          ? "Unmute Soundboard for Server"
+                          : "Mute Soundboard for Server"
+                      }
                       danger={serverSoundboardMuted}
                       onClick={toggleServerSoundboardMute}
                     />
                   )}
-                  <MenuItem label="Server Mute" danger onClick={handleServerMute} />
-                  <MenuItem label="Server Deafen" danger onClick={handleServerDeafen} />
+                  <MenuItem
+                    label="Server Mute"
+                    danger
+                    onClick={handleServerMute}
+                  />
+                  <MenuItem
+                    label="Server Deafen"
+                    danger
+                    onClick={handleServerDeafen}
+                  />
                 </>
               )}
-              {showDisconnect && <MenuItem label="Disconnect" danger onClick={onClose} />}
+              {showDisconnect && (
+                <MenuItem label="Disconnect" danger onClick={onClose} />
+              )}
             </>
           }
         />
@@ -191,8 +208,16 @@ export const RemoteMenu: React.FC<RemoteMenuProps> = ({
 
   return (
     <>
-      <MenuItem label="Profile" onMouseEnter={clearSubmenu} onClick={handleProfile} />
-      <MenuItem label="Message" onMouseEnter={clearSubmenu} onClick={handleMessage} />
+      <MenuItem
+        label="Profile"
+        onMouseEnter={clearSubmenu}
+        onClick={handleProfile}
+      />
+      <MenuItem
+        label="Message"
+        onMouseEnter={clearSubmenu}
+        onClick={handleMessage}
+      />
 
       <Divider />
 
@@ -248,21 +273,40 @@ export const RemoteMenu: React.FC<RemoteMenuProps> = ({
         <>
           {toggleServerSoundboardMute && (
             <MenuItem
-              label={serverSoundboardMuted ? "Unmute Soundboard for Server" : "Mute Soundboard for Server"}
+              label={
+                serverSoundboardMuted
+                  ? "Unmute Soundboard for Server"
+                  : "Mute Soundboard for Server"
+              }
               danger={serverSoundboardMuted}
               onMouseEnter={clearSubmenu}
               onClick={toggleServerSoundboardMute}
             />
           )}
-          <MenuItem label="Server Mute" danger onMouseEnter={clearSubmenu} onClick={handleServerMute} />
-          <MenuItem label="Server Deafen" danger onMouseEnter={clearSubmenu} onClick={handleServerDeafen} />
+          <MenuItem
+            label="Server Mute"
+            danger
+            onMouseEnter={clearSubmenu}
+            onClick={handleServerMute}
+          />
+          <MenuItem
+            label="Server Deafen"
+            danger
+            onMouseEnter={clearSubmenu}
+            onClick={handleServerDeafen}
+          />
           <Divider />
         </>
       )}
 
       {showDisconnect && (
         <>
-          <MenuItem label="Disconnect" danger onMouseEnter={clearSubmenu} onClick={onClose} />
+          <MenuItem
+            label="Disconnect"
+            danger
+            onMouseEnter={clearSubmenu}
+            onClick={onClose}
+          />
           <Divider />
         </>
       )}
@@ -271,7 +315,11 @@ export const RemoteMenu: React.FC<RemoteMenuProps> = ({
         label="Copy User ID"
         onMouseEnter={clearSubmenu}
         onClick={handleCopyId}
-        rightElement={<span className="text-[10px] bg-rm-bg-active px-1 rounded text-rm-text-muted/40 font-bold shadow-sm">ID</span>}
+        rightElement={
+          <span className="text-[10px] bg-rm-bg-active px-1 rounded text-rm-text-muted/40 font-bold shadow-sm">
+            ID
+          </span>
+        }
       />
     </>
   );

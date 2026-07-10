@@ -24,7 +24,7 @@ describe("ImageViewerThumbnails", () => {
         setLocalState={() => {}}
         getUrl={() => "https://media.example.com/dmca.mp4"}
         getPosterUrl={() => "https://media.example.com/dmca.jpg"}
-      />
+      />,
     );
 
     expect(markup).toContain('src="https://media.example.com/dmca.jpg"');
@@ -50,7 +50,7 @@ describe("ImageViewerThumbnails", () => {
         setLocalState={() => {}}
         getUrl={() => "https://media.example.com/gif.mp4"}
         getPosterUrl={() => "https://media.example.com/gif.jpg"}
-      />
+      />,
     );
 
     expect(markup).toContain("<video");

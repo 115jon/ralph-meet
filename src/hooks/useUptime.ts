@@ -7,7 +7,10 @@ import { useEffect, useRef, useState } from "react";
  * @param startedAt  – epoch ms when the session began, or null to reset
  * @param enabled    – skip ticking when false (avoids pointless renders)
  */
-export function useUptime(startedAt: number | null, enabled = true): string | null {
+export function useUptime(
+  startedAt: number | null,
+  enabled = true,
+): string | null {
   const [display, setDisplay] = useState<string | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -29,7 +32,9 @@ export function useUptime(startedAt: number | null, enabled = true): string | nu
       const secs = elapsed % 60;
 
       if (hrs > 0) {
-        setDisplay(`${hrs}:${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`);
+        setDisplay(
+          `${hrs}:${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`,
+        );
       } else {
         setDisplay(`${mins}:${secs.toString().padStart(2, "0")}`);
       }

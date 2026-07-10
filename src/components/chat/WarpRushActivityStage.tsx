@@ -15,7 +15,17 @@ import {
   getWarpRushRingRenderState,
 } from "@/lib/warp-rush";
 import { cn } from "@/lib/utils";
-import { AlertTriangle, Gauge, Move3D, Rocket, RotateCcw, Trophy, Users, Wind, Zap } from "lucide-react";
+import {
+  AlertTriangle,
+  Gauge,
+  Move3D,
+  Rocket,
+  RotateCcw,
+  Trophy,
+  Users,
+  Wind,
+  Zap,
+} from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
@@ -117,7 +127,14 @@ const RENDER_SCALES = [
   { label: "1.0x", value: 1 },
   { label: "1.25x", value: 1.25 },
 ] as const;
-const GHOST_COLORS = ["#67e8f9", "#f472b6", "#facc15", "#a78bfa", "#4ade80", "#fb923c"];
+const GHOST_COLORS = [
+  "#67e8f9",
+  "#f472b6",
+  "#facc15",
+  "#a78bfa",
+  "#4ade80",
+  "#fb923c",
+];
 
 function readBestScore() {
   if (typeof window === "undefined") return 0;
@@ -128,7 +145,10 @@ function readBestScore() {
 function writeBestScore(value: number) {
   if (typeof window === "undefined") return;
   try {
-    window.localStorage.setItem(STORAGE_KEY, String(Math.max(0, Math.round(value))));
+    window.localStorage.setItem(
+      STORAGE_KEY,
+      String(Math.max(0, Math.round(value))),
+    );
   } catch {
     // Best score is non-critical.
   }
@@ -179,17 +199,20 @@ function buildStarGeometry(
 }
 
 function buildDebrisField(count: number, loopLength: number) {
-  return Array.from({ length: count }, (_, index): DebrisState => ({
-    distance: 20 + (index / count) * loopLength,
-    radius: 6.8 + (index % 19) * 0.36,
-    angle: (index * 0.73) % (Math.PI * 2),
-    lift: ((index * 17) % 29) / 29 - 0.5,
-    scale: 0.08 + (index % 7) * 0.022,
-    drift: 0.18 + (index % 11) * 0.045,
-    spinX: 0.18 + (index % 5) * 0.09,
-    spinY: 0.26 + (index % 7) * 0.06,
-    spinZ: 0.16 + (index % 9) * 0.05,
-  }));
+  return Array.from(
+    { length: count },
+    (_, index): DebrisState => ({
+      distance: 20 + (index / count) * loopLength,
+      radius: 6.8 + (index % 19) * 0.36,
+      angle: (index * 0.73) % (Math.PI * 2),
+      lift: ((index * 17) % 29) / 29 - 0.5,
+      scale: 0.08 + (index % 7) * 0.022,
+      drift: 0.18 + (index % 11) * 0.045,
+      spinX: 0.18 + (index % 5) * 0.09,
+      spinY: 0.26 + (index % 7) * 0.06,
+      spinZ: 0.16 + (index % 9) * 0.05,
+    }),
+  );
 }
 
 function createGhostShip(colorHex: string) {
@@ -237,7 +260,14 @@ export function WarpRushActivityStage({
   const restartRef = useRef<() => void>(() => {});
   const [bestScore, setBestScore] = useState(readBestScore);
   const bestRef = useRef(bestScore);
-  const emitPresenceRef = useRef<(state: Pick<PilotPresenceState, "x" | "y" | "worldDistance" | "score" | "crashed" | "slipstream">) => void>(() => {});
+  const emitPresenceRef = useRef<
+    (
+      state: Pick<
+        PilotPresenceState,
+        "x" | "y" | "worldDistance" | "score" | "crashed" | "slipstream"
+      >,
+    ) => void
+  >(() => {});
   const localPresenceRef = useRef<PilotPresenceState | null>(null);
   const remotePilotsRef = useRef<Record<string, PilotPresenceState>>({});
   const [preset, setPreset] = useState<WarpRushPreset>("ultra");
@@ -255,19 +285,31 @@ export function WarpRushActivityStage({
     dpr: 1,
   });
   const [rendererLabel, setRendererLabel] = useState("Booting renderer...");
-  const [accelerationLabel, setAccelerationLabel] = useState("Checking acceleration");
+  const [accelerationLabel, setAccelerationLabel] = useState(
+    "Checking acceleration",
+  );
   const [failureReason, setFailureReason] = useState<string | null>(null);
-  const [pilotStates, setPilotStates] = useState<Record<string, PilotPresenceState>>({});
+  const [pilotStates, setPilotStates] = useState<
+    Record<string, PilotPresenceState>
+  >({});
 
   const localPilot = useMemo(
-    () => participants.find((participant) => participant.userId === localUserId) ?? null,
+    () =>
+      participants.find((participant) => participant.userId === localUserId) ??
+      null,
     [participants, localUserId],
   );
   const participantMap = useMemo(
-    () => new Map(participants.map((participant) => [participant.userId, participant])),
+    () =>
+      new Map(
+        participants.map((participant) => [participant.userId, participant]),
+      ),
     [participants],
   );
-  const course = useMemo(() => createWarpRushCourse(`voice:${channelId}`), [channelId]);
+  const course = useMemo(
+    () => createWarpRushCourse(`voice:${channelId}`),
+    [channelId],
+  );
 
   useEffect(() => {
     bestRef.current = bestScore;
@@ -279,42 +321,50 @@ export function WarpRushActivityStage({
     );
   }, [pilotStates, localUserId]);
 
-  const emitPresence = useCallback((nextState: Pick<PilotPresenceState, "x" | "y" | "worldDistance" | "score" | "crashed" | "slipstream">) => {
-    if (!localUserId) return;
-    const entry: PilotPresenceState = {
-      userId: localUserId,
-      name: localPilot?.name ?? "Pilot",
-      avatar: localPilot?.avatar ?? null,
-      x: nextState.x,
-      y: nextState.y,
-      worldDistance: nextState.worldDistance,
-      score: nextState.score,
-      best: Math.max(bestRef.current, nextState.score),
-      preset,
-      crashed: nextState.crashed,
-      slipstream: nextState.slipstream,
-      updatedAt: Date.now(),
-    };
-    localPresenceRef.current = entry;
-    setPilotStates((current) => ({ ...current, [entry.userId]: entry }));
-    if (!sfu) return;
-    sfu.voiceGW.sendAppEvent({
-      type: "warp-rush.player.state",
-      channelId,
-      userId: entry.userId,
-      name: entry.name,
-      avatar: entry.avatar,
-      x: entry.x,
-      y: entry.y,
-      worldDistance: entry.worldDistance,
-      score: entry.score,
-      best: entry.best,
-      preset: entry.preset,
-      crashed: entry.crashed,
-      slipstream: entry.slipstream,
-      updatedAt: entry.updatedAt,
-    });
-  }, [channelId, localPilot?.avatar, localPilot?.name, localUserId, preset, sfu]);
+  const emitPresence = useCallback(
+    (
+      nextState: Pick<
+        PilotPresenceState,
+        "x" | "y" | "worldDistance" | "score" | "crashed" | "slipstream"
+      >,
+    ) => {
+      if (!localUserId) return;
+      const entry: PilotPresenceState = {
+        userId: localUserId,
+        name: localPilot?.name ?? "Pilot",
+        avatar: localPilot?.avatar ?? null,
+        x: nextState.x,
+        y: nextState.y,
+        worldDistance: nextState.worldDistance,
+        score: nextState.score,
+        best: Math.max(bestRef.current, nextState.score),
+        preset,
+        crashed: nextState.crashed,
+        slipstream: nextState.slipstream,
+        updatedAt: Date.now(),
+      };
+      localPresenceRef.current = entry;
+      setPilotStates((current) => ({ ...current, [entry.userId]: entry }));
+      if (!sfu) return;
+      sfu.voiceGW.sendAppEvent({
+        type: "warp-rush.player.state",
+        channelId,
+        userId: entry.userId,
+        name: entry.name,
+        avatar: entry.avatar,
+        x: entry.x,
+        y: entry.y,
+        worldDistance: entry.worldDistance,
+        score: entry.score,
+        best: entry.best,
+        preset: entry.preset,
+        crashed: entry.crashed,
+        slipstream: entry.slipstream,
+        updatedAt: entry.updatedAt,
+      });
+    },
+    [channelId, localPilot?.avatar, localPilot?.name, localUserId, preset, sfu],
+  );
 
   useEffect(() => {
     emitPresenceRef.current = emitPresence;
@@ -354,12 +404,20 @@ export function WarpRushActivityStage({
 
     const unsubscribe = sfu.on("app-event", (event) => {
       if (event.channelId !== channelId) return;
-      if (event.type === "warp-rush.presence.request" && typeof event.userId === "string" && event.userId !== localUserId) {
+      if (
+        event.type === "warp-rush.presence.request" &&
+        typeof event.userId === "string" &&
+        event.userId !== localUserId
+      ) {
         respondWithLocalState();
         return;
       }
 
-      if (event.type !== "warp-rush.player.state" || typeof event.userId !== "string" || event.userId === localUserId) {
+      if (
+        event.type !== "warp-rush.player.state" ||
+        typeof event.userId !== "string" ||
+        event.userId === localUserId
+      ) {
         return;
       }
 
@@ -368,19 +426,36 @@ export function WarpRushActivityStage({
         ...current,
         [userId]: {
           userId,
-          name: typeof event.name === "string" ? event.name : current[userId]?.name,
-          avatar: typeof event.avatar === "string" ? event.avatar : current[userId]?.avatar ?? null,
-          x: typeof event.x === "number" ? event.x : current[userId]?.x ?? 0,
-          y: typeof event.y === "number" ? event.y : current[userId]?.y ?? 0,
-          worldDistance: typeof event.worldDistance === "number" ? event.worldDistance : current[userId]?.worldDistance ?? 0,
-          score: typeof event.score === "number" ? Math.max(0, Math.round(event.score)) : current[userId]?.score ?? 0,
-          best: typeof event.best === "number" ? Math.max(0, Math.round(event.best)) : current[userId]?.best ?? 0,
-          preset: event.preset === "balanced" || event.preset === "ultra" || event.preset === "meltdown"
-            ? event.preset
-            : current[userId]?.preset ?? "balanced",
+          name:
+            typeof event.name === "string" ? event.name : current[userId]?.name,
+          avatar:
+            typeof event.avatar === "string"
+              ? event.avatar
+              : (current[userId]?.avatar ?? null),
+          x: typeof event.x === "number" ? event.x : (current[userId]?.x ?? 0),
+          y: typeof event.y === "number" ? event.y : (current[userId]?.y ?? 0),
+          worldDistance:
+            typeof event.worldDistance === "number"
+              ? event.worldDistance
+              : (current[userId]?.worldDistance ?? 0),
+          score:
+            typeof event.score === "number"
+              ? Math.max(0, Math.round(event.score))
+              : (current[userId]?.score ?? 0),
+          best:
+            typeof event.best === "number"
+              ? Math.max(0, Math.round(event.best))
+              : (current[userId]?.best ?? 0),
+          preset:
+            event.preset === "balanced" ||
+            event.preset === "ultra" ||
+            event.preset === "meltdown"
+              ? event.preset
+              : (current[userId]?.preset ?? "balanced"),
           crashed: event.crashed === true,
           slipstream: event.slipstream === true,
-          updatedAt: typeof event.updatedAt === "number" ? event.updatedAt : Date.now(),
+          updatedAt:
+            typeof event.updatedAt === "number" ? event.updatedAt : Date.now(),
         },
       }));
     });
@@ -432,7 +507,11 @@ export function WarpRushActivityStage({
     } catch (error) {
       queueMicrotask(() => {
         if (disposed) return;
-        setFailureReason(error instanceof Error ? error.message : "WebGL renderer failed to initialize.");
+        setFailureReason(
+          error instanceof Error
+            ? error.message
+            : "WebGL renderer failed to initialize.",
+        );
         setStatus("unsupported");
       });
       return;
@@ -454,7 +533,11 @@ export function WarpRushActivityStage({
     queueMicrotask(() => {
       if (disposed) return;
       setRendererLabel(finalRendererLabel);
-      setAccelerationLabel(isLikelySoftwareRenderer(finalRendererLabel) ? "Fallback renderer likely" : "Hardware acceleration likely");
+      setAccelerationLabel(
+        isLikelySoftwareRenderer(finalRendererLabel)
+          ? "Fallback renderer likely"
+          : "Hardware acceleration likely",
+      );
       setFailureReason(null);
       setStatus("running");
     });
@@ -464,7 +547,12 @@ export function WarpRushActivityStage({
 
     const composer = new EffectComposer(renderer);
     composer.addPass(new RenderPass(scene, camera));
-    const bloomPass = new UnrealBloomPass(new THREE.Vector2(1, 1), config.bloomStrength, 0.36, 0.18);
+    const bloomPass = new UnrealBloomPass(
+      new THREE.Vector2(1, 1),
+      config.bloomStrength,
+      0.36,
+      0.18,
+    );
     composer.addPass(bloomPass);
 
     const resize = () => {
@@ -540,7 +628,10 @@ export function WarpRushActivityStage({
       }
     });
 
-    const obstacleGeometry = new THREE.IcosahedronGeometry(1, config.obstacleDetail);
+    const obstacleGeometry = new THREE.IcosahedronGeometry(
+      1,
+      config.obstacleDetail,
+    );
     const obstacleMaterial = new THREE.MeshStandardMaterial({
       color: "#f97316",
       emissive: "#fb7185",
@@ -549,11 +640,20 @@ export function WarpRushActivityStage({
       metalness: 0.55,
       roughness: 0.3,
     });
-    const obstaclesMesh = new THREE.InstancedMesh(obstacleGeometry, obstacleMaterial, course.obstacles.length);
+    const obstaclesMesh = new THREE.InstancedMesh(
+      obstacleGeometry,
+      obstacleMaterial,
+      course.obstacles.length,
+    );
     obstaclesMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     scene.add(obstaclesMesh);
 
-    const ringGeometry = new THREE.TorusGeometry(config.ringRadius, 0.18, 18, 80);
+    const ringGeometry = new THREE.TorusGeometry(
+      config.ringRadius,
+      0.18,
+      18,
+      80,
+    );
     const ringMaterial = new THREE.MeshStandardMaterial({
       color: "#22d3ee",
       emissive: "#38bdf8",
@@ -561,7 +661,11 @@ export function WarpRushActivityStage({
       metalness: 0.2,
       roughness: 0.16,
     });
-    const ringsMesh = new THREE.InstancedMesh(ringGeometry, ringMaterial, course.rings.length);
+    const ringsMesh = new THREE.InstancedMesh(
+      ringGeometry,
+      ringMaterial,
+      course.rings.length,
+    );
     ringsMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     scene.add(ringsMesh);
 
@@ -575,7 +679,11 @@ export function WarpRushActivityStage({
       transparent: true,
       opacity: 0.74,
     });
-    const debrisMesh = new THREE.InstancedMesh(debrisGeometry, debrisMaterial, debrisField.length);
+    const debrisMesh = new THREE.InstancedMesh(
+      debrisGeometry,
+      debrisMaterial,
+      debrisField.length,
+    );
     debrisMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     scene.add(debrisMesh);
 
@@ -590,7 +698,11 @@ export function WarpRushActivityStage({
 
     const starMaterials: THREE.PointsMaterial[] = [];
     const starGeometries: THREE.BufferGeometry[] = [];
-    const starLayers: Array<{ mesh: THREE.Points; speed: number; span: number }> = [];
+    const starLayers: Array<{
+      mesh: THREE.Points;
+      speed: number;
+      span: number;
+    }> = [];
     for (let index = 0; index < config.starLayers; index++) {
       const geometry = buildStarGeometry(
         config.starsPerLayer,
@@ -612,10 +724,20 @@ export function WarpRushActivityStage({
       scene.add(points);
       starGeometries.push(geometry);
       starMaterials.push(material);
-      starLayers.push({ mesh: points, speed: WARP_RUSH_BASE_SPEED * (0.18 + index * 0.04), span: 260 });
+      starLayers.push({
+        mesh: points,
+        speed: WARP_RUSH_BASE_SPEED * (0.18 + index * 0.04),
+        span: 260,
+      });
     }
 
-    const dustGeometry = buildStarGeometry(config.dustPerLayer, 6.6, 210, "#ffffff", "#38bdf8");
+    const dustGeometry = buildStarGeometry(
+      config.dustPerLayer,
+      6.6,
+      210,
+      "#ffffff",
+      "#38bdf8",
+    );
     const dustMaterial = new THREE.PointsMaterial({
       size: 0.14,
       transparent: true,
@@ -672,8 +794,16 @@ export function WarpRushActivityStage({
 
     const onPointerMove = (event: PointerEvent) => {
       const rect = container.getBoundingClientRect();
-      pointer.x = clamp(((event.clientX - rect.left) / rect.width) * 2 - 1, -1, 1);
-      pointer.y = clamp(-(((event.clientY - rect.top) / rect.height) * 2 - 1), -1, 1);
+      pointer.x = clamp(
+        ((event.clientX - rect.left) / rect.width) * 2 - 1,
+        -1,
+        1,
+      );
+      pointer.y = clamp(
+        -(((event.clientY - rect.top) / rect.height) * 2 - 1),
+        -1,
+        1,
+      );
     };
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "a" || event.key === "ArrowLeft") keys.left = true;
@@ -701,19 +831,33 @@ export function WarpRushActivityStage({
     });
 
     const getGhostColor = (userId: string) =>
-      GHOST_COLORS[Math.abs(
-        Array.from(userId).reduce((sum, character) => sum + character.charCodeAt(0), 0),
-      ) % GHOST_COLORS.length];
+      GHOST_COLORS[
+        Math.abs(
+          Array.from(userId).reduce(
+            (sum, character) => sum + character.charCodeAt(0),
+            0,
+          ),
+        ) % GHOST_COLORS.length
+      ];
 
     const renderFrame = (timestamp: number) => {
       if (disposed) return;
 
       if (!lastTimestamp) lastTimestamp = timestamp;
-      const frameSeconds = clamp((timestamp - lastTimestamp) / 1000, 0.001, 0.1);
+      const frameSeconds = clamp(
+        (timestamp - lastTimestamp) / 1000,
+        0.001,
+        0.1,
+      );
       lastTimestamp = timestamp;
-      accumulator = Math.min(accumulator + frameSeconds, WARP_RUSH_STEP_SECONDS * 8);
+      accumulator = Math.min(
+        accumulator + frameSeconds,
+        WARP_RUSH_STEP_SECONDS * 8,
+      );
 
-      const activeRemotePilots: WarpRushRemotePilotState[] = Object.values(remotePilotsRef.current)
+      const activeRemotePilots: WarpRushRemotePilotState[] = Object.values(
+        remotePilotsRef.current,
+      )
         .filter((pilot) => Date.now() - pilot.updatedAt < 6000)
         .map((pilot) => ({
           x: pilot.x,
@@ -722,7 +866,11 @@ export function WarpRushActivityStage({
           crashed: pilot.crashed,
         }));
 
-      let latestStep = { collided: false, slipstream: runState.usedSlipstream, speed: WARP_RUSH_BASE_SPEED };
+      let latestStep = {
+        collided: false,
+        slipstream: runState.usedSlipstream,
+        speed: WARP_RUSH_BASE_SPEED,
+      };
       let stepCount = 0;
       while (accumulator >= WARP_RUSH_STEP_SECONDS && stepCount < 8) {
         const keyboardX = (keys.right ? 0.72 : 0) - (keys.left ? 0.72 : 0);
@@ -731,7 +879,13 @@ export function WarpRushActivityStage({
           targetX: clamp(pointer.x + keyboardX, -1, 1),
           targetY: clamp(pointer.y + keyboardY, -1, 1),
         };
-        latestStep = advanceWarpRushRunState(runState, input, course, activeRemotePilots, WARP_RUSH_STEP_SECONDS);
+        latestStep = advanceWarpRushRunState(
+          runState,
+          input,
+          course,
+          activeRemotePilots,
+          WARP_RUSH_STEP_SECONDS,
+        );
         accumulator -= WARP_RUSH_STEP_SECONDS;
         stepCount += 1;
 
@@ -758,15 +912,32 @@ export function WarpRushActivityStage({
       ship.rotation.z = -runState.normalizedX * 0.42;
       ship.rotation.x = -runState.normalizedY * 0.2 + 0.04;
 
-      camera.position.x = THREE.MathUtils.damp(camera.position.x, runState.normalizedX * 1.15, 3.8, frameSeconds);
-      camera.position.y = THREE.MathUtils.damp(camera.position.y, runState.normalizedY * 0.85 + 0.9, 3.8, frameSeconds);
-      camera.lookAt(runState.normalizedX * 1.65, runState.normalizedY * 1.15, -24);
+      camera.position.x = THREE.MathUtils.damp(
+        camera.position.x,
+        runState.normalizedX * 1.15,
+        3.8,
+        frameSeconds,
+      );
+      camera.position.y = THREE.MathUtils.damp(
+        camera.position.y,
+        runState.normalizedY * 0.85 + 0.9,
+        3.8,
+        frameSeconds,
+      );
+      camera.lookAt(
+        runState.normalizedX * 1.65,
+        runState.normalizedY * 1.15,
+        -24,
+      );
 
       rimLight.position.x = runState.normalizedX * 4 - 3;
       rimLight.position.y = runState.normalizedY * 2 + 1.2;
 
       for (const starLayer of starLayers) {
-        starLayer.mesh.position.z += latestStep.speed * frameSeconds * (starLayer.speed / WARP_RUSH_BASE_SPEED);
+        starLayer.mesh.position.z +=
+          latestStep.speed *
+          frameSeconds *
+          (starLayer.speed / WARP_RUSH_BASE_SPEED);
         if (starLayer.mesh.position.z > 40) {
           starLayer.mesh.position.z = -starLayer.span;
         }
@@ -778,9 +949,17 @@ export function WarpRushActivityStage({
 
       for (let index = 0; index < course.rings.length; index++) {
         const ring = course.rings[index];
-        const ringState = getWarpRushRingRenderState(ring, runState.worldDistance, course.loopLength);
+        const ringState = getWarpRushRingRenderState(
+          ring,
+          runState.worldDistance,
+          course.loopLength,
+        );
         ringTmp.position.set(ringState.x, ringState.y, ringState.z);
-        ringTmp.rotation.set(Math.PI / 2 + ring.twist * 0.22, ring.rot + runState.worldDistance * 0.006, ring.rot * 0.5);
+        ringTmp.rotation.set(
+          Math.PI / 2 + ring.twist * 0.22,
+          ring.rot + runState.worldDistance * 0.006,
+          ring.rot * 0.5,
+        );
         ringTmp.updateMatrix();
         ringsMesh.setMatrixAt(index, ringTmp.matrix);
       }
@@ -788,8 +967,16 @@ export function WarpRushActivityStage({
 
       for (let index = 0; index < course.obstacles.length; index++) {
         const obstacle = course.obstacles[index];
-        const obstacleState = getWarpRushObstacleRenderState(obstacle, runState.worldDistance, course.loopLength);
-        obstacleTmp.position.set(obstacleState.x, obstacleState.y, obstacleState.z);
+        const obstacleState = getWarpRushObstacleRenderState(
+          obstacle,
+          runState.worldDistance,
+          course.loopLength,
+        );
+        obstacleTmp.position.set(
+          obstacleState.x,
+          obstacleState.y,
+          obstacleState.z,
+        );
         obstacleTmp.rotation.set(
           obstacle.rotX + obstacleState.travelDistance * obstacle.spinX * 0.018,
           obstacle.rotY + obstacleState.travelDistance * obstacle.spinY * 0.016,
@@ -803,7 +990,11 @@ export function WarpRushActivityStage({
 
       for (let index = 0; index < debrisField.length; index++) {
         const debris = debrisField[index];
-        const relativeDistance = getWarpRushRelativeDistance(debris.distance, runState.worldDistance * 1.12, course.loopLength);
+        const relativeDistance = getWarpRushRelativeDistance(
+          debris.distance,
+          runState.worldDistance * 1.12,
+          course.loopLength,
+        );
         const travelDistance = runState.worldDistance + relativeDistance;
         const angle = debris.angle + travelDistance * debris.drift * 0.012;
         debrisTmp.position.set(
@@ -870,10 +1061,11 @@ export function WarpRushActivityStage({
       hudElapsed += frameSeconds;
       if (hudElapsed >= 0.08) {
         hudElapsed = 0;
-        const nearestAhead = activeRemotePilots
-          .map((pilot) => pilot.worldDistance - runState.worldDistance)
-          .filter((gap) => gap >= 0)
-          .sort((left, right) => left - right)[0] ?? null;
+        const nearestAhead =
+          activeRemotePilots
+            .map((pilot) => pilot.worldDistance - runState.worldDistance)
+            .filter((gap) => gap >= 0)
+            .sort((left, right) => left - right)[0] ?? null;
         if (bestRef.current !== lastCommittedBest) {
           lastCommittedBest = bestRef.current;
           writeBestScore(lastCommittedBest);
@@ -915,10 +1107,20 @@ export function WarpRushActivityStage({
   }, [channelId, course, preset, renderScale]);
 
   const sortedLeaderboard = useMemo(
-    () => Object.values(pilotStates)
-      .filter((entry) => Date.now() - entry.updatedAt < 12000 || entry.userId === localUserId)
-      .sort((left, right) => right.best - left.best || right.score - left.score || right.updatedAt - left.updatedAt)
-      .slice(0, 8),
+    () =>
+      Object.values(pilotStates)
+        .filter(
+          (entry) =>
+            Date.now() - entry.updatedAt < 12000 ||
+            entry.userId === localUserId,
+        )
+        .sort(
+          (left, right) =>
+            right.best - left.best ||
+            right.score - left.score ||
+            right.updatedAt - left.updatedAt,
+        )
+        .slice(0, 8),
     [localUserId, pilotStates],
   );
   const softwareRendererLikely = isLikelySoftwareRenderer(rendererLabel);
@@ -943,9 +1145,13 @@ export function WarpRushActivityStage({
                     <Rocket size={14} />
                     Warp Rush 3D
                   </div>
-                  <h2 className="mt-2 text-2xl font-black leading-none text-white sm:text-[2rem]">Shared tunnel sprint</h2>
+                  <h2 className="mt-2 text-2xl font-black leading-none text-white sm:text-[2rem]">
+                    Shared tunnel sprint
+                  </h2>
                   <p className="mt-2 max-w-[34ch] text-sm leading-6 text-slate-300">
-                    Same seed, same hazards, live ghost ships. Draft the pilot ahead and compare acceleration modes without changing the sim.
+                    Same seed, same hazards, live ghost ships. Draft the pilot
+                    ahead and compare acceleration modes without changing the
+                    sim.
                   </p>
                 </div>
                 <div
@@ -962,20 +1168,35 @@ export function WarpRushActivityStage({
 
               <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
                 <div className="rounded-2xl border border-white/8 bg-white/[0.04] px-3 py-3">
-                  <div className="text-[10px] uppercase tracking-[0.22em] text-slate-500">Score</div>
-                  <div className="mt-2 text-2xl font-black text-cyan-200">{formatStat(score)}</div>
+                  <div className="text-[10px] uppercase tracking-[0.22em] text-slate-500">
+                    Score
+                  </div>
+                  <div className="mt-2 text-2xl font-black text-cyan-200">
+                    {formatStat(score)}
+                  </div>
                 </div>
                 <div className="rounded-2xl border border-white/8 bg-white/[0.04] px-3 py-3">
-                  <div className="text-[10px] uppercase tracking-[0.22em] text-slate-500">Best</div>
-                  <div className="mt-2 text-2xl font-black text-fuchsia-200">{formatStat(bestScore)}</div>
+                  <div className="text-[10px] uppercase tracking-[0.22em] text-slate-500">
+                    Best
+                  </div>
+                  <div className="mt-2 text-2xl font-black text-fuchsia-200">
+                    {formatStat(bestScore)}
+                  </div>
                 </div>
                 <div className="rounded-2xl border border-white/8 bg-white/[0.04] px-3 py-3">
                   <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-[0.22em] text-slate-500">
                     <Wind size={12} />
                     Draft
                   </div>
-                  <div className={cn("mt-2 text-sm font-bold", slipstreamActive ? "text-emerald-200" : "text-slate-200")}>
-                    {slipstreamActive ? `+${Math.round(WARP_RUSH_SLIPSTREAM_BONUS * 100)}% speed` : "No draft"}
+                  <div
+                    className={cn(
+                      "mt-2 text-sm font-bold",
+                      slipstreamActive ? "text-emerald-200" : "text-slate-200",
+                    )}
+                  >
+                    {slipstreamActive
+                      ? `+${Math.round(WARP_RUSH_SLIPSTREAM_BONUS * 100)}% speed`
+                      : "No draft"}
                   </div>
                 </div>
                 <div className="rounded-2xl border border-white/8 bg-white/[0.04] px-3 py-3">
@@ -984,7 +1205,9 @@ export function WarpRushActivityStage({
                     Rival
                   </div>
                   <div className="mt-2 text-sm font-bold text-slate-100">
-                    {nearestRivalGap === null ? "Open tunnel" : `${nearestRivalGap.toFixed(1)}m ahead`}
+                    {nearestRivalGap === null
+                      ? "Open tunnel"
+                      : `${nearestRivalGap.toFixed(1)}m ahead`}
                   </div>
                 </div>
               </div>
@@ -1004,43 +1227,68 @@ export function WarpRushActivityStage({
                 Session board
               </div>
               <div className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-[10px] uppercase tracking-[0.18em] text-slate-300">
-                {remotePilotCount > 0 ? `${remotePilotCount + 1} live` : "Solo warm-up"}
+                {remotePilotCount > 0
+                  ? `${remotePilotCount + 1} live`
+                  : "Solo warm-up"}
               </div>
             </div>
 
             <div className="mt-3 max-h-[44vh] space-y-2 overflow-y-auto pr-1">
-              {sortedLeaderboard.length > 0 ? sortedLeaderboard.map((entry, index) => {
-                const participant = participantMap.get(entry.userId);
-                const displayName = participant?.name ?? entry.name ?? "Pilot";
-                const avatar = participant?.avatar ?? entry.avatar ?? null;
-                return (
-                  <div key={entry.userId} className="flex items-center gap-3 rounded-2xl border border-white/8 bg-white/[0.04] px-3 py-2.5">
-                    <div className="flex h-9 w-9 items-center justify-center rounded-full bg-cyan-400/15 text-xs font-black text-cyan-100">
-                      {index + 1}
-                    </div>
-                    {avatar ? (
-                      <img src={getAuthAssetUrl(avatar)} alt="" className="h-10 w-10 rounded-full object-cover" />
-                    ) : (
-                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-fuchsia-400/15 text-sm font-black text-fuchsia-100">
-                        {displayName.slice(0, 1).toUpperCase()}
+              {sortedLeaderboard.length > 0 ? (
+                sortedLeaderboard.map((entry, index) => {
+                  const participant = participantMap.get(entry.userId);
+                  const displayName =
+                    participant?.name ?? entry.name ?? "Pilot";
+                  const avatar = participant?.avatar ?? entry.avatar ?? null;
+                  return (
+                    <div
+                      key={entry.userId}
+                      className="flex items-center gap-3 rounded-2xl border border-white/8 bg-white/[0.04] px-3 py-2.5"
+                    >
+                      <div className="flex h-9 w-9 items-center justify-center rounded-full bg-cyan-400/15 text-xs font-black text-cyan-100">
+                        {index + 1}
                       </div>
-                    )}
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate text-sm font-bold text-white">{displayName}</div>
-                      <div className="mt-1 flex items-center gap-2 text-[10px] uppercase tracking-[0.18em] text-slate-400">
-                        <span>{PRESETS[entry.preset].label}</span>
-                        <span>{entry.crashed ? "Crashed" : entry.slipstream ? "Drafting" : "Running"}</span>
+                      {avatar ? (
+                        <img
+                          src={getAuthAssetUrl(avatar)}
+                          alt=""
+                          className="h-10 w-10 rounded-full object-cover"
+                        />
+                      ) : (
+                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-fuchsia-400/15 text-sm font-black text-fuchsia-100">
+                          {displayName.slice(0, 1).toUpperCase()}
+                        </div>
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-sm font-bold text-white">
+                          {displayName}
+                        </div>
+                        <div className="mt-1 flex items-center gap-2 text-[10px] uppercase tracking-[0.18em] text-slate-400">
+                          <span>{PRESETS[entry.preset].label}</span>
+                          <span>
+                            {entry.crashed
+                              ? "Crashed"
+                              : entry.slipstream
+                                ? "Drafting"
+                                : "Running"}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-lg font-black text-cyan-100">
+                          {formatStat(entry.best)}
+                        </div>
+                        <div className="text-[10px] uppercase tracking-[0.18em] text-slate-400">
+                          Peak
+                        </div>
                       </div>
                     </div>
-                    <div className="text-right">
-                      <div className="text-lg font-black text-cyan-100">{formatStat(entry.best)}</div>
-                      <div className="text-[10px] uppercase tracking-[0.18em] text-slate-400">Peak</div>
-                    </div>
-                  </div>
-                );
-              }) : (
+                  );
+                })
+              ) : (
                 <div className="rounded-2xl border border-dashed border-white/10 px-4 py-5 text-center text-sm text-slate-300">
-                  Launch the activity in the same voice session and live rivals will start ghosting into the tunnel.
+                  Launch the activity in the same voice session and live rivals
+                  will start ghosting into the tunnel.
                 </div>
               )}
             </div>
@@ -1053,10 +1301,18 @@ export function WarpRushActivityStage({
               <Move3D size={14} />
               Controls
             </div>
-            <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-sm text-slate-200">Mouse / touch steer</span>
-            <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-sm text-slate-200">WASD trim</span>
-            <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-sm text-slate-200">Draft a ghost</span>
-            <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-sm text-slate-200">Space restart</span>
+            <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-sm text-slate-200">
+              Mouse / touch steer
+            </span>
+            <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-sm text-slate-200">
+              WASD trim
+            </span>
+            <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-sm text-slate-200">
+              Draft a ghost
+            </span>
+            <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-sm text-slate-200">
+              Space restart
+            </span>
           </div>
 
           <div className="pointer-events-auto w-full max-w-[640px] rounded-[28px] border border-cyan-300/15 bg-slate-950/44 p-3 shadow-[0_22px_90px_rgba(2,6,23,0.36)] backdrop-blur-2xl sm:p-4">
@@ -1126,8 +1382,12 @@ export function WarpRushActivityStage({
             </div>
 
             <div className="mt-3 min-w-0 rounded-full border border-white/8 bg-black/25 px-3 py-2 text-[11px] text-slate-300">
-              <span className="uppercase tracking-[0.18em] text-slate-500">Renderer</span>
-              <span className="ml-2 inline-block max-w-full break-all align-middle text-slate-100">{rendererLabel}</span>
+              <span className="uppercase tracking-[0.18em] text-slate-500">
+                Renderer
+              </span>
+              <span className="ml-2 inline-block max-w-full break-all align-middle text-slate-100">
+                {rendererLabel}
+              </span>
             </div>
           </div>
         </div>
@@ -1141,20 +1401,34 @@ export function WarpRushActivityStage({
             </div>
             <h3 className="mt-4 text-3xl font-black text-white">Hull breach</h3>
             <p className="mt-3 text-sm leading-6 text-slate-300">
-              Breach confirmed. The race sim stays fixed-step across refresh rates now, so acceleration changes should affect render cost, not the course itself.
+              Breach confirmed. The race sim stays fixed-step across refresh
+              rates now, so acceleration changes should affect render cost, not
+              the course itself.
             </p>
             <div className="mt-5 flex items-center justify-center gap-6">
               <div>
-                <div className="text-[11px] uppercase tracking-[0.18em] text-slate-400">Run</div>
-                <div className="mt-1 text-3xl font-black text-cyan-200">{formatStat(score)}</div>
+                <div className="text-[11px] uppercase tracking-[0.18em] text-slate-400">
+                  Run
+                </div>
+                <div className="mt-1 text-3xl font-black text-cyan-200">
+                  {formatStat(score)}
+                </div>
               </div>
               <div>
-                <div className="text-[11px] uppercase tracking-[0.18em] text-slate-400">Best</div>
-                <div className="mt-1 text-3xl font-black text-fuchsia-200">{formatStat(bestScore)}</div>
+                <div className="text-[11px] uppercase tracking-[0.18em] text-slate-400">
+                  Best
+                </div>
+                <div className="mt-1 text-3xl font-black text-fuchsia-200">
+                  {formatStat(bestScore)}
+                </div>
               </div>
               <div>
-                <div className="text-[11px] uppercase tracking-[0.18em] text-slate-400">Live FPS</div>
-                <div className="mt-1 text-3xl font-black text-emerald-200">{perfStats.fps}</div>
+                <div className="text-[11px] uppercase tracking-[0.18em] text-slate-400">
+                  Live FPS
+                </div>
+                <div className="mt-1 text-3xl font-black text-emerald-200">
+                  {perfStats.fps}
+                </div>
               </div>
             </div>
             <button

@@ -43,15 +43,28 @@ function getXGifSourceUrl(sourceUrl: string | null | undefined): string | null {
   const unwrappedUrl = unwrapProxyMediaUrl(sourceUrl);
 
   try {
-    const parsed = new URL(unwrappedUrl, typeof window !== "undefined" ? window.location.origin : "https://localhost");
+    const parsed = new URL(
+      unwrappedUrl,
+      typeof window !== "undefined"
+        ? window.location.origin
+        : "https://localhost",
+    );
     const hostname = parsed.hostname.toLowerCase();
     const pathname = parsed.pathname;
 
-    if (hostname === "video.twimg.com" && pathname.startsWith("/tweet_video/") && pathname.toLowerCase().endsWith(".mp4")) {
+    if (
+      hostname === "video.twimg.com" &&
+      pathname.startsWith("/tweet_video/") &&
+      pathname.toLowerCase().endsWith(".mp4")
+    ) {
       return `https://video.twimg.com${pathname}`;
     }
 
-    if (hostname === "gif.fxtwitter.com" && pathname.startsWith("/tweet_video/") && pathname.toLowerCase().endsWith(".webp")) {
+    if (
+      hostname === "gif.fxtwitter.com" &&
+      pathname.startsWith("/tweet_video/") &&
+      pathname.toLowerCase().endsWith(".webp")
+    ) {
       return `https://video.twimg.com${pathname.replace(/\.webp$/i, ".mp4")}`;
     }
   } catch {
@@ -61,22 +74,32 @@ function getXGifSourceUrl(sourceUrl: string | null | undefined): string | null {
   return null;
 }
 
-function getXGifFavoriteId(sourceUrl: string | null | undefined): string | null {
+function getXGifFavoriteId(
+  sourceUrl: string | null | undefined,
+): string | null {
   const xGifSourceUrl = getXGifSourceUrl(sourceUrl);
   return xGifSourceUrl ? `x-media-0-${xGifSourceUrl}` : null;
 }
 
-function positiveNumber(value: number | null | undefined, fallback: number): number {
+function positiveNumber(
+  value: number | null | undefined,
+  fallback: number,
+): number {
   return Number.isFinite(value) && Number(value) > 0 ? Number(value) : fallback;
 }
 
-function getDefaultFavoriteTitle(contentType: GifPickerAsset["contentType"], providedTitle?: string): string {
+function getDefaultFavoriteTitle(
+  contentType: GifPickerAsset["contentType"],
+  providedTitle?: string,
+): string {
   const trimmed = providedTitle?.trim();
   if (trimmed) return trimmed;
   return contentType === "video/mp4" ? "Saved clip" : "Saved GIF";
 }
 
-export function createExternalGifFavorite(input: AnimatedFavoriteInput): GifPickerItem {
+export function createExternalGifFavorite(
+  input: AnimatedFavoriteInput,
+): GifPickerItem {
   const width = positiveNumber(input.width, 320);
   const height = positiveNumber(input.height, 320);
   const sizeBytes = Math.max(0, Math.floor(positiveNumber(input.sizeBytes, 0)));
@@ -121,9 +144,12 @@ export function createExternalGifFavorite(input: AnimatedFavoriteInput): GifPick
     },
     sourceUrl: input.sourceUrl,
     aspectRatio: width / height,
-    duration: typeof input.duration === "number" && Number.isFinite(input.duration) && input.duration > 0
-      ? input.duration
-      : undefined,
+    duration:
+      typeof input.duration === "number" &&
+      Number.isFinite(input.duration) &&
+      input.duration > 0
+        ? input.duration
+        : undefined,
     mediaType,
   };
 }
@@ -136,11 +162,13 @@ function getFilenameStem(filename: string | null | undefined): string | null {
   return lastDot > 0 ? trimmed.slice(0, lastDot) : trimmed;
 }
 
-export function createAttachmentGifFavorite(input: AttachmentFavoriteInput): GifPickerItem {
+export function createAttachmentGifFavorite(
+  input: AttachmentFavoriteInput,
+): GifPickerItem {
   const favorite = createExternalGifFavorite(input);
   const identityUrl = input.fileKeyOrUrl || input.sendUrl || input.sourceUrl;
   const xGifFavoriteId = getXGifFavoriteId(identityUrl);
-  
+
   let result: GifPickerItem;
   if (xGifFavoriteId) {
     result = {
@@ -172,7 +200,9 @@ type AttachmentClipFavoriteInput = AttachmentFavoriteInput & {
   duration?: number | null;
 };
 
-export function createAttachmentClipFavorite(input: AttachmentClipFavoriteInput): GifPickerItem {
+export function createAttachmentClipFavorite(
+  input: AttachmentClipFavoriteInput,
+): GifPickerItem {
   const identityUrl = input.fileKeyOrUrl || input.sendUrl || input.sourceUrl;
   const favorite = createExternalGifFavorite({
     ...input,
@@ -181,9 +211,10 @@ export function createAttachmentClipFavorite(input: AttachmentClipFavoriteInput)
   });
 
   const provider = getGifAttachmentProvider(identityUrl);
-  const nextId = provider === "klipy" || provider === "tenor"
-    ? getFilenameStem(input.filename) || input.id || favorite.id
-    : input.sourceUrl || input.sendUrl || input.id || favorite.id;
+  const nextId =
+    provider === "klipy" || provider === "tenor"
+      ? getFilenameStem(input.filename) || input.id || favorite.id
+      : input.sourceUrl || input.sendUrl || input.id || favorite.id;
 
   const result: GifPickerItem = {
     ...favorite,
@@ -199,10 +230,18 @@ export function createAttachmentClipFavorite(input: AttachmentClipFavoriteInput)
   };
 }
 
-export function getFavoriteActionLabel(gif: Pick<GifPickerItem, "mediaType" | "send">, isFavorite: boolean): string {
+export function getFavoriteActionLabel(
+  gif: Pick<GifPickerItem, "mediaType" | "send">,
+  isFavorite: boolean,
+): string {
   const mediaType = gif.mediaType ?? inferGifPickerMediaType(gif);
-  const noun = mediaType === "clips" || gif.send.contentType === "video/mp4" ? "clip" : "GIF";
-  return isFavorite ? `Remove ${noun} from favorites` : `Add ${noun} to favorites`;
+  const noun =
+    mediaType === "clips" || gif.send.contentType === "video/mp4"
+      ? "clip"
+      : "GIF";
+  return isFavorite
+    ? `Remove ${noun} from favorites`
+    : `Add ${noun} to favorites`;
 }
 
 export { unwrapProxyMediaUrl } from "@/lib/proxy-media-url";

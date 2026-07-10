@@ -1,16 +1,23 @@
-
 import { AvatarImage } from "@/components/chat/AvatarImage";
 import { ProfileDisplayName } from "@/components/chat/ProfileDisplayName";
 import { BaseModal } from "@/components/ui/BaseModal";
 import { IconButton } from "@/components/ui/IconButton";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { getDisplayInitial } from "@/lib/display-name";
 import { useContextMenu } from "@/hooks/useContextMenu";
 import { useCustomEmojiLookup } from "@/hooks/useCustomEmojiLookup";
 import { useUserResolution } from "@/hooks/useUserResolution";
 import { getAttachmentUrl } from "@/lib/attachment-url";
 import { extractCustomEmojiIds, type EmojiRecentItem } from "@/lib/emoji";
-import { getQuickReactionItems, rememberRecentReaction } from "@/lib/message-reaction-recents";
+import {
+  getQuickReactionItems,
+  rememberRecentReaction,
+} from "@/lib/message-reaction-recents";
 import { createAttachmentClipFavorite } from "@/lib/gif-favorite-item";
 import type { Message } from "@/lib/types";
 import { shouldBlurSensitiveAttachment } from "@/lib/media-safety";
@@ -22,13 +29,35 @@ import { useDelayUnmount } from "@/hooks/useDelayUnmount";
 import { getFileIcon } from "@/lib/file-icons";
 import { createAttachmentGifFavorite } from "@/lib/gif-favorite-item";
 import { isAnimatedMedia, isPlayableVideo } from "@/lib/media";
-import { getAuthAssetUrl, getDownloadUrl, getMediaUrl, isDesktop } from "@/lib/platform";
+import {
+  getAuthAssetUrl,
+  getDownloadUrl,
+  getMediaUrl,
+  isDesktop,
+} from "@/lib/platform";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ContextMenuItem } from "./ContextMenu";
 import ContextMenu from "./ContextMenu";
 import EmojiPicker from "./EmojiPicker";
 import EmojiToken from "./EmojiToken";
-import { ChevronRight, Copy, CornerUpLeft, Download, Edit2, Forward, Link, MailOpen, MessageSquare, MoreHorizontal, Pin, Share2, Smile, Trash2, User as UserIcon, X } from "./Icons";
+import {
+  ChevronRight,
+  Copy,
+  CornerUpLeft,
+  Download,
+  Edit2,
+  Forward,
+  Link,
+  MailOpen,
+  MessageSquare,
+  MoreHorizontal,
+  Pin,
+  Share2,
+  Smile,
+  Trash2,
+  User as UserIcon,
+  X,
+} from "./Icons";
 import { ImageGrid } from "./ImageGrid";
 import { GifFavoriteButton } from "./GifFavoriteButton";
 import { LinkEmbed } from "./LinkEmbed";
@@ -37,7 +66,10 @@ import MessageShareModal from "./MessageShareModal";
 import SensitiveMediaFrame from "./SensitiveMediaFrame";
 import UserProfilePopover from "./UserProfilePopover";
 import VideoAttachment from "./VideoAttachment";
-import { ReplyPreviewContent, getReplyPreviewText } from "./ReplyPreviewContent";
+import {
+  ReplyPreviewContent,
+  getReplyPreviewText,
+} from "./ReplyPreviewContent";
 
 interface Props {
   id?: string;
@@ -62,7 +94,11 @@ interface Props {
 
 function formatTime(iso: string): string {
   const d = new Date(iso);
-  return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit", hour12: true });
+  return d.toLocaleTimeString([], {
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  });
 }
 
 function formatDate(iso: string): string {
@@ -77,11 +113,13 @@ function formatDate(iso: string): string {
   if (d.toDateString() === yesterday.toDateString()) {
     return `Yesterday at ${formatTime(iso)}`;
   }
-  return d.toLocaleDateString([], {
-    month: "2-digit",
-    day: "2-digit",
-    year: "numeric",
-  }) + ` ${formatTime(iso)}`;
+  return (
+    d.toLocaleDateString([], {
+      month: "2-digit",
+      day: "2-digit",
+      year: "numeric",
+    }) + ` ${formatTime(iso)}`
+  );
 }
 
 function formatFileSize(bytes: number): string {
@@ -93,13 +131,18 @@ function formatFileSize(bytes: number): string {
 const QUICK_REACTION_BUTTON_LIMIT = 4;
 const RECENT_REACTION_MENU_LIMIT = 5;
 
-function buildRecentEmojiTokenMap(items: EmojiRecentItem[]): Record<string, { image_url?: string | null }> {
-  return items.reduce<Record<string, { image_url?: string | null }>>((map, item) => {
-    if (item.type === "custom" && item.imageUrl) {
-      map[item.id] = { image_url: item.imageUrl };
-    }
-    return map;
-  }, {});
+function buildRecentEmojiTokenMap(
+  items: EmojiRecentItem[],
+): Record<string, { image_url?: string | null }> {
+  return items.reduce<Record<string, { image_url?: string | null }>>(
+    (map, item) => {
+      if (item.type === "custom" && item.imageUrl) {
+        map[item.id] = { image_url: item.imageUrl };
+      }
+      return map;
+    },
+    {},
+  );
 }
 
 function getAttachmentSourceUrl(att: { url?: string; file_key: string }) {
@@ -115,13 +158,18 @@ async function openExternalLink(url: string) {
   window.open(url, "_blank", "noopener,noreferrer");
 }
 
-function buildMessageLink(serverId: string | null, channelId: string, messageId: string): string {
+function buildMessageLink(
+  serverId: string | null,
+  channelId: string,
+  messageId: string,
+): string {
   if (typeof window === "undefined") return "";
   const serverSegment = encodeURIComponent(serverId || "@me");
   return `${window.location.origin}/chat/${serverSegment}/${encodeURIComponent(channelId)}?message=${encodeURIComponent(messageId)}`;
 }
 
-const MESSAGE_TOOLBAR_TOOLTIP_CLASS = "bg-rm-bg-floating border-none text-rm-text-primary text-[13px] font-bold shadow-xl px-3 py-2 rounded-lg";
+const MESSAGE_TOOLBAR_TOOLTIP_CLASS =
+  "bg-rm-bg-floating border-none text-rm-text-primary text-[13px] font-bold shadow-xl px-3 py-2 rounded-lg";
 
 function ToolbarSeparator() {
   return <div className="my-auto h-4 w-px shrink-0 bg-rm-border" />;
@@ -153,325 +201,290 @@ function ToolbarEmojiButton({
           />
         </button>
       </TooltipTrigger>
-      <TooltipContent side="top" sideOffset={8} className={MESSAGE_TOOLBAR_TOOLTIP_CLASS}>
+      <TooltipContent
+        side="top"
+        sideOffset={8}
+        className={MESSAGE_TOOLBAR_TOOLTIP_CLASS}
+      >
         <p>{item.label}</p>
       </TooltipContent>
     </Tooltip>
   );
 }
 
+const MessageItem = memo(
+  ({
+    id,
+    message,
+    showHeader,
+    onReply,
+    onPin,
+    onUnpin,
+    onJump,
+    onBan,
+    onThread,
+    currentUserId,
+    canPin: propCanPin,
+    canDeleteMessages = false,
+    hideReplyConnector = false,
+    onMediaPlay,
+    onManageShares,
+    onVisible,
+    onHeightChange,
+    previewOnly = false,
+  }: Props) => {
+    const {
+      addReaction,
+      removeReaction,
+      editMessage,
+      deleteMessage,
+      markChannelUnread,
+      setProfileUser,
+      removeEmbeds,
+      createMessageShare,
+    } = useChatActions();
+    const activeServerId = useChatStore((state) => state.activeServerId);
+    const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+    const [showProfile, setShowProfile] = useState(false);
+    const [editing, setEditing] = useState(false);
+    const [showShareModal, setShowShareModal] = useState(false);
+    const shouldRenderShareModal = useDelayUnmount(showShareModal, 200);
+    const [showDeleteModal, setShowDeleteModal] = useState(false);
+    const shouldRenderDeleteModal = useDelayUnmount(showDeleteModal, 200);
+    const [editInput, setEditInput] = useState("");
+    const [toolbarQuickReactions, setToolbarQuickReactions] = useState(() =>
+      getQuickReactionItems(3),
+    );
+    const [isShiftPressed, setIsShiftPressed] = useState(false);
+    const [authorNameEl, setAuthorNameEl] = useState<HTMLElement | null>(null);
+    const rootRef = useRef<HTMLDivElement>(null);
+    const visibilityReportedRef = useRef(false);
+    const editTextAreaRef = useRef<HTMLTextAreaElement>(null);
+    const emojiBtnRef = useRef<HTMLButtonElement>(null);
+    const contextEmojiPickerAnchorRef = useRef<HTMLSpanElement>(null);
+    const { menu, openMenu, closeMenu, shouldRender, isClosing } =
+      useContextMenu();
+    const [contextEmojiPickerAnchor, setContextEmojiPickerAnchor] = useState<{
+      x: number;
+      y: number;
+    } | null>(null);
 
-const MessageItem = memo(({ id, message, showHeader, onReply, onPin, onUnpin, onJump, onBan, onThread, currentUserId, canPin: propCanPin, canDeleteMessages = false, hideReplyConnector = false, onMediaPlay, onManageShares, onVisible, onHeightChange, previewOnly = false }: Props) => {
-  const { addReaction, removeReaction, editMessage, deleteMessage, markChannelUnread, setProfileUser, removeEmbeds, createMessageShare } = useChatActions();
-  const activeServerId = useChatStore((state) => state.activeServerId);
-  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
-  const [showProfile, setShowProfile] = useState(false);
-  const [editing, setEditing] = useState(false);
-  const [showShareModal, setShowShareModal] = useState(false);
-  const shouldRenderShareModal = useDelayUnmount(showShareModal, 200);
-  const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const shouldRenderDeleteModal = useDelayUnmount(showDeleteModal, 200);
-  const [editInput, setEditInput] = useState("");
-  const [toolbarQuickReactions, setToolbarQuickReactions] = useState(() => getQuickReactionItems(3));
-  const [isShiftPressed, setIsShiftPressed] = useState(false);
-  const [authorNameEl, setAuthorNameEl] = useState<HTMLElement | null>(null);
-  const rootRef = useRef<HTMLDivElement>(null);
-  const visibilityReportedRef = useRef(false);
-  const editTextAreaRef = useRef<HTMLTextAreaElement>(null);
-  const emojiBtnRef = useRef<HTMLButtonElement>(null);
-  const contextEmojiPickerAnchorRef = useRef<HTMLSpanElement>(null);
-  const { menu, openMenu, closeMenu, shouldRender, isClosing } = useContextMenu();
-  const [contextEmojiPickerAnchor, setContextEmojiPickerAnchor] = useState<{ x: number; y: number } | null>(null);
+    const authorInfo = useUserResolution(message.author_id, message.author);
+    const replyInfo = useUserResolution(
+      message.reply_to?.author_id,
+      message.reply_to?.author,
+    );
+    const contentFilter = useMediaSafetySettingsStore(
+      (state) => state.getSettings(state.currentUser).contentFilter,
+    );
+    const reactionEmojiIds = useMemo(
+      () =>
+        extractCustomEmojiIds(
+          message.reactions?.map((reaction) => reaction.emoji).join(" ") ?? "",
+        ),
+      [message.reactions],
+    );
+    const reactionEmojiMap = useCustomEmojiLookup(reactionEmojiIds);
+    const toolbarQuickReactionEmojiMap = useMemo(
+      () => buildRecentEmojiTokenMap(toolbarQuickReactions),
+      [toolbarQuickReactions],
+    );
 
-  const authorInfo = useUserResolution(message.author_id, message.author);
-  const replyInfo = useUserResolution(message.reply_to?.author_id, message.reply_to?.author);
-  const contentFilter = useMediaSafetySettingsStore((state) => state.getSettings(state.currentUser).contentFilter);
-  const reactionEmojiIds = useMemo(
-    () => extractCustomEmojiIds(message.reactions?.map((reaction) => reaction.emoji).join(" ") ?? ""),
-    [message.reactions],
-  );
-  const reactionEmojiMap = useCustomEmojiLookup(reactionEmojiIds);
-  const toolbarQuickReactionEmojiMap = useMemo(
-    () => buildRecentEmojiTokenMap(toolbarQuickReactions),
-    [toolbarQuickReactions],
-  );
-
-  const handleTextareaRef = useCallback((el: HTMLTextAreaElement | null) => {
-    editTextAreaRef.current = el;
-    if (el && editing) {
-      el.focus();
-      const length = el.value.length;
-      el.setSelectionRange(length, length);
-    }
-  }, [editing]);
-
-  // Listen for external edit trigger (↑ arrow key in MessageInput)
-  useEffect(() => {
-    const handler = () => {
-      if (previewOnly) return;
-      setEditing(true);
-      setEditInput(message.content);
-    };
-    window.addEventListener(`edit-message-${message.id}`, handler);
-    return () => window.removeEventListener(`edit-message-${message.id}`, handler);
-  }, [message.id, message.content, previewOnly]);
-
-  useEffect(() => {
-    if (previewOnly) return;
-
-    const updateShiftState = (event: KeyboardEvent) => {
-      setIsShiftPressed(event.shiftKey);
-    };
-    const resetShiftState = () => setIsShiftPressed(false);
-
-    window.addEventListener("keydown", updateShiftState);
-    window.addEventListener("keyup", updateShiftState);
-    window.addEventListener("blur", resetShiftState);
-    return () => {
-      window.removeEventListener("keydown", updateShiftState);
-      window.removeEventListener("keyup", updateShiftState);
-      window.removeEventListener("blur", resetShiftState);
-    };
-  }, [previewOnly]);
-
-  const onHeightChangeRef = useRef(onHeightChange);
-  useEffect(() => {
-    onHeightChangeRef.current = onHeightChange;
-  }, [onHeightChange]);
-
-  useEffect(() => {
-    const el = rootRef.current;
-    if (!el || !onHeightChange) return;
-
-    let previousHeight = el.clientHeight;
-
-    const observer = new ResizeObserver(() => {
-      const actualHeight = el.clientHeight;
-      if (actualHeight !== previousHeight) {
-        previousHeight = actualHeight;
-        onHeightChangeRef.current?.();
-      }
-    });
-
-    observer.observe(el);
-    return () => {
-      observer.disconnect();
-    };
-  }, [onHeightChange]);
-
-  useEffect(() => {
-    if (!onVisible || visibilityReportedRef.current) return;
-
-    const el = rootRef.current;
-    if (!el) return;
-    let observer: IntersectionObserver | null = null;
-
-    const reportVisible = () => {
-      if (visibilityReportedRef.current) return;
-      visibilityReportedRef.current = true;
-      observer?.disconnect();
-      onVisible();
-    };
-
-    if (typeof IntersectionObserver === "undefined") {
-      const rect = el.getBoundingClientRect();
-      if (rect.bottom > 0 && rect.top < window.innerHeight) {
-        reportVisible();
-      }
-      return;
-    }
-
-    observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) {
-          reportVisible();
+    const handleTextareaRef = useCallback(
+      (el: HTMLTextAreaElement | null) => {
+        editTextAreaRef.current = el;
+        if (el && editing) {
+          el.focus();
+          const length = el.value.length;
+          el.setSelectionRange(length, length);
         }
       },
-      { threshold: 0.3 }
+      [editing],
     );
 
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, [onVisible]);
+    // Listen for external edit trigger (↑ arrow key in MessageInput)
+    useEffect(() => {
+      const handler = () => {
+        if (previewOnly) return;
+        setEditing(true);
+        setEditInput(message.content);
+      };
+      window.addEventListener(`edit-message-${message.id}`, handler);
+      return () =>
+        window.removeEventListener(`edit-message-${message.id}`, handler);
+    }, [message.id, message.content, previewOnly]);
 
-  const toggleReaction = useCallback((emoji: string) => {
-    if (!message.channel_id) return;
-    const hasReacted = message.reactions
-      ?.find((r) => r.emoji === emoji)
-      ?.users?.includes(currentUserId ?? "");
-    if (hasReacted) {
-      removeReaction(message.channel_id, message.id, emoji);
-    } else {
-      addReaction(message.channel_id, message.id, emoji);
-    }
-  }, [addReaction, currentUserId, message.channel_id, message.id, message.reactions, removeReaction]);
+    useEffect(() => {
+      if (previewOnly) return;
 
-  const handleQuickReaction = useCallback((item: EmojiRecentItem) => {
-    if (!message.channel_id) return;
+      const updateShiftState = (event: KeyboardEvent) => {
+        setIsShiftPressed(event.shiftKey);
+      };
+      const resetShiftState = () => setIsShiftPressed(false);
 
-    const hasReacted = message.reactions
-      ?.find((reaction) => reaction.emoji === item.insertText)
-      ?.users?.includes(currentUserId ?? "");
+      window.addEventListener("keydown", updateShiftState);
+      window.addEventListener("keyup", updateShiftState);
+      window.addEventListener("blur", resetShiftState);
+      return () => {
+        window.removeEventListener("keydown", updateShiftState);
+        window.removeEventListener("keyup", updateShiftState);
+        window.removeEventListener("blur", resetShiftState);
+      };
+    }, [previewOnly]);
 
-    if (!hasReacted) {
-      rememberRecentReaction(item);
-      setToolbarQuickReactions(getQuickReactionItems(3));
-    }
+    const onHeightChangeRef = useRef(onHeightChange);
+    useEffect(() => {
+      onHeightChangeRef.current = onHeightChange;
+    }, [onHeightChange]);
 
-    toggleReaction(item.insertText);
-    closeMenu();
-  }, [closeMenu, currentUserId, message.channel_id, message.reactions, toggleReaction]);
+    useEffect(() => {
+      const el = rootRef.current;
+      if (!el || !onHeightChange) return;
 
-  const handleEmojiPickerSelect = useCallback((emoji: string) => {
-    toggleReaction(emoji);
-    setShowEmojiPicker(false);
-    setContextEmojiPickerAnchor(null);
-    setToolbarQuickReactions(getQuickReactionItems(3));
-  }, [toggleReaction]);
+      let previousHeight = el.clientHeight;
 
-  const openReactionPickerFromMenu = useCallback((event: React.MouseEvent<HTMLButtonElement>) => {
-    const rect = event.currentTarget.getBoundingClientRect();
-    setShowEmojiPicker(false);
-    setContextEmojiPickerAnchor({
-      x: rect.left,
-      y: rect.bottom,
-    });
-    closeMenu();
-  }, [closeMenu]);
+      const observer = new ResizeObserver(() => {
+        const actualHeight = el.clientHeight;
+        if (actualHeight !== previousHeight) {
+          previousHeight = actualHeight;
+          onHeightChangeRef.current?.();
+        }
+      });
 
-  const handleContextMenu = (e: React.MouseEvent) => {
-    const target = e.target as HTMLElement | null;
-    const hoveredAnchor = target?.closest?.("a[href]") as HTMLAnchorElement | null;
-    const hoveredEmbed = target?.closest?.("[data-embed-url]") as HTMLElement | null;
-    const hoveredUrl = hoveredAnchor?.href || hoveredEmbed?.dataset.embedUrl || null;
-    const quickReactions = getQuickReactionItems(RECENT_REACTION_MENU_LIMIT);
-    const quickReactionButtons = quickReactions.slice(0, QUICK_REACTION_BUTTON_LIMIT);
-    const quickReactionEmojiMap = buildRecentEmojiTokenMap(quickReactions);
+      observer.observe(el);
+      return () => {
+        observer.disconnect();
+      };
+    }, [onHeightChange]);
 
-    setShowEmojiPicker(false);
-    setContextEmojiPickerAnchor(null);
+    useEffect(() => {
+      if (!onVisible || visibilityReportedRef.current) return;
 
-    const reactionSubmenu = (
-      <div className="flex flex-col gap-0.5">
-        {quickReactions.map((item) => (
-          <button
-            key={`${item.type}:${item.id}`}
-            type="button"
-            onClick={(event) => {
-              event.preventDefault();
-              event.stopPropagation();
-              handleQuickReaction(item);
-            }}
-            className="group flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-[13px] font-semibold text-rm-text-secondary transition-all hover:bg-primary hover:text-white"
-          >
-            <span className="truncate">{item.label}</span>
-            <EmojiToken
-              value={item.insertText}
-              customEmojiMap={quickReactionEmojiMap}
-              className="h-5 w-5"
-              fallbackClassName="text-base"
-            />
-          </button>
-        ))}
-        <div className="my-1.5 h-px w-full bg-rm-border" />
-        <button
-          type="button"
-          onClick={openReactionPickerFromMenu}
-          className="group flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-[13px] font-semibold text-rm-text-secondary transition-all hover:bg-primary hover:text-white"
-        >
-          <span>View More</span>
-          <Smile className="h-4 w-4 opacity-50 transition-opacity group-hover:opacity-90" />
-        </button>
-      </div>
-    );
+      const el = rootRef.current;
+      if (!el) return;
+      let observer: IntersectionObserver | null = null;
 
-    const items: ContextMenuItem[] = [
-      {
-        key: "add-reaction",
-        label: "Add Reaction",
-        onClick: () => undefined,
-        rightIcon: <ChevronRight className="h-4 w-4" />,
-        submenu: reactionSubmenu,
-        closeOnClick: false,
-        divider: true,
-      },
-      ...(isOwnMessage ? [{
-        label: "Edit Message",
-        rightIcon: <Edit2 className="h-4 w-4" />,
-        onClick: startEditing,
-      }] : []),
-      {
-        label: "Reply",
-        rightIcon: <MessageSquare className="h-4 w-4" />,
-        onClick: () => onReply?.(message),
-      },
-      ...(onThread ? [{
-        label: (message.reply_count ?? 0) > 0 ? "View Thread" : "Create Thread",
-        rightIcon: <MessageSquare className="h-4 w-4" />,
-        onClick: () => onThread(message.id),
-      }] : []),
-      ...(canPin ? [{
-        label: message.is_pinned ? "Unpin Message" : "Pin Message",
-        rightIcon: <Pin className="h-4 w-4" />,
-        onClick: () => handlePinToggle(isShiftPressed),
-        divider: true,
-      }] : []),
-      {
-        label: "Copy Text",
-        rightIcon: <Copy className="h-4 w-4" />,
-        onClick: () => navigator.clipboard.writeText(message.content),
-      },
-      ...(hoveredUrl ? [{
-        label: "Copy Link",
-        rightIcon: <Link className="h-4 w-4" />,
-        onClick: () => navigator.clipboard.writeText(hoveredUrl),
-      }, {
-        label: "Open Link",
-        rightIcon: <Share2 className="h-4 w-4" />,
-        onClick: () => {
-          void openExternalLink(hoveredUrl);
+      const reportVisible = () => {
+        if (visibilityReportedRef.current) return;
+        visibilityReportedRef.current = true;
+        observer?.disconnect();
+        onVisible();
+      };
+
+      if (typeof IntersectionObserver === "undefined") {
+        const rect = el.getBoundingClientRect();
+        if (rect.bottom > 0 && rect.top < window.innerHeight) {
+          reportVisible();
+        }
+        return;
+      }
+
+      observer = new IntersectionObserver(
+        ([entry]) => {
+          if (entry.isIntersecting) {
+            reportVisible();
+          }
         },
-      }] : []),
-      ...(message.channel_id && !message.pending ? [{
-        label: "Share Message",
-        rightIcon: <Share2 className="h-4 w-4" />,
-        onClick: () => setShowShareModal(true),
-      }] : []),
-      {
-        label: "Profile",
-        rightIcon: <UserIcon className="h-4 w-4" />,
-        onClick: () => message.author && setProfileUser(message.author as any),
+        { threshold: 0.3 },
+      );
+
+      observer.observe(el);
+      return () => observer.disconnect();
+    }, [onVisible]);
+
+    const toggleReaction = useCallback(
+      (emoji: string) => {
+        if (!message.channel_id) return;
+        const hasReacted = message.reactions
+          ?.find((r) => r.emoji === emoji)
+          ?.users?.includes(currentUserId ?? "");
+        if (hasReacted) {
+          removeReaction(message.channel_id, message.id, emoji);
+        } else {
+          addReaction(message.channel_id, message.id, emoji);
+        }
       },
-      {
-        label: "Copy ID",
-        rightIcon: <span className="rounded-md bg-rm-bg-surface px-1 py-0.5 text-[10px] font-black uppercase tracking-[0.08em] text-rm-text-muted">ID</span>,
-        onClick: () => navigator.clipboard.writeText(message.id),
-        divider: isOwnMessage || canDeleteMessages || Boolean(onBan),
+      [
+        addReaction,
+        currentUserId,
+        message.channel_id,
+        message.id,
+        message.reactions,
+        removeReaction,
+      ],
+    );
+
+    const handleQuickReaction = useCallback(
+      (item: EmojiRecentItem) => {
+        if (!message.channel_id) return;
+
+        const hasReacted = message.reactions
+          ?.find((reaction) => reaction.emoji === item.insertText)
+          ?.users?.includes(currentUserId ?? "");
+
+        if (!hasReacted) {
+          rememberRecentReaction(item);
+          setToolbarQuickReactions(getQuickReactionItems(3));
+        }
+
+        toggleReaction(item.insertText);
+        closeMenu();
       },
-    ];
+      [
+        closeMenu,
+        currentUserId,
+        message.channel_id,
+        message.reactions,
+        toggleReaction,
+      ],
+    );
 
-    if (isOwnMessage || canDeleteMessages) {
-      items.push({
-        label: "Delete Message",
-        rightIcon: <Trash2 className="h-4 w-4" />,
-        onClick: () => handleDelete(isShiftPressed),
-        variant: "danger",
-      });
-    }
+    const handleEmojiPickerSelect = useCallback(
+      (emoji: string) => {
+        toggleReaction(emoji);
+        setShowEmojiPicker(false);
+        setContextEmojiPickerAnchor(null);
+        setToolbarQuickReactions(getQuickReactionItems(3));
+      },
+      [toggleReaction],
+    );
 
-    if (!isOwnMessage && onBan) {
-      items.push({
-        label: "Ban User",
-        rightIcon: <Trash2 className="h-4 w-4" />,
-        onClick: () => onBan(message.author_id, authorInfo.username),
-        variant: "danger",
-      });
-    }
+    const openReactionPickerFromMenu = useCallback(
+      (event: React.MouseEvent<HTMLButtonElement>) => {
+        const rect = event.currentTarget.getBoundingClientRect();
+        setShowEmojiPicker(false);
+        setContextEmojiPickerAnchor({
+          x: rect.left,
+          y: rect.bottom,
+        });
+        closeMenu();
+      },
+      [closeMenu],
+    );
 
-    openMenu(e, items, {
-      topContent: quickReactionButtons.length > 0 ? (
-        <div className="flex items-center gap-1 px-1">
-          {quickReactionButtons.map((item) => (
+    const handleContextMenu = (e: React.MouseEvent) => {
+      const target = e.target as HTMLElement | null;
+      const hoveredAnchor = target?.closest?.(
+        "a[href]",
+      ) as HTMLAnchorElement | null;
+      const hoveredEmbed = target?.closest?.(
+        "[data-embed-url]",
+      ) as HTMLElement | null;
+      const hoveredUrl =
+        hoveredAnchor?.href || hoveredEmbed?.dataset.embedUrl || null;
+      const quickReactions = getQuickReactionItems(RECENT_REACTION_MENU_LIMIT);
+      const quickReactionButtons = quickReactions.slice(
+        0,
+        QUICK_REACTION_BUTTON_LIMIT,
+      );
+      const quickReactionEmojiMap = buildRecentEmojiTokenMap(quickReactions);
+
+      setShowEmojiPicker(false);
+      setContextEmojiPickerAnchor(null);
+
+      const reactionSubmenu = (
+        <div className="flex flex-col gap-0.5">
+          {quickReactions.map((item) => (
             <button
               key={`${item.type}:${item.id}`}
               type="button"
@@ -480,10 +493,9 @@ const MessageItem = memo(({ id, message, showHeader, onReply, onPin, onUnpin, on
                 event.stopPropagation();
                 handleQuickReaction(item);
               }}
-              className="flex h-11 w-11 items-center justify-center rounded-xl bg-rm-bg-surface text-rm-text transition-all hover:bg-primary hover:text-white"
-              title={item.label}
-              aria-label={`React with ${item.label}`}
+              className="group flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-[13px] font-semibold text-rm-text-secondary transition-all hover:bg-primary hover:text-white"
             >
+              <span className="truncate">{item.label}</span>
               <EmojiToken
                 value={item.insertText}
                 customEmojiMap={quickReactionEmojiMap}
@@ -492,548 +504,851 @@ const MessageItem = memo(({ id, message, showHeader, onReply, onPin, onUnpin, on
               />
             </button>
           ))}
-        </div>
-      ) : undefined,
-    });
-  };
-
-  const handlePinToggle = useCallback((skipConfirm = false) => {
-    if (!message.channel_id) return;
-    if (message.is_pinned) {
-      onUnpin?.(message.id, skipConfirm);
-    } else {
-      onPin?.(message);
-    }
-  }, [message, onPin, onUnpin]);
-
-  const startEditing = useCallback(() => {
-    setEditing(true);
-    setEditInput(message.content);
-  }, [message.content]);
-
-  const cancelEditing = useCallback(() => {
-    setEditing(false);
-    setEditInput("");
-  }, []);
-
-  const handleEditSubmit = useCallback(() => {
-    if (editInput.trim() && editInput.trim() !== message.content) {
-      editMessage(message.id, editInput.trim());
-    }
-    setEditing(false);
-    setEditInput("");
-  }, [editInput, message.id, message.content, editMessage]);
-
-  const handleEditKeyDown = useCallback(
-    (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-      if (e.key === "Escape") {
-        cancelEditing();
-      }
-      if (e.key === "Enter" && !e.shiftKey) {
-        e.preventDefault();
-        handleEditSubmit();
-      }
-    },
-    [cancelEditing, handleEditSubmit]
-  );
-
-  const copyMessageId = useCallback(() => {
-    void navigator.clipboard.writeText(message.id);
-  }, [message.id]);
-
-  const copyMessageLink = useCallback(() => {
-    if (!message.channel_id) return;
-    void navigator.clipboard.writeText(buildMessageLink(activeServerId, message.channel_id, message.id));
-  }, [activeServerId, message.channel_id, message.id]);
-
-  const handleMarkUnread = useCallback(() => {
-    if (!message.channel_id) return;
-    void markChannelUnread(message.channel_id, message.id, message.created_at);
-  }, [markChannelUnread, message.channel_id, message.created_at, message.id]);
-
-  const performDelete = useCallback(() => {
-    if (!message.channel_id) return;
-    deleteMessage(message.channel_id, message.id);
-  }, [message.channel_id, message.id, deleteMessage]);
-
-  const handleDelete = useCallback((skipConfirm = false) => {
-    if (!message.channel_id || previewOnly) return;
-    if (skipConfirm) {
-      performDelete();
-      return;
-    }
-    setShowDeleteModal(true);
-  }, [message.channel_id, performDelete, previewOnly]);
-
-  const isOwnMessage = message.author_id === currentUserId;
-  const canPin = propCanPin;
-
-  // Split attachments into image / video / file buckets
-  // Only Chromium-playable video formats get the inline player; the rest are files.
-  const imageAttachments = message.attachments?.filter((a) => a.content_type?.startsWith("image/")) ?? [];
-  const videoAttachments = message.attachments?.filter((a) => isPlayableVideo(a.content_type)) ?? [];
-  const fileAttachments = message.attachments?.filter((a) => !a.content_type?.startsWith("image/") && !isPlayableVideo(a.content_type)) ?? [];
-
-  return (
-    <div
-      ref={rootRef}
-      id={id}
-      className={cn(
-        "group relative flex flex-col transition-all duration-100",
-        !previewOnly && "hover:bg-rm-bg-hover",
-        showHeader && !previewOnly && "mt-4",
-        message.pending && "opacity-50"
-      )}
-      onContextMenu={previewOnly ? undefined : handleContextMenu}
-    >
-      {/* Reply connector */}
-      {message.reply_to && !hideReplyConnector && (
-        <button
-          type="button"
-          className="ml-14 mb-1 flex border-0 bg-transparent p-0 text-left items-center gap-2 opacity-60 transition-opacity hover:opacity-100 cursor-pointer group/reply outline-none"
-          onClick={() => onJump?.(message.reply_to_id!)}
-          aria-label={`Reply to ${replyInfo.displayName}: ${getReplyPreviewText(message.reply_to.content, message.reply_to.attachment_count ?? message.reply_to.attachments?.length ?? 0)}`}
-        >
-          <div className="mt-2 h-4 w-8 shrink-0 rounded-tl-lg border-l-2 border-t-2 border-rm-border group-hover/reply:border-rm-text-muted transition-colors" />
-          <div className="flex h-4 w-4 shrink-0 items-center justify-center overflow-visible rounded-full bg-rm-bg-elevated text-[9px] font-bold text-rm-text-muted relative">
-            {replyInfo.avatarUrl ? (
-              <AvatarImage src={getAuthAssetUrl(replyInfo.avatarUrl)} alt="" display={replyInfo.avatarDisplay} />
-            ) : (
-              getDisplayInitial({ display_name: replyInfo.displayName, username: replyInfo.username })
-            )}
-          </div>
-          <ProfileDisplayName
-            text={replyInfo.displayName}
-            displayNameStyle={replyInfo.displayNameStyle}
-            className="block max-w-[150px] truncate text-[12px] font-bold text-rm-text-muted"
-          />
-          <span className="min-w-0 flex-1 truncate text-[12px] font-medium italic text-rm-text-muted">
-            <ReplyPreviewContent
-              content={message.reply_to.content}
-              attachmentsCount={message.reply_to.attachment_count ?? message.reply_to.attachments?.length ?? 0}
-            />
-          </span>
-        </button>
-      )}
-
-      <div className={cn("relative flex gap-4 px-4", showHeader ? "pt-0.5 pb-1" : "py-0.5")}>
-        {/* Avatar or time hover */}
-        {showHeader ? (
+          <div className="my-1.5 h-px w-full bg-rm-border" />
           <button
             type="button"
-            className="mt-0.5 flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center overflow-visible rounded-full border-0 bg-primary/10 p-0 text-sm font-bold text-primary transition-all hover:opacity-80 relative"
-            onClick={() => setShowProfile(true)}
-            aria-label={`View ${authorInfo.displayName}'s profile`}
+            onClick={openReactionPickerFromMenu}
+            className="group flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-[13px] font-semibold text-rm-text-secondary transition-all hover:bg-primary hover:text-white"
           >
-            {authorInfo.avatarUrl ? (
-              <AvatarImage src={getAuthAssetUrl(authorInfo.avatarUrl)} alt="" display={authorInfo.avatarDisplay} />
-            ) : (
-              getDisplayInitial({ display_name: authorInfo.displayName, username: authorInfo.username })
-            )}
+            <span>View More</span>
+            <Smile className="h-4 w-4 opacity-50 transition-opacity group-hover:opacity-90" />
           </button>
-        ) : (
-          <div className="flex w-10 shrink-0 items-start justify-center pt-1 opacity-0 group-hover:opacity-100 transition-opacity">
-            <span className="select-none text-[10.5px] font-medium text-rm-text-muted">
-              {formatTime(message.created_at)}
+        </div>
+      );
+
+      const items: ContextMenuItem[] = [
+        {
+          key: "add-reaction",
+          label: "Add Reaction",
+          onClick: () => undefined,
+          rightIcon: <ChevronRight className="h-4 w-4" />,
+          submenu: reactionSubmenu,
+          closeOnClick: false,
+          divider: true,
+        },
+        ...(isOwnMessage
+          ? [
+              {
+                label: "Edit Message",
+                rightIcon: <Edit2 className="h-4 w-4" />,
+                onClick: startEditing,
+              },
+            ]
+          : []),
+        {
+          label: "Reply",
+          rightIcon: <MessageSquare className="h-4 w-4" />,
+          onClick: () => onReply?.(message),
+        },
+        ...(onThread
+          ? [
+              {
+                label:
+                  (message.reply_count ?? 0) > 0
+                    ? "View Thread"
+                    : "Create Thread",
+                rightIcon: <MessageSquare className="h-4 w-4" />,
+                onClick: () => onThread(message.id),
+              },
+            ]
+          : []),
+        ...(canPin
+          ? [
+              {
+                label: message.is_pinned ? "Unpin Message" : "Pin Message",
+                rightIcon: <Pin className="h-4 w-4" />,
+                onClick: () => handlePinToggle(isShiftPressed),
+                divider: true,
+              },
+            ]
+          : []),
+        {
+          label: "Copy Text",
+          rightIcon: <Copy className="h-4 w-4" />,
+          onClick: () => navigator.clipboard.writeText(message.content),
+        },
+        ...(hoveredUrl
+          ? [
+              {
+                label: "Copy Link",
+                rightIcon: <Link className="h-4 w-4" />,
+                onClick: () => navigator.clipboard.writeText(hoveredUrl),
+              },
+              {
+                label: "Open Link",
+                rightIcon: <Share2 className="h-4 w-4" />,
+                onClick: () => {
+                  void openExternalLink(hoveredUrl);
+                },
+              },
+            ]
+          : []),
+        ...(message.channel_id && !message.pending
+          ? [
+              {
+                label: "Share Message",
+                rightIcon: <Share2 className="h-4 w-4" />,
+                onClick: () => setShowShareModal(true),
+              },
+            ]
+          : []),
+        {
+          label: "Profile",
+          rightIcon: <UserIcon className="h-4 w-4" />,
+          onClick: () =>
+            message.author && setProfileUser(message.author as any),
+        },
+        {
+          label: "Copy ID",
+          rightIcon: (
+            <span className="rounded-md bg-rm-bg-surface px-1 py-0.5 text-[10px] font-black uppercase tracking-[0.08em] text-rm-text-muted">
+              ID
             </span>
-          </div>
-        )}
+          ),
+          onClick: () => navigator.clipboard.writeText(message.id),
+          divider: isOwnMessage || canDeleteMessages || Boolean(onBan),
+        },
+      ];
 
-        {/* Message body */}
-        <div className="min-w-0 flex-1">
-          {showHeader && (
-            <div className="mb-0.5 flex items-center gap-2">
-              <button
-                type="button"
-                ref={setAuthorNameEl}
-                className="cursor-pointer border-0 bg-transparent p-0 text-[15px] font-bold text-rm-text transition-colors hover:underline outline-none"
-                onClick={() => setShowProfile(true)}
-              >
-                <ProfileDisplayName
-                  text={authorInfo.displayName}
-                  displayNameStyle={authorInfo.displayNameStyle}
-                  className="block max-w-full text-[15px] font-bold text-rm-text"
-                />
-              </button>
-              <span className="text-[11.5px] font-medium text-rm-text-muted ml-0.5 mt-0.5">
-                {formatDate(message.created_at)}
-              </span>
-              {message.is_pinned && (
-                <div className="flex items-center gap-1 rounded border border-primary/20 bg-primary/10 px-1.5 py-0.5 text-[10px] font-bold text-primary">
-                  <Pin className="h-2.5 w-2.5 fill-current" />
-                  PINNED
-                </div>
-              )}
-            </div>
-          )}
+      if (isOwnMessage || canDeleteMessages) {
+        items.push({
+          label: "Delete Message",
+          rightIcon: <Trash2 className="h-4 w-4" />,
+          onClick: () => handleDelete(isShiftPressed),
+          variant: "danger",
+        });
+      }
 
-          {/* Editing mode */}
-          {editing ? (
-            <div className="mt-1">
-              <textarea
-                ref={handleTextareaRef}
-                value={editInput}
-                onChange={(e) => setEditInput(e.target.value)}
-                onKeyDown={handleEditKeyDown}
-                aria-label="Edit message"
-                className="w-full bg-rm-bg-elevated border border-primary/50 rounded-lg p-3 text-rm-text text-[15px] outline-none min-h-[60px] resize-none font-medium focus:border-primary transition-colors"
-              />
-              <div className="mt-1 text-[11px] text-rm-text-muted flex gap-2">
-                <span>escape to <button type="button" onClick={cancelEditing} className="text-primary hover:underline">cancel</button></span>
-                <span className="opacity-50">•</span>
-                <span>enter to <button type="button" onClick={handleEditSubmit} className="text-primary hover:underline">save</button></span>
-              </div>
-            </div>
-          ) : (
-            <div className="whitespace-pre-wrap text-[15px] font-medium leading-[1.25] text-rm-text">
-              <MarkdownRenderer content={message.content} />
-              {message.updated_at && (
-                <span className="ml-1 text-[10px] text-rm-text-muted" title={`Edited ${formatDate(message.updated_at)}`}>(edited)</span>
-              )}
-            </div>
-          )}
+      if (!isOwnMessage && onBan) {
+        items.push({
+          label: "Ban User",
+          rightIcon: <Trash2 className="h-4 w-4" />,
+          onClick: () => onBan(message.author_id, authorInfo.username),
+          variant: "danger",
+        });
+      }
 
-          {/* Social media embeds */}
-          {!editing && message.embeds?.map((embed, i) => (
-            <div key={i} data-embed-url={embed.url}>
-              <LinkEmbed
-                embed={embed}
-                messageId={message.id}
-                onJumpToMessage={onJump}
-                onRemoveEmbeds={!previewOnly && isOwnMessage && message.channel_id ? () => removeEmbeds(message.channel_id!, message.id) : undefined}
-                onMediaPlay={onMediaPlay}
-              />
-            </div>
-          ))}
-
-          {/* Image attachments */}
-          {imageAttachments.length > 0 && (
-            <div className="mt-2">
-              <ImageGrid
-                attachments={imageAttachments}
-                username={authorInfo.username}
-                displayName={authorInfo.displayName}
-                avatarUrl={authorInfo.avatarUrl}
-                avatarDisplay={authorInfo.avatarDisplay}
-                createdAt={message.created_at}
-                messageId={message.id}
-                onJumpToMessage={onJump}
-              />
-            </div>
-          )}
-
-          {/* Video attachments */}
-          {videoAttachments.length > 0 && (
-            <div className="mt-2 flex flex-col gap-2">
-              {videoAttachments.map((att) => (
-                (() => {
-                  const sourceUrl = getAttachmentSourceUrl(att);
-                  const isGif = isAnimatedMedia(att.content_type, att.isGif, att.url || att.file_key);
-                  const favorite = isGif
-                    ? createAttachmentGifFavorite({
-                      id: att.id || sourceUrl,
-                      filename: att.filename,
-                      fileKeyOrUrl: att.file_key || att.url,
-                      title: att.filename,
-                      sourceUrl,
-                      previewUrl: sourceUrl,
-                      sendUrl: sourceUrl,
-                      contentType: att.content_type,
-                      sizeBytes: att.size_bytes,
-                    })
-                    : att.content_type === "video/mp4"
-                      ? createAttachmentClipFavorite({
-                        id: att.id || sourceUrl,
-                        filename: att.filename,
-                        fileKeyOrUrl: att.file_key || att.url,
-                        title: att.filename,
-                        sourceUrl,
-                        previewUrl: att.thumbnailUrl || sourceUrl,
-                        sendUrl: sourceUrl,
-                        width: undefined,
-                        height: undefined,
-                        sizeBytes: att.size_bytes,
-                      })
-                      : null;
-
-                  return (
-                    <SensitiveMediaFrame
-                      key={att.id}
-                      attachmentId={att.id}
-                      blur={shouldBlurSensitiveAttachment(att, contentFilter)}
-                      className="relative w-fit max-w-full"
-                    >
-                      <VideoAttachment
-                        src={getMediaUrl(sourceUrl)}
-                        filename={att.filename}
-                        brandingKey={att.file_key || att.url}
-                      />
-                      {favorite && <GifFavoriteButton gif={favorite} />}
-                    </SensitiveMediaFrame>
-                  );
-                })()
+      openMenu(e, items, {
+        topContent:
+          quickReactionButtons.length > 0 ? (
+            <div className="flex items-center gap-1 px-1">
+              {quickReactionButtons.map((item) => (
+                <button
+                  key={`${item.type}:${item.id}`}
+                  type="button"
+                  onClick={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    handleQuickReaction(item);
+                  }}
+                  className="flex h-11 w-11 items-center justify-center rounded-xl bg-rm-bg-surface text-rm-text transition-all hover:bg-primary hover:text-white"
+                  title={item.label}
+                  aria-label={`React with ${item.label}`}
+                >
+                  <EmojiToken
+                    value={item.insertText}
+                    customEmojiMap={quickReactionEmojiMap}
+                    className="h-5 w-5"
+                    fallbackClassName="text-base"
+                  />
+                </button>
               ))}
             </div>
-          )}
+          ) : undefined,
+      });
+    };
 
-          {/* File attachments */}
-          {fileAttachments.length > 0 && (
-            <div className="mt-2 flex flex-col gap-2 max-w-sm">
-              {fileAttachments.map((att) => {
-                const { Icon: TypeIcon, colorClass } = getFileIcon(att.filename, att.content_type ?? undefined);
-                return (
-                  <a
-                    key={att.id}
-                    href={getDownloadUrl(getAttachmentSourceUrl(att))}
-                    download={att.filename}
-                    className="flex items-center gap-3 rounded-xl border border-rm-border bg-rm-bg-elevated px-4 py-3 transition-all hover:border-rm-text-muted/20 hover:bg-rm-bg-hover group/file"
-                  >
-                    <div className={cn("flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-rm-bg-surface border border-rm-border/30", colorClass)}>
-                      <TypeIcon size={20} />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-[13px] font-semibold text-primary/80 group-hover/file:underline group-hover/file:text-primary">{att.filename}</p>
-                      <p className="text-[11px] text-rm-text-muted">{formatFileSize(att.size_bytes)}</p>
-                    </div>
-                    <Download className="h-4 w-4 shrink-0 text-rm-text-muted transition-colors group-hover/file:text-rm-text-secondary" />
-                  </a>
-                );
-              })}
+    const handlePinToggle = useCallback(
+      (skipConfirm = false) => {
+        if (!message.channel_id) return;
+        if (message.is_pinned) {
+          onUnpin?.(message.id, skipConfirm);
+        } else {
+          onPin?.(message);
+        }
+      },
+      [message, onPin, onUnpin],
+    );
+
+    const startEditing = useCallback(() => {
+      setEditing(true);
+      setEditInput(message.content);
+    }, [message.content]);
+
+    const cancelEditing = useCallback(() => {
+      setEditing(false);
+      setEditInput("");
+    }, []);
+
+    const handleEditSubmit = useCallback(() => {
+      if (editInput.trim() && editInput.trim() !== message.content) {
+        editMessage(message.id, editInput.trim());
+      }
+      setEditing(false);
+      setEditInput("");
+    }, [editInput, message.id, message.content, editMessage]);
+
+    const handleEditKeyDown = useCallback(
+      (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+        if (e.key === "Escape") {
+          cancelEditing();
+        }
+        if (e.key === "Enter" && !e.shiftKey) {
+          e.preventDefault();
+          handleEditSubmit();
+        }
+      },
+      [cancelEditing, handleEditSubmit],
+    );
+
+    const copyMessageId = useCallback(() => {
+      void navigator.clipboard.writeText(message.id);
+    }, [message.id]);
+
+    const copyMessageLink = useCallback(() => {
+      if (!message.channel_id) return;
+      void navigator.clipboard.writeText(
+        buildMessageLink(activeServerId, message.channel_id, message.id),
+      );
+    }, [activeServerId, message.channel_id, message.id]);
+
+    const handleMarkUnread = useCallback(() => {
+      if (!message.channel_id) return;
+      void markChannelUnread(
+        message.channel_id,
+        message.id,
+        message.created_at,
+      );
+    }, [markChannelUnread, message.channel_id, message.created_at, message.id]);
+
+    const performDelete = useCallback(() => {
+      if (!message.channel_id) return;
+      deleteMessage(message.channel_id, message.id);
+    }, [message.channel_id, message.id, deleteMessage]);
+
+    const handleDelete = useCallback(
+      (skipConfirm = false) => {
+        if (!message.channel_id || previewOnly) return;
+        if (skipConfirm) {
+          performDelete();
+          return;
+        }
+        setShowDeleteModal(true);
+      },
+      [message.channel_id, performDelete, previewOnly],
+    );
+
+    const isOwnMessage = message.author_id === currentUserId;
+    const canPin = propCanPin;
+
+    // Split attachments into image / video / file buckets
+    // Only Chromium-playable video formats get the inline player; the rest are files.
+    const imageAttachments =
+      message.attachments?.filter((a) =>
+        a.content_type?.startsWith("image/"),
+      ) ?? [];
+    const videoAttachments =
+      message.attachments?.filter((a) => isPlayableVideo(a.content_type)) ?? [];
+    const fileAttachments =
+      message.attachments?.filter(
+        (a) =>
+          !a.content_type?.startsWith("image/") &&
+          !isPlayableVideo(a.content_type),
+      ) ?? [];
+
+    return (
+      <div
+        ref={rootRef}
+        id={id}
+        className={cn(
+          "group relative flex flex-col transition-all duration-100",
+          !previewOnly && "hover:bg-rm-bg-hover",
+          showHeader && !previewOnly && "mt-4",
+          message.pending && "opacity-50",
+        )}
+        onContextMenu={previewOnly ? undefined : handleContextMenu}
+      >
+        {/* Reply connector */}
+        {message.reply_to && !hideReplyConnector && (
+          <button
+            type="button"
+            className="ml-14 mb-1 flex border-0 bg-transparent p-0 text-left items-center gap-2 opacity-60 transition-opacity hover:opacity-100 cursor-pointer group/reply outline-none"
+            onClick={() => onJump?.(message.reply_to_id!)}
+            aria-label={`Reply to ${replyInfo.displayName}: ${getReplyPreviewText(message.reply_to.content, message.reply_to.attachment_count ?? message.reply_to.attachments?.length ?? 0)}`}
+          >
+            <div className="mt-2 h-4 w-8 shrink-0 rounded-tl-lg border-l-2 border-t-2 border-rm-border group-hover/reply:border-rm-text-muted transition-colors" />
+            <div className="flex h-4 w-4 shrink-0 items-center justify-center overflow-visible rounded-full bg-rm-bg-elevated text-[9px] font-bold text-rm-text-muted relative">
+              {replyInfo.avatarUrl ? (
+                <AvatarImage
+                  src={getAuthAssetUrl(replyInfo.avatarUrl)}
+                  alt=""
+                  display={replyInfo.avatarDisplay}
+                />
+              ) : (
+                getDisplayInitial({
+                  display_name: replyInfo.displayName,
+                  username: replyInfo.username,
+                })
+              )}
             </div>
-          )}
+            <ProfileDisplayName
+              text={replyInfo.displayName}
+              displayNameStyle={replyInfo.displayNameStyle}
+              className="block max-w-[150px] truncate text-[12px] font-bold text-rm-text-muted"
+            />
+            <span className="min-w-0 flex-1 truncate text-[12px] font-medium italic text-rm-text-muted">
+              <ReplyPreviewContent
+                content={message.reply_to.content}
+                attachmentsCount={
+                  message.reply_to.attachment_count ??
+                  message.reply_to.attachments?.length ??
+                  0
+                }
+              />
+            </span>
+          </button>
+        )}
 
-          {/* Reactions */}
-          {message.reactions && message.reactions.length > 0 && (
-            <div className="mt-2 flex flex-wrap gap-1.5">
-              {message.reactions.map((reaction) => {
-                const hasReacted = reaction.users?.includes(currentUserId ?? "");
-                return (
-                  <button
-                    key={reaction.emoji}
-                    className={cn(
-                      "flex cursor-pointer items-center gap-1.5 rounded-lg border px-2 py-0.5 text-[12px] font-bold transition-all",
-                      previewOnly && "cursor-default",
-                      hasReacted
-                        ? "border-primary/40 bg-primary/10 text-primary shadow-[0_0_10px_var(--rm-glow)]"
-                        : "border-rm-border bg-rm-bg-elevated/50 text-rm-text-muted hover:border-rm-text-muted/20 hover:text-rm-text-secondary"
-                    )}
-                    onClick={previewOnly ? undefined : () => toggleReaction(reaction.emoji)}
-                  >
-                    <EmojiToken
-                      value={reaction.emoji}
-                      customEmojiMap={reactionEmojiMap}
-                      className="h-4 w-4"
-                      fallbackClassName="max-w-[84px] truncate text-[11px]"
-                    />
-                    <span className="text-[10px] opacity-60">{reaction.count}</span>
-                  </button>
-                );
-              })}
-            </div>
+        <div
+          className={cn(
+            "relative flex gap-4 px-4",
+            showHeader ? "pt-0.5 pb-1" : "py-0.5",
           )}
-
-          {/* Thread badge */}
-          {(message.reply_count ?? 0) > 0 && (
+        >
+          {/* Avatar or time hover */}
+          {showHeader ? (
             <button
-              onClick={previewOnly ? undefined : () => onThread?.(message.id)}
-              disabled={previewOnly}
-              className="mt-2 flex items-center gap-1.5 rounded-lg border border-primary/20 bg-primary/5 px-2.5 py-1 text-[12px] font-semibold text-primary transition-all hover:bg-primary/10 hover:border-primary/30 outline-none"
+              type="button"
+              className="mt-0.5 flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center overflow-visible rounded-full border-0 bg-primary/10 p-0 text-sm font-bold text-primary transition-all hover:opacity-80 relative"
+              onClick={() => setShowProfile(true)}
+              aria-label={`View ${authorInfo.displayName}'s profile`}
             >
-              <MessageSquare className="h-3 w-3" />
-              {message.reply_count} {message.reply_count === 1 ? "Reply" : "Replies"}
+              {authorInfo.avatarUrl ? (
+                <AvatarImage
+                  src={getAuthAssetUrl(authorInfo.avatarUrl)}
+                  alt=""
+                  display={authorInfo.avatarDisplay}
+                />
+              ) : (
+                getDisplayInitial({
+                  display_name: authorInfo.displayName,
+                  username: authorInfo.username,
+                })
+              )}
             </button>
+          ) : (
+            <div className="flex w-10 shrink-0 items-start justify-center pt-1 opacity-0 group-hover:opacity-100 transition-opacity">
+              <span className="select-none text-[10.5px] font-medium text-rm-text-muted">
+                {formatTime(message.created_at)}
+              </span>
+            </div>
+          )}
+
+          {/* Message body */}
+          <div className="min-w-0 flex-1">
+            {showHeader && (
+              <div className="mb-0.5 flex items-center gap-2">
+                <button
+                  type="button"
+                  ref={setAuthorNameEl}
+                  className="cursor-pointer border-0 bg-transparent p-0 text-[15px] font-bold text-rm-text transition-colors hover:underline outline-none"
+                  onClick={() => setShowProfile(true)}
+                >
+                  <ProfileDisplayName
+                    text={authorInfo.displayName}
+                    displayNameStyle={authorInfo.displayNameStyle}
+                    className="block max-w-full text-[15px] font-bold text-rm-text"
+                  />
+                </button>
+                <span className="text-[11.5px] font-medium text-rm-text-muted ml-0.5 mt-0.5">
+                  {formatDate(message.created_at)}
+                </span>
+                {message.is_pinned && (
+                  <div className="flex items-center gap-1 rounded border border-primary/20 bg-primary/10 px-1.5 py-0.5 text-[10px] font-bold text-primary">
+                    <Pin className="h-2.5 w-2.5 fill-current" />
+                    PINNED
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Editing mode */}
+            {editing ? (
+              <div className="mt-1">
+                <textarea
+                  ref={handleTextareaRef}
+                  value={editInput}
+                  onChange={(e) => setEditInput(e.target.value)}
+                  onKeyDown={handleEditKeyDown}
+                  aria-label="Edit message"
+                  className="w-full bg-rm-bg-elevated border border-primary/50 rounded-lg p-3 text-rm-text text-[15px] outline-none min-h-[60px] resize-none font-medium focus:border-primary transition-colors"
+                />
+                <div className="mt-1 text-[11px] text-rm-text-muted flex gap-2">
+                  <span>
+                    escape to{" "}
+                    <button
+                      type="button"
+                      onClick={cancelEditing}
+                      className="text-primary hover:underline"
+                    >
+                      cancel
+                    </button>
+                  </span>
+                  <span className="opacity-50">•</span>
+                  <span>
+                    enter to{" "}
+                    <button
+                      type="button"
+                      onClick={handleEditSubmit}
+                      className="text-primary hover:underline"
+                    >
+                      save
+                    </button>
+                  </span>
+                </div>
+              </div>
+            ) : (
+              <div className="whitespace-pre-wrap text-[15px] font-medium leading-[1.25] text-rm-text">
+                <MarkdownRenderer content={message.content} />
+                {message.updated_at && (
+                  <span
+                    className="ml-1 text-[10px] text-rm-text-muted"
+                    title={`Edited ${formatDate(message.updated_at)}`}
+                  >
+                    (edited)
+                  </span>
+                )}
+              </div>
+            )}
+
+            {/* Social media embeds */}
+            {!editing &&
+              message.embeds?.map((embed, i) => (
+                <div key={i} data-embed-url={embed.url}>
+                  <LinkEmbed
+                    embed={embed}
+                    messageId={message.id}
+                    onJumpToMessage={onJump}
+                    onRemoveEmbeds={
+                      !previewOnly && isOwnMessage && message.channel_id
+                        ? () => removeEmbeds(message.channel_id!, message.id)
+                        : undefined
+                    }
+                    onMediaPlay={onMediaPlay}
+                  />
+                </div>
+              ))}
+
+            {/* Image attachments */}
+            {imageAttachments.length > 0 && (
+              <div className="mt-2">
+                <ImageGrid
+                  attachments={imageAttachments}
+                  username={authorInfo.username}
+                  displayName={authorInfo.displayName}
+                  avatarUrl={authorInfo.avatarUrl}
+                  avatarDisplay={authorInfo.avatarDisplay}
+                  createdAt={message.created_at}
+                  messageId={message.id}
+                  onJumpToMessage={onJump}
+                />
+              </div>
+            )}
+
+            {/* Video attachments */}
+            {videoAttachments.length > 0 && (
+              <div className="mt-2 flex flex-col gap-2">
+                {videoAttachments.map((att) =>
+                  (() => {
+                    const sourceUrl = getAttachmentSourceUrl(att);
+                    const isGif = isAnimatedMedia(
+                      att.content_type,
+                      att.isGif,
+                      att.url || att.file_key,
+                    );
+                    const favorite = isGif
+                      ? createAttachmentGifFavorite({
+                          id: att.id || sourceUrl,
+                          filename: att.filename,
+                          fileKeyOrUrl: att.file_key || att.url,
+                          title: att.filename,
+                          sourceUrl,
+                          previewUrl: sourceUrl,
+                          sendUrl: sourceUrl,
+                          contentType: att.content_type,
+                          sizeBytes: att.size_bytes,
+                        })
+                      : att.content_type === "video/mp4"
+                        ? createAttachmentClipFavorite({
+                            id: att.id || sourceUrl,
+                            filename: att.filename,
+                            fileKeyOrUrl: att.file_key || att.url,
+                            title: att.filename,
+                            sourceUrl,
+                            previewUrl: att.thumbnailUrl || sourceUrl,
+                            sendUrl: sourceUrl,
+                            width: undefined,
+                            height: undefined,
+                            sizeBytes: att.size_bytes,
+                          })
+                        : null;
+
+                    return (
+                      <SensitiveMediaFrame
+                        key={att.id}
+                        attachmentId={att.id}
+                        blur={shouldBlurSensitiveAttachment(att, contentFilter)}
+                        className="relative w-fit max-w-full"
+                      >
+                        <VideoAttachment
+                          src={getMediaUrl(sourceUrl)}
+                          filename={att.filename}
+                          brandingKey={att.file_key || att.url}
+                        />
+                        {favorite && <GifFavoriteButton gif={favorite} />}
+                      </SensitiveMediaFrame>
+                    );
+                  })(),
+                )}
+              </div>
+            )}
+
+            {/* File attachments */}
+            {fileAttachments.length > 0 && (
+              <div className="mt-2 flex flex-col gap-2 max-w-sm">
+                {fileAttachments.map((att) => {
+                  const { Icon: TypeIcon, colorClass } = getFileIcon(
+                    att.filename,
+                    att.content_type ?? undefined,
+                  );
+                  return (
+                    <a
+                      key={att.id}
+                      href={getDownloadUrl(getAttachmentSourceUrl(att))}
+                      download={att.filename}
+                      className="flex items-center gap-3 rounded-xl border border-rm-border bg-rm-bg-elevated px-4 py-3 transition-all hover:border-rm-text-muted/20 hover:bg-rm-bg-hover group/file"
+                    >
+                      <div
+                        className={cn(
+                          "flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-rm-bg-surface border border-rm-border/30",
+                          colorClass,
+                        )}
+                      >
+                        <TypeIcon size={20} />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-[13px] font-semibold text-primary/80 group-hover/file:underline group-hover/file:text-primary">
+                          {att.filename}
+                        </p>
+                        <p className="text-[11px] text-rm-text-muted">
+                          {formatFileSize(att.size_bytes)}
+                        </p>
+                      </div>
+                      <Download className="h-4 w-4 shrink-0 text-rm-text-muted transition-colors group-hover/file:text-rm-text-secondary" />
+                    </a>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Reactions */}
+            {message.reactions && message.reactions.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {message.reactions.map((reaction) => {
+                  const hasReacted = reaction.users?.includes(
+                    currentUserId ?? "",
+                  );
+                  return (
+                    <button
+                      key={reaction.emoji}
+                      className={cn(
+                        "flex cursor-pointer items-center gap-1.5 rounded-lg border px-2 py-0.5 text-[12px] font-bold transition-all",
+                        previewOnly && "cursor-default",
+                        hasReacted
+                          ? "border-primary/40 bg-primary/10 text-primary shadow-[0_0_10px_var(--rm-glow)]"
+                          : "border-rm-border bg-rm-bg-elevated/50 text-rm-text-muted hover:border-rm-text-muted/20 hover:text-rm-text-secondary",
+                      )}
+                      onClick={
+                        previewOnly
+                          ? undefined
+                          : () => toggleReaction(reaction.emoji)
+                      }
+                    >
+                      <EmojiToken
+                        value={reaction.emoji}
+                        customEmojiMap={reactionEmojiMap}
+                        className="h-4 w-4"
+                        fallbackClassName="max-w-[84px] truncate text-[11px]"
+                      />
+                      <span className="text-[10px] opacity-60">
+                        {reaction.count}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Thread badge */}
+            {(message.reply_count ?? 0) > 0 && (
+              <button
+                onClick={previewOnly ? undefined : () => onThread?.(message.id)}
+                disabled={previewOnly}
+                className="mt-2 flex items-center gap-1.5 rounded-lg border border-primary/20 bg-primary/5 px-2.5 py-1 text-[12px] font-semibold text-primary transition-all hover:bg-primary/10 hover:border-primary/30 outline-none"
+              >
+                <MessageSquare className="h-3 w-3" />
+                {message.reply_count}{" "}
+                {message.reply_count === 1 ? "Reply" : "Replies"}
+              </button>
+            )}
+          </div>
+
+          {/* Hover action toolbar */}
+          {!previewOnly && !message.pending && !editing && (
+            <TooltipProvider delayDuration={120}>
+              <div className="pointer-events-none absolute -top-3 right-4 z-20 flex max-w-[calc(100vw-96px)] origin-bottom scale-95 items-center gap-0.5 overflow-x-auto rounded-lg border border-rm-border bg-rm-bg-elevated p-0.5 opacity-0 shadow-2xl transition-all group-hover:pointer-events-auto group-hover:scale-100 group-hover:opacity-100 focus-within:pointer-events-auto focus-within:scale-100 focus-within:opacity-100">
+                {isShiftPressed ? (
+                  <>
+                    <IconButton
+                      icon={Copy}
+                      size="sm"
+                      tooltip="Copy Message ID"
+                      onClick={copyMessageId}
+                    />
+                    <IconButton
+                      icon={Link}
+                      size="sm"
+                      tooltip="Copy Message Link"
+                      onClick={copyMessageLink}
+                    />
+                    <IconButton
+                      icon={MailOpen}
+                      size="sm"
+                      tooltip="Mark Unread"
+                      onClick={handleMarkUnread}
+                    />
+                    {canPin && (
+                      <IconButton
+                        icon={Pin}
+                        size="sm"
+                        tooltip={
+                          message.is_pinned ? "Unpin Message" : "Pin Message"
+                        }
+                        iconClassName={cn(
+                          "rotate-45",
+                          message.is_pinned && "fill-current",
+                        )}
+                        className={
+                          message.is_pinned ? "text-primary" : undefined
+                        }
+                        onClick={(event) =>
+                          handlePinToggle(event.shiftKey || isShiftPressed)
+                        }
+                      />
+                    )}
+                    {onThread && (
+                      <IconButton
+                        icon={MessageSquare}
+                        size="sm"
+                        tooltip={
+                          (message.reply_count ?? 0) > 0
+                            ? "View Thread"
+                            : "Create Thread"
+                        }
+                        onClick={() => onThread(message.id)}
+                      />
+                    )}
+                    <ToolbarSeparator />
+                    <div className="relative">
+                      <IconButton
+                        ref={emojiBtnRef}
+                        icon={Smile}
+                        size="sm"
+                        tooltip="Add Reaction"
+                        className={
+                          showEmojiPicker
+                            ? "bg-primary/10 text-primary"
+                            : undefined
+                        }
+                        onClick={() => {
+                          setContextEmojiPickerAnchor(null);
+                          setShowEmojiPicker((current) => !current);
+                        }}
+                      />
+                      {showEmojiPicker && (
+                        <EmojiPicker
+                          placement="bottom-end"
+                          onSelect={handleEmojiPickerSelect}
+                          onClose={() => setShowEmojiPicker(false)}
+                          markerRef={emojiBtnRef}
+                        />
+                      )}
+                    </div>
+                    <IconButton
+                      icon={CornerUpLeft}
+                      size="sm"
+                      tooltip="Reply"
+                      onClick={() => onReply?.(message)}
+                    />
+                    <IconButton
+                      icon={Forward}
+                      size="sm"
+                      tooltip="Forward"
+                      aria-disabled="true"
+                      className="opacity-50"
+                      onClick={() => undefined}
+                    />
+                    {(isOwnMessage || canDeleteMessages) && (
+                      <IconButton
+                        icon={Trash2}
+                        size="sm"
+                        variant="destructive"
+                        tooltip="Delete Message"
+                        onClick={() => handleDelete(true)}
+                      />
+                    )}
+                  </>
+                ) : (
+                  <>
+                    {toolbarQuickReactions.map((item) => (
+                      <ToolbarEmojiButton
+                        key={`${item.type}:${item.id}`}
+                        item={item}
+                        customEmojiMap={toolbarQuickReactionEmojiMap}
+                        onClick={handleQuickReaction}
+                      />
+                    ))}
+                    <ToolbarSeparator />
+                    <div className="relative">
+                      <IconButton
+                        ref={emojiBtnRef}
+                        icon={Smile}
+                        size="sm"
+                        tooltip="Add Reaction"
+                        className={
+                          showEmojiPicker
+                            ? "bg-primary/10 text-primary"
+                            : undefined
+                        }
+                        onClick={() => {
+                          setContextEmojiPickerAnchor(null);
+                          setShowEmojiPicker((current) => !current);
+                        }}
+                      />
+                      {showEmojiPicker && (
+                        <EmojiPicker
+                          placement="bottom-end"
+                          onSelect={handleEmojiPickerSelect}
+                          onClose={() => setShowEmojiPicker(false)}
+                          markerRef={emojiBtnRef}
+                        />
+                      )}
+                    </div>
+                    <IconButton
+                      icon={CornerUpLeft}
+                      size="sm"
+                      tooltip="Reply"
+                      onClick={() => onReply?.(message)}
+                    />
+                    <IconButton
+                      icon={Forward}
+                      size="sm"
+                      tooltip="Forward"
+                      aria-disabled="true"
+                      className="opacity-50"
+                      onClick={() => undefined}
+                    />
+                    <IconButton
+                      icon={MoreHorizontal}
+                      size="sm"
+                      tooltip="More"
+                      onClick={handleContextMenu}
+                    />
+                  </>
+                )}
+              </div>
+            </TooltipProvider>
+          )}
+
+          {/* User profile popover */}
+          {!previewOnly && showProfile && authorNameEl && (
+            <UserProfilePopover
+              userId={message.author_id}
+              username={authorInfo.username}
+              displayName={authorInfo.displayName}
+              avatarUrl={authorInfo.avatarUrl}
+              avatarDisplay={authorInfo.avatarDisplay}
+              anchorEl={authorNameEl}
+              onClose={() => setShowProfile(false)}
+            />
           )}
         </div>
 
-        {/* Hover action toolbar */}
-        {!previewOnly && !message.pending && !editing && (
-          <TooltipProvider delayDuration={120}>
-            <div className="pointer-events-none absolute -top-3 right-4 z-20 flex max-w-[calc(100vw-96px)] origin-bottom scale-95 items-center gap-0.5 overflow-x-auto rounded-lg border border-rm-border bg-rm-bg-elevated p-0.5 opacity-0 shadow-2xl transition-all group-hover:pointer-events-auto group-hover:scale-100 group-hover:opacity-100 focus-within:pointer-events-auto focus-within:scale-100 focus-within:opacity-100">
-              {isShiftPressed ? (
-                <>
-                  <IconButton icon={Copy} size="sm" tooltip="Copy Message ID" onClick={copyMessageId} />
-                  <IconButton icon={Link} size="sm" tooltip="Copy Message Link" onClick={copyMessageLink} />
-                  <IconButton icon={MailOpen} size="sm" tooltip="Mark Unread" onClick={handleMarkUnread} />
-                  {canPin && (
-                    <IconButton
-                      icon={Pin}
-                      size="sm"
-                      tooltip={message.is_pinned ? "Unpin Message" : "Pin Message"}
-                      iconClassName={cn("rotate-45", message.is_pinned && "fill-current")}
-                      className={message.is_pinned ? "text-primary" : undefined}
-                      onClick={(event) => handlePinToggle(event.shiftKey || isShiftPressed)}
-                    />
-                  )}
-                  {onThread && (
-                    <IconButton
-                      icon={MessageSquare}
-                      size="sm"
-                      tooltip={(message.reply_count ?? 0) > 0 ? "View Thread" : "Create Thread"}
-                      onClick={() => onThread(message.id)}
-                    />
-                  )}
-                  <ToolbarSeparator />
-                  <div className="relative">
-                    <IconButton
-                      ref={emojiBtnRef}
-                      icon={Smile}
-                      size="sm"
-                      tooltip="Add Reaction"
-                      className={showEmojiPicker ? "bg-primary/10 text-primary" : undefined}
-                      onClick={() => {
-                        setContextEmojiPickerAnchor(null);
-                        setShowEmojiPicker((current) => !current);
-                      }}
-                    />
-                    {showEmojiPicker && (
-                      <EmojiPicker
-                        placement="bottom-end"
-                        onSelect={handleEmojiPickerSelect}
-                        onClose={() => setShowEmojiPicker(false)}
-                        markerRef={emojiBtnRef}
-                      />
-                    )}
-                  </div>
-                  <IconButton icon={CornerUpLeft} size="sm" tooltip="Reply" onClick={() => onReply?.(message)} />
-                  <IconButton
-                    icon={Forward}
-                    size="sm"
-                    tooltip="Forward"
-                    aria-disabled="true"
-                    className="opacity-50"
-                    onClick={() => undefined}
-                  />
-                  {(isOwnMessage || canDeleteMessages) && (
-                    <IconButton
-                      icon={Trash2}
-                      size="sm"
-                      variant="destructive"
-                      tooltip="Delete Message"
-                      onClick={() => handleDelete(true)}
-                    />
-                  )}
-                </>
-              ) : (
-                <>
-                  {toolbarQuickReactions.map((item) => (
-                    <ToolbarEmojiButton
-                      key={`${item.type}:${item.id}`}
-                      item={item}
-                      customEmojiMap={toolbarQuickReactionEmojiMap}
-                      onClick={handleQuickReaction}
-                    />
-                  ))}
-                  <ToolbarSeparator />
-                  <div className="relative">
-                    <IconButton
-                      ref={emojiBtnRef}
-                      icon={Smile}
-                      size="sm"
-                      tooltip="Add Reaction"
-                      className={showEmojiPicker ? "bg-primary/10 text-primary" : undefined}
-                      onClick={() => {
-                        setContextEmojiPickerAnchor(null);
-                        setShowEmojiPicker((current) => !current);
-                      }}
-                    />
-                    {showEmojiPicker && (
-                      <EmojiPicker
-                        placement="bottom-end"
-                        onSelect={handleEmojiPickerSelect}
-                        onClose={() => setShowEmojiPicker(false)}
-                        markerRef={emojiBtnRef}
-                      />
-                    )}
-                  </div>
-                  <IconButton icon={CornerUpLeft} size="sm" tooltip="Reply" onClick={() => onReply?.(message)} />
-                  <IconButton
-                    icon={Forward}
-                    size="sm"
-                    tooltip="Forward"
-                    aria-disabled="true"
-                    className="opacity-50"
-                    onClick={() => undefined}
-                  />
-                  <IconButton icon={MoreHorizontal} size="sm" tooltip="More" onClick={handleContextMenu} />
-                </>
-              )}
-            </div>
-          </TooltipProvider>
+        {!previewOnly && shouldRender && (
+          <ContextMenu
+            x={menu.x}
+            y={menu.y}
+            items={menu.items}
+            topContent={menu.topContent}
+            onClose={closeMenu}
+            isClosing={isClosing}
+          />
         )}
 
-        {/* User profile popover */}
-        {!previewOnly && showProfile && authorNameEl && (
-          <UserProfilePopover
-            userId={message.author_id}
-            username={authorInfo.username}
-            displayName={authorInfo.displayName}
-            avatarUrl={authorInfo.avatarUrl}
-            avatarDisplay={authorInfo.avatarDisplay}
-            anchorEl={authorNameEl}
-            onClose={() => setShowProfile(false)}
+        {!previewOnly && contextEmojiPickerAnchor ? (
+          <>
+            <span
+              ref={contextEmojiPickerAnchorRef}
+              aria-hidden="true"
+              className="fixed h-0 w-0"
+              style={{
+                left: contextEmojiPickerAnchor.x,
+                top: contextEmojiPickerAnchor.y,
+                pointerEvents: "none",
+              }}
+            />
+            <EmojiPicker
+              placement="bottom-end"
+              markerRef={contextEmojiPickerAnchorRef}
+              onSelect={handleEmojiPickerSelect}
+              onClose={() => setContextEmojiPickerAnchor(null)}
+            />
+          </>
+        ) : null}
+
+        {!previewOnly && shouldRenderShareModal && (
+          <MessageShareModal
+            message={message}
+            onClose={() => setShowShareModal(false)}
+            onCreateShare={createMessageShare}
+            onManageShares={
+              onManageShares ??
+              (() => {
+                window.dispatchEvent(
+                  new CustomEvent("open-shared-messages-settings"),
+                );
+                setShowShareModal(false);
+              })
+            }
+          />
+        )}
+
+        {!previewOnly && shouldRenderDeleteModal && (
+          <DeleteMessageModal
+            message={message}
+            currentUserId={currentUserId}
+            isClosing={!showDeleteModal}
+            onClose={() => setShowDeleteModal(false)}
+            onConfirm={() => {
+              performDelete();
+              setShowDeleteModal(false);
+            }}
           />
         )}
       </div>
-
-      {!previewOnly && shouldRender && (
-        <ContextMenu
-          x={menu.x}
-          y={menu.y}
-          items={menu.items}
-          topContent={menu.topContent}
-          onClose={closeMenu}
-          isClosing={isClosing}
-        />
-      )}
-
-      {!previewOnly && contextEmojiPickerAnchor ? (
-        <>
-          <span
-            ref={contextEmojiPickerAnchorRef}
-            aria-hidden="true"
-            className="fixed h-0 w-0"
-            style={{
-              left: contextEmojiPickerAnchor.x,
-              top: contextEmojiPickerAnchor.y,
-              pointerEvents: "none",
-            }}
-          />
-          <EmojiPicker
-            placement="bottom-end"
-            markerRef={contextEmojiPickerAnchorRef}
-            onSelect={handleEmojiPickerSelect}
-            onClose={() => setContextEmojiPickerAnchor(null)}
-          />
-        </>
-      ) : null}
-
-      {!previewOnly && shouldRenderShareModal && (
-        <MessageShareModal
-          message={message}
-          onClose={() => setShowShareModal(false)}
-          onCreateShare={createMessageShare}
-          onManageShares={onManageShares ?? (() => {
-            window.dispatchEvent(new CustomEvent("open-shared-messages-settings"));
-            setShowShareModal(false);
-          })}
-        />
-      )}
-
-      {!previewOnly && shouldRenderDeleteModal && (
-        <DeleteMessageModal
-          message={message}
-          currentUserId={currentUserId}
-          isClosing={!showDeleteModal}
-          onClose={() => setShowDeleteModal(false)}
-          onConfirm={() => {
-            performDelete();
-            setShowDeleteModal(false);
-          }}
-        />
-      )}
-    </div>
-  );
-});
+    );
+  },
+);
 
 function DeleteMessageModal({
   message,
@@ -1059,7 +1374,9 @@ function DeleteMessageModal({
       <div
         className={cn(
           "fixed inset-0 z-[1100] flex items-end justify-center bg-black/65 p-0 backdrop-blur-sm md:items-center md:p-6",
-          isClosing ? "animate-out fade-out duration-200" : "animate-in fade-in duration-200"
+          isClosing
+            ? "animate-out fade-out duration-200"
+            : "animate-in fade-in duration-200",
         )}
         onClick={(event) => {
           if (event.target === event.currentTarget) {
@@ -1072,17 +1389,25 @@ function DeleteMessageModal({
           open
           className={cn(
             "relative m-0 flex max-h-[calc(100dvh-16px)] w-full max-w-[480px] flex-col overflow-hidden rounded-t-xl border border-rm-border bg-rm-bg-primary p-0 shadow-2xl outline-none md:max-h-[min(760px,calc(100dvh-48px))] md:rounded-xl",
-            isClosing ? "animate-out fade-out zoom-out-95 duration-200" : "animate-in fade-in zoom-in-95 duration-200"
+            isClosing
+              ? "animate-out fade-out zoom-out-95 duration-200"
+              : "animate-in fade-in zoom-in-95 duration-200",
           )}
           aria-labelledby="delete-message-title"
           aria-describedby="delete-message-description"
         >
           <div className="flex shrink-0 items-start justify-between px-6 pb-3 pt-6">
             <div>
-              <h2 id="delete-message-title" className="text-lg font-bold text-rm-text">
+              <h2
+                id="delete-message-title"
+                className="text-lg font-bold text-rm-text"
+              >
                 Delete Message
               </h2>
-              <p id="delete-message-description" className="mt-1 text-sm text-rm-text-muted">
+              <p
+                id="delete-message-description"
+                className="mt-1 text-sm text-rm-text-muted"
+              >
                 Are you sure you want to delete this message?
               </p>
             </div>
@@ -1115,9 +1440,12 @@ function DeleteMessageModal({
           </div>
 
           <div className="shrink-0 border-t border-rm-border/60 px-6 pb-2 pt-4 text-sm leading-tight">
-            <p className="text-[12px] font-black uppercase text-emerald-400">Protip:</p>
+            <p className="text-[12px] font-black uppercase text-emerald-400">
+              Protip:
+            </p>
             <p className="mt-1 text-rm-text-secondary">
-              You can hold down Shift when clicking delete message to bypass this confirmation entirely.
+              You can hold down Shift when clicking delete message to bypass
+              this confirmation entirely.
             </p>
           </div>
 

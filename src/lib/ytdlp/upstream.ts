@@ -21,9 +21,12 @@ const SOLVER_BUNDLE_TTL_SECONDS = 60 * 60 * 24 * 30;
 const UPSTREAM_STATUS_TTL_SECONDS = 60 * 60 * 6;
 const RECOMMENDED_CHANNEL = "nightly" as const;
 const BUNDLED_EJS_VERSION = "0.8.0";
-const BUNDLED_EJS_RELEASE_URL = "https://github.com/yt-dlp/ejs/releases/tag/0.8.0";
-const BUNDLED_EJS_LIB_DIGEST = "sha256:c55987fe697e5b9ee18830163f7af85327e9bb5c3e674b969d38c8d205eaa577";
-const BUNDLED_EJS_CORE_DIGEST = "sha256:18da6ce0758b416e7ae645084f4f8801f9f9d59d6c477c05eaa0ff94ebd8cc00";
+const BUNDLED_EJS_RELEASE_URL =
+  "https://github.com/yt-dlp/ejs/releases/tag/0.8.0";
+const BUNDLED_EJS_LIB_DIGEST =
+  "sha256:c55987fe697e5b9ee18830163f7af85327e9bb5c3e674b969d38c8d205eaa577";
+const BUNDLED_EJS_CORE_DIGEST =
+  "sha256:18da6ce0758b416e7ae645084f4f8801f9f9d59d6c477c05eaa0ff94ebd8cc00";
 
 interface GitHubReleaseAsset {
   name: string;
@@ -63,7 +66,9 @@ const bundledSolverBundle: YtDlpSolverBundle = {
 async function fetchJson<T>(url: string): Promise<T> {
   const response = await fetch(url, { headers: GITHUB_HEADERS });
   if (!response.ok) {
-    throw new Error(`GitHub API request failed for ${url} (${response.status})`);
+    throw new Error(
+      `GitHub API request failed for ${url} (${response.status})`,
+    );
   }
   return response.json() as Promise<T>;
 }
@@ -71,7 +76,9 @@ async function fetchJson<T>(url: string): Promise<T> {
 async function fetchText(url: string) {
   const response = await fetch(url, { headers: GITHUB_HEADERS });
   if (!response.ok) {
-    throw new Error(`GitHub asset download failed for ${url} (${response.status})`);
+    throw new Error(
+      `GitHub asset download failed for ${url} (${response.status})`,
+    );
   }
   return response.text();
 }
@@ -93,7 +100,10 @@ async function verifyAssetDigest(code: string, expectedDigest?: string) {
   return (await sha256DigestHex(code)) === value.toLowerCase();
 }
 
-function summarizeRelease(repo: string, release: GitHubRelease | null): YtDlpReleaseSummary | null {
+function summarizeRelease(
+  repo: string,
+  release: GitHubRelease | null,
+): YtDlpReleaseSummary | null {
   if (!release) return null;
   return {
     repo,
@@ -103,7 +113,10 @@ function summarizeRelease(repo: string, release: GitHubRelease | null): YtDlpRel
   };
 }
 
-function summarizeCommit(repo: string, commit: GitHubCommit | null): YtDlpCommitSummary | null {
+function summarizeCommit(
+  repo: string,
+  commit: GitHubCommit | null,
+): YtDlpCommitSummary | null {
   if (!commit) return null;
   return {
     repo,
@@ -117,10 +130,13 @@ function isOlderThan(dateString: string | null, ageMs: number) {
   if (!dateString) return true;
   const parsed = Date.parse(dateString);
   if (!Number.isFinite(parsed)) return true;
-  return (Date.now() - parsed) > ageMs;
+  return Date.now() - parsed > ageMs;
 }
 
-function buildFallbackStatus(bundle: YtDlpSolverBundle, errors: string[] = []): YtDlpUpstreamStatus {
+function buildFallbackStatus(
+  bundle: YtDlpSolverBundle,
+  errors: string[] = [],
+): YtDlpUpstreamStatus {
   return {
     syncedAt: null,
     recommendedChannel: RECOMMENDED_CHANNEL,
@@ -178,10 +194,17 @@ export async function getYtDlpUpstreamStatus(): Promise<YtDlpUpstreamStatus> {
   return buildFallbackStatus(await loadActiveSolverBundle());
 }
 
-export async function syncYtDlpUpstream(force = false): Promise<YtDlpUpstreamStatus> {
+export async function syncYtDlpUpstream(
+  force = false,
+): Promise<YtDlpUpstreamStatus> {
   if (!force) {
-    const cached = await cacheGet<YtDlpUpstreamStatus>(UPSTREAM_STATUS_CACHE_KEY);
-    if (cached && !isOlderThan(cached.syncedAt, UPSTREAM_STATUS_TTL_SECONDS * 1000)) {
+    const cached = await cacheGet<YtDlpUpstreamStatus>(
+      UPSTREAM_STATUS_CACHE_KEY,
+    );
+    if (
+      cached &&
+      !isOlderThan(cached.syncedAt, UPSTREAM_STATUS_TTL_SECONDS * 1000)
+    ) {
       return cached;
     }
   }
@@ -197,28 +220,52 @@ export async function syncYtDlpUpstream(force = false): Promise<YtDlpUpstreamSta
   ] = await Promise.allSettled([
     fetchJson<GitHubRelease>(`${GITHUB_API}/yt-dlp/ejs/releases/latest`),
     fetchJson<GitHubRelease>(`${GITHUB_API}/yt-dlp/yt-dlp/releases/latest`),
-    fetchJson<GitHubRelease>(`${GITHUB_API}/yt-dlp/yt-dlp-nightly-builds/releases/latest`),
-    fetchJson<GitHubRelease>(`${GITHUB_API}/yt-dlp/yt-dlp-master-builds/releases/latest`),
+    fetchJson<GitHubRelease>(
+      `${GITHUB_API}/yt-dlp/yt-dlp-nightly-builds/releases/latest`,
+    ),
+    fetchJson<GitHubRelease>(
+      `${GITHUB_API}/yt-dlp/yt-dlp-master-builds/releases/latest`,
+    ),
     fetchJson<GitHubCommit>(`${GITHUB_API}/yt-dlp/yt-dlp/commits/master`),
   ]);
 
   const ejsRelease = ejsResult.status === "fulfilled" ? ejsResult.value : null;
-  const stableRelease = stableResult.status === "fulfilled" ? stableResult.value : null;
-  const nightlyRelease = nightlyResult.status === "fulfilled" ? nightlyResult.value : null;
-  const masterRelease = masterReleaseResult.status === "fulfilled" ? masterReleaseResult.value : null;
-  const masterCommit = masterCommitResult.status === "fulfilled" ? masterCommitResult.value : null;
+  const stableRelease =
+    stableResult.status === "fulfilled" ? stableResult.value : null;
+  const nightlyRelease =
+    nightlyResult.status === "fulfilled" ? nightlyResult.value : null;
+  const masterRelease =
+    masterReleaseResult.status === "fulfilled"
+      ? masterReleaseResult.value
+      : null;
+  const masterCommit =
+    masterCommitResult.status === "fulfilled" ? masterCommitResult.value : null;
 
-  for (const result of [ejsResult, stableResult, nightlyResult, masterReleaseResult, masterCommitResult]) {
+  for (const result of [
+    ejsResult,
+    stableResult,
+    nightlyResult,
+    masterReleaseResult,
+    masterCommitResult,
+  ]) {
     if (result.status === "rejected") {
-      errors.push(result.reason instanceof Error ? result.reason.message : String(result.reason));
+      errors.push(
+        result.reason instanceof Error
+          ? result.reason.message
+          : String(result.reason),
+      );
     }
   }
 
   let activeBundle = await loadActiveSolverBundle();
 
   if (ejsRelease) {
-    const libAsset = ejsRelease.assets.find((asset) => asset.name === "yt.solver.lib.min.js");
-    const coreAsset = ejsRelease.assets.find((asset) => asset.name === "yt.solver.core.min.js");
+    const libAsset = ejsRelease.assets.find(
+      (asset) => asset.name === "yt.solver.lib.min.js",
+    );
+    const coreAsset = ejsRelease.assets.find(
+      (asset) => asset.name === "yt.solver.core.min.js",
+    );
 
     if (libAsset && coreAsset) {
       try {
@@ -243,18 +290,26 @@ export async function syncYtDlpUpstream(force = false): Promise<YtDlpUpstreamSta
           releaseUrl: ejsRelease.html_url,
           libCode,
           coreCode,
-          libDigest: libAsset.digest ?? `sha256:${await sha256DigestHex(libCode)}`,
-          coreDigest: coreAsset.digest ?? `sha256:${await sha256DigestHex(coreCode)}`,
+          libDigest:
+            libAsset.digest ?? `sha256:${await sha256DigestHex(libCode)}`,
+          coreDigest:
+            coreAsset.digest ?? `sha256:${await sha256DigestHex(coreCode)}`,
         };
 
         assertSolverBundleUsable(freshBundle);
-        await cacheSet(SOLVER_BUNDLE_CACHE_KEY, freshBundle, SOLVER_BUNDLE_TTL_SECONDS);
+        await cacheSet(
+          SOLVER_BUNDLE_CACHE_KEY,
+          freshBundle,
+          SOLVER_BUNDLE_TTL_SECONDS,
+        );
         activeBundle = freshBundle;
       } catch (error) {
         errors.push(error instanceof Error ? error.message : String(error));
       }
     } else {
-      errors.push("Latest yt-dlp/ejs release did not contain both minified solver assets");
+      errors.push(
+        "Latest yt-dlp/ejs release did not contain both minified solver assets",
+      );
     }
   }
 
@@ -269,13 +324,20 @@ export async function syncYtDlpUpstream(force = false): Promise<YtDlpUpstreamSta
     },
     ejsLatest: summarizeRelease("yt-dlp/ejs", ejsRelease),
     ytDlpStable: summarizeRelease("yt-dlp/yt-dlp", stableRelease),
-    ytDlpNightly: summarizeRelease("yt-dlp/yt-dlp-nightly-builds", nightlyRelease),
+    ytDlpNightly: summarizeRelease(
+      "yt-dlp/yt-dlp-nightly-builds",
+      nightlyRelease,
+    ),
     ytDlpMaster: summarizeRelease("yt-dlp/yt-dlp-master-builds", masterRelease),
     ytDlpMasterCommit: summarizeCommit("yt-dlp/yt-dlp", masterCommit),
     stale: !!ejsRelease && activeBundle.version !== ejsRelease.tag_name,
     errors,
   };
 
-  await cacheSet(UPSTREAM_STATUS_CACHE_KEY, status, UPSTREAM_STATUS_TTL_SECONDS);
+  await cacheSet(
+    UPSTREAM_STATUS_CACHE_KEY,
+    status,
+    UPSTREAM_STATUS_TTL_SECONDS,
+  );
   return status;
 }

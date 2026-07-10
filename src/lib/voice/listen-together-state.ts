@@ -72,7 +72,9 @@ function insertQueueEntries(
     return [...queue, ...additions];
   }
 
-  const currentIndex = queue.findIndex((entry) => entry.entryId === currentEntryId);
+  const currentIndex = queue.findIndex(
+    (entry) => entry.entryId === currentEntryId,
+  );
   if (currentIndex === -1) {
     return [...queue, ...additions];
   }
@@ -88,7 +90,10 @@ function getEntryDuration(
   queue: ListenTogetherQueueEntry[],
   currentEntryId: string | null,
 ): number | null {
-  return getListenTogetherCurrentEntry(queue, currentEntryId)?.track.durationMs ?? null;
+  return (
+    getListenTogetherCurrentEntry(queue, currentEntryId)?.track.durationMs ??
+    null
+  );
 }
 
 export function ensureListenTogetherState(
@@ -121,7 +126,12 @@ export function enqueueListenTogetherEntries(
 ): ListenTogetherMutationResult {
   const nextState = ensureListenTogetherState(roomSlug, state);
   const additions = buildQueueEntries(entries, now);
-  const nextQueue = insertQueueEntries(queue, nextState.currentEntryId, additions, mode);
+  const nextQueue = insertQueueEntries(
+    queue,
+    nextState.currentEntryId,
+    additions,
+    mode,
+  );
   if (additions.length === 0) {
     return {
       state: nextState,
@@ -156,9 +166,15 @@ export function playListenTogether(
   now = Date.now(),
 ): ListenTogetherMutationResult {
   const nextState = ensureListenTogetherState(roomSlug, state);
-  const targetEntryId = entryId ?? nextState.currentEntryId ?? queue[0]?.entryId ?? null;
+  const targetEntryId =
+    entryId ?? nextState.currentEntryId ?? queue[0]?.entryId ?? null;
   if (!targetEntryId) {
-    return { state: nextState, queue, queueChanged: false, playbackChanged: false };
+    return {
+      state: nextState,
+      queue,
+      queueChanged: false,
+      playbackChanged: false,
+    };
   }
 
   const currentDurationMs = getEntryDuration(queue, nextState.currentEntryId);
@@ -184,7 +200,12 @@ export function pauseListenTogether(
 ): ListenTogetherMutationResult {
   const nextState = ensureListenTogetherState(roomSlug, state);
   if (!nextState.currentEntryId || nextState.paused === paused) {
-    return { state: nextState, queue, queueChanged: false, playbackChanged: false };
+    return {
+      state: nextState,
+      queue,
+      queueChanged: false,
+      playbackChanged: false,
+    };
   }
 
   const durationMs = getEntryDuration(queue, nextState.currentEntryId);
@@ -214,7 +235,12 @@ export function seekListenTogether(
 ): ListenTogetherMutationResult {
   const nextState = ensureListenTogetherState(roomSlug, state);
   if (!nextState.currentEntryId) {
-    return { state: nextState, queue, queueChanged: false, playbackChanged: false };
+    return {
+      state: nextState,
+      queue,
+      queueChanged: false,
+      playbackChanged: false,
+    };
   }
   const durationMs = getEntryDuration(queue, nextState.currentEntryId);
   return {
@@ -240,16 +266,31 @@ export function skipListenTogether(
 ): ListenTogetherMutationResult {
   const nextState = ensureListenTogetherState(roomSlug, state);
   if (!nextState.currentEntryId) {
-    return { state: nextState, queue, queueChanged: false, playbackChanged: false };
+    return {
+      state: nextState,
+      queue,
+      queueChanged: false,
+      playbackChanged: false,
+    };
   }
 
-  const currentIndex = queue.findIndex((entry) => entry.entryId === nextState.currentEntryId);
+  const currentIndex = queue.findIndex(
+    (entry) => entry.entryId === nextState.currentEntryId,
+  );
   if (currentIndex === -1) {
-    return { state: nextState, queue, queueChanged: false, playbackChanged: false };
+    return {
+      state: nextState,
+      queue,
+      queueChanged: false,
+      playbackChanged: false,
+    };
   }
 
-  const nextQueue = queue.filter((entry) => entry.entryId !== nextState.currentEntryId);
-  const successor = nextQueue[currentIndex] ?? nextQueue[currentIndex - 1] ?? null;
+  const nextQueue = queue.filter(
+    (entry) => entry.entryId !== nextState.currentEntryId,
+  );
+  const successor =
+    nextQueue[currentIndex] ?? nextQueue[currentIndex - 1] ?? null;
   if (!successor) {
     return {
       state: touchState(
@@ -286,7 +327,12 @@ export function removeListenTogetherEntry(
   const nextState = ensureListenTogetherState(roomSlug, state);
   const removeIndex = queue.findIndex((entry) => entry.entryId === entryId);
   if (removeIndex === -1) {
-    return { state: nextState, queue, queueChanged: false, playbackChanged: false };
+    return {
+      state: nextState,
+      queue,
+      queueChanged: false,
+      playbackChanged: false,
+    };
   }
 
   const nextQueue = queue.filter((entry) => entry.entryId !== entryId);
@@ -299,7 +345,8 @@ export function removeListenTogetherEntry(
     };
   }
 
-  const successor = nextQueue[removeIndex] ?? nextQueue[removeIndex - 1] ?? null;
+  const successor =
+    nextQueue[removeIndex] ?? nextQueue[removeIndex - 1] ?? null;
   if (!successor) {
     return {
       state: touchState(
@@ -357,10 +404,19 @@ export function freezeListenTogetherPlayback(
 ): ListenTogetherMutationResult {
   const nextState = ensureListenTogetherState(roomSlug, state);
   if (!nextState.currentEntryId || nextState.paused) {
-    return { state: nextState, queue, queueChanged: false, playbackChanged: false };
+    return {
+      state: nextState,
+      queue,
+      queueChanged: false,
+      playbackChanged: false,
+    };
   }
   const durationMs = getEntryDuration(queue, nextState.currentEntryId);
-  const frozenPositionMs = getListenTogetherPositionMs(nextState, durationMs, now);
+  const frozenPositionMs = getListenTogetherPositionMs(
+    nextState,
+    durationMs,
+    now,
+  );
   return {
     state: touchState(
       nextState,

@@ -1,16 +1,18 @@
 import { apiError, getBucket, requireAuth } from "@/lib/api-helpers";
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute } from "@tanstack/react-router";
 
 // Content types that should NEVER be served as their declared type.
 // These are re-typed to application/octet-stream to force download
 // and prevent the browser from interpreting them as executable content.
 const DANGEROUS_CONTENT_TYPES = new Set([
-  "text/html", "text/xml", "application/xhtml+xml",
-  "image/svg+xml",  // SVGs can contain embedded scripts
-  "application/javascript", "text/javascript",
+  "text/html",
+  "text/xml",
+  "application/xhtml+xml",
+  "image/svg+xml", // SVGs can contain embedded scripts
+  "application/javascript",
+  "text/javascript",
   "application/x-httpd-php",
 ]);
-
 
 // GET /api/attachments/{channelId}/{attachmentId}/{filename}
 // R2 key = attachments/{channelId}/{attachmentId}/{filename}
@@ -49,13 +51,17 @@ const GET = async ({ request, params }: any) => {
     }
   }
 
-  const object = await bucket.get(key, rangeOption ? { range: rangeOption } : undefined);
+  const object = await bucket.get(
+    key,
+    rangeOption ? { range: rangeOption } : undefined,
+  );
 
   if (!object) {
     return apiError("File not found", 404);
   }
 
-  let contentType = object.httpMetadata?.contentType || "application/octet-stream";
+  let contentType =
+    object.httpMetadata?.contentType || "application/octet-stream";
   const pathParts = splatPath.split("/");
   const filename = pathParts[pathParts.length - 1] || "download";
 
@@ -102,7 +108,10 @@ const GET = async ({ request, params }: any) => {
       const h = new Headers();
       h.set("Content-Range", `bytes */${object.size}`);
       h.set("X-Content-Type-Options", "nosniff");
-      h.set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; img-src 'self' data:; media-src 'self'; script-src 'none';");
+      h.set(
+        "Content-Security-Policy",
+        "default-src 'none'; style-src 'unsafe-inline'; img-src 'self' data:; media-src 'self'; script-src 'none';",
+      );
       h.set("X-Frame-Options", "DENY");
       h.set("Referrer-Policy", "no-referrer");
       h.set("Cross-Origin-Resource-Policy", "cross-origin");
@@ -116,7 +125,10 @@ const GET = async ({ request, params }: any) => {
       if (typeof r.length === "number") length = r.length;
     }
 
-    headers.set("Content-Range", `bytes ${offset}-${offset + length - 1}/${object.size}`);
+    headers.set(
+      "Content-Range",
+      `bytes ${offset}-${offset + length - 1}/${object.size}`,
+    );
     headers.set("Content-Length", length.toString());
   } else {
     // Media types (video/audio) need range-request support for seeking.
@@ -125,14 +137,21 @@ const GET = async ({ request, params }: any) => {
     // back to the beginning). Use `no-store` for media to ensure every seek
     // hits the server with a proper Range header. Images and other static
     // assets keep the long cache since they don't need seeking.
-    const isMedia = contentType.startsWith("video/") || contentType.startsWith("audio/");
-    headers.set("Cache-Control", isMedia ? "no-store" : "private, max-age=31536000, immutable");
+    const isMedia =
+      contentType.startsWith("video/") || contentType.startsWith("audio/");
+    headers.set(
+      "Cache-Control",
+      isMedia ? "no-store" : "private, max-age=31536000, immutable",
+    );
     headers.set("Content-Length", object.size.toString());
   }
 
   // ── Defense-in-depth security headers ─────────────────────────────
   headers.set("X-Content-Type-Options", "nosniff");
-  headers.set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; img-src 'self' data:; media-src 'self'; script-src 'none';");
+  headers.set(
+    "Content-Security-Policy",
+    "default-src 'none'; style-src 'unsafe-inline'; img-src 'self' data:; media-src 'self'; script-src 'none';",
+  );
   headers.set("X-Frame-Options", "DENY");
   headers.set("Referrer-Policy", "no-referrer");
   headers.set("Cross-Origin-Resource-Policy", "cross-origin");
@@ -145,14 +164,12 @@ const GET = async ({ request, params }: any) => {
     status,
     headers,
   });
-}
+};
 
-
-
-export const Route = createFileRoute('/api/attachments/$')({
+export const Route = createFileRoute("/api/attachments/$")({
   server: {
     handlers: {
       GET,
-    }
-  }
+    },
+  },
 });

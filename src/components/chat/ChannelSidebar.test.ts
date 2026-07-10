@@ -20,7 +20,11 @@ describe("ChannelSidebar voice member identities", () => {
   beforeEach(() => {
     useChatStore.setState(initialState);
     useVoiceActivityStore.setState({ activeByUser: {} });
-    useVoiceSettingsStore.setState({ currentUser: null, userSettings: {}, _cache: {} });
+    useVoiceSettingsStore.setState({
+      currentUser: null,
+      userSettings: {},
+      _cache: {},
+    });
   });
 
   it("renders the latest display name for voice channel members", () => {
@@ -455,8 +459,8 @@ describe("ChannelSidebar voice member identities", () => {
     // Edit controls must NOT appear for observers
     expect(observerMarkup).not.toContain("Change media");
     expect(observerMarkup).not.toContain("Remove media");
-    expect(observerMarkup).not.toContain("aria-label=\"Change media\"");
-    expect(observerMarkup).not.toContain("aria-label=\"Remove media\"");
+    expect(observerMarkup).not.toContain('aria-label="Change media"');
+    expect(observerMarkup).not.toContain('aria-label="Remove media"');
     // The editable text trigger (Edit2 pencil) should not appear
     expect(observerMarkup).not.toContain("Set a channel status");
   });
@@ -497,6 +501,8 @@ describe("ChannelSidebar voice member identities", () => {
     );
 
     // Status must not be visible when the channel is empty
-    expect(emptyChannelMarkup).not.toContain("Leftover status from last session");
+    expect(emptyChannelMarkup).not.toContain(
+      "Leftover status from last session",
+    );
   });
 });

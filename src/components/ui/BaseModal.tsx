@@ -14,7 +14,11 @@ interface BaseModalProps {
  * - Pressing the Escape key to close
  * - Tauri Android back button to close
  */
-export function BaseModal({ onClose, children, portal = true }: BaseModalProps) {
+export function BaseModal({
+  onClose,
+  children,
+  portal = true,
+}: BaseModalProps) {
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
@@ -22,14 +26,15 @@ export function BaseModal({ onClose, children, portal = true }: BaseModalProps) 
       }
     };
     window.addEventListener("keydown", handler, { capture: true });
-    return () => window.removeEventListener("keydown", handler, { capture: true });
+    return () =>
+      window.removeEventListener("keydown", handler, { capture: true });
   }, [onClose]);
 
   useBackButton(
     useCallback(() => {
       onClose();
       return true; // consume the event
-    }, [onClose])
+    }, [onClose]),
   );
 
   if (portal && typeof document !== "undefined") {

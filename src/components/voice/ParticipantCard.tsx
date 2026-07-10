@@ -1,4 +1,3 @@
-
 import { IconButton } from "@/components/ui/IconButton";
 import { extractDominantColor } from "@/lib/color-utils";
 import { getAuthAssetUrl } from "@/lib/platform";
@@ -13,7 +12,7 @@ import {
   Headphones,
   MicOff,
   Monitor,
-  MoreHorizontal
+  MoreHorizontal,
 } from "../chat/Icons";
 import { QualityMonitor } from "./QualityMonitor";
 import { StreamWatcherList } from "./StreamWatcherList";
@@ -22,9 +21,10 @@ import { GridItem, VoiceActions } from "./types";
 import { VideoPlayer } from "./VideoPlayer";
 import { StickerReactionsOverlay } from "./StickerReactionsOverlay";
 
-
 const StreamContextMenu = lazy(() =>
-  import("../StreamContextMenu").then((mod) => ({ default: mod.StreamContextMenu }))
+  import("../StreamContextMenu").then((mod) => ({
+    default: mod.StreamContextMenu,
+  })),
 );
 
 interface ParticipantCardProps {
@@ -50,35 +50,62 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
   streamThumbnails,
   suppressVideo = false,
 }) => {
-  const [contextMenu, setContextMenu] = useState<{ x: number, y: number; isMini?: boolean } | null>(null);
-  const { shouldRender: shouldRenderStreamMenu, value: renderedContextMenu } = useDelayedUnmountValue(contextMenu, 150);
+  const [contextMenu, setContextMenu] = useState<{
+    x: number;
+    y: number;
+    isMini?: boolean;
+  } | null>(null);
+  const { shouldRender: shouldRenderStreamMenu, value: renderedContextMenu } =
+    useDelayedUnmountValue(contextMenu, 150);
   const [dominantColor, setDominantColor] = useState<string | null>(null);
 
   useEffect(() => {
     if (item.avatar) {
-      extractDominantColor(getAuthAssetUrl(item.avatar)).then((color: string | null) => {
-        if (color) setDominantColor(color);
-      });
+      extractDominantColor(getAuthAssetUrl(item.avatar)).then(
+        (color: string | null) => {
+          if (color) setDominantColor(color);
+        },
+      );
     } else {
       setDominantColor(null);
     }
   }, [item.avatar]);
 
-  const isScreen = item.type === 'screen';
-  const isCamera = item.type === 'camera';
-  const isPreviewHidden = isScreen && item.isLocal && !!voiceActions?.isPreviewHidden;
-  const isEffectivelyWatchingStream = isScreen && (item.isLocal || !!watchedStreams[item.userId] || isFocused);
-  const streamWatchers = isScreen ? (voiceActions?.watchersByStreamer?.[item.userId] ?? []) : [];
+  const isScreen = item.type === "screen";
+  const isCamera = item.type === "camera";
+  const isPreviewHidden =
+    isScreen && item.isLocal && !!voiceActions?.isPreviewHidden;
+  const isEffectivelyWatchingStream =
+    isScreen && (item.isLocal || !!watchedStreams[item.userId] || isFocused);
+  const streamWatchers = isScreen
+    ? (voiceActions?.watchersByStreamer?.[item.userId] ?? [])
+    : [];
   const streamDisplayName = isScreen
-    ? (item.isLocal ? 'You' : item.name.replace(/(?:'s|') Stream$/, ""))
-    : (item.isLocal ? 'You' : item.name);
-  const shouldShowWatchers = !isTray && streamWatchers.length > 0 && isEffectivelyWatchingStream;
+    ? item.isLocal
+      ? "You"
+      : item.name.replace(/(?:'s|') Stream$/, "")
+    : item.isLocal
+      ? "You"
+      : item.name;
+  const shouldShowWatchers =
+    !isTray && streamWatchers.length > 0 && isEffectivelyWatchingStream;
   // When preview is hidden the stream is null; we still want to show video for other cases.
   const shouldRenderVideo = !!item.stream && !suppressVideo && !isPreviewHidden;
-  const shouldShowWatchPrompt = isScreen && !item.isLocal && !isEffectivelyWatchingStream;
-  const shouldRenderThumbnailPoster = isScreen && !shouldRenderVideo && !!streamThumbnails[item.userId] && !shouldShowWatchPrompt && !isPreviewHidden;
-  const shouldShowFocusedStreamOverlay = isScreen && isTray && isFocused && shouldRenderThumbnailPoster;
-  const isLoadingStream = (isCamera || isScreen) && !item.stream && !shouldShowWatchPrompt && !isPreviewHidden;
+  const shouldShowWatchPrompt =
+    isScreen && !item.isLocal && !isEffectivelyWatchingStream;
+  const shouldRenderThumbnailPoster =
+    isScreen &&
+    !shouldRenderVideo &&
+    !!streamThumbnails[item.userId] &&
+    !shouldShowWatchPrompt &&
+    !isPreviewHidden;
+  const shouldShowFocusedStreamOverlay =
+    isScreen && isTray && isFocused && shouldRenderThumbnailPoster;
+  const isLoadingStream =
+    (isCamera || isScreen) &&
+    !item.stream &&
+    !shouldShowWatchPrompt &&
+    !isPreviewHidden;
 
   return (
     <>
@@ -86,9 +113,14 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
         className={cn(
           "relative group rounded-2xl overflow-hidden bg-rm-bg-surface/40 backdrop-blur-xl transition-all duration-300 cursor-pointer aspect-video w-full h-full",
           isFocused && "ring-2 ring-rm-text/20 z-50",
-          item.isSpeaking && "ring-[3px] ring-primary shadow-[0_0_20px_var(--rm-glow)] z-20",
-          item.isRinging && "ring-[3px] ring-primary/50 shadow-[0_0_20px_var(--rm-glow)] animate-pulse z-20",
-          !isFocused && !item.isSpeaking && !item.isRinging && "ring-1 ring-rm-border hover:ring-rm-text/20",
+          item.isSpeaking &&
+            "ring-[3px] ring-primary shadow-[0_0_20px_var(--rm-glow)] z-20",
+          item.isRinging &&
+            "ring-[3px] ring-primary/50 shadow-[0_0_20px_var(--rm-glow)] animate-pulse z-20",
+          !isFocused &&
+            !item.isSpeaking &&
+            !item.isRinging &&
+            "ring-1 ring-rm-border hover:ring-rm-text/20",
         )}
       >
         <button
@@ -101,7 +133,10 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
           aria-label={`Open participant tile for ${item.name}`}
           className="absolute inset-0 z-[35] rounded-2xl outline-none"
         />
-        <StickerReactionsOverlay sfu={voiceActions?.sfu} senderUserId={item.userId} />
+        <StickerReactionsOverlay
+          sfu={voiceActions?.sfu}
+          senderUserId={item.userId}
+        />
 
         {/* Selected Overlay */}
         {isFocused && (
@@ -112,25 +147,32 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
         {item.avatar && (
           <div
             className="absolute inset-0 z-0 transition-colors duration-500"
-            style={{ backgroundColor: ((isCamera || isScreen) && shouldRenderVideo) ? 'black' : (dominantColor || undefined) }}
+            style={{
+              backgroundColor:
+                (isCamera || isScreen) && shouldRenderVideo
+                  ? "black"
+                  : dominantColor || undefined,
+            }}
           />
         )}
 
         {/* Video Layer */}
         {shouldRenderVideo && (
-          <div className={cn(
-            "absolute inset-0 z-10 transition-opacity duration-500",
-            !(isCamera || isScreen) && "opacity-0 pointer-events-none"
-          )}>
+          <div
+            className={cn(
+              "absolute inset-0 z-10 transition-opacity duration-500",
+              !(isCamera || isScreen) && "opacity-0 pointer-events-none",
+            )}
+          >
             <VideoPlayer
               stream={item.stream}
               label={item.name}
               muted={true} // Audio is handled by SFUClient AudioContext
-              isLocal={item.isLocal && item.type === 'camera'}
+              isLocal={item.isLocal && item.type === "camera"}
               className={cn(
                 "w-full h-full transition-all duration-500",
                 isScreen ? "object-contain" : "object-cover",
-                shouldShowWatchPrompt && "opacity-0"
+                shouldShowWatchPrompt && "opacity-0",
               )}
             />
             {/* Dark gradient for labels */}
@@ -159,7 +201,9 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
         {isPreviewHidden && (
           <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-black/70 backdrop-blur-sm gap-2">
             <EyeOff size={22} className="text-white/50" />
-            <span className="text-[10px] font-bold text-white/40 uppercase tracking-widest">Preview paused</span>
+            <span className="text-[10px] font-bold text-white/40 uppercase tracking-widest">
+              Preview paused
+            </span>
           </div>
         )}
 
@@ -178,12 +222,15 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
             )}
             <div className="relative z-10 flex flex-col items-center justify-center p-1 sm:p-2 w-full h-full overflow-hidden">
               <div className="shrink border border-rm-border rounded-xl bg-rm-bg-elevated/60 p-2 sm:w-8 sm:h-8 text-rm-text-muted shadow-lg backdrop-blur-md flex items-center justify-center group-hover:scale-110 transition-transform duration-500">
-                <Monitor className="w-3 h-3 sm:w-4 sm:h-4 text-rm-text-muted shrink-0" strokeWidth={2} />
+                <Monitor
+                  className="w-3 h-3 sm:w-4 sm:h-4 text-rm-text-muted shrink-0"
+                  strokeWidth={2}
+                />
               </div>
 
               <div className="shrink min-h-0 flex flex-col items-center justify-center mt-1 sm:mt-2">
                 <h3 className="text-[9px] sm:text-[11px] font-bold text-rm-text tracking-tight truncate w-full text-center px-1">
-                  {item.name.replace(/'s Stream$/, '')}'s Stream
+                  {item.name.replace(/'s Stream$/, "")}'s Stream
                 </h3>
               </div>
 
@@ -201,36 +248,53 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
         )}
 
         {/* Full-size Avatar (Only if not showing video, prompt, or paused-preview placeholder) */}
-        {!((isCamera || isScreen) && shouldRenderVideo) && !shouldShowWatchPrompt && !isPreviewHidden && !shouldRenderThumbnailPoster && (
-          <div className="absolute inset-0 z-30 flex items-center justify-center p-4">
-            {item.avatar ? (
-              <div className="h-20 w-20 overflow-visible rounded-full border-4 border-black/20 drop-shadow-2xl sm:h-28 sm:w-28">
-                <AvatarImage
-                  src={getAuthAssetUrl(item.avatar)}
-                  alt={item.name}
-                  display={item.avatarDisplay}
-                />
-              </div>
-            ) : (
-              <div className="w-20 h-20 sm:w-28 sm:h-28 flex items-center justify-center bg-black/40 rounded-full border-4 border-black/20 drop-shadow-2xl">
-                <span className="text-3xl sm:text-5xl font-black text-white">{item.name[0]?.toUpperCase()}</span>
-              </div>
-            )}
+        {!((isCamera || isScreen) && shouldRenderVideo) &&
+          !shouldShowWatchPrompt &&
+          !isPreviewHidden &&
+          !shouldRenderThumbnailPoster && (
+            <div className="absolute inset-0 z-30 flex items-center justify-center p-4">
+              {item.avatar ? (
+                <div className="h-20 w-20 overflow-visible rounded-full border-4 border-black/20 drop-shadow-2xl sm:h-28 sm:w-28">
+                  <AvatarImage
+                    src={getAuthAssetUrl(item.avatar)}
+                    alt={item.name}
+                    display={item.avatarDisplay}
+                  />
+                </div>
+              ) : (
+                <div className="w-20 h-20 sm:w-28 sm:h-28 flex items-center justify-center bg-black/40 rounded-full border-4 border-black/20 drop-shadow-2xl">
+                  <span className="text-3xl sm:text-5xl font-black text-white">
+                    {item.name[0]?.toUpperCase()}
+                  </span>
+                </div>
+              )}
 
-            {/* Type Overlay Icon */}
-            {isTray && isFocused && (
-              <div className="absolute inset-0 flex items-center justify-center bg-black/70 animate-in fade-in duration-300">
-                {isScreen ? (
-                  <Monitor size={32} className="text-white" fill="currentColor" />
-                ) : isCamera ? (
-                  <Camera size={32} className="text-white" fill="currentColor" />
-                ) : (
-                  <Phone size={32} className="text-white" fill="currentColor" />
-                )}
-              </div>
-            )}
-          </div>
-        )}
+              {/* Type Overlay Icon */}
+              {isTray && isFocused && (
+                <div className="absolute inset-0 flex items-center justify-center bg-black/70 animate-in fade-in duration-300">
+                  {isScreen ? (
+                    <Monitor
+                      size={32}
+                      className="text-white"
+                      fill="currentColor"
+                    />
+                  ) : isCamera ? (
+                    <Camera
+                      size={32}
+                      className="text-white"
+                      fill="currentColor"
+                    />
+                  ) : (
+                    <Phone
+                      size={32}
+                      className="text-white"
+                      fill="currentColor"
+                    />
+                  )}
+                </div>
+              )}
+            </div>
+          )}
 
         {/* Ringing Overlay Label */}
         {item.isRinging && (
@@ -259,10 +323,20 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
             <div className="bg-rm-bg-primary/60 backdrop-blur-md px-2.5 py-1 rounded-lg border border-rm-border flex items-center gap-2 shadow-lg">
               <div className="flex items-center gap-1">
                 {item.isDeafened && (
-                  <Headphones size={10} className="text-rm-text-muted shrink-0" />
+                  <Headphones
+                    size={10}
+                    className="text-rm-text-muted shrink-0"
+                  />
                 )}
                 {item.isMuted && (
-                  <MicOff size={10} className={item.serverMute ? "text-destructive shrink-0" : "text-rm-text-muted shrink-0"} />
+                  <MicOff
+                    size={10}
+                    className={
+                      item.serverMute
+                        ? "text-destructive shrink-0"
+                        : "text-rm-text-muted shrink-0"
+                    }
+                  />
                 )}
               </div>
 
@@ -292,12 +366,22 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
                 e.stopPropagation();
                 voiceActions.togglePreviewHidden?.();
               }}
-              title={isPreviewHidden ? "Resume preview" : "Pause preview (saves resources)"}
+              title={
+                isPreviewHidden
+                  ? "Resume preview"
+                  : "Pause preview (saves resources)"
+              }
               className="flex items-center gap-1.5 bg-rm-bg-primary/70 backdrop-blur-md border border-rm-border px-2 py-1 rounded-lg text-[9px] font-bold text-rm-text-muted hover:text-rm-text transition-all shadow-lg"
             >
-              {isPreviewHidden
-                ? <><Eye size={11} /> <span>Resume</span></>
-                : <><EyeOff size={11} /> <span>Pause</span></>}
+              {isPreviewHidden ? (
+                <>
+                  <Eye size={11} /> <span>Resume</span>
+                </>
+              ) : (
+                <>
+                  <EyeOff size={11} /> <span>Pause</span>
+                </>
+              )}
             </button>
           </div>
         )}

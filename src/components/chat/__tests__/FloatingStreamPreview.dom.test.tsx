@@ -62,10 +62,18 @@ describe("FloatingStreamPreview context menu", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Open stream settings" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Always Show Stream Preview" }));
-    fireEvent.click(screen.getByRole("button", { name: "Open stream settings" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Stop Streaming" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Open stream settings" }),
+    );
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Always Show Stream Preview" }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Open stream settings" }),
+    );
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Stop Streaming" }),
+    );
 
     expect(onToggleAlwaysShowStreamPreview).toHaveBeenCalledTimes(1);
     expect(onToggleScreenShare).toHaveBeenCalledTimes(1);
@@ -99,16 +107,27 @@ describe("FloatingStreamPreview context menu", () => {
       />,
     );
 
-    const previewRoot = container.querySelector(".fixed.z-\\[130\\]") as HTMLDivElement | null;
+    const previewRoot = container.querySelector(
+      ".fixed.z-\\[130\\]",
+    ) as HTMLDivElement | null;
     expect(previewRoot).not.toBeNull();
     const setPointerCapture = vi.fn();
     if (previewRoot) {
       previewRoot.setPointerCapture = setPointerCapture;
     }
 
-    fireEvent.click(screen.getByRole("button", { name: "Open stream settings" }));
-    const menuItem = await screen.findByRole("button", { name: "Always Show Stream Preview" });
-    fireEvent.pointerDown(menuItem, { button: 0, pointerId: 1, clientX: 20, clientY: 20 });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Open stream settings" }),
+    );
+    const menuItem = await screen.findByRole("button", {
+      name: "Always Show Stream Preview",
+    });
+    fireEvent.pointerDown(menuItem, {
+      button: 0,
+      pointerId: 1,
+      clientX: 20,
+      clientY: 20,
+    });
     fireEvent.click(menuItem);
 
     expect(setPointerCapture).not.toHaveBeenCalled();
@@ -147,6 +166,8 @@ describe("FloatingStreamPreview context menu", () => {
     expect(previewRoot).not.toBeNull();
     fireEvent.contextMenu(previewRoot!);
 
-    expect(await screen.findByRole("button", { name: "Always Show Stream Preview" })).toBeTruthy();
+    expect(
+      await screen.findByRole("button", { name: "Always Show Stream Preview" }),
+    ).toBeTruthy();
   });
 });

@@ -20,8 +20,16 @@ export function applyStreamWatcherSnapshot(
 ): StreamWatcherIdsByStreamer {
   const next: StreamWatcherIdsByStreamer = {};
 
-  for (const [streamerUserId, viewerIds] of Object.entries(snapshot.watchers_by_streamer ?? {})) {
-    const deduped = Array.from(new Set(viewerIds.filter((viewerId) => typeof viewerId === "string" && viewerId.length > 0)));
+  for (const [streamerUserId, viewerIds] of Object.entries(
+    snapshot.watchers_by_streamer ?? {},
+  )) {
+    const deduped = Array.from(
+      new Set(
+        viewerIds.filter(
+          (viewerId) => typeof viewerId === "string" && viewerId.length > 0,
+        ),
+      ),
+    );
     if (deduped.length > 0) {
       next[streamerUserId] = deduped;
     }
@@ -58,7 +66,9 @@ export function buildWatchedStreamsForLocalViewer(
   if (!localWatcherUserId) return {};
 
   const nextWatchedStreams: Record<string, boolean> = {};
-  for (const [streamerUserId, viewerIds] of Object.entries(watcherIdsByStreamer)) {
+  for (const [streamerUserId, viewerIds] of Object.entries(
+    watcherIdsByStreamer,
+  )) {
     if (viewerIds.includes(localWatcherUserId)) {
       nextWatchedStreams[streamerUserId] = true;
     }
@@ -75,11 +85,16 @@ export function resolveWatchedStreamsWithPendingIntents(
   watchedStreams: Record<string, boolean>;
   pendingIntents: PendingStreamWatchIntents;
 } {
-  const authoritative = buildWatchedStreamsForLocalViewer(watcherIdsByStreamer, localWatcherUserId);
+  const authoritative = buildWatchedStreamsForLocalViewer(
+    watcherIdsByStreamer,
+    localWatcherUserId,
+  );
   const mergedWatchedStreams = { ...authoritative };
   const nextPendingIntents: PendingStreamWatchIntents = {};
 
-  for (const [streamerUserId, desiredWatching] of Object.entries(pendingIntents)) {
+  for (const [streamerUserId, desiredWatching] of Object.entries(
+    pendingIntents,
+  )) {
     const authoritativeWatching = !!authoritative[streamerUserId];
     if (authoritativeWatching === desiredWatching) {
       continue;
@@ -110,7 +125,10 @@ export function buildStreamWatcherIdentities(
     if (identitiesByUserId.has(item.userId) && item.type === "screen") continue;
     identitiesByUserId.set(item.userId, {
       userId: item.userId,
-      name: localUserId && item.userId === localUserId ? "You" : item.name.replace(/'s Stream$/, ""),
+      name:
+        localUserId && item.userId === localUserId
+          ? "You"
+          : item.name.replace(/'s Stream$/, ""),
       avatar: item.avatar ?? null,
       avatarDisplay: item.avatarDisplay ?? null,
       isLocal: !!localUserId && item.userId === localUserId,
@@ -119,16 +137,28 @@ export function buildStreamWatcherIdentities(
 
   const next: StreamWatchersByStreamer = {};
 
-  for (const [streamerUserId, watcherIds] of Object.entries(watcherIdsByStreamer)) {
+  for (const [streamerUserId, watcherIds] of Object.entries(
+    watcherIdsByStreamer,
+  )) {
     const watchers = watcherIds
-      .map((watcherUserId) => identitiesByUserId.get(watcherUserId) ?? {
-        userId: watcherUserId,
-        name: localUserId && watcherUserId === localUserId ? "You" : watcherUserId,
-        avatar: null,
-        avatarDisplay: null,
-        isLocal: !!localUserId && watcherUserId === localUserId,
-      })
-      .filter((watcher, index, list) => list.findIndex((candidate) => candidate.userId === watcher.userId) === index);
+      .map(
+        (watcherUserId) =>
+          identitiesByUserId.get(watcherUserId) ?? {
+            userId: watcherUserId,
+            name:
+              localUserId && watcherUserId === localUserId
+                ? "You"
+                : watcherUserId,
+            avatar: null,
+            avatarDisplay: null,
+            isLocal: !!localUserId && watcherUserId === localUserId,
+          },
+      )
+      .filter(
+        (watcher, index, list) =>
+          list.findIndex((candidate) => candidate.userId === watcher.userId) ===
+          index,
+      );
 
     if (watchers.length > 0) {
       next[streamerUserId] = watchers;
@@ -142,16 +172,23 @@ export function getLocalScreenStreamWatchers(
   gridItems: GridItem[],
   watchersByStreamer: StreamWatchersByStreamer,
 ): StreamWatcherIdentity[] {
-  const localScreen = gridItems.find((item) => item.isLocal && item.type === "screen");
+  const localScreen = gridItems.find(
+    (item) => item.isLocal && item.type === "screen",
+  );
   if (!localScreen) return [];
   return watchersByStreamer[localScreen.userId] ?? [];
 }
 
-export function isStreamWatcherSnapshotPayload(value: unknown): value is StreamWatchSnapshotPayload {
-  return !!value
-    && typeof value === "object"
-    && "type" in value
-    && (value as { type?: unknown }).type === "stream.watch.snapshot"
-    && "watchers_by_streamer" in value
-    && typeof (value as { watchers_by_streamer?: unknown }).watchers_by_streamer === "object";
+export function isStreamWatcherSnapshotPayload(
+  value: unknown,
+): value is StreamWatchSnapshotPayload {
+  return (
+    !!value &&
+    typeof value === "object" &&
+    "type" in value &&
+    (value as { type?: unknown }).type === "stream.watch.snapshot" &&
+    "watchers_by_streamer" in value &&
+    typeof (value as { watchers_by_streamer?: unknown })
+      .watchers_by_streamer === "object"
+  );
 }

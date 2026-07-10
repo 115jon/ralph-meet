@@ -43,7 +43,7 @@ interface KeyPayload {
  */
 export function encodePublishableKey(
   authUrl: string,
-  opts: { mode?: "live" | "test"; appId?: string } = {}
+  opts: { mode?: "live" | "test"; appId?: string } = {},
 ): string {
   const { mode = "live", appId } = opts;
   const payload: KeyPayload = { v: 1, authUrl, ...(appId ? { appId } : {}) };
@@ -77,7 +77,7 @@ export function decodePublishableKey(key: string): DecodedKey {
   } else {
     throw new Error(
       `[KovaAuth] Invalid publishable key: expected "pk_live_..." or "pk_test_...". ` +
-      `Got: "${key.slice(0, 20)}..."`
+        `Got: "${key.slice(0, 20)}..."`,
     );
   }
 
@@ -86,7 +86,7 @@ export function decodePublishableKey(key: string): DecodedKey {
     payload = JSON.parse(atob(encoded));
   } catch {
     throw new Error(
-      "[KovaAuth] Failed to decode publishable key — base64 decode or JSON parse error."
+      "[KovaAuth] Failed to decode publishable key — base64 decode or JSON parse error.",
     );
   }
 
@@ -98,7 +98,7 @@ export function decodePublishableKey(key: string): DecodedKey {
   ) {
     throw new Error(
       "[KovaAuth] Publishable key payload is invalid. " +
-      "Please re-generate your key from the dashboard."
+        "Please re-generate your key from the dashboard.",
     );
   }
 
@@ -128,6 +128,6 @@ export function resolveAuthUrl(opts: {
     return decodePublishableKey(opts.publishableKey).authUrl;
   }
   throw new Error(
-    "[KovaAuth] You must provide either `publishableKey` or `authUrl` to <KovaAuthProvider>."
+    "[KovaAuth] You must provide either `publishableKey` or `authUrl` to <KovaAuthProvider>.",
   );
 }

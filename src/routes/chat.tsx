@@ -3,10 +3,22 @@ import { ChatGateway } from "@/components/chat/ChatGateway";
 import ChatPageClient from "@/components/chat/ChatPageClient";
 import { ConnectionOverlay } from "@/components/chat/ConnectionOverlay";
 import { ImageViewerModal } from "@/components/chat/ImageViewerModal";
-import { getDesktopToken, getStoredKovaAuthSessionToken, isDesktopAuthenticated, setStoredKovaAuthSessionToken } from "@/lib/desktop-auth";
+import {
+  getDesktopToken,
+  getStoredKovaAuthSessionToken,
+  isDesktopAuthenticated,
+  setStoredKovaAuthSessionToken,
+} from "@/lib/desktop-auth";
 import { isTauri } from "@/lib/platform";
 import { useAuth } from "@kova/react";
-import { createFileRoute, Navigate, Outlet, redirect, useLocation, useNavigate } from "@tanstack/react-router";
+import {
+  createFileRoute,
+  Navigate,
+  Outlet,
+  redirect,
+  useLocation,
+  useNavigate,
+} from "@tanstack/react-router";
 import { createServerFn } from "@tanstack/react-start";
 import { useEffect, useState } from "react";
 
@@ -65,7 +77,10 @@ export const Route = createFileRoute("/chat")({
       location.searchStr.includes("ralph_auth_code=");
     if (hasAuthTransferCode) return { userId: "oauth-callback" };
     if (isTauri()) return desktopAuthGuard();
-    if (typeof window !== "undefined" && (getDesktopToken() || getStoredKovaAuthSessionToken())) {
+    if (
+      typeof window !== "undefined" &&
+      (getDesktopToken() || getStoredKovaAuthSessionToken())
+    ) {
       return { userId: "web" };
     }
     const result = await authGuard();
@@ -92,7 +107,8 @@ export const Route = createFileRoute("/chat")({
 function ChatLayout() {
   const { userId } = Route.useRouteContext();
   const location = useLocation();
-  const isChatLanding = location.pathname === "/chat" || location.pathname === "/chat/";
+  const isChatLanding =
+    location.pathname === "/chat" || location.pathname === "/chat/";
 
   if (userId === "oauth-callback") {
     return <ChatAuthCallbackGate />;
@@ -131,10 +147,9 @@ function ChatAuthCallbackGate() {
       if (token) {
         setStoredKovaAuthSessionToken(token);
         const target = buildPostAuthCallbackUrl();
-        void navigate({ to: target as any, replace: true } as any)
-          .catch(() => {
-            window.location.replace(target);
-          });
+        void navigate({ to: target as any, replace: true } as any).catch(() => {
+          window.location.replace(target);
+        });
         return;
       }
 
@@ -149,7 +164,13 @@ function ChatAuthCallbackGate() {
   }, [getToken, isLoaded, isSignedIn, navigate]);
 
   if (failed) {
-    return <Navigate to="/sign-in" search={{ redirect_url: buildPostAuthCallbackUrl() }} replace />;
+    return (
+      <Navigate
+        to="/sign-in"
+        search={{ redirect_url: buildPostAuthCallbackUrl() }}
+        replace
+      />
+    );
   }
 
   return <div className="min-h-screen bg-[var(--rm-bg-primary)]" />;

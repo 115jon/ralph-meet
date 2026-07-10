@@ -32,9 +32,14 @@ export interface SocketTicketProtocolResult {
 export type SocketTicketVerification =
   | { ok: true; claims: SocketTicketClaims }
   | {
-    ok: false;
-    reason: "audience_mismatch" | "expired" | "invalid" | "mode_mismatch" | "room_mismatch";
-  };
+      ok: false;
+      reason:
+        | "audience_mismatch"
+        | "expired"
+        | "invalid"
+        | "mode_mismatch"
+        | "room_mismatch";
+    };
 
 export type SocketTicketProtocolParseResult =
   | { ok: true; value: SocketTicketProtocolResult }
@@ -108,7 +113,9 @@ export function buildSocketTicketProtocols(ticket: string): string[] {
   return [SOCKET_PROTOCOL_NAME, `${SOCKET_TICKET_PROTOCOL_PREFIX}${ticket}`];
 }
 
-export function parseSocketTicketProtocols(header: string | null): SocketTicketProtocolParseResult {
+export function parseSocketTicketProtocols(
+  header: string | null,
+): SocketTicketProtocolParseResult {
   if (!header) return { ok: false, reason: "missing" };
 
   const protocols = header
@@ -146,15 +153,15 @@ export function parseSocketTicketProtocols(header: string | null): SocketTicketP
 
 function isValidClaims(value: SocketTicketClaims): boolean {
   return (
-    isSocketTicketAudience(value.audience)
-    && isRealtimeAccessMode(value.accessMode)
-    && Number.isFinite(value.expiresAt)
-    && value.expiresAt > 0
-    && roomSlugPattern.test(value.roomSlug)
-    && ticketTokenPattern.test(value.nonce)
-    && value.nonce.length >= 8
-    && ticketTokenPattern.test(value.subject)
-    && value.subject.length >= 1
+    isSocketTicketAudience(value.audience) &&
+    isRealtimeAccessMode(value.accessMode) &&
+    Number.isFinite(value.expiresAt) &&
+    value.expiresAt > 0 &&
+    roomSlugPattern.test(value.roomSlug) &&
+    ticketTokenPattern.test(value.nonce) &&
+    value.nonce.length >= 8 &&
+    ticketTokenPattern.test(value.subject) &&
+    value.subject.length >= 1
   );
 }
 
@@ -198,11 +205,19 @@ async function sign(value: string, secret: string): Promise<Uint8Array> {
     false,
     ["sign"],
   );
-  const signature = await crypto.subtle.sign("HMAC", key, textEncoder.encode(value));
+  const signature = await crypto.subtle.sign(
+    "HMAC",
+    key,
+    textEncoder.encode(value),
+  );
   return new Uint8Array(signature);
 }
 
-async function verify(value: string, signature: Uint8Array, secret: string): Promise<boolean> {
+async function verify(
+  value: string,
+  signature: Uint8Array,
+  secret: string,
+): Promise<boolean> {
   const key = await crypto.subtle.importKey(
     "raw",
     textEncoder.encode(secret),

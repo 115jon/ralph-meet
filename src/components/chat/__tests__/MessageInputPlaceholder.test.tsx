@@ -12,10 +12,15 @@ vi.mock("@/hooks/useCustomEmojiLookup", () => ({
 describe("MessageInputPlaceholder", () => {
   it("renders the channel placeholder with emoji-aware inline content", () => {
     const markup = renderToStaticMarkup(
-      <MessageInputPlaceholder channelName="「✨」chat" replyDisplayName={null} />,
+      <MessageInputPlaceholder
+        channelName="「✨」chat"
+        replyDisplayName={null}
+      />,
     );
 
     expect(markup).toContain("Message #");
-    expect(markup).toContain(`emoji-datasource-twitter@${NATIVE_EMOJI_STYLE_VERSION}`);
+    expect(markup).toContain(
+      `emoji-datasource-twitter@${NATIVE_EMOJI_STYLE_VERSION}`,
+    );
   });
 });

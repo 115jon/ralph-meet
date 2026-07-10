@@ -14,7 +14,10 @@ interface ProfileAssetLayerProps {
 }
 
 const DEFAULT_NAMEPLATE_MASK_FULL_OPACITY_START = 92.86;
-const NAMEPLATE_IDENTITY_ALPHA_STOPS: Array<{ percent: number; alpha: number }> = [
+const NAMEPLATE_IDENTITY_ALPHA_STOPS: Array<{
+  percent: number;
+  alpha: number;
+}> = [
   { percent: 0, alpha: 0 },
   { percent: 21.4, alpha: 0 },
   { percent: 25, alpha: 0.02 },
@@ -42,12 +45,16 @@ function buildNameplateIdentityMask(fullOpacityStartPercent?: number) {
     99,
   );
 
-  return `linear-gradient(90deg, ${NAMEPLATE_IDENTITY_ALPHA_STOPS.map(({ percent, alpha }) => {
-    const scaledPercent = percent === 100
-      ? 100
-      : (percent / DEFAULT_NAMEPLATE_MASK_FULL_OPACITY_START) * targetFullOpacityStart;
-    return `rgba(0, 0, 0, ${alpha}) ${Math.min(100, scaledPercent).toFixed(2)}%`;
-  }).join(", ")})`;
+  return `linear-gradient(90deg, ${NAMEPLATE_IDENTITY_ALPHA_STOPS.map(
+    ({ percent, alpha }) => {
+      const scaledPercent =
+        percent === 100
+          ? 100
+          : (percent / DEFAULT_NAMEPLATE_MASK_FULL_OPACITY_START) *
+            targetFullOpacityStart;
+      return `rgba(0, 0, 0, ${alpha}) ${Math.min(100, scaledPercent).toFixed(2)}%`;
+    },
+  ).join(", ")})`;
 }
 
 function isVideoUrl(url: string) {
@@ -67,12 +74,15 @@ export function ProfileAssetLayer({
 
   const treatAsVideo = isVideo(contentType) || isVideoUrl(url);
   const src = treatAsVideo ? getMediaUrl(url) : getAuthAssetUrl(url);
-  const maskStyle = maskPreset === "nameplateIdentity"
-    ? {
-        maskImage: buildNameplateIdentityMask(maskFullOpacityStartPercent),
-        WebkitMaskImage: buildNameplateIdentityMask(maskFullOpacityStartPercent),
-      } satisfies CSSProperties
-    : undefined;
+  const maskStyle =
+    maskPreset === "nameplateIdentity"
+      ? ({
+          maskImage: buildNameplateIdentityMask(maskFullOpacityStartPercent),
+          WebkitMaskImage: buildNameplateIdentityMask(
+            maskFullOpacityStartPercent,
+          ),
+        } satisfies CSSProperties)
+      : undefined;
 
   if (treatAsVideo) {
     return (

@@ -1,4 +1,7 @@
-import type { ProfileEffectLayer, ProfileEffectSelection } from "@/lib/avatar-display";
+import type {
+  ProfileEffectLayer,
+  ProfileEffectSelection,
+} from "@/lib/avatar-display";
 
 type MediaKind = "image" | "video";
 
@@ -27,7 +30,8 @@ export type ProfileEffectPlaybackSnapshot = {
 };
 
 function normalizeNonNegativeInt(value: number | undefined, fallback = 0) {
-  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) return fallback;
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0)
+    return fallback;
   return Math.round(value);
 }
 
@@ -37,7 +41,8 @@ function normalizeFiniteInt(value: number | undefined, fallback = 0) {
 }
 
 function normalizePositiveInt(value: number | undefined): number | null {
-  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) return null;
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0)
+    return null;
   return Math.round(value);
 }
 
@@ -53,7 +58,9 @@ function getLayerSourceOptions(layer: ProfileEffectLayer) {
   const sources = [
     layer.src,
     ...(layer.randomizedSources?.map((source) => source.src) ?? []),
-  ].filter((src, index, entries) => Boolean(src) && entries.indexOf(src) === index);
+  ].filter(
+    (src, index, entries) => Boolean(src) && entries.indexOf(src) === index,
+  );
 
   return sources.length ? sources : [layer.src];
 }
@@ -74,7 +81,8 @@ export function resolveProfileEffectLayerSource(
   const sources = getLayerSourceOptions(layer);
   if (sources.length === 1) return sources[0];
 
-  const sourceIndex = hashString(`${layer.src}:${cycleIndex}:${invocationSeed}`) % sources.length;
+  const sourceIndex =
+    hashString(`${layer.src}:${cycleIndex}:${invocationSeed}`) % sources.length;
   return sources[sourceIndex];
 }
 
@@ -163,12 +171,20 @@ export function getProfileEffectLayerState(
   }
 
   if (!durationMs) {
-    const resolvedSrc = resolveProfileEffectLayerSource(layer, 0, invocationSeed);
+    const resolvedSrc = resolveProfileEffectLayerSource(
+      layer,
+      0,
+      invocationSeed,
+    );
     return {
       layer,
       resolvedSrc,
       renderIndex,
-      renderKey: buildPlaybackRenderKey(renderIndex, resolvedSrc, invocationSeed),
+      renderKey: buildPlaybackRenderKey(
+        renderIndex,
+        resolvedSrc,
+        invocationSeed,
+      ),
       active: true,
       cycleIndex: 0,
       startMs,
@@ -180,12 +196,20 @@ export function getProfileEffectLayerState(
 
   if (layer.loop !== true) {
     const active = safeElapsed < startMs + durationMs;
-    const resolvedSrc = resolveProfileEffectLayerSource(layer, 0, invocationSeed);
+    const resolvedSrc = resolveProfileEffectLayerSource(
+      layer,
+      0,
+      invocationSeed,
+    );
     return {
       layer,
       resolvedSrc,
       renderIndex,
-      renderKey: buildPlaybackRenderKey(renderIndex, resolvedSrc, invocationSeed),
+      renderKey: buildPlaybackRenderKey(
+        renderIndex,
+        resolvedSrc,
+        invocationSeed,
+      ),
       active,
       cycleIndex: 0,
       startMs,
@@ -197,12 +221,20 @@ export function getProfileEffectLayerState(
 
   const periodMs = durationMs + loopDelayMs;
   if (periodMs <= 0) {
-    const resolvedSrc = resolveProfileEffectLayerSource(layer, 0, invocationSeed);
+    const resolvedSrc = resolveProfileEffectLayerSource(
+      layer,
+      0,
+      invocationSeed,
+    );
     return {
       layer,
       resolvedSrc,
       renderIndex,
-      renderKey: buildPlaybackRenderKey(renderIndex, resolvedSrc, invocationSeed),
+      renderKey: buildPlaybackRenderKey(
+        renderIndex,
+        resolvedSrc,
+        invocationSeed,
+      ),
       active: true,
       cycleIndex: 0,
       startMs,
@@ -217,7 +249,11 @@ export function getProfileEffectLayerState(
   const cycleStartMs = startMs + cycleIndex * periodMs;
   const cycleElapsedMs = elapsedSinceStart - cycleIndex * periodMs;
   const active = cycleElapsedMs < durationMs;
-  const resolvedSrc = resolveProfileEffectLayerSource(layer, cycleIndex, invocationSeed);
+  const resolvedSrc = resolveProfileEffectLayerSource(
+    layer,
+    cycleIndex,
+    invocationSeed,
+  );
 
   return {
     layer,
@@ -229,7 +265,9 @@ export function getProfileEffectLayerState(
     startMs: cycleStartMs,
     activeOffsetMs: active ? cycleElapsedMs : durationMs,
     zIndex,
-    nextTransitionMs: active ? cycleStartMs + durationMs : cycleStartMs + periodMs,
+    nextTransitionMs: active
+      ? cycleStartMs + durationMs
+      : cycleStartMs + periodMs,
   };
 }
 
@@ -239,16 +277,24 @@ export function getProfileEffectPlaybackSnapshot(
   invocationSeed = 0,
 ): ProfileEffectPlaybackSnapshot {
   const safeElapsed = normalizeNonNegativeInt(elapsedMs);
-  const states = layers.map((layer, index) => getProfileEffectLayerState(layer, safeElapsed, index, invocationSeed));
+  const states = layers.map((layer, index) =>
+    getProfileEffectLayerState(layer, safeElapsed, index, invocationSeed),
+  );
   const nextTransitionMs = states.reduce<number | null>((soonest, state) => {
     if (state.nextTransitionMs == null) return soonest;
     if (state.nextTransitionMs <= safeElapsed) return soonest;
-    return soonest == null ? state.nextTransitionMs : Math.min(soonest, state.nextTransitionMs);
+    return soonest == null
+      ? state.nextTransitionMs
+      : Math.min(soonest, state.nextTransitionMs);
   }, null);
 
   return {
     activeLayers: states.filter((state) => state.active),
-    renderedLayers: states.filter((state) => state.active || safeElapsed >= normalizeNonNegativeInt(state.layer.start)),
+    renderedLayers: states.filter(
+      (state) =>
+        state.active ||
+        safeElapsed >= normalizeNonNegativeInt(state.layer.start),
+    ),
     nextTransitionMs,
   };
 }

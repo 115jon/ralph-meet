@@ -125,7 +125,15 @@ export interface Appearance {
 // ── Plugin feature flags ──────────────────────────────────────────────────────
 
 export interface OAuthProvider {
-  id: "google" | "discord" | "github" | "microsoft" | "apple" | "facebook" | "twitter" | string;
+  id:
+    | "google"
+    | "discord"
+    | "github"
+    | "microsoft"
+    | "apple"
+    | "facebook"
+    | "twitter"
+    | string;
   label?: string;
   /** Resolved icon URL or React element, populated automatically for known providers. */
   icon?: string;
@@ -146,22 +154,22 @@ export interface PluginConfig {
    * Two-factor authentication — TOTP authenticator app + email OTP.
    */
   twoFactor?:
-  | boolean
-  | {
-    /** Called when the server triggers a 2FA challenge during sign-in. */
-    onTwoFactorRedirect?: () => void;
-  };
+    | boolean
+    | {
+        /** Called when the server triggers a 2FA challenge during sign-in. */
+        onTwoFactorRedirect?: () => void;
+      };
   /**
    * Organization plugin — multi-tenancy with teams and dynamic RBAC.
    * Both `teams` and `dynamicAccessControl` are enabled by default
    * to match the server configuration.
    */
   organization?:
-  | boolean
-  | {
-    teams?: boolean;
-    dynamicAccessControl?: boolean;
-  };
+    | boolean
+    | {
+        teams?: boolean;
+        dynamicAccessControl?: boolean;
+      };
   /**
    * Multi-session plugin — simultaneous sign-in with multiple accounts.
    */
@@ -364,7 +372,10 @@ export interface UseLinkedAccountsReturn {
    * Initiate an OAuth redirect to link a new provider account.
    * Redirects the browser — resolves immediately after redirect is triggered.
    */
-  linkAccount: (opts: { provider: string; callbackURL?: string }) => Promise<void>;
+  linkAccount: (opts: {
+    provider: string;
+    callbackURL?: string;
+  }) => Promise<void>;
   /**
    * Refresh the list from the server.
    */

@@ -1,8 +1,7 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute } from "@tanstack/react-router";
 
 import { apiError, apiSuccess, getDB, requireAuth } from "@/lib/api-helpers";
 import { searchMessages } from "@/services/server.service";
-
 
 // GET /api/servers/:id/search?q=query&limit=25&offset=0
 const GET = async ({ request, params }: any) => {
@@ -14,9 +13,10 @@ const GET = async ({ request, params }: any) => {
   const db = getDB();
 
   // Verify membership
-  const member = await db.prepare(
-    `SELECT 1 FROM server_members WHERE server_id = ? AND user_id = ?`
-  ).bind(serverId, userId).first();
+  const member = await db
+    .prepare(`SELECT 1 FROM server_members WHERE server_id = ? AND user_id = ?`)
+    .bind(serverId, userId)
+    .first();
 
   if (!member) {
     return apiError("Not a member", 403);
@@ -34,13 +34,12 @@ const GET = async ({ request, params }: any) => {
   const result = await searchMessages(db, serverId, query, limit, offset);
 
   return apiSuccess(result);
-}
+};
 
-
-export const Route = createFileRoute('/api/servers/$id/search')({
+export const Route = createFileRoute("/api/servers/$id/search")({
   server: {
     handlers: {
       GET,
-    }
-  }
+    },
+  },
 });

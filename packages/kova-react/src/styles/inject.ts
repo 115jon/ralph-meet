@@ -40,7 +40,7 @@ const VAR_MAP: Record<keyof AppearanceVariables, string> = {
  */
 export function injectAppearanceVars(
   vars: Required<AppearanceVariables>,
-  prevId: string | null
+  prevId: string | null,
 ): string {
   if (typeof document === "undefined") return "ra-vars"; // SSR guard
 

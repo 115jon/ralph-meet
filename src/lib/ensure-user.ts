@@ -9,17 +9,29 @@ import { getDB } from "@/lib/api-helpers";
  * Look up a user in D1 by their Clerk user ID.
  * Returns their username and avatar, or `null` if the user hasn't been synced yet.
  */
-export async function lookupUser(
-  userId: string
-): Promise<{ username: string; display_name: string | null; avatar: string | null } | null> {
+export async function lookupUser(userId: string): Promise<{
+  username: string;
+  display_name: string | null;
+  avatar: string | null;
+} | null> {
   const db = getDB();
 
   const row = await db
-    .prepare(`SELECT username, display_name, avatar_url FROM users WHERE id = ?`)
+    .prepare(
+      `SELECT username, display_name, avatar_url FROM users WHERE id = ?`,
+    )
     .bind(userId)
-    .first<{ username: string; display_name: string | null; avatar_url: string | null }>();
+    .first<{
+      username: string;
+      display_name: string | null;
+      avatar_url: string | null;
+    }>();
 
   if (!row) return null;
 
-  return { username: row.username, display_name: row.display_name, avatar: row.avatar_url };
+  return {
+    username: row.username,
+    display_name: row.display_name,
+    avatar: row.avatar_url,
+  };
 }

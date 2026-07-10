@@ -4,7 +4,14 @@ import { isTauri } from "@/lib/platform";
 import { useChatActions, useChatStore } from "@/stores/chat-store";
 import { useCallStore } from "@/stores/useCallStore";
 import { useUser } from "@kova/react";
-import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useReducer,
+  useRef,
+  useState,
+} from "react";
 import { useShallow } from "zustand/shallow";
 
 export function silentPush(path: string) {
@@ -16,7 +23,11 @@ export function silentPush(path: string) {
   }
 }
 
-function buildChatUrl(serverId: string, channelId: string | null, messageId?: string | null): string {
+function buildChatUrl(
+  serverId: string,
+  channelId: string | null,
+  messageId?: string | null,
+): string {
   const path = channelId
     ? `/chat/${encodeURIComponent(serverId)}/${encodeURIComponent(channelId)}`
     : `/chat/${encodeURIComponent(serverId)}`;
@@ -28,7 +39,8 @@ function buildChatUrl(serverId: string, channelId: string | null, messageId?: st
 }
 
 const LEGACY_LAST_ACTIVE_CHANNELS_KEY = "lastActiveChannels";
-const lastActiveChannelsKey = (userId: string) => `lastActiveChannels:${userId}`;
+const lastActiveChannelsKey = (userId: string) =>
+  `lastActiveChannels:${userId}`;
 
 function deriveUsername(user: any) {
   const email = typeof user?.email === "string" ? user.email : null;
@@ -39,8 +51,13 @@ function deriveUsername(user: any) {
     (typeof user?.name === "string" ? user.name : null) ||
     (typeof user?.fullName === "string" ? user.fullName : null);
 
-  const normalized = candidate?.trim().toLowerCase().replace(/[^a-z0-9_.-]+/g, "");
-  return normalized || (user?.id ? `user_${String(user.id).slice(-6)}` : "user");
+  const normalized = candidate
+    ?.trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_.-]+/g, "");
+  return (
+    normalized || (user?.id ? `user_${String(user.id).slice(-6)}` : "user")
+  );
 }
 
 export interface UIState {
@@ -61,32 +78,54 @@ export type UIAction =
   | { type: "TOGGLE_VOICE_TEXT" }
   | { type: "SET_VOICE_TEXT"; show: boolean }
   | { type: "SET_VOICE_JOIN_ON_SELECT"; channelId: string | null }
-  | { type: "SET_PENDING_JUMP"; jump: { channelId: string; messageId: string } | null };
+  | {
+      type: "SET_PENDING_JUMP";
+      jump: { channelId: string; messageId: string } | null;
+    };
 
 export function uiReducer(state: UIState, action: UIAction): UIState {
   switch (action.type) {
-    case "SET_SIDEBAR": return { ...state, sidebarOpen: action.open };
-    case "OPEN_MODAL": return { ...state, activeModal: action.modal };
-    case "CLOSE_MODAL": return { ...state, activeModal: "none" };
-    case "TOGGLE_MEMBERS": return { ...state, showMembers: !state.showMembers };
-    case "SET_MEMBERS": return { ...state, showMembers: action.show };
-    case "TOGGLE_VOICE_TEXT": return { ...state, showVoiceTextChat: !state.showVoiceTextChat };
-    case "SET_VOICE_TEXT": return { ...state, showVoiceTextChat: action.show };
-    case "SET_VOICE_JOIN_ON_SELECT": return { ...state, voiceJoinOnSelectChannelId: action.channelId };
-    case "SET_PENDING_JUMP": return { ...state, pendingJump: action.jump };
-    default: return state;
+    case "SET_SIDEBAR":
+      return { ...state, sidebarOpen: action.open };
+    case "OPEN_MODAL":
+      return { ...state, activeModal: action.modal };
+    case "CLOSE_MODAL":
+      return { ...state, activeModal: "none" };
+    case "TOGGLE_MEMBERS":
+      return { ...state, showMembers: !state.showMembers };
+    case "SET_MEMBERS":
+      return { ...state, showMembers: action.show };
+    case "TOGGLE_VOICE_TEXT":
+      return { ...state, showVoiceTextChat: !state.showVoiceTextChat };
+    case "SET_VOICE_TEXT":
+      return { ...state, showVoiceTextChat: action.show };
+    case "SET_VOICE_JOIN_ON_SELECT":
+      return { ...state, voiceJoinOnSelectChannelId: action.channelId };
+    case "SET_PENDING_JUMP":
+      return { ...state, pendingJump: action.jump };
+    default:
+      return state;
   }
 }
 
 export function useChatPageLogic() {
-  const { chatUser, servers, activeServerId, activeChannelId, channels: stateChannels, dmChannels } = useChatStore(useShallow(s => ({
-    chatUser: s.user,
-    servers: s.servers,
-    activeServerId: s.activeServerId,
-    activeChannelId: s.activeChannelId,
-    channels: s.channels,
-    dmChannels: s.dmChannels,
-  })));
+  const {
+    chatUser,
+    servers,
+    activeServerId,
+    activeChannelId,
+    channels: stateChannels,
+    dmChannels,
+  } = useChatStore(
+    useShallow((s) => ({
+      chatUser: s.user,
+      servers: s.servers,
+      activeServerId: s.activeServerId,
+      activeChannelId: s.activeChannelId,
+      channels: s.channels,
+      dmChannels: s.dmChannels,
+    })),
+  );
   const {
     bootstrapChat,
     loadChannels,
@@ -116,17 +155,22 @@ export function useChatPageLogic() {
   });
   const lastActiveChannels = useRef<Record<string, string>>({});
 
-  const [localStreamState, setLocalStreamState] = useState<VoiceSessionStreamState | null>(null);
-  const handleLocalStreamStateUpdate = useCallback((state: VoiceSessionStreamState) => {
-    if (!state.joined) return;
-    setLocalStreamState(state);
-  }, []);
+  const [localStreamState, setLocalStreamState] =
+    useState<VoiceSessionStreamState | null>(null);
+  const handleLocalStreamStateUpdate = useCallback(
+    (state: VoiceSessionStreamState) => {
+      if (!state.joined) return;
+      setLocalStreamState(state);
+    },
+    [],
+  );
 
   const slug = useMemo(
-    () => typeof window !== "undefined"
-      ? window.location.pathname.split("/").filter(Boolean).slice(1)
-      : [],
-    []
+    () =>
+      typeof window !== "undefined"
+        ? window.location.pathname.split("/").filter(Boolean).slice(1)
+        : [],
+    [],
   );
   const initializedRef = useRef(false);
   const [dmChannelsLoaded, setDmChannelsLoaded] = useState(false);
@@ -168,16 +212,25 @@ export function useChatPageLogic() {
     uiRef.current = ui;
   }, [ui]);
 
-  const [desktopReady, setDesktopReady] = useState(!isTauri() || !!getDesktopToken());
+  const [desktopReady, setDesktopReady] = useState(
+    !isTauri() || !!getDesktopToken(),
+  );
 
-  const getRestorableChannelId = useCallback((serverId: string, candidateId: string | null) => {
-    if (!candidateId) return null;
-    if (serverId === "@me") {
-      return dmChannels.some((channel) => channel.id === candidateId) ? candidateId : null;
-    }
-    const candidate = stateChannels.find((channel) => channel.id === candidateId);
-    return candidate?.channel_type === "text" ? candidateId : null;
-  }, [dmChannels, stateChannels]);
+  const getRestorableChannelId = useCallback(
+    (serverId: string, candidateId: string | null) => {
+      if (!candidateId) return null;
+      if (serverId === "@me") {
+        return dmChannels.some((channel) => channel.id === candidateId)
+          ? candidateId
+          : null;
+      }
+      const candidate = stateChannels.find(
+        (channel) => channel.id === candidateId,
+      );
+      return candidate?.channel_type === "text" ? candidateId : null;
+    },
+    [dmChannels, stateChannels],
+  );
 
   useEffect(() => {
     if (!isTauri() || desktopReady) return;
@@ -211,11 +264,18 @@ export function useChatPageLogic() {
         user.username ||
         deriveUsername(user) ||
         undefined,
-      avatar_url: isR2Avatar ? existingAvatar : (existingAvatar || user.imageUrl || undefined),
+      avatar_url: isR2Avatar
+        ? existingAvatar
+        : existingAvatar || user.imageUrl || undefined,
       bio: chatUser?.bio,
       pronouns: chatUser?.pronouns,
       presence_platforms: chatUser?.presence_platforms,
-      status: chatUser?.status || (typeof window !== "undefined" ? localStorage.getItem("user-status") as any : null) || "online",
+      status:
+        chatUser?.status ||
+        (typeof window !== "undefined"
+          ? (localStorage.getItem("user-status") as any)
+          : null) ||
+        "online",
       custom_status: chatUser?.custom_status,
     };
 
@@ -235,18 +295,24 @@ export function useChatPageLogic() {
       }
     }
 
-    const urlServer = currentSlug[0] ? decodeURIComponent(currentSlug[0]) : null;
-    const urlChannel = currentSlug[1] ? decodeURIComponent(currentSlug[1]) : null;
-    const urlMessage = typeof window !== "undefined"
-      ? new URLSearchParams(window.location.search).get("message")
+    const urlServer = currentSlug[0]
+      ? decodeURIComponent(currentSlug[0])
       : null;
+    const urlChannel = currentSlug[1]
+      ? decodeURIComponent(currentSlug[1])
+      : null;
+    const urlMessage =
+      typeof window !== "undefined"
+        ? new URLSearchParams(window.location.search).get("message")
+        : null;
     const isDM = urlServer === "@me" || urlServer === "%40me";
     const hasServers = servers.length > 0;
 
     let shouldInit = false;
     if (isDM) shouldInit = true;
-    else if (urlServer) { if (hasServers) shouldInit = true; }
-    else if (hasServers) shouldInit = true;
+    else if (urlServer) {
+      if (hasServers) shouldInit = true;
+    } else if (hasServers) shouldInit = true;
 
     if (!shouldInit) return;
 
@@ -257,18 +323,33 @@ export function useChatPageLogic() {
       const targetId = urlChannel || getRestorableChannelId("@me", cachedId);
       dispatch({ type: "SWITCH_SERVER", serverId: "@me", channelId: targetId });
       if (urlMessage && targetId) {
-        uiDispatch({ type: "SET_PENDING_JUMP", jump: { channelId: targetId, messageId: urlMessage } });
+        uiDispatch({
+          type: "SET_PENDING_JUMP",
+          jump: { channelId: targetId, messageId: urlMessage },
+        });
       }
     } else if (urlServer && servers.some((s) => s.id === urlServer)) {
-      const targetId = urlChannel || lastActiveChannels.current[urlServer] || null;
-      dispatch({ type: "SWITCH_SERVER", serverId: urlServer, channelId: targetId });
+      const targetId =
+        urlChannel || lastActiveChannels.current[urlServer] || null;
+      dispatch({
+        type: "SWITCH_SERVER",
+        serverId: urlServer,
+        channelId: targetId,
+      });
       if (urlMessage && targetId) {
-        uiDispatch({ type: "SET_PENDING_JUMP", jump: { channelId: targetId, messageId: urlMessage } });
+        uiDispatch({
+          type: "SET_PENDING_JUMP",
+          jump: { channelId: targetId, messageId: urlMessage },
+        });
       }
     } else if (hasServers) {
       const firstServer = servers[0].id;
       const targetId = lastActiveChannels.current[firstServer] || null;
-      dispatch({ type: "SWITCH_SERVER", serverId: firstServer, channelId: targetId });
+      dispatch({
+        type: "SWITCH_SERVER",
+        serverId: firstServer,
+        channelId: targetId,
+      });
     }
   }, [servers, slug, dispatch, getRestorableChannelId]);
 
@@ -298,11 +379,15 @@ export function useChatPageLogic() {
       activeServerId === "@me" ||
       stateChannels.length === 0 ||
       activeChannelId
-    ) return;
+    )
+      return;
     if (channelsLoadedForServer.current === activeServerId) return;
     channelsLoadedForServer.current = activeServerId;
 
-    const lastId = getRestorableChannelId(activeServerId, lastActiveChannels.current[activeServerId]);
+    const lastId = getRestorableChannelId(
+      activeServerId,
+      lastActiveChannels.current[activeServerId],
+    );
     if (lastId && stateChannels.some((c) => c.id === lastId)) {
       dispatch({ type: "SET_ACTIVE_CHANNEL", channelId: lastId });
       return;
@@ -312,15 +397,26 @@ export function useChatPageLogic() {
     if (firstText) {
       dispatch({ type: "SET_ACTIVE_CHANNEL", channelId: firstText.id });
     }
-  }, [stateChannels, activeServerId, activeChannelId, dispatch, getRestorableChannelId]);
+  }, [
+    stateChannels,
+    activeServerId,
+    activeChannelId,
+    dispatch,
+    getRestorableChannelId,
+  ]);
 
   useEffect(() => {
     if (chatUser?.id && activeServerId && activeChannelId) {
-      const shouldPersist = activeServerId === "@me"
-        || stateChannels.find((channel) => channel.id === activeChannelId)?.channel_type === "text";
+      const shouldPersist =
+        activeServerId === "@me" ||
+        stateChannels.find((channel) => channel.id === activeChannelId)
+          ?.channel_type === "text";
       if (shouldPersist) {
         lastActiveChannels.current[activeServerId] = activeChannelId;
-        localStorage.setItem(lastActiveChannelsKey(chatUser.id), JSON.stringify(lastActiveChannels.current));
+        localStorage.setItem(
+          lastActiveChannelsKey(chatUser.id),
+          JSON.stringify(lastActiveChannels.current),
+        );
       }
     }
   }, [chatUser?.id, activeServerId, activeChannelId, stateChannels]);
@@ -328,25 +424,50 @@ export function useChatPageLogic() {
   // Validate active server channel exists after channels load
   useEffect(() => {
     if (activeServerId && activeServerId !== "@me" && activeChannelId) {
-      if (stateChannels.length > 0 && !stateChannels.some((c) => c.id === activeChannelId)) {
+      if (
+        stateChannels.length > 0 &&
+        !stateChannels.some((c) => c.id === activeChannelId)
+      ) {
         const firstText = stateChannels.find((c) => c.channel_type === "text");
-        dispatch({ type: "SET_ACTIVE_CHANNEL", channelId: firstText ? firstText.id : null });
+        dispatch({
+          type: "SET_ACTIVE_CHANNEL",
+          channelId: firstText ? firstText.id : null,
+        });
       }
     }
   }, [stateChannels, activeServerId, activeChannelId, dispatch]);
 
   useEffect(() => {
-    if (!chatUser?.id || !activeServerId || activeServerId === "@me" || !activeChannelId || stateChannels.length === 0) {
+    if (
+      !chatUser?.id ||
+      !activeServerId ||
+      activeServerId === "@me" ||
+      !activeChannelId ||
+      stateChannels.length === 0
+    ) {
       return;
     }
-    const activeChannel = stateChannels.find((channel) => channel.id === activeChannelId);
+    const activeChannel = stateChannels.find(
+      (channel) => channel.id === activeChannelId,
+    );
     const savedLastId = lastActiveChannels.current[activeServerId];
-    if (activeChannel?.channel_type === "voice" && savedLastId === activeChannelId) {
-      const firstText = stateChannels.find((channel) => channel.channel_type === "text");
-      dispatch({ type: "SET_ACTIVE_CHANNEL", channelId: firstText?.id ?? null });
+    if (
+      activeChannel?.channel_type === "voice" &&
+      savedLastId === activeChannelId
+    ) {
+      const firstText = stateChannels.find(
+        (channel) => channel.channel_type === "text",
+      );
+      dispatch({
+        type: "SET_ACTIVE_CHANNEL",
+        channelId: firstText?.id ?? null,
+      });
       if (firstText) {
         lastActiveChannels.current[activeServerId] = firstText.id;
-        localStorage.setItem(lastActiveChannelsKey(chatUser.id), JSON.stringify(lastActiveChannels.current));
+        localStorage.setItem(
+          lastActiveChannelsKey(chatUser.id),
+          JSON.stringify(lastActiveChannels.current),
+        );
       }
     }
   }, [chatUser?.id, stateChannels, activeServerId, activeChannelId, dispatch]);
@@ -368,7 +489,11 @@ export function useChatPageLogic() {
       activeChannelId && ui.pendingJump?.channelId === activeChannelId
         ? ui.pendingJump.messageId
         : null;
-    const path = buildChatUrl(activeServerId, activeChannelId, pendingMessageId);
+    const path = buildChatUrl(
+      activeServerId,
+      activeChannelId,
+      pendingMessageId,
+    );
     silentPush(path);
   }, [activeServerId, activeChannelId, ui.pendingJump]);
 
@@ -393,7 +518,10 @@ export function useChatPageLogic() {
     if (!activeChannelId) return;
 
     // Unsub from previous active channel
-    if (activeChannelSubRef.current && activeChannelSubRef.current !== activeChannelId) {
+    if (
+      activeChannelSubRef.current &&
+      activeChannelSubRef.current !== activeChannelId
+    ) {
       unsubscribeChannel(activeChannelSubRef.current);
     }
 
@@ -408,7 +536,11 @@ export function useChatPageLogic() {
     if (serverId === "@me") {
       const lastDmId = lastActiveChannels.current["@me"];
       const targetDmId = getRestorableChannelId("@me", lastDmId);
-      dispatch({ type: "SWITCH_SERVER", serverId: "@me", channelId: targetDmId });
+      dispatch({
+        type: "SWITCH_SERVER",
+        serverId: "@me",
+        channelId: targetDmId,
+      });
       return;
     }
 
@@ -418,36 +550,50 @@ export function useChatPageLogic() {
     dispatch({ type: "SWITCH_SERVER", serverId, channelId: lastId || null });
   };
 
-  const handleSelectChannel = useCallback((channelId: string, options?: { isJump?: boolean; forceVoiceJoin?: boolean }) => {
-    const targetChannel = stateChannels.find((channel) => channel.id === channelId);
-    const shouldAutoJoinVoice = !!targetChannel && targetChannel.channel_type === "voice" && !options?.isJump;
+  const handleSelectChannel = useCallback(
+    (
+      channelId: string,
+      options?: { isJump?: boolean; forceVoiceJoin?: boolean },
+    ) => {
+      const targetChannel = stateChannels.find(
+        (channel) => channel.id === channelId,
+      );
+      const shouldAutoJoinVoice =
+        !!targetChannel &&
+        targetChannel.channel_type === "voice" &&
+        !options?.isJump;
 
-    if (channelId === activeChannelId) {
-      if (options?.forceVoiceJoin && shouldAutoJoinVoice) {
-        uiDispatch({ type: "SET_SIDEBAR", open: false });
-        uiDispatch({ type: "SET_VOICE_JOIN_ON_SELECT", channelId });
+      if (channelId === activeChannelId) {
+        if (options?.forceVoiceJoin && shouldAutoJoinVoice) {
+          uiDispatch({ type: "SET_SIDEBAR", open: false });
+          uiDispatch({ type: "SET_VOICE_JOIN_ON_SELECT", channelId });
 
-        if (!options.isJump) {
-          uiDispatch({ type: "SET_VOICE_TEXT", show: false });
+          if (!options.isJump) {
+            uiDispatch({ type: "SET_VOICE_TEXT", show: false });
+            uiDispatch({ type: "SET_PENDING_JUMP", jump: null });
+          }
+        }
+
+        if (!options?.isJump) {
           uiDispatch({ type: "SET_PENDING_JUMP", jump: null });
         }
+        return;
       }
+
+      dispatch({ type: "SET_ACTIVE_CHANNEL", channelId });
+      uiDispatch({ type: "SET_SIDEBAR", open: false });
+      uiDispatch({
+        type: "SET_VOICE_JOIN_ON_SELECT",
+        channelId: shouldAutoJoinVoice ? channelId : null,
+      });
 
       if (!options?.isJump) {
+        uiDispatch({ type: "SET_VOICE_TEXT", show: false });
         uiDispatch({ type: "SET_PENDING_JUMP", jump: null });
       }
-      return;
-    }
-
-    dispatch({ type: "SET_ACTIVE_CHANNEL", channelId });
-    uiDispatch({ type: "SET_SIDEBAR", open: false });
-    uiDispatch({ type: "SET_VOICE_JOIN_ON_SELECT", channelId: shouldAutoJoinVoice ? channelId : null });
-
-    if (!options?.isJump) {
-      uiDispatch({ type: "SET_VOICE_TEXT", show: false });
-      uiDispatch({ type: "SET_PENDING_JUMP", jump: null });
-    }
-  }, [activeChannelId, dispatch, stateChannels]);
+    },
+    [activeChannelId, dispatch, stateChannels],
+  );
 
   useEffect(() => {
     const handler = (e: Event) => {
@@ -460,7 +606,10 @@ export function useChatPageLogic() {
         const isTargetVoice = targetChannel?.channel_type === "voice";
 
         if (messageId) {
-          uiDispatch({ type: "SET_PENDING_JUMP", jump: { channelId, messageId } });
+          uiDispatch({
+            type: "SET_PENDING_JUMP",
+            jump: { channelId, messageId },
+          });
           if (isTargetVoice) {
             uiDispatch({ type: "SET_VOICE_TEXT", show: true });
           }
@@ -470,7 +619,7 @@ export function useChatPageLogic() {
 
         if (messageId && channelId === activeChannelId) {
           const event = new CustomEvent("jump-to-message", {
-            detail: { channelId, messageId }
+            detail: { channelId, messageId },
           });
           window.dispatchEvent(event);
         }
@@ -480,7 +629,10 @@ export function useChatPageLogic() {
     return () => window.removeEventListener("navigate-channel", handler);
   }, [handleSelectChannel, stateChannels, activeChannelId]);
 
-  const handleToggleVoiceTextChat = useCallback(() => uiDispatch({ type: "TOGGLE_VOICE_TEXT" }), []);
+  const handleToggleVoiceTextChat = useCallback(
+    () => uiDispatch({ type: "TOGGLE_VOICE_TEXT" }),
+    [],
+  );
 
   const onVoiceJoin = useCallback(() => {
     const { status } = useCallStore.getState();
@@ -489,7 +641,8 @@ export function useChatPageLogic() {
     }
     uiDispatch({ type: "SET_VOICE_JOIN_ON_SELECT", channelId: null });
     // Resolve the channel name now, while `channels` still belongs to the correct server
-    const name = stateChannels.find((c) => c.id === activeChannelId)?.name ?? null;
+    const name =
+      stateChannels.find((c) => c.id === activeChannelId)?.name ?? null;
     setVoiceState({
       channelId: activeChannelId,
       serverId: activeServerId,
@@ -500,7 +653,12 @@ export function useChatPageLogic() {
 
   const onVoiceLeave = useCallback(() => {
     uiDispatch({ type: "SET_VOICE_JOIN_ON_SELECT", channelId: null });
-    setVoiceState({ channelId: null, serverId: null, channelName: null, joined: false });
+    setVoiceState({
+      channelId: null,
+      serverId: null,
+      channelName: null,
+      joined: false,
+    });
     setLocalStreamState(null);
   }, []);
 

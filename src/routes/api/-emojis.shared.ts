@@ -18,7 +18,8 @@ export function normalizeKlipyGeneratedStatusResponse(
 
   return {
     status: typeof source.status === "string" ? source.status : null,
-    base64Encoded: typeof result?.base64_encoded === "string" ? result.base64_encoded : null,
+    base64Encoded:
+      typeof result?.base64_encoded === "string" ? result.base64_encoded : null,
     mimeType: typeof result?.mime_type === "string" ? result.mime_type : null,
   };
 }

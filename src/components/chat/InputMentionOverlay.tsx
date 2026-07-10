@@ -1,6 +1,11 @@
-
 import React from "react";
-import { buildCustomEmojiToken, extractCustomEmojiIds, isInsideUrl, resolveNativeEmojiShortcode, splitTextByNativeEmoji } from "@/lib/emoji";
+import {
+  buildCustomEmojiToken,
+  extractCustomEmojiIds,
+  isInsideUrl,
+  resolveNativeEmojiShortcode,
+  splitTextByNativeEmoji,
+} from "@/lib/emoji";
 import { useCustomEmojiLookup } from "@/hooks/useCustomEmojiLookup";
 
 import EmojiToken from "./EmojiToken";
@@ -17,7 +22,10 @@ function toPlaceholderRegex(char: string): string {
   return `\\u${char.charCodeAt(0).toString(16).padStart(4, "0")}`;
 }
 
-export function InputMentionOverlay({ text, composerCustomEmojiMap = EMPTY_COMPOSER_CUSTOM_EMOJI_MAP }: Props) {
+export function InputMentionOverlay({
+  text,
+  composerCustomEmojiMap = EMPTY_COMPOSER_CUSTOM_EMOJI_MAP,
+}: Props) {
   const placeholderPattern = React.useMemo(() => {
     const placeholders = Object.keys(composerCustomEmojiMap);
     if (placeholders.length === 0) return null;
@@ -25,17 +33,21 @@ export function InputMentionOverlay({ text, composerCustomEmojiMap = EMPTY_COMPO
     return placeholders.map(toPlaceholderRegex).join("|");
   }, [composerCustomEmojiMap]);
   const regex = React.useMemo(
-    () => new RegExp(
-      `${String.raw`(https?:\/\/[^\s<>"'\`)\]]+)|<:([a-z0-9_]+):([a-z0-9-]+)>|:([a-z0-9_+-]+):|@([a-zA-Z0-9_]+)`}${placeholderPattern ? `|(${placeholderPattern})` : ""}`,
-      "gi",
-    ),
+    () =>
+      new RegExp(
+        `${String.raw`(https?:\/\/[^\s<>"'\`)\]]+)|<:([a-z0-9_]+):([a-z0-9-]+)>|:([a-z0-9_+-]+):|@([a-zA-Z0-9_]+)`}${placeholderPattern ? `|(${placeholderPattern})` : ""}`,
+        "gi",
+      ),
     [placeholderPattern],
   );
   const customEmojiIds = React.useMemo(
-    () => Array.from(new Set([
-      ...extractCustomEmojiIds(text),
-      ...Object.values(composerCustomEmojiMap).map((item) => item.id),
-    ])),
+    () =>
+      Array.from(
+        new Set([
+          ...extractCustomEmojiIds(text),
+          ...Object.values(composerCustomEmojiMap).map((item) => item.id),
+        ]),
+      ),
     [composerCustomEmojiMap, text],
   );
   const customEmojiMap = useCustomEmojiLookup(customEmojiIds);
@@ -55,31 +67,32 @@ export function InputMentionOverlay({ text, composerCustomEmojiMap = EMPTY_COMPO
       </span>
     </span>
   );
-  const renderFixedEmojiWithLayout = (
-    key: string,
-    node: React.ReactNode,
-  ) => (
-    <span key={key} className="relative inline-block h-[1.35em] w-[1.35em] align-[-0.22em]">
-      <span className="invisible inline-block h-[1.35em] w-[1.35em] select-none">.</span>
+  const renderFixedEmojiWithLayout = (key: string, node: React.ReactNode) => (
+    <span
+      key={key}
+      className="relative inline-block h-[1.35em] w-[1.35em] align-[-0.22em]"
+    >
+      <span className="invisible inline-block h-[1.35em] w-[1.35em] select-none">
+        .
+      </span>
       <span className="pointer-events-none absolute inset-0 inline-flex items-center justify-center">
         {node}
       </span>
     </span>
   );
-  const renderPlainText = React.useCallback((segment: string, keyPrefix: string) => (
-    splitTextByNativeEmoji(segment).map((part, index) => (
-      part.type === "emoji"
-        ? renderEmojiWithLayout(
-          `${keyPrefix}-native-${index}`,
-          part.value,
-          <EmojiToken
-            value={part.value}
-            className="pointer-events-none"
-          />,
-        )
-        : part.value
-    ))
-  ), []);
+  const renderPlainText = React.useCallback(
+    (segment: string, keyPrefix: string) =>
+      splitTextByNativeEmoji(segment).map((part, index) =>
+        part.type === "emoji"
+          ? renderEmojiWithLayout(
+              `${keyPrefix}-native-${index}`,
+              part.value,
+              <EmojiToken value={part.value} className="pointer-events-none" />,
+            )
+          : part.value,
+      ),
+    [],
+  );
 
   while ((match = regex.exec(text)) !== null) {
     const isUrl = match[1] != null;
@@ -94,7 +107,12 @@ export function InputMentionOverlay({ text, composerCustomEmojiMap = EMPTY_COMPO
     }
 
     if (match.index > lastIndex) {
-      parts.push(...renderPlainText(text.slice(lastIndex, match.index), `plain-${lastIndex}`));
+      parts.push(
+        ...renderPlainText(
+          text.slice(lastIndex, match.index),
+          `plain-${lastIndex}`,
+        ),
+      );
     }
 
     if (isUrl) {
@@ -105,7 +123,7 @@ export function InputMentionOverlay({ text, composerCustomEmojiMap = EMPTY_COMPO
           className="text-primary pointer-events-none"
         >
           {match[0]}
-        </span>
+        </span>,
       );
     } else if (isCustomEmoji) {
       parts.push(
@@ -117,21 +135,26 @@ export function InputMentionOverlay({ text, composerCustomEmojiMap = EMPTY_COMPO
             customEmojiMap={customEmojiMap}
             className="pointer-events-none"
           />,
-        )
+        ),
       );
     } else if (isComposerCustomEmoji) {
       const placeholder = match[6];
       const customEmoji = composerCustomEmojiMap[placeholder];
 
       parts.push(
-        customEmoji ? renderFixedEmojiWithLayout(
-          `composer-custom-emoji-${match.index}`,
-          <EmojiToken
-            value={buildCustomEmojiToken(customEmoji.shortcode, customEmoji.id)}
-            customEmojiMap={customEmojiMap}
-            className="pointer-events-none"
-          />,
-        ) : placeholder,
+        customEmoji
+          ? renderFixedEmojiWithLayout(
+              `composer-custom-emoji-${match.index}`,
+              <EmojiToken
+                value={buildCustomEmojiToken(
+                  customEmoji.shortcode,
+                  customEmoji.id,
+                )}
+                customEmojiMap={customEmojiMap}
+                className="pointer-events-none"
+              />,
+            )
+          : placeholder,
       );
     } else if (isNativeShortcode) {
       if (isInsideUrl(text, match.index)) {
@@ -140,16 +163,13 @@ export function InputMentionOverlay({ text, composerCustomEmojiMap = EMPTY_COMPO
         const shortcode = match[4].toLowerCase();
         const emoji = resolveNativeEmojiShortcode(shortcode);
         parts.push(
-          emoji ? (
-            renderEmojiWithLayout(
-              `native-emoji-${match.index}`,
-              match[0],
-              <EmojiToken
-                value={match[0]}
-                className="pointer-events-none"
-              />,
-            )
-          ) : match[0]
+          emoji
+            ? renderEmojiWithLayout(
+                `native-emoji-${match.index}`,
+                match[0],
+                <EmojiToken value={match[0]} className="pointer-events-none" />,
+              )
+            : match[0],
         );
       }
     } else if (isMention) {
@@ -160,14 +180,16 @@ export function InputMentionOverlay({ text, composerCustomEmojiMap = EMPTY_COMPO
           className="rounded-sm font-medium select-none pointer-events-auto bg-rm-accent/20 text-rm-accent"
         >
           {match[0]}
-        </span>
+        </span>,
       );
     }
     lastIndex = match.index + match[0].length;
   }
 
   if (lastIndex < text.length) {
-    parts.push(...renderPlainText(text.slice(lastIndex), `plain-tail-${lastIndex}`));
+    parts.push(
+      ...renderPlainText(text.slice(lastIndex), `plain-tail-${lastIndex}`),
+    );
   }
 
   // Use zero-width space to preserve trailing newlines for height calculation

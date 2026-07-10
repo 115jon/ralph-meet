@@ -31,7 +31,9 @@ let loadPromise: Promise<void> | null = null;
 
 function readLegacyLocalFavorites(): GifPickerItem[] {
   if (typeof window === "undefined") return [];
-  return parseStoredGifFavorites(window.localStorage.getItem(GIF_FAVORITES_STORAGE_KEY));
+  return parseStoredGifFavorites(
+    window.localStorage.getItem(GIF_FAVORITES_STORAGE_KEY),
+  );
 }
 
 function clearLegacyLocalFavorites() {
@@ -58,21 +60,41 @@ export const useGifFavoritesStore = create<GifFavoritesState>((set, get) => ({
       loadPromise = (async () => {
         set({ loading: true, error: null });
         try {
-          const data = await apiGet<GifFavoritesResponse>("/api/gifs?mode=favorites");
+          const data = await apiGet<GifFavoritesResponse>(
+            "/api/gifs?mode=favorites",
+          );
           const legacyFavorites = readLegacyLocalFavorites();
           if (legacyFavorites.length > 0) {
-            const imported = await apiPost<GifFavoritesResponse, { favorites: GifPickerItem[] }>(
-              "/api/gifs?mode=favorites/import",
-              { favorites: legacyFavorites }
-            );
-            set({ favorites: imported.favorites, loaded: true, loading: false, error: null });
+            const imported = await apiPost<
+              GifFavoritesResponse,
+              { favorites: GifPickerItem[] }
+            >("/api/gifs?mode=favorites/import", {
+              favorites: legacyFavorites,
+            });
+            set({
+              favorites: imported.favorites,
+              loaded: true,
+              loading: false,
+              error: null,
+            });
             clearLegacyLocalFavorites();
             return;
           }
 
-          set({ favorites: data.favorites, loaded: true, loading: false, error: null });
+          set({
+            favorites: data.favorites,
+            loaded: true,
+            loading: false,
+            error: null,
+          });
         } catch (error) {
-          set({ loading: false, error: error instanceof Error ? error.message : "Failed to load GIF favorites" });
+          set({
+            loading: false,
+            error:
+              error instanceof Error
+                ? error.message
+                : "Failed to load GIF favorites",
+          });
         } finally {
           loadPromise = null;
         }
@@ -84,18 +106,29 @@ export const useGifFavoritesStore = create<GifFavoritesState>((set, get) => ({
     add: async (gif) => {
       await get().actions.load();
       const key = getGifItemIdentityKey(gif);
-      const alreadyFavorite = get().favorites.some((item) => getGifItemIdentityKey(item) === key);
+      const alreadyFavorite = get().favorites.some(
+        (item) => getGifItemIdentityKey(item) === key,
+      );
       if (alreadyFavorite) return { added: false };
 
       const previous = get().favorites;
       set({ favorites: toggleGifFavorite(previous, gif), error: null });
       try {
-        const data = await apiPost<GifFavoritesResponse, { favorite: GifPickerItem }>("/api/gifs?mode=favorite", { favorite: gif });
+        const data = await apiPost<
+          GifFavoritesResponse,
+          { favorite: GifPickerItem }
+        >("/api/gifs?mode=favorite", { favorite: gif });
         set({ favorites: data.favorites, loaded: true, error: null });
         notifyFavoriteAdded();
         return { added: true };
       } catch (error) {
-        set({ favorites: previous, error: error instanceof Error ? error.message : "Failed to save GIF favorite" });
+        set({
+          favorites: previous,
+          error:
+            error instanceof Error
+              ? error.message
+              : "Failed to save GIF favorite",
+        });
         throw error;
       }
     },
@@ -103,15 +136,29 @@ export const useGifFavoritesStore = create<GifFavoritesState>((set, get) => ({
     remove: async (gif) => {
       await get().actions.load();
       const previous = get().favorites;
-      set({ favorites: previous.filter((item) => getGifItemIdentityKey(item) !== getGifItemIdentityKey(gif)), error: null });
+      set({
+        favorites: previous.filter(
+          (item) => getGifItemIdentityKey(item) !== getGifItemIdentityKey(gif),
+        ),
+        error: null,
+      });
       try {
-        const data = await apiDelete<GifFavoritesResponse, { provider: string; gif_id: string }>("/api/gifs?mode=favorite", {
+        const data = await apiDelete<
+          GifFavoritesResponse,
+          { provider: string; gif_id: string }
+        >("/api/gifs?mode=favorite", {
           provider: gif.provider,
           gif_id: gif.id,
         });
         set({ favorites: data.favorites, loaded: true, error: null });
       } catch (error) {
-        set({ favorites: previous, error: error instanceof Error ? error.message : "Failed to remove GIF favorite" });
+        set({
+          favorites: previous,
+          error:
+            error instanceof Error
+              ? error.message
+              : "Failed to remove GIF favorite",
+        });
         throw error;
       }
     },
@@ -119,7 +166,9 @@ export const useGifFavoritesStore = create<GifFavoritesState>((set, get) => ({
     toggle: async (gif) => {
       await get().actions.load();
       const key = getGifItemIdentityKey(gif);
-      const alreadyFavorite = get().favorites.some((item) => getGifItemIdentityKey(item) === key);
+      const alreadyFavorite = get().favorites.some(
+        (item) => getGifItemIdentityKey(item) === key,
+      );
       if (alreadyFavorite) {
         await get().actions.remove(gif);
         return { added: false };
@@ -130,4 +179,5 @@ export const useGifFavoritesStore = create<GifFavoritesState>((set, get) => ({
   },
 }));
 
-export const useGifFavoriteActions = () => useGifFavoritesStore((state) => state.actions);
+export const useGifFavoriteActions = () =>
+  useGifFavoritesStore((state) => state.actions);

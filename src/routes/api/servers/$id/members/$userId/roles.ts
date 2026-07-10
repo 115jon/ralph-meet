@@ -1,10 +1,13 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute } from "@tanstack/react-router";
 
 import { apiError, apiSuccess, getDB, requireAuth } from "@/lib/api-helpers";
 import { ServiceError } from "@/lib/service-error";
 import { updateMemberRoles } from "@/services/role.service";
-import { executeAuditLog, executeBroadcast, executeInvalidation } from "@/services/service-helpers";
-
+import {
+  executeAuditLog,
+  executeBroadcast,
+  executeInvalidation,
+} from "@/services/service-helpers";
 
 // PUT /api/servers/:id/members/:userId/roles — update a member's roles
 const PUT = async ({ request, params }: any) => {
@@ -21,7 +24,13 @@ const PUT = async ({ request, params }: any) => {
   const db = getDB();
 
   try {
-    const result = await updateMemberRoles(db, serverId, targetUserId, requesterId, body.roleIds);
+    const result = await updateMemberRoles(
+      db,
+      serverId,
+      targetUserId,
+      requesterId,
+      body.roleIds,
+    );
     await executeInvalidation(result.cacheKeysToInvalidate);
     await executeBroadcast(result.broadcast);
     await executeAuditLog(db, result.auditLog);
@@ -32,13 +41,12 @@ const PUT = async ({ request, params }: any) => {
     }
     throw e;
   }
-}
+};
 
-
-export const Route = createFileRoute('/api/servers/$id/members/$userId/roles')({
+export const Route = createFileRoute("/api/servers/$id/members/$userId/roles")({
   server: {
     handlers: {
       PUT,
-    }
-  }
+    },
+  },
 });

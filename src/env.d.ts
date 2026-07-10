@@ -27,32 +27,34 @@ declare global {
     track: MediaStreamTrack;
   }
 
-   
-  var MediaStreamTrackProcessor: {
-    prototype: MediaStreamTrackProcessor;
-    new(init: MediaStreamTrackProcessorInit): MediaStreamTrackProcessor;
-  } | undefined;
+  var MediaStreamTrackProcessor:
+    | {
+        prototype: MediaStreamTrackProcessor;
+        new (init: MediaStreamTrackProcessorInit): MediaStreamTrackProcessor;
+      }
+    | undefined;
 
   interface MediaStreamTrackProcessor {
     readonly readable: ReadableStream;
   }
 
   interface MediaStreamTrackGeneratorInit {
-    kind: 'audio' | 'video';
+    kind: "audio" | "video";
   }
 
-   
-  var MediaStreamTrackGenerator: {
-    prototype: MediaStreamTrackGenerator;
-    new(init: MediaStreamTrackGeneratorInit): MediaStreamTrackGenerator;
-  } | undefined;
+  var MediaStreamTrackGenerator:
+    | {
+        prototype: MediaStreamTrackGenerator;
+        new (init: MediaStreamTrackGeneratorInit): MediaStreamTrackGenerator;
+      }
+    | undefined;
 
   interface MediaStreamTrackGenerator extends MediaStreamTrack {
     readonly writable: WritableStream;
   }
 }
 
-export { };
+export {};
 
 declare module "*.css?url" {
   const src: string;

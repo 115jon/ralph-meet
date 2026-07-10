@@ -21,7 +21,9 @@ describe("getNameplateTextColors", () => {
   it("falls back to semantic app text colors for assisted custom nameplates", () => {
     const theme = buildNameplateTheme("violet", "custom-nameplate");
 
-    expect(getNameplateTextColors(theme, { useThemeSemanticColors: true })).toEqual({
+    expect(
+      getNameplateTextColors(theme, { useThemeSemanticColors: true }),
+    ).toEqual({
       foregroundColor: "var(--rm-text-primary)",
       mutedForegroundColor: "var(--rm-text-muted)",
       metaColor: "var(--rm-text-secondary)",
@@ -38,24 +40,30 @@ describe("shouldUseNameplateIdentityFade", () => {
   it("adds a synthetic identity fade for custom uploaded nameplates", () => {
     const theme = buildNameplateTheme("clouds", "custom-nameplate");
 
-    expect(shouldUseNameplateIdentityFade(theme, {
-      needsContrastAssist: true,
-    })).toBe(true);
+    expect(
+      shouldUseNameplateIdentityFade(theme, {
+        needsContrastAssist: true,
+      }),
+    ).toBe(true);
   });
 
   it("does not add a synthetic fade for collectible nameplates on light surfaces", () => {
     const theme = buildNameplateTheme("red", "collectible-nameplate");
 
-    expect(shouldUseNameplateIdentityFade(theme, {
-      needsContrastAssist: false,
-    })).toBe(false);
+    expect(
+      shouldUseNameplateIdentityFade(theme, {
+        needsContrastAssist: false,
+      }),
+    ).toBe(false);
   });
 
   it("does not add a synthetic fade for collectible nameplates on dark surfaces when assist is not needed", () => {
     const theme = buildNameplateTheme("red", "collectible-nameplate");
 
-    expect(shouldUseNameplateIdentityFade(theme, {
-      needsContrastAssist: false,
-    })).toBe(false);
+    expect(
+      shouldUseNameplateIdentityFade(theme, {
+        needsContrastAssist: false,
+      }),
+    ).toBe(false);
   });
 });

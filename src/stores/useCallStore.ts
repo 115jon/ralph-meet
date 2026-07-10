@@ -9,7 +9,11 @@
 import { create } from "zustand";
 import type { AvatarDisplay } from "@/lib/avatar-display";
 
-export type CallStatus = "idle" | "ringing_outgoing" | "ringing_incoming" | "active";
+export type CallStatus =
+  | "idle"
+  | "ringing_outgoing"
+  | "ringing_incoming"
+  | "active";
 
 export interface CallUser {
   id: string;
@@ -44,11 +48,21 @@ interface CallActions {
   /**
    * Transition to ringing incoming.
    */
-  setIncomingCall: (payload: { callId: string; remoteUser: NonNullable<CallState["remoteUser"]>; channelId: string; voiceRoomId: string }) => void;
+  setIncomingCall: (payload: {
+    callId: string;
+    remoteUser: NonNullable<CallState["remoteUser"]>;
+    channelId: string;
+    voiceRoomId: string;
+  }) => void;
   /**
    * Transition to ringing outgoing.
    */
-  setOutgoingCall: (payload: { callId: string; remoteUser: NonNullable<CallState["remoteUser"]>; channelId: string; voiceRoomId: string }) => void;
+  setOutgoingCall: (payload: {
+    callId: string;
+    remoteUser: NonNullable<CallState["remoteUser"]>;
+    channelId: string;
+    voiceRoomId: string;
+  }) => void;
   /** Explicitly join the SFU room */
   joinSFU: () => void;
   /** Reset the startedAt timer when callee accepts the call */
@@ -110,7 +124,12 @@ export const useCallStore = create<CallState & CallActions>()((set, get) => ({
   joinSFU: () => set({ hasJoinedSFU: true }),
 
   acceptCall: () => {
-    set({ status: "active", startedAt: Date.now(), hasConnected: true, hasJoinedSFU: true });
+    set({
+      status: "active",
+      startedAt: Date.now(),
+      hasConnected: true,
+      hasJoinedSFU: true,
+    });
   },
 
   leaveCall: () => {

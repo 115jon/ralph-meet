@@ -1,4 +1,7 @@
-import { getDesktopToken, getStoredKovaAuthSessionToken } from "@/lib/desktop-auth";
+import {
+  getDesktopToken,
+  getStoredKovaAuthSessionToken,
+} from "@/lib/desktop-auth";
 import { KOVA_AUTH_PUBLISHABLE_KEY } from "@/lib/kova-auth-config";
 import { apiUrl, isTauri } from "@/lib/platform";
 
@@ -17,7 +20,9 @@ function getAuthToken(): string | null {
   }
 }
 
-export function buildVoiceDisconnectBeaconHeaders(payload: VoiceDisconnectBeaconPayload): Record<string, string> {
+export function buildVoiceDisconnectBeaconHeaders(
+  payload: VoiceDisconnectBeaconPayload,
+): Record<string, string> {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
   };
@@ -42,7 +47,9 @@ export function buildVoiceDisconnectBeaconHeaders(payload: VoiceDisconnectBeacon
   return headers;
 }
 
-export function sendVoiceDisconnectBeacon(payload: VoiceDisconnectBeaconPayload): boolean {
+export function sendVoiceDisconnectBeacon(
+  payload: VoiceDisconnectBeaconPayload,
+): boolean {
   if (typeof window === "undefined") return false;
   if (!payload.channelId) return false;
   if (!payload.gatewaySessionId && !payload.voiceSessionId) return false;
@@ -55,10 +62,18 @@ export function sendVoiceDisconnectBeacon(payload: VoiceDisconnectBeaconPayload)
   });
 
   const token = getAuthToken();
-  const needsExplicitAuthHeaders = !!token || (isTauri() && !!KOVA_AUTH_PUBLISHABLE_KEY);
+  const needsExplicitAuthHeaders =
+    !!token || (isTauri() && !!KOVA_AUTH_PUBLISHABLE_KEY);
 
-  if (!needsExplicitAuthHeaders && typeof navigator !== "undefined" && typeof navigator.sendBeacon === "function") {
-    return navigator.sendBeacon(url, new Blob([body], { type: "application/json" }));
+  if (
+    !needsExplicitAuthHeaders &&
+    typeof navigator !== "undefined" &&
+    typeof navigator.sendBeacon === "function"
+  ) {
+    return navigator.sendBeacon(
+      url,
+      new Blob([body], { type: "application/json" }),
+    );
   }
 
   void fetch(url, {

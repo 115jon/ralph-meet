@@ -31,7 +31,7 @@ function serverMessageRow(overrides: Record<string, unknown> = {}) {
     author_username: "alice",
     author_display_name: "Alice",
     author_avatar_url: "/api/avatars/alice.png",
-    author_avatar_display: "{\"zoom\":1.1,\"offsetX\":0.2}",
+    author_avatar_display: '{"zoom":1.1,"offsetX":0.2}',
     ...overrides,
   };
 }
@@ -120,7 +120,7 @@ describe("message share service", () => {
       username: "alice",
       display_name: "Alice",
       avatar_url: "/api/avatars/alice.png",
-      avatar_display: "{\"zoom\":1.1,\"offsetX\":0.2}",
+      avatar_display: '{"zoom":1.1,"offsetX":0.2}',
     });
     db.assertCalled(/INSERT INTO message_shares/);
   });
@@ -149,14 +149,19 @@ describe("message share service", () => {
       genToken: () => "tok_ext",
     });
 
-    expect(share.snapshot.attachments[0].url).toBe("https://static.klipy.com/provider.gif");
+    expect(share.snapshot.attachments[0].url).toBe(
+      "https://static.klipy.com/provider.gif",
+    );
   });
 
   it("rejects DM message sharing", async () => {
-    db.mockQuery("FROM messages m", serverMessageRow({
-      server_id: null,
-      channel_type: "dm",
-    }));
+    db.mockQuery(
+      "FROM messages m",
+      serverMessageRow({
+        server_id: null,
+        channel_type: "dm",
+      }),
+    );
 
     await expect(
       createMessageShare(db as any, {
@@ -165,14 +170,17 @@ describe("message share service", () => {
         now: NOW,
         genId: () => "share_1",
         genToken: () => "tok_public",
-      })
+      }),
     ).rejects.toHaveProperty("status", 403);
   });
 
   it("rejects sharing when the server or channel disables public shares", async () => {
-    db.mockQuery("FROM messages m", serverMessageRow({
-      channel_allow_public_shares: 0,
-    }));
+    db.mockQuery(
+      "FROM messages m",
+      serverMessageRow({
+        channel_allow_public_shares: 0,
+      }),
+    );
 
     await expect(
       createMessageShare(db as any, {
@@ -181,7 +189,7 @@ describe("message share service", () => {
         now: NOW,
         genId: () => "share_1",
         genToken: () => "tok_public",
-      })
+      }),
     ).rejects.toHaveProperty("status", 403);
   });
 
@@ -199,7 +207,7 @@ describe("message share service", () => {
     });
 
     await expect(
-      getPublicMessageShare(db as any, "tok_public", NOW)
+      getPublicMessageShare(db as any, "tok_public", NOW),
     ).rejects.toHaveProperty("status", 410);
   });
 
@@ -220,7 +228,8 @@ describe("message share service", () => {
           token: "tok_public",
           source_message_id: "msg_1",
           snapshot_content: "hello",
-          snapshot_author: "{\"display_name\":\"Alice\",\"avatar_display\":\"{\\\"zoom\\\":1.1}\"}",
+          snapshot_author:
+            '{"display_name":"Alice","avatar_display":"{\\"zoom\\":1.1}"}',
           created_at: "2026-05-23T11:00:00.000Z",
           expires_at: "2026-06-22T11:00:00.000Z",
           revoked_at: null,
@@ -233,7 +242,7 @@ describe("message share service", () => {
     const shares = await listUserMessageShares(db as any, "user_reader");
     expect(shares).toHaveLength(1);
     expect(shares[0].author.display_name).toBe("Alice");
-    expect(shares[0].author.avatar_display).toBe("{\"zoom\":1.1}");
+    expect(shares[0].author.avatar_display).toBe('{"zoom":1.1}');
 
     await revokeMessageShare(db as any, "share_1", "user_reader", NOW);
     db.assertCalledWith(/UPDATE message_shares SET status = 'revoked'/, [
@@ -259,7 +268,8 @@ describe("message share service", () => {
       view_count: 2,
       allow_indexing: 0,
       snapshot_content: "hello",
-      snapshot_author: "{\"id\":\"user_author\",\"username\":\"alice\",\"display_name\":\"Alice\",\"avatar_url\":\"/api/avatars/alice.png\",\"avatar_display\":\"{\\\"zoom\\\":1.1}\"}",
+      snapshot_author:
+        '{"id":"user_author","username":"alice","display_name":"Alice","avatar_url":"/api/avatars/alice.png","avatar_display":"{\\"zoom\\":1.1}"}',
       snapshot_attachments: "[]",
       snapshot_embeds: "[]",
       snapshot_reactions: "[]",
@@ -268,7 +278,9 @@ describe("message share service", () => {
       current_updated_at: null,
     });
 
-    const share = await getPublicMessageShare(db as any, "tok_public", NOW, { incrementView: false });
-    expect(share.snapshot.author.avatar_display).toBe("{\"zoom\":1.1}");
+    const share = await getPublicMessageShare(db as any, "tok_public", NOW, {
+      incrementView: false,
+    });
+    expect(share.snapshot.author.avatar_display).toBe('{"zoom":1.1}');
   });
 });

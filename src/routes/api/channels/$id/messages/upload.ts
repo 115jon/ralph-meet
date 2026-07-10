@@ -1,13 +1,19 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute } from "@tanstack/react-router";
 
-import { apiError, apiSuccess, genId, getBucket, getDB, requireAuth } from "@/lib/api-helpers";
+import {
+  apiError,
+  apiSuccess,
+  genId,
+  getBucket,
+  getDB,
+  requireAuth,
+} from "@/lib/api-helpers";
 import { cacheDel, CacheKey } from "@/lib/cache";
 import { logger } from "@/lib/logger";
 import { hasPermission, PERMISSIONS } from "@/lib/permissions";
 import { checkRateLimitDO, RATE_LIMITS } from "@/lib/rate-limit";
 import { requireChannelAccess } from "@/lib/require-channel-access";
 import { getUserPermissions } from "@/lib/require-permission";
-
 
 const DEFAULT_UPLOAD_LIMIT_BYTES = 25 * 1024 * 1024;
 const SOUNDBOARD_UPLOAD_LIMIT_BYTES = 50 * 1024 * 1024;
@@ -29,7 +35,9 @@ function getFileExtension(filename: string) {
 
 function inferSoundboardContentType(file: File) {
   if (file.type.startsWith("audio/")) return file.type;
-  return SOUNDBOARD_AUDIO_TYPES_BY_EXTENSION[getFileExtension(file.name)] ?? null;
+  return (
+    SOUNDBOARD_AUDIO_TYPES_BY_EXTENSION[getFileExtension(file.name)] ?? null
+  );
 }
 
 // POST /api/channels/:id/messages/upload — upload file attachment
@@ -40,7 +48,11 @@ const POST = async ({ request, params }: any) => {
   const { id: channelId } = params;
 
   // Rate limit: file upload limits (global DO limit)
-  const rl = await checkRateLimitDO(userId, "file-upload", RATE_LIMITS.FILE_UPLOAD);
+  const rl = await checkRateLimitDO(
+    userId,
+    "file-upload",
+    RATE_LIMITS.FILE_UPLOAD,
+  );
   if (rl) return rl;
 
   // Verify channel access
@@ -70,7 +82,9 @@ const POST = async ({ request, params }: any) => {
     return apiError("Soundboard uploads require a server channel", 400);
   }
 
-  const uploadLimit = isSoundboardUpload ? SOUNDBOARD_UPLOAD_LIMIT_BYTES : DEFAULT_UPLOAD_LIMIT_BYTES;
+  const uploadLimit = isSoundboardUpload
+    ? SOUNDBOARD_UPLOAD_LIMIT_BYTES
+    : DEFAULT_UPLOAD_LIMIT_BYTES;
   if (file.size > uploadLimit) {
     return apiError(`File too large (max ${uploadLimit / 1024 / 1024}MB)`, 413);
   }
@@ -97,23 +111,26 @@ const POST = async ({ request, params }: any) => {
   });
 
   // Insert into the attachments table
-  await db.prepare(
-    `INSERT INTO attachments (id, message_id, soundboard_server_id, filename, file_key, content_type, size_bytes, user_id, created_at, sound_name, sound_emoji, sound_volume)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-  ).bind(
-    attachmentId,
-    messageId,
-    isSoundboardUpload ? serverId : null,
-    file.name,
-    key,
-    contentType,
-    file.size,
-    userId,
-    now,
-    formData.get("sound_name") as string | null,
-    formData.get("sound_emoji") as string | null,
-    formData.has("sound_volume") ? Number(formData.get("sound_volume")) : 1.0
-  ).run();
+  await db
+    .prepare(
+      `INSERT INTO attachments (id, message_id, soundboard_server_id, filename, file_key, content_type, size_bytes, user_id, created_at, sound_name, sound_emoji, sound_volume)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    )
+    .bind(
+      attachmentId,
+      messageId,
+      isSoundboardUpload ? serverId : null,
+      file.name,
+      key,
+      contentType,
+      file.size,
+      userId,
+      now,
+      formData.get("sound_name") as string | null,
+      formData.get("sound_emoji") as string | null,
+      formData.has("sound_volume") ? Number(formData.get("sound_volume")) : 1.0,
+    )
+    .run();
 
   logger.info("file_uploaded", {
     userId,
@@ -128,20 +145,22 @@ const POST = async ({ request, params }: any) => {
     await cacheDel(CacheKey.serverSoundboard(serverId));
   }
 
-  return apiSuccess({
-    id: attachmentId,
-    file_url: `/api/${key}`,
-    file_name: file.name,
-    file_size: file.size,
-    content_type: contentType,
-  }, 201);
-}
+  return apiSuccess(
+    {
+      id: attachmentId,
+      file_url: `/api/${key}`,
+      file_name: file.name,
+      file_size: file.size,
+      content_type: contentType,
+    },
+    201,
+  );
+};
 
-
-export const Route = createFileRoute('/api/channels/$id/messages/upload')({
+export const Route = createFileRoute("/api/channels/$id/messages/upload")({
   server: {
     handlers: {
       POST,
-    }
-  }
+    },
+  },
 });

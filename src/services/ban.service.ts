@@ -7,7 +7,11 @@
 
 import { AuditLogAction } from "@/lib/audit-logger";
 import { CacheKey } from "@/lib/cache";
-import { calculatePermissions, hasPermission, PERMISSIONS } from "@/lib/permissions";
+import {
+  calculatePermissions,
+  hasPermission,
+  PERMISSIONS,
+} from "@/lib/permissions";
 import { ServiceError } from "@/lib/service-error";
 import type { D1Database } from "@cloudflare/workers-types";
 import type { AuditLogDescriptor, BroadcastDescriptor } from "./server.service";
@@ -17,7 +21,7 @@ import type { AuditLogDescriptor, BroadcastDescriptor } from "./server.service";
 async function getActorPermsAndPosition(
   db: D1Database,
   serverId: string,
-  userId: string
+  userId: string,
 ): Promise<{ total_perms: number | null; max_position: number | null }> {
   const { results } = await db
     .prepare(
@@ -25,7 +29,7 @@ async function getActorPermsAndPosition(
        FROM server_members sm
        JOIN member_roles mr ON mr.server_id = sm.server_id AND mr.user_id = sm.user_id
        JOIN roles r ON r.id = mr.role_id
-       WHERE sm.server_id = ? AND sm.user_id = ?`
+       WHERE sm.server_id = ? AND sm.user_id = ?`,
     )
     .bind(serverId, userId)
     .all();
@@ -35,8 +39,13 @@ async function getActorPermsAndPosition(
   }
 
   return {
-    total_perms: calculatePermissions(results.map((row) => row.permissions as number)),
-    max_position: results.reduce((max, row) => Math.max(max, (row.position as number) ?? 0), 0),
+    total_perms: calculatePermissions(
+      results.map((row) => row.permissions as number),
+    ),
+    max_position: results.reduce(
+      (max, row) => Math.max(max, (row.position as number) ?? 0),
+      0,
+    ),
   };
 }
 
@@ -62,7 +71,7 @@ function hasViewBanPermission(totalPerms: number | null): boolean {
 export async function listBans(
   db: D1Database,
   serverId: string,
-  actorId: string
+  actorId: string,
 ): Promise<Array<Record<string, unknown>>> {
   const actorPerms = await getActorPermsAndPosition(db, serverId, actorId);
 
@@ -77,7 +86,7 @@ export async function listBans(
        LEFT JOIN users u ON u.id = b.user_id
        LEFT JOIN users banner ON banner.id = b.banned_by
        WHERE b.server_id = ?
-       ORDER BY b.created_at DESC`
+       ORDER BY b.created_at DESC`,
     )
     .bind(serverId)
     .all();
@@ -96,7 +105,7 @@ export async function banUser(
   db: D1Database,
   serverId: string,
   actorId: string,
-  input: BanUserInput
+  input: BanUserInput,
 ): Promise<{
   cacheKeysToInvalidate: string[];
   broadcast: BroadcastDescriptor;
@@ -108,7 +117,7 @@ export async function banUser(
 
   if (!hasBanPermission(actorPerms.total_perms)) {
     throw ServiceError.forbidden(
-      "Insufficient permissions (BAN_MEMBERS required)"
+      "Insufficient permissions (BAN_MEMBERS required)",
     );
   }
 
@@ -127,7 +136,11 @@ export async function banUser(
   }
 
   // Role hierarchy check
-  const targetPerms = await getActorPermsAndPosition(db, serverId, targetUserId);
+  const targetPerms = await getActorPermsAndPosition(
+    db,
+    serverId,
+    targetUserId,
+  );
   const actorTopRole = actorPerms.max_position ?? 0;
   const targetTopRole = targetPerms.max_position ?? 0;
 
@@ -135,7 +148,9 @@ export async function banUser(
     targetTopRole >= actorTopRole &&
     !hasPermission(actorPerms.total_perms!, PERMISSIONS.ADMINISTRATOR)
   ) {
-    throw ServiceError.forbidden("Cannot ban a member with equal or higher role");
+    throw ServiceError.forbidden(
+      "Cannot ban a member with equal or higher role",
+    );
   }
 
   const now = new Date().toISOString();
@@ -144,7 +159,7 @@ export async function banUser(
     db
       .prepare(
         `INSERT OR REPLACE INTO server_bans (server_id, user_id, reason, banned_by, created_at)
-         VALUES (?, ?, ?, ?, ?)`
+         VALUES (?, ?, ?, ?, ?)`,
       )
       .bind(serverId, targetUserId, input.reason ?? null, actorId, now),
     db
@@ -185,7 +200,7 @@ export async function unbanUser(
   db: D1Database,
   serverId: string,
   actorId: string,
-  targetUserId: string
+  targetUserId: string,
 ): Promise<{
   auditLog: AuditLogDescriptor;
 }> {

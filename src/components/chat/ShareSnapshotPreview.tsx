@@ -74,12 +74,21 @@ export default function ShareSnapshotPreview({
 }: ShareSnapshotPreviewProps) {
   const displayName = author.display_name || author.username || "Unknown";
   const initial = (displayName[0] || "?").toUpperCase();
-  const imageAttachments = attachments.filter((attachment) => attachment.content_type?.startsWith("image/"));
-  const videoAttachments = attachments.filter((attachment) => isPlayableVideo(attachment.content_type));
-  const contentFilter = useMediaSafetySettingsStore((state) => state.getSettings(state.currentUser).contentFilter);
+  const imageAttachments = attachments.filter((attachment) =>
+    attachment.content_type?.startsWith("image/"),
+  );
+  const videoAttachments = attachments.filter((attachment) =>
+    isPlayableVideo(attachment.content_type),
+  );
+  const contentFilter = useMediaSafetySettingsStore(
+    (state) => state.getSettings(state.currentUser).contentFilter,
+  );
   const hasContent = content.trim().length > 0;
   const reactionEmojiIds = React.useMemo(
-    () => extractCustomEmojiIds(reactions.map((reaction) => reaction.emoji).join(" ")),
+    () =>
+      extractCustomEmojiIds(
+        reactions.map((reaction) => reaction.emoji).join(" "),
+      ),
     [reactions],
   );
   const reactionEmojiMap = useCustomEmojiLookup(reactionEmojiIds);
@@ -89,7 +98,7 @@ export default function ShareSnapshotPreview({
       className={cn(
         "rounded-lg border border-rm-border bg-rm-bg-surface p-4",
         !compact && "shadow-xl shadow-black/20",
-        className
+        className,
       )}
     >
       {originalEdited && (
@@ -101,7 +110,11 @@ export default function ShareSnapshotPreview({
       <div className="mb-3 flex items-start gap-3">
         <div className="relative flex h-10 w-10 shrink-0 items-center justify-center overflow-visible rounded-full bg-primary/10 text-sm font-bold text-primary">
           {avatarUrl ? (
-            <AvatarImage src={avatarUrl} alt="" display={author.avatar_display ?? null} />
+            <AvatarImage
+              src={avatarUrl}
+              alt=""
+              display={author.avatar_display ?? null}
+            />
           ) : (
             initial
           )}
@@ -109,7 +122,11 @@ export default function ShareSnapshotPreview({
         <div className="min-w-0">
           <div className="flex flex-wrap items-baseline gap-2">
             <h3 className="text-sm font-bold text-rm-text">{displayName}</h3>
-            {createdAt && <time className="text-xs text-rm-text-muted">{formatDate(createdAt)}</time>}
+            {createdAt && (
+              <time className="text-xs text-rm-text-muted">
+                {formatDate(createdAt)}
+              </time>
+            )}
           </div>
           {source && (
             <p className="mt-0.5 truncate text-xs text-rm-text-muted">
@@ -130,7 +147,10 @@ export default function ShareSnapshotPreview({
       {embeds.length > 0 && (
         <div className="mt-3 flex flex-col items-start gap-2">
           {embeds.map((embed, index) => (
-            <LinkEmbed key={embed.id || `${embed.url}-${index}`} embed={embed} />
+            <LinkEmbed
+              key={embed.id || `${embed.url}-${index}`}
+              embed={embed}
+            />
           ))}
         </div>
       )}
@@ -147,7 +167,9 @@ export default function ShareSnapshotPreview({
                 className="group/image relative overflow-hidden rounded-lg border border-rm-border bg-rm-bg-elevated"
               >
                 {({ revealed }) => {
-                  const interactive = !shouldBlurSensitiveAttachment(attachment, contentFilter) || revealed;
+                  const interactive =
+                    !shouldBlurSensitiveAttachment(attachment, contentFilter) ||
+                    revealed;
                   return (
                     <a
                       href={interactive ? url : undefined}
@@ -160,12 +182,16 @@ export default function ShareSnapshotPreview({
                         alt={attachment.filename}
                         className={cn(
                           "h-full w-full object-contain transition group-hover/image:brightness-105",
-                          previewMedia ? "max-h-[220px]" : "max-h-[360px]"
+                          previewMedia ? "max-h-[220px]" : "max-h-[360px]",
                         )}
                         loading="lazy"
                       />
-                      <GifProviderBranding fileKeyOrUrl={attachment.file_key || attachment.url} />
-                      <span className="sr-only">Open {attachment.filename}</span>
+                      <GifProviderBranding
+                        fileKeyOrUrl={attachment.file_key || attachment.url}
+                      />
+                      <span className="sr-only">
+                        Open {attachment.filename}
+                      </span>
                     </a>
                   );
                 }}
@@ -205,7 +231,9 @@ export default function ShareSnapshotPreview({
             <ImageIcon className="h-4 w-4 shrink-0" />
           )}
           <span>
-            {omittedAttachmentCount} attachment{omittedAttachmentCount === 1 ? "" : "s"} not included in public share.
+            {omittedAttachmentCount} attachment
+            {omittedAttachmentCount === 1 ? "" : "s"} not included in public
+            share.
           </span>
         </div>
       )}
@@ -213,7 +241,10 @@ export default function ShareSnapshotPreview({
       {(reactions.length > 0 || replyCount > 0) && (
         <div className="mt-4 flex flex-wrap gap-2 border-t border-rm-border pt-4">
           {reactions.map((reaction) => (
-            <span key={reaction.emoji} className="rounded-lg border border-rm-border bg-rm-bg-elevated px-2 py-1 text-xs font-bold text-rm-text-secondary">
+            <span
+              key={reaction.emoji}
+              className="rounded-lg border border-rm-border bg-rm-bg-elevated px-2 py-1 text-xs font-bold text-rm-text-secondary"
+            >
               <span className="inline-flex items-center gap-1.5">
                 <EmojiToken
                   value={reaction.emoji}

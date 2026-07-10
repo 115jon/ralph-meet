@@ -20,36 +20,40 @@ const GET = async ({ request }: any) => {
   try {
     const response = await fetch(targetUrl, {
       headers: {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Accept": "text/html"
-      }
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        Accept: "text/html",
+      },
     });
 
     if (!response.ok) {
-      return apiError(`Failed to fetch from MyInstants: ${response.status}`, response.status);
+      return apiError(
+        `Failed to fetch from MyInstants: ${response.status}`,
+        response.status,
+      );
     }
 
     const html = await response.text();
 
-    const regex = /<div class="instant">[\s\S]*?style="background-color:(#[A-Fa-f0-9]{6});"[\s\S]*?onclick="play\('([^']+)'[\s\S]*?<a[^>]*class="instant-link link-secondary">([^<]+)<\/a>/g;
-    
+    const regex =
+      /<div class="instant">[\s\S]*?style="background-color:(#[A-Fa-f0-9]{6});"[\s\S]*?onclick="play\('([^']+)'[\s\S]*?<a[^>]*class="instant-link link-secondary">([^<]+)<\/a>/g;
+
     let match;
     const results: MyInstantsSound[] = [];
-    
+
     while ((match = regex.exec(html)) !== null) {
       // url match[2] looks like '/media/sounds/bruh.mp3'
-      const audioPath = match[2].startsWith('/') ? match[2] : `/${match[2]}`;
-      
+      const audioPath = match[2].startsWith("/") ? match[2] : `/${match[2]}`;
+
       results.push({
-        id: audioPath.split('/').pop()?.split('.')[0] || crypto.randomUUID(),
+        id: audioPath.split("/").pop()?.split(".")[0] || crypto.randomUUID(),
         color: match[1],
         url: `https://www.myinstants.com${audioPath}`,
-        title: match[3].trim()
+        title: match[3].trim(),
       });
     }
 
     return apiSuccess({ results, page: Number(page) });
-
   } catch (error) {
     console.error("MyInstants API Error:", error);
     return apiError("Internal server error while fetching sounds", 500);

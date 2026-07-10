@@ -40,12 +40,16 @@ export function MentionAutocomplete({
               onMouseEnter={() => setLocalState({ mentionIndex: i })}
               className={cn(
                 "w-full flex items-center gap-2 px-3 py-2 transition-colors",
-                i === mentionIndex ? "bg-rm-accent/10" : "hover:bg-rm-bg-hover"
+                i === mentionIndex ? "bg-rm-accent/10" : "hover:bg-rm-bg-hover",
               )}
             >
               <div className="flex h-6 w-6 shrink-0 items-center justify-center overflow-visible rounded-full bg-rm-bg-surface text-[10px] font-bold text-rm-text-muted border border-rm-border">
                 {user.avatar_url ? (
-                  <AvatarImage src={getAuthAssetUrl(user.avatar_url)} alt="" display={user.avatar_display} />
+                  <AvatarImage
+                    src={getAuthAssetUrl(user.avatar_url)}
+                    alt=""
+                    display={user.avatar_display}
+                  />
                 ) : (
                   getDisplayInitial(user)
                 )}
@@ -54,7 +58,9 @@ export function MentionAutocomplete({
                 user={user}
                 className={cn(
                   "block truncate text-[13px] font-medium",
-                  i === mentionIndex ? "text-rm-accent" : "text-rm-text-primary",
+                  i === mentionIndex
+                    ? "text-rm-accent"
+                    : "text-rm-text-primary",
                 )}
               />
             </button>

@@ -48,8 +48,16 @@ vi.mock("@/components/chat/VideoAttachment", () => ({
         ...(mediaClassName ? { "data-media-class": mediaClassName } : {}),
       },
       showDurationBadge && durationBadgeSeconds
-        ? React.createElement("span", {}, `${Math.floor(durationBadgeSeconds / 60)}:${Math.floor(durationBadgeSeconds % 60).toString().padStart(2, "0")}`)
-        : null
+        ? React.createElement(
+            "span",
+            {},
+            `${Math.floor(durationBadgeSeconds / 60)}:${Math.floor(
+              durationBadgeSeconds % 60,
+            )
+              .toString()
+              .padStart(2, "0")}`,
+          )
+        : null,
     ),
 }));
 
@@ -100,7 +108,8 @@ describe("LinkEmbed - X mixed media", () => {
       },
       footer: {
         text: "X",
-        iconURL: "https://abs.twimg.com/responsive-web/client-web/icon-default.522d363a.png",
+        iconURL:
+          "https://abs.twimg.com/responsive-web/client-web/icon-default.522d363a.png",
       },
       author: {
         name: "Die Chance (5/5) (@DieChanc3)",
@@ -131,7 +140,8 @@ describe("LinkEmbed - X mixed media", () => {
           url: "https://video.twimg.com/tweet_video/HKes4LvXkAADDvJ.mp4",
           width: 498,
           height: 270,
-          thumbnailUrl: "https://pbs.twimg.com/tweet_video_thumb/HKes4LvXkAADDvJ.jpg",
+          thumbnailUrl:
+            "https://pbs.twimg.com/tweet_video_thumb/HKes4LvXkAADDvJ.jpg",
           contentType: "video/mp4",
           durationSeconds: 8.4,
         },
@@ -140,11 +150,15 @@ describe("LinkEmbed - X mixed media", () => {
     });
 
     expect(markup).toContain("x-image-1");
-    expect(markup).toContain("/api/proxy-media?url=https%3A%2F%2Fpbs.twimg.com%2Ftweet_video_thumb%2FHKes4LvXkAADDvJ.jpg");
+    expect(markup).toContain(
+      "/api/proxy-media?url=https%3A%2F%2Fpbs.twimg.com%2Ftweet_video_thumb%2FHKes4LvXkAADDvJ.jpg",
+    );
     expect(markup).toContain("Add clip to favorites");
-    expect(markup).toContain("/api/proxy-media?url=https%3A%2F%2Fvideo.twimg.com%2Ftweet_video%2FHKes4LvXkAADDvJ.mp4&amp;sourceUrl=https%3A%2F%2Fx.com%2FDieChanc3%2Fstatus%2F2064809045672783978%3Fs%3D20");
-    expect(markup).toContain("data-testid=\"video-attachment\"");
-    expect(markup).toContain("data-fallback-poster=\"true\"");
+    expect(markup).toContain(
+      "/api/proxy-media?url=https%3A%2F%2Fvideo.twimg.com%2Ftweet_video%2FHKes4LvXkAADDvJ.mp4&amp;sourceUrl=https%3A%2F%2Fx.com%2FDieChanc3%2Fstatus%2F2064809045672783978%3Fs%3D20",
+    );
+    expect(markup).toContain('data-testid="video-attachment"');
+    expect(markup).toContain('data-fallback-poster="true"');
     expect(markup).toContain(">0:08<");
   });
 
@@ -259,7 +273,7 @@ describe("LinkEmbed - X mixed media", () => {
       fields: [],
     });
 
-    expect(markup).toContain("data-x-gif=\"true\"");
+    expect(markup).toContain('data-x-gif="true"');
     expect(markup).toContain("loop");
     expect(markup).toContain("muted");
     expect(markup).toContain("Pause GIF");
@@ -318,9 +332,11 @@ describe("LinkEmbed - X mixed media", () => {
     expect(markup).toContain("block w-fit max-w-full rounded-[20px]");
     expect(markup).not.toContain("bg-black/30");
     expect(markup).toContain("Add clip to favorites");
-    expect(markup).toContain("/api/proxy-media?url=https%3A%2F%2Fvideo.twimg.com%2Fext_tw_video%2Fportrait.mp4&amp;sourceUrl=https%3A%2F%2Fx.com%2Fexample%2Fstatus%2F4");
-    expect(markup).toContain("data-aspect-ratio=\"0.5625\"");
-    expect(markup).toContain("data-media-class=\"object-left\"");
+    expect(markup).toContain(
+      "/api/proxy-media?url=https%3A%2F%2Fvideo.twimg.com%2Fext_tw_video%2Fportrait.mp4&amp;sourceUrl=https%3A%2F%2Fx.com%2Fexample%2Fstatus%2F4",
+    );
+    expect(markup).toContain('data-aspect-ratio="0.5625"');
+    expect(markup).toContain('data-media-class="object-left"');
     expect(markup).toContain(">0:19<");
   });
 
@@ -342,8 +358,12 @@ describe("LinkEmbed - X mixed media", () => {
       fields: [],
     });
 
-    expect(markup).toContain("h-auto max-h-[420px] w-auto max-w-full object-contain object-left");
-    expect(markup).toContain("block w-fit max-w-full rounded-[20px] border border-rm-border/45 bg-rm-bg-surface/30");
+    expect(markup).toContain(
+      "h-auto max-h-[420px] w-auto max-w-full object-contain object-left",
+    );
+    expect(markup).toContain(
+      "block w-fit max-w-full rounded-[20px] border border-rm-border/45 bg-rm-bg-surface/30",
+    );
   });
 
   it("renders X external card chips over standalone media with a low-key source line", () => {
@@ -371,7 +391,9 @@ describe("LinkEmbed - X mixed media", () => {
     });
 
     expect(markup).toContain("MLC soul bag Mod for Deadlock | DL Mods");
-    expect(markup).toContain("pointer-events-none absolute inset-x-0 bottom-0 z-20");
+    expect(markup).toContain(
+      "pointer-events-none absolute inset-x-0 bottom-0 z-20",
+    );
     expect(markup).toContain("From ");
     expect(markup).toContain(">gamebanana.com<");
   });
@@ -387,11 +409,12 @@ describe("LinkEmbed - X mixed media", () => {
         name: "CookieLoLxx (@CookieLoLxx)",
         url: "https://twitter.com/CookieLoLxx",
       },
-      rawDescription: "Going live tomorrow at 14:00 CET\n\nhttps://www.twitch.tv/rikohgg",
+      rawDescription:
+        "Going live tomorrow at 14:00 CET\n\nhttps://www.twitch.tv/rikohgg",
       fields: [],
     });
 
-    expect(markup).toContain("href=\"https://www.twitch.tv/rikohgg\"");
+    expect(markup).toContain('href="https://www.twitch.tv/rikohgg"');
     expect(markup).toContain(">twitch.tv/rikohgg<");
     expect(markup).toContain("text-primary transition-colors hover:underline");
   });
@@ -408,12 +431,14 @@ describe("LinkEmbed - X mixed media", () => {
         url: "https://twitter.com/quotedposter",
       },
       rawDescription: "main post",
-      media: [{
-        type: "image",
-        url: "https://pbs.twimg.com/media/main-media.jpg",
-        width: 1200,
-        height: 800,
-      }],
+      media: [
+        {
+          type: "image",
+          url: "https://pbs.twimg.com/media/main-media.jpg",
+          width: 1200,
+          height: 800,
+        },
+      ],
       referencedTweet: {
         type: "quoted",
         url: "https://x.com/original/status/1",
@@ -422,12 +447,14 @@ describe("LinkEmbed - X mixed media", () => {
           name: "Original Author (@original)",
           url: "https://twitter.com/original",
         },
-        media: [{
-          type: "image",
-          url: "https://pbs.twimg.com/media/quoted-portrait.jpg",
-          width: 900,
-          height: 1600,
-        }],
+        media: [
+          {
+            type: "image",
+            url: "https://pbs.twimg.com/media/quoted-portrait.jpg",
+            width: 900,
+            height: 1600,
+          },
+        ],
       },
       fields: [],
     });
@@ -436,7 +463,9 @@ describe("LinkEmbed - X mixed media", () => {
     expect(markup).toContain("h-[180px]");
     expect(markup).toContain("object-center");
     expect(markup).toContain("mx-auto");
-    expect(markup).not.toContain("max-w-[240px] rounded-[18px] border border-rm-border/45");
+    expect(markup).not.toContain(
+      "max-w-[240px] rounded-[18px] border border-rm-border/45",
+    );
     expect(markup).not.toContain("rounded-[18px]");
     expect(markup).toContain("Open quoted post on X");
   });
@@ -461,23 +490,29 @@ describe("LinkEmbed - X mixed media", () => {
           name: "Original Author (@original)",
           url: "https://twitter.com/original",
         },
-        media: [{
-          type: "image",
-          url: "https://pbs.twimg.com/media/quoted-portrait-large.jpg",
-          width: 546,
-          height: 674,
-        }],
+        media: [
+          {
+            type: "image",
+            url: "https://pbs.twimg.com/media/quoted-portrait-large.jpg",
+            width: 546,
+            height: 674,
+          },
+        ],
       },
       fields: [],
     });
 
     expect(markup).not.toContain("max-w-[240px]");
     expect(markup).not.toContain("h-[180px]");
-    expect(markup).toContain("h-auto max-h-[420px] w-auto max-w-full object-contain object-center");
+    expect(markup).toContain(
+      "h-auto max-h-[420px] w-auto max-w-full object-contain object-center",
+    );
     expect(markup).toContain("mx-auto");
     expect(markup).toContain("block w-fit max-w-full");
     expect(markup).not.toContain("rounded-[20px]");
-    expect(markup).not.toContain("block w-fit max-w-full rounded-[20px] border border-rm-border/45 bg-rm-bg-surface/30");
+    expect(markup).not.toContain(
+      "block w-fit max-w-full rounded-[20px] border border-rm-border/45 bg-rm-bg-surface/30",
+    );
   });
 
   it("collapses oversized referenced tweet text behind an expandable affordance", () => {
@@ -507,8 +542,8 @@ describe("LinkEmbed - X mixed media", () => {
       fields: [],
     });
 
-    expect(markup).toContain("aria-label=\"Expand quoted post text\"");
-    expect(markup).toContain("aria-expanded=\"false\"");
+    expect(markup).toContain('aria-label="Expand quoted post text"');
+    expect(markup).toContain('aria-expanded="false"');
     expect(markup).toContain("line-clamp-4");
     expect(markup).toContain(">...<");
   });
@@ -535,7 +570,7 @@ describe("LinkEmbed - X mixed media", () => {
       fields: [],
     });
 
-    expect(markup).toContain("aria-label=\"Expand post text\"");
+    expect(markup).toContain('aria-label="Expand post text"');
     expect(markup).toContain(">Show more<");
     expect(markup).not.toContain(">...<");
   });
@@ -555,7 +590,7 @@ describe("LinkEmbed - X mixed media", () => {
       fields: [],
     });
 
-    expect(markup).not.toContain("aria-label=\"Expand post text\"");
+    expect(markup).not.toContain('aria-label="Expand post text"');
     expect(markup).not.toContain(">Show more<");
   });
 
@@ -604,15 +639,17 @@ describe("LinkEmbed - X mixed media", () => {
           name: "Original Author (@original)",
           url: "https://twitter.com/original",
         },
-        media: [{
-          type: "video",
-          url: "https://video.twimg.com/ext_tw_video/quoted.mp4",
-          width: 720,
-          height: 1280,
-          thumbnailUrl: "https://pbs.twimg.com/ext_tw_video_thumb/quoted.jpg",
-          contentType: "video/mp4",
-          durationSeconds: 3,
-        }],
+        media: [
+          {
+            type: "video",
+            url: "https://video.twimg.com/ext_tw_video/quoted.mp4",
+            width: 720,
+            height: 1280,
+            thumbnailUrl: "https://pbs.twimg.com/ext_tw_video_thumb/quoted.jpg",
+            contentType: "video/mp4",
+            durationSeconds: 3,
+          },
+        ],
       },
       fields: [],
     });
@@ -635,7 +672,9 @@ describe("LinkEmbed - X mixed media", () => {
       fields: [],
     });
 
-    expect(markup).toContain(`emoji-datasource-twitter@${NATIVE_EMOJI_STYLE_VERSION}`);
+    expect(markup).toContain(
+      `emoji-datasource-twitter@${NATIVE_EMOJI_STYLE_VERSION}`,
+    );
     expect(markup).not.toContain("Ship it 😂</div>");
   });
 
@@ -650,7 +689,9 @@ describe("LinkEmbed - X mixed media", () => {
       fields: [],
     });
 
-    expect(markup).toContain(`emoji-datasource-twitter@${NATIVE_EMOJI_STYLE_VERSION}`);
+    expect(markup).toContain(
+      `emoji-datasource-twitter@${NATIVE_EMOJI_STYLE_VERSION}`,
+    );
     expect(markup).not.toContain("Launch 😂 Notes");
   });
 
@@ -679,13 +720,17 @@ describe("LinkEmbed - X mixed media", () => {
       fields: [],
     });
 
-    expect(markup).toContain("/api/proxy-media?url=https%3A%2F%2Fscontent-ord5-1.cdninstagram.com%2Fthumb.jpg&amp;sourceUrl=https%3A%2F%2Fwww.instagram.com%2Freel%2FDXU4PV2AGJU%2F");
+    expect(markup).toContain(
+      "/api/proxy-media?url=https%3A%2F%2Fscontent-ord5-1.cdninstagram.com%2Fthumb.jpg&amp;sourceUrl=https%3A%2F%2Fwww.instagram.com%2Freel%2FDXU4PV2AGJU%2F",
+    );
     expect(markup).toContain("Open in Instagram");
     expect(markup).toContain("Instagram");
     expect(markup).toContain("VsNE-OHk_8a.png");
     expect(markup).toContain("craziest work");
     expect(markup).toContain("chardanceswag");
-    expect(markup).not.toContain("instagram.com/reel/DXU4PV2AGJU/embed/captioned");
+    expect(markup).not.toContain(
+      "instagram.com/reel/DXU4PV2AGJU/embed/captioned",
+    );
   });
 
   it("keeps Instagram preview sizing aligned with the media aspect ratio before playback", () => {

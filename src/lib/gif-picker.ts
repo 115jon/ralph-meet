@@ -6,7 +6,12 @@ export const MAX_GIF_UPLOAD_BYTES = 25 * 1024 * 1024;
 export const DEFAULT_GIF_PROVIDER = "klipy";
 
 export type GifProvider = "klipy" | "tenor" | "external";
-export type GifPickerContentType = "image/gif" | "image/apng" | "image/webp" | "image/png" | "video/mp4";
+export type GifPickerContentType =
+  | "image/gif"
+  | "image/apng"
+  | "image/webp"
+  | "image/png"
+  | "video/mp4";
 export type GifPickerMediaType = "gifs" | "stickers" | "clips" | "memes";
 
 export interface GifPickerAsset {
@@ -70,15 +75,25 @@ type GifMediaTypeInferenceInput = {
 };
 
 function isStaticMemeUrl(value: string | null | undefined): boolean {
-  return typeof value === "string" && value.toLowerCase().includes("/static-memes/");
+  return (
+    typeof value === "string" && value.toLowerCase().includes("/static-memes/")
+  );
 }
 
-export function isGifPickerMediaType(value: unknown): value is GifPickerMediaType {
-  return typeof value === "string" && (GIF_PICKER_MEDIA_TYPES as readonly string[]).includes(value);
+export function isGifPickerMediaType(
+  value: unknown,
+): value is GifPickerMediaType {
+  return (
+    typeof value === "string" &&
+    (GIF_PICKER_MEDIA_TYPES as readonly string[]).includes(value)
+  );
 }
 
-export function normalizeGifPickerContentType(value: unknown): GifPickerContentType {
-  const mime = typeof value === "string" ? value.toLowerCase().split(";")[0].trim() : "";
+export function normalizeGifPickerContentType(
+  value: unknown,
+): GifPickerContentType {
+  const mime =
+    typeof value === "string" ? value.toLowerCase().split(";")[0].trim() : "";
   if (mime === "image/apng") return "image/apng";
   if (mime === "image/webp") return "image/webp";
   if (mime === "image/png") return "image/png";
@@ -86,13 +101,17 @@ export function normalizeGifPickerContentType(value: unknown): GifPickerContentT
   return "image/gif";
 }
 
-export function inferGifPickerMediaType(input: GifMediaTypeInferenceInput): GifPickerMediaType {
+export function inferGifPickerMediaType(
+  input: GifMediaTypeInferenceInput,
+): GifPickerMediaType {
   if (isGifPickerMediaType(input.mediaType)) return input.mediaType;
 
   const sendUrl = input.send?.url ?? "";
   const previewUrl = input.preview?.url ?? "";
   const sourceUrl = input.sourceUrl ?? "";
-  const sendContentType = normalizeGifPickerContentType(input.send?.contentType);
+  const sendContentType = normalizeGifPickerContentType(
+    input.send?.contentType,
+  );
   const title = input.title?.toLowerCase() ?? "";
   const id = input.id?.toLowerCase() ?? "";
 
@@ -106,7 +125,11 @@ export function inferGifPickerMediaType(input: GifMediaTypeInferenceInput): GifP
     return "clips";
   }
 
-  if (isStaticMemeUrl(sendUrl) || isStaticMemeUrl(previewUrl) || isStaticMemeUrl(sourceUrl)) {
+  if (
+    isStaticMemeUrl(sendUrl) ||
+    isStaticMemeUrl(previewUrl) ||
+    isStaticMemeUrl(sourceUrl)
+  ) {
     return "memes";
   }
 
@@ -135,23 +158,46 @@ export function getGifProviderSearchPlaceholder(provider: GifProvider): string {
   return `Search ${getGifProviderLabel(provider)}`;
 }
 
-export function getGifAttachmentProvider(fileKeyOrUrl: string | null | undefined): GifProvider | null {
+export function getGifAttachmentProvider(
+  fileKeyOrUrl: string | null | undefined,
+): GifProvider | null {
   if (!fileKeyOrUrl) return null;
 
   const normalized = fileKeyOrUrl.toLowerCase();
   const unwrappedUrl = unwrapProxyMediaUrl(fileKeyOrUrl);
   const unwrappedNormalized = unwrappedUrl.toLowerCase();
-  if (normalized.includes("/gifs/klipy/") || normalized.includes("\\gifs\\klipy\\")) return "klipy";
-  if (normalized.includes("/gifs/tenor/") || normalized.includes("\\gifs\\tenor\\")) return "tenor";
-  if (unwrappedNormalized.includes("/gifs/klipy/") || unwrappedNormalized.includes("\\gifs\\klipy\\")) return "klipy";
-  if (unwrappedNormalized.includes("/gifs/tenor/") || unwrappedNormalized.includes("\\gifs\\tenor\\")) return "tenor";
+  if (
+    normalized.includes("/gifs/klipy/") ||
+    normalized.includes("\\gifs\\klipy\\")
+  )
+    return "klipy";
+  if (
+    normalized.includes("/gifs/tenor/") ||
+    normalized.includes("\\gifs\\tenor\\")
+  )
+    return "tenor";
+  if (
+    unwrappedNormalized.includes("/gifs/klipy/") ||
+    unwrappedNormalized.includes("\\gifs\\klipy\\")
+  )
+    return "klipy";
+  if (
+    unwrappedNormalized.includes("/gifs/tenor/") ||
+    unwrappedNormalized.includes("\\gifs\\tenor\\")
+  )
+    return "tenor";
 
   try {
     const parsed = new URL(unwrappedUrl);
     const hostname = parsed.hostname.toLowerCase();
     if (/^static\d*\.klipy\.com$/.test(hostname)) return "klipy";
-    if (hostname === "tenor.com" || /^media\d*\.tenor\.com$/.test(hostname)) return "tenor";
-    if (hostname === "gif.fxtwitter.com" && parsed.pathname.startsWith("/tweet_video/")) return "external";
+    if (hostname === "tenor.com" || /^media\d*\.tenor\.com$/.test(hostname))
+      return "tenor";
+    if (
+      hostname === "gif.fxtwitter.com" &&
+      parsed.pathname.startsWith("/tweet_video/")
+    )
+      return "external";
   } catch {
     // Non-URL storage keys are handled by the path checks above.
   }
@@ -159,7 +205,9 @@ export function getGifAttachmentProvider(fileKeyOrUrl: string | null | undefined
   return null;
 }
 
-export function inferGifProviderFromUrl(url: string | null | undefined): GifProvider {
+export function inferGifProviderFromUrl(
+  url: string | null | undefined,
+): GifProvider {
   if (!url) return DEFAULT_GIF_PROVIDER;
 
   const lowerUrl = url.toLowerCase();
@@ -169,7 +217,9 @@ export function inferGifProviderFromUrl(url: string | null | undefined): GifProv
   return getGifAttachmentProvider(url) ?? DEFAULT_GIF_PROVIDER;
 }
 
-export function getGifItemIdentityKey(gif: Pick<GifPickerItem, "id" | "provider">): string {
+export function getGifItemIdentityKey(
+  gif: Pick<GifPickerItem, "id" | "provider">,
+): string {
   return `${gif.provider}:${gif.id}`;
 }
 
@@ -186,32 +236,44 @@ function decodeBase64Utf8(encoded: string): string {
 }
 
 export function extractTenorConfigFromHtml(html: string): TenorConfig | null {
-  const match = html.match(/<script\b(?=[^>]*\bid=["']data["'])(?=[^>]*\btype=["']text\/x-cache["'])[^>]*>([\s\S]*?)<\/script>/i);
+  const match = html.match(
+    /<script\b(?=[^>]*\bid=["']data["'])(?=[^>]*\btype=["']text\/x-cache["'])[^>]*>([\s\S]*?)<\/script>/i,
+  );
   const encoded = match?.[1]?.trim();
   if (!encoded) return null;
 
   try {
     const decoded = JSON.parse(decodeBase64Utf8(encoded));
-    if (typeof decoded?.API_V2_KEY !== "string" || typeof decoded?.API_V2_URL !== "string") return null;
+    if (
+      typeof decoded?.API_V2_KEY !== "string" ||
+      typeof decoded?.API_V2_URL !== "string"
+    )
+      return null;
 
     return {
       API_V2_KEY: decoded.API_V2_KEY,
       API_V2_URL: decoded.API_V2_URL,
-      API_V2_CLIENT_KEY: typeof decoded.API_V2_CLIENT_KEY === "string" ? decoded.API_V2_CLIENT_KEY : undefined,
+      API_V2_CLIENT_KEY:
+        typeof decoded.API_V2_CLIENT_KEY === "string"
+          ? decoded.API_V2_CLIENT_KEY
+          : undefined,
     };
   } catch {
     return null;
   }
 }
 
-export function buildTenorCacheKey(path: string, params: Record<string, TenorCacheParamValue>): string {
+export function buildTenorCacheKey(
+  path: string,
+  params: Record<string, TenorCacheParamValue>,
+): string {
   return buildGifProviderCacheKey("tenor", path, params);
 }
 
 export function buildGifProviderCacheKey(
   provider: GifProvider,
   path: string,
-  params: Record<string, TenorCacheParamValue>
+  params: Record<string, TenorCacheParamValue>,
 ): string {
   const search = new URLSearchParams();
   for (const key of Object.keys(params).sort()) {
@@ -221,7 +283,9 @@ export function buildGifProviderCacheKey(
   }
 
   const suffix = search.toString();
-  return suffix ? `gif:${provider}:v1:${path}?${suffix}` : `gif:${provider}:v1:${path}`;
+  return suffix
+    ? `gif:${provider}:v1:${path}?${suffix}`
+    : `gif:${provider}:v1:${path}`;
 }
 
 export function dedupeGifPickerItems(items: GifPickerItem[]): GifPickerItem[] {
@@ -234,12 +298,19 @@ export function dedupeGifPickerItems(items: GifPickerItem[]): GifPickerItem[] {
   });
 }
 
-export function appendUniqueGifPickerItems(current: GifPickerItem[], incoming: GifPickerItem[]): GifPickerItem[] {
+export function appendUniqueGifPickerItems(
+  current: GifPickerItem[],
+  incoming: GifPickerItem[],
+): GifPickerItem[] {
   return dedupeGifPickerItems([...current, ...incoming]);
 }
 
-function normalizeTenorAsset(format: TenorMediaFormat | undefined, contentType: GifPickerAsset["contentType"]): GifPickerAsset | null {
-  if (!format?.url || !Array.isArray(format.dims) || format.dims.length < 2) return null;
+function normalizeTenorAsset(
+  format: TenorMediaFormat | undefined,
+  contentType: GifPickerAsset["contentType"],
+): GifPickerAsset | null {
+  if (!format?.url || !Array.isArray(format.dims) || format.dims.length < 2)
+    return null;
 
   const [width, height] = format.dims;
   if (!width || !height) return null;
@@ -270,7 +341,11 @@ export function normalizeTenorGifResult(result: any): GifPickerItem | null {
     normalizeTenorAsset(result.media_formats.gif, "image/gif"),
   ].filter(Boolean) as GifPickerAsset[];
 
-  const send = sendCandidates.find((asset) => asset.sizeBytes === 0 || asset.sizeBytes <= MAX_GIF_UPLOAD_BYTES) ?? sendCandidates[0];
+  const send =
+    sendCandidates.find(
+      (asset) =>
+        asset.sizeBytes === 0 || asset.sizeBytes <= MAX_GIF_UPLOAD_BYTES,
+    ) ?? sendCandidates[0];
   const preview = previewCandidates[0];
 
   if (!send || !preview) return null;
@@ -280,7 +355,9 @@ export function normalizeTenorGifResult(result: any): GifPickerItem | null {
     result.h1_title ||
     result.title ||
     result.long_title ||
-    (Array.isArray(result.tags) && result.tags.length > 0 ? String(result.tags[0]) : "GIF");
+    (Array.isArray(result.tags) && result.tags.length > 0
+      ? String(result.tags[0])
+      : "GIF");
 
   return {
     id: String(result.id),
@@ -295,8 +372,12 @@ export function normalizeTenorGifResult(result: any): GifPickerItem | null {
   };
 }
 
-function normalizeKlipyAsset(format: KlipyMediaFormat | undefined, contentType: GifPickerAsset["contentType"]): GifPickerAsset | null {
-  if (!format?.url || !Array.isArray(format.dims) || format.dims.length < 2) return null;
+function normalizeKlipyAsset(
+  format: KlipyMediaFormat | undefined,
+  contentType: GifPickerAsset["contentType"],
+): GifPickerAsset | null {
+  if (!format?.url || !Array.isArray(format.dims) || format.dims.length < 2)
+    return null;
 
   const [width, height] = format.dims;
   if (!width || !height) return null;
@@ -329,14 +410,20 @@ export function normalizeKlipyGifResult(result: any): GifPickerItem | null {
     normalizeKlipyAsset(result.media_formats.gif, "image/gif"),
   ].filter(Boolean) as GifPickerAsset[];
 
-  const send = sendCandidates.find((asset) => asset.sizeBytes === 0 || asset.sizeBytes <= MAX_GIF_UPLOAD_BYTES) ?? sendCandidates[0];
+  const send =
+    sendCandidates.find(
+      (asset) =>
+        asset.sizeBytes === 0 || asset.sizeBytes <= MAX_GIF_UPLOAD_BYTES,
+    ) ?? sendCandidates[0];
   const preview = previewCandidates[0];
 
   if (!send || !preview) return null;
 
   return {
     id: String(result.id),
-    title: String(result.title || result.content_description || result.long_title || "GIF"),
+    title: String(
+      result.title || result.content_description || result.long_title || "GIF",
+    ),
     provider: "klipy",
     altText: result.content_description || result.title || undefined,
     query: undefined,
@@ -344,7 +431,13 @@ export function normalizeKlipyGifResult(result: any): GifPickerItem | null {
     send,
     sourceUrl: send.url,
     aspectRatio: preview.width / preview.height,
-    duration: typeof result.duration === "number" ? result.duration : (typeof result.duration === "string" && !isNaN(parseFloat(result.duration)) ? parseFloat(result.duration) : undefined),
+    duration:
+      typeof result.duration === "number"
+        ? result.duration
+        : typeof result.duration === "string" &&
+            !isNaN(parseFloat(result.duration))
+          ? parseFloat(result.duration)
+          : undefined,
   };
 }
 
@@ -382,28 +475,47 @@ export function normalizeKlipyCategory(tag: any): GifPickerCategory | null {
   };
 }
 
-export function toggleGifFavorite(favorites: GifPickerItem[], gif: GifPickerItem): GifPickerItem[] {
+export function toggleGifFavorite(
+  favorites: GifPickerItem[],
+  gif: GifPickerItem,
+): GifPickerItem[] {
   const gifKey = getGifItemIdentityKey(gif);
-  const existing = favorites.some((item) => getGifItemIdentityKey(item) === gifKey);
+  const existing = favorites.some(
+    (item) => getGifItemIdentityKey(item) === gifKey,
+  );
   if (existing) {
     return favorites.filter((item) => getGifItemIdentityKey(item) !== gifKey);
   }
 
-  return [gif, ...favorites.filter((item) => getGifItemIdentityKey(item) !== gifKey)].slice(0, MAX_GIF_FAVORITES);
+  return [
+    gif,
+    ...favorites.filter((item) => getGifItemIdentityKey(item) !== gifKey),
+  ].slice(0, MAX_GIF_FAVORITES);
 }
 
-export function isGifFavorite(favorites: GifPickerItem[], gifId: string): boolean {
+export function isGifFavorite(
+  favorites: GifPickerItem[],
+  gifId: string,
+): boolean {
   return favorites.some((item) => item.id === gifId);
 }
 
-export function parseStoredGifFavorites(raw: string | null | undefined): GifPickerItem[] {
+export function parseStoredGifFavorites(
+  raw: string | null | undefined,
+): GifPickerItem[] {
   if (!raw) return [];
 
   try {
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
     return parsed
-      .filter((item) => item && typeof item.id === "string" && item.preview?.url && item.send?.url)
+      .filter(
+        (item) =>
+          item &&
+          typeof item.id === "string" &&
+          item.preview?.url &&
+          item.send?.url,
+      )
       .map((item) => {
         const normalizedPreview = {
           ...item.preview,
@@ -428,7 +540,9 @@ export function parseStoredGifFavorites(raw: string | null | undefined): GifPick
               ? item.provider
               : item.provider === "external"
                 ? "external"
-              : inferGifProviderFromUrl(item.sourceUrl || item.send?.url || item.preview?.url),
+                : inferGifProviderFromUrl(
+                    item.sourceUrl || item.send?.url || item.preview?.url,
+                  ),
         };
       });
   } catch {

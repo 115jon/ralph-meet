@@ -27,10 +27,18 @@ interface UploadSoundModalProps {
   };
 }
 
-export function UploadSoundModal({ onClose, onUpload, isUploading, editSound, isClosing }: UploadSoundModalProps) {
+export function UploadSoundModal({
+  onClose,
+  onUpload,
+  isUploading,
+  editSound,
+  isClosing,
+}: UploadSoundModalProps) {
   const [file, setFile] = useState<File | null>(null);
   const [soundName, setSoundName] = useState(editSound?.name ?? "");
-  const [relatedEmoji, setRelatedEmoji] = useState<string | null>(editSound?.emoji ?? null);
+  const [relatedEmoji, setRelatedEmoji] = useState<string | null>(
+    editSound?.emoji ?? null,
+  );
   const [soundVolume, setSoundVolume] = useState(editSound?.volume ?? 1.0);
   const [isEmojiPickerOpen, setIsEmojiPickerOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -52,7 +60,13 @@ export function UploadSoundModal({ onClose, onUpload, isUploading, editSound, is
 
   const handleSubmit = async () => {
     if ((!file && !editSound) || !soundName) return;
-    await onUpload({ file, soundId: editSound?.id, soundName, relatedEmoji, soundVolume });
+    await onUpload({
+      file,
+      soundId: editSound?.id,
+      soundName,
+      relatedEmoji,
+      soundVolume,
+    });
   };
 
   const isEditMode = !!editSound;
@@ -64,18 +78,25 @@ export function UploadSoundModal({ onClose, onUpload, isUploading, editSound, is
           type="button"
           onClick={onClose}
           className="absolute top-5 right-5 text-rm-text-muted hover:text-rm-text transition-colors"
-          aria-label={isEditMode ? "Close edit sound modal" : "Close upload sound modal"}
+          aria-label={
+            isEditMode ? "Close edit sound modal" : "Close upload sound modal"
+          }
         >
           <X size={20} />
         </button>
 
-        <h2 className="text-xl font-bold text-rm-text mb-6">{isEditMode ? "Edit Sound" : "Upload a Sound"}</h2>
+        <h2 className="text-xl font-bold text-rm-text mb-6">
+          {isEditMode ? "Edit Sound" : "Upload a Sound"}
+        </h2>
 
         <div className="space-y-5">
           {/* File Input */}
           {!isEditMode && (
             <div>
-              <label htmlFor={fileInputId} className="block text-[13px] font-bold text-rm-text mb-2">
+              <label
+                htmlFor={fileInputId}
+                className="block text-[13px] font-bold text-rm-text mb-2"
+              >
                 File <span className="text-red-500 dark:text-red-400">*</span>
               </label>
               <label
@@ -84,19 +105,21 @@ export function UploadSoundModal({ onClose, onUpload, isUploading, editSound, is
               >
                 <div className="flex items-center gap-2 text-rm-text-muted truncate pr-2">
                   <Upload size={16} />
-                  <span className="text-sm truncate">{file ? file.name : "Choose a file"}</span>
+                  <span className="text-sm truncate">
+                    {file ? file.name : "Choose a file"}
+                  </span>
                 </div>
                 <span className="bg-rm-bg-active hover:bg-rm-bg-floating text-rm-text text-sm font-semibold px-4 py-2 rounded-lg transition-colors shrink-0 border border-rm-border">
                   Browse
                 </span>
               </label>
-              <input 
+              <input
                 id={fileInputId}
-                type="file" 
-                accept="audio/*" 
-                className="hidden" 
-                ref={fileInputRef} 
-                onChange={handleFileChange} 
+                type="file"
+                accept="audio/*"
+                className="hidden"
+                ref={fileInputRef}
+                onChange={handleFileChange}
               />
             </div>
           )}
@@ -104,8 +127,12 @@ export function UploadSoundModal({ onClose, onUpload, isUploading, editSound, is
           <div className="flex gap-4">
             {/* Sound Name */}
             <div className="flex-1">
-              <label htmlFor={soundNameInputId} className="block text-[13px] font-bold text-rm-text mb-2">
-                Sound Name <span className="text-red-500 dark:text-red-400">*</span>
+              <label
+                htmlFor={soundNameInputId}
+                className="block text-[13px] font-bold text-rm-text mb-2"
+              >
+                Sound Name{" "}
+                <span className="text-red-500 dark:text-red-400">*</span>
               </label>
               <input
                 id={soundNameInputId}
@@ -119,7 +146,10 @@ export function UploadSoundModal({ onClose, onUpload, isUploading, editSound, is
 
             {/* Related Emoji */}
             <div className="w-[160px] relative">
-              <label htmlFor={emojiButtonId} className="block text-[13px] font-bold text-rm-text mb-2">
+              <label
+                htmlFor={emojiButtonId}
+                className="block text-[13px] font-bold text-rm-text mb-2"
+              >
                 Related Emoji
               </label>
               <button
@@ -132,10 +162,10 @@ export function UploadSoundModal({ onClose, onUpload, isUploading, editSound, is
                 aria-expanded={isEmojiPickerOpen}
               >
                 {relatedEmoji ? (
-                  <EmojiToken 
-                    value={relatedEmoji} 
-                    className="h-6 w-6 object-contain block" 
-                    fallbackClassName="text-xl leading-none block" 
+                  <EmojiToken
+                    value={relatedEmoji}
+                    className="h-6 w-6 object-contain block"
+                    fallbackClassName="text-xl leading-none block"
                   />
                 ) : (
                   <>
@@ -144,7 +174,7 @@ export function UploadSoundModal({ onClose, onUpload, isUploading, editSound, is
                   </>
                 )}
               </button>
-              
+
               {isEmojiPickerOpen && (
                 <Suspense fallback={null}>
                   <EmojiPicker
@@ -163,7 +193,10 @@ export function UploadSoundModal({ onClose, onUpload, isUploading, editSound, is
 
           {/* Sound Volume */}
           <div>
-            <label htmlFor={soundVolumeInputId} className="block text-[13px] font-bold text-rm-text mb-2">
+            <label
+              htmlFor={soundVolumeInputId}
+              className="block text-[13px] font-bold text-rm-text mb-2"
+            >
               Sound Volume
             </label>
             <div className="flex items-center h-10">

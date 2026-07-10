@@ -9,9 +9,15 @@
 //   Everything else                 → TanStack Start handler
 // ============================================================================
 
-import { createStartHandler, defaultStreamHandler } from "@tanstack/react-start/server";
+import {
+  createStartHandler,
+  defaultStreamHandler,
+} from "@tanstack/react-start/server";
 import { logger } from "./src/lib/logger";
-import { getCorsHeaders, handleCorsPreflightIfNeeded } from "./src/lib/api-helpers";
+import {
+  getCorsHeaders,
+  handleCorsPreflightIfNeeded,
+} from "./src/lib/api-helpers";
 import { buildHealthzPayload } from "./src/lib/healthz";
 import { handleYtDlpRequest } from "./src/lib/ytdlp/http";
 import { syncYtDlpUpstream } from "./src/lib/ytdlp/upstream";
@@ -72,7 +78,10 @@ function withDesktopCors(request: Request, response: Response): Response {
       nextHeaders.set(key, value);
     }
 
-    const hasNoBody = response.status === 204 || response.status === 304 || response.status < 200;
+    const hasNoBody =
+      response.status === 204 ||
+      response.status === 304 ||
+      response.status < 200;
     return new Response(hasNoBody ? null : response.body, {
       status: response.status,
       statusText: response.statusText,
@@ -100,7 +109,10 @@ function isAllowedRealtimeOrigin(request: Request, env: Env): boolean {
     new URL(request.url).origin,
     "http://tauri.localhost",
     "https://tauri.localhost",
-    ...(env.REALTIME_ALLOWED_ORIGINS ?? "").split(",").map((value) => value.trim()).filter(Boolean),
+    ...(env.REALTIME_ALLOWED_ORIGINS ?? "")
+      .split(",")
+      .map((value) => value.trim())
+      .filter(Boolean),
   ]);
   return allowedOrigins.has(origin);
 }
@@ -113,35 +125,53 @@ async function requireAuthenticatedWebSocket(
 ): Promise<VerifiedWebSocketRequest | Response> {
   const upgradeError = requireWebSocket(request);
   if (upgradeError) return upgradeError;
-  if (!isAllowedRealtimeOrigin(request, env)) return new Response("Realtime origin is not allowed", { status: 403 });
+  if (!isAllowedRealtimeOrigin(request, env))
+    return new Response("Realtime origin is not allowed", { status: 403 });
 
   const config = getRealtimeAdmissionConfig(env);
-  if (!config.ok) return unauthorizedWebSocket("Realtime admission is not configured");
+  if (!config.ok)
+    return unauthorizedWebSocket("Realtime admission is not configured");
 
-  const protocol = parseSocketTicketProtocols(request.headers.get("Sec-WebSocket-Protocol"));
+  const protocol = parseSocketTicketProtocols(
+    request.headers.get("Sec-WebSocket-Protocol"),
+  );
   if (!protocol.ok) return unauthorizedWebSocket("Missing realtime capability");
 
-  const verification = await verifySocketTicket(protocol.value.ticket, config.config.ticketSecret, {
-    audience,
-    now: Date.now(),
-    roomSlug,
-  });
-  if (!verification.ok) return unauthorizedWebSocket("Invalid realtime capability");
+  const verification = await verifySocketTicket(
+    protocol.value.ticket,
+    config.config.ticketSecret,
+    {
+      audience,
+      now: Date.now(),
+      roomSlug,
+    },
+  );
+  if (!verification.ok)
+    return unauthorizedWebSocket("Invalid realtime capability");
 
   const context = await createRealtimeAdmissionContext(verification.claims);
-  const headers = appendRealtimeAdmissionHeaders(stripRealtimeAdmissionHeaders(new Headers(request.headers)), context);
+  const headers = appendRealtimeAdmissionHeaders(
+    stripRealtimeAdmissionHeaders(new Headers(request.headers)),
+    context,
+  );
   headers.delete("Sec-WebSocket-Protocol");
   headers.set("Sec-WebSocket-Protocol", protocol.value.responseProtocol);
 
   const consumeNamespace = env.MEETING_ROOM as DurableObjectNamespace;
-  const consumeStub = consumeNamespace.get(consumeNamespace.idFromName(roomSlug));
+  const consumeStub = consumeNamespace.get(
+    consumeNamespace.idFromName(roomSlug),
+  );
   const consumeHeaders = appendRealtimeAdmissionHeaders(new Headers(), context);
-  const consumeResponse = await consumeStub.fetch("https://internal/consume-realtime-admission", {
-    method: "POST",
-    // Do not copy browser upgrade headers onto this ordinary internal POST.
-    headers: consumeHeaders,
-  });
-  if (!consumeResponse.ok) return unauthorizedWebSocket("Realtime capability already used");
+  const consumeResponse = await consumeStub.fetch(
+    "https://internal/consume-realtime-admission",
+    {
+      method: "POST",
+      // Do not copy browser upgrade headers onto this ordinary internal POST.
+      headers: consumeHeaders,
+    },
+  );
+  if (!consumeResponse.ok)
+    return unauthorizedWebSocket("Realtime capability already used");
 
   return {
     request: new Request(request, { headers }),
@@ -152,7 +182,7 @@ export default {
   async fetch(
     request: Request,
     env: Env,
-    _ctx: ExecutionContext
+    _ctx: ExecutionContext,
   ): Promise<Response> {
     const url = new URL(request.url);
 
@@ -172,9 +202,15 @@ export default {
     // headers during video playback — rate limiting them causes
     // ERR_REQUEST_RANGE_NOT_SATISFIABLE retry storms.
     const isWebSocket = !!request.headers.get("Upgrade");
-    const isStaticAssetRead = request.method === "GET"
-      && (url.pathname.startsWith("/api/attachments/") || url.pathname.startsWith("/api/camera-backgrounds/"));
-    if (url.pathname.startsWith("/api/") && !isWebSocket && !isStaticAssetRead) {
+    const isStaticAssetRead =
+      request.method === "GET" &&
+      (url.pathname.startsWith("/api/attachments/") ||
+        url.pathname.startsWith("/api/camera-backgrounds/"));
+    if (
+      url.pathname.startsWith("/api/") &&
+      !isWebSocket &&
+      !isStaticAssetRead
+    ) {
       const clientIP = request.headers.get("CF-Connecting-IP") ?? "unknown";
       const result = rateLimiter.check(clientIP, request.method, url.pathname);
 
@@ -185,17 +221,23 @@ export default {
           path: url.pathname,
           retry_after_ms: result.resetMs,
         });
-        return withDesktopCors(request, new Response(
-          JSON.stringify({ error: "Too many requests", retry_after_ms: result.resetMs }),
-          {
-            status: 429,
-            headers: {
-              "Content-Type": "application/json",
-              "Retry-After": String(Math.ceil(result.resetMs / 1000)),
-              "X-RateLimit-Remaining": "0",
+        return withDesktopCors(
+          request,
+          new Response(
+            JSON.stringify({
+              error: "Too many requests",
+              retry_after_ms: result.resetMs,
+            }),
+            {
+              status: 429,
+              headers: {
+                "Content-Type": "application/json",
+                "Retry-After": String(Math.ceil(result.resetMs / 1000)),
+                "X-RateLimit-Remaining": "0",
+              },
             },
-          }
-        ));
+          ),
+        );
       }
     }
 
@@ -206,7 +248,12 @@ export default {
 
     // ── Global Main Gateway WebSocket → MeetingRoom DO ────────────────
     if (url.pathname === "/api/gateway") {
-      const verified = await requireAuthenticatedWebSocket(request, env, "global", "global-gateway");
+      const verified = await requireAuthenticatedWebSocket(
+        request,
+        env,
+        "global",
+        "global-gateway",
+      );
       if (verified instanceof Response) return verified;
 
       const doNamespace = env.MEETING_ROOM as DurableObjectNamespace;
@@ -219,7 +266,12 @@ export default {
     const wsMatch = url.pathname.match(/^\/api\/channels\/([^/]+)\/ws$/);
     if (wsMatch) {
       const channelId = wsMatch[1];
-      const verified = await requireAuthenticatedWebSocket(request, env, "room", channelId);
+      const verified = await requireAuthenticatedWebSocket(
+        request,
+        env,
+        "room",
+        channelId,
+      );
       if (verified instanceof Response) return verified;
 
       const doNamespace = env.MEETING_ROOM as DurableObjectNamespace;
@@ -232,7 +284,12 @@ export default {
     const voiceMatch = url.pathname.match(/^\/api\/channels\/([^/]+)\/voice$/);
     if (voiceMatch) {
       const channelId = voiceMatch[1];
-      const verified = await requireAuthenticatedWebSocket(request, env, "voice", channelId);
+      const verified = await requireAuthenticatedWebSocket(
+        request,
+        env,
+        "voice",
+        channelId,
+      );
       if (verified instanceof Response) return verified;
 
       const doNamespace = env.VOICE_ROOM as DurableObjectNamespace;
@@ -247,12 +304,17 @@ export default {
       response = await handler(request);
     } catch (err: any) {
       console.error("Error in handler:", err?.message || err);
-      response = new Response(JSON.stringify({ error: err?.message || "Internal Server Error" }), {
-        status: 500,
-        headers: { "Content-Type": "application/json" },
-      });
+      response = new Response(
+        JSON.stringify({ error: err?.message || "Internal Server Error" }),
+        {
+          status: 500,
+          headers: { "Content-Type": "application/json" },
+        },
+      );
     }
-    return url.pathname.startsWith("/api/") ? withDesktopCors(request, response) : response;
+    return url.pathname.startsWith("/api/")
+      ? withDesktopCors(request, response)
+      : response;
   },
 
   async scheduled(
@@ -260,8 +322,10 @@ export default {
     _env: Env,
     ctx: ExecutionContext,
   ): Promise<void> {
-    ctx.waitUntil(syncYtDlpUpstream(true).catch((error) => {
-      console.error("yt-dlp upstream sync failed:", error);
-    }));
+    ctx.waitUntil(
+      syncYtDlpUpstream(true).catch((error) => {
+        console.error("yt-dlp upstream sync failed:", error);
+      }),
+    );
   },
 };

@@ -1,13 +1,19 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute } from "@tanstack/react-router";
 
-import { apiError, apiSuccess, broadcastToAll, getBucket, getDB, requireAuth } from "@/lib/api-helpers";
+import {
+  apiError,
+  apiSuccess,
+  broadcastToAll,
+  getBucket,
+  getDB,
+  requireAuth,
+} from "@/lib/api-helpers";
 import { cacheDel, CacheKey } from "@/lib/cache";
 import { MAX_IMAGE_SIZE, validateImageBuffer } from "@/lib/image-validation";
 import { logger } from "@/lib/logger";
 import { checkRateLimitDO, RATE_LIMITS } from "@/lib/rate-limit";
 import { updateAvatarUrl } from "@/services/user.service";
 import { normalizeAvatarDisplay } from "@/lib/avatar-display";
-
 
 // POST /api/avatar-upload — upload a user avatar to R2
 const POST = async ({ request, params }: any) => {
@@ -16,14 +22,21 @@ const POST = async ({ request, params }: any) => {
   const { userId } = authResult;
 
   // Rate limit
-  const rl = await checkRateLimitDO(userId, "avatar-upload", RATE_LIMITS.FILE_UPLOAD);
+  const rl = await checkRateLimitDO(
+    userId,
+    "avatar-upload",
+    RATE_LIMITS.FILE_UPLOAD,
+  );
   if (rl) return rl;
 
   const formData = await request.formData();
   const file = formData.get("file") as File | null;
   const avatarDisplayInput = formData.get("avatar_display");
-  const avatarDisplayRaw = typeof avatarDisplayInput === "string" ? avatarDisplayInput : null;
-  const avatarDisplay = avatarDisplayRaw ? normalizeAvatarDisplay(avatarDisplayRaw) : null;
+  const avatarDisplayRaw =
+    typeof avatarDisplayInput === "string" ? avatarDisplayInput : null;
+  const avatarDisplay = avatarDisplayRaw
+    ? normalizeAvatarDisplay(avatarDisplayRaw)
+    : null;
 
   if (!file) {
     return apiError("No file provided", 400);
@@ -67,7 +80,7 @@ const POST = async ({ request, params }: any) => {
   await cacheDel(CacheKey.userProfile(userId));
   if (result.serverIds.length) {
     await Promise.all(
-      result.serverIds.map((sid) => cacheDel(CacheKey.serverMembers(sid)))
+      result.serverIds.map((sid) => cacheDel(CacheKey.serverMembers(sid))),
     );
   }
 
@@ -82,14 +95,16 @@ const POST = async ({ request, params }: any) => {
 
   logger.info("Avatar uploaded", { userId, key });
 
-  return apiSuccess({ url: result.avatarUrl, avatar_display: result.avatarDisplay }, 201);
-}
+  return apiSuccess(
+    { url: result.avatarUrl, avatar_display: result.avatarDisplay },
+    201,
+  );
+};
 
-
-export const Route = createFileRoute('/api/avatar-upload')({
+export const Route = createFileRoute("/api/avatar-upload")({
   server: {
     handlers: {
       POST,
-    }
-  }
+    },
+  },
 });

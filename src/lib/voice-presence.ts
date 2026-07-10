@@ -21,8 +21,12 @@ export interface VoiceMemberStreamDisplayInfo extends VoiceMemberConnectionInfo 
   self_stream?: boolean;
 }
 
-export function isVoiceMemberReconnecting(member: VoiceMemberConnectionInfo): boolean {
-  return member.connection_state === "reconnecting" || member.connected === false;
+export function isVoiceMemberReconnecting(
+  member: VoiceMemberConnectionInfo,
+): boolean {
+  return (
+    member.connection_state === "reconnecting" || member.connected === false
+  );
 }
 
 export function shouldShowVoiceMemberStreamState(
@@ -34,7 +38,8 @@ export function shouldShowVoiceMemberStreamState(
 ): boolean {
   if (!member.self_stream) return false;
   if (isVoiceMemberReconnecting(member)) return false;
-  if (options?.isCurrentUser && !options.isCurrentClientVoiceConnected) return false;
+  if (options?.isCurrentUser && !options.isCurrentClientVoiceConnected)
+    return false;
   return true;
 }
 
@@ -44,23 +49,23 @@ export function getNextVoicePresenceAlarmTime(
   deadlines: Array<number | null | undefined>,
 ): number {
   const fallback = now + fallbackIntervalMs;
-  const validDeadlines = deadlines
-    .filter((deadline): deadline is number => typeof deadline === "number" && Number.isFinite(deadline));
+  const validDeadlines = deadlines.filter(
+    (deadline): deadline is number =>
+      typeof deadline === "number" && Number.isFinite(deadline),
+  );
 
   if (validDeadlines.some((deadline) => deadline <= now)) {
     return now;
   }
 
-  const nextDeadline = validDeadlines
-    .sort((a, b) => a - b)[0];
+  const nextDeadline = validDeadlines.sort((a, b) => a - b)[0];
 
   return Math.min(nextDeadline ?? fallback, fallback);
 }
 
-export function refreshVoiceMemberIdentity<T extends VoiceMemberConnectionInfo & VoiceMemberIdentityInfo>(
-  member: T,
-  identity: VoiceMemberIdentityInfo,
-): T {
+export function refreshVoiceMemberIdentity<
+  T extends VoiceMemberConnectionInfo & VoiceMemberIdentityInfo,
+>(member: T, identity: VoiceMemberIdentityInfo): T {
   return {
     ...member,
     name: identity.name,

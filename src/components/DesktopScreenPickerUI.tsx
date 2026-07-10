@@ -30,13 +30,23 @@ export const QUALITY_PRESETS = [
   { id: "4k60", label: "4K", fps: 60 },
 ];
 
-export function DeviceGrid({ devices, selectedId, onSelect }: { devices: MediaDeviceSource[], selectedId: string | null, onSelect: (id: string) => void }) {
+export function DeviceGrid({
+  devices,
+  selectedId,
+  onSelect,
+}: {
+  devices: MediaDeviceSource[];
+  selectedId: string | null;
+  onSelect: (id: string) => void;
+}) {
   if (devices.length === 0) {
     return (
       <div className="flex h-[300px] flex-col items-center justify-center gap-2 text-rm-text-muted">
         <Tv size={40} className="opacity-30" />
         <p className="text-sm">No capture devices found</p>
-        <p className="text-xs text-rm-text-muted/50">Connect a capture card or webcam to share</p>
+        <p className="text-xs text-rm-text-muted/50">
+          Connect a capture card or webcam to share
+        </p>
       </div>
     );
   }
@@ -50,20 +60,29 @@ export function DeviceGrid({ devices, selectedId, onSelect }: { devices: MediaDe
             "group relative flex flex-col overflow-hidden rounded-xl border-2 transition-all outline-none",
             selectedId === device.deviceId
               ? "border-primary ring-2 ring-primary/30 bg-primary/5"
-              : "border-rm-border/50 hover:border-rm-text/30 bg-rm-bg-surface/20"
+              : "border-rm-border/50 hover:border-rm-text/30 bg-rm-bg-surface/20",
           )}
         >
           <div className="flex aspect-video w-full items-center justify-center bg-rm-bg-elevated/30">
-            <Tv size={32} className={cn(
-              "transition-colors",
-              selectedId === device.deviceId ? "text-primary" : "text-rm-text-muted/30"
-            )} />
+            <Tv
+              size={32}
+              className={cn(
+                "transition-colors",
+                selectedId === device.deviceId
+                  ? "text-primary"
+                  : "text-rm-text-muted/30",
+              )}
+            />
           </div>
           <div className="flex items-center gap-2 px-3 py-2">
-            <span className={cn(
-              "truncate text-xs font-semibold",
-              selectedId === device.deviceId ? "text-primary" : "text-rm-text"
-            )}>
+            <span
+              className={cn(
+                "truncate text-xs font-semibold",
+                selectedId === device.deviceId
+                  ? "text-primary"
+                  : "text-rm-text",
+              )}
+            >
               {device.label}
             </span>
           </div>
@@ -85,11 +104,11 @@ export function SourceGrid({
   onSelect,
   onPreview,
 }: {
-  sources: ScreenSource[],
-  thumbnails: Record<string, string>,
-  selectedId: string | null,
-  onSelect: (id: string) => void,
-  onPreview: (id: string) => void,
+  sources: ScreenSource[];
+  thumbnails: Record<string, string>;
+  selectedId: string | null;
+  onSelect: (id: string) => void;
+  onPreview: (id: string) => void;
 }) {
   return (
     <div className="grid grid-cols-2 gap-3">
@@ -105,12 +124,17 @@ export function SourceGrid({
               "group relative flex flex-col overflow-hidden rounded-xl border-2 transition-all hover:brightness-110 outline-none",
               selectedId === source.id
                 ? "border-primary ring-2 ring-primary/30 bg-primary/5"
-                : "border-rm-border/50 hover:border-rm-text/30 bg-rm-bg-surface/20"
+                : "border-rm-border/50 hover:border-rm-text/30 bg-rm-bg-surface/20",
             )}
           >
             <div className="relative aspect-video w-full overflow-hidden bg-black/60">
               {thumb ? (
-                <img src={thumb} alt={source.name} className="h-full w-full object-contain animate-in fade-in duration-300" draggable={false} />
+                <img
+                  src={thumb}
+                  alt={source.name}
+                  className="h-full w-full object-contain animate-in fade-in duration-300"
+                  draggable={false}
+                />
               ) : (
                 <div className="flex h-full items-center justify-center">
                   {source.kind === "monitor" ? (
@@ -139,10 +163,12 @@ export function SourceGrid({
               ) : (
                 <AppWindow size={14} className="shrink-0 text-rm-text-muted" />
               )}
-              <span className={cn(
-                "truncate text-xs font-semibold",
-                selectedId === source.id ? "text-primary" : "text-rm-text"
-              )}>
+              <span
+                className={cn(
+                  "truncate text-xs font-semibold",
+                  selectedId === source.id ? "text-primary" : "text-rm-text",
+                )}
+              >
                 {source.name}
               </span>
             </div>
@@ -153,16 +179,26 @@ export function SourceGrid({
   );
 }
 
-export function DesktopScreenPickerTabBar({ tab, setTab }: { tab: Tab; setTab: (t: Tab) => void }) {
+export function DesktopScreenPickerTabBar({
+  tab,
+  setTab,
+}: {
+  tab: Tab;
+  setTab: (t: Tab) => void;
+}) {
   return (
     <div className="flex border-b border-rm-border bg-rm-bg-surface/30">
       {(
         [
-          { key: "applications" as Tab, icon: AppWindow, label: "Applications" },
+          {
+            key: "applications" as Tab,
+            icon: AppWindow,
+            label: "Applications",
+          },
           { key: "screens" as Tab, icon: Monitor, label: "Entire Screen" },
           { key: "devices" as Tab, icon: Tv, label: "Devices" },
         ] as const
-      ).map(t => (
+      ).map((t) => (
         <button
           key={t.key}
           onClick={() => setTab(t.key)}
@@ -170,7 +206,7 @@ export function DesktopScreenPickerTabBar({ tab, setTab }: { tab: Tab; setTab: (
             "flex flex-1 items-center justify-center gap-2 px-6 py-3.5 text-sm font-bold transition-all",
             tab === t.key
               ? "border-b-2 border-primary text-primary"
-              : "text-rm-text-muted hover:text-rm-text"
+              : "text-rm-text-muted hover:text-rm-text",
           )}
         >
           <t.icon size={16} />
@@ -240,7 +276,7 @@ export function DesktopScreenPickerBottomBar({
             "flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-bold transition-all",
             withAudio
               ? "border-primary/30 bg-primary/10 text-primary"
-              : "border-rm-border bg-rm-bg-elevated text-rm-text-muted hover:text-rm-text"
+              : "border-rm-border bg-rm-bg-elevated text-rm-text-muted hover:text-rm-text",
           )}
         >
           <Music size={14} />
@@ -263,7 +299,7 @@ export function DesktopScreenPickerBottomBar({
             "flex items-center gap-2 rounded-xl px-6 py-2 text-sm font-black shadow-xl transition-all active:scale-95",
             selectedId
               ? "bg-primary text-primary-foreground shadow-primary/20 hover:brightness-110"
-              : "bg-rm-bg-elevated text-rm-text-muted cursor-not-allowed"
+              : "bg-rm-bg-elevated text-rm-text-muted cursor-not-allowed",
           )}
         >
           <span>Go Live</span>

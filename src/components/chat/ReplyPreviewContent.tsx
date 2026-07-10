@@ -5,14 +5,20 @@ type ReplyPreviewContentProps = {
   attachmentsCount?: number;
 };
 
-export function getReplyPreviewText(content: string, attachmentsCount = 0): string {
+export function getReplyPreviewText(
+  content: string,
+  attachmentsCount = 0,
+): string {
   const trimmed = content.trim();
   if (trimmed) return content;
   if (attachmentsCount > 0) return "Click to see attachment";
   return "(no content)";
 }
 
-export function ReplyPreviewContent({ content, attachmentsCount = 0 }: ReplyPreviewContentProps) {
+export function ReplyPreviewContent({
+  content,
+  attachmentsCount = 0,
+}: ReplyPreviewContentProps) {
   const trimmed = content.trim();
 
   if (trimmed) {

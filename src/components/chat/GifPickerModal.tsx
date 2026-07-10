@@ -1,5 +1,10 @@
 import { BaseModal } from "@/components/ui/BaseModal";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { apiGet } from "@/lib/api-client";
 import { getAuthAssetUrl, getMediaUrl } from "@/lib/platform";
 import klipyTextLightUrl from "@/assets/klipy-text-light.svg";
@@ -24,10 +29,24 @@ import { getVoiceRenderableGifAsset } from "@/lib/voice-channel-status";
 import { consumeStickerToken } from "@/lib/voice/sticker-rate-limiter";
 import type { SFUClient } from "@/lib/sfu-client";
 import { cn } from "@/lib/utils";
-import { useGifFavoriteActions, useGifFavoritesStore } from "@/stores/useGifFavoritesStore";
+import {
+  useGifFavoriteActions,
+  useGifFavoritesStore,
+} from "@/stores/useGifFavoritesStore";
 import { useMediaSafetySettingsStore } from "@/stores/useMediaSafetySettingsStore";
 import { useUser } from "@kova/react";
-import { ArrowLeft, ChevronDown, Maximize2, Minimize2, Search, Star, TrendingUp, X, Volume2, VolumeX } from "lucide-react";
+import {
+  ArrowLeft,
+  ChevronDown,
+  Maximize2,
+  Minimize2,
+  Search,
+  Star,
+  TrendingUp,
+  X,
+  Volume2,
+  VolumeX,
+} from "lucide-react";
 import { useTheme } from "next-themes";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -44,7 +63,6 @@ const VOICE_DISPLAY_MODE_LABELS: Record<VoiceDisplayMode, string> = {
 };
 const VOICE_DISPLAY_MODE_KEY = "voice:sticker:displayMode";
 
-
 type GifPickerResponse = {
   results: GifPickerItem[];
   next: string | null;
@@ -55,7 +73,11 @@ type GifCategoryResponse = {
 };
 
 const DEFAULT_PROVIDER_OPTIONS: GifProvider[] = ["klipy", "tenor"];
-const KLIPY_ONLY_MEDIA_TYPES: readonly GifPickerMediaType[] = ["stickers", "clips", "memes"];
+const KLIPY_ONLY_MEDIA_TYPES: readonly GifPickerMediaType[] = [
+  "stickers",
+  "clips",
+  "memes",
+];
 type GifPickerMode = "categories" | "featured" | "search" | "favorites";
 
 function useColumnsCount(expanded: boolean) {
@@ -129,17 +151,25 @@ export default function GifPickerModal({
 }: GifPickerModalProps) {
   const { resolvedTheme } = useTheme();
   const { user } = useUser();
-  const providerOptions = providers?.length ? providers : DEFAULT_PROVIDER_OPTIONS;
+  const providerOptions = providers?.length
+    ? providers
+    : DEFAULT_PROVIDER_OPTIONS;
   const preferredProvider =
-    KLIPY_ONLY_MEDIA_TYPES.includes(defaultMediaType) && providerOptions.includes("klipy")
+    KLIPY_ONLY_MEDIA_TYPES.includes(defaultMediaType) &&
+    providerOptions.includes("klipy")
       ? "klipy"
       : defaultProvider;
-  const initialProvider = providerOptions.includes(preferredProvider) ? preferredProvider : providerOptions[0];
-  const externalApiQuerySuffix = apiQuery ? `&${apiQuery.replace(/^[?&]+/, "")}` : "";
+  const initialProvider = providerOptions.includes(preferredProvider)
+    ? preferredProvider
+    : providerOptions[0];
+  const externalApiQuerySuffix = apiQuery
+    ? `&${apiQuery.replace(/^[?&]+/, "")}`
+    : "";
   const [mode, setMode] = useState<GifPickerMode>("categories");
   const browseModeRef = useRef<"categories" | "featured">("categories");
   const [provider, setProvider] = useState<GifProvider>(initialProvider);
-  const [mediaType, setMediaType] = useState<GifPickerMediaType>(defaultMediaType);
+  const [mediaType, setMediaType] =
+    useState<GifPickerMediaType>(defaultMediaType);
   const [query, setQuery] = useState("");
   const [searchValue, setSearchValue] = useState("");
   const [suggestions, setSuggestions] = useState<string[]>([]);
@@ -149,30 +179,44 @@ export default function GifPickerModal({
   const [categories, setCategories] = useState<GifPickerCategory[]>([]);
   const [categoriesLoading, setCategoriesLoading] = useState(true);
   const [results, setResults] = useState<GifPickerItem[]>([]);
-  const [featuredPreview, setFeaturedPreview] = useState<GifPickerItem | null>(null);
+  const [featuredPreview, setFeaturedPreview] = useState<GifPickerItem | null>(
+    null,
+  );
   const [localFavorites, setLocalFavorites] = useState<GifPickerItem[]>([]);
   const nextCursorRef = useRef<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [loadMoreCooldownUntil, setLoadMoreCooldownUntil] = useState<number | null>(null);
+  const [loadMoreCooldownUntil, setLoadMoreCooldownUntil] = useState<
+    number | null
+  >(null);
   const [error, setError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(initialExpanded);
-  const [dynamicStyle, setDynamicStyle] = useState<React.CSSProperties>({ opacity: 0 });
+  const [dynamicStyle, setDynamicStyle] = useState<React.CSSProperties>({
+    opacity: 0,
+  });
   const [clipsMuted, setClipsMuted] = useState(() => {
     if (typeof window === "undefined") return true;
     return window.localStorage.getItem("chat:clips:muted") !== "false";
   });
 
   // Voice reaction: display mode (persisted)
-  const [voiceDisplayMode, setVoiceDisplayMode] = useState<VoiceDisplayMode>(() => {
-    if (typeof window === "undefined") return "single";
-    const s = window.localStorage.getItem(VOICE_DISPLAY_MODE_KEY);
-    return (VOICE_DISPLAY_MODES as readonly string[]).includes(s ?? "") ? (s as VoiceDisplayMode) : "single";
-  });
+  const [voiceDisplayMode, setVoiceDisplayMode] = useState<VoiceDisplayMode>(
+    () => {
+      if (typeof window === "undefined") return "single";
+      const s = window.localStorage.getItem(VOICE_DISPLAY_MODE_KEY);
+      return (VOICE_DISPLAY_MODES as readonly string[]).includes(s ?? "")
+        ? (s as VoiceDisplayMode)
+        : "single";
+    },
+  );
   const [voiceRateLimited, setVoiceRateLimited] = useState(false);
   const settingsUserId = user?.id ?? null;
-  const mediaSafetySettings = useMediaSafetySettingsStore((state) => state.getSettings(settingsUserId));
-  const setMediaSafetyCurrentUser = useMediaSafetySettingsStore((state) => state.setCurrentUser);
+  const mediaSafetySettings = useMediaSafetySettingsStore((state) =>
+    state.getSettings(settingsUserId),
+  );
+  const setMediaSafetyCurrentUser = useMediaSafetySettingsStore(
+    (state) => state.setCurrentUser,
+  );
   const mediaRequestQuerySuffix = useMemo(() => {
     const queryParams = new URLSearchParams({
       contentFilter: mediaSafetySettings.contentFilter,
@@ -196,7 +240,6 @@ export default function GifPickerModal({
     }
   }, [settingsUserId, setMediaSafetyCurrentUser]);
 
-
   const [recentQueries, setRecentQueries] = useState<string[]>([]);
   const lastSyncedDefaultMediaTypeRef = useRef(defaultMediaType);
 
@@ -212,7 +255,9 @@ export default function GifPickerModal({
       try {
         const parsed = JSON.parse(stored);
         if (Array.isArray(parsed)) {
-          setRecentQueries(parsed.filter((q) => typeof q === "string" && q.trim() !== ""));
+          setRecentQueries(
+            parsed.filter((q) => typeof q === "string" && q.trim() !== ""),
+          );
           return;
         }
       } catch (e) {
@@ -222,16 +267,21 @@ export default function GifPickerModal({
     setRecentQueries([]);
   }, [mediaType, getRecentQueriesKey]);
 
-  const saveQueryToHistory = useCallback((q: string) => {
-    if (typeof window === "undefined") return;
-    const key = getRecentQueriesKey(mediaType);
-    setRecentQueries((prev) => {
-      const filtered = prev.filter((item) => item.toLowerCase() !== q.toLowerCase());
-      const next = [q, ...filtered].slice(0, 5);
-      window.localStorage.setItem(key, JSON.stringify(next));
-      return next;
-    });
-  }, [mediaType, getRecentQueriesKey]);
+  const saveQueryToHistory = useCallback(
+    (q: string) => {
+      if (typeof window === "undefined") return;
+      const key = getRecentQueriesKey(mediaType);
+      setRecentQueries((prev) => {
+        const filtered = prev.filter(
+          (item) => item.toLowerCase() !== q.toLowerCase(),
+        );
+        const next = [q, ...filtered].slice(0, 5);
+        window.localStorage.setItem(key, JSON.stringify(next));
+        return next;
+      });
+    },
+    [mediaType, getRecentQueriesKey],
+  );
 
   const clearRecentQueries = useCallback(() => {
     if (typeof window === "undefined") return;
@@ -240,15 +290,18 @@ export default function GifPickerModal({
     setRecentQueries([]);
   }, [mediaType, getRecentQueriesKey]);
 
-  const removeRecentQuery = useCallback((qToRemove: string) => {
-    if (typeof window === "undefined") return;
-    const key = getRecentQueriesKey(mediaType);
-    setRecentQueries((prev) => {
-      const next = prev.filter((q) => q !== qToRemove);
-      window.localStorage.setItem(key, JSON.stringify(next));
-      return next;
-    });
-  }, [mediaType, getRecentQueriesKey]);
+  const removeRecentQuery = useCallback(
+    (qToRemove: string) => {
+      if (typeof window === "undefined") return;
+      const key = getRecentQueriesKey(mediaType);
+      setRecentQueries((prev) => {
+        const next = prev.filter((q) => q !== qToRemove);
+        window.localStorage.setItem(key, JSON.stringify(next));
+        return next;
+      });
+    },
+    [mediaType, getRecentQueriesKey],
+  );
 
   // Debounce saving search history to avoid intermediate queries while typing
   useEffect(() => {
@@ -285,12 +338,28 @@ export default function GifPickerModal({
   const searchInputRef = useRef<HTMLInputElement>(null);
   const loadingMoreRef = useRef(false);
   const loadMoreBlockedUntilRef = useRef(0);
-  const [cache] = useState(() => new Map<string, { results: GifPickerItem[]; next: string | null; error: string | null; scrollTop?: number }>());
-  const [categoriesCache] = useState(() => new Map<string, GifPickerCategory[]>());
-  const [featuredPreviewCache] = useState(() => new Map<string, GifPickerItem | null>());
+  const [cache] = useState(
+    () =>
+      new Map<
+        string,
+        {
+          results: GifPickerItem[];
+          next: string | null;
+          error: string | null;
+          scrollTop?: number;
+        }
+      >(),
+  );
+  const [categoriesCache] = useState(
+    () => new Map<string, GifPickerCategory[]>(),
+  );
+  const [featuredPreviewCache] = useState(
+    () => new Map<string, GifPickerItem | null>(),
+  );
 
   const dbFavorites = useGifFavoritesStore((state) => state.favorites);
-  const { load: loadDbFavorites, toggle: toggleDbFavorite } = useGifFavoriteActions();
+  const { load: loadDbFavorites, toggle: toggleDbFavorite } =
+    useGifFavoriteActions();
   const favorites = skipAuth ? localFavorites : dbFavorites;
 
   const filteredFavorites = useMemo(() => {
@@ -301,78 +370,112 @@ export default function GifPickerModal({
   }, [favorites, mediaType]);
   const latestFavoritePreview = filteredFavorites[0] ?? null;
   const featuredPreviewCacheKey = useMemo(
-    () => `${provider}:${mediaType}:${requestContextKey}:${skipAuth ? "guest" : "auth"}:${requestApiQuerySuffix}`,
-    [provider, mediaType, requestContextKey, requestApiQuerySuffix, skipAuth]
+    () =>
+      `${provider}:${mediaType}:${requestContextKey}:${skipAuth ? "guest" : "auth"}:${requestApiQuerySuffix}`,
+    [provider, mediaType, requestContextKey, requestApiQuerySuffix, skipAuth],
   );
 
-  const getCacheKey = useCallback((
-    mType: GifPickerMediaType,
-    mMode: GifPickerMode,
-    q: string,
-    prov: GifProvider,
-    contextKey: string
-  ) => {
-    return `${mType}:${mMode}:${q}:${prov}:${contextKey}`;
-  }, []);
-  const cachedFeaturedPreview = cache.get(getCacheKey(mediaType, "featured", "", provider, requestContextKey))?.results[0] ?? null;
+  const getCacheKey = useCallback(
+    (
+      mType: GifPickerMediaType,
+      mMode: GifPickerMode,
+      q: string,
+      prov: GifProvider,
+      contextKey: string,
+    ) => {
+      return `${mType}:${mMode}:${q}:${prov}:${contextKey}`;
+    },
+    [],
+  );
+  const cachedFeaturedPreview =
+    cache.get(
+      getCacheKey(mediaType, "featured", "", provider, requestContextKey),
+    )?.results[0] ?? null;
   const featuredCardPreview = cachedFeaturedPreview ?? featuredPreview;
 
-  const handleMediaTypeChange = useCallback((nextMediaType: GifPickerMediaType) => {
-    const currentCacheKey = getCacheKey(mediaType, mode, query, provider, requestContextKey);
-    if (scrollRef.current) {
-      const cached = cache.get(currentCacheKey);
-      if (cached) {
-        cached.scrollTop = scrollRef.current.scrollTop;
-      }
-    }
-
-    const nextProvider = KLIPY_ONLY_MEDIA_TYPES.includes(nextMediaType) ? "klipy" : provider;
-    
-    let nextMode = mode;
-    if (mode !== "favorites") {
-      nextMode = searchValue.trim() ? "search" : browseModeRef.current;
-    }
-    const nextQuery = nextMode === "categories" ? "" : query;
-
-    setMediaType(nextMediaType);
-    setIsSuggestionListOpen(false);
-    setActiveSuggestionIndex(-1);
-    if (KLIPY_ONLY_MEDIA_TYPES.includes(nextMediaType)) {
-      setProvider("klipy");
-    }
-    setMode(nextMode);
-
-    if (nextMode === "favorites") {
-      const nextFilteredFavorites = favorites.filter((gif) => {
-        const itemMediaType = inferGifPickerMediaType(gif);
-        return itemMediaType === nextMediaType;
-      });
-      setResults(nextFilteredFavorites);
-      nextCursorRef.current = null;
-      setError(null);
-      setLoading(false);
-    } else {
-      const nextCacheKey = getCacheKey(nextMediaType, nextMode, nextQuery, nextProvider, requestContextKey);
-      const cached = cache.get(nextCacheKey);
-      if (cached) {
-        setResults(cached.results);
-        nextCursorRef.current = cached.next;
-        setError(cached.error);
-        setLoading(false);
-        if (cached.scrollTop !== undefined) {
-          setTimeout(() => {
-            if (scrollRef.current) {
-              scrollRef.current.scrollTop = cached.scrollTop || 0;
-            }
-          }, 0);
+  const handleMediaTypeChange = useCallback(
+    (nextMediaType: GifPickerMediaType) => {
+      const currentCacheKey = getCacheKey(
+        mediaType,
+        mode,
+        query,
+        provider,
+        requestContextKey,
+      );
+      if (scrollRef.current) {
+        const cached = cache.get(currentCacheKey);
+        if (cached) {
+          cached.scrollTop = scrollRef.current.scrollTop;
         }
-      } else {
-        setResults([]);
+      }
+
+      const nextProvider = KLIPY_ONLY_MEDIA_TYPES.includes(nextMediaType)
+        ? "klipy"
+        : provider;
+
+      let nextMode = mode;
+      if (mode !== "favorites") {
+        nextMode = searchValue.trim() ? "search" : browseModeRef.current;
+      }
+      const nextQuery = nextMode === "categories" ? "" : query;
+
+      setMediaType(nextMediaType);
+      setIsSuggestionListOpen(false);
+      setActiveSuggestionIndex(-1);
+      if (KLIPY_ONLY_MEDIA_TYPES.includes(nextMediaType)) {
+        setProvider("klipy");
+      }
+      setMode(nextMode);
+
+      if (nextMode === "favorites") {
+        const nextFilteredFavorites = favorites.filter((gif) => {
+          const itemMediaType = inferGifPickerMediaType(gif);
+          return itemMediaType === nextMediaType;
+        });
+        setResults(nextFilteredFavorites);
         nextCursorRef.current = null;
         setError(null);
+        setLoading(false);
+      } else {
+        const nextCacheKey = getCacheKey(
+          nextMediaType,
+          nextMode,
+          nextQuery,
+          nextProvider,
+          requestContextKey,
+        );
+        const cached = cache.get(nextCacheKey);
+        if (cached) {
+          setResults(cached.results);
+          nextCursorRef.current = cached.next;
+          setError(cached.error);
+          setLoading(false);
+          if (cached.scrollTop !== undefined) {
+            setTimeout(() => {
+              if (scrollRef.current) {
+                scrollRef.current.scrollTop = cached.scrollTop || 0;
+              }
+            }, 0);
+          }
+        } else {
+          setResults([]);
+          nextCursorRef.current = null;
+          setError(null);
+        }
       }
-    }
-  }, [cache, mediaType, mode, query, provider, requestContextKey, searchValue, getCacheKey, favorites]);
+    },
+    [
+      cache,
+      mediaType,
+      mode,
+      query,
+      provider,
+      requestContextKey,
+      searchValue,
+      getCacheKey,
+      favorites,
+    ],
+  );
 
   useEffect(() => {
     if (lastSyncedDefaultMediaTypeRef.current === defaultMediaType) return;
@@ -400,7 +503,6 @@ export default function GifPickerModal({
     return `No ${mediaLabel} found.`;
   };
 
-
   useEffect(() => {
     searchInputRef.current?.focus();
   }, [provider]);
@@ -408,13 +510,20 @@ export default function GifPickerModal({
   useEffect(() => {
     if (!skipAuth) return;
     if (typeof window === "undefined") return;
-    setLocalFavorites(parseStoredGifFavorites(window.localStorage.getItem(GIF_FAVORITES_STORAGE_KEY)));
+    setLocalFavorites(
+      parseStoredGifFavorites(
+        window.localStorage.getItem(GIF_FAVORITES_STORAGE_KEY),
+      ),
+    );
   }, [skipAuth]);
 
   useEffect(() => {
     if (!skipAuth) return;
     if (typeof window === "undefined") return;
-    window.localStorage.setItem(GIF_FAVORITES_STORAGE_KEY, JSON.stringify(favorites));
+    window.localStorage.setItem(
+      GIF_FAVORITES_STORAGE_KEY,
+      JSON.stringify(favorites),
+    );
   }, [favorites, skipAuth]);
 
   useEffect(() => {
@@ -435,7 +544,9 @@ export default function GifPickerModal({
     }
 
     if (featuredPreviewCache.has(featuredPreviewCacheKey)) {
-      setFeaturedPreview(featuredPreviewCache.get(featuredPreviewCacheKey) ?? null);
+      setFeaturedPreview(
+        featuredPreviewCache.get(featuredPreviewCacheKey) ?? null,
+      );
       return () => {
         cancelled = true;
         controller.abort();
@@ -457,10 +568,16 @@ export default function GifPickerModal({
         }
 
         const endpoint = `/api/gifs?${queryParams.toString()}${requestApiQuerySuffix}`;
-        const data = await apiGet<GifPickerResponse>(endpoint, { signal: controller.signal, skipAuth });
+        const data = await apiGet<GifPickerResponse>(endpoint, {
+          signal: controller.signal,
+          skipAuth,
+        });
 
         if (!cancelled) {
-          const previewItem = dedupeGifPickerItems(data.results.map((item) => ({ ...item, query: "" })))[0] ?? null;
+          const previewItem =
+            dedupeGifPickerItems(
+              data.results.map((item) => ({ ...item, query: "" })),
+            )[0] ?? null;
           featuredPreviewCache.set(featuredPreviewCacheKey, previewItem);
           setFeaturedPreview(previewItem);
         }
@@ -503,10 +620,13 @@ export default function GifPickerModal({
     const run = async () => {
       setCategoriesLoading(true);
       try {
-        const data = await apiGet<GifCategoryResponse>(`/api/gifs?mode=categories&provider=${provider}&mediaType=${mediaType}${requestApiQuerySuffix}`, {
-          signal: controller.signal,
-          skipAuth,
-        });
+        const data = await apiGet<GifCategoryResponse>(
+          `/api/gifs?mode=categories&provider=${provider}&mediaType=${mediaType}${requestApiQuerySuffix}`,
+          {
+            signal: controller.signal,
+            skipAuth,
+          },
+        );
         if (!cancelled) {
           categoriesCache.set(cacheKey, data.categories);
           setCategories(data.categories);
@@ -556,7 +676,9 @@ export default function GifPickerModal({
     const timeout = window.setTimeout(async () => {
       setIsSuggesting(true);
       try {
-        const buildSuggestionEndpoint = (mode: "autocomplete" | "suggestions") => {
+        const buildSuggestionEndpoint = (
+          mode: "autocomplete" | "suggestions",
+        ) => {
           const queryParams = new URLSearchParams({
             mode,
             q: trimmed,
@@ -567,31 +689,47 @@ export default function GifPickerModal({
           }
           return `/api/gifs?${queryParams.toString()}${requestApiQuerySuffix}`;
         };
-        const [autocompleteResult, suggestionResult] = await Promise.allSettled([
-          apiGet<{ results: string[] }>(buildSuggestionEndpoint("autocomplete"), {
-            signal: controller.signal,
-            skipAuth,
-          }),
-          apiGet<{ results: string[] }>(buildSuggestionEndpoint("suggestions"), {
-            signal: controller.signal,
-            skipAuth,
-          }),
-        ]);
+        const [autocompleteResult, suggestionResult] = await Promise.allSettled(
+          [
+            apiGet<{ results: string[] }>(
+              buildSuggestionEndpoint("autocomplete"),
+              {
+                signal: controller.signal,
+                skipAuth,
+              },
+            ),
+            apiGet<{ results: string[] }>(
+              buildSuggestionEndpoint("suggestions"),
+              {
+                signal: controller.signal,
+                skipAuth,
+              },
+            ),
+          ],
+        );
 
         if (!cancelled) {
           const autocompleteSuggestions =
-            autocompleteResult.status === "fulfilled" && Array.isArray(autocompleteResult.value?.results)
+            autocompleteResult.status === "fulfilled" &&
+            Array.isArray(autocompleteResult.value?.results)
               ? autocompleteResult.value.results
               : [];
           const providerSuggestions =
-            suggestionResult.status === "fulfilled" && Array.isArray(suggestionResult.value?.results)
+            suggestionResult.status === "fulfilled" &&
+            Array.isArray(suggestionResult.value?.results)
               ? suggestionResult.value.results
               : [];
-          const matchingHistory = recentQueries.filter((q) =>
-            q.toLowerCase().includes(trimmed.toLowerCase()) && q.toLowerCase() !== trimmed.toLowerCase()
+          const matchingHistory = recentQueries.filter(
+            (q) =>
+              q.toLowerCase().includes(trimmed.toLowerCase()) &&
+              q.toLowerCase() !== trimmed.toLowerCase(),
           );
           const combined = Array.from(
-            new Set([...matchingHistory, ...autocompleteSuggestions, ...providerSuggestions])
+            new Set([
+              ...matchingHistory,
+              ...autocompleteSuggestions,
+              ...providerSuggestions,
+            ]),
           ).slice(0, 8);
           setSuggestions(combined);
           setActiveSuggestionIndex(-1);
@@ -671,7 +809,13 @@ export default function GifPickerModal({
       };
     }
 
-    const cacheKey = getCacheKey(mediaType, mode, query, provider, requestContextKey);
+    const cacheKey = getCacheKey(
+      mediaType,
+      mode,
+      query,
+      provider,
+      requestContextKey,
+    );
     const cached = cache.get(cacheKey);
     if (cached) {
       if (!cancelled) {
@@ -713,10 +857,20 @@ export default function GifPickerModal({
           queryParams.set("skipAuth", "true");
         }
         const endpoint = `/api/gifs?${queryParams.toString()}${requestApiQuerySuffix}`;
-        const data = await apiGet<GifPickerResponse>(endpoint, { signal: controller.signal, skipAuth });
+        const data = await apiGet<GifPickerResponse>(endpoint, {
+          signal: controller.signal,
+          skipAuth,
+        });
         if (!cancelled) {
-          const newResults = dedupeGifPickerItems(data.results.map((item) => ({ ...item, query })));
-          cache.set(cacheKey, { results: newResults, next: data.next, error: null, scrollTop: 0 });
+          const newResults = dedupeGifPickerItems(
+            data.results.map((item) => ({ ...item, query })),
+          );
+          cache.set(cacheKey, {
+            results: newResults,
+            next: data.next,
+            error: null,
+            scrollTop: 0,
+          });
           setResults(newResults);
           nextCursorRef.current = data.next;
         }
@@ -725,7 +879,12 @@ export default function GifPickerModal({
           setResults([]);
           nextCursorRef.current = null;
           const errMsg = `Could not load ${providerLabel} assets right now. Try again in a moment.`;
-          cache.set(cacheKey, { results: [], next: null, error: errMsg, scrollTop: 0 });
+          cache.set(cacheKey, {
+            results: [],
+            next: null,
+            error: errMsg,
+            scrollTop: 0,
+          });
           setError(errMsg);
         }
       } finally {
@@ -740,98 +899,133 @@ export default function GifPickerModal({
       cancelled = true;
       controller.abort();
     };
-  }, [cache, filteredFavorites, mode, provider, providerLabel, query, requestApiQuerySuffix, requestContextKey, skipAuth, mediaType, getCacheKey, saveQueryToHistory]);
+  }, [
+    cache,
+    filteredFavorites,
+    mode,
+    provider,
+    providerLabel,
+    query,
+    requestApiQuerySuffix,
+    requestContextKey,
+    skipAuth,
+    mediaType,
+    getCacheKey,
+    saveQueryToHistory,
+  ]);
 
-  const favoriteIds = useMemo(() => new Set(favorites.map((item) => getGifItemIdentityKey(item))), [favorites]);
+  const favoriteIds = useMemo(
+    () => new Set(favorites.map((item) => getGifItemIdentityKey(item))),
+    [favorites],
+  );
 
-  const handleToggleFavorite = useCallback((gif: GifPickerItem) => {
-    if (!skipAuth) {
-      void toggleDbFavorite(gif);
-      return;
-    }
-
-    setLocalFavorites((current) => {
-      return toggleGifFavorite(current, gif);
-    });
-  }, [skipAuth, toggleDbFavorite]);
-
-  const handleSelect = useCallback((gif: GifPickerItem) => {
-    if (voiceMode) {
-      // Voice reaction mode: send via SFU, do NOT close the picker
-      const asset = getVoiceRenderableGifAsset(gif);
-      if (!consumeStickerToken()) {
-        setVoiceRateLimited(true);
-        window.setTimeout(() => setVoiceRateLimited(false), 2500);
+  const handleToggleFavorite = useCallback(
+    (gif: GifPickerItem) => {
+      if (!skipAuth) {
+        void toggleDbFavorite(gif);
         return;
       }
-      voiceMode.sfu.voiceGW.sendAppEvent({
-        type: "reaction.sticker",
-        url: asset.url,
-        // Carry content type so the overlay can render <video> vs <img> correctly
-        contentType: asset.contentType || "image/gif",
-        displayMode: voiceDisplayMode,
+
+      setLocalFavorites((current) => {
+        return toggleGifFavorite(current, gif);
       });
-      return;
-    }
-    // Normal chat mode
-    if (query.trim()) {
-      saveQueryToHistory(query.trim());
-    }
-    onClose();
-    void onSelect(gif);
-  }, [voiceMode, voiceDisplayMode, onClose, onSelect, query, saveQueryToHistory]);
+    },
+    [skipAuth, toggleDbFavorite],
+  );
 
-  const suggestionsVisible = isSuggestionListOpen && suggestions.length > 0 && searchValue.trim().length >= 2;
+  const handleSelect = useCallback(
+    (gif: GifPickerItem) => {
+      if (voiceMode) {
+        // Voice reaction mode: send via SFU, do NOT close the picker
+        const asset = getVoiceRenderableGifAsset(gif);
+        if (!consumeStickerToken()) {
+          setVoiceRateLimited(true);
+          window.setTimeout(() => setVoiceRateLimited(false), 2500);
+          return;
+        }
+        voiceMode.sfu.voiceGW.sendAppEvent({
+          type: "reaction.sticker",
+          url: asset.url,
+          // Carry content type so the overlay can render <video> vs <img> correctly
+          contentType: asset.contentType || "image/gif",
+          displayMode: voiceDisplayMode,
+        });
+        return;
+      }
+      // Normal chat mode
+      if (query.trim()) {
+        saveQueryToHistory(query.trim());
+      }
+      onClose();
+      void onSelect(gif);
+    },
+    [voiceMode, voiceDisplayMode, onClose, onSelect, query, saveQueryToHistory],
+  );
 
-  const selectSuggestion = useCallback((suggestion: string) => {
-    setSearchValue(suggestion);
-    setQuery(suggestion);
-    setMode("search");
-    saveQueryToHistory(suggestion);
-    setIsSuggestionListOpen(false);
-    setActiveSuggestionIndex(-1);
-    searchInputRef.current?.focus();
-  }, [saveQueryToHistory]);
+  const suggestionsVisible =
+    isSuggestionListOpen &&
+    suggestions.length > 0 &&
+    searchValue.trim().length >= 2;
 
-  const handleSearchInputKeyDown = useCallback((event: React.KeyboardEvent<HTMLInputElement>) => {
-    if (!suggestionsVisible) {
+  const selectSuggestion = useCallback(
+    (suggestion: string) => {
+      setSearchValue(suggestion);
+      setQuery(suggestion);
+      setMode("search");
+      saveQueryToHistory(suggestion);
+      setIsSuggestionListOpen(false);
+      setActiveSuggestionIndex(-1);
+      searchInputRef.current?.focus();
+    },
+    [saveQueryToHistory],
+  );
+
+  const handleSearchInputKeyDown = useCallback(
+    (event: React.KeyboardEvent<HTMLInputElement>) => {
+      if (!suggestionsVisible) {
+        if (event.key === "Escape") {
+          setIsSuggestionListOpen(false);
+          setActiveSuggestionIndex(-1);
+        }
+        return;
+      }
+
+      if (event.key === "ArrowDown") {
+        event.preventDefault();
+        setActiveSuggestionIndex((current) => {
+          if (current < 0) return 0;
+          return current >= suggestions.length - 1 ? 0 : current + 1;
+        });
+        return;
+      }
+
+      if (event.key === "ArrowUp") {
+        event.preventDefault();
+        setActiveSuggestionIndex((current) => {
+          if (current < 0) return suggestions.length - 1;
+          return current <= 0 ? suggestions.length - 1 : current - 1;
+        });
+        return;
+      }
+
+      if (
+        event.key === "Enter" &&
+        activeSuggestionIndex >= 0 &&
+        suggestions[activeSuggestionIndex]
+      ) {
+        event.preventDefault();
+        selectSuggestion(suggestions[activeSuggestionIndex]);
+        return;
+      }
+
       if (event.key === "Escape") {
+        event.preventDefault();
         setIsSuggestionListOpen(false);
         setActiveSuggestionIndex(-1);
       }
-      return;
-    }
-
-    if (event.key === "ArrowDown") {
-      event.preventDefault();
-      setActiveSuggestionIndex((current) => {
-        if (current < 0) return 0;
-        return current >= suggestions.length - 1 ? 0 : current + 1;
-      });
-      return;
-    }
-
-    if (event.key === "ArrowUp") {
-      event.preventDefault();
-      setActiveSuggestionIndex((current) => {
-        if (current < 0) return suggestions.length - 1;
-        return current <= 0 ? suggestions.length - 1 : current - 1;
-      });
-      return;
-    }
-
-    if (event.key === "Enter" && activeSuggestionIndex >= 0 && suggestions[activeSuggestionIndex]) {
-      event.preventDefault();
-      selectSuggestion(suggestions[activeSuggestionIndex]);
-      return;
-    }
-
-    if (event.key === "Escape") {
-      event.preventDefault();
-      setIsSuggestionListOpen(false);
-      setActiveSuggestionIndex(-1);
-    }
-  }, [activeSuggestionIndex, selectSuggestion, suggestions, suggestionsVisible]);
+    },
+    [activeSuggestionIndex, selectSuggestion, suggestions, suggestionsVisible],
+  );
 
   const handleCategorySearch = (category: GifPickerCategory) => {
     browseModeRef.current = "categories";
@@ -876,7 +1070,12 @@ export default function GifPickerModal({
 
   const handleLoadMore = async () => {
     const initialCursor = nextCursorRef.current;
-    if ((mode !== "search" && mode !== "featured") || !initialCursor || loadingMoreRef.current) return;
+    if (
+      (mode !== "search" && mode !== "featured") ||
+      !initialCursor ||
+      loadingMoreRef.current
+    )
+      return;
     if (Date.now() < loadMoreBlockedUntilRef.current) return;
 
     loadingMoreRef.current = true;
@@ -887,7 +1086,10 @@ export default function GifPickerModal({
       accumulatedResults: GifPickerItem[],
       attempts: number,
       addedCount: number,
-    ): Promise<{ accumulatedResults: GifPickerItem[]; nextCursor: string | null }> => {
+    ): Promise<{
+      accumulatedResults: GifPickerItem[];
+      nextCursor: string | null;
+    }> => {
       const queryParams = new URLSearchParams({
         mode: "search",
         provider,
@@ -906,7 +1108,10 @@ export default function GifPickerModal({
 
       const incoming = data.results.map((item) => ({ ...item, query }));
       const currentLength = accumulatedResults.length;
-      const nextAccumulatedResults = appendUniqueGifPickerItems(accumulatedResults, incoming);
+      const nextAccumulatedResults = appendUniqueGifPickerItems(
+        accumulatedResults,
+        incoming,
+      );
       const newlyAdded = nextAccumulatedResults.length - currentLength;
       const nextAddedCount = addedCount + newlyAdded;
       const nextCursor = data.next ?? null;
@@ -914,21 +1119,42 @@ export default function GifPickerModal({
       if (newlyAdded > 0 && nextAddedCount >= 8) {
         return { accumulatedResults: nextAccumulatedResults, nextCursor };
       }
-      if (!nextCursor || nextCursor === currentCursor || incoming.length === 0 || attempts + 1 >= 3) {
+      if (
+        !nextCursor ||
+        nextCursor === currentCursor ||
+        incoming.length === 0 ||
+        attempts + 1 >= 3
+      ) {
         return { accumulatedResults: nextAccumulatedResults, nextCursor };
       }
 
-      return loadNextPage(nextCursor, nextAccumulatedResults, attempts + 1, nextAddedCount);
+      return loadNextPage(
+        nextCursor,
+        nextAccumulatedResults,
+        attempts + 1,
+        nextAddedCount,
+      );
     };
 
     try {
-      const { accumulatedResults, nextCursor } = await loadNextPage(initialCursor, [...results], 0, 0);
-      const cacheKey = getCacheKey(mediaType, mode, query, provider, requestContextKey);
+      const { accumulatedResults, nextCursor } = await loadNextPage(
+        initialCursor,
+        [...results],
+        0,
+        0,
+      );
+      const cacheKey = getCacheKey(
+        mediaType,
+        mode,
+        query,
+        provider,
+        requestContextKey,
+      );
       cache.set(cacheKey, {
         results: accumulatedResults,
         next: nextCursor,
         error: null,
-        scrollTop: scrollRef.current?.scrollTop || 0
+        scrollTop: scrollRef.current?.scrollTop || 0,
       });
       setResults(accumulatedResults);
       nextCursorRef.current = nextCursor;
@@ -943,7 +1169,9 @@ export default function GifPickerModal({
           setLoadMoreCooldownUntil(retryAt);
           setError(null);
         } else {
-          setError(`Could not load more ${providerLabel} ${mediaLabel}. Scroll again to retry.`);
+          setError(
+            `Could not load more ${providerLabel} ${mediaLabel}. Scroll again to retry.`,
+          );
         }
       }
     } finally {
@@ -954,7 +1182,10 @@ export default function GifPickerModal({
 
   const handleProviderChange = (nextProvider: GifProvider) => {
     setProvider(nextProvider);
-    if (nextProvider === "tenor" && KLIPY_ONLY_MEDIA_TYPES.includes(mediaType)) {
+    if (
+      nextProvider === "tenor" &&
+      KLIPY_ONLY_MEDIA_TYPES.includes(mediaType)
+    ) {
       setMediaType("gifs");
     }
     setSuggestions([]);
@@ -968,10 +1199,13 @@ export default function GifPickerModal({
 
   useEffect(() => {
     if (!loadMoreCooldownUntil) return;
-    const timeout = window.setTimeout(() => {
-      loadMoreBlockedUntilRef.current = 0;
-      setLoadMoreCooldownUntil(null);
-    }, Math.max(0, loadMoreCooldownUntil - Date.now()));
+    const timeout = window.setTimeout(
+      () => {
+        loadMoreBlockedUntilRef.current = 0;
+        setLoadMoreCooldownUntil(null);
+      },
+      Math.max(0, loadMoreCooldownUntil - Date.now()),
+    );
 
     return () => window.clearTimeout(timeout);
   }, [loadMoreCooldownUntil]);
@@ -984,7 +1218,8 @@ export default function GifPickerModal({
     }
   };
 
-  const favoriteCardBg = "bg-rm-bg-floating/90 border border-rm-border text-rm-text";
+  const favoriteCardBg =
+    "bg-rm-bg-floating/90 border border-rm-border text-rm-text";
   const favoriteIconBase = "text-rm-text-muted";
   const shortcutCardShadowStyle: React.CSSProperties = {
     boxShadow:
@@ -1005,12 +1240,14 @@ export default function GifPickerModal({
           ].join(", "),
   };
   const shortcutCardFallbackStyle: React.CSSProperties = {
-    background: "linear-gradient(135deg, color-mix(in oklab, var(--primary) 86%, black 14%), color-mix(in oklab, var(--primary) 48%, black 52%))",
+    background:
+      "linear-gradient(135deg, color-mix(in oklab, var(--primary) 86%, black 14%), color-mix(in oklab, var(--primary) 48%, black 52%))",
   };
   const shortcutCardBadgeStyle: React.CSSProperties = {
-    background: "color-mix(in oklab, var(--primary) 24%, rgba(255, 255, 255, 0.12))",
+    background:
+      "color-mix(in oklab, var(--primary) 24%, rgba(255, 255, 255, 0.12))",
   };
-  
+
   useEffect(() => {
     if (expanded) return;
     let frameId: number;
@@ -1019,7 +1256,7 @@ export default function GifPickerModal({
         setDynamicStyle({ opacity: 1 });
         return;
       }
-      
+
       if (window.innerWidth < 640) {
         setDynamicStyle({ opacity: 1 });
         return;
@@ -1027,13 +1264,13 @@ export default function GifPickerModal({
 
       const rect = markerRef.current.getBoundingClientRect();
       const pickerWidth = 420;
-      
+
       const MAX_HEIGHT = Math.min(620, window.innerHeight - 20);
 
-      const style: React.CSSProperties = { 
+      const style: React.CSSProperties = {
         opacity: 1,
         maxHeight: MAX_HEIGHT,
-        height: "68vh" // use default height but clamped by maxHeight
+        height: "68vh", // use default height but clamped by maxHeight
       };
 
       let left = rect.left;
@@ -1060,7 +1297,9 @@ export default function GifPickerModal({
 
   const panelLayout = expanded
     ? "left-1/2 top-1/2 h-[min(82vh,780px)] w-[min(900px,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 max-sm:inset-0 max-sm:h-[100dvh] max-sm:w-screen max-sm:translate-x-0 max-sm:translate-y-0 max-sm:rounded-none"
-    : markerRef ? "w-full sm:w-[min(440px,calc(100vw-24px))]" : "bottom-[calc(88px+var(--safe-area-bottom,0px))] right-4 h-[min(68vh,620px)] w-[min(420px,calc(100vw-2rem))] max-sm:inset-x-2 max-sm:bottom-[calc(76px+var(--safe-area-bottom,0px))] max-sm:h-[min(72vh,560px)] max-sm:w-auto";
+    : markerRef
+      ? "w-full sm:w-[min(440px,calc(100vw-24px))]"
+      : "bottom-[calc(88px+var(--safe-area-bottom,0px))] right-4 h-[min(68vh,620px)] w-[min(420px,calc(100vw-2rem))] max-sm:inset-x-2 max-sm:bottom-[calc(76px+var(--safe-area-bottom,0px))] max-sm:h-[min(72vh,560px)] max-sm:w-auto";
 
   return (
     <BaseModal onClose={onClose}>
@@ -1068,16 +1307,23 @@ export default function GifPickerModal({
         <div className={cn("fixed inset-0", overlayZIndexClassName)}>
           <button
             type="button"
-            className={cn("absolute inset-0 border-0 p-0", expanded ? "bg-black/55 backdrop-blur-sm" : "bg-transparent")}
+            className={cn(
+              "absolute inset-0 border-0 p-0",
+              expanded ? "bg-black/55 backdrop-blur-sm" : "bg-transparent",
+            )}
             aria-label="Close GIF picker"
             onMouseDown={onClose}
           />
           <div
             className={cn(
               "picker-panel absolute flex flex-col overflow-hidden rounded-[26px] border backdrop-blur-2xl shadow-2xl transition-all duration-150 ease-out",
-              !isClosing ? "animate-in fade-in zoom-in-95 opacity-100" : "opacity-0 scale-95 max-sm:translate-y-8",
-              markerRef && !expanded ? "max-sm:fixed max-sm:inset-x-0 max-sm:bottom-0 max-sm:top-auto max-sm:h-[85dvh] max-sm:w-full max-sm:rounded-t-[26px] max-sm:rounded-b-none max-sm:border-x-0 max-sm:border-b-0 max-sm:translate-y-0 max-sm:slide-in-from-bottom max-sm:zoom-in-100" : "",
-              panelLayout
+              !isClosing
+                ? "animate-in fade-in zoom-in-95 opacity-100"
+                : "opacity-0 scale-95 max-sm:translate-y-8",
+              markerRef && !expanded
+                ? "max-sm:fixed max-sm:inset-x-0 max-sm:bottom-0 max-sm:top-auto max-sm:h-[85dvh] max-sm:w-full max-sm:rounded-t-[26px] max-sm:rounded-b-none max-sm:border-x-0 max-sm:border-b-0 max-sm:translate-y-0 max-sm:slide-in-from-bottom max-sm:zoom-in-100"
+                : "",
+              panelLayout,
             )}
             style={markerRef && !expanded ? dynamicStyle : undefined}
             onMouseDown={(event) => event.stopPropagation()}
@@ -1089,7 +1335,9 @@ export default function GifPickerModal({
                   onClick={() => handleMediaTypeChange("gifs")}
                   className={cn(
                     "rounded-xl px-3.5 py-2 transition-all duration-150 active:scale-95",
-                    mediaType === "gifs" ? "bg-rm-bg-active text-rm-text shadow-sm dark:shadow-none" : "text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover"
+                    mediaType === "gifs"
+                      ? "bg-rm-bg-active text-rm-text shadow-sm dark:shadow-none"
+                      : "text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover",
                   )}
                 >
                   GIFs
@@ -1099,7 +1347,9 @@ export default function GifPickerModal({
                   onClick={() => handleMediaTypeChange("stickers")}
                   className={cn(
                     "rounded-xl px-3.5 py-2 transition-all duration-150 active:scale-95",
-                    mediaType === "stickers" ? "bg-rm-bg-active text-rm-text shadow-sm dark:shadow-none" : "text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover"
+                    mediaType === "stickers"
+                      ? "bg-rm-bg-active text-rm-text shadow-sm dark:shadow-none"
+                      : "text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover",
                   )}
                 >
                   Stickers
@@ -1109,7 +1359,9 @@ export default function GifPickerModal({
                   onClick={() => handleMediaTypeChange("clips")}
                   className={cn(
                     "rounded-xl px-3.5 py-2 transition-all duration-150 active:scale-95",
-                    mediaType === "clips" ? "bg-rm-bg-active text-rm-text shadow-sm dark:shadow-none" : "text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover"
+                    mediaType === "clips"
+                      ? "bg-rm-bg-active text-rm-text shadow-sm dark:shadow-none"
+                      : "text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover",
                   )}
                 >
                   Clips
@@ -1119,7 +1371,9 @@ export default function GifPickerModal({
                   onClick={() => handleMediaTypeChange("memes")}
                   className={cn(
                     "rounded-xl px-3.5 py-2 transition-all duration-150 active:scale-95",
-                    mediaType === "memes" ? "bg-rm-bg-active text-rm-text shadow-sm dark:shadow-none" : "text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover"
+                    mediaType === "memes"
+                      ? "bg-rm-bg-active text-rm-text shadow-sm dark:shadow-none"
+                      : "text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover",
                   )}
                 >
                   Memes
@@ -1131,10 +1385,16 @@ export default function GifPickerModal({
                     type="button"
                     onClick={() => setExpanded((value) => !value)}
                     className="rounded-lg p-2 text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text transition"
-                    aria-label={expanded ? "Shrink GIF picker" : "Expand GIF picker"}
+                    aria-label={
+                      expanded ? "Shrink GIF picker" : "Expand GIF picker"
+                    }
                     title={expanded ? "Shrink" : "Expand"}
                   >
-                    {expanded ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+                    {expanded ? (
+                      <Minimize2 className="h-4 w-4" />
+                    ) : (
+                      <Maximize2 className="h-4 w-4" />
+                    )}
                   </button>
                 )}
                 <button
@@ -1151,7 +1411,9 @@ export default function GifPickerModal({
             {/* Voice reaction mode: display mode selector + rate limit banner */}
             {voiceMode && (
               <div className="flex items-center gap-1.5 px-4 py-2 border-b border-rm-border bg-rm-bg-surface/30 overflow-x-auto scrollbar-none shrink-0">
-                <span className="text-[10px] font-black uppercase tracking-widest text-rm-text-secondary shrink-0 mr-1">React Mode</span>
+                <span className="text-[10px] font-black uppercase tracking-widest text-rm-text-secondary shrink-0 mr-1">
+                  React Mode
+                </span>
                 {VOICE_DISPLAY_MODES.map((mode) => (
                   <button
                     key={mode}
@@ -1161,18 +1423,19 @@ export default function GifPickerModal({
                       "shrink-0 rounded-lg px-2.5 py-1 text-[11px] font-bold transition-all duration-150 active:scale-95",
                       voiceDisplayMode === mode
                         ? "bg-primary text-white shadow-sm shadow-primary/40"
-                        : "text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover"
+                        : "text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover",
                     )}
                   >
                     {VOICE_DISPLAY_MODE_LABELS[mode]}
                   </button>
                 ))}
                 {voiceRateLimited && (
-                  <span className="ml-auto shrink-0 text-[11px] font-semibold text-amber-500 dark:text-amber-400">Slow down! ⚠️</span>
+                  <span className="ml-auto shrink-0 text-[11px] font-semibold text-amber-500 dark:text-amber-400">
+                    Slow down! ⚠️
+                  </span>
                 )}
               </div>
             )}
-
 
             {mode === "favorites" ? (
               <div className="flex items-center gap-3 px-4 py-3 bg-transparent">
@@ -1184,7 +1447,9 @@ export default function GifPickerModal({
                 >
                   <ArrowLeft className="h-5 w-5" />
                 </button>
-                <h3 className="truncate text-sm font-black text-rm-text">Favorite {mediaLabel}</h3>
+                <h3 className="truncate text-sm font-black text-rm-text">
+                  Favorite {mediaLabel}
+                </h3>
               </div>
             ) : (
               <div className="border-b border-rm-border bg-transparent px-4 py-3">
@@ -1206,14 +1471,21 @@ export default function GifPickerModal({
                       value={searchValue}
                       onChange={(event) => setSearchValue(event.target.value)}
                       onFocus={() => {
-                        if (suggestions.length > 0 && searchValue.trim().length >= 2) {
+                        if (
+                          suggestions.length > 0 &&
+                          searchValue.trim().length >= 2
+                        ) {
                           setIsSuggestionListOpen(true);
                         }
                       }}
                       onKeyDown={handleSearchInputKeyDown}
                       placeholder={getGifProviderSearchPlaceholder(provider)}
                       aria-autocomplete="list"
-                      aria-controls={suggestionsVisible ? "gif-picker-search-suggestions" : undefined}
+                      aria-controls={
+                        suggestionsVisible
+                          ? "gif-picker-search-suggestions"
+                          : undefined
+                      }
                       aria-label={`Search ${providerLabel} ${mediaLabel}`}
                       aria-activedescendant={
                         suggestionsVisible && activeSuggestionIndex >= 0
@@ -1243,7 +1515,7 @@ export default function GifPickerModal({
                               "flex w-full items-center justify-between gap-3 px-4 py-3 text-left text-sm font-semibold transition",
                               activeSuggestionIndex === index
                                 ? "bg-rm-bg-active text-rm-text"
-                                : "text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text"
+                                : "text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text",
                             )}
                           >
                             <span className="flex min-w-0 items-center gap-2">
@@ -1275,12 +1547,22 @@ export default function GifPickerModal({
                         <>
                           <select
                             value={provider}
-                            onChange={(event) => handleProviderChange(event.target.value as GifProvider)}
+                            onChange={(event) =>
+                              handleProviderChange(
+                                event.target.value as GifProvider,
+                              )
+                            }
                             aria-label="GIF provider"
                             className="picker-pill h-11 appearance-none rounded-xl border pl-3 pr-9 text-sm font-semibold outline-none transition shadow-sm dark:shadow-none"
                           >
                             {providerOptions.map((option) => (
-                              <option key={option} value={option} className="bg-rm-bg-elevated text-rm-text">{getGifProviderLabel(option)}</option>
+                              <option
+                                key={option}
+                                value={option}
+                                className="bg-rm-bg-elevated text-rm-text"
+                              >
+                                {getGifProviderLabel(option)}
+                              </option>
                             ))}
                           </select>
                           <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-rm-text-muted" />
@@ -1296,62 +1578,73 @@ export default function GifPickerModal({
               </div>
             )}
 
-            <div ref={scrollRef} onScroll={() => void handleScroll()} className="custom-scrollbar flex-1 overflow-y-auto px-4 py-3">
-              {mode === "categories" && searchValue.trim() === "" && recentQueries.length > 0 && (
-                <div className="mb-4 rounded-xl border border-rm-border bg-rm-bg-elevated p-3 shadow-sm dark:shadow-none">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs font-black uppercase tracking-wider text-rm-text-muted">
-                      Recent Searches
-                    </span>
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        clearRecentQueries();
-                      }}
-                      className="text-xs font-semibold text-red-500 hover:text-red-600 dark:text-red-400 dark:hover:text-red-300 transition"
-                    >
-                      Clear All
-                    </button>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    {recentQueries.map((q) => (
-                      <div
-                        key={q}
-                        className="picker-pill inline-flex items-center gap-1.5 rounded-full border pl-3 pr-2 py-1 text-xs font-semibold transition shadow-sm dark:shadow-none"
+            <div
+              ref={scrollRef}
+              onScroll={() => void handleScroll()}
+              className="custom-scrollbar flex-1 overflow-y-auto px-4 py-3"
+            >
+              {mode === "categories" &&
+                searchValue.trim() === "" &&
+                recentQueries.length > 0 && (
+                  <div className="mb-4 rounded-xl border border-rm-border bg-rm-bg-elevated p-3 shadow-sm dark:shadow-none">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs font-black uppercase tracking-wider text-rm-text-muted">
+                        Recent Searches
+                      </span>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          clearRecentQueries();
+                        }}
+                        className="text-xs font-semibold text-red-500 hover:text-red-600 dark:text-red-400 dark:hover:text-red-300 transition"
                       >
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setSearchValue(q);
-                            setQuery(q);
-                            setMode("search");
-                            saveQueryToHistory(q);
-                          }}
-                          className="text-left hover:underline text-rm-text"
-                          style={{ color: "var(--rm-text-primary)" }}
+                        Clear All
+                      </button>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {recentQueries.map((q) => (
+                        <div
+                          key={q}
+                          className="picker-pill inline-flex items-center gap-1.5 rounded-full border pl-3 pr-2 py-1 text-xs font-semibold transition shadow-sm dark:shadow-none"
                         >
-                          {q}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            removeRecentQuery(q);
-                          }}
-                          className="rounded-full p-0.5 hover:bg-rm-bg-active text-rm-text-muted hover:text-rm-text transition"
-                          aria-label={`Remove ${q} from history`}
-                        >
-                          <X className="h-3.5 w-3.5" />
-                        </button>
-                      </div>
-                    ))}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSearchValue(q);
+                              setQuery(q);
+                              setMode("search");
+                              saveQueryToHistory(q);
+                            }}
+                            className="text-left hover:underline text-rm-text"
+                            style={{ color: "var(--rm-text-primary)" }}
+                          >
+                            {q}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              removeRecentQuery(q);
+                            }}
+                            className="rounded-full p-0.5 hover:bg-rm-bg-active text-rm-text-muted hover:text-rm-text transition"
+                            aria-label={`Remove ${q} from history`}
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
 
               {mode === "categories" && (
-                <div className={cn("mb-4 grid grid-cols-2 gap-2", expanded && "md:grid-cols-3")}>
+                <div
+                  className={cn(
+                    "mb-4 grid grid-cols-2 gap-2",
+                    expanded && "md:grid-cols-3",
+                  )}
+                >
                   <button
                     type="button"
                     onClick={openFavorites}
@@ -1359,8 +1652,16 @@ export default function GifPickerModal({
                     style={shortcutCardShadowStyle}
                   >
                     <GifShortcutCardMedia item={latestFavoritePreview} />
-                    {!latestFavoritePreview ? <div className="absolute inset-0" style={shortcutCardFallbackStyle} /> : null}
-                    <div className="absolute inset-0" style={shortcutCardOverlayStyle} />
+                    {!latestFavoritePreview ? (
+                      <div
+                        className="absolute inset-0"
+                        style={shortcutCardFallbackStyle}
+                      />
+                    ) : null}
+                    <div
+                      className="absolute inset-0"
+                      style={shortcutCardOverlayStyle}
+                    />
                     <div
                       className="absolute right-3 top-3 rounded-full border border-white/12 p-2 text-white backdrop-blur-sm"
                       style={shortcutCardBadgeStyle}
@@ -1381,8 +1682,16 @@ export default function GifPickerModal({
                     style={shortcutCardShadowStyle}
                   >
                     <GifShortcutCardMedia item={featuredCardPreview} />
-                    {!featuredCardPreview ? <div className="absolute inset-0" style={shortcutCardFallbackStyle} /> : null}
-                    <div className="absolute inset-0" style={shortcutCardOverlayStyle} />
+                    {!featuredCardPreview ? (
+                      <div
+                        className="absolute inset-0"
+                        style={shortcutCardFallbackStyle}
+                      />
+                    ) : null}
+                    <div
+                      className="absolute inset-0"
+                      style={shortcutCardOverlayStyle}
+                    />
                     <div
                       className="absolute right-3 top-3 rounded-full border border-white/12 p-2 text-white backdrop-blur-sm"
                       style={shortcutCardBadgeStyle}
@@ -1403,21 +1712,34 @@ export default function GifPickerModal({
                       onClick={() => handleCategorySearch(category)}
                       className="group relative h-24 overflow-hidden rounded-xl border border-rm-border shadow-sm dark:shadow-none"
                     >
-                      <img src={category.imageUrl} alt="" loading="lazy" decoding="async" className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105" />
+                      <img
+                        src={category.imageUrl}
+                        alt=""
+                        loading="lazy"
+                        decoding="async"
+                        className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                      />
                       <div className="absolute inset-0 bg-black/45 dark:bg-black/60" />
-                      <div className="absolute inset-0 flex items-center justify-center px-3 text-center text-lg font-black capitalize text-white drop-shadow-md">{category.label}</div>
+                      <div className="absolute inset-0 flex items-center justify-center px-3 text-center text-lg font-black capitalize text-white drop-shadow-md">
+                        {category.label}
+                      </div>
                     </button>
                   ))}
                 </div>
               )}
 
               {mode === "categories" && categoriesLoading ? (
-                <div className="py-8 text-center text-sm font-medium text-rm-text-muted">Loading {providerLabel} {mediaLabel} categories…</div>
+                <div className="py-8 text-center text-sm font-medium text-rm-text-muted">
+                  Loading {providerLabel} {mediaLabel} categories…
+                </div>
               ) : null}
 
-              {mode === "categories" && !categoriesLoading && categories.length === 0 ? (
+              {mode === "categories" &&
+              !categoriesLoading &&
+              categories.length === 0 ? (
                 <div className="flex h-40 items-center justify-center text-center text-sm font-medium text-rm-text-muted">
-                  No {providerLabel} {mediaLabel} categories available right now.
+                  No {providerLabel} {mediaLabel} categories available right
+                  now.
                 </div>
               ) : null}
 
@@ -1427,22 +1749,41 @@ export default function GifPickerModal({
                 </div>
               ) : null}
 
-              {mode === "favorites" && results.length === 0 ? <FavoritesEmptyState mediaLabel={mediaLabel} /> : null}
+              {mode === "favorites" && results.length === 0 ? (
+                <FavoritesEmptyState mediaLabel={mediaLabel} />
+              ) : null}
 
               {mode !== "categories" && results.length > 0 ? (
-                <div className={cn("flex items-start", expanded ? "gap-2 md:gap-3" : "gap-2")}>
+                <div
+                  className={cn(
+                    "flex items-start",
+                    expanded ? "gap-2 md:gap-3" : "gap-2",
+                  )}
+                >
                   {columnItems.map((col, colIdx) => (
-                    <div key={colIdx} className={cn("flex flex-col flex-1 min-w-0", expanded ? "gap-2 md:gap-3" : "gap-2")}>
+                    <div
+                      key={colIdx}
+                      className={cn(
+                        "flex flex-col flex-1 min-w-0",
+                        expanded ? "gap-2 md:gap-3" : "gap-2",
+                      )}
+                    >
                       {col.map((gif) => (
                         <GifTile
                           key={getGifItemIdentityKey(gif)}
                           gif={gif}
-                          isFavorite={favoriteIds.has(getGifItemIdentityKey(gif))}
+                          isFavorite={favoriteIds.has(
+                            getGifItemIdentityKey(gif),
+                          )}
                           favoriteCardBg={favoriteCardBg}
                           favoriteIconBase={favoriteIconBase}
                           onToggleFavorite={handleToggleFavorite}
                           onSelect={handleSelect}
-                          isClip={mediaType === "clips" || (mode === "favorites" && inferGifPickerMediaType(gif) === "clips")}
+                          isClip={
+                            mediaType === "clips" ||
+                            (mode === "favorites" &&
+                              inferGifPickerMediaType(gif) === "clips")
+                          }
                           clipsMuted={clipsMuted}
                           onToggleClipsMuted={handleToggleClipsMuted}
                         />
@@ -1450,13 +1791,19 @@ export default function GifPickerModal({
                     </div>
                   ))}
                 </div>
-              ) : (mode === "search" || mode === "featured") && !loading && !error ? (
+              ) : (mode === "search" || mode === "featured") &&
+                !loading &&
+                !error ? (
                 <div className="flex h-40 items-center justify-center text-center text-sm font-medium text-rm-text-muted">
                   {getNoResultsMessage()}
                 </div>
               ) : null}
 
-              {loading ? <GifLoadingSkeleton message={`Loading ${providerLabel} ${mediaLabel}…`} /> : null}
+              {loading ? (
+                <GifLoadingSkeleton
+                  message={`Loading ${providerLabel} ${mediaLabel}…`}
+                />
+              ) : null}
 
               {loadingMore || loadMoreCooldownUntil ? (
                 <GifLoadingSkeleton
@@ -1475,7 +1822,11 @@ export default function GifPickerModal({
                 <span className="text-[10px] font-bold uppercase tracking-wider text-rm-text-muted mr-1.5 opacity-70">
                   Powered by
                 </span>
-                <img src={klipyTextLightUrl} alt="KLIPY" className="h-3.5 w-auto opacity-70 dark:opacity-70 invert dark:invert-0" />
+                <img
+                  src={klipyTextLightUrl}
+                  alt="KLIPY"
+                  className="h-3.5 w-auto opacity-70 dark:opacity-70 invert dark:invert-0"
+                />
               </div>
             )}
           </div>
@@ -1543,7 +1894,12 @@ const ClipVideoPlayer = memo(function ClipVideoPlayer({
         aria-label="Clip preview"
         onLoadedMetadata={(e) => {
           const video = e.currentTarget;
-          if (video && !isNaN(video.duration) && isFinite(video.duration) && onDurationLoaded) {
+          if (
+            video &&
+            !isNaN(video.duration) &&
+            isFinite(video.duration) &&
+            onDurationLoaded
+          ) {
             onDurationLoaded(video.duration);
           }
         }}
@@ -1555,7 +1911,7 @@ const ClipVideoPlayer = memo(function ClipVideoPlayer({
         onClick={toggleMute}
         className={cn(
           "absolute bottom-2 left-2 z-10 flex h-7 w-7 items-center justify-center rounded-lg border border-white/10 bg-black/60 p-0 text-white transition-opacity duration-150 backdrop-blur-xs hover:bg-black/80 hover:scale-105 active:scale-95 cursor-pointer",
-          hovered ? "opacity-100" : "opacity-0"
+          hovered ? "opacity-100" : "opacity-0",
         )}
         aria-label={isMuted ? "Unmute clip preview" : "Mute clip preview"}
         aria-pressed={!isMuted}
@@ -1593,7 +1949,9 @@ const GifTile = memo(function GifTile({
   onToggleClipsMuted: () => void;
 }) {
   const gifId = getGifItemIdentityKey(gif);
-  const [loadedDuration, setLoadedDuration] = useState<number | undefined>(undefined);
+  const [loadedDuration, setLoadedDuration] = useState<number | undefined>(
+    undefined,
+  );
 
   useEffect(() => {
     setLoadedDuration(undefined);
@@ -1641,16 +1999,20 @@ const GifTile = memo(function GifTile({
             className={cn(
               "absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-xl border border-black/10 opacity-0 shadow-lg transition-all duration-150 group-hover:pointer-events-auto group-hover:opacity-100 hover:scale-110",
               favoriteCardBg,
-              isFavorite ? "scale-110" : "scale-100"
+              isFavorite ? "scale-110" : "scale-100",
             )}
-            aria-label={isFavorite ? "Remove from favorites" : "Add to favorites"}
+            aria-label={
+              isFavorite ? "Remove from favorites" : "Add to favorites"
+            }
             title={isFavorite ? "Remove from favorites" : "Add to favorites"}
           >
             <svg
               viewBox="0 0 24 24"
               className={cn(
                 "h-4.5 w-4.5 transition-all duration-200",
-                isFavorite ? "fill-amber-500 text-amber-500 dark:fill-yellow-400 dark:text-yellow-400 scale-110" : `${favoriteIconBase} fill-transparent group-hover:text-amber-500 dark:group-hover:text-yellow-400`
+                isFavorite
+                  ? "fill-amber-500 text-amber-500 dark:fill-yellow-400 dark:text-yellow-400 scale-110"
+                  : `${favoriteIconBase} fill-transparent group-hover:text-amber-500 dark:group-hover:text-yellow-400`,
               )}
               stroke="currentColor"
               strokeWidth="2"
@@ -1659,7 +2021,11 @@ const GifTile = memo(function GifTile({
             </svg>
           </button>
         </TooltipTrigger>
-        <TooltipContent side="left" sideOffset={8} className="bg-rm-bg-floating text-rm-text border border-rm-border shadow-xl text-xs font-semibold px-3 py-1.5">
+        <TooltipContent
+          side="left"
+          sideOffset={8}
+          className="bg-rm-bg-floating text-rm-text border border-rm-border shadow-xl text-xs font-semibold px-3 py-1.5"
+        >
           {isFavorite ? "Remove from favorites" : "Add to favorites"}
         </TooltipContent>
       </Tooltip>
@@ -1671,7 +2037,8 @@ function GifShortcutCardMedia({ item }: { item: GifPickerItem | null }) {
   if (!item) return null;
 
   const asset = item.preview;
-  const className = "absolute inset-0 h-full w-full object-cover transition-transform duration-300 group-hover:scale-105";
+  const className =
+    "absolute inset-0 h-full w-full object-cover transition-transform duration-300 group-hover:scale-105";
 
   if (asset.contentType === "video/mp4") {
     return (
@@ -1703,12 +2070,23 @@ function GifShortcutCardMedia({ item }: { item: GifPickerItem | null }) {
 }
 
 function FavoritesEmptyState({ mediaLabel = "GIFs" }: { mediaLabel?: string }) {
-  const singleLabel = mediaLabel.toLowerCase().endsWith("s") ? mediaLabel.slice(0, -1) : mediaLabel;
+  const singleLabel = mediaLabel.toLowerCase().endsWith("s")
+    ? mediaLabel.slice(0, -1)
+    : mediaLabel;
   return (
-    <div className="grid grid-cols-3 gap-3 max-sm:grid-cols-1" aria-live="polite">
+    <div
+      className="grid grid-cols-3 gap-3 max-sm:grid-cols-1"
+      aria-live="polite"
+    >
       <div className="relative flex min-h-40 items-center justify-center rounded-xl bg-rm-bg-surface border border-rm-border px-5 py-6 text-center text-[15px] font-medium leading-7 text-rm-text shadow-sm dark:shadow-none">
-        <Star className="absolute right-4 top-3 h-7 w-7 fill-amber-400 text-amber-400" aria-hidden="true" />
-        <p>Click the star in the corner of a {singleLabel.toLowerCase()} to favorite it</p>
+        <Star
+          className="absolute right-4 top-3 h-7 w-7 fill-amber-400 text-amber-400"
+          aria-hidden="true"
+        />
+        <p>
+          Click the star in the corner of a {singleLabel.toLowerCase()} to
+          favorite it
+        </p>
       </div>
       <div className="flex min-h-40 items-center justify-center rounded-xl bg-rm-bg-surface border border-rm-border px-5 py-6 text-center text-[15px] font-medium leading-7 text-rm-text shadow-sm dark:shadow-none">
         <p>Favorites will show up here!</p>
@@ -1721,7 +2099,11 @@ function FavoritesEmptyState({ mediaLabel = "GIFs" }: { mediaLabel?: string }) {
 }
 
 function isRateLimitError(error: unknown): boolean {
-  const maybeError = error as { status?: unknown; code?: unknown; message?: unknown };
+  const maybeError = error as {
+    status?: unknown;
+    code?: unknown;
+    message?: unknown;
+  };
   return (
     maybeError.status === 429 ||
     String(maybeError.code || "").endsWith("_RATE_LIMITED") ||
@@ -1736,14 +2118,40 @@ function formatDuration(seconds: number | undefined): string | null {
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
-function GifLoadingSkeleton({ compact = false, message }: { compact?: boolean; message: string }) {
+function GifLoadingSkeleton({
+  compact = false,
+  message,
+}: {
+  compact?: boolean;
+  message: string;
+}) {
   return (
-    <div className="py-4 flex flex-col items-center justify-center" aria-live="polite" aria-busy="true">
+    <div
+      className="py-4 flex flex-col items-center justify-center"
+      aria-live="polite"
+      aria-busy="true"
+    >
       <div className="text-center text-xs font-semibold uppercase tracking-wide text-rm-text-muted flex items-center justify-center gap-2">
         {compact && (
-          <svg className="animate-spin h-3.5 w-3.5 text-rm-text-muted" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+          <svg
+            className="animate-spin h-3.5 w-3.5 text-rm-text-muted"
+            xmlns="http://www.w3.org/2000/svg"
+            fill="none"
+            viewBox="0 0 24 24"
+          >
+            <circle
+              className="opacity-25"
+              cx="12"
+              cy="12"
+              r="10"
+              stroke="currentColor"
+              strokeWidth="4"
+            ></circle>
+            <path
+              className="opacity-75"
+              fill="currentColor"
+              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+            ></path>
           </svg>
         )}
         {message}
@@ -1755,7 +2163,7 @@ function GifLoadingSkeleton({ compact = false, message }: { compact?: boolean; m
               key={index}
               className={cn(
                 "animate-pulse rounded-xl border border-rm-border bg-rm-bg-surface shadow-sm dark:shadow-none",
-                index % 3 === 0 ? "h-28" : index % 3 === 1 ? "h-20" : "h-24"
+                index % 3 === 0 ? "h-28" : index % 3 === 1 ? "h-20" : "h-24",
               )}
             />
           ))}
@@ -1765,7 +2173,13 @@ function GifLoadingSkeleton({ compact = false, message }: { compact?: boolean; m
   );
 }
 
-function GifPreviewMedia({ asset, alt }: { asset: GifPickerAsset; alt: string }) {
+function GifPreviewMedia({
+  asset,
+  alt,
+}: {
+  asset: GifPickerAsset;
+  alt: string;
+}) {
   const className = "h-auto w-full object-cover";
   const style = { aspectRatio: `${asset.width} / ${asset.height}` };
 

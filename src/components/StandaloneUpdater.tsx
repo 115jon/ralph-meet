@@ -2,17 +2,30 @@ import splashLogo from "@/assets/splash-logo.svg";
 import { restartDesktopApp } from "@/lib/desktop-restart";
 import { useEffect, useState } from "react";
 
-type StandaloneUpdaterStatus = "checking" | "downloading" | "installing" | "starting" | "error";
+type StandaloneUpdaterStatus =
+  | "checking"
+  | "downloading"
+  | "installing"
+  | "starting"
+  | "error";
 
 const STARTING_HANDOFF_DELAY_MS = 700;
 
-export function getStandaloneUpdaterStatusText(status: StandaloneUpdaterStatus, progress: number) {
+export function getStandaloneUpdaterStatusText(
+  status: StandaloneUpdaterStatus,
+  progress: number,
+) {
   switch (status) {
-    case "checking": return "Checking for updates...";
-    case "downloading": return `Downloading update... ${progress}%`;
-    case "installing": return "Installing update...";
-    case "starting": return "Starting Ralph Meet...";
-    case "error": return "Update check failed (Debug mode active)";
+    case "checking":
+      return "Checking for updates...";
+    case "downloading":
+      return `Downloading update... ${progress}%`;
+    case "installing":
+      return "Installing update...";
+    case "starting":
+      return "Starting Ralph Meet...";
+    case "error":
+      return "Update check failed (Debug mode active)";
   }
 }
 
@@ -45,7 +58,12 @@ export function StandaloneUpdater() {
               case "Progress":
                 downloaded += event.data.chunkLength;
                 if (contentLength > 0 && mounted) {
-                  setProgress(Math.min(100, Math.round((downloaded / contentLength) * 100)));
+                  setProgress(
+                    Math.min(
+                      100,
+                      Math.round((downloaded / contentLength) * 100),
+                    ),
+                  );
                 }
                 break;
               case "Finished":
@@ -62,12 +80,10 @@ export function StandaloneUpdater() {
               console.error("Relaunch failed", e);
             }
           }, 3000);
-
         } else {
           // No update, switch to main window
           if (mounted) showStartingThenSwitch();
         }
-
       } catch (e: any) {
         console.error("Update check failed:", e);
         // On error, fallback to main window
@@ -82,8 +98,9 @@ export function StandaloneUpdater() {
     }
 
     async function switchToMain() {
-      const { Window, getCurrentWindow } = await import("@tauri-apps/api/window");
-      
+      const { Window, getCurrentWindow } =
+        await import("@tauri-apps/api/window");
+
       try {
         const mainWindow = await Window.getByLabel("main");
         if (mainWindow) {
@@ -111,15 +128,16 @@ export function StandaloneUpdater() {
   }, []);
 
   return (
-    <div 
+    <div
       className="w-screen h-screen flex flex-col justify-center items-center bg-rm-bg-primary relative overflow-hidden"
-      style={{ WebkitAppRegion: 'drag' } as any}
+      style={{ WebkitAppRegion: "drag" } as any}
     >
       {/* Radial glow */}
       <div
         className="absolute top-[45%] left-1/2 w-[320px] h-[320px] rounded-full pointer-events-none animate-[conn-glow_3s_ease-in-out_infinite]"
         style={{
-          background: "radial-gradient(circle, var(--rm-glow, rgba(88, 101, 242, 0.4)) 0%, transparent 70%)",
+          background:
+            "radial-gradient(circle, var(--rm-glow, rgba(88, 101, 242, 0.4)) 0%, transparent 70%)",
           transform: "translate(-50%, -50%)",
         }}
       />
@@ -146,9 +164,9 @@ export function StandaloneUpdater() {
         {status === "checking" || status === "installing" ? (
           <div className="absolute top-0 h-full rounded-full bg-rm-accent animate-[conn-bar_1.8s_cubic-bezier(0.4,0,0.2,1)_infinite]" />
         ) : (
-          <div 
-            className="h-full rounded-full bg-rm-accent transition-all duration-200 ease-out" 
-            style={{ width: `${progress}%` }} 
+          <div
+            className="h-full rounded-full bg-rm-accent transition-all duration-200 ease-out"
+            style={{ width: `${progress}%` }}
           />
         )}
       </div>

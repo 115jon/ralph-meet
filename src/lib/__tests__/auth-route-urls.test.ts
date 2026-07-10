@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { buildAuthRouteUrl, buildDesktopSignInUrl, buildPostAuthSignInUrl } from "../auth-route-urls";
+import {
+  buildAuthRouteUrl,
+  buildDesktopSignInUrl,
+  buildPostAuthSignInUrl,
+} from "../auth-route-urls";
 
 describe("auth route URL helpers", () => {
   it("omits search params when no redirect context is present", () => {
@@ -16,7 +20,9 @@ describe("auth route URL helpers", () => {
   });
 
   it("routes post-signup completion back through sign-in", () => {
-    expect(buildPostAuthSignInUrl("/chat")).toBe("/sign-in?redirect_url=%2Fchat");
+    expect(buildPostAuthSignInUrl("/chat")).toBe(
+      "/sign-in?redirect_url=%2Fchat",
+    );
   });
 
   it("keeps desktop handoff context during post-signup completion", () => {

@@ -4,12 +4,23 @@ import {
   type ChannelVisibilityOverride,
   type ChannelVisibilityRole,
 } from "@/lib/channel-visibility";
-import { calculatePermissions, hasPermission, PERMISSIONS } from "@/lib/permissions";
+import {
+  calculatePermissions,
+  hasPermission,
+  PERMISSIONS,
+} from "@/lib/permissions";
 
 async function fetchServerMemberRoles(
   serverId: string,
-  userId: string
-): Promise<Array<{ permissions: number; position: number; is_default: number; id: string }>> {
+  userId: string,
+): Promise<
+  Array<{
+    permissions: number;
+    position: number;
+    is_default: number;
+    id: string;
+  }>
+> {
   const db = getDB();
   const { results } = await db
     .prepare(
@@ -17,14 +28,18 @@ async function fetchServerMemberRoles(
        FROM server_members sm
        JOIN member_roles mr ON mr.server_id = sm.server_id AND mr.user_id = sm.user_id
        JOIN roles r ON r.id = mr.role_id
-       WHERE sm.server_id = ? AND sm.user_id = ?`
+       WHERE sm.server_id = ? AND sm.user_id = ?`,
     )
     .bind(serverId, userId)
     .all();
 
-  return (results ?? []) as Array<{ permissions: number; position: number; is_default: number; id: string }>;
+  return (results ?? []) as Array<{
+    permissions: number;
+    position: number;
+    is_default: number;
+    id: string;
+  }>;
 }
-
 
 /**
  * Verify the user has a specific permission in a server.
@@ -38,12 +53,13 @@ export async function requirePermission(
   serverId: string,
   userId: string,
   permission: number,
-  errorMessage = "Insufficient permissions"
+  errorMessage = "Insufficient permissions",
 ): Promise<{ permissions: number } | Response> {
   const roles = await fetchServerMemberRoles(serverId, userId);
-  const totalPerms = roles.length > 0
-    ? calculatePermissions(roles.map((role) => role.permissions))
-    : null;
+  const totalPerms =
+    roles.length > 0
+      ? calculatePermissions(roles.map((role) => role.permissions))
+      : null;
 
   if (totalPerms === null || !hasPermission(totalPerms, permission)) {
     return Response.json({ error: errorMessage }, { status: 403 });
@@ -58,7 +74,7 @@ export async function requirePermission(
  */
 export async function getUserPermissions(
   serverId: string,
-  userId: string
+  userId: string,
 ): Promise<number | null> {
   const roles = await fetchServerMemberRoles(serverId, userId);
   return roles.length > 0
@@ -81,7 +97,7 @@ export async function getUserPermissions(
 export async function getUserChannelPermissions(
   serverId: string,
   channelId: string,
-  userId: string
+  userId: string,
 ): Promise<number | null> {
   const db = getDB();
   const userRoles = await fetchServerMemberRoles(serverId, userId);
@@ -108,30 +124,39 @@ export async function getUserChannelPermissions(
   }
 
   // 2. Fetch all overrides for this channel that apply to the user
-  const placeholders = roleIds.map(() => '?').join(',');
+  const placeholders = roleIds.map(() => "?").join(",");
   const queryParams = [channelId, userId, ...roleIds];
 
-  const { results: overrides } = await db.prepare(
-    `SELECT target_id, target_type, allow, deny
+  const { results: overrides } = await db
+    .prepare(
+      `SELECT target_id, target_type, allow, deny
      FROM channel_permission_overrides
      WHERE channel_id = ?
        AND (
          (target_type = 'user' AND target_id = ?) OR
          (target_type = 'role' AND target_id IN (${placeholders}))
-       )`
-  ).bind(...queryParams).all();
+       )`,
+    )
+    .bind(...queryParams)
+    .all();
 
   let finalPermissions = basePermissions;
 
   // Find specific overrides
-  const everyoneOverride = overrides?.find((o: any) => o.target_type === 'role' && o.target_id === everyoneRoleId);
-  const roleOverrides = overrides?.filter((o: any) => o.target_type === 'role' && o.target_id !== everyoneRoleId);
-  const userOverride = overrides?.find((o: any) => o.target_type === 'user' && o.target_id === userId);
+  const everyoneOverride = overrides?.find(
+    (o: any) => o.target_type === "role" && o.target_id === everyoneRoleId,
+  );
+  const roleOverrides = overrides?.filter(
+    (o: any) => o.target_type === "role" && o.target_id !== everyoneRoleId,
+  );
+  const userOverride = overrides?.find(
+    (o: any) => o.target_type === "user" && o.target_id === userId,
+  );
 
   // 3. Apply @everyone overrides
   if (everyoneOverride) {
     finalPermissions &= ~(everyoneOverride.deny as number);
-    finalPermissions |= (everyoneOverride.allow as number);
+    finalPermissions |= everyoneOverride.allow as number;
   }
 
   // 4. Apply Role overrides (sum all denies, sum all allows)
@@ -149,7 +174,7 @@ export async function getUserChannelPermissions(
   // 5. Apply User override
   if (userOverride) {
     finalPermissions &= ~(userOverride.deny as number);
-    finalPermissions |= (userOverride.allow as number);
+    finalPermissions |= userOverride.allow as number;
   }
 
   return finalPermissions;
@@ -163,9 +188,13 @@ export async function requireChannelPermission(
   channelId: string,
   userId: string,
   permission: number,
-  errorMessage = "Insufficient channel permissions"
+  errorMessage = "Insufficient channel permissions",
 ): Promise<{ permissions: number } | Response> {
-  const totalPerms = await getUserChannelPermissions(serverId, channelId, userId);
+  const totalPerms = await getUserChannelPermissions(
+    serverId,
+    channelId,
+    userId,
+  );
 
   if (totalPerms === null || !hasPermission(totalPerms, permission)) {
     return Response.json({ error: errorMessage }, { status: 403 });
@@ -178,32 +207,39 @@ export async function requireChannelPermission(
  * Filters a list of channels, returning only those the user has VIEW_CHANNELS for.
  * Computes all channel overrides locally in one pass for performance.
  */
- 
+
 export async function getVisibleChannels<T extends { id: string }>(
   serverId: string,
   userId: string,
-  channels: T[]
+  channels: T[],
 ): Promise<T[]> {
   const db = getDB();
 
-  const userRoles = await fetchServerMemberRoles(serverId, userId) as ChannelVisibilityRole[];
+  const userRoles = (await fetchServerMemberRoles(
+    serverId,
+    userId,
+  )) as ChannelVisibilityRole[];
 
   if (!userRoles || userRoles.length === 0) return [];
   const roleIds = userRoles.map((role) => role.id);
 
-  const placeholders = roleIds.length > 0 ? roleIds.map(() => '?').join(',') : "''";
+  const placeholders =
+    roleIds.length > 0 ? roleIds.map(() => "?").join(",") : "''";
   const queryParams = [serverId, userId, ...roleIds];
 
-  const { results: overrides } = await db.prepare(
-    `SELECT co.channel_id, co.target_id, co.target_type, co.allow, co.deny
+  const { results: overrides } = await db
+    .prepare(
+      `SELECT co.channel_id, co.target_id, co.target_type, co.allow, co.deny
      FROM channel_permission_overrides co
      JOIN channels c ON c.id = co.channel_id
      WHERE c.server_id = ?
        AND (
          (co.target_type = 'user' AND co.target_id = ?) OR
          (co.target_type = 'role' AND co.target_id IN (${placeholders}))
-       )`
-  ).bind(...queryParams).all();
+       )`,
+    )
+    .bind(...queryParams)
+    .all();
   const visiblePermissions = resolveVisibleChannelPermissions(
     channels,
     userId,

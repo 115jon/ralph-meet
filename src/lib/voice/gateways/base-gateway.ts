@@ -4,13 +4,15 @@ import type { ClientMessage, ServerMessage } from "@/lib/types";
 import { HeartbeatManager } from "../heartbeat-manager";
 
 export interface BaseGatewayEvents {
-  "connected": void;
-  "disconnected": void;
-  "message": ServerMessage;
-  "kicked": void;
+  connected: void;
+  disconnected: void;
+  message: ServerMessage;
+  kicked: void;
 }
 
-export abstract class BaseGateway<EventMap extends Record<string, any>> extends TypedEventEmitter<EventMap & BaseGatewayEvents> {
+export abstract class BaseGateway<
+  EventMap extends Record<string, any>,
+> extends TypedEventEmitter<EventMap & BaseGatewayEvents> {
   protected ws: WebSocket | null = null;
   protected reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   protected reconnectAttempt = 0;
@@ -25,7 +27,10 @@ export abstract class BaseGateway<EventMap extends Record<string, any>> extends 
   protected readonly log: ScopedLogger;
   protected readonly heartbeat: HeartbeatManager;
 
-  constructor(public readonly label: string, private heartbeatOpcode: number) {
+  constructor(
+    public readonly label: string,
+    private heartbeatOpcode: number,
+  ) {
     super();
     this.log = clog(label);
     const HEARTBEAT_MSG = JSON.stringify({ op: this.heartbeatOpcode });
@@ -41,15 +46,25 @@ export abstract class BaseGateway<EventMap extends Record<string, any>> extends 
   /**
    * Called to establish the WebSocket connection.
    */
-  public connect(url: string, resetReconnectAttempt = true, protocols?: string[]) {
+  public connect(
+    url: string,
+    resetReconnectAttempt = true,
+    protocols?: string[],
+  ) {
     this.isLeaving = false;
     if (resetReconnectAttempt) {
       this.reconnectAttempt = 0;
     }
 
     // Guard against duplicate connections
-    if (this.ws && (this.ws.readyState === WebSocket.CONNECTING || this.ws.readyState === WebSocket.OPEN)) {
-      this.log.info("Already connecting/connected, skipping duplicate connect()");
+    if (
+      this.ws &&
+      (this.ws.readyState === WebSocket.CONNECTING ||
+        this.ws.readyState === WebSocket.OPEN)
+    ) {
+      this.log.info(
+        "Already connecting/connected, skipping duplicate connect()",
+      );
       return;
     }
 
@@ -76,8 +91,13 @@ export abstract class BaseGateway<EventMap extends Record<string, any>> extends 
       this.ws = null;
 
       if (!this.isLeaving) {
-        if (event.code === 1000 && event.reason === "Replaced by new connection") {
-          this.log.warn("Session was replaced by a new connection in another tab/device. Not reconnecting.");
+        if (
+          event.code === 1000 &&
+          event.reason === "Replaced by new connection"
+        ) {
+          this.log.warn(
+            "Session was replaced by a new connection in another tab/device. Not reconnecting.",
+          );
           this.isLeaving = true;
           this.emit("kicked", undefined as never);
           this.emit("disconnected", undefined as never);
@@ -92,7 +112,9 @@ export abstract class BaseGateway<EventMap extends Record<string, any>> extends 
         }
 
         this.emit("disconnected", undefined as never);
-        this.log.warn(`Connection lost (code=${event.code}, reason=${event.reason}) \u2014 attempting to reconnect`);
+        this.log.warn(
+          `Connection lost (code=${event.code}, reason=${event.reason}) \u2014 attempting to reconnect`,
+        );
         this.scheduleReconnect();
       }
     };
@@ -107,7 +129,9 @@ export abstract class BaseGateway<EventMap extends Record<string, any>> extends 
    */
   public send(msg: ClientMessage, forceSendBeforeIdentify = false) {
     if (!this.isIdentified && !forceSendBeforeIdentify) {
-      this.log.warn(`Not ready (identified=${this.isIdentified}), queueing message op=${msg.op}`);
+      this.log.warn(
+        `Not ready (identified=${this.isIdentified}), queueing message op=${msg.op}`,
+      );
       this.msgQueue.push(msg);
       return;
     }
@@ -146,12 +170,16 @@ export abstract class BaseGateway<EventMap extends Record<string, any>> extends 
     }
 
     // Jittered exponential backoff: 500ms, 1s, 2s, 4s, 8s, 10s (capped)
-    const delay = Math.min(
-      BaseGateway.BACKOFF_BASE_MS * Math.pow(2, this.reconnectAttempt),
-      BaseGateway.BACKOFF_MAX_MS
-    ) * (0.5 + Math.random() * 0.5);
+    const delay =
+      Math.min(
+        BaseGateway.BACKOFF_BASE_MS * Math.pow(2, this.reconnectAttempt),
+        BaseGateway.BACKOFF_MAX_MS,
+      ) *
+      (0.5 + Math.random() * 0.5);
 
-    this.log.info(`Scheduling reconnect in ${Math.round(delay)}ms (attempt ${this.reconnectAttempt + 1})`);
+    this.log.info(
+      `Scheduling reconnect in ${Math.round(delay)}ms (attempt ${this.reconnectAttempt + 1})`,
+    );
     this.reconnectAttempt++;
 
     this.reconnectTimer = setTimeout(() => {
@@ -163,7 +191,9 @@ export abstract class BaseGateway<EventMap extends Record<string, any>> extends 
   }
 
   protected flushQueue() {
-    this.log.info(`Identified, flushing ${this.msgQueue.length} queued messages`);
+    this.log.info(
+      `Identified, flushing ${this.msgQueue.length} queued messages`,
+    );
     const queued = [...this.msgQueue];
     this.msgQueue = [];
     for (const m of queued) {
@@ -184,7 +214,9 @@ export abstract class BaseGateway<EventMap extends Record<string, any>> extends 
       this.ws.onclose = null;
       this.ws.onerror = null;
       this.ws.onmessage = null;
-      try { this.ws.close(); } catch { }
+      try {
+        this.ws.close();
+      } catch {}
       this.ws = null;
     }
     this.isIdentified = false;
@@ -202,7 +234,9 @@ export abstract class BaseGateway<EventMap extends Record<string, any>> extends 
       this.ws.onclose = null;
       this.ws.onerror = null;
       this.ws.onmessage = null;
-      try { this.ws.close(); } catch { }
+      try {
+        this.ws.close();
+      } catch {}
       this.ws = null;
     }
 

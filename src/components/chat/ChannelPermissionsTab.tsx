@@ -1,17 +1,17 @@
 import { getAuthAssetUrl } from "@/lib/platform";
-import { apiDelete, apiGet, apiPut } from '@/lib/api-client';
-import { PERMISSIONS } from '@/lib/permissions';
-import type { Role, User } from '@/lib/types';
-import { cn } from '@/lib/utils';
-import { Check, Loader2, Plus, Slash, Trash2, X } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
-import { AvatarImage } from './AvatarImage';
+import { apiDelete, apiGet, apiPut } from "@/lib/api-client";
+import { PERMISSIONS } from "@/lib/permissions";
+import type { Role, User } from "@/lib/types";
+import { cn } from "@/lib/utils";
+import { Check, Loader2, Plus, Slash, Trash2, X } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { AvatarImage } from "./AvatarImage";
 import { ButtonBase } from "@/components/ui/button-base";
 
 interface Override {
   id?: string;
   target_id: string;
-  target_type: 'role' | 'user';
+  target_type: "role" | "user";
   allow: number;
   deny: number;
   name?: string;
@@ -27,21 +27,69 @@ interface ChannelPermissionsTabProps {
 }
 
 const TEXT_PERMISSIONS = [
-  { mask: PERMISSIONS.VIEW_CHANNELS, name: 'View Channel', desc: 'Allows members to view and read messages in this channel' },
-  { mask: PERMISSIONS.MANAGE_CHANNELS, name: 'Manage Channel', desc: 'Allows members to change the channels name or delete it' },
-  { mask: PERMISSIONS.MANAGE_MESSAGES, name: 'Manage Messages', desc: 'Allows members to delete messages by other users or pin any message' },
-  { mask: PERMISSIONS.SEND_MESSAGES, name: 'Send Messages', desc: 'Allows members to send text messages' },
-  { mask: PERMISSIONS.ADD_REACTIONS, name: 'Add Reactions', desc: 'Allows members to add new emoji reactions to a message' },
-  { mask: PERMISSIONS.ATTACH_FILES, name: 'Attach Files', desc: 'Allows members to upload files' },
+  {
+    mask: PERMISSIONS.VIEW_CHANNELS,
+    name: "View Channel",
+    desc: "Allows members to view and read messages in this channel",
+  },
+  {
+    mask: PERMISSIONS.MANAGE_CHANNELS,
+    name: "Manage Channel",
+    desc: "Allows members to change the channels name or delete it",
+  },
+  {
+    mask: PERMISSIONS.MANAGE_MESSAGES,
+    name: "Manage Messages",
+    desc: "Allows members to delete messages by other users or pin any message",
+  },
+  {
+    mask: PERMISSIONS.SEND_MESSAGES,
+    name: "Send Messages",
+    desc: "Allows members to send text messages",
+  },
+  {
+    mask: PERMISSIONS.ADD_REACTIONS,
+    name: "Add Reactions",
+    desc: "Allows members to add new emoji reactions to a message",
+  },
+  {
+    mask: PERMISSIONS.ATTACH_FILES,
+    name: "Attach Files",
+    desc: "Allows members to upload files",
+  },
 ];
 
 const VOICE_PERMISSIONS = [
-  { mask: PERMISSIONS.VIEW_CHANNELS, name: 'View Channel', desc: 'Allows members to see the voice channel' },
-  { mask: PERMISSIONS.MANAGE_CHANNELS, name: 'Manage Channel', desc: 'Allows members to change the channels name or delete it' },
-  { mask: PERMISSIONS.CONNECT, name: 'Connect', desc: 'Allows members to join this voice channel' },
-  { mask: PERMISSIONS.SPEAK, name: 'Speak', desc: 'Allows members to talk in this voice channel' },
-  { mask: PERMISSIONS.VIDEO, name: 'Video', desc: 'Allows members to share their screen or camera' },
-  { mask: PERMISSIONS.MUTE_MEMBERS, name: 'Mute Members', desc: 'Allows members to mute other users in this voice channel' },
+  {
+    mask: PERMISSIONS.VIEW_CHANNELS,
+    name: "View Channel",
+    desc: "Allows members to see the voice channel",
+  },
+  {
+    mask: PERMISSIONS.MANAGE_CHANNELS,
+    name: "Manage Channel",
+    desc: "Allows members to change the channels name or delete it",
+  },
+  {
+    mask: PERMISSIONS.CONNECT,
+    name: "Connect",
+    desc: "Allows members to join this voice channel",
+  },
+  {
+    mask: PERMISSIONS.SPEAK,
+    name: "Speak",
+    desc: "Allows members to talk in this voice channel",
+  },
+  {
+    mask: PERMISSIONS.VIDEO,
+    name: "Video",
+    desc: "Allows members to share their screen or camera",
+  },
+  {
+    mask: PERMISSIONS.MUTE_MEMBERS,
+    name: "Mute Members",
+    desc: "Allows members to mute other users in this voice channel",
+  },
 ];
 
 function PermissionsSidebar({
@@ -60,7 +108,14 @@ function PermissionsSidebar({
   setIsAddingTarget: (val: boolean) => void;
   availableRoles: Role[];
   availableMembers: any[];
-  handleAddOverride: (target_id: string, target_type: 'role' | 'user', name: string, color?: string | null, avatar_url?: string | null, avatar_display?: User["avatar_display"]) => void;
+  handleAddOverride: (
+    target_id: string,
+    target_type: "role" | "user",
+    name: string,
+    color?: string | null,
+    avatar_url?: string | null,
+    avatar_display?: User["avatar_display"],
+  ) => void;
   overrides: Override[];
   roles: Role[];
   selectedTargetId: string | null;
@@ -70,9 +125,18 @@ function PermissionsSidebar({
   return (
     <div className="w-56 bg-rm-bg-secondary border-r border-rm-border flex flex-col relative z-10">
       <div className="p-3 border-b border-rm-border flex justify-between items-center">
-        <span className="text-xs font-bold uppercase tracking-widest text-rm-text-muted">Roles/Members</span>
-        <ButtonBase onClick={() => setIsAddingTarget(!isAddingTarget)} className="p-1 hover:bg-rm-bg-hover rounded transition-colors text-rm-text-secondary hover:text-rm-text relative z-10">
-          {isAddingTarget ? <X className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
+        <span className="text-xs font-bold uppercase tracking-widest text-rm-text-muted">
+          Roles/Members
+        </span>
+        <ButtonBase
+          onClick={() => setIsAddingTarget(!isAddingTarget)}
+          className="p-1 hover:bg-rm-bg-hover rounded transition-colors text-rm-text-secondary hover:text-rm-text relative z-10"
+        >
+          {isAddingTarget ? (
+            <X className="h-4 w-4" />
+          ) : (
+            <Plus className="h-4 w-4" />
+          )}
         </ButtonBase>
       </div>
 
@@ -80,15 +144,27 @@ function PermissionsSidebar({
         <div className="flex-1 overflow-y-auto p-2 bg-rm-bg-surface space-y-4">
           {availableRoles.length > 0 && (
             <div>
-              <span className="px-2 text-[10px] font-bold uppercase text-rm-text-muted">Roles</span>
+              <span className="px-2 text-[10px] font-bold uppercase text-rm-text-muted">
+                Roles
+              </span>
               <div className="space-y-1 mt-1">
-                {availableRoles.map(role => (
+                {availableRoles.map((role) => (
                   <ButtonBase
                     key={role.id}
-                    onClick={() => handleAddOverride(role.id, 'role', role.name, role.color || undefined)}
+                    onClick={() =>
+                      handleAddOverride(
+                        role.id,
+                        "role",
+                        role.name,
+                        role.color || undefined,
+                      )
+                    }
                     className="w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-rm-bg-hover text-sm text-left"
                   >
-                    <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: role.color || '#94a3b8' }} />
+                    <div
+                      className="w-3 h-3 rounded-full shrink-0"
+                      style={{ backgroundColor: role.color || "#94a3b8" }}
+                    />
                     <span className="truncate">{role.name}</span>
                   </ButtonBase>
                 ))}
@@ -98,21 +174,39 @@ function PermissionsSidebar({
 
           {availableMembers.length > 0 && (
             <div>
-              <span className="px-2 text-[10px] font-bold uppercase text-rm-text-muted">Members</span>
+              <span className="px-2 text-[10px] font-bold uppercase text-rm-text-muted">
+                Members
+              </span>
               <div className="space-y-1 mt-1">
-                {availableMembers.map(m => {
-                  const displayName = m.user.display_name?.trim() || m.user.username;
+                {availableMembers.map((m) => {
+                  const displayName =
+                    m.user.display_name?.trim() || m.user.username;
                   return (
                     <ButtonBase
                       key={m.user.id}
-                      onClick={() => handleAddOverride(m.user.id, 'user', displayName, undefined, m.user.avatar_url, m.user.avatar_display)}
+                      onClick={() =>
+                        handleAddOverride(
+                          m.user.id,
+                          "user",
+                          displayName,
+                          undefined,
+                          m.user.avatar_url,
+                          m.user.avatar_display,
+                        )
+                      }
                       className="w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-rm-bg-hover text-sm text-left"
                     >
                       <div className="w-5 h-5 rounded-full bg-rm-bg-elevated overflow-visible flex items-center justify-center shrink-0">
                         {m.user.avatar_url ? (
-                          <AvatarImage src={getAuthAssetUrl(m.user.avatar_url)} alt="" display={m.user.avatar_display} />
+                          <AvatarImage
+                            src={getAuthAssetUrl(m.user.avatar_url)}
+                            alt=""
+                            display={m.user.avatar_display}
+                          />
                         ) : (
-                          <span className="text-[10px] text-rm-text uppercase font-bold">{displayName[0]}</span>
+                          <span className="text-[10px] text-rm-text uppercase font-bold">
+                            {displayName[0]}
+                          </span>
                         )}
                       </div>
                       <span className="truncate">{displayName}</span>
@@ -123,13 +217,15 @@ function PermissionsSidebar({
             </div>
           )}
           {availableRoles.length === 0 && availableMembers.length === 0 && (
-            <p className="p-2 text-xs text-rm-text-muted text-center">Everyone is added.</p>
+            <p className="p-2 text-xs text-rm-text-muted text-center">
+              Everyone is added.
+            </p>
           )}
         </div>
       ) : (
         <div className="flex-1 overflow-y-auto p-2 space-y-1">
-          {overrides.map(o => {
-            const roleInfo = roles.find(r => r.id === o.target_id);
+          {overrides.map((o) => {
+            const roleInfo = roles.find((r) => r.id === o.target_id);
             const isDefault = roleInfo?.is_default;
 
             return (
@@ -138,17 +234,28 @@ function PermissionsSidebar({
                 onClick={() => setSelectedTargetId(o.target_id)}
                 className={cn(
                   "w-full flex items-center gap-2 px-2 py-1.5 rounded text-sm text-left transition-colors group",
-                  selectedTargetId === o.target_id ? "bg-primary/20 text-primary" : "hover:bg-rm-bg-hover text-rm-text"
+                  selectedTargetId === o.target_id
+                    ? "bg-primary/20 text-primary"
+                    : "hover:bg-rm-bg-hover text-rm-text",
                 )}
               >
-                {o.target_type === 'role' ? (
-                  <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: o.color || '#94a3b8' }} />
+                {o.target_type === "role" ? (
+                  <div
+                    className="w-3 h-3 rounded-full shrink-0"
+                    style={{ backgroundColor: o.color || "#94a3b8" }}
+                  />
                 ) : (
                   <div className="w-5 h-5 rounded-full bg-rm-bg-elevated overflow-visible flex items-center justify-center -ml-1 shrink-0">
                     {o.avatar_url ? (
-                      <AvatarImage src={getAuthAssetUrl(o.avatar_url)} alt="" display={o.avatar_display} />
+                      <AvatarImage
+                        src={getAuthAssetUrl(o.avatar_url)}
+                        alt=""
+                        display={o.avatar_display}
+                      />
                     ) : (
-                      <span className="text-[10px] text-rm-text uppercase font-bold">{(o.name || '?')[0]}</span>
+                      <span className="text-[10px] text-rm-text uppercase font-bold">
+                        {(o.name || "?")[0]}
+                      </span>
                     )}
                   </div>
                 )}
@@ -156,7 +263,10 @@ function PermissionsSidebar({
                 {!isDefault && (
                   <Trash2
                     className="h-3 w-3 opacity-0 group-hover:opacity-100 hover:text-destructive shrink-0"
-                    onClick={(e) => { e.stopPropagation(); handleDeleteOverride(o.target_id); }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDeleteOverride(o.target_id);
+                    }}
                   />
                 )}
               </ButtonBase>
@@ -177,7 +287,10 @@ function PermissionsEditor({
   selectedOverride: Override | undefined;
   savingTarget: string | null;
   permissionList: { mask: number; name: string; desc: string }[];
-  handleUpdatePermission: (mask: number, action: 'allow' | 'deny' | 'inherit') => void;
+  handleUpdatePermission: (
+    mask: number,
+    action: "allow" | "deny" | "inherit",
+  ) => void;
 }) {
   return (
     <div className="flex-1 flex flex-col bg-rm-bg-primary overflow-hidden relative">
@@ -185,51 +298,75 @@ function PermissionsEditor({
         <>
           <div className="p-5 border-b border-rm-border flex items-center gap-3">
             <span className="font-bold text-lg text-rm-text flex items-center gap-2">
-              {selectedOverride.target_type === 'role' ? (
-                <div className="w-4 h-4 rounded-full inline-block" style={{ backgroundColor: selectedOverride.color || '#94a3b8' }} />
+              {selectedOverride.target_type === "role" ? (
+                <div
+                  className="w-4 h-4 rounded-full inline-block"
+                  style={{
+                    backgroundColor: selectedOverride.color || "#94a3b8",
+                  }}
+                />
               ) : null}
               {selectedOverride.name}
             </span>
-            {savingTarget === selectedOverride.target_id && <Loader2 className="h-4 w-4 animate-spin text-rm-text-muted" />}
+            {savingTarget === selectedOverride.target_id && (
+              <Loader2 className="h-4 w-4 animate-spin text-rm-text-muted" />
+            )}
           </div>
 
           <div className="flex-1 overflow-y-auto px-6 py-4 space-y-3 relative z-0">
-            {permissionList.map(perm => {
-              const isAllowed = ((selectedOverride.allow & perm.mask) === perm.mask);
-              const isDenied = ((selectedOverride.deny & perm.mask) === perm.mask);
+            {permissionList.map((perm) => {
+              const isAllowed =
+                (selectedOverride.allow & perm.mask) === perm.mask;
+              const isDenied =
+                (selectedOverride.deny & perm.mask) === perm.mask;
               const isInherit = !isAllowed && !isDenied;
 
               return (
-                <div key={perm.mask} className="flex items-center justify-between pb-4 border-b border-rm-border/30 last:border-0 hover:bg-rm-white/5 rounded px-2 -mx-2 transition-colors">
+                <div
+                  key={perm.mask}
+                  className="flex items-center justify-between pb-4 border-b border-rm-border/30 last:border-0 hover:bg-rm-white/5 rounded px-2 -mx-2 transition-colors"
+                >
                   <div className="max-w-[70%]">
-                    <div className="text-sm font-semibold text-rm-text">{perm.name}</div>
-                    <div className="text-xs text-rm-text-secondary mt-1">{perm.desc}</div>
+                    <div className="text-sm font-semibold text-rm-text">
+                      {perm.name}
+                    </div>
+                    <div className="text-xs text-rm-text-secondary mt-1">
+                      {perm.desc}
+                    </div>
                   </div>
 
                   <div className="flex bg-rm-bg-elevated rounded-lg p-1 gap-1 border border-rm-border/50 shadow-inner">
                     <ButtonBase
-                      onClick={() => handleUpdatePermission(perm.mask, 'deny')}
+                      onClick={() => handleUpdatePermission(perm.mask, "deny")}
                       className={cn(
                         "w-10 h-8 rounded flex items-center justify-center transition-colors shadow-sm",
-                        isDenied ? "bg-red-500 text-white" : "hover:bg-rm-white/10 text-rm-text-muted"
+                        isDenied
+                          ? "bg-red-500 text-white"
+                          : "hover:bg-rm-white/10 text-rm-text-muted",
                       )}
                     >
                       <X className="h-4 w-4" />
                     </ButtonBase>
                     <ButtonBase
-                      onClick={() => handleUpdatePermission(perm.mask, 'inherit')}
+                      onClick={() =>
+                        handleUpdatePermission(perm.mask, "inherit")
+                      }
                       className={cn(
                         "w-10 h-8 rounded flex items-center justify-center transition-colors shadow-sm",
-                        isInherit ? "bg-slate-500 text-white border border-rm-border" : "hover:bg-rm-white/10 text-rm-text-muted"
+                        isInherit
+                          ? "bg-slate-500 text-white border border-rm-border"
+                          : "hover:bg-rm-white/10 text-rm-text-muted",
                       )}
                     >
                       <Slash className="h-4 w-4" />
                     </ButtonBase>
                     <ButtonBase
-                      onClick={() => handleUpdatePermission(perm.mask, 'allow')}
+                      onClick={() => handleUpdatePermission(perm.mask, "allow")}
                       className={cn(
                         "w-10 h-8 rounded flex items-center justify-center transition-colors shadow-sm",
-                        isAllowed ? "bg-green-500 text-white" : "hover:bg-rm-white/10 text-rm-text-muted"
+                        isAllowed
+                          ? "bg-green-500 text-white"
+                          : "hover:bg-rm-white/10 text-rm-text-muted",
                       )}
                     >
                       <Check className="h-4 w-4" />
@@ -249,7 +386,11 @@ function PermissionsEditor({
   );
 }
 
-export default function ChannelPermissionsTab({ serverId, channelId, isVoice }: ChannelPermissionsTabProps) {
+export default function ChannelPermissionsTab({
+  serverId,
+  channelId,
+  isVoice,
+}: ChannelPermissionsTabProps) {
   const [state, setState] = useState({
     loading: true,
     overrides: [] as Override[],
@@ -264,49 +405,63 @@ export default function ChannelPermissionsTab({ serverId, channelId, isVoice }: 
 
   const fetchData = useCallback(async () => {
     try {
-      setState(prev => ({ ...prev, loading: true }));
+      setState((prev) => ({ ...prev, loading: true }));
       const [overridesData, rolesData, membersData] = await Promise.all([
         apiGet<Override[]>(`/api/channels/${channelId}/permissions`),
         apiGet<Role[]>(`/api/servers/${serverId}/roles`),
-        apiGet<any[]>(`/api/servers/${serverId}/members`)
+        apiGet<any[]>(`/api/servers/${serverId}/members`),
       ]);
 
-      const enhancedOverrides = overridesData.map(o => {
-        if (o.target_type === 'role') {
-          const role = rolesData.find(r => r.id === o.target_id);
-          return { ...o, name: role?.name || 'Unknown Role', color: role?.color };
+      const enhancedOverrides = overridesData.map((o) => {
+        if (o.target_type === "role") {
+          const role = rolesData.find((r) => r.id === o.target_id);
+          return {
+            ...o,
+            name: role?.name || "Unknown Role",
+            color: role?.color,
+          };
         } else {
-          const member = membersData.find(m => m.user.id === o.target_id);
-          const displayName = member?.user?.display_name?.trim() || member?.user?.username;
-          return { ...o, name: displayName || 'Unknown User', avatar_url: member?.user?.avatar_url, avatar_display: member?.user?.avatar_display };
+          const member = membersData.find((m) => m.user.id === o.target_id);
+          const displayName =
+            member?.user?.display_name?.trim() || member?.user?.username;
+          return {
+            ...o,
+            name: displayName || "Unknown User",
+            avatar_url: member?.user?.avatar_url,
+            avatar_display: member?.user?.avatar_display,
+          };
         }
       });
 
-      const everyoneRole = rolesData.find(r => r.is_default);
-      if (everyoneRole && !enhancedOverrides.find(o => o.target_id === everyoneRole.id)) {
+      const everyoneRole = rolesData.find((r) => r.is_default);
+      if (
+        everyoneRole &&
+        !enhancedOverrides.find((o) => o.target_id === everyoneRole.id)
+      ) {
         enhancedOverrides.unshift({
           target_id: everyoneRole.id,
-          target_type: 'role',
+          target_type: "role",
           allow: 0,
           deny: 0,
-          name: '@everyone',
-          color: everyoneRole.color
+          name: "@everyone",
+          color: everyoneRole.color,
         });
       }
 
-      setState(prev => ({
+      setState((prev) => ({
         ...prev,
         roles: rolesData,
         members: membersData,
         overrides: enhancedOverrides,
-        selectedTargetId: (enhancedOverrides.length > 0 && !prev.selectedTargetId)
-          ? (everyoneRole?.id || enhancedOverrides[0].target_id)
-          : prev.selectedTargetId
+        selectedTargetId:
+          enhancedOverrides.length > 0 && !prev.selectedTargetId
+            ? everyoneRole?.id || enhancedOverrides[0].target_id
+            : prev.selectedTargetId,
       }));
     } catch (e) {
       console.error(e);
     } finally {
-      setState(prev => ({ ...prev, loading: false }));
+      setState((prev) => ({ ...prev, loading: false }));
     }
   }, [channelId, serverId]);
 
@@ -314,20 +469,25 @@ export default function ChannelPermissionsTab({ serverId, channelId, isVoice }: 
     fetchData();
   }, [fetchData]);
 
-  const selectedOverride = state.overrides.find(o => o.target_id === state.selectedTargetId);
+  const selectedOverride = state.overrides.find(
+    (o) => o.target_id === state.selectedTargetId,
+  );
 
-  const handleUpdatePermission = async (mask: number, action: 'allow' | 'deny' | 'inherit') => {
+  const handleUpdatePermission = async (
+    mask: number,
+    action: "allow" | "deny" | "inherit",
+  ) => {
     if (!selectedOverride) return;
 
-    setState(prev => ({ ...prev, savingTarget: selectedOverride.target_id }));
+    setState((prev) => ({ ...prev, savingTarget: selectedOverride.target_id }));
 
     let newAllow = selectedOverride.allow;
     let newDeny = selectedOverride.deny;
 
-    if (action === 'allow') {
+    if (action === "allow") {
       newAllow |= mask;
       newDeny &= ~mask;
-    } else if (action === 'deny') {
+    } else if (action === "deny") {
       newDeny |= mask;
       newAllow &= ~mask;
     } else {
@@ -336,47 +496,73 @@ export default function ChannelPermissionsTab({ serverId, channelId, isVoice }: 
     }
 
     try {
-      await apiPut(`/api/channels/${channelId}/permissions/${selectedOverride.target_id}`, {
-        target_type: selectedOverride.target_type,
-        allow: newAllow,
-        deny: newDeny
-      });
+      await apiPut(
+        `/api/channels/${channelId}/permissions/${selectedOverride.target_id}`,
+        {
+          target_type: selectedOverride.target_type,
+          allow: newAllow,
+          deny: newDeny,
+        },
+      );
 
-      setState(prev => ({
+      setState((prev) => ({
         ...prev,
-        overrides: prev.overrides.map(o => o.target_id === selectedOverride.target_id ? { ...o, allow: newAllow, deny: newDeny } : o)
+        overrides: prev.overrides.map((o) =>
+          o.target_id === selectedOverride.target_id
+            ? { ...o, allow: newAllow, deny: newDeny }
+            : o,
+        ),
       }));
     } catch (e) {
       console.error(e);
     } finally {
-      setState(prev => ({ ...prev, savingTarget: null }));
+      setState((prev) => ({ ...prev, savingTarget: null }));
     }
   };
 
   const handleDeleteOverride = async (targetId: string) => {
-    if (!confirm('Are you sure you want to remove permissions for this target?')) return;
+    if (
+      !confirm("Are you sure you want to remove permissions for this target?")
+    )
+      return;
 
-    setState(prev => ({ ...prev, savingTarget: targetId }));
+    setState((prev) => ({ ...prev, savingTarget: targetId }));
     try {
       await apiDelete(`/api/channels/${channelId}/permissions/${targetId}`);
-      setState(prev => {
-        const nextOverrides = prev.overrides.filter(o => o.target_id !== targetId);
+      setState((prev) => {
+        const nextOverrides = prev.overrides.filter(
+          (o) => o.target_id !== targetId,
+        );
         return {
           ...prev,
           overrides: nextOverrides,
-          selectedTargetId: prev.selectedTargetId === targetId ? (nextOverrides[0]?.target_id || null) : prev.selectedTargetId
+          selectedTargetId:
+            prev.selectedTargetId === targetId
+              ? nextOverrides[0]?.target_id || null
+              : prev.selectedTargetId,
         };
       });
     } catch (e) {
       console.error(e);
     } finally {
-      setState(prev => ({ ...prev, savingTarget: null }));
+      setState((prev) => ({ ...prev, savingTarget: null }));
     }
   };
 
-  const handleAddOverride = (target_id: string, target_type: 'role' | 'user', name: string, color?: string | null, avatar_url?: string | null, avatar_display?: User["avatar_display"]) => {
-    if (state.overrides.some(o => o.target_id === target_id)) {
-      setState(prev => ({ ...prev, selectedTargetId: target_id, isAddingTarget: false }));
+  const handleAddOverride = (
+    target_id: string,
+    target_type: "role" | "user",
+    name: string,
+    color?: string | null,
+    avatar_url?: string | null,
+    avatar_display?: User["avatar_display"],
+  ) => {
+    if (state.overrides.some((o) => o.target_id === target_id)) {
+      setState((prev) => ({
+        ...prev,
+        selectedTargetId: target_id,
+        isAddingTarget: false,
+      }));
       return;
     }
 
@@ -388,10 +574,10 @@ export default function ChannelPermissionsTab({ serverId, channelId, isVoice }: 
       name,
       color,
       avatar_url,
-      avatar_display
+      avatar_display,
     };
 
-    setState(prev => ({
+    setState((prev) => ({
       ...prev,
       overrides: [...prev.overrides, newOverride],
       selectedTargetId: target_id,
@@ -399,25 +585,37 @@ export default function ChannelPermissionsTab({ serverId, channelId, isVoice }: 
     }));
   };
 
-  const availableRoles = state.roles.filter(r => !r.is_default && !state.overrides.some(o => o.target_id === r.id));
-  const availableMembers = state.members.filter(m => !state.overrides.some(o => o.target_id === m.user.id));
+  const availableRoles = state.roles.filter(
+    (r) => !r.is_default && !state.overrides.some((o) => o.target_id === r.id),
+  );
+  const availableMembers = state.members.filter(
+    (m) => !state.overrides.some((o) => o.target_id === m.user.id),
+  );
 
   if (state.loading) {
-    return <div className="flex justify-center p-8"><Loader2 className="h-6 w-6 animate-spin text-rm-text-muted" /></div>;
+    return (
+      <div className="flex justify-center p-8">
+        <Loader2 className="h-6 w-6 animate-spin text-rm-text-muted" />
+      </div>
+    );
   }
 
   return (
     <div className="flex max-h-[500px] h-[500px] border border-rm-border rounded-xl overflow-hidden bg-rm-bg-surface">
       <PermissionsSidebar
         isAddingTarget={state.isAddingTarget}
-        setIsAddingTarget={(val) => setState(prev => ({ ...prev, isAddingTarget: val }))}
+        setIsAddingTarget={(val) =>
+          setState((prev) => ({ ...prev, isAddingTarget: val }))
+        }
         availableRoles={availableRoles}
         availableMembers={availableMembers}
         handleAddOverride={handleAddOverride}
         overrides={state.overrides}
         roles={state.roles}
         selectedTargetId={state.selectedTargetId}
-        setSelectedTargetId={(id) => setState(prev => ({ ...prev, selectedTargetId: id }))}
+        setSelectedTargetId={(id) =>
+          setState((prev) => ({ ...prev, selectedTargetId: id }))
+        }
         handleDeleteOverride={handleDeleteOverride}
       />
       <PermissionsEditor

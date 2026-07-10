@@ -156,14 +156,11 @@ export function SignUp({
   const el = merged.elements ?? {};
   const resolvedUrl = afterSignUpUrl ?? providerUrl;
 
-  const { signUp, isLoading, error, verificationPending, retryAfterSeconds } = useSignUp();
+  const { signUp, isLoading, error, verificationPending, retryAfterSeconds } =
+    useSignUp();
 
   // Rate-limit countdown — seeded by retryAfterSeconds from the hook
-  const {
-    isRateLimited,
-    secondsRemaining,
-    recordRateLimit,
-  } = useRateLimit();
+  const { isRateLimited, secondsRemaining, recordRateLimit } = useRateLimit();
   useSeedRateLimitCountdown(retryAfterSeconds, recordRateLimit);
 
   const [name, setName] = useState("");
@@ -215,7 +212,9 @@ export function SignUp({
     e.preventDefault();
     if (isRateLimited) return; // hard guard — button is also disabled
     if (!validate()) return;
-    await signUp.email({ name, email, password, callbackURL: absCallbackUrl }).catch(() => null);
+    await signUp
+      .email({ name, email, password, callbackURL: absCallbackUrl })
+      .catch(() => null);
   };
 
   if (verificationPending) {
@@ -231,7 +230,14 @@ export function SignUp({
             Didn&apos;t get it? Check your spam folder, or{" "}
             <button
               type="button"
-              onClick={() => void signUp.email({ name, email, password, callbackURL: absCallbackUrl })}
+              onClick={() =>
+                void signUp.email({
+                  name,
+                  email,
+                  password,
+                  callbackURL: absCallbackUrl,
+                })
+              }
               style={{
                 background: "none",
                 border: "none",
@@ -324,7 +330,11 @@ export function SignUp({
           />
           <PasswordStrength password={password} />
 
-          <SubmitButton isLoading={isLoading} disabled={isRateLimited} elements={el}>
+          <SubmitButton
+            isLoading={isLoading}
+            disabled={isRateLimited}
+            elements={el}
+          >
             Create account
           </SubmitButton>
         </form>

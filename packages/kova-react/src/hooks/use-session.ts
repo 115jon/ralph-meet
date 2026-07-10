@@ -28,10 +28,10 @@ export function useSession(): UseSessionReturn {
   const isSignedIn = !!result.data?.user && !result.error;
 
   const session = result.data
-    ? ({
-      user: result.data.user as unknown as KovaUser,
-      session: result.data.session as unknown as KovaSession,
-    })
+    ? {
+        user: result.data.user as unknown as KovaUser,
+        session: result.data.session as unknown as KovaSession,
+      }
     : null;
 
   return {

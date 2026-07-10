@@ -1,4 +1,4 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute } from "@tanstack/react-router";
 
 import { apiError, apiSuccess, getDB, requireAuth } from "@/lib/api-helpers";
 import { PERMISSIONS } from "@/lib/permissions";
@@ -6,7 +6,10 @@ import { requirePermission } from "@/lib/require-permission";
 import { ServiceError } from "@/lib/service-error";
 import { CreateCategorySchema } from "@/lib/validations";
 import { createCategory } from "@/services/category.service";
-import { executeBroadcast, executeInvalidation } from "@/services/service-helpers";
+import {
+  executeBroadcast,
+  executeInvalidation,
+} from "@/services/service-helpers";
 
 import { z } from "zod";
 
@@ -17,7 +20,11 @@ const POST = async ({ request, params }: any) => {
   const { userId } = authResult;
   const { id: serverId } = params;
 
-  const permResult = await requirePermission(serverId, userId, PERMISSIONS.MANAGE_CATEGORIES);
+  const permResult = await requirePermission(
+    serverId,
+    userId,
+    PERMISSIONS.MANAGE_CATEGORIES,
+  );
   if (permResult instanceof Response) return permResult;
 
   let body;
@@ -34,7 +41,9 @@ const POST = async ({ request, params }: any) => {
   const db = getDB();
 
   try {
-    const result = await createCategory(db, serverId, userId, { name: body.name });
+    const result = await createCategory(db, serverId, userId, {
+      name: body.name,
+    });
 
     await executeInvalidation(result.cacheKeysToInvalidate);
     if (result.broadcast) await executeBroadcast(result.broadcast);
@@ -42,17 +51,19 @@ const POST = async ({ request, params }: any) => {
     return apiSuccess(result.data, 201);
   } catch (e) {
     if (e instanceof ServiceError) {
-      return Response.json({ error: e.message, code: e.code }, { status: e.status });
+      return Response.json(
+        { error: e.message, code: e.code },
+        { status: e.status },
+      );
     }
     throw e;
   }
-}
+};
 
-
-export const Route = createFileRoute('/api/servers/$id/categories')({
+export const Route = createFileRoute("/api/servers/$id/categories")({
   server: {
     handlers: {
       POST,
-    }
-  }
+    },
+  },
 });

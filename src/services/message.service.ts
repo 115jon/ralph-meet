@@ -46,7 +46,13 @@ export interface ReplyPreview {
   id: string;
   content: string;
   author_id: string;
-  author: { id: string; username: string; display_name: string | null; avatar_url: string | null; avatar_display?: AvatarDisplay | string | null };
+  author: {
+    id: string;
+    username: string;
+    display_name: string | null;
+    avatar_url: string | null;
+    avatar_display?: AvatarDisplay | string | null;
+  };
   attachment_count: number;
 }
 
@@ -54,7 +60,13 @@ export interface FormattedMessage {
   id: unknown;
   channel_id: unknown;
   author_id: unknown;
-  author: { id: unknown; username: string; display_name: unknown; avatar_url: unknown; avatar_display?: unknown };
+  author: {
+    id: unknown;
+    username: string;
+    display_name: unknown;
+    avatar_url: unknown;
+    avatar_display?: unknown;
+  };
   content: unknown;
   reply_to_id: unknown;
   reply_to?: ReplyPreview;
@@ -73,7 +85,7 @@ export interface FormattedMessage {
 
 export async function batchFetchReactions(
   db: D1Database,
-  messageIds: string[]
+  messageIds: string[],
 ): Promise<Record<string, ReactionGroup[]>> {
   if (messageIds.length === 0) return {};
 
@@ -82,7 +94,7 @@ export async function batchFetchReactions(
     .prepare(
       `SELECT message_id, emoji, user_id FROM message_reactions
        WHERE message_id IN (${placeholders})
-       ORDER BY created_at ASC`
+       ORDER BY created_at ASC`,
     )
     .bind(...messageIds)
     .all();
@@ -107,7 +119,7 @@ export async function batchFetchReactions(
 
 export async function batchFetchAttachments(
   db: D1Database,
-  messageIds: string[]
+  messageIds: string[],
 ): Promise<Record<string, Attachment[]>> {
   if (messageIds.length === 0) return {};
 
@@ -117,7 +129,7 @@ export async function batchFetchAttachments(
       `SELECT id, message_id, filename, file_key, content_type, size_bytes, is_nsfw
        FROM attachments
        WHERE message_id IN (${placeholders})
-       ORDER BY created_at ASC`
+       ORDER BY created_at ASC`,
     )
     .bind(...messageIds)
     .all();
@@ -146,12 +158,13 @@ export function formatMessageRow(
   currentUserId: string,
   reactionsByMessage: Record<string, ReactionGroup[]>,
   attachmentsByMessage: Record<string, Attachment[]>,
-  replyPreviews?: Record<string, ReplyPreview>
+  replyPreviews?: Record<string, ReplyPreview>,
 ): FormattedMessage {
   const msgId = row.id as string;
-  const replyData = row.reply_to_id && replyPreviews
-    ? replyPreviews[row.reply_to_id as string]
-    : undefined;
+  const replyData =
+    row.reply_to_id && replyPreviews
+      ? replyPreviews[row.reply_to_id as string]
+      : undefined;
   return {
     id: row.id,
     channel_id: row.channel_id,
@@ -177,7 +190,11 @@ export function formatMessageRow(
       me: r.user_ids.includes(currentUserId),
       users: r.user_ids,
     })),
-    embeds: row.embeds ? (typeof row.embeds === "string" ? JSON.parse(row.embeds) : row.embeds) : undefined,
+    embeds: row.embeds
+      ? typeof row.embeds === "string"
+        ? JSON.parse(row.embeds)
+        : row.embeds
+      : undefined,
     reply_count: (row.reply_count as number) ?? 0,
   };
 }
@@ -189,7 +206,7 @@ export async function addReaction(
   channelId: string,
   userId: string,
   messageId: string,
-  emoji: string
+  emoji: string,
 ): Promise<{ broadcast: BroadcastDescriptor }> {
   const now = new Date().toISOString();
 
@@ -197,7 +214,7 @@ export async function addReaction(
     .prepare(
       `INSERT INTO message_reactions (message_id, user_id, emoji, created_at)
        VALUES (?, ?, ?, ?)
-       ON CONFLICT (message_id, user_id, emoji) DO NOTHING`
+       ON CONFLICT (message_id, user_id, emoji) DO NOTHING`,
     )
     .bind(messageId, userId, emoji, now)
     .run();
@@ -224,11 +241,11 @@ export async function removeReaction(
   channelId: string,
   userId: string,
   messageId: string,
-  emoji: string
+  emoji: string,
 ): Promise<{ broadcast: BroadcastDescriptor }> {
   await db
     .prepare(
-      `DELETE FROM message_reactions WHERE message_id = ? AND user_id = ? AND emoji = ?`
+      `DELETE FROM message_reactions WHERE message_id = ? AND user_id = ? AND emoji = ?`,
     )
     .bind(messageId, userId, emoji)
     .run();
@@ -253,7 +270,7 @@ export async function removeReaction(
 export async function markChannelAsRead(
   db: D1Database,
   userId: string,
-  channelId: string
+  channelId: string,
 ): Promise<{ channel_id: string; last_read_at: string }> {
   const now = new Date().toISOString();
 
@@ -261,7 +278,7 @@ export async function markChannelAsRead(
     .prepare(
       `INSERT INTO read_states (user_id, channel_id, last_read_at)
        VALUES (?, ?, ?)
-       ON CONFLICT(user_id, channel_id) DO UPDATE SET last_read_at = excluded.last_read_at`
+       ON CONFLICT(user_id, channel_id) DO UPDATE SET last_read_at = excluded.last_read_at`,
     )
     .bind(userId, channelId, now)
     .run();
@@ -288,12 +305,12 @@ export async function markChannelUnreadFromMessage(
   db: D1Database,
   userId: string,
   channelId: string,
-  messageId: string
+  messageId: string,
 ): Promise<{ channel_id: string; last_read_at: string }> {
-  const message = await db
+  const message = (await db
     .prepare(`SELECT created_at FROM messages WHERE id = ? AND channel_id = ?`)
     .bind(messageId, channelId)
-    .first() as { created_at: string } | null;
+    .first()) as { created_at: string } | null;
 
   if (!message) {
     throw ServiceError.notFound("Message not found");
@@ -305,7 +322,7 @@ export async function markChannelUnreadFromMessage(
     .prepare(
       `INSERT INTO read_states (user_id, channel_id, last_read_at)
        VALUES (?, ?, ?)
-       ON CONFLICT(user_id, channel_id) DO UPDATE SET last_read_at = excluded.last_read_at`
+       ON CONFLICT(user_id, channel_id) DO UPDATE SET last_read_at = excluded.last_read_at`,
     )
     .bind(userId, channelId, lastReadAt)
     .run();
@@ -318,11 +335,11 @@ export async function markChannelUnreadFromMessage(
 export async function pinMessage(
   db: D1Database,
   channelId: string,
-  messageId: string
+  messageId: string,
 ): Promise<{ broadcast: BroadcastDescriptor }> {
   const msg = (await db
     .prepare(
-      `SELECT id, channel_id, is_pinned FROM messages WHERE id = ? AND channel_id = ?`
+      `SELECT id, channel_id, is_pinned FROM messages WHERE id = ? AND channel_id = ?`,
     )
     .bind(messageId, channelId)
     .first()) as { id: string } | null;
@@ -334,16 +351,14 @@ export async function pinMessage(
   // Check pin limit (50 per channel)
   const { results: pinCount } = await db
     .prepare(
-      `SELECT COUNT(*) as count FROM messages WHERE channel_id = ? AND is_pinned = 1`
+      `SELECT COUNT(*) as count FROM messages WHERE channel_id = ? AND is_pinned = 1`,
     )
     .bind(channelId)
     .all();
   const count =
     ((pinCount?.[0] as Record<string, unknown>)?.count as number) ?? 0;
   if (count >= 50) {
-    throw ServiceError.badRequest(
-      "Maximum 50 pinned messages per channel"
-    );
+    throw ServiceError.badRequest("Maximum 50 pinned messages per channel");
   }
 
   await db
@@ -366,11 +381,11 @@ export async function pinMessage(
 export async function unpinMessage(
   db: D1Database,
   channelId: string,
-  messageId: string
+  messageId: string,
 ): Promise<{ broadcast: BroadcastDescriptor }> {
   const msg = (await db
     .prepare(
-      `SELECT id, channel_id, is_pinned FROM messages WHERE id = ? AND channel_id = ?`
+      `SELECT id, channel_id, is_pinned FROM messages WHERE id = ? AND channel_id = ?`,
     )
     .bind(messageId, channelId)
     .first()) as { id: string } | null;
@@ -403,7 +418,12 @@ export async function unpinMessage(
 export interface ThreadItem {
   id: string;
   content: string;
-  author: { id: string; username: string; display_name: string | null; avatar_url: string | null };
+  author: {
+    id: string;
+    username: string;
+    display_name: string | null;
+    avatar_url: string | null;
+  };
   reply_count: number;
   last_reply_at: string;
   created_at: string;
@@ -412,12 +432,13 @@ export interface ThreadItem {
 export async function fetchChannelThreads(
   db: D1Database,
   channelId: string,
-  opts: { limit?: number } = {}
+  opts: { limit?: number } = {},
 ): Promise<ThreadItem[]> {
   const limit = Math.min(opts.limit ?? 30, 50);
 
-  const { results } = await db.prepare(
-    `SELECT m.id, m.content, m.author_id, m.created_at,
+  const { results } = await db
+    .prepare(
+      `SELECT m.id, m.content, m.author_id, m.created_at,
             u.username as author_username, u.display_name as author_display_name, u.avatar_url as author_avatar_url,
             COUNT(r.id) as reply_count,
             MAX(r.created_at) as last_reply_at
@@ -427,8 +448,10 @@ export async function fetchChannelThreads(
      WHERE m.channel_id = ?
      GROUP BY m.id
      ORDER BY last_reply_at DESC
-     LIMIT ?`
-  ).bind(channelId, limit).all();
+     LIMIT ?`,
+    )
+    .bind(channelId, limit)
+    .all();
 
   return (results ?? []).map((row: Record<string, unknown>) => ({
     id: row.id as string,
@@ -449,30 +472,38 @@ export async function fetchChannelThreads(
 
 export async function batchFetchReplyPreviews(
   db: D1Database,
-  replyToIds: string[]
+  replyToIds: string[],
 ): Promise<Record<string, ReplyPreview>> {
   const result: Record<string, ReplyPreview> = {};
   if (replyToIds.length === 0) return result;
 
   const uniqueIds = [...new Set(replyToIds)];
   const placeholders = uniqueIds.map(() => "?").join(",");
-  const [{ results: messageResults }, { results: attachmentResults }] = await Promise.all([
-    db.prepare(
-    `SELECT m.id, m.content, m.author_id, u.username as author_username, u.display_name as author_display_name, u.avatar_url as author_avatar_url, u.avatar_display as author_avatar_display
+  const [{ results: messageResults }, { results: attachmentResults }] =
+    await Promise.all([
+      db
+        .prepare(
+          `SELECT m.id, m.content, m.author_id, u.username as author_username, u.display_name as author_display_name, u.avatar_url as author_avatar_url, u.avatar_display as author_avatar_display
      FROM messages m LEFT JOIN users u ON u.id = m.author_id
-     WHERE m.id IN (${placeholders})`
-    ).bind(...uniqueIds).all(),
-    db.prepare(
-      `SELECT message_id, COUNT(*) as attachment_count
+     WHERE m.id IN (${placeholders})`,
+        )
+        .bind(...uniqueIds)
+        .all(),
+      db
+        .prepare(
+          `SELECT message_id, COUNT(*) as attachment_count
        FROM attachments
        WHERE message_id IN (${placeholders})
-       GROUP BY message_id`
-    ).bind(...uniqueIds).all(),
-  ]);
+       GROUP BY message_id`,
+        )
+        .bind(...uniqueIds)
+        .all(),
+    ]);
 
   const attachmentCountByMessageId: Record<string, number> = {};
   for (const row of attachmentResults ?? []) {
-    attachmentCountByMessageId[row.message_id as string] = Number(row.attachment_count) || 0;
+    attachmentCountByMessageId[row.message_id as string] =
+      Number(row.attachment_count) || 0;
   }
 
   for (const r of messageResults ?? []) {
@@ -512,13 +543,13 @@ export interface ListMessagesResult {
   rows: Record<string, unknown>[];
   hasMoreBefore: boolean;
   hasMoreAfter: boolean;
-  mode: 'around' | 'after' | 'before' | 'latest';
+  mode: "around" | "after" | "before" | "latest";
 }
 
 export async function fetchMessageRows(
   db: D1Database,
   channelId: string,
-  opts: ListMessagesOpts = {}
+  opts: ListMessagesOpts = {},
 ): Promise<ListMessagesResult> {
   const limit = Math.min(opts.limit ?? 50, 100);
   let rows: Record<string, unknown>[];
@@ -529,10 +560,12 @@ export async function fetchMessageRows(
     const halfBefore = 25;
     const halfAfter = 24;
 
-    const anchor = await db
-      .prepare(`SELECT created_at FROM messages WHERE id = ? AND channel_id = ?`)
+    const anchor = (await db
+      .prepare(
+        `SELECT created_at FROM messages WHERE id = ? AND channel_id = ?`,
+      )
       .bind(opts.around, channelId)
-      .first() as { created_at: string } | null;
+      .first()) as { created_at: string } | null;
 
     if (!anchor) {
       throw ServiceError.notFound("Message not found");
@@ -540,12 +573,22 @@ export async function fetchMessageRows(
 
     const anchorTime = anchor.created_at;
 
-    const [{ results: beforeRows }, { results: afterRows }] = await Promise.all([
-      db.prepare(`${MESSAGE_SELECT} WHERE m.channel_id = ? AND m.created_at <= ? ORDER BY m.created_at DESC LIMIT ?`)
-        .bind(channelId, anchorTime, halfBefore + 1).all(),
-      db.prepare(`${MESSAGE_SELECT} WHERE m.channel_id = ? AND m.created_at > ? ORDER BY m.created_at ASC LIMIT ?`)
-        .bind(channelId, anchorTime, halfAfter + 1).all(),
-    ]);
+    const [{ results: beforeRows }, { results: afterRows }] = await Promise.all(
+      [
+        db
+          .prepare(
+            `${MESSAGE_SELECT} WHERE m.channel_id = ? AND m.created_at <= ? ORDER BY m.created_at DESC LIMIT ?`,
+          )
+          .bind(channelId, anchorTime, halfBefore + 1)
+          .all(),
+        db
+          .prepare(
+            `${MESSAGE_SELECT} WHERE m.channel_id = ? AND m.created_at > ? ORDER BY m.created_at ASC LIMIT ?`,
+          )
+          .bind(channelId, anchorTime, halfAfter + 1)
+          .all(),
+      ],
+    );
 
     hasMoreBefore = (beforeRows?.length ?? 0) > halfBefore;
     hasMoreAfter = (afterRows?.length ?? 0) > halfAfter;
@@ -554,32 +597,41 @@ export async function fetchMessageRows(
     const afterSlice = (afterRows ?? []).slice(0, halfAfter);
     rows = [...beforeSlice, ...afterSlice];
 
-    return { rows, hasMoreBefore, hasMoreAfter, mode: 'around' };
+    return { rows, hasMoreBefore, hasMoreAfter, mode: "around" };
   }
 
   if (opts.before) {
-    const { results } = await db.prepare(
-      `${MESSAGE_SELECT} WHERE m.channel_id = ? AND m.created_at < ? ORDER BY m.created_at DESC LIMIT ?`
-    ).bind(channelId, opts.before, limit).all();
+    const { results } = await db
+      .prepare(
+        `${MESSAGE_SELECT} WHERE m.channel_id = ? AND m.created_at < ? ORDER BY m.created_at DESC LIMIT ?`,
+      )
+      .bind(channelId, opts.before, limit)
+      .all();
     rows = (results ?? []).reverse();
-    return { rows, hasMoreBefore: false, hasMoreAfter: false, mode: 'before' };
+    return { rows, hasMoreBefore: false, hasMoreAfter: false, mode: "before" };
   }
 
   if (opts.after) {
-    const { results } = await db.prepare(
-      `${MESSAGE_SELECT} WHERE m.channel_id = ? AND m.created_at > ? ORDER BY m.created_at ASC LIMIT ?`
-    ).bind(channelId, opts.after, limit + 1).all();
+    const { results } = await db
+      .prepare(
+        `${MESSAGE_SELECT} WHERE m.channel_id = ? AND m.created_at > ? ORDER BY m.created_at ASC LIMIT ?`,
+      )
+      .bind(channelId, opts.after, limit + 1)
+      .all();
     hasMoreAfter = (results?.length ?? 0) > limit;
     rows = (results ?? []).slice(0, limit);
-    return { rows, hasMoreBefore: false, hasMoreAfter, mode: 'after' };
+    return { rows, hasMoreBefore: false, hasMoreAfter, mode: "after" };
   }
 
   // Default: latest N messages
-  const { results } = await db.prepare(
-    `${MESSAGE_SELECT} WHERE m.channel_id = ? ORDER BY m.created_at DESC LIMIT ?`
-  ).bind(channelId, limit).all();
+  const { results } = await db
+    .prepare(
+      `${MESSAGE_SELECT} WHERE m.channel_id = ? ORDER BY m.created_at DESC LIMIT ?`,
+    )
+    .bind(channelId, limit)
+    .all();
   rows = (results ?? []).reverse();
-  return { rows, hasMoreBefore: false, hasMoreAfter: false, mode: 'latest' };
+  return { rows, hasMoreBefore: false, hasMoreAfter: false, mode: "latest" };
 }
 
 // ─── listMessages (full pipeline: fetch + hydrate + format) ──────────────────
@@ -588,53 +640,82 @@ export async function listMessages(
   db: D1Database,
   channelId: string,
   userId: string,
-  opts: ListMessagesOpts = {}
-): Promise<{ messages: FormattedMessage[]; hasMoreBefore: boolean; hasMoreAfter: boolean; mode: string }> {
-  const { rows, hasMoreBefore, hasMoreAfter, mode } = await fetchMessageRows(db, channelId, opts);
+  opts: ListMessagesOpts = {},
+): Promise<{
+  messages: FormattedMessage[];
+  hasMoreBefore: boolean;
+  hasMoreAfter: boolean;
+  mode: string;
+}> {
+  const { rows, hasMoreBefore, hasMoreAfter, mode } = await fetchMessageRows(
+    db,
+    channelId,
+    opts,
+  );
 
   const messageIds = rows.map((r) => r.id as string);
   const replyToIds = rows
     .map((r) => r.reply_to_id as string | null)
     .filter((id): id is string => !!id);
 
-  const [reactionsByMessage, attachmentsByMessage, replyPreviews] = await Promise.all([
-    batchFetchReactions(db, messageIds),
-    batchFetchAttachments(db, messageIds),
-    batchFetchReplyPreviews(db, replyToIds),
-  ]);
+  const [reactionsByMessage, attachmentsByMessage, replyPreviews] =
+    await Promise.all([
+      batchFetchReactions(db, messageIds),
+      batchFetchAttachments(db, messageIds),
+      batchFetchReplyPreviews(db, replyToIds),
+    ]);
 
   const messages = rows.map((row) =>
-    formatMessageRow(row, userId, reactionsByMessage, attachmentsByMessage, replyPreviews)
+    formatMessageRow(
+      row,
+      userId,
+      reactionsByMessage,
+      attachmentsByMessage,
+      replyPreviews,
+    ),
   );
 
-  const hydratedMessages = await Promise.all(messages.map(async (message) => {
-    const embeds = Array.isArray(message.embeds) ? message.embeds as EmbedInfo[] : [];
-    if (embeds.length === 0) {
-      return message;
-    }
+  const hydratedMessages = await Promise.all(
+    messages.map(async (message) => {
+      const embeds = Array.isArray(message.embeds)
+        ? (message.embeds as EmbedInfo[])
+        : [];
+      if (embeds.length === 0) {
+        return message;
+      }
 
-    const hydratedEmbeds = await hydrateSocialEmbeds(embeds).catch((error) => {
-      embedHydrationLog.warn(`Failed to refresh embeds for message ${String(message.id)}`, error);
-      return embeds;
-    });
+      const hydratedEmbeds = await hydrateSocialEmbeds(embeds).catch(
+        (error) => {
+          embedHydrationLog.warn(
+            `Failed to refresh embeds for message ${String(message.id)}`,
+            error,
+          );
+          return embeds;
+        },
+      );
 
-    if (hydratedEmbeds === embeds) {
-      return message;
-    }
+      if (hydratedEmbeds === embeds) {
+        return message;
+      }
 
-    try {
-      await db.prepare(
-        `UPDATE messages SET embeds = ? WHERE id = ?`
-      ).bind(JSON.stringify(hydratedEmbeds), String(message.id)).run();
-    } catch (error) {
-      embedHydrationLog.warn(`Failed to persist refreshed embeds for message ${String(message.id)}`, error);
-    }
+      try {
+        await db
+          .prepare(`UPDATE messages SET embeds = ? WHERE id = ?`)
+          .bind(JSON.stringify(hydratedEmbeds), String(message.id))
+          .run();
+      } catch (error) {
+        embedHydrationLog.warn(
+          `Failed to persist refreshed embeds for message ${String(message.id)}`,
+          error,
+        );
+      }
 
-    return {
-      ...message,
-      embeds: hydratedEmbeds,
-    };
-  }));
+      return {
+        ...message,
+        embeds: hydratedEmbeds,
+      };
+    }),
+  );
 
   return { messages: hydratedMessages, hasMoreBefore, hasMoreAfter, mode };
 }
@@ -654,39 +735,53 @@ export async function createMessage(
   channelId: string,
   userId: string,
   messageId: string,
-  input: CreateMessageInput
+  input: CreateMessageInput,
 ): Promise<FormattedMessage> {
   const now = new Date().toISOString();
   const content = (input.content ?? "").trim();
 
-  await db.prepare(
-    `INSERT INTO messages (id, channel_id, author_id, content, reply_to_id, created_at)
-     VALUES (?, ?, ?, ?, ?, ?)`
-  ).bind(messageId, channelId, userId, content, input.reply_to_id ?? null, now).run();
+  await db
+    .prepare(
+      `INSERT INTO messages (id, channel_id, author_id, content, reply_to_id, created_at)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+    )
+    .bind(messageId, channelId, userId, content, input.reply_to_id ?? null, now)
+    .run();
 
   // Link pre-uploaded attachments
   let attachments: Attachment[] = [];
   if (input.attachment_ids?.length) {
     const attIds = [...new Set(input.attachment_ids)];
     const sensitiveAttachmentIds = new Set(
-      (input.nsfw_attachment_ids ?? []).filter((attachmentId) => attIds.includes(attachmentId))
+      (input.nsfw_attachment_ids ?? []).filter((attachmentId) =>
+        attIds.includes(attachmentId),
+      ),
     );
     const placeholders = attIds.map(() => "?").join(",");
-    await db.prepare(
-      `UPDATE attachments SET message_id = ?, is_nsfw = 0 WHERE id IN (${placeholders}) AND user_id = ?`
-    ).bind(messageId, ...attIds, userId).run();
+    await db
+      .prepare(
+        `UPDATE attachments SET message_id = ?, is_nsfw = 0 WHERE id IN (${placeholders}) AND user_id = ?`,
+      )
+      .bind(messageId, ...attIds, userId)
+      .run();
 
     if (sensitiveAttachmentIds.size > 0) {
       const sensitiveIds = [...sensitiveAttachmentIds];
       const sensitivePlaceholders = sensitiveIds.map(() => "?").join(",");
-      await db.prepare(
-        `UPDATE attachments SET is_nsfw = 1 WHERE message_id = ? AND user_id = ? AND id IN (${sensitivePlaceholders})`
-      ).bind(messageId, userId, ...sensitiveIds).run();
+      await db
+        .prepare(
+          `UPDATE attachments SET is_nsfw = 1 WHERE message_id = ? AND user_id = ? AND id IN (${sensitivePlaceholders})`,
+        )
+        .bind(messageId, userId, ...sensitiveIds)
+        .run();
     }
 
-    const { results: attRows } = await db.prepare(
-      `SELECT id, filename, file_key, content_type, size_bytes, is_nsfw FROM attachments WHERE id IN (${placeholders})`
-    ).bind(...attIds).all();
+    const { results: attRows } = await db
+      .prepare(
+        `SELECT id, filename, file_key, content_type, size_bytes, is_nsfw FROM attachments WHERE id IN (${placeholders})`,
+      )
+      .bind(...attIds)
+      .all();
 
     attachments = (attRows ?? []).map((r: Record<string, unknown>) => ({
       id: r.id as string,
@@ -700,9 +795,17 @@ export async function createMessage(
   }
 
   // Get author info
-  const authorRow = await db.prepare(
-    `SELECT username, display_name, avatar_url, avatar_display FROM users WHERE id = ?`
-  ).bind(userId).first() as { username: string; display_name: string | null; avatar_url: string | null; avatar_display: string | null } | null;
+  const authorRow = (await db
+    .prepare(
+      `SELECT username, display_name, avatar_url, avatar_display FROM users WHERE id = ?`,
+    )
+    .bind(userId)
+    .first()) as {
+    username: string;
+    display_name: string | null;
+    avatar_url: string | null;
+    avatar_display: string | null;
+  } | null;
 
   // Get reply-to preview
   let replyTo: ReplyPreview | undefined;
@@ -743,21 +846,34 @@ export async function editMessage(
   channelId: string,
   userId: string,
   messageId: string,
-  newContent: string
-): Promise<{ id: string; channel_id: string; content: string; updated_at: string }> {
-  const msg = await db.prepare(
-    `SELECT author_id FROM messages WHERE id = ? AND channel_id = ?`
-  ).bind(messageId, channelId).first() as { author_id: string } | null;
+  newContent: string,
+): Promise<{
+  id: string;
+  channel_id: string;
+  content: string;
+  updated_at: string;
+}> {
+  const msg = (await db
+    .prepare(`SELECT author_id FROM messages WHERE id = ? AND channel_id = ?`)
+    .bind(messageId, channelId)
+    .first()) as { author_id: string } | null;
 
   if (!msg) throw ServiceError.notFound("Message not found");
-  if (msg.author_id !== userId) throw ServiceError.forbidden("Not your message");
+  if (msg.author_id !== userId)
+    throw ServiceError.forbidden("Not your message");
 
   const now = new Date().toISOString();
-  await db.prepare(
-    `UPDATE messages SET content = ?, updated_at = ? WHERE id = ?`
-  ).bind(newContent.trim(), now, messageId).run();
+  await db
+    .prepare(`UPDATE messages SET content = ?, updated_at = ? WHERE id = ?`)
+    .bind(newContent.trim(), now, messageId)
+    .run();
 
-  return { id: messageId, channel_id: channelId, content: newContent.trim(), updated_at: now };
+  return {
+    id: messageId,
+    channel_id: channelId,
+    content: newContent.trim(),
+    updated_at: now,
+  };
 }
 
 // ─── deleteMessage ───────────────────────────────────────────────────────────
@@ -767,11 +883,12 @@ export async function deleteMessage(
   channelId: string,
   messageId: string,
   userId: string,
-  hasModeratorPermission: boolean
+  hasModeratorPermission: boolean,
 ): Promise<void> {
-  const msg = await db.prepare(
-    `SELECT author_id FROM messages WHERE id = ? AND channel_id = ?`
-  ).bind(messageId, channelId).first() as { author_id: string } | null;
+  const msg = (await db
+    .prepare(`SELECT author_id FROM messages WHERE id = ? AND channel_id = ?`)
+    .bind(messageId, channelId)
+    .first()) as { author_id: string } | null;
 
   if (!msg) throw ServiceError.notFound("Message not found");
   if (msg.author_id !== userId && !hasModeratorPermission) {
@@ -787,11 +904,14 @@ export async function deleteMessage(
 export async function getDMRecipients(
   db: D1Database,
   channelId: string,
-  excludeUserId: string
+  excludeUserId: string,
 ): Promise<string[]> {
-  const { results } = await db.prepare(
-    `SELECT user_id FROM dm_recipients WHERE channel_id = ? AND user_id != ?`
-  ).bind(channelId, excludeUserId).all();
+  const { results } = await db
+    .prepare(
+      `SELECT user_id FROM dm_recipients WHERE channel_id = ? AND user_id != ?`,
+    )
+    .bind(channelId, excludeUserId)
+    .all();
   return (results ?? []).map((r) => r.user_id as string);
 }
 
@@ -815,7 +935,7 @@ export async function generateMessageNotifications(
     authorAvatarUrl: string | null;
     content: string;
     replyToId?: string;
-  }
+  },
 ): Promise<NotificationBroadcast[]> {
   const broadcasts: NotificationBroadcast[] = [];
   const notifiedUserIds = new Set<string>();
@@ -823,11 +943,19 @@ export async function generateMessageNotifications(
   const snippet = opts.content.trim().slice(0, 200);
 
   // Get channel info for denormalized fields
-  const channelInfo = await db.prepare(
-    `SELECT c.name as channel_name, c.server_id, c.channel_type, s.name as server_name
+  const channelInfo = (await db
+    .prepare(
+      `SELECT c.name as channel_name, c.server_id, c.channel_type, s.name as server_name
      FROM channels c LEFT JOIN servers s ON s.id = c.server_id
-     WHERE c.id = ?`
-  ).bind(opts.channelId).first() as { channel_name: string; server_id: string | null; channel_type: string; server_name: string | null } | null;
+     WHERE c.id = ?`,
+    )
+    .bind(opts.channelId)
+    .first()) as {
+    channel_name: string;
+    server_id: string | null;
+    channel_type: string;
+    server_name: string | null;
+  } | null;
 
   const serverId = channelInfo?.server_id ?? null;
 
@@ -840,10 +968,15 @@ export async function generateMessageNotifications(
   }
 
   if (mentionedUsernames.size > 0) {
-    const placeholders = [...mentionedUsernames].map(() => "LOWER(?)").join(",");
-    const { results: mentionedUsers } = await db.prepare(
-      `SELECT id, username FROM users WHERE LOWER(username) IN (${placeholders})`
-    ).bind(...mentionedUsernames).all();
+    const placeholders = [...mentionedUsernames]
+      .map(() => "LOWER(?)")
+      .join(",");
+    const { results: mentionedUsers } = await db
+      .prepare(
+        `SELECT id, username FROM users WHERE LOWER(username) IN (${placeholders})`,
+      )
+      .bind(...mentionedUsernames)
+      .all();
 
     for (const mu of mentionedUsers ?? []) {
       const mentionedId = mu.id as string;
@@ -851,10 +984,22 @@ export async function generateMessageNotifications(
       notifiedUserIds.add(mentionedId);
 
       const notifId = genId();
-      await db.prepare(
-        `INSERT INTO notifications (id, user_id, type, channel_id, server_id, message_id, from_user_id, content, created_at)
-         VALUES (?, ?, 'mention', ?, ?, ?, ?, ?, ?)`
-      ).bind(notifId, mentionedId, opts.channelId, serverId, opts.messageId, opts.authorId, snippet, now).run();
+      await db
+        .prepare(
+          `INSERT INTO notifications (id, user_id, type, channel_id, server_id, message_id, from_user_id, content, created_at)
+         VALUES (?, ?, 'mention', ?, ?, ?, ?, ?, ?)`,
+        )
+        .bind(
+          notifId,
+          mentionedId,
+          opts.channelId,
+          serverId,
+          opts.messageId,
+          opts.authorId,
+          snippet,
+          now,
+        )
+        .run();
 
       broadcasts.push({
         userId: mentionedId,
@@ -865,7 +1010,12 @@ export async function generateMessageNotifications(
           channel_id: opts.channelId,
           server_id: serverId,
           message_id: opts.messageId,
-          from_user: { id: opts.authorId, username: opts.authorUsername, display_name: opts.authorDisplayName, avatar_url: opts.authorAvatarUrl },
+          from_user: {
+            id: opts.authorId,
+            username: opts.authorUsername,
+            display_name: opts.authorDisplayName,
+            avatar_url: opts.authorAvatarUrl,
+          },
           content: snippet,
           is_read: false,
           created_at: now,
@@ -878,16 +1028,33 @@ export async function generateMessageNotifications(
 
   // 2. Reply notification
   if (opts.replyToId) {
-    const parentMsg = await db.prepare(
-      `SELECT author_id FROM messages WHERE id = ?`
-    ).bind(opts.replyToId).first() as { author_id: string } | null;
+    const parentMsg = (await db
+      .prepare(`SELECT author_id FROM messages WHERE id = ?`)
+      .bind(opts.replyToId)
+      .first()) as { author_id: string } | null;
 
-    if (parentMsg && parentMsg.author_id !== opts.authorId && !notifiedUserIds.has(parentMsg.author_id)) {
+    if (
+      parentMsg &&
+      parentMsg.author_id !== opts.authorId &&
+      !notifiedUserIds.has(parentMsg.author_id)
+    ) {
       const notifId = genId();
-      await db.prepare(
-        `INSERT INTO notifications (id, user_id, type, channel_id, server_id, message_id, from_user_id, content, created_at)
-         VALUES (?, ?, 'reply', ?, ?, ?, ?, ?, ?)`
-      ).bind(notifId, parentMsg.author_id, opts.channelId, serverId, opts.messageId, opts.authorId, snippet, now).run();
+      await db
+        .prepare(
+          `INSERT INTO notifications (id, user_id, type, channel_id, server_id, message_id, from_user_id, content, created_at)
+         VALUES (?, ?, 'reply', ?, ?, ?, ?, ?, ?)`,
+        )
+        .bind(
+          notifId,
+          parentMsg.author_id,
+          opts.channelId,
+          serverId,
+          opts.messageId,
+          opts.authorId,
+          snippet,
+          now,
+        )
+        .run();
 
       broadcasts.push({
         userId: parentMsg.author_id,
@@ -898,7 +1065,12 @@ export async function generateMessageNotifications(
           channel_id: opts.channelId,
           server_id: serverId,
           message_id: opts.messageId,
-          from_user: { id: opts.authorId, username: opts.authorUsername, display_name: opts.authorDisplayName, avatar_url: opts.authorAvatarUrl },
+          from_user: {
+            id: opts.authorId,
+            username: opts.authorUsername,
+            display_name: opts.authorDisplayName,
+            avatar_url: opts.authorAvatarUrl,
+          },
           content: snippet,
           is_read: false,
           created_at: now,
@@ -918,10 +1090,22 @@ export async function generateMessageNotifications(
         notifiedUserIds.add(recipientId);
 
         const notifId = genId();
-        await db.prepare(
-          `INSERT INTO notifications (id, user_id, type, channel_id, server_id, message_id, from_user_id, content, created_at)
-           VALUES (?, ?, 'dm', ?, ?, ?, ?, ?, ?)`
-        ).bind(notifId, recipientId, opts.channelId, null, opts.messageId, opts.authorId, snippet, now).run();
+        await db
+          .prepare(
+            `INSERT INTO notifications (id, user_id, type, channel_id, server_id, message_id, from_user_id, content, created_at)
+           VALUES (?, ?, 'dm', ?, ?, ?, ?, ?, ?)`,
+          )
+          .bind(
+            notifId,
+            recipientId,
+            opts.channelId,
+            null,
+            opts.messageId,
+            opts.authorId,
+            snippet,
+            now,
+          )
+          .run();
 
         broadcasts.push({
           userId: recipientId,
@@ -932,7 +1116,12 @@ export async function generateMessageNotifications(
             channel_id: opts.channelId,
             server_id: null,
             message_id: opts.messageId,
-          from_user: { id: opts.authorId, username: opts.authorUsername, display_name: opts.authorDisplayName, avatar_url: opts.authorAvatarUrl },
+            from_user: {
+              id: opts.authorId,
+              username: opts.authorUsername,
+              display_name: opts.authorDisplayName,
+              avatar_url: opts.authorAvatarUrl,
+            },
             content: snippet,
             is_read: false,
             created_at: now,

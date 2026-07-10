@@ -17,7 +17,16 @@ import { resolveProfileTheme } from "@/lib/profile-customization";
 import type { User } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useChatActions, useChatStore } from "@/stores/chat-store";
-import { Ban, Check, Copy, Loader2, MessageSquare, UserMinus, UserPlus, X } from "lucide-react";
+import {
+  Ban,
+  Check,
+  Copy,
+  Loader2,
+  MessageSquare,
+  UserMinus,
+  UserPlus,
+  X,
+} from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
 interface Props {
@@ -74,13 +83,7 @@ const STATUS_LABELS: Record<string, string> = {
   offline: "Offline",
 };
 
-function StatRow({
-  label,
-  value,
-}: {
-  label: string;
-  value: string;
-}) {
+function StatRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-center justify-between gap-4 rounded-[16px] border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] px-3 py-2.5">
       <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[color:var(--rm-profile-custom-muted)]">
@@ -96,8 +99,11 @@ function StatRow({
 export default function UserProfileModal({ user, onClose, isClosing }: Props) {
   const relationships = useChatStore((state) => state.relationships);
   const currentUser = useChatStore((state) => state.user);
-  const memberRecord = useChatStore((state) =>
-    (state.members as JoinedMemberRecord[]).find((member) => member.user.id === user.id) ?? null,
+  const memberRecord = useChatStore(
+    (state) =>
+      (state.members as JoinedMemberRecord[]).find(
+        (member) => member.user.id === user.id,
+      ) ?? null,
   );
   const { openDm, loadRelationships, dispatch } = useChatActions();
 
@@ -106,7 +112,8 @@ export default function UserProfileModal({ user, onClose, isClosing }: Props) {
   const [profileError, setProfileError] = useState<string | null>(null);
 
   const relationship = relationships.find((entry) => entry.user.id === user.id);
-  const seededUser = memberRecord?.user ?? (currentUser?.id === user.id ? currentUser : user);
+  const seededUser =
+    memberRecord?.user ?? (currentUser?.id === user.id ? currentUser : user);
   const resolvedUser = profileData?.user ?? seededUser;
   const isMe = currentUser?.id === resolvedUser.id;
   const displayName = getDisplayName(resolvedUser);
@@ -116,8 +123,12 @@ export default function UserProfileModal({ user, onClose, isClosing }: Props) {
     joinedAt: memberRecord?.joined_at,
     createdAt: resolvedUser.created_at ?? null,
   });
-  const mutualFriends = !isMe ? profileData?.mutualFriends ?? EMPTY_MUTUAL_FRIENDS : EMPTY_MUTUAL_FRIENDS;
-  const mutualServers = !isMe ? profileData?.mutualServers ?? EMPTY_MUTUAL_SERVERS : EMPTY_MUTUAL_SERVERS;
+  const mutualFriends = !isMe
+    ? (profileData?.mutualFriends ?? EMPTY_MUTUAL_FRIENDS)
+    : EMPTY_MUTUAL_FRIENDS;
+  const mutualServers = !isMe
+    ? (profileData?.mutualServers ?? EMPTY_MUTUAL_SERVERS)
+    : EMPTY_MUTUAL_SERVERS;
   const customStatus = resolvedUser.custom_status?.trim() ?? "";
   const pronouns = resolvedUser.pronouns?.trim() ?? "";
   const bio = resolvedUser.bio?.trim() ?? "";
@@ -141,7 +152,11 @@ export default function UserProfileModal({ user, onClose, isClosing }: Props) {
       })
       .catch((error) => {
         if (cancelled) return;
-        setProfileError(error instanceof Error ? error.message : "Unable to load the latest profile preview.");
+        setProfileError(
+          error instanceof Error
+            ? error.message
+            : "Unable to load the latest profile preview.",
+        );
       });
 
     return () => {
@@ -149,23 +164,29 @@ export default function UserProfileModal({ user, onClose, isClosing }: Props) {
     };
   }, [isMe, user.id]);
 
-  const handleRelationshipAction = useCallback(async (action: RelationshipAction) => {
-    setLoading(true);
+  const handleRelationshipAction = useCallback(
+    async (action: RelationshipAction) => {
+      setLoading(true);
 
-    try {
-      if (action === "add") {
-        await apiPost("/api/friends", { username: resolvedUser.username });
-      } else if (action === "accept" || action === "block") {
-        await apiPut("/api/friends", { target_user_id: resolvedUser.id, action });
-      } else if (action === "remove" || action === "unblock") {
-        await apiDelete("/api/friends", { target_user_id: resolvedUser.id });
+      try {
+        if (action === "add") {
+          await apiPost("/api/friends", { username: resolvedUser.username });
+        } else if (action === "accept" || action === "block") {
+          await apiPut("/api/friends", {
+            target_user_id: resolvedUser.id,
+            action,
+          });
+        } else if (action === "remove" || action === "unblock") {
+          await apiDelete("/api/friends", { target_user_id: resolvedUser.id });
+        }
+
+        await loadRelationships();
+      } finally {
+        setLoading(false);
       }
-
-      await loadRelationships();
-    } finally {
-      setLoading(false);
-    }
-  }, [loadRelationships, resolvedUser.id, resolvedUser.username]);
+    },
+    [loadRelationships, resolvedUser.id, resolvedUser.username],
+  );
 
   const handleMessage = useCallback(async () => {
     if (isMe) return;
@@ -249,7 +270,13 @@ export default function UserProfileModal({ user, onClose, isClosing }: Props) {
                     bannerUrl={resolvedUser.banner_url}
                     bannerContentType={resolvedUser.banner_content_type}
                   />
-                  <div className="pointer-events-none absolute inset-0 z-[2]" style={{ background: "var(--rm-profile-custom-surface-overlay-strong)" }} />
+                  <div
+                    className="pointer-events-none absolute inset-0 z-[2]"
+                    style={{
+                      background:
+                        "var(--rm-profile-custom-surface-overlay-strong)",
+                    }}
+                  />
 
                   <section
                     className="relative z-10 mx-auto w-full max-w-[400px] self-start overflow-hidden rounded-[28px] border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg)] shadow-[0_26px_64px_rgba(0,0,0,0.26)] backdrop-blur-[18px]"
@@ -258,7 +285,12 @@ export default function UserProfileModal({ user, onClose, isClosing }: Props) {
                       aspectRatio: PROFILE_SURFACE_ASPECT_RATIO,
                     }}
                   >
-                    <div className="pointer-events-none absolute inset-0 z-[2]" style={{ background: "var(--rm-profile-custom-surface-overlay)" }} />
+                    <div
+                      className="pointer-events-none absolute inset-0 z-[2]"
+                      style={{
+                        background: "var(--rm-profile-custom-surface-overlay)",
+                      }}
+                    />
                     <div className="pointer-events-none absolute inset-0 z-30">
                       <ProfileCollectiblesLayer
                         display={resolvedUser.avatar_display}
@@ -270,7 +302,9 @@ export default function UserProfileModal({ user, onClose, isClosing }: Props) {
 
                     <div
                       className="relative h-[18%] min-h-[128px] w-full overflow-hidden"
-                      style={{ background: "var(--rm-profile-custom-banner-fallback)" }}
+                      style={{
+                        background: "var(--rm-profile-custom-banner-fallback)",
+                      }}
                     >
                       <ProfileAssetLayer
                         url={resolvedUser.banner_url}
@@ -278,7 +312,12 @@ export default function UserProfileModal({ user, onClose, isClosing }: Props) {
                         alt="Profile banner"
                         className="opacity-94"
                       />
-                      <div className="absolute inset-0" style={{ background: "var(--rm-profile-custom-banner-overlay)" }} />
+                      <div
+                        className="absolute inset-0"
+                        style={{
+                          background: "var(--rm-profile-custom-banner-overlay)",
+                        }}
+                      />
                     </div>
 
                     <div className="relative z-20 px-6 pb-7">
@@ -300,7 +339,8 @@ export default function UserProfileModal({ user, onClose, isClosing }: Props) {
                               <span
                                 className={cn(
                                   "block h-4 w-4 rounded-full",
-                                  STATUS_CLASS_NAMES[resolvedStatus] ?? STATUS_CLASS_NAMES.offline,
+                                  STATUS_CLASS_NAMES[resolvedStatus] ??
+                                    STATUS_CLASS_NAMES.offline,
                                 )}
                               />
                             </div>
@@ -329,7 +369,10 @@ export default function UserProfileModal({ user, onClose, isClosing }: Props) {
                             <span>@{resolvedUser.username}</span>
                             {pronouns ? (
                               <>
-                                <span aria-hidden="true" className="text-[color:var(--rm-profile-custom-muted)]/60">
+                                <span
+                                  aria-hidden="true"
+                                  className="text-[color:var(--rm-profile-custom-muted)]/60"
+                                >
                                   •
                                 </span>
                                 <span className="rounded-md border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg)] px-2 py-0.5 text-[13px] font-medium text-[color:var(--rm-profile-custom-text)]">
@@ -394,39 +437,57 @@ export default function UserProfileModal({ user, onClose, isClosing }: Props) {
                   </section>
 
                   <aside className="relative z-10 mt-6 w-full max-w-[540px] self-start justify-self-center md:mt-0 md:flex md:h-full md:min-h-0 md:flex-col">
-                    <div className="flex items-center gap-5 border-b border-[color:var(--rm-profile-custom-card-border)] pb-3" style={profileThemeStyle}>
-                      {["Board", "Connections", "Activity"].map((tab, index) => (
-                        <button
-                          key={tab}
-                          type="button"
-                          className={cn(
-                            "pb-2 text-[13px] font-semibold text-[color:var(--rm-profile-custom-muted)] transition",
-                            index === 0 && "border-b-2 border-[color:var(--rm-profile-custom-text)] text-[color:var(--rm-profile-custom-text)]",
-                          )}
-                        >
-                          {tab}
-                        </button>
-                      ))}
+                    <div
+                      className="flex items-center gap-5 border-b border-[color:var(--rm-profile-custom-card-border)] pb-3"
+                      style={profileThemeStyle}
+                    >
+                      {["Board", "Connections", "Activity"].map(
+                        (tab, index) => (
+                          <button
+                            key={tab}
+                            type="button"
+                            className={cn(
+                              "pb-2 text-[13px] font-semibold text-[color:var(--rm-profile-custom-muted)] transition",
+                              index === 0 &&
+                                "border-b-2 border-[color:var(--rm-profile-custom-text)] text-[color:var(--rm-profile-custom-text)]",
+                            )}
+                          >
+                            {tab}
+                          </button>
+                        ),
+                      )}
                     </div>
 
                     <div className="mt-4 flex items-center justify-between">
-                      <div className="text-[13px] font-medium text-[color:var(--rm-profile-custom-muted)]" style={profileThemeStyle}>
+                      <div
+                        className="text-[13px] font-medium text-[color:var(--rm-profile-custom-muted)]"
+                        style={profileThemeStyle}
+                      >
                         {displayName}&apos;s widgets
                       </div>
                     </div>
 
                     <div className="mt-4 space-y-4 md:min-h-0 md:flex-1 md:overflow-y-auto md:pr-1">
                       {!isMe ? (
-                        <ProfilePreviewWidgetCard title="Relationship" subtitle="Quick actions">
+                        <ProfilePreviewWidgetCard
+                          title="Relationship"
+                          subtitle="Quick actions"
+                        >
                           <div className="space-y-3">
                             {relationship?.type === 0 ? (
                               <Button
                                 type="button"
                                 disabled={loading}
-                                onClick={() => void handleRelationshipAction("remove")}
+                                onClick={() =>
+                                  void handleRelationshipAction("remove")
+                                }
                                 className="w-full rounded-xl border border-rose-500/25 bg-rose-500/12 text-rose-300 hover:bg-rose-500 hover:text-white"
                               >
-                                {loading ? <Loader2 size={16} className="animate-spin" /> : <UserMinus size={16} />}
+                                {loading ? (
+                                  <Loader2 size={16} className="animate-spin" />
+                                ) : (
+                                  <UserMinus size={16} />
+                                )}
                                 Remove Friend
                               </Button>
                             ) : relationship?.type === 2 ? (
@@ -434,17 +495,28 @@ export default function UserProfileModal({ user, onClose, isClosing }: Props) {
                                 <Button
                                   type="button"
                                   disabled={loading}
-                                  onClick={() => void handleRelationshipAction("accept")}
+                                  onClick={() =>
+                                    void handleRelationshipAction("accept")
+                                  }
                                   className="rounded-xl bg-[var(--rm-profile-custom-button-bg)] text-[color:var(--rm-profile-custom-button-text)] shadow-[0_8px_20px_var(--rm-profile-custom-button-shadow)] hover:brightness-105"
                                   style={profileThemeStyle}
                                 >
-                                  {loading ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}
+                                  {loading ? (
+                                    <Loader2
+                                      size={16}
+                                      className="animate-spin"
+                                    />
+                                  ) : (
+                                    <Check size={16} />
+                                  )}
                                   Accept
                                 </Button>
                                 <Button
                                   type="button"
                                   disabled={loading}
-                                  onClick={() => void handleRelationshipAction("remove")}
+                                  onClick={() =>
+                                    void handleRelationshipAction("remove")
+                                  }
                                   className="rounded-xl border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] text-[color:var(--rm-profile-custom-text)] hover:bg-[var(--rm-profile-custom-card-bg)]"
                                   style={profileThemeStyle}
                                 >
@@ -464,7 +536,9 @@ export default function UserProfileModal({ user, onClose, isClosing }: Props) {
                               <Button
                                 type="button"
                                 disabled={loading}
-                                onClick={() => void handleRelationshipAction("unblock")}
+                                onClick={() =>
+                                  void handleRelationshipAction("unblock")
+                                }
                                 className="w-full rounded-xl border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] text-[color:var(--rm-profile-custom-text)] hover:bg-[var(--rm-profile-custom-card-bg)]"
                                 style={profileThemeStyle}
                               >
@@ -474,11 +548,17 @@ export default function UserProfileModal({ user, onClose, isClosing }: Props) {
                               <Button
                                 type="button"
                                 disabled={loading}
-                                onClick={() => void handleRelationshipAction("add")}
+                                onClick={() =>
+                                  void handleRelationshipAction("add")
+                                }
                                 className="w-full rounded-xl bg-[var(--rm-profile-custom-button-bg)] text-[color:var(--rm-profile-custom-button-text)] shadow-[0_8px_20px_var(--rm-profile-custom-button-shadow)] hover:brightness-105"
                                 style={profileThemeStyle}
                               >
-                                {loading ? <Loader2 size={16} className="animate-spin" /> : <UserPlus size={16} />}
+                                {loading ? (
+                                  <Loader2 size={16} className="animate-spin" />
+                                ) : (
+                                  <UserPlus size={16} />
+                                )}
                                 Add Friend
                               </Button>
                             )}
@@ -508,7 +588,9 @@ export default function UserProfileModal({ user, onClose, isClosing }: Props) {
                               <Button
                                 type="button"
                                 disabled={loading}
-                                onClick={() => void handleRelationshipAction("block")}
+                                onClick={() =>
+                                  void handleRelationshipAction("block")
+                                }
                                 className="w-full rounded-xl border border-rose-500/25 bg-rose-500/12 text-rose-300 hover:bg-rose-500 hover:text-white"
                               >
                                 <Ban size={15} />
@@ -519,7 +601,10 @@ export default function UserProfileModal({ user, onClose, isClosing }: Props) {
                         </ProfilePreviewWidgetCard>
                       ) : null}
 
-                      <ProfilePreviewWidgetCard title="Mutuals" subtitle="Shared circles">
+                      <ProfilePreviewWidgetCard
+                        title="Mutuals"
+                        subtitle="Shared circles"
+                      >
                         <div className="space-y-4">
                           <div>
                             <div className="flex items-center justify-between gap-3">
@@ -531,29 +616,33 @@ export default function UserProfileModal({ user, onClose, isClosing }: Props) {
                               </span>
                             </div>
                             <div className="mt-3 flex flex-wrap gap-2">
-                              {mutualFriends.items.length > 0 ? mutualFriends.items.map((friend) => (
-                                <div
-                                  key={friend.id}
-                                  className="flex min-w-0 items-center gap-2 rounded-full border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] py-1 pl-1 pr-3"
-                                >
-                                  <div className="relative h-7 w-7 overflow-hidden rounded-full bg-[var(--rm-profile-custom-card-bg)]">
-                                    {friend.avatar_url ? (
-                                      <AvatarImage
-                                        src={getAuthAssetUrl(friend.avatar_url)}
-                                        alt={getDisplayName(friend)}
-                                        display={friend.avatar_display}
-                                      />
-                                    ) : (
-                                      <div className="flex h-full w-full items-center justify-center text-[10px] font-bold text-[color:var(--rm-profile-custom-text)]">
-                                        {getDisplayInitial(friend)}
-                                      </div>
-                                    )}
+                              {mutualFriends.items.length > 0 ? (
+                                mutualFriends.items.map((friend) => (
+                                  <div
+                                    key={friend.id}
+                                    className="flex min-w-0 items-center gap-2 rounded-full border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] py-1 pl-1 pr-3"
+                                  >
+                                    <div className="relative h-7 w-7 overflow-hidden rounded-full bg-[var(--rm-profile-custom-card-bg)]">
+                                      {friend.avatar_url ? (
+                                        <AvatarImage
+                                          src={getAuthAssetUrl(
+                                            friend.avatar_url,
+                                          )}
+                                          alt={getDisplayName(friend)}
+                                          display={friend.avatar_display}
+                                        />
+                                      ) : (
+                                        <div className="flex h-full w-full items-center justify-center text-[10px] font-bold text-[color:var(--rm-profile-custom-text)]">
+                                          {getDisplayInitial(friend)}
+                                        </div>
+                                      )}
+                                    </div>
+                                    <span className="max-w-[180px] truncate text-[13px] text-[color:var(--rm-profile-custom-text)]">
+                                      {getDisplayName(friend)}
+                                    </span>
                                   </div>
-                                  <span className="max-w-[180px] truncate text-[13px] text-[color:var(--rm-profile-custom-text)]">
-                                    {getDisplayName(friend)}
-                                  </span>
-                                </div>
-                              )) : (
+                                ))
+                              ) : (
                                 <div className="text-[13px] text-[color:var(--rm-profile-custom-muted)]">
                                   No shared friends yet.
                                 </div>
@@ -571,27 +660,29 @@ export default function UserProfileModal({ user, onClose, isClosing }: Props) {
                               </span>
                             </div>
                             <div className="mt-3 flex flex-wrap gap-2">
-                              {mutualServers.items.length > 0 ? mutualServers.items.map((server) => (
-                                <div
-                                  key={server.id}
-                                  className="flex min-w-0 items-center gap-2 rounded-full border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] py-1 pl-1 pr-3"
-                                >
-                                  <div className="relative flex h-7 w-7 items-center justify-center overflow-hidden rounded-full bg-[var(--rm-profile-custom-card-bg)] text-[10px] font-bold text-[color:var(--rm-profile-custom-text)]">
-                                    {server.icon_url ? (
-                                      <img
-                                        src={getAuthAssetUrl(server.icon_url)}
-                                        alt={server.name}
-                                        className="h-full w-full object-cover"
-                                      />
-                                    ) : (
-                                      server.name.charAt(0).toUpperCase()
-                                    )}
+                              {mutualServers.items.length > 0 ? (
+                                mutualServers.items.map((server) => (
+                                  <div
+                                    key={server.id}
+                                    className="flex min-w-0 items-center gap-2 rounded-full border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] py-1 pl-1 pr-3"
+                                  >
+                                    <div className="relative flex h-7 w-7 items-center justify-center overflow-hidden rounded-full bg-[var(--rm-profile-custom-card-bg)] text-[10px] font-bold text-[color:var(--rm-profile-custom-text)]">
+                                      {server.icon_url ? (
+                                        <img
+                                          src={getAuthAssetUrl(server.icon_url)}
+                                          alt={server.name}
+                                          className="h-full w-full object-cover"
+                                        />
+                                      ) : (
+                                        server.name.charAt(0).toUpperCase()
+                                      )}
+                                    </div>
+                                    <span className="max-w-[180px] truncate text-[13px] text-[color:var(--rm-profile-custom-text)]">
+                                      {server.name}
+                                    </span>
                                   </div>
-                                  <span className="max-w-[180px] truncate text-[13px] text-[color:var(--rm-profile-custom-text)]">
-                                    {server.name}
-                                  </span>
-                                </div>
-                              )) : (
+                                ))
+                              ) : (
                                 <div className="text-[13px] text-[color:var(--rm-profile-custom-muted)]">
                                   No shared servers right now.
                                 </div>
@@ -601,11 +692,20 @@ export default function UserProfileModal({ user, onClose, isClosing }: Props) {
                         </div>
                       </ProfilePreviewWidgetCard>
 
-                      <ProfilePreviewWidgetCard title="Details" subtitle="Profile snapshot">
+                      <ProfilePreviewWidgetCard
+                        title="Details"
+                        subtitle="Profile snapshot"
+                      >
                         <div className="space-y-3">
                           <StatRow label="Status" value={resolvedStatusLabel} />
-                          <StatRow label={profileReferenceDate.label} value={profileReferenceDate.value} />
-                          <StatRow label="Pronouns" value={pronouns || "Not set"} />
+                          <StatRow
+                            label={profileReferenceDate.label}
+                            value={profileReferenceDate.value}
+                          />
+                          <StatRow
+                            label="Pronouns"
+                            value={pronouns || "Not set"}
+                          />
                         </div>
                       </ProfilePreviewWidgetCard>
                     </div>

@@ -1,8 +1,7 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute } from "@tanstack/react-router";
 
 import { broadcastToChannel, requireAuth } from "@/lib/api-helpers";
 import { requireChannelAccess } from "@/lib/require-channel-access";
-
 
 // POST /api/channels/:id/typing — send typing indicator
 const POST = async ({ request, params }: any) => {
@@ -22,13 +21,12 @@ const POST = async ({ request, params }: any) => {
   });
 
   return new Response(null, { status: 204 });
-}
+};
 
-
-export const Route = createFileRoute('/api/channels/$id/typing')({
+export const Route = createFileRoute("/api/channels/$id/typing")({
   server: {
     handlers: {
       POST,
-    }
-  }
+    },
+  },
 });

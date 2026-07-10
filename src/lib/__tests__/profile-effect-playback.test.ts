@@ -12,27 +12,49 @@ describe("profile effect playback", () => {
       skuId: "1516560602187825362",
       name: "Let's Play",
       animationType: 2,
-      previewUrl: "https://cdn.discordapp.com/media/v1/collectibles-shop/preview",
-      thumbnailPreviewSrc: "https://cdn.discordapp.com/media/v1/collectibles-shop/thumb",
-      reducedMotionSrc: "https://cdn.discordapp.com/media/v1/collectibles-shop/reduced",
-      staticFrameSrc: "https://cdn.discordapp.com/media/v1/collectibles-shop/static-frame",
+      previewUrl:
+        "https://cdn.discordapp.com/media/v1/collectibles-shop/preview",
+      thumbnailPreviewSrc:
+        "https://cdn.discordapp.com/media/v1/collectibles-shop/thumb",
+      reducedMotionSrc:
+        "https://cdn.discordapp.com/media/v1/collectibles-shop/reduced",
+      staticFrameSrc:
+        "https://cdn.discordapp.com/media/v1/collectibles-shop/static-frame",
       staticUrl: "https://cdn.discordapp.com/media/v1/collectibles-shop/static",
-      animatedUrl: "https://cdn.discordapp.com/media/v1/collectibles-shop/animated",
-      effectUrls: ["https://cdn.discordapp.com/media/v1/collectibles-shop/layer-a"],
+      animatedUrl:
+        "https://cdn.discordapp.com/media/v1/collectibles-shop/animated",
+      effectUrls: [
+        "https://cdn.discordapp.com/media/v1/collectibles-shop/layer-a",
+      ],
       effects: [],
     };
 
-    expect(getProfileEffectFallbackAsset(effect, { playAnimation: true, prefersReducedMotion: true })).toEqual({
+    expect(
+      getProfileEffectFallbackAsset(effect, {
+        playAnimation: true,
+        prefersReducedMotion: true,
+      }),
+    ).toEqual({
       src: "https://cdn.discordapp.com/media/v1/collectibles-shop/reduced",
       kind: "image",
     });
 
-    expect(getProfileEffectFallbackAsset(effect, { playAnimation: false, prefersReducedMotion: false })).toEqual({
+    expect(
+      getProfileEffectFallbackAsset(effect, {
+        playAnimation: false,
+        prefersReducedMotion: false,
+      }),
+    ).toEqual({
       src: "https://cdn.discordapp.com/media/v1/collectibles-shop/static-frame",
       kind: "image",
     });
 
-    expect(getProfileEffectFallbackAsset(effect, { playAnimation: true, prefersReducedMotion: false })).toEqual({
+    expect(
+      getProfileEffectFallbackAsset(effect, {
+        playAnimation: true,
+        prefersReducedMotion: false,
+      }),
+    ).toEqual({
       src: "https://cdn.discordapp.com/media/v1/collectibles-shop/animated",
       kind: "video",
     });
@@ -61,7 +83,9 @@ describe("profile effect playback", () => {
     expect(getProfileEffectPlaybackSnapshot(layers, 0)).toMatchObject({
       activeLayers: [
         {
-          layer: { src: "https://cdn.discordapp.com/media/v1/collectibles-shop/intro" },
+          layer: {
+            src: "https://cdn.discordapp.com/media/v1/collectibles-shop/intro",
+          },
           cycleIndex: 0,
           activeOffsetMs: 0,
         },
@@ -77,7 +101,9 @@ describe("profile effect playback", () => {
     expect(getProfileEffectPlaybackSnapshot(layers, 7906)).toMatchObject({
       activeLayers: [
         {
-          layer: { src: "https://cdn.discordapp.com/media/v1/collectibles-shop/loop" },
+          layer: {
+            src: "https://cdn.discordapp.com/media/v1/collectibles-shop/loop",
+          },
           cycleIndex: 0,
           activeOffsetMs: 0,
         },
@@ -88,7 +114,9 @@ describe("profile effect playback", () => {
     expect(getProfileEffectPlaybackSnapshot(layers, 15812)).toMatchObject({
       activeLayers: [
         {
-          layer: { src: "https://cdn.discordapp.com/media/v1/collectibles-shop/loop" },
+          layer: {
+            src: "https://cdn.discordapp.com/media/v1/collectibles-shop/loop",
+          },
           cycleIndex: 1,
           activeOffsetMs: 0,
         },
@@ -161,7 +189,9 @@ describe("profile effect playback", () => {
       cycleIndex: 1,
       activeOffsetMs: 0,
     });
-    expect(secondCycle.activeLayers[0].renderKey).toBe(firstCycle.activeLayers[0].renderKey);
+    expect(secondCycle.activeLayers[0].renderKey).toBe(
+      firstCycle.activeLayers[0].renderKey,
+    );
   });
 
   it("resolves randomized sources one variant at a time for each invocation", () => {

@@ -50,7 +50,10 @@ export function isTikTokShortLookupUrl(rawUrl: string): boolean {
   }
 }
 
-export function buildTikTokMetadataLookupUrls(initialLookupUrl: string, resolvedLookupUrl?: string | null): string[] {
+export function buildTikTokMetadataLookupUrls(
+  initialLookupUrl: string,
+  resolvedLookupUrl?: string | null,
+): string[] {
   const urls = [initialLookupUrl];
 
   if (resolvedLookupUrl && resolvedLookupUrl !== initialLookupUrl) {
@@ -68,8 +71,9 @@ async function resolveTikTokLookupUrl(rawUrl: string): Promise<string> {
       method: "HEAD",
       redirect: "follow",
       headers: {
-        "Accept": "text/html,*/*;q=0.8",
-        "User-Agent": "Mozilla/5.0 (compatible; RalphMeetBot/1.0; +https://meet.115jon.site)",
+        Accept: "text/html,*/*;q=0.8",
+        "User-Agent":
+          "Mozilla/5.0 (compatible; RalphMeetBot/1.0; +https://meet.115jon.site)",
       },
     });
 
@@ -80,14 +84,17 @@ async function resolveTikTokLookupUrl(rawUrl: string): Promise<string> {
   }
 }
 
-export function hasTikTokVideoResultContent(result?: TikTokVideoResult | null): result is TikTokVideoResult {
-  return !!(result && (
-    result.videoUrl
-    || result.media?.length
-    || result.coverUrl
-    || result.audio
-    || result.title
-  ));
+export function hasTikTokVideoResultContent(
+  result?: TikTokVideoResult | null,
+): result is TikTokVideoResult {
+  return !!(
+    result &&
+    (result.videoUrl ||
+      result.media?.length ||
+      result.coverUrl ||
+      result.audio ||
+      result.title)
+  );
 }
 
 const GET = async ({ request }: any) => {
@@ -95,7 +102,10 @@ const GET = async ({ request }: any) => {
   const videoUrl = url.searchParams.get("videoUrl");
 
   if (!videoUrl) {
-    return Response.json({ error: "Missing videoUrl parameter" }, { status: 400 });
+    return Response.json(
+      { error: "Missing videoUrl parameter" },
+      { status: 400 },
+    );
   }
 
   // Validate it's actually a TikTok URL
@@ -107,19 +117,35 @@ const GET = async ({ request }: any) => {
   }
 
   if (!parsed.hostname.toLowerCase().includes("tiktok.com")) {
-    return Response.json({ error: "Only TikTok URLs are supported" }, { status: 400 });
+    return Response.json(
+      { error: "Only TikTok URLs are supported" },
+      { status: 400 },
+    );
   }
 
   const initialLookupUrl = canonicalizeTikTokLookupUrl(videoUrl);
   if (!initialLookupUrl) {
-    return Response.json({ error: "Only TikTok URLs are supported" }, { status: 400 });
+    return Response.json(
+      { error: "Only TikTok URLs are supported" },
+      { status: 400 },
+    );
   }
-  const resolvedLookupUrl = canonicalizeTikTokLookupUrl(await resolveTikTokLookupUrl(initialLookupUrl));
+  const resolvedLookupUrl = canonicalizeTikTokLookupUrl(
+    await resolveTikTokLookupUrl(initialLookupUrl),
+  );
   if (!resolvedLookupUrl) {
-    return Response.json({ error: "Only TikTok URLs are supported" }, { status: 400 });
+    return Response.json(
+      { error: "Only TikTok URLs are supported" },
+      { status: 400 },
+    );
   }
-  const lookupUrls = buildTikTokMetadataLookupUrls(initialLookupUrl, resolvedLookupUrl);
-  const cacheKeys = lookupUrls.map((lookupUrl) => `v1:tiktok-video:${lookupUrl}`);
+  const lookupUrls = buildTikTokMetadataLookupUrls(
+    initialLookupUrl,
+    resolvedLookupUrl,
+  );
+  const cacheKeys = lookupUrls.map(
+    (lookupUrl) => `v1:tiktok-video:${lookupUrl}`,
+  );
 
   try {
     for (const cacheKey of cacheKeys) {
@@ -158,7 +184,10 @@ const GET = async ({ request }: any) => {
     };
 
     if (!hasTikTokVideoResultContent(result)) {
-      return Response.json({ error: "Could not resolve TikTok media" }, { status: 404 });
+      return Response.json(
+        { error: "Could not resolve TikTok media" },
+        { status: 404 },
+      );
     }
 
     const cacheLookupUrls = new Set<string>(lookupUrls);
@@ -167,7 +196,9 @@ const GET = async ({ request }: any) => {
     }
 
     for (const lookupUrl of cacheLookupUrls) {
-      cacheSet(`v1:tiktok-video:${lookupUrl}`, result, TIKTOK_VIDEO_TTL).catch(() => { });
+      cacheSet(`v1:tiktok-video:${lookupUrl}`, result, TIKTOK_VIDEO_TTL).catch(
+        () => {},
+      );
     }
 
     return Response.json(result, {
@@ -178,7 +209,10 @@ const GET = async ({ request }: any) => {
     });
   } catch (e) {
     log.error("fetch failed:", e);
-    return Response.json({ error: "Failed to resolve TikTok video" }, { status: 502 });
+    return Response.json(
+      { error: "Failed to resolve TikTok video" },
+      { status: 502 },
+    );
   }
 };
 

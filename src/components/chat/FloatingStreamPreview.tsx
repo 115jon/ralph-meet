@@ -19,17 +19,36 @@ function getDefaultPosition(slotIndex: number) {
   }
 
   return {
-    x: Math.max(16, Math.min(96 - slotIndex * 12, window.innerWidth - DEFAULT_PREVIEW_SIZE.width - 16 - slotIndex * 24)),
-    y: Math.max(16, window.innerHeight - DEFAULT_PREVIEW_SIZE.height - 120 - slotIndex * 28),
+    x: Math.max(
+      16,
+      Math.min(
+        96 - slotIndex * 12,
+        window.innerWidth - DEFAULT_PREVIEW_SIZE.width - 16 - slotIndex * 24,
+      ),
+    ),
+    y: Math.max(
+      16,
+      window.innerHeight - DEFAULT_PREVIEW_SIZE.height - 120 - slotIndex * 28,
+    ),
   };
 }
 
-function clampPosition(position: { x: number; y: number }, width: number, height: number) {
+function clampPosition(
+  position: { x: number; y: number },
+  width: number,
+  height: number,
+) {
   if (typeof window === "undefined") return position;
 
   return {
-    x: Math.min(Math.max(12, position.x), Math.max(12, window.innerWidth - width - 12)),
-    y: Math.min(Math.max(12, position.y), Math.max(12, window.innerHeight - height - 12)),
+    x: Math.min(
+      Math.max(12, position.x),
+      Math.max(12, window.innerWidth - width - 12),
+    ),
+    y: Math.min(
+      Math.max(12, position.y),
+      Math.max(12, window.innerHeight - height - 12),
+    ),
   };
 }
 
@@ -65,9 +84,16 @@ export default function FloatingStreamPreview({
   menuProps,
 }: FloatingStreamPreviewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const dragStateRef = useRef<{ pointerId: number; offsetX: number; offsetY: number } | null>(null);
+  const dragStateRef = useRef<{
+    pointerId: number;
+    offsetX: number;
+    offsetY: number;
+  } | null>(null);
   const [position, setPosition] = useState(() => getDefaultPosition(slotIndex));
-  const [menuPosition, setMenuPosition] = useState<{ x: number; y: number } | null>(null);
+  const [menuPosition, setMenuPosition] = useState<{
+    x: number;
+    y: number;
+  } | null>(null);
 
   const openMenuAt = (x: number, y: number) => {
     setMenuPosition({ x, y });
@@ -99,7 +125,11 @@ export default function FloatingStreamPreview({
       return;
     }
 
-    if ((event.target as HTMLElement).closest("[data-stream-preview-interactive='true']")) {
+    if (
+      (event.target as HTMLElement).closest(
+        "[data-stream-preview-interactive='true']",
+      )
+    ) {
       return;
     }
 
@@ -133,7 +163,10 @@ export default function FloatingStreamPreview({
   };
 
   const handlePointerUp = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (!dragStateRef.current || dragStateRef.current.pointerId !== event.pointerId) {
+    if (
+      !dragStateRef.current ||
+      dragStateRef.current.pointerId !== event.pointerId
+    ) {
       return;
     }
 
@@ -177,8 +210,12 @@ export default function FloatingStreamPreview({
 
           {(isPreviewPaused || !previewStream) && (
             <div className="absolute inset-0 flex flex-col items-center justify-center bg-black px-8 text-center">
-              <p className="text-lg font-black tracking-tight text-white">{pausedTitle}</p>
-              <p className="mt-2 text-sm font-medium text-white/70">{pausedDescription}</p>
+              <p className="text-lg font-black tracking-tight text-white">
+                {pausedTitle}
+              </p>
+              <p className="mt-2 text-sm font-medium text-white/70">
+                {pausedDescription}
+              </p>
             </div>
           )}
 
@@ -210,9 +247,9 @@ export default function FloatingStreamPreview({
               className="border border-white/10 bg-black/55 text-white/85 hover:bg-black/70 hover:text-white"
               onClick={(event) => {
                 const rect = event.currentTarget.getBoundingClientRect();
-                setMenuPosition((current) => (
-                  current ? null : { x: rect.right + 4, y: rect.top - 4 }
-                ));
+                setMenuPosition((current) =>
+                  current ? null : { x: rect.right + 4, y: rect.top - 4 },
+                );
               }}
             />
             <IconButton

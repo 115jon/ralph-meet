@@ -11,10 +11,17 @@ const GET = async ({ request }: any) => {
   const refresh = url.searchParams.get("refresh") === "1";
 
   try {
-    const catalog = await getCollectiblesCatalog(getDB(), { forceRefresh: refresh });
+    const catalog = await getCollectiblesCatalog(getDB(), {
+      forceRefresh: refresh,
+    });
     return apiSuccess({ catalog }, 200, request);
   } catch {
-    return apiError("Unable to load collectibles catalog", 503, "COLLECTIBLES_CATALOG_UNAVAILABLE", request);
+    return apiError(
+      "Unable to load collectibles catalog",
+      503,
+      "COLLECTIBLES_CATALOG_UNAVAILABLE",
+      request,
+    );
   }
 };
 

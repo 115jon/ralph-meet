@@ -36,20 +36,24 @@ describe("message input utils", () => {
   it("expands mapped custom emoji placeholders into stored tokens", () => {
     const placeholder = "\uE000";
 
-    expect(expandComposerCustomEmojiPlaceholders(`hey ${placeholder}`, {
-      [placeholder]: {
-        id: "bbb80f56-387b-42d7-bb30-e0d38a072485",
-        shortcode: "sly_cooper",
-      },
-    })).toBe("hey <:sly_cooper:bbb80f56-387b-42d7-bb30-e0d38a072485>");
+    expect(
+      expandComposerCustomEmojiPlaceholders(`hey ${placeholder}`, {
+        [placeholder]: {
+          id: "bbb80f56-387b-42d7-bb30-e0d38a072485",
+          shortcode: "sly_cooper",
+        },
+      }),
+    ).toBe("hey <:sly_cooper:bbb80f56-387b-42d7-bb30-e0d38a072485>");
   });
 
   it("prunes custom emoji entries that are no longer present in the composer", () => {
-    expect(pruneComposerCustomEmojiMap("hello", {
-      "\uE000": {
-        id: "bbb80f56-387b-42d7-bb30-e0d38a072485",
-        shortcode: "sly_cooper",
-      },
-    })).toEqual({});
+    expect(
+      pruneComposerCustomEmojiMap("hello", {
+        "\uE000": {
+          id: "bbb80f56-387b-42d7-bb30-e0d38a072485",
+          shortcode: "sly_cooper",
+        },
+      }),
+    ).toEqual({});
   });
 });

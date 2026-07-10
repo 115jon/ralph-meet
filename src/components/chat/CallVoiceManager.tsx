@@ -35,7 +35,8 @@ export function CallVoiceManager() {
     }
   }, [status]);
 
-  if (status !== "active" || !hasJoinedSFU || !voiceRoomId || !channelId) return null;
+  if (status !== "active" || !hasJoinedSFU || !voiceRoomId || !channelId)
+    return null;
 
   return <ActiveCallSession voiceRoomId={voiceRoomId} channelId={channelId} />;
 }

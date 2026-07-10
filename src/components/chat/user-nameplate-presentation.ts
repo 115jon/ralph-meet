@@ -1,13 +1,15 @@
 import { getAvatarCollectibles } from "@/lib/avatar-display";
-import { findCollectibleItem, type CollectiblesCatalog } from "@/lib/collectibles-catalog";
+import {
+  findCollectibleItem,
+  type CollectiblesCatalog,
+} from "@/lib/collectibles-catalog";
 import type { User } from "@/lib/types";
-
 
 function hslToHex(hue: number, saturation: number, lightness: number) {
   const s = saturation / 100;
   const l = lightness / 100;
   const c = (1 - Math.abs(2 * l - 1)) * s;
-  const x = c * (1 - Math.abs((hue / 60) % 2 - 1));
+  const x = c * (1 - Math.abs(((hue / 60) % 2) - 1));
   const m = l - c / 2;
 
   let red = 0;
@@ -34,15 +36,22 @@ function hslToHex(hue: number, saturation: number, lightness: number) {
     blue = x;
   }
 
-  const toHex = (value: number) => Math.round((value + m) * 255).toString(16).padStart(2, "0");
+  const toHex = (value: number) =>
+    Math.round((value + m) * 255)
+      .toString(16)
+      .padStart(2, "0");
   return `#${toHex(red)}${toHex(green)}${toHex(blue)}`;
 }
 
 function hexToRgb(hex: string) {
   const normalized = hex.replace("#", "");
-  const expanded = normalized.length === 3
-    ? normalized.split("").map((part) => `${part}${part}`).join("")
-    : normalized;
+  const expanded =
+    normalized.length === 3
+      ? normalized
+          .split("")
+          .map((part) => `${part}${part}`)
+          .join("")
+      : normalized;
   const value = Number.parseInt(expanded, 16);
 
   return {
@@ -166,7 +175,10 @@ const SEMANTIC_NAMEPLATE_TEXT_PRIMARY = "var(--rm-text-primary)";
 const SEMANTIC_NAMEPLATE_TEXT_SECONDARY = "var(--rm-text-secondary)";
 const SEMANTIC_NAMEPLATE_TEXT_MUTED = "var(--rm-text-muted)";
 
-export function buildNameplateTheme(palette: string | null | undefined, seed: string): NameplateTheme {
+export function buildNameplateTheme(
+  palette: string | null | undefined,
+  seed: string,
+): NameplateTheme {
   const accentHex = accentFromPalette(palette, seed);
   const accentRgb = hexToRgb(accentHex);
   const isLightAccent = relativeLuminance(accentRgb) > 0.36;
@@ -214,7 +226,10 @@ export function getNameplateTextColors(
   };
 }
 
-type NameplateSourceUser = Pick<User, "id" | "avatar_display" | "nameplate_url"> | null | undefined;
+type NameplateSourceUser =
+  | Pick<User, "id" | "avatar_display" | "nameplate_url">
+  | null
+  | undefined;
 
 export function shouldUseNameplateIdentityFade(
   theme: NameplateTheme | null | undefined,
@@ -229,7 +244,9 @@ export function getUserNameplatePresentation(
   user: NameplateSourceUser,
   collectiblesCatalog?: CollectiblesCatalog | null,
 ) {
-  const nameplateSelection = getAvatarCollectibles(user?.avatar_display)?.nameplate;
+  const nameplateSelection = getAvatarCollectibles(
+    user?.avatar_display,
+  )?.nameplate;
   const hasNameplate = Boolean(user?.nameplate_url);
   const hasCollectibleNameplate = Boolean(nameplateSelection);
   const needsContrastAssist = hasNameplate && !hasCollectibleNameplate;
@@ -245,10 +262,13 @@ export function getUserNameplatePresentation(
   }
 
   const paletteFromDisplay = nameplateSelection?.palette;
-  const paletteFromCatalog = collectiblesCatalog && nameplateSelection?.skuId
-    ? findCollectibleItem(collectiblesCatalog, nameplateSelection.skuId)?.palette
-    : undefined;
-  const seed = nameplateSelection?.skuId ?? user?.nameplate_url ?? user?.id ?? "nameplate";
+  const paletteFromCatalog =
+    collectiblesCatalog && nameplateSelection?.skuId
+      ? findCollectibleItem(collectiblesCatalog, nameplateSelection.skuId)
+          ?.palette
+      : undefined;
+  const seed =
+    nameplateSelection?.skuId ?? user?.nameplate_url ?? user?.id ?? "nameplate";
 
   return {
     nameplateSelection,

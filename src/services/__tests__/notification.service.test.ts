@@ -141,13 +141,13 @@ describe("markNotificationsRead", () => {
 
   it("throws 400 when neither ids nor all is provided", async () => {
     await expect(
-      markNotificationsRead(db as any, USER_ID, {})
+      markNotificationsRead(db as any, USER_ID, {}),
     ).rejects.toHaveProperty("status", 400);
   });
 
   it("throws 400 when ids is an empty array", async () => {
     await expect(
-      markNotificationsRead(db as any, USER_ID, { ids: [] })
+      markNotificationsRead(db as any, USER_ID, { ids: [] }),
     ).rejects.toHaveProperty("status", 400);
   });
 });

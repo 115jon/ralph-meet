@@ -8,7 +8,13 @@ describe("resolveVisibleChannelPermissions", () => {
     const visible = resolveVisibleChannelPermissions(
       [{ id: "vc-public" }, { id: "vc-private" }],
       "user-1",
-      [{ id: "role-everyone", permissions: PERMISSIONS.VIEW_CHANNELS, is_default: true }],
+      [
+        {
+          id: "role-everyone",
+          permissions: PERMISSIONS.VIEW_CHANNELS,
+          is_default: true,
+        },
+      ],
       [
         {
           channel_id: "vc-private",

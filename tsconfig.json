@@ -1,11 +1,7 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "lib": [
-      "dom",
-      "dom.iterable",
-      "esnext"
-    ],
+    "lib": ["dom", "dom.iterable", "esnext"],
     "allowJs": true,
     "skipLibCheck": true,
     "strict": true,
@@ -18,21 +14,10 @@
     "jsx": "react-jsx",
     "incremental": true,
     "paths": {
-      "@/*": [
-        "./src/*"
-      ],
-      "@kova/react": [
-        "../ralph-auth/packages/kova-react/src/index.ts"
-      ]
+      "@/*": ["./src/*"],
+      "@kova/react": ["../ralph-auth/packages/kova-react/src/index.ts"]
     }
   },
-  "include": [
-    "src/**/*.ts",
-    "src/**/*.tsx",
-    "vite.config.ts"
-  ],
-  "exclude": [
-    "node_modules",
-    "worker"
-  ]
+  "include": ["src/**/*.ts", "src/**/*.tsx", "vite.config.ts"],
+  "exclude": ["node_modules", "worker"]
 }

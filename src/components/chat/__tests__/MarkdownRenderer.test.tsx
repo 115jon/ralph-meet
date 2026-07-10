@@ -8,25 +8,29 @@ import { MarkdownRenderer } from "../MarkdownRenderer";
 describe("MarkdownRenderer emoji support", () => {
   it("renders native emoji shortcodes inline", () => {
     const markup = renderToStaticMarkup(
-      <MarkdownRenderer content="let's go :joy:" />
+      <MarkdownRenderer content="let's go :joy:" />,
     );
 
-    expect(markup).toContain(`emoji-datasource-twitter@${NATIVE_EMOJI_STYLE_VERSION}`);
+    expect(markup).toContain(
+      `emoji-datasource-twitter@${NATIVE_EMOJI_STYLE_VERSION}`,
+    );
     expect(markup).not.toContain("let&#x27;s go :joy:");
   });
 
   it("renders native emoji characters with the shared emoji asset style", () => {
     const markup = renderToStaticMarkup(
-      <MarkdownRenderer content="let's go 😂" />
+      <MarkdownRenderer content="let's go 😂" />,
     );
 
-    expect(markup).toContain(`emoji-datasource-twitter@${NATIVE_EMOJI_STYLE_VERSION}`);
+    expect(markup).toContain(
+      `emoji-datasource-twitter@${NATIVE_EMOJI_STYLE_VERSION}`,
+    );
     expect(markup).not.toContain("let&#x27;s go 😂");
   });
 
   it("falls back to readable text for unresolved custom emoji tokens", () => {
     const markup = renderToStaticMarkup(
-      <MarkdownRenderer content="ship it <:party_blob:emoji-123>" />
+      <MarkdownRenderer content="ship it <:party_blob:emoji-123>" />,
     );
 
     expect(markup).toContain(":party_blob:");

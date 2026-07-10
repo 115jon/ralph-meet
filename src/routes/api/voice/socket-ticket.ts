@@ -44,36 +44,55 @@ const POST = async ({ request }: { request: Request }) => {
   const env = getEnv() as SocketTicketEnv;
   const config = getSocketTicketConfig(env);
   if (!config.ok) {
-    return noStore(apiError("Realtime admission is not configured", 503, config.code, request));
+    return noStore(
+      apiError(
+        "Realtime admission is not configured",
+        503,
+        config.code,
+        request,
+      ),
+    );
   }
 
   let body: SocketTicketRequestBody;
   try {
-    body = await request.json() as SocketTicketRequestBody;
+    body = (await request.json()) as SocketTicketRequestBody;
   } catch {
     return noStore(apiError("Invalid JSON", 400, "INVALID_JSON", request));
   }
 
   const audience = parseAudience(body.audience);
   if (!audience) {
-    return noStore(apiError("Invalid socket audience", 400, "INVALID_AUDIENCE", request));
+    return noStore(
+      apiError("Invalid socket audience", 400, "INVALID_AUDIENCE", request),
+    );
   }
 
-  const hasChannelId = typeof body.channelId === "string" && body.channelId.trim().length > 0;
-  const admission = audience !== "global" && !hasChannelId
-    ? await authorizePublicDemoTicket(request, config.ticketSecret, body, audience)
-    : await authorizeAuthenticatedTicket(request, body, audience);
+  const hasChannelId =
+    typeof body.channelId === "string" && body.channelId.trim().length > 0;
+  const admission =
+    audience !== "global" && !hasChannelId
+      ? await authorizePublicDemoTicket(
+          request,
+          config.ticketSecret,
+          body,
+          audience,
+        )
+      : await authorizeAuthenticatedTicket(request, body, audience);
   if (admission instanceof Response) return noStore(admission);
 
   const expiresAt = Date.now() + SOCKET_TICKET_TTL_MS;
-  const ticket = await issueSocketTicket({
-    accessMode: admission.accessMode,
-    audience,
-    expiresAt,
-    nonce: crypto.randomUUID(),
-    roomSlug: admission.roomSlug,
-    subject: admission.subject,
-  }, config.ticketSecret);
+  const ticket = await issueSocketTicket(
+    {
+      accessMode: admission.accessMode,
+      audience,
+      expiresAt,
+      nonce: crypto.randomUUID(),
+      roomSlug: admission.roomSlug,
+      subject: admission.subject,
+    },
+    config.ticketSecret,
+  );
 
   const response = Response.json({
     access_mode: admission.accessMode,
@@ -97,7 +116,11 @@ async function authorizeAuthenticatedTicket(
   if (authResult instanceof Response) return authResult;
 
   if (audience === "global") {
-    return { accessMode: "authenticated", roomSlug: "global-gateway", subject: authResult.userId };
+    return {
+      accessMode: "authenticated",
+      roomSlug: "global-gateway",
+      subject: authResult.userId,
+    };
   }
 
   if (typeof body.channelId !== "string" || !body.channelId.trim()) {
@@ -105,35 +128,85 @@ async function authorizeAuthenticatedTicket(
   }
 
   const channelId = body.channelId.trim();
-  const channelAccess = await requireChannelAccess(authResult.userId, channelId);
+  const channelAccess = await requireChannelAccess(
+    authResult.userId,
+    channelId,
+  );
   if (channelAccess instanceof Response) return channelAccess;
 
-  if (typeof body.roomSlug === "string" && body.roomSlug.startsWith("dm-call-")) {
-    const callRoomSlug = await getAuthorizedDmCallRoomSlug(authResult.userId, channelId);
+  if (
+    typeof body.roomSlug === "string" &&
+    body.roomSlug.startsWith("dm-call-")
+  ) {
+    const callRoomSlug = await getAuthorizedDmCallRoomSlug(
+      authResult.userId,
+      channelId,
+    );
     if (!callRoomSlug || callRoomSlug !== body.roomSlug) {
-      return apiError("Channel not found or access denied", 403, "ROOM_NOT_ALLOWED", request);
+      return apiError(
+        "Channel not found or access denied",
+        403,
+        "ROOM_NOT_ALLOWED",
+        request,
+      );
     }
-    return { accessMode: "authenticated", roomSlug: callRoomSlug, subject: authResult.userId };
+    return {
+      accessMode: "authenticated",
+      roomSlug: callRoomSlug,
+      subject: authResult.userId,
+    };
   }
 
   if (!channelAccess.serverId) {
-    return apiError("Server voice channel required", 400, "SERVER_VOICE_REQUIRED", request);
+    return apiError(
+      "Server voice channel required",
+      400,
+      "SERVER_VOICE_REQUIRED",
+      request,
+    );
   }
 
-  const channel = await getDB().prepare(
-    "SELECT channel_type FROM channels WHERE id = ? AND server_id = ?",
-  ).bind(channelId, channelAccess.serverId).first<{ channel_type: string }>();
+  const channel = await getDB()
+    .prepare("SELECT channel_type FROM channels WHERE id = ? AND server_id = ?")
+    .bind(channelId, channelAccess.serverId)
+    .first<{ channel_type: string }>();
   if (channel?.channel_type !== "voice") {
-    return apiError("Server voice channel required", 400, "SERVER_VOICE_REQUIRED", request);
+    return apiError(
+      "Server voice channel required",
+      400,
+      "SERVER_VOICE_REQUIRED",
+      request,
+    );
   }
 
-  if (typeof body.serverId === "string" && body.serverId.trim() && body.serverId.trim() !== channelAccess.serverId) {
-    return apiError("Channel not found or access denied", 403, "SERVER_MISMATCH", request);
+  if (
+    typeof body.serverId === "string" &&
+    body.serverId.trim() &&
+    body.serverId.trim() !== channelAccess.serverId
+  ) {
+    return apiError(
+      "Channel not found or access denied",
+      403,
+      "SERVER_MISMATCH",
+      request,
+    );
   }
 
-  const permissions = await getUserChannelPermissions(channelAccess.serverId, channelId, authResult.userId);
-  if (permissions === null || !hasPermission(permissions, PERMISSIONS.CONNECT)) {
-    return apiError("You do not have permission to connect to this voice channel", 403, "CONNECT_DENIED", request);
+  const permissions = await getUserChannelPermissions(
+    channelAccess.serverId,
+    channelId,
+    authResult.userId,
+  );
+  if (
+    permissions === null ||
+    !hasPermission(permissions, PERMISSIONS.CONNECT)
+  ) {
+    return apiError(
+      "You do not have permission to connect to this voice channel",
+      403,
+      "CONNECT_DENIED",
+      request,
+    );
   }
 
   return {
@@ -150,10 +223,19 @@ async function authorizePublicDemoTicket(
   audience: SocketTicketAudience,
 ): Promise<TicketAdmission | Response> {
   if (!isSameOrigin(request)) {
-    return apiError("Demo ticket origin is not allowed", 403, "DEMO_ORIGIN_NOT_ALLOWED", request);
+    return apiError(
+      "Demo ticket origin is not allowed",
+      403,
+      "DEMO_ORIGIN_NOT_ALLOWED",
+      request,
+    );
   }
   if (audience === "global") {
-    return apiError("Public demo global gateway is disabled", 403, "GLOBAL_DEMO_DISABLED");
+    return apiError(
+      "Public demo global gateway is disabled",
+      403,
+      "GLOBAL_DEMO_DISABLED",
+    );
   }
   if (!isPublicDemoRoomSlug(body.roomSlug)) {
     return apiError("Demo room is not allowed", 403, "DEMO_ROOM_NOT_ALLOWED");
@@ -183,18 +265,26 @@ async function authorizePublicDemoTicket(
   };
 }
 
-async function getAuthorizedDmCallRoomSlug(userId: string, channelId: string): Promise<string | null> {
-  const { results } = await getDB().prepare(
-    `SELECT user_id FROM dm_recipients WHERE channel_id = ? ORDER BY user_id ASC`,
-  ).bind(channelId).all<{ user_id: string }>();
-  const recipients = (results ?? []).map((row: { user_id: string }) => row.user_id).filter(Boolean);
+async function getAuthorizedDmCallRoomSlug(
+  userId: string,
+  channelId: string,
+): Promise<string | null> {
+  const { results } = await getDB()
+    .prepare(
+      `SELECT user_id FROM dm_recipients WHERE channel_id = ? ORDER BY user_id ASC`,
+    )
+    .bind(channelId)
+    .all<{ user_id: string }>();
+  const recipients = (results ?? [])
+    .map((row: { user_id: string }) => row.user_id)
+    .filter(Boolean);
   if (recipients.length !== 2 || !recipients.includes(userId)) return null;
   return `dm-call-${recipients[0]}-${recipients[1]}`;
 }
 
-function getSocketTicketConfig(env: SocketTicketEnv):
-  | { ok: true; ticketSecret: string }
-  | { ok: false; code: string } {
+function getSocketTicketConfig(
+  env: SocketTicketEnv,
+): { ok: true; ticketSecret: string } | { ok: false; code: string } {
   if (!env.REALTIME_TICKET_SECRET) {
     return { ok: false, code: "REALTIME_TICKET_SECRET_MISSING" };
   }
@@ -211,7 +301,9 @@ function isSameOrigin(request: Request): boolean {
 }
 
 function parseAudience(value: unknown): SocketTicketAudience | null {
-  return value === "global" || value === "room" || value === "voice" ? value : null;
+  return value === "global" || value === "room" || value === "voice"
+    ? value
+    : null;
 }
 
 function noStore(response: Response): Response {

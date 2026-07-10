@@ -95,7 +95,12 @@ function lerp(start: number, end: number, amount: number) {
   return start + (end - start) * amount;
 }
 
-function dampNumber(current: number, target: number, smoothing: number, deltaSeconds: number) {
+function dampNumber(
+  current: number,
+  target: number,
+  smoothing: number,
+  deltaSeconds: number,
+) {
   return lerp(current, target, 1 - Math.exp(-smoothing * deltaSeconds));
 }
 
@@ -123,14 +128,20 @@ function randomBetween(rng: () => number, min: number, max: number) {
   return min + (max - min) * rng();
 }
 
-export function createWarpRushCourse(seedSource: string, ringCount = COURSE_RING_COUNT): WarpRushCourse {
+export function createWarpRushCourse(
+  seedSource: string,
+  ringCount = COURSE_RING_COUNT,
+): WarpRushCourse {
   const rng = createRng(`${COURSE_SEED_VERSION}:${seedSource}`);
   const obstacles: WarpRushCourseObstacle[] = [];
   const usableLength = WARP_RUSH_LOOP_LENGTH - WARP_RUSH_INTRO_DISTANCE - 48;
   const segmentSpacing = usableLength / COURSE_OBSTACLE_COUNT;
 
   for (let index = 0; index < COURSE_OBSTACLE_COUNT; index++) {
-    const distance = WARP_RUSH_INTRO_DISTANCE + index * segmentSpacing + randomBetween(rng, segmentSpacing * 0.18, segmentSpacing * 0.62);
+    const distance =
+      WARP_RUSH_INTRO_DISTANCE +
+      index * segmentSpacing +
+      randomBetween(rng, segmentSpacing * 0.18, segmentSpacing * 0.62);
     let candidate: WarpRushCourseObstacle | null = null;
 
     for (let attempt = 0; attempt < 24; attempt++) {
@@ -153,13 +164,22 @@ export function createWarpRushCourse(seedSource: string, ringCount = COURSE_RING
 
       const needsEarlyClearance = distance < WARP_RUSH_INTRO_DISTANCE + 150;
       const safeBuffer = needsEarlyClearance ? EARLY_SAFE_BUFFER : 1.18;
-      if (Math.hypot(nextCandidate.x, nextCandidate.y) < nextCandidate.radius + safeBuffer) {
+      if (
+        Math.hypot(nextCandidate.x, nextCandidate.y) <
+        nextCandidate.radius + safeBuffer
+      ) {
         continue;
       }
 
-      const overlaps = obstacles.some((obstacle) =>
-        Math.abs(obstacle.distance - nextCandidate.distance) < COURSE_CLEARANCE_DISTANCE
-        && Math.hypot(obstacle.x - nextCandidate.x, obstacle.y - nextCandidate.y) < obstacle.radius + nextCandidate.radius + COURSE_CLEARANCE_RADIUS
+      const overlaps = obstacles.some(
+        (obstacle) =>
+          Math.abs(obstacle.distance - nextCandidate.distance) <
+            COURSE_CLEARANCE_DISTANCE &&
+          Math.hypot(
+            obstacle.x - nextCandidate.x,
+            obstacle.y - nextCandidate.y,
+          ) <
+            obstacle.radius + nextCandidate.radius + COURSE_CLEARANCE_RADIUS,
       );
       if (overlaps) {
         continue;
@@ -169,29 +189,38 @@ export function createWarpRushCourse(seedSource: string, ringCount = COURSE_RING
       break;
     }
 
-    obstacles.push(candidate ?? {
-      distance,
-      x: randomBetween(rng, COURSE_SPREAD_X * 0.52, COURSE_SPREAD_X * 0.92) * (rng() > 0.5 ? 1 : -1),
-      y: randomBetween(rng, COURSE_SPREAD_Y * 0.45, COURSE_SPREAD_Y * 0.85) * (rng() > 0.5 ? 1 : -1),
-      radius: 0.58,
-      wobbleAmpX: 0.12,
-      wobbleAmpY: 0.09,
-      wobbleFreq: 0.07,
-      wobblePhase: randomBetween(rng, 0, Math.PI * 2),
-      spinX: randomBetween(rng, 0.45, 1.25),
-      spinY: randomBetween(rng, -1.7, 1.7),
-      spinZ: randomBetween(rng, -0.8, 0.8),
-      rotX: randomBetween(rng, 0, Math.PI * 2),
-      rotY: randomBetween(rng, 0, Math.PI * 2),
-      rotZ: randomBetween(rng, 0, Math.PI * 2),
-    });
+    obstacles.push(
+      candidate ?? {
+        distance,
+        x:
+          randomBetween(rng, COURSE_SPREAD_X * 0.52, COURSE_SPREAD_X * 0.92) *
+          (rng() > 0.5 ? 1 : -1),
+        y:
+          randomBetween(rng, COURSE_SPREAD_Y * 0.45, COURSE_SPREAD_Y * 0.85) *
+          (rng() > 0.5 ? 1 : -1),
+        radius: 0.58,
+        wobbleAmpX: 0.12,
+        wobbleAmpY: 0.09,
+        wobbleFreq: 0.07,
+        wobblePhase: randomBetween(rng, 0, Math.PI * 2),
+        spinX: randomBetween(rng, 0.45, 1.25),
+        spinY: randomBetween(rng, -1.7, 1.7),
+        spinZ: randomBetween(rng, -0.8, 0.8),
+        rotX: randomBetween(rng, 0, Math.PI * 2),
+        rotY: randomBetween(rng, 0, Math.PI * 2),
+        rotZ: randomBetween(rng, 0, Math.PI * 2),
+      },
+    );
   }
 
   const rings: WarpRushCourseRing[] = [];
   const ringSpacing = usableLength / ringCount;
   for (let index = 0; index < ringCount; index++) {
     rings.push({
-      distance: WARP_RUSH_INTRO_DISTANCE * 0.6 + index * ringSpacing + randomBetween(rng, ringSpacing * 0.1, ringSpacing * 0.45),
+      distance:
+        WARP_RUSH_INTRO_DISTANCE * 0.6 +
+        index * ringSpacing +
+        randomBetween(rng, ringSpacing * 0.1, ringSpacing * 0.45),
       x: randomBetween(rng, -0.7, 0.7),
       y: randomBetween(rng, -0.55, 0.55),
       rot: randomBetween(rng, 0, Math.PI * 2),
@@ -221,7 +250,10 @@ export function createWarpRushRunState(): WarpRushRunState {
   };
 }
 
-export function getWarpRushObstacleOffset(obstacle: WarpRushCourseObstacle, travelDistance: number) {
+export function getWarpRushObstacleOffset(
+  obstacle: WarpRushCourseObstacle,
+  travelDistance: number,
+) {
   const phase = travelDistance * obstacle.wobbleFreq + obstacle.wobblePhase;
   return {
     x: obstacle.x + Math.sin(phase) * obstacle.wobbleAmpX,
@@ -247,7 +279,11 @@ export function getWarpRushObstacleRenderState(
   worldDistance: number,
   loopLength: number,
 ) {
-  const relativeDistance = getWarpRushRelativeDistance(obstacle.distance, worldDistance, loopLength);
+  const relativeDistance = getWarpRushRelativeDistance(
+    obstacle.distance,
+    worldDistance,
+    loopLength,
+  );
   const travelDistance = worldDistance + relativeDistance;
   const offset = getWarpRushObstacleOffset(obstacle, travelDistance);
   return {
@@ -263,7 +299,11 @@ export function getWarpRushRingRenderState(
   worldDistance: number,
   loopLength: number,
 ) {
-  const relativeDistance = getWarpRushRelativeDistance(ring.distance, worldDistance, loopLength);
+  const relativeDistance = getWarpRushRelativeDistance(
+    ring.distance,
+    worldDistance,
+    loopLength,
+  );
   return {
     x: ring.x,
     y: ring.y,
@@ -284,17 +324,26 @@ export function hasWarpRushCollision(
   if (stepDistance <= 0) return false;
 
   for (const obstacle of course.obstacles) {
-    const loopIndex = Math.floor((previousWorldDistance - obstacle.distance) / course.loopLength);
+    const loopIndex = Math.floor(
+      (previousWorldDistance - obstacle.distance) / course.loopLength,
+    );
     for (const offset of [loopIndex, loopIndex + 1]) {
       const collisionDistance = obstacle.distance + offset * course.loopLength;
-      if (collisionDistance <= previousWorldDistance || collisionDistance > nextWorldDistance) {
+      if (
+        collisionDistance <= previousWorldDistance ||
+        collisionDistance > nextWorldDistance
+      ) {
         continue;
       }
 
-      const travelProgress = (collisionDistance - previousWorldDistance) / stepDistance;
+      const travelProgress =
+        (collisionDistance - previousWorldDistance) / stepDistance;
       const shipX = lerp(previousShipX, nextShipX, travelProgress);
       const shipY = lerp(previousShipY, nextShipY, travelProgress);
-      const obstacleOffset = getWarpRushObstacleOffset(obstacle, collisionDistance);
+      const obstacleOffset = getWarpRushObstacleOffset(
+        obstacle,
+        collisionDistance,
+      );
       const collisionRadius = obstacle.radius + COLLISION_PADDING;
       const dx = obstacleOffset.x - shipX;
       const dy = obstacleOffset.y - shipY;
@@ -322,17 +371,33 @@ export function advanceWarpRushRunState(
   const previousShipY = state.shipY;
   const previousWorldDistance = state.worldDistance;
 
-  state.normalizedX = dampNumber(state.normalizedX, clamp(input.targetX, -1, 1), TURN_RESPONSE, stepSeconds);
-  state.normalizedY = dampNumber(state.normalizedY, clamp(input.targetY, -1, 1), TURN_RESPONSE, stepSeconds);
+  state.normalizedX = dampNumber(
+    state.normalizedX,
+    clamp(input.targetX, -1, 1),
+    TURN_RESPONSE,
+    stepSeconds,
+  );
+  state.normalizedY = dampNumber(
+    state.normalizedY,
+    clamp(input.targetY, -1, 1),
+    TURN_RESPONSE,
+    stepSeconds,
+  );
   state.shipX = state.normalizedX * WARP_RUSH_SHIP_RANGE_X;
   state.shipY = state.normalizedY * WARP_RUSH_SHIP_RANGE_Y;
 
   const slipstream = remotePilots.some((pilot) => {
     if (pilot.crashed) return false;
     const gap = pilot.worldDistance - previousWorldDistance;
-    return gap >= 8 && gap <= 20 && Math.abs(pilot.x - previousShipX) <= 2.2 && Math.abs(pilot.y - previousShipY) <= 1.7;
+    return (
+      gap >= 8 &&
+      gap <= 20 &&
+      Math.abs(pilot.x - previousShipX) <= 2.2 &&
+      Math.abs(pilot.y - previousShipY) <= 1.7
+    );
   });
-  const speed = WARP_RUSH_BASE_SPEED * (slipstream ? 1 + WARP_RUSH_SLIPSTREAM_BONUS : 1);
+  const speed =
+    WARP_RUSH_BASE_SPEED * (slipstream ? 1 + WARP_RUSH_SLIPSTREAM_BONUS : 1);
   const nextWorldDistance = previousWorldDistance + speed * stepSeconds;
   const collided = hasWarpRushCollision(
     course,
@@ -347,7 +412,9 @@ export function advanceWarpRushRunState(
   state.elapsedSeconds += stepSeconds;
   state.worldDistance = nextWorldDistance;
   state.usedSlipstream = slipstream;
-  state.score = Math.round(nextWorldDistance * WARP_RUSH_SCORE_PER_UNIT * (slipstream ? 1.04 : 1));
+  state.score = Math.round(
+    nextWorldDistance * WARP_RUSH_SCORE_PER_UNIT * (slipstream ? 1.04 : 1),
+  );
   if (collided) {
     state.crashed = true;
   }

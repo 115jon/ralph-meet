@@ -18,7 +18,7 @@ export function setSocialIdGenerator(fn: () => string): void {
 
 export async function listRelationships(
   db: D1Database,
-  userId: string
+  userId: string,
 ): Promise<
   Array<{
     user: Record<string, unknown>;
@@ -33,7 +33,7 @@ export async function listRelationships(
        FROM relationships r
        JOIN users u ON u.id = r.target_user_id
        WHERE r.user_id = ?
-       ORDER BY r.created_at DESC`
+       ORDER BY r.created_at DESC`,
     )
     .bind(userId)
     .all();
@@ -58,7 +58,7 @@ export async function listRelationships(
 export async function sendFriendRequest(
   db: D1Database,
   userId: string,
-  targetUsername: string
+  targetUsername: string,
 ): Promise<{
   user: Record<string, unknown>;
   type: number;
@@ -66,7 +66,7 @@ export async function sendFriendRequest(
 }> {
   const target = (await db
     .prepare(
-      `SELECT id, username, display_name, avatar_url, avatar_display, status, custom_status FROM users WHERE username = ?`
+      `SELECT id, username, display_name, avatar_url, avatar_display, status, custom_status FROM users WHERE username = ?`,
     )
     .bind(targetUsername.trim())
     .first()) as Record<string, unknown> | null;
@@ -82,7 +82,7 @@ export async function sendFriendRequest(
   // Check existing relationship
   const existing = (await db
     .prepare(
-      `SELECT type FROM relationships WHERE user_id = ? AND target_user_id = ?`
+      `SELECT type FROM relationships WHERE user_id = ? AND target_user_id = ?`,
     )
     .bind(userId, target.id)
     .first()) as { type: number } | null;
@@ -99,12 +99,12 @@ export async function sendFriendRequest(
       await db.batch([
         db
           .prepare(
-            `UPDATE relationships SET type = 0, updated_at = ? WHERE user_id = ? AND target_user_id = ?`
+            `UPDATE relationships SET type = 0, updated_at = ? WHERE user_id = ? AND target_user_id = ?`,
           )
           .bind(now, userId, target.id as string),
         db
           .prepare(
-            `UPDATE relationships SET type = 0, updated_at = ? WHERE user_id = ? AND target_user_id = ?`
+            `UPDATE relationships SET type = 0, updated_at = ? WHERE user_id = ? AND target_user_id = ?`,
           )
           .bind(now, target.id as string, userId),
       ]);
@@ -130,13 +130,13 @@ export async function sendFriendRequest(
     db
       .prepare(
         `INSERT INTO relationships (user_id, target_user_id, type, created_at, updated_at)
-         VALUES (?, ?, 3, ?, ?)`
+         VALUES (?, ?, 3, ?, ?)`,
       )
       .bind(userId, target.id as string, now, now),
     db
       .prepare(
         `INSERT INTO relationships (user_id, target_user_id, type, created_at, updated_at)
-         VALUES (?, ?, 2, ?, ?)`
+         VALUES (?, ?, 2, ?, ?)`,
       )
       .bind(target.id as string, userId, now, now),
   ]);
@@ -144,7 +144,7 @@ export async function sendFriendRequest(
   // Fetch current user for broadcasts
   const currentUser = await db
     .prepare(
-      `SELECT id, username, display_name, avatar_url, avatar_display, status, custom_status FROM users WHERE id = ?`
+      `SELECT id, username, display_name, avatar_url, avatar_display, status, custom_status FROM users WHERE id = ?`,
     )
     .bind(userId)
     .first();
@@ -182,11 +182,11 @@ export async function sendFriendRequest(
 export async function acceptFriendRequest(
   db: D1Database,
   userId: string,
-  targetUserId: string
+  targetUserId: string,
 ): Promise<{ type: number; broadcasts: BroadcastDescriptor[] }> {
   const pending = await db
     .prepare(
-      `SELECT 1 FROM relationships WHERE user_id = ? AND target_user_id = ? AND type = 2`
+      `SELECT 1 FROM relationships WHERE user_id = ? AND target_user_id = ? AND type = 2`,
     )
     .bind(userId, targetUserId)
     .first();
@@ -199,25 +199,25 @@ export async function acceptFriendRequest(
   await db.batch([
     db
       .prepare(
-        `UPDATE relationships SET type = 0, updated_at = ? WHERE user_id = ? AND target_user_id = ?`
+        `UPDATE relationships SET type = 0, updated_at = ? WHERE user_id = ? AND target_user_id = ?`,
       )
       .bind(now, userId, targetUserId),
     db
       .prepare(
-        `UPDATE relationships SET type = 0, updated_at = ? WHERE user_id = ? AND target_user_id = ?`
+        `UPDATE relationships SET type = 0, updated_at = ? WHERE user_id = ? AND target_user_id = ?`,
       )
       .bind(now, targetUserId, userId),
   ]);
 
   const userA = await db
     .prepare(
-      `SELECT id, username, display_name, avatar_url, avatar_display, status, custom_status FROM users WHERE id = ?`
+      `SELECT id, username, display_name, avatar_url, avatar_display, status, custom_status FROM users WHERE id = ?`,
     )
     .bind(userId)
     .first();
   const userB = await db
     .prepare(
-      `SELECT id, username, display_name, avatar_url, avatar_display, status, custom_status FROM users WHERE id = ?`
+      `SELECT id, username, display_name, avatar_url, avatar_display, status, custom_status FROM users WHERE id = ?`,
     )
     .bind(targetUserId)
     .first();
@@ -246,7 +246,7 @@ export async function acceptFriendRequest(
 export async function blockUser(
   db: D1Database,
   userId: string,
-  targetUserId: string
+  targetUserId: string,
 ): Promise<{ type: number; broadcasts: BroadcastDescriptor[] }> {
   const now = new Date().toISOString();
 
@@ -254,19 +254,19 @@ export async function blockUser(
     db
       .prepare(
         `INSERT OR REPLACE INTO relationships (user_id, target_user_id, type, created_at, updated_at)
-         VALUES (?, ?, 1, ?, ?)`
+         VALUES (?, ?, 1, ?, ?)`,
       )
       .bind(userId, targetUserId, now, now),
     db
       .prepare(
-        `DELETE FROM relationships WHERE user_id = ? AND target_user_id = ?`
+        `DELETE FROM relationships WHERE user_id = ? AND target_user_id = ?`,
       )
       .bind(targetUserId, userId),
   ]);
 
   const userB = await db
     .prepare(
-      `SELECT id, username, display_name, avatar_url, avatar_display, status, custom_status FROM users WHERE id = ?`
+      `SELECT id, username, display_name, avatar_url, avatar_display, status, custom_status FROM users WHERE id = ?`,
     )
     .bind(targetUserId)
     .first();
@@ -295,17 +295,17 @@ export async function blockUser(
 export async function removeRelationship(
   db: D1Database,
   userId: string,
-  targetUserId: string
+  targetUserId: string,
 ): Promise<{ broadcasts: BroadcastDescriptor[] }> {
   await db.batch([
     db
       .prepare(
-        `DELETE FROM relationships WHERE user_id = ? AND target_user_id = ?`
+        `DELETE FROM relationships WHERE user_id = ? AND target_user_id = ?`,
       )
       .bind(userId, targetUserId),
     db
       .prepare(
-        `DELETE FROM relationships WHERE user_id = ? AND target_user_id = ?`
+        `DELETE FROM relationships WHERE user_id = ? AND target_user_id = ?`,
       )
       .bind(targetUserId, userId),
   ]);
@@ -332,7 +332,7 @@ export async function removeRelationship(
 
 export async function listDMs(
   db: D1Database,
-  userId: string
+  userId: string,
 ): Promise<
   Array<{
     id: unknown;
@@ -357,7 +357,7 @@ export async function listDMs(
        JOIN dm_recipients other ON other.channel_id = c.id AND other.user_id != ?
        JOIN users u ON u.id = other.user_id
        WHERE me.user_id = ?
-       ORDER BY c.created_at DESC`
+       ORDER BY c.created_at DESC`,
     )
     .bind(userId, userId)
     .all();
@@ -384,7 +384,7 @@ export async function listDMs(
 export async function getOrCreateDM(
   db: D1Database,
   userId: string,
-  targetUserId: string
+  targetUserId: string,
 ): Promise<{
   isNew: boolean;
   dm: Record<string, unknown>;
@@ -396,7 +396,7 @@ export async function getOrCreateDM(
 
   const target = (await db
     .prepare(
-      `SELECT id, username, display_name, avatar_url, avatar_display, status, custom_status FROM users WHERE id = ?`
+      `SELECT id, username, display_name, avatar_url, avatar_display, status, custom_status FROM users WHERE id = ?`,
     )
     .bind(targetUserId)
     .first()) as Record<string, unknown> | null;
@@ -411,7 +411,7 @@ export async function getOrCreateDM(
       `SELECT c.id FROM dm_recipients a
        JOIN dm_recipients b ON a.channel_id = b.channel_id
        JOIN channels c ON c.id = a.channel_id AND c.channel_type = 'dm'
-       WHERE a.user_id = ? AND b.user_id = ?`
+       WHERE a.user_id = ? AND b.user_id = ?`,
     )
     .bind(userId, targetUserId)
     .first();
@@ -437,24 +437,20 @@ export async function getOrCreateDM(
     db
       .prepare(
         `INSERT INTO channels (id, server_id, name, channel_type, position, created_at)
-         VALUES (?, NULL, ?, 'dm', 0, ?)`
+         VALUES (?, NULL, ?, 'dm', 0, ?)`,
       )
       .bind(channelId, `DM-${userId}-${targetUserId}`, now),
     db
-      .prepare(
-        `INSERT INTO dm_recipients (channel_id, user_id) VALUES (?, ?)`
-      )
+      .prepare(`INSERT INTO dm_recipients (channel_id, user_id) VALUES (?, ?)`)
       .bind(channelId, userId),
     db
-      .prepare(
-        `INSERT INTO dm_recipients (channel_id, user_id) VALUES (?, ?)`
-      )
+      .prepare(`INSERT INTO dm_recipients (channel_id, user_id) VALUES (?, ?)`)
       .bind(channelId, targetUserId),
   ]);
 
   const currentUser = await db
     .prepare(
-      `SELECT id, username, display_name, avatar_url, avatar_display, status, custom_status FROM users WHERE id = ?`
+      `SELECT id, username, display_name, avatar_url, avatar_display, status, custom_status FROM users WHERE id = ?`,
     )
     .bind(userId)
     .first();
@@ -525,7 +521,7 @@ export async function createInvite(
     max_uses?: number;
     max_age?: number;
     temporary?: boolean;
-  }
+  },
 ): Promise<{
   code: string;
   expires_at: string | null;
@@ -542,7 +538,7 @@ export async function createInvite(
   await db
     .prepare(
       `INSERT INTO invites (code, server_id, channel_id, inviter_id, max_uses, temporary, expires_at, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .bind(
       code,
@@ -552,7 +548,7 @@ export async function createInvite(
       options.max_uses ?? null,
       options.temporary ? 1 : 0,
       expiresAt,
-      now
+      now,
     )
     .run();
 
@@ -568,7 +564,7 @@ export async function createInvite(
 export async function listInvites(
   db: D1Database,
   serverId: string,
-  showAll: boolean
+  showAll: boolean,
 ): Promise<Record<string, unknown>[]> {
   let query = `
     SELECT i.*,
@@ -597,7 +593,7 @@ export async function joinServer(
   userId: string,
   username: string,
   avatarUrl: string | null,
-  displayName?: string | null
+  displayName?: string | null,
 ): Promise<{
   joined?: boolean;
   already_member?: boolean;
@@ -609,14 +605,14 @@ export async function joinServer(
     .prepare(`SELECT * FROM invites WHERE code = ?`)
     .bind(code)
     .first()) as {
-      code: string;
-      server_id: string;
-      channel_id: string | null;
-      max_uses: number | null;
-      uses: number;
-      temporary: number;
-      expires_at: string | null;
-    } | null;
+    code: string;
+    server_id: string;
+    channel_id: string | null;
+    max_uses: number | null;
+    uses: number;
+    temporary: number;
+    expires_at: string | null;
+  } | null;
 
   if (!invite) {
     throw ServiceError.notFound("Invalid invite");
@@ -629,7 +625,7 @@ export async function joinServer(
 
   if ((server as { invites_paused?: number })?.invites_paused) {
     throw ServiceError.forbidden(
-      "Invites are currently paused for this server"
+      "Invites are currently paused for this server",
     );
   }
 
@@ -643,9 +639,7 @@ export async function joinServer(
 
   // Check if already a member
   const existing = await db
-    .prepare(
-      `SELECT 1 FROM server_members WHERE server_id = ? AND user_id = ?`
-    )
+    .prepare(`SELECT 1 FROM server_members WHERE server_id = ? AND user_id = ?`)
     .bind(invite.server_id, userId)
     .first();
 
@@ -659,9 +653,7 @@ export async function joinServer(
 
   // Check if banned
   const banned = await db
-    .prepare(
-      `SELECT 1 FROM server_bans WHERE server_id = ? AND user_id = ?`
-    )
+    .prepare(`SELECT 1 FROM server_bans WHERE server_id = ? AND user_id = ?`)
     .bind(invite.server_id, userId)
     .first();
 
@@ -671,9 +663,7 @@ export async function joinServer(
 
   // Get @everyone role
   const everyoneRole = (await db
-    .prepare(
-      `SELECT * FROM roles WHERE server_id = ? AND is_default = 1`
-    )
+    .prepare(`SELECT * FROM roles WHERE server_id = ? AND is_default = 1`)
     .bind(invite.server_id)
     .first()) as Record<string, unknown> | null;
 
@@ -687,18 +677,16 @@ export async function joinServer(
     db
       .prepare(
         `INSERT INTO server_members (server_id, user_id, joined_at)
-         VALUES (?, ?, ?)`
+         VALUES (?, ?, ?)`,
       )
       .bind(invite.server_id, userId, now),
     db
       .prepare(
         `INSERT INTO member_roles (server_id, user_id, role_id)
-         VALUES (?, ?, ?)`
+         VALUES (?, ?, ?)`,
       )
       .bind(invite.server_id, userId, everyoneRole.id),
-    db
-      .prepare(`UPDATE invites SET uses = uses + 1 WHERE code = ?`)
-      .bind(code),
+    db.prepare(`UPDATE invites SET uses = uses + 1 WHERE code = ?`).bind(code),
   ]);
 
   return {
@@ -731,10 +719,12 @@ export async function joinServer(
             avatar_url: avatarUrl,
             status: "online",
           },
-          roles: [{
-            ...everyoneRole,
-            is_default: everyoneRole.is_default === 1,
-          }],
+          roles: [
+            {
+              ...everyoneRole,
+              is_default: everyoneRole.is_default === 1,
+            },
+          ],
         },
       },
       {
@@ -755,11 +745,12 @@ export async function joinServer(
 export async function revokeInvite(
   db: D1Database,
   serverId: string,
-  code: string
+  code: string,
 ): Promise<void> {
-  const invite = await db.prepare(
-    `SELECT code FROM invites WHERE code = ? AND server_id = ?`
-  ).bind(code, serverId).first();
+  const invite = await db
+    .prepare(`SELECT code FROM invites WHERE code = ? AND server_id = ?`)
+    .bind(code, serverId)
+    .first();
 
   if (!invite) {
     throw ServiceError.notFound("Invite not found");
@@ -772,13 +763,22 @@ export async function revokeInvite(
 
 export interface InviteInfo {
   code: string;
-  server: { id: string; name: string; icon_url: string | null; member_count: number };
-  inviter: { username: string; display_name: string | null; avatar_url: string | null };
+  server: {
+    id: string;
+    name: string;
+    icon_url: string | null;
+    member_count: number;
+  };
+  inviter: {
+    username: string;
+    display_name: string | null;
+    avatar_url: string | null;
+  };
 }
 
 export async function getInviteInfo(
   db: D1Database,
-  code: string
+  code: string,
 ): Promise<InviteInfo> {
   const invite = await db
     .prepare(
@@ -789,7 +789,7 @@ export async function getInviteInfo(
        FROM invites i
        JOIN servers s ON s.id = i.server_id
        JOIN users u ON u.id = i.inviter_id
-       WHERE i.code = ?`
+       WHERE i.code = ?`,
     )
     .bind(code)
     .first<{

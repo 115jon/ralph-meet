@@ -25,17 +25,23 @@ export interface KovaAuthSession {
   userAgent?: string | null;
 }
 
-export async function getKovaAuthSession(headers?: Headers): Promise<{ user: KovaAuthUser; session: KovaAuthSession } | null> {
+export async function getKovaAuthSession(
+  headers?: Headers,
+): Promise<{ user: KovaAuthUser; session: KovaAuthSession } | null> {
   const authEnv = env as unknown as CloudflareEnv & {
     KOVA_AUTH_URL?: string;
     VITE_KOVA_AUTH_PUBLISHABLE_KEY?: string;
   };
-  const authUrl = (authEnv.KOVA_AUTH_URL ?? "https://auth.115jon.site").replace(/\/$/, "");
+  const authUrl = (authEnv.KOVA_AUTH_URL ?? "https://auth.115jon.site").replace(
+    /\/$/,
+    "",
+  );
   const publishableKey =
     authEnv.VITE_KOVA_AUTH_PUBLISHABLE_KEY ??
     "pk_dev_fhygLR-eApZ4HvSfu-v-LEGFp7WAsgkLRhlveveNzhk";
   const reqHeaders = new Headers();
-  const authHeader = headers?.get("authorization") ?? getRequestHeader("authorization");
+  const authHeader =
+    headers?.get("authorization") ?? getRequestHeader("authorization");
   const cookie = headers?.get("cookie") ?? getRequestHeader("cookie");
   if (authHeader) reqHeaders.set("authorization", authHeader);
   if (cookie) reqHeaders.set("cookie", cookie);
@@ -46,8 +52,13 @@ export async function getKovaAuthSession(headers?: Headers): Promise<{ user: Kov
   }).catch(() => null);
 
   if (!res?.ok) return null;
-  const data = await res.json().catch(() => null) as { user?: KovaAuthUser; session?: KovaAuthSession } | null;
-  return data?.user && data?.session ? { user: data.user, session: data.session } : null;
+  const data = (await res.json().catch(() => null)) as {
+    user?: KovaAuthUser;
+    session?: KovaAuthSession;
+  } | null;
+  return data?.user && data?.session
+    ? { user: data.user, session: data.session }
+    : null;
 }
 
 export async function auth() {
@@ -63,6 +74,8 @@ export async function getCurrentUser(headers?: Headers) {
 }
 
 export async function verifyToken(token: string) {
-  const session = await getKovaAuthSession(new Headers({ authorization: `Bearer ${token}` }));
+  const session = await getKovaAuthSession(
+    new Headers({ authorization: `Bearer ${token}` }),
+  );
   return session?.user ? { sub: session.user.id } : null;
 }

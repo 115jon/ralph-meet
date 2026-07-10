@@ -1,8 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import {
-  requireActiveVoiceRoomSession,
-  requireAuth,
-} from "@/lib/api-helpers";
+import { requireActiveVoiceRoomSession, requireAuth } from "@/lib/api-helpers";
 import { clog } from "@/lib/console-logger";
 import { resolveListenTogetherAudioStream } from "@/services/listen-together.service";
 
@@ -17,12 +14,15 @@ const LISTEN_TOGETHER_IN_MEMORY_MAX_BYTES = 24 * 1024 * 1024;
 const LISTEN_TOGETHER_IN_MEMORY_TTL_MS = 5 * 60 * 1000;
 const streamLog = clog("listen-together:stream");
 
-const listenTogetherInMemoryStreamCache = new Map<string, {
-  bytes: Uint8Array;
-  contentLength: number;
-  mimeType: string | null;
-  expiresAt: number;
-}>();
+const listenTogetherInMemoryStreamCache = new Map<
+  string,
+  {
+    bytes: Uint8Array;
+    contentLength: number;
+    mimeType: string | null;
+    expiresAt: number;
+  }
+>();
 
 export function buildProxyHeaders(upstreamHeaders: Headers) {
   const headers = new Headers();
@@ -104,7 +104,13 @@ function parseByteRange(range: string | null, contentLength: number) {
     end = endText ? Number(endText) : contentLength - 1;
   }
 
-  if (!Number.isFinite(start) || !Number.isFinite(end) || start < 0 || end < start || start >= contentLength) {
+  if (
+    !Number.isFinite(start) ||
+    !Number.isFinite(end) ||
+    start < 0 ||
+    end < start ||
+    start >= contentLength
+  ) {
     return "invalid" as const;
   }
 
@@ -123,7 +129,10 @@ function buildRangeResponseFromBuffer(
     includeBody: boolean;
   },
 ) {
-  const parsedRange = parseByteRange(options.requestedRange, options.contentLength);
+  const parsedRange = parseByteRange(
+    options.requestedRange,
+    options.contentLength,
+  );
   if (parsedRange === null) {
     return null;
   }
@@ -156,7 +165,10 @@ function buildRangeResponseFromBuffer(
   }
 
   const sliced = bytes.slice(start, end + 1);
-  headers.set("Content-Range", `bytes ${start}-${end}/${options.contentLength}`);
+  headers.set(
+    "Content-Range",
+    `bytes ${start}-${end}/${options.contentLength}`,
+  );
   headers.set("Content-Length", String(sliced.byteLength));
 
   return new Response(options.includeBody ? toBody(sliced) : null, {
@@ -165,7 +177,10 @@ function buildRangeResponseFromBuffer(
   });
 }
 
-export async function makeSyntheticRangeResponse(upstream: Response, range: string) {
+export async function makeSyntheticRangeResponse(
+  upstream: Response,
+  range: string,
+) {
   const match = range.trim().match(/^bytes=(\d*)-(\d*)$/);
   if (!match) return null;
 
@@ -187,7 +202,13 @@ export async function makeSyntheticRangeResponse(upstream: Response, range: stri
     end = endText ? Number(endText) : contentLength - 1;
   }
 
-  if (!Number.isFinite(start) || !Number.isFinite(end) || start < 0 || end < start || start >= contentLength) {
+  if (
+    !Number.isFinite(start) ||
+    !Number.isFinite(end) ||
+    start < 0 ||
+    end < start ||
+    start >= contentLength
+  ) {
     return new Response(null, {
       status: 416,
       headers: {
@@ -201,7 +222,10 @@ export async function makeSyntheticRangeResponse(upstream: Response, range: stri
   const sliced = buffer.slice(start, Math.min(end + 1, buffer.length));
   const headers = buildProxyHeaders(upstream.headers);
   headers.set("Accept-Ranges", "bytes");
-  headers.set("Content-Range", `bytes ${start}-${Math.min(end, contentLength - 1)}/${contentLength}`);
+  headers.set(
+    "Content-Range",
+    `bytes ${start}-${Math.min(end, contentLength - 1)}/${contentLength}`,
+  );
   headers.set("Content-Length", String(sliced.byteLength));
 
   return new Response(sliced, {
@@ -218,7 +242,8 @@ export function normalizeListenTogetherUpstreamRange(
   },
 ) {
   const includeBody = options?.includeBody ?? true;
-  const chunkBytes = options?.chunkBytes ?? LISTEN_TOGETHER_UPSTREAM_CHUNK_BYTES;
+  const chunkBytes =
+    options?.chunkBytes ?? LISTEN_TOGETHER_UPSTREAM_CHUNK_BYTES;
 
   if (!requestedRange) {
     if (!includeBody) return "bytes=0-1";
@@ -290,38 +315,50 @@ async function fetchListenTogetherUpstream(
   });
 }
 
-export async function proxyListenTogetherStream(request: Request, includeBody: boolean): Promise<Response> {
+export async function proxyListenTogetherStream(
+  request: Request,
+  includeBody: boolean,
+): Promise<Response> {
   const auth = await requireAuth(request);
   if (auth instanceof Response) return auth;
 
   const url = new URL(request.url);
   const roomSlug = url.searchParams.get("roomSlug")?.trim();
   const videoId = url.searchParams.get("videoId")?.trim();
-  const preferredFormat = url.searchParams.get("format") === "webm" ? "webm" : "mp4";
+  const preferredFormat =
+    url.searchParams.get("format") === "webm" ? "webm" : "mp4";
   const serverId = url.searchParams.get("serverId")?.trim() ?? null;
   const channelId = url.searchParams.get("channelId")?.trim() ?? null;
-  const cf = (request as Request & {
-    cf?: {
-      country?: string;
-      regionCode?: string;
-      colo?: string;
-    };
-  }).cf;
+  const cf = (
+    request as Request & {
+      cf?: {
+        country?: string;
+        regionCode?: string;
+        colo?: string;
+      };
+    }
+  ).cf;
 
   if (!roomSlug || !videoId) {
-    streamLog.warn("Rejecting listen together stream request without required parameters", {
-      userId: auth.userId,
-      roomSlug: roomSlug ?? null,
-      videoId: videoId ?? null,
-      preferredFormat,
-      includeBody,
-      serverId,
-      channelId,
-      country: cf?.country ?? null,
-      regionCode: cf?.regionCode ?? null,
-      colo: cf?.colo ?? null,
-    });
-    return Response.json({ error: "Missing roomSlug or videoId" }, { status: 400 });
+    streamLog.warn(
+      "Rejecting listen together stream request without required parameters",
+      {
+        userId: auth.userId,
+        roomSlug: roomSlug ?? null,
+        videoId: videoId ?? null,
+        preferredFormat,
+        includeBody,
+        serverId,
+        channelId,
+        country: cf?.country ?? null,
+        regionCode: cf?.regionCode ?? null,
+        colo: cf?.colo ?? null,
+      },
+    );
+    return Response.json(
+      { error: "Missing roomSlug or videoId" },
+      { status: 400 },
+    );
   }
 
   const sessionCheck = await requireActiveVoiceRoomSession(
@@ -331,7 +368,8 @@ export async function proxyListenTogetherStream(request: Request, includeBody: b
     {
       serverId,
       channelId,
-      errorMessage: "You must be actively connected to this voice room to stream media.",
+      errorMessage:
+        "You must be actively connected to this voice room to stream media.",
     },
   );
   if (sessionCheck instanceof Response) return sessionCheck;
@@ -351,7 +389,10 @@ export async function proxyListenTogetherStream(request: Request, includeBody: b
       colo: cf?.colo ?? null,
     });
 
-    const memoryCacheKey = getListenTogetherMemoryCacheKey(videoId, preferredFormat);
+    const memoryCacheKey = getListenTogetherMemoryCacheKey(
+      videoId,
+      preferredFormat,
+    );
     const memoryCached = readListenTogetherMemoryStream(memoryCacheKey);
     if (memoryCached) {
       streamLog.debug("Serving listen together audio from in-memory cache", {
@@ -370,7 +411,10 @@ export async function proxyListenTogetherStream(request: Request, includeBody: b
       if (response) return response;
     }
 
-    let resolved = await resolveListenTogetherAudioStream(videoId, preferredFormat);
+    let resolved = await resolveListenTogetherAudioStream(
+      videoId,
+      preferredFormat,
+    );
     let upstreamUrl = new URL(resolved.url);
     if (!upstreamUrl.hostname.toLowerCase().includes("googlevideo.com")) {
       streamLog.error("Resolved listen together stream host is not allowed", {
@@ -379,11 +423,20 @@ export async function proxyListenTogetherStream(request: Request, includeBody: b
         preferredFormat,
         host: upstreamUrl.hostname.toLowerCase(),
       });
-      return Response.json({ error: "Resolved stream host is not allowed" }, { status: 502 });
+      return Response.json(
+        { error: "Resolved stream host is not allowed" },
+        { status: 502 },
+      );
     }
 
-    const upstreamRange = normalizeListenTogetherUpstreamRange(range, { includeBody });
-    let upstream = await fetchListenTogetherUpstream(upstreamUrl, upstreamRange, "header");
+    const upstreamRange = normalizeListenTogetherUpstreamRange(range, {
+      includeBody,
+    });
+    let upstream = await fetchListenTogetherUpstream(
+      upstreamUrl,
+      upstreamRange,
+      "header",
+    );
 
     if (!upstream.ok) {
       streamLog.warn("Upstream fetch failed; refreshing resolved stream URL", {
@@ -393,19 +446,33 @@ export async function proxyListenTogetherStream(request: Request, includeBody: b
         upstreamRange,
         status: upstream.status,
       });
-      resolved = await resolveListenTogetherAudioStream(videoId, preferredFormat, { forceRefresh: true });
+      resolved = await resolveListenTogetherAudioStream(
+        videoId,
+        preferredFormat,
+        { forceRefresh: true },
+      );
       upstreamUrl = new URL(resolved.url);
       if (!upstreamUrl.hostname.toLowerCase().includes("googlevideo.com")) {
-        streamLog.error("Refreshed listen together stream host is not allowed", {
-          roomSlug,
-          videoId,
-          preferredFormat,
-          host: upstreamUrl.hostname.toLowerCase(),
-        });
-        return Response.json({ error: "Resolved stream host is not allowed" }, { status: 502 });
+        streamLog.error(
+          "Refreshed listen together stream host is not allowed",
+          {
+            roomSlug,
+            videoId,
+            preferredFormat,
+            host: upstreamUrl.hostname.toLowerCase(),
+          },
+        );
+        return Response.json(
+          { error: "Resolved stream host is not allowed" },
+          { status: 502 },
+        );
       }
 
-      upstream = await fetchListenTogetherUpstream(upstreamUrl, upstreamRange, "header");
+      upstream = await fetchListenTogetherUpstream(
+        upstreamUrl,
+        upstreamRange,
+        "header",
+      );
     }
 
     if (!upstream.ok && upstreamRange) {
@@ -416,13 +483,18 @@ export async function proxyListenTogetherStream(request: Request, includeBody: b
         upstreamRange,
         status: upstream.status,
       });
-      upstream = await fetchListenTogetherUpstream(upstreamUrl, upstreamRange, "query");
+      upstream = await fetchListenTogetherUpstream(
+        upstreamUrl,
+        upstreamRange,
+        "query",
+      );
     }
 
     if (!upstream.ok) {
       const knownLength = resolved.contentLength ?? null;
       const canAttemptBufferedFallback =
-        knownLength === null || knownLength <= LISTEN_TOGETHER_IN_MEMORY_MAX_BYTES;
+        knownLength === null ||
+        knownLength <= LISTEN_TOGETHER_IN_MEMORY_MAX_BYTES;
 
       const fullStream = canAttemptBufferedFallback
         ? await fetchListenTogetherUpstream(upstreamUrl, null, "header")
@@ -435,8 +507,12 @@ export async function proxyListenTogetherStream(request: Request, includeBody: b
           upstreamRange,
         });
         const bytes = new Uint8Array(await fullStream.arrayBuffer());
-        const totalLength = Number(fullStream.headers.get("Content-Length")) || bytes.byteLength;
-        const mimeType = fullStream.headers.get("Content-Type") || resolved.mimeType || "application/octet-stream";
+        const totalLength =
+          Number(fullStream.headers.get("Content-Length")) || bytes.byteLength;
+        const mimeType =
+          fullStream.headers.get("Content-Type") ||
+          resolved.mimeType ||
+          "application/octet-stream";
 
         if (totalLength <= LISTEN_TOGETHER_IN_MEMORY_MAX_BYTES) {
           writeListenTogetherMemoryStream(memoryCacheKey, {
@@ -464,11 +540,17 @@ export async function proxyListenTogetherStream(request: Request, includeBody: b
         upstreamRange,
         canAttemptBufferedFallback,
       });
-      return Response.json({ error: "Failed to fetch upstream audio stream" }, { status: 502 });
+      return Response.json(
+        { error: "Failed to fetch upstream audio stream" },
+        { status: 502 },
+      );
     }
 
     if (includeBody && range && upstream.status === 200) {
-      const syntheticRange = await makeSyntheticRangeResponse(upstream.clone(), range);
+      const syntheticRange = await makeSyntheticRangeResponse(
+        upstream.clone(),
+        range,
+      );
       if (syntheticRange) return syntheticRange;
     }
 
@@ -476,7 +558,12 @@ export async function proxyListenTogetherStream(request: Request, includeBody: b
     if (resolved.contentLength && !headers.get("Content-Length")) {
       headers.set("Content-Length", String(resolved.contentLength));
     }
-    headers.set("Content-Type", upstream.headers.get("Content-Type") || resolved.mimeType || "application/octet-stream");
+    headers.set(
+      "Content-Type",
+      upstream.headers.get("Content-Type") ||
+        resolved.mimeType ||
+        "application/octet-stream",
+    );
 
     if (!includeBody) {
       if (!range) {
@@ -497,7 +584,8 @@ export async function proxyListenTogetherStream(request: Request, includeBody: b
       headers,
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Failed to proxy audio stream";
+    const message =
+      error instanceof Error ? error.message : "Failed to proxy audio stream";
     streamLog.error("Listen together proxy failed", {
       roomSlug,
       videoId,
@@ -509,8 +597,10 @@ export async function proxyListenTogetherStream(request: Request, includeBody: b
   }
 }
 
-const GET = async ({ request }: any) => proxyListenTogetherStream(request, true);
-const HEAD = async ({ request }: any) => proxyListenTogetherStream(request, false);
+const GET = async ({ request }: any) =>
+  proxyListenTogetherStream(request, true);
+const HEAD = async ({ request }: any) =>
+  proxyListenTogetherStream(request, false);
 
 export const Route = createFileRoute("/api/listen-together/stream")({
   server: {

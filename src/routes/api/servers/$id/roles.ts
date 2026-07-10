@@ -1,10 +1,9 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute } from "@tanstack/react-router";
 
 import { apiSuccess, getDB, requireAuth } from "@/lib/api-helpers";
 import { ServiceError } from "@/lib/service-error";
 import { createRole, listServerRoles } from "@/services/role.service";
 import { executeAuditLog } from "@/services/service-helpers";
-
 
 // GET /api/servers/:id/roles — list all roles for a server
 const GET = async ({ request, params }: any) => {
@@ -20,11 +19,14 @@ const GET = async ({ request, params }: any) => {
     return apiSuccess(roles);
   } catch (e) {
     if (e instanceof ServiceError) {
-      return Response.json({ error: e.message, code: e.code }, { status: e.status });
+      return Response.json(
+        { error: e.message, code: e.code },
+        { status: e.status },
+      );
     }
     throw e;
   }
-}
+};
 
 // POST /api/servers/:id/roles — create a new role
 const POST = async ({ request, params }: any) => {
@@ -34,7 +36,11 @@ const POST = async ({ request, params }: any) => {
   const { id: serverId } = params;
 
   const db = getDB();
-  const body = (await request.json()) as { name: string; color?: string; permissions?: number };
+  const body = (await request.json()) as {
+    name: string;
+    color?: string;
+    permissions?: number;
+  };
 
   try {
     const result = await createRole(db, serverId, userId, {
@@ -50,18 +56,20 @@ const POST = async ({ request, params }: any) => {
     return apiSuccess(result.data, 201);
   } catch (e) {
     if (e instanceof ServiceError) {
-      return Response.json({ error: e.message, code: e.code }, { status: e.status });
+      return Response.json(
+        { error: e.message, code: e.code },
+        { status: e.status },
+      );
     }
     throw e;
   }
-}
+};
 
-
-export const Route = createFileRoute('/api/servers/$id/roles')({
+export const Route = createFileRoute("/api/servers/$id/roles")({
   server: {
     handlers: {
       GET,
       POST,
-    }
-  }
+    },
+  },
 });

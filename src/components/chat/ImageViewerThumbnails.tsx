@@ -1,8 +1,8 @@
-import type { MediaContentFilter } from '@/lib/media-content-filter';
-import { shouldBlurSensitiveAttachment } from '@/lib/media-safety';
-import { isAnimatedMedia, isVideo } from '@/lib/media';
-import { cn } from '@/lib/utils';
-import React from 'react';
+import type { MediaContentFilter } from "@/lib/media-content-filter";
+import { shouldBlurSensitiveAttachment } from "@/lib/media-safety";
+import { isAnimatedMedia, isVideo } from "@/lib/media";
+import { cn } from "@/lib/utils";
+import React from "react";
 
 interface ImageViewerThumbnailsProps {
   images: any[];
@@ -15,9 +15,17 @@ interface ImageViewerThumbnailsProps {
 }
 
 export function ImageViewerThumbnails({
-  images, currentIndex, contentFilter, thumbAspects, setLocalState, getUrl, getPosterUrl
+  images,
+  currentIndex,
+  contentFilter,
+  thumbAspects,
+  setLocalState,
+  getUrl,
+  getPosterUrl,
 }: ImageViewerThumbnailsProps) {
-  const isWide = typeof window !== 'undefined' && window.matchMedia('(min-width: 768px)').matches;
+  const isWide =
+    typeof window !== "undefined" &&
+    window.matchMedia("(min-width: 768px)").matches;
   const thumbH = isWide ? 56 : 44;
   const baseW = isWide ? 56 : 30; // square on desktop, portrait on mobile
 
@@ -26,15 +34,21 @@ export function ImageViewerThumbnails({
       <div className="flex items-center gap-2 p-2 bg-rm-bg-primary/40 backdrop-blur-xl rounded-2xl border border-rm-border overflow-x-auto shadow-2xl custom-scrollbar no-scrollbar">
         {images.map((img, idx) => {
           const isSelected = idx === currentIndex;
-          const isAnimated = isAnimatedMedia(img.content_type, img.isGif, img.url || img.file_key);
+          const isAnimated = isAnimatedMedia(
+            img.content_type,
+            img.isGif,
+            img.url || img.file_key,
+          );
           const isVideoItem = isVideo(img.content_type);
           const shouldBlur = shouldBlurSensitiveAttachment(img, contentFilter);
-          const posterUrl = !isAnimated && isVideoItem ? getPosterUrl(img) : undefined;
+          const posterUrl =
+            !isAnimated && isVideoItem ? getPosterUrl(img) : undefined;
           const aspect = thumbAspects.current.get(idx);
           // Selected thumbnail morphs width to match aspect ratio; others use base width
           // Cap aspect at 3:1 to prevent ultra-wide thumbnails
           const clampedAspect = aspect ? Math.min(Math.max(aspect, 0.5), 3) : 1;
-          const thumbWidth = isSelected && aspect ? Math.round(thumbH * clampedAspect) : baseW;
+          const thumbWidth =
+            isSelected && aspect ? Math.round(thumbH * clampedAspect) : baseW;
 
           return (
             <button
@@ -43,13 +57,17 @@ export function ImageViewerThumbnails({
                 e.stopPropagation();
                 setLocalState({ currentIndex: idx, isLoaded: false });
               }}
-              aria-label={shouldBlur ? `Sensitive media thumbnail ${idx + 1}` : `Media thumbnail ${idx + 1}`}
+              aria-label={
+                shouldBlur
+                  ? `Sensitive media thumbnail ${idx + 1}`
+                  : `Media thumbnail ${idx + 1}`
+              }
               title={shouldBlur ? "Sensitive media" : undefined}
               className={cn(
                 "relative rounded-lg overflow-hidden shrink-0 group will-change-transform transition-[transform,opacity] duration-200 [transition-timing-function:cubic-bezier(0.16,1,0.3,1)]",
                 isSelected
                   ? "ring-2 ring-rm-accent opacity-100"
-                  : "opacity-50 hover:opacity-100 hover:scale-105"
+                  : "opacity-50 hover:opacity-100 hover:scale-105",
               )}
               style={{
                 height: thumbH,
@@ -62,13 +80,25 @@ export function ImageViewerThumbnails({
                     <img
                       src={posterUrl}
                       alt={`Video thumbnail ${idx + 1}`}
-                      className={cn("w-full h-full object-cover", shouldBlur && "scale-110 blur-sm saturate-50")}
+                      className={cn(
+                        "w-full h-full object-cover",
+                        shouldBlur && "scale-110 blur-sm saturate-50",
+                      )}
                       loading="lazy"
                       onLoad={(e) => {
                         const el = e.currentTarget;
-                        if (el.naturalWidth && el.naturalHeight && !thumbAspects.current.has(idx)) {
-                          thumbAspects.current.set(idx, el.naturalWidth / el.naturalHeight);
-                          setLocalState((prev: any) => ({ thumbUpdate: prev.thumbUpdate + 1 }));
+                        if (
+                          el.naturalWidth &&
+                          el.naturalHeight &&
+                          !thumbAspects.current.has(idx)
+                        ) {
+                          thumbAspects.current.set(
+                            idx,
+                            el.naturalWidth / el.naturalHeight,
+                          );
+                          setLocalState((prev: any) => ({
+                            thumbUpdate: prev.thumbUpdate + 1,
+                          }));
                         }
                       }}
                     />
@@ -81,19 +111,35 @@ export function ImageViewerThumbnails({
                       loop={isAnimated}
                       playsInline
                       preload="metadata"
-                      className={cn("w-full h-full object-cover", shouldBlur && "scale-110 blur-sm saturate-50")}
+                      className={cn(
+                        "w-full h-full object-cover",
+                        shouldBlur && "scale-110 blur-sm saturate-50",
+                      )}
                       onLoadedMetadata={(e) => {
                         const el = e.currentTarget;
-                        if (el.videoWidth && el.videoHeight && !thumbAspects.current.has(idx)) {
-                          thumbAspects.current.set(idx, el.videoWidth / el.videoHeight);
-                          setLocalState((prev: any) => ({ thumbUpdate: prev.thumbUpdate + 1 }));
+                        if (
+                          el.videoWidth &&
+                          el.videoHeight &&
+                          !thumbAspects.current.has(idx)
+                        ) {
+                          thumbAspects.current.set(
+                            idx,
+                            el.videoWidth / el.videoHeight,
+                          );
+                          setLocalState((prev: any) => ({
+                            thumbUpdate: prev.thumbUpdate + 1,
+                          }));
                         }
                       }}
                     />
                   )}
                   {!isAnimated && (
                     <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                      <svg viewBox="0 0 24 24" className="w-3.5 h-3.5 text-white drop-shadow-md" fill="currentColor">
+                      <svg
+                        viewBox="0 0 24 24"
+                        className="w-3.5 h-3.5 text-white drop-shadow-md"
+                        fill="currentColor"
+                      >
                         <path d="M8 5v14l11-7z" />
                       </svg>
                     </div>
@@ -103,13 +149,25 @@ export function ImageViewerThumbnails({
                 <img
                   src={getUrl(img)}
                   alt={`Thumbnail ${idx + 1}`}
-                  className={cn("w-full h-full object-cover", shouldBlur && "scale-110 blur-sm saturate-50")}
+                  className={cn(
+                    "w-full h-full object-cover",
+                    shouldBlur && "scale-110 blur-sm saturate-50",
+                  )}
                   loading="lazy"
                   onLoad={(e) => {
                     const el = e.currentTarget;
-                    if (el.naturalWidth && el.naturalHeight && !thumbAspects.current.has(idx)) {
-                      thumbAspects.current.set(idx, el.naturalWidth / el.naturalHeight);
-                      setLocalState((prev: any) => ({ thumbUpdate: prev.thumbUpdate + 1 }));
+                    if (
+                      el.naturalWidth &&
+                      el.naturalHeight &&
+                      !thumbAspects.current.has(idx)
+                    ) {
+                      thumbAspects.current.set(
+                        idx,
+                        el.naturalWidth / el.naturalHeight,
+                      );
+                      setLocalState((prev: any) => ({
+                        thumbUpdate: prev.thumbUpdate + 1,
+                      }));
                     }
                   }}
                 />

@@ -11,10 +11,14 @@ export interface UnifiedScreenShareModalProps {
 }
 
 const DesktopScreenPickerModal = lazy(() =>
-  import("@/components/DesktopScreenPickerModal").then((mod) => ({ default: mod.DesktopScreenPickerModal }))
+  import("@/components/DesktopScreenPickerModal").then((mod) => ({
+    default: mod.DesktopScreenPickerModal,
+  })),
 );
 const ScreenShareModal = lazy(() =>
-  import("@/components/ScreenShareModal").then((mod) => ({ default: mod.ScreenShareModal }))
+  import("@/components/ScreenShareModal").then((mod) => ({
+    default: mod.ScreenShareModal,
+  })),
 );
 
 export function UnifiedScreenShareModal({
@@ -45,7 +49,7 @@ export function UnifiedScreenShareModal({
     <Suspense fallback={null}>
       <ScreenShareModal
         isOpen={isOpen}
-          isClosing={!isOpen}
+        isClosing={!isOpen}
         onClose={onClose}
         onStart={onStart}
         availableQualities={availableQualities}

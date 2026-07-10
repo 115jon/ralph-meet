@@ -8,7 +8,11 @@ import type { StreamWatcherIdentity } from "@/lib/stream-watchers";
 import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
 
 function resetVoiceSettingsStore() {
-  useVoiceSettingsStore.setState({ currentUser: null, userSettings: {}, _cache: {} });
+  useVoiceSettingsStore.setState({
+    currentUser: null,
+    userSettings: {},
+    _cache: {},
+  });
 }
 
 function setViewerPeerSettings(peerSettings: Record<string, any>) {
@@ -20,7 +24,10 @@ function setViewerPeerSettings(peerSettings: Record<string, any>) {
 }
 
 function makeFocusedScreenItem(overrides: Partial<GridItem> = {}): GridItem {
-  const liveAudioTrack = { kind: "audio", readyState: "live" } as MediaStreamTrack;
+  const liveAudioTrack = {
+    kind: "audio",
+    readyState: "live",
+  } as MediaStreamTrack;
 
   return {
     id: "remote-screen-user-2",
@@ -85,11 +92,9 @@ describe("VoiceGrid focused stage", () => {
   });
 
   it("renders an inline stream volume slider for a focused remote stream", () => {
-    const markup = render(
-      [makeFocusedScreenItem()],
-      "remote-screen-user-2",
-      { peerSettings: { "user-2": { volume: 135 } } },
-    );
+    const markup = render([makeFocusedScreenItem()], "remote-screen-user-2", {
+      peerSettings: { "user-2": { volume: 135 } },
+    });
 
     expect(markup).toContain("Stream Volume");
     expect(markup).toContain('type="range"');
@@ -115,14 +120,17 @@ describe("VoiceGrid focused stage", () => {
   });
 
   it("hides the stream volume slider for a focused remote stream without audio", () => {
-    const markup = render([
-      makeFocusedScreenItem({
-        stream: {
-          getAudioTracks: () => [],
-          getVideoTracks: () => [],
-        } as unknown as MediaStream,
-      }),
-    ], "remote-screen-user-2");
+    const markup = render(
+      [
+        makeFocusedScreenItem({
+          stream: {
+            getAudioTracks: () => [],
+            getVideoTracks: () => [],
+          } as unknown as MediaStream,
+        }),
+      ],
+      "remote-screen-user-2",
+    );
 
     expect(markup).not.toContain("Stream Volume");
     expect(markup).not.toContain('type="range"');
@@ -136,14 +144,17 @@ describe("VoiceGrid focused stage", () => {
   });
 
   it("renders a natural local stream label", () => {
-    const markup = render([
-      makeFocusedScreenItem({
-        id: "local-screen-user-1",
-        userId: "user-1",
-        name: "You",
-        isLocal: true,
-      }),
-    ], "local-screen-user-1");
+    const markup = render(
+      [
+        makeFocusedScreenItem({
+          id: "local-screen-user-1",
+          userId: "user-1",
+          name: "You",
+          isLocal: true,
+        }),
+      ],
+      "local-screen-user-1",
+    );
 
     expect(markup).toContain("Your Stream");
     expect(markup).not.toContain("You&#x27;s Screen");
@@ -167,22 +178,26 @@ describe("VoiceGrid focused stage", () => {
   });
 
   it("renders the focused avatar stage from the raw source without crop or decoration overlays", () => {
-    const markup = render([
-      makeFocusedAvatarItem({
-        avatarDisplay: {
-          version: 1,
-          crop: { x: 25, y: 25, width: 50, height: 50 },
-          collectibles: {
-            avatarDecoration: {
-              skuId: "decor-1",
-              name: "Glow",
-              asset: "decor/glow",
-              imageUrl: "https://cdn.discordapp.com/avatar-decoration-presets/glow.png",
+    const markup = render(
+      [
+        makeFocusedAvatarItem({
+          avatarDisplay: {
+            version: 1,
+            crop: { x: 25, y: 25, width: 50, height: 50 },
+            collectibles: {
+              avatarDecoration: {
+                skuId: "decor-1",
+                name: "Glow",
+                asset: "decor/glow",
+                imageUrl:
+                  "https://cdn.discordapp.com/avatar-decoration-presets/glow.png",
+              },
             },
           },
-        },
-      }),
-    ], "avatar-user-2");
+        }),
+      ],
+      "avatar-user-2",
+    );
 
     expect(markup).toContain("avatars/alice.png");
     expect(markup).toContain("object-contain");

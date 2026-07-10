@@ -2,7 +2,13 @@ import { SplashScreen } from "@/components/SplashScreen";
 import { ThemeProvider } from "@/components/theme-provider";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useExternalLinkHandler } from "@/hooks/useExternalLinkHandler";
-import { DEBUG_DESKTOP_AUTH, getDesktopAuthHandoffToken, setDesktopAuthSession, subscribeDesktopTokenChanges, useKovaAuthTokenSync } from "@/lib/desktop-auth";
+import {
+  DEBUG_DESKTOP_AUTH,
+  getDesktopAuthHandoffToken,
+  setDesktopAuthSession,
+  subscribeDesktopTokenChanges,
+  useKovaAuthTokenSync,
+} from "@/lib/desktop-auth";
 import { getKovaAuthConfig } from "@/lib/kova-auth-config";
 import { isDesktop, isTauri } from "@/lib/platform";
 import { KovaAuthProvider, useAuth } from "@kova/react";
@@ -136,7 +142,8 @@ function RootComponent() {
             tokenLength: token?.length ?? 0,
           });
         }
-        if (token && !getDesktopAuthHandoffToken()) setDesktopAuthSession(token);
+        if (token && !getDesktopAuthHandoffToken())
+          setDesktopAuthSession(token);
       }}
     >
       <KovaMeetTokenBridge />
@@ -199,7 +206,9 @@ function DesktopDeepLinkBridge() {
           const sessionToken = extractSearchParam(url, "session_token");
           if (sessionToken) {
             setDesktopAuthSession(sessionToken);
-            deepLinkLog.info("Raw session token handoff received and stored; login view will validate it");
+            deepLinkLog.info(
+              "Raw session token handoff received and stored; login view will validate it",
+            );
             void navigate({ to: "/", replace: true });
             return;
           }
@@ -207,15 +216,24 @@ function DesktopDeepLinkBridge() {
           const inviteCode = extractInviteCode(url);
           if (inviteCode) {
             deepLinkLog.info("Deep link contained invite code");
-            void navigate({ to: "/invite/$code", params: { code: inviteCode } } as any);
+            void navigate({
+              to: "/invite/$code",
+              params: { code: inviteCode },
+            } as any);
             return;
           }
 
-          deepLinkLog.warn("Deep link did not contain a session token, auth code, or invite");
+          deepLinkLog.warn(
+            "Deep link did not contain a session token, auth code, or invite",
+          );
         };
 
-        const unlistenDeepLink = await listen("deep-link", (event) => handleDeepLink(event.payload));
-        const unlistenNewUrl = await listen("deep-link://new-url", (event) => handleDeepLink(event.payload));
+        const unlistenDeepLink = await listen("deep-link", (event) =>
+          handleDeepLink(event.payload),
+        );
+        const unlistenNewUrl = await listen("deep-link://new-url", (event) =>
+          handleDeepLink(event.payload),
+        );
 
         deepLinkLog.info("Listening for desktop deep links");
 

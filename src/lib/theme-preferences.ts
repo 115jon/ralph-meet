@@ -24,19 +24,26 @@ type RawThemePreferences = {
   theme_sync_enabled?: boolean | number | null;
 };
 
-export function isAppTheme(value: string | null | undefined): value is AppTheme {
+export function isAppTheme(
+  value: string | null | undefined,
+): value is AppTheme {
   return typeof value === "string" && APP_THEMES.includes(value as AppTheme);
 }
 
 export function isDarkAppTheme(theme: string | null | undefined): boolean {
-  return typeof theme === "string" && (theme === "dark" || theme.endsWith("-dark"));
+  return (
+    typeof theme === "string" && (theme === "dark" || theme.endsWith("-dark"))
+  );
 }
 
-export function normalizeThemePreferences(raw: RawThemePreferences | null | undefined): ThemePreferences {
+export function normalizeThemePreferences(
+  raw: RawThemePreferences | null | undefined,
+): ThemePreferences {
   const themePreference = raw?.theme_preference ?? null;
   return {
     themePreference: isAppTheme(themePreference) ? themePreference : null,
-    themeSyncEnabled: raw?.theme_sync_enabled === true || raw?.theme_sync_enabled === 1,
+    themeSyncEnabled:
+      raw?.theme_sync_enabled === true || raw?.theme_sync_enabled === 1,
   };
 }
 
@@ -52,5 +59,9 @@ export function shouldApplySyncedTheme(
   currentTheme: string | undefined,
   prefs: ThemePreferences,
 ): prefs is ThemePreferences & { themePreference: AppTheme } {
-  return !!prefs.themeSyncEnabled && !!prefs.themePreference && prefs.themePreference !== currentTheme;
+  return (
+    !!prefs.themeSyncEnabled &&
+    !!prefs.themePreference &&
+    prefs.themePreference !== currentTheme
+  );
 }

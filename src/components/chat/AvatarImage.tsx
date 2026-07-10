@@ -33,7 +33,12 @@ export function AvatarImage({
   const avatarDecoration = getAvatarDecoration(display);
 
   return (
-    <span className={cn("relative block h-full w-full overflow-visible rounded-[inherit]", className)}>
+    <span
+      className={cn(
+        "relative block h-full w-full overflow-visible rounded-[inherit]",
+        className,
+      )}
+    >
       <span className="absolute inset-0 block overflow-hidden rounded-[inherit]">
         <img
           src={src}
@@ -43,7 +48,9 @@ export function AvatarImage({
           referrerPolicy={referrerPolicy}
           onError={onError}
           className={cn(
-            displayStyle ? "block" : "absolute inset-0 h-full w-full object-cover",
+            displayStyle
+              ? "block"
+              : "absolute inset-0 h-full w-full object-cover",
             imageClassName,
           )}
           style={displayStyle}

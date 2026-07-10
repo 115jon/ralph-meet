@@ -1,4 +1,4 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute } from "@tanstack/react-router";
 
 import { apiError, apiSuccess, getDB, requireAuth } from "@/lib/api-helpers";
 import { hasPermission, PERMISSIONS } from "@/lib/permissions";
@@ -8,7 +8,6 @@ import { getUserChannelPermissions } from "@/lib/require-permission";
 import { AddReactionSchema } from "@/lib/validations";
 import { addReaction, removeReaction } from "@/services/message.service";
 import { executeBroadcast } from "@/services/service-helpers";
-
 
 // PUT /api/channels/:id/reactions — add a reaction
 const PUT = async ({ request, params }: any) => {
@@ -36,15 +35,24 @@ const PUT = async ({ request, params }: any) => {
   const body = await request.json();
   const parsed = AddReactionSchema.safeParse(body);
   if (!parsed.success) {
-    return Response.json({ error: parsed.error.issues[0]?.message ?? "Invalid input" }, { status: 400 });
+    return Response.json(
+      { error: parsed.error.issues[0]?.message ?? "Invalid input" },
+      { status: 400 },
+    );
   }
 
   const db = getDB();
-  const result = await addReaction(db, channelId, userId, parsed.data.message_id, parsed.data.emoji);
+  const result = await addReaction(
+    db,
+    channelId,
+    userId,
+    parsed.data.message_id,
+    parsed.data.emoji,
+  );
   await executeBroadcast(result.broadcast);
 
   return apiSuccess({ added: true });
-}
+};
 
 // DELETE /api/channels/:id/reactions — remove a reaction
 const DELETE = async ({ request, params }: any) => {
@@ -71,22 +79,30 @@ const DELETE = async ({ request, params }: any) => {
   const body = await request.json();
   const parsed = AddReactionSchema.safeParse(body);
   if (!parsed.success) {
-    return Response.json({ error: parsed.error.issues[0]?.message ?? "Invalid input" }, { status: 400 });
+    return Response.json(
+      { error: parsed.error.issues[0]?.message ?? "Invalid input" },
+      { status: 400 },
+    );
   }
 
   const db = getDB();
-  const result = await removeReaction(db, channelId, userId, parsed.data.message_id, parsed.data.emoji);
+  const result = await removeReaction(
+    db,
+    channelId,
+    userId,
+    parsed.data.message_id,
+    parsed.data.emoji,
+  );
   await executeBroadcast(result.broadcast);
 
   return apiSuccess({ removed: true });
-}
+};
 
-
-export const Route = createFileRoute('/api/channels/$id/reactions')({
+export const Route = createFileRoute("/api/channels/$id/reactions")({
   server: {
     handlers: {
       PUT,
       DELETE,
-    }
-  }
+    },
+  },
 });

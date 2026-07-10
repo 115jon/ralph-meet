@@ -1,6 +1,14 @@
 import { apiDelete, apiGet } from "@/lib/api-client";
 import { cn } from "@/lib/utils";
-import { Check, Copy, ExternalLink, Eye, Loader2, RefreshCw, Trash2 } from "lucide-react";
+import {
+  Check,
+  Copy,
+  ExternalLink,
+  Eye,
+  Loader2,
+  RefreshCw,
+  Trash2,
+} from "lucide-react";
 import { useEffect, useState } from "react";
 
 interface ShareListItem {
@@ -30,7 +38,8 @@ function formatDate(value: string | null): string {
 function effectiveStatus(share: ShareListItem): ShareListItem["status"] {
   if (share.status !== "active") return share.status;
   if (share.revoked_at) return "revoked";
-  if (share.expires_at && new Date(share.expires_at).getTime() <= Date.now()) return "expired";
+  if (share.expires_at && new Date(share.expires_at).getTime() <= Date.now())
+    return "expired";
   return "active";
 }
 
@@ -80,17 +89,25 @@ export default function SettingsSharesTab() {
   useEffect(() => loadShares(), []);
 
   const revoke = async (shareId: string) => {
-    const ok = window.confirm("Revoke this public share link? Anyone with the link will see that it is gone.");
+    const ok = window.confirm(
+      "Revoke this public share link? Anyone with the link will see that it is gone.",
+    );
     if (!ok) return;
 
     setRevokingId(shareId);
     try {
       await apiDelete(`/api/shares/${shareId}`);
-      setShares((prev) => prev.map((share) => (
-        share.id === shareId
-          ? { ...share, status: "revoked", revoked_at: new Date().toISOString() }
-          : share
-      )));
+      setShares((prev) =>
+        prev.map((share) =>
+          share.id === shareId
+            ? {
+                ...share,
+                status: "revoked",
+                revoked_at: new Date().toISOString(),
+              }
+            : share,
+        ),
+      );
     } finally {
       setRevokingId(null);
     }
@@ -100,11 +117,13 @@ export default function SettingsSharesTab() {
     await navigator.clipboard.writeText(url);
     setCopiedId(shareId);
     window.setTimeout(() => {
-      setCopiedId((current) => current === shareId ? null : current);
+      setCopiedId((current) => (current === shareId ? null : current));
     }, 1800);
   };
 
-  const currentShares = shares.filter((share) => effectiveStatus(share) === "active");
+  const currentShares = shares.filter(
+    (share) => effectiveStatus(share) === "active",
+  );
   const visibleShares = filter === "current" ? currentShares : shares;
 
   return (
@@ -115,7 +134,8 @@ export default function SettingsSharesTab() {
             Shared Messages
           </h1>
           <p className="max-w-[560px] text-sm leading-6 text-rm-text-muted">
-            Review your current public message snapshots, copy links, and revoke anything you no longer want available.
+            Review your current public message snapshots, copy links, and revoke
+            anything you no longer want available.
           </p>
         </div>
         <button
@@ -130,7 +150,10 @@ export default function SettingsSharesTab() {
 
       <div className="mb-4 grid grid-cols-2 rounded-lg border border-rm-border bg-rm-bg-surface p-1">
         {[
-          { id: "current" as const, label: `Current (${currentShares.length})` },
+          {
+            id: "current" as const,
+            label: `Current (${currentShares.length})`,
+          },
           { id: "all" as const, label: `All (${shares.length})` },
         ].map((item) => (
           <button
@@ -140,7 +163,7 @@ export default function SettingsSharesTab() {
               "rounded-md px-3 py-2 text-sm font-bold transition",
               filter === item.id
                 ? "bg-primary text-primary-foreground"
-                : "text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text"
+                : "text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text",
             )}
           >
             {item.label}
@@ -159,7 +182,9 @@ export default function SettingsSharesTab() {
         </div>
       ) : visibleShares.length === 0 ? (
         <div className="rounded-lg border border-rm-border bg-rm-bg-surface p-6 text-sm text-rm-text-muted">
-          {filter === "current" ? "No current public shares." : "No public shares yet."}
+          {filter === "current"
+            ? "No current public shares."
+            : "No public shares yet."}
         </div>
       ) : (
         <div className="space-y-3">
@@ -168,7 +193,10 @@ export default function SettingsSharesTab() {
             const status = effectiveStatus(share);
             const active = status === "active";
             return (
-              <div key={share.id} className="rounded-lg border border-rm-border bg-rm-bg-surface p-4">
+              <div
+                key={share.id}
+                className="rounded-lg border border-rm-border bg-rm-bg-surface p-4"
+              >
                 <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0">
                     <p className="text-sm font-bold text-rm-text">
@@ -183,7 +211,7 @@ export default function SettingsSharesTab() {
                       "rounded-md border px-2 py-1 text-[11px] font-bold uppercase",
                       active
                         ? "border-emerald-400/20 bg-emerald-400/10 text-emerald-300"
-                        : "border-rm-border text-rm-text-muted"
+                        : "border-rm-border text-rm-text-muted",
                     )}
                   >
                     {statusLabel(status)}
@@ -205,7 +233,11 @@ export default function SettingsSharesTab() {
                     disabled={!active}
                     className="inline-flex items-center gap-2 rounded-lg border border-rm-border px-3 py-2 text-xs font-bold text-rm-text-secondary transition hover:bg-rm-bg-hover disabled:opacity-40"
                   >
-                    {copiedId === share.id ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                    {copiedId === share.id ? (
+                      <Check className="h-3.5 w-3.5" />
+                    ) : (
+                      <Copy className="h-3.5 w-3.5" />
+                    )}
                     {copiedId === share.id ? "Copied" : "Copy"}
                   </button>
                   {active && (
@@ -225,7 +257,11 @@ export default function SettingsSharesTab() {
                       disabled={revokingId === share.id}
                       className="inline-flex items-center gap-2 rounded-lg border border-destructive/20 px-3 py-2 text-xs font-bold text-destructive transition hover:bg-destructive/10 disabled:opacity-40"
                     >
-                      {revokingId === share.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                      {revokingId === share.id ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <Trash2 className="h-3.5 w-3.5" />
+                      )}
                       Revoke
                     </button>
                   )}

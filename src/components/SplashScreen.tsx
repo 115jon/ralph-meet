@@ -22,16 +22,25 @@ const LOADING_TIPS = [
 ];
 
 export function SplashScreen() {
-  const [tipData, dispatch] = useReducer((state: { index: number; visible: boolean }, action: "FADE_OUT" | "FADE_IN_NEXT") => {
-    switch (action) {
-      case "FADE_OUT":
-        return { ...state, visible: false };
-      case "FADE_IN_NEXT":
-        return { index: (state.index + 1) % LOADING_TIPS.length, visible: true };
-      default:
-        return state;
-    }
-  }, { index: 0, visible: true });
+  const [tipData, dispatch] = useReducer(
+    (
+      state: { index: number; visible: boolean },
+      action: "FADE_OUT" | "FADE_IN_NEXT",
+    ) => {
+      switch (action) {
+        case "FADE_OUT":
+          return { ...state, visible: false };
+        case "FADE_IN_NEXT":
+          return {
+            index: (state.index + 1) % LOADING_TIPS.length,
+            visible: true,
+          };
+        default:
+          return state;
+      }
+    },
+    { index: 0, visible: true },
+  );
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -46,9 +55,7 @@ export function SplashScreen() {
   return (
     <div className="flex flex-col items-center justify-center h-full w-full bg-rm-bg-primary relative overflow-hidden font-sans select-none">
       {/* Subtle radial glow behind the logo */}
-      <div
-        className="absolute top-[45%] left-1/2 w-[320px] h-[320px] rounded-full bg-[radial-gradient(circle,var(--rm-glow)_0%,transparent_70%)] -translate-x-1/2 -translate-y-1/2 pointer-events-none animate-splash-glow"
-      />
+      <div className="absolute top-[45%] left-1/2 w-[320px] h-[320px] rounded-full bg-[radial-gradient(circle,var(--rm-glow)_0%,transparent_70%)] -translate-x-1/2 -translate-y-1/2 pointer-events-none animate-splash-glow" />
 
       {/* Logo with breathing animation */}
       <div className="w-24 h-24 z-10 flex items-center justify-center animate-splash-breathe">
@@ -74,8 +81,9 @@ export function SplashScreen() {
 
       {/* Rotating tip text */}
       <p
-        className={`mt-5 text-[13px] font-normal tracking-[0.01em] transition-opacity duration-400 z-10 text-rm-text-muted ${tipData.visible ? "opacity-100" : "opacity-0"
-          }`}
+        className={`mt-5 text-[13px] font-normal tracking-[0.01em] transition-opacity duration-400 z-10 text-rm-text-muted ${
+          tipData.visible ? "opacity-100" : "opacity-0"
+        }`}
       >
         {LOADING_TIPS[tipData.index]}
       </p>

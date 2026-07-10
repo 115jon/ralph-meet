@@ -43,22 +43,28 @@ describe("voice-status-media.service", () => {
 
   it("lists recent assets for a server", async () => {
     db.mockQuery("FROM voice_status_media_assets", {
-      results: [{
-        id: ASSET_ID,
-        server_id: SERVER_ID,
-        channel_id: CHANNEL_ID,
-        user_id: USER_ID,
-        filename: "vibe.webm",
-        file_key: "voice-status-media/server-1/asset-1/vibe.webm",
-        content_type: "video/webm",
-        preview_width: 640,
-        preview_height: 360,
-        size_bytes: 1234,
-        created_at: NOW,
-      }],
+      results: [
+        {
+          id: ASSET_ID,
+          server_id: SERVER_ID,
+          channel_id: CHANNEL_ID,
+          user_id: USER_ID,
+          filename: "vibe.webm",
+          file_key: "voice-status-media/server-1/asset-1/vibe.webm",
+          content_type: "video/webm",
+          preview_width: 640,
+          preview_height: 360,
+          size_bytes: 1234,
+          created_at: NOW,
+        },
+      ],
     });
 
-    const assets = await listRecentVoiceStatusMediaAssets(db as any, SERVER_ID, 12);
+    const assets = await listRecentVoiceStatusMediaAssets(
+      db as any,
+      SERVER_ID,
+      12,
+    );
 
     expect(assets).toHaveLength(1);
     expect(assets[0].media.preview_content_type).toBe("video/webm");
@@ -83,32 +89,42 @@ describe("voice-status-media.service", () => {
     const asset = await getVoiceStatusMediaAssetById(db as any, ASSET_ID);
 
     expect(asset).not.toBeNull();
-    expect(asset?.fileKey).toBe("voice-status-media/server-1/asset-1/party.gif");
+    expect(asset?.fileKey).toBe(
+      "voice-status-media/server-1/asset-1/party.gif",
+    );
     expect(asset?.media.preview_url).toContain(ASSET_ID);
   });
 
   it("maps external recent assets back to their original preview url", async () => {
     db.mockQuery("FROM voice_status_media_assets", {
-      results: [{
-        id: ASSET_ID,
-        server_id: SERVER_ID,
-        channel_id: CHANNEL_ID,
-        user_id: USER_ID,
-        filename: "tenor-asset.gif",
-        file_key: "external-url:https://media.tenor.com/example.gif",
-        content_type: "image/gif",
-        preview_width: 320,
-        preview_height: 180,
-        size_bytes: 0,
-        created_at: NOW,
-      }],
+      results: [
+        {
+          id: ASSET_ID,
+          server_id: SERVER_ID,
+          channel_id: CHANNEL_ID,
+          user_id: USER_ID,
+          filename: "tenor-asset.gif",
+          file_key: "external-url:https://media.tenor.com/example.gif",
+          content_type: "image/gif",
+          preview_width: 320,
+          preview_height: 180,
+          size_bytes: 0,
+          created_at: NOW,
+        },
+      ],
     });
 
-    const assets = await listRecentVoiceStatusMediaAssets(db as any, SERVER_ID, 12);
+    const assets = await listRecentVoiceStatusMediaAssets(
+      db as any,
+      SERVER_ID,
+      12,
+    );
 
     expect(assets).toHaveLength(1);
     expect(assets[0].media.provider).toBe("external");
-    expect(assets[0].media.preview_url).toBe("https://media.tenor.com/example.gif");
+    expect(assets[0].media.preview_url).toBe(
+      "https://media.tenor.com/example.gif",
+    );
   });
 
   it("reuses an existing external asset when the same preview URL is chosen again", async () => {
@@ -141,7 +157,9 @@ describe("voice-status-media.service", () => {
     });
 
     expect(asset.id).toBe(ASSET_ID);
-    expect(asset.fileKey).toBe("external-url:https://media.tenor.com/example.gif");
+    expect(asset.fileKey).toBe(
+      "external-url:https://media.tenor.com/example.gif",
+    );
     db.assertNotCalled(/INSERT INTO voice_status_media_assets/);
   });
 

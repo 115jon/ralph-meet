@@ -70,7 +70,8 @@ export function useAppUpdater(): AppUpdaterState {
   // Prevent concurrent checks
   const checkingRef = useRef(false);
 
-  const isDesktop = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+  const isDesktop =
+    typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
   const checkForUpdate = useCallback(async () => {
     if (!isDesktop || checkingRef.current) return;

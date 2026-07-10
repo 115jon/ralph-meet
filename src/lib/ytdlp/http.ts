@@ -1,7 +1,4 @@
-import {
-  requireActiveVoiceRoomSession,
-  requireAuth,
-} from "@/lib/api-helpers";
+import { requireActiveVoiceRoomSession, requireAuth } from "@/lib/api-helpers";
 import { getYtDlpUpstreamStatus, syncYtDlpUpstream } from "./upstream";
 import { resolveYouTubePlayback } from "./youtube";
 
@@ -26,12 +23,12 @@ function isStaleStatus(status: { syncedAt: string | null }) {
   if (!status.syncedAt) return true;
   const timestamp = Date.parse(status.syncedAt);
   if (!Number.isFinite(timestamp)) return true;
-  return (Date.now() - timestamp) > BACKGROUND_SYNC_MAX_AGE_MS;
+  return Date.now() - timestamp > BACKGROUND_SYNC_MAX_AGE_MS;
 }
 
 async function readJsonBody(request: Request) {
   try {
-    return await request.json() as ResolveRequestBody;
+    return (await request.json()) as ResolveRequestBody;
   } catch {
     return {};
   }
@@ -76,7 +73,10 @@ export async function handleYtDlpRequest(
     const body = await readJsonBody(request);
     const source = body.url?.trim() || body.videoId?.trim();
     if (!source) {
-      return Response.json({ error: "Missing url or videoId" }, { status: 400 });
+      return Response.json(
+        { error: "Missing url or videoId" },
+        { status: 400 },
+      );
     }
 
     const roomSlug = body.roomSlug?.trim();
@@ -88,7 +88,8 @@ export async function handleYtDlpRequest(
         {
           serverId: body.serverId?.trim() ?? null,
           channelId: body.channelId?.trim() ?? null,
-          errorMessage: "You must be actively connected to this voice room to resolve YouTube media.",
+          errorMessage:
+            "You must be actively connected to this voice room to resolve YouTube media.",
         },
       );
       if (sessionCheck instanceof Response) return sessionCheck;
@@ -112,7 +113,10 @@ export async function handleYtDlpRequest(
         },
       });
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Failed to resolve YouTube playback";
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Failed to resolve YouTube playback";
       return Response.json({ error: message }, { status: 502 });
     }
   }

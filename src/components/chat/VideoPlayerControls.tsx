@@ -1,5 +1,10 @@
 import { ButtonBase } from "@/components/ui/button-base";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { getDownloadUrl } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 import { useEffect, useRef, useState } from "react";
@@ -34,13 +39,18 @@ function TipButton({
       <TooltipTrigger asChild>
         <ButtonBase
           onClick={onClick}
-          className={cn("p-1.5 rounded-md hover:bg-white/10 transition-colors", className)}
+          className={cn(
+            "p-1.5 rounded-md hover:bg-white/10 transition-colors",
+            className,
+          )}
           aria-label={label}
         >
           {children}
         </ButtonBase>
       </TooltipTrigger>
-      <TooltipContent side="top" sideOffset={6}>{label}</TooltipContent>
+      <TooltipContent side="top" sideOffset={6}>
+        {label}
+      </TooltipContent>
     </Tooltip>
   );
 }
@@ -53,12 +63,18 @@ interface VideoDownloadButtonProps {
   visible: boolean;
 }
 
-export function VideoDownloadButton({ src, filename, visible }: VideoDownloadButtonProps) {
+export function VideoDownloadButton({
+  src,
+  filename,
+  visible,
+}: VideoDownloadButtonProps) {
   return (
     <div
       className={cn(
         "absolute top-2 right-2 z-20 transition-all duration-200",
-        visible ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-1 pointer-events-none"
+        visible
+          ? "opacity-100 translate-y-0"
+          : "opacity-0 -translate-y-1 pointer-events-none",
       )}
     >
       <TooltipProvider>
@@ -74,7 +90,9 @@ export function VideoDownloadButton({ src, filename, visible }: VideoDownloadBut
               <DownloadIcon />
             </a>
           </TooltipTrigger>
-          <TooltipContent side="bottom" sideOffset={6}>Download</TooltipContent>
+          <TooltipContent side="bottom" sideOffset={6}>
+            Download
+          </TooltipContent>
         </Tooltip>
       </TooltipProvider>
     </div>
@@ -119,7 +137,7 @@ export function VideoProgressBar({
       ref={progressRef}
       className={cn(
         "group/bar relative rounded-full cursor-pointer mb-2 transition-all",
-        dragging ? "h-2" : "h-1 hover:h-1.5"
+        dragging ? "h-2" : "h-1 hover:h-1.5",
       )}
     >
       <input
@@ -135,12 +153,23 @@ export function VideoProgressBar({
         className="absolute inset-0 z-20 h-full w-full cursor-pointer opacity-0"
       />
       <div className="absolute inset-0 rounded-full bg-white/15" />
-      <div className="absolute inset-y-0 left-0 rounded-full bg-white/25" style={{ width: `${buffered}%` }} />
-      <div className="absolute inset-y-0 left-0 rounded-full bg-primary" style={{ width: `${displayProgress}%`, transition: dragging ? 'none' : 'width 0.1s' }} />
+      <div
+        className="absolute inset-y-0 left-0 rounded-full bg-white/25"
+        style={{ width: `${buffered}%` }}
+      />
+      <div
+        className="absolute inset-y-0 left-0 rounded-full bg-primary"
+        style={{
+          width: `${displayProgress}%`,
+          transition: dragging ? "none" : "width 0.1s",
+        }}
+      />
       <div
         className={cn(
           "absolute top-1/2 -translate-y-1/2 rounded-full bg-white shadow-lg transition-opacity",
-          dragging ? "w-3.5 h-3.5 opacity-100" : "w-2.5 h-2.5 opacity-0 group-hover/bar:opacity-100"
+          dragging
+            ? "w-3.5 h-3.5 opacity-100"
+            : "w-2.5 h-2.5 opacity-0 group-hover/bar:opacity-100",
         )}
         style={{ left: `calc(${displayProgress}% - ${dragging ? 7 : 5}px)` }}
       />
@@ -169,7 +198,7 @@ interface VideoControlBarProps {
   toggleMute: () => void;
   handleVolumeChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   toggleFullscreen: () => void;
-  mode?: 'default' | 'animated';
+  mode?: "default" | "animated";
 }
 
 export function VideoControlBar({
@@ -183,10 +212,11 @@ export function VideoControlBar({
   toggleMute,
   handleVolumeChange,
   toggleFullscreen,
-  mode = 'default',
+  mode = "default",
 }: VideoControlBarProps) {
   const [volumePopoverOpen, setVolumePopoverOpen] = useState(false);
-  const closeVolumePopoverTimerRef = useRef<ReturnType<typeof setTimeout>>(null);
+  const closeVolumePopoverTimerRef =
+    useRef<ReturnType<typeof setTimeout>>(null);
 
   useEffect(() => {
     return () => {
@@ -218,7 +248,10 @@ export function VideoControlBar({
 
   const handleVolumeBlurCapture = (event: React.FocusEvent<HTMLDivElement>) => {
     const nextTarget = event.relatedTarget;
-    if (nextTarget instanceof Node && event.currentTarget.contains(nextTarget)) {
+    if (
+      nextTarget instanceof Node &&
+      event.currentTarget.contains(nextTarget)
+    ) {
       return;
     }
 
@@ -229,7 +262,7 @@ export function VideoControlBar({
     setVolumePopoverOpen(false);
   };
 
-  if (mode === 'animated') {
+  if (mode === "animated") {
     return (
       <TooltipProvider>
         <div className="flex items-center justify-end text-white/90">
@@ -273,7 +306,13 @@ export function VideoControlBar({
             aria-label={muted ? "Unmute" : "Mute"}
             aria-expanded={volumePopoverOpen}
           >
-            {muted || volume === 0 ? <VolumeMuteIcon /> : volume < 0.5 ? <VolumeLowIcon /> : <VolumeHighIcon />}
+            {muted || volume === 0 ? (
+              <VolumeMuteIcon />
+            ) : volume < 0.5 ? (
+              <VolumeLowIcon />
+            ) : (
+              <VolumeHighIcon />
+            )}
           </ButtonBase>
 
           {/* Vertical volume slider – stays open briefly on leave so the handoff
@@ -283,7 +322,7 @@ export function VideoControlBar({
               "absolute bottom-full left-1/2 origin-bottom -translate-x-1/2 pb-2 transition-all duration-200",
               volumePopoverOpen
                 ? "scale-100 opacity-100 pointer-events-auto"
-                : "scale-95 opacity-0 pointer-events-none"
+                : "scale-95 opacity-0 pointer-events-none",
             )}
           >
             <div className="flex flex-col items-center bg-black/70 backdrop-blur-md rounded-lg px-2 py-3 border border-white/10 shadow-xl">
@@ -314,7 +353,7 @@ export function VideoControlBar({
 
 interface SplashOverlayProps {
   splashKey: number;
-  splashIcon: 'play' | 'pause';
+  splashIcon: "play" | "pause";
 }
 
 export function SplashOverlay({ splashKey, splashIcon }: SplashOverlayProps) {
@@ -325,7 +364,11 @@ export function SplashOverlay({ splashKey, splashIcon }: SplashOverlayProps) {
       className="absolute inset-0 flex items-center justify-center pointer-events-none z-30"
     >
       <div className="w-14 h-14 rounded-full bg-black/40 backdrop-blur-sm flex items-center justify-center text-white animate-[splash_0.5s_ease-out_forwards]">
-        {splashIcon === 'play' ? <PlayIcon className="w-6 h-6" /> : <PauseIcon />}
+        {splashIcon === "play" ? (
+          <PlayIcon className="w-6 h-6" />
+        ) : (
+          <PauseIcon />
+        )}
       </div>
     </div>
   );
@@ -341,11 +384,13 @@ interface BigPlayOverlayProps {
 export function BigPlayOverlay({ isViewer, ended }: BigPlayOverlayProps) {
   return (
     <div className="absolute inset-0 flex items-center justify-center">
-      <div className={cn(
-        "rounded-full backdrop-blur-sm flex items-center justify-center transition-transform group-hover/video:scale-110",
-        "w-14 h-14 bg-black/50 border border-white/10 shadow-2xl text-white",
-        isViewer && "w-16 h-16"
-      )}>
+      <div
+        className={cn(
+          "rounded-full backdrop-blur-sm flex items-center justify-center transition-transform group-hover/video:scale-110",
+          "w-14 h-14 bg-black/50 border border-white/10 shadow-2xl text-white",
+          isViewer && "w-16 h-16",
+        )}
+      >
         {ended ? <PlayAgainIcon /> : <BigPlayIcon />}
       </div>
     </div>

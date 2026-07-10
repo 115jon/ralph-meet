@@ -6,14 +6,24 @@ import { InputMentionOverlay } from "./InputMentionOverlay";
 import { useDelayUnmount } from "@/hooks/useDelayUnmount";
 import { MessageInputPlaceholder } from "./MessageInputPlaceholder";
 
-import { useMessageInput, type PendingUpload, type UploadedFile, type UploadedFileInfo } from "./useMessageInput";
+import {
+  useMessageInput,
+  type PendingUpload,
+  type UploadedFile,
+  type UploadedFileInfo,
+} from "./useMessageInput";
 
 export type { PendingUpload, UploadedFile, UploadedFileInfo };
 
 interface Props {
   channelId: string;
   channelName: string;
-  onSend: (content: string, replyToId?: string, attachmentIds?: string[], uploadedFiles?: UploadedFileInfo[]) => void;
+  onSend: (
+    content: string,
+    replyToId?: string,
+    attachmentIds?: string[],
+    uploadedFiles?: UploadedFileInfo[],
+  ) => void;
   onTyping: () => void;
   replyTo?: Message | null;
   onCancelReply?: () => void;
@@ -26,9 +36,17 @@ import { InputControls } from "./InputControls";
 import { MentionAutocomplete } from "./MentionAutocomplete";
 import { ReplyIndicator } from "./ReplyIndicator";
 
-
-export default function MessageInput({ channelId, channelName, onSend, onTyping, replyTo, onCancelReply }: Props) {
-  const replyDisplayName = replyTo ? getDisplayName(replyTo.author, "message") : null;
+export default function MessageInput({
+  channelId,
+  channelName,
+  onSend,
+  onTyping,
+  replyTo,
+  onCancelReply,
+}: Props) {
+  const replyDisplayName = replyTo
+    ? getDisplayName(replyTo.author, "message")
+    : null;
 
   const {
     value,
@@ -69,11 +87,15 @@ export default function MessageInput({ channelId, channelName, onSend, onTyping,
   return (
     <div
       className="z-10 px-2 md:px-4 pt-0 relative"
-      style={{ paddingBottom: 'calc(16px + var(--safe-area-bottom, 0px))' }}
+      style={{ paddingBottom: "calc(16px + var(--safe-area-bottom, 0px))" }}
     >
       <div className="group flex flex-col rounded-xl bg-rm-bg-elevated shadow-sm transition-all duration-300 border border-white/5 relative">
         {shouldRenderReply && replyTo && (
-          <ReplyIndicator replyTo={replyTo} onCancelReply={onCancelReply} isClosing={!showReply} />
+          <ReplyIndicator
+            replyTo={replyTo}
+            onCancelReply={onCancelReply}
+            isClosing={!showReply}
+          />
         )}
 
         <MentionAutocomplete
@@ -84,7 +106,10 @@ export default function MessageInput({ channelId, channelName, onSend, onTyping,
           insertMention={insertMention}
         />
 
-        <HoveredMentionTooltip hoveredMember={hoveredMember} pos={mentionTooltipPos} />
+        <HoveredMentionTooltip
+          hoveredMember={hoveredMember}
+          pos={mentionTooltipPos}
+        />
 
         <AttachmentList
           uploadedFiles={uploadedFiles}
@@ -146,8 +171,16 @@ export default function MessageInput({ channelId, channelName, onSend, onTyping,
               ref={textareaRef}
               rows={1}
               value={value}
-              aria-label={replyTo ? `Reply to ${replyDisplayName}` : `Message #${channelName}`}
-              aria-placeholder={replyTo ? `Reply to ${replyDisplayName}…` : `Message #${channelName}`}
+              aria-label={
+                replyTo
+                  ? `Reply to ${replyDisplayName}`
+                  : `Message #${channelName}`
+              }
+              aria-placeholder={
+                replyTo
+                  ? `Reply to ${replyDisplayName}…`
+                  : `Message #${channelName}`
+              }
               onChange={handleInput}
               onKeyDown={handleKeyDown}
               onPaste={handlePaste}
@@ -158,10 +191,10 @@ export default function MessageInput({ channelId, channelName, onSend, onTyping,
               onClick={enforceAtomicMentions}
               placeholder=""
               className={cn(
-                "custom-scrollbar relative z-10 w-full resize-none overflow-y-auto bg-transparent py-1 text-[15px] font-medium leading-normal text-transparent outline-none placeholder:text-rm-text-muted/60 selection:bg-primary/30 selection:text-transparent"
+                "custom-scrollbar relative z-10 w-full resize-none overflow-y-auto bg-transparent py-1 text-[15px] font-medium leading-normal text-transparent outline-none placeholder:text-rm-text-muted/60 selection:bg-primary/30 selection:text-transparent",
               )}
               style={{
-                caretColor: "rgba(226, 232, 240, 0.9)"
+                caretColor: "rgba(226, 232, 240, 0.9)",
               }}
               data-gramm="false"
               autoComplete="off"

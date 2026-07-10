@@ -1,4 +1,4 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute } from "@tanstack/react-router";
 
 import { apiError, getBucket } from "@/lib/api-helpers";
 
@@ -24,19 +24,22 @@ const GET = async ({ request, params }: any) => {
   headers.set("Cache-Control", "public, max-age=31536000, immutable");
   // Security headers — defense-in-depth against MIME sniffing and embedded scripts
   headers.set("X-Content-Type-Options", "nosniff");
-  headers.set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'");
+  headers.set(
+    "Content-Security-Policy",
+    "default-src 'none'; style-src 'unsafe-inline'",
+  );
   headers.set("Content-Disposition", "inline");
 
   return new Response(object.body as ReadableStream, {
     status: 200,
     headers,
   });
-}
+};
 
-export const Route = createFileRoute('/api/server-icons/$')({
+export const Route = createFileRoute("/api/server-icons/$")({
   server: {
     handlers: {
       GET,
-    }
-  }
+    },
+  },
 });

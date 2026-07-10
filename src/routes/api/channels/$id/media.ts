@@ -1,9 +1,13 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute } from "@tanstack/react-router";
 
 import { apiError, apiSuccess, getDB, requireAuth } from "@/lib/api-helpers";
 import { requireChannelAccess } from "@/lib/require-channel-access";
 import { ServiceError } from "@/lib/service-error";
-import { fetchChannelFiles, fetchChannelLinks, fetchChannelMedia } from "@/services/media.service";
+import {
+  fetchChannelFiles,
+  fetchChannelLinks,
+  fetchChannelMedia,
+} from "@/services/media.service";
 
 // GET /api/channels/:id/media?type=images|links|files&before=cursor&limit=50
 const GET = async ({ request, params }: any) => {
@@ -47,10 +51,10 @@ const GET = async ({ request, params }: any) => {
   }
 };
 
-export const Route = createFileRoute('/api/channels/$id/media')({
+export const Route = createFileRoute("/api/channels/$id/media")({
   server: {
     handlers: {
       GET,
-    }
-  }
+    },
+  },
 });

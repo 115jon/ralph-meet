@@ -7,7 +7,10 @@
 // ============================================================================
 
 import type { GridItem } from "@/components/voice/types";
-import type { ScreenShareOptions, ScreenShareSourceState } from "@/lib/screen-share-types";
+import type {
+  ScreenShareOptions,
+  ScreenShareSourceState,
+} from "@/lib/screen-share-types";
 import type { SFUClient } from "@/lib/sfu-client";
 import type { StreamWatchersByStreamer } from "@/lib/stream-watchers";
 import type { SharedSpatialAudioState } from "@/lib/voice/spatial-audio";
@@ -65,7 +68,9 @@ export interface CallVoiceState {
   onToggleStreamAudio: (() => void) | null;
   onToggleWatch: ((streamId: string) => void) | null;
   setFocusedId: ((id: string | null) => void) | null;
-  updateSharedSpatialAudioState: ((state: SharedSpatialAudioState) => void) | null;
+  updateSharedSpatialAudioState:
+    | ((state: SharedSpatialAudioState) => void)
+    | null;
 
   // ── Setters ──────────────────────────────────────────────────────────
   update: (partial: Partial<CallVoiceState>) => void;
@@ -102,7 +107,9 @@ const initialState = {
   onToggleStreamAudio: null as (() => void) | null,
   onToggleWatch: null as ((streamId: string) => void) | null,
   setFocusedId: null as ((id: string | null) => void) | null,
-  updateSharedSpatialAudioState: null as ((state: SharedSpatialAudioState) => void) | null,
+  updateSharedSpatialAudioState: null as
+    | ((state: SharedSpatialAudioState) => void)
+    | null,
 };
 
 export const useCallVoiceStore = create<CallVoiceState>()((set) => ({

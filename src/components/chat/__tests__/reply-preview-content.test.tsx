@@ -1,11 +1,14 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { ReplyPreviewContent, getReplyPreviewText } from "../ReplyPreviewContent";
+import {
+  ReplyPreviewContent,
+  getReplyPreviewText,
+} from "../ReplyPreviewContent";
 
 describe("ReplyPreviewContent", () => {
   it("renders attachment-only fallback", () => {
     const markup = renderToStaticMarkup(
-      <ReplyPreviewContent content="" attachmentsCount={1} />
+      <ReplyPreviewContent content="" attachmentsCount={1} />,
     );
 
     expect(markup).toContain("Click to see attachment");

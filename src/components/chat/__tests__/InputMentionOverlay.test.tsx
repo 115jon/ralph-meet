@@ -44,9 +44,7 @@ describe("InputMentionOverlay", () => {
   });
 
   it("renders mention pills without adding horizontal padding that skews caret alignment", () => {
-    const markup = renderToStaticMarkup(
-      <InputMentionOverlay text="@ralph" />,
-    );
+    const markup = renderToStaticMarkup(<InputMentionOverlay text="@ralph" />);
 
     expect(markup).toContain('data-mention="ralph"');
     expect(markup).toContain("rounded-sm");
@@ -54,10 +52,10 @@ describe("InputMentionOverlay", () => {
   });
 
   it("renders native emoji characters with the shared asset style inside the composer overlay", () => {
-    const markup = renderToStaticMarkup(
-      <InputMentionOverlay text="😂" />,
-    );
+    const markup = renderToStaticMarkup(<InputMentionOverlay text="😂" />);
 
-    expect(markup).toContain(`emoji-datasource-twitter@${NATIVE_EMOJI_STYLE_VERSION}`);
+    expect(markup).toContain(
+      `emoji-datasource-twitter@${NATIVE_EMOJI_STYLE_VERSION}`,
+    );
   });
 });

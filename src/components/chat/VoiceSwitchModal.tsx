@@ -50,7 +50,9 @@ export function VoiceSwitchModal({
     if (dontAskAgain) {
       try {
         localStorage.setItem(DONT_ASK_KEY, "true");
-      } catch { /* quota / private-mode — silently ignore */ }
+      } catch {
+        /* quota / private-mode — silently ignore */
+      }
     }
     onConfirm();
   }, [dontAskAgain, onConfirm]);
@@ -64,15 +66,17 @@ export function VoiceSwitchModal({
 
   return (
     <BaseModal onClose={onCancel}>
-      <div className={cn(
-        "fixed inset-0 z-[200] flex items-center justify-center bg-black/60 backdrop-blur-[2px] animate-in fade-in duration-200",
-        isClosing && "animate-out fade-out"
-      )}>
+      <div
+        className={cn(
+          "fixed inset-0 z-[200] flex items-center justify-center bg-black/60 backdrop-blur-[2px] animate-in fade-in duration-200",
+          isClosing && "animate-out fade-out",
+        )}
+      >
         <dialog
           open
           className={cn(
             "relative m-0 w-[calc(100%-2rem)] max-w-[440px] rounded-lg border-0 bg-rm-bg-surface p-0 shadow-2xl outline-none animate-in fade-in zoom-in-95 duration-200",
-            isClosing && "animate-out zoom-out-95"
+            isClosing && "animate-out zoom-out-95",
           )}
           aria-labelledby="voice-switch-title"
         >
@@ -104,10 +108,11 @@ export function VoiceSwitchModal({
             {/* Checkbox */}
             <label className="flex items-center gap-2 select-none cursor-pointer group">
               <span
-                className={`flex h-[18px] w-[18px] items-center justify-center rounded-[4px] border transition-colors ${dontAskAgain
+                className={`flex h-[18px] w-[18px] items-center justify-center rounded-[4px] border transition-colors ${
+                  dontAskAgain
                     ? "border-primary bg-primary"
                     : "border-rm-text-muted/40 bg-transparent group-hover:border-rm-text-muted/60"
-                  }`}
+                }`}
               >
                 {dontAskAgain && (
                   <svg

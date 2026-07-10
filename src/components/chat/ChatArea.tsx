@@ -149,8 +149,20 @@ export default function ChatArea({
       }
 
       return false; // allow to cascade to next (parent, e.g. ChatPageClient)
-    }, [showSearch, showPins, threadMessageId, showChannelDetails, showMembers, onMembersClick, setLocalState]),
-    showSearch || showPins || !!threadMessageId || showChannelDetails || !!(showMembers && onMembersClick)
+    }, [
+      showSearch,
+      showPins,
+      threadMessageId,
+      showChannelDetails,
+      showMembers,
+      onMembersClick,
+      setLocalState,
+    ]),
+    showSearch ||
+      showPins ||
+      !!threadMessageId ||
+      showChannelDetails ||
+      !!(showMembers && onMembersClick),
   );
 
   const computedMembers = useMemo(() => {
@@ -159,7 +171,7 @@ export default function ChatArea({
       if (dmChannel?.recipient) {
         return [
           { user: state.user, roles: [] },
-          { user: dmChannel.recipient, roles: [] }
+          { user: dmChannel.recipient, roles: [] },
         ];
       }
     }
@@ -185,7 +197,11 @@ export default function ChatArea({
         channelId={channelId}
         memberCount={computedMembers.length}
         showChannelDetails={showChannelDetails}
-        onToggleChannelDetails={() => setLocalState((prev: any) => ({ showChannelDetails: !prev.showChannelDetails }))}
+        onToggleChannelDetails={() =>
+          setLocalState((prev: any) => ({
+            showChannelDetails: !prev.showChannelDetails,
+          }))
+        }
         onMenuClick={onMenuClick}
         onMembersClick={onMembersClick}
         showMembers={showMembers}
@@ -203,7 +219,11 @@ export default function ChatArea({
         <PinModal
           isOpen={pinModal.isOpen}
           isClosing={!pinModal.isOpen}
-          onClose={() => setLocalState({ pinModal: { isOpen: false, message: null, mode: 'pin' } })}
+          onClose={() =>
+            setLocalState({
+              pinModal: { isOpen: false, message: null, mode: "pin" },
+            })
+          }
           onConfirm={confirmPinAction}
           message={pinModal.message}
           mode={pinModal.mode}
@@ -215,14 +235,18 @@ export default function ChatArea({
         <div
           className="absolute inset-0 z-50 md:inset-auto md:right-4 md:top-14"
           onClick={(e) => {
-            if (e.target === e.currentTarget) setLocalState({ showPins: false });
+            if (e.target === e.currentTarget)
+              setLocalState({ showPins: false });
           }}
           role="presentation"
           onKeyDown={(e) => {
             if (e.key === "Escape") setLocalState({ showPins: false });
           }}
         >
-          <div ref={pinSidebarRef} className="h-full w-full bg-rm-bg-primary/50 md:bg-transparent backdrop-blur-sm md:backdrop-blur-none flex sm:justify-end items-start pointer-events-auto">
+          <div
+            ref={pinSidebarRef}
+            className="h-full w-full bg-rm-bg-primary/50 md:bg-transparent backdrop-blur-sm md:backdrop-blur-none flex sm:justify-end items-start pointer-events-auto"
+          >
             <PinnedMessagesSidebar
               messages={state.pinnedMessages}
               isLoading={state.loadingPins}
@@ -243,15 +267,15 @@ export default function ChatArea({
             if (targetChannelId === channelId) {
               handleJumpToMessage(messageId);
             } else {
-              const event = new CustomEvent('navigate-channel', {
-                detail: { channelId: targetChannelId, messageId }
+              const event = new CustomEvent("navigate-channel", {
+                detail: { channelId: targetChannelId, messageId },
               });
               window.dispatchEvent(event);
             }
           }}
           onNavigate={(targetChannelId) => {
-            const event = new CustomEvent('navigate-channel', {
-              detail: { channelId: targetChannelId }
+            const event = new CustomEvent("navigate-channel", {
+              detail: { channelId: targetChannelId },
             });
             window.dispatchEvent(event);
           }}
@@ -290,27 +314,32 @@ export default function ChatArea({
               }}
               unreadSeparatorId={unreadSeparatorId}
               onLoadMore={handleLoadMore}
-              onLoadAfter={isDetached && hasMoreAfterAnchor ? handleLoadAfter : undefined}
+              onLoadAfter={
+                isDetached && hasMoreAfterAnchor ? handleLoadAfter : undefined
+              }
               onReply={handleReply}
               onPin={handlePin}
               onUnpin={handleUnpin}
               onJump={handleJumpToMessage}
               onBan={canBan ? handleBan : undefined}
               onThread={handleThread}
-              welcomeContent={(
+              welcomeContent={
                 <MemoizedChatWelcomeContent
                   isDM={!!isDM}
                   channelName={channelName}
                   channelId={channelId}
                 />
-              )}
+              }
               onAtBottom={handleAtBottom}
               onScrollRangeChange={handleScrollRangeChange}
               onMessageVisible={handleMessageVisible}
             />
           </div>
 
-          <ChatJumpToPresent isDetached={isDetached} onJumpToPresent={handleJumpToPresent} />
+          <ChatJumpToPresent
+            isDetached={isDetached}
+            onJumpToPresent={handleJumpToPresent}
+          />
 
           <div className="shrink-0 relative pt-6">
             <ChatTypingIndicator typingUsers={typingUsers} />
@@ -345,7 +374,11 @@ export default function ChatArea({
             <MemberList
               members={computedMembers}
               onlineUsers={state.onlineUsers}
-              typingUsers={state.activeChannelId ? state.typingUsers[state.activeChannelId] : undefined}
+              typingUsers={
+                state.activeChannelId
+                  ? state.typingUsers[state.activeChannelId]
+                  : undefined
+              }
               currentUserId={state.user?.id}
               onBan={canBan ? handleBan : undefined}
               onClose={onMembersClick}
@@ -355,7 +388,9 @@ export default function ChatArea({
               onOpenSearch={() => {
                 setLocalState({ showSearch: true });
               }}
-              onOpenSettings={() => setLocalState({ showChannelSettings: true })}
+              onOpenSettings={() =>
+                setLocalState({ showChannelSettings: true })
+              }
               onInviteClick={onInviteClick}
               pinnedMessages={state.pinnedMessages}
               loadingPins={state.loadingPins}
@@ -366,7 +401,9 @@ export default function ChatArea({
                 setLocalState({ threadMessageId: messageId });
               }}
               showDetails={showChannelDetails}
-              onToggleDetails={() => setLocalState({ showChannelDetails: false })}
+              onToggleDetails={() =>
+                setLocalState({ showChannelDetails: false })
+              }
               isDM={isDM}
             />
           </>
@@ -389,13 +426,15 @@ export default function ChatArea({
         )}
       </div>
 
-      {showChannelSettings && channelData && (serverId ?? state.activeServerId) && (
-        <ChannelSettingsModal
-          serverId={(serverId ?? state.activeServerId)!}
-          channel={channelData as Channel}
-          onClose={() => setLocalState({ showChannelSettings: false })}
-        />
-      )}
+      {showChannelSettings &&
+        channelData &&
+        (serverId ?? state.activeServerId) && (
+          <ChannelSettingsModal
+            serverId={(serverId ?? state.activeServerId)!}
+            channel={channelData as Channel}
+            onClose={() => setLocalState({ showChannelSettings: false })}
+          />
+        )}
     </div>
   );
 }

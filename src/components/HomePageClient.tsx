@@ -45,7 +45,9 @@ function HomePageHeader() {
         <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-rm-bg-surface text-rm-text ring-1 ring-rm-border shadow-xs">
           <HomeIcon className="h-5 w-5" />
         </div>
-        <span className="text-lg font-bold tracking-tight text-rm-text">Ralph Meet</span>
+        <span className="text-lg font-bold tracking-tight text-rm-text">
+          Ralph Meet
+        </span>
       </div>
       <div className="flex items-center gap-4">
         {!isSignedIn ? (
@@ -58,7 +60,11 @@ function HomePageHeader() {
           </a>
         ) : (
           <div className="rounded-full bg-rm-bg-surface/50 p-1 shadow-md ring-1 ring-rm-border backdrop-blur-xl transition-all hover:bg-rm-bg-elevated">
-            <UserButton afterSignOutUrl="/" size={32} appearance={{ variables: { colorPrimary: "#5865f2" } }} />
+            <UserButton
+              afterSignOutUrl="/"
+              size={32}
+              appearance={{ variables: { colorPrimary: "#5865f2" } }}
+            />
           </div>
         )}
       </div>
@@ -78,28 +84,32 @@ const FALLBACK_RELEASES: DesktopRelease[] = [
   {
     tagName: "v1.9.0",
     name: "v1.9.0",
-    downloadUrl: "https://github.com/115jon/ralph-meet/releases/download/v1.9.0/RalphMeetSetup.exe",
+    downloadUrl:
+      "https://github.com/115jon/ralph-meet/releases/download/v1.9.0/RalphMeetSetup.exe",
     fileName: "RalphMeetSetup.exe",
     isLatest: true,
   },
   {
     tagName: "v1.8.0",
     name: "v1.8.0",
-    downloadUrl: "https://github.com/115jon/ralph-meet/releases/download/v1.8.0/Ralph.Meet_1.8.0_x64-setup.exe",
+    downloadUrl:
+      "https://github.com/115jon/ralph-meet/releases/download/v1.8.0/Ralph.Meet_1.8.0_x64-setup.exe",
     fileName: "Ralph.Meet_1.8.0_x64-setup.exe",
     isLatest: false,
   },
   {
     tagName: "v1.7.0",
     name: "v1.7.0",
-    downloadUrl: "https://github.com/115jon/ralph-meet/releases/download/v1.7.0/Ralph.Meet_1.7.0_x64-setup.exe",
+    downloadUrl:
+      "https://github.com/115jon/ralph-meet/releases/download/v1.7.0/Ralph.Meet_1.7.0_x64-setup.exe",
     fileName: "Ralph.Meet_1.7.0_x64-setup.exe",
     isLatest: false,
   },
   {
     tagName: "v1.6.0",
     name: "v1.6.0",
-    downloadUrl: "https://github.com/115jon/ralph-meet/releases/download/v1.6.0/Ralph.Meet_1.6.0_x64-setup.exe",
+    downloadUrl:
+      "https://github.com/115jon/ralph-meet/releases/download/v1.6.0/Ralph.Meet_1.6.0_x64-setup.exe",
     fileName: "Ralph.Meet_1.6.0_x64-setup.exe",
     isLatest: false,
   },
@@ -121,7 +131,9 @@ function HomePageHero({ createRoom }: { createRoom: () => void }) {
     let isMounted = true;
     async function fetchReleases() {
       try {
-        const res = await fetch("https://api.github.com/repos/115jon/ralph-meet/releases");
+        const res = await fetch(
+          "https://api.github.com/repos/115jon/ralph-meet/releases",
+        );
         if (!res.ok) return;
         const data = await res.json();
         if (!Array.isArray(data) || data.length === 0) return;
@@ -134,15 +146,21 @@ function HomePageHero({ createRoom }: { createRoom: () => void }) {
           const tagName = rel.tag_name || rel.name || "";
           if (!tagName) continue;
 
-          let exeAsset: { browser_download_url?: string; name?: string } | undefined;
+          let exeAsset:
+            | { browser_download_url?: string; name?: string }
+            | undefined;
           for (const asset of Array.isArray(rel.assets) ? rel.assets : []) {
-            if (typeof asset?.name === "string" && asset.name.toLowerCase().endsWith(".exe")) {
+            if (
+              typeof asset?.name === "string" &&
+              asset.name.toLowerCase().endsWith(".exe")
+            ) {
               exeAsset = asset;
               break;
             }
           }
-          const downloadUrl = exeAsset?.browser_download_url
-            ?? `https://github.com/115jon/ralph-meet/releases/download/${tagName}/RalphMeetSetup.exe`;
+          const downloadUrl =
+            exeAsset?.browser_download_url ??
+            `https://github.com/115jon/ralph-meet/releases/download/${tagName}/RalphMeetSetup.exe`;
           const fileName = exeAsset?.name ?? `${tagName}-setup.exe`;
 
           const isLatest = !latestFound && !rel.prerelease;
@@ -166,7 +184,10 @@ function HomePageHero({ createRoom }: { createRoom: () => void }) {
           setReleases(fetched);
         }
       } catch (err) {
-        console.warn("Failed to auto-fetch desktop releases from GitHub API:", err);
+        console.warn(
+          "Failed to auto-fetch desktop releases from GitHub API:",
+          err,
+        );
       }
     }
     fetchReleases();
@@ -177,7 +198,10 @@ function HomePageHero({ createRoom }: { createRoom: () => void }) {
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+      if (
+        dropdownRef.current &&
+        !dropdownRef.current.contains(event.target as Node)
+      ) {
         setReleasesExpanded(false);
       }
     }
@@ -189,7 +213,8 @@ function HomePageHero({ createRoom }: { createRoom: () => void }) {
     };
   }, [releasesExpanded]);
 
-  const latestRelease = releases.find((r) => r.isLatest) || releases[0] || FALLBACK_RELEASES[0];
+  const latestRelease =
+    releases.find((r) => r.isLatest) || releases[0] || FALLBACK_RELEASES[0];
 
   return (
     <section className="mx-auto flex min-h-[90dvh] w-full max-w-7xl flex-col items-center justify-between gap-12 px-6 pb-12 pt-28 lg:flex-row lg:px-10">
@@ -202,11 +227,18 @@ function HomePageHero({ createRoom }: { createRoom: () => void }) {
           </span>
         </h1>
 
-        <p className="mb-8 text-base font-medium leading-relaxed text-rm-text-secondary max-w-[45ch] lg:max-w-none" style={{ animationDelay: "150ms" }}>
-          An invite-only space to hang out with friends, collaborate on code, or chat with your community. Real-time and secure.
+        <p
+          className="mb-8 text-base font-medium leading-relaxed text-rm-text-secondary max-w-[45ch] lg:max-w-none"
+          style={{ animationDelay: "150ms" }}
+        >
+          An invite-only space to hang out with friends, collaborate on code, or
+          chat with your community. Real-time and secure.
         </p>
 
-        <div className="flex w-full max-w-2xl flex-col items-stretch gap-3.5 sm:flex-row sm:items-center sm:justify-center lg:justify-start" style={{ animationDelay: "300ms" }}>
+        <div
+          className="flex w-full max-w-2xl flex-col items-stretch gap-3.5 sm:flex-row sm:items-center sm:justify-center lg:justify-start"
+          style={{ animationDelay: "300ms" }}
+        >
           {!isWindowsUser ? (
             <>
               <button
@@ -231,7 +263,9 @@ function HomePageHero({ createRoom }: { createRoom: () => void }) {
                 className="group relative flex w-full shrink-0 items-center justify-center gap-2 overflow-hidden rounded-full bg-rm-bg-surface/80 px-6 py-4.5 text-base font-bold text-rm-text shadow-md ring-1 ring-rm-border backdrop-blur-xl transition-all duration-300 hover:bg-rm-bg-elevated hover:ring-rm-border/80 active:scale-[0.98] sm:w-auto cursor-pointer"
               >
                 <MessageSquare className="h-4 w-4 transition-transform duration-300 group-hover:scale-110" />
-                <span className="relative z-10 whitespace-nowrap">Open Web Chat</span>
+                <span className="relative z-10 whitespace-nowrap">
+                  Open Web Chat
+                </span>
               </a>
             </>
           ) : (
@@ -259,10 +293,16 @@ function HomePageHero({ createRoom }: { createRoom: () => void }) {
                 title={`Download ${latestRelease.tagName}`}
                 className="group relative hidden md:flex w-full shrink-0 items-center justify-center gap-2 overflow-hidden rounded-full bg-rm-bg-surface/80 px-6 py-4.5 text-base font-bold text-rm-text shadow-md ring-1 ring-rm-border backdrop-blur-xl transition-all duration-300 hover:bg-rm-bg-elevated hover:ring-rm-border/80 active:scale-[0.98] sm:w-auto cursor-pointer"
               >
-                <svg className="h-4 w-4 fill-current transition-transform duration-300 group-hover:scale-110 text-rm-text" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M0 3.449L9.75 2.1v9.45H0V3.449zM0 12.45h9.75v9.45L0 20.551v-8.1zM10.95 1.95L24 0v11.55H10.95V1.95zM10.95 12.45H24v11.55l-13.05-1.95v-9.6z"/>
+                <svg
+                  className="h-4 w-4 fill-current transition-transform duration-300 group-hover:scale-110 text-rm-text"
+                  viewBox="0 0 24 24"
+                  xmlns="http://www.w3.org/2000/svg"
+                >
+                  <path d="M0 3.449L9.75 2.1v9.45H0V3.449zM0 12.45h9.75v9.45L0 20.551v-8.1zM10.95 1.95L24 0v11.55H10.95V1.95zM10.95 12.45H24v11.55l-13.05-1.95v-9.6z" />
                 </svg>
-                <span className="relative z-10 whitespace-nowrap">Download for Windows</span>
+                <span className="relative z-10 whitespace-nowrap">
+                  Download for Windows
+                </span>
               </a>
 
               {/* Mobile Fallback: Open Web Chat */}
@@ -272,7 +312,9 @@ function HomePageHero({ createRoom }: { createRoom: () => void }) {
                 className="group relative flex md:hidden w-full shrink-0 items-center justify-center gap-2 overflow-hidden rounded-full bg-rm-bg-surface/80 px-6 py-4.5 text-base font-bold text-rm-text shadow-md ring-1 ring-rm-border backdrop-blur-xl transition-all duration-300 hover:bg-rm-bg-elevated hover:ring-rm-border/80 active:scale-[0.98] sm:w-auto cursor-pointer"
               >
                 <MessageSquare className="h-4 w-4 transition-transform duration-300 group-hover:scale-110" />
-                <span className="relative z-10 whitespace-nowrap">Open Web Chat</span>
+                <span className="relative z-10 whitespace-nowrap">
+                  Open Web Chat
+                </span>
               </a>
 
               {isSignedIn && (
@@ -282,21 +324,33 @@ function HomePageHero({ createRoom }: { createRoom: () => void }) {
                   className="group relative hidden md:flex w-full shrink-0 items-center justify-center gap-2 overflow-hidden rounded-full bg-rm-bg-surface/80 px-6 py-4.5 text-base font-bold text-rm-text shadow-md ring-1 ring-rm-border backdrop-blur-xl transition-all duration-300 hover:bg-rm-bg-elevated hover:ring-rm-border/80 active:scale-[0.98] sm:w-auto cursor-pointer"
                 >
                   <MessageSquare className="h-4 w-4 transition-transform duration-300 group-hover:scale-110" />
-                  <span className="relative z-10 whitespace-nowrap">Open Chat</span>
+                  <span className="relative z-10 whitespace-nowrap">
+                    Open Chat
+                  </span>
                 </button>
               )}
             </>
           )}
         </div>
 
-        <div className="mt-8 flex flex-col items-center lg:items-start gap-4 text-xs font-medium text-rm-text-muted animate-fade-in-up" style={{ animationDelay: "400ms" }}>
+        <div
+          className="mt-8 flex flex-col items-center lg:items-start gap-4 text-xs font-medium text-rm-text-muted animate-fade-in-up"
+          style={{ animationDelay: "400ms" }}
+        >
           <div className="flex flex-col items-center lg:items-start gap-1">
             {isWindowsUser ? (
-              <p className="hidden md:block">Instant rooms. Desktop client available for Windows (x64).</p>
+              <p className="hidden md:block">
+                Instant rooms. Desktop client available for Windows (x64).
+              </p>
             ) : (
-              <p className="hidden md:block">Instant rooms. Desktop client available for Windows (x64) - macOS & Linux coming soon.</p>
+              <p className="hidden md:block">
+                Instant rooms. Desktop client available for Windows (x64) -
+                macOS & Linux coming soon.
+              </p>
             )}
-            <p className="block md:hidden">Instant rooms and real-time chat right in your browser.</p>
+            <p className="block md:hidden">
+              Instant rooms and real-time chat right in your browser.
+            </p>
             {!isSignedIn && (
               <p className="text-rm-text-secondary">
                 Want persistent chats?{" "}
@@ -328,8 +382,12 @@ function HomePageHero({ createRoom }: { createRoom: () => void }) {
             {releasesExpanded && (
               <div className="absolute left-0 mt-2.5 z-30 w-72 origin-top-left rounded-2xl border border-rm-border bg-rm-bg-surface p-4 shadow-2xl backdrop-blur-xl animate-fade-in-up">
                 <div className="mb-3 flex items-center justify-between border-b border-rm-border/60 pb-2">
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-rm-text-secondary">Windows x64 Releases</span>
-                  <span className="rounded-full bg-rm-bg-primary px-2 py-0.5 text-[10px] font-medium text-rm-text-muted">Direct Links</span>
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-rm-text-secondary">
+                    Windows x64 Releases
+                  </span>
+                  <span className="rounded-full bg-rm-bg-primary px-2 py-0.5 text-[10px] font-medium text-rm-text-muted">
+                    Direct Links
+                  </span>
                 </div>
                 <ul className="flex flex-col gap-2.5">
                   {releases.map((rel) => (
@@ -344,7 +402,9 @@ function HomePageHero({ createRoom }: { createRoom: () => void }) {
                       <div className="flex flex-col gap-0.5 min-w-0 pr-2">
                         <span
                           className={`font-bold text-xs truncate ${
-                            rel.isLatest ? "text-rm-text" : "text-rm-text-secondary"
+                            rel.isLatest
+                              ? "text-rm-text"
+                              : "text-rm-text-secondary"
                           }`}
                         >
                           {rel.tagName} {rel.isLatest && "(Latest)"}
@@ -383,7 +443,10 @@ function HeroInteractiveWorkspace() {
   const [activeTab, setActiveTab] = useState<"voice" | "chat">("voice");
 
   return (
-    <div className="relative flex w-full flex-1 items-center justify-center lg:w-[54%] animate-fade-in-up mt-8 lg:mt-0" style={{ animationDelay: "450ms" }}>
+    <div
+      className="relative flex w-full flex-1 items-center justify-center lg:w-[54%] animate-fade-in-up mt-8 lg:mt-0"
+      style={{ animationDelay: "450ms" }}
+    >
       {/* Underlay glow */}
       <div className="absolute h-80 w-80 rounded-full bg-rm-accent/20 blur-[120px] pointer-events-none" />
 
@@ -445,7 +508,9 @@ function HeroInteractiveWorkspace() {
                   <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-gradient-to-tr from-rm-accent to-purple-500 font-bold text-white text-[10px]">
                     R
                   </div>
-                  <span className="font-bold text-[12px] text-rm-text truncate">Ralph Space</span>
+                  <span className="font-bold text-[12px] text-rm-text truncate">
+                    Ralph Space
+                  </span>
                 </div>
                 <ChevronDown className="h-3.5 w-3.5 text-rm-text-muted shrink-0" />
               </div>
@@ -453,12 +518,16 @@ function HeroInteractiveWorkspace() {
               {/* Channels */}
               <div className="p-2 flex flex-col gap-2.5 text-[11px]">
                 <div className="flex flex-col gap-0.5">
-                  <span className="px-1 py-0.5 text-[9px] font-extrabold uppercase tracking-wider text-rm-text-muted">Text</span>
+                  <span className="px-1 py-0.5 text-[9px] font-extrabold uppercase tracking-wider text-rm-text-muted">
+                    Text
+                  </span>
                   <button
                     type="button"
                     onClick={() => setActiveTab("chat")}
                     className={`flex w-full items-center gap-2 rounded border-0 bg-transparent px-2 py-1 text-left cursor-pointer transition-colors ${
-                      activeTab === "chat" ? "bg-rm-accent/20 font-bold text-rm-accent" : "text-rm-text-secondary hover:bg-rm-bg-hover"
+                      activeTab === "chat"
+                        ? "bg-rm-accent/20 font-bold text-rm-accent"
+                        : "text-rm-text-secondary hover:bg-rm-bg-hover"
                     }`}
                     aria-label="Open general chat"
                   >
@@ -468,12 +537,16 @@ function HeroInteractiveWorkspace() {
                 </div>
 
                 <div className="flex flex-col gap-0.5">
-                  <span className="px-1 py-0.5 text-[9px] font-extrabold uppercase tracking-wider text-rm-text-muted">Voice</span>
+                  <span className="px-1 py-0.5 text-[9px] font-extrabold uppercase tracking-wider text-rm-text-muted">
+                    Voice
+                  </span>
                   <button
                     type="button"
                     onClick={() => setActiveTab("voice")}
                     className={`flex w-full items-center justify-between rounded border-0 bg-transparent px-2 py-1 text-left cursor-pointer transition-colors ${
-                      activeTab === "voice" ? "bg-emerald-500/20 font-bold text-emerald-400" : "text-rm-text-secondary hover:bg-rm-bg-hover"
+                      activeTab === "voice"
+                        ? "bg-emerald-500/20 font-bold text-emerald-400"
+                        : "text-rm-text-secondary hover:bg-rm-bg-hover"
                     }`}
                     aria-label="Open Lounge Voice"
                   >
@@ -497,8 +570,12 @@ function HeroInteractiveWorkspace() {
                   <span className="absolute bottom-0 right-0 h-2 w-2 rounded-full bg-emerald-500 ring-1 ring-rm-bg-elevated" />
                 </div>
                 <div className="flex flex-col min-w-0">
-                  <span className="font-bold text-[11px] text-rm-text truncate leading-tight">Jonathan</span>
-                  <span className="text-[9px] text-emerald-400 leading-tight">Online</span>
+                  <span className="font-bold text-[11px] text-rm-text truncate leading-tight">
+                    Jonathan
+                  </span>
+                  <span className="text-[9px] text-emerald-400 leading-tight">
+                    Online
+                  </span>
                 </div>
               </div>
               <div className="flex items-center gap-1 text-rm-text-muted">
@@ -511,7 +588,10 @@ function HeroInteractiveWorkspace() {
           {/* Right Workspace Main Content Area */}
           <div className="relative flex-1 bg-rm-bg-primary overflow-hidden flex flex-col min-w-0">
             {activeTab === "voice" ? (
-              <div className="flex flex-1 flex-col justify-between p-3 animate-fade-in-up" style={{ animationDuration: "250ms" }}>
+              <div
+                className="flex flex-1 flex-col justify-between p-3 animate-fade-in-up"
+                style={{ animationDuration: "250ms" }}
+              >
                 {/* Real Voice Participant Grid */}
                 <div className="grid grid-cols-2 gap-2 flex-1">
                   {/* Tile 1: Active Speaker */}
@@ -523,11 +603,15 @@ function HeroInteractiveWorkspace() {
                           DK
                         </div>
                       </div>
-                      <span className="mt-1.5 text-[11px] font-bold text-rm-text">Devin K.</span>
+                      <span className="mt-1.5 text-[11px] font-bold text-rm-text">
+                        Devin K.
+                      </span>
                     </div>
                     <div className="absolute bottom-1.5 left-1.5 flex items-center gap-1 rounded-md bg-rm-bg-elevated/90 backdrop-blur-md px-1.5 py-0.5 ring-1 ring-rm-border">
                       <Video className="h-2.5 w-2.5 text-rm-accent" />
-                      <span className="text-[9px] sm:text-[10px] font-semibold text-rm-text">Devin (HD Video)</span>
+                      <span className="text-[9px] sm:text-[10px] font-semibold text-rm-text">
+                        Devin (HD Video)
+                      </span>
                     </div>
                   </div>
 
@@ -540,11 +624,15 @@ function HeroInteractiveWorkspace() {
                           SC
                         </div>
                       </div>
-                      <span className="mt-1.5 text-[11px] font-bold text-rm-text">Sarah Chen</span>
+                      <span className="mt-1.5 text-[11px] font-bold text-rm-text">
+                        Sarah Chen
+                      </span>
                     </div>
                     <div className="absolute bottom-1.5 left-1.5 flex items-center gap-1 rounded-md bg-rm-bg-elevated/90 backdrop-blur-md px-1.5 py-0.5 ring-1 ring-rm-border">
                       <Video className="h-2.5 w-2.5 text-emerald-400" />
-                      <span className="text-[9px] sm:text-[10px] font-semibold text-rm-text">Sarah Chen</span>
+                      <span className="text-[9px] sm:text-[10px] font-semibold text-rm-text">
+                        Sarah Chen
+                      </span>
                     </div>
                   </div>
 
@@ -553,7 +641,9 @@ function HeroInteractiveWorkspace() {
                     <div className="h-9 w-9 sm:h-11 sm:w-11 rounded-full bg-gradient-to-tr from-purple-600 to-pink-600 flex items-center justify-center font-bold text-white text-xs shadow-md">
                       MR
                     </div>
-                    <span className="mt-1.5 text-[11px] font-medium text-rm-text-secondary">Marcus R.</span>
+                    <span className="mt-1.5 text-[11px] font-medium text-rm-text-secondary">
+                      Marcus R.
+                    </span>
                     <div className="absolute top-1.5 right-1.5 rounded-full bg-red-500/20 p-1 ring-1 ring-red-500/40">
                       <MicOff className="h-2.5 w-2.5 text-red-400" />
                     </div>
@@ -567,7 +657,9 @@ function HeroInteractiveWorkspace() {
                         EV
                       </div>
                     </div>
-                    <span className="mt-1.5 text-[11px] font-medium text-rm-text">Elena V.</span>
+                    <span className="mt-1.5 text-[11px] font-medium text-rm-text">
+                      Elena V.
+                    </span>
                     <div className="absolute bottom-1.5 left-1.5 rounded-md bg-rm-bg-elevated/90 backdrop-blur-md px-1.5 py-0.5 text-[9px] text-emerald-400 font-medium">
                       Speaking...
                     </div>
@@ -576,32 +668,51 @@ function HeroInteractiveWorkspace() {
 
                 {/* Control Dock */}
                 <div className="mt-2.5 flex items-center justify-center gap-2 py-1.5 rounded-xl border border-rm-border/60 bg-rm-bg-elevated">
-                  <button type="button" className="flex h-8 w-8 items-center justify-center rounded-lg bg-rm-bg-surface text-rm-text border border-rm-border/60 hover:bg-rm-bg-hover transition-all cursor-pointer">
+                  <button
+                    type="button"
+                    className="flex h-8 w-8 items-center justify-center rounded-lg bg-rm-bg-surface text-rm-text border border-rm-border/60 hover:bg-rm-bg-hover transition-all cursor-pointer"
+                  >
                     <Mic className="h-3.5 w-3.5" />
                   </button>
-                  <button type="button" className="flex h-8 w-8 items-center justify-center rounded-lg bg-rm-bg-surface text-rm-text border border-rm-border/60 hover:bg-rm-bg-hover transition-all cursor-pointer">
+                  <button
+                    type="button"
+                    className="flex h-8 w-8 items-center justify-center rounded-lg bg-rm-bg-surface text-rm-text border border-rm-border/60 hover:bg-rm-bg-hover transition-all cursor-pointer"
+                  >
                     <Video className="h-3.5 w-3.5" />
                   </button>
-                  <button type="button" className="flex h-8 w-8 items-center justify-center rounded-lg bg-rm-accent text-white hover:bg-rm-accent-hover transition-all cursor-pointer shadow-md">
+                  <button
+                    type="button"
+                    className="flex h-8 w-8 items-center justify-center rounded-lg bg-rm-accent text-white hover:bg-rm-accent-hover transition-all cursor-pointer shadow-md"
+                  >
                     <Monitor className="h-3.5 w-3.5" />
                   </button>
-                  <button type="button" className="flex h-8 px-3 items-center justify-center gap-1 rounded-lg bg-red-600 text-xs font-bold text-white hover:bg-red-700 transition-all cursor-pointer">
+                  <button
+                    type="button"
+                    className="flex h-8 px-3 items-center justify-center gap-1 rounded-lg bg-red-600 text-xs font-bold text-white hover:bg-red-700 transition-all cursor-pointer"
+                  >
                     <PhoneOff className="h-3.5 w-3.5" />
                     <span className="hidden sm:inline">Leave</span>
                   </button>
                 </div>
               </div>
             ) : (
-              <div className="flex flex-1 flex-col justify-between bg-rm-bg-primary animate-fade-in-up" style={{ animationDuration: "250ms" }}>
+              <div
+                className="flex flex-1 flex-col justify-between bg-rm-bg-primary animate-fade-in-up"
+                style={{ animationDuration: "250ms" }}
+              >
                 {/* Chat Sub-header */}
                 <div className="flex h-9 items-center justify-between border-b border-rm-border/60 bg-rm-bg-elevated px-3 select-none shrink-0">
                   <div className="flex items-center gap-1.5">
                     <Hash className="h-3.5 w-3.5 text-rm-accent" />
-                    <span className="font-extrabold text-xs text-rm-text">general</span>
+                    <span className="font-extrabold text-xs text-rm-text">
+                      general
+                    </span>
                   </div>
                   <div className="flex items-center gap-1.5 text-rm-text-muted">
                     <Users className="h-3.5 w-3.5 text-rm-accent" />
-                    <span className="text-[10px] font-bold text-rm-text-secondary">42 online</span>
+                    <span className="text-[10px] font-bold text-rm-text-secondary">
+                      42 online
+                    </span>
                   </div>
                 </div>
 
@@ -613,12 +724,19 @@ function HeroInteractiveWorkspace() {
                     </div>
                     <div className="flex flex-col min-w-0">
                       <div className="flex items-center gap-1.5">
-                        <span className="font-bold text-rm-text text-[11px]">Alex Rivera</span>
-                        <span className="rounded bg-rm-accent/20 px-1 py-0.2 text-[8px] font-bold text-rm-accent uppercase">MOD</span>
-                        <span className="text-[9px] text-rm-text-muted">2:14 PM</span>
+                        <span className="font-bold text-rm-text text-[11px]">
+                          Alex Rivera
+                        </span>
+                        <span className="rounded bg-rm-accent/20 px-1 py-0.2 text-[8px] font-bold text-rm-accent uppercase">
+                          MOD
+                        </span>
+                        <span className="text-[9px] text-rm-text-muted">
+                          2:14 PM
+                        </span>
                       </div>
                       <p className="text-rm-text-secondary text-[11px] leading-snug">
-                        Deployed multi-region WebRTC relays across 300+ edge locations! Latency down 40%. 🚀
+                        Deployed multi-region WebRTC relays across 300+ edge
+                        locations! Latency down 40%. 🚀
                       </p>
                     </div>
                   </div>
@@ -629,11 +747,16 @@ function HeroInteractiveWorkspace() {
                     </div>
                     <div className="flex flex-col min-w-0">
                       <div className="flex items-center gap-1.5">
-                        <span className="font-bold text-rm-text text-[11px]">Sarah Chen</span>
-                        <span className="text-[9px] text-rm-text-muted">2:15 PM</span>
+                        <span className="font-bold text-rm-text text-[11px]">
+                          Sarah Chen
+                        </span>
+                        <span className="text-[9px] text-rm-text-muted">
+                          2:15 PM
+                        </span>
                       </div>
                       <p className="text-rm-text-secondary text-[11px] leading-snug">
-                        Tested Lounge Voice with 8 participants. Audio clarity is top notch!
+                        Tested Lounge Voice with 8 participants. Audio clarity
+                        is top notch!
                       </p>
                     </div>
                   </div>
@@ -650,7 +773,10 @@ function HeroInteractiveWorkspace() {
                       placeholder="Message #general"
                       className="flex-1 bg-transparent text-xs text-rm-text placeholder:text-rm-text-muted focus:outline-none min-w-0"
                     />
-                    <button type="button" className="flex h-5 w-5 items-center justify-center rounded-lg bg-rm-accent text-white shrink-0">
+                    <button
+                      type="button"
+                      className="flex h-5 w-5 items-center justify-center rounded-lg bg-rm-accent text-white shrink-0"
+                    >
                       <Send className="h-3 w-3" />
                     </button>
                   </div>
@@ -670,25 +796,81 @@ function NetworkVisual() {
       {/* Grid Overlay & Glow */}
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_10%,var(--rm-bg-primary)_95%)] pointer-events-none z-10" />
       <div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff05_1px,transparent_1px),linear-gradient(to_bottom,#ffffff05_1px,transparent_1px)] bg-[size:2rem_2rem]" />
-      
+
       {/* Top Telemetry Badge */}
       <div className="absolute top-3 right-3 z-20 flex items-center gap-1.5 rounded-full bg-rm-bg-secondary/80 border border-rm-border/60 px-2.5 py-1 text-[10px] font-mono font-bold text-rm-text-secondary shadow-lg backdrop-blur-md">
         <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
         <span>Global Mesh • 10 Gbps</span>
       </div>
 
-      <svg className="absolute inset-0 h-full w-full opacity-75 z-0" viewBox="0 0 400 240" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <svg
+        className="absolute inset-0 h-full w-full opacity-75 z-0"
+        viewBox="0 0 400 240"
+        fill="none"
+        xmlns="http://www.w3.org/2000/svg"
+      >
         {/* Connection Paths */}
-        <path d="M 60,60 Q 130,90 200,120" stroke="var(--rm-accent)" strokeWidth="1.5" strokeOpacity="0.25" strokeDasharray="3 3" />
-        <path d="M 340,50 Q 270,80 200,120" stroke="var(--rm-accent)" strokeWidth="1.5" strokeOpacity="0.25" strokeDasharray="3 3" />
-        <path d="M 80,180 Q 140,150 200,120" stroke="var(--rm-accent)" strokeWidth="1.5" strokeOpacity="0.25" strokeDasharray="3 3" />
-        <path d="M 320,190 Q 260,160 200,120" stroke="var(--rm-accent)" strokeWidth="1.5" strokeOpacity="0.25" strokeDasharray="3 3" />
+        <path
+          d="M 60,60 Q 130,90 200,120"
+          stroke="var(--rm-accent)"
+          strokeWidth="1.5"
+          strokeOpacity="0.25"
+          strokeDasharray="3 3"
+        />
+        <path
+          d="M 340,50 Q 270,80 200,120"
+          stroke="var(--rm-accent)"
+          strokeWidth="1.5"
+          strokeOpacity="0.25"
+          strokeDasharray="3 3"
+        />
+        <path
+          d="M 80,180 Q 140,150 200,120"
+          stroke="var(--rm-accent)"
+          strokeWidth="1.5"
+          strokeOpacity="0.25"
+          strokeDasharray="3 3"
+        />
+        <path
+          d="M 320,190 Q 260,160 200,120"
+          stroke="var(--rm-accent)"
+          strokeWidth="1.5"
+          strokeOpacity="0.25"
+          strokeDasharray="3 3"
+        />
 
         {/* Dynamic Pulse Beams */}
-        <path d="M 60,60 Q 130,90 200,120" stroke="var(--rm-accent)" strokeWidth="2" strokeLinecap="round" className="animate-pulse" />
-        <path d="M 340,50 Q 270,80 200,120" stroke="var(--rm-accent)" strokeWidth="2" strokeLinecap="round" className="animate-pulse" style={{ animationDelay: '0.5s' }} />
-        <path d="M 80,180 Q 140,150 200,120" stroke="var(--rm-accent)" strokeWidth="2" strokeLinecap="round" className="animate-pulse" style={{ animationDelay: '1s' }} />
-        <path d="M 320,190 Q 260,160 200,120" stroke="var(--rm-accent)" strokeWidth="2" strokeLinecap="round" className="animate-pulse" style={{ animationDelay: '1.5s' }} />
+        <path
+          d="M 60,60 Q 130,90 200,120"
+          stroke="var(--rm-accent)"
+          strokeWidth="2"
+          strokeLinecap="round"
+          className="animate-pulse"
+        />
+        <path
+          d="M 340,50 Q 270,80 200,120"
+          stroke="var(--rm-accent)"
+          strokeWidth="2"
+          strokeLinecap="round"
+          className="animate-pulse"
+          style={{ animationDelay: "0.5s" }}
+        />
+        <path
+          d="M 80,180 Q 140,150 200,120"
+          stroke="var(--rm-accent)"
+          strokeWidth="2"
+          strokeLinecap="round"
+          className="animate-pulse"
+          style={{ animationDelay: "1s" }}
+        />
+        <path
+          d="M 320,190 Q 260,160 200,120"
+          stroke="var(--rm-accent)"
+          strokeWidth="2"
+          strokeLinecap="round"
+          className="animate-pulse"
+          style={{ animationDelay: "1.5s" }}
+        />
       </svg>
 
       {/* Central Cloudflare SFU Core */}
@@ -716,7 +898,10 @@ function NetworkVisual() {
       {/* Node 2: TYO */}
       <div className="absolute left-[85%] top-[20%] flex -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-1 z-20">
         <div className="relative">
-          <div className="h-2.5 w-2.5 rounded-full bg-emerald-400 shadow-[0_0_12px_#34d399] animate-ping" style={{ animationDelay: '0.4s' }} />
+          <div
+            className="h-2.5 w-2.5 rounded-full bg-emerald-400 shadow-[0_0_12px_#34d399] animate-ping"
+            style={{ animationDelay: "0.4s" }}
+          />
           <div className="absolute inset-0 h-2.5 w-2.5 rounded-full bg-emerald-400 shadow-[0_0_12px_#34d399]" />
         </div>
         <span className="font-mono text-[9px] font-bold text-rm-text-secondary bg-rm-bg-surface/80 px-2 py-0.5 rounded-md border border-rm-border/60 shadow-md backdrop-blur-sm">
@@ -727,7 +912,10 @@ function NetworkVisual() {
       {/* Node 3: LHR */}
       <div className="absolute left-[20%] top-[75%] flex -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-1 z-20">
         <div className="relative">
-          <div className="h-2.5 w-2.5 rounded-full bg-emerald-400 shadow-[0_0_12px_#34d399] animate-ping" style={{ animationDelay: '0.8s' }} />
+          <div
+            className="h-2.5 w-2.5 rounded-full bg-emerald-400 shadow-[0_0_12px_#34d399] animate-ping"
+            style={{ animationDelay: "0.8s" }}
+          />
           <div className="absolute inset-0 h-2.5 w-2.5 rounded-full bg-emerald-400 shadow-[0_0_12px_#34d399]" />
         </div>
         <span className="font-mono text-[9px] font-bold text-rm-text-secondary bg-rm-bg-surface/80 px-2 py-0.5 rounded-md border border-rm-border/60 shadow-md backdrop-blur-sm">
@@ -738,7 +926,10 @@ function NetworkVisual() {
       {/* Node 4: SYD */}
       <div className="absolute left-[80%] top-[80%] flex -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-1 z-20">
         <div className="relative">
-          <div className="h-2.5 w-2.5 rounded-full bg-emerald-400 shadow-[0_0_12px_#34d399] animate-ping" style={{ animationDelay: '1.2s' }} />
+          <div
+            className="h-2.5 w-2.5 rounded-full bg-emerald-400 shadow-[0_0_12px_#34d399] animate-ping"
+            style={{ animationDelay: "1.2s" }}
+          />
           <div className="absolute inset-0 h-2.5 w-2.5 rounded-full bg-emerald-400 shadow-[0_0_12px_#34d399]" />
         </div>
         <span className="font-mono text-[9px] font-bold text-rm-text-secondary bg-rm-bg-surface/80 px-2 py-0.5 rounded-md border border-rm-border/60 shadow-md backdrop-blur-sm">
@@ -784,7 +975,9 @@ function AnimatedChatShowcase() {
                 <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-gradient-to-tr from-rm-accent to-purple-500 font-bold text-white text-[11px]">
                   R
                 </div>
-                <span className="font-bold text-[13px] text-rm-text truncate">Ralph Community</span>
+                <span className="font-bold text-[13px] text-rm-text truncate">
+                  Ralph Community
+                </span>
               </div>
               <ChevronDown className="h-4 w-4 text-rm-text-muted shrink-0" />
             </div>
@@ -804,7 +997,12 @@ function AnimatedChatShowcase() {
                 {[
                   { id: "general", name: "general", icon: Hash, unread: 0 },
                   { id: "dev-talk", name: "dev-talk", icon: Hash, unread: 4 },
-                  { id: "announcements", name: "announcements", icon: Pin, unread: 0 },
+                  {
+                    id: "announcements",
+                    name: "announcements",
+                    icon: Pin,
+                    unread: 0,
+                  },
                 ].map((ch) => {
                   const Icon = ch.icon;
                   const isActive = activeChannel === ch.id;
@@ -820,7 +1018,9 @@ function AnimatedChatShowcase() {
                       }`}
                     >
                       <div className="flex items-center gap-2 truncate">
-                        <Icon className={`h-4 w-4 shrink-0 ${isActive ? "text-rm-accent" : "text-rm-text-muted"}`} />
+                        <Icon
+                          className={`h-4 w-4 shrink-0 ${isActive ? "text-rm-accent" : "text-rm-text-muted"}`}
+                        />
                         <span className="truncate text-[12px]">{ch.name}</span>
                       </div>
                       {ch.unread > 0 && (
@@ -871,7 +1071,9 @@ function AnimatedChatShowcase() {
                       </div>
                       <span className="absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full bg-emerald-500 ring-1 ring-rm-bg-sidebar" />
                     </div>
-                    <span className="text-[11px] text-rm-text font-medium truncate">Alex Rivera</span>
+                    <span className="text-[11px] text-rm-text font-medium truncate">
+                      Alex Rivera
+                    </span>
                   </div>
                   <div className="flex items-center gap-2 px-1.5 py-1 rounded hover:bg-rm-bg-hover transition-colors">
                     <div className="relative">
@@ -880,7 +1082,9 @@ function AnimatedChatShowcase() {
                       </div>
                       <span className="absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full bg-emerald-500 ring-1 ring-rm-bg-sidebar" />
                     </div>
-                    <span className="text-[11px] text-rm-text-secondary truncate">Sarah Chen</span>
+                    <span className="text-[11px] text-rm-text-secondary truncate">
+                      Sarah Chen
+                    </span>
                   </div>
                 </div>
               </div>
@@ -897,18 +1101,34 @@ function AnimatedChatShowcase() {
                 <span className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full bg-emerald-500 ring-2 ring-rm-bg-elevated" />
               </div>
               <div className="flex flex-col min-w-0">
-                <span className="font-bold text-[12px] text-rm-text truncate leading-tight">Jonathan</span>
-                <span className="text-[10px] text-emerald-400 font-medium leading-tight">Online</span>
+                <span className="font-bold text-[12px] text-rm-text truncate leading-tight">
+                  Jonathan
+                </span>
+                <span className="text-[10px] text-emerald-400 font-medium leading-tight">
+                  Online
+                </span>
               </div>
             </div>
             <div className="flex items-center gap-1 text-rm-text-muted">
-              <button type="button" title="Mute Microphone" className="p-1 hover:bg-rm-bg-hover rounded hover:text-rm-text transition-colors">
+              <button
+                type="button"
+                title="Mute Microphone"
+                className="p-1 hover:bg-rm-bg-hover rounded hover:text-rm-text transition-colors"
+              >
                 <Mic className="h-3.5 w-3.5" />
               </button>
-              <button type="button" title="Deafen Audio" className="p-1 hover:bg-rm-bg-hover rounded hover:text-rm-text transition-colors">
+              <button
+                type="button"
+                title="Deafen Audio"
+                className="p-1 hover:bg-rm-bg-hover rounded hover:text-rm-text transition-colors"
+              >
                 <Headphones className="h-3.5 w-3.5" />
               </button>
-              <button type="button" title="User Settings" className="p-1 hover:bg-rm-bg-hover rounded hover:text-rm-text transition-colors">
+              <button
+                type="button"
+                title="User Settings"
+                className="p-1 hover:bg-rm-bg-hover rounded hover:text-rm-text transition-colors"
+              >
                 <Settings className="h-3.5 w-3.5" />
               </button>
             </div>
@@ -921,19 +1141,33 @@ function AnimatedChatShowcase() {
           <div className="flex h-12 shrink-0 items-center justify-between border-b border-rm-border/60 bg-rm-bg-elevated px-3 sm:px-4 select-none">
             <div className="flex items-center gap-2 min-w-0">
               <Hash className="h-5 w-5 text-rm-text-muted shrink-0" />
-              <span className="font-extrabold text-[14px] text-rm-text truncate">{activeChannel}</span>
+              <span className="font-extrabold text-[14px] text-rm-text truncate">
+                {activeChannel}
+              </span>
               <span className="hidden lg:inline-block text-[11px] text-rm-text-muted pl-2 border-l border-rm-border/50 truncate">
                 Official server discussion & edge updates
               </span>
             </div>
             <div className="flex items-center gap-2.5 text-rm-text-muted shrink-0">
-              <button type="button" className="hover:text-rm-text transition-colors" title="Pinned Messages">
+              <button
+                type="button"
+                className="hover:text-rm-text transition-colors"
+                title="Pinned Messages"
+              >
                 <Pin className="h-4 w-4" />
               </button>
-              <button type="button" className="hover:text-rm-text transition-colors" title="Notifications">
+              <button
+                type="button"
+                className="hover:text-rm-text transition-colors"
+                title="Notifications"
+              >
                 <Bell className="h-4 w-4" />
               </button>
-              <button type="button" className="hover:text-rm-text transition-colors" title="Member List">
+              <button
+                type="button"
+                className="hover:text-rm-text transition-colors"
+                title="Member List"
+              >
                 <Users className="h-4 w-4 text-rm-accent" />
               </button>
             </div>
@@ -947,12 +1181,19 @@ function AnimatedChatShowcase() {
               </div>
               <div className="flex flex-col gap-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="font-bold text-rm-text text-[12px] sm:text-[13px] hover:underline cursor-pointer">Alex Rivera</span>
-                  <span className="rounded bg-rm-accent/20 px-1.5 py-0.2 text-[8px] sm:text-[9px] font-bold text-rm-accent uppercase tracking-wider">MOD</span>
-                  <span className="text-[10px] text-rm-text-muted">Today at 2:14 PM</span>
+                  <span className="font-bold text-rm-text text-[12px] sm:text-[13px] hover:underline cursor-pointer">
+                    Alex Rivera
+                  </span>
+                  <span className="rounded bg-rm-accent/20 px-1.5 py-0.2 text-[8px] sm:text-[9px] font-bold text-rm-accent uppercase tracking-wider">
+                    MOD
+                  </span>
+                  <span className="text-[10px] text-rm-text-muted">
+                    Today at 2:14 PM
+                  </span>
                 </div>
                 <p className="text-rm-text-secondary text-[11px] sm:text-[12px] leading-relaxed">
-                  Just deployed the new multi-region WebRTC relay via Cloudflare Workers! Anyone free to test voice channels? 🚀
+                  Just deployed the new multi-region WebRTC relay via Cloudflare
+                  Workers! Anyone free to test voice channels? 🚀
                 </p>
               </div>
             </div>
@@ -963,11 +1204,19 @@ function AnimatedChatShowcase() {
               </div>
               <div className="flex flex-col gap-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="font-bold text-rm-text text-[12px] sm:text-[13px] hover:underline cursor-pointer">Sarah Chen</span>
-                  <span className="text-[10px] text-rm-text-muted">Today at 2:15 PM</span>
+                  <span className="font-bold text-rm-text text-[12px] sm:text-[13px] hover:underline cursor-pointer">
+                    Sarah Chen
+                  </span>
+                  <span className="text-[10px] text-rm-text-muted">
+                    Today at 2:15 PM
+                  </span>
                 </div>
                 <p className="text-rm-text-secondary text-[11px] sm:text-[12px] leading-relaxed">
-                  Connected to <span className="rounded bg-emerald-500/20 px-1.5 py-0.5 text-emerald-400 font-semibold text-[10px] sm:text-[11px] inline-flex items-center gap-1"><Volume2 className="h-3 w-3" /> Lounge Voice</span> right now! Latency is practically zero.
+                  Connected to{" "}
+                  <span className="rounded bg-emerald-500/20 px-1.5 py-0.5 text-emerald-400 font-semibold text-[10px] sm:text-[11px] inline-flex items-center gap-1">
+                    <Volume2 className="h-3 w-3" /> Lounge Voice
+                  </span>{" "}
+                  right now! Latency is practically zero.
                 </p>
               </div>
             </div>
@@ -981,10 +1230,15 @@ function AnimatedChatShowcase() {
                 <span className="h-1.5 w-1.5 rounded-full bg-rm-accent animate-[pulse_900ms_cubic-bezier(0.16,1,0.3,1)_infinite] [animation-delay:150ms]" />
                 <span className="h-1.5 w-1.5 rounded-full bg-rm-accent animate-[pulse_900ms_cubic-bezier(0.16,1,0.3,1)_infinite] [animation-delay:300ms]" />
               </span>
-              <span className="font-medium text-rm-text-secondary">Devin is typing...</span>
+              <span className="font-medium text-rm-text-secondary">
+                Devin is typing...
+              </span>
             </div>
             <div className="flex items-center gap-2 rounded-xl border border-rm-border/70 bg-rm-bg-surface/60 px-2.5 py-2 sm:px-3 sm:py-2.5 shadow-inner focus-within:border-rm-accent/60 transition-colors">
-              <button type="button" className="flex h-6 w-6 items-center justify-center rounded-full bg-rm-bg-surface border border-rm-border/60 hover:bg-rm-bg-hover text-rm-text-muted hover:text-rm-text transition-colors shrink-0">
+              <button
+                type="button"
+                className="flex h-6 w-6 items-center justify-center rounded-full bg-rm-bg-surface border border-rm-border/60 hover:bg-rm-bg-hover text-rm-text-muted hover:text-rm-text transition-colors shrink-0"
+              >
                 <Plus className="h-4 w-4" />
               </button>
               <input
@@ -995,9 +1249,22 @@ function AnimatedChatShowcase() {
                 className="flex-1 bg-transparent text-[11px] sm:text-[12px] text-rm-text placeholder:text-rm-text-muted focus:outline-none min-w-0"
               />
               <div className="flex items-center gap-1.5 sm:gap-2 text-rm-text-muted shrink-0">
-                <button type="button" className="hover:text-rm-text transition-colors hidden sm:inline-block"><Smile className="h-4 w-4" /></button>
-                <button type="button" className="hover:text-rm-text transition-colors hidden sm:inline-block"><Paperclip className="h-4 w-4" /></button>
-                <button type="button" className="flex h-6 w-6 sm:h-7 sm:w-7 items-center justify-center rounded-lg bg-rm-accent text-white hover:bg-rm-accent-hover transition-colors shadow-sm">
+                <button
+                  type="button"
+                  className="hover:text-rm-text transition-colors hidden sm:inline-block"
+                >
+                  <Smile className="h-4 w-4" />
+                </button>
+                <button
+                  type="button"
+                  className="hover:text-rm-text transition-colors hidden sm:inline-block"
+                >
+                  <Paperclip className="h-4 w-4" />
+                </button>
+                <button
+                  type="button"
+                  className="flex h-6 w-6 sm:h-7 sm:w-7 items-center justify-center rounded-lg bg-rm-accent text-white hover:bg-rm-accent-hover transition-colors shadow-sm"
+                >
                   <Send className="h-3.5 w-3.5" />
                 </button>
               </div>
@@ -1020,8 +1287,12 @@ function AnimatedVoiceShowcase() {
             <Volume2 className="h-5 w-5 animate-pulse" />
           </div>
           <div className="flex flex-col text-left">
-            <span className="text-sm font-extrabold text-rm-text">Lounge Voice</span>
-            <span className="text-[11px] text-emerald-400 font-medium">3 friends connected</span>
+            <span className="text-sm font-extrabold text-rm-text">
+              Lounge Voice
+            </span>
+            <span className="text-[11px] text-emerald-400 font-medium">
+              3 friends connected
+            </span>
           </div>
         </div>
         <div className="flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-3 py-1 text-xs font-bold text-emerald-400 ring-1 ring-emerald-500/30">
@@ -1109,7 +1380,9 @@ function HomePageFeatureBlocks() {
                 Topic-based channels
               </h3>
               <p className="text-sm leading-relaxed text-rm-text-secondary sm:text-base">
-                Rooms are organized into focused text and voice channels. Collaborate on projects, share code, or simply hang out without cluttering up a single long message thread.
+                Rooms are organized into focused text and voice channels.
+                Collaborate on projects, share code, or simply hang out without
+                cluttering up a single long message thread.
               </p>
             </div>
             <div className="relative mt-auto overflow-hidden rounded-t-xl border-t border-x border-rm-border bg-rm-bg-primary/50 shadow-inner">
@@ -1124,7 +1397,8 @@ function HomePageFeatureBlocks() {
                 Hanging out is easy
               </h3>
               <p className="text-sm leading-relaxed text-rm-text-secondary sm:text-base">
-                Grab a seat in a voice room when you are free. Friends in your space can see you are around and instantly drop in to talk.
+                Grab a seat in a voice room when you are free. Friends in your
+                space can see you are around and instantly drop in to talk.
               </p>
             </div>
             <div className="relative mt-auto overflow-hidden rounded-t-xl border-t border-x border-rm-border bg-rm-bg-primary/50 shadow-inner">
@@ -1139,7 +1413,10 @@ function HomePageFeatureBlocks() {
                 Built on the global edge
               </h3>
               <p className="text-sm leading-relaxed text-rm-text-secondary sm:text-base">
-                Your video, audio, and screenshares route through the fastest path on the planet via Cloudflare's ultra-low latency SFU network. Enjoy real-time speed that makes you feel in the same room.
+                Your video, audio, and screenshares route through the fastest
+                path on the planet via Cloudflare's ultra-low latency SFU
+                network. Enjoy real-time speed that makes you feel in the same
+                room.
               </p>
             </div>
             <NetworkVisual />
@@ -1215,19 +1492,27 @@ function HomePageFooter() {
               <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-rm-bg-surface text-rm-text ring-1 ring-rm-border shadow-xs">
                 <HomeIcon className="h-4 w-4" />
               </div>
-              <span className="text-sm font-bold tracking-tight text-rm-text">Ralph Meet</span>
+              <span className="text-sm font-bold tracking-tight text-rm-text">
+                Ralph Meet
+              </span>
             </div>
             <p className="text-xs leading-relaxed text-rm-text-muted max-w-[200px]">
-              A high-performance real-time video conferencing & chat application built on the global edge.
+              A high-performance real-time video conferencing & chat application
+              built on the global edge.
             </p>
           </div>
 
           {/* Product Links */}
           <div className="flex flex-col gap-3">
-            <h4 className="text-xs font-bold uppercase tracking-wider text-rm-text">Product</h4>
+            <h4 className="text-xs font-bold uppercase tracking-wider text-rm-text">
+              Product
+            </h4>
             <ul className="flex flex-col gap-2 text-xs font-medium text-rm-text-muted">
               <li>
-                <a href="#hero-try-free" className="transition-colors hover:text-rm-text-secondary">
+                <a
+                  href="#hero-try-free"
+                  className="transition-colors hover:text-rm-text-secondary"
+                >
                   Try It Free
                 </a>
               </li>
@@ -1240,17 +1525,26 @@ function HomePageFooter() {
                 </a>
               </li>
               <li>
-                <a href="/sign-in" className="transition-colors hover:text-rm-text-secondary">
+                <a
+                  href="/sign-in"
+                  className="transition-colors hover:text-rm-text-secondary"
+                >
                   Open Chat
                 </a>
               </li>
               <li>
-                <a href="/sign-in" className="transition-colors hover:text-rm-text-secondary">
+                <a
+                  href="/sign-in"
+                  className="transition-colors hover:text-rm-text-secondary"
+                >
                   Sign In
                 </a>
               </li>
               <li>
-                <a href="/sign-up" className="transition-colors hover:text-rm-text-secondary">
+                <a
+                  href="/sign-up"
+                  className="transition-colors hover:text-rm-text-secondary"
+                >
                   Sign Up
                 </a>
               </li>
@@ -1259,7 +1553,9 @@ function HomePageFooter() {
 
           {/* Developer Links */}
           <div className="flex flex-col gap-3">
-            <h4 className="text-xs font-bold uppercase tracking-wider text-rm-text">Developers</h4>
+            <h4 className="text-xs font-bold uppercase tracking-wider text-rm-text">
+              Developers
+            </h4>
             <ul className="flex flex-col gap-2 text-xs font-medium text-rm-text-muted">
               <li>
                 <a
@@ -1286,7 +1582,9 @@ function HomePageFooter() {
 
           {/* Status & Privacy Links */}
           <div className="flex flex-col gap-3">
-            <h4 className="text-xs font-bold uppercase tracking-wider text-rm-text">Company</h4>
+            <h4 className="text-xs font-bold uppercase tracking-wider text-rm-text">
+              Company
+            </h4>
             <ul className="flex flex-col gap-2 text-xs font-medium text-rm-text-muted">
               <li>
                 <a

@@ -1,21 +1,20 @@
+import { getAuthAssetUrl } from "@/lib/platform";
+import { getAttachmentUrl } from "@/lib/attachment-url";
+import { createAttachmentGifFavorite } from "@/lib/gif-favorite-item";
+import { shouldBlurSensitiveAttachment } from "@/lib/media-safety";
+import { isAnimatedMedia } from "@/lib/media";
+import type { Attachment } from "@/lib/types";
+import { cn } from "@/lib/utils";
+import { useMediaSafetySettingsStore } from "@/stores/useMediaSafetySettingsStore";
+import type { ViewerContext } from "@/stores/useImageViewerStore";
+import { useImageViewerActions } from "@/stores/useImageViewerStore";
+import type { AvatarDisplay } from "@/lib/avatar-display";
+import { Trash2 } from "lucide-react";
+import { GifFavoriteButton } from "./GifFavoriteButton";
+import { GifProviderBranding } from "./GifProviderBranding";
+import SensitiveMediaFrame from "./SensitiveMediaFrame";
 
-import { getAuthAssetUrl } from '@/lib/platform';
-import { getAttachmentUrl } from '@/lib/attachment-url';
-import { createAttachmentGifFavorite } from '@/lib/gif-favorite-item';
-import { shouldBlurSensitiveAttachment } from '@/lib/media-safety';
-import { isAnimatedMedia } from '@/lib/media';
-import type { Attachment } from '@/lib/types';
-import { cn } from '@/lib/utils';
-import { useMediaSafetySettingsStore } from '@/stores/useMediaSafetySettingsStore';
-import type { ViewerContext } from '@/stores/useImageViewerStore';
-import { useImageViewerActions } from '@/stores/useImageViewerStore';
-import type { AvatarDisplay } from '@/lib/avatar-display';
-import { Trash2 } from 'lucide-react';
-import { GifFavoriteButton } from './GifFavoriteButton';
-import { GifProviderBranding } from './GifProviderBranding';
-import SensitiveMediaFrame from './SensitiveMediaFrame';
-
-import React from 'react';
+import React from "react";
 
 interface DeleteButtonProps {
   id: string;
@@ -29,7 +28,7 @@ const DeleteButton: React.FC<DeleteButtonProps> = ({ id, onDelete }) => {
         type="button"
         onClick={(e) => {
           e.stopPropagation();
-          if (window.confirm('Delete this attachment?')) {
+          if (window.confirm("Delete this attachment?")) {
             onDelete(id);
           }
         }}
@@ -67,14 +66,16 @@ export const ImageGrid: React.FC<ImageGridProps> = ({
 }) => {
   const count = attachments.length;
   const { open } = useImageViewerActions();
-  const contentFilter = useMediaSafetySettingsStore((state) => state.getSettings(state.currentUser).contentFilter);
+  const contentFilter = useMediaSafetySettingsStore(
+    (state) => state.getSettings(state.currentUser).contentFilter,
+  );
 
   const handleOpen = (idx: number) => {
-    const viewerAttachments = attachments.map((attachment) => (
+    const viewerAttachments = attachments.map((attachment) =>
       attachment.message_id || !messageId
         ? attachment
-        : { ...attachment, message_id: messageId }
-    ));
+        : { ...attachment, message_id: messageId },
+    );
     const context: ViewerContext = {
       username,
       display_name: displayName,
@@ -89,10 +90,12 @@ export const ImageGrid: React.FC<ImageGridProps> = ({
   if (count === 0) return null;
 
   // Resolve URL — use `url` if available, otherwise build from file_key
-  const getRawUrl = (att: Attachment) => att.url || getAttachmentUrl(att.file_key);
+  const getRawUrl = (att: Attachment) =>
+    att.url || getAttachmentUrl(att.file_key);
   const getUrl = (att: Attachment) => getAuthAssetUrl(getRawUrl(att));
   const getFavorite = (att: Attachment) => {
-    if (!isAnimatedMedia(att.content_type, att.isGif, att.url || att.file_key)) return null;
+    if (!isAnimatedMedia(att.content_type, att.isGif, att.url || att.file_key))
+      return null;
     const rawUrl = getRawUrl(att);
     return createAttachmentGifFavorite({
       id: att.id || rawUrl,
@@ -107,7 +110,11 @@ export const ImageGrid: React.FC<ImageGridProps> = ({
     });
   };
 
-  const renderViewerButton = (att: Attachment, idx: number, interactive: boolean) => (
+  const renderViewerButton = (
+    att: Attachment,
+    idx: number,
+    interactive: boolean,
+  ) => (
     <button
       type="button"
       onClick={() => handleOpen(idx)}
@@ -115,7 +122,7 @@ export const ImageGrid: React.FC<ImageGridProps> = ({
       aria-label={att.filename ? `Open ${att.filename}` : "Open image"}
       className={cn(
         "peer absolute inset-0 z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-white/80",
-        interactive && "cursor-zoom-in"
+        interactive && "cursor-zoom-in",
       )}
     />
   );
@@ -129,7 +136,7 @@ export const ImageGrid: React.FC<ImageGridProps> = ({
       imageClassName: string;
       width: number;
       height: number;
-    }
+    },
   ) => {
     const url = getUrl(att);
     const favorite = getFavorite(att);
@@ -145,7 +152,13 @@ export const ImageGrid: React.FC<ImageGridProps> = ({
         {({ revealed }) => {
           const interactive = !shouldBlur || revealed;
           return (
-            <div className={cn("relative", options.interactiveClassName, interactive && "cursor-zoom-in")}>
+            <div
+              className={cn(
+                "relative",
+                options.interactiveClassName,
+                interactive && "cursor-zoom-in",
+              )}
+            >
               {renderViewerButton(att, idx, interactive)}
               <img
                 src={url}
@@ -155,7 +168,8 @@ export const ImageGrid: React.FC<ImageGridProps> = ({
                 className={cn(
                   options.imageClassName,
                   "pointer-events-none",
-                  interactive && "peer-hover:brightness-105 peer-focus-visible:brightness-105"
+                  interactive &&
+                    "peer-hover:brightness-105 peer-focus-visible:brightness-105",
                 )}
               />
               {favorite && <GifFavoriteButton gif={favorite} />}
@@ -171,26 +185,33 @@ export const ImageGrid: React.FC<ImageGridProps> = ({
   if (count === 1) {
     const att = attachments[0];
     return renderTile(att, 0, {
-      frameClassName: "w-fit rounded-xl overflow-hidden border border-rm-border group/att relative shadow-xl hover:shadow-primary/5 transition-all",
-      imageClassName: "max-w-full max-h-[450px] w-auto h-auto object-contain transition-all",
+      frameClassName:
+        "w-fit rounded-xl overflow-hidden border border-rm-border group/att relative shadow-xl hover:shadow-primary/5 transition-all",
+      imageClassName:
+        "max-w-full max-h-[450px] w-auto h-auto object-contain transition-all",
       width: 800,
       height: 450,
     });
   }
 
   // Multi-image container settings
-  const containerClasses = "grid gap-1 rounded-xl overflow-hidden max-w-[550px] border border-rm-border shadow-xl bg-rm-bg-elevated";
+  const containerClasses =
+    "grid gap-1 rounded-xl overflow-hidden max-w-[550px] border border-rm-border shadow-xl bg-rm-bg-elevated";
 
   // 2 Images: Two vertical columns
   if (count === 2) {
     return (
       <div className={cn(containerClasses, "grid-cols-2 h-[300px]")}>
-        {attachments.map((att, idx) => renderTile(att, idx, {
-          frameClassName: "h-full w-full overflow-hidden group/att relative bg-rm-bg-primary/50",
-          imageClassName: "w-full h-full object-cover transition-all duration-500",
-          width: 300,
-          height: 300,
-        }))}
+        {attachments.map((att, idx) =>
+          renderTile(att, idx, {
+            frameClassName:
+              "h-full w-full overflow-hidden group/att relative bg-rm-bg-primary/50",
+            imageClassName:
+              "w-full h-full object-cover transition-all duration-500",
+            width: 300,
+            height: 300,
+          }),
+        )}
       </div>
     );
   }
@@ -198,15 +219,18 @@ export const ImageGrid: React.FC<ImageGridProps> = ({
   // 3 Images: 1 large on left, 2 stacked on right
   if (count === 3) {
     return (
-      <div className={cn(containerClasses, "grid-cols-2 grid-rows-2 h-[350px]")}>
+      <div
+        className={cn(containerClasses, "grid-cols-2 grid-rows-2 h-[350px]")}
+      >
         {[0, 1, 2].map((idx) => {
           const att = attachments[idx];
           return renderTile(att, idx, {
             frameClassName: cn(
               "overflow-hidden group/att relative bg-[#0a0a0c]",
-              idx === 0 && "row-span-2"
+              idx === 0 && "row-span-2",
             ),
-            imageClassName: "w-full h-full object-cover transition-all duration-500",
+            imageClassName:
+              "w-full h-full object-cover transition-all duration-500",
             width: idx === 0 ? 350 : 250,
             height: idx === 0 ? 350 : 175,
           });
@@ -218,13 +242,19 @@ export const ImageGrid: React.FC<ImageGridProps> = ({
   // 4 Images: balanced 2x2
   if (count === 4) {
     return (
-      <div className={cn(containerClasses, "grid-cols-2 grid-rows-2 h-[400px]")}>
-        {attachments.map((att, idx) => renderTile(att, idx, {
-          frameClassName: "h-full w-full overflow-hidden group/att relative bg-rm-bg-primary/50",
-          imageClassName: "w-full h-full object-cover transition-all duration-500",
-          width: 250,
-          height: 200,
-        }))}
+      <div
+        className={cn(containerClasses, "grid-cols-2 grid-rows-2 h-[400px]")}
+      >
+        {attachments.map((att, idx) =>
+          renderTile(att, idx, {
+            frameClassName:
+              "h-full w-full overflow-hidden group/att relative bg-rm-bg-primary/50",
+            imageClassName:
+              "w-full h-full object-cover transition-all duration-500",
+            width: 250,
+            height: 200,
+          }),
+        )}
       </div>
     );
   }
@@ -233,15 +263,18 @@ export const ImageGrid: React.FC<ImageGridProps> = ({
   if (count === 5) {
     return (
       <div className={cn(containerClasses, "grid-cols-6")}>
-        {attachments.map((att, idx) => renderTile(att, idx, {
-          frameClassName: cn(
-            "h-full w-full overflow-hidden group/att relative bg-[#0a0a0c]",
-            idx < 2 ? "col-span-3 aspect-video" : "col-span-2 aspect-square"
-          ),
-          imageClassName: "w-full h-full object-cover transition-all duration-500",
-          width: idx < 2 ? 300 : 200,
-          height: idx < 2 ? 170 : 200,
-        }))}
+        {attachments.map((att, idx) =>
+          renderTile(att, idx, {
+            frameClassName: cn(
+              "h-full w-full overflow-hidden group/att relative bg-[#0a0a0c]",
+              idx < 2 ? "col-span-3 aspect-video" : "col-span-2 aspect-square",
+            ),
+            imageClassName:
+              "w-full h-full object-cover transition-all duration-500",
+            width: idx < 2 ? 300 : 200,
+            height: idx < 2 ? 170 : 200,
+          }),
+        )}
       </div>
     );
   }
@@ -263,14 +296,20 @@ export const ImageGrid: React.FC<ImageGridProps> = ({
             blur={shouldBlurSensitiveAttachment(att, contentFilter)}
             className={cn(
               "h-full w-full overflow-hidden group/att relative bg-[#0a0a0c]",
-              isFirst ? "col-span-3 h-[250px]" : "col-span-1 aspect-square"
+              isFirst ? "col-span-3 h-[250px]" : "col-span-1 aspect-square",
             )}
           >
             {({ revealed }) => {
-              const interactive = !shouldBlurSensitiveAttachment(att, contentFilter) || revealed;
+              const interactive =
+                !shouldBlurSensitiveAttachment(att, contentFilter) || revealed;
               const favorite = getFavorite(att);
               return (
-                <div className={cn("relative h-full w-full", interactive && "cursor-zoom-in")}>
+                <div
+                  className={cn(
+                    "relative h-full w-full",
+                    interactive && "cursor-zoom-in",
+                  )}
+                >
                   {renderViewerButton(att, idx, interactive)}
                   <img
                     src={getUrl(att)}
@@ -279,7 +318,8 @@ export const ImageGrid: React.FC<ImageGridProps> = ({
                     height={isFirst ? 250 : 180}
                     className={cn(
                       "w-full h-full object-cover transition-all duration-500 pointer-events-none",
-                      interactive && "peer-hover:brightness-105 peer-focus-visible:brightness-105"
+                      interactive &&
+                        "peer-hover:brightness-105 peer-focus-visible:brightness-105",
                     )}
                   />
                   {favorite && <GifFavoriteButton gif={favorite} />}
@@ -287,7 +327,9 @@ export const ImageGrid: React.FC<ImageGridProps> = ({
                   {onDelete && <DeleteButton id={att.id} onDelete={onDelete} />}
                   {isLastVisible && hasMore && (
                     <div className="absolute inset-0 bg-black/60 flex items-center justify-center backdrop-blur-[2px] pointer-events-none">
-                      <span className="text-2xl font-black text-white">+{count - 10}</span>
+                      <span className="text-2xl font-black text-white">
+                        +{count - 10}
+                      </span>
                     </div>
                   )}
                 </div>

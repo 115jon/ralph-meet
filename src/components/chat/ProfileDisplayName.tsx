@@ -44,13 +44,18 @@ export function ProfileDisplayName({
     setSpanNode(node);
   }, []);
   const contrastContext = useMemo(() => {
-    if (!normalizedStyle || explicitContrastContext.backgroundColor || !spanNode || typeof window === "undefined") {
+    if (
+      !normalizedStyle ||
+      explicitContrastContext.backgroundColor ||
+      !spanNode ||
+      typeof window === "undefined"
+    ) {
       return explicitContrastContext;
     }
 
     const fallbackTextColor =
-      explicitContrastContext.fallbackTextColor
-      ?? normalizeDisplayColor(window.getComputedStyle(spanNode).color);
+      explicitContrastContext.fallbackTextColor ??
+      normalizeDisplayColor(window.getComputedStyle(spanNode).color);
 
     let resolvedBackgroundColor: string | null = null;
     let currentNode: HTMLElement | null = spanNode;
@@ -75,18 +80,15 @@ export function ProfileDisplayName({
       backgroundColor: resolvedBackgroundColor,
       fallbackTextColor,
     };
-  }, [
-    explicitContrastContext,
-    normalizedStyle,
-    spanNode,
-  ]);
+  }, [explicitContrastContext, normalizedStyle, spanNode]);
 
   const resolvedStyle = useMemo(
-    () => resolveReadableDisplayNameStyle(normalizedStyle, {
-      backgroundColor: contrastContext.backgroundColor,
-      fallbackTextColor: contrastContext.fallbackTextColor,
-      minContrastRatio,
-    }) ?? normalizedStyle,
+    () =>
+      resolveReadableDisplayNameStyle(normalizedStyle, {
+        backgroundColor: contrastContext.backgroundColor,
+        fallbackTextColor: contrastContext.fallbackTextColor,
+        minContrastRatio,
+      }) ?? normalizedStyle,
     [contrastContext, minContrastRatio, normalizedStyle],
   );
 

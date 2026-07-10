@@ -10,7 +10,12 @@
 
 import { AuditLogAction } from "@/lib/audit-logger";
 import { CacheKey } from "@/lib/cache";
-import { calculatePermissions, DEFAULT_EVERYONE_PERMISSIONS, hasPermission, PERMISSIONS } from "@/lib/permissions";
+import {
+  calculatePermissions,
+  DEFAULT_EVERYONE_PERMISSIONS,
+  hasPermission,
+  PERMISSIONS,
+} from "@/lib/permissions";
 import { applyProfileThemeDefaults } from "@/lib/profile-customization";
 import { ServiceError } from "@/lib/service-error";
 import type { D1Database } from "@cloudflare/workers-types";
@@ -57,14 +62,14 @@ function genId(): string {
 
 export async function listUserServers(
   db: D1Database,
-  userId: string
+  userId: string,
 ): Promise<Record<string, unknown>[]> {
   const { results } = await db
     .prepare(
       `SELECT s.* FROM servers s
        INNER JOIN server_members sm ON sm.server_id = s.id
        WHERE sm.user_id = ?
-       ORDER BY s.created_at ASC`
+       ORDER BY s.created_at ASC`,
     )
     .bind(userId)
     .all();
@@ -81,7 +86,7 @@ export interface CreateServerInput {
 export async function createServer(
   db: D1Database,
   userId: string,
-  input: CreateServerInput
+  input: CreateServerInput,
 ): Promise<{
   server: {
     id: string;
@@ -108,54 +113,54 @@ export async function createServer(
   await db.batch([
     db
       .prepare(
-        `INSERT INTO servers (id, name, owner_id, icon_url, created_at) VALUES (?, ?, ?, ?, ?)`
+        `INSERT INTO servers (id, name, owner_id, icon_url, created_at) VALUES (?, ?, ?, ?, ?)`,
       )
       .bind(serverId, name, userId, iconUrl, now),
     db
       .prepare(
-        `INSERT INTO server_members (server_id, user_id, joined_at) VALUES (?, ?, ?)`
+        `INSERT INTO server_members (server_id, user_id, joined_at) VALUES (?, ?, ?)`,
       )
       .bind(serverId, userId, now),
     db
       .prepare(
-        `INSERT INTO roles (id, server_id, name, color, permissions, position, is_default, created_at) VALUES (?, ?, '@everyone', NULL, ?, 0, 1, ?)`
+        `INSERT INTO roles (id, server_id, name, color, permissions, position, is_default, created_at) VALUES (?, ?, '@everyone', NULL, ?, 0, 1, ?)`,
       )
       .bind(everyoneRoleId, serverId, DEFAULT_EVERYONE_PERMISSIONS, now),
     db
       .prepare(
-        `INSERT INTO roles (id, server_id, name, color, permissions, position, is_default, created_at) VALUES (?, ?, 'Owner', '#FACC15', ?, 1, 0, ?)`
+        `INSERT INTO roles (id, server_id, name, color, permissions, position, is_default, created_at) VALUES (?, ?, 'Owner', '#FACC15', ?, 1, 0, ?)`,
       )
       .bind(ownerRoleId, serverId, PERMISSIONS.ADMINISTRATOR, now),
     db
       .prepare(
-        `INSERT INTO member_roles (server_id, user_id, role_id) VALUES (?, ?, ?)`
+        `INSERT INTO member_roles (server_id, user_id, role_id) VALUES (?, ?, ?)`,
       )
       .bind(serverId, userId, everyoneRoleId),
     db
       .prepare(
-        `INSERT INTO member_roles (server_id, user_id, role_id) VALUES (?, ?, ?)`
+        `INSERT INTO member_roles (server_id, user_id, role_id) VALUES (?, ?, ?)`,
       )
       .bind(serverId, userId, ownerRoleId),
     db
       .prepare(
-        `INSERT INTO categories (id, server_id, name, rank) VALUES (?, ?, 'TEXT CHANNELS', 0)`
+        `INSERT INTO categories (id, server_id, name, rank) VALUES (?, ?, 'TEXT CHANNELS', 0)`,
       )
       .bind(textCategoryId, serverId),
     db
       .prepare(
-        `INSERT INTO categories (id, server_id, name, rank) VALUES (?, ?, 'VOICE CHANNELS', 1)`
+        `INSERT INTO categories (id, server_id, name, rank) VALUES (?, ?, 'VOICE CHANNELS', 1)`,
       )
       .bind(voiceCategoryId, serverId),
     db
       .prepare(
         `INSERT INTO channels (id, server_id, name, channel_type, category_id, position, created_at)
-         VALUES (?, ?, 'general', 'text', ?, 0, ?)`
+         VALUES (?, ?, 'general', 'text', ?, 0, ?)`,
       )
       .bind(channelId, serverId, textCategoryId, now),
     db
       .prepare(
         `INSERT INTO channels (id, server_id, name, channel_type, category_id, position, created_at)
-         VALUES (?, ?, 'General', 'voice', ?, 1, ?)`
+         VALUES (?, ?, 'General', 'voice', ?, 1, ?)`,
       )
       .bind(voiceChannelId, serverId, voiceCategoryId, now),
   ]);
@@ -206,7 +211,7 @@ export async function updateServer(
   db: D1Database,
   serverId: string,
   actorId: string,
-  input: UpdateServerInput
+  input: UpdateServerInput,
 ): Promise<ServiceResult<{ server: Record<string, unknown> | null }>> {
   const updates: string[] = [];
   const values: (string | null)[] = [];
@@ -260,7 +265,7 @@ export async function updateServer(
   const cacheKeysToInvalidate = [
     CacheKey.server(serverId),
     ...(memberRows ?? []).map((r: Record<string, unknown>) =>
-      CacheKey.userServers(r.user_id as string)
+      CacheKey.userServers(r.user_id as string),
     ),
   ];
 
@@ -281,7 +286,7 @@ export async function updateServer(
           acc[curr.split(" = ")[0]] = values[idx];
           return acc;
         },
-        {} as Record<string, unknown>
+        {} as Record<string, unknown>,
       ),
     },
   };
@@ -292,7 +297,7 @@ export async function updateServer(
 export async function deleteServer(
   db: D1Database,
   serverId: string,
-  actorId: string
+  actorId: string,
 ): Promise<{
   cacheKeysToInvalidate: string[];
   broadcast: BroadcastDescriptor;
@@ -320,7 +325,7 @@ export async function deleteServer(
       CacheKey.serverChannels(serverId),
       CacheKey.serverMembers(serverId),
       ...(memberRows ?? []).map((r: Record<string, unknown>) =>
-        CacheKey.userServers(r.user_id as string)
+        CacheKey.userServers(r.user_id as string),
       ),
     ],
     broadcast: {
@@ -335,7 +340,7 @@ export async function deleteServer(
 
 export async function listServerMembers(
   db: D1Database,
-  serverId: string
+  serverId: string,
 ): Promise<
   Array<{
     joined_at: unknown;
@@ -401,46 +406,56 @@ export async function listServerMembers(
        FROM server_members sm
        LEFT JOIN users u ON u.id = sm.user_id
        WHERE sm.server_id = ?
-       ORDER BY sm.joined_at ASC`
+       ORDER BY sm.joined_at ASC`,
     )
     .bind(serverId)
     .all();
 
   return (results ?? []).map((row: Record<string, unknown>) => {
     const profileTheme = applyProfileThemeDefaults({
-      profile_accent_color: row.profile_accent_color as string | null | undefined,
-      profile_background_color: row.profile_background_color as string | null | undefined,
-      profile_banner_color: row.profile_banner_color as string | null | undefined,
+      profile_accent_color: row.profile_accent_color as
+        | string
+        | null
+        | undefined,
+      profile_background_color: row.profile_background_color as
+        | string
+        | null
+        | undefined,
+      profile_banner_color: row.profile_banner_color as
+        | string
+        | null
+        | undefined,
     });
 
-    return ({
-    joined_at: row.joined_at,
-    roles: JSON.parse((row.roles_json as string) || "[]").map(
-      (r: Record<string, unknown>) => ({
-        ...r,
-        is_default: r.is_default === 1,
-      })
-    ),
-    user: {
-      id: row.user_id,
-      username: (row.username as string) ?? "Unknown",
-      display_name: (row.display_name as string) ?? null,
-      display_name_style: (row.display_name_style as string) ?? null,
-      avatar_url: row.avatar_url,
-      avatar_display: row.avatar_display,
-      banner_url: row.banner_url,
-      banner_content_type: row.banner_content_type,
-      nameplate_url: row.nameplate_url,
-      nameplate_content_type: row.nameplate_content_type,
-      profile_accent_color: profileTheme.profile_accent_color,
-      profile_background_color: profileTheme.profile_background_color,
-      profile_banner_color: profileTheme.profile_banner_color,
-      created_at: row.created_at,
-      bio: row.bio,
-      status: (row.status as string) ?? "offline",
-      custom_status: row.custom_status,
-    },
-  })});
+    return {
+      joined_at: row.joined_at,
+      roles: JSON.parse((row.roles_json as string) || "[]").map(
+        (r: Record<string, unknown>) => ({
+          ...r,
+          is_default: r.is_default === 1,
+        }),
+      ),
+      user: {
+        id: row.user_id,
+        username: (row.username as string) ?? "Unknown",
+        display_name: (row.display_name as string) ?? null,
+        display_name_style: (row.display_name_style as string) ?? null,
+        avatar_url: row.avatar_url,
+        avatar_display: row.avatar_display,
+        banner_url: row.banner_url,
+        banner_content_type: row.banner_content_type,
+        nameplate_url: row.nameplate_url,
+        nameplate_content_type: row.nameplate_content_type,
+        profile_accent_color: profileTheme.profile_accent_color,
+        profile_background_color: profileTheme.profile_background_color,
+        profile_banner_color: profileTheme.profile_banner_color,
+        created_at: row.created_at,
+        bio: row.bio,
+        status: (row.status as string) ?? "offline",
+        custom_status: row.custom_status,
+      },
+    };
+  });
 }
 
 // ─── searchMessages ──────────────────────────────────────────────────────────
@@ -450,7 +465,7 @@ export async function searchMessages(
   serverId: string,
   query: string,
   limit: number,
-  offset: number
+  offset: number,
 ): Promise<{
   messages: Array<{
     id: unknown;
@@ -479,7 +494,7 @@ export async function searchMessages(
        LEFT JOIN users u ON u.id = m.author_id
        WHERE m.content LIKE ?
        ORDER BY m.created_at DESC
-       LIMIT ? OFFSET ?`
+       LIMIT ? OFFSET ?`,
     )
     .bind(serverId, likeQuery, cappedLimit, offset)
     .all();
@@ -489,7 +504,7 @@ export async function searchMessages(
       `SELECT COUNT(*) as total
        FROM messages m
        JOIN channels c ON c.id = m.channel_id AND c.server_id = ?
-       WHERE m.content LIKE ?`
+       WHERE m.content LIKE ?`,
     )
     .bind(serverId, likeQuery)
     .first()) as { total: number } | null;
@@ -525,7 +540,7 @@ export async function kickMember(
   db: D1Database,
   serverId: string,
   actorId: string,
-  targetUserId: string
+  targetUserId: string,
 ): Promise<{
   kicked: boolean;
   cacheKeysToInvalidate: string[];
@@ -539,17 +554,23 @@ export async function kickMember(
        FROM server_members sm
        JOIN member_roles mr ON mr.server_id = sm.server_id AND mr.user_id = sm.user_id
        JOIN roles r ON r.id = mr.role_id
-       WHERE sm.server_id = ? AND sm.user_id = ?`
+       WHERE sm.server_id = ? AND sm.user_id = ?`,
     )
     .bind(serverId, actorId)
     .all();
 
-  const actorPermsResult = actorRoleRows && actorRoleRows.length > 0
-    ? {
-      total_perms: calculatePermissions(actorRoleRows.map((row) => row.permissions as number)),
-      max_position: actorRoleRows.reduce((max, row) => Math.max(max, (row.position as number) ?? 0), 0),
-    }
-    : null;
+  const actorPermsResult =
+    actorRoleRows && actorRoleRows.length > 0
+      ? {
+          total_perms: calculatePermissions(
+            actorRoleRows.map((row) => row.permissions as number),
+          ),
+          max_position: actorRoleRows.reduce(
+            (max, row) => Math.max(max, (row.position as number) ?? 0),
+            0,
+          ),
+        }
+      : null;
 
   if (
     !actorPermsResult ||
@@ -561,9 +582,7 @@ export async function kickMember(
 
   // Verify target is a member
   const target = await db
-    .prepare(
-      `SELECT 1 FROM server_members WHERE server_id = ? AND user_id = ?`
-    )
+    .prepare(`SELECT 1 FROM server_members WHERE server_id = ? AND user_id = ?`)
     .bind(serverId, targetUserId)
     .first();
 
@@ -577,7 +596,7 @@ export async function kickMember(
       `SELECT MAX(r.position) as max_position
        FROM member_roles mr
        JOIN roles r ON r.id = mr.role_id
-       WHERE mr.server_id = ? AND mr.user_id = ?`
+       WHERE mr.server_id = ? AND mr.user_id = ?`,
     )
     .bind(serverId, targetUserId)
     .first()) as { max_position: number | null } | null;
@@ -590,20 +609,16 @@ export async function kickMember(
     !hasPermission(actorPermsResult.total_perms, PERMISSIONS.ADMINISTRATOR)
   ) {
     throw ServiceError.forbidden(
-      "Cannot kick a member with equal or higher role"
+      "Cannot kick a member with equal or higher role",
     );
   }
 
   await db
-    .prepare(
-      `DELETE FROM server_members WHERE server_id = ? AND user_id = ?`
-    )
+    .prepare(`DELETE FROM server_members WHERE server_id = ? AND user_id = ?`)
     .bind(serverId, targetUserId)
     .run();
   await db
-    .prepare(
-      `DELETE FROM member_roles WHERE server_id = ? AND user_id = ?`
-    )
+    .prepare(`DELETE FROM member_roles WHERE server_id = ? AND user_id = ?`)
     .bind(serverId, targetUserId)
     .run();
 

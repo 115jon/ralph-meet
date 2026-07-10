@@ -38,7 +38,10 @@ function makeShare(overrides: Partial<MessageShare> = {}): MessageShare {
 
 describe("share metadata", () => {
   it("builds noindex Open Graph source data for text shares", () => {
-    const metadata = buildShareMetadata("https://meet.115jon.site", makeShare());
+    const metadata = buildShareMetadata(
+      "https://meet.115jon.site",
+      makeShare(),
+    );
 
     expect(metadata.title).toBe("Check this out https://example.com");
     expect(metadata.description).toBe("Check this out https://example.com");
@@ -82,7 +85,7 @@ describe("share metadata", () => {
             },
           ],
         },
-      })
+      }),
     );
 
     expect(metadata.title).toBe("GIFs Shitpost (@GiFShitpost)");
@@ -126,7 +129,7 @@ describe("share metadata", () => {
             },
           ],
         },
-      })
+      }),
     );
 
     expect(metadata.title).toBe("Look at this one");
@@ -169,7 +172,7 @@ describe("share metadata", () => {
             },
           ],
         },
-      })
+      }),
     );
 
     expect(metadata.title).toBe("TikTok - Johnny");
@@ -212,7 +215,8 @@ describe("share metadata", () => {
                 {
                   type: "video",
                   url: "https://v16m.tiktokcdn-us.com/example/video.mp4?mime_type=video_mp4",
-                  thumbnailUrl: "https://p16-sign.tiktokcdn-us.com/tos-useast5-p/example.jpeg",
+                  thumbnailUrl:
+                    "https://p16-sign.tiktokcdn-us.com/tos-useast5-p/example.jpeg",
                   contentType: "video/mp4",
                   durationSeconds: 13,
                   width: 720,
@@ -223,7 +227,7 @@ describe("share metadata", () => {
             },
           ],
         },
-      })
+      }),
     );
 
     expect(metadata.title).toBe("TikTok - Johnny");
@@ -260,7 +264,8 @@ describe("share metadata", () => {
                 {
                   type: "video",
                   url: "https://v16m.tiktokcdn-us.com/example/live-photo-1.mp4?mime_type=video_mp4",
-                  thumbnailUrl: "https://p19-common-sign.tiktokcdn-us.com/example/photo-1.jpeg",
+                  thumbnailUrl:
+                    "https://p19-common-sign.tiktokcdn-us.com/example/photo-1.jpeg",
                   contentType: "video/mp4",
                   width: 720,
                   height: 1280,
@@ -268,7 +273,8 @@ describe("share metadata", () => {
                 {
                   type: "video",
                   url: "https://v16m.tiktokcdn-us.com/example/live-photo-2.mp4?mime_type=video_mp4",
-                  thumbnailUrl: "https://p16-common-sign.tiktokcdn-us.com/example/photo-2.jpeg",
+                  thumbnailUrl:
+                    "https://p16-common-sign.tiktokcdn-us.com/example/photo-2.jpeg",
                   contentType: "video/mp4",
                   width: 720,
                   height: 1280,
@@ -320,7 +326,7 @@ describe("share metadata", () => {
             },
           ],
         },
-      })
+      }),
     );
 
     expect(metadata.title).toBe("craziest work");
@@ -352,7 +358,7 @@ describe("share metadata", () => {
             },
           ],
         },
-      })
+      }),
     );
 
     expect(metadata.media).toEqual({
@@ -385,7 +391,7 @@ describe("share metadata", () => {
             },
           ],
         },
-      })
+      }),
     );
 
     expect(metadata.description).toBe("External description");
@@ -415,7 +421,7 @@ describe("share metadata", () => {
             },
           ],
         },
-      })
+      }),
     );
     const oembed = buildShareOEmbed(metadata);
 
@@ -455,7 +461,8 @@ describe("share metadata", () => {
                 {
                   type: "video",
                   url: "https://v16m.tiktokcdn-us.com/example/video.mp4?mime_type=video_mp4",
-                  thumbnailUrl: "https://p16-sign.tiktokcdn-us.com/tos-useast5-p/example.jpeg",
+                  thumbnailUrl:
+                    "https://p16-sign.tiktokcdn-us.com/tos-useast5-p/example.jpeg",
                   contentType: "video/mp4",
                   width: 720,
                   height: 1280,
@@ -465,15 +472,19 @@ describe("share metadata", () => {
             },
           ],
         },
-      })
+      }),
     );
     const oembed = buildShareOEmbed(metadata);
 
     expect(oembed.type).toBe("video");
-    expect(oembed.url).toBe("https://meet.115jon.site/api/proxy-media?url=https%3A%2F%2Fv16m.tiktokcdn-us.com%2Fexample%2Fvideo.mp4%3Fmime_type%3Dvideo_mp4&sourceUrl=https%3A%2F%2Fwww.tiktok.com%2F%40johnny%2Fvideo%2F123");
+    expect(oembed.url).toBe(
+      "https://meet.115jon.site/api/proxy-media?url=https%3A%2F%2Fv16m.tiktokcdn-us.com%2Fexample%2Fvideo.mp4%3Fmime_type%3Dvideo_mp4&sourceUrl=https%3A%2F%2Fwww.tiktok.com%2F%40johnny%2Fvideo%2F123",
+    );
     expect(oembed.html).toContain("<video");
     expect(oembed.html).toContain("video.mp4");
-    expect(oembed.thumbnail_url).toBe("https://p16-sign.tiktokcdn-us.com/tos-useast5-p/example.jpeg");
+    expect(oembed.thumbnail_url).toBe(
+      "https://p16-sign.tiktokcdn-us.com/tos-useast5-p/example.jpeg",
+    );
   });
 
   it("serves TikTok live-photo slides through oEmbed video payloads", () => {
@@ -499,7 +510,8 @@ describe("share metadata", () => {
                 {
                   type: "video",
                   url: "https://v16m.tiktokcdn-us.com/example/live-photo-1.mp4?mime_type=video_mp4",
-                  thumbnailUrl: "https://p19-common-sign.tiktokcdn-us.com/example/photo-1.jpeg",
+                  thumbnailUrl:
+                    "https://p19-common-sign.tiktokcdn-us.com/example/photo-1.jpeg",
                   contentType: "video/mp4",
                   width: 720,
                   height: 1280,
@@ -514,10 +526,14 @@ describe("share metadata", () => {
     const oembed = buildShareOEmbed(metadata);
 
     expect(oembed.type).toBe("video");
-    expect(oembed.url).toBe("https://meet.115jon.site/api/proxy-media?url=https%3A%2F%2Fv16m.tiktokcdn-us.com%2Fexample%2Flive-photo-1.mp4%3Fmime_type%3Dvideo_mp4&sourceUrl=https%3A%2F%2Fwww.tiktok.com%2F%40nt_hani%2Fphoto%2F7654964663997730066");
+    expect(oembed.url).toBe(
+      "https://meet.115jon.site/api/proxy-media?url=https%3A%2F%2Fv16m.tiktokcdn-us.com%2Fexample%2Flive-photo-1.mp4%3Fmime_type%3Dvideo_mp4&sourceUrl=https%3A%2F%2Fwww.tiktok.com%2F%40nt_hani%2Fphoto%2F7654964663997730066",
+    );
     expect(oembed.html).toContain("<video");
     expect(oembed.html).toContain("live-photo-1.mp4");
-    expect(oembed.thumbnail_url).toBe("https://p19-common-sign.tiktokcdn-us.com/example/photo-1.jpeg");
+    expect(oembed.thumbnail_url).toBe(
+      "https://p19-common-sign.tiktokcdn-us.com/example/photo-1.jpeg",
+    );
   });
 
   it("omits the trailing separator in oEmbed html when minimal cards have no description", () => {
@@ -554,6 +570,8 @@ describe("share metadata", () => {
     );
     const oembed = buildShareOEmbed(metadata);
 
-    expect(oembed.html).toBe("<blockquote><strong>jm50106001</strong></blockquote>");
+    expect(oembed.html).toBe(
+      "<blockquote><strong>jm50106001</strong></blockquote>",
+    );
   });
 });

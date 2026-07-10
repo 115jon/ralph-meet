@@ -16,13 +16,12 @@ const PLAYABLE_VIDEO_TYPES = new Set([
   "video/mp2t",
 ]);
 
-const ANIMATED_IMAGE_TYPES = new Set([
-  "image/gif",
-  "image/apng",
-]);
+const ANIMATED_IMAGE_TYPES = new Set(["image/gif", "image/apng"]);
 
 /** Returns true if the given content_type is a video that CEF can play inline. */
-export function isPlayableVideo(contentType: string | undefined | null): boolean {
+export function isPlayableVideo(
+  contentType: string | undefined | null,
+): boolean {
   if (!contentType) return false;
   const normalized = contentType.toLowerCase();
   const mime = normalized.split(";")[0].trim();
@@ -40,21 +39,29 @@ function normalizeMimeType(contentType: string | undefined | null): string {
   return contentType.toLowerCase().split(";")[0].trim();
 }
 
-export function isAnimatedImage(contentType: string | undefined | null): boolean {
+export function isAnimatedImage(
+  contentType: string | undefined | null,
+): boolean {
   return ANIMATED_IMAGE_TYPES.has(normalizeMimeType(contentType));
 }
 
-function isXAnimatedGifVideoSource(sourceUrlOrFileKey: string | undefined | null): boolean {
+function isXAnimatedGifVideoSource(
+  sourceUrlOrFileKey: string | undefined | null,
+): boolean {
   if (!sourceUrlOrFileKey) return false;
 
   try {
     const parsed = new URL(
       unwrapProxyMediaUrl(sourceUrlOrFileKey),
-      typeof window !== "undefined" ? window.location.origin : "https://localhost",
+      typeof window !== "undefined"
+        ? window.location.origin
+        : "https://localhost",
     );
-    return parsed.hostname.toLowerCase() === "video.twimg.com"
-      && parsed.pathname.startsWith("/tweet_video/")
-      && parsed.pathname.toLowerCase().endsWith(".mp4");
+    return (
+      parsed.hostname.toLowerCase() === "video.twimg.com" &&
+      parsed.pathname.startsWith("/tweet_video/") &&
+      parsed.pathname.toLowerCase().endsWith(".mp4")
+    );
   } catch {
     return false;
   }
@@ -66,7 +73,12 @@ export function isAnimatedMedia(
   sourceUrlOrFileKey?: string | null,
 ): boolean {
   if (isGif === true) return true;
-  if (sourceUrlOrFileKey && getGifAttachmentProvider(sourceUrlOrFileKey)) return true;
-  if (normalizeMimeType(contentType) === "video/mp4" && isXAnimatedGifVideoSource(sourceUrlOrFileKey)) return true;
+  if (sourceUrlOrFileKey && getGifAttachmentProvider(sourceUrlOrFileKey))
+    return true;
+  if (
+    normalizeMimeType(contentType) === "video/mp4" &&
+    isXAnimatedGifVideoSource(sourceUrlOrFileKey)
+  )
+    return true;
   return isAnimatedImage(contentType);
 }

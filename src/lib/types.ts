@@ -399,7 +399,12 @@ export interface TracksReadyPayload {
 
 /** C→S: Update simulcast layer on already-pulled tracks */
 export interface TrackUpdatePayload {
-  tracks: Array<{ track_name: string; session_id: string; mid: string; rid: string }>;
+  tracks: Array<{
+    track_name: string;
+    session_id: string;
+    mid: string;
+    rid: string;
+  }>;
 }
 
 /** C→S: Request ICE restart on existing SFU session */
@@ -739,11 +744,17 @@ export interface Relationship {
 /** Notification object */
 export interface Notification {
   id: string;
-  type: 'mention' | 'reply' | 'dm';
+  type: "mention" | "reply" | "dm";
   channel_id: string;
   server_id: string | null;
   message_id: string;
-  from_user: { id: string; username: string; display_name?: string | null; avatar_url?: string | null; avatar_display?: AvatarDisplay | string | null };
+  from_user: {
+    id: string;
+    username: string;
+    display_name?: string | null;
+    avatar_url?: string | null;
+    avatar_display?: AvatarDisplay | string | null;
+  };
   content: string;
   is_read: boolean;
   created_at: string;
@@ -764,8 +775,6 @@ export interface ServerAuditLog {
   reason?: string | null;
   created_at: string;
 }
-
-
 
 // ── Chat Client → Server Payloads ───────────────────────────────────────────
 
@@ -926,17 +935,35 @@ export interface SFUEventMap {
     participants: VoiceState[];
     spatialAudioState?: import("@/lib/voice/spatial-audio").SharedSpatialAudioState;
   };
-  "voice-state-update": { participant: VoiceState; action: "join" | "leave" | "update" };
+  "voice-state-update": {
+    participant: VoiceState;
+    action: "join" | "leave" | "update";
+  };
   "participant-joined": { participant: VoiceState };
-  "participants-sync": { participants: VoiceState[]; spatialAudioState?: import("@/lib/voice/spatial-audio").SharedSpatialAudioState };
+  "participants-sync": {
+    participants: VoiceState[];
+    spatialAudioState?: import("@/lib/voice/spatial-audio").SharedSpatialAudioState;
+  };
   "participant-left": { participantId: string };
-  "remote-track": { participantId: string; track: MediaStreamTrack; trackInfo: TrackInfo; action?: "add" | "remove" };
+  "remote-track": {
+    participantId: string;
+    track: MediaStreamTrack;
+    trackInfo: TrackInfo;
+    action?: "add" | "remove";
+  };
   "tracks-published": { participantId: string; tracks: TrackInfo[] };
   "tracks-stopped": { participantId: string; trackNames: string[] };
   speaking: { participantId: string; speaking: number };
   "vad-speaking": { participantId: string; isSpeaking: boolean };
   "audio-stalled": boolean;
-  "profile-update": { participantId: string; name: string; username?: string; displayName?: string | null; avatarUrl?: string; avatarDisplay?: AvatarDisplay | string | null };
+  "profile-update": {
+    participantId: string;
+    name: string;
+    username?: string;
+    displayName?: string | null;
+    avatarUrl?: string;
+    avatarDisplay?: AvatarDisplay | string | null;
+  };
   "connection-state": { state: string };
   disconnected: never;
   kicked: never;
@@ -977,4 +1004,3 @@ export interface VoiceConnectionStats {
   subscribeConnectionState: string;
   remoteTrackCount: number;
 }
-

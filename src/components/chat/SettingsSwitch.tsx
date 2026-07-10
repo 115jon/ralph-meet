@@ -21,7 +21,7 @@ export function SettingsSwitch({
       <div
         className={cn(
           "absolute top-[2px] left-[2px] h-[24px] w-[24px] bg-white rounded-full transition-transform duration-200 ease-in-out shadow-sm",
-          checked ? "translate-x-[22px]" : "translate-x-0"
+          checked ? "translate-x-[22px]" : "translate-x-0",
         )}
       />
     </button>

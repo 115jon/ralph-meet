@@ -1,10 +1,9 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute } from "@tanstack/react-router";
 
 import { apiError, apiSuccess, getDB, requireAuth } from "@/lib/api-helpers";
 import { ServiceError } from "@/lib/service-error";
 import { executeBroadcast } from "@/services/service-helpers";
 import { getOrCreateDM, listDMs } from "@/services/social.service";
-
 
 // GET /api/dms — list all DM channels for the authenticated user
 const GET = async ({ request, params }: any) => {
@@ -15,7 +14,7 @@ const GET = async ({ request, params }: any) => {
   const db = getDB();
   const dms = await listDMs(db, userId);
   return apiSuccess(dms);
-}
+};
 
 // POST /api/dms — open or create a DM with a user
 const POST = async ({ request, params }: any) => {
@@ -42,18 +41,20 @@ const POST = async ({ request, params }: any) => {
     return apiSuccess(result.dm, result.isNew ? 201 : 200);
   } catch (e) {
     if (e instanceof ServiceError) {
-      return Response.json({ error: e.message, code: e.code }, { status: e.status });
+      return Response.json(
+        { error: e.message, code: e.code },
+        { status: e.status },
+      );
     }
     throw e;
   }
-}
+};
 
-
-export const Route = createFileRoute('/api/dms')({
+export const Route = createFileRoute("/api/dms")({
   server: {
     handlers: {
       GET,
       POST,
-    }
-  }
+    },
+  },
 });

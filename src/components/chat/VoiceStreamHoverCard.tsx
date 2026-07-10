@@ -57,10 +57,14 @@ export function VoiceStreamHoverCard({
 }: VoiceStreamHoverCardProps) {
   const hasWatchAction = typeof onWatchStream === "function";
   const ctaLabel = isCurrentUser
-    ? (hasWatchAction ? "Open Stream" : "You're Streaming!")
+    ? hasWatchAction
+      ? "Open Stream"
+      : "You're Streaming!"
     : "Watch Stream";
   const resolvedThumbnailUrl = thumbnailUrl
-    ? (thumbnailUrl.startsWith("data:") ? thumbnailUrl : getAuthAssetUrl(thumbnailUrl))
+    ? thumbnailUrl.startsWith("data:")
+      ? thumbnailUrl
+      : getAuthAssetUrl(thumbnailUrl)
     : null;
   const handleWatchStream = hasWatchAction ? onWatchStream : undefined;
 
@@ -73,7 +77,9 @@ export function VoiceStreamHoverCard({
       data-stream-hover-card="true"
     >
       <div className="mb-2 flex items-center justify-between gap-3">
-        <span className="text-[13px] font-semibold text-rm-text-muted">Streaming now</span>
+        <span className="text-[13px] font-semibold text-rm-text-muted">
+          Streaming now
+        </span>
         <span className="rounded-full border border-destructive/25 bg-destructive/10 px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.18em] text-destructive">
           LIVE
         </span>
@@ -86,7 +92,8 @@ export function VoiceStreamHoverCard({
         onClick={handleWatchStream}
         className={cn(
           "group/stream-thumb relative block w-full overflow-hidden rounded-[16px] border border-rm-border bg-rm-bg-surface text-left shadow-lg transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35 focus-visible:ring-offset-2 focus-visible:ring-offset-rm-bg-floating",
-          hasWatchAction && "cursor-pointer hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-xl active:translate-y-0 active:scale-[0.995]",
+          hasWatchAction &&
+            "cursor-pointer hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-xl active:translate-y-0 active:scale-[0.995]",
           !hasWatchAction && "cursor-default",
         )}
       >
@@ -101,7 +108,10 @@ export function VoiceStreamHoverCard({
               )}
             />
           ) : (
-            <PlaceholderStreamPreview displayName={displayName} isCurrentUser={isCurrentUser} />
+            <PlaceholderStreamPreview
+              displayName={displayName}
+              isCurrentUser={isCurrentUser}
+            />
           )}
         </div>
         <div
@@ -114,7 +124,9 @@ export function VoiceStreamHoverCard({
           <div
             className={cn(
               "rounded-full border border-rm-border bg-rm-bg-floating/90 px-3 py-1.5 text-[11px] font-black uppercase tracking-[0.18em] text-rm-text shadow-lg backdrop-blur-sm transition-all duration-200",
-              hasWatchAction ? "opacity-0 group-hover/stream-thumb:-translate-y-0.5 group-hover/stream-thumb:opacity-100" : "opacity-100",
+              hasWatchAction
+                ? "opacity-0 group-hover/stream-thumb:-translate-y-0.5 group-hover/stream-thumb:opacity-100"
+                : "opacity-100",
             )}
           >
             {ctaLabel}

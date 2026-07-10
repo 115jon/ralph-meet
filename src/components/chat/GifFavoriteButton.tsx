@@ -1,8 +1,16 @@
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { getFavoriteActionLabel } from "@/lib/gif-favorite-item";
 import { getGifItemIdentityKey, type GifPickerItem } from "@/lib/gif-picker";
 import { cn } from "@/lib/utils";
-import { useGifFavoriteActions, useGifFavoritesStore } from "@/stores/useGifFavoritesStore";
+import {
+  useGifFavoriteActions,
+  useGifFavoritesStore,
+} from "@/stores/useGifFavoritesStore";
 import { useEffect, useState } from "react";
 
 interface GifFavoriteButtonProps {
@@ -14,7 +22,9 @@ export function GifFavoriteButton({ gif, className }: GifFavoriteButtonProps) {
   const favorites = useGifFavoritesStore((state) => state.favorites);
   const { load, toggle } = useGifFavoriteActions();
   const [pending, setPending] = useState(false);
-  const isFavorite = favorites.some((item) => getGifItemIdentityKey(item) === getGifItemIdentityKey(gif));
+  const isFavorite = favorites.some(
+    (item) => getGifItemIdentityKey(item) === getGifItemIdentityKey(gif),
+  );
   const label = getFavoriteActionLabel(gif, isFavorite);
 
   useEffect(() => {
@@ -41,7 +51,7 @@ export function GifFavoriteButton({ gif, className }: GifFavoriteButtonProps) {
             className={cn(
               "absolute left-2 top-2 z-30 flex h-8 w-8 items-center justify-center rounded-xl border border-black/10 bg-white/95 text-black shadow-lg transition-all duration-150 hover:scale-110 disabled:pointer-events-none disabled:opacity-70 dark:bg-black/70 dark:text-white",
               isFavorite && "scale-105",
-              className
+              className,
             )}
             aria-label={label}
             title={label}
@@ -50,7 +60,9 @@ export function GifFavoriteButton({ gif, className }: GifFavoriteButtonProps) {
               viewBox="0 0 24 24"
               className={cn(
                 "h-4.5 w-4.5 transition-all duration-200",
-                isFavorite ? "scale-110 fill-amber-500 text-amber-500 dark:fill-yellow-400 dark:text-yellow-400" : "fill-transparent text-current hover:text-amber-500 dark:hover:text-yellow-400"
+                isFavorite
+                  ? "scale-110 fill-amber-500 text-amber-500 dark:fill-yellow-400 dark:text-yellow-400"
+                  : "fill-transparent text-current hover:text-amber-500 dark:hover:text-yellow-400",
               )}
               stroke="currentColor"
               strokeWidth="2"
@@ -59,7 +71,11 @@ export function GifFavoriteButton({ gif, className }: GifFavoriteButtonProps) {
             </svg>
           </button>
         </TooltipTrigger>
-        <TooltipContent side="right" sideOffset={8} className="bg-rm-bg-floating text-rm-text-primary">
+        <TooltipContent
+          side="right"
+          sideOffset={8}
+          className="bg-rm-bg-floating text-rm-text-primary"
+        >
           {label}
         </TooltipContent>
       </Tooltip>

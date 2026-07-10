@@ -80,7 +80,10 @@ async function getAutostart() {
 /**
  * Invoke a Tauri command. Returns silently on web.
  */
-async function tauriInvoke<T = unknown>(cmd: string, args: Record<string, unknown> = {}) {
+async function tauriInvoke<T = unknown>(
+  cmd: string,
+  args: Record<string, unknown> = {},
+) {
   if (!isDesktop()) return undefined;
   try {
     const { invoke } = await import("@tauri-apps/api/core");
@@ -101,7 +104,10 @@ export const useDesktopSettingsStore = create<DesktopSettingsState>()(
         // Fire-and-forget sync to Rust backend
         const state = { ...get(), ...updates };
         syncSettingsToRust(state, {
-          includeHardwareAcceleration: Object.prototype.hasOwnProperty.call(updates, "hardwareAcceleration"),
+          includeHardwareAcceleration: Object.prototype.hasOwnProperty.call(
+            updates,
+            "hardwareAcceleration",
+          ),
         });
       },
 
@@ -129,7 +135,9 @@ async function syncSettingsToRust(
   if (!isDesktop()) return;
 
   if (isWindowsDesktop()) {
-    await tauriInvoke("set_open_on_startup", { enabled: settings.openOnStartup });
+    await tauriInvoke("set_open_on_startup", {
+      enabled: settings.openOnStartup,
+    });
   } else {
     // Sync autostart
     const autostart = await getAutostart();
@@ -151,11 +159,15 @@ async function syncSettingsToRust(
   await tauriInvoke("set_close_to_tray", { enabled: settings.closeToTray });
 
   // Sync start-minimized preference to Rust AtomicBool
-  await tauriInvoke("set_start_minimized", { enabled: settings.startMinimized });
+  await tauriInvoke("set_start_minimized", {
+    enabled: settings.startMinimized,
+  });
 
   if (options.includeHardwareAcceleration) {
     // Persist renderer acceleration preference only during the explicit restart flow.
-    await tauriInvoke("set_hardware_acceleration", { enabled: settings.hardwareAcceleration });
+    await tauriInvoke("set_hardware_acceleration", {
+      enabled: settings.hardwareAcceleration,
+    });
   }
 }
 

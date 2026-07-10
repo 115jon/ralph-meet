@@ -1,10 +1,20 @@
 import GifPickerModal from "@/components/chat/GifPickerModal";
 import { GifProviderBranding } from "@/components/chat/GifProviderBranding";
-import { DEMO_CHAT_MAX_CONTENT_LENGTH, DEMO_CHAT_TTL_MINUTES, getDemoChatCharacterCounter } from "@/lib/demo-chat-limits";
+import {
+  DEMO_CHAT_MAX_CONTENT_LENGTH,
+  DEMO_CHAT_TTL_MINUTES,
+  getDemoChatCharacterCounter,
+} from "@/lib/demo-chat-limits";
 import type { GifPickerItem, GifProvider } from "@/lib/gif-picker";
 import type { SFUClient } from "@/lib/sfu-client";
 import { cn } from "@/lib/utils";
-import { ImagePlus, LockKeyhole, MessageCircle, Send, Sparkles } from "lucide-react";
+import {
+  ImagePlus,
+  LockKeyhole,
+  MessageCircle,
+  Send,
+  Sparkles,
+} from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 interface DemoChatGif {
@@ -41,7 +51,12 @@ interface DemoUploadBlockerModalProps {
 
 const DEMO_GIF_PROVIDERS: GifProvider[] = ["klipy", "tenor"];
 
-export function DemoRoomChatPanel({ sfu, guestName, className, onUploadBlocked }: DemoRoomChatPanelProps) {
+export function DemoRoomChatPanel({
+  sfu,
+  guestName,
+  className,
+  onUploadBlocked,
+}: DemoRoomChatPanelProps) {
   const [messages, setMessages] = useState<DemoChatMessage[]>([]);
   const [value, setValue] = useState("");
   const [showGifPicker, setShowGifPicker] = useState(false);
@@ -55,17 +70,23 @@ export function DemoRoomChatPanel({ sfu, guestName, className, onUploadBlocked }
 
     const off = sfu.on("app-event", (event) => {
       if (event.type === "demo.chat.history" && Array.isArray(event.messages)) {
-        setMessages(event.messages.flatMap((message) => {
-          const parsedMessage = parseDemoChatMessage(message);
-          return parsedMessage ? [parsedMessage] : [];
-        }));
+        setMessages(
+          event.messages.flatMap((message) => {
+            const parsedMessage = parseDemoChatMessage(message);
+            return parsedMessage ? [parsedMessage] : [];
+          }),
+        );
         return;
       }
 
       if (event.type === "demo.chat.message") {
         const message = parseDemoChatMessage(event.message);
         if (!message) return;
-        setMessages((current) => [...current.filter((item) => item.id !== message.id), message].slice(-75));
+        setMessages((current) =>
+          [...current.filter((item) => item.id !== message.id), message].slice(
+            -75,
+          ),
+        );
       }
     });
 
@@ -74,47 +95,67 @@ export function DemoRoomChatPanel({ sfu, guestName, className, onUploadBlocked }
   }, [sfu]);
 
   useEffect(() => {
-    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
+    scrollRef.current?.scrollTo({
+      top: scrollRef.current.scrollHeight,
+      behavior: "smooth",
+    });
   }, [messages.length]);
 
-  const sendMessage = useCallback((content: string, gif?: DemoChatGif) => {
-    const trimmed = content.trim();
-    if (!sfu || (!trimmed && !gif)) return;
+  const sendMessage = useCallback(
+    (content: string, gif?: DemoChatGif) => {
+      const trimmed = content.trim();
+      if (!sfu || (!trimmed && !gif)) return;
 
-    sfu.sendDemoChatMessage({
-      author_name: guestName,
-      content: trimmed,
-      ...(gif ? { gif } : {}),
-    });
-  }, [guestName, sfu]);
+      sfu.sendDemoChatMessage({
+        author_name: guestName,
+        content: trimmed,
+        ...(gif ? { gif } : {}),
+      });
+    },
+    [guestName, sfu],
+  );
 
-  const handleSubmit = useCallback((event: React.FormEvent) => {
-    event.preventDefault();
-    sendMessage(value);
-    setValue("");
-  }, [sendMessage, value]);
+  const handleSubmit = useCallback(
+    (event: React.FormEvent) => {
+      event.preventDefault();
+      sendMessage(value);
+      setValue("");
+    },
+    [sendMessage, value],
+  );
 
-  const handleGifSelect = useCallback(async (gif: GifPickerItem) => {
-    sendMessage("", {
-      url: gif.send.url,
-      content_type: gif.send.contentType,
-      title: gif.title,
-      source_url: gif.sourceUrl,
-      provider: gif.provider,
-      width: gif.send.width,
-      height: gif.send.height,
-    });
-    setShowGifPicker(false);
-  }, [sendMessage]);
+  const handleGifSelect = useCallback(
+    async (gif: GifPickerItem) => {
+      sendMessage("", {
+        url: gif.send.url,
+        content_type: gif.send.contentType,
+        title: gif.title,
+        source_url: gif.sourceUrl,
+        provider: gif.provider,
+        width: gif.send.width,
+        height: gif.send.height,
+      });
+      setShowGifPicker(false);
+    },
+    [sendMessage],
+  );
 
-  const handlePaste = useCallback((event: React.ClipboardEvent<HTMLTextAreaElement>) => {
-    if (event.clipboardData.files.length === 0) return;
-    event.preventDefault();
-    onUploadBlocked();
-  }, [onUploadBlocked]);
+  const handlePaste = useCallback(
+    (event: React.ClipboardEvent<HTMLTextAreaElement>) => {
+      if (event.clipboardData.files.length === 0) return;
+      event.preventDefault();
+      onUploadBlocked();
+    },
+    [onUploadBlocked],
+  );
 
   return (
-    <aside className={cn("flex min-h-0 flex-col border-t border-rm-border bg-rm-bg-surface/95 backdrop-blur md:w-[380px] md:border-l md:border-t-0", className)}>
+    <aside
+      className={cn(
+        "flex min-h-0 flex-col border-t border-rm-border bg-rm-bg-surface/95 backdrop-blur md:w-[380px] md:border-l md:border-t-0",
+        className,
+      )}
+    >
       <div className="border-b border-rm-border px-4 py-3">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-2">
@@ -123,37 +164,65 @@ export function DemoRoomChatPanel({ sfu, guestName, className, onUploadBlocked }
             </div>
             <div>
               <h2 className="text-sm font-bold text-rm-text">Temporary Chat</h2>
-              <p className="text-[11px] font-medium text-rm-text-muted">Messages and GIFs expire after {DEMO_CHAT_TTL_MINUTES} minutes.</p>
+              <p className="text-[11px] font-medium text-rm-text-muted">
+                Messages and GIFs expire after {DEMO_CHAT_TTL_MINUTES} minutes.
+              </p>
             </div>
           </div>
           <Sparkles className="h-4 w-4 text-rm-accent opacity-80" />
         </div>
       </div>
 
-      <div ref={scrollRef} className="custom-scrollbar min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-4">
+      <div
+        ref={scrollRef}
+        className="custom-scrollbar min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-4"
+      >
         {messages.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-rm-border bg-rm-bg-primary/40 p-4 text-center">
-            <p className="text-sm font-semibold text-rm-text">No messages yet</p>
-            <p className="mt-1 text-xs text-rm-text-muted">Say hi before this room forgets the conversation in {DEMO_CHAT_TTL_MINUTES} minutes.</p>
+            <p className="text-sm font-semibold text-rm-text">
+              No messages yet
+            </p>
+            <p className="mt-1 text-xs text-rm-text-muted">
+              Say hi before this room forgets the conversation in{" "}
+              {DEMO_CHAT_TTL_MINUTES} minutes.
+            </p>
           </div>
-        ) : messages.map((message) => (
-          <article key={message.id} className="group rounded-2xl bg-rm-bg-primary/55 p-3 ring-1 ring-white/5">
-            <div className="mb-1 flex items-center justify-between gap-3">
-              <span className="truncate text-xs font-bold text-rm-text">{message.author_name}</span>
-              <time className="shrink-0 text-[10px] font-medium text-rm-text-muted" dateTime={new Date(message.created_at).toISOString()}>
-                {formatChatTime(message.created_at)}
-              </time>
-            </div>
-            {message.content && <p className="whitespace-pre-wrap wrap-break-word text-sm leading-relaxed text-rm-text/90">{message.content}</p>}
-            {message.gif && <DemoChatGifPreview gif={message.gif} />}
-          </article>
-        ))}
+        ) : (
+          messages.map((message) => (
+            <article
+              key={message.id}
+              className="group rounded-2xl bg-rm-bg-primary/55 p-3 ring-1 ring-white/5"
+            >
+              <div className="mb-1 flex items-center justify-between gap-3">
+                <span className="truncate text-xs font-bold text-rm-text">
+                  {message.author_name}
+                </span>
+                <time
+                  className="shrink-0 text-[10px] font-medium text-rm-text-muted"
+                  dateTime={new Date(message.created_at).toISOString()}
+                >
+                  {formatChatTime(message.created_at)}
+                </time>
+              </div>
+              {message.content && (
+                <p className="whitespace-pre-wrap wrap-break-word text-sm leading-relaxed text-rm-text/90">
+                  {message.content}
+                </p>
+              )}
+              {message.gif && <DemoChatGifPreview gif={message.gif} />}
+            </article>
+          ))
+        )}
       </div>
 
-      <form onSubmit={handleSubmit} className="relative border-t border-rm-border p-3">
+      <form
+        onSubmit={handleSubmit}
+        className="relative border-t border-rm-border p-3"
+      >
         <div className="mb-2 flex items-center gap-2 rounded-xl border border-amber-500/25 dark:border-amber-400/20 bg-amber-500/5 dark:bg-amber-400/10 px-3 py-2 text-[11px] font-semibold text-amber-800 dark:text-amber-100/90">
           <LockKeyhole className="h-3.5 w-3.5 shrink-0" />
-          Messages and GIFs here are demo-only and expire after {DEMO_CHAT_TTL_MINUTES} minutes.
+          Messages and GIFs here are demo-only and expire after{" "}
+          {DEMO_CHAT_TTL_MINUTES} minutes.
         </div>
         <div className="flex items-end gap-2 rounded-2xl bg-rm-bg-primary p-2 ring-1 ring-white/5">
           <button
@@ -216,17 +285,30 @@ export function DemoRoomChatPanel({ sfu, guestName, className, onUploadBlocked }
   );
 }
 
-export function DemoUploadBlockerModal({ onClose, onSignIn }: DemoUploadBlockerModalProps) {
+export function DemoUploadBlockerModal({
+  onClose,
+  onSignIn,
+}: DemoUploadBlockerModalProps) {
   return (
-    <dialog open className="fixed inset-0 z-[1000] m-0 flex items-center justify-center border-0 bg-black/65 p-4 backdrop-blur-sm" aria-labelledby="demo-upload-blocker-title">
+    <dialog
+      open
+      className="fixed inset-0 z-[1000] m-0 flex items-center justify-center border-0 bg-black/65 p-4 backdrop-blur-sm"
+      aria-labelledby="demo-upload-blocker-title"
+    >
       <div className="w-full max-w-md overflow-hidden rounded-3xl border border-rm-border bg-rm-bg-elevated shadow-2xl">
         <div className="bg-linear-to-br from-primary/15 via-rm-accent/10 to-transparent px-6 pt-6">
           <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/15 text-primary ring-1 ring-primary/25">
             <LockKeyhole className="h-5 w-5" />
           </div>
-          <h2 id="demo-upload-blocker-title" className="text-xl font-black text-rm-text">Uploads are in the full app</h2>
+          <h2
+            id="demo-upload-blocker-title"
+            className="text-xl font-black text-rm-text"
+          >
+            Uploads are in the full app
+          </h2>
           <p className="mt-2 text-sm leading-relaxed text-rm-text-muted">
-            Sign in to Ralph Meet to upload images and files with persistent chat, attachment storage, and the full server experience.
+            Sign in to Ralph Meet to upload images and files with persistent
+            chat, attachment storage, and the full server experience.
           </p>
         </div>
         <div className="space-y-3 px-6 py-5">
@@ -266,9 +348,22 @@ function DemoChatGifPreview({ gif }: { gif: DemoChatGif }) {
       className="relative mt-2 block overflow-hidden rounded-xl border border-rm-border bg-black/20"
     >
       {gif.content_type === "video/mp4" ? (
-        <video src={gif.url} autoPlay loop muted playsInline className="max-h-52 w-full object-cover" aria-label={alt} />
+        <video
+          src={gif.url}
+          autoPlay
+          loop
+          muted
+          playsInline
+          className="max-h-52 w-full object-cover"
+          aria-label={alt}
+        />
       ) : (
-        <img src={gif.url} alt={alt} className="max-h-52 w-full object-cover" loading="lazy" />
+        <img
+          src={gif.url}
+          alt={alt}
+          className="max-h-52 w-full object-cover"
+          loading="lazy"
+        />
       )}
       <GifProviderBranding fileKeyOrUrl={gif.source_url || gif.url} />
     </a>
@@ -315,13 +410,22 @@ function parseDemoChatGif(value: unknown): DemoChatGif | undefined {
     url: gif.url,
     content_type: gif.content_type,
     ...(typeof gif.title === "string" ? { title: gif.title } : {}),
-    ...(typeof gif.source_url === "string" ? { source_url: gif.source_url } : {}),
-    ...(gif.provider === "klipy" || gif.provider === "tenor" || gif.provider === "external" ? { provider: gif.provider } : {}),
+    ...(typeof gif.source_url === "string"
+      ? { source_url: gif.source_url }
+      : {}),
+    ...(gif.provider === "klipy" ||
+    gif.provider === "tenor" ||
+    gif.provider === "external"
+      ? { provider: gif.provider }
+      : {}),
     ...(typeof gif.width === "number" ? { width: gif.width } : {}),
     ...(typeof gif.height === "number" ? { height: gif.height } : {}),
   };
 }
 
 function formatChatTime(timestamp: number) {
-  return new Date(timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  return new Date(timestamp).toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }

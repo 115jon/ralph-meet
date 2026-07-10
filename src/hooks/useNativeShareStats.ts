@@ -151,7 +151,10 @@ export function useNativeShareStats(): NativeShareStatsState {
     // Poll immediately so the UI is not blank during startup, then keep a
     // steady low-rate refresh running for the session.
     void poll();
-    const pollIntervalId = setInterval(() => void poll(), NATIVE_SHARE_STATS_POLL_MS);
+    const pollIntervalId = setInterval(
+      () => void poll(),
+      NATIVE_SHARE_STATS_POLL_MS,
+    );
 
     // ── Status-triggered refreshes ────────────────────────────────────────────
     void (async () => {
@@ -163,7 +166,8 @@ export function useNativeShareStats(): NativeShareStatsState {
         const disposeStatus = await listen("native-screen-share-status", () => {
           void poll();
         });
-        if (cancelled) disposeStatus(); else unlistenFns.push(disposeStatus);
+        if (cancelled) disposeStatus();
+        else unlistenFns.push(disposeStatus);
       } catch {
         // Event subscription unavailable — polling still drives refreshes.
       }

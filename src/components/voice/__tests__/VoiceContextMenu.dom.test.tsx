@@ -1,6 +1,12 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { StreamContextMenu } from "@/components/StreamContextMenu";
@@ -56,7 +62,9 @@ describe("voice context menu wiring", () => {
 
     fireEvent.mouseEnter(screen.getByRole("button", { name: "More Options" }));
 
-    const messageButton = await screen.findByRole("button", { name: "Message" });
+    const messageButton = await screen.findByRole("button", {
+      name: "Message",
+    });
     fireEvent.click(messageButton);
 
     expect(onOpenMessageUser).toHaveBeenCalledWith("target-user");
@@ -77,10 +85,14 @@ describe("voice context menu wiring", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Mute" }));
     fireEvent.click(screen.getByRole("button", { name: "Mute Soundboard" }));
-    fireEvent.click(screen.getByRole("button", { name: "Always Hear Stream Audio" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Always Hear Stream Audio" }),
+    );
 
     await waitFor(() => {
-      const peerSettings = useVoiceSettingsStore.getState().getSettings("viewer").peerSettings["target-user"];
+      const peerSettings = useVoiceSettingsStore
+        .getState()
+        .getSettings("viewer").peerSettings["target-user"];
       expect(peerSettings?.muted).toBe(true);
       expect(peerSettings?.soundboardMuted).toBe(true);
       expect(peerSettings?.alwaysHear).toBe(true);
@@ -117,9 +129,13 @@ describe("voice context menu wiring", () => {
       />,
     );
 
-    fireEvent.contextMenu(screen.getByRole("button", { name: "Clear focused participant" }));
+    fireEvent.contextMenu(
+      screen.getByRole("button", { name: "Clear focused participant" }),
+    );
 
-    const profileButton = await screen.findByRole("button", { name: "Profile" });
+    const profileButton = await screen.findByRole("button", {
+      name: "Profile",
+    });
     fireEvent.click(profileButton);
 
     await waitFor(() => {

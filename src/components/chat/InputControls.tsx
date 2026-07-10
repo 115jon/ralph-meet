@@ -40,7 +40,10 @@ export function InputControls({
     const handleFavoriteAdded = () => {
       setShowFavoriteNotice(true);
       if (noticeTimeoutRef.current) clearTimeout(noticeTimeoutRef.current);
-      noticeTimeoutRef.current = setTimeout(() => setShowFavoriteNotice(false), 1800);
+      noticeTimeoutRef.current = setTimeout(
+        () => setShowFavoriteNotice(false),
+        1800,
+      );
     };
 
     window.addEventListener(GIF_FAVORITE_ADDED_EVENT, handleFavoriteAdded);
@@ -51,15 +54,19 @@ export function InputControls({
   }, []);
 
   const openGifPicker = (nextMediaType: GifPickerMediaType) => {
-    setLocalState((prev: {
-      gifPickerMediaType: GifPickerMediaType;
-      showGifPicker: boolean;
-      showEmoji: boolean;
-    }) => ({
-      gifPickerMediaType: nextMediaType,
-      showGifPicker: !(prev.showGifPicker && prev.gifPickerMediaType === nextMediaType),
-      showEmoji: false,
-    }));
+    setLocalState(
+      (prev: {
+        gifPickerMediaType: GifPickerMediaType;
+        showGifPicker: boolean;
+        showEmoji: boolean;
+      }) => ({
+        gifPickerMediaType: nextMediaType,
+        showGifPicker: !(
+          prev.showGifPicker && prev.gifPickerMediaType === nextMediaType
+        ),
+        showEmoji: false,
+      }),
+    );
   };
 
   const activeMediaButton = showGifPicker ? gifPickerMediaType : null;
@@ -67,13 +74,13 @@ export function InputControls({
     cn(
       hiddenClassName,
       "flex h-8 w-8 items-center justify-center rounded-lg transition-all hover:scale-105 hover:bg-rm-bg-hover",
-      isActive ? "bg-rm-bg-hover text-primary shadow-sm dark:shadow-none" : "text-rm-text-muted hover:text-primary"
+      isActive
+        ? "bg-rm-bg-hover text-primary shadow-sm dark:shadow-none"
+        : "text-rm-text-muted hover:text-primary",
     );
 
   const gifPickerMarkerRef =
-    gifPickerMediaType === "stickers"
-      ? stickerBtnRef
-      : gifBtnRef;
+    gifPickerMediaType === "stickers" ? stickerBtnRef : gifBtnRef;
 
   return (
     <div className="ml-2 mt-[4px] flex items-center gap-2 text-rm-text-muted md:gap-4">
@@ -90,8 +97,10 @@ export function InputControls({
           title={showFavoriteNotice ? "Added to Favorites" : "GIFs"}
           className={cn(
             "flex h-8 w-8 items-center justify-center rounded-lg transition-all hover:scale-105 hover:bg-rm-bg-hover hover:text-primary",
-            activeMediaButton === "gifs" && "bg-rm-bg-hover text-primary shadow-sm dark:shadow-none",
-            showFavoriteNotice && "animate-pulse bg-yellow-400/15 text-yellow-700 dark:text-yellow-300 ring-2 ring-yellow-500/60 dark:ring-yellow-300/60"
+            activeMediaButton === "gifs" &&
+              "bg-rm-bg-hover text-primary shadow-sm dark:shadow-none",
+            showFavoriteNotice &&
+              "animate-pulse bg-yellow-400/15 text-yellow-700 dark:text-yellow-300 ring-2 ring-yellow-500/60 dark:ring-yellow-300/60",
           )}
           onClick={() => openGifPicker("gifs")}
         >
@@ -104,7 +113,10 @@ export function InputControls({
         aria-label="Open sticker picker"
         title="Stickers"
         onClick={() => openGifPicker("stickers")}
-        className={mediaButtonClassName(activeMediaButton === "stickers", "hidden md:flex")}
+        className={mediaButtonClassName(
+          activeMediaButton === "stickers",
+          "hidden md:flex",
+        )}
       >
         <Sticker className="h-5 w-5" />
       </button>
@@ -113,7 +125,14 @@ export function InputControls({
           ref={emojiBtnRef}
           type="button"
           aria-label="Open emoji picker"
-          onClick={() => setLocalState((prev: { showEmoji: boolean; showGifPicker: boolean }) => ({ showEmoji: !prev.showEmoji, showGifPicker: false }))}
+          onClick={() =>
+            setLocalState(
+              (prev: { showEmoji: boolean; showGifPicker: boolean }) => ({
+                showEmoji: !prev.showEmoji,
+                showGifPicker: false,
+              }),
+            )
+          }
           className="flex h-8 w-8 items-center justify-center rounded-lg transition-all hover:bg-rm-bg-hover hover:text-primary"
         >
           <Smile className="h-5 w-5" />
@@ -139,7 +158,9 @@ export function InputControls({
       <div
         className={cn(
           "flex items-center overflow-hidden transition-all duration-300 ease-out md:hidden",
-          canSend ? "w-8 opacity-100" : "w-0 opacity-0 -ml-2 pointer-events-none"
+          canSend
+            ? "w-8 opacity-100"
+            : "w-0 opacity-0 -ml-2 pointer-events-none",
         )}
       >
         <button

@@ -43,7 +43,7 @@ export interface VirtualMessageListHandle {
     messageId: string,
     align?: "start" | "center" | "end",
     behavior?: ScrollBehavior,
-    highlight?: boolean
+    highlight?: boolean,
   ): void;
 }
 
@@ -95,7 +95,10 @@ interface MessageRow {
   showSeparator: boolean;
 }
 
-function buildMessageRows(messages: Message[], unreadSeparatorId?: string | null): MessageRow[] {
+function buildMessageRows(
+  messages: Message[],
+  unreadSeparatorId?: string | null,
+): MessageRow[] {
   return messages.map((message, index) => {
     let showHeader = true;
     if (index > 0) {
@@ -167,25 +170,27 @@ interface HeaderProps {
   welcomeContent?: ReactNode;
 }
 
-const ListHeader = memo(({ hasMore, loading, hasMessages, welcomeContent }: HeaderProps) => {
-  if (!hasMore && !loading) {
-    return (
-      <div className="animate-in fade-in slide-in-from-bottom-4 duration-1000">
-        {welcomeContent}
-      </div>
-    );
-  }
-  if (loading && !hasMessages) {
-    return (
-      <div className="pb-2 animate-in fade-in duration-300">
-        <SkeletonGroup />
-        <SkeletonGroup />
-        <SkeletonGroup />
-      </div>
-    );
-  }
-  return null;
-});
+const ListHeader = memo(
+  ({ hasMore, loading, hasMessages, welcomeContent }: HeaderProps) => {
+    if (!hasMore && !loading) {
+      return (
+        <div className="animate-in fade-in slide-in-from-bottom-4 duration-1000">
+          {welcomeContent}
+        </div>
+      );
+    }
+    if (loading && !hasMessages) {
+      return (
+        <div className="pb-2 animate-in fade-in duration-300">
+          <SkeletonGroup />
+          <SkeletonGroup />
+          <SkeletonGroup />
+        </div>
+      );
+    }
+    return null;
+  },
+);
 ListHeader.displayName = "ListHeader";
 
 // ── Main component ─────────────────────────────────────────────────────────
@@ -220,14 +225,20 @@ const VirtualMessageList = forwardRef<VirtualMessageListHandle, Props>(
       onMessageVisible,
       unreadSeparatorId,
     },
-    ref
+    ref,
   ) => {
-    const safeMessages = useMemo(() => (Array.isArray(messages) ? messages : []), [messages]);
+    const safeMessages = useMemo(
+      () => (Array.isArray(messages) ? messages : []),
+      [messages],
+    );
     const messageRows = useMemo(
       () => buildMessageRows(safeMessages, unreadSeparatorId),
-      [safeMessages, unreadSeparatorId]
+      [safeMessages, unreadSeparatorId],
     );
-    const messageIndexMap = useMemo(() => buildIndexMap(safeMessages), [safeMessages]);
+    const messageIndexMap = useMemo(
+      () => buildIndexMap(safeMessages),
+      [safeMessages],
+    );
 
     if (import.meta.env.DEV && !Array.isArray(messages)) {
       log.warn("Expected messages array", {
@@ -279,15 +290,17 @@ const VirtualMessageList = forwardRef<VirtualMessageListHandle, Props>(
     // A full replacement (e.g. Jump to Present): both first AND last change.
     // We must NOT set shift=true for full replacements.
     const prevFirstMsgIdRef = useRef<string | null>(
-      safeMessages.length > 0 ? safeMessages[0].id : null
+      safeMessages.length > 0 ? safeMessages[0].id : null,
     );
     const prevLastMsgIdRef = useRef<string | null>(
-      safeMessages.length > 0 ? safeMessages[safeMessages.length - 1].id : null
+      safeMessages.length > 0 ? safeMessages[safeMessages.length - 1].id : null,
     );
     const prevMessageCountRef = useRef(safeMessages.length);
     const firstMsgId = safeMessages.length > 0 ? safeMessages[0].id : null;
-    const lastMsgId = safeMessages.length > 0 ? safeMessages[safeMessages.length - 1].id : null;
-    const lastMessage = safeMessages.length > 0 ? safeMessages[safeMessages.length - 1] : null;
+    const lastMsgId =
+      safeMessages.length > 0 ? safeMessages[safeMessages.length - 1].id : null;
+    const lastMessage =
+      safeMessages.length > 0 ? safeMessages[safeMessages.length - 1] : null;
     const wasPrepend =
       prevFirstMsgIdRef.current !== null &&
       firstMsgId !== null &&
@@ -364,7 +377,7 @@ const VirtualMessageList = forwardRef<VirtualMessageListHandle, Props>(
     }, [isDetached, initialScrollMessageId]);
 
     useEffect(() => {
-    return () => {
+      return () => {
         scrollRunIdRef.current += 1;
       };
     }, []);
@@ -393,7 +406,7 @@ const VirtualMessageList = forwardRef<VirtualMessageListHandle, Props>(
           smooth,
         });
       },
-      [safeMessages.length]
+      [safeMessages.length],
     );
 
     const scrollToVirtualIndex = useCallback(
@@ -406,7 +419,7 @@ const VirtualMessageList = forwardRef<VirtualMessageListHandle, Props>(
           highlight?: boolean;
           highlightMessageId?: string;
           onSettled?: () => void;
-        }
+        },
       ) => {
         const {
           align,
@@ -417,11 +430,16 @@ const VirtualMessageList = forwardRef<VirtualMessageListHandle, Props>(
           onSettled,
         } = options;
         const runId = ++scrollRunIdRef.current;
-        const totalAttempts = preserveAnimation ? 3 : behavior === "smooth" ? 6 : 3;
+        const totalAttempts = preserveAnimation
+          ? 3
+          : behavior === "smooth"
+            ? 6
+            : 3;
 
         const runAttempt = (attempt: number) => {
           if (scrollRunIdRef.current !== runId) return;
-          const shouldScrollNow = !preserveAnimation || attempt === totalAttempts;
+          const shouldScrollNow =
+            !preserveAnimation || attempt === totalAttempts;
           const useSmooth = behavior === "smooth" && attempt === totalAttempts;
           if (shouldScrollNow) {
             virtualizerRef.current?.scrollToIndex(targetIndex, {
@@ -441,7 +459,11 @@ const VirtualMessageList = forwardRef<VirtualMessageListHandle, Props>(
             scrollTop: scrollContainerRef.current?.scrollTop ?? null,
             scrollHeight: scrollContainerRef.current?.scrollHeight ?? null,
           });
-          if (highlight && highlightMessageId && attempt === Math.min(2, totalAttempts)) {
+          if (
+            highlight &&
+            highlightMessageId &&
+            attempt === Math.min(2, totalAttempts)
+          ) {
             highlightMessage(highlightMessageId);
           }
           if (attempt >= totalAttempts) {
@@ -466,7 +488,7 @@ const VirtualMessageList = forwardRef<VirtualMessageListHandle, Props>(
 
         runAttempt(1);
       },
-      [highlightMessage]
+      [highlightMessage],
     );
 
     const handleHeightChange = useCallback(() => {
@@ -527,7 +549,11 @@ const VirtualMessageList = forwardRef<VirtualMessageListHandle, Props>(
           });
           finishInitialRestore();
         });
-      } else if (!isDetached && didAppendToEnd && (shouldStickToBottom.current || didAppendOwnMessage)) {
+      } else if (
+        !isDetached &&
+        didAppendToEnd &&
+        (shouldStickToBottom.current || didAppendOwnMessage)
+      ) {
         if (didAppendOwnMessage) {
           shouldStickToBottom.current = true;
         }
@@ -624,7 +650,7 @@ const VirtualMessageList = forwardRef<VirtualMessageListHandle, Props>(
           messageId: string,
           align: "start" | "center" | "end" = "center",
           behavior: ScrollBehavior = "smooth",
-          highlight = true
+          highlight = true,
         ) {
           const arrayIndex = indexMapRef.current.get(messageId);
           if (arrayIndex === undefined) return;
@@ -639,7 +665,7 @@ const VirtualMessageList = forwardRef<VirtualMessageListHandle, Props>(
         },
       }),
       // eslint-disable-next-line react-hooks/exhaustive-deps
-      [safeMessages.length, scrollToBottomIndex, scrollToVirtualIndex]
+      [safeMessages.length, scrollToBottomIndex, scrollToVirtualIndex],
     );
 
     // ── Load-more guards ─────────────────────────────────────────────────
@@ -707,11 +733,19 @@ const VirtualMessageList = forwardRef<VirtualMessageListHandle, Props>(
 
         // Bottom reached for loading after (detached mode) — trigger early
         const distanceFromBottom = scrollSize - offset - viewportSize;
-        if (distanceFromBottom <= 800 && onLoadAfter && canLoadMoreRef.current) {
+        if (
+          distanceFromBottom <= 800 &&
+          onLoadAfter &&
+          canLoadMoreRef.current
+        ) {
           handleEndReached();
         }
 
-        if (onScrollRangeChange && canLoadMoreRef.current && !restoreInProgress) {
+        if (
+          onScrollRangeChange &&
+          canLoadMoreRef.current &&
+          !restoreInProgress
+        ) {
           // -1 to convert Virtualizer child index to message array index
           // (ListHeader is child 0)
           const topChildIndex = virtualizerRef.current.findItemIndex(offset);
@@ -733,7 +767,7 @@ const VirtualMessageList = forwardRef<VirtualMessageListHandle, Props>(
         handleEndReached,
         onScrollRangeChange,
         restoreInProgress,
-      ]
+      ],
     );
 
     // ── Render ────────────────────────────────────────────────────────────
@@ -779,34 +813,40 @@ const VirtualMessageList = forwardRef<VirtualMessageListHandle, Props>(
             welcomeContent={welcomeContent}
           />
 
-          {messageRows.map(({ message: msg, arrayIndex, showHeader, showSeparator }) => {
-            return (
-              <div key={msg.id}>
-                {showSeparator && <NewMessageSeparator />}
-                <MessageItem
-                  id={`message-${msg.id}`}
-                  message={msg}
-                  showHeader={showHeader}
-                  currentUserId={currentUserId}
-                  canPin={canPin}
-                  canDeleteMessages={canDeleteMessages}
-                  onReply={onReply}
-                  onPin={onPin}
-                  onUnpin={onUnpin}
-                  onJump={onJump}
-                  onBan={onBan}
-                  onThread={onThread}
-                  onMediaPlay={() => handleMediaPlay(arrayIndex)}
-                  onVisible={onMessageVisible ? () => onMessageVisible(msg.id) : undefined}
-                  onHeightChange={handleHeightChange}
-                />
-              </div>
-            );
-          })}
+          {messageRows.map(
+            ({ message: msg, arrayIndex, showHeader, showSeparator }) => {
+              return (
+                <div key={msg.id}>
+                  {showSeparator && <NewMessageSeparator />}
+                  <MessageItem
+                    id={`message-${msg.id}`}
+                    message={msg}
+                    showHeader={showHeader}
+                    currentUserId={currentUserId}
+                    canPin={canPin}
+                    canDeleteMessages={canDeleteMessages}
+                    onReply={onReply}
+                    onPin={onPin}
+                    onUnpin={onUnpin}
+                    onJump={onJump}
+                    onBan={onBan}
+                    onThread={onThread}
+                    onMediaPlay={() => handleMediaPlay(arrayIndex)}
+                    onVisible={
+                      onMessageVisible
+                        ? () => onMessageVisible(msg.id)
+                        : undefined
+                    }
+                    onHeightChange={handleHeightChange}
+                  />
+                </div>
+              );
+            },
+          )}
         </Virtualizer>
       </div>
     );
-  }
+  },
 );
 
 VirtualMessageList.displayName = "VirtualMessageList";

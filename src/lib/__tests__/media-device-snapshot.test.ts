@@ -10,15 +10,33 @@ describe("media-device-snapshot", () => {
   describe("mergeNativeAudioLabels", () => {
     it("should merge native labels onto browser devices", () => {
       const browserDevices: MediaDeviceInfo_Custom[] = [
-        { deviceId: "default", label: "Default Microphone", kind: "audioinput" },
+        {
+          deviceId: "default",
+          label: "Default Microphone",
+          kind: "audioinput",
+        },
         { deviceId: "device1", label: "", kind: "audioinput" },
       ];
       const nativeDevices: NativeDevice[] = [
-        { device_id: "native-id-default", label: "Real Mic Default", kind: "audioinput", is_default: true },
-        { device_id: "native-id-1", label: "Real Mic 1", kind: "audioinput", is_default: false },
+        {
+          device_id: "native-id-default",
+          label: "Real Mic Default",
+          kind: "audioinput",
+          is_default: true,
+        },
+        {
+          device_id: "native-id-1",
+          label: "Real Mic 1",
+          kind: "audioinput",
+          is_default: false,
+        },
       ];
 
-      const merged = mergeNativeAudioLabels(browserDevices, nativeDevices, "audioinput");
+      const merged = mergeNativeAudioLabels(
+        browserDevices,
+        nativeDevices,
+        "audioinput",
+      );
       expect(merged).toHaveLength(2);
       expect(merged[0].label).toBe("Real Mic Default");
       expect(merged[0].isDefault).toBe(true);
@@ -37,8 +55,18 @@ describe("media-device-snapshot", () => {
         { deviceId: "cam2", label: "Camera 2", kind: "videoinput" },
       ];
       const nativeDevices: NativeDevice[] = [
-        { device_id: "vid-id-1", label: "USB Webcam", kind: "videoinput", is_default: false },
-        { device_id: "vid-id-2", label: "Integrated Camera", kind: "videoinput", is_default: false },
+        {
+          device_id: "vid-id-1",
+          label: "USB Webcam",
+          kind: "videoinput",
+          is_default: false,
+        },
+        {
+          device_id: "vid-id-2",
+          label: "Integrated Camera",
+          kind: "videoinput",
+          is_default: false,
+        },
       ];
 
       const merged = mergeNativeVideoLabels(browserDevices, nativeDevices);
@@ -57,8 +85,18 @@ describe("media-device-snapshot", () => {
         { deviceId: "cam1", label: "integrated camera", kind: "videoinput" },
       ];
       const nativeDevices: NativeDevice[] = [
-        { device_id: "vid-id-1", label: "USB Webcam", kind: "videoinput", is_default: false },
-        { device_id: "vid-id-2", label: "Integrated Camera", kind: "videoinput", is_default: false },
+        {
+          device_id: "vid-id-1",
+          label: "USB Webcam",
+          kind: "videoinput",
+          is_default: false,
+        },
+        {
+          device_id: "vid-id-2",
+          label: "Integrated Camera",
+          kind: "videoinput",
+          is_default: false,
+        },
       ];
 
       const merged = mergeNativeVideoLabels(browserDevices, nativeDevices);

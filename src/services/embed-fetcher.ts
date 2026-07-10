@@ -1,13 +1,17 @@
 import type { EmbedInfo } from "@/lib/types";
 import { resolveInstagramVideoMetadata } from "@/lib/instagram-video-resolver";
-import { fetchInstagramOEmbedMetadata, fetchTikTokProxyMetadata } from "@/lib/share-preview-proxy";
+import {
+  fetchInstagramOEmbedMetadata,
+  fetchTikTokProxyMetadata,
+} from "@/lib/share-preview-proxy";
 import { clog } from "@/lib/console-logger";
 
 const log = clog("EmbedFetcher");
 const twitterLog = clog("embed:twitter");
 
 const URL_REGEX = /(https?:\/\/[^\s]+)/g;
-const X_ICON_URL = "https://abs.twimg.com/responsive-web/client-web/icon-default.522d363a.png";
+const X_ICON_URL =
+  "https://abs.twimg.com/responsive-web/client-web/icon-default.522d363a.png";
 const X_EMBED_HOSTS = new Set([
   "x.com",
   "twitter.com",
@@ -28,14 +32,16 @@ function nextEmbedId(): string {
   return `embed_${++embedCounter}`;
 }
 
-export async function extractAndProcessEmbeds(content: string): Promise<EmbedInfo[]> {
+export async function extractAndProcessEmbeds(
+  content: string,
+): Promise<EmbedInfo[]> {
   const matches = content.match(URL_REGEX);
   if (!matches || matches.length === 0) return [];
 
   // Limit to 3 embeds max per message to prevent abuse
   const urls = [...new Set(matches)].slice(0, 3);
 
-  const embedPromises = urls.map(url => fetchEmbedMetadata(url));
+  const embedPromises = urls.map((url) => fetchEmbedMetadata(url));
   const results = await Promise.allSettled(embedPromises);
 
   const embeds: EmbedInfo[] = [];
@@ -69,7 +75,10 @@ async function fetchEmbedMetadata(url: string): Promise<EmbedInfo | null> {
       return await fetchTikTokDataRefreshed(url);
     }
 
-    if (hostname.includes("spotify.com") || hostname.includes("open.spotify.com")) {
+    if (
+      hostname.includes("spotify.com") ||
+      hostname.includes("open.spotify.com")
+    ) {
       return await fetchSpotifyData(url);
     }
 
@@ -90,7 +99,11 @@ function isXPostHostname(hostname: string): boolean {
 }
 
 function extractTweetStatusId(parsed: URL): string | null {
-  return parsed.pathname.match(/\/status(?:es)?\/(\d{2,20})(?:\.(?:mp4|jpe?g|png|webp))?(?:\/|$)/i)?.[1] ?? null;
+  return (
+    parsed.pathname.match(
+      /\/status(?:es)?\/(\d{2,20})(?:\.(?:mp4|jpe?g|png|webp))?(?:\/|$)/i,
+    )?.[1] ?? null
+  );
 }
 
 function normalizeTwitterStatusPath(pathname: string): string {
@@ -104,11 +117,15 @@ function buildTwitterApiUrls(parsed: URL): string[] {
     statusId ? `https://api.fxtwitter.com/2/status/${statusId}` : null,
     `https://api.fxtwitter.com${statusPath}`,
     `https://api.vxtwitter.com${statusPath}`,
-  ].filter((url, index, urls): url is string => !!url && urls.indexOf(url) === index);
+  ].filter(
+    (url, index, urls): url is string => !!url && urls.indexOf(url) === index,
+  );
 }
 
 function extractTweetScreenName(parsed: URL): string {
-  const screenName = normalizeTwitterStatusPath(parsed.pathname).split("/").filter(Boolean)[0];
+  const screenName = normalizeTwitterStatusPath(parsed.pathname)
+    .split("/")
+    .filter(Boolean)[0];
   return screenName && screenName !== "i" ? screenName : "x";
 }
 
@@ -119,7 +136,7 @@ async function fetchYouTubeData(url: string): Promise<EmbedInfo | null> {
   const res = await fetch(oembedUrl);
   if (!res.ok) return null;
 
-  const data = await res.json() as any;
+  const data = (await res.json()) as any;
   const videoIdMatch =
     url.match(/[?&]v=([^&]+)/) ||
     url.match(/youtu\.be\/([^?]+)/) ||
@@ -130,7 +147,9 @@ async function fetchYouTubeData(url: string): Promise<EmbedInfo | null> {
 
   const isShort = /youtube\.com\/shorts\//i.test(url);
   const videoDimensions = await fetchYouTubeVideoDimensions(videoId, url);
-  const fallbackDimensions = isShort ? { width: 720, height: 1280 } : { width: 1280, height: 720 };
+  const fallbackDimensions = isShort
+    ? { width: 720, height: 1280 }
+    : { width: 1280, height: 720 };
   const resolvedDimensions = videoDimensions ?? fallbackDimensions;
 
   return {
@@ -162,7 +181,10 @@ async function fetchYouTubeData(url: string): Promise<EmbedInfo | null> {
   };
 }
 
-async function fetchYouTubeVideoDimensions(videoId: string, sourceUrl: string): Promise<{ width: number; height: number } | null> {
+async function fetchYouTubeVideoDimensions(
+  videoId: string,
+  sourceUrl: string,
+): Promise<{ width: number; height: number } | null> {
   try {
     const innertubeDimensions = await fetchYouTubeInnertubeDimensions(videoId);
     if (innertubeDimensions) {
@@ -172,7 +194,8 @@ async function fetchYouTubeVideoDimensions(videoId: string, sourceUrl: string): 
     const watchUrl = buildYouTubeWatchUrl(videoId, sourceUrl);
     const res = await fetch(`${watchUrl}&pbj=1`, {
       headers: {
-        "User-Agent": "Mozilla/5.0 (compatible; RalphMeet/1.0; +https://ralph.dev)",
+        "User-Agent":
+          "Mozilla/5.0 (compatible; RalphMeet/1.0; +https://ralph.dev)",
         "x-youtube-client-name": "1",
         "x-youtube-client-version": "2.20260611.01.00",
       },
@@ -185,7 +208,8 @@ async function fetchYouTubeVideoDimensions(videoId: string, sourceUrl: string): 
 
     const htmlRes = await fetch(watchUrl, {
       headers: {
-        "User-Agent": "Mozilla/5.0 (compatible; RalphMeet/1.0; +https://ralph.dev)",
+        "User-Agent":
+          "Mozilla/5.0 (compatible; RalphMeet/1.0; +https://ralph.dev)",
       },
     });
     if (!htmlRes.ok) return null;
@@ -197,47 +221,54 @@ async function fetchYouTubeVideoDimensions(videoId: string, sourceUrl: string): 
   }
 }
 
-async function fetchYouTubeInnertubeDimensions(videoId: string): Promise<{ width: number; height: number } | null> {
+async function fetchYouTubeInnertubeDimensions(
+  videoId: string,
+): Promise<{ width: number; height: number } | null> {
   const clients = [
     {
       clientName: "ANDROID",
       clientVersion: "20.10.38",
-      userAgent: "com.google.android.youtube/20.10.38 (Linux; U; Android 14) gzip",
+      userAgent:
+        "com.google.android.youtube/20.10.38 (Linux; U; Android 14) gzip",
     },
     {
       clientName: "IOS",
       clientVersion: "20.10.4",
-      userAgent: "com.google.ios.youtube/20.10.4 (iPhone16,2; U; CPU iOS 18_0 like Mac OS X)",
+      userAgent:
+        "com.google.ios.youtube/20.10.4 (iPhone16,2; U; CPU iOS 18_0 like Mac OS X)",
     },
   ] as const;
 
   for (const client of clients) {
     try {
-      const res = await fetch("https://www.youtube.com/youtubei/v1/player?key=AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "User-Agent": client.userAgent,
-        },
-        body: JSON.stringify({
-          context: {
-            client: {
-              clientName: client.clientName,
-              clientVersion: client.clientVersion,
-              hl: "en",
-              gl: "US",
-            },
+      const res = await fetch(
+        "https://www.youtube.com/youtubei/v1/player?key=AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "User-Agent": client.userAgent,
           },
-          videoId,
-          contentCheckOk: true,
-          racyCheckOk: true,
-        }),
-      });
+          body: JSON.stringify({
+            context: {
+              client: {
+                clientName: client.clientName,
+                clientVersion: client.clientVersion,
+                hl: "en",
+                gl: "US",
+              },
+            },
+            videoId,
+            contentCheckOk: true,
+            racyCheckOk: true,
+          }),
+        },
+      );
       if (!res.ok) {
         continue;
       }
 
-      const playerResponse = await res.json() as any;
+      const playerResponse = (await res.json()) as any;
       const dimensions = extractLargestYouTubeFormatDimensions(playerResponse);
       if (dimensions) {
         return dimensions;
@@ -253,7 +284,9 @@ async function fetchYouTubeInnertubeDimensions(videoId: string): Promise<{ width
 function buildYouTubeWatchUrl(videoId: string, sourceUrl: string): string {
   try {
     const parsed = new URL(sourceUrl);
-    const isShort = parsed.hostname.toLowerCase().includes("youtube.com") && parsed.pathname.startsWith("/shorts/");
+    const isShort =
+      parsed.hostname.toLowerCase().includes("youtube.com") &&
+      parsed.pathname.startsWith("/shorts/");
     return isShort
       ? `https://www.youtube.com/shorts/${videoId}`
       : `https://www.youtube.com/watch?v=${videoId}`;
@@ -296,7 +329,9 @@ function extractYouTubePbjPlayerResponse(rawBody: string): any | null {
   return null;
 }
 
-function extractLargestYouTubeFormatDimensions(playerResponse: any): { width: number; height: number } | null {
+function extractLargestYouTubeFormatDimensions(
+  playerResponse: any,
+): { width: number; height: number } | null {
   if (!playerResponse) return null;
 
   const formats = [
@@ -304,11 +339,17 @@ function extractLargestYouTubeFormatDimensions(playerResponse: any): { width: nu
     ...(playerResponse.streamingData?.adaptiveFormats || []),
   ];
 
-  let bestDimensions: { width: number; height: number; pixels: number } | null = null;
+  let bestDimensions: { width: number; height: number; pixels: number } | null =
+    null;
   for (const format of formats) {
     const width = Number(format?.width);
     const height = Number(format?.height);
-    if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+    if (
+      !Number.isFinite(width) ||
+      !Number.isFinite(height) ||
+      width <= 0 ||
+      height <= 0
+    ) {
       continue;
     }
 
@@ -333,23 +374,27 @@ async function fetchTwitterData(url: string): Promise<EmbedInfo | null> {
     try {
       twitterLog.info(`Trying API: ${apiUrl}`);
       const res = await fetch(apiUrl, {
-        headers: { 'User-Agent': 'RalphMeet/1.0 (+https://ralph.dev)' },
+        headers: { "User-Agent": "RalphMeet/1.0 (+https://ralph.dev)" },
       });
-      twitterLog.info(`API response status: ${res.status}, content-type: ${res.headers.get('content-type')}`);
+      twitterLog.info(
+        `API response status: ${res.status}, content-type: ${res.headers.get("content-type")}`,
+      );
 
       if (!res.ok) {
         const errBody = await res.text().catch(() => "");
-        twitterLog.info(`API ${res.status} body (first 200): ${errBody.substring(0, 200)}`);
+        twitterLog.info(
+          `API ${res.status} body (first 200): ${errBody.substring(0, 200)}`,
+        );
         continue;
       }
 
-      const contentType = res.headers.get('content-type') || '';
-      if (!contentType.includes('json')) {
+      const contentType = res.headers.get("content-type") || "";
+      if (!contentType.includes("json")) {
         twitterLog.info(`API returned non-JSON content-type: ${contentType}`);
         continue;
       }
 
-      const data = await res.json() as any;
+      const data = (await res.json()) as any;
       // v2 returns { status }, legacy fxtwitter returns { tweet }, vxtwitter returns a bare object.
       const tweet = data.status || data.tweet || data;
 
@@ -362,7 +407,11 @@ async function fetchTwitterData(url: string): Promise<EmbedInfo | null> {
   }
 
   if (fallbackTweet) {
-    return buildTwitterEmbed(fallbackTweet, url, extractTweetScreenName(parsed));
+    return buildTwitterEmbed(
+      fallbackTweet,
+      url,
+      extractTweetScreenName(parsed),
+    );
   }
 
   // Fallback: scrape OG tags from vxtwitter.com
@@ -371,21 +420,34 @@ async function fetchTwitterData(url: string): Promise<EmbedInfo | null> {
     twitterLog.info(`Fallback: scraping vxtwitter OG: ${vxUrl}`);
     const res = await fetch(vxUrl, {
       headers: {
-        'User-Agent': 'Mozilla/5.0 (compatible; Discordbot/2.0; +https://discordapp.com)'
-      }
+        "User-Agent":
+          "Mozilla/5.0 (compatible; Discordbot/2.0; +https://discordapp.com)",
+      },
     });
 
     if (res.ok) {
       const html = await res.text();
       twitterLog.info(`OG fallback HTML length: ${html.length}`);
 
-      const titleMatch = html.match(/<meta property="og:title" content="([^"]+)"/i);
-      const descMatch = html.match(/<meta property="og:description" content="([^"]+)"/i);
-      const imgMatch = html.match(/<meta property="og:image" content="([^"]+)"/i);
-      const videoMatch = html.match(/<meta property="og:video(?::url)?" content="([^"]+)"/i);
-      const videoTypeMatch = html.match(/<meta property="og:video:type" content="([^"]+)"/i);
+      const titleMatch = html.match(
+        /<meta property="og:title" content="([^"]+)"/i,
+      );
+      const descMatch = html.match(
+        /<meta property="og:description" content="([^"]+)"/i,
+      );
+      const imgMatch = html.match(
+        /<meta property="og:image" content="([^"]+)"/i,
+      );
+      const videoMatch = html.match(
+        /<meta property="og:video(?::url)?" content="([^"]+)"/i,
+      );
+      const videoTypeMatch = html.match(
+        /<meta property="og:video:type" content="([^"]+)"/i,
+      );
 
-      twitterLog.info(`OG: title=${!!titleMatch} desc=${!!descMatch} img=${!!imgMatch} video=${!!videoMatch}`);
+      twitterLog.info(
+        `OG: title=${!!titleMatch} desc=${!!descMatch} img=${!!imgMatch} video=${!!videoMatch}`,
+      );
 
       if (titleMatch || descMatch) {
         // vxtwitter OG titles are typically "Name (@handle)" or just "Name"
@@ -419,7 +481,8 @@ async function fetchTwitterData(url: string): Promise<EmbedInfo | null> {
           },
           footer: {
             text: "X",
-            iconURL: "https://abs.twimg.com/responsive-web/client-web/icon-default.522d363a.png",
+            iconURL:
+              "https://abs.twimg.com/responsive-web/client-web/icon-default.522d363a.png",
           },
           color: "#1D9BF0",
           fields: [],
@@ -436,7 +499,8 @@ async function fetchTwitterData(url: string): Promise<EmbedInfo | null> {
         // If OG has a video tag, add it
         if (videoMatch?.[1] || imgMatch?.[1]) {
           // vxtwitter OG video tags point to direct mp4 or embed URLs
-          const hasVideo = videoMatch?.[1] && videoTypeMatch?.[1]?.includes("text/html");
+          const hasVideo =
+            videoMatch?.[1] && videoTypeMatch?.[1]?.includes("text/html");
           if (hasVideo) {
             embed.video = {
               url: videoMatch![1],
@@ -472,12 +536,16 @@ function extractTweetMedia(tweet: any): NonNullable<EmbedInfo["media"]> {
 
   const add = (item: any, fallbackType?: "image" | "video") => {
     const normalizedType = normalizeTweetMediaType(item?.type) || fallbackType;
-    const url = item?.url || item?.media_url_https || item?.media_url || item?.src;
+    const url =
+      item?.url || item?.media_url_https || item?.media_url || item?.src;
     if (!normalizedType || !url) return;
 
-    const rawType = typeof item?.type === "string" ? item.type.toLowerCase() : undefined;
-    const thumbnailUrl = item?.thumbnail_url || item?.thumb || item?.preview_image_url;
-    const contentType = item?.format || item?.content_type || item?.variants?.[0]?.content_type;
+    const rawType =
+      typeof item?.type === "string" ? item.type.toLowerCase() : undefined;
+    const thumbnailUrl =
+      item?.thumbnail_url || item?.thumb || item?.preview_image_url;
+    const contentType =
+      item?.format || item?.content_type || item?.variants?.[0]?.content_type;
     const dedupeKey = getTweetMediaDedupKey(url);
     const existingIndex = seen.get(dedupeKey);
     const width = item?.width || item?.size?.width || item?.sizes?.large?.w;
@@ -491,11 +559,19 @@ function extractTweetMedia(tweet: any): NonNullable<EmbedInfo["media"]> {
         ...existing,
         width: existing.width ?? width,
         height: existing.height ?? height,
-        thumbnailUrl: existing.thumbnailUrl ?? (normalizedType === "video" ? thumbnailUrl : undefined),
-        contentType: existing.contentType ?? (normalizedType === "video" ? contentType : undefined),
-        isGif: existing.isGif ?? (rawType === "animated_gif" || rawType === "gif" ? true : undefined),
+        thumbnailUrl:
+          existing.thumbnailUrl ??
+          (normalizedType === "video" ? thumbnailUrl : undefined),
+        contentType:
+          existing.contentType ??
+          (normalizedType === "video" ? contentType : undefined),
+        isGif:
+          existing.isGif ??
+          (rawType === "animated_gif" || rawType === "gif" ? true : undefined),
         altText: existing.altText ?? altText,
-        durationSeconds: existing.durationSeconds ?? (normalizedType === "video" ? durationSeconds : undefined),
+        durationSeconds:
+          existing.durationSeconds ??
+          (normalizedType === "video" ? durationSeconds : undefined),
       };
       return;
     }
@@ -533,12 +609,13 @@ function getTweetMediaDedupKey(rawUrl: string): string {
       return `${hostname}${pathname}`;
     }
 
-    if (hostname === "pbs.twimg.com" && (
-      pathname.startsWith("/media/") ||
-      pathname.startsWith("/tweet_video_thumb/") ||
-      pathname.startsWith("/ext_tw_video_thumb/") ||
-      pathname.startsWith("/amplify_video_thumb/")
-    )) {
+    if (
+      hostname === "pbs.twimg.com" &&
+      (pathname.startsWith("/media/") ||
+        pathname.startsWith("/tweet_video_thumb/") ||
+        pathname.startsWith("/ext_tw_video_thumb/") ||
+        pathname.startsWith("/amplify_video_thumb/"))
+    ) {
       return `${hostname}${pathname}`;
     }
 
@@ -549,8 +626,13 @@ function getTweetMediaDedupKey(rawUrl: string): string {
 }
 
 function getTweetMediaDurationSeconds(item: any): number | undefined {
-  const rawDuration = item?.duration ?? item?.duration_seconds ?? item?.durationSecs;
-  if (typeof rawDuration === "number" && Number.isFinite(rawDuration) && rawDuration > 0) {
+  const rawDuration =
+    item?.duration ?? item?.duration_seconds ?? item?.durationSecs;
+  if (
+    typeof rawDuration === "number" &&
+    Number.isFinite(rawDuration) &&
+    rawDuration > 0
+  ) {
     return rawDuration;
   }
 
@@ -561,8 +643,13 @@ function getTweetMediaDurationSeconds(item: any): number | undefined {
     }
   }
 
-  const rawMillis = item?.duration_millis ?? item?.durationMillis ?? item?.duration_ms;
-  if (typeof rawMillis === "number" && Number.isFinite(rawMillis) && rawMillis > 0) {
+  const rawMillis =
+    item?.duration_millis ?? item?.durationMillis ?? item?.duration_ms;
+  if (
+    typeof rawMillis === "number" &&
+    Number.isFinite(rawMillis) &&
+    rawMillis > 0
+  ) {
     return rawMillis / 1000;
   }
 
@@ -576,7 +663,11 @@ function getTweetMediaDurationSeconds(item: any): number | undefined {
   return undefined;
 }
 
-function buildTwitterEmbed(tweet: any, url: string, fallbackScreenName: string): EmbedInfo | null {
+function buildTwitterEmbed(
+  tweet: any,
+  url: string,
+  fallbackScreenName: string,
+): EmbedInfo | null {
   const externalCard = extractTweetExternalCard(tweet);
   const media = extractTweetMedia(tweet);
   const rawDescription = extractTweetText(tweet, externalCard);
@@ -665,15 +756,33 @@ function mergeTweetMetadata(baseTweet: any, incomingTweet: any): any {
       ...(incomingTweet.author || {}),
     },
     media: mergeTweetMedia(baseTweet.media, incomingTweet.media),
-    media_extended: mergeTweetMediaLists(baseTweet.media_extended, incomingTweet.media_extended),
+    media_extended: mergeTweetMediaLists(
+      baseTweet.media_extended,
+      incomingTweet.media_extended,
+    ),
     quote: mergeReferencedTweet(baseTweet.quote, incomingTweet.quote),
-    quoted_tweet: mergeReferencedTweet(baseTweet.quoted_tweet, incomingTweet.quoted_tweet),
-    quotedTweet: mergeReferencedTweet(baseTweet.quotedTweet, incomingTweet.quotedTweet),
+    quoted_tweet: mergeReferencedTweet(
+      baseTweet.quoted_tweet,
+      incomingTweet.quoted_tweet,
+    ),
+    quotedTweet: mergeReferencedTweet(
+      baseTweet.quotedTweet,
+      incomingTweet.quotedTweet,
+    ),
     qrt: mergeReferencedTweet(baseTweet.qrt, incomingTweet.qrt),
     retweet: mergeReferencedTweet(baseTweet.retweet, incomingTweet.retweet),
-    retweeted_tweet: mergeReferencedTweet(baseTweet.retweeted_tweet, incomingTweet.retweeted_tweet),
-    retweetedTweet: mergeReferencedTweet(baseTweet.retweetedTweet, incomingTweet.retweetedTweet),
-    original_tweet: mergeReferencedTweet(baseTweet.original_tweet, incomingTweet.original_tweet),
+    retweeted_tweet: mergeReferencedTweet(
+      baseTweet.retweeted_tweet,
+      incomingTweet.retweeted_tweet,
+    ),
+    retweetedTweet: mergeReferencedTweet(
+      baseTweet.retweetedTweet,
+      incomingTweet.retweetedTweet,
+    ),
+    original_tweet: mergeReferencedTweet(
+      baseTweet.original_tweet,
+      incomingTweet.original_tweet,
+    ),
   };
 
   return mergedTweet;
@@ -696,14 +805,20 @@ function mergeTweetMedia(baseMedia: any, incomingMedia: any): any {
 
   for (const key of ["all", "photos", "videos"]) {
     if (baseMedia[key] || incomingMedia[key]) {
-      mergedMedia[key] = mergeTweetMediaLists(baseMedia[key], incomingMedia[key]);
+      mergedMedia[key] = mergeTweetMediaLists(
+        baseMedia[key],
+        incomingMedia[key],
+      );
     }
   }
 
   return mergedMedia;
 }
 
-function mergeTweetMediaLists(baseList: any[] | undefined, incomingList: any[] | undefined): any[] | undefined {
+function mergeTweetMediaLists(
+  baseList: any[] | undefined,
+  incomingList: any[] | undefined,
+): any[] | undefined {
   if (!baseList?.length) return incomingList;
   if (!incomingList?.length) return baseList;
 
@@ -711,7 +826,11 @@ function mergeTweetMediaLists(baseList: any[] | undefined, incomingList: any[] |
 
   const getKey = (item: any, index: number) => {
     const rawUrl = item?.url || item?.media_url_https || item?.media_url;
-    return String(item?.id || item?.id_str || (rawUrl ? getTweetMediaDedupKey(rawUrl) : index));
+    return String(
+      item?.id ||
+        item?.id_str ||
+        (rawUrl ? getTweetMediaDedupKey(rawUrl) : index),
+    );
   };
 
   for (const [index, item] of baseList.entries()) {
@@ -730,12 +849,24 @@ function normalizeTweetMediaType(type?: string): "image" | "video" | null {
   if (!type) return null;
   const normalized = type.toLowerCase();
   if (normalized === "photo" || normalized === "image") return "image";
-  if (normalized === "video" || normalized === "animated_gif" || normalized === "gif") return "video";
+  if (
+    normalized === "video" ||
+    normalized === "animated_gif" ||
+    normalized === "gif"
+  )
+    return "video";
   return null;
 }
 
-function extractTweetAuthor(tweet: any, fallbackScreenName = "x"): { name: string; screenName: string; avatar?: string } {
-  const screenName = tweet.author?.screen_name || tweet.user_screen_name || tweet.user?.screen_name || fallbackScreenName;
+function extractTweetAuthor(
+  tweet: any,
+  fallbackScreenName = "x",
+): { name: string; screenName: string; avatar?: string } {
+  const screenName =
+    tweet.author?.screen_name ||
+    tweet.user_screen_name ||
+    tweet.user?.screen_name ||
+    fallbackScreenName;
 
   return {
     name: tweet.author?.name || tweet.user_name || tweet.user?.name || "X User",
@@ -749,7 +880,8 @@ function extractTweetAuthor(tweet: any, fallbackScreenName = "x"): { name: strin
 }
 
 function extractTweetTimestamp(tweet: any): string | undefined {
-  if (tweet.created_timestamp) return new Date(tweet.created_timestamp * 1000).toISOString();
+  if (tweet.created_timestamp)
+    return new Date(tweet.created_timestamp * 1000).toISOString();
   if (tweet.date_epoch) return new Date(tweet.date_epoch * 1000).toISOString();
   if (tweet.created_at) {
     const parsed = new Date(tweet.created_at);
@@ -814,7 +946,12 @@ function extractTweetMetrics(tweet: any): EmbedInfo["metrics"] | undefined {
     "public_metrics.view_count",
   ]);
 
-  if (replies === undefined && retweets === undefined && likes === undefined && impressions === undefined) {
+  if (
+    replies === undefined &&
+    retweets === undefined &&
+    likes === undefined &&
+    impressions === undefined
+  ) {
     return undefined;
   }
 
@@ -866,7 +1003,8 @@ function parseCountValue(value: unknown): number | undefined {
   if (compactMatch) {
     const amount = Number(compactMatch[1]);
     const suffix = compactMatch[2].toLowerCase();
-    const multiplier = suffix === "k" ? 1_000 : suffix === "m" ? 1_000_000 : 1_000_000_000;
+    const multiplier =
+      suffix === "k" ? 1_000 : suffix === "m" ? 1_000_000 : 1_000_000_000;
     return Math.round(amount * multiplier);
   }
 
@@ -878,16 +1016,28 @@ function parseCountValue(value: unknown): number | undefined {
   return Math.round(parsed);
 }
 
-function extractReferencedTweet(tweet: any, sourceUrl: string): EmbedInfo["referencedTweet"] | undefined {
-  const quotedTweet = tweet.quote || tweet.quoted_tweet || tweet.quotedTweet || tweet.qrt;
-  const retweetedTweet = tweet.retweet || tweet.retweeted_tweet || tweet.retweetedTweet || tweet.original_tweet;
+function extractReferencedTweet(
+  tweet: any,
+  sourceUrl: string,
+): EmbedInfo["referencedTweet"] | undefined {
+  const quotedTweet =
+    tweet.quote || tweet.quoted_tweet || tweet.quotedTweet || tweet.qrt;
+  const retweetedTweet =
+    tweet.retweet ||
+    tweet.retweeted_tweet ||
+    tweet.retweetedTweet ||
+    tweet.original_tweet;
   const referencedTweet = quotedTweet || retweetedTweet;
   if (!referencedTweet) return undefined;
 
   const externalCard = extractTweetExternalCard(referencedTweet);
   const media = extractTweetMedia(referencedTweet);
   const author = extractTweetAuthor(referencedTweet);
-  const referencedUrl = referencedTweet.url || referencedTweet.tweet_url || referencedTweet.link || buildReferencedTweetUrl(author.screenName, referencedTweet.id);
+  const referencedUrl =
+    referencedTweet.url ||
+    referencedTweet.tweet_url ||
+    referencedTweet.link ||
+    buildReferencedTweetUrl(author.screenName, referencedTweet.id);
 
   return {
     type: quotedTweet ? "quoted" : "retweeted",
@@ -905,12 +1055,18 @@ function extractReferencedTweet(tweet: any, sourceUrl: string): EmbedInfo["refer
   };
 }
 
-function buildReferencedTweetUrl(screenName?: string, id?: string | number): string | undefined {
+function buildReferencedTweetUrl(
+  screenName?: string,
+  id?: string | number,
+): string | undefined {
   if (!screenName || !id) return undefined;
   return `https://twitter.com/${screenName}/status/${id}`;
 }
 
-function extractTweetText(tweet: any, externalCard?: EmbedInfo["externalCard"]): string | undefined {
+function extractTweetText(
+  tweet: any,
+  externalCard?: EmbedInfo["externalCard"],
+): string | undefined {
   const text = tweet.text || tweet.full_text || tweet.description;
   if (!text) return undefined;
 
@@ -921,42 +1077,70 @@ function extractTweetText(tweet: any, externalCard?: EmbedInfo["externalCard"]):
     tweet.qrt?.url,
   ].filter(Boolean);
   const mediaUrlCandidates = collectTweetFacetUrlCandidates(tweet, "media");
-  const cardUrlCandidates = externalCard ? collectTweetCardUrlCandidates(tweet, externalCard) : [];
+  const cardUrlCandidates = externalCard
+    ? collectTweetCardUrlCandidates(tweet, externalCard)
+    : [];
 
-  if (referencedUrls.length === 0 && mediaUrlCandidates.length === 0 && cardUrlCandidates.length === 0) return text;
+  if (
+    referencedUrls.length === 0 &&
+    mediaUrlCandidates.length === 0 &&
+    cardUrlCandidates.length === 0
+  )
+    return text;
 
-  const filteredLines = text
-    .split("\n")
-    .filter((line: string) => {
-      const trimmed = line.trim();
-      if (!trimmed) return true;
+  const filteredLines = text.split("\n").filter((line: string) => {
+    const trimmed = line.trim();
+    if (!trimmed) return true;
 
-      if (referencedUrls.some((url: string) => trimmed === url)) {
-        return false;
-      }
+    if (referencedUrls.some((url: string) => trimmed === url)) {
+      return false;
+    }
 
-      if (mediaUrlCandidates.length > 0 && isTweetCandidateUrlLine(trimmed, mediaUrlCandidates)) {
-        return false;
-      }
+    if (
+      mediaUrlCandidates.length > 0 &&
+      isTweetCandidateUrlLine(trimmed, mediaUrlCandidates)
+    ) {
+      return false;
+    }
 
-      if (cardUrlCandidates.length > 0 && isTweetCandidateUrlLine(trimmed, cardUrlCandidates)) {
-        return false;
-      }
+    if (
+      cardUrlCandidates.length > 0 &&
+      isTweetCandidateUrlLine(trimmed, cardUrlCandidates)
+    ) {
+      return false;
+    }
 
-      return true;
-    });
+    return true;
+  });
 
-  return filteredLines.join("\n").replace(/\n{3,}/g, "\n\n").trim() || undefined;
+  return (
+    filteredLines
+      .join("\n")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim() || undefined
+  );
 }
 
-function extractTweetExternalCard(tweet: any): EmbedInfo["externalCard"] | undefined {
-  const card = tweet.card || tweet.summary_card || tweet.link_card || tweet.website_card;
+function extractTweetExternalCard(
+  tweet: any,
+): EmbedInfo["externalCard"] | undefined {
+  const card =
+    tweet.card || tweet.summary_card || tweet.link_card || tweet.website_card;
   if (!card || typeof card !== "object") return undefined;
 
-  const url = firstNonEmptyString(card.url, card.link, card.expanded_url, card.destination?.url);
+  const url = firstNonEmptyString(
+    card.url,
+    card.link,
+    card.expanded_url,
+    card.destination?.url,
+  );
   const title = firstNonEmptyString(card.title, card.name);
   const description = firstNonEmptyString(card.description, card.subtitle);
-  const domain = firstNonEmptyString(card.domain, card.site_name, getDomainLabel(url));
+  const domain = firstNonEmptyString(
+    card.domain,
+    card.site_name,
+    getDomainLabel(url),
+  );
   const imageUrl = firstNonEmptyString(
     card.image?.url,
     card.image_url,
@@ -964,8 +1148,18 @@ function extractTweetExternalCard(tweet: any): EmbedInfo["externalCard"] | undef
     card.thumbnail?.url,
     card.thumbnail_url,
   );
-  const imageWidth = readPositiveNumber(card.image?.width, card.image_width, card.thumbnail?.width, card.thumbnail_width);
-  const imageHeight = readPositiveNumber(card.image?.height, card.image_height, card.thumbnail?.height, card.thumbnail_height);
+  const imageWidth = readPositiveNumber(
+    card.image?.width,
+    card.image_width,
+    card.thumbnail?.width,
+    card.thumbnail_width,
+  );
+  const imageHeight = readPositiveNumber(
+    card.image?.height,
+    card.image_height,
+    card.thumbnail?.height,
+    card.thumbnail_height,
+  );
 
   if (!url && !title && !description && !domain && !imageUrl) {
     return undefined;
@@ -976,30 +1170,46 @@ function extractTweetExternalCard(tweet: any): EmbedInfo["externalCard"] | undef
     title: title || undefined,
     description: description || undefined,
     domain: domain || undefined,
-    image: imageUrl ? {
-      url: imageUrl,
-      width: imageWidth,
-      height: imageHeight,
-    } : undefined,
+    image: imageUrl
+      ? {
+          url: imageUrl,
+          width: imageWidth,
+          height: imageHeight,
+        }
+      : undefined,
   };
 }
 
-function collectTweetCardUrlCandidates(tweet: any, externalCard?: EmbedInfo["externalCard"]): string[] {
+function collectTweetCardUrlCandidates(
+  tweet: any,
+  externalCard?: EmbedInfo["externalCard"],
+): string[] {
   return [
     tweet.card?.url,
     tweet.card?.link,
     tweet.card?.expanded_url,
     externalCard?.url,
     ...collectTweetFacetUrlCandidates(tweet, "url"),
-  ].filter((value): value is string => typeof value === "string" && value.trim().length > 0);
+  ].filter(
+    (value): value is string =>
+      typeof value === "string" && value.trim().length > 0,
+  );
 }
 
-function collectTweetFacetUrlCandidates(tweet: any, facetType: "url" | "media"): string[] {
+function collectTweetFacetUrlCandidates(
+  tweet: any,
+  facetType: "url" | "media",
+): string[] {
   return Array.isArray(tweet.raw_text?.facets)
-    ? tweet.raw_text.facets.flatMap((facet: any) => {
-      if (facet?.type !== facetType) return [];
-      return [facet.original, facet.replacement, facet.display];
-    }).filter((value: unknown): value is string => typeof value === "string" && value.trim().length > 0)
+    ? tweet.raw_text.facets
+        .flatMap((facet: any) => {
+          if (facet?.type !== facetType) return [];
+          return [facet.original, facet.replacement, facet.display];
+        })
+        .filter(
+          (value: unknown): value is string =>
+            typeof value === "string" && value.trim().length > 0,
+        )
     : [];
 }
 
@@ -1021,9 +1231,14 @@ function normalizeComparableUrlValue(value: string): string | null {
 
   const normalized = trimmed.replace(/^https?:\/\//i, "");
   try {
-    const parsed = new URL(/^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`);
+    const parsed = new URL(
+      /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`,
+    );
     const pathname = parsed.pathname.replace(/\/$/, "");
-    return `${parsed.hostname.toLowerCase()}${pathname}${parsed.search}`.replace(/\/$/, "");
+    return `${parsed.hostname.toLowerCase()}${pathname}${parsed.search}`.replace(
+      /\/$/,
+      "",
+    );
   } catch {
     return normalized.replace(/\/$/, "").toLowerCase();
   }
@@ -1075,13 +1290,19 @@ async function fetchInstagramData(url: string): Promise<EmbedInfo | null> {
   const media = videoData?.media?.length ? videoData.media : undefined;
   const firstVideo = media?.find((entry) => entry.type === "video");
   const firstMedia = media?.[0];
-  const thumbnailUrl = videoData?.thumbnailUrl ?? firstVideo?.thumbnailUrl ?? firstMedia?.url ?? data?.thumbnailUrl;
-  const thumbnailWidth = firstMedia?.type === "image"
-    ? firstMedia.width
-    : firstVideo?.width ?? data?.thumbnailWidth;
-  const thumbnailHeight = firstMedia?.type === "image"
-    ? firstMedia.height
-    : firstVideo?.height ?? data?.thumbnailHeight;
+  const thumbnailUrl =
+    videoData?.thumbnailUrl ??
+    firstVideo?.thumbnailUrl ??
+    firstMedia?.url ??
+    data?.thumbnailUrl;
+  const thumbnailWidth =
+    firstMedia?.type === "image"
+      ? firstMedia.width
+      : (firstVideo?.width ?? data?.thumbnailWidth);
+  const thumbnailHeight =
+    firstMedia?.type === "image"
+      ? firstMedia.height
+      : (firstVideo?.height ?? data?.thumbnailHeight);
   const authorName = data?.authorName ?? videoData?.authorName ?? undefined;
   const authorUrl = data?.authorUrl ?? videoData?.authorUrl ?? undefined;
   const authorIconUrl = videoData?.authorAvatarUrl ?? undefined;
@@ -1089,15 +1310,16 @@ async function fetchInstagramData(url: string): Promise<EmbedInfo | null> {
   const videoDurationSeconds = videoData?.durationSeconds ?? undefined;
   const audio = videoData?.audio ?? undefined;
   const timestamp = videoData?.timestamp ?? undefined;
-  const metrics = (
-    videoData?.commentCount !== undefined
-    || videoData?.likeCount !== undefined
-    || videoData?.viewCount !== undefined
-  ) ? {
-    comments: videoData?.commentCount ?? undefined,
-    likes: videoData?.likeCount ?? undefined,
-    views: videoData?.viewCount ?? undefined,
-  } : undefined;
+  const metrics =
+    videoData?.commentCount !== undefined ||
+    videoData?.likeCount !== undefined ||
+    videoData?.viewCount !== undefined
+      ? {
+          comments: videoData?.commentCount ?? undefined,
+          likes: videoData?.likeCount ?? undefined,
+          views: videoData?.viewCount ?? undefined,
+        }
+      : undefined;
   const rawTitle = videoData?.title ?? data?.title;
 
   if (!rawTitle && !thumbnailUrl && !media?.length && !videoData?.videoUrl) {
@@ -1109,31 +1331,37 @@ async function fetchInstagramData(url: string): Promise<EmbedInfo | null> {
     url,
     type: "rich",
     rawTitle,
-    author: authorName ? {
-      name: authorName,
-      url: authorUrl,
-      iconURL: authorIconUrl,
-      isVerified: authorVerified,
-    } : undefined,
+    author: authorName
+      ? {
+          name: authorName,
+          url: authorUrl,
+          iconURL: authorIconUrl,
+          isVerified: authorVerified,
+        }
+      : undefined,
     provider: {
       name: data?.providerName || "Instagram",
       url: data?.providerUrl || "https://www.instagram.com",
     },
     color: "#E1306C",
-    thumbnail: thumbnailUrl ? {
-      url: thumbnailUrl,
-      width: thumbnailWidth,
-      height: thumbnailHeight,
-    } : undefined,
+    thumbnail: thumbnailUrl
+      ? {
+          url: thumbnailUrl,
+          width: thumbnailWidth,
+          height: thumbnailHeight,
+        }
+      : undefined,
     media,
-    video: videoData?.videoUrl ? {
-      url: videoData.videoUrl,
-      width: firstVideo?.width ?? 720,
-      height: firstVideo?.height ?? 1280,
-      kind: "direct",
-      contentType: "video/mp4",
-      durationSeconds: videoDurationSeconds,
-    } : undefined,
+    video: videoData?.videoUrl
+      ? {
+          url: videoData.videoUrl,
+          width: firstVideo?.width ?? 720,
+          height: firstVideo?.height ?? 1280,
+          kind: "direct",
+          contentType: "video/mp4",
+          durationSeconds: videoDurationSeconds,
+        }
+      : undefined,
     audio,
     timestamp,
     metrics,
@@ -1144,7 +1372,9 @@ async function fetchInstagramData(url: string): Promise<EmbedInfo | null> {
   };
 }
 
-async function fetchTikTokDataRefreshed(url: string): Promise<EmbedInfo | null> {
+async function fetchTikTokDataRefreshed(
+  url: string,
+): Promise<EmbedInfo | null> {
   const oembedUrl = `https://www.tiktok.com/oembed?url=${encodeURIComponent(url)}`;
   const [oembedResult, proxyResult] = await Promise.allSettled([
     fetch(oembedUrl),
@@ -1152,33 +1382,46 @@ async function fetchTikTokDataRefreshed(url: string): Promise<EmbedInfo | null> 
   ]);
 
   const res = oembedResult.status === "fulfilled" ? oembedResult.value : null;
-  const proxyData = proxyResult.status === "fulfilled" ? proxyResult.value : null;
+  const proxyData =
+    proxyResult.status === "fulfilled" ? proxyResult.value : null;
   if (!res?.ok && !proxyData) return null;
 
-  const data = res?.ok ? await res.json() as any : {};
-  const videoIdMatch = data.html?.match(/data-video-id="([^"]+)"/)
-    || url.match(/(?:video|photo|player\/v1)\/(\d+)/)
-    || proxyData?.id;
-  const videoId = Array.isArray(videoIdMatch) ? videoIdMatch[1] : videoIdMatch ?? null;
+  const data = res?.ok ? ((await res.json()) as any) : {};
+  const videoIdMatch =
+    data.html?.match(/data-video-id="([^"]+)"/) ||
+    url.match(/(?:video|photo|player\/v1)\/(\d+)/) ||
+    proxyData?.id;
+  const videoId = Array.isArray(videoIdMatch)
+    ? videoIdMatch[1]
+    : (videoIdMatch ?? null);
   const caption = proxyData?.title || data.title;
   const authorName = data.author_name || proxyData?.authorName || "Unknown";
-  const authorUrl = data.author_url || (proxyData?.authorHandle ? `https://www.tiktok.com/@${proxyData.authorHandle}` : undefined);
+  const authorUrl =
+    data.author_url ||
+    (proxyData?.authorHandle
+      ? `https://www.tiktok.com/@${proxyData.authorHandle}`
+      : undefined);
   const firstVideo = proxyData?.media?.find((entry) => entry.type === "video");
   const firstMedia = proxyData?.media?.[0];
-  const metrics = (
-    proxyData?.commentCount !== undefined
-    || proxyData?.likeCount !== undefined
-    || proxyData?.viewCount !== undefined
-  ) ? {
-    comments: proxyData?.commentCount,
-    likes: proxyData?.likeCount,
-    views: proxyData?.viewCount,
-  } : undefined;
+  const metrics =
+    proxyData?.commentCount !== undefined ||
+    proxyData?.likeCount !== undefined ||
+    proxyData?.viewCount !== undefined
+      ? {
+          comments: proxyData?.commentCount,
+          likes: proxyData?.likeCount,
+          views: proxyData?.viewCount,
+        }
+      : undefined;
   const postType = proxyData?.postType === "slideshow" ? "slideshow" : "video";
   const slideshowThumbnailUrl = firstVideo?.thumbnailUrl;
-  const thumbnailUrl = postType === "slideshow"
-    ? slideshowThumbnailUrl || proxyData?.coverUrl || data.thumbnail_url
-    : proxyData?.coverUrl || data.thumbnail_url || firstVideo?.thumbnailUrl || firstMedia?.url;
+  const thumbnailUrl =
+    postType === "slideshow"
+      ? slideshowThumbnailUrl || proxyData?.coverUrl || data.thumbnail_url
+      : proxyData?.coverUrl ||
+        data.thumbnail_url ||
+        firstVideo?.thumbnailUrl ||
+        firstMedia?.url;
 
   if (!videoId && !proxyData?.media?.length && !thumbnailUrl && !caption) {
     return null;
@@ -1188,29 +1431,39 @@ async function fetchTikTokDataRefreshed(url: string): Promise<EmbedInfo | null> 
     id: nextEmbedId(),
     url,
     type: postType === "slideshow" ? "rich" : "video",
-    rawTitle: caption || `${postType === "slideshow" ? "TikTok slideshow" : "TikTok"} · ${authorName}`,
+    rawTitle:
+      caption ||
+      `${postType === "slideshow" ? "TikTok slideshow" : "TikTok"} · ${authorName}`,
     rawDescription: caption || undefined,
-    author: data.author_name || proxyData?.authorName ? {
-      name: authorName,
-      url: authorUrl,
-      iconURL: proxyData?.authorAvatarUrl,
-    } : undefined,
+    author:
+      data.author_name || proxyData?.authorName
+        ? {
+            name: authorName,
+            url: authorUrl,
+            iconURL: proxyData?.authorAvatarUrl,
+          }
+        : undefined,
     provider: {
       name: "TikTok",
       url: data.provider_url || "https://www.tiktok.com",
     },
     color: "#FF0050",
-    video: videoId && postType !== "slideshow" ? {
-      url: `https://www.tiktok.com/player/v1/${videoId}`,
-      width: firstVideo?.width ?? 325,
-      height: firstVideo?.height ?? 738,
-      kind: "player",
-    } : undefined,
-    thumbnail: thumbnailUrl ? {
-      url: thumbnailUrl,
-      width: data.thumbnail_width ?? 300,
-      height: data.thumbnail_height ?? 400,
-    } : undefined,
+    video:
+      videoId && postType !== "slideshow"
+        ? {
+            url: `https://www.tiktok.com/player/v1/${videoId}`,
+            width: firstVideo?.width ?? 325,
+            height: firstVideo?.height ?? 738,
+            kind: "player",
+          }
+        : undefined,
+    thumbnail: thumbnailUrl
+      ? {
+          url: thumbnailUrl,
+          width: data.thumbnail_width ?? 300,
+          height: data.thumbnail_height ?? 400,
+        }
+      : undefined,
     media: proxyData?.media,
     audio: proxyData?.audio,
     timestamp: proxyData?.timestamp,
@@ -1227,10 +1480,11 @@ async function _fetchTikTokDataLegacy(url: string): Promise<EmbedInfo | null> {
   const res = await fetch(oembedUrl);
   if (!res.ok) return null;
 
-  const data = await res.json() as any;
+  const data = (await res.json()) as any;
 
   // Extract video ID from the oEmbed HTML or URL
-  const videoIdMatch = data.html?.match(/data-video-id="([^"]+)"/) || url.match(/video\/(\d+)/);
+  const videoIdMatch =
+    data.html?.match(/data-video-id="([^"]+)"/) || url.match(/video\/(\d+)/);
   const videoId = videoIdMatch ? videoIdMatch[1] : null;
   if (!videoId) return null;
 
@@ -1240,10 +1494,12 @@ async function _fetchTikTokDataLegacy(url: string): Promise<EmbedInfo | null> {
     type: "video",
     rawTitle: `TikTok · ${data.author_name || "Unknown"}`,
     rawDescription: data.title,
-    author: data.author_name ? {
-      name: data.author_name,
-      url: data.author_url,
-    } : undefined,
+    author: data.author_name
+      ? {
+          name: data.author_name,
+          url: data.author_url,
+        }
+      : undefined,
     provider: {
       name: "TikTok",
       url: data.provider_url || "https://www.tiktok.com",
@@ -1255,11 +1511,13 @@ async function _fetchTikTokDataLegacy(url: string): Promise<EmbedInfo | null> {
       height: 738,
       kind: "player",
     },
-    thumbnail: data.thumbnail_url ? {
-      url: data.thumbnail_url,
-      width: data.thumbnail_width,
-      height: data.thumbnail_height,
-    } : undefined,
+    thumbnail: data.thumbnail_url
+      ? {
+          url: data.thumbnail_url,
+          width: data.thumbnail_width,
+          height: data.thumbnail_height,
+        }
+      : undefined,
     fields: [],
   };
 
@@ -1270,20 +1528,27 @@ async function fetchOpenGraphData(url: string): Promise<EmbedInfo | null> {
   try {
     const res = await fetch(url, {
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-      }
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+      },
     });
 
-    if (!res.ok || !res.headers.get('content-type')?.includes('text/html')) {
+    if (!res.ok || !res.headers.get("content-type")?.includes("text/html")) {
       return null;
     }
 
     const html = await res.text();
 
-    const titleMatch = html.match(/<meta property="og:title" content="([^"]+)"/i) || html.match(/<title>([^<]+)<\/title>/i);
-    const descMatch = html.match(/<meta property="og:description" content="([^"]+)"/i) || html.match(/<meta name="description" content="([^"]+)"/i);
+    const titleMatch =
+      html.match(/<meta property="og:title" content="([^"]+)"/i) ||
+      html.match(/<title>([^<]+)<\/title>/i);
+    const descMatch =
+      html.match(/<meta property="og:description" content="([^"]+)"/i) ||
+      html.match(/<meta name="description" content="([^"]+)"/i);
     const imgMatch = html.match(/<meta property="og:image" content="([^"]+)"/i);
-    const siteNameMatch = html.match(/<meta property="og:site_name" content="([^"]+)"/i);
+    const siteNameMatch = html.match(
+      /<meta property="og:site_name" content="([^"]+)"/i,
+    );
     const typeMatch = html.match(/<meta property="og:type" content="([^"]+)"/i);
 
     if (!titleMatch) return null;
@@ -1324,24 +1589,28 @@ async function fetchSpotifyData(url: string): Promise<EmbedInfo | null> {
     const res = await fetch(oembedUrl);
     if (!res.ok) return await fetchOpenGraphData(url);
 
-    const data = await res.json() as any;
+    const data = (await res.json()) as any;
 
     return {
       id: nextEmbedId(),
       url,
       type: "link",
       rawTitle: data.title,
-      rawDescription: data.author_name ? `Spotify - ${data.author_name}` : "Spotify",
+      rawDescription: data.author_name
+        ? `Spotify - ${data.author_name}`
+        : "Spotify",
       provider: {
         name: "Spotify",
         url: "https://spotify.com/",
       },
       color: "#1DB954",
-      thumbnail: data.thumbnail_url ? {
-        url: data.thumbnail_url,
-        width: data.thumbnail_width ?? 300,
-        height: data.thumbnail_height ?? 300,
-      } : undefined,
+      thumbnail: data.thumbnail_url
+        ? {
+            url: data.thumbnail_url,
+            width: data.thumbnail_width ?? 300,
+            height: data.thumbnail_height ?? 300,
+          }
+        : undefined,
       fields: [],
     };
   } catch {

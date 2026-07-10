@@ -1,11 +1,13 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute } from "@tanstack/react-router";
 
 import { apiError, apiSuccess, getDB, requireAuth } from "@/lib/api-helpers";
 import { lookupUser } from "@/lib/ensure-user";
 import { ServiceError } from "@/lib/service-error";
-import { executeBroadcast, executeInvalidation } from "@/services/service-helpers";
+import {
+  executeBroadcast,
+  executeInvalidation,
+} from "@/services/service-helpers";
 import { joinServer } from "@/services/social.service";
-
 
 // POST /api/invites/:code/join — accept an invite and join a server
 const POST = async ({ request, params }: any) => {
@@ -19,11 +21,21 @@ const POST = async ({ request, params }: any) => {
   // Look up the user — they must already be synced via /api/users/me or webhook
   const userInfo = await lookupUser(userId);
   if (!userInfo) {
-    return apiError("User profile not synced yet. Please reload the page.", 409);
+    return apiError(
+      "User profile not synced yet. Please reload the page.",
+      409,
+    );
   }
 
   try {
-    const result = await joinServer(db, code, userId, userInfo.username, userInfo.avatar, userInfo.display_name);
+    const result = await joinServer(
+      db,
+      code,
+      userId,
+      userInfo.username,
+      userInfo.avatar,
+      userInfo.display_name,
+    );
 
     if (result.already_member) {
       return apiSuccess({ already_member: true, server: result.server });
@@ -39,17 +51,19 @@ const POST = async ({ request, params }: any) => {
     return apiSuccess({ joined: true, server: result.server }, 201);
   } catch (e) {
     if (e instanceof ServiceError) {
-      return Response.json({ error: e.message, code: e.code }, { status: e.status });
+      return Response.json(
+        { error: e.message, code: e.code },
+        { status: e.status },
+      );
     }
     throw e;
   }
-}
+};
 
-
-export const Route = createFileRoute('/api/invites/$code/join')({
+export const Route = createFileRoute("/api/invites/$code/join")({
   server: {
     handlers: {
       POST,
-    }
-  }
+    },
+  },
 });

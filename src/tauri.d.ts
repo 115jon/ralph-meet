@@ -110,8 +110,12 @@ declare module "@tauri-apps/plugin-notification" {
   export function isPermissionGranted(): Promise<boolean>;
   export function requestPermission(): Promise<NotificationPermission>;
   export function sendNotification(options: NotificationOptions | string): void;
-  export function registerActionTypes(types: NotificationActionType[]): Promise<void>;
+  export function registerActionTypes(
+    types: NotificationActionType[],
+  ): Promise<void>;
   export function createChannel(channel: NotificationChannel): Promise<void>;
   export function channels(): Promise<NotificationChannel[]>;
-  export function onAction(cb: (notification: NotificationActionEvent) => void): Promise<() => void>;
+  export function onAction(
+    cb: (notification: NotificationActionEvent) => void,
+  ): Promise<() => void>;
 }

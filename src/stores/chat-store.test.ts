@@ -58,7 +58,9 @@ describe("chatStore logic equivalence", () => {
     it("appends a message to the active channel", () => {
       useChatStore.setState(stateWith({ activeChannelId: "ch-1" }));
       const msg = makeMessage();
-      useChatStore.getState().dispatch({ type: "APPEND_MESSAGE", message: msg });
+      useChatStore
+        .getState()
+        .dispatch({ type: "APPEND_MESSAGE", message: msg });
 
       const next = useChatStore.getState();
       expect(next.messages).toHaveLength(1);
@@ -68,7 +70,9 @@ describe("chatStore logic equivalence", () => {
     it("ignores messages for a different channel", () => {
       useChatStore.setState(stateWith({ activeChannelId: "ch-other" }));
       const msg = makeMessage({ channel_id: "ch-1" });
-      useChatStore.getState().dispatch({ type: "APPEND_MESSAGE", message: msg });
+      useChatStore
+        .getState()
+        .dispatch({ type: "APPEND_MESSAGE", message: msg });
 
       const next = useChatStore.getState();
       expect(next.messages).toHaveLength(0);
@@ -76,19 +80,35 @@ describe("chatStore logic equivalence", () => {
 
     it("deduplicates by ID (late echo)", () => {
       const msg = makeMessage();
-      useChatStore.setState(stateWith({ activeChannelId: "ch-1", messages: [msg] }));
-      useChatStore.getState().dispatch({ type: "APPEND_MESSAGE", message: msg });
+      useChatStore.setState(
+        stateWith({ activeChannelId: "ch-1", messages: [msg] }),
+      );
+      useChatStore
+        .getState()
+        .dispatch({ type: "APPEND_MESSAGE", message: msg });
 
       const next = useChatStore.getState();
       expect(next.messages).toHaveLength(1);
     });
 
     it("replaces optimistic message by nonce", () => {
-      const pending = makeMessage({ id: "pending-abc", nonce: "abc", pending: true });
-      useChatStore.setState(stateWith({ activeChannelId: "ch-1", messages: [pending] }));
+      const pending = makeMessage({
+        id: "pending-abc",
+        nonce: "abc",
+        pending: true,
+      });
+      useChatStore.setState(
+        stateWith({ activeChannelId: "ch-1", messages: [pending] }),
+      );
 
-      const confirmed = makeMessage({ id: "real-id", nonce: "abc", pending: false });
-      useChatStore.getState().dispatch({ type: "APPEND_MESSAGE", message: confirmed });
+      const confirmed = makeMessage({
+        id: "real-id",
+        nonce: "abc",
+        pending: false,
+      });
+      useChatStore
+        .getState()
+        .dispatch({ type: "APPEND_MESSAGE", message: confirmed });
 
       const next = useChatStore.getState();
       expect(next.messages).toHaveLength(1);
@@ -102,7 +122,9 @@ describe("chatStore logic equivalence", () => {
   describe("DELETE_MESSAGE", () => {
     it("removes from both messages and pinnedMessages", () => {
       const msg = makeMessage({ is_pinned: true });
-      useChatStore.setState(stateWith({ messages: [msg], pinnedMessages: [msg] }));
+      useChatStore.setState(
+        stateWith({ messages: [msg], pinnedMessages: [msg] }),
+      );
 
       useChatStore.getState().dispatch({ type: "DELETE_MESSAGE", id: "msg-1" });
 
@@ -116,13 +138,23 @@ describe("chatStore logic equivalence", () => {
 
   describe("ADD_SERVER", () => {
     it("deduplicates an existing server and refreshes its fields", () => {
-      useChatStore.setState(stateWith({
-        servers: [{ id: "srv-1", name: "Old", owner_id: "u1", created_at: "" }],
-      }));
+      useChatStore.setState(
+        stateWith({
+          servers: [
+            { id: "srv-1", name: "Old", owner_id: "u1", created_at: "" },
+          ],
+        }),
+      );
 
       useChatStore.getState().dispatch({
         type: "ADD_SERVER",
-        server: { id: "srv-1", name: "New", owner_id: "u1", icon_url: "/icon.png", created_at: "" },
+        server: {
+          id: "srv-1",
+          name: "New",
+          owner_id: "u1",
+          icon_url: "/icon.png",
+          created_at: "",
+        },
       });
 
       const next = useChatStore.getState();
@@ -137,20 +169,36 @@ describe("chatStore logic equivalence", () => {
 
   describe("REMOVE_SERVER", () => {
     it("clears server-scoped state when removing the active server", () => {
-      useChatStore.setState(stateWith({
-        activeServerId: "srv-1",
-        activeChannelId: "ch-1",
-        servers: [{ id: "srv-1", name: "Test", owner_id: "u1", created_at: "" }],
-        channels: [{ id: "ch-1", name: "general", channel_type: "text", position: 0, created_at: "" }],
-        messages: [makeMessage()],
-        members: [{ user: { id: "u1", username: "alice" } }],
-        channelsByServerId: { "srv-1": [makeChannel()] },
-        categoriesByServerId: { "srv-1": [makeCategory()] },
-        channelsLoadedByServerId: { "srv-1": true },
-        membersByServerId: { "srv-1": [{ user: { id: "u1", username: "alice" } }] },
-        membersLoadedByServerId: { "srv-1": true },
-      }));
-      useChatStore.getState().dispatch({ type: "REMOVE_SERVER", serverId: "srv-1" });
+      useChatStore.setState(
+        stateWith({
+          activeServerId: "srv-1",
+          activeChannelId: "ch-1",
+          servers: [
+            { id: "srv-1", name: "Test", owner_id: "u1", created_at: "" },
+          ],
+          channels: [
+            {
+              id: "ch-1",
+              name: "general",
+              channel_type: "text",
+              position: 0,
+              created_at: "",
+            },
+          ],
+          messages: [makeMessage()],
+          members: [{ user: { id: "u1", username: "alice" } }],
+          channelsByServerId: { "srv-1": [makeChannel()] },
+          categoriesByServerId: { "srv-1": [makeCategory()] },
+          channelsLoadedByServerId: { "srv-1": true },
+          membersByServerId: {
+            "srv-1": [{ user: { id: "u1", username: "alice" } }],
+          },
+          membersLoadedByServerId: { "srv-1": true },
+        }),
+      );
+      useChatStore
+        .getState()
+        .dispatch({ type: "REMOVE_SERVER", serverId: "srv-1" });
 
       const next = useChatStore.getState();
       expect(next.servers).toHaveLength(0);
@@ -167,15 +215,19 @@ describe("chatStore logic equivalence", () => {
     });
 
     it("preserves state when removing a non-active server", () => {
-      useChatStore.setState(stateWith({
-        activeServerId: "srv-2",
-        servers: [
-          { id: "srv-1", name: "Removed", owner_id: "u1", created_at: "" },
-          { id: "srv-2", name: "Active", owner_id: "u1", created_at: "" },
-        ],
-        messages: [makeMessage()],
-      }));
-      useChatStore.getState().dispatch({ type: "REMOVE_SERVER", serverId: "srv-1" });
+      useChatStore.setState(
+        stateWith({
+          activeServerId: "srv-2",
+          servers: [
+            { id: "srv-1", name: "Removed", owner_id: "u1", created_at: "" },
+            { id: "srv-2", name: "Active", owner_id: "u1", created_at: "" },
+          ],
+          messages: [makeMessage()],
+        }),
+      );
+      useChatStore
+        .getState()
+        .dispatch({ type: "REMOVE_SERVER", serverId: "srv-1" });
 
       const next = useChatStore.getState();
       expect(next.servers).toHaveLength(1);
@@ -191,7 +243,12 @@ describe("chatStore logic equivalence", () => {
       const msg = makeMessage({ reactions: [] });
       useChatStore.setState(stateWith({ messages: [msg] }));
 
-      useChatStore.getState().dispatch({ type: "ADD_REACTION", messageId: "msg-1", emoji: "👍", userId: "user-1" });
+      useChatStore.getState().dispatch({
+        type: "ADD_REACTION",
+        messageId: "msg-1",
+        emoji: "👍",
+        userId: "user-1",
+      });
 
       const next = useChatStore.getState();
       const reactions = next.messages[0].reactions!;
@@ -206,7 +263,12 @@ describe("chatStore logic equivalence", () => {
         reactions: [{ emoji: "👍", count: 1, me: false, users: ["user-1"] }],
       });
       useChatStore.setState(stateWith({ messages: [msg] }));
-      useChatStore.getState().dispatch({ type: "ADD_REACTION", messageId: "msg-1", emoji: "👍", userId: "user-2" });
+      useChatStore.getState().dispatch({
+        type: "ADD_REACTION",
+        messageId: "msg-1",
+        emoji: "👍",
+        userId: "user-2",
+      });
 
       const next = useChatStore.getState();
       const reactions = next.messages[0].reactions!;
@@ -220,7 +282,12 @@ describe("chatStore logic equivalence", () => {
       });
       useChatStore.setState(stateWith({ messages: [msg] }));
 
-      useChatStore.getState().dispatch({ type: "ADD_REACTION", messageId: "msg-1", emoji: "👍", userId: "user-1" });
+      useChatStore.getState().dispatch({
+        type: "ADD_REACTION",
+        messageId: "msg-1",
+        emoji: "👍",
+        userId: "user-1",
+      });
 
       const next = useChatStore.getState();
       const reactions = next.messages[0].reactions!;
@@ -233,7 +300,12 @@ describe("chatStore logic equivalence", () => {
         reactions: [{ emoji: "👍", count: 1, me: false, users: ["user-1"] }],
       });
       useChatStore.setState(stateWith({ messages: [msg] }));
-      useChatStore.getState().dispatch({ type: "REMOVE_REACTION", messageId: "msg-1", emoji: "👍", userId: "user-1" });
+      useChatStore.getState().dispatch({
+        type: "REMOVE_REACTION",
+        messageId: "msg-1",
+        emoji: "👍",
+        userId: "user-1",
+      });
 
       const next = useChatStore.getState();
       const reactions = next.messages[0].reactions!;
@@ -244,9 +316,24 @@ describe("chatStore logic equivalence", () => {
       const msg = makeMessage({ reactions: [] });
       useChatStore.setState(stateWith({ messages: [msg] }));
 
-      useChatStore.getState().dispatch({ type: "ADD_REACTION", messageId: "msg-1", emoji: "😈", userId: "user-1" });
-      useChatStore.getState().dispatch({ type: "ADD_REACTION", messageId: "msg-1", emoji: "😈", userId: "user-1" });
-      useChatStore.getState().dispatch({ type: "REMOVE_REACTION", messageId: "msg-1", emoji: "😈", userId: "user-1" });
+      useChatStore.getState().dispatch({
+        type: "ADD_REACTION",
+        messageId: "msg-1",
+        emoji: "😈",
+        userId: "user-1",
+      });
+      useChatStore.getState().dispatch({
+        type: "ADD_REACTION",
+        messageId: "msg-1",
+        emoji: "😈",
+        userId: "user-1",
+      });
+      useChatStore.getState().dispatch({
+        type: "REMOVE_REACTION",
+        messageId: "msg-1",
+        emoji: "😈",
+        userId: "user-1",
+      });
 
       const next = useChatStore.getState();
       expect(next.messages[0].reactions).toEqual([]);
@@ -259,7 +346,9 @@ describe("chatStore logic equivalence", () => {
     it("adds a message to pinnedMessages when pinned", () => {
       const msg = makeMessage();
       useChatStore.setState(stateWith({ messages: [msg] }));
-      useChatStore.getState().dispatch({ type: "PIN_MESSAGE", messageId: "msg-1", pinned: true });
+      useChatStore
+        .getState()
+        .dispatch({ type: "PIN_MESSAGE", messageId: "msg-1", pinned: true });
 
       const next = useChatStore.getState();
       expect(next.messages[0].is_pinned).toBe(true);
@@ -269,8 +358,12 @@ describe("chatStore logic equivalence", () => {
 
     it("removes a message from pinnedMessages when unpinned", () => {
       const msg = makeMessage({ is_pinned: true });
-      useChatStore.setState(stateWith({ messages: [msg], pinnedMessages: [msg] }));
-      useChatStore.getState().dispatch({ type: "PIN_MESSAGE", messageId: "msg-1", pinned: false });
+      useChatStore.setState(
+        stateWith({ messages: [msg], pinnedMessages: [msg] }),
+      );
+      useChatStore
+        .getState()
+        .dispatch({ type: "PIN_MESSAGE", messageId: "msg-1", pinned: false });
 
       const next = useChatStore.getState();
       expect(next.messages[0].is_pinned).toBe(false);
@@ -283,15 +376,25 @@ describe("chatStore logic equivalence", () => {
   describe("typing", () => {
     it("SET_TYPING adds a user to the channel's typing set", () => {
       useChatStore.setState(stateWith({}));
-      useChatStore.getState().dispatch({ type: "SET_TYPING", channelId: "ch-1", userId: "user-1" });
-      expect(useChatStore.getState().typingUsers["ch-1"]?.has("user-1")).toBe(true);
+      useChatStore
+        .getState()
+        .dispatch({ type: "SET_TYPING", channelId: "ch-1", userId: "user-1" });
+      expect(useChatStore.getState().typingUsers["ch-1"]?.has("user-1")).toBe(
+        true,
+      );
     });
 
     it("CLEAR_TYPING removes a user from the channel's typing set", () => {
       const typing = new Set(["user-1"]);
       useChatStore.setState(stateWith({ typingUsers: { "ch-1": typing } }));
-      useChatStore.getState().dispatch({ type: "CLEAR_TYPING", channelId: "ch-1", userId: "user-1" });
-      expect(useChatStore.getState().typingUsers["ch-1"]?.has("user-1")).toBe(false);
+      useChatStore.getState().dispatch({
+        type: "CLEAR_TYPING",
+        channelId: "ch-1",
+        userId: "user-1",
+      });
+      expect(useChatStore.getState().typingUsers["ch-1"]?.has("user-1")).toBe(
+        false,
+      );
     });
   });
 
@@ -306,12 +409,14 @@ describe("chatStore logic equivalence", () => {
     });
 
     it("REMOVE_MEMBER filters by userId", () => {
-      useChatStore.setState(stateWith({
-        members: [
-          { user: { id: "u1", username: "alice" } },
-          { user: { id: "u2", username: "bob" } },
-        ],
-      }));
+      useChatStore.setState(
+        stateWith({
+          members: [
+            { user: { id: "u1", username: "alice" } },
+            { user: { id: "u2", username: "bob" } },
+          ],
+        }),
+      );
       useChatStore.getState().dispatch({ type: "REMOVE_MEMBER", userId: "u1" });
 
       const next = useChatStore.getState();
@@ -321,15 +426,24 @@ describe("chatStore logic equivalence", () => {
 
     it("ADD_MEMBER caches inactive server members without replacing the active view", () => {
       const activeMember = { user: { id: "active-user", username: "active" } };
-      const inactiveMember = { user: { id: "inactive-user", username: "inactive" }, roles: [] };
+      const inactiveMember = {
+        user: { id: "inactive-user", username: "inactive" },
+        roles: [],
+      };
 
-      useChatStore.setState(stateWith({
-        activeServerId: "srv-active",
-        members: [activeMember],
-        membersByServerId: { "srv-active": [activeMember] },
-      }));
+      useChatStore.setState(
+        stateWith({
+          activeServerId: "srv-active",
+          members: [activeMember],
+          membersByServerId: { "srv-active": [activeMember] },
+        }),
+      );
 
-      useChatStore.getState().dispatch({ type: "ADD_MEMBER", serverId: "srv-inactive", member: inactiveMember });
+      useChatStore.getState().dispatch({
+        type: "ADD_MEMBER",
+        serverId: "srv-inactive",
+        member: inactiveMember,
+      });
 
       const next = useChatStore.getState();
       expect(next.members).toEqual([activeMember]);
@@ -338,18 +452,26 @@ describe("chatStore logic equivalence", () => {
 
     it("REMOVE_MEMBER removes inactive server members without replacing the active view", () => {
       const activeMember = { user: { id: "active-user", username: "active" } };
-      const inactiveMember = { user: { id: "inactive-user", username: "inactive" } };
+      const inactiveMember = {
+        user: { id: "inactive-user", username: "inactive" },
+      };
 
-      useChatStore.setState(stateWith({
-        activeServerId: "srv-active",
-        members: [activeMember],
-        membersByServerId: {
-          "srv-active": [activeMember],
-          "srv-inactive": [inactiveMember],
-        },
-      }));
+      useChatStore.setState(
+        stateWith({
+          activeServerId: "srv-active",
+          members: [activeMember],
+          membersByServerId: {
+            "srv-active": [activeMember],
+            "srv-inactive": [inactiveMember],
+          },
+        }),
+      );
 
-      useChatStore.getState().dispatch({ type: "REMOVE_MEMBER", serverId: "srv-inactive", userId: "inactive-user" });
+      useChatStore.getState().dispatch({
+        type: "REMOVE_MEMBER",
+        serverId: "srv-inactive",
+        userId: "inactive-user",
+      });
 
       const next = useChatStore.getState();
       expect(next.members).toEqual([activeMember]);
@@ -357,29 +479,44 @@ describe("chatStore logic equivalence", () => {
     });
 
     it("UPDATE_MEMBER_ROLES updates inactive server member roles without replacing the active view", () => {
-      const activeMember = { user: { id: "active-user", username: "active" }, roles: [] };
-      const inactiveMember = { user: { id: "inactive-user", username: "inactive" }, roles: [] };
-      const roles = [{
-        id: "role-1",
-        server_id: "srv-inactive",
-        name: "Mod",
-        permissions: 0,
-        position: 1,
-        color: null,
-        is_default: false,
-        created_at: "2026-01-01T00:00:00Z",
-      }];
-
-      useChatStore.setState(stateWith({
-        activeServerId: "srv-active",
-        members: [activeMember],
-        membersByServerId: {
-          "srv-active": [activeMember],
-          "srv-inactive": [inactiveMember],
+      const activeMember = {
+        user: { id: "active-user", username: "active" },
+        roles: [],
+      };
+      const inactiveMember = {
+        user: { id: "inactive-user", username: "inactive" },
+        roles: [],
+      };
+      const roles = [
+        {
+          id: "role-1",
+          server_id: "srv-inactive",
+          name: "Mod",
+          permissions: 0,
+          position: 1,
+          color: null,
+          is_default: false,
+          created_at: "2026-01-01T00:00:00Z",
         },
-      }));
+      ];
 
-      useChatStore.getState().dispatch({ type: "UPDATE_MEMBER_ROLES", serverId: "srv-inactive", userId: "inactive-user", roles });
+      useChatStore.setState(
+        stateWith({
+          activeServerId: "srv-active",
+          members: [activeMember],
+          membersByServerId: {
+            "srv-active": [activeMember],
+            "srv-inactive": [inactiveMember],
+          },
+        }),
+      );
+
+      useChatStore.getState().dispatch({
+        type: "UPDATE_MEMBER_ROLES",
+        serverId: "srv-inactive",
+        userId: "inactive-user",
+        roles,
+      });
 
       const next = useChatStore.getState();
       expect(next.members).toEqual([activeMember]);
@@ -402,12 +539,14 @@ describe("chatStore logic equivalence", () => {
         },
       };
 
-      useChatStore.setState(stateWith({
-        activeServerId: "srv-active",
-        membersByServerId: {
-          "srv-inactive": [inactiveMember],
-        },
-      }));
+      useChatStore.setState(
+        stateWith({
+          activeServerId: "srv-active",
+          membersByServerId: {
+            "srv-inactive": [inactiveMember],
+          },
+        }),
+      );
 
       useChatStore.getState().dispatch({
         type: "UPDATE_MEMBER_PROFILE",
@@ -443,50 +582,118 @@ describe("chatStore logic equivalence", () => {
   describe("voice channel states", () => {
     it("UPDATE_VOICE_CHANNEL_STATE adds members for a channel", () => {
       useChatStore.setState(stateWith({}));
-      const members = [{ clerk_user_id: "u1", name: "alice", self_mute: false, self_deaf: false, self_video: false, self_stream: false }];
-      useChatStore.getState().dispatch({ type: "UPDATE_VOICE_CHANNEL_STATE", channelId: "vc-1", members, startedAt: null });
-      expect(useChatStore.getState().voiceChannelStates["vc-1"]).toMatchObject(members);
+      const members = [
+        {
+          clerk_user_id: "u1",
+          name: "alice",
+          self_mute: false,
+          self_deaf: false,
+          self_video: false,
+          self_stream: false,
+        },
+      ];
+      useChatStore.getState().dispatch({
+        type: "UPDATE_VOICE_CHANNEL_STATE",
+        channelId: "vc-1",
+        members,
+        startedAt: null,
+      });
+      expect(useChatStore.getState().voiceChannelStates["vc-1"]).toMatchObject(
+        members,
+      );
     });
 
     it("UPDATE_VOICE_CHANNEL_STATE removes channel entry when members is empty", () => {
-      useChatStore.setState(stateWith({
-        voiceChannelStates: {
-          "vc-1": [{ clerk_user_id: "u1", name: "alice", self_mute: false, self_deaf: false, self_video: false, self_stream: false }],
-        },
-      }));
-      useChatStore.getState().dispatch({ type: "UPDATE_VOICE_CHANNEL_STATE", channelId: "vc-1", members: [], startedAt: null });
-      expect(useChatStore.getState().voiceChannelStates["vc-1"]).toBeUndefined();
+      useChatStore.setState(
+        stateWith({
+          voiceChannelStates: {
+            "vc-1": [
+              {
+                clerk_user_id: "u1",
+                name: "alice",
+                self_mute: false,
+                self_deaf: false,
+                self_video: false,
+                self_stream: false,
+              },
+            ],
+          },
+        }),
+      );
+      useChatStore.getState().dispatch({
+        type: "UPDATE_VOICE_CHANNEL_STATE",
+        channelId: "vc-1",
+        members: [],
+        startedAt: null,
+      });
+      expect(
+        useChatStore.getState().voiceChannelStates["vc-1"],
+      ).toBeUndefined();
     });
 
     it("uses cached display names when applying gateway voice-state members", () => {
-      useChatStore.setState(stateWith({
-        members: [{ user: { id: "u1", username: "alice", display_name: "Alice Display" } }],
-      }));
+      useChatStore.setState(
+        stateWith({
+          members: [
+            {
+              user: {
+                id: "u1",
+                username: "alice",
+                display_name: "Alice Display",
+              },
+            },
+          ],
+        }),
+      );
 
       useChatStore.getState().dispatch({
         type: "UPDATE_VOICE_CHANNEL_STATE",
         channelId: "vc-1",
-        members: [{ clerk_user_id: "u1", name: "alice", self_mute: false, self_deaf: false, self_video: false, self_stream: false }],
+        members: [
+          {
+            clerk_user_id: "u1",
+            name: "alice",
+            self_mute: false,
+            self_deaf: false,
+            self_video: false,
+            self_stream: false,
+          },
+        ],
         startedAt: null,
       });
 
-      expect(useChatStore.getState().voiceChannelStates["vc-1"]?.[0]?.name).toBe("Alice Display");
+      expect(
+        useChatStore.getState().voiceChannelStates["vc-1"]?.[0]?.name,
+      ).toBe("Alice Display");
     });
 
     it("updates the current user's voice member display name when SET_USER refreshes the profile", () => {
-      useChatStore.setState(stateWith({
-        user: { id: "u1", username: "alice" },
-        voiceChannelStates: {
-          "vc-1": [{ clerk_user_id: "u1", name: "alice", self_mute: false, self_deaf: false, self_video: false, self_stream: false }],
-        },
-      }));
+      useChatStore.setState(
+        stateWith({
+          user: { id: "u1", username: "alice" },
+          voiceChannelStates: {
+            "vc-1": [
+              {
+                clerk_user_id: "u1",
+                name: "alice",
+                self_mute: false,
+                self_deaf: false,
+                self_video: false,
+                self_stream: false,
+              },
+            ],
+          },
+        }),
+      );
 
       useChatStore.getState().dispatch({
         type: "SET_USER",
         user: { id: "u1", username: "alice", display_name: "Alice Display" },
       });
 
-      expect(useChatStore.getState().voiceChannelStates["vc-1"]?.[0]?.name).toBe("Alice Display");
+      expect(
+        useChatStore.getState().voiceChannelStates["vc-1"]?.[0]?.name,
+      ).toBe("Alice Display");
     });
   });
 
@@ -494,13 +701,17 @@ describe("chatStore logic equivalence", () => {
 
   describe("navigation identity checks", () => {
     it("SET_ACTIVE_CHANNEL clears messages and pins on change", () => {
-      useChatStore.setState(stateWith({
-        activeChannelId: "ch-1",
-        messages: [makeMessage()],
-        pinnedMessages: [makeMessage({ is_pinned: true })],
-        pinsLoadedFor: "ch-1",
-      }));
-      useChatStore.getState().dispatch({ type: "SET_ACTIVE_CHANNEL", channelId: "ch-2" });
+      useChatStore.setState(
+        stateWith({
+          activeChannelId: "ch-1",
+          messages: [makeMessage()],
+          pinnedMessages: [makeMessage({ is_pinned: true })],
+          pinsLoadedFor: "ch-1",
+        }),
+      );
+      useChatStore
+        .getState()
+        .dispatch({ type: "SET_ACTIVE_CHANNEL", channelId: "ch-2" });
 
       const next = useChatStore.getState();
       expect(next.activeChannelId).toBe("ch-2");
@@ -514,14 +725,20 @@ describe("chatStore logic equivalence", () => {
       const category = makeCategory();
       const member = { user: { id: "u1", username: "alice" } };
 
-      useChatStore.setState(stateWith({
-        activeServerId: "srv-2",
-        channelsByServerId: { "srv-1": [channel] },
-        categoriesByServerId: { "srv-1": [category] },
-        membersByServerId: { "srv-1": [member] },
-      }));
+      useChatStore.setState(
+        stateWith({
+          activeServerId: "srv-2",
+          channelsByServerId: { "srv-1": [channel] },
+          categoriesByServerId: { "srv-1": [category] },
+          membersByServerId: { "srv-1": [member] },
+        }),
+      );
 
-      useChatStore.getState().dispatch({ type: "SWITCH_SERVER", serverId: "srv-1", channelId: "ch-1" });
+      useChatStore.getState().dispatch({
+        type: "SWITCH_SERVER",
+        serverId: "srv-1",
+        channelId: "ch-1",
+      });
 
       const next = useChatStore.getState();
       expect(next.channels).toEqual([channel]);
@@ -530,17 +747,30 @@ describe("chatStore logic equivalence", () => {
     });
 
     it("caches inactive server channel and member loads without replacing the active view", () => {
-      const activeChannel = makeChannel({ id: "active-ch", server_id: "srv-active" });
-      const inactiveChannel = makeChannel({ id: "inactive-ch", server_id: "srv-inactive" });
-      const inactiveCategory = makeCategory({ id: "inactive-cat", server_id: "srv-inactive" });
+      const activeChannel = makeChannel({
+        id: "active-ch",
+        server_id: "srv-active",
+      });
+      const inactiveChannel = makeChannel({
+        id: "inactive-ch",
+        server_id: "srv-inactive",
+      });
+      const inactiveCategory = makeCategory({
+        id: "inactive-cat",
+        server_id: "srv-inactive",
+      });
       const activeMember = { user: { id: "active-user", username: "active" } };
-      const inactiveMember = { user: { id: "inactive-user", username: "inactive" } };
+      const inactiveMember = {
+        user: { id: "inactive-user", username: "inactive" },
+      };
 
-      useChatStore.setState(stateWith({
-        activeServerId: "srv-active",
-        channels: [activeChannel],
-        members: [activeMember],
-      }));
+      useChatStore.setState(
+        stateWith({
+          activeServerId: "srv-active",
+          channels: [activeChannel],
+          members: [activeMember],
+        }),
+      );
 
       useChatStore.getState().dispatch({
         type: "SET_CHANNELS_AND_CATEGORIES",
@@ -548,13 +778,21 @@ describe("chatStore logic equivalence", () => {
         channels: [inactiveChannel],
         categories: [inactiveCategory],
       });
-      useChatStore.getState().dispatch({ type: "SET_MEMBERS", serverId: "srv-inactive", members: [inactiveMember] });
+      useChatStore.getState().dispatch({
+        type: "SET_MEMBERS",
+        serverId: "srv-inactive",
+        members: [inactiveMember],
+      });
 
       const next = useChatStore.getState();
       expect(next.channels).toEqual([activeChannel]);
       expect(next.members).toEqual([activeMember]);
-      expect(next.channelsByServerId["srv-inactive"]).toEqual([inactiveChannel]);
-      expect(next.categoriesByServerId["srv-inactive"]).toEqual([inactiveCategory]);
+      expect(next.channelsByServerId["srv-inactive"]).toEqual([
+        inactiveChannel,
+      ]);
+      expect(next.categoriesByServerId["srv-inactive"]).toEqual([
+        inactiveCategory,
+      ]);
       expect(next.membersByServerId["srv-inactive"]).toEqual([inactiveMember]);
     });
 
@@ -562,13 +800,17 @@ describe("chatStore logic equivalence", () => {
       const oldChannel = makeChannel({ id: "ch-1", name: "old-name" });
       const updatedChannel = makeChannel({ id: "ch-1", name: "new-name" });
 
-      useChatStore.setState(stateWith({
-        activeServerId: "srv-1",
-        channels: [oldChannel],
-        channelsByServerId: { "srv-1": [oldChannel] },
-      }));
+      useChatStore.setState(
+        stateWith({
+          activeServerId: "srv-1",
+          channels: [oldChannel],
+          channelsByServerId: { "srv-1": [oldChannel] },
+        }),
+      );
 
-      useChatStore.getState().dispatch({ type: "UPSERT_CHANNEL", channel: updatedChannel });
+      useChatStore
+        .getState()
+        .dispatch({ type: "UPSERT_CHANNEL", channel: updatedChannel });
 
       const next = useChatStore.getState();
       expect(next.channels).toEqual([updatedChannel]);
@@ -576,17 +818,28 @@ describe("chatStore logic equivalence", () => {
     });
 
     it("collapses an optimistic channel when the gateway already inserted the real id", () => {
-      const optimisticChannel = makeChannel({ id: "temp-channel", name: "instagram-embed-test" });
-      const realChannel = makeChannel({ id: "real-channel", name: "instagram-embed-test", position: 2 });
+      const optimisticChannel = makeChannel({
+        id: "temp-channel",
+        name: "instagram-embed-test",
+      });
+      const realChannel = makeChannel({
+        id: "real-channel",
+        name: "instagram-embed-test",
+        position: 2,
+      });
 
-      useChatStore.setState(stateWith({
-        activeServerId: "srv-1",
-        activeChannelId: "temp-channel",
-        channels: [optimisticChannel],
-        channelsByServerId: { "srv-1": [optimisticChannel] },
-      }));
+      useChatStore.setState(
+        stateWith({
+          activeServerId: "srv-1",
+          activeChannelId: "temp-channel",
+          channels: [optimisticChannel],
+          channelsByServerId: { "srv-1": [optimisticChannel] },
+        }),
+      );
 
-      useChatStore.getState().dispatch({ type: "UPSERT_CHANNEL", channel: realChannel });
+      useChatStore
+        .getState()
+        .dispatch({ type: "UPSERT_CHANNEL", channel: realChannel });
       useChatStore.getState().dispatch({
         type: "UPDATE_CHANNEL_ID",
         oldId: "temp-channel",
@@ -600,20 +853,32 @@ describe("chatStore logic equivalence", () => {
     });
 
     it("upserts an inactive server channel delta without replacing the active view", () => {
-      const activeChannel = makeChannel({ id: "active-ch", server_id: "srv-active" });
-      const inactiveChannel = makeChannel({ id: "inactive-ch", server_id: "srv-inactive" });
+      const activeChannel = makeChannel({
+        id: "active-ch",
+        server_id: "srv-active",
+      });
+      const inactiveChannel = makeChannel({
+        id: "inactive-ch",
+        server_id: "srv-inactive",
+      });
 
-      useChatStore.setState(stateWith({
-        activeServerId: "srv-active",
-        channels: [activeChannel],
-        channelsByServerId: { "srv-active": [activeChannel] },
-      }));
+      useChatStore.setState(
+        stateWith({
+          activeServerId: "srv-active",
+          channels: [activeChannel],
+          channelsByServerId: { "srv-active": [activeChannel] },
+        }),
+      );
 
-      useChatStore.getState().dispatch({ type: "UPSERT_CHANNEL", channel: inactiveChannel });
+      useChatStore
+        .getState()
+        .dispatch({ type: "UPSERT_CHANNEL", channel: inactiveChannel });
 
       const next = useChatStore.getState();
       expect(next.channels).toEqual([activeChannel]);
-      expect(next.channelsByServerId["srv-inactive"]).toEqual([inactiveChannel]);
+      expect(next.channelsByServerId["srv-inactive"]).toEqual([
+        inactiveChannel,
+      ]);
     });
   });
 
@@ -621,18 +886,34 @@ describe("chatStore logic equivalence", () => {
 
   describe("DM channels", () => {
     it("ADD_DM_CHANNEL ignores duplicates", () => {
-      const dm = { id: "dm-1", name: "DM", recipient: { id: "u2", username: "bob" } };
+      const dm = {
+        id: "dm-1",
+        name: "DM",
+        recipient: { id: "u2", username: "bob" },
+      };
       useChatStore.setState(stateWith({ dmChannels: [dm] }));
-      useChatStore.getState().dispatch({ type: "ADD_DM_CHANNEL", dmChannel: dm });
+      useChatStore
+        .getState()
+        .dispatch({ type: "ADD_DM_CHANNEL", dmChannel: dm });
       expect(useChatStore.getState().dmChannels).toHaveLength(1);
     });
 
     it("ADD_DM_CHANNEL prepends new DM channel", () => {
-      const existing = { id: "dm-1", name: "DM1", recipient: { id: "u2", username: "bob" } };
+      const existing = {
+        id: "dm-1",
+        name: "DM1",
+        recipient: { id: "u2", username: "bob" },
+      };
       useChatStore.setState(stateWith({ dmChannels: [existing] }));
 
-      const newDm = { id: "dm-2", name: "DM2", recipient: { id: "u3", username: "carol" } };
-      useChatStore.getState().dispatch({ type: "ADD_DM_CHANNEL", dmChannel: newDm });
+      const newDm = {
+        id: "dm-2",
+        name: "DM2",
+        recipient: { id: "u3", username: "carol" },
+      };
+      useChatStore
+        .getState()
+        .dispatch({ type: "ADD_DM_CHANNEL", dmChannel: newDm });
 
       const next = useChatStore.getState();
       expect(next.dmChannels).toHaveLength(2);

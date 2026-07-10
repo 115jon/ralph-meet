@@ -11,6 +11,8 @@ describe("getDemoChatCharacterCounter", () => {
   });
 
   it("uses singular copy for one remaining character", () => {
-    expect(getDemoChatCharacterCounter("1234", 5).label).toBe("1 character left");
+    expect(getDemoChatCharacterCounter("1234", 5).label).toBe(
+      "1 character left",
+    );
   });
 });

@@ -9,38 +9,38 @@
 // Core Permissions
 export const PERMISSIONS = {
   // General Server Permissions
-  ADMINISTRATOR: 1 << 0,       // 1 - Implicitly grants all other permissions
-  MANAGE_SERVER: 1 << 1,       // 2
-  MANAGE_ROLES: 1 << 2,        // 4
-  MANAGE_CATEGORIES: 1 << 3,   // 8
-  MANAGE_CHANNELS: 1 << 4,     // 16
+  ADMINISTRATOR: 1 << 0, // 1 - Implicitly grants all other permissions
+  MANAGE_SERVER: 1 << 1, // 2
+  MANAGE_ROLES: 1 << 2, // 4
+  MANAGE_CATEGORIES: 1 << 3, // 8
+  MANAGE_CHANNELS: 1 << 4, // 16
 
   // Member Management
-  KICK_MEMBERS: 1 << 5,        // 32
-  BAN_MEMBERS: 1 << 6,         // 64
-  CREATE_INVITE: 1 << 7,       // 128
+  KICK_MEMBERS: 1 << 5, // 32
+  BAN_MEMBERS: 1 << 6, // 64
+  CREATE_INVITE: 1 << 7, // 128
 
   // Text Channel Permissions
-  VIEW_CHANNELS: 1 << 8,       // 256
-  SEND_MESSAGES: 1 << 9,       // 512
-  MANAGE_MESSAGES: 1 << 10,    // 1024
-  ADD_REACTIONS: 1 << 11,      // 2048
-  ATTACH_FILES: 1 << 12,       // 4096
+  VIEW_CHANNELS: 1 << 8, // 256
+  SEND_MESSAGES: 1 << 9, // 512
+  MANAGE_MESSAGES: 1 << 10, // 1024
+  ADD_REACTIONS: 1 << 11, // 2048
+  ATTACH_FILES: 1 << 12, // 4096
 
   // Voice Channel Permissions
-  CONNECT: 1 << 13,            // 8192
-  SPEAK: 1 << 14,              // 16384
-  VIDEO: 1 << 15,              // 32768
-  MUTE_MEMBERS: 1 << 16,       // 65536
-  DEAFEN_MEMBERS: 1 << 17,     // 131072
-  VIEW_AUDIT_LOG: 1 << 18,     // 262144
+  CONNECT: 1 << 13, // 8192
+  SPEAK: 1 << 14, // 16384
+  VIDEO: 1 << 15, // 32768
+  MUTE_MEMBERS: 1 << 16, // 65536
+  DEAFEN_MEMBERS: 1 << 17, // 131072
+  VIEW_AUDIT_LOG: 1 << 18, // 262144
 } as const;
 
 export type PermissionKey = keyof typeof PERMISSIONS;
 
 export const ALL_PERMISSIONS = Object.values(PERMISSIONS).reduce(
   (total, permission) => total | permission,
-  0
+  0,
 );
 
 // Helper to calculate total permissions from a list of bitmasks
@@ -49,16 +49,28 @@ export function calculatePermissions(rolePermissions: number[]): number {
 }
 
 // Helper to check if a user has a specific permission
-export function hasPermission(totalPermissions: number, checkPermission: number): boolean {
+export function hasPermission(
+  totalPermissions: number,
+  checkPermission: number,
+): boolean {
   // Administrators always have permission
-  if ((totalPermissions & PERMISSIONS.ADMINISTRATOR) === PERMISSIONS.ADMINISTRATOR) {
+  if (
+    (totalPermissions & PERMISSIONS.ADMINISTRATOR) ===
+    PERMISSIONS.ADMINISTRATOR
+  ) {
     return true;
   }
   return (totalPermissions & checkPermission) === checkPermission;
 }
 
-export function hasAnyPermission(totalPermissions: number, checkPermissions: number): boolean {
-  if ((totalPermissions & PERMISSIONS.ADMINISTRATOR) === PERMISSIONS.ADMINISTRATOR) {
+export function hasAnyPermission(
+  totalPermissions: number,
+  checkPermissions: number,
+): boolean {
+  if (
+    (totalPermissions & PERMISSIONS.ADMINISTRATOR) ===
+    PERMISSIONS.ADMINISTRATOR
+  ) {
     return true;
   }
   return (totalPermissions & checkPermissions) !== 0;

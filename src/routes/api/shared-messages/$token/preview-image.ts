@@ -1,6 +1,12 @@
 import { getDB } from "@/lib/api-helpers";
 import { createTikTokSharePreviewPng } from "@/lib/share-preview-image";
-import { fetchInstagramOEmbedMetadata, fetchTikTokProxyMetadata, getTikTokShareUrl, getTikTokThumbnailUrl, proxyImage } from "@/lib/share-preview-proxy";
+import {
+  fetchInstagramOEmbedMetadata,
+  fetchTikTokProxyMetadata,
+  getTikTokShareUrl,
+  getTikTokThumbnailUrl,
+  proxyImage,
+} from "@/lib/share-preview-proxy";
 import { ServiceError } from "@/lib/service-error";
 import { getPublicMessageShare } from "@/services/message-share.service";
 import { createFileRoute } from "@tanstack/react-router";
@@ -10,7 +16,10 @@ function getInstagramShareUrl(share: any): string | null {
     const provider = embed.provider?.name?.toLowerCase();
     try {
       const parsed = new URL(embed.url);
-      if (provider === "instagram" || parsed.hostname.toLowerCase().includes("instagram.com")) {
+      if (
+        provider === "instagram" ||
+        parsed.hostname.toLowerCase().includes("instagram.com")
+      ) {
         return parsed.toString();
       }
     } catch {
@@ -26,7 +35,9 @@ function getInstagramThumbnailUrl(share: any): string | null {
     const provider = embed.provider?.name?.toLowerCase();
     let isInstagram = provider === "instagram";
     try {
-      isInstagram = isInstagram || new URL(embed.url).hostname.toLowerCase().includes("instagram.com");
+      isInstagram =
+        isInstagram ||
+        new URL(embed.url).hostname.toLowerCase().includes("instagram.com");
     } catch {
       // Ignore malformed embed URLs and continue scanning.
     }
@@ -39,8 +50,14 @@ function getInstagramThumbnailUrl(share: any): string | null {
 
 const GET = async ({ params }: any) => {
   try {
-    const share = await getPublicMessageShare(getDB(), params.token, new Date(), { incrementView: false });
-    const thumbnailUrl = getTikTokThumbnailUrl(share) ?? getInstagramThumbnailUrl(share);
+    const share = await getPublicMessageShare(
+      getDB(),
+      params.token,
+      new Date(),
+      { incrementView: false },
+    );
+    const thumbnailUrl =
+      getTikTokThumbnailUrl(share) ?? getInstagramThumbnailUrl(share);
     const tiktokUrl = getTikTokShareUrl(share);
     const instagramUrl = getInstagramShareUrl(share);
     if (thumbnailUrl === null && tiktokUrl === null && instagramUrl === null) {
@@ -87,7 +104,9 @@ const GET = async ({ params }: any) => {
   }
 };
 
-export const Route = createFileRoute("/api/shared-messages/$token/preview-image")({
+export const Route = createFileRoute(
+  "/api/shared-messages/$token/preview-image",
+)({
   server: {
     handlers: {
       GET,

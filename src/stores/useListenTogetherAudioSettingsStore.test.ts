@@ -12,10 +12,12 @@ describe("Listen Together audio settings", () => {
   });
 
   it("rejects unsupported persisted presets", () => {
-    expect(normalizeListenTogetherAudioSettings({
-      enabled: false,
-      preset: "cinema" as never,
-    })).toEqual({
+    expect(
+      normalizeListenTogetherAudioSettings({
+        enabled: false,
+        preset: "cinema" as never,
+      }),
+    ).toEqual({
       enabled: false,
       preset: "balanced",
     });

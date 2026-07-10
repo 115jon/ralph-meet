@@ -130,7 +130,15 @@ export function DesktopThumbnailToolbarSync({
     }
 
     return null;
-  }, [callHasJoinedSFU, callStatus, callVoice, currentUserId, endCall, localStreamState, voiceJoined]);
+  }, [
+    callHasJoinedSFU,
+    callStatus,
+    callVoice,
+    currentUserId,
+    endCall,
+    localStreamState,
+    voiceJoined,
+  ]);
 
   const voiceSettings = useVoiceSettingsStore((state) =>
     state.getSettings(activeSession?.settingsUserId),
@@ -180,9 +188,7 @@ export function DesktopThumbnailToolbarSync({
     if (!isTauri()) return;
 
     let isDisposed = false;
-    let unlisten:
-      | (() => void)
-      | undefined;
+    let unlisten: (() => void) | undefined;
 
     void listenForDesktopThumbnailToolbarActions(async ({ action }) => {
       if (isDisposed) return;
@@ -247,7 +253,8 @@ export function DesktopThumbnailToolbarSync({
     };
   }, []);
 
-  const modalSession = activeSession && isCameraModalOpen ? activeSession : null;
+  const modalSession =
+    activeSession && isCameraModalOpen ? activeSession : null;
 
   return (
     <CameraSettingsModal

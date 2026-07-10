@@ -1,11 +1,10 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute } from "@tanstack/react-router";
 
 import { apiError, apiSuccess, getDB, requireAuth } from "@/lib/api-helpers";
 import { PERMISSIONS } from "@/lib/permissions";
 import { requirePermission } from "@/lib/require-permission";
 import { ServiceError } from "@/lib/service-error";
 import { revokeInvite } from "@/services/social.service";
-
 
 // DELETE /api/servers/:id/invites/:code — revoke an invite
 const DELETE = async ({ request, params }: any) => {
@@ -16,7 +15,11 @@ const DELETE = async ({ request, params }: any) => {
   const { id: serverId, code } = params;
 
   // Verify MANAGE_SERVER permission
-  const permResult = await requirePermission(serverId, userId, PERMISSIONS.MANAGE_SERVER);
+  const permResult = await requirePermission(
+    serverId,
+    userId,
+    PERMISSIONS.MANAGE_SERVER,
+  );
   if (permResult instanceof Response) return permResult;
 
   const db = getDB();
@@ -30,13 +33,12 @@ const DELETE = async ({ request, params }: any) => {
     }
     throw e;
   }
-}
+};
 
-
-export const Route = createFileRoute('/api/servers/$id/invites/$code')({
+export const Route = createFileRoute("/api/servers/$id/invites/$code")({
   server: {
     handlers: {
       DELETE,
-    }
-  }
+    },
+  },
 });

@@ -1,9 +1,7 @@
-
-
-import { apiGet, apiPost } from '@/lib/api-client';
-import { useNavigate, useParams } from '@tanstack/react-router';
-import { Check, Link2, Loader2, Users, X } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { apiGet, apiPost } from "@/lib/api-client";
+import { useNavigate, useParams } from "@tanstack/react-router";
+import { Check, Link2, Loader2, Users, X } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
 
 interface InvitePreview {
   code: string;
@@ -23,9 +21,11 @@ interface InvitePreview {
 export default function InviteClient() {
   const { code } = useParams({ strict: false }) as { code: string };
   const navigate = useNavigate();
-  const [status, setStatus] = useState<'loading' | 'preview' | 'joining' | 'success' | 'error'>('loading');
+  const [status, setStatus] = useState<
+    "loading" | "preview" | "joining" | "success" | "error"
+  >("loading");
   const [invite, setInvite] = useState<InvitePreview | null>(null);
-  const [errorMsg, setErrorMsg] = useState('');
+  const [errorMsg, setErrorMsg] = useState("");
 
   // Fetch invite preview
   useEffect(() => {
@@ -33,16 +33,16 @@ export default function InviteClient() {
     let cancelled = false;
 
     const fetchPreview = async () => {
-      setStatus('loading');
+      setStatus("loading");
       try {
         const data = await apiGet<InvitePreview>(`/api/invites/${code}`);
         if (cancelled) return;
         setInvite(data);
-        setStatus('preview');
+        setStatus("preview");
       } catch (err: any) {
         if (cancelled) return;
-        setErrorMsg(err.message || 'Invite not found');
-        setStatus('error');
+        setErrorMsg(err.message || "Invite not found");
+        setStatus("error");
       }
     };
 
@@ -54,21 +54,25 @@ export default function InviteClient() {
   }, [code]);
 
   const joinServer = useCallback(async () => {
-    setStatus('joining');
+    setStatus("joining");
     try {
-      type JoinRes = { joined?: boolean; already_member?: boolean; server?: { name: string; id: string } };
+      type JoinRes = {
+        joined?: boolean;
+        already_member?: boolean;
+        server?: { name: string; id: string };
+      };
       const data = await apiPost<JoinRes>(`/api/invites/${code}/join`, {});
 
       if (data.server) {
-        setStatus('success');
-        setTimeout(() => navigate({ to: '/chat' }), 1500);
+        setStatus("success");
+        setTimeout(() => navigate({ to: "/chat" }), 1500);
       } else {
-        setErrorMsg('Failed to join');
-        setStatus('error');
+        setErrorMsg("Failed to join");
+        setStatus("error");
       }
     } catch (err: any) {
-      setErrorMsg(err.message || 'Network error');
-      setStatus('error');
+      setErrorMsg(err.message || "Network error");
+      setStatus("error");
     }
   }, [code, navigate]);
 
@@ -78,17 +82,17 @@ export default function InviteClient() {
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
         <div
           className="absolute h-[500px] w-[500px] rounded-full bg-rm-accent/8 blur-[120px]"
-          style={{ top: '15%', left: '25%' }}
+          style={{ top: "15%", left: "25%" }}
         />
         <div
           className="absolute h-[400px] w-[400px] rounded-full bg-primary/5 blur-[100px]"
-          style={{ bottom: '20%', right: '20%' }}
+          style={{ bottom: "20%", right: "20%" }}
         />
       </div>
 
       <div className="relative z-10 w-full max-w-[420px]">
         {/* Loading */}
-        {status === 'loading' && (
+        {status === "loading" && (
           <div className="flex flex-col items-center gap-4 rounded-2xl bg-rm-bg-secondary/80 p-10 shadow-2xl ring-1 ring-white/[0.06] backdrop-blur-xl">
             <Loader2 className="h-8 w-8 animate-spin text-rm-accent" />
             <p className="text-sm text-rm-text-muted">Loading invite...</p>
@@ -96,12 +100,14 @@ export default function InviteClient() {
         )}
 
         {/* Preview */}
-        {status === 'preview' && invite && (
+        {status === "preview" && invite && (
           <div className="flex flex-col items-center gap-6 rounded-2xl bg-rm-bg-secondary/80 p-8 shadow-2xl ring-1 ring-white/[0.06] backdrop-blur-xl">
             {/* Invite badge */}
             <div className="flex items-center gap-2 rounded-full bg-rm-accent-dim px-3 py-1 ring-1 ring-rm-accent/20">
               <Link2 className="h-3.5 w-3.5 text-rm-accent" />
-              <span className="text-xs font-semibold text-rm-accent uppercase tracking-wider">Invite</span>
+              <span className="text-xs font-semibold text-rm-accent uppercase tracking-wider">
+                Invite
+              </span>
             </div>
 
             <p className="text-sm text-rm-text-muted -mt-2">
@@ -129,14 +135,20 @@ export default function InviteClient() {
                 </h2>
                 <div className="flex items-center gap-1.5 text-sm text-rm-text-muted">
                   <Users className="h-3.5 w-3.5" />
-                  <span>{invite.server.member_count.toLocaleString()} {invite.server.member_count === 1 ? 'member' : 'members'}</span>
+                  <span>
+                    {invite.server.member_count.toLocaleString()}{" "}
+                    {invite.server.member_count === 1 ? "member" : "members"}
+                  </span>
                 </div>
               </div>
             </div>
 
             {/* Inviter info */}
             <p className="text-xs text-rm-text-muted">
-              Invited by <span className="font-semibold text-rm-text-secondary">{invite.inviter.display_name ?? invite.inviter.username}</span>
+              Invited by{" "}
+              <span className="font-semibold text-rm-text-secondary">
+                {invite.inviter.display_name ?? invite.inviter.username}
+              </span>
             </p>
 
             {/* Accept Button */}
@@ -149,7 +161,7 @@ export default function InviteClient() {
 
             {/* Decline link */}
             <button
-              onClick={() => navigate({ to: '/chat' })}
+              onClick={() => navigate({ to: "/chat" })}
               className="text-xs text-rm-text-muted hover:text-rm-text-secondary transition-colors"
             >
               No thanks
@@ -158,17 +170,19 @@ export default function InviteClient() {
         )}
 
         {/* Joining */}
-        {status === 'joining' && (
+        {status === "joining" && (
           <div className="flex flex-col items-center gap-4 rounded-2xl bg-rm-bg-secondary/80 p-10 shadow-2xl ring-1 ring-white/[0.06] backdrop-blur-xl">
             <div className="relative">
               <Loader2 className="h-8 w-8 animate-spin text-rm-accent" />
             </div>
-            <p className="text-sm font-medium text-rm-text">Joining {invite?.server.name}...</p>
+            <p className="text-sm font-medium text-rm-text">
+              Joining {invite?.server.name}...
+            </p>
           </div>
         )}
 
         {/* Success */}
-        {status === 'success' && (
+        {status === "success" && (
           <div className="flex flex-col items-center gap-4 rounded-2xl bg-rm-bg-secondary/80 p-10 shadow-2xl ring-1 ring-white/[0.06] backdrop-blur-xl">
             <div className="flex h-14 w-14 items-center justify-center rounded-full bg-emerald-500/15 ring-1 ring-emerald-400/30">
               <Check className="h-7 w-7 text-emerald-400" />
@@ -177,13 +191,15 @@ export default function InviteClient() {
               <h2 className="text-lg font-bold text-rm-text">
                 Joined {invite?.server.name}!
               </h2>
-              <p className="mt-1 text-sm text-rm-text-muted">Redirecting to chat...</p>
+              <p className="mt-1 text-sm text-rm-text-muted">
+                Redirecting to chat...
+              </p>
             </div>
           </div>
         )}
 
         {/* Error */}
-        {status === 'error' && (
+        {status === "error" && (
           <div className="flex flex-col items-center gap-5 rounded-2xl bg-rm-bg-secondary/80 p-10 shadow-2xl ring-1 ring-white/[0.06] backdrop-blur-xl">
             <div className="flex h-14 w-14 items-center justify-center rounded-full bg-red-500/15 ring-1 ring-red-400/30">
               <X className="h-7 w-7 text-red-400" />
@@ -193,7 +209,7 @@ export default function InviteClient() {
               <p className="mt-1 text-sm text-rm-text-muted">{errorMsg}</p>
             </div>
             <button
-              onClick={() => navigate({ to: '/chat' })}
+              onClick={() => navigate({ to: "/chat" })}
               className="rounded-xl bg-rm-bg-hover px-6 py-2.5 text-sm font-medium text-rm-text ring-1 ring-white/[0.06] transition-colors hover:bg-rm-bg-elevated"
             >
               Go to Chat

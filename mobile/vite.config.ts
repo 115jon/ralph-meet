@@ -18,10 +18,7 @@ const shimDir = path.resolve(rootDir, "src/shims");
 export default defineConfig({
   root: import.meta.dirname,
   publicDir: path.resolve(rootDir, "public"),
-  plugins: [
-    viteReact(),
-    tailwindcss(),
-  ],
+  plugins: [viteReact(), tailwindcss()],
   resolve: {
     alias: {
       "@": path.resolve(rootDir, "src"),
@@ -29,17 +26,41 @@ export default defineConfig({
 
       // ── Tauri plugin resolution ────────────────────────────────────
       // Map to this project's node_modules (not root)
-      "@tauri-apps/plugin-shell": path.resolve(import.meta.dirname, "node_modules/@tauri-apps/plugin-shell"),
-      "tauri-plugin-status-bar-color-api": path.resolve(import.meta.dirname, "node_modules/tauri-plugin-status-bar-color-api"),
+      "@tauri-apps/plugin-shell": path.resolve(
+        import.meta.dirname,
+        "node_modules/@tauri-apps/plugin-shell",
+      ),
+      "tauri-plugin-status-bar-color-api": path.resolve(
+        import.meta.dirname,
+        "node_modules/tauri-plugin-status-bar-color-api",
+      ),
 
       // ── Shims for server-only / Cloudflare-only imports ────────────
-      "cloudflare:workers": path.resolve(import.meta.dirname, "shims/cloudflare-workers.ts"),
-      "@tanstack/react-start/server": path.resolve(import.meta.dirname, "shims/tanstack-react-start-server.ts"),
-      "@tanstack/react-start": path.resolve(import.meta.dirname, "shims/tanstack-react-start.ts"),
+      "cloudflare:workers": path.resolve(
+        import.meta.dirname,
+        "shims/cloudflare-workers.ts",
+      ),
+      "@tanstack/react-start/server": path.resolve(
+        import.meta.dirname,
+        "shims/tanstack-react-start-server.ts",
+      ),
+      "@tanstack/react-start": path.resolve(
+        import.meta.dirname,
+        "shims/tanstack-react-start.ts",
+      ),
       // ── Desktop-only plugin shims (no-op on mobile) ────────────────
-      "@tauri-apps/plugin-updater": path.resolve(import.meta.dirname, "shims/tauri-plugin-noop.ts"),
-      "@tauri-apps/plugin-process": path.resolve(import.meta.dirname, "shims/tauri-plugin-noop.ts"),
-      "@tauri-apps/plugin-autostart": path.resolve(import.meta.dirname, "shims/tauri-plugin-noop.ts"),
+      "@tauri-apps/plugin-updater": path.resolve(
+        import.meta.dirname,
+        "shims/tauri-plugin-noop.ts",
+      ),
+      "@tauri-apps/plugin-process": path.resolve(
+        import.meta.dirname,
+        "shims/tauri-plugin-noop.ts",
+      ),
+      "@tauri-apps/plugin-autostart": path.resolve(
+        import.meta.dirname,
+        "shims/tauri-plugin-noop.ts",
+      ),
 
       // ── use-sync-external-store shims (shared with web config) ─────
       "use-sync-external-store/shim/with-selector": path.resolve(

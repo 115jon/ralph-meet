@@ -3,9 +3,9 @@
 //
 // Creates the server_bans table for storing user bans per server.
 
-import { execSync } from 'child_process';
+import { execSync } from "child_process";
 
-const dbName = 'ralph-chat-db';
+const dbName = "ralph-chat-db";
 
 const sql = `
 CREATE TABLE IF NOT EXISTS server_bans (
@@ -21,5 +21,8 @@ CREATE INDEX IF NOT EXISTS idx_server_bans_server ON server_bans(server_id);
 `;
 
 console.log("Creating server_bans table...");
-execSync(`npx wrangler d1 execute ${dbName} --local --command="${sql.replace(/\n/g, ' ')}"`, { stdio: 'inherit' });
+execSync(
+  `npx wrangler d1 execute ${dbName} --local --command="${sql.replace(/\n/g, " ")}"`,
+  { stdio: "inherit" },
+);
 console.log("Done!");

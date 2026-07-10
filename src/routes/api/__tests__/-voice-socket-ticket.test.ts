@@ -6,16 +6,24 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("@/lib/api-helpers", () => ({
-  apiError: (error: string, status = 400, code?: string) => Response.json({ error, code }, { status }),
-  buildVoiceChannelRoomSlug: (serverId: string, channelId: string) => `voice-${serverId}-${channelId}`,
+  apiError: (error: string, status = 400, code?: string) =>
+    Response.json({ error, code }, { status }),
+  buildVoiceChannelRoomSlug: (serverId: string, channelId: string) =>
+    `voice-${serverId}-${channelId}`,
   getDB: vi.fn(),
   getEnv: () => mocks.env,
   requireAuth: mocks.requireAuth,
 }));
 
-vi.mock("@/lib/require-channel-access", () => ({ requireChannelAccess: vi.fn() }));
-vi.mock("@/lib/require-permission", () => ({ getUserChannelPermissions: vi.fn() }));
-vi.mock("@/lib/rate-limit", () => ({ checkRateLimitDOFailClosed: vi.fn().mockResolvedValue(null) }));
+vi.mock("@/lib/require-channel-access", () => ({
+  requireChannelAccess: vi.fn(),
+}));
+vi.mock("@/lib/require-permission", () => ({
+  getUserChannelPermissions: vi.fn(),
+}));
+vi.mock("@/lib/rate-limit", () => ({
+  checkRateLimitDOFailClosed: vi.fn().mockResolvedValue(null),
+}));
 
 import { verifySocketTicket } from "@/lib/voice/socket-ticket";
 import { socketTicketPost } from "../voice/socket-ticket";
@@ -38,16 +46,21 @@ describe("socket ticket route", () => {
         body: JSON.stringify({ audience: "global" }),
       }),
     });
-    const body = await response.json() as { expires_at: number; ticket: string };
+    const body = (await response.json()) as {
+      expires_at: number;
+      ticket: string;
+    };
 
     expect(response.status).toBe(200);
     expect(response.headers.get("Cache-Control")).toBe("no-store");
-    await expect(verifySocketTicket(body.ticket, ticketSecret, {
-      accessMode: "authenticated",
-      audience: "global",
-      now: body.expires_at - 1,
-      roomSlug: "global-gateway",
-    })).resolves.toMatchObject({
+    await expect(
+      verifySocketTicket(body.ticket, ticketSecret, {
+        accessMode: "authenticated",
+        audience: "global",
+        now: body.expires_at - 1,
+        roomSlug: "global-gateway",
+      }),
+    ).resolves.toMatchObject({
       ok: true,
       claims: { subject: "user-123" },
     });
@@ -62,7 +75,9 @@ describe("socket ticket route", () => {
       }),
     });
 
-    await expect(response.json()).resolves.toMatchObject({ code: "REALTIME_TICKET_SECRET_MISSING" });
+    await expect(response.json()).resolves.toMatchObject({
+      code: "REALTIME_TICKET_SECRET_MISSING",
+    });
     expect(response.status).toBe(503);
     expect(response.headers.get("Cache-Control")).toBe("no-store");
   });
@@ -71,22 +86,31 @@ describe("socket ticket route", () => {
     mocks.env = {
       REALTIME_TICKET_SECRET: ticketSecret,
     };
-    const createRequest = (cookie?: string) => new Request("https://meet.test/api/voice/socket-ticket", {
-      method: "POST",
-      headers: {
-        origin: "https://meet.test",
-        ...(cookie ? { cookie } : {}),
-      },
-      body: JSON.stringify({ audience: "room", roomSlug: "demo-room" }),
-    });
+    const createRequest = (cookie?: string) =>
+      new Request("https://meet.test/api/voice/socket-ticket", {
+        method: "POST",
+        headers: {
+          origin: "https://meet.test",
+          ...(cookie ? { cookie } : {}),
+        },
+        body: JSON.stringify({ audience: "room", roomSlug: "demo-room" }),
+      });
 
     const firstResponse = await socketTicketPost({ request: createRequest() });
-    const firstBody = await firstResponse.json() as { expires_at: number; ticket: string };
+    const firstBody = (await firstResponse.json()) as {
+      expires_at: number;
+      ticket: string;
+    };
     const cookie = firstResponse.headers.get("Set-Cookie")?.split(";", 1)[0];
     if (!cookie) throw new Error("Expected demo session cookie");
 
-    const secondResponse = await socketTicketPost({ request: createRequest(cookie) });
-    const secondBody = await secondResponse.json() as { expires_at: number; ticket: string };
+    const secondResponse = await socketTicketPost({
+      request: createRequest(cookie),
+    });
+    const secondBody = (await secondResponse.json()) as {
+      expires_at: number;
+      ticket: string;
+    };
     const [first, second] = await Promise.all([
       verifySocketTicket(firstBody.ticket, ticketSecret, {
         accessMode: "public-demo",
@@ -104,7 +128,8 @@ describe("socket ticket route", () => {
 
     expect(first).toMatchObject({ ok: true });
     expect(second).toMatchObject({ ok: true });
-    if (!first.ok || !second.ok) throw new Error("Expected demo tickets to verify");
+    if (!first.ok || !second.ok)
+      throw new Error("Expected demo tickets to verify");
     expect(first.claims.subject).toBe(second.claims.subject);
   });
 
@@ -120,11 +145,18 @@ describe("socket ticket route", () => {
       request: new Request("https://meet.test/api/voice/socket-ticket", {
         method: "POST",
         headers: { origin: "https://meet.test" },
-        body: JSON.stringify({ audience: "room", roomSlug: "voice-server-channel" }),
+        body: JSON.stringify({
+          audience: "room",
+          roomSlug: "voice-server-channel",
+        }),
       }),
     });
 
-    await expect(crossOrigin.json()).resolves.toMatchObject({ code: "DEMO_ORIGIN_NOT_ALLOWED" });
-    await expect(reservedSlug.json()).resolves.toMatchObject({ code: "DEMO_ROOM_NOT_ALLOWED" });
+    await expect(crossOrigin.json()).resolves.toMatchObject({
+      code: "DEMO_ORIGIN_NOT_ALLOWED",
+    });
+    await expect(reservedSlug.json()).resolves.toMatchObject({
+      code: "DEMO_ROOM_NOT_ALLOWED",
+    });
   });
 });

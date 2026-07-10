@@ -1,13 +1,23 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { apiError, apiSuccess, getDB, requireActiveVoiceChannelSession, requireAuth } from "@/lib/api-helpers";
+import {
+  apiError,
+  apiSuccess,
+  getDB,
+  requireActiveVoiceChannelSession,
+  requireAuth,
+} from "@/lib/api-helpers";
 import { PERMISSIONS } from "@/lib/permissions";
 import { requireChannelAccess } from "@/lib/require-channel-access";
 import { requireChannelPermission } from "@/lib/require-permission";
 import { ServiceError } from "@/lib/service-error";
 import type { VoiceChannelStatus } from "@/lib/types";
 import { updateVoiceChannelStatus } from "@/services/channel.service";
-import { executeAuditLog, executeBroadcast, executeInvalidation } from "@/services/service-helpers";
+import {
+  executeAuditLog,
+  executeBroadcast,
+  executeInvalidation,
+} from "@/services/service-helpers";
 
 const PATCH = async ({ request, params }: any) => {
   const authResult = await requireAuth(request);
@@ -19,7 +29,10 @@ const PATCH = async ({ request, params }: any) => {
   if (accessResult instanceof Response) return accessResult;
 
   if (!accessResult.serverId) {
-    return apiError("Voice statuses are only available for server voice channels", 400);
+    return apiError(
+      "Voice statuses are only available for server voice channels",
+      400,
+    );
   }
 
   const permissionResult = await requireChannelPermission(
@@ -27,7 +40,7 @@ const PATCH = async ({ request, params }: any) => {
     channelId,
     userId,
     PERMISSIONS.CONNECT,
-    "You do not have permission to set this voice channel status"
+    "You do not have permission to set this voice channel status",
   );
   if (permissionResult instanceof Response) return permissionResult;
 
@@ -38,7 +51,8 @@ const PATCH = async ({ request, params }: any) => {
     accessResult.serverId,
     "You must be actively connected to this voice channel to change its status.",
   );
-  if (activeVoiceSessionResult instanceof Response) return activeVoiceSessionResult;
+  if (activeVoiceSessionResult instanceof Response)
+    return activeVoiceSessionResult;
 
   const body = await request.json();
   const { voice_status } = body as { voice_status?: VoiceChannelStatus | null };
@@ -50,7 +64,12 @@ const PATCH = async ({ request, params }: any) => {
   const db = getDB();
 
   try {
-    const result = await updateVoiceChannelStatus(db, channelId, userId, voice_status);
+    const result = await updateVoiceChannelStatus(
+      db,
+      channelId,
+      userId,
+      voice_status,
+    );
 
     await executeInvalidation(result.cacheKeysToInvalidate);
     await executeBroadcast(result.broadcast);
@@ -59,7 +78,10 @@ const PATCH = async ({ request, params }: any) => {
     return apiSuccess(result.channel);
   } catch (error) {
     if (error instanceof ServiceError) {
-      return Response.json({ error: error.message, code: error.code }, { status: error.status });
+      return Response.json(
+        { error: error.message, code: error.code },
+        { status: error.status },
+      );
     }
     throw error;
   }

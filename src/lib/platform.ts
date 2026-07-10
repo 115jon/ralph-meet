@@ -16,10 +16,7 @@ const log = clog("platform");
  * Tauri injects `__TAURI_INTERNALS__` into the webview's window object.
  */
 export function isTauri(): boolean {
-  return (
-    typeof window !== "undefined" &&
-    "__TAURI_INTERNALS__" in window
-  );
+  return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 }
 
 /** True when running as a mobile app (Tauri iOS/Android) */
@@ -63,9 +60,10 @@ export function isWindows(): boolean {
 export type CapturePolicy = "wgc-enabled" | "hook-exclusive";
 
 export function getCapturePolicy(): CapturePolicy {
-  const value = typeof import.meta !== "undefined" && typeof import.meta.env !== "undefined"
-    ? import.meta.env.VITE_RALPH_CAPTURE_POLICY
-    : undefined;
+  const value =
+    typeof import.meta !== "undefined" && typeof import.meta.env !== "undefined"
+      ? import.meta.env.VITE_RALPH_CAPTURE_POLICY
+      : undefined;
 
   return value === "hook-exclusive" ? "hook-exclusive" : "wgc-enabled";
 }
@@ -104,9 +102,10 @@ export function getApiBaseUrl(): string {
   }
 
   // Allow build-time override via Vite env var for production
-  const envUrl = typeof import.meta !== "undefined" && typeof import.meta.env !== "undefined"
-    ? import.meta.env.VITE_API_BASE_URL
-    : undefined;
+  const envUrl =
+    typeof import.meta !== "undefined" && typeof import.meta.env !== "undefined"
+      ? import.meta.env.VITE_API_BASE_URL
+      : undefined;
   if (envUrl) return envUrl;
 
   // Production Tauri build — point to the deployed Cloudflare Workers backend
@@ -119,9 +118,10 @@ export function getApiBaseUrl(): string {
  * - Production: Custom env URL or `https://meet.115jon.site`
  */
 export function getPublicApiUrl(): string {
-  const envUrl = typeof import.meta !== "undefined" && typeof import.meta.env !== "undefined"
-    ? import.meta.env.VITE_API_BASE_URL
-    : undefined;
+  const envUrl =
+    typeof import.meta !== "undefined" && typeof import.meta.env !== "undefined"
+      ? import.meta.env.VITE_API_BASE_URL
+      : undefined;
 
   if (envUrl) return envUrl;
 
@@ -143,9 +143,10 @@ export function getPublicApiUrl(): string {
  * should happen on the deployed Ralph Meet site, then deep-link back into Tauri.
  */
 export function getPublicWebUrl(): string {
-  const envUrl = typeof import.meta !== "undefined" && typeof import.meta.env !== "undefined"
-    ? import.meta.env.VITE_PUBLIC_WEB_URL
-    : undefined;
+  const envUrl =
+    typeof import.meta !== "undefined" && typeof import.meta.env !== "undefined"
+      ? import.meta.env.VITE_PUBLIC_WEB_URL
+      : undefined;
 
   return (envUrl || "https://meet.115jon.site").replace(/\/$/, "");
 }
@@ -183,9 +184,7 @@ export function getWsBaseUrl(): string {
   const apiBase = getPublicApiUrl();
   log.info("Using ws base from apiBase:", apiBase);
 
-  return apiBase
-    .replace(/^https:/, "wss:")
-    .replace(/^http:/, "ws:");
+  return apiBase.replace(/^https:/, "wss:").replace(/^http:/, "ws:");
 }
 
 /**
@@ -240,7 +239,12 @@ function withAuthTokenForProtectedAsset(fullUrl: string): string {
   if (!token) return fullUrl;
 
   try {
-    const urlObj = new URL(fullUrl, typeof window !== "undefined" ? window.location.origin : getPublicApiUrl());
+    const urlObj = new URL(
+      fullUrl,
+      typeof window !== "undefined"
+        ? window.location.origin
+        : getPublicApiUrl(),
+    );
     if (
       urlObj.pathname.startsWith("/api/attachments/") ||
       urlObj.pathname.startsWith("/api/camera-backgrounds/") ||
@@ -309,8 +313,6 @@ export function getAuthAssetUrl(pathOrUrl: string): string {
 
   let fullUrl = pathOrUrl;
 
-
-
   if (fullUrl.startsWith("/")) {
     fullUrl = apiUrl(fullUrl);
   }
@@ -347,7 +349,9 @@ export function getDownloadUrl(pathOrUrl: string): string {
         return pathOrUrl;
       }
       path = u.pathname + u.search;
-    } catch { /* keep as-is */ }
+    } catch {
+      /* keep as-is */
+    }
   }
 
   // The real backend origin that resolves outside Tauri

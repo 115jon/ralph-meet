@@ -36,7 +36,11 @@ const snapshotArb: fc.Arbitrary<NativeShareStatsSnapshot> = fc.record({
     "generic_hw",
     "software",
   ),
-  fallback_reason: fc.constantFrom("none", "watchdog_timeout", "monitor_source"),
+  fallback_reason: fc.constantFrom(
+    "none",
+    "watchdog_timeout",
+    "monitor_source",
+  ),
   captured_frames: fc.nat(),
   encoded_frames: fc.nat(),
   encode_errors: fc.nat(),

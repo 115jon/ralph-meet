@@ -35,19 +35,21 @@ describe("emoji.service", () => {
 
   it("maps listed user creations into client-friendly emoji items", async () => {
     db.mockQuery("FROM generated_emojis", {
-      results: [{
-        id: EMOJI_ID,
-        user_id: USER_ID,
-        shortcode: "party_blob",
-        prompt: "party blob with confetti",
-        file_key: "emoji-assets/user-1/emoji-1.png",
-        content_type: "image/png",
-        size_bytes: 2048,
-        status: "ready",
-        error_message: null,
-        created_at: CREATED_AT,
-        updated_at: CREATED_AT,
-      }],
+      results: [
+        {
+          id: EMOJI_ID,
+          user_id: USER_ID,
+          shortcode: "party_blob",
+          prompt: "party blob with confetti",
+          file_key: "emoji-assets/user-1/emoji-1.png",
+          content_type: "image/png",
+          size_bytes: 2048,
+          status: "ready",
+          error_message: null,
+          created_at: CREATED_AT,
+          updated_at: CREATED_AT,
+        },
+      ],
     });
 
     const items = await listUserGeneratedEmojis(db as any, USER_ID, 12);
@@ -90,7 +92,10 @@ describe("emoji.service", () => {
       ],
     });
 
-    const items = await listGeneratedEmojisByIds(db as any, ["emoji-a", "emoji-b"]);
+    const items = await listGeneratedEmojisByIds(db as any, [
+      "emoji-a",
+      "emoji-b",
+    ]);
 
     expect(items.map((item) => item.id)).toEqual(["emoji-a", "emoji-b"]);
   });

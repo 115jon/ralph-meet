@@ -16,7 +16,7 @@ describe("InputControls media launchers", () => {
         handleGifSelect={async () => undefined}
         canSend={false}
         onSend={() => undefined}
-      />
+      />,
     );
 
     expect(markup).toContain("Open GIF picker");

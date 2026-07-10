@@ -13,7 +13,11 @@ describe("listen together provider helpers", () => {
       videoId: "abc123XYZ90",
     });
 
-    expect(extractYouTubeUrl("https://music.youtube.com/watch?v=abc123XYZ90&list=PL12345")).toEqual({
+    expect(
+      extractYouTubeUrl(
+        "https://music.youtube.com/watch?v=abc123XYZ90&list=PL12345",
+      ),
+    ).toEqual({
       provider: "youtube_music",
       videoId: "abc123XYZ90",
       playlistId: "PL12345",
@@ -26,7 +30,10 @@ describe("listen together provider helpers", () => {
       title: { runs: [{ text: "Track One" }] },
       author: { name: { runs: [{ text: "Artist Name" }] } },
       length_text: { runs: [{ text: "3:45" }] },
-      thumbnails: [{ url: "https://img.example/1.jpg" }, { url: "https://img.example/2.jpg" }],
+      thumbnails: [
+        { url: "https://img.example/1.jpg" },
+        { url: "https://img.example/2.jpg" },
+      ],
     });
 
     expect(mapped).toMatchObject({

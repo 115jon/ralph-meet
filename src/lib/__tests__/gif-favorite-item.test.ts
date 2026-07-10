@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { createAttachmentClipFavorite, createAttachmentGifFavorite, createExternalGifFavorite, getFxTwitterGifWebpUrl } from "@/lib/gif-favorite-item";
+import {
+  createAttachmentClipFavorite,
+  createAttachmentGifFavorite,
+  createExternalGifFavorite,
+  getFxTwitterGifWebpUrl,
+} from "@/lib/gif-favorite-item";
 
 describe("gif favorite item helpers", () => {
   it("creates clip favorites for external mp4 videos", () => {
@@ -18,24 +23,34 @@ describe("gif favorite item helpers", () => {
     expect(favorite.mediaType).toBe("clips");
     expect(favorite.preview.contentType).toBe("video/mp4");
     expect(favorite.send.contentType).toBe("video/mp4");
-    expect(favorite.send.url).toBe("https://cdn.example.com/clips/helicopter.mp4");
+    expect(favorite.send.url).toBe(
+      "https://cdn.example.com/clips/helicopter.mp4",
+    );
     expect(favorite.duration).toBe(12.4);
   });
 
   it("derives FxTwitter animated WebP URLs from Twitter GIF MP4 media", () => {
-    expect(getFxTwitterGifWebpUrl("https://video.twimg.com/tweet_video/HKohayFWcAA3VCp.mp4")).toBe(
-      "https://gif.fxtwitter.com/tweet_video/HKohayFWcAA3VCp.webp"
-    );
+    expect(
+      getFxTwitterGifWebpUrl(
+        "https://video.twimg.com/tweet_video/HKohayFWcAA3VCp.mp4",
+      ),
+    ).toBe("https://gif.fxtwitter.com/tweet_video/HKohayFWcAA3VCp.webp");
   });
 
   it("derives FxTwitter animated WebP URLs from proxied Twitter GIF MP4 media", () => {
-    expect(getFxTwitterGifWebpUrl("/api/proxy-media?url=https%3A%2F%2Fvideo.twimg.com%2Ftweet_video%2FHKohayFWcAA3VCp.mp4")).toBe(
-      "https://gif.fxtwitter.com/tweet_video/HKohayFWcAA3VCp.webp"
-    );
+    expect(
+      getFxTwitterGifWebpUrl(
+        "/api/proxy-media?url=https%3A%2F%2Fvideo.twimg.com%2Ftweet_video%2FHKohayFWcAA3VCp.mp4",
+      ),
+    ).toBe("https://gif.fxtwitter.com/tweet_video/HKohayFWcAA3VCp.webp");
   });
 
   it("does not derive WebP URLs for normal Twitter videos", () => {
-    expect(getFxTwitterGifWebpUrl("https://video.twimg.com/amplify_video/2065467720074661889/vid/avc1/720x1280/QgEjUIGoD_gpNbNV.mp4")).toBeNull();
+    expect(
+      getFxTwitterGifWebpUrl(
+        "https://video.twimg.com/amplify_video/2065467720074661889/vid/avc1/720x1280/QgEjUIGoD_gpNbNV.mp4",
+      ),
+    ).toBeNull();
   });
 
   it("preserves WebP as an image GIF favorite asset type", () => {
@@ -93,8 +108,10 @@ describe("gif favorite item helpers", () => {
     });
     const sentFavorite = createAttachmentGifFavorite({
       id: "0f72a3a1-a38c-4893-8a9d-6db1862bc438",
-      filename: "x-media-0-https-video.twimg.com-tweet_video-HKohayFWcAA3VCp.mp4.webp",
-      fileKeyOrUrl: "https://gif.fxtwitter.com/tweet_video/HKohayFWcAA3VCp.webp",
+      filename:
+        "x-media-0-https-video.twimg.com-tweet_video-HKohayFWcAA3VCp.mp4.webp",
+      fileKeyOrUrl:
+        "https://gif.fxtwitter.com/tweet_video/HKohayFWcAA3VCp.webp",
       sourceUrl: "https://gif.fxtwitter.com/tweet_video/HKohayFWcAA3VCp.webp",
       sendUrl: "https://gif.fxtwitter.com/tweet_video/HKohayFWcAA3VCp.webp",
       contentType: "image/webp",

@@ -28,10 +28,7 @@ function legacyRalphSessionStorageKey(): string | null {
 }
 
 function isTauriRuntime(): boolean {
-  return (
-    typeof window !== "undefined" &&
-    "__TAURI_INTERNALS__" in window
-  );
+  return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 }
 
 export function getStoredKovaAuthSessionToken(): string | null {
@@ -112,7 +109,9 @@ export function getDesktopAuthHandoffToken(): string | null {
   return getDesktopToken() ?? getStoredKovaAuthSessionToken();
 }
 
-export async function waitForDesktopToken(timeoutMs = 1500): Promise<string | null> {
+export async function waitForDesktopToken(
+  timeoutMs = 1500,
+): Promise<string | null> {
   const existing = getDesktopAuthHandoffToken();
   if (existing || typeof window === "undefined") return existing;
 
@@ -136,11 +135,16 @@ export function clearDesktopToken() {
   }
 }
 
-export function subscribeDesktopTokenChanges(listener: (token: string | null) => void): () => void {
+export function subscribeDesktopTokenChanges(
+  listener: (token: string | null) => void,
+): () => void {
   if (typeof window === "undefined") return () => undefined;
 
   const handler = (event: Event) => {
-    listener((event as CustomEvent<string | null>).detail ?? getDesktopAuthHandoffToken());
+    listener(
+      (event as CustomEvent<string | null>).detail ??
+        getDesktopAuthHandoffToken(),
+    );
   };
   window.addEventListener(TOKEN_EVENT, handler);
   return () => window.removeEventListener(TOKEN_EVENT, handler);
@@ -180,7 +184,9 @@ export function registerTokenRefresher(fn: TokenRefresher) {
   tokenRefresher = fn;
 }
 
-export async function refreshDesktopToken(options: { force?: boolean } = {}): Promise<string | null> {
+export async function refreshDesktopToken(
+  options: { force?: boolean } = {},
+): Promise<string | null> {
   const existing = getDesktopAuthHandoffToken();
   if (existing && !options.force) return existing;
   if (!tokenRefresher) return null;

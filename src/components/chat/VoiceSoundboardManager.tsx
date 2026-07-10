@@ -25,7 +25,9 @@ export function VoiceSoundboardManager({
   localUserId,
 }: VoiceSoundboardManagerProps) {
   const serverKey = getSoundboardServerKey(serverId);
-  const setServerSoundboardMuted = useVoiceSoundboardStore((s) => s.setServerSoundboardMuted);
+  const setServerSoundboardMuted = useVoiceSoundboardStore(
+    (s) => s.setServerSoundboardMuted,
+  );
 
   // `sfu.on(...)` returns the unsubscribe function from EventEmitter.on.
   // react-doctor-disable-next-line react-doctor/effect-needs-cleanup
@@ -33,18 +35,24 @@ export function VoiceSoundboardManager({
     if (!sfu) return;
 
     return sfu.on("app-event", (event) => {
-      if (event.server_key !== serverKey || typeof event.type !== "string") return;
+      if (event.server_key !== serverKey || typeof event.type !== "string")
+        return;
       const receivedAt = Date.now();
-      const peerSettings = useVoiceSettingsStore.getState().getSettings(localUserId).peerSettings;
-      const serverMutedMap = useVoiceSoundboardStore.getState().serverMutedByServer[serverKey] ?? {};
+      const peerSettings = useVoiceSettingsStore
+        .getState()
+        .getSettings(localUserId).peerSettings;
+      const serverMutedMap =
+        useVoiceSoundboardStore.getState().serverMutedByServer[serverKey] ?? {};
 
       if (event.type === "soundboard.play") {
-        const ownerId = typeof event.user_id === "string"
-          ? event.user_id
-          : typeof event.participant_id === "string"
-            ? event.participant_id
-            : null;
-        const playbackId = typeof event.playback_id === "string" ? event.playback_id : null;
+        const ownerId =
+          typeof event.user_id === "string"
+            ? event.user_id
+            : typeof event.participant_id === "string"
+              ? event.participant_id
+              : null;
+        const playbackId =
+          typeof event.playback_id === "string" ? event.playback_id : null;
         const name = typeof event.name === "string" ? event.name : "Sound";
         if (!ownerId || !playbackId) return;
 
@@ -60,9 +68,12 @@ export function VoiceSoundboardManager({
           ownerId,
           serverKey,
           name,
-          soundId: typeof event.sound_id === "string" ? event.sound_id : undefined,
-          dataUrl: typeof event.data_url === "string" ? event.data_url : undefined,
-          mediaUrl: typeof event.media_url === "string" ? event.media_url : undefined,
+          soundId:
+            typeof event.sound_id === "string" ? event.sound_id : undefined,
+          dataUrl:
+            typeof event.data_url === "string" ? event.data_url : undefined,
+          mediaUrl:
+            typeof event.media_url === "string" ? event.media_url : undefined,
           volume: typeof event.volume === "number" ? event.volume : undefined,
           isLocal: ownerId === localUserId,
           receivedAt,
@@ -76,40 +87,56 @@ export function VoiceSoundboardManager({
           return;
         }
 
-        const ownerId = typeof event.user_id === "string"
-          ? event.user_id
-          : typeof event.participant_id === "string"
-            ? event.participant_id
-            : null;
+        const ownerId =
+          typeof event.user_id === "string"
+            ? event.user_id
+            : typeof event.participant_id === "string"
+              ? event.participant_id
+              : null;
         if (ownerId) stopSoundboardPlaybacksByOwner(ownerId, serverKey);
         return;
       }
 
       if (event.type === "soundboard.pause-set") {
-        if (typeof event.playback_id !== "string" || typeof event.paused !== "boolean") return;
+        if (
+          typeof event.playback_id !== "string" ||
+          typeof event.paused !== "boolean"
+        )
+          return;
         if (event.paused) pauseSoundboardPlayback(event.playback_id);
         else resumeSoundboardPlayback(event.playback_id);
         return;
       }
 
       if (event.type === "soundboard.volume-set") {
-        if (typeof event.playback_id !== "string" || typeof event.volume !== "number") return;
+        if (
+          typeof event.playback_id !== "string" ||
+          typeof event.volume !== "number"
+        )
+          return;
         setSoundboardPlaybackVolume(event.playback_id, event.volume);
         return;
       }
 
       if (event.type === "soundboard.server-mute-set") {
-        const targetUserId = typeof event.target_user_id === "string" ? event.target_user_id : null;
+        const targetUserId =
+          typeof event.target_user_id === "string"
+            ? event.target_user_id
+            : null;
         if (!targetUserId || typeof event.muted !== "boolean") return;
         setServerSoundboardMuted(serverKey, targetUserId, event.muted);
-        if (event.muted) stopSoundboardPlaybacksByOwner(targetUserId, serverKey);
+        if (event.muted)
+          stopSoundboardPlaybacksByOwner(targetUserId, serverKey);
       }
     });
   }, [localUserId, serverKey, setServerSoundboardMuted, sfu]);
 
-  useEffect(() => () => {
-    stopAllSoundboardPlaybacksForServer(serverKey);
-  }, [serverKey]);
+  useEffect(
+    () => () => {
+      stopAllSoundboardPlaybacksForServer(serverKey);
+    },
+    [serverKey],
+  );
 
   return null;
 }

@@ -1,11 +1,11 @@
-import type { Attachment } from '@/lib/types';
-import { cn } from '@/lib/utils';
-import React from 'react';
-import { useVideoPlaybackAvailability } from '@/lib/video-playback-availability';
-import { GifProviderBranding } from './GifProviderBranding';
-import SensitiveMediaFrame from './SensitiveMediaFrame';
-import VideoAttachment from './VideoAttachment';
-import type { ViewState } from './useImageViewerState';
+import type { Attachment } from "@/lib/types";
+import { cn } from "@/lib/utils";
+import React from "react";
+import { useVideoPlaybackAvailability } from "@/lib/video-playback-availability";
+import { GifProviderBranding } from "./GifProviderBranding";
+import SensitiveMediaFrame from "./SensitiveMediaFrame";
+import VideoAttachment from "./VideoAttachment";
+import type { ViewState } from "./useImageViewerState";
 
 interface ImageViewerContentProps {
   currentImage: Attachment;
@@ -52,7 +52,8 @@ export function ImageViewerContent({
   });
 
   if (isVideo) {
-    const shouldRenderPosterOnly = !!videoPosterUrl && playbackAvailability !== 'playable';
+    const shouldRenderPosterOnly =
+      !!videoPosterUrl && playbackAvailability !== "playable";
 
     if (shouldRenderPosterOnly) {
       return (
@@ -81,12 +82,15 @@ export function ImageViewerContent({
               }}
               draggable={false}
             />
-            {(playbackAvailability === 'checking' || !isLoaded) && (
+            {(playbackAvailability === "checking" || !isLoaded) && (
               <div className="absolute inset-0 flex items-center justify-center">
                 <div className="w-8 h-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />
               </div>
             )}
-            <GifProviderBranding fileKeyOrUrl={currentImage.file_key || currentImage.url} className="bottom-3 left-3" />
+            <GifProviderBranding
+              fileKeyOrUrl={currentImage.file_key || currentImage.url}
+              className="bottom-3 left-3"
+            />
           </div>
         </SensitiveMediaFrame>
       );
@@ -104,7 +108,7 @@ export function ImageViewerContent({
           poster={videoPosterUrl}
           variant="viewer"
           brandingKey={currentImage.file_key || currentImage.url}
-          playbackMode={isAnimatedMedia ? 'animated' : 'default'}
+          playbackMode={isAnimatedMedia ? "animated" : "default"}
           fallbackToPosterOnError={!!videoPosterUrl}
         />
       </SensitiveMediaFrame>
@@ -125,7 +129,10 @@ export function ImageViewerContent({
             className="relative border-0 bg-transparent p-0 transition-transform duration-75 ease-out outline-none"
             style={{
               transform: `translate(${translateX}px, ${pan.y}px) scale(${scale})`,
-              transition: isDragging || isSwipeDragging ? 'none' : 'transform 0.2s ease-out'
+              transition:
+                isDragging || isSwipeDragging
+                  ? "none"
+                  : "transform 0.2s ease-out",
             }}
             onClick={interactive ? (e) => handleImageClick(e) : undefined}
             tabIndex={interactive ? 0 : -1}
@@ -139,10 +146,19 @@ export function ImageViewerContent({
               className={cn(
                 "max-w-full max-h-[60vh] md:max-h-[75vh] object-contain shadow-2xl rounded-sm transition-opacity duration-300 select-none",
                 isLoaded ? "opacity-100" : "opacity-0",
-                interactive && (isZoomed ? "cursor-grab active:cursor-grabbing" : "cursor-zoom-in")
+                interactive &&
+                  (isZoomed
+                    ? "cursor-grab active:cursor-grabbing"
+                    : "cursor-zoom-in"),
               )}
               onLoad={(e) => {
-                setLocalState({ isLoaded: true, dimensions: { width: e.currentTarget.naturalWidth, height: e.currentTarget.naturalHeight } });
+                setLocalState({
+                  isLoaded: true,
+                  dimensions: {
+                    width: e.currentTarget.naturalWidth,
+                    height: e.currentTarget.naturalHeight,
+                  },
+                });
               }}
               draggable={false}
             />
@@ -151,7 +167,10 @@ export function ImageViewerContent({
                 <div className="w-8 h-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />
               </div>
             )}
-            <GifProviderBranding fileKeyOrUrl={currentImage.file_key || currentImage.url} className="bottom-3 left-3" />
+            <GifProviderBranding
+              fileKeyOrUrl={currentImage.file_key || currentImage.url}
+              className="bottom-3 left-3"
+            />
           </button>
         );
       }}

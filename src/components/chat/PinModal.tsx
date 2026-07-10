@@ -1,18 +1,18 @@
 import { getDisplayInitial, getDisplayName } from "@/lib/display-name";
 import { getAuthAssetUrl } from "@/lib/platform";
-import { BaseModal } from '@/components/ui/BaseModal';
-import type { Message } from '@/lib/types';
-import { cn } from '@/lib/utils';
-import { X } from 'lucide-react';
+import { BaseModal } from "@/components/ui/BaseModal";
+import type { Message } from "@/lib/types";
+import { cn } from "@/lib/utils";
+import { X } from "lucide-react";
 
-import { isPlayableVideo } from '@/lib/media';
-import React, { useEffect, useState } from 'react';
-import { AvatarImage } from './AvatarImage';
-import { ImageGrid } from './ImageGrid';
-import InlineEmojiText from './InlineEmojiText';
-import { MarkdownRenderer } from './MarkdownRenderer';
-import { UserDisplayName } from './UserDisplayName';
-import VideoAttachment from './VideoAttachment';
+import { isPlayableVideo } from "@/lib/media";
+import React, { useEffect, useState } from "react";
+import { AvatarImage } from "./AvatarImage";
+import { ImageGrid } from "./ImageGrid";
+import InlineEmojiText from "./InlineEmojiText";
+import { MarkdownRenderer } from "./MarkdownRenderer";
+import { UserDisplayName } from "./UserDisplayName";
+import VideoAttachment from "./VideoAttachment";
 
 interface PinModalProps {
   isClosing?: boolean;
@@ -20,7 +20,7 @@ interface PinModalProps {
   onClose: () => void;
   onConfirm: () => void;
   message: Message | null;
-  mode: 'pin' | 'unpin';
+  mode: "pin" | "unpin";
   channelName: string;
 }
 
@@ -30,7 +30,7 @@ export const PinModal: React.FC<PinModalProps> = ({
   onConfirm,
   message,
   mode,
-  channelName
+  channelName,
 }) => {
   const [isClosing, setIsClosing] = useState(false);
   const modalIsClosing = isClosing;
@@ -54,13 +54,13 @@ export const PinModal: React.FC<PinModalProps> = ({
   if (!isOpen && !modalIsClosing) return null;
   if (!message) return null;
 
-  const isPin = mode === 'pin';
+  const isPin = mode === "pin";
   const authorDisplayName = getDisplayName(message.author);
   const imageAttachments: typeof message.attachments = [];
   const videoAttachments: typeof message.attachments = [];
 
   for (const attachment of message.attachments ?? []) {
-    if (attachment.content_type?.startsWith('image/')) {
+    if (attachment.content_type?.startsWith("image/")) {
       imageAttachments.push(attachment);
       continue;
     }
@@ -76,10 +76,13 @@ export const PinModal: React.FC<PinModalProps> = ({
         <div
           className={cn(
             "absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity duration-200",
-            modalIsClosing ? "opacity-0" : "opacity-100"
+            modalIsClosing ? "opacity-0" : "opacity-100",
           )}
           onClick={handleClose}
-          onKeyDown={(e) => { if (e.key === "Enter" || e.key === " " || e.key === "Escape") handleClose(); }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " " || e.key === "Escape")
+              handleClose();
+          }}
           role="presentation"
           aria-hidden="true"
         />
@@ -89,13 +92,18 @@ export const PinModal: React.FC<PinModalProps> = ({
           open
           className={cn(
             "relative m-0 w-full max-w-[480px] overflow-hidden rounded-2xl border border-rm-border bg-rm-bg-primary p-0 shadow-2xl outline-none transition-all duration-200",
-            modalIsClosing ? "opacity-0 scale-95 translate-y-4" : "opacity-100 scale-100 translate-y-0"
+            modalIsClosing
+              ? "opacity-0 scale-95 translate-y-4"
+              : "opacity-100 scale-100 translate-y-0",
           )}
           aria-labelledby="pin-modal-title"
         >
           <div className="p-6">
             <div className="flex items-start justify-between mb-4">
-              <h2 id="pin-modal-title" className="text-xl font-black text-rm-text leading-tight">
+              <h2
+                id="pin-modal-title"
+                className="text-xl font-black text-rm-text leading-tight"
+              >
                 {isPin ? "Pin It. Pin It Good." : "Unpin Message"}
               </h2>
               <button
@@ -107,9 +115,13 @@ export const PinModal: React.FC<PinModalProps> = ({
             </div>
 
             <div className="text-rm-text-muted text-[14px] mb-6 leading-relaxed">
-              {isPin
-                ? <InlineEmojiText text={`Hey, just double checking that you want to pin this message to #${channelName} for posterity and greatness?`} />
-                : "You sure you want to remove this pinned message?"}
+              {isPin ? (
+                <InlineEmojiText
+                  text={`Hey, just double checking that you want to pin this message to #${channelName} for posterity and greatness?`}
+                />
+              ) : (
+                "You sure you want to remove this pinned message?"
+              )}
             </div>
 
             {/* Message Preview */}
@@ -117,7 +129,11 @@ export const PinModal: React.FC<PinModalProps> = ({
               <div className="flex gap-3 mb-2">
                 <div className="relative h-10 w-10 shrink-0 overflow-visible rounded-full bg-primary/10 text-sm font-bold text-primary flex items-center justify-center border border-rm-border">
                   {message.author?.avatar_url ? (
-                    <AvatarImage src={getAuthAssetUrl(message.author.avatar_url)} alt={authorDisplayName} display={message.author.avatar_display} />
+                    <AvatarImage
+                      src={getAuthAssetUrl(message.author.avatar_url)}
+                      alt={authorDisplayName}
+                      display={message.author.avatar_display}
+                    />
                   ) : (
                     getDisplayInitial(message.author)
                   )}
@@ -129,13 +145,18 @@ export const PinModal: React.FC<PinModalProps> = ({
                       className="block truncate text-[14px] font-bold text-rm-text"
                     />
                     <span className="text-[10px] text-rm-text-muted font-medium">
-                      {new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      {new Date(message.created_at).toLocaleTimeString([], {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
                     </span>
                   </div>
                   <div className="text-[14px] text-rm-text-secondary leading-relaxed wrap-break-word">
                     <MarkdownRenderer content={message.content} />
                     {message.updated_at && (
-                      <span className="ml-1 text-[10px] text-rm-text-muted">(edited)</span>
+                      <span className="ml-1 text-[10px] text-rm-text-muted">
+                        (edited)
+                      </span>
                     )}
                   </div>
                 </div>
@@ -168,9 +189,19 @@ export const PinModal: React.FC<PinModalProps> = ({
 
             {!isPin && (
               <div className="mb-6 px-1">
-                <p className="text-[11px] font-black text-primary uppercase tracking-widest mb-1.5">Protip:</p>
+                <p className="text-[11px] font-black text-primary uppercase tracking-widest mb-1.5">
+                  Protip:
+                </p>
                 <p className="text-[12px] text-rm-text-muted leading-relaxed">
-                  You can hold down <span className="text-rm-text-secondary font-bold bg-rm-bg-elevated px-1.5 py-0.5 rounded">shift</span> when clicking <span className="text-rm-text-secondary font-bold">unpin message</span> to bypass this confirmation entirely.
+                  You can hold down{" "}
+                  <span className="text-rm-text-secondary font-bold bg-rm-bg-elevated px-1.5 py-0.5 rounded">
+                    shift
+                  </span>{" "}
+                  when clicking{" "}
+                  <span className="text-rm-text-secondary font-bold">
+                    unpin message
+                  </span>{" "}
+                  to bypass this confirmation entirely.
                 </p>
               </div>
             )}
@@ -191,7 +222,7 @@ export const PinModal: React.FC<PinModalProps> = ({
                   "flex-1 px-4 py-3 rounded-xl font-bold text-[14px] transition-all shadow-lg",
                   isPin
                     ? "bg-primary hover:brightness-110 text-primary-foreground shadow-primary/20"
-                    : "bg-destructive hover:brightness-110 text-destructive-foreground shadow-destructive/20"
+                    : "bg-destructive hover:brightness-110 text-destructive-foreground shadow-destructive/20",
                 )}
               >
                 {isPin ? "Oh yeah. Pin it" : "Remove it please!"}

@@ -7,7 +7,14 @@ import {
   getProfileAssetUrl,
   isProfileAssetKind,
 } from "@/lib/profile-assets";
-import { apiError, apiSuccess, broadcastToAll, getBucket, getDB, requireAuth } from "@/lib/api-helpers";
+import {
+  apiError,
+  apiSuccess,
+  broadcastToAll,
+  getBucket,
+  getDB,
+  requireAuth,
+} from "@/lib/api-helpers";
 import { cacheDel, CacheKey } from "@/lib/cache";
 import { logger } from "@/lib/logger";
 import {
@@ -19,9 +26,14 @@ import {
 import { checkRateLimitDO, RATE_LIMITS } from "@/lib/rate-limit";
 import { clearProfileAsset, updateProfileAsset } from "@/services/user.service";
 
-async function listExistingAssetKeys(kind: ProfileAssetKind, userId: string): Promise<string[]> {
+async function listExistingAssetKeys(
+  kind: ProfileAssetKind,
+  userId: string,
+): Promise<string[]> {
   const bucket = getBucket();
-  const listed = await bucket.list({ prefix: getProfileAssetStoragePrefix(kind, userId) });
+  const listed = await bucket.list({
+    prefix: getProfileAssetStoragePrefix(kind, userId),
+  });
   return listed.objects.map((object: { key: string }) => object.key);
 }
 
@@ -35,12 +47,16 @@ async function invalidateProfileCaches(userId: string, serverIds: string[]) {
   await cacheDel(CacheKey.userServers(userId));
 
   if (serverIds.length === 0) return;
-  await Promise.all(serverIds.map((serverId) => cacheDel(CacheKey.serverMembers(serverId))));
+  await Promise.all(
+    serverIds.map((serverId) => cacheDel(CacheKey.serverMembers(serverId))),
+  );
 }
 
 async function broadcastProfileUpdate(
   userId: string,
-  result: Awaited<ReturnType<typeof updateProfileAsset>> | Awaited<ReturnType<typeof clearProfileAsset>>,
+  result:
+    | Awaited<ReturnType<typeof updateProfileAsset>>
+    | Awaited<ReturnType<typeof clearProfileAsset>>,
 ) {
   await broadcastToAll("USER_PROFILE_UPDATE", {
     user_id: userId,
@@ -58,7 +74,11 @@ const POST = async ({ request }: any) => {
   if (authResult instanceof Response) return authResult;
   const { userId } = authResult;
 
-  const rl = await checkRateLimitDO(userId, "profile-asset-upload", RATE_LIMITS.FILE_UPLOAD);
+  const rl = await checkRateLimitDO(
+    userId,
+    "profile-asset-upload",
+    RATE_LIMITS.FILE_UPLOAD,
+  );
   if (rl) return rl;
 
   const formData = await request.formData();
@@ -73,7 +93,10 @@ const POST = async ({ request }: any) => {
     return apiError("No file provided", 400);
   }
 
-  const maxSize = kindValue === "banner" ? MAX_PROFILE_BANNER_SIZE : MAX_PROFILE_NAMEPLATE_SIZE;
+  const maxSize =
+    kindValue === "banner"
+      ? MAX_PROFILE_BANNER_SIZE
+      : MAX_PROFILE_NAMEPLATE_SIZE;
   if (file.size > maxSize) {
     return apiError(
       kindValue === "banner"
@@ -84,9 +107,10 @@ const POST = async ({ request }: any) => {
   }
 
   const buffer = await file.arrayBuffer();
-  const validation = kindValue === "banner"
-    ? validateProfileBannerBuffer(buffer)
-    : validateProfileNameplateBuffer(buffer);
+  const validation =
+    kindValue === "banner"
+      ? validateProfileBannerBuffer(buffer)
+      : validateProfileNameplateBuffer(buffer);
 
   if (!validation.ok) {
     logger.security("profile_asset_upload_invalid_magic_bytes", {
@@ -120,13 +144,18 @@ const POST = async ({ request }: any) => {
         userId,
         kind: kindValue,
         key,
-        error: cleanupError instanceof Error ? cleanupError.message : String(cleanupError),
+        error:
+          cleanupError instanceof Error
+            ? cleanupError.message
+            : String(cleanupError),
       });
     }
     throw error;
   }
 
-  const staleKeys = existingKeys.filter((existingKey: string) => existingKey !== key);
+  const staleKeys = existingKeys.filter(
+    (existingKey: string) => existingKey !== key,
+  );
   if (staleKeys.length > 0) {
     try {
       await deleteAssetKeys(staleKeys);
@@ -136,7 +165,10 @@ const POST = async ({ request }: any) => {
         kind: kindValue,
         key,
         staleKeys,
-        error: cleanupError instanceof Error ? cleanupError.message : String(cleanupError),
+        error:
+          cleanupError instanceof Error
+            ? cleanupError.message
+            : String(cleanupError),
       });
     }
   }
@@ -152,12 +184,18 @@ const POST = async ({ request }: any) => {
     sizeBytes: file.size,
   });
 
-  return apiSuccess({
-    kind: kindValue,
-    url: kindValue === "banner" ? result.user.banner_url : result.user.nameplate_url,
-    content_type: validation.mimeType,
-    updated_at: result.updatedAt,
-  }, 201);
+  return apiSuccess(
+    {
+      kind: kindValue,
+      url:
+        kindValue === "banner"
+          ? result.user.banner_url
+          : result.user.nameplate_url,
+      content_type: validation.mimeType,
+      updated_at: result.updatedAt,
+    },
+    201,
+  );
 };
 
 const DELETE = async ({ request }: any) => {
@@ -187,7 +225,10 @@ const DELETE = async ({ request }: any) => {
         userId,
         kind: body.kind,
         existingKeys,
-        error: cleanupError instanceof Error ? cleanupError.message : String(cleanupError),
+        error:
+          cleanupError instanceof Error
+            ? cleanupError.message
+            : String(cleanupError),
       });
     }
   }

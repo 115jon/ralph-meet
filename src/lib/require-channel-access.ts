@@ -7,7 +7,6 @@ import { getDB } from "@/lib/api-helpers";
 import { hasPermission, PERMISSIONS } from "@/lib/permissions";
 import { getUserChannelPermissions } from "@/lib/require-permission";
 
-
 /**
  * Verify the user has access to this channel.
  *
@@ -19,20 +18,24 @@ import { getUserChannelPermissions } from "@/lib/require-permission";
  */
 export async function requireChannelAccess(
   userId: string,
-  channelId: string
+  channelId: string,
 ): Promise<{ serverId: string | null } | Response> {
   const db = getDB();
 
   // First, look up the channel to determine its type
-  const channel = await db
+  const channel = (await db
     .prepare(`SELECT id, server_id, channel_type FROM channels WHERE id = ?`)
     .bind(channelId)
-    .first() as { id: string; server_id: string | null; channel_type: string } | null;
+    .first()) as {
+    id: string;
+    server_id: string | null;
+    channel_type: string;
+  } | null;
 
   if (!channel) {
     return Response.json(
       { error: "Channel not found or access denied" },
-      { status: 403 }
+      { status: 403 },
     );
   }
 
@@ -40,7 +43,7 @@ export async function requireChannelAccess(
   if (channel.channel_type === "dm" || channel.server_id === null) {
     const recipient = await db
       .prepare(
-        `SELECT 1 FROM dm_recipients WHERE channel_id = ? AND user_id = ?`
+        `SELECT 1 FROM dm_recipients WHERE channel_id = ? AND user_id = ?`,
       )
       .bind(channelId, userId)
       .first();
@@ -48,7 +51,7 @@ export async function requireChannelAccess(
     if (!recipient) {
       return Response.json(
         { error: "Channel not found or access denied" },
-        { status: 403 }
+        { status: 403 },
       );
     }
 
@@ -57,25 +60,27 @@ export async function requireChannelAccess(
 
   // Server channel — verify the user is a server member
   const member = await db
-    .prepare(
-      `SELECT 1 FROM server_members WHERE server_id = ? AND user_id = ?`
-    )
+    .prepare(`SELECT 1 FROM server_members WHERE server_id = ? AND user_id = ?`)
     .bind(channel.server_id, userId)
     .first();
 
   if (!member) {
     return Response.json(
       { error: "Channel not found or access denied" },
-      { status: 403 }
+      { status: 403 },
     );
   }
 
   // Also verify VIEW_CHANNELS for this specific channel
-  const perms = await getUserChannelPermissions(channel.server_id, channelId, userId);
+  const perms = await getUserChannelPermissions(
+    channel.server_id,
+    channelId,
+    userId,
+  );
   if (perms === null || !hasPermission(perms, PERMISSIONS.VIEW_CHANNELS)) {
     return Response.json(
       { error: "Channel not found or access denied" },
-      { status: 403 }
+      { status: 403 },
     );
   }
 

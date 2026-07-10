@@ -57,7 +57,7 @@ describe("deleteChannel", () => {
   it("throws 404 when channel not found", async () => {
     // No mock → returns null by default
     await expect(
-      deleteChannel(db as any, "nonexistent")
+      deleteChannel(db as any, "nonexistent"),
     ).rejects.toHaveProperty("status", 404);
   });
 });
@@ -126,7 +126,7 @@ describe("createChannel", () => {
       createChannel(db as any, SERVER_ID, USER_ID, {
         name: "   ",
         channel_type: "text",
-      })
+      }),
     ).rejects.toHaveProperty("status", 400);
   });
 });
@@ -192,12 +192,19 @@ describe("updateVoiceChannelStatus", () => {
   });
 
   it("stores a normalized voice status payload and returns it on the channel", async () => {
-    const result = await updateVoiceChannelStatus(db as any, CHANNEL_ID, USER_ID, {
-      text: "  Working session  ",
-      media: JSON.parse(VOICE_STATUS_MEDIA_JSON),
-    });
+    const result = await updateVoiceChannelStatus(
+      db as any,
+      CHANNEL_ID,
+      USER_ID,
+      {
+        text: "  Working session  ",
+        media: JSON.parse(VOICE_STATUS_MEDIA_JSON),
+      },
+    );
 
-    db.assertCalled(/UPDATE channels SET voice_status_text = \?, voice_status_media = \? WHERE id = \?/);
+    db.assertCalled(
+      /UPDATE channels SET voice_status_text = \?, voice_status_media = \? WHERE id = \?/,
+    );
     expect((result.channel as any).voice_status).toEqual({
       text: "Working session",
       media: JSON.parse(VOICE_STATUS_MEDIA_JSON),
@@ -221,7 +228,9 @@ describe("updateVoiceChannelStatus", () => {
     });
 
     await expect(
-      updateVoiceChannelStatus(db as any, CHANNEL_ID, USER_ID, { text: "nope" })
+      updateVoiceChannelStatus(db as any, CHANNEL_ID, USER_ID, {
+        text: "nope",
+      }),
     ).rejects.toHaveProperty("status", 400);
   });
 });

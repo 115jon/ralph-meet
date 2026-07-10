@@ -56,7 +56,7 @@ describe("listBans", () => {
     });
 
     await expect(
-      listBans(db as any, SERVER_ID, USER_ID)
+      listBans(db as any, SERVER_ID, USER_ID),
     ).rejects.toHaveProperty("status", 403);
   });
 
@@ -85,7 +85,7 @@ describe("banUser", () => {
     db.mockQuery(
       /SELECT r\.permissions, r\.position/,
       { results: [{ permissions: BAN_MEMBERS, position: 2 }] },
-      [SERVER_ID, USER_ID]
+      [SERVER_ID, USER_ID],
     );
     // Server ownership check
     db.mockQuery(/SELECT owner_id FROM servers/, { owner_id: "someone_else" });
@@ -93,7 +93,7 @@ describe("banUser", () => {
     db.mockQuery(
       /SELECT r\.permissions, r\.position/,
       { results: [{ permissions: 0, position: 1 }] },
-      [SERVER_ID, TARGET_ID]
+      [SERVER_ID, TARGET_ID],
     );
 
     const result = await banUser(db as any, SERVER_ID, USER_ID, {
@@ -112,11 +112,11 @@ describe("banUser", () => {
     db.mockQuery(
       /SELECT r\.permissions, r\.position/,
       { results: [{ permissions: BAN_MEMBERS, position: 2 }] },
-      [SERVER_ID, USER_ID]
+      [SERVER_ID, USER_ID],
     );
 
     await expect(
-      banUser(db as any, SERVER_ID, USER_ID, { user_id: USER_ID })
+      banUser(db as any, SERVER_ID, USER_ID, { user_id: USER_ID }),
     ).rejects.toHaveProperty("status", 400);
   });
 
@@ -124,12 +124,12 @@ describe("banUser", () => {
     db.mockQuery(
       /SELECT r\.permissions, r\.position/,
       { results: [{ permissions: BAN_MEMBERS, position: 2 }] },
-      [SERVER_ID, USER_ID]
+      [SERVER_ID, USER_ID],
     );
     db.mockQuery(/SELECT owner_id FROM servers/, { owner_id: TARGET_ID });
 
     await expect(
-      banUser(db as any, SERVER_ID, USER_ID, { user_id: TARGET_ID })
+      banUser(db as any, SERVER_ID, USER_ID, { user_id: TARGET_ID }),
     ).rejects.toHaveProperty("status", 400);
   });
 
@@ -137,11 +137,11 @@ describe("banUser", () => {
     db.mockQuery(
       /SELECT r\.permissions, r\.position/,
       { results: [{ permissions: 0, position: 2 }] },
-      [SERVER_ID, USER_ID]
+      [SERVER_ID, USER_ID],
     );
 
     await expect(
-      banUser(db as any, SERVER_ID, USER_ID, { user_id: TARGET_ID })
+      banUser(db as any, SERVER_ID, USER_ID, { user_id: TARGET_ID }),
     ).rejects.toHaveProperty("status", 403);
   });
 
@@ -149,17 +149,17 @@ describe("banUser", () => {
     db.mockQuery(
       /SELECT r\.permissions, r\.position/,
       { results: [{ permissions: BAN_MEMBERS, position: 1 }] },
-      [SERVER_ID, USER_ID]
+      [SERVER_ID, USER_ID],
     );
     db.mockQuery(/SELECT owner_id FROM servers/, { owner_id: "someone_else" });
     db.mockQuery(
       /SELECT r\.permissions, r\.position/,
       { results: [{ permissions: 0, position: 1 }] },
-      [SERVER_ID, TARGET_ID]
+      [SERVER_ID, TARGET_ID],
     );
 
     await expect(
-      banUser(db as any, SERVER_ID, USER_ID, { user_id: TARGET_ID })
+      banUser(db as any, SERVER_ID, USER_ID, { user_id: TARGET_ID }),
     ).rejects.toHaveProperty("status", 403);
   });
 });
@@ -190,7 +190,7 @@ describe("unbanUser", () => {
     });
 
     await expect(
-      unbanUser(db as any, SERVER_ID, USER_ID, TARGET_ID)
+      unbanUser(db as any, SERVER_ID, USER_ID, TARGET_ID),
     ).rejects.toHaveProperty("status", 403);
   });
 });

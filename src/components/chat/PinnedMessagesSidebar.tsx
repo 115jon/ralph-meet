@@ -1,19 +1,19 @@
 import { getDisplayInitial } from "@/lib/display-name";
 import { getAuthAssetUrl } from "@/lib/platform";
-import { useUserResolution } from '@/hooks/useUserResolution';
-import { getFileIcon } from '@/lib/file-icons';
-import { isPlayableVideo } from '@/lib/media';
-import { getDownloadUrl } from '@/lib/platform';
-import type { Message } from '@/lib/types';
-import { cn } from '@/lib/utils';
-import { Download, Loader2 } from 'lucide-react';
+import { useUserResolution } from "@/hooks/useUserResolution";
+import { getFileIcon } from "@/lib/file-icons";
+import { isPlayableVideo } from "@/lib/media";
+import { getDownloadUrl } from "@/lib/platform";
+import type { Message } from "@/lib/types";
+import { cn } from "@/lib/utils";
+import { Download, Loader2 } from "lucide-react";
 
-import React from 'react';
-import { AvatarImage } from './AvatarImage';
-import { Pin, X } from './Icons';
-import { ImageGrid } from './ImageGrid';
-import { MarkdownRenderer } from './MarkdownRenderer';
-import VideoAttachment from './VideoAttachment';
+import React from "react";
+import { AvatarImage } from "./AvatarImage";
+import { Pin, X } from "./Icons";
+import { ImageGrid } from "./ImageGrid";
+import { MarkdownRenderer } from "./MarkdownRenderer";
+import VideoAttachment from "./VideoAttachment";
 
 function formatFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -36,16 +36,17 @@ export const PinnedMessagesSidebar: React.FC<PinnedMessagesSidebarProps> = ({
   onClose,
   onJumpToMessage,
   onUnpin,
-  canUnpin
+  canUnpin,
 }) => {
   React.useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
+      if (e.key === "Escape") {
         onClose();
       }
     };
-    window.addEventListener('keydown', handleKeyDown, { capture: true });
-    return () => window.removeEventListener('keydown', handleKeyDown, { capture: true });
+    window.addEventListener("keydown", handleKeyDown, { capture: true });
+    return () =>
+      window.removeEventListener("keydown", handleKeyDown, { capture: true });
   }, [onClose]);
 
   return (
@@ -66,15 +67,22 @@ export const PinnedMessagesSidebar: React.FC<PinnedMessagesSidebarProps> = ({
         {isLoading ? (
           <div className="py-12 flex flex-col items-center justify-center gap-3 text-rm-text-muted">
             <Loader2 className="w-8 h-8 animate-spin text-primary/50" />
-            <span className="text-xs font-bold uppercase tracking-widest">Loading Pins...</span>
+            <span className="text-xs font-bold uppercase tracking-widest">
+              Loading Pins...
+            </span>
           </div>
         ) : messages.length === 0 ? (
           <div className="py-12 flex flex-col items-center justify-center gap-4 text-center px-4">
             <div className="w-16 h-16 rounded-3xl bg-rm-bg-elevated/40 flex items-center justify-center border border-rm-border shadow-xl rotate-12">
-              <Pin size={32} className="opacity-10 rotate-45 text-rm-text-muted" />
+              <Pin
+                size={32}
+                className="opacity-10 rotate-45 text-rm-text-muted"
+              />
             </div>
             <div>
-              <p className="text-rm-text-secondary font-bold mb-1">No pinned messages</p>
+              <p className="text-rm-text-secondary font-bold mb-1">
+                No pinned messages
+              </p>
               <p className="text-[11px] text-rm-text-muted leading-relaxed">
                 Pin important messages to see them here.
               </p>
@@ -98,7 +106,12 @@ export const PinnedMessagesSidebar: React.FC<PinnedMessagesSidebarProps> = ({
   );
 };
 
-const PinnedMessageItem = ({ msg, onJumpToMessage, onUnpin, canUnpin }: {
+const PinnedMessageItem = ({
+  msg,
+  onJumpToMessage,
+  onUnpin,
+  canUnpin,
+}: {
   msg: Message;
   onJumpToMessage: (id: string) => void;
   onUnpin: (id: string, skipConfirm: boolean) => void;
@@ -121,21 +134,28 @@ const PinnedMessageItem = ({ msg, onJumpToMessage, onUnpin, canUnpin }: {
   }
 
   return (
-    <div
-      className="group p-5 rounded-2xl border border-rm-border bg-rm-bg-elevated/40 hover:bg-rm-bg-elevated/80 transition-all relative overflow-hidden flex flex-col gap-4"
-    >
+    <div className="group p-5 rounded-2xl border border-rm-border bg-rm-bg-elevated/40 hover:bg-rm-bg-elevated/80 transition-all relative overflow-hidden flex flex-col gap-4">
       <div className="flex items-start justify-between gap-4">
         <div className="flex gap-4 min-w-0">
           <div className="mt-0.5 flex h-12 w-12 shrink-0 items-center justify-center overflow-visible rounded-full bg-primary/10 text-base font-bold text-primary border border-rm-border transition-transform group-hover:scale-105 duration-300">
             {authorInfo.avatarUrl ? (
-              <AvatarImage src={getAuthAssetUrl(authorInfo.avatarUrl)} alt="" display={authorInfo.avatarDisplay} />
+              <AvatarImage
+                src={getAuthAssetUrl(authorInfo.avatarUrl)}
+                alt=""
+                display={authorInfo.avatarDisplay}
+              />
             ) : (
-              getDisplayInitial({ display_name: authorInfo.displayName, username: authorInfo.username })
+              getDisplayInitial({
+                display_name: authorInfo.displayName,
+                username: authorInfo.username,
+              })
             )}
           </div>
           <div className="flex flex-col min-w-0 pt-0.5">
             <div className="flex items-center gap-2 mb-1">
-              <span className="font-bold text-[15px] text-rm-text truncate">{authorInfo.displayName}</span>
+              <span className="font-bold text-[15px] text-rm-text truncate">
+                {authorInfo.displayName}
+              </span>
               <span className="text-[11px] text-rm-text-muted font-medium shrink-0">
                 {new Date(msg.created_at).toLocaleDateString()}
               </span>
@@ -145,7 +165,12 @@ const PinnedMessageItem = ({ msg, onJumpToMessage, onUnpin, canUnpin }: {
               <div className="text-[14px] text-rm-text-secondary leading-[1.4] break-words">
                 <MarkdownRenderer content={msg.content} />
                 {msg.updated_at && (
-                  <span className="ml-1.5 text-[10px] text-rm-text-muted font-medium" title={`Edited ${new Date(msg.updated_at).toLocaleString()}`}>(edited)</span>
+                  <span
+                    className="ml-1.5 text-[10px] text-rm-text-muted font-medium"
+                    title={`Edited ${new Date(msg.updated_at).toLocaleString()}`}
+                  >
+                    (edited)
+                  </span>
                 )}
               </div>
             )}
@@ -179,7 +204,10 @@ const PinnedMessageItem = ({ msg, onJumpToMessage, onUnpin, canUnpin }: {
 
                 {/* Other files */}
                 {otherAttachments.map((att) => {
-                  const { Icon: TypeIcon, colorClass } = getFileIcon(att.filename, att.content_type ?? undefined);
+                  const { Icon: TypeIcon, colorClass } = getFileIcon(
+                    att.filename,
+                    att.content_type ?? undefined,
+                  );
                   return (
                     <a
                       key={att.id}
@@ -187,12 +215,21 @@ const PinnedMessageItem = ({ msg, onJumpToMessage, onUnpin, canUnpin }: {
                       download={att.filename}
                       className="flex items-center gap-3 rounded-xl border border-rm-border bg-rm-bg-primary/20 px-4 py-3 transition-all hover:border-rm-border hover:bg-rm-bg-hover group/file max-w-[280px]"
                     >
-                      <div className={cn("flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-rm-bg-surface border border-rm-border/30", colorClass)}>
+                      <div
+                        className={cn(
+                          "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-rm-bg-surface border border-rm-border/30",
+                          colorClass,
+                        )}
+                      >
                         <TypeIcon size={18} />
                       </div>
                       <div className="min-w-0 flex-1">
-                        <p className="truncate text-[12px] font-bold text-primary group-hover/file:underline">{att.filename}</p>
-                        <p className="text-[10px] text-rm-text-muted font-medium uppercase tracking-tighter">{formatFileSize(att.size_bytes)}</p>
+                        <p className="truncate text-[12px] font-bold text-primary group-hover/file:underline">
+                          {att.filename}
+                        </p>
+                        <p className="text-[10px] text-rm-text-muted font-medium uppercase tracking-tighter">
+                          {formatFileSize(att.size_bytes)}
+                        </p>
                       </div>
                       <Download className="h-4 w-4 shrink-0 text-rm-text-muted transition-colors group-hover/file:text-rm-text-secondary" />
                     </a>

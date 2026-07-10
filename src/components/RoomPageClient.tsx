@@ -1,5 +1,8 @@
 import RoomSettingsModal from "@/components/RoomSettingsModal";
-import { DemoRoomChatPanel, DemoUploadBlockerModal } from "@/components/DemoRoomChatPanel";
+import {
+  DemoRoomChatPanel,
+  DemoUploadBlockerModal,
+} from "@/components/DemoRoomChatPanel";
 import { AudioInteractionModal } from "@/components/voice/AudioInteractionModal";
 import { ParticipantCard } from "@/components/voice/ParticipantCard";
 import { StreamingStatsPanel } from "@/components/voice/StreamingStatsPanel";
@@ -31,10 +34,20 @@ import {
   Settings,
   X,
 } from "lucide-react";
-import { lazy, Suspense, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
+import {
+  lazy,
+  Suspense,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type DragEvent,
+} from "react";
 
 const UnifiedScreenShareModal = lazy(() =>
-  import("@/components/UnifiedScreenShareModal").then((mod) => ({ default: mod.UnifiedScreenShareModal }))
+  import("@/components/UnifiedScreenShareModal").then((mod) => ({
+    default: mod.UnifiedScreenShareModal,
+  })),
 );
 
 export default function RoomPageClient() {
@@ -106,7 +119,9 @@ export default function RoomPageClient() {
             <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-rm-accent-dim shadow-[0_0_40px_var(--rm-accent-dim)] ring-1 ring-rm-border">
               <Radio className="h-8 w-8 text-rm-accent" />
             </div>
-            <h1 className="text-2xl font-extrabold text-rm-text">Join Meeting</h1>
+            <h1 className="text-2xl font-extrabold text-rm-text">
+              Join Meeting
+            </h1>
             <p className="text-center text-sm text-rm-text-muted">
               Room: <span className="font-semibold text-rm-text">{slug}</span>
             </p>
@@ -115,11 +130,15 @@ export default function RoomPageClient() {
           <form onSubmit={handleNameSubmit} className="flex flex-col gap-4">
             {preflightWarnings.length > 0 && (
               <div className="rounded-xl border border-warning/20 bg-warning/10 px-4 py-3 text-xs font-medium text-warning">
-                {preflightWarnings[0]}. You can still join, then check input settings from the call controls.
+                {preflightWarnings[0]}. You can still join, then check input
+                settings from the call controls.
               </div>
             )}
             <div className="space-y-2">
-              <label htmlFor="name" className="text-xs font-semibold text-rm-text-muted">
+              <label
+                htmlFor="name"
+                className="text-xs font-semibold text-rm-text-muted"
+              >
                 Your Name
               </label>
               <input
@@ -127,7 +146,9 @@ export default function RoomPageClient() {
                 id="name"
                 type="text"
                 value={guestState.name}
-                onChange={(e) => setGuestState({ ...guestState, name: e.target.value })}
+                onChange={(e) =>
+                  setGuestState({ ...guestState, name: e.target.value })
+                }
                 placeholder="Enter your name"
                 className="w-full rounded-xl border border-rm-border bg-rm-bg-elevated px-4 py-3 text-rm-text outline-none transition-all placeholder:text-rm-text-muted/40 focus:border-rm-accent/30 focus:ring-2 focus:ring-rm-accent/20"
                 autoComplete="off"
@@ -162,14 +183,24 @@ export default function RoomPageClient() {
 // ── Room voice view (uses modern voice components) ───────────────────────
 
 function ControlsBar({
-  hasMicrophone, isMicOn, toggleMic,
-  isDeafened, toggleDeafen,
-  hasCamera, isCameraOn, toggleCamera,
-  isScreenSharing, toggleScreenShare, setIsScreenModalOpen,
+  hasMicrophone,
+  isMicOn,
+  toggleMic,
+  isDeafened,
+  toggleDeafen,
+  hasCamera,
+  isCameraOn,
+  toggleCamera,
+  isScreenSharing,
+  toggleScreenShare,
+  setIsScreenModalOpen,
   handleLeave,
-  toggleFs, isFullscreen,
+  toggleFs,
+  isFullscreen,
   setIsSettingsOpen,
-  focusedId, showMembers, setShowMembers
+  focusedId,
+  showMembers,
+  setShowMembers,
 }: any) {
   return (
     <div className="h-[72px] flex items-center justify-between px-6 bg-rm-bg-elevated/40">
@@ -178,16 +209,28 @@ function ControlsBar({
         <div className="flex items-center gap-1 bg-rm-bg-surface p-1 rounded-2xl border border-rm-border shadow-2xl">
           <button
             type="button"
-            title={!hasMicrophone ? "No microphone detected" : isMicOn ? "Mute" : "Unmute"}
+            title={
+              !hasMicrophone
+                ? "No microphone detected"
+                : isMicOn
+                  ? "Mute"
+                  : "Unmute"
+            }
             disabled={!hasMicrophone}
             onClick={toggleMic}
             className={cn(
               "w-12 h-10 rounded-xl flex items-center justify-center transition-all outline-none",
-              (!isMicOn || !hasMicrophone) ? "bg-destructive text-destructive-foreground shadow-lg shadow-destructive/20" : "text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text",
-              !hasMicrophone && "cursor-not-allowed"
+              !isMicOn || !hasMicrophone
+                ? "bg-destructive text-destructive-foreground shadow-lg shadow-destructive/20"
+                : "text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text",
+              !hasMicrophone && "cursor-not-allowed",
             )}
           >
-            {(!isMicOn || !hasMicrophone) ? <MicOff className="h-5 w-5 text-destructive-foreground" /> : <Mic className="h-5 w-5" />}
+            {!isMicOn || !hasMicrophone ? (
+              <MicOff className="h-5 w-5 text-destructive-foreground" />
+            ) : (
+              <Mic className="h-5 w-5" />
+            )}
           </button>
 
           <button
@@ -196,24 +239,43 @@ function ControlsBar({
             onClick={toggleDeafen}
             className={cn(
               "w-12 h-10 rounded-xl flex items-center justify-center transition-all outline-none",
-              isDeafened ? "bg-destructive text-destructive-foreground" : "text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text"
+              isDeafened
+                ? "bg-destructive text-destructive-foreground"
+                : "text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text",
             )}
           >
-            <Headphones className={cn("h-5 w-5", isDeafened && "text-destructive-foreground")} />
+            <Headphones
+              className={cn(
+                "h-5 w-5",
+                isDeafened && "text-destructive-foreground",
+              )}
+            />
           </button>
 
           <button
             type="button"
-            title={!hasCamera ? "No camera detected" : isCameraOn ? "Stop Camera" : "Start Camera"}
+            title={
+              !hasCamera
+                ? "No camera detected"
+                : isCameraOn
+                  ? "Stop Camera"
+                  : "Start Camera"
+            }
             disabled={!hasCamera}
             onClick={toggleCamera}
             className={cn(
               "w-12 h-10 rounded-xl flex items-center justify-center transition-all outline-none",
-              isCameraOn ? "bg-rm-text text-rm-bg-surface shadow-lg" : "text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text",
-              !hasCamera && "opacity-50 cursor-not-allowed grayscale"
+              isCameraOn
+                ? "bg-rm-text text-rm-bg-surface shadow-lg"
+                : "text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text",
+              !hasCamera && "opacity-50 cursor-not-allowed grayscale",
             )}
           >
-            {isCameraOn ? <Camera className="h-5 w-5" /> : <CameraOff className="h-5 w-5" />}
+            {isCameraOn ? (
+              <Camera className="h-5 w-5" />
+            ) : (
+              <CameraOff className="h-5 w-5" />
+            )}
           </button>
 
           <div className="w-px h-6 bg-rm-border mx-1" />
@@ -227,10 +289,16 @@ function ControlsBar({
             }}
             className={cn(
               "w-12 h-10 rounded-xl flex items-center justify-center transition-all outline-none",
-              isScreenSharing ? "bg-primary text-primary-foreground" : "text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text"
+              isScreenSharing
+                ? "bg-primary text-primary-foreground"
+                : "text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text",
             )}
           >
-            {isScreenSharing ? <X className="h-5 w-5 text-primary-foreground" /> : <Monitor className="h-5 w-5" />}
+            {isScreenSharing ? (
+              <X className="h-5 w-5 text-primary-foreground" />
+            ) : (
+              <Monitor className="h-5 w-5" />
+            )}
           </button>
 
           <div className="w-px h-6 bg-rm-border mx-1" />
@@ -252,7 +320,11 @@ function ControlsBar({
           className="p-2 text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover rounded-xl transition-all outline-none"
           title={isFullscreen ? "Exit Fullscreen" : "Fullscreen"}
         >
-          {isFullscreen ? <Minimize className="h-5 w-5" /> : <Maximize2 className="h-5 w-5" />}
+          {isFullscreen ? (
+            <Minimize className="h-5 w-5" />
+          ) : (
+            <Maximize2 className="h-5 w-5" />
+          )}
         </button>
         <button
           type="button"
@@ -268,11 +340,18 @@ function ControlsBar({
             onClick={() => setShowMembers(!showMembers)}
             className={cn(
               "p-2 rounded-xl transition-all outline-none",
-              showMembers ? "text-rm-text bg-rm-bg-active" : "text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover"
+              showMembers
+                ? "text-rm-text bg-rm-bg-active"
+                : "text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover",
             )}
             title={showMembers ? "Hide Members" : "Show Members"}
           >
-            <ChevronUp className={cn("h-5 w-5 transition-transform", !showMembers && "rotate-180")} />
+            <ChevronUp
+              className={cn(
+                "h-5 w-5 transition-transform",
+                !showMembers && "rotate-180",
+              )}
+            />
           </button>
         )}
       </div>
@@ -280,8 +359,17 @@ function ControlsBar({
   );
 }
 
-function RoomHeader({ slug, connectionState, joined, focusedId, gridItemsCount, localScreenWatchers }: any) {
-  const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
+function RoomHeader({
+  slug,
+  connectionState,
+  joined,
+  focusedId,
+  gridItemsCount,
+  localScreenWatchers,
+}: any) {
+  const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">(
+    "idle",
+  );
   const connectionBadge = getConnectionStatusBadge({ joined, connectionState });
 
   const handleCopyRoomLink = async () => {
@@ -298,13 +386,20 @@ function RoomHeader({ slug, connectionState, joined, focusedId, gridItemsCount, 
     <div
       className={cn(
         "absolute top-0 inset-x-0 flex items-center justify-between px-6 z-100 pointer-events-none",
-        focusedId ? "bg-linear-to-b from-rm-bg-primary/80 to-transparent" : "bg-rm-bg-primary/20"
+        focusedId
+          ? "bg-linear-to-b from-rm-bg-primary/80 to-transparent"
+          : "bg-rm-bg-primary/20",
       )}
-      style={{ paddingTop: 'var(--safe-area-top, 0px)', height: 'calc(3.5rem + var(--safe-area-top, 0px))' }}
+      style={{
+        paddingTop: "var(--safe-area-top, 0px)",
+        height: "calc(3.5rem + var(--safe-area-top, 0px))",
+      }}
     >
       <div className="flex items-center gap-3 pointer-events-auto">
         <Radio className="h-4 w-4 text-rm-accent" />
-        <span className="text-sm font-bold text-rm-text tracking-tight">{slug}</span>
+        <span className="text-sm font-bold text-rm-text tracking-tight">
+          {slug}
+        </span>
         <button
           type="button"
           onClick={handleCopyRoomLink}
@@ -313,10 +408,22 @@ function RoomHeader({ slug, connectionState, joined, focusedId, gridItemsCount, 
             copyState === "copied" && "border-emerald-400/40 text-emerald-300",
             copyState === "failed" && "border-destructive/40 text-destructive",
           )}
-          aria-label={copyState === "copied" ? "Room link copied" : "Copy room link"}
-          title={copyState === "copied" ? "Copied" : copyState === "failed" ? "Copy failed" : "Copy room link"}
+          aria-label={
+            copyState === "copied" ? "Room link copied" : "Copy room link"
+          }
+          title={
+            copyState === "copied"
+              ? "Copied"
+              : copyState === "failed"
+                ? "Copy failed"
+                : "Copy room link"
+          }
         >
-          {copyState === "copied" ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+          {copyState === "copied" ? (
+            <Check className="h-3.5 w-3.5" />
+          ) : (
+            <Copy className="h-3.5 w-3.5" />
+          )}
         </button>
         <div className="h-4 w-px bg-rm-border" />
         <StreamingStatsPanel
@@ -328,9 +435,12 @@ function RoomHeader({ slug, connectionState, joined, focusedId, gridItemsCount, 
         <span
           className={cn(
             "inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] font-bold",
-            connectionBadge.tone === "good" && "border-emerald-400/20 bg-emerald-400/10 text-emerald-300",
-            connectionBadge.tone === "pending" && "border-warning/20 bg-warning/10 text-warning",
-            connectionBadge.tone === "bad" && "border-destructive/20 bg-destructive/10 text-destructive",
+            connectionBadge.tone === "good" &&
+              "border-emerald-400/20 bg-emerald-400/10 text-emerald-300",
+            connectionBadge.tone === "pending" &&
+              "border-warning/20 bg-warning/10 text-warning",
+            connectionBadge.tone === "bad" &&
+              "border-destructive/20 bg-destructive/10 text-destructive",
           )}
           title={`Voice status: ${connectionBadge.label}`}
         >
@@ -358,7 +468,9 @@ function RoomHeader({ slug, connectionState, joined, focusedId, gridItemsCount, 
           </>
         )}
         <div className="h-4 w-px bg-rm-border" />
-        <span className="text-xs text-rm-text-muted">{gridItemsCount} in room</span>
+        <span className="text-xs text-rm-text-muted">
+          {gridItemsCount} in room
+        </span>
       </div>
       <div className="pointer-events-auto" />
     </div>
@@ -415,7 +527,7 @@ function RoomVoiceView({
     mode: "room",
     roomSlug: slug,
     guestName,
-    onJoined: () => { },
+    onJoined: () => {},
     onLeft: () => {
       sessionStorage.removeItem("room-guest-name");
       onLeaveToHome();
@@ -455,7 +567,8 @@ function RoomVoiceView({
   };
 
   const hasDraggedFiles = (event: DragEvent<HTMLDivElement>) =>
-    Array.from(event.dataTransfer.types).includes("Files") || event.dataTransfer.files.length > 0;
+    Array.from(event.dataTransfer.types).includes("Files") ||
+    event.dataTransfer.files.length > 0;
 
   const openUploadBlocker = () => setShowUploadBlocker(true);
 
@@ -467,7 +580,8 @@ function RoomVoiceView({
   };
 
   const handleDragLeave = (event: DragEvent<HTMLDivElement>) => {
-    if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
+    if (event.currentTarget.contains(event.relatedTarget as Node | null))
+      return;
     setIsFileDragging(false);
   };
 
@@ -509,7 +623,9 @@ function RoomVoiceView({
         <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-rm-accent-dim ring-1 ring-rm-border animate-pulse">
           <Radio className="h-8 w-8 text-rm-accent" />
         </div>
-        <span className="text-sm font-semibold text-rm-text-muted">Connecting to {slug}…</span>
+        <span className="text-sm font-semibold text-rm-text-muted">
+          Connecting to {slug}…
+        </span>
       </div>
     );
   }
@@ -525,8 +641,12 @@ function RoomVoiceView({
       {isFileDragging && (
         <div className="pointer-events-none absolute inset-4 z-[900] flex items-center justify-center rounded-3xl border border-dashed border-primary/50 bg-rm-bg-primary/70 backdrop-blur-sm">
           <div className="rounded-2xl border border-rm-border bg-rm-bg-elevated px-5 py-4 text-center shadow-2xl">
-            <p className="text-sm font-black text-rm-text">Uploads unlock in the full app</p>
-            <p className="mt-1 text-xs font-medium text-rm-text-muted">Drop to see how to sign in. GIFs still work here.</p>
+            <p className="text-sm font-black text-rm-text">
+              Uploads unlock in the full app
+            </p>
+            <p className="mt-1 text-xs font-medium text-rm-text-muted">
+              Drop to see how to sign in. GIFs still work here.
+            </p>
           </div>
         </div>
       )}
@@ -544,7 +664,9 @@ function RoomVoiceView({
           <div className="z-50 bg-destructive text-destructive-foreground px-4 py-3 flex items-center justify-between text-sm font-medium shadow-md shrink-0">
             <div className="flex items-center gap-2">
               <MicOff className="h-4 w-4 shrink-0" />
-              <span>We can't hear you! Your microphone isn't detecting any sound.</span>
+              <span>
+                We can't hear you! Your microphone isn't detecting any sound.
+              </span>
             </div>
             <button
               type="button"
@@ -579,13 +701,18 @@ function RoomVoiceView({
         <div className="shrink-0 bg-rm-bg-surface border-t border-rm-border z-20 relative">
           {focusedId && showMembers && (
             <div className="p-4 bg-rm-bg-primary/20 backdrop-blur-sm animate-in slide-in-from-bottom-2 duration-300 w-full overflow-hidden border-b border-rm-border">
-              <div className="flex items-center gap-4 w-full overflow-x-auto no-scrollbar px-6 justify-start sm:justify-center" style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}>
+              <div
+                className="flex items-center gap-4 w-full overflow-x-auto no-scrollbar px-6 justify-start sm:justify-center"
+                style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
+              >
                 {gridItems.map((item) => (
                   <div
                     key={item.id}
                     className={cn(
                       "w-44 sm:w-52 aspect-video shrink-0 transition-all duration-300 py-2",
-                      focusedId === item.id ? "" : "opacity-70 hover:opacity-100"
+                      focusedId === item.id
+                        ? ""
+                        : "opacity-70 hover:opacity-100",
                     )}
                   >
                     <ParticipantCard
@@ -596,7 +723,9 @@ function RoomVoiceView({
                       watchedStreams={watchedStreams}
                       streamThumbnails={streamThumbnails}
                       voiceActions={voiceActions}
-                      onClick={() => setFocusedId(focusedId === item.id ? null : item.id)}
+                      onClick={() =>
+                        setFocusedId(focusedId === item.id ? null : item.id)
+                      }
                     />
                   </div>
                 ))}
@@ -605,14 +734,24 @@ function RoomVoiceView({
           )}
 
           <ControlsBar
-            hasMicrophone={hasMicrophone} isMicOn={isMicOn} toggleMic={toggleMic}
-            isDeafened={isDeafened} toggleDeafen={toggleDeafen}
-            hasCamera={hasCamera} isCameraOn={isCameraOn} toggleCamera={toggleCamera}
-            isScreenSharing={isScreenSharing} toggleScreenShare={toggleScreenShare} setIsScreenModalOpen={setIsScreenModalOpen}
+            hasMicrophone={hasMicrophone}
+            isMicOn={isMicOn}
+            toggleMic={toggleMic}
+            isDeafened={isDeafened}
+            toggleDeafen={toggleDeafen}
+            hasCamera={hasCamera}
+            isCameraOn={isCameraOn}
+            toggleCamera={toggleCamera}
+            isScreenSharing={isScreenSharing}
+            toggleScreenShare={toggleScreenShare}
+            setIsScreenModalOpen={setIsScreenModalOpen}
             handleLeave={handleLeave}
-            toggleFs={toggleFs} isFullscreen={isFullscreen}
+            toggleFs={toggleFs}
+            isFullscreen={isFullscreen}
             setIsSettingsOpen={setIsSettingsOpen}
-            focusedId={focusedId} showMembers={showMembers} setShowMembers={setShowMembers}
+            focusedId={focusedId}
+            showMembers={showMembers}
+            setShowMembers={setShowMembers}
           />
         </div>
       </div>
@@ -632,33 +771,29 @@ function RoomVoiceView({
         />
       </Suspense>
 
-      {
-        audioBlocked && (
-          <AudioInteractionModal
-            onInteract={() => {
-              sfu?.resumeAudioContext();
-              resumeSoundContext();
-              setAudioBlocked(false);
-            }}
-            onClose={() => setAudioBlocked(false)}
-          />
-        )
-      }
+      {audioBlocked && (
+        <AudioInteractionModal
+          onInteract={() => {
+            sfu?.resumeAudioContext();
+            resumeSoundContext();
+            setAudioBlocked(false);
+          }}
+          onClose={() => setAudioBlocked(false)}
+        />
+      )}
 
-      {
-        isSettingsOpen && (
-          <RoomSettingsModal
-            onClose={() => setIsSettingsOpen(false)}
-            settingsUserId={settingsUserId}
-          />
-        )
-      }
+      {isSettingsOpen && (
+        <RoomSettingsModal
+          onClose={() => setIsSettingsOpen(false)}
+          settingsUserId={settingsUserId}
+        />
+      )}
       {showUploadBlocker && (
         <DemoUploadBlockerModal
           onClose={() => setShowUploadBlocker(false)}
           onSignIn={onSignIn}
         />
       )}
-    </div >
+    </div>
   );
 }

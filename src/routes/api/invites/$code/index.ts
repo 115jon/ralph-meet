@@ -1,4 +1,4 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute } from "@tanstack/react-router";
 
 import { apiSuccess, getDB } from "@/lib/api-helpers";
 import { ServiceError } from "@/lib/service-error";
@@ -20,11 +20,10 @@ const GET = async ({ params }: any) => {
   }
 };
 
-
-export const Route = createFileRoute('/api/invites/$code/')({
+export const Route = createFileRoute("/api/invites/$code/")({
   server: {
     handlers: {
       GET,
-    }
-  }
+    },
+  },
 });

@@ -1,7 +1,11 @@
 import { BaseModal } from "@/components/ui/BaseModal";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { createCameraBackgroundEffect } from "@/lib/camera-background-effects";
 import {
   CAMERA_BACKGROUND_ACCEPT,
@@ -10,11 +14,17 @@ import {
   listCameraBackgrounds,
   uploadCameraBackground,
 } from "@/lib/camera-backgrounds";
-import { CAMERA_QUALITY_PROFILES, buildCameraVideoConstraints } from "@/lib/camera-quality";
+import {
+  CAMERA_QUALITY_PROFILES,
+  buildCameraVideoConstraints,
+} from "@/lib/camera-quality";
 import { getAuthAssetUrl } from "@/lib/platform";
 import { useMediaDevices } from "@/lib/useMediaDevices";
 import { cn } from "@/lib/utils";
-import type { CameraBackgroundSetting, CustomCameraBackground } from "@/stores/useVoiceSettingsStore";
+import type {
+  CameraBackgroundSetting,
+  CustomCameraBackground,
+} from "@/stores/useVoiceSettingsStore";
 import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
 import {
   Ban,
@@ -29,10 +39,16 @@ import {
   Upload,
   Volume2,
   X,
-  Zap
+  Zap,
 } from "lucide-react";
 import { useTheme } from "next-themes";
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { useShallow } from "zustand/shallow";
 import { NoiseReductionPanel } from "./chat/NoiseReductionPanel";
 import { CustomSelect } from "./ui/CustomSelect";
@@ -46,7 +62,11 @@ interface RoomSettingsModalProps {
 
 type Tab = "voice" | "camera" | "appearance";
 
-export default function RoomSettingsModal({ onClose, settingsUserId, isClosing }: RoomSettingsModalProps) {
+export default function RoomSettingsModal({
+  onClose,
+  settingsUserId,
+  isClosing,
+}: RoomSettingsModalProps) {
   const { theme, setTheme } = useTheme();
   const [activeTab, setActiveTab] = useState<Tab>("voice");
   const mounted = useSyncExternalStore(
@@ -56,9 +76,11 @@ export default function RoomSettingsModal({ onClose, settingsUserId, isClosing }
   );
 
   const { audioInputs, audioOutputs, videoInputs } = useMediaDevices();
-  const vSettings = useVoiceSettingsStore(useShallow(s => s.getSettings(settingsUserId)));
-  const setDevice = useVoiceSettingsStore(s => s.setDevice);
-  const updateUserSettings = useVoiceSettingsStore(s => s.updateUserSettings);
+  const vSettings = useVoiceSettingsStore(
+    useShallow((s) => s.getSettings(settingsUserId)),
+  );
+  const setDevice = useVoiceSettingsStore((s) => s.setDevice);
+  const updateUserSettings = useVoiceSettingsStore((s) => s.updateUserSettings);
 
   const [previewStream, setPreviewStream] = useState<MediaStream | null>(null);
   const webcamStreamRef = useRef<MediaStream | null>(null);
@@ -71,59 +93,69 @@ export default function RoomSettingsModal({ onClose, settingsUserId, isClosing }
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Filter out browser's synthetic "default" device since we add our own Default option
-  const filteredAudioInputs = audioInputs.filter(d => d.deviceId !== 'default');
-  const filteredAudioOutputs = audioOutputs.filter(d => d.deviceId !== 'default');
+  const filteredAudioInputs = audioInputs.filter(
+    (d) => d.deviceId !== "default",
+  );
+  const filteredAudioOutputs = audioOutputs.filter(
+    (d) => d.deviceId !== "default",
+  );
   const defaultAudioInput = audioInputs.find((d) => d.deviceId === "default");
   const defaultAudioOutput = audioOutputs.find((d) => d.deviceId === "default");
 
   const latestCameraBackgroundRef = useRef(vSettings.cameraBackground);
-  const latestCustomCameraBackgroundsRef = useRef(vSettings.customCameraBackgrounds ?? []);
+  const latestCustomCameraBackgroundsRef = useRef(
+    vSettings.customCameraBackgrounds ?? [],
+  );
   latestCameraBackgroundRef.current = vSettings.cameraBackground;
-  latestCustomCameraBackgroundsRef.current = vSettings.customCameraBackgrounds ?? [];
+  latestCustomCameraBackgroundsRef.current =
+    vSettings.customCameraBackgrounds ?? [];
 
-  const applyPreviewStream = useCallback(async (
-    stream: MediaStream | null,
-    cameraBackground: CameraBackgroundSetting,
-    customCameraBackgrounds: CustomCameraBackground[],
-  ) => {
-    const requestId = ++previewRequestIdRef.current;
-    previewEffectRef.current?.stop?.();
-    previewEffectRef.current = null;
+  const applyPreviewStream = useCallback(
+    async (
+      stream: MediaStream | null,
+      cameraBackground: CameraBackgroundSetting,
+      customCameraBackgrounds: CustomCameraBackground[],
+    ) => {
+      const requestId = ++previewRequestIdRef.current;
+      previewEffectRef.current?.stop?.();
+      previewEffectRef.current = null;
 
-    if (!stream) {
-      setPreviewStream(null);
-      return;
-    }
-
-    const videoTrack = stream.getVideoTracks()[0];
-    if (!videoTrack || cameraBackground.type === "none") {
-      setPreviewStream(stream);
-      return;
-    }
-
-    try {
-      const effect = await createCameraBackgroundEffect(
-        videoTrack,
-        cameraBackground,
-        customCameraBackgrounds
-      );
-      if (previewRequestIdRef.current !== requestId) {
-        effect?.stop?.();
+      if (!stream) {
+        setPreviewStream(null);
         return;
       }
-      if (effect) {
-        previewEffectRef.current = effect;
-        setPreviewStream(effect.stream);
-      } else {
+
+      const videoTrack = stream.getVideoTracks()[0];
+      if (!videoTrack || cameraBackground.type === "none") {
         setPreviewStream(stream);
+        return;
       }
-    } catch (err) {
-      if (previewRequestIdRef.current === requestId) {
-        console.error("Failed to apply background effect:", err);
-        setPreviewStream(stream);
+
+      try {
+        const effect = await createCameraBackgroundEffect(
+          videoTrack,
+          cameraBackground,
+          customCameraBackgrounds,
+        );
+        if (previewRequestIdRef.current !== requestId) {
+          effect?.stop?.();
+          return;
+        }
+        if (effect) {
+          previewEffectRef.current = effect;
+          setPreviewStream(effect.stream);
+        } else {
+          setPreviewStream(stream);
+        }
+      } catch (err) {
+        if (previewRequestIdRef.current === requestId) {
+          console.error("Failed to apply background effect:", err);
+          setPreviewStream(stream);
+        }
       }
-    }
-  }, []);
+    },
+    [],
+  );
 
   // Load camera backgrounds on settings modal open / active camera tab
   useEffect(() => {
@@ -135,15 +167,28 @@ export default function RoomSettingsModal({ onClose, settingsUserId, isClosing }
       .then((backgrounds) => {
         if (cancelled) return;
         updateUserSettings((current) => {
-          const localOnlyBackgrounds = (current.customCameraBackgrounds ?? []).filter((background) => background.dataUrl && !background.url);
-          const customCameraBackgrounds = [...backgrounds, ...localOnlyBackgrounds];
-          const selectedBackgroundId = current.cameraBackground.type === "image" ? current.cameraBackground.id : null;
-          const selectedBackgroundMissing = !!selectedBackgroundId
-            && !customCameraBackgrounds.some((background) => background.id === selectedBackgroundId);
+          const localOnlyBackgrounds = (
+            current.customCameraBackgrounds ?? []
+          ).filter((background) => background.dataUrl && !background.url);
+          const customCameraBackgrounds = [
+            ...backgrounds,
+            ...localOnlyBackgrounds,
+          ];
+          const selectedBackgroundId =
+            current.cameraBackground.type === "image"
+              ? current.cameraBackground.id
+              : null;
+          const selectedBackgroundMissing =
+            !!selectedBackgroundId &&
+            !customCameraBackgrounds.some(
+              (background) => background.id === selectedBackgroundId,
+            );
 
           return {
             ...current,
-            cameraBackground: selectedBackgroundMissing ? { type: "none" } : current.cameraBackground,
+            cameraBackground: selectedBackgroundMissing
+              ? { type: "none" }
+              : current.cameraBackground,
             customCameraBackgrounds,
           };
         }, settingsUserId);
@@ -219,7 +264,12 @@ export default function RoomSettingsModal({ onClose, settingsUserId, isClosing }
       }
       setPreviewStream(null);
     };
-  }, [activeTab, applyPreviewStream, vSettings.videoDeviceId, vSettings.cameraQuality]);
+  }, [
+    activeTab,
+    applyPreviewStream,
+    vSettings.videoDeviceId,
+    vSettings.cameraQuality,
+  ]);
 
   // 2. Background Effect Lifecycle
   useEffect(() => {
@@ -231,7 +281,12 @@ export default function RoomSettingsModal({ onClose, settingsUserId, isClosing }
       vSettings.cameraBackground,
       vSettings.customCameraBackgrounds ?? [],
     );
-  }, [activeTab, applyPreviewStream, vSettings.cameraBackground, vSettings.customCameraBackgrounds]);
+  }, [
+    activeTab,
+    applyPreviewStream,
+    vSettings.cameraBackground,
+    vSettings.customCameraBackgrounds,
+  ]);
 
   const handleUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.currentTarget.files?.[0];
@@ -247,19 +302,30 @@ export default function RoomSettingsModal({ onClose, settingsUserId, isClosing }
     setIsUploadingBackground(true);
     try {
       const background = await uploadCameraBackground(file);
-      updateUserSettings((current) => ({
-        ...current,
-        cameraBackground: { type: "image", id: background.id },
-        customCameraBackgrounds: [
-          background,
-          ...(current.customCameraBackgrounds ?? []).filter((candidate) => candidate.id !== background.id),
-        ],
-      }), settingsUserId);
+      updateUserSettings(
+        (current) => ({
+          ...current,
+          cameraBackground: { type: "image", id: background.id },
+          customCameraBackgrounds: [
+            background,
+            ...(current.customCameraBackgrounds ?? []).filter(
+              (candidate) => candidate.id !== background.id,
+            ),
+          ],
+        }),
+        settingsUserId,
+      );
       setUploadError(null);
     } catch (error) {
       const status = (error as any)?.status;
-      if (status === 401) setUploadError("Sign in to upload synced backgrounds.");
-      else setUploadError(error instanceof Error ? error.message : "Could not upload that image.");
+      if (status === 401)
+        setUploadError("Sign in to upload synced backgrounds.");
+      else
+        setUploadError(
+          error instanceof Error
+            ? error.message
+            : "Could not upload that image.",
+        );
     } finally {
       setIsUploadingBackground(false);
     }
@@ -270,18 +336,29 @@ export default function RoomSettingsModal({ onClose, settingsUserId, isClosing }
       try {
         await deleteCameraBackground(background.id);
       } catch (error) {
-        setUploadError(error instanceof Error ? error.message : "Could not remove that background.");
+        setUploadError(
+          error instanceof Error
+            ? error.message
+            : "Could not remove that background.",
+        );
         return;
       }
     }
 
-    updateUserSettings((current) => ({
-      ...current,
-      cameraBackground: current.cameraBackground.type === "image" && current.cameraBackground.id === background.id
-        ? { type: "none" }
-        : current.cameraBackground,
-      customCameraBackgrounds: (current.customCameraBackgrounds ?? []).filter((candidate) => candidate.id !== background.id),
-    }), settingsUserId);
+    updateUserSettings(
+      (current) => ({
+        ...current,
+        cameraBackground:
+          current.cameraBackground.type === "image" &&
+          current.cameraBackground.id === background.id
+            ? { type: "none" }
+            : current.cameraBackground,
+        customCameraBackgrounds: (current.customCameraBackgrounds ?? []).filter(
+          (candidate) => candidate.id !== background.id,
+        ),
+      }),
+      settingsUserId,
+    );
     setUploadError(null);
   };
 
@@ -332,7 +409,9 @@ export default function RoomSettingsModal({ onClose, settingsUserId, isClosing }
             onClose();
           }
         }}
-        onKeyDown={(e) => { if (e.key === "Escape") onClose(); }}
+        onKeyDown={(e) => {
+          if (e.key === "Escape") onClose();
+        }}
         role="presentation"
       >
         <dialog
@@ -343,13 +422,17 @@ export default function RoomSettingsModal({ onClose, settingsUserId, isClosing }
           {/* Sidebar */}
           <div
             className="w-full md:w-[180px] flex flex-row md:flex-col shrink-0 bg-rm-server-bar pt-2 md:pt-10 pb-2 px-4 overflow-x-auto md:overflow-y-auto md:overflow-x-hidden custom-scrollbar border-b md:border-b-0 md:border-r border-rm-border/50 gap-2 md:gap-0"
-            style={{ paddingTop: 'calc(8px + var(--safe-area-top, 0px))' }}
+            style={{ paddingTop: "calc(8px + var(--safe-area-top, 0px))" }}
           >
             <div className="flex w-full md:w-auto items-center justify-between px-2 mb-0 md:mb-6 md:mt-0 gap-4">
-              <h3 id="room-settings-title" className="text-[11px] font-bold uppercase tracking-wider text-rm-text-muted shrink-0">
+              <h3
+                id="room-settings-title"
+                className="text-[11px] font-bold uppercase tracking-wider text-rm-text-muted shrink-0"
+              >
                 Room Settings
               </h3>
-              <button type="button"
+              <button
+                type="button"
                 onClick={onClose}
                 className="md:hidden p-1 rounded-full bg-rm-bg-surface text-rm-text flex items-center justify-center hover:bg-rm-bg-hover active:scale-95 transition-all"
                 aria-label="Close room settings"
@@ -363,8 +446,16 @@ export default function RoomSettingsModal({ onClose, settingsUserId, isClosing }
               <span className="hidden md:inline text-[9px] font-bold text-rm-text-muted/50 uppercase tracking-widest px-2 mb-1">
                 Audio & Video
               </span>
-              <TabBtn active={activeTab === "voice"} onClick={() => setActiveTab("voice")} label="Voice" />
-              <TabBtn active={activeTab === "camera"} onClick={() => setActiveTab("camera")} label="Camera" />
+              <TabBtn
+                active={activeTab === "voice"}
+                onClick={() => setActiveTab("voice")}
+                label="Voice"
+              />
+              <TabBtn
+                active={activeTab === "camera"}
+                onClick={() => setActiveTab("camera")}
+                label="Camera"
+              />
             </div>
 
             {/* Theme Subgroup */}
@@ -372,7 +463,11 @@ export default function RoomSettingsModal({ onClose, settingsUserId, isClosing }
               <span className="hidden md:inline text-[9px] font-bold text-rm-text-muted/50 uppercase tracking-widest px-2 mb-1">
                 Theme
               </span>
-              <TabBtn active={activeTab === "appearance"} onClick={() => setActiveTab("appearance")} label="Appearance" />
+              <TabBtn
+                active={activeTab === "appearance"}
+                onClick={() => setActiveTab("appearance")}
+                label="Appearance"
+              />
             </div>
           </div>
 
@@ -380,63 +475,114 @@ export default function RoomSettingsModal({ onClose, settingsUserId, isClosing }
           <div className="flex-1 flex flex-col relative overflow-hidden bg-rm-bg-primary">
             {/* Close */}
             <div className="absolute right-5 top-5 z-20 hidden md:flex flex-col items-center gap-1">
-              <button type="button" onClick={onClose} className="flex h-8 w-8 items-center justify-center rounded-full border border-rm-border text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text transition-all" aria-label="Close room settings">
+              <button
+                type="button"
+                onClick={onClose}
+                className="flex h-8 w-8 items-center justify-center rounded-full border border-rm-border text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text transition-all"
+                aria-label="Close room settings"
+              >
                 <X size={16} />
               </button>
-              <span className="text-[11px] font-bold text-rm-text-muted">ESC</span>
+              <span className="text-[11px] font-bold text-rm-text-muted">
+                ESC
+              </span>
             </div>
 
             <div
               className="flex-1 overflow-y-auto custom-scrollbar px-6 pb-10 pt-6 md:pt-10 max-w-[600px]"
-              style={{ paddingBottom: 'calc(40px + var(--safe-area-bottom, 0px))' }}
+              style={{
+                paddingBottom: "calc(40px + var(--safe-area-bottom, 0px))",
+              }}
             >
               {activeTab === "voice" && (
                 <div className="animate-in fade-in slide-in-from-right-4 duration-300">
-                  <h1 className="text-xl font-bold text-rm-text mb-1">Voice Settings</h1>
-                  <p className="text-sm text-rm-text-muted mb-8">Configure your media devices and audio processing.</p>
+                  <h1 className="text-xl font-bold text-rm-text mb-1">
+                    Voice Settings
+                  </h1>
+                  <p className="text-sm text-rm-text-muted mb-8">
+                    Configure your media devices and audio processing.
+                  </p>
 
                   <div className="space-y-10">
                     {/* Hardware */}
                     <section className="space-y-5">
                       <div className="flex items-center gap-2">
                         <Volume2 size={14} className="text-rm-accent" />
-                        <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-rm-text-muted">Hardware</h3>
+                        <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-rm-text-muted">
+                          Hardware
+                        </h3>
                       </div>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                         <div className="space-y-2">
-                          <Label htmlFor="room-settings-input-device" className="text-[10px] font-bold uppercase tracking-wider text-rm-text-muted ml-1">Input Device</Label>
+                          <Label
+                            htmlFor="room-settings-input-device"
+                            className="text-[10px] font-bold uppercase tracking-wider text-rm-text-muted ml-1"
+                          >
+                            Input Device
+                          </Label>
                           <select
                             id="room-settings-input-device"
                             value={vSettings.inputDeviceId}
-                            onChange={e => {
-                              const device = audioInputs.find((d) => d.deviceId === e.target.value);
-                              setDevice("input", e.target.value, settingsUserId, {
-                                label: device?.label,
-                                groupId: device?.groupId,
-                              });
+                            onChange={(e) => {
+                              const device = audioInputs.find(
+                                (d) => d.deviceId === e.target.value,
+                              );
+                              setDevice(
+                                "input",
+                                e.target.value,
+                                settingsUserId,
+                                {
+                                  label: device?.label,
+                                  groupId: device?.groupId,
+                                },
+                              );
                             }}
                             className="w-full rounded-lg border border-rm-border bg-rm-bg-elevated px-3 py-2 text-sm text-rm-text outline-none"
                           >
-                            <option value="default">{defaultAudioInput?.label || "Default Microphone"}</option>
-                            {filteredAudioInputs.map(d => <option key={d.deviceId} value={d.deviceId}>{d.label || `Mic ${d.deviceId.slice(0, 5)}`}</option>)}
+                            <option value="default">
+                              {defaultAudioInput?.label || "Default Microphone"}
+                            </option>
+                            {filteredAudioInputs.map((d) => (
+                              <option key={d.deviceId} value={d.deviceId}>
+                                {d.label || `Mic ${d.deviceId.slice(0, 5)}`}
+                              </option>
+                            ))}
                           </select>
                         </div>
                         <div className="space-y-2">
-                          <Label htmlFor="room-settings-output-device" className="text-[10px] font-bold uppercase tracking-wider text-rm-text-muted ml-1">Output Device</Label>
+                          <Label
+                            htmlFor="room-settings-output-device"
+                            className="text-[10px] font-bold uppercase tracking-wider text-rm-text-muted ml-1"
+                          >
+                            Output Device
+                          </Label>
                           <select
                             id="room-settings-output-device"
                             value={vSettings.outputDeviceId}
-                            onChange={e => {
-                              const device = audioOutputs.find((d) => d.deviceId === e.target.value);
-                              setDevice("output", e.target.value, settingsUserId, {
-                                label: device?.label,
-                                groupId: device?.groupId,
-                              });
+                            onChange={(e) => {
+                              const device = audioOutputs.find(
+                                (d) => d.deviceId === e.target.value,
+                              );
+                              setDevice(
+                                "output",
+                                e.target.value,
+                                settingsUserId,
+                                {
+                                  label: device?.label,
+                                  groupId: device?.groupId,
+                                },
+                              );
                             }}
                             className="w-full rounded-lg border border-rm-border bg-rm-bg-elevated px-3 py-2 text-sm text-rm-text outline-none"
                           >
-                            <option value="default">{defaultAudioOutput?.label || "Default Speaker"}</option>
-                            {filteredAudioOutputs.map(d => <option key={d.deviceId} value={d.deviceId}>{d.label || `Speaker ${d.deviceId.slice(0, 5)}`}</option>)}
+                            <option value="default">
+                              {defaultAudioOutput?.label || "Default Speaker"}
+                            </option>
+                            {filteredAudioOutputs.map((d) => (
+                              <option key={d.deviceId} value={d.deviceId}>
+                                {d.label || `Speaker ${d.deviceId.slice(0, 5)}`}
+                              </option>
+                            ))}
                           </select>
                         </div>
                       </div>
@@ -448,29 +594,62 @@ export default function RoomSettingsModal({ onClose, settingsUserId, isClosing }
                     <section className="space-y-5">
                       <div className="flex items-center gap-2">
                         <Volume2 size={14} className="text-emerald-400" />
-                        <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-rm-text-muted">Volume</h3>
+                        <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-rm-text-muted">
+                          Volume
+                        </h3>
                       </div>
                       <div className="space-y-4">
                         <div className="flex justify-between items-end px-1">
-                          <label htmlFor="outputVolume" className="text-[10px] font-bold uppercase tracking-wider text-rm-text-muted">Output Volume</label>
-                          <span className="text-sm font-black text-rm-accent tabular-nums">{vSettings.outputVolume}%</span>
+                          <label
+                            htmlFor="outputVolume"
+                            className="text-[10px] font-bold uppercase tracking-wider text-rm-text-muted"
+                          >
+                            Output Volume
+                          </label>
+                          <span className="text-sm font-black text-rm-accent tabular-nums">
+                            {vSettings.outputVolume}%
+                          </span>
                         </div>
                         <input
                           id="outputVolume"
-                          type="range" min="0" max="200"
+                          type="range"
+                          min="0"
+                          max="200"
                           value={vSettings.outputVolume}
-                          onChange={e => handleVoiceSlider("outputVolume", parseInt(e.target.value))}
+                          onChange={(e) =>
+                            handleVoiceSlider(
+                              "outputVolume",
+                              parseInt(e.target.value),
+                            )
+                          }
                           className="w-full h-1.5 bg-rm-bg-elevated rounded-full appearance-none cursor-pointer accent-rm-accent"
                         />
                       </div>
                       {!vSettings.autoSensitivity && (
                         <div className="space-y-4">
                           <div className="flex justify-between items-end px-1">
-                            <label htmlFor="inputSensitivity" className="text-[10px] font-bold uppercase tracking-wider text-rm-text-muted">Input Sensitivity</label>
-                             <span className="text-sm font-black text-amber-600 dark:text-amber-400 tabular-nums">{vSettings.sensitivity}dB</span>
+                            <label
+                              htmlFor="inputSensitivity"
+                              className="text-[10px] font-bold uppercase tracking-wider text-rm-text-muted"
+                            >
+                              Input Sensitivity
+                            </label>
+                            <span className="text-sm font-black text-amber-600 dark:text-amber-400 tabular-nums">
+                              {vSettings.sensitivity}dB
+                            </span>
                           </div>
-                          <input id="inputSensitivity" type="range" min="-100" max="0" value={vSettings.sensitivity}
-                            onChange={e => handleVoiceSlider("sensitivity", parseInt(e.target.value))}
+                          <input
+                            id="inputSensitivity"
+                            type="range"
+                            min="-100"
+                            max="0"
+                            value={vSettings.sensitivity}
+                            onChange={(e) =>
+                              handleVoiceSlider(
+                                "sensitivity",
+                                parseInt(e.target.value),
+                              )
+                            }
                             className="w-full h-1.5 bg-rm-bg-elevated rounded-full appearance-none cursor-pointer accent-amber-500"
                           />
                         </div>
@@ -482,7 +661,9 @@ export default function RoomSettingsModal({ onClose, settingsUserId, isClosing }
                     <section className="space-y-5">
                       <div className="flex items-center gap-2">
                         <Sparkles size={14} className="text-sky-300" />
-                        <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-rm-text-muted">Noise Suppression</h3>
+                        <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-rm-text-muted">
+                          Noise Suppression
+                        </h3>
                       </div>
                       <NoiseReductionPanel settingsUserId={settingsUserId} />
                     </section>
@@ -492,37 +673,76 @@ export default function RoomSettingsModal({ onClose, settingsUserId, isClosing }
                     {/* Processing */}
                     <section className="space-y-5">
                       <div className="flex items-center gap-2">
-                         <Zap size={14} className="text-amber-600 dark:text-amber-400" />
-                        <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-rm-text-muted">Audio Processing</h3>
+                        <Zap
+                          size={14}
+                          className="text-amber-600 dark:text-amber-400"
+                        />
+                        <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-rm-text-muted">
+                          Audio Processing
+                        </h3>
                       </div>
                       <div className="grid grid-cols-1 gap-3">
                         {[
-                          { id: "noiseSuppression", label: "Browser Noise Suppression", desc: "Uses the browser's built-in noise suppression. Turn on Noise Suppression above for the stronger open-source path.", icon: <Mic size={16} /> },
-                          { id: "echoCancellation", label: "Echo Cancellation", desc: "Prevents mic picking up speakers (Disables High Fidelity)", icon: <Speaker size={16} /> },
-                          { id: "autoSensitivity", label: "Input Sensitivity", desc: "Auto-detect best input level (Disables High Fidelity)", icon: <Volume2 size={16} /> },
-                          { id: "streamHighFidelity", label: "High Fidelity Audio", desc: "Disables all processing for stereo mic", icon: <Music size={16} /> },
-                        ].map(opt => (
-                          <div key={opt.id} className="group flex items-center justify-between p-3 rounded-xl bg-rm-bg-elevated/50 border border-rm-border hover:bg-rm-bg-hover transition-all">
+                          {
+                            id: "noiseSuppression",
+                            label: "Browser Noise Suppression",
+                            desc: "Uses the browser's built-in noise suppression. Turn on Noise Suppression above for the stronger open-source path.",
+                            icon: <Mic size={16} />,
+                          },
+                          {
+                            id: "echoCancellation",
+                            label: "Echo Cancellation",
+                            desc: "Prevents mic picking up speakers (Disables High Fidelity)",
+                            icon: <Speaker size={16} />,
+                          },
+                          {
+                            id: "autoSensitivity",
+                            label: "Input Sensitivity",
+                            desc: "Auto-detect best input level (Disables High Fidelity)",
+                            icon: <Volume2 size={16} />,
+                          },
+                          {
+                            id: "streamHighFidelity",
+                            label: "High Fidelity Audio",
+                            desc: "Disables all processing for stereo mic",
+                            icon: <Music size={16} />,
+                          },
+                        ].map((opt) => (
+                          <div
+                            key={opt.id}
+                            className="group flex items-center justify-between p-3 rounded-xl bg-rm-bg-elevated/50 border border-rm-border hover:bg-rm-bg-hover transition-all"
+                          >
                             <div className="flex items-center gap-3">
-                              <div className="w-8 h-8 rounded-lg bg-rm-bg-surface flex items-center justify-center text-rm-text-muted">{opt.icon}</div>
+                              <div className="w-8 h-8 rounded-lg bg-rm-bg-surface flex items-center justify-center text-rm-text-muted">
+                                {opt.icon}
+                              </div>
                               <div>
-                                <h4 className="text-[13px] font-bold text-rm-text">{opt.label}</h4>
-                                <p className="text-[11px] text-rm-text-muted">{opt.desc}</p>
+                                <h4 className="text-[13px] font-bold text-rm-text">
+                                  {opt.label}
+                                </h4>
+                                <p className="text-[11px] text-rm-text-muted">
+                                  {opt.desc}
+                                </p>
                               </div>
                             </div>
-                            <button type="button"
+                            <button
+                              type="button"
                               onClick={() => handleVoiceToggle(opt.id)}
                               aria-label={opt.label}
                               aria-pressed={Boolean((vSettings as any)[opt.id])}
                               className={cn(
                                 "relative w-10 h-5 rounded-full transition-colors duration-200",
-                                (vSettings as any)[opt.id] ? "bg-primary" : "bg-rm-bg-elevated border border-rm-border"
+                                (vSettings as any)[opt.id]
+                                  ? "bg-primary"
+                                  : "bg-rm-bg-elevated border border-rm-border",
                               )}
                             >
-                              <span className={cn(
-                                "absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform duration-200",
-                                (vSettings as any)[opt.id] && "translate-x-5"
-                              )} />
+                              <span
+                                className={cn(
+                                  "absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform duration-200",
+                                  (vSettings as any)[opt.id] && "translate-x-5",
+                                )}
+                              />
                             </button>
                           </div>
                         ))}
@@ -535,25 +755,38 @@ export default function RoomSettingsModal({ onClose, settingsUserId, isClosing }
               {activeTab === "camera" && (
                 <div className="animate-in fade-in slide-in-from-right-4 duration-300 space-y-8">
                   <div>
-                    <h1 className="text-xl font-bold text-rm-text mb-1">Camera Settings</h1>
-                    <p className="text-sm text-rm-text-muted">Configure your video input, capture quality, and background preferences.</p>
+                    <h1 className="text-xl font-bold text-rm-text mb-1">
+                      Camera Settings
+                    </h1>
+                    <p className="text-sm text-rm-text-muted">
+                      Configure your video input, capture quality, and
+                      background preferences.
+                    </p>
                   </div>
 
                   {/* Live Video Preview Box */}
                   <div className="relative aspect-video w-full max-w-[480px] overflow-hidden rounded-xl bg-black border border-rm-border flex items-center justify-center">
                     {previewStream && (
-                      <VideoPlayer stream={previewStream} isLocal={true} className="h-full w-full object-contain bg-black" />
+                      <VideoPlayer
+                        stream={previewStream}
+                        isLocal={true}
+                        className="h-full w-full object-contain bg-black"
+                      />
                     )}
                   </div>
 
                   {/* Camera dropdown selection */}
                   <div className="space-y-2 max-w-[480px]">
                     <div className="flex flex-col gap-2">
-                      <p className="ml-1 text-[10px] font-bold uppercase tracking-wider text-rm-text-muted">Camera Device</p>
+                      <p className="ml-1 text-[10px] font-bold uppercase tracking-wider text-rm-text-muted">
+                        Camera Device
+                      </p>
                       <CustomSelect
                         value={vSettings.videoDeviceId || "default"}
                         onChange={(val) => {
-                          const device = videoInputs.find((d) => d.deviceId === val);
+                          const device = videoInputs.find(
+                            (d) => d.deviceId === val,
+                          );
                           setDevice("video", val, settingsUserId, {
                             label: device?.label,
                             groupId: device?.groupId,
@@ -561,7 +794,11 @@ export default function RoomSettingsModal({ onClose, settingsUserId, isClosing }
                         }}
                         options={videoInputs.map((d) => ({
                           value: d.deviceId,
-                          label: d.label || (d.deviceId === "default" ? "Default Camera" : "Camera"),
+                          label:
+                            d.label ||
+                            (d.deviceId === "default"
+                              ? "Default Camera"
+                              : "Camera"),
                         }))}
                         placeholder="Select camera device"
                       />
@@ -570,29 +807,56 @@ export default function RoomSettingsModal({ onClose, settingsUserId, isClosing }
 
                   {/* Camera Quality */}
                   <div className="space-y-3">
-                    <p className="ml-1 text-[10px] font-bold uppercase tracking-wider text-rm-text-muted">Capture Quality</p>
+                    <p className="ml-1 text-[10px] font-bold uppercase tracking-wider text-rm-text-muted">
+                      Capture Quality
+                    </p>
                     <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 max-w-[480px]">
                       {CAMERA_QUALITY_PROFILES.map((profile) => {
-                        const isSelected = vSettings.cameraQuality === profile.id;
+                        const isSelected =
+                          vSettings.cameraQuality === profile.id;
                         return (
-                          <button type="button"
+                          <button
+                            type="button"
                             key={profile.id}
-                            onClick={() => updateUserSettings((current: any) => ({ ...current, cameraQuality: profile.id }), settingsUserId)}
+                            onClick={() =>
+                              updateUserSettings(
+                                (current: any) => ({
+                                  ...current,
+                                  cameraQuality: profile.id,
+                                }),
+                                settingsUserId,
+                              )
+                            }
                             className={cn(
                               "group rounded-xl border p-3 text-left outline-none transition-all",
                               isSelected
                                 ? "border-primary bg-primary/5 ring-1 ring-primary"
-                                : "border-rm-border bg-rm-bg-surface/40 hover:border-rm-text/20 hover:bg-rm-bg-surface/60"
+                                : "border-rm-border bg-rm-bg-surface/40 hover:border-rm-text/20 hover:bg-rm-bg-surface/60",
                             )}
                           >
                             <div className="mb-1 flex items-center justify-between">
                               <div className="flex items-center gap-1.5">
-                                <span className={cn("text-xs font-bold", isSelected ? "text-primary" : "text-rm-text")}>{profile.label}</span>
-                                <span className="rounded-md bg-rm-bg-elevated/40 px-1 py-0.5 text-[8px] font-black text-rm-text-muted">{profile.fps} FPS</span>
+                                <span
+                                  className={cn(
+                                    "text-xs font-bold",
+                                    isSelected
+                                      ? "text-primary"
+                                      : "text-rm-text",
+                                  )}
+                                >
+                                  {profile.label}
+                                </span>
+                                <span className="rounded-md bg-rm-bg-elevated/40 px-1 py-0.5 text-[8px] font-black text-rm-text-muted">
+                                  {profile.fps} FPS
+                                </span>
                               </div>
-                              {isSelected && <Check size={12} className="text-primary" />}
+                              {isSelected && (
+                                <Check size={12} className="text-primary" />
+                              )}
                             </div>
-                            <p className="text-[9px] leading-tight text-rm-text-muted">{profile.width}x{profile.height}</p>
+                            <p className="text-[9px] leading-tight text-rm-text-muted">
+                              {profile.width}x{profile.height}
+                            </p>
                           </button>
                         );
                       })}
@@ -602,15 +866,21 @@ export default function RoomSettingsModal({ onClose, settingsUserId, isClosing }
                   {/* Video Background */}
                   <div className="space-y-3">
                     <div className="flex items-center justify-between gap-3 px-1 max-w-[480px]">
-                      <p className="text-[10px] font-bold uppercase tracking-wider text-rm-text-muted">Video Background</p>
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-rm-text-muted">
+                        Video Background
+                      </p>
                       {!isUnauthenticated && (
                         <>
-                          <button type="button"
+                          <button
+                            type="button"
                             onClick={() => fileInputRef.current?.click()}
                             disabled={isUploadingBackground}
                             className="flex items-center gap-1.5 rounded-lg border border-rm-border bg-rm-bg-surface/40 px-2.5 py-1.5 text-[10px] font-black text-rm-text-muted transition-colors hover:text-rm-text"
                           >
-                            <Upload size={12} /> {isUploadingBackground ? "Uploading" : "Upload Image"}
+                            <Upload size={12} />{" "}
+                            {isUploadingBackground
+                              ? "Uploading"
+                              : "Upload Image"}
                           </button>
                           <input
                             ref={fileInputRef}
@@ -634,25 +904,38 @@ export default function RoomSettingsModal({ onClose, settingsUserId, isClosing }
                         {
                           id: "blur",
                           label: "Blur",
-                          value: { type: "blur", strength: "strong" } as CameraBackgroundSetting,
+                          value: {
+                            type: "blur",
+                            strength: "strong",
+                          } as CameraBackgroundSetting,
                         },
                       ].map((option) => {
                         const optionId = option.id;
-                        const currentBgId = vSettings.cameraBackground.type === "blur"
-                          ? "blur"
-                          : vSettings.cameraBackground.type === "image"
-                            ? `image-${vSettings.cameraBackground.id}`
-                            : "none";
+                        const currentBgId =
+                          vSettings.cameraBackground.type === "blur"
+                            ? "blur"
+                            : vSettings.cameraBackground.type === "image"
+                              ? `image-${vSettings.cameraBackground.id}`
+                              : "none";
                         const isSelected = currentBgId === optionId;
                         return (
-                          <button type="button"
+                          <button
+                            type="button"
                             key={option.id}
-                            onClick={() => updateUserSettings((current: any) => ({ ...current, cameraBackground: option.value }), settingsUserId)}
+                            onClick={() =>
+                              updateUserSettings(
+                                (current: any) => ({
+                                  ...current,
+                                  cameraBackground: option.value,
+                                }),
+                                settingsUserId,
+                              )
+                            }
                             className={cn(
                               "group relative flex flex-col rounded-xl border p-2.5 text-left outline-none transition-all",
                               isSelected
                                 ? "border-primary bg-primary/5 ring-1 ring-primary"
-                                : "border-rm-border bg-rm-bg-surface/40 hover:border-rm-text/20 hover:bg-rm-bg-surface/60"
+                                : "border-rm-border bg-rm-bg-surface/40 hover:border-rm-text/20 hover:bg-rm-bg-surface/60",
                             )}
                           >
                             {option.id === "none" ? (
@@ -660,46 +943,107 @@ export default function RoomSettingsModal({ onClose, settingsUserId, isClosing }
                                 <Ban size={20} />
                               </div>
                             ) : (
-                               <div className="relative mb-2 flex h-16 w-full items-center justify-center overflow-hidden rounded-lg bg-rm-bg-elevated/40 transition-all group-hover:scale-[1.02]">
-                                 <div className="absolute inset-0 bg-gradient-to-tr from-primary/30 via-rm-accent/25 to-rm-accent/40 filter blur-[8px]" />
-                                 <div className="absolute inset-0 bg-black/15" />
-                                 <Sparkles size={20} className="relative z-10 text-white/80" />
-                                </div>
-                             )}
-                             <span className={cn("text-xs font-bold", isSelected ? "text-primary" : "text-rm-text")}>{option.label}</span>
-                             {isSelected && <div className="absolute top-2 right-2 rounded-full bg-primary p-0.5 text-primary-foreground"><Check size={10} /></div>}
+                              <div className="relative mb-2 flex h-16 w-full items-center justify-center overflow-hidden rounded-lg bg-rm-bg-elevated/40 transition-all group-hover:scale-[1.02]">
+                                <div className="absolute inset-0 bg-gradient-to-tr from-primary/30 via-rm-accent/25 to-rm-accent/40 filter blur-[8px]" />
+                                <div className="absolute inset-0 bg-black/15" />
+                                <Sparkles
+                                  size={20}
+                                  className="relative z-10 text-white/80"
+                                />
+                              </div>
+                            )}
+                            <span
+                              className={cn(
+                                "text-xs font-bold",
+                                isSelected ? "text-primary" : "text-rm-text",
+                              )}
+                            >
+                              {option.label}
+                            </span>
+                            {isSelected && (
+                              <div className="absolute top-2 right-2 rounded-full bg-primary p-0.5 text-primary-foreground">
+                                <Check size={10} />
+                              </div>
+                            )}
                           </button>
                         );
                       })}
 
-                      {(vSettings.customCameraBackgrounds ?? []).map((background) => {
-                        const currentBgId = vSettings.cameraBackground.type === "image" ? `image-${vSettings.cameraBackground.id}` : null;
-                        const isSelected = currentBgId === `image-${background.id}`;
-                        return (
-                          <div
-                            key={background.id}
-                            className={cn(
-                              "group relative overflow-hidden rounded-xl border bg-rm-bg-surface/40 outline-none transition-all",
-                              isSelected ? "border-primary ring-1 ring-primary" : "border-rm-border hover:border-rm-text/20"
-                            )}
-                          >
-                            <button type="button" onClick={() => updateUserSettings((current: any) => ({ ...current, cameraBackground: { type: "image", id: background.id } }), settingsUserId)} className="block w-full p-2 text-left">
-                              <img src={background.url ? getAuthAssetUrl(background.url) : background.dataUrl} alt="" className="h-16 w-full rounded-lg object-cover" />
-                              <div className="mt-2 flex items-center justify-between gap-2 px-1">
-                                <span className={cn("truncate text-xs font-bold", isSelected ? "text-primary" : "text-rm-text")}>{background.name}</span>
-                              </div>
-                            </button>
-                            {isSelected && <div className="absolute top-3 right-8 rounded-full bg-primary p-0.5 text-primary-foreground"><Check size={10} /></div>}
-                            <button type="button"
-                              onClick={() => void removeBackground(background)}
-                              className="absolute right-2 top-2 rounded-md bg-black/60 p-1 text-white/80 opacity-0 transition-opacity hover:text-white group-hover:opacity-100"
-                              aria-label={`Remove ${background.name}`}
+                      {(vSettings.customCameraBackgrounds ?? []).map(
+                        (background) => {
+                          const currentBgId =
+                            vSettings.cameraBackground.type === "image"
+                              ? `image-${vSettings.cameraBackground.id}`
+                              : null;
+                          const isSelected =
+                            currentBgId === `image-${background.id}`;
+                          return (
+                            <div
+                              key={background.id}
+                              className={cn(
+                                "group relative overflow-hidden rounded-xl border bg-rm-bg-surface/40 outline-none transition-all",
+                                isSelected
+                                  ? "border-primary ring-1 ring-primary"
+                                  : "border-rm-border hover:border-rm-text/20",
+                              )}
                             >
-                              <Trash2 size={12} />
-                            </button>
-                          </div>
-                        );
-                      })}
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  updateUserSettings(
+                                    (current: any) => ({
+                                      ...current,
+                                      cameraBackground: {
+                                        type: "image",
+                                        id: background.id,
+                                      },
+                                    }),
+                                    settingsUserId,
+                                  )
+                                }
+                                className="block w-full p-2 text-left"
+                              >
+                                <img
+                                  src={
+                                    background.url
+                                      ? getAuthAssetUrl(background.url)
+                                      : background.dataUrl
+                                  }
+                                  alt=""
+                                  className="h-16 w-full rounded-lg object-cover"
+                                />
+                                <div className="mt-2 flex items-center justify-between gap-2 px-1">
+                                  <span
+                                    className={cn(
+                                      "truncate text-xs font-bold",
+                                      isSelected
+                                        ? "text-primary"
+                                        : "text-rm-text",
+                                    )}
+                                  >
+                                    {background.name}
+                                  </span>
+                                </div>
+                              </button>
+                              {isSelected && (
+                                <div className="absolute top-3 right-8 rounded-full bg-primary p-0.5 text-primary-foreground">
+                                  <Check size={10} />
+                                </div>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  void removeBackground(background)
+                                }
+                                className="absolute right-2 top-2 rounded-md bg-black/60 p-1 text-white/80 opacity-0 transition-opacity hover:text-white group-hover:opacity-100"
+                                aria-label={`Remove ${background.name}`}
+                              >
+                                <Trash2 size={12} />
+                              </button>
+                            </div>
+                          );
+                        },
+                      )}
 
                       {isUnauthenticated && (
                         <Tooltip>
@@ -711,45 +1055,74 @@ export default function RoomSettingsModal({ onClose, settingsUserId, isClosing }
                               className="group relative flex flex-col rounded-xl border border-primary/20 bg-gradient-to-br from-primary/10 via-rm-accent/10 to-rm-accent/5 p-2.5 text-left outline-none transition-all hover:border-primary/50 hover:from-primary/15 hover:to-rm-accent/15"
                             >
                               <div className="mb-2 flex h-16 w-full flex-col items-center justify-center rounded-lg bg-gradient-to-tr from-primary/20 to-rm-accent/20 text-primary transition-all group-hover:scale-[1.02]">
-                                <Lock size={18} className="text-rm-accent group-hover:scale-110 transition-transform" />
+                                <Lock
+                                  size={18}
+                                  className="text-rm-accent group-hover:scale-110 transition-transform"
+                                />
                               </div>
-                              <span className="text-xs font-bold text-primary-foreground/90 group-hover:text-primary">Upload Custom</span>
+                              <span className="text-xs font-bold text-primary-foreground/90 group-hover:text-primary">
+                                Upload Custom
+                              </span>
                             </a>
                           </TooltipTrigger>
-                          <TooltipContent side="top" className="bg-rm-bg-floating border border-rm-border text-rm-text-primary text-[12px] font-bold shadow-xl px-3 py-2 rounded-lg" sideOffset={8}>
+                          <TooltipContent
+                            side="top"
+                            className="bg-rm-bg-floating border border-rm-border text-rm-text-primary text-[12px] font-bold shadow-xl px-3 py-2 rounded-lg"
+                            sideOffset={8}
+                          >
                             Sign in to upload custom backgrounds
                           </TooltipContent>
                         </Tooltip>
                       )}
                     </div>
-                    {isLoadingBackgrounds && <p className="px-1 text-xs font-medium text-rm-text-muted">Loading saved backgrounds...</p>}
-                    {uploadError && <p className="px-1 text-xs font-medium text-destructive">{uploadError}</p>}
+                    {isLoadingBackgrounds && (
+                      <p className="px-1 text-xs font-medium text-rm-text-muted">
+                        Loading saved backgrounds...
+                      </p>
+                    )}
+                    {uploadError && (
+                      <p className="px-1 text-xs font-medium text-destructive">
+                        {uploadError}
+                      </p>
+                    )}
                   </div>
 
                   {/* Always Preview Video Toggle */}
                   <div className="flex items-center justify-between p-3.5 rounded-xl bg-rm-bg-elevated/50 border border-rm-border hover:bg-rm-bg-hover transition-all max-w-[480px]">
                     <div>
-                      <h4 className="text-[13px] font-bold text-rm-text">Always Preview Video</h4>
-                      <p className="text-[11px] text-rm-text-muted">Show preview modal before starting video chat</p>
+                      <h4 className="text-[13px] font-bold text-rm-text">
+                        Always Preview Video
+                      </h4>
+                      <p className="text-[11px] text-rm-text-muted">
+                        Show preview modal before starting video chat
+                      </p>
                     </div>
-                    <button type="button"
+                    <button
+                      type="button"
                       onClick={() => {
-                        updateUserSettings((current: any) => ({
-                          ...current,
-                          alwaysPreviewVideo: !current.alwaysPreviewVideo,
-                        }), settingsUserId);
+                        updateUserSettings(
+                          (current: any) => ({
+                            ...current,
+                            alwaysPreviewVideo: !current.alwaysPreviewVideo,
+                          }),
+                          settingsUserId,
+                        );
                       }}
                       aria-label={`Always preview video: ${vSettings.alwaysPreviewVideo ? "On" : "Off"}`}
                       aria-pressed={vSettings.alwaysPreviewVideo}
                       className={cn(
                         "relative w-10 h-5 rounded-full transition-colors duration-200 outline-none",
-                        vSettings.alwaysPreviewVideo ? "bg-primary" : "bg-rm-bg-elevated border border-rm-border"
+                        vSettings.alwaysPreviewVideo
+                          ? "bg-primary"
+                          : "bg-rm-bg-elevated border border-rm-border",
                       )}
                     >
-                      <span className={cn(
-                        "absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform duration-200",
-                        vSettings.alwaysPreviewVideo && "translate-x-5"
-                      )} />
+                      <span
+                        className={cn(
+                          "absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform duration-200",
+                          vSettings.alwaysPreviewVideo && "translate-x-5",
+                        )}
+                      />
                     </button>
                   </div>
                 </div>
@@ -757,27 +1130,51 @@ export default function RoomSettingsModal({ onClose, settingsUserId, isClosing }
 
               {activeTab === "appearance" && (
                 <div className="animate-in fade-in slide-in-from-right-4 duration-300">
-                  <h1 className="text-xl font-bold text-rm-text mb-1">Appearance</h1>
-                  <p className="text-sm text-rm-text-muted mb-8">Choose your preferred theme.</p>
+                  <h1 className="text-xl font-bold text-rm-text mb-1">
+                    Appearance
+                  </h1>
+                  <p className="text-sm text-rm-text-muted mb-8">
+                    Choose your preferred theme.
+                  </p>
 
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
                     {[
                       { id: "dark", label: "Dark", preview: "bg-[#0f0f11]" },
                       { id: "light", label: "Light", preview: "bg-[#f2f3f5]" },
-                      { id: "system", label: "System", preview: "bg-gradient-to-br from-[#0f0f11] to-[#f2f3f5]" },
-                      { id: "miku-dark", label: "Miku Dark", preview: "bg-[#0c0b14] border border-[#39c5bb]/30" },
-                      { id: "miku-light", label: "Miku Light", preview: "bg-[#f3faf9] border border-[#00a399]/30" },
-                    ].map(t => (
-                      <button type="button"
+                      {
+                        id: "system",
+                        label: "System",
+                        preview:
+                          "bg-gradient-to-br from-[#0f0f11] to-[#f2f3f5]",
+                      },
+                      {
+                        id: "miku-dark",
+                        label: "Miku Dark",
+                        preview: "bg-[#0c0b14] border border-[#39c5bb]/30",
+                      },
+                      {
+                        id: "miku-light",
+                        label: "Miku Light",
+                        preview: "bg-[#f3faf9] border border-[#00a399]/30",
+                      },
+                    ].map((t) => (
+                      <button
+                        type="button"
                         key={t.id}
                         onClick={() => setTheme(t.id)}
                         className={cn(
                           "rounded-xl border-2 p-1 transition-all",
-                          theme === t.id ? "border-primary ring-2 ring-primary/20" : "border-rm-border hover:border-rm-text-muted/30"
+                          theme === t.id
+                            ? "border-primary ring-2 ring-primary/20"
+                            : "border-rm-border hover:border-rm-text-muted/30",
                         )}
                       >
-                        <div className={cn("h-16 rounded-lg mb-2", t.preview)} />
-                        <span className="text-xs font-bold text-rm-text">{t.label}</span>
+                        <div
+                          className={cn("h-16 rounded-lg mb-2", t.preview)}
+                        />
+                        <span className="text-xs font-bold text-rm-text">
+                          {t.label}
+                        </span>
                       </button>
                     ))}
                   </div>
@@ -788,8 +1185,13 @@ export default function RoomSettingsModal({ onClose, settingsUserId, isClosing }
                         <Monitor size={20} />
                       </div>
                       <div>
-                        <h4 className="text-sm font-bold text-rm-text mb-1">Visual Comfort</h4>
-                        <p className="text-xs text-rm-text-muted">Our dark mode uses true black and slate tones to reduce eye strain.</p>
+                        <h4 className="text-sm font-bold text-rm-text mb-1">
+                          Visual Comfort
+                        </h4>
+                        <p className="text-xs text-rm-text-muted">
+                          Our dark mode uses true black and slate tones to
+                          reduce eye strain.
+                        </p>
                       </div>
                     </div>
                   </div>
@@ -803,13 +1205,24 @@ export default function RoomSettingsModal({ onClose, settingsUserId, isClosing }
   );
 }
 
-function TabBtn({ active, onClick, label }: { active: boolean; onClick: () => void; label: string }) {
+function TabBtn({
+  active,
+  onClick,
+  label,
+}: {
+  active: boolean;
+  onClick: () => void;
+  label: string;
+}) {
   return (
-    <button type="button"
+    <button
+      type="button"
       onClick={onClick}
       className={cn(
         "shrink-0 flex items-center md:justify-start justify-center rounded-full md:rounded-lg px-4 md:px-3 py-2 text-[13px] md:text-sm font-bold md:font-medium transition-colors w-full text-left",
-        active ? "bg-primary text-primary-foreground md:bg-primary/10 md:text-primary" : "text-rm-text-secondary hover:bg-rm-bg-hover hover:text-rm-text bg-rm-bg-elevated/50 md:bg-transparent"
+        active
+          ? "bg-primary text-primary-foreground md:bg-primary/10 md:text-primary"
+          : "text-rm-text-secondary hover:bg-rm-bg-hover hover:text-rm-text bg-rm-bg-elevated/50 md:bg-transparent",
       )}
     >
       {label}

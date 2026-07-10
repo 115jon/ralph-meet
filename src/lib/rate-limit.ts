@@ -10,7 +10,6 @@ import { clog } from "@/lib/console-logger";
 
 const log = clog("RateLimiterDO");
 
-
 interface BucketEntry {
   count: number;
   windowStart: number;
@@ -61,10 +60,8 @@ export const RATE_LIMITS = {
 export async function checkRateLimitDO(
   shardId: string,
   action: string,
-  opts: RateLimitOptions = RATE_LIMITS.DEFAULT
+  opts: RateLimitOptions = RATE_LIMITS.DEFAULT,
 ): Promise<Response | null> {
-  
-
   // We use `idFromName` to deterministically route all requests for this
   // shardId (user/IP) to the exact same global Durable Object instance.
   const id = env.RATE_LIMITER.idFromName(shardId);
@@ -77,7 +74,7 @@ export async function checkRateLimitDO(
       body: JSON.stringify({
         action,
         limit: opts.limit,
-        windowMs: opts.windowMs
+        windowMs: opts.windowMs,
       }),
     });
 
@@ -86,7 +83,7 @@ export async function checkRateLimitDO(
       return null; // Fail open
     }
 
-    const result = await res.json() as {
+    const result = (await res.json()) as {
       allowed: boolean;
       remaining: number;
       resetMs: number;
@@ -100,7 +97,7 @@ export async function checkRateLimitDO(
           headers: {
             "Retry-After": String(Math.ceil(result.resetMs / 1000)),
           },
-        }
+        },
       );
     }
 
@@ -123,13 +120,23 @@ export async function checkRateLimitDOFailClosed(
     const response = await stub.fetch("https://internal/rate-limit", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action, limit: opts.limit, windowMs: opts.windowMs }),
+      body: JSON.stringify({
+        action,
+        limit: opts.limit,
+        windowMs: opts.windowMs,
+      }),
     });
     if (!response.ok) {
-      return Response.json({ error: "Rate limit service unavailable" }, { status: 503 });
+      return Response.json(
+        { error: "Rate limit service unavailable" },
+        { status: 503 },
+      );
     }
 
-    const result = await response.json() as { allowed: boolean; resetMs: number };
+    const result = (await response.json()) as {
+      allowed: boolean;
+      resetMs: number;
+    };
     if (result.allowed) return null;
     return Response.json(
       { error: "Rate limit exceeded. Please slow down." },
@@ -139,7 +146,10 @@ export async function checkRateLimitDOFailClosed(
       },
     );
   } catch {
-    return Response.json({ error: "Rate limit service unavailable" }, { status: 503 });
+    return Response.json(
+      { error: "Rate limit service unavailable" },
+      { status: 503 },
+    );
   }
 }
 
@@ -156,7 +166,7 @@ export async function checkRateLimitDOFailClosed(
 export function checkRateLimit(
   userId: string,
   action: string,
-  opts: RateLimitOptions = RATE_LIMITS.DEFAULT
+  opts: RateLimitOptions = RATE_LIMITS.DEFAULT,
 ): Response | null {
   maybeCleanup();
 
@@ -181,7 +191,7 @@ export function checkRateLimit(
         headers: {
           "Retry-After": String(Math.ceil(retryAfterMs / 1000)),
         },
-      }
+      },
     );
   }
 

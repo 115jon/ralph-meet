@@ -9,14 +9,29 @@ import {
 
 describe("voice presence helpers", () => {
   it("treats reconnecting members as disconnected-but-resumable", () => {
-    expect(isVoiceMemberReconnecting({ connection_state: "reconnecting", connected: false })).toBe(true);
-    expect(isVoiceMemberReconnecting({ connection_state: "connected", connected: true })).toBe(false);
+    expect(
+      isVoiceMemberReconnecting({
+        connection_state: "reconnecting",
+        connected: false,
+      }),
+    ).toBe(true);
+    expect(
+      isVoiceMemberReconnecting({
+        connection_state: "connected",
+        connected: true,
+      }),
+    ).toBe(false);
   });
 
   it("schedules the next alarm for the earliest voice grace deadline", () => {
     const now = 1_000;
 
-    expect(getNextVoicePresenceAlarmTime(now, 300_000, [now + 120_000, now + 30_000])).toBe(now + 30_000);
+    expect(
+      getNextVoicePresenceAlarmTime(now, 300_000, [
+        now + 120_000,
+        now + 30_000,
+      ]),
+    ).toBe(now + 30_000);
   });
 
   it("schedules overdue voice grace deadlines immediately", () => {
@@ -56,28 +71,32 @@ describe("voice presence helpers", () => {
   });
 
   it("hides stream state for stale local memberships when this client is not actually in voice", () => {
-    expect(shouldShowVoiceMemberStreamState(
-      {
-        self_stream: true,
-        connected: true,
-        connection_state: "connected",
-      },
-      {
-        isCurrentUser: true,
-        isCurrentClientVoiceConnected: false,
-      },
-    )).toBe(false);
+    expect(
+      shouldShowVoiceMemberStreamState(
+        {
+          self_stream: true,
+          connected: true,
+          connection_state: "connected",
+        },
+        {
+          isCurrentUser: true,
+          isCurrentClientVoiceConnected: false,
+        },
+      ),
+    ).toBe(false);
 
-    expect(shouldShowVoiceMemberStreamState(
-      {
-        self_stream: true,
-        connected: true,
-        connection_state: "connected",
-      },
-      {
-        isCurrentUser: true,
-        isCurrentClientVoiceConnected: true,
-      },
-    )).toBe(true);
+    expect(
+      shouldShowVoiceMemberStreamState(
+        {
+          self_stream: true,
+          connected: true,
+          connection_state: "connected",
+        },
+        {
+          isCurrentUser: true,
+          isCurrentClientVoiceConnected: true,
+        },
+      ),
+    ).toBe(true);
   });
 });

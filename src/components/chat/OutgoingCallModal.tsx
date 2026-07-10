@@ -18,8 +18,15 @@ export function OutgoingCallModal() {
 
   const activeCallee = useUserResolution(remoteUser?.id, remoteUser);
 
-  const shouldRender = useDelayUnmount(status === "ringing_outgoing" && !!remoteUser && !!callId, 200);
-  const isClosing = !(status === "ringing_outgoing" && !!remoteUser && !!callId);
+  const shouldRender = useDelayUnmount(
+    status === "ringing_outgoing" && !!remoteUser && !!callId,
+    200,
+  );
+  const isClosing = !(
+    status === "ringing_outgoing" &&
+    !!remoteUser &&
+    !!callId
+  );
 
   if (!shouldRender || !remoteUser || !callId) return null;
 
@@ -40,7 +47,11 @@ export function OutgoingCallModal() {
           <div className="absolute -inset-1 rounded-full border border-blue-500/20 animate-pulse" />
           <div className="relative h-24 w-24 rounded-full bg-rm-bg-elevated border-2 border-blue-500/40 overflow-visible">
             {avatarSrc ? (
-              <AvatarImage src={avatarSrc} alt={activeCallee.displayName} display={activeCallee.avatarDisplay} />
+              <AvatarImage
+                src={avatarSrc}
+                alt={activeCallee.displayName}
+                display={activeCallee.avatarDisplay}
+              />
             ) : (
               <div className="h-full w-full flex items-center justify-center text-3xl font-bold text-rm-text-muted">
                 {activeCallee.displayName[0]?.toUpperCase()}
@@ -51,14 +62,22 @@ export function OutgoingCallModal() {
 
         {/* Callee info */}
         <div className="text-center">
-          <h2 className="text-xl font-bold text-white">{activeCallee.displayName}</h2>
+          <h2 className="text-xl font-bold text-white">
+            {activeCallee.displayName}
+          </h2>
           <p className="text-sm text-rm-text-muted mt-1">
             <span className="inline-flex items-center gap-1.5">
               Calling
               <span className="inline-flex gap-0.5">
-                <span className="animate-[pulse_900ms_cubic-bezier(0.16,1,0.3,1)_infinite]">.</span>
-                <span className="animate-[pulse_900ms_cubic-bezier(0.16,1,0.3,1)_infinite] [animation-delay:150ms]">.</span>
-                <span className="animate-[pulse_900ms_cubic-bezier(0.16,1,0.3,1)_infinite] [animation-delay:300ms]">.</span>
+                <span className="animate-[pulse_900ms_cubic-bezier(0.16,1,0.3,1)_infinite]">
+                  .
+                </span>
+                <span className="animate-[pulse_900ms_cubic-bezier(0.16,1,0.3,1)_infinite] [animation-delay:150ms]">
+                  .
+                </span>
+                <span className="animate-[pulse_900ms_cubic-bezier(0.16,1,0.3,1)_infinite] [animation-delay:300ms]">
+                  .
+                </span>
               </span>
             </span>
           </p>

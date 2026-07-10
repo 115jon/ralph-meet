@@ -139,7 +139,9 @@ describe("createServer", () => {
       name: "Sync Test",
     });
 
-    expect(result.cacheKeysToInvalidate).toEqual([CacheKey.userServers(USER_ID)]);
+    expect(result.cacheKeysToInvalidate).toEqual([
+      CacheKey.userServers(USER_ID),
+    ]);
     expect(result.broadcasts).toEqual([
       expect.objectContaining({
         type: "user",
@@ -196,11 +198,11 @@ describe("updateServer", () => {
 
   it("throws ServiceError when no changes provided", async () => {
     await expect(
-      updateServer(db as any, SERVER_ID, USER_ID, {})
+      updateServer(db as any, SERVER_ID, USER_ID, {}),
     ).rejects.toThrow(ServiceError);
 
     await expect(
-      updateServer(db as any, SERVER_ID, USER_ID, {})
+      updateServer(db as any, SERVER_ID, USER_ID, {}),
     ).rejects.toHaveProperty("status", 400);
   });
 
@@ -258,18 +260,18 @@ describe("deleteServer", () => {
   it("throws 403 when non-owner tries to delete", async () => {
     db.mockQuery(/SELECT owner_id FROM servers/, { owner_id: "other_user" });
 
-    await expect(
-      deleteServer(db as any, SERVER_ID, USER_ID)
-    ).rejects.toThrow(ServiceError);
+    await expect(deleteServer(db as any, SERVER_ID, USER_ID)).rejects.toThrow(
+      ServiceError,
+    );
 
     await expect(
-      deleteServer(db as any, SERVER_ID, USER_ID)
+      deleteServer(db as any, SERVER_ID, USER_ID),
     ).rejects.toHaveProperty("status", 403);
   });
 
   it("throws 403 when server not found", async () => {
     await expect(
-      deleteServer(db as any, "nonexistent", USER_ID)
+      deleteServer(db as any, "nonexistent", USER_ID),
     ).rejects.toThrow(ServiceError);
   });
 });
@@ -303,9 +305,11 @@ describe("listServerMembers", () => {
     expect(result[0].user.id).toBe(USER_ID);
     expect(result[0].user.username).toBe("testuser");
     expect(result[0].user.display_name).toBe("Test User");
-    expect(result[0].user.display_name_style).toContain("\"effect\":\"gradient\"");
+    expect(result[0].user.display_name_style).toContain('"effect":"gradient"');
     expect(result[0].user.created_at).toBe(NOW);
-    expect(result[0].user.profile_background_color).toBe(DEFAULT_PROFILE_THEME.background);
+    expect(result[0].user.profile_background_color).toBe(
+      DEFAULT_PROFILE_THEME.background,
+    );
     expect(result[0].roles).toEqual([]);
     expect(result[1].user.id).toBe("u2");
   });
@@ -412,26 +416,24 @@ describe("kickMember", () => {
     db.mockQuery(
       /SELECT r\.permissions, r\.position/,
       { results: [{ permissions: KICK_MEMBERS, position: 2 }] },
-      [SERVER_ID, USER_ID]
+      [SERVER_ID, USER_ID],
     );
     // Target exists as member
-    db.mockQuery(
-      /SELECT 1 FROM server_members/,
-      { "1": 1 },
-      [SERVER_ID, "target_user"]
-    );
+    db.mockQuery(/SELECT 1 FROM server_members/, { "1": 1 }, [
+      SERVER_ID,
+      "target_user",
+    ]);
     // Target has lower role
-    db.mockQuery(
-      "MAX(r.position) as max_position",
-      { max_position: 1 },
-      [SERVER_ID, "target_user"]
-    );
+    db.mockQuery("MAX(r.position) as max_position", { max_position: 1 }, [
+      SERVER_ID,
+      "target_user",
+    ]);
 
     const result = await kickMember(
       db as any,
       SERVER_ID,
       USER_ID,
-      "target_user"
+      "target_user",
     );
 
     expect(result.kicked).toBe(true);
@@ -447,11 +449,11 @@ describe("kickMember", () => {
     db.mockQuery(
       /SELECT r\.permissions, r\.position/,
       { results: [{ permissions: 0, position: 2 }] },
-      [SERVER_ID, USER_ID]
+      [SERVER_ID, USER_ID],
     );
 
     await expect(
-      kickMember(db as any, SERVER_ID, USER_ID, "target_user")
+      kickMember(db as any, SERVER_ID, USER_ID, "target_user"),
     ).rejects.toHaveProperty("status", 403);
   });
 
@@ -460,12 +462,12 @@ describe("kickMember", () => {
     db.mockQuery(
       /SELECT r\.permissions, r\.position/,
       { results: [{ permissions: KICK_MEMBERS, position: 2 }] },
-      [SERVER_ID, USER_ID]
+      [SERVER_ID, USER_ID],
     );
     // Target not found — no mock for SELECT 1 FROM server_members → returns null
 
     await expect(
-      kickMember(db as any, SERVER_ID, USER_ID, "target_user")
+      kickMember(db as any, SERVER_ID, USER_ID, "target_user"),
     ).rejects.toHaveProperty("status", 404);
   });
 
@@ -473,41 +475,44 @@ describe("kickMember", () => {
     db.mockQuery(
       /SELECT r\.permissions, r\.position/,
       { results: [{ permissions: KICK_MEMBERS, position: 1 }] },
-      [SERVER_ID, USER_ID]
+      [SERVER_ID, USER_ID],
     );
-    db.mockQuery(
-      /SELECT 1 FROM server_members/,
-      { "1": 1 },
-      [SERVER_ID, "target_user"]
-    );
-    db.mockQuery(
-      "MAX(r.position) as max_position",
-      { max_position: 1 },
-      [SERVER_ID, "target_user"]
-    );
+    db.mockQuery(/SELECT 1 FROM server_members/, { "1": 1 }, [
+      SERVER_ID,
+      "target_user",
+    ]);
+    db.mockQuery("MAX(r.position) as max_position", { max_position: 1 }, [
+      SERVER_ID,
+      "target_user",
+    ]);
 
     await expect(
-      kickMember(db as any, SERVER_ID, USER_ID, "target_user")
+      kickMember(db as any, SERVER_ID, USER_ID, "target_user"),
     ).rejects.toHaveProperty("status", 403);
   });
 
   it("does not lose permissions when duplicate role bits exist", async () => {
     db.mockQuery(
       /SELECT r\.permissions, r\.position/,
-      { results: [{ permissions: KICK_MEMBERS, position: 2 }, { permissions: KICK_MEMBERS, position: 1 }] },
-      [SERVER_ID, USER_ID]
+      {
+        results: [
+          { permissions: KICK_MEMBERS, position: 2 },
+          { permissions: KICK_MEMBERS, position: 1 },
+        ],
+      },
+      [SERVER_ID, USER_ID],
     );
-    db.mockQuery(
-      /SELECT 1 FROM server_members/,
-      { "1": 1 },
-      [SERVER_ID, "target_user"]
-    );
-    db.mockQuery(
-      "MAX(r.position) as max_position",
-      { max_position: 0 },
-      [SERVER_ID, "target_user"]
-    );
+    db.mockQuery(/SELECT 1 FROM server_members/, { "1": 1 }, [
+      SERVER_ID,
+      "target_user",
+    ]);
+    db.mockQuery("MAX(r.position) as max_position", { max_position: 0 }, [
+      SERVER_ID,
+      "target_user",
+    ]);
 
-    await expect(kickMember(db as any, SERVER_ID, USER_ID, "target_user")).resolves.toMatchObject({ kicked: true });
+    await expect(
+      kickMember(db as any, SERVER_ID, USER_ID, "target_user"),
+    ).resolves.toMatchObject({ kicked: true });
   });
 });

@@ -21,10 +21,18 @@ export function NoiseReductionPanel({
   compact = false,
   className,
 }: NoiseReductionPanelProps) {
-  const settings = useVoiceSettingsStore(useShallow((state) => state.getSettings(settingsUserId)));
-  const updateUserSettings = useVoiceSettingsStore((state) => state.updateUserSettings);
-  const supported = isNoiseReductionProviderSupported(settings.noiseReductionProvider);
-  const providerLabel = NOISE_REDUCTION_PROVIDER_LABELS[settings.noiseReductionProvider] ?? "RNNoise";
+  const settings = useVoiceSettingsStore(
+    useShallow((state) => state.getSettings(settingsUserId)),
+  );
+  const updateUserSettings = useVoiceSettingsStore(
+    (state) => state.updateUserSettings,
+  );
+  const supported = isNoiseReductionProviderSupported(
+    settings.noiseReductionProvider,
+  );
+  const providerLabel =
+    NOISE_REDUCTION_PROVIDER_LABELS[settings.noiseReductionProvider] ??
+    "RNNoise";
 
   const processing: VoiceAudioProcessingSettings = {
     noiseSuppression: settings.noiseSuppression,
@@ -56,7 +64,9 @@ export function NoiseReductionPanel({
               Suppress background noise before your voice leaves the app
             </h3>
             <p className="text-[12px] leading-relaxed text-rm-text-muted">
-              Enable live {providerLabel} noise suppression for your outbound voice. It updates in real time while you test, and it takes priority over high-fidelity pass-through while active.
+              Enable live {providerLabel} noise suppression for your outbound
+              voice. It updates in real time while you test, and it takes
+              priority over high-fidelity pass-through while active.
             </p>
           </div>
         </div>
@@ -71,10 +81,17 @@ export function NoiseReductionPanel({
               return {
                 ...current,
                 noiseReductionEnabled: nextEnabled,
-                noiseReductionProvider: current.noiseReductionProvider ?? "rnnoise",
-                streamHighFidelity: nextEnabled ? false : current.streamHighFidelity,
-                spatialAudioEnabled: nextEnabled ? false : current.spatialAudioEnabled,
-                noiseSuppression: nextEnabled ? false : current.noiseSuppression,
+                noiseReductionProvider:
+                  current.noiseReductionProvider ?? "rnnoise",
+                streamHighFidelity: nextEnabled
+                  ? false
+                  : current.streamHighFidelity,
+                spatialAudioEnabled: nextEnabled
+                  ? false
+                  : current.spatialAudioEnabled,
+                noiseSuppression: nextEnabled
+                  ? false
+                  : current.noiseSuppression,
               };
             }, settingsUserId ?? undefined);
           }}
@@ -83,7 +100,8 @@ export function NoiseReductionPanel({
 
       {!supported && (
         <div className="mt-4 rounded-lg border border-amber-400/20 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-100/90">
-          This browser does not expose the AudioWorklet features needed for live provider-based noise suppression here yet.
+          This browser does not expose the AudioWorklet features needed for live
+          provider-based noise suppression here yet.
         </div>
       )}
 

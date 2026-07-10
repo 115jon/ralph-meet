@@ -31,7 +31,11 @@ export default function EmojiToken({
   if (customEmoji) {
     const item = customEmojiMap[customEmoji.id];
     if (!item?.image_url) {
-      return <span className={fallbackClassName ?? className}>{`:${customEmoji.shortcode}:`}</span>;
+      return (
+        <span
+          className={fallbackClassName ?? className}
+        >{`:${customEmoji.shortcode}:`}</span>
+      );
     }
 
     return (
@@ -45,9 +49,10 @@ export default function EmojiToken({
     );
   }
 
-  const nativeEmoji = value.startsWith(":") && value.endsWith(":")
-    ? resolveNativeEmojiShortcode(value.slice(1, -1))
-    : resolveNativeEmojiValue(value);
+  const nativeEmoji =
+    value.startsWith(":") && value.endsWith(":")
+      ? resolveNativeEmojiShortcode(value.slice(1, -1))
+      : resolveNativeEmojiValue(value);
 
   if (nativeEmoji) {
     return (

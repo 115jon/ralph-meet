@@ -20,7 +20,8 @@ function makeShare(): MessageShare {
     allow_indexing: false,
     original_edited: false,
     snapshot: {
-      content: "https://www.instagram.com/reel/DXU4PV2AGJU/?igsh=b3hjc3NnZGg2NjZv",
+      content:
+        "https://www.instagram.com/reel/DXU4PV2AGJU/?igsh=b3hjc3NnZGg2NjZv",
       author: {
         id: "author-1",
         username: "jm50106001",
@@ -63,33 +64,48 @@ describe("hydrateInstagramEmbedsForShare", () => {
     workerEnv.INSTAGRAM_SESSIONID = "sessionid";
     workerEnv.INSTAGRAM_CSRFTOKEN = "csrftoken";
 
-    vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => {
-      const url = input.toString();
-      if (url.startsWith("https://www.instagram.com/api/v1/oembed/")) {
-        return Response.json({
-          media_id: "3878972523924185684_71645946242",
-          thumbnail_url: "https://scontent-ord5-1.cdninstagram.com/thumb.jpg",
-          title: "craziest work",
-        });
-      }
-      if (url.startsWith("https://i.instagram.com/api/v1/media/3878972523924185684/info/")) {
-        return Response.json({
-          items: [{
-            video_versions: [
-              { url: "https://scontent-ord5-1.cdninstagram.com/video.mp4?sig=1", width: 720, height: 1280 },
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request) => {
+        const url = input.toString();
+        if (url.startsWith("https://www.instagram.com/api/v1/oembed/")) {
+          return Response.json({
+            media_id: "3878972523924185684_71645946242",
+            thumbnail_url: "https://scontent-ord5-1.cdninstagram.com/thumb.jpg",
+            title: "craziest work",
+          });
+        }
+        if (
+          url.startsWith(
+            "https://i.instagram.com/api/v1/media/3878972523924185684/info/",
+          )
+        ) {
+          return Response.json({
+            items: [
+              {
+                video_versions: [
+                  {
+                    url: "https://scontent-ord5-1.cdninstagram.com/video.mp4?sig=1",
+                    width: 720,
+                    height: 1280,
+                  },
+                ],
+                image_versions2: {
+                  candidates: [
+                    {
+                      url: "https://scontent-ord5-1.cdninstagram.com/thumb.jpg",
+                    },
+                  ],
+                },
+                caption: { text: "craziest work" },
+                video_duration: 128.4,
+              },
             ],
-            image_versions2: {
-              candidates: [
-                { url: "https://scontent-ord5-1.cdninstagram.com/thumb.jpg" },
-              ],
-            },
-            caption: { text: "craziest work" },
-            video_duration: 128.4,
-          }],
-        });
-      }
-      throw new Error(`Unexpected fetch: ${url}`);
-    }));
+          });
+        }
+        throw new Error(`Unexpected fetch: ${url}`);
+      }),
+    );
 
     const hydrated = await hydrateInstagramEmbedsForShare(makeShare());
 
@@ -112,33 +128,48 @@ describe("hydrateInstagramEmbedsForShare", () => {
     workerEnv.INSTAGRAM_SESSIONID = "sessionid";
     workerEnv.INSTAGRAM_CSRFTOKEN = "csrftoken";
 
-    vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => {
-      const url = input.toString();
-      if (url.startsWith("https://www.instagram.com/api/v1/oembed/")) {
-        return Response.json({
-          media_id: "3878972523924185684_71645946242",
-          title: "craziest work",
-          thumbnail_url: "https://scontent-ord5-1.cdninstagram.com/thumb.jpg",
-        });
-      }
-      if (url.startsWith("https://i.instagram.com/api/v1/media/3878972523924185684/info/")) {
-        return Response.json({
-          items: [{
-            video_versions: [
-              { url: "https://scontent-ord5-1.cdninstagram.com/video.mp4?sig=1", width: 720, height: 1280 },
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request) => {
+        const url = input.toString();
+        if (url.startsWith("https://www.instagram.com/api/v1/oembed/")) {
+          return Response.json({
+            media_id: "3878972523924185684_71645946242",
+            title: "craziest work",
+            thumbnail_url: "https://scontent-ord5-1.cdninstagram.com/thumb.jpg",
+          });
+        }
+        if (
+          url.startsWith(
+            "https://i.instagram.com/api/v1/media/3878972523924185684/info/",
+          )
+        ) {
+          return Response.json({
+            items: [
+              {
+                video_versions: [
+                  {
+                    url: "https://scontent-ord5-1.cdninstagram.com/video.mp4?sig=1",
+                    width: 720,
+                    height: 1280,
+                  },
+                ],
+                image_versions2: {
+                  candidates: [
+                    {
+                      url: "https://scontent-ord5-1.cdninstagram.com/thumb.jpg",
+                    },
+                  ],
+                },
+                caption: { text: "craziest work" },
+                video_duration: 128.4,
+              },
             ],
-            image_versions2: {
-              candidates: [
-                { url: "https://scontent-ord5-1.cdninstagram.com/thumb.jpg" },
-              ],
-            },
-            caption: { text: "craziest work" },
-            video_duration: 128.4,
-          }],
-        });
-      }
-      throw new Error(`Unexpected fetch: ${url}`);
-    }));
+          });
+        }
+        throw new Error(`Unexpected fetch: ${url}`);
+      }),
+    );
 
     const share = makeShare();
     share.snapshot.embeds[0] = {
@@ -154,41 +185,51 @@ describe("hydrateInstagramEmbedsForShare", () => {
   });
 
   it("hydrates stale TikTok player embeds into direct shareable media", async () => {
-    vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => {
-      const url = input.toString();
-      if (url === "https://www.tiktok.com/player/api/v1/items?item_ids=7644364274630020383") {
-        return new Response("not found", { status: 404 });
-      }
-      if (!url.startsWith("https://www.tikwm.com/api/?url=")) {
-        throw new Error(`Unexpected fetch: ${url}`);
-      }
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request) => {
+        const url = input.toString();
+        if (
+          url ===
+          "https://www.tiktok.com/player/api/v1/items?item_ids=7644364274630020383"
+        ) {
+          return new Response("not found", { status: 404 });
+        }
+        if (!url.startsWith("https://www.tikwm.com/api/?url=")) {
+          throw new Error(`Unexpected fetch: ${url}`);
+        }
 
-      return Response.json({
-        code: 0,
-        data: {
-          id: "7644364274630020383",
-          title: "Not even gonna let him finish this one",
-          hdplay: "https://v16m.tiktokcdn-us.com/example/video.mp4?mime_type=video_mp4",
-          cover: "https://p19-common-sign.tiktokcdn-us.com/example/video-cover.webp",
-          author: {
-            nickname: "1Cloud9",
-            unique_id: "kingoftheskys1",
-            avatar: "https://p16-common-sign.tiktokcdn-us.com/example/avatar.jpeg",
+        return Response.json({
+          code: 0,
+          data: {
+            id: "7644364274630020383",
+            title: "Not even gonna let him finish this one",
+            hdplay:
+              "https://v16m.tiktokcdn-us.com/example/video.mp4?mime_type=video_mp4",
+            cover:
+              "https://p19-common-sign.tiktokcdn-us.com/example/video-cover.webp",
+            author: {
+              nickname: "1Cloud9",
+              unique_id: "kingoftheskys1",
+              avatar:
+                "https://p16-common-sign.tiktokcdn-us.com/example/avatar.jpeg",
+            },
+            digg_count: 17039,
+            comment_count: 363,
+            play_count: 183647,
+            create_time: 1748306272,
+            duration: 21,
           },
-          digg_count: 17039,
-          comment_count: 363,
-          play_count: 183647,
-          create_time: 1748306272,
-          duration: 21,
-        },
-      });
-    }) as unknown as typeof fetch);
+        });
+      }) as unknown as typeof fetch,
+    );
 
     const share = {
       ...makeShare(),
       snapshot: {
         ...makeShare().snapshot,
-        content: "https://www.tiktok.com/@kingoftheskys1/video/7644364274630020383",
+        content:
+          "https://www.tiktok.com/@kingoftheskys1/video/7644364274630020383",
         embeds: [
           {
             id: "embed-tt-1",
@@ -214,7 +255,9 @@ describe("hydrateInstagramEmbedsForShare", () => {
     const hydrated = await hydrateInstagramEmbedsForShare(share);
     const embed = hydrated.snapshot.embeds[0];
 
-    expect(embed.url).toBe("https://www.tiktok.com/@kingoftheskys1/video/7644364274630020383?is_from_webapp=1&sender_device=pc");
+    expect(embed.url).toBe(
+      "https://www.tiktok.com/@kingoftheskys1/video/7644364274630020383?is_from_webapp=1&sender_device=pc",
+    );
     expect(embed.video).toEqual({
       url: "https://v16m.tiktokcdn-us.com/example/video.mp4?mime_type=video_mp4",
       width: 720,
@@ -227,7 +270,8 @@ describe("hydrateInstagramEmbedsForShare", () => {
       {
         type: "video",
         url: "https://v16m.tiktokcdn-us.com/example/video.mp4?mime_type=video_mp4",
-        thumbnailUrl: "https://p19-common-sign.tiktokcdn-us.com/example/video-cover.webp",
+        thumbnailUrl:
+          "https://p19-common-sign.tiktokcdn-us.com/example/video-cover.webp",
         contentType: "video/mp4",
         durationSeconds: 21,
       },
@@ -248,32 +292,47 @@ describe("hydrateInstagramEmbedsForShare", () => {
     workerEnv.INSTAGRAM_SESSIONID = "sessionid";
     workerEnv.INSTAGRAM_CSRFTOKEN = "csrftoken";
 
-    vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => {
-      const url = input.toString();
-      if (url.startsWith("https://www.instagram.com/api/v1/oembed/")) {
-        return Response.json({
-          title: "craziest work",
-          thumbnail_url: "https://scontent-ord5-1.cdninstagram.com/thumb.jpg",
-        });
-      }
-      if (url.startsWith("https://i.instagram.com/api/v1/media/shortcode/DXU4PV2AGJU/info/")) {
-        return Response.json({
-          items: [{
-            video_versions: [
-              { url: "https://scontent-ord5-1.cdninstagram.com/video.mp4?sig=1", width: 720, height: 1280 },
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request) => {
+        const url = input.toString();
+        if (url.startsWith("https://www.instagram.com/api/v1/oembed/")) {
+          return Response.json({
+            title: "craziest work",
+            thumbnail_url: "https://scontent-ord5-1.cdninstagram.com/thumb.jpg",
+          });
+        }
+        if (
+          url.startsWith(
+            "https://i.instagram.com/api/v1/media/shortcode/DXU4PV2AGJU/info/",
+          )
+        ) {
+          return Response.json({
+            items: [
+              {
+                video_versions: [
+                  {
+                    url: "https://scontent-ord5-1.cdninstagram.com/video.mp4?sig=1",
+                    width: 720,
+                    height: 1280,
+                  },
+                ],
+                image_versions2: {
+                  candidates: [
+                    {
+                      url: "https://scontent-ord5-1.cdninstagram.com/thumb.jpg",
+                    },
+                  ],
+                },
+                caption: { text: "craziest work" },
+                video_duration: 128.4,
+              },
             ],
-            image_versions2: {
-              candidates: [
-                { url: "https://scontent-ord5-1.cdninstagram.com/thumb.jpg" },
-              ],
-            },
-            caption: { text: "craziest work" },
-            video_duration: 128.4,
-          }],
-        });
-      }
-      throw new Error(`Unexpected fetch: ${url}`);
-    }));
+          });
+        }
+        throw new Error(`Unexpected fetch: ${url}`);
+      }),
+    );
 
     const hydrated = await hydrateInstagramEmbedsForShare(makeShare());
 
@@ -291,34 +350,49 @@ describe("hydrateInstagramEmbedsForShare", () => {
     workerEnv.INSTAGRAM_SESSIONID = "sessionid";
     workerEnv.INSTAGRAM_CSRFTOKEN = "csrftoken";
 
-    vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => {
-      const url = input.toString();
-      if (url.startsWith("https://www.instagram.com/api/v1/oembed/")) {
-        return new Response("not found", {
-          status: 404,
-          headers: {
-            "Content-Type": "text/html; charset=utf-8",
-          },
-        });
-      }
-      if (url.startsWith("https://i.instagram.com/api/v1/media/shortcode/DXU4PV2AGJU/info/")) {
-        return Response.json({
-          items: [{
-            video_versions: [
-              { url: "https://scontent-ord5-1.cdninstagram.com/video.mp4?sig=2", width: 720, height: 1280 },
-            ],
-            image_versions2: {
-              candidates: [
-                { url: "https://scontent-ord5-1.cdninstagram.com/thumb-2.jpg" },
-              ],
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request) => {
+        const url = input.toString();
+        if (url.startsWith("https://www.instagram.com/api/v1/oembed/")) {
+          return new Response("not found", {
+            status: 404,
+            headers: {
+              "Content-Type": "text/html; charset=utf-8",
             },
-            caption: { text: "craziest work again" },
-            video_duration: 64.2,
-          }],
-        });
-      }
-      throw new Error(`Unexpected fetch: ${url}`);
-    }));
+          });
+        }
+        if (
+          url.startsWith(
+            "https://i.instagram.com/api/v1/media/shortcode/DXU4PV2AGJU/info/",
+          )
+        ) {
+          return Response.json({
+            items: [
+              {
+                video_versions: [
+                  {
+                    url: "https://scontent-ord5-1.cdninstagram.com/video.mp4?sig=2",
+                    width: 720,
+                    height: 1280,
+                  },
+                ],
+                image_versions2: {
+                  candidates: [
+                    {
+                      url: "https://scontent-ord5-1.cdninstagram.com/thumb-2.jpg",
+                    },
+                  ],
+                },
+                caption: { text: "craziest work again" },
+                video_duration: 64.2,
+              },
+            ],
+          });
+        }
+        throw new Error(`Unexpected fetch: ${url}`);
+      }),
+    );
 
     const hydrated = await hydrateInstagramEmbedsForShare(makeShare());
 
@@ -341,34 +415,45 @@ describe("hydrateInstagramEmbedsForShare", () => {
     workerEnv.INSTAGRAM_SESSIONID = "sessionid";
     workerEnv.INSTAGRAM_CSRFTOKEN = "csrftoken";
 
-    vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => {
-      const url = input.toString();
-      if (url.startsWith("https://www.instagram.com/api/v1/oembed/")) {
-        return new Response("No Media Match", {
-          status: 404,
-          headers: {
-            "Content-Type": "text/html; charset=utf-8",
-          },
-        });
-      }
-      if (url.startsWith("https://i.instagram.com/api/v1/media/shortcode/DZ9DK2RgNSk/info/")) {
-        return new Response("not found", {
-          status: 404,
-          headers: {
-            "Content-Type": "text/html; charset=utf-8",
-          },
-        });
-      }
-      if (url.startsWith("https://www.instagram.com/api/v1/media/shortcode/DZ9DK2RgNSk/info/")) {
-        return new Response("not found", {
-          status: 404,
-          headers: {
-            "Content-Type": "text/html; charset=utf-8",
-          },
-        });
-      }
-      if (url === "https://www.instagram.com/p/DZ9DK2RgNSk/") {
-        return new Response(`
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request) => {
+        const url = input.toString();
+        if (url.startsWith("https://www.instagram.com/api/v1/oembed/")) {
+          return new Response("No Media Match", {
+            status: 404,
+            headers: {
+              "Content-Type": "text/html; charset=utf-8",
+            },
+          });
+        }
+        if (
+          url.startsWith(
+            "https://i.instagram.com/api/v1/media/shortcode/DZ9DK2RgNSk/info/",
+          )
+        ) {
+          return new Response("not found", {
+            status: 404,
+            headers: {
+              "Content-Type": "text/html; charset=utf-8",
+            },
+          });
+        }
+        if (
+          url.startsWith(
+            "https://www.instagram.com/api/v1/media/shortcode/DZ9DK2RgNSk/info/",
+          )
+        ) {
+          return new Response("not found", {
+            status: 404,
+            headers: {
+              "Content-Type": "text/html; charset=utf-8",
+            },
+          });
+        }
+        if (url === "https://www.instagram.com/p/DZ9DK2RgNSk/") {
+          return new Response(
+            `
           <html>
             <head>
               <meta property="og:title" content="tas on Instagram: &quot;rukia!&quot;" />
@@ -376,18 +461,22 @@ describe("hydrateInstagramEmbedsForShare", () => {
               <meta property="og:image" content="https://scontent-ord5-2.cdninstagram.com/fresh-image.jpg?oe=6A53095B&amp;_nc_ht=scontent-ord5-2.cdninstagram.com" />
             </head>
           </html>
-        `, {
-          status: 200,
-          headers: {
-            "Content-Type": "text/html; charset=utf-8",
-          },
-        });
-      }
-      throw new Error(`Unexpected fetch: ${url}`);
-    }));
+        `,
+            {
+              status: 200,
+              headers: {
+                "Content-Type": "text/html; charset=utf-8",
+              },
+            },
+          );
+        }
+        throw new Error(`Unexpected fetch: ${url}`);
+      }),
+    );
 
     const share = makeShare();
-    share.snapshot.content = "https://www.instagram.com/p/DZ9DK2RgNSk/?igsh=MXV1bnhwem9iMmY4bA==";
+    share.snapshot.content =
+      "https://www.instagram.com/p/DZ9DK2RgNSk/?igsh=MXV1bnhwem9iMmY4bA==";
     share.snapshot.embeds[0] = {
       ...share.snapshot.embeds[0],
       url: "https://www.instagram.com/p/DZ9DK2RgNSk/?igsh=MXV1bnhwem9iMmY4bA==",
@@ -427,67 +516,101 @@ describe("hydrateInstagramEmbedsForShare", () => {
     workerEnv.INSTAGRAM_SESSIONID = "sessionid";
     workerEnv.INSTAGRAM_CSRFTOKEN = "csrftoken";
 
-    vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => {
-      const url = input.toString();
-      if (url.startsWith("https://www.instagram.com/api/v1/oembed/")) {
-        return new Response("No Media Match", {
-          status: 404,
-          headers: {
-            "Content-Type": "text/html; charset=utf-8",
-          },
-        });
-      }
-      if (url.startsWith("https://i.instagram.com/api/v1/media/shortcode/DZ9DK2RgNSk/info/")) {
-        return new Response("not found", {
-          status: 404,
-          headers: {
-            "Content-Type": "text/html; charset=utf-8",
-          },
-        });
-      }
-      if (url.startsWith("https://www.instagram.com/api/v1/media/shortcode/DZ9DK2RgNSk/info/")) {
-        return new Response("not found", {
-          status: 404,
-          headers: {
-            "Content-Type": "text/html; charset=utf-8",
-          },
-        });
-      }
-      if (url.startsWith("https://i.instagram.com/api/v1/media/3926308389746955428/info/")) {
-        return Response.json({
-          items: [{
-            caption: { text: "rukia!" },
-            like_count: 1073,
-            comment_count: 15,
-            taken_at: 1782272402,
-            user: {
-              username: "tasyiu",
-              profile_pic_url: "https://scontent-ord5-1.cdninstagram.com/avatar.jpg?oe=6A53095B",
-              is_verified: true,
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request) => {
+        const url = input.toString();
+        if (url.startsWith("https://www.instagram.com/api/v1/oembed/")) {
+          return new Response("No Media Match", {
+            status: 404,
+            headers: {
+              "Content-Type": "text/html; charset=utf-8",
             },
-            carousel_media: [
+          });
+        }
+        if (
+          url.startsWith(
+            "https://i.instagram.com/api/v1/media/shortcode/DZ9DK2RgNSk/info/",
+          )
+        ) {
+          return new Response("not found", {
+            status: 404,
+            headers: {
+              "Content-Type": "text/html; charset=utf-8",
+            },
+          });
+        }
+        if (
+          url.startsWith(
+            "https://www.instagram.com/api/v1/media/shortcode/DZ9DK2RgNSk/info/",
+          )
+        ) {
+          return new Response("not found", {
+            status: 404,
+            headers: {
+              "Content-Type": "text/html; charset=utf-8",
+            },
+          });
+        }
+        if (
+          url.startsWith(
+            "https://i.instagram.com/api/v1/media/3926308389746955428/info/",
+          )
+        ) {
+          return Response.json({
+            items: [
               {
-                image_versions2: {
-                  candidates: [
-                    { url: "https://scontent-ord5-2.cdninstagram.com/slide-1.jpg?oe=6A53095B", width: 2728, height: 1817 },
-                    { url: "https://scontent-ord5-2.cdninstagram.com/slide-1-small.jpg?oe=6A53095B", width: 750, height: 500 },
-                  ],
+                caption: { text: "rukia!" },
+                like_count: 1073,
+                comment_count: 15,
+                taken_at: 1782272402,
+                user: {
+                  username: "tasyiu",
+                  profile_pic_url:
+                    "https://scontent-ord5-1.cdninstagram.com/avatar.jpg?oe=6A53095B",
+                  is_verified: true,
                 },
-              },
-              {
-                image_versions2: {
-                  candidates: [
-                    { url: "https://scontent-ord5-1.cdninstagram.com/slide-2.jpg?oe=6A532925", width: 2727, height: 1816 },
-                    { url: "https://scontent-ord5-1.cdninstagram.com/slide-2-small.jpg?oe=6A532925", width: 750, height: 499 },
-                  ],
-                },
+                carousel_media: [
+                  {
+                    image_versions2: {
+                      candidates: [
+                        {
+                          url: "https://scontent-ord5-2.cdninstagram.com/slide-1.jpg?oe=6A53095B",
+                          width: 2728,
+                          height: 1817,
+                        },
+                        {
+                          url: "https://scontent-ord5-2.cdninstagram.com/slide-1-small.jpg?oe=6A53095B",
+                          width: 750,
+                          height: 500,
+                        },
+                      ],
+                    },
+                  },
+                  {
+                    image_versions2: {
+                      candidates: [
+                        {
+                          url: "https://scontent-ord5-1.cdninstagram.com/slide-2.jpg?oe=6A532925",
+                          width: 2727,
+                          height: 1816,
+                        },
+                        {
+                          url: "https://scontent-ord5-1.cdninstagram.com/slide-2-small.jpg?oe=6A532925",
+                          width: 750,
+                          height: 499,
+                        },
+                      ],
+                    },
+                  },
+                ],
               },
             ],
-          }],
-        });
-      }
-      if (url === "https://www.instagram.com/p/DZ9DK2RgNSk/") {
-        return new Response(`
+          });
+        }
+        if (url === "https://www.instagram.com/p/DZ9DK2RgNSk/") {
+          return new Response(
+            `
           <html>
             <head>
               <meta property="og:title" content="tas on Instagram: &quot;rukia!&quot;" />
@@ -496,18 +619,22 @@ describe("hydrateInstagramEmbedsForShare", () => {
               <script type="application/json">{"shared_entity_id":"3926308389746955428"}</script>
             </head>
           </html>
-        `, {
-          status: 200,
-          headers: {
-            "Content-Type": "text/html; charset=utf-8",
-          },
-        });
-      }
-      throw new Error(`Unexpected fetch: ${url}`);
-    }));
+        `,
+            {
+              status: 200,
+              headers: {
+                "Content-Type": "text/html; charset=utf-8",
+              },
+            },
+          );
+        }
+        throw new Error(`Unexpected fetch: ${url}`);
+      }),
+    );
 
     const share = makeShare();
-    share.snapshot.content = "https://www.instagram.com/p/DZ9DK2RgNSk/?igsh=MXV1bnhwem9iMmY4bA==";
+    share.snapshot.content =
+      "https://www.instagram.com/p/DZ9DK2RgNSk/?igsh=MXV1bnhwem9iMmY4bA==";
     share.snapshot.embeds[0] = {
       ...share.snapshot.embeds[0],
       url: "https://www.instagram.com/p/DZ9DK2RgNSk/?igsh=MXV1bnhwem9iMmY4bA==",
@@ -527,7 +654,8 @@ describe("hydrateInstagramEmbedsForShare", () => {
     expect(hydrated.snapshot.embeds[0].author).toEqual({
       name: "tasyiu",
       url: "https://www.instagram.com/tasyiu",
-      iconURL: "https://scontent-ord5-1.cdninstagram.com/avatar.jpg?oe=6A53095B",
+      iconURL:
+        "https://scontent-ord5-1.cdninstagram.com/avatar.jpg?oe=6A53095B",
       isVerified: true,
     });
     expect(hydrated.snapshot.embeds[0].thumbnail).toEqual({

@@ -151,7 +151,9 @@ function defaultCounts(): Record<CollectibleKind, number> {
 }
 
 function asRecord(value: unknown): Record<string, any> {
-  return value && typeof value === "object" ? value as Record<string, any> : {};
+  return value && typeof value === "object"
+    ? (value as Record<string, any>)
+    : {};
 }
 
 function asArray(value: unknown): any[] {
@@ -163,7 +165,9 @@ function asString(value: unknown): string | undefined {
 }
 
 function asNumber(value: unknown): number | undefined {
-  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+  return typeof value === "number" && Number.isFinite(value)
+    ? value
+    : undefined;
 }
 
 function kindFromItemType(type: unknown): CollectibleKind | null {
@@ -197,7 +201,10 @@ function frameLayerUrl(productSkuId: string, layerId: string) {
   return `${DISCORD_CDN}/media/v1/collectibles-shop/${productSkuId}/${layerId}/static`;
 }
 
-function firstPrice(prices: unknown, key: "0" | "4"): CollectiblePrice | undefined {
+function firstPrice(
+  prices: unknown,
+  key: "0" | "4",
+): CollectiblePrice | undefined {
   const price = asRecord(prices)[key];
   const countryPrices = asRecord(price).country_prices;
   const values = asArray(asRecord(countryPrices).prices);
@@ -205,7 +212,11 @@ function firstPrice(prices: unknown, key: "0" | "4"): CollectiblePrice | undefin
   const amount = first.amount;
   const exponent = first.exponent;
   const currency = first.currency;
-  if (typeof amount !== "number" || typeof exponent !== "number" || typeof currency !== "string") {
+  if (
+    typeof amount !== "number" ||
+    typeof exponent !== "number" ||
+    typeof currency !== "string"
+  ) {
     return undefined;
   }
   return { amount, exponent, currency };
@@ -227,8 +238,12 @@ function normalizeYapperProduct(
   const productSkuId = asString(product.sku_id) ?? skuId;
   const categoryName = asString(category.name) ?? "Uncategorized";
   const name = asString(item.title) ?? asString(product.name) ?? skuId;
-  const label = asString(item.label) ?? asString(item.accessibilityLabel) ?? asString(item.description);
-  const summary = asString(product.summary) ?? asString(item.description) ?? label ?? "";
+  const label =
+    asString(item.label) ??
+    asString(item.accessibilityLabel) ??
+    asString(item.description);
+  const summary =
+    asString(product.summary) ?? asString(item.description) ?? label ?? "";
   const previewAssets = asRecord(product.preview_assets);
 
   const normalized: CollectibleCatalogItem = {
@@ -240,15 +255,22 @@ function normalizeYapperProduct(
     label,
     kind,
     source: "yapper",
-    categoryId: asString(category.sku_id) ?? asString(category.store_listing_id) ?? categoryName,
+    categoryId:
+      asString(category.sku_id) ??
+      asString(category.store_listing_id) ??
+      categoryName,
     categoryName,
     productType: typeof product.type === "number" ? product.type : -1,
     itemType: typeof item.type === "number" ? item.type : -1,
-    premiumType: typeof product.premium_type === "number" ? product.premium_type : undefined,
+    premiumType:
+      typeof product.premium_type === "number"
+        ? product.premium_type
+        : undefined,
     updatedAt: asString(product.updated_at) ?? asString(category.updated_at),
     price: firstPrice(product.prices, "0"),
     nitroPrice: firstPrice(product.prices, "4"),
-    previewUrl: asString(previewAssets.fg_static) ?? asString(previewAssets.bg_static),
+    previewUrl:
+      asString(previewAssets.fg_static) ?? asString(previewAssets.bg_static),
     previewAssets: {
       fg_static: asString(previewAssets.fg_static),
       bg_static: asString(previewAssets.bg_static),
@@ -300,19 +322,26 @@ function normalizeYapperProduct(
                   return { x, y };
                 })()
               : undefined,
-          randomizedSources: randomizedSources.length ? randomizedSources : undefined,
+          randomizedSources: randomizedSources.length
+            ? randomizedSources
+            : undefined,
         };
       })
-      .filter((effect): effect is NonNullable<typeof effect> => Boolean(effect));
+      .filter((effect): effect is NonNullable<typeof effect> =>
+        Boolean(effect),
+      );
 
     normalized.profileEffect = {
-      animationType: typeof item.animationType === "number" ? item.animationType : undefined,
+      animationType:
+        typeof item.animationType === "number" ? item.animationType : undefined,
       thumbnailPreviewSrc: asString(item.thumbnailPreviewSrc),
       reducedMotionSrc: asString(item.reducedMotionSrc),
       staticFrameSrc: asString(item.staticFrameSrc),
       effects,
     };
-    normalized.staticUrl = normalized.profileEffect.staticFrameSrc ?? normalized.profileEffect.reducedMotionSrc;
+    normalized.staticUrl =
+      normalized.profileEffect.staticFrameSrc ??
+      normalized.profileEffect.reducedMotionSrc;
     normalized.animatedUrl = effects[0]?.src;
     normalized.previewUrl =
       normalized.profileEffect.thumbnailPreviewSrc ??
@@ -342,7 +371,7 @@ function normalizeYapperProduct(
           id,
           src: frameLayerUrl(productSkuId, id),
           type: asString(row.type) ?? "staple",
-          order: row.order === "back" ? "back" as const : "front" as const,
+          order: row.order === "back" ? ("back" as const) : ("front" as const),
           anchor: asString(row.anchor) ?? "top",
           responsive: row.responsive === true,
         };
@@ -351,10 +380,16 @@ function normalizeYapperProduct(
     if (!layers.length) return null;
 
     normalized.frame = {
-      innerWidth: typeof item.inner_width === "number" ? item.inner_width : 1200,
-      overflowTop: typeof item.overflow_top === "number" ? item.overflow_top : 300,
-      overflowBottom: typeof item.overflow_bottom === "number" ? item.overflow_bottom : 200,
-      overflowHorizontal: typeof item.overflow_horizontal === "number" ? item.overflow_horizontal : 50,
+      innerWidth:
+        typeof item.inner_width === "number" ? item.inner_width : 1200,
+      overflowTop:
+        typeof item.overflow_top === "number" ? item.overflow_top : 300,
+      overflowBottom:
+        typeof item.overflow_bottom === "number" ? item.overflow_bottom : 200,
+      overflowHorizontal:
+        typeof item.overflow_horizontal === "number"
+          ? item.overflow_horizontal
+          : 50,
       layers,
     };
     normalized.previewUrl = layers[0]?.src ?? normalized.previewUrl;
@@ -363,20 +398,30 @@ function normalizeYapperProduct(
   return normalized;
 }
 
-function shouldReplaceExisting(existing: CollectibleCatalogItem, next: CollectibleCatalogItem) {
+function shouldReplaceExisting(
+  existing: CollectibleCatalogItem,
+  next: CollectibleCatalogItem,
+) {
   const existingIsBundle = existing.productType >= 1000;
   const nextIsSingle = next.productType < 1000;
   return existingIsBundle && nextIsSingle;
 }
 
-function normalizeYapperCatalog(raw: unknown, syncedAt = new Date().toISOString()): CollectiblesCatalog {
+function normalizeYapperCatalog(
+  raw: unknown,
+  syncedAt = new Date().toISOString(),
+): CollectiblesCatalog {
   const rawCategories = asArray(raw);
   const itemMap = new Map<string, CollectibleCatalogItem>();
   const categoryMap = new Map<string, CollectibleCatalogCategory>();
 
   for (const rawCategory of rawCategories) {
     const category = asRecord(rawCategory);
-    const categoryId = asString(category.sku_id) ?? asString(category.store_listing_id) ?? asString(category.name) ?? "uncategorized";
+    const categoryId =
+      asString(category.sku_id) ??
+      asString(category.store_listing_id) ??
+      asString(category.name) ??
+      "uncategorized";
     const categoryName = asString(category.name) ?? "Uncategorized";
     const assetUrls = asRecord(asRecord(category.assets).url);
     const itemIds = new Set<string>();
@@ -384,12 +429,18 @@ function normalizeYapperCatalog(raw: unknown, syncedAt = new Date().toISOString(
     for (const rawProduct of asArray(category.products)) {
       const product = asRecord(rawProduct);
       for (const rawItem of asArray(product.items)) {
-        const item = normalizeYapperProduct(category, product, asRecord(rawItem));
+        const item = normalizeYapperProduct(
+          category,
+          product,
+          asRecord(rawItem),
+        );
         if (!item) continue;
         const existing = itemMap.get(item.id);
         if (existing) {
           if (!existing.productIds) {
-            existing.productIds = existing.productId ? [existing.productId] : [];
+            existing.productIds = existing.productId
+              ? [existing.productId]
+              : [];
           }
           if (item.productId && !existing.productIds.includes(item.productId)) {
             existing.productIds.push(item.productId);
@@ -411,7 +462,8 @@ function normalizeYapperCatalog(raw: unknown, syncedAt = new Date().toISOString(
       id: categoryId,
       name: categoryName,
       summary: asString(category.summary) ?? "",
-      bannerUrl: asString(assetUrls.catalog_banner) ?? asString(assetUrls.hero_banner),
+      bannerUrl:
+        asString(assetUrls.catalog_banner) ?? asString(assetUrls.hero_banner),
       logoUrl: asString(assetUrls.logo) ?? asString(assetUrls.hero_logo),
       updatedAt: asString(category.updated_at),
       itemIds: [...itemIds],
@@ -439,14 +491,21 @@ function normalizeYapperCatalog(raw: unknown, syncedAt = new Date().toISOString(
   };
 }
 
-function normalizeInfinitayCatalog(raw: unknown, syncedAt = new Date().toISOString()): CollectiblesCatalog {
+function normalizeInfinitayCatalog(
+  raw: unknown,
+  syncedAt = new Date().toISOString(),
+): CollectiblesCatalog {
   const rawCategories = asArray(raw);
   const itemMap = new Map<string, CollectibleCatalogItem>();
   const categories: CollectibleCatalogCategory[] = [];
 
   for (const rawCategory of rawCategories) {
     const category = asRecord(rawCategory);
-    const categoryId = asString(category.sku_id) ?? asString(category.store_listing_id) ?? asString(category.name) ?? "uncategorized";
+    const categoryId =
+      asString(category.sku_id) ??
+      asString(category.store_listing_id) ??
+      asString(category.name) ??
+      "uncategorized";
     const categoryName = asString(category.name) ?? "Uncategorized";
     const itemIds = new Set<string>();
 
@@ -471,13 +530,25 @@ function normalizeInfinitayCatalog(raw: unknown, syncedAt = new Date().toISOStri
           categoryName,
           productType: typeof product.type === "number" ? product.type : -1,
           itemType: typeof item.type === "number" ? item.type : -1,
-          premiumType: typeof product.premium_type === "number" ? product.premium_type : undefined,
+          premiumType:
+            typeof product.premium_type === "number"
+              ? product.premium_type
+              : undefined,
           price: firstPrice(product.prices, "0"),
           nitroPrice: firstPrice(product.prices, "4"),
           asset,
-          staticUrl: kind === "avatar_decoration" && asset ? avatarDecorationUrl(asset, 240) : undefined,
-          animatedUrl: kind === "avatar_decoration" && asset ? avatarDecorationUrl(asset, 4096) : undefined,
-          previewUrl: kind === "avatar_decoration" && asset ? avatarDecorationUrl(asset, 240) : undefined,
+          staticUrl:
+            kind === "avatar_decoration" && asset
+              ? avatarDecorationUrl(asset, 240)
+              : undefined,
+          animatedUrl:
+            kind === "avatar_decoration" && asset
+              ? avatarDecorationUrl(asset, 4096)
+              : undefined,
+          previewUrl:
+            kind === "avatar_decoration" && asset
+              ? avatarDecorationUrl(asset, 240)
+              : undefined,
         };
         itemMap.set(normalized.id, normalized);
         itemIds.add(normalized.id);
@@ -510,8 +581,9 @@ function normalizeInfinitayCatalog(raw: unknown, syncedAt = new Date().toISOStri
 }
 
 async function ensureCatalogCacheTable(db: D1Database) {
-  await db.prepare(
-    `CREATE TABLE IF NOT EXISTS collectible_catalog_cache (
+  await db
+    .prepare(
+      `CREATE TABLE IF NOT EXISTS collectible_catalog_cache (
       source TEXT PRIMARY KEY,
       payload TEXT NOT NULL,
       etag TEXT,
@@ -519,22 +591,33 @@ async function ensureCatalogCacheTable(db: D1Database) {
       item_count INTEGER NOT NULL DEFAULT 0,
       synced_at TEXT NOT NULL
     )`,
-  ).run();
+    )
+    .run();
 }
 
-async function readCatalogCache(db: D1Database): Promise<CatalogCacheRow | null> {
+async function readCatalogCache(
+  db: D1Database,
+): Promise<CatalogCacheRow | null> {
   await ensureCatalogCacheTable(db);
-  return db.prepare(
-    `SELECT source, payload, etag, category_count, item_count, synced_at
+  return db
+    .prepare(
+      `SELECT source, payload, etag, category_count, item_count, synced_at
      FROM collectible_catalog_cache
      WHERE source = ?`,
-  ).bind(CACHE_SOURCE).first<CatalogCacheRow>();
+    )
+    .bind(CACHE_SOURCE)
+    .first<CatalogCacheRow>();
 }
 
-async function writeCatalogCache(db: D1Database, catalog: CollectiblesCatalog, etag?: string | null) {
+async function writeCatalogCache(
+  db: D1Database,
+  catalog: CollectiblesCatalog,
+  etag?: string | null,
+) {
   await ensureCatalogCacheTable(db);
-  await db.prepare(
-    `INSERT INTO collectible_catalog_cache (source, payload, etag, category_count, item_count, synced_at)
+  await db
+    .prepare(
+      `INSERT INTO collectible_catalog_cache (source, payload, etag, category_count, item_count, synced_at)
      VALUES (?, ?, ?, ?, ?, ?)
      ON CONFLICT(source) DO UPDATE SET
        payload = excluded.payload,
@@ -542,14 +625,16 @@ async function writeCatalogCache(db: D1Database, catalog: CollectiblesCatalog, e
        category_count = excluded.category_count,
        item_count = excluded.item_count,
        synced_at = excluded.synced_at`,
-  ).bind(
-    CACHE_SOURCE,
-    JSON.stringify(catalog),
-    etag ?? null,
-    catalog.categories.length,
-    catalog.items.length,
-    catalog.syncedAt,
-  ).run();
+    )
+    .bind(
+      CACHE_SOURCE,
+      JSON.stringify(catalog),
+      etag ?? null,
+      catalog.categories.length,
+      catalog.items.length,
+      catalog.syncedAt,
+    )
+    .run();
 }
 
 function parseCachedCatalog(row: CatalogCacheRow): CollectiblesCatalog | null {
@@ -585,26 +670,36 @@ function primeMemoryCatalog(
 
 function readMemoryCatalog(): CollectiblesCatalog | null {
   if (!memoryCatalogEntry) return null;
-  if (Date.now() - memoryCatalogEntry.syncedAtMs > MAX_CACHE_AGE_MS) return null;
+  if (Date.now() - memoryCatalogEntry.syncedAtMs > MAX_CACHE_AGE_MS)
+    return null;
   return {
     ...memoryCatalogEntry.catalog,
     stale: false,
   };
 }
 
-async function touchCatalogCache(db: D1Database, etag: string | null, syncedAt: string) {
+async function touchCatalogCache(
+  db: D1Database,
+  etag: string | null,
+  syncedAt: string,
+) {
   await ensureCatalogCacheTable(db);
-  await db.prepare(
-    `UPDATE collectible_catalog_cache
+  await db
+    .prepare(
+      `UPDATE collectible_catalog_cache
      SET etag = COALESCE(?, etag),
          synced_at = ?
      WHERE source = ?`,
-  ).bind(etag, syncedAt, CACHE_SOURCE).run();
+    )
+    .bind(etag, syncedAt, CACHE_SOURCE)
+    .run();
 }
 
-async function fetchYapperCatalog(
-  cachedEtag?: string | null,
-): Promise<{ catalog: CollectiblesCatalog | null; etag: string | null; notModified: boolean }> {
+async function fetchYapperCatalog(cachedEtag?: string | null): Promise<{
+  catalog: CollectiblesCatalog | null;
+  etag: string | null;
+  notModified: boolean;
+}> {
   const response = await fetch(YAPPER_CATALOG_URL, {
     headers: {
       ...YAPPER_HEADERS,
@@ -648,7 +743,9 @@ export async function syncCollectiblesCatalog(
   cachedCatalog?: CollectiblesCatalog | null,
 ): Promise<CollectiblesCatalog> {
   try {
-    const { catalog, etag, notModified } = await fetchYapperCatalog(cachedRow?.etag ?? memoryCatalogEntry?.etag ?? null);
+    const { catalog, etag, notModified } = await fetchYapperCatalog(
+      cachedRow?.etag ?? memoryCatalogEntry?.etag ?? null,
+    );
     if (notModified && cachedCatalog) {
       const syncedAt = new Date().toISOString();
       const refreshedCatalog = {
@@ -667,11 +764,15 @@ export async function syncCollectiblesCatalog(
   } catch {
     const fallback = await fetchInfinitayCatalog();
     await writeCatalogCache(db, fallback, null);
-    return primeMemoryCatalog({
-      ...fallback,
-      stale: false,
-      source: "infinitay",
-    }, null, fallback.syncedAt);
+    return primeMemoryCatalog(
+      {
+        ...fallback,
+        stale: false,
+        source: "infinitay",
+      },
+      null,
+      fallback.syncedAt,
+    );
   }
 }
 
@@ -694,12 +795,20 @@ export async function getCollectiblesCatalog(
     : false;
 
   if (cached && isFresh && !options.forceRefresh) {
-    return primeMemoryCatalog(cached, cachedRow?.etag ?? null, cachedRow?.synced_at ?? cached.syncedAt);
+    return primeMemoryCatalog(
+      cached,
+      cachedRow?.etag ?? null,
+      cachedRow?.synced_at ?? cached.syncedAt,
+    );
   }
 
   try {
     if (!inFlightCatalogSync) {
-      inFlightCatalogSync = syncCollectiblesCatalog(db, cachedRow, cached).finally(() => {
+      inFlightCatalogSync = syncCollectiblesCatalog(
+        db,
+        cachedRow,
+        cached,
+      ).finally(() => {
         inFlightCatalogSync = null;
       });
     }
@@ -710,6 +819,13 @@ export async function getCollectiblesCatalog(
   }
 }
 
-export function findCollectibleItem(catalog: CollectiblesCatalog, skuIdOrId: string) {
-  return catalog.items.find((item) => item.id === skuIdOrId || item.skuId === skuIdOrId) ?? null;
+export function findCollectibleItem(
+  catalog: CollectiblesCatalog,
+  skuIdOrId: string,
+) {
+  return (
+    catalog.items.find(
+      (item) => item.id === skuIdOrId || item.skuId === skuIdOrId,
+    ) ?? null
+  );
 }

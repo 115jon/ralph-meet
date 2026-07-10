@@ -7,7 +7,9 @@ import {
 } from "@/lib/voice/listen-together-player";
 import { afterEach, describe, expect, it } from "vitest";
 
-function makeSnapshot(overrides: Partial<ListenTogetherStateSnapshot> = {}): ListenTogetherStateSnapshot {
+function makeSnapshot(
+  overrides: Partial<ListenTogetherStateSnapshot> = {},
+): ListenTogetherStateSnapshot {
   const currentEntry = {
     entryId: "entry-1",
     requestedAt: 1_000,
@@ -115,12 +117,15 @@ describe("listen together playback plan", () => {
 
 afterEach(() => {
   localStorage.clear();
-  delete (window as typeof window & { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__;
+  delete (window as typeof window & { __TAURI_INTERNALS__?: unknown })
+    .__TAURI_INTERNALS__;
 });
 
 describe("listen together stream url", () => {
   it("uses the tokenized media URL path for tauri audio playback", () => {
-    (window as typeof window & { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__ = {};
+    (
+      window as typeof window & { __TAURI_INTERNALS__?: unknown }
+    ).__TAURI_INTERNALS__ = {};
     localStorage.setItem("desktop_auth_token", "desktop-token");
 
     const parsed = new URL(

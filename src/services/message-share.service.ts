@@ -110,7 +110,10 @@ function makeToken(): string {
 
 function isPublicShareAllowed(row: MessageSourceRow): boolean {
   if (!row.server_id || row.channel_type === "dm") return false;
-  if (row.channel_allow_public_shares !== null && row.channel_allow_public_shares !== undefined) {
+  if (
+    row.channel_allow_public_shares !== null &&
+    row.channel_allow_public_shares !== undefined
+  ) {
     return row.channel_allow_public_shares === 1;
   }
   return row.server_allow_public_shares !== 0;
@@ -118,10 +121,11 @@ function isPublicShareAllowed(row: MessageSourceRow): boolean {
 
 async function getMessageSourceRow(
   db: D1Database,
-  messageId: string
+  messageId: string,
 ): Promise<MessageSourceRow> {
-  const row = await db.prepare(
-    `SELECT m.id, m.channel_id, m.author_id, m.content, m.created_at, m.updated_at, m.embeds,
+  const row = (await db
+    .prepare(
+      `SELECT m.id, m.channel_id, m.author_id, m.content, m.created_at, m.updated_at, m.embeds,
             c.server_id, c.name as channel_name, c.channel_type, c.allow_public_shares as channel_allow_public_shares,
             s.name as server_name, s.allow_public_shares as server_allow_public_shares,
             s.show_source_in_shares as server_show_source_in_shares,
@@ -133,8 +137,10 @@ async function getMessageSourceRow(
      JOIN channels c ON c.id = m.channel_id
      LEFT JOIN servers s ON s.id = c.server_id
      LEFT JOIN users u ON u.id = m.author_id
-     WHERE m.id = ?`
-  ).bind(messageId).first() as MessageSourceRow | null;
+     WHERE m.id = ?`,
+    )
+    .bind(messageId)
+    .first()) as MessageSourceRow | null;
 
   if (!row) {
     throw ServiceError.notFound("Message not found");
@@ -143,22 +149,28 @@ async function getMessageSourceRow(
 }
 
 function isShareableAttachment(contentType: unknown): contentType is string {
-  return typeof contentType === "string" && (
-    contentType.startsWith("image/") ||
-    isPlayableVideo(contentType)
+  return (
+    typeof contentType === "string" &&
+    (contentType.startsWith("image/") || isPlayableVideo(contentType))
   );
 }
 
-async function getShareableAttachments(db: D1Database, messageId: string): Promise<{
+async function getShareableAttachments(
+  db: D1Database,
+  messageId: string,
+): Promise<{
   attachments: Attachment[];
   omittedAttachmentCount: number;
 }> {
-  const { results } = await db.prepare(
-    `SELECT id, filename, file_key, content_type, size_bytes, is_nsfw
+  const { results } = await db
+    .prepare(
+      `SELECT id, filename, file_key, content_type, size_bytes, is_nsfw
      FROM attachments
      WHERE message_id = ?
-     ORDER BY created_at ASC`
-  ).bind(messageId).all();
+     ORDER BY created_at ASC`,
+    )
+    .bind(messageId)
+    .all();
 
   const rows = (results ?? []) as Array<Record<string, unknown>>;
   const attachments = rows
@@ -181,15 +193,18 @@ async function getShareableAttachments(db: D1Database, messageId: string): Promi
 
 async function getReactionCounts(
   db: D1Database,
-  messageId: string
+  messageId: string,
 ): Promise<ShareReactionSnapshot[]> {
-  const { results } = await db.prepare(
-    `SELECT emoji, COUNT(*) as count
+  const { results } = await db
+    .prepare(
+      `SELECT emoji, COUNT(*) as count
      FROM message_reactions
      WHERE message_id = ?
      GROUP BY emoji
-     ORDER BY count DESC, emoji ASC`
-  ).bind(messageId).all();
+     ORDER BY count DESC, emoji ASC`,
+    )
+    .bind(messageId)
+    .all();
 
   return (results ?? []).map((row: Record<string, unknown>) => ({
     emoji: row.emoji as string,
@@ -199,7 +214,7 @@ async function getReactionCounts(
 
 export async function createMessageShare(
   db: D1Database,
-  opts: CreateMessageShareOptions
+  opts: CreateMessageShareOptions,
 ): Promise<MessageShare> {
   const now = opts.now ?? new Date();
   const source = await getMessageSourceRow(db, opts.messageId);
@@ -208,10 +223,11 @@ export async function createMessageShare(
     throw ServiceError.forbidden("Public sharing is disabled for this message");
   }
 
-  const [{ attachments, omittedAttachmentCount }, reactions] = await Promise.all([
-    getShareableAttachments(db, opts.messageId),
-    getReactionCounts(db, opts.messageId),
-  ]);
+  const [{ attachments, omittedAttachmentCount }, reactions] =
+    await Promise.all([
+      getShareableAttachments(db, opts.messageId),
+      getReactionCounts(db, opts.messageId),
+    ]);
 
   const author: ShareAuthorSnapshot = {
     id: source.author_id,
@@ -231,47 +247,53 @@ export async function createMessageShare(
     reply_count: source.reply_count ?? 0,
     created_at: source.created_at,
     updated_at: source.updated_at,
-    ...(showSource ? {
-      source: {
-        server_name: source.server_name,
-        channel_name: source.channel_name,
-      },
-    } : {}),
+    ...(showSource
+      ? {
+          source: {
+            server_name: source.server_name,
+            channel_name: source.channel_name,
+          },
+        }
+      : {}),
   };
 
   const id = opts.genId?.() ?? crypto.randomUUID();
   const token = opts.genToken?.() ?? makeToken();
   const createdAt = now.toISOString();
-  const expiresAt = opts.expiresAt === undefined
-    ? addDays(now, DEFAULT_SHARE_DAYS).toISOString()
-    : opts.expiresAt;
+  const expiresAt =
+    opts.expiresAt === undefined
+      ? addDays(now, DEFAULT_SHARE_DAYS).toISOString()
+      : opts.expiresAt;
   const allowIndexing = source.server_allow_share_indexing === 1;
 
-  await db.prepare(
-    `INSERT INTO message_shares (
+  await db
+    .prepare(
+      `INSERT INTO message_shares (
        id, token, source_message_id, source_channel_id, source_server_id,
        created_by, snapshot_content, snapshot_author, snapshot_attachments,
        snapshot_embeds, snapshot_reactions, omitted_attachment_count,
        reply_count, allow_indexing, created_at, expires_at, status
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active')`
-  ).bind(
-    id,
-    token,
-    source.id,
-    source.channel_id,
-    source.server_id,
-    opts.createdBy,
-    snapshot.content,
-    JSON.stringify(snapshot.author),
-    JSON.stringify(snapshot.attachments),
-    JSON.stringify(snapshot.embeds),
-    JSON.stringify(snapshot.reactions),
-    snapshot.omitted_attachment_count,
-    snapshot.reply_count,
-    allowIndexing ? 1 : 0,
-    createdAt,
-    expiresAt
-  ).run();
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active')`,
+    )
+    .bind(
+      id,
+      token,
+      source.id,
+      source.channel_id,
+      source.server_id,
+      opts.createdBy,
+      snapshot.content,
+      JSON.stringify(snapshot.author),
+      JSON.stringify(snapshot.attachments),
+      JSON.stringify(snapshot.embeds),
+      JSON.stringify(snapshot.reactions),
+      snapshot.omitted_attachment_count,
+      snapshot.reply_count,
+      allowIndexing ? 1 : 0,
+      createdAt,
+      expiresAt,
+    )
+    .run();
 
   return {
     id,
@@ -294,14 +316,17 @@ export async function getPublicMessageShare(
   db: D1Database,
   token: string,
   now = new Date(),
-  opts: { incrementView?: boolean } = {}
+  opts: { incrementView?: boolean } = {},
 ): Promise<MessageShare> {
-  const row = await db.prepare(
-    `SELECT ms.*, m.updated_at as current_updated_at
+  const row = (await db
+    .prepare(
+      `SELECT ms.*, m.updated_at as current_updated_at
      FROM message_shares ms
      LEFT JOIN messages m ON m.id = ms.source_message_id
-     WHERE ms.token = ?`
-  ).bind(token).first() as Record<string, unknown> | null;
+     WHERE ms.token = ?`,
+    )
+    .bind(token)
+    .first()) as Record<string, unknown> | null;
 
   if (!row) {
     throw ServiceError.notFound("Share not found");
@@ -320,9 +345,12 @@ export async function getPublicMessageShare(
 
   const incrementView = opts.incrementView ?? true;
   if (incrementView) {
-    await db.prepare(
-      `UPDATE message_shares SET view_count = view_count + 1 WHERE token = ?`
-    ).bind(token).run();
+    await db
+      .prepare(
+        `UPDATE message_shares SET view_count = view_count + 1 WHERE token = ?`,
+      )
+      .bind(token)
+      .run();
   }
 
   const snapshotAuthor = safeJson<ShareAuthorSnapshot>(row.snapshot_author, {
@@ -363,27 +391,32 @@ export async function getPublicMessageShare(
 
 export async function listUserMessageShares(
   db: D1Database,
-  userId: string
-): Promise<Array<{
-  id: string;
-  token: string;
-  source_message_id: string;
-  content: string;
-  author: ShareAuthorSnapshot;
-  created_at: string;
-  expires_at: string | null;
-  revoked_at: string | null;
-  status: MessageShare["status"];
-  view_count: number;
-}>> {
-  const { results } = await db.prepare(
-    `SELECT id, token, source_message_id, snapshot_content, snapshot_author,
+  userId: string,
+): Promise<
+  Array<{
+    id: string;
+    token: string;
+    source_message_id: string;
+    content: string;
+    author: ShareAuthorSnapshot;
+    created_at: string;
+    expires_at: string | null;
+    revoked_at: string | null;
+    status: MessageShare["status"];
+    view_count: number;
+  }>
+> {
+  const { results } = await db
+    .prepare(
+      `SELECT id, token, source_message_id, snapshot_content, snapshot_author,
             created_at, expires_at, revoked_at, status, view_count
      FROM message_shares
      WHERE created_by = ?
      ORDER BY created_at DESC
-     LIMIT 100`
-  ).bind(userId).all();
+     LIMIT 100`,
+    )
+    .bind(userId)
+    .all();
 
   return (results ?? []).map((row: Record<string, unknown>) => ({
     id: row.id as string,
@@ -409,19 +442,25 @@ export async function revokeMessageShare(
   db: D1Database,
   shareId: string,
   userId: string,
-  now = new Date()
+  now = new Date(),
 ): Promise<void> {
-  await db.prepare(
-    `UPDATE message_shares SET status = 'revoked', revoked_at = ? WHERE id = ? AND created_by = ?`
-  ).bind(now.toISOString(), shareId, userId).run();
+  await db
+    .prepare(
+      `UPDATE message_shares SET status = 'revoked', revoked_at = ? WHERE id = ? AND created_by = ?`,
+    )
+    .bind(now.toISOString(), shareId, userId)
+    .run();
 }
 
 export async function markSharesDeletedForMessage(
   db: D1Database,
   messageId: string,
-  now = new Date()
+  now = new Date(),
 ): Promise<void> {
-  await db.prepare(
-    `UPDATE message_shares SET status = 'deleted', deleted_at = ? WHERE source_message_id = ? AND status = 'active'`
-  ).bind(now.toISOString(), messageId).run();
+  await db
+    .prepare(
+      `UPDATE message_shares SET status = 'deleted', deleted_at = ? WHERE source_message_id = ? AND status = 'active'`,
+    )
+    .bind(now.toISOString(), messageId)
+    .run();
 }

@@ -46,7 +46,10 @@ describe("Infrastructure: MockD1Database", () => {
   });
 
   it("returns null by default for .first()", async () => {
-    const result = await db.prepare("SELECT * FROM servers WHERE id = ?").bind("s1").first();
+    const result = await db
+      .prepare("SELECT * FROM servers WHERE id = ?")
+      .bind("s1")
+      .first();
     expect(result).toBeNull();
   });
 
@@ -54,21 +57,32 @@ describe("Infrastructure: MockD1Database", () => {
     db.mockQuery(/SELECT.*FROM servers/, {
       results: [{ id: "s1", name: "Test Server" }],
     });
-    const result = await db.prepare("SELECT * FROM servers WHERE owner = ?").bind("u1").all();
+    const result = await db
+      .prepare("SELECT * FROM servers WHERE owner = ?")
+      .bind("u1")
+      .all();
     expect(result.results).toHaveLength(1);
     expect(result.results![0].name).toBe("Test Server");
   });
 
   it("mockQuery returns configured response for .first()", async () => {
     db.mockQuery(/SELECT.*FROM users/, { id: "u1", username: "alice" });
-    const result = await db.prepare("SELECT * FROM users WHERE id = ?").bind("u1").first();
+    const result = await db
+      .prepare("SELECT * FROM users WHERE id = ?")
+      .bind("u1")
+      .first();
     expect(result).toEqual({ id: "u1", username: "alice" });
   });
 
   it("records calls with bindings", async () => {
-    await db.prepare("INSERT INTO servers (id, name) VALUES (?, ?)").bind("s1", "My Server").run();
+    await db
+      .prepare("INSERT INTO servers (id, name) VALUES (?, ?)")
+      .bind("s1", "My Server")
+      .run();
     expect(db.calls).toHaveLength(1);
-    expect(db.calls[0].sql).toBe("INSERT INTO servers (id, name) VALUES (?, ?)");
+    expect(db.calls[0].sql).toBe(
+      "INSERT INTO servers (id, name) VALUES (?, ?)",
+    );
     expect(db.calls[0].bindings).toEqual(["s1", "My Server"]);
     expect(db.calls[0].method).toBe("run");
   });
@@ -124,8 +138,14 @@ describe("Infrastructure: MockD1Database", () => {
     db.mockQuery(/SELECT.*users/, { id: "u1", username: "alice" }, ["u1"]);
     db.mockQuery(/SELECT.*users/, { id: "u2", username: "bob" }, ["u2"]);
 
-    const alice = await db.prepare("SELECT * FROM users WHERE id = ?").bind("u1").first();
-    const bob = await db.prepare("SELECT * FROM users WHERE id = ?").bind("u2").first();
+    const alice = await db
+      .prepare("SELECT * FROM users WHERE id = ?")
+      .bind("u1")
+      .first();
+    const bob = await db
+      .prepare("SELECT * FROM users WHERE id = ?")
+      .bind("u2")
+      .first();
 
     expect(alice).toEqual({ id: "u1", username: "alice" });
     expect(bob).toEqual({ id: "u2", username: "bob" });

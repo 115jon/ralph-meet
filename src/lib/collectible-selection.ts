@@ -5,7 +5,11 @@ import type {
   ProfileFrameSelection,
 } from "@/lib/avatar-display";
 import { getAvatarCollectibles } from "@/lib/avatar-display";
-import type { CollectibleCatalogItem, CollectibleKind, CollectiblesCatalog } from "@/lib/collectibles-catalog";
+import type {
+  CollectibleCatalogItem,
+  CollectibleKind,
+  CollectiblesCatalog,
+} from "@/lib/collectibles-catalog";
 
 const KIND_ORDER: CollectibleKind[] = [
   "avatar_decoration",
@@ -14,11 +18,17 @@ const KIND_ORDER: CollectibleKind[] = [
   "profile_frame",
 ];
 
-function cloneProfileEffectLayer(layer: NonNullable<CollectibleCatalogItem["profileEffect"]>["effects"][number]): ProfileEffectLayer {
+function cloneProfileEffectLayer(
+  layer: NonNullable<
+    CollectibleCatalogItem["profileEffect"]
+  >["effects"][number],
+): ProfileEffectLayer {
   return {
     ...layer,
     position: layer.position ? { ...layer.position } : undefined,
-    randomizedSources: layer.randomizedSources?.map((source) => ({ ...source })),
+    randomizedSources: layer.randomizedSources?.map((source) => ({
+      ...source,
+    })),
   };
 }
 
@@ -28,7 +38,9 @@ function cloneProfileFrameLayers(
   return item.frame?.layers.map((layer) => ({ ...layer }));
 }
 
-export function collectibleItemToSelection(item: CollectibleCatalogItem): Partial<AvatarCollectibles> {
+export function collectibleItemToSelection(
+  item: CollectibleCatalogItem,
+): Partial<AvatarCollectibles> {
   if (item.kind === "avatar_decoration" && item.asset) {
     return {
       avatarDecoration: {
@@ -41,7 +53,10 @@ export function collectibleItemToSelection(item: CollectibleCatalogItem): Partia
   }
 
   if (item.kind === "profile_effect") {
-    const effects = item.profileEffect?.effects.map((effect) => cloneProfileEffectLayer(effect)) ?? [];
+    const effects =
+      item.profileEffect?.effects.map((effect) =>
+        cloneProfileEffectLayer(effect),
+      ) ?? [];
     return {
       profileEffect: {
         skuId: item.skuId,
@@ -97,7 +112,8 @@ export function selectedSkuForKind(
   kind: CollectibleKind,
 ) {
   const collectibles = getAvatarCollectibles(display);
-  if (kind === "avatar_decoration") return collectibles?.avatarDecoration?.skuId;
+  if (kind === "avatar_decoration")
+    return collectibles?.avatarDecoration?.skuId;
   if (kind === "profile_effect") return collectibles?.profileEffect?.skuId;
   if (kind === "nameplate") return collectibles?.nameplate?.skuId;
   return collectibles?.profileFrame?.skuId;
@@ -105,9 +121,10 @@ export function selectedSkuForKind(
 
 export function isBundleCollectible(item: CollectibleCatalogItem) {
   const isNameplate = item.kind === "nameplate";
-  return !isNameplate && (
-    (item.productType >= 1000 && item.productType < 2000) ||
-    item.name.toLowerCase().includes("bundle")
+  return (
+    !isNameplate &&
+    ((item.productType >= 1000 && item.productType < 2000) ||
+      item.name.toLowerCase().includes("bundle"))
   );
 }
 
@@ -122,10 +139,16 @@ function resolveBundleProductId(
     catalog.items
       .filter(isBundleCollectible)
       .map((candidate) => candidate.productId)
-      .filter((productId): productId is string => typeof productId === "string" && productId.length > 0),
+      .filter(
+        (productId): productId is string =>
+          typeof productId === "string" && productId.length > 0,
+      ),
   );
 
-  return item.productIds?.find((productId) => bundleProductIds.has(productId)) ?? null;
+  return (
+    item.productIds?.find((productId) => bundleProductIds.has(productId)) ??
+    null
+  );
 }
 
 export function getBundleConstituentItems(
@@ -136,7 +159,9 @@ export function getBundleConstituentItems(
   if (!catalog || !bundleProductId) return [item];
 
   const candidates = catalog.items.filter(
-    (candidate) => candidate.productId === bundleProductId || candidate.productIds?.includes(bundleProductId),
+    (candidate) =>
+      candidate.productId === bundleProductId ||
+      candidate.productIds?.includes(bundleProductId),
   );
   if (!candidates.length) return [item];
 
@@ -166,10 +191,18 @@ export function getCollectibleApplySelections(
   catalog: CollectiblesCatalog | null | undefined,
   item: CollectibleCatalogItem,
 ) {
-  const selections = (isBundleCollectible(item) ? getBundleConstituentItems(catalog, item) : [item])
-    .map((constituent) => ({ kind: constituent.kind, skuId: constituent.skuId }));
+  const selections = (
+    isBundleCollectible(item)
+      ? getBundleConstituentItems(catalog, item)
+      : [item]
+  ).map((constituent) => ({
+    kind: constituent.kind,
+    skuId: constituent.skuId,
+  }));
 
-  return selections.length ? selections : [{ kind: item.kind, skuId: item.skuId }];
+  return selections.length
+    ? selections
+    : [{ kind: item.kind, skuId: item.skuId }];
 }
 
 export function isBundleFullyApplied(
@@ -179,7 +212,11 @@ export function isBundleFullyApplied(
 ) {
   if (!isBundleCollectible(item)) return false;
   const constituents = getBundleConstituentItems(catalog, item);
-  return constituents.length > 1 && constituents.every(
-    (constituent) => selectedSkuForKind(display, constituent.kind) === constituent.skuId,
+  return (
+    constituents.length > 1 &&
+    constituents.every(
+      (constituent) =>
+        selectedSkuForKind(display, constituent.kind) === constituent.skuId,
+    )
   );
 }

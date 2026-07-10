@@ -1,11 +1,16 @@
-import type { VoiceChannelStatusMedia, VoiceChannelStatusMediaAsset } from "@/lib/types";
+import type {
+  VoiceChannelStatusMedia,
+  VoiceChannelStatusMediaAsset,
+} from "@/lib/types";
 
 export const VOICE_STATUS_MEDIA_PREFIX = "voice-status-media";
 export const EXTERNAL_VOICE_STATUS_MEDIA_FILE_KEY_PREFIX = "external-url:";
 export const MAX_VOICE_STATUS_MEDIA_UPLOAD_BYTES = 25 * 1024 * 1024;
 export const MAX_VOICE_STATUS_MEDIA_RECENTS = 12;
 
-export const ALLOWED_VOICE_STATUS_MEDIA_CONTENT_TYPES = new Set<VoiceChannelStatusMedia["preview_content_type"]>([
+export const ALLOWED_VOICE_STATUS_MEDIA_CONTENT_TYPES = new Set<
+  VoiceChannelStatusMedia["preview_content_type"]
+>([
   "image/gif",
   "image/apng",
   "image/webp",
@@ -15,7 +20,10 @@ export const ALLOWED_VOICE_STATUS_MEDIA_CONTENT_TYPES = new Set<VoiceChannelStat
   "video/webm",
 ]);
 
-const CONTENT_TYPE_BY_EXTENSION: Record<string, VoiceChannelStatusMedia["preview_content_type"]> = {
+const CONTENT_TYPE_BY_EXTENSION: Record<
+  string,
+  VoiceChannelStatusMedia["preview_content_type"]
+> = {
   gif: "image/gif",
   apng: "image/apng",
   webp: "image/webp",
@@ -26,9 +34,16 @@ const CONTENT_TYPE_BY_EXTENSION: Record<string, VoiceChannelStatusMedia["preview
   webm: "video/webm",
 };
 
-export function getVoiceStatusMediaUploadContentType(file: File): VoiceChannelStatusMedia["preview_content_type"] | null {
+export function getVoiceStatusMediaUploadContentType(
+  file: File,
+): VoiceChannelStatusMedia["preview_content_type"] | null {
   const declaredType = file.type?.toLowerCase();
-  if (declaredType && ALLOWED_VOICE_STATUS_MEDIA_CONTENT_TYPES.has(declaredType as VoiceChannelStatusMedia["preview_content_type"])) {
+  if (
+    declaredType &&
+    ALLOWED_VOICE_STATUS_MEDIA_CONTENT_TYPES.has(
+      declaredType as VoiceChannelStatusMedia["preview_content_type"],
+    )
+  ) {
     return declaredType as VoiceChannelStatusMedia["preview_content_type"];
   }
 
@@ -36,19 +51,32 @@ export function getVoiceStatusMediaUploadContentType(file: File): VoiceChannelSt
   return CONTENT_TYPE_BY_EXTENSION[ext] ?? null;
 }
 
-export function buildVoiceStatusMediaStorageKey(serverId: string, assetId: string, filename: string): string {
+export function buildVoiceStatusMediaStorageKey(
+  serverId: string,
+  assetId: string,
+  filename: string,
+): string {
   return `${VOICE_STATUS_MEDIA_PREFIX}/${serverId}/${assetId}/${filename}`;
 }
 
-export function buildExternalVoiceStatusMediaFileKey(previewUrl: string): string {
+export function buildExternalVoiceStatusMediaFileKey(
+  previewUrl: string,
+): string {
   return `${EXTERNAL_VOICE_STATUS_MEDIA_FILE_KEY_PREFIX}${previewUrl}`;
 }
 
-export function buildVoiceStatusMediaUrl(assetId: string, filename: string): string {
+export function buildVoiceStatusMediaUrl(
+  assetId: string,
+  filename: string,
+): string {
   return `/api/voice-status-media/${assetId}/${encodeURIComponent(filename)}`;
 }
 
-function resolveVoiceStatusMediaPreviewUrl(assetId: string, filename: string, fileKey?: string | null): string {
+function resolveVoiceStatusMediaPreviewUrl(
+  assetId: string,
+  filename: string,
+  fileKey?: string | null,
+): string {
   if (fileKey?.startsWith(EXTERNAL_VOICE_STATUS_MEDIA_FILE_KEY_PREFIX)) {
     return fileKey.slice(EXTERNAL_VOICE_STATUS_MEDIA_FILE_KEY_PREFIX.length);
   }
@@ -103,10 +131,18 @@ export function buildVoiceStatusMediaAsset(input: {
     created_at: input.created_at,
     media: buildVoiceStatusMediaItem({
       id: input.id,
-      provider: input.file_key?.startsWith(EXTERNAL_VOICE_STATUS_MEDIA_FILE_KEY_PREFIX) ? "external" : "server-upload",
+      provider: input.file_key?.startsWith(
+        EXTERNAL_VOICE_STATUS_MEDIA_FILE_KEY_PREFIX,
+      )
+        ? "external"
+        : "server-upload",
       title: null,
       alt_text: null,
-      preview_url: resolveVoiceStatusMediaPreviewUrl(input.id, input.filename, input.file_key),
+      preview_url: resolveVoiceStatusMediaPreviewUrl(
+        input.id,
+        input.filename,
+        input.file_key,
+      ),
       preview_width: input.preview_width,
       preview_height: input.preview_height,
       preview_content_type: input.content_type,

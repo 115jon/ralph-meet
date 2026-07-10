@@ -18,7 +18,12 @@ describe("user avatar display metadata", () => {
       avatar_display: JSON.stringify(display),
     });
 
-    const result = await updateAvatarUrl(db as any, "user-1", "/api/avatars/user-1.png", display);
+    const result = await updateAvatarUrl(
+      db as any,
+      "user-1",
+      "/api/avatars/user-1.png",
+      display,
+    );
     const [updateCall] = db.getCalls(/UPDATE users SET avatar_url/);
 
     expect(updateCall.sql).toContain("avatar_display = ?");

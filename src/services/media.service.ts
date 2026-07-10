@@ -25,7 +25,12 @@ export interface MediaItem {
   source_kind: "attachment" | "embed";
   thumbnail_url?: string | null;
   is_gif?: boolean;
-  author: { id: string; username: string; display_name: string | null; avatar_url: string | null };
+  author: {
+    id: string;
+    username: string;
+    display_name: string | null;
+    avatar_url: string | null;
+  };
   created_at: string;
 }
 
@@ -33,7 +38,12 @@ export interface LinkItem {
   id: string;
   message_id: string;
   content: string;
-  author: { id: string; username: string; display_name: string | null; avatar_url: string | null };
+  author: {
+    id: string;
+    username: string;
+    display_name: string | null;
+    avatar_url: string | null;
+  };
   created_at: string;
 }
 
@@ -45,7 +55,7 @@ export interface LinkItem {
 export async function fetchChannelMedia(
   db: D1Database,
   channelId: string,
-  opts: { limit?: number; before?: string | null } = {}
+  opts: { limit?: number; before?: string | null } = {},
 ): Promise<MediaItem[]> {
   const limit = Math.min(opts.limit ?? 50, 100);
   const attachmentBindings: (string | number)[] = [channelId];
@@ -61,8 +71,9 @@ export async function fetchChannelMedia(
   embedBindings.push(limit);
 
   const [attachmentResult, embedResult] = await Promise.all([
-    db.prepare(
-      `SELECT a.id, a.filename, a.file_key, a.content_type, a.size_bytes, a.created_at,
+    db
+      .prepare(
+        `SELECT a.id, a.filename, a.file_key, a.content_type, a.size_bytes, a.created_at,
               a.message_id, m.author_id,
               m.created_at AS message_created_at,
               u.username AS author_username, u.display_name AS author_display_name, u.avatar_url AS author_avatar_url
@@ -79,12 +90,13 @@ export async function fetchChannelMedia(
          )
          ${cursorClause}
        ORDER BY m.created_at DESC
-       LIMIT ?`
-    )
+       LIMIT ?`,
+      )
       .bind(...attachmentBindings)
       .all(),
-    db.prepare(
-      `SELECT m.id AS message_id, m.created_at, m.embeds, m.author_id,
+    db
+      .prepare(
+        `SELECT m.id AS message_id, m.created_at, m.embeds, m.author_id,
               u.username AS author_username, u.display_name AS author_display_name, u.avatar_url AS author_avatar_url
        FROM messages m
        LEFT JOIN users u ON u.id = m.author_id
@@ -92,14 +104,18 @@ export async function fetchChannelMedia(
          AND COALESCE(m.embeds, '[]') != '[]'
          ${cursorClause}
        ORDER BY m.created_at DESC
-       LIMIT ?`
-    )
+       LIMIT ?`,
+      )
       .bind(...embedBindings)
       .all(),
   ]);
 
-  const attachmentItems = (attachmentResult.results ?? []).map(formatAttachmentRow);
-  const embedItems = (embedResult.results ?? []).flatMap(extractEmbeddedMediaRows);
+  const attachmentItems = (attachmentResult.results ?? []).map(
+    formatAttachmentRow,
+  );
+  const embedItems = (embedResult.results ?? []).flatMap(
+    extractEmbeddedMediaRows,
+  );
 
   return [...attachmentItems, ...embedItems]
     .sort((a, b) => b.created_at.localeCompare(a.created_at))
@@ -115,7 +131,7 @@ export async function fetchChannelMedia(
 export async function fetchChannelFiles(
   db: D1Database,
   channelId: string,
-  opts: { limit?: number; before?: string | null } = {}
+  opts: { limit?: number; before?: string | null } = {},
 ): Promise<MediaItem[]> {
   const limit = Math.min(opts.limit ?? 50, 100);
   const bindings: (string | number)[] = [channelId];
@@ -144,7 +160,7 @@ export async function fetchChannelFiles(
          AND a.content_type NOT LIKE 'video/mp2t%'
          ${cursorClause}
        ORDER BY m.created_at DESC
-       LIMIT ?`
+       LIMIT ?`,
     )
     .bind(...bindings)
     .all();
@@ -160,7 +176,7 @@ export async function fetchChannelFiles(
 export async function fetchChannelLinks(
   db: D1Database,
   channelId: string,
-  opts: { limit?: number; before?: string | null } = {}
+  opts: { limit?: number; before?: string | null } = {},
 ): Promise<LinkItem[]> {
   const limit = Math.min(opts.limit ?? 50, 100);
   const bindings: (string | number)[] = [channelId];
@@ -182,7 +198,7 @@ export async function fetchChannelLinks(
          AND (m.content LIKE '%http://%' OR m.content LIKE '%https://%')
          ${cursorClause}
        ORDER BY m.created_at DESC
-       LIMIT ?`
+       LIMIT ?`,
     )
     .bind(...bindings)
     .all();
@@ -223,7 +239,8 @@ function formatAttachmentRow(row: Record<string, unknown>): MediaItem {
       display_name: (row.author_display_name as string) ?? null,
       avatar_url: (row.author_avatar_url as string) ?? null,
     },
-    created_at: (row.message_created_at as string) ?? (row.created_at as string),
+    created_at:
+      (row.message_created_at as string) ?? (row.created_at as string),
   };
 }
 
@@ -233,7 +250,7 @@ function parseEmbeds(value: unknown): EmbedInfo[] {
 
   try {
     const parsed = JSON.parse(value);
-    return Array.isArray(parsed) ? parsed as EmbedInfo[] : [];
+    return Array.isArray(parsed) ? (parsed as EmbedInfo[]) : [];
   } catch {
     return [];
   }
@@ -264,8 +281,14 @@ function inferMediaContentType(
   mediaUrl: string,
   explicitContentType?: string,
 ): string {
-  const normalizedExplicit = explicitContentType?.split(";")[0].trim().toLowerCase();
-  if (normalizedExplicit?.startsWith("image/") || normalizedExplicit?.startsWith("video/")) {
+  const normalizedExplicit = explicitContentType
+    ?.split(";")[0]
+    .trim()
+    .toLowerCase();
+  if (
+    normalizedExplicit?.startsWith("image/") ||
+    normalizedExplicit?.startsWith("video/")
+  ) {
     return explicitContentType!;
   }
 
@@ -283,7 +306,8 @@ function inferMediaContentType(
     if (pathname.endsWith(".webp")) return "image/webp";
     if (pathname.endsWith(".gif")) return "image/gif";
     if (pathname.endsWith(".svg")) return "image/svg+xml";
-    if (pathname.endsWith(".jpg") || pathname.endsWith(".jpeg")) return "image/jpeg";
+    if (pathname.endsWith(".jpg") || pathname.endsWith(".jpeg"))
+      return "image/jpeg";
   } catch {
     // Fall back below.
   }
@@ -351,7 +375,11 @@ function pushEmbedMediaItem(
   if (seen.has(dedupeKey)) return;
   seen.add(dedupeKey);
 
-  const contentType = inferMediaContentType(media.type, mediaUrl, media.contentType);
+  const contentType = inferMediaContentType(
+    media.type,
+    mediaUrl,
+    media.contentType,
+  );
   items.push({
     id: `${row.message_id as string}:${fallbackKey}:${items.length}`,
     message_id: row.message_id as string,
@@ -362,7 +390,10 @@ function pushEmbedMediaItem(
     content_type: contentType,
     size_bytes: 0,
     source_kind: "embed",
-    thumbnail_url: media.type === "video" ? (media.thumbnailUrl ?? fallbackThumbnailUrl ?? null) : null,
+    thumbnail_url:
+      media.type === "video"
+        ? (media.thumbnailUrl ?? fallbackThumbnailUrl ?? null)
+        : null,
     is_gif: media.isGif ?? false,
     author: {
       id: row.author_id as string,
@@ -383,30 +414,54 @@ function collectEmbedMedia(
 ): void {
   if (Array.isArray(embed.media) && embed.media.length > 0) {
     embed.media.forEach((media, index) => {
-      pushEmbedMediaItem(items, seen, row, media, embed.url, embed.thumbnail?.url, `${fallbackPrefix}-media-${index + 1}`);
+      pushEmbedMediaItem(
+        items,
+        seen,
+        row,
+        media,
+        embed.url,
+        embed.thumbnail?.url,
+        `${fallbackPrefix}-media-${index + 1}`,
+      );
     });
     return;
   }
 
   if (embed.video?.url && embed.video.kind !== "player") {
-    pushEmbedMediaItem(items, seen, row, {
-      type: "video",
-      url: embed.video.url,
-      contentType: embed.video.contentType,
-      width: embed.video.width,
-      height: embed.video.height,
-      thumbnailUrl: embed.thumbnail?.url,
-    }, embed.url, embed.thumbnail?.url, `${fallbackPrefix}-video`);
+    pushEmbedMediaItem(
+      items,
+      seen,
+      row,
+      {
+        type: "video",
+        url: embed.video.url,
+        contentType: embed.video.contentType,
+        width: embed.video.width,
+        height: embed.video.height,
+        thumbnailUrl: embed.thumbnail?.url,
+      },
+      embed.url,
+      embed.thumbnail?.url,
+      `${fallbackPrefix}-video`,
+    );
     return;
   }
 
   if (embed.type === "image" && embed.url) {
-    pushEmbedMediaItem(items, seen, row, {
-      type: "image",
-      url: embed.url,
-      width: embed.thumbnail?.width,
-      height: embed.thumbnail?.height,
-    }, embed.url, embed.thumbnail?.url, `${fallbackPrefix}-image`);
+    pushEmbedMediaItem(
+      items,
+      seen,
+      row,
+      {
+        type: "image",
+        url: embed.url,
+        width: embed.thumbnail?.width,
+        height: embed.thumbnail?.height,
+      },
+      embed.url,
+      embed.thumbnail?.url,
+      `${fallbackPrefix}-image`,
+    );
   }
 }
 

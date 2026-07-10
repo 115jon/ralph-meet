@@ -2,20 +2,22 @@
  * Extracts the average (dominant) color from an image URL using heavily downsampled canvas.
  * Returns a hex color string or null if calculation fails (CORS, network error, etc.).
  */
-export async function extractDominantColor(imageUrl: string): Promise<string | null> {
+export async function extractDominantColor(
+  imageUrl: string,
+): Promise<string | null> {
   return new Promise((resolve) => {
-    if (typeof document === 'undefined') {
+    if (typeof document === "undefined") {
       resolve(null);
       return;
     }
 
     const img = new Image();
-    img.crossOrigin = 'Anonymous'; // Required for cross-origin images to not taint canvas
+    img.crossOrigin = "Anonymous"; // Required for cross-origin images to not taint canvas
 
     img.onload = () => {
       try {
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+        const canvas = document.createElement("canvas");
+        const ctx = canvas.getContext("2d", { willReadFrequently: true });
 
         if (!ctx) {
           resolve(null);
@@ -28,7 +30,9 @@ export async function extractDominantColor(imageUrl: string): Promise<string | n
         ctx.drawImage(img, 0, 0, 10, 10);
 
         const imageData = ctx.getImageData(0, 0, 10, 10).data;
-        let r = 0, g = 0, b = 0;
+        let r = 0,
+          g = 0,
+          b = 0;
         const count = imageData.length / 4;
 
         for (let i = 0; i < imageData.length; i += 4) {
@@ -42,10 +46,14 @@ export async function extractDominantColor(imageUrl: string): Promise<string | n
         b = Math.floor(b / count);
 
         // Convert to hex
-        const hex = '#' + [r, g, b].map(x => x.toString(16).padStart(2, '0')).join('');
+        const hex =
+          "#" + [r, g, b].map((x) => x.toString(16).padStart(2, "0")).join("");
         resolve(hex);
       } catch (e) {
-        console.warn('Failed to extract dominant color (likely CORS taint):', e);
+        console.warn(
+          "Failed to extract dominant color (likely CORS taint):",
+          e,
+        );
         resolve(null);
       }
     };

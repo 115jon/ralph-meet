@@ -10,11 +10,11 @@ published and can be independently verified.
 
 ## Signing roles
 
-| Role | Responsibility | Member |
-| --- | --- | --- |
-| Committer | Maintains the source code and release configuration | [115jon](https://github.com/115jon) |
-| Reviewer | Reviews changes from contributors who are not committers | [115jon](https://github.com/115jon) |
-| Approver | Approves each release-signing request | [115jon](https://github.com/115jon) |
+| Role      | Responsibility                                           | Member                              |
+| --------- | -------------------------------------------------------- | ----------------------------------- |
+| Committer | Maintains the source code and release configuration      | [115jon](https://github.com/115jon) |
+| Reviewer  | Reviews changes from contributors who are not committers | [115jon](https://github.com/115jon) |
+| Approver  | Approves each release-signing request                    | [115jon](https://github.com/115jon) |
 
 The three roles are currently held by the same maintainer. Contributions from
 other people still require maintainer review before merge. Automated tools may

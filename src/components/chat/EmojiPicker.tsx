@@ -1,4 +1,9 @@
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { apiGet, apiPost } from "@/lib/api-client";
 import {
   MAX_AI_EMOJI_PROMPT_LENGTH,
@@ -78,7 +83,9 @@ function dedupeCreatedEmojis(items: GeneratedEmoji[]): GeneratedEmoji[] {
   return next;
 }
 
-function buildInitialCollapsedCategories(categories: NativeEmojiCategory[]): Record<string, boolean> {
+function buildInitialCollapsedCategories(
+  categories: NativeEmojiCategory[],
+): Record<string, boolean> {
   return {
     [RECENTS_SECTION_ID]: false,
     [CUSTOM_SECTION_ID]: false,
@@ -94,8 +101,10 @@ function getStoredSkinTone(): NativeEmojiSkinTone {
   const rawValue = window.localStorage.getItem(SKIN_TONE_STORAGE_KEY);
   const numericValue = Number(rawValue);
 
-  return Number.isInteger(numericValue) && numericValue >= 0 && numericValue <= 5
-    ? numericValue as NativeEmojiSkinTone
+  return Number.isInteger(numericValue) &&
+    numericValue >= 0 &&
+    numericValue <= 5
+    ? (numericValue as NativeEmojiSkinTone)
     : 0;
 }
 
@@ -123,15 +132,22 @@ function subscribeEmojiRecents(onStoreChange: () => void): () => void {
   };
 }
 
-function matchesGeneratedEmojiSearch(item: GeneratedEmoji, query: string): boolean {
+function matchesGeneratedEmojiSearch(
+  item: GeneratedEmoji,
+  query: string,
+): boolean {
   const normalizedQuery = query.trim().toLowerCase();
   if (!normalizedQuery) return false;
 
-  return `${item.shortcode} ${item.prompt}`.toLowerCase().includes(normalizedQuery);
+  return `${item.shortcode} ${item.prompt}`
+    .toLowerCase()
+    .includes(normalizedQuery);
 }
 
 function getErrorMessage(error: unknown, fallback: string): string {
-  return error instanceof Error && error.message.trim() ? error.message : fallback;
+  return error instanceof Error && error.message.trim()
+    ? error.message
+    : fallback;
 }
 
 function ReadyEmojiPreview({
@@ -201,7 +217,11 @@ function CustomEmojiCard({
         if (isReady) onSelect(emoji);
       }}
       title={`:${emoji.shortcode}: ${emoji.prompt}`}
-      aria-label={isReady ? `Insert :${emoji.shortcode}:` : `Emoji ${emoji.shortcode} is ${emoji.status}`}
+      aria-label={
+        isReady
+          ? `Insert :${emoji.shortcode}:`
+          : `Emoji ${emoji.shortcode} is ${emoji.status}`
+      }
       className={cn(
         "group rounded-2xl border p-2.5 text-left transition-all",
         isReady
@@ -212,7 +232,9 @@ function CustomEmojiCard({
       <div
         className={cn(
           "relative mb-2 flex h-14 items-center justify-center rounded-xl border",
-          isReady ? "border-rm-border bg-rm-bg-hover" : "border-rm-border bg-rm-bg-surface/30",
+          isReady
+            ? "border-rm-border bg-rm-bg-hover"
+            : "border-rm-border bg-rm-bg-surface/30",
         )}
       >
         {isReady ? (
@@ -224,16 +246,22 @@ function CustomEmojiCard({
         ) : isPending ? (
           <div className="flex flex-col items-center gap-1 text-rm-text-muted">
             <Loader2 className="h-4 w-4 animate-spin" />
-            <span className="text-[10px] font-semibold uppercase tracking-wide">Generating</span>
+            <span className="text-[10px] font-semibold uppercase tracking-wide">
+              Generating
+            </span>
           </div>
         ) : (
           <div className="flex flex-col items-center gap-1 text-red-600 dark:text-red-400">
             <AlertCircle className="h-4 w-4" />
-            <span className="text-[10px] font-semibold uppercase tracking-wide">Failed</span>
+            <span className="text-[10px] font-semibold uppercase tracking-wide">
+              Failed
+            </span>
           </div>
         )}
       </div>
-      <div className="truncate text-[11px] font-black text-rm-text">:{emoji.shortcode}:</div>
+      <div className="truncate text-[11px] font-black text-rm-text">
+        :{emoji.shortcode}:
+      </div>
       <div className="mt-0.5 line-clamp-2 min-h-[2rem] text-[10px] leading-4 text-rm-text-muted">
         {emoji.prompt}
       </div>
@@ -263,7 +291,12 @@ function SectionHeader({
       className="mb-3 flex w-full items-center justify-between gap-3 rounded-xl border border-rm-border bg-rm-bg-surface px-3 py-2 text-left transition-colors hover:bg-rm-bg-hover"
     >
       <div className="flex min-w-0 items-center gap-2.5">
-        <div className={cn("flex h-8 w-8 items-center justify-center rounded-xl border border-rm-border bg-rm-bg-hover", accentClassName)}>
+        <div
+          className={cn(
+            "flex h-8 w-8 items-center justify-center rounded-xl border border-rm-border bg-rm-bg-hover",
+            accentClassName,
+          )}
+        >
           {icon}
         </div>
         <div className="min-w-0">
@@ -294,20 +327,28 @@ export default function EmojiPicker({
 }: Props) {
   const [activeView, setActiveView] = useState<EmojiView>("emoji");
   const [search, setSearch] = useState("");
-  const [selectedSkinTone, setSelectedSkinTone] = useState<NativeEmojiSkinTone>(getStoredSkinTone);
+  const [selectedSkinTone, setSelectedSkinTone] =
+    useState<NativeEmojiSkinTone>(getStoredSkinTone);
   const [showSkinToneMenu, setShowSkinToneMenu] = useState(false);
   const [generatedEmojis, setGeneratedEmojis] = useState<GeneratedEmoji[]>([]);
   const [loadingGeneratedEmojis, setLoadingGeneratedEmojis] = useState(true);
-  const [generatedEmojiError, setGeneratedEmojiError] = useState<string | null>(null);
-  const recents = useSyncExternalStore(subscribeEmojiRecents, loadEmojiRecents, () => []);
+  const [generatedEmojiError, setGeneratedEmojiError] = useState<string | null>(
+    null,
+  );
+  const recents = useSyncExternalStore(
+    subscribeEmojiRecents,
+    loadEmojiRecents,
+    () => [],
+  );
   const nativeCategories = useMemo(
     () => getNativeEmojiCategories(selectedSkinTone),
     [selectedSkinTone],
   );
-  const [collapsedCategories, setCollapsedCategories] = useState<Record<string, boolean>>(
-    () => buildInitialCollapsedCategories(nativeCategories),
-  );
-  const [activeCategory, setActiveCategory] = useState<string>(CUSTOM_SECTION_ID);
+  const [collapsedCategories, setCollapsedCategories] = useState<
+    Record<string, boolean>
+  >(() => buildInitialCollapsedCategories(nativeCategories));
+  const [activeCategory, setActiveCategory] =
+    useState<string>(CUSTOM_SECTION_ID);
   const pendingJumpIdRef = useRef<string | null>(null);
   const [prompt, setPrompt] = useState("");
   const [shortcode, setShortcode] = useState("");
@@ -317,7 +358,9 @@ export default function EmojiPicker({
 
   const internalMarkerRef = useRef<HTMLSpanElement>(null);
   const markerRef = externalMarkerRef ?? internalMarkerRef;
-  const [dynamicStyle, setDynamicStyle] = useState<React.CSSProperties>({ opacity: 0 });
+  const [dynamicStyle, setDynamicStyle] = useState<React.CSSProperties>({
+    opacity: 0,
+  });
   const promptInputId = useId();
   const searchInputId = useId();
   const shortcodeInputId = useId();
@@ -327,12 +370,18 @@ export default function EmojiPicker({
   const contentRef = useRef<HTMLDivElement>(null);
   const sectionRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const nativeSectionOrder = useMemo(
-    () => [CUSTOM_SECTION_ID, ...nativeCategories.map((category) => category.id)],
+    () => [
+      CUSTOM_SECTION_ID,
+      ...nativeCategories.map((category) => category.id),
+    ],
     [nativeCategories],
   );
 
   const readyGeneratedEmojis = useMemo(
-    () => generatedEmojis.filter((item) => item.status === "ready" && Boolean(item.image_url)),
+    () =>
+      generatedEmojis.filter(
+        (item) => item.status === "ready" && Boolean(item.image_url),
+      ),
     [generatedEmojis],
   );
   const hasPendingGeneratedEmojis = useMemo(
@@ -340,17 +389,25 @@ export default function EmojiPicker({
     [generatedEmojis],
   );
   const customSearchResults = useMemo(
-    () => (deferredSearch
-      ? generatedEmojis.filter((item) => matchesGeneratedEmojiSearch(item, deferredSearch))
-      : []),
+    () =>
+      deferredSearch
+        ? generatedEmojis.filter((item) =>
+            matchesGeneratedEmojiSearch(item, deferredSearch),
+          )
+        : [],
     [deferredSearch, generatedEmojis],
   );
   const nativeSearchResults = useMemo(
-    () => (deferredSearch ? searchNativeEmojis(deferredSearch, 120, selectedSkinTone) : []),
+    () =>
+      deferredSearch
+        ? searchNativeEmojis(deferredSearch, 120, selectedSkinTone)
+        : [],
     [deferredSearch, selectedSkinTone],
   );
   const clapPreviewEmoji = useMemo(
-    () => resolveNativeEmojiShortcode("clap", selectedSkinTone) ?? resolveNativeEmojiShortcode("raised_hands", selectedSkinTone),
+    () =>
+      resolveNativeEmojiShortcode("clap", selectedSkinTone) ??
+      resolveNativeEmojiShortcode("raised_hands", selectedSkinTone),
     [selectedSkinTone],
   );
   const customCategoryPreview = readyGeneratedEmojis[0] ?? null;
@@ -369,42 +426,70 @@ export default function EmojiPicker({
     }
   }, []);
 
-  const recentRenderableItems = useMemo<RecentRenderableItem[]>(() => (
-    recents.flatMap<RecentRenderableItem>((item) => {
-      if (item.type === "native") {
-        const emoji = resolveNativeEmojiShortcode(item.shortcode, selectedSkinTone)
-          ?? resolveNativeEmojiShortcode(item.shortcode);
+  const recentRenderableItems = useMemo<RecentRenderableItem[]>(
+    () =>
+      recents.flatMap<RecentRenderableItem>((item) => {
+        if (item.type === "native") {
+          const emoji =
+            resolveNativeEmojiShortcode(item.shortcode, selectedSkinTone) ??
+            resolveNativeEmojiShortcode(item.shortcode);
 
-        return emoji
-          ? [{ key: `recent-native-${item.id}`, type: "native" as const, emoji }]
+          return emoji
+            ? [
+                {
+                  key: `recent-native-${item.id}`,
+                  type: "native" as const,
+                  emoji,
+                },
+              ]
+            : [];
+        }
+
+        const customEmoji = generatedEmojis.find(
+          (emoji) => emoji.id === item.id,
+        );
+        return customEmoji
+          ? [
+              {
+                key: `recent-custom-${item.id}`,
+                type: "custom" as const,
+                emoji: customEmoji,
+              },
+            ]
           : [];
+      }),
+    [generatedEmojis, recents, selectedSkinTone],
+  );
+
+  const loadGeneratedEmojis = useCallback(
+    async (options?: { signal?: AbortSignal; silent?: boolean }) => {
+      setGeneratedEmojiError(null);
+      if (!options?.silent) {
+        setLoadingGeneratedEmojis(true);
       }
 
-      const customEmoji = generatedEmojis.find((emoji) => emoji.id === item.id);
-      return customEmoji
-        ? [{ key: `recent-custom-${item.id}`, type: "custom" as const, emoji: customEmoji }]
-        : [];
-    })
-  ), [generatedEmojis, recents, selectedSkinTone]);
-
-  const loadGeneratedEmojis = useCallback(async (options?: { signal?: AbortSignal; silent?: boolean }) => {
-    setGeneratedEmojiError(null);
-    if (!options?.silent) {
-      setLoadingGeneratedEmojis(true);
-    }
-
-    try {
-      const response = await apiGet<GeneratedEmojiListResponse>("/api/emojis", { signal: options?.signal });
-      const nextItems = dedupeCreatedEmojis(response.items);
-      primeCustomEmojiCache(nextItems);
-      setGeneratedEmojis(nextItems);
-    } catch (error) {
-      if ((error as Error).name === "AbortError") return;
-      setGeneratedEmojiError(getErrorMessage(error, "Could not load your emoji creations right now."));
-    } finally {
-      setLoadingGeneratedEmojis(false);
-    }
-  }, []);
+      try {
+        const response = await apiGet<GeneratedEmojiListResponse>(
+          "/api/emojis",
+          { signal: options?.signal },
+        );
+        const nextItems = dedupeCreatedEmojis(response.items);
+        primeCustomEmojiCache(nextItems);
+        setGeneratedEmojis(nextItems);
+      } catch (error) {
+        if ((error as Error).name === "AbortError") return;
+        setGeneratedEmojiError(
+          getErrorMessage(
+            error,
+            "Could not load your emoji creations right now.",
+          ),
+        );
+      } finally {
+        setLoadingGeneratedEmojis(false);
+      }
+    },
+    [],
+  );
 
   useEffect(() => {
     searchInputRef.current?.focus();
@@ -438,7 +523,8 @@ export default function EmojiPicker({
     };
 
     window.addEventListener("keydown", handleEscape, { capture: true });
-    return () => window.removeEventListener("keydown", handleEscape, { capture: true });
+    return () =>
+      window.removeEventListener("keydown", handleEscape, { capture: true });
   }, [onClose, showSkinToneMenu]);
 
   useBackButton(
@@ -450,7 +536,7 @@ export default function EmojiPicker({
       onClose();
       return true;
     }, [onClose, showSkinToneMenu]),
-    !isClosing
+    !isClosing,
   );
 
   useEffect(() => {
@@ -479,7 +565,8 @@ export default function EmojiPicker({
       if (!(RECENTS_SECTION_ID in next)) next[RECENTS_SECTION_ID] = false;
       if (!(CUSTOM_SECTION_ID in next)) next[CUSTOM_SECTION_ID] = false;
       for (const category of nativeCategories) {
-        if (!(category.id in next)) next[category.id] = category.id !== nativeCategories[0]?.id;
+        if (!(category.id in next))
+          next[category.id] = category.id !== nativeCategories[0]?.id;
       }
 
       return next;
@@ -505,11 +592,11 @@ export default function EmojiPicker({
 
       const rect = markerRef.current.getBoundingClientRect();
       const pickerWidth = 440;
-      
+
       // Calculate absolute safe max height
       const MAX_HEIGHT = Math.min(600, window.innerHeight - 20);
 
-      const style: React.CSSProperties = { 
+      const style: React.CSSProperties = {
         opacity: 1,
         maxHeight: MAX_HEIGHT,
       };
@@ -550,19 +637,25 @@ export default function EmojiPicker({
     }
   }, []);
 
-  const handleNativeSelect = useCallback((emoji: NativeEmoji) => {
-    handleRememberRecent(toNativeEmojiRecentItem(emoji));
-    onSelect(emoji.native);
-    onClose();
-  }, [handleRememberRecent, onClose, onSelect]);
+  const handleNativeSelect = useCallback(
+    (emoji: NativeEmoji) => {
+      handleRememberRecent(toNativeEmojiRecentItem(emoji));
+      onSelect(emoji.native);
+      onClose();
+    },
+    [handleRememberRecent, onClose, onSelect],
+  );
 
-  const handleCustomSelect = useCallback((emoji: GeneratedEmoji) => {
-    if (!emoji.image_url) return;
+  const handleCustomSelect = useCallback(
+    (emoji: GeneratedEmoji) => {
+      if (!emoji.image_url) return;
 
-    handleRememberRecent(toCustomEmojiRecentItem(emoji));
-    onSelect(buildCustomEmojiToken(emoji.shortcode, emoji.id));
-    onClose();
-  }, [handleRememberRecent, onClose, onSelect]);
+      handleRememberRecent(toCustomEmojiRecentItem(emoji));
+      onSelect(buildCustomEmojiToken(emoji.shortcode, emoji.id));
+      onClose();
+    },
+    [handleRememberRecent, onClose, onSelect],
+  );
 
   const handleEmojiListScroll = useCallback(() => {
     if (deferredSearch) return;
@@ -618,21 +711,27 @@ export default function EmojiPicker({
     setIsGenerating(true);
 
     try {
-      const response = await apiPost<{ item: GeneratedEmoji }, { prompt: string; shortcode?: string }>(
-        "/api/emojis",
-        {
-          prompt: normalizedPrompt,
-          ...(normalizedShortcode ? { shortcode: normalizedShortcode } : {}),
-        },
-      );
+      const response = await apiPost<
+        { item: GeneratedEmoji },
+        { prompt: string; shortcode?: string }
+      >("/api/emojis", {
+        prompt: normalizedPrompt,
+        ...(normalizedShortcode ? { shortcode: normalizedShortcode } : {}),
+      });
 
       primeCustomEmojiCache([response.item]);
-      setGeneratedEmojis((current) => dedupeCreatedEmojis([response.item, ...current]));
+      setGeneratedEmojis((current) =>
+        dedupeCreatedEmojis([response.item, ...current]),
+      );
       setPrompt("");
       setShortcode("");
-      setGenerateSuccess(`Added :${response.item.shortcode}: to your creations.`);
+      setGenerateSuccess(
+        `Added :${response.item.shortcode}: to your creations.`,
+      );
     } catch (error) {
-      setGenerateError(getErrorMessage(error, "Could not start emoji generation right now."));
+      setGenerateError(
+        getErrorMessage(error, "Could not start emoji generation right now."),
+      );
     } finally {
       setIsGenerating(false);
     }
@@ -644,7 +743,12 @@ export default function EmojiPicker({
   return (
     <>
       {!externalMarkerRef ? (
-        <span ref={internalMarkerRef} aria-hidden="true" className="absolute" style={{ pointerEvents: "none" }} />
+        <span
+          ref={internalMarkerRef}
+          aria-hidden="true"
+          className="absolute"
+          style={{ pointerEvents: "none" }}
+        />
       ) : null}
       {createPortal(
         <>
@@ -662,510 +766,580 @@ export default function EmojiPicker({
               open
               className={cn(
                 "picker-panel fixed z-[1051] m-0 flex w-[min(440px,calc(100vw-24px))] flex-col overflow-hidden rounded-[26px] border p-0 shadow-[0_8px_30px_rgba(0,0,0,0.12)] outline-none dark:shadow-[0_22px_80px_rgba(0,0,0,0.55)] transition-all duration-150 ease-out",
-                !isClosing ? "animate-in fade-in zoom-in-95 max-sm:slide-in-from-bottom max-sm:zoom-in-100 opacity-100" : "opacity-0 scale-95 max-sm:translate-y-8",
+                !isClosing
+                  ? "animate-in fade-in zoom-in-95 max-sm:slide-in-from-bottom max-sm:zoom-in-100 opacity-100"
+                  : "opacity-0 scale-95 max-sm:translate-y-8",
                 placementClasses,
               )}
               style={dynamicStyle}
               aria-label="Emoji picker"
             >
               <div className="picker-header border-b px-4 pb-3 pt-4">
-            {activeView === "emoji" ? (
-              <>
-                <div className="flex items-center gap-2">
-                  <div className="relative min-w-0 flex-1">
-                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-rm-text-muted" />
-                    <input
-                      ref={searchInputRef}
-                      id={searchInputId}
-                      type="text"
-                      value={search}
-                      onChange={(event) => {
-                        setSearch(event.target.value);
-                        setShowSkinToneMenu(false);
-                      }}
-                      placeholder="Search emoji and your creations"
-                      aria-label="Search emoji and your creations"
-                      className="picker-search-input h-11 w-full rounded-2xl border pl-10 pr-4 text-[14px] outline-none transition placeholder:text-rm-text-muted focus:border-primary/60"
-                    />
-                  </div>
+                {activeView === "emoji" ? (
+                  <>
+                    <div className="flex items-center gap-2">
+                      <div className="relative min-w-0 flex-1">
+                        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-rm-text-muted" />
+                        <input
+                          ref={searchInputRef}
+                          id={searchInputId}
+                          type="text"
+                          value={search}
+                          onChange={(event) => {
+                            setSearch(event.target.value);
+                            setShowSkinToneMenu(false);
+                          }}
+                          placeholder="Search emoji and your creations"
+                          aria-label="Search emoji and your creations"
+                          className="picker-search-input h-11 w-full rounded-2xl border pl-10 pr-4 text-[14px] outline-none transition placeholder:text-rm-text-muted focus:border-primary/60"
+                        />
+                      </div>
 
-                  <div className="relative">
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <button
-                          type="button"
-                          onClick={() => setShowSkinToneMenu((current) => !current)}
-                          className="flex h-11 w-11 items-center justify-center rounded-2xl border border-rm-border bg-rm-bg-hover transition hover:bg-rm-bg-active"
-                          aria-label="Choose emoji skin tone"
-                        >
-                          {clapPreviewEmoji ? (
-                            <ReadyEmojiPreview
-                              alt="Choose emoji skin tone"
-                              imageUrl={clapPreviewEmoji.imageUrl}
-                              native={clapPreviewEmoji.native}
-                              className="h-6 w-6"
-                            />
-                          ) : (
-                            <span className="text-xl">👏</span>
-                          )}
-                        </button>
-                      </TooltipTrigger>
-                      <TooltipContent side="bottom" sideOffset={8} className="bg-rm-bg-floating text-rm-text border border-rm-border shadow-xl text-xs font-semibold px-3 py-1.5">
-                        Skin tone
-                      </TooltipContent>
-                    </Tooltip>
-
-                    {showSkinToneMenu ? (
-                      <div className="picker-panel absolute right-0 top-[calc(100%+8px)] z-10 w-52 rounded-2xl border backdrop-blur-2xl p-2 shadow-2xl">
-                        {NATIVE_EMOJI_SKIN_TONE_OPTIONS.map((option) => {
-                          const optionClapEmoji = resolveNativeEmojiShortcode("clap", option.tone) ?? clapPreviewEmoji;
-                          const isActive = selectedSkinTone === option.tone;
-
-                          return (
+                      <div className="relative">
+                        <Tooltip>
+                          <TooltipTrigger asChild>
                             <button
-                              key={option.tone}
                               type="button"
-                              onClick={() => {
-                                persistSkinTone(option.tone);
-                                setShowSkinToneMenu(false);
-                              }}
-                              className={cn(
-                                "flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left transition-colors",
-                                isActive ? "bg-primary/15 text-primary font-bold" : "text-rm-text hover:bg-rm-bg-hover",
-                              )}
+                              onClick={() =>
+                                setShowSkinToneMenu((current) => !current)
+                              }
+                              className="flex h-11 w-11 items-center justify-center rounded-2xl border border-rm-border bg-rm-bg-hover transition hover:bg-rm-bg-active"
+                              aria-label="Choose emoji skin tone"
                             >
-                              {optionClapEmoji ? (
+                              {clapPreviewEmoji ? (
                                 <ReadyEmojiPreview
-                                  alt={option.label}
-                                  imageUrl={optionClapEmoji.imageUrl}
-                                  native={optionClapEmoji.native}
-                                  className="h-5 w-5"
+                                  alt="Choose emoji skin tone"
+                                  imageUrl={clapPreviewEmoji.imageUrl}
+                                  native={clapPreviewEmoji.native}
+                                  className="h-6 w-6"
                                 />
                               ) : (
-                                <span className="text-base">👏</span>
+                                <span className="text-xl">👏</span>
                               )}
-                              <span className="text-sm font-semibold">{option.label}</span>
                             </button>
-                          );
-                        })}
+                          </TooltipTrigger>
+                          <TooltipContent
+                            side="bottom"
+                            sideOffset={8}
+                            className="bg-rm-bg-floating text-rm-text border border-rm-border shadow-xl text-xs font-semibold px-3 py-1.5"
+                          >
+                            Skin tone
+                          </TooltipContent>
+                        </Tooltip>
+
+                        {showSkinToneMenu ? (
+                          <div className="picker-panel absolute right-0 top-[calc(100%+8px)] z-10 w-52 rounded-2xl border backdrop-blur-2xl p-2 shadow-2xl">
+                            {NATIVE_EMOJI_SKIN_TONE_OPTIONS.map((option) => {
+                              const optionClapEmoji =
+                                resolveNativeEmojiShortcode(
+                                  "clap",
+                                  option.tone,
+                                ) ?? clapPreviewEmoji;
+                              const isActive = selectedSkinTone === option.tone;
+
+                              return (
+                                <button
+                                  key={option.tone}
+                                  type="button"
+                                  onClick={() => {
+                                    persistSkinTone(option.tone);
+                                    setShowSkinToneMenu(false);
+                                  }}
+                                  className={cn(
+                                    "flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left transition-colors",
+                                    isActive
+                                      ? "bg-primary/15 text-primary font-bold"
+                                      : "text-rm-text hover:bg-rm-bg-hover",
+                                  )}
+                                >
+                                  {optionClapEmoji ? (
+                                    <ReadyEmojiPreview
+                                      alt={option.label}
+                                      imageUrl={optionClapEmoji.imageUrl}
+                                      native={optionClapEmoji.native}
+                                      className="h-5 w-5"
+                                    />
+                                  ) : (
+                                    <span className="text-base">👏</span>
+                                  )}
+                                  <span className="text-sm font-semibold">
+                                    {option.label}
+                                  </span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        ) : null}
                       </div>
-                    ) : null}
-                  </div>
 
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setActiveView("compose");
-                          setGenerateError(null);
-                          setGenerateSuccess(null);
-                          setShowSkinToneMenu(false);
-                        }}
-                        className="inline-flex h-11 items-center gap-2 rounded-2xl border border-rm-border bg-primary/20 px-3 text-sm font-black text-rm-text shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] transition-transform hover:scale-[1.01] active:scale-[0.99]"
-                      >
-                        <WandSparkles className="h-4 w-4" />
-                        <span className="hidden sm:inline">Create</span>
-                      </button>
-                    </TooltipTrigger>
-                    <TooltipContent side="bottom" sideOffset={8} className="bg-rm-bg-floating text-rm-text border border-rm-border shadow-xl text-xs font-semibold px-3 py-1.5">
-                      Generate your own emoji
-                    </TooltipContent>
-                  </Tooltip>
-                </div>
-
-                {hasPendingGeneratedEmojis ? (
-                  <div className="mt-3 flex items-center gap-2 rounded-2xl border border-amber-400/15 bg-amber-400/8 px-3 py-2 text-[11px] font-semibold text-amber-800 dark:text-amber-100">
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    Your creations are still generating. This list refreshes automatically.
-                  </div>
-                ) : null}
-              </>
-            ) : (
-              <>
-                <div className="flex items-center justify-between gap-3">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setActiveView("emoji");
-                      setGenerateError(null);
-                      setGenerateSuccess(null);
-                    }}
-                    className="inline-flex h-10 items-center gap-2 rounded-2xl border border-rm-border bg-rm-bg-hover px-3 text-sm font-semibold text-rm-text transition-colors hover:bg-rm-bg-active"
-                  >
-                    <ChevronLeft className="h-4 w-4" />
-                    Back
-                  </button>
-                  <div className="text-right">
-                    <div className="text-[12px] font-black uppercase tracking-[0.14em] text-rm-text">
-                      AI Emoji Composer
-                    </div>
-                    <div className="text-[11px] text-rm-text-muted">
-                      Build custom emoji for your server vibe
-                    </div>
-                  </div>
-                </div>
-                <div className="mt-4 space-y-3 rounded-[24px] border border-rm-border bg-rm-bg-surface/30 p-4">
-                  <div>
-                    <label htmlFor={promptInputId} className="mb-2 block text-[12px] font-black uppercase tracking-[0.12em] text-rm-text">
-                      Prompt
-                    </label>
-                    <textarea
-                      id={promptInputId}
-                      aria-label="Prompt"
-                      value={prompt}
-                      onChange={(event) => {
-                        setPrompt(event.target.value.slice(0, MAX_AI_EMOJI_PROMPT_LENGTH));
-                        setGenerateError(null);
-                        setGenerateSuccess(null);
-                      }}
-                      rows={3}
-                      placeholder="Cyber raccoon smirking with pixel sunglasses"
-                      className="picker-search-input w-full resize-none rounded-2xl border px-4 py-3 text-[14px] outline-none transition placeholder:text-rm-text-muted focus:border-primary/60"
-                    />
-                    <div className="mt-1 text-right text-[11px] text-rm-text-muted">
-                      {prompt.trim().length} / {MAX_AI_EMOJI_PROMPT_LENGTH}
-                    </div>
-                  </div>
-                  <div>
-                    <label htmlFor={shortcodeInputId} className="mb-2 block text-[12px] font-black uppercase tracking-[0.12em] text-rm-text">
-                      Shortcode
-                    </label>
-                    <input
-                      id={shortcodeInputId}
-                      type="text"
-                      aria-label="Shortcode"
-                      value={shortcode}
-                      onChange={(event) => {
-                        setShortcode(event.target.value);
-                        setGenerateError(null);
-                        setGenerateSuccess(null);
-                      }}
-                      placeholder="Optional. We can generate one for you."
-                      className="picker-search-input h-11 w-full rounded-2xl border px-4 text-[14px] outline-none transition placeholder:text-rm-text-muted focus:border-primary/60"
-                    />
-                  </div>
-                  {generateError ? (
-                    <div className="rounded-2xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-sm text-red-800 dark:text-red-200">
-                      {generateError}
-                    </div>
-                  ) : null}
-                  {generateSuccess ? (
-                    <div className="rounded-2xl border border-emerald-400/20 bg-emerald-400/10 px-3 py-2 text-sm text-emerald-800 dark:text-emerald-200">
-                      {generateSuccess}
-                    </div>
-                  ) : null}
-                  <button
-                    type="button"
-                    onClick={() => void handleGenerate()}
-                    disabled={!prompt.trim() || isGenerating}
-                    className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-2xl bg-primary text-sm font-black text-white hover:opacity-90 active:scale-95 transition-all disabled:cursor-not-allowed disabled:opacity-55"
-                  >
-                    {isGenerating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-                    {isGenerating ? "Starting generation..." : "Generate emoji"}
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
-
-          <div className="min-h-0 flex-1">
-            {activeView === "emoji" ? (
-              <div className="flex h-[min(560px,70vh)] min-h-[420px]">
-                <aside className="flex w-[68px] shrink-0 flex-col border-r border-rm-border bg-rm-bg-surface/30 px-2 py-3">
-                  <div className="no-scrollbar flex min-h-0 flex-col gap-2 overflow-y-auto overflow-x-hidden pr-1">
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <button
-                          type="button"
-                          onClick={() => jumpToSection(CUSTOM_SECTION_ID)}
-                          className={cn(
-                            "flex h-11 w-11 items-center justify-center self-center rounded-2xl border shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] transition-all",
-                            activeCategory === CUSTOM_SECTION_ID
-                              ? "border-rm-border bg-primary/20"
-                              : "border-rm-border bg-rm-bg-hover hover:bg-rm-bg-active",
-                          )}
-                        >
-                          {customCategoryPreview?.image_url ? (
-                            <ReadyEmojiPreview
-                              alt="Your creations"
-                              imageUrl={customCategoryPreview.image_url}
-                              className="h-6 w-6"
-                            />
-                          ) : (
-                            <Sparkles className="h-5 w-5 text-primary" />
-                          )}
-                        </button>
-                      </TooltipTrigger>
-                      <TooltipContent side="right" sideOffset={10} className="bg-rm-bg-floating text-rm-text border border-rm-border shadow-xl text-xs font-semibold px-3 py-1.5">
-                        Your creations
-                      </TooltipContent>
-                    </Tooltip>
-
-                    <div className="mx-auto my-1 h-px w-8 bg-rm-border" />
-
-                    {nativeCategories.map((category) => (
-                      <Tooltip key={category.id}>
+                      <Tooltip>
                         <TooltipTrigger asChild>
                           <button
                             type="button"
-                            onClick={() => jumpToSection(category.id)}
-                            className={cn(
-                              "flex h-11 w-11 items-center justify-center self-center rounded-2xl border transition-colors",
-                              activeCategory === category.id
-                                ? "border-rm-border bg-rm-bg-active"
-                                : "border-transparent bg-transparent hover:bg-rm-bg-hover",
-                            )}
+                            onClick={() => {
+                              setActiveView("compose");
+                              setGenerateError(null);
+                              setGenerateSuccess(null);
+                              setShowSkinToneMenu(false);
+                            }}
+                            className="inline-flex h-11 items-center gap-2 rounded-2xl border border-rm-border bg-primary/20 px-3 text-sm font-black text-rm-text shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] transition-transform hover:scale-[1.01] active:scale-[0.99]"
                           >
-                            <ReadyEmojiPreview
-                              alt={category.label}
-                              imageUrl={category.iconImageUrl}
-                              native={category.iconNative}
-                              className="h-5 w-5 grayscale opacity-75"
-                            />
+                            <WandSparkles className="h-4 w-4" />
+                            <span className="hidden sm:inline">Create</span>
                           </button>
                         </TooltipTrigger>
-                        <TooltipContent side="right" sideOffset={10} className="bg-rm-bg-floating text-rm-text border border-rm-border shadow-xl text-xs font-semibold px-3 py-1.5">
-                          {category.label}
+                        <TooltipContent
+                          side="bottom"
+                          sideOffset={8}
+                          className="bg-rm-bg-floating text-rm-text border border-rm-border shadow-xl text-xs font-semibold px-3 py-1.5"
+                        >
+                          Generate your own emoji
                         </TooltipContent>
                       </Tooltip>
-                    ))}
-                  </div>
-                </aside>
+                    </div>
 
-                <div
-                  ref={contentRef}
-                  onScroll={handleEmojiListScroll}
-                  className="custom-scrollbar min-h-0 flex-1 overflow-y-auto px-4 py-4"
-                >
-                  {deferredSearch ? (
-                    <div className="space-y-5">
-                      <div className="rounded-2xl border border-rm-border bg-rm-bg-surface/30 px-4 py-3">
-                        <div className="text-[12px] font-black uppercase tracking-[0.12em] text-rm-text">
-                          Search Results
+                    {hasPendingGeneratedEmojis ? (
+                      <div className="mt-3 flex items-center gap-2 rounded-2xl border border-amber-400/15 bg-amber-400/8 px-3 py-2 text-[11px] font-semibold text-amber-800 dark:text-amber-100">
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        Your creations are still generating. This list refreshes
+                        automatically.
+                      </div>
+                    ) : null}
+                  </>
+                ) : (
+                  <>
+                    <div className="flex items-center justify-between gap-3">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setActiveView("emoji");
+                          setGenerateError(null);
+                          setGenerateSuccess(null);
+                        }}
+                        className="inline-flex h-10 items-center gap-2 rounded-2xl border border-rm-border bg-rm-bg-hover px-3 text-sm font-semibold text-rm-text transition-colors hover:bg-rm-bg-active"
+                      >
+                        <ChevronLeft className="h-4 w-4" />
+                        Back
+                      </button>
+                      <div className="text-right">
+                        <div className="text-[12px] font-black uppercase tracking-[0.14em] text-rm-text">
+                          AI Emoji Composer
                         </div>
-                        <div className="mt-1 text-sm text-rm-text-muted">
-                          {customSearchResults.length + nativeSearchResults.length} matches for "{deferredSearch}"
+                        <div className="text-[11px] text-rm-text-muted">
+                          Build custom emoji for your server vibe
                         </div>
                       </div>
-
-                      {customSearchResults.length > 0 ? (
-                        <section>
-                          <SectionHeader
-                            icon={<Sparkles className="h-4 w-4 text-primary" />}
-                            title="Your Creations"
-                            count={customSearchResults.length}
-                            isCollapsed={false}
-                            onToggle={() => undefined}
-                            accentClassName="bg-primary/20"
-                          />
-                          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                            {customSearchResults.map((emoji) => (
-                              <CustomEmojiCard
-                                key={emoji.id}
-                                emoji={emoji}
-                                onSelect={handleCustomSelect}
-                              />
-                            ))}
-                          </div>
-                        </section>
-                      ) : null}
-
-                      {nativeSearchResults.length > 0 ? (
-                        <section>
-                          <SectionHeader
-                            icon={<Search className="h-4 w-4 text-rm-text" />}
-                            title="Emoji"
-                            count={nativeSearchResults.length}
-                            isCollapsed={false}
-                            onToggle={() => undefined}
-                          />
-                          <div className="grid grid-cols-6 gap-1.5 sm:grid-cols-7">
-                            {nativeSearchResults.map((emoji) => (
-                              <NativeEmojiButton
-                                key={`${emoji.id}-${emoji.unified}`}
-                                emoji={emoji}
-                                onSelect={handleNativeSelect}
-                              />
-                            ))}
-                          </div>
-                        </section>
-                      ) : null}
-
-                      {customSearchResults.length === 0 && nativeSearchResults.length === 0 ? (
-                        <div className="rounded-[24px] border border-dashed border-rm-border bg-rm-bg-surface/10 px-5 py-10 text-center text-sm text-rm-text-muted">
-                          No emoji matched "{deferredSearch}".
+                    </div>
+                    <div className="mt-4 space-y-3 rounded-[24px] border border-rm-border bg-rm-bg-surface/30 p-4">
+                      <div>
+                        <label
+                          htmlFor={promptInputId}
+                          className="mb-2 block text-[12px] font-black uppercase tracking-[0.12em] text-rm-text"
+                        >
+                          Prompt
+                        </label>
+                        <textarea
+                          id={promptInputId}
+                          aria-label="Prompt"
+                          value={prompt}
+                          onChange={(event) => {
+                            setPrompt(
+                              event.target.value.slice(
+                                0,
+                                MAX_AI_EMOJI_PROMPT_LENGTH,
+                              ),
+                            );
+                            setGenerateError(null);
+                            setGenerateSuccess(null);
+                          }}
+                          rows={3}
+                          placeholder="Cyber raccoon smirking with pixel sunglasses"
+                          className="picker-search-input w-full resize-none rounded-2xl border px-4 py-3 text-[14px] outline-none transition placeholder:text-rm-text-muted focus:border-primary/60"
+                        />
+                        <div className="mt-1 text-right text-[11px] text-rm-text-muted">
+                          {prompt.trim().length} / {MAX_AI_EMOJI_PROMPT_LENGTH}
+                        </div>
+                      </div>
+                      <div>
+                        <label
+                          htmlFor={shortcodeInputId}
+                          className="mb-2 block text-[12px] font-black uppercase tracking-[0.12em] text-rm-text"
+                        >
+                          Shortcode
+                        </label>
+                        <input
+                          id={shortcodeInputId}
+                          type="text"
+                          aria-label="Shortcode"
+                          value={shortcode}
+                          onChange={(event) => {
+                            setShortcode(event.target.value);
+                            setGenerateError(null);
+                            setGenerateSuccess(null);
+                          }}
+                          placeholder="Optional. We can generate one for you."
+                          className="picker-search-input h-11 w-full rounded-2xl border px-4 text-[14px] outline-none transition placeholder:text-rm-text-muted focus:border-primary/60"
+                        />
+                      </div>
+                      {generateError ? (
+                        <div className="rounded-2xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-sm text-red-800 dark:text-red-200">
+                          {generateError}
                         </div>
                       ) : null}
+                      {generateSuccess ? (
+                        <div className="rounded-2xl border border-emerald-400/20 bg-emerald-400/10 px-3 py-2 text-sm text-emerald-800 dark:text-emerald-200">
+                          {generateSuccess}
+                        </div>
+                      ) : null}
+                      <button
+                        type="button"
+                        onClick={() => void handleGenerate()}
+                        disabled={!prompt.trim() || isGenerating}
+                        className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-2xl bg-primary text-sm font-black text-white hover:opacity-90 active:scale-95 transition-all disabled:cursor-not-allowed disabled:opacity-55"
+                      >
+                        {isGenerating ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Sparkles className="h-4 w-4" />
+                        )}
+                        {isGenerating
+                          ? "Starting generation..."
+                          : "Generate emoji"}
+                      </button>
                     </div>
-                  ) : (
-                    <div className="space-y-5">
-                      <section ref={setSectionRef(RECENTS_SECTION_ID)}>
-                        <SectionHeader
-                          icon={<Clock3 className="h-4 w-4 text-rm-text" />}
-                          title="Recently Used"
-                          count={recents.length}
-                          isCollapsed={collapsedCategories[RECENTS_SECTION_ID] ?? false}
-                          onToggle={() => toggleSection(RECENTS_SECTION_ID)}
-                        />
-                        {!(collapsedCategories[RECENTS_SECTION_ID] ?? false) ? (
-                          recentRenderableItems.length > 0 ? (
-                            <div className="grid grid-cols-6 gap-1.5 sm:grid-cols-7">
-                              {recentRenderableItems.map((item) => item.type === "native" ? (
-                                <NativeEmojiButton
-                                  key={item.key}
-                                  emoji={item.emoji}
-                                  onSelect={handleNativeSelect}
+                  </>
+                )}
+              </div>
+
+              <div className="min-h-0 flex-1">
+                {activeView === "emoji" ? (
+                  <div className="flex h-[min(560px,70vh)] min-h-[420px]">
+                    <aside className="flex w-[68px] shrink-0 flex-col border-r border-rm-border bg-rm-bg-surface/30 px-2 py-3">
+                      <div className="no-scrollbar flex min-h-0 flex-col gap-2 overflow-y-auto overflow-x-hidden pr-1">
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <button
+                              type="button"
+                              onClick={() => jumpToSection(CUSTOM_SECTION_ID)}
+                              className={cn(
+                                "flex h-11 w-11 items-center justify-center self-center rounded-2xl border shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] transition-all",
+                                activeCategory === CUSTOM_SECTION_ID
+                                  ? "border-rm-border bg-primary/20"
+                                  : "border-rm-border bg-rm-bg-hover hover:bg-rm-bg-active",
+                              )}
+                            >
+                              {customCategoryPreview?.image_url ? (
+                                <ReadyEmojiPreview
+                                  alt="Your creations"
+                                  imageUrl={customCategoryPreview.image_url}
+                                  className="h-6 w-6"
                                 />
                               ) : (
-                                <CustomEmojiCard
-                                  key={item.key}
-                                  emoji={item.emoji}
-                                  onSelect={handleCustomSelect}
-                                />
-                              ))}
-                            </div>
-                          ) : (
-                            <div className="rounded-2xl border border-dashed border-rm-border bg-rm-bg-surface/10 px-4 py-5 text-sm text-rm-text-muted">
-                              Your recently used emoji will show up here.
-                            </div>
-                          )
-                        ) : null}
-                      </section>
-
-                      <section ref={setSectionRef(CUSTOM_SECTION_ID)}>
-                        <SectionHeader
-                          icon={
-                            customCategoryPreview?.image_url ? (
-                              <ReadyEmojiPreview
-                                alt="Your creations"
-                                imageUrl={customCategoryPreview.image_url}
-                                className="h-5 w-5"
-                              />
-                            ) : (
-                              <Sparkles className="h-4 w-4 text-primary" />
-                            )
-                          }
-                          title="Your Creations"
-                          count={generatedEmojis.length}
-                          isCollapsed={collapsedCategories[CUSTOM_SECTION_ID] ?? false}
-                          onToggle={() => toggleSection(CUSTOM_SECTION_ID)}
-                          accentClassName="bg-primary/20"
-                        />
-                        {!(collapsedCategories[CUSTOM_SECTION_ID] ?? false) ? (
-                          loadingGeneratedEmojis ? (
-                            <div className="rounded-2xl border border-rm-border bg-rm-bg-surface/10 px-4 py-5 text-sm text-rm-text-muted">
-                              Loading your creations...
-                            </div>
-                          ) : generatedEmojiError ? (
-                            <div className="rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-800 dark:text-red-200">
-                              {generatedEmojiError}
-                            </div>
-                          ) : generatedEmojis.length > 0 ? (
-                            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                              {generatedEmojis.map((emoji) => (
-                                <CustomEmojiCard
-                                  key={emoji.id}
-                                  emoji={emoji}
-                                  onSelect={handleCustomSelect}
-                                />
-                              ))}
-                            </div>
-                          ) : (
-                            <div className="rounded-[24px] border border-dashed border-rm-border bg-rm-bg-surface/10 px-5 py-10 text-center">
-                              <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/20">
                                 <Sparkles className="h-5 w-5 text-primary" />
-                              </div>
-                              <div className="text-sm font-semibold text-rm-text">
-                                No custom emoji yet
-                              </div>
-                              <div className="mt-1 text-sm text-rm-text-muted">
-                                Use the composer button above to generate your first one.
-                              </div>
-                            </div>
-                          )
-                        ) : null}
-                      </section>
+                              )}
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent
+                            side="right"
+                            sideOffset={10}
+                            className="bg-rm-bg-floating text-rm-text border border-rm-border shadow-xl text-xs font-semibold px-3 py-1.5"
+                          >
+                            Your creations
+                          </TooltipContent>
+                        </Tooltip>
 
-                      {nativeCategories.map((category) => (
-                        <section
-                          key={category.id}
-                          ref={setSectionRef(category.id)}
-                          style={{ contentVisibility: "auto", containIntrinsicSize: "280px" }}
-                        >
-                          <SectionHeader
-                            icon={
-                              <ReadyEmojiPreview
-                                alt={category.label}
-                                imageUrl={category.iconImageUrl}
-                                native={category.iconNative}
-                                className="h-5 w-5"
-                              />
-                            }
-                            title={category.label}
-                            count={category.emojis.length}
-                            isCollapsed={collapsedCategories[category.id] ?? false}
-                            onToggle={() => toggleSection(category.id)}
-                          />
-                          {!(collapsedCategories[category.id] ?? false) ? (
-                            <div className="grid grid-cols-6 gap-1.5 sm:grid-cols-7">
-                              {category.emojis.map((emoji) => (
-                                <NativeEmojiButton
-                                  key={`${category.id}-${emoji.id}-${emoji.unified}`}
-                                  emoji={emoji}
-                                  onSelect={handleNativeSelect}
+                        <div className="mx-auto my-1 h-px w-8 bg-rm-border" />
+
+                        {nativeCategories.map((category) => (
+                          <Tooltip key={category.id}>
+                            <TooltipTrigger asChild>
+                              <button
+                                type="button"
+                                onClick={() => jumpToSection(category.id)}
+                                className={cn(
+                                  "flex h-11 w-11 items-center justify-center self-center rounded-2xl border transition-colors",
+                                  activeCategory === category.id
+                                    ? "border-rm-border bg-rm-bg-active"
+                                    : "border-transparent bg-transparent hover:bg-rm-bg-hover",
+                                )}
+                              >
+                                <ReadyEmojiPreview
+                                  alt={category.label}
+                                  imageUrl={category.iconImageUrl}
+                                  native={category.iconNative}
+                                  className="h-5 w-5 grayscale opacity-75"
                                 />
-                              ))}
+                              </button>
+                            </TooltipTrigger>
+                            <TooltipContent
+                              side="right"
+                              sideOffset={10}
+                              className="bg-rm-bg-floating text-rm-text border border-rm-border shadow-xl text-xs font-semibold px-3 py-1.5"
+                            >
+                              {category.label}
+                            </TooltipContent>
+                          </Tooltip>
+                        ))}
+                      </div>
+                    </aside>
+
+                    <div
+                      ref={contentRef}
+                      onScroll={handleEmojiListScroll}
+                      className="custom-scrollbar min-h-0 flex-1 overflow-y-auto px-4 py-4"
+                    >
+                      {deferredSearch ? (
+                        <div className="space-y-5">
+                          <div className="rounded-2xl border border-rm-border bg-rm-bg-surface/30 px-4 py-3">
+                            <div className="text-[12px] font-black uppercase tracking-[0.12em] text-rm-text">
+                              Search Results
+                            </div>
+                            <div className="mt-1 text-sm text-rm-text-muted">
+                              {customSearchResults.length +
+                                nativeSearchResults.length}{" "}
+                              matches for "{deferredSearch}"
+                            </div>
+                          </div>
+
+                          {customSearchResults.length > 0 ? (
+                            <section>
+                              <SectionHeader
+                                icon={
+                                  <Sparkles className="h-4 w-4 text-primary" />
+                                }
+                                title="Your Creations"
+                                count={customSearchResults.length}
+                                isCollapsed={false}
+                                onToggle={() => undefined}
+                                accentClassName="bg-primary/20"
+                              />
+                              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                                {customSearchResults.map((emoji) => (
+                                  <CustomEmojiCard
+                                    key={emoji.id}
+                                    emoji={emoji}
+                                    onSelect={handleCustomSelect}
+                                  />
+                                ))}
+                              </div>
+                            </section>
+                          ) : null}
+
+                          {nativeSearchResults.length > 0 ? (
+                            <section>
+                              <SectionHeader
+                                icon={
+                                  <Search className="h-4 w-4 text-rm-text" />
+                                }
+                                title="Emoji"
+                                count={nativeSearchResults.length}
+                                isCollapsed={false}
+                                onToggle={() => undefined}
+                              />
+                              <div className="grid grid-cols-6 gap-1.5 sm:grid-cols-7">
+                                {nativeSearchResults.map((emoji) => (
+                                  <NativeEmojiButton
+                                    key={`${emoji.id}-${emoji.unified}`}
+                                    emoji={emoji}
+                                    onSelect={handleNativeSelect}
+                                  />
+                                ))}
+                              </div>
+                            </section>
+                          ) : null}
+
+                          {customSearchResults.length === 0 &&
+                          nativeSearchResults.length === 0 ? (
+                            <div className="rounded-[24px] border border-dashed border-rm-border bg-rm-bg-surface/10 px-5 py-10 text-center text-sm text-rm-text-muted">
+                              No emoji matched "{deferredSearch}".
                             </div>
                           ) : null}
-                        </section>
-                      ))}
+                        </div>
+                      ) : (
+                        <div className="space-y-5">
+                          <section ref={setSectionRef(RECENTS_SECTION_ID)}>
+                            <SectionHeader
+                              icon={<Clock3 className="h-4 w-4 text-rm-text" />}
+                              title="Recently Used"
+                              count={recents.length}
+                              isCollapsed={
+                                collapsedCategories[RECENTS_SECTION_ID] ?? false
+                              }
+                              onToggle={() => toggleSection(RECENTS_SECTION_ID)}
+                            />
+                            {!(
+                              collapsedCategories[RECENTS_SECTION_ID] ?? false
+                            ) ? (
+                              recentRenderableItems.length > 0 ? (
+                                <div className="grid grid-cols-6 gap-1.5 sm:grid-cols-7">
+                                  {recentRenderableItems.map((item) =>
+                                    item.type === "native" ? (
+                                      <NativeEmojiButton
+                                        key={item.key}
+                                        emoji={item.emoji}
+                                        onSelect={handleNativeSelect}
+                                      />
+                                    ) : (
+                                      <CustomEmojiCard
+                                        key={item.key}
+                                        emoji={item.emoji}
+                                        onSelect={handleCustomSelect}
+                                      />
+                                    ),
+                                  )}
+                                </div>
+                              ) : (
+                                <div className="rounded-2xl border border-dashed border-rm-border bg-rm-bg-surface/10 px-4 py-5 text-sm text-rm-text-muted">
+                                  Your recently used emoji will show up here.
+                                </div>
+                              )
+                            ) : null}
+                          </section>
+
+                          <section ref={setSectionRef(CUSTOM_SECTION_ID)}>
+                            <SectionHeader
+                              icon={
+                                customCategoryPreview?.image_url ? (
+                                  <ReadyEmojiPreview
+                                    alt="Your creations"
+                                    imageUrl={customCategoryPreview.image_url}
+                                    className="h-5 w-5"
+                                  />
+                                ) : (
+                                  <Sparkles className="h-4 w-4 text-primary" />
+                                )
+                              }
+                              title="Your Creations"
+                              count={generatedEmojis.length}
+                              isCollapsed={
+                                collapsedCategories[CUSTOM_SECTION_ID] ?? false
+                              }
+                              onToggle={() => toggleSection(CUSTOM_SECTION_ID)}
+                              accentClassName="bg-primary/20"
+                            />
+                            {!(
+                              collapsedCategories[CUSTOM_SECTION_ID] ?? false
+                            ) ? (
+                              loadingGeneratedEmojis ? (
+                                <div className="rounded-2xl border border-rm-border bg-rm-bg-surface/10 px-4 py-5 text-sm text-rm-text-muted">
+                                  Loading your creations...
+                                </div>
+                              ) : generatedEmojiError ? (
+                                <div className="rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-800 dark:text-red-200">
+                                  {generatedEmojiError}
+                                </div>
+                              ) : generatedEmojis.length > 0 ? (
+                                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                                  {generatedEmojis.map((emoji) => (
+                                    <CustomEmojiCard
+                                      key={emoji.id}
+                                      emoji={emoji}
+                                      onSelect={handleCustomSelect}
+                                    />
+                                  ))}
+                                </div>
+                              ) : (
+                                <div className="rounded-[24px] border border-dashed border-rm-border bg-rm-bg-surface/10 px-5 py-10 text-center">
+                                  <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/20">
+                                    <Sparkles className="h-5 w-5 text-primary" />
+                                  </div>
+                                  <div className="text-sm font-semibold text-rm-text">
+                                    No custom emoji yet
+                                  </div>
+                                  <div className="mt-1 text-sm text-rm-text-muted">
+                                    Use the composer button above to generate
+                                    your first one.
+                                  </div>
+                                </div>
+                              )
+                            ) : null}
+                          </section>
+
+                          {nativeCategories.map((category) => (
+                            <section
+                              key={category.id}
+                              ref={setSectionRef(category.id)}
+                              style={{
+                                contentVisibility: "auto",
+                                containIntrinsicSize: "280px",
+                              }}
+                            >
+                              <SectionHeader
+                                icon={
+                                  <ReadyEmojiPreview
+                                    alt={category.label}
+                                    imageUrl={category.iconImageUrl}
+                                    native={category.iconNative}
+                                    className="h-5 w-5"
+                                  />
+                                }
+                                title={category.label}
+                                count={category.emojis.length}
+                                isCollapsed={
+                                  collapsedCategories[category.id] ?? false
+                                }
+                                onToggle={() => toggleSection(category.id)}
+                              />
+                              {!(collapsedCategories[category.id] ?? false) ? (
+                                <div className="grid grid-cols-6 gap-1.5 sm:grid-cols-7">
+                                  {category.emojis.map((emoji) => (
+                                    <NativeEmojiButton
+                                      key={`${category.id}-${emoji.id}-${emoji.unified}`}
+                                      emoji={emoji}
+                                      onSelect={handleNativeSelect}
+                                    />
+                                  ))}
+                                </div>
+                              ) : null}
+                            </section>
+                          ))}
+                        </div>
+                      )}
                     </div>
-                  )}
-                </div>
+                  </div>
+                ) : (
+                  <div className="custom-scrollbar h-[min(560px,70vh)] min-h-[420px] overflow-y-auto px-4 py-4">
+                    <section>
+                      <SectionHeader
+                        icon={<Sparkles className="h-4 w-4 text-primary" />}
+                        title="Your Creations"
+                        count={generatedEmojis.length}
+                        isCollapsed={false}
+                        onToggle={() => undefined}
+                        accentClassName="bg-primary/20"
+                      />
+                      {loadingGeneratedEmojis ? (
+                        <div className="rounded-2xl border border-rm-border bg-rm-bg-surface/10 px-4 py-5 text-sm text-rm-text-muted">
+                          Loading your creations...
+                        </div>
+                      ) : generatedEmojiError ? (
+                        <div className="rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-800 dark:text-red-200">
+                          {generatedEmojiError}
+                        </div>
+                      ) : generatedEmojis.length > 0 ? (
+                        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                          {generatedEmojis.map((emoji) => (
+                            <CustomEmojiCard
+                              key={emoji.id}
+                              emoji={emoji}
+                              onSelect={handleCustomSelect}
+                            />
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="rounded-[24px] border border-dashed border-rm-border bg-rm-bg-surface/10 px-5 py-10 text-center text-sm text-rm-text-muted">
+                          Your creations will show up here as soon as you
+                          generate them.
+                        </div>
+                      )}
+                    </section>
+                  </div>
+                )}
               </div>
-            ) : (
-              <div className="custom-scrollbar h-[min(560px,70vh)] min-h-[420px] overflow-y-auto px-4 py-4">
-                <section>
-                  <SectionHeader
-                    icon={<Sparkles className="h-4 w-4 text-primary" />}
-                    title="Your Creations"
-                    count={generatedEmojis.length}
-                    isCollapsed={false}
-                    onToggle={() => undefined}
-                    accentClassName="bg-primary/20"
-                  />
-                  {loadingGeneratedEmojis ? (
-                    <div className="rounded-2xl border border-rm-border bg-rm-bg-surface/10 px-4 py-5 text-sm text-rm-text-muted">
-                      Loading your creations...
-                    </div>
-                  ) : generatedEmojiError ? (
-                    <div className="rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-800 dark:text-red-200">
-                      {generatedEmojiError}
-                    </div>
-                  ) : generatedEmojis.length > 0 ? (
-                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                      {generatedEmojis.map((emoji) => (
-                        <CustomEmojiCard
-                          key={emoji.id}
-                          emoji={emoji}
-                          onSelect={handleCustomSelect}
-                        />
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="rounded-[24px] border border-dashed border-rm-border bg-rm-bg-surface/10 px-5 py-10 text-center text-sm text-rm-text-muted">
-                      Your creations will show up here as soon as you generate them.
-                    </div>
-                  )}
-                </section>
-              </div>
-            )}
-          </div>
             </dialog>
           </TooltipProvider>
         </>,
-        document.body
+        document.body,
       )}
     </>
   );

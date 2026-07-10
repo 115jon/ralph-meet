@@ -1,4 +1,7 @@
-import { DEFAULT_MEDIA_CONTENT_FILTER, type MediaContentFilter } from "@/lib/media-content-filter";
+import {
+  DEFAULT_MEDIA_CONTENT_FILTER,
+  type MediaContentFilter,
+} from "@/lib/media-content-filter";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
@@ -12,8 +15,14 @@ interface MediaSafetySettingsState {
   _cache: Record<string, MediaSafetySettings>;
   setCurrentUser: (userId: string | null) => void;
   getSettings: (userId?: string | null) => MediaSafetySettings;
-  hydrateSettings: (settings: Partial<MediaSafetySettings>, userId?: string | null) => void;
-  updateSettings: (updates: Partial<MediaSafetySettings>, userId?: string) => void;
+  hydrateSettings: (
+    settings: Partial<MediaSafetySettings>,
+    userId?: string | null,
+  ) => void;
+  updateSettings: (
+    updates: Partial<MediaSafetySettings>,
+    userId?: string,
+  ) => void;
 }
 
 const defaultMediaSafetySettings: MediaSafetySettings = {
@@ -38,7 +47,8 @@ export const useMediaSafetySettingsStore = create<MediaSafetySettingsState>()(
         const cached = get()._cache[uid];
         if (
           cached &&
-          cached.contentFilter === (raw.contentFilter ?? defaultMediaSafetySettings.contentFilter)
+          cached.contentFilter ===
+            (raw.contentFilter ?? defaultMediaSafetySettings.contentFilter)
         ) {
           return cached;
         }
@@ -105,6 +115,6 @@ export const useMediaSafetySettingsStore = create<MediaSafetySettingsState>()(
     {
       name: "media-safety-settings-storage",
       version: 1,
-    }
-  )
+    },
+  ),
 );

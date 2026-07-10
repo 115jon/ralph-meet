@@ -23,7 +23,7 @@ export class AudioSentinel {
   private consecutiveZeroDeltas = 0;
   private isStalled = false;
 
-  constructor(private options: AudioSentinelOptions) { }
+  constructor(private options: AudioSentinelOptions) {}
 
   public start() {
     if (this.timer) return;
@@ -34,11 +34,17 @@ export class AudioSentinel {
     const interval = this.options.intervalMs ?? 1000;
     const threshold = this.options.stallThresholdTicks ?? 5;
 
-    log.info(`AudioSentinel started (interval: ${interval}ms, threshold: ${threshold} ticks)`);
+    log.info(
+      `AudioSentinel started (interval: ${interval}ms, threshold: ${threshold} ticks)`,
+    );
 
     this.timer = setInterval(async () => {
       const pc = this.options.pc();
-      if (!pc || pc.iceConnectionState !== "connected" && pc.iceConnectionState !== "completed") {
+      if (
+        !pc ||
+        (pc.iceConnectionState !== "connected" &&
+          pc.iceConnectionState !== "completed")
+      ) {
         // Only monitor when ICE is actively connected. If ICE is disconnected/checking,
         // it's a known network routing issue, not a "ghost drop" of the audio packets.
         this.prevBytesReceived = null;
@@ -56,7 +62,7 @@ export class AudioSentinel {
         stats.forEach((report) => {
           if (report.type === "inbound-rtp" && report.kind === "audio") {
             foundAudio = true;
-            currentBytes += (report.bytesReceived || 0);
+            currentBytes += report.bytesReceived || 0;
             lastJitter = report.jitter || 0;
             lastPacketsLost = report.packetsLost || 0;
           }
@@ -73,21 +79,30 @@ export class AudioSentinel {
           if (delta === 0) {
             this.consecutiveZeroDeltas++;
             if (this.consecutiveZeroDeltas >= threshold && !this.isStalled) {
-              if (this.options.shouldTreatAsStall && !this.options.shouldTreatAsStall()) {
+              if (
+                this.options.shouldTreatAsStall &&
+                !this.options.shouldTreatAsStall()
+              ) {
                 this.consecutiveZeroDeltas = Math.max(0, threshold - 1);
                 return;
               }
               this.isStalled = true;
-              log.error(`Audio stall detected: no inbound bytes for ${this.consecutiveZeroDeltas} ticks. (Bytes: ${currentBytes}, PacketsLost: ${lastPacketsLost}, Jitter: ${lastJitter})`);
+              log.error(
+                `Audio stall detected: no inbound bytes for ${this.consecutiveZeroDeltas} ticks. (Bytes: ${currentBytes}, PacketsLost: ${lastPacketsLost}, Jitter: ${lastJitter})`,
+              );
               this.options.onStall();
             } else if (!this.isStalled) {
               // Log minor stalls for deep debugging
-              log.debug(`Warning: Audio bytes stalled for ${this.consecutiveZeroDeltas} ticks...`);
+              log.debug(
+                `Warning: Audio bytes stalled for ${this.consecutiveZeroDeltas} ticks...`,
+              );
             }
           } else {
             // Audio is flowing
             if (this.isStalled) {
-              log.info(`Audio recovered after ${this.consecutiveZeroDeltas} stalled ticks.`);
+              log.info(
+                `Audio recovered after ${this.consecutiveZeroDeltas} stalled ticks.`,
+              );
               this.isStalled = false;
               this.options.onRecover();
             }

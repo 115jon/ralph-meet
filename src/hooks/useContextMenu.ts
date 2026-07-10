@@ -20,21 +20,24 @@ export function useContextMenu() {
     isOpen: false,
   });
 
-  const openMenu = useCallback((
-    e: React.MouseEvent | MouseEvent,
-    items: ContextMenuItem[],
-    options?: { topContent?: ReactNode },
-  ) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setMenu({
-      x: e.clientX,
-      y: e.clientY,
-      items,
-      topContent: options?.topContent,
-      isOpen: true,
-    });
-  }, []);
+  const openMenu = useCallback(
+    (
+      e: React.MouseEvent | MouseEvent,
+      items: ContextMenuItem[],
+      options?: { topContent?: ReactNode },
+    ) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setMenu({
+        x: e.clientX,
+        y: e.clientY,
+        items,
+        topContent: options?.topContent,
+        isOpen: true,
+      });
+    },
+    [],
+  );
 
   const closeMenu = useCallback(() => {
     setMenu((prev) => ({ ...prev, isOpen: false }));

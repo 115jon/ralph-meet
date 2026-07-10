@@ -11,9 +11,11 @@ const GET = async ({ params }: any) => {
       {
         headers: {
           "Cache-Control": "no-store",
-          "X-Robots-Tag": share.allow_indexing ? "index, follow" : "noindex, nofollow",
+          "X-Robots-Tag": share.allow_indexing
+            ? "index, follow"
+            : "noindex, nofollow",
         },
-      }
+      },
     );
   } catch (error) {
     if (error instanceof ServiceError) {

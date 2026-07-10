@@ -48,8 +48,12 @@ export default function SettingsAccountOverviewTab({
   if (!user) {
     return (
       <div className="animate-in fade-in slide-in-from-right-4 duration-300">
-        <h1 className="mb-2 hidden text-2xl font-bold text-rm-text md:block">Account</h1>
-        <p className="mb-8 text-sm text-rm-text-muted">We are still loading your account details.</p>
+        <h1 className="mb-2 hidden text-2xl font-bold text-rm-text md:block">
+          Account
+        </h1>
+        <p className="mb-8 text-sm text-rm-text-muted">
+          We are still loading your account details.
+        </p>
       </div>
     );
   }
@@ -60,12 +64,16 @@ export default function SettingsAccountOverviewTab({
   });
   const username = chatUser?.username || user.username || "Unknown";
   const email = user.primaryEmailAddress?.emailAddress || "No email on file";
-  const avatarUrl = chatUser?.avatar_url ? getAuthAssetUrl(chatUser.avatar_url) : user.imageUrl;
+  const avatarUrl = chatUser?.avatar_url
+    ? getAuthAssetUrl(chatUser.avatar_url)
+    : user.imageUrl;
   const avatarDisplay = chatUser?.avatar_display ?? null;
 
   return (
     <div className="animate-in fade-in slide-in-from-right-4 duration-300">
-      <h1 className="mb-2 hidden text-2xl font-bold text-rm-text md:block">Account</h1>
+      <h1 className="mb-2 hidden text-2xl font-bold text-rm-text md:block">
+        Account
+      </h1>
       <p className="mb-8 max-w-2xl text-sm text-rm-text-muted">
         Manage your identity, security, and profile appearance from one place.
       </p>
@@ -75,7 +83,11 @@ export default function SettingsAccountOverviewTab({
           <div className="flex min-w-0 items-center gap-4">
             <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-full border border-white/10 bg-rm-bg-elevated">
               {avatarUrl ? (
-                <AvatarImage src={avatarUrl} alt={displayName} display={avatarDisplay} />
+                <AvatarImage
+                  src={avatarUrl}
+                  alt={displayName}
+                  display={avatarDisplay}
+                />
               ) : (
                 <div className="flex h-full w-full items-center justify-center text-xl font-bold text-rm-text">
                   {getDisplayInitial({ name: displayName })}
@@ -83,8 +95,12 @@ export default function SettingsAccountOverviewTab({
               )}
             </div>
             <div className="min-w-0">
-              <div className="truncate text-lg font-bold text-rm-text">{displayName}</div>
-              <div className="truncate text-sm text-rm-text-muted">@{username}</div>
+              <div className="truncate text-lg font-bold text-rm-text">
+                {displayName}
+              </div>
+              <div className="truncate text-sm text-rm-text-muted">
+                @{username}
+              </div>
             </div>
           </div>
           <Button
@@ -99,10 +115,22 @@ export default function SettingsAccountOverviewTab({
 
         <div className="px-5 py-5 md:px-8">
           <div className="border-b border-rm-border/70 pb-4">
-            <h2 className="text-[28px] font-semibold tracking-[-0.04em] text-rm-text">Account info</h2>
+            <h2 className="text-[28px] font-semibold tracking-[-0.04em] text-rm-text">
+              Account info
+            </h2>
           </div>
-          <OverviewRow label="Display name" value={displayName} actionLabel="Edit profile" onAction={onOpenProfileEditor} />
-          <OverviewRow label="Username" value={`@${username}`} actionLabel="Edit profile" onAction={onOpenProfileEditor} />
+          <OverviewRow
+            label="Display name"
+            value={displayName}
+            actionLabel="Edit profile"
+            onAction={onOpenProfileEditor}
+          />
+          <OverviewRow
+            label="Username"
+            value={`@${username}`}
+            actionLabel="Edit profile"
+            onAction={onOpenProfileEditor}
+          />
           <OverviewRow label="Email" value={email} />
           <OverviewRow
             label="Profile appearance"
@@ -119,8 +147,12 @@ export default function SettingsAccountOverviewTab({
                 <CheckCircle2 size={18} />
               </div>
               <div>
-                <h3 className="text-sm font-semibold text-rm-text">Account standing</h3>
-                <p className="text-sm text-rm-text-secondary">Your account is in good shape.</p>
+                <h3 className="text-sm font-semibold text-rm-text">
+                  Account standing
+                </h3>
+                <p className="text-sm text-rm-text-secondary">
+                  Your account is in good shape.
+                </p>
               </div>
             </div>
             <p className="text-sm leading-6 text-rm-text-muted">
@@ -135,11 +167,14 @@ export default function SettingsAccountOverviewTab({
               </div>
               <div>
                 <h3 className="text-sm font-semibold text-rm-text">Security</h3>
-                <p className="text-sm text-rm-text-secondary">Signed in with Ralph Auth.</p>
+                <p className="text-sm text-rm-text-secondary">
+                  Signed in with Ralph Auth.
+                </p>
               </div>
             </div>
             <p className="text-sm leading-6 text-rm-text-muted">
-              Password, sessions, and additional security controls will appear here as we expand account management.
+              Password, sessions, and additional security controls will appear
+              here as we expand account management.
             </p>
           </section>
         </div>

@@ -8,15 +8,25 @@ interface AudioInteractionModalProps {
   isClosing?: boolean;
 }
 
-export function AudioInteractionModal({ onInteract, onClose, isClosing }: AudioInteractionModalProps) {
+export function AudioInteractionModal({
+  onInteract,
+  onClose,
+  isClosing,
+}: AudioInteractionModalProps) {
   return (
     <BaseModal onClose={onClose}>
       <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4">
         {/* Backdrop */}
         <div
-          className={cn("absolute inset-0 bg-black/60 backdrop-blur-sm animate-in fade-in duration-300", isClosing && "animate-out fade-out")}
+          className={cn(
+            "absolute inset-0 bg-black/60 backdrop-blur-sm animate-in fade-in duration-300",
+            isClosing && "animate-out fade-out",
+          )}
           onClick={onClose}
-          onKeyDown={(e) => { if (e.key === "Enter" || e.key === " " || e.key === "Escape") onClose(); }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " " || e.key === "Escape")
+              onClose();
+          }}
           role="presentation"
           aria-hidden="true"
         />
@@ -24,7 +34,10 @@ export function AudioInteractionModal({ onInteract, onClose, isClosing }: AudioI
         {/* Modal */}
         <dialog
           open
-          className={cn("relative z-10 m-0 w-full max-w-sm rounded-2xl border border-rm-border bg-rm-bg-primary p-6 shadow-2xl outline-none animate-in fade-in zoom-in-95 duration-300", isClosing && "animate-out fade-out zoom-out-95")}
+          className={cn(
+            "relative z-10 m-0 w-full max-w-sm rounded-2xl border border-rm-border bg-rm-bg-primary p-6 shadow-2xl outline-none animate-in fade-in zoom-in-95 duration-300",
+            isClosing && "animate-out fade-out zoom-out-95",
+          )}
           aria-labelledby="audio-modal-title"
         >
           <button
@@ -37,9 +50,15 @@ export function AudioInteractionModal({ onInteract, onClose, isClosing }: AudioI
 
           <div className="space-y-4">
             <div className="space-y-2">
-              <h2 id="audio-modal-title" className="text-xl font-bold text-rm-text tracking-tight">Interaction Required</h2>
+              <h2
+                id="audio-modal-title"
+                className="text-xl font-bold text-rm-text tracking-tight"
+              >
+                Interaction Required
+              </h2>
               <p className="text-sm text-rm-text-muted leading-relaxed">
-                Browsers require user interaction before they will play audio. Just click okay to continue.
+                Browsers require user interaction before they will play audio.
+                Just click okay to continue.
               </p>
             </div>
 

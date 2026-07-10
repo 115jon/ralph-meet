@@ -10,11 +10,21 @@ export type VoiceIdentitySource = {
 };
 
 function hasTextIdentity(source: VoiceIdentitySource): boolean {
-  return source.display_name !== undefined || source.username !== undefined || source.name !== undefined;
+  return (
+    source.display_name !== undefined ||
+    source.username !== undefined ||
+    source.name !== undefined
+  );
 }
 
-export function resolveVoiceIdentity(...sources: Array<VoiceIdentitySource | null | undefined>) {
-  const textSource = sources.find((source): source is VoiceIdentitySource => !!source && hasTextIdentity(source)) ?? {};
+export function resolveVoiceIdentity(
+  ...sources: Array<VoiceIdentitySource | null | undefined>
+) {
+  const textSource =
+    sources.find(
+      (source): source is VoiceIdentitySource =>
+        !!source && hasTextIdentity(source),
+    ) ?? {};
   let avatarUrl: string | null = null;
   let avatarDisplay: AvatarDisplay | string | null = null;
   for (let i = sources.length - 1; i >= 0; i--) {

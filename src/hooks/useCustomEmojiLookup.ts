@@ -35,7 +35,9 @@ export function primeCustomEmojiCache(items: GeneratedEmoji[]): void {
 }
 
 async function ensureCustomEmojiIds(ids: string[]): Promise<void> {
-  const missing = Array.from(new Set(ids.filter((id) => id && !emojiCache.has(id))));
+  const missing = Array.from(
+    new Set(ids.filter((id) => id && !emojiCache.has(id))),
+  );
   if (missing.length === 0) return;
 
   const requestKey = missing.slice().sort().join(",");
@@ -45,7 +47,9 @@ async function ensureCustomEmojiIds(ids: string[]): Promise<void> {
     return;
   }
 
-  const request = apiGet<GeneratedEmojiListResponse>(`/api/emojis?ids=${encodeURIComponent(missing.join(","))}`)
+  const request = apiGet<GeneratedEmojiListResponse>(
+    `/api/emojis?ids=${encodeURIComponent(missing.join(","))}`,
+  )
     .then((response) => {
       primeCustomEmojiCache(response.items);
     })
@@ -57,7 +61,9 @@ async function ensureCustomEmojiIds(ids: string[]): Promise<void> {
   await request;
 }
 
-export function useCustomEmojiLookup(ids: string[]): Record<string, GeneratedEmoji> {
+export function useCustomEmojiLookup(
+  ids: string[],
+): Record<string, GeneratedEmoji> {
   const normalizedIds = useMemo(
     () => Array.from(new Set(ids.filter(Boolean))),
     [ids.join(",")],

@@ -44,13 +44,25 @@ export default function SettingsMediaTab() {
   const { user } = useUser();
   const chatUser = useChatStore((state) => state.user);
   const dispatch = useChatStore((state) => state.dispatch);
-  const loadCurrentUser = useChatStore((state) => state.actions.loadCurrentUser);
+  const loadCurrentUser = useChatStore(
+    (state) => state.actions.loadCurrentUser,
+  );
   const settingsUserId = chatUser?.id ?? user?.id ?? null;
-  const mediaSafetySettings = useMediaSafetySettingsStore((state) => state.getSettings(settingsUserId));
-  const updateMediaSafetySettings = useMediaSafetySettingsStore((state) => state.updateSettings);
-  const hydrateMediaSafetySettings = useMediaSafetySettingsStore((state) => state.hydrateSettings);
-  const setCurrentUser = useMediaSafetySettingsStore((state) => state.setCurrentUser);
-  const [savingFilter, setSavingFilter] = useState<MediaContentFilter | null>(null);
+  const mediaSafetySettings = useMediaSafetySettingsStore((state) =>
+    state.getSettings(settingsUserId),
+  );
+  const updateMediaSafetySettings = useMediaSafetySettingsStore(
+    (state) => state.updateSettings,
+  );
+  const hydrateMediaSafetySettings = useMediaSafetySettingsStore(
+    (state) => state.hydrateSettings,
+  );
+  const setCurrentUser = useMediaSafetySettingsStore(
+    (state) => state.setCurrentUser,
+  );
+  const [savingFilter, setSavingFilter] = useState<MediaContentFilter | null>(
+    null,
+  );
   const [saveError, setSaveError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -60,8 +72,15 @@ export default function SettingsMediaTab() {
   useEffect(() => {
     if (!chatUser?.id) return;
     if (!chatUser.media_content_filter) return;
-    hydrateMediaSafetySettings({ contentFilter: chatUser.media_content_filter }, chatUser.id);
-  }, [chatUser?.id, chatUser?.media_content_filter, hydrateMediaSafetySettings]);
+    hydrateMediaSafetySettings(
+      { contentFilter: chatUser.media_content_filter },
+      chatUser.id,
+    );
+  }, [
+    chatUser?.id,
+    chatUser?.media_content_filter,
+    hydrateMediaSafetySettings,
+  ]);
 
   const handleFilterChange = async (nextFilter: MediaContentFilter) => {
     if (!settingsUserId) return;
@@ -85,9 +104,16 @@ export default function SettingsMediaTab() {
         mediaContentFilter: nextFilter,
       });
     } catch (error) {
-      updateMediaSafetySettings({ contentFilter: previousFilter }, settingsUserId);
+      updateMediaSafetySettings(
+        { contentFilter: previousFilter },
+        settingsUserId,
+      );
       await loadCurrentUser();
-      setSaveError(error instanceof Error ? error.message : "Unable to save your media filter.");
+      setSaveError(
+        error instanceof Error
+          ? error.message
+          : "Unable to save your media filter.",
+      );
     } finally {
       setSavingFilter(null);
     }
@@ -99,8 +125,8 @@ export default function SettingsMediaTab() {
         Media & Content
       </h1>
       <p className="text-sm text-rm-text-muted mb-6 md:mb-10">
-        Control how broad media results can be when browsing trending content or searching for GIFs,
-        stickers, clips, and memes.
+        Control how broad media results can be when browsing trending content or
+        searching for GIFs, stickers, clips, and memes.
       </p>
 
       <div className="space-y-12">
@@ -116,17 +142,19 @@ export default function SettingsMediaTab() {
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div className="max-w-[520px]">
                 <p className="text-sm font-semibold text-rm-text">
-                  Your current media filter is set to {mediaSafetySettings.contentFilter}.
+                  Your current media filter is set to{" "}
+                  {mediaSafetySettings.contentFilter}.
                 </p>
                 <p className="mt-1 text-sm leading-relaxed text-rm-text-muted">
-                  Ralph Meet passes this level through to supported provider requests so your search and
-                  trending results stay consistent with your preference.
+                  Ralph Meet passes this level through to supported provider
+                  requests so your search and trending results stay consistent
+                  with your preference.
                 </p>
               </div>
               <div
                 className={cn(
                   "inline-flex items-center rounded-full border px-3 py-1 text-[11px] font-black uppercase tracking-[0.18em]",
-                  FILTER_ACCENT_STYLES[mediaSafetySettings.contentFilter].badge
+                  FILTER_ACCENT_STYLES[mediaSafetySettings.contentFilter].badge,
                 )}
               >
                 {mediaSafetySettings.contentFilter}
@@ -134,9 +162,14 @@ export default function SettingsMediaTab() {
             </div>
           </div>
 
-          <div role="radiogroup" aria-label="Media content filter" className="grid gap-3">
+          <div
+            role="radiogroup"
+            aria-label="Media content filter"
+            className="grid gap-3"
+          >
             {MEDIA_CONTENT_FILTER_OPTIONS.map((option) => {
-              const selected = mediaSafetySettings.contentFilter === option.value;
+              const selected =
+                mediaSafetySettings.contentFilter === option.value;
 
               return (
                 <button
@@ -153,19 +186,21 @@ export default function SettingsMediaTab() {
                       ? cn(
                           "shadow-lg ring-1",
                           FILTER_ACCENT_STYLES[option.value].border,
-                          FILTER_ACCENT_STYLES[option.value].ring
+                          FILTER_ACCENT_STYLES[option.value].ring,
                         )
-                      : "border-rm-border hover:border-rm-text-muted/20 hover:bg-rm-bg-elevated/40"
+                      : "border-rm-border hover:border-rm-text-muted/20 hover:bg-rm-bg-elevated/40",
                   )}
                 >
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
-                        <span className="text-base font-black text-rm-text">{option.label}</span>
+                        <span className="text-base font-black text-rm-text">
+                          {option.label}
+                        </span>
                         <span
                           className={cn(
                             "inline-flex rounded-full border px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.16em]",
-                            FILTER_ACCENT_STYLES[option.value].badge
+                            FILTER_ACCENT_STYLES[option.value].badge,
                           )}
                         >
                           {option.badge}
@@ -179,8 +214,11 @@ export default function SettingsMediaTab() {
                       className={cn(
                         "flex h-5 w-5 shrink-0 items-center justify-center rounded-full border transition-colors",
                         selected
-                          ? cn("border-transparent text-white", FILTER_ACCENT_STYLES[option.value].badge)
-                          : "border-rm-border bg-rm-bg-primary text-transparent"
+                          ? cn(
+                              "border-transparent text-white",
+                              FILTER_ACCENT_STYLES[option.value].badge,
+                            )
+                          : "border-rm-border bg-rm-bg-primary text-transparent",
                       )}
                     >
                       <span className="text-[11px] leading-none">•</span>
@@ -215,10 +253,13 @@ export default function SettingsMediaTab() {
               <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl border border-sky-500/20 bg-sky-500/10 text-sky-400">
                 <Sparkles size={18} />
               </div>
-              <h4 className="text-sm font-bold text-rm-text">Search + Trending</h4>
+              <h4 className="text-sm font-bold text-rm-text">
+                Search + Trending
+              </h4>
               <p className="mt-1 text-sm leading-relaxed text-rm-text-muted">
-                The selected level is forwarded with GIF, sticker, clip, and meme search requests, including the
-                new trending surface in the picker.
+                The selected level is forwarded with GIF, sticker, clip, and
+                meme search requests, including the new trending surface in the
+                picker.
               </p>
             </div>
 
@@ -226,10 +267,13 @@ export default function SettingsMediaTab() {
               <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl border border-rm-accent/20 bg-rm-accent/10 text-rm-accent">
                 <UserRound size={18} />
               </div>
-              <h4 className="text-sm font-bold text-rm-text">Account-aware Requests</h4>
+              <h4 className="text-sm font-bold text-rm-text">
+                Account-aware Requests
+              </h4>
               <p className="mt-1 text-sm leading-relaxed text-rm-text-muted">
-                When the provider supports personalization, Ralph Meet sends your current account ID with those
-                fetches so media browsing can stay tied to the right user context.
+                When the provider supports personalization, Ralph Meet sends
+                your current account ID with those fetches so media browsing can
+                stay tied to the right user context.
               </p>
             </div>
           </div>

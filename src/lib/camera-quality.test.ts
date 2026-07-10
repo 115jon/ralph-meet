@@ -17,11 +17,13 @@ describe("camera quality constraints", () => {
   });
 
   it("requests 16:9 resolution, frame rate, and exact device when required", () => {
-    expect(buildCameraVideoConstraints({
-      deviceId: "cam-1",
-      exactDevice: true,
-      qualityId: "1080p60",
-    })).toEqual({
+    expect(
+      buildCameraVideoConstraints({
+        deviceId: "cam-1",
+        exactDevice: true,
+        qualityId: "1080p60",
+      }),
+    ).toEqual({
       deviceId: { exact: "cam-1" },
       width: { ideal: 1920 },
       height: { ideal: 1080 },
@@ -31,11 +33,13 @@ describe("camera quality constraints", () => {
   });
 
   it("uses ideal device selection for non-exact retries", () => {
-    expect(buildCameraVideoConstraints({
-      deviceId: "cam-2",
-      exactDevice: false,
-      qualityId: "480p30",
-    })).toMatchObject({
+    expect(
+      buildCameraVideoConstraints({
+        deviceId: "cam-2",
+        exactDevice: false,
+        qualityId: "480p30",
+      }),
+    ).toMatchObject({
       deviceId: { ideal: "cam-2" },
       width: { ideal: 854 },
       height: { ideal: 480 },

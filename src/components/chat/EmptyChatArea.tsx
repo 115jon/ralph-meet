@@ -10,11 +10,15 @@ export function EmptyChatArea({ onMenuClick }: { onMenuClick: () => void }) {
         >
           <Menu className="h-5 w-5" />
         </button>
-        <span className="text-sm font-medium text-rm-text-muted">Select a channel</span>
+        <span className="text-sm font-medium text-rm-text-muted">
+          Select a channel
+        </span>
       </header>
       <div className="flex flex-1 flex-col items-center justify-center gap-3">
         <MessageSquare className="h-12 w-12 text-rm-text-muted border-rm-border" />
-        <span className="text-base font-semibold text-rm-text-muted">No channel selected</span>
+        <span className="text-base font-semibold text-rm-text-muted">
+          No channel selected
+        </span>
         <span className="text-xs text-rm-text-muted opacity-70">
           Pick a server and channel to start chatting
         </span>

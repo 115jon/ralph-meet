@@ -1,6 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { apiError, apiSuccess, genId, getBucket, requireAuth } from "@/lib/api-helpers";
+import {
+  apiError,
+  apiSuccess,
+  genId,
+  getBucket,
+  requireAuth,
+} from "@/lib/api-helpers";
 import { CAMERA_BACKGROUND_UPLOAD_LIMIT_BYTES } from "@/lib/camera-background-validation";
 import { validateImageBuffer } from "@/lib/image-validation";
 import { logger } from "@/lib/logger";
@@ -45,7 +51,10 @@ function backgroundUrl(id: string, filename: string): string {
   return `/api/camera-backgrounds/${encodeURIComponent(id)}/${encodeURIComponent(filename)}`;
 }
 
-function parseBackgroundObject(userId: string, object: ListedR2Object): CameraBackgroundAsset | null {
+function parseBackgroundObject(
+  userId: string,
+  object: ListedR2Object,
+): CameraBackgroundAsset | null {
   const prefix = userPrefix(userId);
   if (!object.key.startsWith(prefix)) return null;
 
@@ -55,7 +64,8 @@ function parseBackgroundObject(userId: string, object: ListedR2Object): CameraBa
 
   const id = suffix.slice(0, slashIndex);
   const filename = suffix.slice(slashIndex + 1);
-  const createdAt = Number(object.customMetadata?.createdAt) || object.uploaded?.getTime() || 0;
+  const createdAt =
+    Number(object.customMetadata?.createdAt) || object.uploaded?.getTime() || 0;
 
   return {
     id,
@@ -67,7 +77,9 @@ function parseBackgroundObject(userId: string, object: ListedR2Object): CameraBa
   };
 }
 
-async function listBackgrounds(userId: string): Promise<CameraBackgroundAsset[]> {
+async function listBackgrounds(
+  userId: string,
+): Promise<CameraBackgroundAsset[]> {
   const bucket = getBucket();
   const listed = await bucket.list({
     prefix: userPrefix(userId),
@@ -76,7 +88,9 @@ async function listBackgrounds(userId: string): Promise<CameraBackgroundAsset[]>
 
   return (listed.objects as ListedR2Object[])
     .map((object) => parseBackgroundObject(userId, object))
-    .filter((background): background is CameraBackgroundAsset => Boolean(background))
+    .filter((background): background is CameraBackgroundAsset =>
+      Boolean(background),
+    )
     .sort((a, b) => b.createdAt - a.createdAt);
 }
 
@@ -84,7 +98,11 @@ export const GET = async ({ request }: any) => {
   const authResult = await requireAuth(request);
   if (authResult instanceof Response) return authResult;
 
-  return apiSuccess({ backgrounds: await listBackgrounds(authResult.userId) }, 200, request);
+  return apiSuccess(
+    { backgrounds: await listBackgrounds(authResult.userId) },
+    200,
+    request,
+  );
 };
 
 export const POST = async ({ request }: any) => {
@@ -92,7 +110,11 @@ export const POST = async ({ request }: any) => {
   if (authResult instanceof Response) return authResult;
   const { userId } = authResult;
 
-  const rl = await checkRateLimitDO(userId, "camera-background-upload", RATE_LIMITS.FILE_UPLOAD);
+  const rl = await checkRateLimitDO(
+    userId,
+    "camera-background-upload",
+    RATE_LIMITS.FILE_UPLOAD,
+  );
   if (rl) return rl;
 
   const formData = await request.formData();
@@ -100,7 +122,12 @@ export const POST = async ({ request }: any) => {
   if (!file) return apiError("No file provided", 400, undefined, request);
 
   if (file.size > CAMERA_BACKGROUND_UPLOAD_LIMIT_BYTES) {
-    return apiError("Background image too large (max 25MB)", 413, undefined, request);
+    return apiError(
+      "Background image too large (max 25MB)",
+      413,
+      undefined,
+      request,
+    );
   }
 
   const buffer = await file.arrayBuffer();
@@ -136,14 +163,18 @@ export const POST = async ({ request }: any) => {
     sizeBytes: file.size,
   });
 
-  return apiSuccess({
-    id,
-    name: file.name || filename,
-    url: backgroundUrl(id, filename),
-    contentType: validation.mimeType,
-    sizeBytes: file.size,
-    createdAt,
-  } satisfies CameraBackgroundAsset, 201, request);
+  return apiSuccess(
+    {
+      id,
+      name: file.name || filename,
+      url: backgroundUrl(id, filename),
+      contentType: validation.mimeType,
+      sizeBytes: file.size,
+      createdAt,
+    } satisfies CameraBackgroundAsset,
+    201,
+    request,
+  );
 };
 
 export const DELETE = async ({ request }: any) => {
@@ -166,7 +197,9 @@ export const DELETE = async ({ request }: any) => {
   const bucket = getBucket();
   const listed = await bucket.list({ prefix: `${userPrefix(userId)}${id}/` });
   if (listed.objects.length > 0) {
-    await bucket.delete((listed.objects as ListedR2Object[]).map((object) => object.key));
+    await bucket.delete(
+      (listed.objects as ListedR2Object[]).map((object) => object.key),
+    );
   }
 
   return apiSuccess({ ok: true }, 200, request);

@@ -4,7 +4,9 @@ let pronounsColumnEnsured = false;
 
 function isDuplicateColumnError(error: unknown, columnName: string) {
   if (!(error instanceof Error)) return false;
-  return error.message.toLowerCase().includes(`duplicate column name: ${columnName.toLowerCase()}`);
+  return error.message
+    .toLowerCase()
+    .includes(`duplicate column name: ${columnName.toLowerCase()}`);
 }
 
 export async function ensureUserProfileSchema(db: D1Database) {

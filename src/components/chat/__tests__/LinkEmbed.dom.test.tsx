@@ -1,6 +1,13 @@
 // @vitest-environment jsdom
 
-import { act, createEvent, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  createEvent,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { EmbedInfo } from "@/lib/types";
@@ -17,7 +24,9 @@ vi.mock("@/stores/useImageViewerStore", () => ({
 }));
 
 vi.mock("@/components/chat/VideoAttachment", async () => {
-  const actual = await vi.importActual<any>("@/components/chat/VideoAttachment");
+  const actual = await vi.importActual<any>(
+    "@/components/chat/VideoAttachment",
+  );
   const ActualVideoAttachment = actual.default;
 
   return {
@@ -68,7 +77,9 @@ function makeStandaloneEmbed(rawDescription: string): EmbedInfo {
   };
 }
 
-function makeInstagramCarouselEmbed(overrides: Partial<EmbedInfo> = {}): EmbedInfo {
+function makeInstagramCarouselEmbed(
+  overrides: Partial<EmbedInfo> = {},
+): EmbedInfo {
   return {
     id: "embed_instagram_carousel_dom",
     url: "https://www.instagram.com/p/DZ9DK2RgNSk/",
@@ -112,7 +123,9 @@ function makeInstagramCarouselEmbed(overrides: Partial<EmbedInfo> = {}): EmbedIn
   };
 }
 
-function makeTikTokSlideshowEmbed(overrides: Partial<EmbedInfo> = {}): EmbedInfo {
+function makeTikTokSlideshowEmbed(
+  overrides: Partial<EmbedInfo> = {},
+): EmbedInfo {
   return {
     id: "embed_tiktok_slideshow_dom",
     url: "https://www.tiktok.com/t/ZTSBAR6M7/",
@@ -170,14 +183,16 @@ describe("LinkEmbed DOM rendering", () => {
   it("expands oversized standalone tweet text with a show more button", () => {
     render(
       <LinkEmbed
-        embed={makeStandaloneEmbed([
-          "PVE // JUNGLE // MISSION",
-          "",
-          "VOSHIL SEES THE F/BAR",
-          "PVE JUNGLE MISSION",
-          "TOMORROW THE WALLS",
-          "AND THE SIGNAL KEEPS GOING",
-        ].join("\n"))}
+        embed={makeStandaloneEmbed(
+          [
+            "PVE // JUNGLE // MISSION",
+            "",
+            "VOSHIL SEES THE F/BAR",
+            "PVE JUNGLE MISSION",
+            "TOMORROW THE WALLS",
+            "AND THE SIGNAL KEEPS GOING",
+          ].join("\n"),
+        )}
       />,
     );
 
@@ -187,69 +202,75 @@ describe("LinkEmbed DOM rendering", () => {
 
     fireEvent.click(toggle);
 
-    expect(screen.getByRole("button", { name: "Collapse post text" })).toHaveAttribute("aria-expanded", "true");
+    expect(
+      screen.getByRole("button", { name: "Collapse post text" }),
+    ).toHaveAttribute("aria-expanded", "true");
     expect(screen.getByText("Show less")).toBeInTheDocument();
   });
 
   it("does not render the standalone show more button for shorter tweet text", () => {
-    render(
-      <LinkEmbed
-        embed={makeStandaloneEmbed("short standalone post")}
-      />,
-    );
+    render(<LinkEmbed embed={makeStandaloneEmbed("short standalone post")} />);
 
-    expect(screen.queryByRole("button", { name: "Expand post text" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Expand post text" }),
+    ).not.toBeInTheDocument();
   });
 
   it("expands oversized referenced tweet text on demand", () => {
     render(
       <LinkEmbed
-        embed={makeQuotedEmbed([
-          "giving away a FREE MiniMax API key worth BILLIONS (330M+ tokens daily, No Rate Limits) 😳",
-          "",
-          "All MiniMax models included-",
-          "text to video",
-          "image generation",
-          "music generation",
-        ].join("\n"))}
+        embed={makeQuotedEmbed(
+          [
+            "giving away a FREE MiniMax API key worth BILLIONS (330M+ tokens daily, No Rate Limits) 😳",
+            "",
+            "All MiniMax models included-",
+            "text to video",
+            "image generation",
+            "music generation",
+          ].join("\n"),
+        )}
       />,
     );
 
-    const toggle = screen.getByRole("button", { name: "Expand quoted post text" });
+    const toggle = screen.getByRole("button", {
+      name: "Expand quoted post text",
+    });
     expect(toggle).toHaveAttribute("aria-expanded", "false");
 
     fireEvent.click(toggle);
 
-    expect(screen.getByRole("button", { name: "Collapse quoted post text" })).toHaveAttribute("aria-expanded", "true");
+    expect(
+      screen.getByRole("button", { name: "Collapse quoted post text" }),
+    ).toHaveAttribute("aria-expanded", "true");
     expect(screen.getByText("Show less")).toBeInTheDocument();
   });
 
   it("does not render the expand affordance for shorter referenced tweet text", () => {
-    render(
-      <LinkEmbed
-        embed={makeQuotedEmbed("short quoted post")}
-      />,
-    );
+    render(<LinkEmbed embed={makeQuotedEmbed("short quoted post")} />);
 
-    expect(screen.queryByRole("button", { name: "Expand quoted post text" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Expand quoted post text" }),
+    ).not.toBeInTheDocument();
   });
 
   it("hides the quoted tweet ellipsis affordance when the measured text does not actually overflow", async () => {
-    vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockImplementation(function(this: HTMLElement) {
-      return this.dataset.xExpandableText === "true" ? 96 : 0;
-    });
-    vi.spyOn(HTMLElement.prototype, "scrollHeight", "get").mockImplementation(function(this: HTMLElement) {
-      return this.dataset.xExpandableText === "true" ? 96 : 0;
-    });
-
-    render(
-      <LinkEmbed
-        embed={makeQuotedEmbed("A".repeat(260))}
-      />,
+    vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockImplementation(
+      function (this: HTMLElement) {
+        return this.dataset.xExpandableText === "true" ? 96 : 0;
+      },
+    );
+    vi.spyOn(HTMLElement.prototype, "scrollHeight", "get").mockImplementation(
+      function (this: HTMLElement) {
+        return this.dataset.xExpandableText === "true" ? 96 : 0;
+      },
     );
 
+    render(<LinkEmbed embed={makeQuotedEmbed("A".repeat(260))} />);
+
     await waitFor(() => {
-      expect(screen.queryByRole("button", { name: "Expand quoted post text" })).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: "Expand quoted post text" }),
+      ).not.toBeInTheDocument();
     });
   });
 
@@ -258,7 +279,9 @@ describe("LinkEmbed DOM rendering", () => {
       <LinkEmbed embed={makeInstagramCarouselEmbed()} />,
     );
 
-    const track = container.querySelector('[data-testid="instagram-carousel-track"]') as HTMLDivElement | null;
+    const track = container.querySelector(
+      '[data-testid="instagram-carousel-track"]',
+    ) as HTMLDivElement | null;
     expect(track).not.toBeNull();
     expect(track?.style.transform).toBe("translate3d(calc(0% + 0px), 0, 0)");
 
@@ -278,7 +301,8 @@ describe("LinkEmbed DOM rendering", () => {
     fireEvent.click(screen.getByRole("button", { name: "Open media 1 of 2" }));
 
     expect(openImageViewerMock).toHaveBeenCalledTimes(1);
-    const [attachments, initialIndex, context] = openImageViewerMock.mock.calls[0];
+    const [attachments, initialIndex, context] =
+      openImageViewerMock.mock.calls[0];
     expect(initialIndex).toBe(0);
     expect(attachments).toHaveLength(2);
     expect(attachments[0]?.url).toContain("/api/proxy-media?url=");
@@ -293,14 +317,14 @@ describe("LinkEmbed DOM rendering", () => {
       context.onIndexChange(1);
     });
 
-    const track = container.querySelector('[data-testid="instagram-carousel-track"]') as HTMLDivElement | null;
+    const track = container.querySelector(
+      '[data-testid="instagram-carousel-track"]',
+    ) as HTMLDivElement | null;
     expect(track?.style.transform).toBe("translate3d(calc(-50% + 0px), 0, 0)");
   });
 
   it("prevents native drag on Instagram images so clicks can open the viewer", () => {
-    render(
-      <LinkEmbed embed={makeInstagramCarouselEmbed()} />,
-    );
+    render(<LinkEmbed embed={makeInstagramCarouselEmbed()} />);
 
     const image = screen.getByAltText("Slide one");
     expect(image).toHaveAttribute("draggable", "false");
@@ -312,13 +336,23 @@ describe("LinkEmbed DOM rendering", () => {
   });
 
   it("toggles Instagram audio playback from the artwork button", async () => {
-    vi.spyOn(HTMLMediaElement.prototype, "play").mockImplementation(function(this: HTMLMediaElement) {
-      Object.defineProperty(this, "paused", { configurable: true, value: false });
+    vi.spyOn(HTMLMediaElement.prototype, "play").mockImplementation(function (
+      this: HTMLMediaElement,
+    ) {
+      Object.defineProperty(this, "paused", {
+        configurable: true,
+        value: false,
+      });
       return Promise.resolve();
     });
-    const pauseMock = vi.spyOn(HTMLMediaElement.prototype, "pause").mockImplementation(function(this: HTMLMediaElement) {
-      Object.defineProperty(this, "paused", { configurable: true, value: true });
-    });
+    const pauseMock = vi
+      .spyOn(HTMLMediaElement.prototype, "pause")
+      .mockImplementation(function (this: HTMLMediaElement) {
+        Object.defineProperty(this, "paused", {
+          configurable: true,
+          value: true,
+        });
+      });
 
     render(
       <LinkEmbed
@@ -327,7 +361,8 @@ describe("LinkEmbed DOM rendering", () => {
             title: "Blue Hour",
             artist: "Example Artist",
             url: "https://scontent-ord5-1.cdninstagram.com/audio/track.m4a?ccb=7-5",
-            artworkUrl: "https://scontent-ord5-1.cdninstagram.com/audio-art.jpg?ccb=7-5",
+            artworkUrl:
+              "https://scontent-ord5-1.cdninstagram.com/audio-art.jpg?ccb=7-5",
           },
         })}
       />,
@@ -336,14 +371,20 @@ describe("LinkEmbed DOM rendering", () => {
     fireEvent.click(screen.getByRole("button", { name: "Play audio preview" }));
 
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: "Pause audio preview" })).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: "Pause audio preview" }),
+      ).toBeInTheDocument();
     });
 
     pauseMock.mockClear();
-    fireEvent.click(screen.getByRole("button", { name: "Pause audio preview" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Pause audio preview" }),
+    );
 
     expect(pauseMock).toHaveBeenCalled();
-    expect(screen.getByRole("button", { name: "Play audio preview" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Play audio preview" }),
+    ).toBeInTheDocument();
   });
 
   it("renders Instagram carousel video slides with the shared video attachment", () => {
@@ -354,7 +395,8 @@ describe("LinkEmbed DOM rendering", () => {
             {
               type: "video",
               url: "https://scontent-ord5-1.cdninstagram.com/clip-1.mp4?stp=dst-video",
-              thumbnailUrl: "https://scontent-ord5-1.cdninstagram.com/clip-1-cover.jpg",
+              thumbnailUrl:
+                "https://scontent-ord5-1.cdninstagram.com/clip-1-cover.jpg",
               width: 1080,
               height: 1350,
               contentType: "video/mp4",
@@ -372,13 +414,17 @@ describe("LinkEmbed DOM rendering", () => {
       />,
     );
 
-    expect(videoAttachmentMock).toHaveBeenCalledWith(expect.objectContaining({
-      filename: "instagram-1.mp4",
-      embeddedChrome: false,
-      playbackMode: "default",
-    }));
+    expect(videoAttachmentMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        filename: "instagram-1.mp4",
+        embeddedChrome: false,
+        playbackMode: "default",
+      }),
+    );
     expect(container.querySelector("video.rm-custom-video")).not.toBeNull();
-    expect(screen.queryByRole("button", { name: "Open media 1 of 2" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Open media 1 of 2" }),
+    ).not.toBeInTheDocument();
   });
 
   it("renders Instagram animated carousel media with the shared video attachment", () => {
@@ -389,7 +435,8 @@ describe("LinkEmbed DOM rendering", () => {
             {
               type: "image",
               url: "https://scontent-ord5-1.cdninstagram.com/animated-1.mp4?stp=dst-video",
-              thumbnailUrl: "https://scontent-ord5-1.cdninstagram.com/animated-1-cover.jpg",
+              thumbnailUrl:
+                "https://scontent-ord5-1.cdninstagram.com/animated-1-cover.jpg",
               width: 1080,
               height: 1350,
               contentType: "video/mp4",
@@ -401,99 +448,126 @@ describe("LinkEmbed DOM rendering", () => {
       />,
     );
 
-    expect(videoAttachmentMock).toHaveBeenCalledWith(expect.objectContaining({
-      filename: "instagram-animated-1.mp4",
-      playbackMode: "animated",
-    }));
+    expect(videoAttachmentMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        filename: "instagram-animated-1.mp4",
+        playbackMode: "animated",
+      }),
+    );
     expect(container.querySelector("video.rm-custom-video")).not.toBeNull();
-    expect(screen.queryByRole("button", { name: "Open media 1 of 1" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Open media 1 of 1" }),
+    ).not.toBeInTheDocument();
   });
 
   it("renders TikTok slideshow branding in the footer without the extra badge", async () => {
-    vi.stubGlobal("IntersectionObserver", class {
-      private readonly callback: IntersectionObserverCallback;
+    vi.stubGlobal(
+      "IntersectionObserver",
+      class {
+        private readonly callback: IntersectionObserverCallback;
 
-      constructor(callback: IntersectionObserverCallback) {
-        this.callback = callback;
-      }
+        constructor(callback: IntersectionObserverCallback) {
+          this.callback = callback;
+        }
 
-      observe = () => {
-        this.callback([{ isIntersecting: true } as IntersectionObserverEntry], this as unknown as IntersectionObserver);
-      };
+        observe = () => {
+          this.callback(
+            [{ isIntersecting: true } as IntersectionObserverEntry],
+            this as unknown as IntersectionObserver,
+          );
+        };
 
-      disconnect = vi.fn();
-      unobserve = vi.fn();
-      takeRecords = vi.fn(() => []);
-      root = null;
-      rootMargin = "";
-      thresholds = [];
-    } as unknown as typeof IntersectionObserver);
+        disconnect = vi.fn();
+        unobserve = vi.fn();
+        takeRecords = vi.fn(() => []);
+        root = null;
+        rootMargin = "";
+        thresholds = [];
+      } as unknown as typeof IntersectionObserver,
+    );
 
-    vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => {
-      const url = input.toString();
-      if (!url.includes("/api/tiktok-video?videoUrl=")) {
-        return new Response("not found", { status: 404 });
-      }
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request) => {
+        const url = input.toString();
+        if (!url.includes("/api/tiktok-video?videoUrl=")) {
+          return new Response("not found", { status: 404 });
+        }
 
-      return Response.json({
-        canonicalUrl: "https://www.tiktok.com/@feetlattee/photo/7649484991986027806",
-        postType: "slideshow",
-        coverUrl: "https://p16-common-sign.tiktokcdn-us.com/example/cover.webp",
-        title: "summer dump",
-        authorName: "natalia",
-        authorHandle: "feetlattee",
-        authorAvatarUrl: "https://p19-common-sign.tiktokcdn-us.com/example/avatar.jpeg",
-        media: [
-          {
-            type: "image",
-            url: "https://p19-common-sign.tiktokcdn-us.com/example/photo-1.jpeg",
+        return Response.json({
+          canonicalUrl:
+            "https://www.tiktok.com/@feetlattee/photo/7649484991986027806",
+          postType: "slideshow",
+          coverUrl:
+            "https://p16-common-sign.tiktokcdn-us.com/example/cover.webp",
+          title: "summer dump",
+          authorName: "natalia",
+          authorHandle: "feetlattee",
+          authorAvatarUrl:
+            "https://p19-common-sign.tiktokcdn-us.com/example/avatar.jpeg",
+          media: [
+            {
+              type: "image",
+              url: "https://p19-common-sign.tiktokcdn-us.com/example/photo-1.jpeg",
+            },
+            {
+              type: "image",
+              url: "https://p16-common-sign.tiktokcdn-us.com/example/photo-2.jpeg",
+            },
+          ],
+          audio: {
+            title: "original sound - realtonyay",
+            artist: "Tonya",
+            url: "https://v16-ies-music.tiktokcdn-us.com/example/audio-track/?mime_type=audio_mpeg",
+            artworkUrl:
+              "https://p19-common-sign.tiktokcdn-us.com/example/music-cover.jpeg",
           },
-          {
-            type: "image",
-            url: "https://p16-common-sign.tiktokcdn-us.com/example/photo-2.jpeg",
-          },
-        ],
-        audio: {
-          title: "original sound - realtonyay",
-          artist: "Tonya",
-          url: "https://v16-ies-music.tiktokcdn-us.com/example/audio-track/?mime_type=audio_mpeg",
-          artworkUrl: "https://p19-common-sign.tiktokcdn-us.com/example/music-cover.jpeg",
-        },
-        likeCount: 2311,
-        commentCount: 19,
-        viewCount: 12416,
-        timestamp: "2026-06-08T17:48:57.000Z",
-      });
-    }) as unknown as typeof fetch);
+          likeCount: 2311,
+          commentCount: 19,
+          viewCount: 12416,
+          timestamp: "2026-06-08T17:48:57.000Z",
+        });
+      }) as unknown as typeof fetch,
+    );
 
     const { container } = render(
       <LinkEmbed embed={makeTikTokSlideshowEmbed()} />,
     );
 
     await waitFor(() => {
-      expect(container.querySelector('[data-testid="tiktok-carousel-track"]')).not.toBeNull();
+      expect(
+        container.querySelector('[data-testid="tiktok-carousel-track"]'),
+      ).not.toBeNull();
     });
 
-    const footerIcon = container.querySelector(`img[src="${"https://www.tiktok.com/favicon.ico"}"]`);
+    const footerIcon = container.querySelector(
+      `img[src="${"https://www.tiktok.com/favicon.ico"}"]`,
+    );
     expect(footerIcon).not.toBeNull();
     expect(container.textContent?.match(/TikTok/g)?.length ?? 0).toBe(1);
   });
 
   it("keeps existing TikTok slideshow media visible when hydration returns a miss", async () => {
-    vi.stubGlobal("IntersectionObserver", class {
-      observe = vi.fn();
-      disconnect = vi.fn();
-      unobserve = vi.fn();
-      takeRecords = vi.fn(() => []);
-      root = null;
-      rootMargin = "";
-      thresholds = [];
-    } as unknown as typeof IntersectionObserver);
+    vi.stubGlobal(
+      "IntersectionObserver",
+      class {
+        observe = vi.fn();
+        disconnect = vi.fn();
+        unobserve = vi.fn();
+        takeRecords = vi.fn(() => []);
+        root = null;
+        rootMargin = "";
+        thresholds = [];
+      } as unknown as typeof IntersectionObserver,
+    );
 
     let resolveFetch: ((value: Response) => void) | undefined;
-    const fetchMock = vi.fn((_input: string | URL | Request) => new Promise<Response>((resolve) => {
-      resolveFetch = resolve;
-    }));
+    const fetchMock = vi.fn(
+      (_input: string | URL | Request) =>
+        new Promise<Response>((resolve) => {
+          resolveFetch = resolve;
+        }),
+    );
     vi.stubGlobal("fetch", fetchMock as unknown as typeof fetch);
 
     const { container } = render(
@@ -514,7 +588,9 @@ describe("LinkEmbed DOM rendering", () => {
       />,
     );
 
-    expect(container.querySelector('[data-testid="tiktok-carousel-track"]')).not.toBeNull();
+    expect(
+      container.querySelector('[data-testid="tiktok-carousel-track"]'),
+    ).not.toBeNull();
 
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -526,44 +602,54 @@ describe("LinkEmbed DOM rendering", () => {
     });
 
     await waitFor(() => {
-      expect(container.querySelector('[data-testid="tiktok-carousel-track"]')).not.toBeNull();
+      expect(
+        container.querySelector('[data-testid="tiktok-carousel-track"]'),
+      ).not.toBeNull();
     });
 
     expect(container.querySelector("iframe")).toBeNull();
   });
 
   it("does not treat the TikTok author name as the caption", async () => {
-    vi.stubGlobal("IntersectionObserver", class {
-      observe = vi.fn();
-      disconnect = vi.fn();
-      unobserve = vi.fn();
-      takeRecords = vi.fn(() => []);
-      root = null;
-      rootMargin = "";
-      thresholds = [];
-    } as unknown as typeof IntersectionObserver);
+    vi.stubGlobal(
+      "IntersectionObserver",
+      class {
+        observe = vi.fn();
+        disconnect = vi.fn();
+        unobserve = vi.fn();
+        takeRecords = vi.fn(() => []);
+        root = null;
+        rootMargin = "";
+        thresholds = [];
+      } as unknown as typeof IntersectionObserver,
+    );
 
-    vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => {
-      const url = input.toString();
-      if (!url.includes("/api/tiktok-video?videoUrl=")) {
-        return new Response("not found", { status: 404 });
-      }
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request) => {
+        const url = input.toString();
+        if (!url.includes("/api/tiktok-video?videoUrl=")) {
+          return new Response("not found", { status: 404 });
+        }
 
-      return Response.json({
-        canonicalUrl: "https://www.tiktok.com/@dj.giggle/photo/7656952653510888717",
-        postType: "slideshow",
-        coverUrl: "https://p16-common-sign.tiktokcdn-us.com/example/cover.webp",
-        title: "Giggle ✓",
-        authorName: "Giggle ✓",
-        authorHandle: "dj.giggle",
-        media: [
-          {
-            type: "image",
-            url: "https://p19-common-sign.tiktokcdn-us.com/example/photo-1.jpeg",
-          },
-        ],
-      });
-    }) as unknown as typeof fetch);
+        return Response.json({
+          canonicalUrl:
+            "https://www.tiktok.com/@dj.giggle/photo/7656952653510888717",
+          postType: "slideshow",
+          coverUrl:
+            "https://p16-common-sign.tiktokcdn-us.com/example/cover.webp",
+          title: "Giggle ✓",
+          authorName: "Giggle ✓",
+          authorHandle: "dj.giggle",
+          media: [
+            {
+              type: "image",
+              url: "https://p19-common-sign.tiktokcdn-us.com/example/photo-1.jpeg",
+            },
+          ],
+        });
+      }) as unknown as typeof fetch,
+    );
 
     const { container } = render(
       <LinkEmbed
@@ -577,44 +663,54 @@ describe("LinkEmbed DOM rendering", () => {
     );
 
     await waitFor(() => {
-      expect(container.querySelector('[data-testid="tiktok-carousel-track"]')).not.toBeNull();
+      expect(
+        container.querySelector('[data-testid="tiktok-carousel-track"]'),
+      ).not.toBeNull();
     });
 
     expect(container.textContent?.match(/Giggle ✓/g)?.length ?? 0).toBe(1);
   });
 
   it("renders TikTok author emoji through the embed text path", async () => {
-    vi.stubGlobal("IntersectionObserver", class {
-      observe = vi.fn();
-      disconnect = vi.fn();
-      unobserve = vi.fn();
-      takeRecords = vi.fn(() => []);
-      root = null;
-      rootMargin = "";
-      thresholds = [];
-    } as unknown as typeof IntersectionObserver);
+    vi.stubGlobal(
+      "IntersectionObserver",
+      class {
+        observe = vi.fn();
+        disconnect = vi.fn();
+        unobserve = vi.fn();
+        takeRecords = vi.fn(() => []);
+        root = null;
+        rootMargin = "";
+        thresholds = [];
+      } as unknown as typeof IntersectionObserver,
+    );
 
-    vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => {
-      const url = input.toString();
-      if (!url.includes("/api/tiktok-video?videoUrl=")) {
-        return new Response("not found", { status: 404 });
-      }
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request) => {
+        const url = input.toString();
+        if (!url.includes("/api/tiktok-video?videoUrl=")) {
+          return new Response("not found", { status: 404 });
+        }
 
-      return Response.json({
-        canonicalUrl: "https://www.tiktok.com/@dj.giggle/photo/7656952653510888717",
-        postType: "slideshow",
-        coverUrl: "https://p16-common-sign.tiktokcdn-us.com/example/cover.webp",
-        title: "still looping",
-        authorName: "Giggle \u2705",
-        authorHandle: "dj.giggle",
-        media: [
-          {
-            type: "image",
-            url: "https://p19-common-sign.tiktokcdn-us.com/example/photo-1.jpeg",
-          },
-        ],
-      });
-    }) as unknown as typeof fetch);
+        return Response.json({
+          canonicalUrl:
+            "https://www.tiktok.com/@dj.giggle/photo/7656952653510888717",
+          postType: "slideshow",
+          coverUrl:
+            "https://p16-common-sign.tiktokcdn-us.com/example/cover.webp",
+          title: "still looping",
+          authorName: "Giggle \u2705",
+          authorHandle: "dj.giggle",
+          media: [
+            {
+              type: "image",
+              url: "https://p19-common-sign.tiktokcdn-us.com/example/photo-1.jpeg",
+            },
+          ],
+        });
+      }) as unknown as typeof fetch,
+    );
 
     const { container } = render(
       <LinkEmbed
@@ -631,69 +727,93 @@ describe("LinkEmbed DOM rendering", () => {
       expect(container.textContent).toContain("Giggle");
     });
 
-    const authorLink = container.querySelector('a[href="https://www.tiktok.com/@dj.giggle"]');
+    const authorLink = container.querySelector(
+      'a[href="https://www.tiktok.com/@dj.giggle"]',
+    );
     expect(authorLink).not.toBeNull();
     expect(authorLink?.querySelector('[aria-label^=":"]')).not.toBeNull();
   });
 
   it("uses each TikTok slideshow slide's natural aspect ratio", async () => {
-    vi.stubGlobal("IntersectionObserver", class {
-      observe = vi.fn();
-      disconnect = vi.fn();
-      unobserve = vi.fn();
-      takeRecords = vi.fn(() => []);
-      root = null;
-      rootMargin = "";
-      thresholds = [];
-    } as unknown as typeof IntersectionObserver);
+    vi.stubGlobal(
+      "IntersectionObserver",
+      class {
+        observe = vi.fn();
+        disconnect = vi.fn();
+        unobserve = vi.fn();
+        takeRecords = vi.fn(() => []);
+        root = null;
+        rootMargin = "";
+        thresholds = [];
+      } as unknown as typeof IntersectionObserver,
+    );
 
-    vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => {
-      const url = input.toString();
-      if (!url.includes("/api/tiktok-video?videoUrl=")) {
-        return new Response("not found", { status: 404 });
-      }
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request) => {
+        const url = input.toString();
+        if (!url.includes("/api/tiktok-video?videoUrl=")) {
+          return new Response("not found", { status: 404 });
+        }
 
-      return Response.json({
-        canonicalUrl: "https://www.tiktok.com/@feetlattee/photo/7649484991986027806",
-        postType: "slideshow",
-        coverUrl: "https://p16-common-sign.tiktokcdn-us.com/example/cover.webp",
-        title: "summer dump",
-        authorName: "natalia",
-        authorHandle: "feetlattee",
-        media: [
-          {
-            type: "image",
-            url: "https://p19-common-sign.tiktokcdn-us.com/example/photo-landscape.jpeg",
-          },
-          {
-            type: "image",
-            url: "https://p16-common-sign.tiktokcdn-us.com/example/photo-portrait.jpeg",
-          },
-        ],
-      });
-    }) as unknown as typeof fetch);
+        return Response.json({
+          canonicalUrl:
+            "https://www.tiktok.com/@feetlattee/photo/7649484991986027806",
+          postType: "slideshow",
+          coverUrl:
+            "https://p16-common-sign.tiktokcdn-us.com/example/cover.webp",
+          title: "summer dump",
+          authorName: "natalia",
+          authorHandle: "feetlattee",
+          media: [
+            {
+              type: "image",
+              url: "https://p19-common-sign.tiktokcdn-us.com/example/photo-landscape.jpeg",
+            },
+            {
+              type: "image",
+              url: "https://p16-common-sign.tiktokcdn-us.com/example/photo-portrait.jpeg",
+            },
+          ],
+        });
+      }) as unknown as typeof fetch,
+    );
 
     const { container } = render(
       <LinkEmbed embed={makeTikTokSlideshowEmbed()} />,
     );
 
     await waitFor(() => {
-      expect(container.querySelector('[data-testid="tiktok-carousel-track"]')).not.toBeNull();
+      expect(
+        container.querySelector('[data-testid="tiktok-carousel-track"]'),
+      ).not.toBeNull();
     });
 
-    const frame = container.querySelector('[data-testid="tiktok-carousel-track"]')?.parentElement as HTMLDivElement | null;
+    const frame = container.querySelector(
+      '[data-testid="tiktok-carousel-track"]',
+    )?.parentElement as HTMLDivElement | null;
     expect(frame).not.toBeNull();
 
-    const firstImage = container.querySelector('[data-tiktok-image-index="0"] img') as HTMLImageElement | null;
-    const secondImage = container.querySelector('[data-tiktok-image-index="1"] img') as HTMLImageElement | null;
+    const firstImage = container.querySelector(
+      '[data-tiktok-image-index="0"] img',
+    ) as HTMLImageElement | null;
+    const secondImage = container.querySelector(
+      '[data-tiktok-image-index="1"] img',
+    ) as HTMLImageElement | null;
     expect(firstImage).not.toBeNull();
     expect(secondImage).not.toBeNull();
     if (!firstImage || !secondImage) {
       throw new Error("Expected TikTok slideshow images to render");
     }
 
-    Object.defineProperty(firstImage, "naturalWidth", { configurable: true, value: 1920 });
-    Object.defineProperty(firstImage, "naturalHeight", { configurable: true, value: 1080 });
+    Object.defineProperty(firstImage, "naturalWidth", {
+      configurable: true,
+      value: 1920,
+    });
+    Object.defineProperty(firstImage, "naturalHeight", {
+      configurable: true,
+      value: 1080,
+    });
     fireEvent.load(firstImage);
 
     await waitFor(() => {
@@ -702,8 +822,14 @@ describe("LinkEmbed DOM rendering", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Next media" }));
 
-    Object.defineProperty(secondImage, "naturalWidth", { configurable: true, value: 1080 });
-    Object.defineProperty(secondImage, "naturalHeight", { configurable: true, value: 1920 });
+    Object.defineProperty(secondImage, "naturalWidth", {
+      configurable: true,
+      value: 1080,
+    });
+    Object.defineProperty(secondImage, "naturalHeight", {
+      configurable: true,
+      value: 1920,
+    });
     fireEvent.load(secondImage);
 
     await waitFor(() => {
@@ -712,37 +838,45 @@ describe("LinkEmbed DOM rendering", () => {
   });
 
   it("renders TikTok caption emoji through the embed text path", async () => {
-    vi.stubGlobal("IntersectionObserver", class {
-      observe = vi.fn();
-      disconnect = vi.fn();
-      unobserve = vi.fn();
-      takeRecords = vi.fn(() => []);
-      root = null;
-      rootMargin = "";
-      thresholds = [];
-    } as unknown as typeof IntersectionObserver);
+    vi.stubGlobal(
+      "IntersectionObserver",
+      class {
+        observe = vi.fn();
+        disconnect = vi.fn();
+        unobserve = vi.fn();
+        takeRecords = vi.fn(() => []);
+        root = null;
+        rootMargin = "";
+        thresholds = [];
+      } as unknown as typeof IntersectionObserver,
+    );
 
-    vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => {
-      const url = input.toString();
-      if (!url.includes("/api/tiktok-video?videoUrl=")) {
-        return new Response("not found", { status: 404 });
-      }
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request) => {
+        const url = input.toString();
+        if (!url.includes("/api/tiktok-video?videoUrl=")) {
+          return new Response("not found", { status: 404 });
+        }
 
-      return Response.json({
-        canonicalUrl: "https://www.tiktok.com/@dj.giggle/photo/7656952653510888717",
-        postType: "slideshow",
-        coverUrl: "https://p16-common-sign.tiktokcdn-us.com/example/cover.webp",
-        title: "unplayable 😢",
-        authorName: "Giggle ✓",
-        authorHandle: "dj.giggle",
-        media: [
-          {
-            type: "image",
-            url: "https://p19-common-sign.tiktokcdn-us.com/example/photo-1.jpeg",
-          },
-        ],
-      });
-    }) as unknown as typeof fetch);
+        return Response.json({
+          canonicalUrl:
+            "https://www.tiktok.com/@dj.giggle/photo/7656952653510888717",
+          postType: "slideshow",
+          coverUrl:
+            "https://p16-common-sign.tiktokcdn-us.com/example/cover.webp",
+          title: "unplayable 😢",
+          authorName: "Giggle ✓",
+          authorHandle: "dj.giggle",
+          media: [
+            {
+              type: "image",
+              url: "https://p19-common-sign.tiktokcdn-us.com/example/photo-1.jpeg",
+            },
+          ],
+        });
+      }) as unknown as typeof fetch,
+    );
 
     const { container } = render(
       <LinkEmbed
@@ -759,50 +893,59 @@ describe("LinkEmbed DOM rendering", () => {
       expect(container.textContent).toContain("unplayable");
     });
 
-    const captionParagraph = Array.from(container.querySelectorAll("p"))
-      .find((element) => element.textContent?.includes("unplayable"));
+    const captionParagraph = Array.from(container.querySelectorAll("p")).find(
+      (element) => element.textContent?.includes("unplayable"),
+    );
     expect(captionParagraph).toBeDefined();
     expect(container.textContent?.match(/Giggle ✓/g)?.length ?? 0).toBe(1);
     expect(captionParagraph?.querySelector('[aria-label^=":"]')).not.toBeNull();
   });
 
   it("renders TikTok audio metadata emoji through the embed text path", async () => {
-    vi.stubGlobal("IntersectionObserver", class {
-      observe = vi.fn();
-      disconnect = vi.fn();
-      unobserve = vi.fn();
-      takeRecords = vi.fn(() => []);
-      root = null;
-      rootMargin = "";
-      thresholds = [];
-    } as unknown as typeof IntersectionObserver);
+    vi.stubGlobal(
+      "IntersectionObserver",
+      class {
+        observe = vi.fn();
+        disconnect = vi.fn();
+        unobserve = vi.fn();
+        takeRecords = vi.fn(() => []);
+        root = null;
+        rootMargin = "";
+        thresholds = [];
+      } as unknown as typeof IntersectionObserver,
+    );
 
-    vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => {
-      const url = input.toString();
-      if (!url.includes("/api/tiktok-video?videoUrl=")) {
-        return new Response("not found", { status: 404 });
-      }
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request) => {
+        const url = input.toString();
+        if (!url.includes("/api/tiktok-video?videoUrl=")) {
+          return new Response("not found", { status: 404 });
+        }
 
-      return Response.json({
-        canonicalUrl: "https://www.tiktok.com/@dj.giggle/photo/7656952653510888717",
-        postType: "slideshow",
-        coverUrl: "https://p16-common-sign.tiktokcdn-us.com/example/cover.webp",
-        title: "still looping",
-        authorName: "Giggle \u2705",
-        authorHandle: "dj.giggle",
-        media: [
-          {
-            type: "image",
-            url: "https://p19-common-sign.tiktokcdn-us.com/example/photo-1.jpeg",
+        return Response.json({
+          canonicalUrl:
+            "https://www.tiktok.com/@dj.giggle/photo/7656952653510888717",
+          postType: "slideshow",
+          coverUrl:
+            "https://p16-common-sign.tiktokcdn-us.com/example/cover.webp",
+          title: "still looping",
+          authorName: "Giggle \u2705",
+          authorHandle: "dj.giggle",
+          media: [
+            {
+              type: "image",
+              url: "https://p19-common-sign.tiktokcdn-us.com/example/photo-1.jpeg",
+            },
+          ],
+          audio: {
+            title: "original sound \u{1F525}",
+            artist: "DJ Echo \u{1F3A7}",
+            url: "https://v16-ies-music.tiktokcdn-us.com/example/audio-track/?mime_type=audio_mpeg",
           },
-        ],
-        audio: {
-          title: "original sound \u{1F525}",
-          artist: "DJ Echo \u{1F3A7}",
-          url: "https://v16-ies-music.tiktokcdn-us.com/example/audio-track/?mime_type=audio_mpeg",
-        },
-      });
-    }) as unknown as typeof fetch);
+        });
+      }) as unknown as typeof fetch,
+    );
 
     const { container } = render(
       <LinkEmbed
@@ -822,41 +965,51 @@ describe("LinkEmbed DOM rendering", () => {
 
     const audioRow = container.querySelector("audio")?.closest("div");
     expect(audioRow).not.toBeNull();
-    expect(audioRow?.querySelectorAll('[aria-label^=":"]').length ?? 0).toBeGreaterThanOrEqual(2);
+    expect(
+      audioRow?.querySelectorAll('[aria-label^=":"]').length ?? 0,
+    ).toBeGreaterThanOrEqual(2);
   });
 
   it("keeps only TikTok hashtags when the caption candidate is author-prefixed", async () => {
-    vi.stubGlobal("IntersectionObserver", class {
-      observe = vi.fn();
-      disconnect = vi.fn();
-      unobserve = vi.fn();
-      takeRecords = vi.fn(() => []);
-      root = null;
-      rootMargin = "";
-      thresholds = [];
-    } as unknown as typeof IntersectionObserver);
+    vi.stubGlobal(
+      "IntersectionObserver",
+      class {
+        observe = vi.fn();
+        disconnect = vi.fn();
+        unobserve = vi.fn();
+        takeRecords = vi.fn(() => []);
+        root = null;
+        rootMargin = "";
+        thresholds = [];
+      } as unknown as typeof IntersectionObserver,
+    );
 
-    vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => {
-      const url = input.toString();
-      if (!url.includes("/api/tiktok-video?videoUrl=")) {
-        return new Response("not found", { status: 404 });
-      }
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request) => {
+        const url = input.toString();
+        if (!url.includes("/api/tiktok-video?videoUrl=")) {
+          return new Response("not found", { status: 404 });
+        }
 
-      return Response.json({
-        canonicalUrl: "https://www.tiktok.com/@dj.giggle/photo/7656952653510888717",
-        postType: "slideshow",
-        coverUrl: "https://p16-common-sign.tiktokcdn-us.com/example/cover.webp",
-        title: "Giggle ✓ #gta6 #sad #fyp #grandtheftauto6",
-        authorName: "Giggle ✓",
-        authorHandle: "dj.giggle",
-        media: [
-          {
-            type: "image",
-            url: "https://p19-common-sign.tiktokcdn-us.com/example/photo-1.jpeg",
-          },
-        ],
-      });
-    }) as unknown as typeof fetch);
+        return Response.json({
+          canonicalUrl:
+            "https://www.tiktok.com/@dj.giggle/photo/7656952653510888717",
+          postType: "slideshow",
+          coverUrl:
+            "https://p16-common-sign.tiktokcdn-us.com/example/cover.webp",
+          title: "Giggle ✓ #gta6 #sad #fyp #grandtheftauto6",
+          authorName: "Giggle ✓",
+          authorHandle: "dj.giggle",
+          media: [
+            {
+              type: "image",
+              url: "https://p19-common-sign.tiktokcdn-us.com/example/photo-1.jpeg",
+            },
+          ],
+        });
+      }) as unknown as typeof fetch,
+    );
 
     const { container } = render(
       <LinkEmbed
@@ -873,23 +1026,29 @@ describe("LinkEmbed DOM rendering", () => {
       expect(container.textContent).toContain("#gta6");
     });
 
-    const captionParagraph = Array.from(container.querySelectorAll("p"))
-      .find((element) => element.textContent?.includes("#gta6"));
-    expect(captionParagraph?.textContent).toContain("#gta6 #sad #fyp #grandtheftauto6");
+    const captionParagraph = Array.from(container.querySelectorAll("p")).find(
+      (element) => element.textContent?.includes("#gta6"),
+    );
+    expect(captionParagraph?.textContent).toContain(
+      "#gta6 #sad #fyp #grandtheftauto6",
+    );
     expect(captionParagraph?.textContent).not.toContain("Giggle ✓");
     expect(container.textContent?.match(/Giggle ✓/g)?.length ?? 0).toBe(1);
   });
 
   it("hydrates TikTok videos without waiting for intersection and uses the custom player", async () => {
-    vi.stubGlobal("IntersectionObserver", class {
-      observe = vi.fn();
-      disconnect = vi.fn();
-      unobserve = vi.fn();
-      takeRecords = vi.fn(() => []);
-      root = null;
-      rootMargin = "";
-      thresholds = [];
-    } as unknown as typeof IntersectionObserver);
+    vi.stubGlobal(
+      "IntersectionObserver",
+      class {
+        observe = vi.fn();
+        disconnect = vi.fn();
+        unobserve = vi.fn();
+        takeRecords = vi.fn(() => []);
+        root = null;
+        rootMargin = "";
+        thresholds = [];
+      } as unknown as typeof IntersectionObserver,
+    );
 
     const fetchMock = vi.fn(async (input: string | URL | Request) => {
       const url = input.toString();
@@ -898,10 +1057,12 @@ describe("LinkEmbed DOM rendering", () => {
       }
 
       return Response.json({
-        canonicalUrl: "https://www.tiktok.com/@killa_cop_/video/7646427256587308308",
+        canonicalUrl:
+          "https://www.tiktok.com/@killa_cop_/video/7646427256587308308",
         postType: "video",
         videoUrl: "https://v19.tiktokcdn-us.com/example/video.mp4",
-        coverUrl: "https://p19-common-sign.tiktokcdn-us.com/example/video-cover.jpeg",
+        coverUrl:
+          "https://p19-common-sign.tiktokcdn-us.com/example/video-cover.jpeg",
         title: "What's up",
         authorName: "Killa Cop",
         authorHandle: "killa_cop_",
@@ -909,7 +1070,8 @@ describe("LinkEmbed DOM rendering", () => {
           {
             type: "video",
             url: "https://v19.tiktokcdn-us.com/example/video.mp4",
-            thumbnailUrl: "https://p19-common-sign.tiktokcdn-us.com/example/video-cover.jpeg",
+            thumbnailUrl:
+              "https://p19-common-sign.tiktokcdn-us.com/example/video-cover.jpeg",
             contentType: "video/mp4",
             durationSeconds: 9,
           },
@@ -918,9 +1080,7 @@ describe("LinkEmbed DOM rendering", () => {
     });
     vi.stubGlobal("fetch", fetchMock as unknown as typeof fetch);
 
-    const { container } = render(
-      <LinkEmbed embed={makeTikTokVideoEmbed()} />,
-    );
+    const { container } = render(<LinkEmbed embed={makeTikTokVideoEmbed()} />);
 
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -934,48 +1094,57 @@ describe("LinkEmbed DOM rendering", () => {
   });
 
   it("keeps hydrated TikTok videos out of iframe fallback after a direct media error", async () => {
-    vi.stubGlobal("IntersectionObserver", class {
-      observe = vi.fn();
-      disconnect = vi.fn();
-      unobserve = vi.fn();
-      takeRecords = vi.fn(() => []);
-      root = null;
-      rootMargin = "";
-      thresholds = [];
-    } as unknown as typeof IntersectionObserver);
-
-    vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => {
-      const url = input.toString();
-      if (!url.includes("/api/tiktok-video?videoUrl=")) {
-        return new Response("not found", { status: 404 });
-      }
-
-      return Response.json({
-        canonicalUrl: "https://www.tiktok.com/@killa_cop_/video/7646427256587308308",
-        postType: "video",
-        videoUrl: "https://v19.tiktokcdn-us.com/example/video.mp4",
-        coverUrl: "https://p19-common-sign.tiktokcdn-us.com/example/video-cover.jpeg",
-        title: "What's up",
-        authorName: "Killa Cop",
-        authorHandle: "killa_cop_",
-        media: [
-          {
-            type: "video",
-            url: "https://v19.tiktokcdn-us.com/example/video.mp4",
-            thumbnailUrl: "https://p19-common-sign.tiktokcdn-us.com/example/video-cover.jpeg",
-            contentType: "video/mp4",
-            durationSeconds: 9,
-          },
-        ],
-      });
-    }) as unknown as typeof fetch);
-
-    const { container } = render(
-      <LinkEmbed embed={makeTikTokVideoEmbed()} />,
+    vi.stubGlobal(
+      "IntersectionObserver",
+      class {
+        observe = vi.fn();
+        disconnect = vi.fn();
+        unobserve = vi.fn();
+        takeRecords = vi.fn(() => []);
+        root = null;
+        rootMargin = "";
+        thresholds = [];
+      } as unknown as typeof IntersectionObserver,
     );
 
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request) => {
+        const url = input.toString();
+        if (!url.includes("/api/tiktok-video?videoUrl=")) {
+          return new Response("not found", { status: 404 });
+        }
+
+        return Response.json({
+          canonicalUrl:
+            "https://www.tiktok.com/@killa_cop_/video/7646427256587308308",
+          postType: "video",
+          videoUrl: "https://v19.tiktokcdn-us.com/example/video.mp4",
+          coverUrl:
+            "https://p19-common-sign.tiktokcdn-us.com/example/video-cover.jpeg",
+          title: "What's up",
+          authorName: "Killa Cop",
+          authorHandle: "killa_cop_",
+          media: [
+            {
+              type: "video",
+              url: "https://v19.tiktokcdn-us.com/example/video.mp4",
+              thumbnailUrl:
+                "https://p19-common-sign.tiktokcdn-us.com/example/video-cover.jpeg",
+              contentType: "video/mp4",
+              durationSeconds: 9,
+            },
+          ],
+        });
+      }) as unknown as typeof fetch,
+    );
+
+    const { container } = render(<LinkEmbed embed={makeTikTokVideoEmbed()} />);
+
     const video = await waitFor(() => {
-      const element = container.querySelector("video.rm-custom-video") as HTMLVideoElement | null;
+      const element = container.querySelector(
+        "video.rm-custom-video",
+      ) as HTMLVideoElement | null;
       expect(element).not.toBeNull();
       return element as HTMLVideoElement;
     });
@@ -988,34 +1157,44 @@ describe("LinkEmbed DOM rendering", () => {
   });
 
   it("rehydrates TikTok video embeds when a same-url message update supplies direct media", async () => {
-    vi.stubGlobal("IntersectionObserver", class {
-      observe = vi.fn();
-      disconnect = vi.fn();
-      unobserve = vi.fn();
-      takeRecords = vi.fn(() => []);
-      root = null;
-      rootMargin = "";
-      thresholds = [];
-    } as unknown as typeof IntersectionObserver);
+    vi.stubGlobal(
+      "IntersectionObserver",
+      class {
+        observe = vi.fn();
+        disconnect = vi.fn();
+        unobserve = vi.fn();
+        takeRecords = vi.fn(() => []);
+        root = null;
+        rootMargin = "";
+        thresholds = [];
+      } as unknown as typeof IntersectionObserver,
+    );
 
-    const fetchMock = vi.fn(async () => Response.json({
-      canonicalUrl: "https://www.tiktok.com/@dre2funtyyy/video/7657740052608339214",
-      postType: "video",
-      videoUrl: "https://v19.tiktokcdn-us.com/example/video.mp4",
-      coverUrl: "https://p16-common-sign.tiktokcdn-us.com/example/full-frame-cover.webp",
-      title: "Twitch:dre2funtyy",
-      authorName: "dre2funtyyy",
-      authorHandle: "dre2funtyyy",
-      media: [{
-        type: "video",
-        url: "https://v19.tiktokcdn-us.com/example/video.mp4",
-        thumbnailUrl: "https://p16-common-sign.tiktokcdn-us.com/example/full-frame-cover.webp",
-        contentType: "video/mp4",
-        durationSeconds: 12,
-        width: 720,
-        height: 1280,
-      }],
-    }));
+    const fetchMock = vi.fn(async () =>
+      Response.json({
+        canonicalUrl:
+          "https://www.tiktok.com/@dre2funtyyy/video/7657740052608339214",
+        postType: "video",
+        videoUrl: "https://v19.tiktokcdn-us.com/example/video.mp4",
+        coverUrl:
+          "https://p16-common-sign.tiktokcdn-us.com/example/full-frame-cover.webp",
+        title: "Twitch:dre2funtyy",
+        authorName: "dre2funtyyy",
+        authorHandle: "dre2funtyyy",
+        media: [
+          {
+            type: "video",
+            url: "https://v19.tiktokcdn-us.com/example/video.mp4",
+            thumbnailUrl:
+              "https://p16-common-sign.tiktokcdn-us.com/example/full-frame-cover.webp",
+            contentType: "video/mp4",
+            durationSeconds: 12,
+            width: 720,
+            height: 1280,
+          },
+        ],
+      }),
+    );
     vi.stubGlobal("fetch", fetchMock as unknown as typeof fetch);
 
     const initialEmbed = makeTikTokVideoEmbed({
@@ -1036,9 +1215,7 @@ describe("LinkEmbed DOM rendering", () => {
       },
     });
 
-    const { container, rerender } = render(
-      <LinkEmbed embed={initialEmbed} />,
-    );
+    const { container, rerender } = render(<LinkEmbed embed={initialEmbed} />);
 
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -1050,15 +1227,18 @@ describe("LinkEmbed DOM rendering", () => {
 
     const updatedEmbed = {
       ...initialEmbed,
-      media: [{
-        type: "video" as const,
-        url: "https://v19.tiktokcdn-us.com/example/video.mp4",
-        thumbnailUrl: "https://p16-common-sign.tiktokcdn-us.com/example/full-frame-cover.webp",
-        contentType: "video/mp4",
-        durationSeconds: 12,
-        width: 720,
-        height: 1280,
-      }],
+      media: [
+        {
+          type: "video" as const,
+          url: "https://v19.tiktokcdn-us.com/example/video.mp4",
+          thumbnailUrl:
+            "https://p16-common-sign.tiktokcdn-us.com/example/full-frame-cover.webp",
+          contentType: "video/mp4",
+          durationSeconds: 12,
+          width: 720,
+          height: 1280,
+        },
+      ],
       thumbnail: {
         url: "https://p16-common-sign.tiktokcdn-us.com/example/full-frame-cover.webp",
         width: 720,
@@ -1078,7 +1258,9 @@ describe("LinkEmbed DOM rendering", () => {
       expect(fetchMock).toHaveBeenCalledTimes(2);
     });
 
-    const video = container.querySelector("video.rm-custom-video") as HTMLVideoElement | null;
+    const video = container.querySelector(
+      "video.rm-custom-video",
+    ) as HTMLVideoElement | null;
     expect(video).not.toBeNull();
     expect(video?.getAttribute("poster")).toContain("full-frame-cover.webp");
   });

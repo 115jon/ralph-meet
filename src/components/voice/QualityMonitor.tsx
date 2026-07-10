@@ -1,4 +1,3 @@
-
 import { formatQuality } from "@/lib/voice/utils";
 import React, { useEffect, useState } from "react";
 
@@ -7,7 +6,7 @@ interface QualityMonitorProps {
   signaledQuality?: string | null;
   sfu?: any;
   userId?: string;
-  type?: 'cam' | 'screen';
+  type?: "cam" | "screen";
 }
 
 export const QualityMonitor: React.FC<QualityMonitorProps> = ({
@@ -15,7 +14,7 @@ export const QualityMonitor: React.FC<QualityMonitorProps> = ({
   signaledQuality,
   sfu,
   userId,
-  type
+  type,
 }) => {
   const [qualityText, setQualityText] = useState("HD");
 
@@ -32,7 +31,12 @@ export const QualityMonitor: React.FC<QualityMonitorProps> = ({
 
     const update = () => {
       let stats = null;
-      if (sfu && userId && type && typeof sfu.getStatsByClerkId === "function") {
+      if (
+        sfu &&
+        userId &&
+        type &&
+        typeof sfu.getStatsByClerkId === "function"
+      ) {
         stats = sfu.getStatsByClerkId(userId, type);
       }
       setQualityText(formatQuality(signaledQuality, track, stats));

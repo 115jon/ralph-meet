@@ -79,13 +79,20 @@ const GET = async ({ request }: any) => {
       } catch (syncErr) {
         log.error("Auto-sync from Ralph Auth failed:", syncErr);
       }
-      return apiError("User profile not found. Please sign out and sign back in.", 404);
+      return apiError(
+        "User profile not found. Please sign out and sign back in.",
+        404,
+      );
     }
     throw e;
   }
 };
 
-async function backfillMissingAvatar(db: any, user: UserProfileRow, headers: Headers) {
+async function backfillMissingAvatar(
+  db: any,
+  user: UserProfileRow,
+  headers: Headers,
+) {
   if (user.avatar_url) return;
 
   try {
@@ -94,7 +101,9 @@ async function backfillMissingAvatar(db: any, user: UserProfileRow, headers: Hea
     if (!avatarUrl) return;
 
     await db
-      .prepare(`UPDATE users SET avatar_url = ? WHERE id = ? AND (avatar_url IS NULL OR avatar_url = '')`)
+      .prepare(
+        `UPDATE users SET avatar_url = ? WHERE id = ? AND (avatar_url IS NULL OR avatar_url = '')`,
+      )
       .bind(avatarUrl, user.id)
       .run();
     user.avatar_url = avatarUrl;
@@ -111,9 +120,15 @@ async function syncUserFromRalphAuth(
   const authUser = await getCurrentUser(headers);
   if (!authUser) return null;
 
-  const email = authUser.email ?? authUser.primaryEmailAddress?.emailAddress ?? null;
-  const username = authUser.username ?? (email ? email.split("@")[0] : null) ?? `user_${userId.slice(-6)}`;
-  const fullName = [authUser.firstName, authUser.lastName].filter(Boolean).join(" ");
+  const email =
+    authUser.email ?? authUser.primaryEmailAddress?.emailAddress ?? null;
+  const username =
+    authUser.username ??
+    (email ? email.split("@")[0] : null) ??
+    `user_${userId.slice(-6)}`;
+  const fullName = [authUser.firstName, authUser.lastName]
+    .filter(Boolean)
+    .join(" ");
   const displayName = authUser.name ?? (fullName || username);
   const avatarUrl = authUser.imageUrl ?? authUser.image ?? null;
   const bio = authUser.bio ?? null;
@@ -150,7 +165,7 @@ async function syncUserFromRalphAuth(
          END,
          bio = COALESCE(users.bio, excluded.bio),
          profile_accent_color = COALESCE(users.profile_accent_color, excluded.profile_accent_color),
-         profile_background_color = COALESCE(users.profile_background_color, excluded.profile_background_color)`
+         profile_background_color = COALESCE(users.profile_background_color, excluded.profile_background_color)`,
     )
     .bind(
       userId,
@@ -199,7 +214,7 @@ async function ensureIdentityClaimsTable(db: any) {
         email TEXT,
         match_method TEXT NOT NULL,
         claimed_at TEXT NOT NULL DEFAULT (datetime('now'))
-      )`
+      )`,
     )
     .run();
 }
@@ -216,11 +231,13 @@ async function claimLegacyIdentity(
     now: string;
   },
 ): Promise<UserProfileRow | null> {
-  const existingClaim = await db
-    .prepare("SELECT legacy_user_id FROM user_identity_claims WHERE auth_user_id = ? LIMIT 1")
+  const existingClaim = (await db
+    .prepare(
+      "SELECT legacy_user_id FROM user_identity_claims WHERE auth_user_id = ? LIMIT 1",
+    )
     .bind(input.authUserId)
     .first()
-    .catch(() => null) as { legacy_user_id: string } | null;
+    .catch(() => null)) as { legacy_user_id: string } | null;
 
   if (existingClaim?.legacy_user_id) {
     const mapped = await getMe(db, input.authUserId).catch(() => null);
@@ -231,34 +248,34 @@ async function claimLegacyIdentity(
   if (!candidates.length) return null;
 
   const placeholders = candidates.map(() => "?").join(", ");
-  const { results = [] } = await db
+  const { results = [] } = (await db
     .prepare(
       `SELECT id, username, display_name, avatar_url, avatar_display, updated_at, bio, pronouns, status, custom_status
             , banner_url, banner_content_type, nameplate_url, nameplate_content_type
             , profile_accent_color, profile_background_color, profile_banner_color, display_name_style
             , theme_preference, theme_sync_enabled, media_content_filter
         FROM users
-        WHERE id != ? AND lower(username) IN (${placeholders})`
+        WHERE id != ? AND lower(username) IN (${placeholders})`,
     )
     .bind(input.authUserId, ...candidates)
     .all()
-    .catch(() => ({ results: [] })) as { results?: UserProfileRow[] };
+    .catch(() => ({ results: [] }))) as { results?: UserProfileRow[] };
 
   if (results.length !== 1) return null;
   const legacy = results[0];
 
-  const existingNewUser = await db
+  const existingNewUser = (await db
     .prepare("SELECT id FROM users WHERE id = ? LIMIT 1")
     .bind(input.authUserId)
     .first()
-    .catch(() => null) as { id: string } | null;
+    .catch(() => null)) as { id: string } | null;
 
   if (!existingNewUser) {
     const legacyProfileTheme = applyProfileThemeDefaults(legacy);
     await db
       .prepare(
         `INSERT INTO users (id, username, display_name, avatar_url, avatar_display, banner_url, banner_content_type, nameplate_url, nameplate_content_type, profile_accent_color, profile_background_color, profile_banner_color, display_name_style, theme_preference, theme_sync_enabled, media_content_filter, bio, pronouns, status, custom_status, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .bind(
         input.authUserId,
@@ -288,16 +305,18 @@ async function claimLegacyIdentity(
   }
 
   const statements = USER_ID_REFERENCES.map(([table, column]) =>
-    db.prepare(`UPDATE ${table} SET ${column} = ? WHERE ${column} = ?`).bind(input.authUserId, legacy.id)
+    db
+      .prepare(`UPDATE ${table} SET ${column} = ? WHERE ${column} = ?`)
+      .bind(input.authUserId, legacy.id),
   );
   statements.push(
     db
       .prepare(
         `UPDATE channel_permission_overrides
          SET target_id = ?
-         WHERE target_type = 'user' AND target_id = ?`
+         WHERE target_type = 'user' AND target_id = ?`,
       )
-      .bind(input.authUserId, legacy.id)
+      .bind(input.authUserId, legacy.id),
   );
   statements.push(db.prepare("DELETE FROM users WHERE id = ?").bind(legacy.id));
   statements.push(
@@ -309,9 +328,9 @@ async function claimLegacyIdentity(
            legacy_user_id = excluded.legacy_user_id,
            email = excluded.email,
            match_method = excluded.match_method,
-           claimed_at = excluded.claimed_at`
+           claimed_at = excluded.claimed_at`,
       )
-      .bind(input.authUserId, legacy.id, input.email, input.now)
+      .bind(input.authUserId, legacy.id, input.email, input.now),
   );
 
   await db.batch(statements);
@@ -319,7 +338,9 @@ async function claimLegacyIdentity(
   const merged = await getMe(db, input.authUserId);
   if (!merged.avatar_url && input.avatarUrl) {
     await db
-      .prepare("UPDATE users SET avatar_url = ? WHERE id = ? AND (avatar_url IS NULL OR avatar_url = '')")
+      .prepare(
+        "UPDATE users SET avatar_url = ? WHERE id = ? AND (avatar_url IS NULL OR avatar_url = '')",
+      )
       .bind(input.avatarUrl, input.authUserId)
       .run();
     merged.avatar_url = input.avatarUrl;

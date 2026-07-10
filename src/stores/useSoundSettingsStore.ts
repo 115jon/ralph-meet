@@ -70,9 +70,14 @@ export const useSoundSettingsStore = create<SoundSettingsState>()(
         if (!raw) return defaultSoundSettings;
         // Return cached merged object if the underlying data hasn't changed
         const cached = get()._cache[uid];
-        if (cached && Object.keys(defaultSoundSettings).every(
-          k => (cached as any)[k] === ((raw as any)[k] ?? (defaultSoundSettings as any)[k])
-        )) {
+        if (
+          cached &&
+          Object.keys(defaultSoundSettings).every(
+            (k) =>
+              (cached as any)[k] ===
+              ((raw as any)[k] ?? (defaultSoundSettings as any)[k]),
+          )
+        ) {
           return cached;
         }
         const merged = { ...defaultSoundSettings, ...raw };
@@ -92,7 +97,11 @@ export const useSoundSettingsStore = create<SoundSettingsState>()(
             _cache: newCache,
             userSettings: {
               ...state.userSettings,
-              [uid]: { ...defaultSoundSettings, ...state.userSettings[uid], ...updates },
+              [uid]: {
+                ...defaultSoundSettings,
+                ...state.userSettings[uid],
+                ...updates,
+              },
             },
           };
         });
@@ -101,13 +110,15 @@ export const useSoundSettingsStore = create<SoundSettingsState>()(
     {
       name: "sound-settings-storage",
       version: 1,
-    }
-  )
+    },
+  ),
 );
 
 // ── Convenience: check if a specific sound category is enabled ──────────────
 
-export function isSoundEnabled(category: keyof Omit<SoundSettings, "soundsEnabled" | "soundVolume">): boolean {
+export function isSoundEnabled(
+  category: keyof Omit<SoundSettings, "soundsEnabled" | "soundVolume">,
+): boolean {
   const store = useSoundSettingsStore.getState();
   const settings = store.getSettings();
   return settings.soundsEnabled && settings[category];

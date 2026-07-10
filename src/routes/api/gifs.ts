@@ -1,6 +1,13 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute } from "@tanstack/react-router";
 
-import { apiError, apiSuccess, getDB, getEnv, getKV, requireAuth } from "@/lib/api-helpers";
+import {
+  apiError,
+  apiSuccess,
+  getDB,
+  getEnv,
+  getKV,
+  requireAuth,
+} from "@/lib/api-helpers";
 import {
   buildGifProviderCacheKey,
   buildTenorCacheKey,
@@ -33,11 +40,26 @@ const TENOR_BOOTSTRAP_URL = "https://tenor.com/search/cat-gifs";
 const TENOR_CONFIG_KV_KEY = "tenor:v1:config";
 const TENOR_CONFIG_SOFT_TTL_MS = 12 * 60 * 60 * 1000;
 const TENOR_CONFIG_STALE_TTL_SECONDS = 7 * 24 * 60 * 60;
-const TENOR_CATEGORIES_CACHE = { freshTtlSeconds: 12 * 60 * 60, staleTtlSeconds: 7 * 24 * 60 * 60 };
-const TENOR_FEATURED_CACHE = { freshTtlSeconds: 5 * 60, staleTtlSeconds: 60 * 60 };
-const TENOR_SEARCH_CACHE = { freshTtlSeconds: 10 * 60, staleTtlSeconds: 24 * 60 * 60 };
-const AUTOCOMPLETE_CACHE = { freshTtlSeconds: 30 * 60, staleTtlSeconds: 24 * 60 * 60 };
-const SUGGESTIONS_CACHE = { freshTtlSeconds: 30 * 60, staleTtlSeconds: 24 * 60 * 60 };
+const TENOR_CATEGORIES_CACHE = {
+  freshTtlSeconds: 12 * 60 * 60,
+  staleTtlSeconds: 7 * 24 * 60 * 60,
+};
+const TENOR_FEATURED_CACHE = {
+  freshTtlSeconds: 5 * 60,
+  staleTtlSeconds: 60 * 60,
+};
+const TENOR_SEARCH_CACHE = {
+  freshTtlSeconds: 10 * 60,
+  staleTtlSeconds: 24 * 60 * 60,
+};
+const AUTOCOMPLETE_CACHE = {
+  freshTtlSeconds: 30 * 60,
+  staleTtlSeconds: 24 * 60 * 60,
+};
+const SUGGESTIONS_CACHE = {
+  freshTtlSeconds: 30 * 60,
+  staleTtlSeconds: 24 * 60 * 60,
+};
 const MAX_TENOR_LIMIT = 30;
 const DEMO_MAX_GIF_LIMIT = 12;
 const DEMO_MAX_QUERY_LENGTH = 64;
@@ -85,7 +107,7 @@ interface KvCacheEntry<T> {
 class TenorRequestError extends Error {
   constructor(
     message: string,
-    readonly status: number
+    readonly status: number,
   ) {
     super(message);
   }
@@ -104,15 +126,24 @@ async function readKvJson<T>(key: string): Promise<T | null> {
   }
 }
 
-async function writeKvJson<T>(key: string, value: T, expirationTtl: number): Promise<void> {
+async function writeKvJson<T>(
+  key: string,
+  value: T,
+  expirationTtl: number,
+): Promise<void> {
   try {
-    await getKV().put(key, JSON.stringify(value), { expirationTtl: Math.max(60, expirationTtl) });
+    await getKV().put(key, JSON.stringify(value), {
+      expirationTtl: Math.max(60, expirationTtl),
+    });
   } catch {
     // KV is an optimization only; Tenor requests should still work without it.
   }
 }
 
-function rememberTenorConfig(config: TenorConfig, ttlMs = TENOR_CONFIG_SOFT_TTL_MS): TenorConfig {
+function rememberTenorConfig(
+  config: TenorConfig,
+  ttlMs = TENOR_CONFIG_SOFT_TTL_MS,
+): TenorConfig {
   cachedTenorConfig = config;
   cachedTenorConfigExpiresAt = Date.now() + ttlMs;
   return config;
@@ -120,9 +151,11 @@ function rememberTenorConfig(config: TenorConfig, ttlMs = TENOR_CONFIG_SOFT_TTL_
 
 async function getTenorConfig(): Promise<TenorConfig | null> {
   const now = Date.now();
-  if (cachedTenorConfig && cachedTenorConfigExpiresAt > now) return cachedTenorConfig;
+  if (cachedTenorConfig && cachedTenorConfigExpiresAt > now)
+    return cachedTenorConfig;
 
-  const kvConfig = await readKvJson<KvCacheEntry<TenorConfig>>(TENOR_CONFIG_KV_KEY);
+  const kvConfig =
+    await readKvJson<KvCacheEntry<TenorConfig>>(TENOR_CONFIG_KV_KEY);
   if (kvConfig?.data && now - kvConfig.cachedAt < TENOR_CONFIG_SOFT_TTL_MS) {
     return rememberTenorConfig(kvConfig.data);
   }
@@ -131,8 +164,15 @@ async function getTenorConfig(): Promise<TenorConfig | null> {
     tenorConfigPromise = fetchTenorConfig()
       .then(async (config) => {
         if (config) {
-          const entry: KvCacheEntry<TenorConfig> = { cachedAt: Date.now(), data: config };
-          await writeKvJson(TENOR_CONFIG_KV_KEY, entry, TENOR_CONFIG_STALE_TTL_SECONDS);
+          const entry: KvCacheEntry<TenorConfig> = {
+            cachedAt: Date.now(),
+            data: config,
+          };
+          await writeKvJson(
+            TENOR_CONFIG_KV_KEY,
+            entry,
+            TENOR_CONFIG_STALE_TTL_SECONDS,
+          );
           return rememberTenorConfig(config);
         }
 
@@ -153,7 +193,8 @@ async function fetchTenorConfig(): Promise<TenorConfig | null> {
   try {
     const res = await fetch(TENOR_BOOTSTRAP_URL, {
       headers: {
-        "User-Agent": "Mozilla/5.0 (compatible; RalphMeet/1.0; +https://ralph.dev)",
+        "User-Agent":
+          "Mozilla/5.0 (compatible; RalphMeet/1.0; +https://ralph.dev)",
       },
     });
     if (!res.ok) return null;
@@ -182,12 +223,16 @@ async function fetchTenor(path: string, params: TenorParams) {
 
   const res = await fetch(url.toString(), {
     headers: {
-      "User-Agent": "Mozilla/5.0 (compatible; RalphMeet/1.0; +https://ralph.dev)",
+      "User-Agent":
+        "Mozilla/5.0 (compatible; RalphMeet/1.0; +https://ralph.dev)",
     },
   });
 
   if (!res.ok) {
-    throw new TenorRequestError(`Tenor request failed with ${res.status}`, res.status);
+    throw new TenorRequestError(
+      `Tenor request failed with ${res.status}`,
+      res.status,
+    );
   }
 
   return res.json() as Promise<any>;
@@ -197,19 +242,29 @@ function getGifProvider(input: string | null): SearchGifProvider {
   return input === "tenor" ? "tenor" : DEFAULT_GIF_PROVIDER;
 }
 
-function getGifPickerMediaType(input: string | null | undefined): GifPickerMediaType {
+function getGifPickerMediaType(
+  input: string | null | undefined,
+): GifPickerMediaType {
   return isGifPickerMediaType(input) ? input : "gifs";
 }
 
-function isNativeKlipyMediaType(mediaType: GifPickerMediaType): mediaType is NativeKlipyMediaType {
-  return mediaType === "stickers" || mediaType === "clips" || mediaType === "memes";
+function isNativeKlipyMediaType(
+  mediaType: GifPickerMediaType,
+): mediaType is NativeKlipyMediaType {
+  return (
+    mediaType === "stickers" || mediaType === "clips" || mediaType === "memes"
+  );
 }
 
 function getKlipyMediaCollection(mediaType: NativeKlipyMediaType): string {
   return mediaType === "memes" ? "static-memes" : mediaType;
 }
 
-function clampString(value: unknown, fallback: string, maxLength: number): string {
+function clampString(
+  value: unknown,
+  fallback: string,
+  maxLength: number,
+): string {
   const text = typeof value === "string" ? value.trim() : "";
   return (text || fallback).slice(0, maxLength);
 }
@@ -236,21 +291,32 @@ function normalizeFavoriteProvider(value: unknown): GifProvider {
   return "klipy";
 }
 
-function getKlipyStaticAssetContentType(url: string, mediaType: Exclude<NativeKlipyMediaType, "clips">): GifPickerContentType {
+function getKlipyStaticAssetContentType(
+  url: string,
+  mediaType: Exclude<NativeKlipyMediaType, "clips">,
+): GifPickerContentType {
   const lowerUrl = url.toLowerCase();
   if (lowerUrl.includes(".webp")) return "image/webp";
-  if (lowerUrl.includes(".png")) return mediaType === "memes" ? "image/png" : "image/apng";
+  if (lowerUrl.includes(".png"))
+    return mediaType === "memes" ? "image/png" : "image/apng";
   return "image/gif";
 }
 
-function normalizeKlipyNativeResult(result: any, mediaType: NativeKlipyMediaType): GifPickerItem | null {
+function normalizeKlipyNativeResult(
+  result: any,
+  mediaType: NativeKlipyMediaType,
+): GifPickerItem | null {
   if (!result || (!result.id && !result.slug)) return null;
 
   const id = String(result.id || result.slug);
   const title = String(
     result.title ||
       result.slug ||
-      (mediaType === "stickers" ? "Sticker" : mediaType === "memes" ? "Meme" : "Clip")
+      (mediaType === "stickers"
+        ? "Sticker"
+        : mediaType === "memes"
+          ? "Meme"
+          : "Clip"),
   );
 
   let previewUrl = "";
@@ -293,8 +359,10 @@ function normalizeKlipyNativeResult(result: any, mediaType: NativeKlipyMediaType
     const hd = file.hd || {};
     const md = file.md || file.sm || hd || {};
 
-    const sendAsset = hd.webp || hd.png || hd.gif || md.webp || md.png || md.gif || {};
-    const previewAsset = md.webp || md.png || md.gif || hd.webp || hd.png || hd.gif || {};
+    const sendAsset =
+      hd.webp || hd.png || hd.gif || md.webp || md.png || md.gif || {};
+    const previewAsset =
+      md.webp || md.png || md.gif || hd.webp || hd.png || hd.gif || {};
 
     sendUrl = sendAsset.url || "";
     sendWidth = sendAsset.width || 320;
@@ -335,11 +403,18 @@ function normalizeKlipyNativeResult(result: any, mediaType: NativeKlipyMediaType
     },
     sourceUrl: sendUrl,
     aspectRatio: previewWidth / previewHeight,
-    duration: mediaType === "clips" ? (typeof result.duration === "number" ? result.duration : (typeof result.duration === "string" && !isNaN(parseFloat(result.duration)) ? parseFloat(result.duration) : undefined)) : undefined,
+    duration:
+      mediaType === "clips"
+        ? typeof result.duration === "number"
+          ? result.duration
+          : typeof result.duration === "string" &&
+              !isNaN(parseFloat(result.duration))
+            ? parseFloat(result.duration)
+            : undefined
+        : undefined,
     mediaType,
   };
 }
-
 
 function normalizeSuggestions(data: any): string[] {
   if (Array.isArray(data)) {
@@ -361,7 +436,12 @@ function normalizeSuggestions(data: any): string[] {
 function isSafeFavoriteUrl(value: unknown): value is string {
   if (typeof value !== "string" || !value.trim()) return false;
   const url = value.trim();
-  if (url.startsWith("/api/attachments/") || url.startsWith("/api/proxy-media?") || url.startsWith("attachments/")) return true;
+  if (
+    url.startsWith("/api/attachments/") ||
+    url.startsWith("/api/proxy-media?") ||
+    url.startsWith("attachments/")
+  )
+    return true;
 
   try {
     const parsed = new URL(url);
@@ -373,17 +453,28 @@ function isSafeFavoriteUrl(value: unknown): value is string {
 
 function normalizeFavorite(raw: any): StoredGifFavoriteRow | null {
   if (!raw || typeof raw !== "object") return null;
-  const preview = raw.preview && typeof raw.preview === "object" ? raw.preview : null;
+  const preview =
+    raw.preview && typeof raw.preview === "object" ? raw.preview : null;
   const send = raw.send && typeof raw.send === "object" ? raw.send : null;
   const sourceUrl = raw.sourceUrl;
   const previewUrl = preview?.url;
   const sendUrl = send?.url;
-  if (!isSafeFavoriteUrl(sourceUrl) || !isSafeFavoriteUrl(previewUrl) || !isSafeFavoriteUrl(sendUrl)) return null;
+  if (
+    !isSafeFavoriteUrl(sourceUrl) ||
+    !isSafeFavoriteUrl(previewUrl) ||
+    !isSafeFavoriteUrl(sendUrl)
+  )
+    return null;
 
   const provider = normalizeFavoriteProvider(raw.provider);
   const width = positiveInteger(preview?.width ?? send?.width, 320);
   const height = positiveInteger(preview?.height ?? send?.height, 320);
-  const duration = typeof raw.duration === "number" ? raw.duration : (typeof raw.duration === "string" && !isNaN(parseFloat(raw.duration)) ? parseFloat(raw.duration) : null);
+  const duration =
+    typeof raw.duration === "number"
+      ? raw.duration
+      : typeof raw.duration === "string" && !isNaN(parseFloat(raw.duration))
+        ? parseFloat(raw.duration)
+        : null;
 
   return {
     provider,
@@ -449,39 +540,53 @@ function toGifPickerItem(row: StoredGifFavoriteRow) {
 }
 
 async function listGifFavorites(userId: string) {
-  const { results } = await getDB().prepare(
-    `SELECT provider, gif_id, title, alt_text, query, source_url, aspect_ratio,
+  const { results } = await getDB()
+    .prepare(
+      `SELECT provider, gif_id, title, alt_text, query, source_url, aspect_ratio,
             preview_url, preview_width, preview_height, preview_size_bytes, preview_content_type,
             send_url, send_width, send_height, send_size_bytes, send_content_type, duration
      FROM gif_favorites
      WHERE user_id = ?
      ORDER BY created_at DESC
-     LIMIT ?`
-  ).bind(userId, MAX_GIF_FAVORITES).all<StoredGifFavoriteRow>();
+     LIMIT ?`,
+    )
+    .bind(userId, MAX_GIF_FAVORITES)
+    .all<StoredGifFavoriteRow>();
 
   return (results ?? []).map(toGifPickerItem);
 }
 
 async function pruneGifFavorites(userId: string) {
-  const { results } = await getDB().prepare(
-    `SELECT provider, gif_id
+  const { results } = await getDB()
+    .prepare(
+      `SELECT provider, gif_id
      FROM gif_favorites
      WHERE user_id = ?
      ORDER BY created_at DESC
-     LIMIT 1000 OFFSET ?`
-  ).bind(userId, MAX_GIF_FAVORITES).all<{ provider: string; gif_id: string }>();
+     LIMIT 1000 OFFSET ?`,
+    )
+    .bind(userId, MAX_GIF_FAVORITES)
+    .all<{ provider: string; gif_id: string }>();
 
   for (const row of results ?? []) {
-    await getDB().prepare(
-      `DELETE FROM gif_favorites WHERE user_id = ? AND provider = ? AND gif_id = ?`
-    ).bind(userId, row.provider, row.gif_id).run();
+    await getDB()
+      .prepare(
+        `DELETE FROM gif_favorites WHERE user_id = ? AND provider = ? AND gif_id = ?`,
+      )
+      .bind(userId, row.provider, row.gif_id)
+      .run();
   }
 }
 
-async function upsertGifFavorite(userId: string, favorite: StoredGifFavoriteRow, createdAt = new Date().toISOString()) {
+async function upsertGifFavorite(
+  userId: string,
+  favorite: StoredGifFavoriteRow,
+  createdAt = new Date().toISOString(),
+) {
   const updatedAt = new Date().toISOString();
-  await getDB().prepare(
-    `INSERT INTO gif_favorites (
+  await getDB()
+    .prepare(
+      `INSERT INTO gif_favorites (
        user_id, provider, gif_id, title, alt_text, query, source_url, aspect_ratio,
        preview_url, preview_width, preview_height, preview_size_bytes, preview_content_type,
        send_url, send_width, send_height, send_size_bytes, send_content_type, duration, created_at, updated_at
@@ -504,37 +609,41 @@ async function upsertGifFavorite(userId: string, favorite: StoredGifFavoriteRow,
        send_content_type = excluded.send_content_type,
        duration = excluded.duration,
        created_at = excluded.created_at,
-       updated_at = excluded.updated_at`
-  ).bind(
-    userId,
-    favorite.provider,
-    favorite.gif_id,
-    favorite.title,
-    favorite.alt_text,
-    favorite.query,
-    favorite.source_url,
-    favorite.aspect_ratio,
-    favorite.preview_url,
-    favorite.preview_width,
-    favorite.preview_height,
-    favorite.preview_size_bytes,
-    favorite.preview_content_type,
-    favorite.send_url,
-    favorite.send_width,
-    favorite.send_height,
-    favorite.send_size_bytes,
-    favorite.send_content_type,
-    favorite.duration ?? null,
-    createdAt,
-    updatedAt
-  ).run();
+       updated_at = excluded.updated_at`,
+    )
+    .bind(
+      userId,
+      favorite.provider,
+      favorite.gif_id,
+      favorite.title,
+      favorite.alt_text,
+      favorite.query,
+      favorite.source_url,
+      favorite.aspect_ratio,
+      favorite.preview_url,
+      favorite.preview_width,
+      favorite.preview_height,
+      favorite.preview_size_bytes,
+      favorite.preview_content_type,
+      favorite.send_url,
+      favorite.send_width,
+      favorite.send_height,
+      favorite.send_size_bytes,
+      favorite.send_content_type,
+      favorite.duration ?? null,
+      createdAt,
+      updatedAt,
+    )
+    .run();
 
   await pruneGifFavorites(userId);
 }
 
 function getKlipyApiKey(): string | null {
   const env = getEnv() as unknown as { KLIPY_API_KEY?: string };
-  return typeof env.KLIPY_API_KEY === "string" && env.KLIPY_API_KEY.trim() ? env.KLIPY_API_KEY.trim() : null;
+  return typeof env.KLIPY_API_KEY === "string" && env.KLIPY_API_KEY.trim()
+    ? env.KLIPY_API_KEY.trim()
+    : null;
 }
 
 async function fetchKlipy(path: string, params: GifApiParams) {
@@ -563,12 +672,16 @@ async function fetchKlipy(path: string, params: GifApiParams) {
 
   const res = await fetch(url.toString(), {
     headers: {
-      "User-Agent": "Mozilla/5.0 (compatible; RalphMeet/1.0; +https://ralph.dev)",
+      "User-Agent":
+        "Mozilla/5.0 (compatible; RalphMeet/1.0; +https://ralph.dev)",
     },
   });
 
   if (!res.ok) {
-    throw new TenorRequestError(`KLIPY request failed with ${res.status}`, res.status);
+    throw new TenorRequestError(
+      `KLIPY request failed with ${res.status}`,
+      res.status,
+    );
   }
 
   return res.json() as Promise<any>;
@@ -586,10 +699,12 @@ async function fetchGifProviderCached(
   path: string,
   params: GifApiParams,
   cache: { freshTtlSeconds: number; staleTtlSeconds: number },
-  options?: { disableCache?: boolean }
+  options?: { disableCache?: boolean },
 ) {
   if (options?.disableCache) {
-    return provider === "tenor" ? fetchTenor(path, params) : fetchKlipy(path, params);
+    return provider === "tenor"
+      ? fetchTenor(path, params)
+      : fetchKlipy(path, params);
   }
 
   const cacheKey =
@@ -604,9 +719,15 @@ async function fetchGifProviderCached(
 
   let request = inFlightTenorRequests.get(cacheKey);
   if (!request) {
-    request = (provider === "tenor" ? fetchTenor(path, params) : fetchKlipy(path, params))
+    request = (
+      provider === "tenor" ? fetchTenor(path, params) : fetchKlipy(path, params)
+    )
       .then(async (data) => {
-        await writeKvJson(cacheKey, { cachedAt: Date.now(), data }, cache.staleTtlSeconds);
+        await writeKvJson(
+          cacheKey,
+          { cachedAt: Date.now(), data },
+          cache.staleTtlSeconds,
+        );
         return data;
       })
       .finally(() => {
@@ -623,7 +744,11 @@ async function fetchGifProviderCached(
   }
 }
 
-function parseTenorLimit(raw: string | null, fallback: number, max = MAX_TENOR_LIMIT): number {
+function parseTenorLimit(
+  raw: string | null,
+  fallback: number,
+  max = MAX_TENOR_LIMIT,
+): number {
   const parsed = Number(raw || fallback);
   if (!Number.isFinite(parsed) || parsed < 1) return fallback;
   return Math.min(Math.floor(parsed), max);
@@ -636,19 +761,32 @@ const GET = async ({ request }: any) => {
   const isDemoRequest = url.searchParams.get("demo") === "1";
   const contentFilter = parseMediaContentFilter(
     url.searchParams.get("contentFilter"),
-    DEFAULT_MEDIA_CONTENT_FILTER
+    DEFAULT_MEDIA_CONTENT_FILTER,
   );
-  const requestedCustomerId = nullableString(url.searchParams.get("customerId"), 128) || undefined;
+  const requestedCustomerId =
+    nullableString(url.searchParams.get("customerId"), 128) || undefined;
   let userId: string | null = null;
 
   if (isDemoRequest) {
     const requestedProvider = url.searchParams.get("provider");
-    if (requestedProvider && requestedProvider !== "klipy" && requestedProvider !== "tenor") {
+    if (
+      requestedProvider &&
+      requestedProvider !== "klipy" &&
+      requestedProvider !== "tenor"
+    ) {
       return apiError("Unsupported GIF provider", 400);
     }
 
-    if (mode !== "categories" && mode !== "search" && mode !== "autocomplete" && mode !== "suggestions") {
-      return apiError("Demo GIF access only supports browsing, search, autocomplete, and suggestions", 403);
+    if (
+      mode !== "categories" &&
+      mode !== "search" &&
+      mode !== "autocomplete" &&
+      mode !== "suggestions"
+    ) {
+      return apiError(
+        "Demo GIF access only supports browsing, search, autocomplete, and suggestions",
+        403,
+      );
     }
 
     const cursor = url.searchParams.get("next");
@@ -669,7 +807,10 @@ const GET = async ({ request }: any) => {
       }
 
       if (provider === "klipy") {
-        await registerKlipyShare(id, url.searchParams.get("q")?.trim() || undefined);
+        await registerKlipyShare(
+          id,
+          url.searchParams.get("q")?.trim() || undefined,
+        );
       }
 
       return apiSuccess({ ok: true });
@@ -681,7 +822,9 @@ const GET = async ({ request }: any) => {
     }
 
     if (mode === "categories") {
-      const mediaType = getGifPickerMediaType(url.searchParams.get("mediaType"));
+      const mediaType = getGifPickerMediaType(
+        url.searchParams.get("mediaType"),
+      );
       if (provider === "klipy") {
         const klipyPath = isNativeKlipyMediaType(mediaType)
           ? `/api/v1/{app_key}/${getKlipyMediaCollection(mediaType)}/categories`
@@ -692,11 +835,13 @@ const GET = async ({ request }: any) => {
           {
             locale: url.searchParams.get("locale") || undefined,
           },
-          TENOR_CATEGORIES_CACHE
+          TENOR_CATEGORIES_CACHE,
         );
         const categoriesArray = data?.data?.categories || [];
         return apiSuccess({
-          categories: categoriesArray.map(normalizeKlipyCategory).filter(Boolean),
+          categories: categoriesArray
+            .map(normalizeKlipyCategory)
+            .filter(Boolean),
         });
       } else {
         const data = await fetchGifProviderCached(
@@ -706,12 +851,12 @@ const GET = async ({ request }: any) => {
             limit: parseTenorLimit(
               url.searchParams.get("limit"),
               isDemoRequest ? DEMO_MAX_GIF_LIMIT : MAX_TENOR_LIMIT,
-              isDemoRequest ? DEMO_MAX_GIF_LIMIT : MAX_TENOR_LIMIT
+              isDemoRequest ? DEMO_MAX_GIF_LIMIT : MAX_TENOR_LIMIT,
             ),
             contentfilter: "high",
             type: "featured",
           },
-          TENOR_CATEGORIES_CACHE
+          TENOR_CATEGORIES_CACHE,
         );
 
         return apiSuccess({
@@ -734,7 +879,7 @@ const GET = async ({ request }: any) => {
           provider,
           `/api/v1/{app_key}/autocomplete/${encodeURIComponent(q)}`,
           {},
-          AUTOCOMPLETE_CACHE
+          AUTOCOMPLETE_CACHE,
         );
         results = normalizeSuggestions(data);
       } else {
@@ -742,7 +887,7 @@ const GET = async ({ request }: any) => {
           provider,
           "/autocomplete",
           { q, limit: 10 },
-          AUTOCOMPLETE_CACHE
+          AUTOCOMPLETE_CACHE,
         );
         results = normalizeSuggestions(data);
       }
@@ -761,7 +906,7 @@ const GET = async ({ request }: any) => {
           provider,
           `/api/v1/{app_key}/search-suggestions/${encodeURIComponent(q)}`,
           {},
-          SUGGESTIONS_CACHE
+          SUGGESTIONS_CACHE,
         );
         results = normalizeSuggestions(data);
       } else {
@@ -769,18 +914,25 @@ const GET = async ({ request }: any) => {
           provider,
           "/search_suggestions",
           { q, limit: 10 },
-          SUGGESTIONS_CACHE
+          SUGGESTIONS_CACHE,
         );
         results = normalizeSuggestions(data);
       }
       return apiSuccess({ results });
     }
 
-    const query = url.searchParams.get("q")?.trim().slice(0, isDemoRequest ? DEMO_MAX_QUERY_LENGTH : 80) || undefined;
+    const query =
+      url.searchParams
+        .get("q")
+        ?.trim()
+        .slice(0, isDemoRequest ? DEMO_MAX_QUERY_LENGTH : 80) || undefined;
     const mediaType = getGifPickerMediaType(url.searchParams.get("mediaType"));
     const customerId = userId ?? requestedCustomerId;
 
-    if (provider === "tenor" && (mediaType === "clips" || mediaType === "memes")) {
+    if (
+      provider === "tenor" &&
+      (mediaType === "clips" || mediaType === "memes")
+    ) {
       return apiSuccess({ results: [], next: null });
     }
 
@@ -792,7 +944,7 @@ const GET = async ({ request }: any) => {
     const limit = parseTenorLimit(
       url.searchParams.get("limit"),
       isDemoRequest ? DEMO_MAX_GIF_LIMIT : 24,
-      isDemoRequest ? DEMO_MAX_GIF_LIMIT : MAX_TENOR_LIMIT
+      isDemoRequest ? DEMO_MAX_GIF_LIMIT : MAX_TENOR_LIMIT,
     );
 
     let endpoint = "";
@@ -840,7 +992,7 @@ const GET = async ({ request }: any) => {
       endpoint,
       params,
       cacheConfig,
-      { disableCache: provider === "klipy" && Boolean(customerId) }
+      { disableCache: provider === "klipy" && Boolean(customerId) },
     );
 
     let results: GifPickerItem[] = [];
@@ -860,7 +1012,10 @@ const GET = async ({ request }: any) => {
       const resultsArray = data.results || [];
       results = resultsArray
         .map((item: any) => {
-          const norm = provider === "tenor" ? normalizeTenorGifResult(item) : normalizeKlipyGifResult(item);
+          const norm =
+            provider === "tenor"
+              ? normalizeTenorGifResult(item)
+              : normalizeKlipyGifResult(item);
           if (norm) {
             norm.mediaType = mediaType;
           }
@@ -879,11 +1034,14 @@ const GET = async ({ request }: any) => {
       return apiError(
         `${provider === "tenor" ? "Tenor" : "KLIPY"} is rate limited. Try again shortly.`,
         429,
-        provider === "tenor" ? "TENOR_RATE_LIMITED" : "KLIPY_RATE_LIMITED"
+        provider === "tenor" ? "TENOR_RATE_LIMITED" : "KLIPY_RATE_LIMITED",
       );
     }
 
-    return apiError(error instanceof Error ? error.message : "Failed to fetch GIFs", 502);
+    return apiError(
+      error instanceof Error ? error.message : "Failed to fetch GIFs",
+      502,
+    );
   }
 };
 
@@ -895,25 +1053,41 @@ const POST = async ({ request }: any) => {
   const mode = url.searchParams.get("mode") || "favorite";
 
   try {
-    const body = await request.json() as FavoriteWriteBody;
+    const body = (await request.json()) as FavoriteWriteBody;
 
     if (mode === "favorites/import") {
-      const favorites = Array.isArray(body.favorites) ? body.favorites.slice(0, MAX_FAVORITE_IMPORT_COUNT) : [];
+      const favorites = Array.isArray(body.favorites)
+        ? body.favorites.slice(0, MAX_FAVORITE_IMPORT_COUNT)
+        : [];
       for (const [index, rawFavorite] of favorites.entries()) {
         const favorite = normalizeFavorite(rawFavorite);
         if (!favorite) continue;
-        await upsertGifFavorite(userId, favorite, new Date(Date.now() - index).toISOString());
+        await upsertGifFavorite(
+          userId,
+          favorite,
+          new Date(Date.now() - index).toISOString(),
+        );
       }
       return apiSuccess({ favorites: await listGifFavorites(userId) });
     }
 
     const favorite = normalizeFavorite(body.favorite);
-    if (!favorite) return apiError("Invalid GIF favorite", 400, "INVALID_GIF_FAVORITE");
+    if (!favorite)
+      return apiError("Invalid GIF favorite", 400, "INVALID_GIF_FAVORITE");
 
     await upsertGifFavorite(userId, favorite);
-    return apiSuccess({ favorite: toGifPickerItem(favorite), favorites: await listGifFavorites(userId) }, 201);
+    return apiSuccess(
+      {
+        favorite: toGifPickerItem(favorite),
+        favorites: await listGifFavorites(userId),
+      },
+      201,
+    );
   } catch (error) {
-    return apiError(error instanceof Error ? error.message : "Failed to save GIF favorite", 400);
+    return apiError(
+      error instanceof Error ? error.message : "Failed to save GIF favorite",
+      400,
+    );
   }
 };
 
@@ -923,27 +1097,34 @@ const DELETE = async ({ request }: any) => {
   const { userId } = authResult;
 
   try {
-    const body = await request.json().catch(() => ({})) as FavoriteWriteBody;
+    const body = (await request.json().catch(() => ({}))) as FavoriteWriteBody;
     const provider = normalizeFavoriteProvider(body.provider);
     const gifId = clampString(body.gif_id, "", 512);
-    if (!gifId) return apiError("GIF favorite id is required", 400, "MISSING_GIF_ID");
+    if (!gifId)
+      return apiError("GIF favorite id is required", 400, "MISSING_GIF_ID");
 
-    await getDB().prepare(
-      `DELETE FROM gif_favorites WHERE user_id = ? AND provider = ? AND gif_id = ?`
-    ).bind(userId, provider, gifId).run();
+    await getDB()
+      .prepare(
+        `DELETE FROM gif_favorites WHERE user_id = ? AND provider = ? AND gif_id = ?`,
+      )
+      .bind(userId, provider, gifId)
+      .run();
 
     return apiSuccess({ favorites: await listGifFavorites(userId) });
   } catch (error) {
-    return apiError(error instanceof Error ? error.message : "Failed to remove GIF favorite", 400);
+    return apiError(
+      error instanceof Error ? error.message : "Failed to remove GIF favorite",
+      400,
+    );
   }
 };
 
-export const Route = createFileRoute('/api/gifs')({
+export const Route = createFileRoute("/api/gifs")({
   server: {
     handlers: {
       GET,
       POST,
       DELETE,
-    }
-  }
+    },
+  },
 });

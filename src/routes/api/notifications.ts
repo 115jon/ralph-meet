@@ -1,13 +1,17 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute } from "@tanstack/react-router";
 
-import { apiSuccess, broadcastToUser, getDB, requireAuth } from "@/lib/api-helpers";
+import {
+  apiSuccess,
+  broadcastToUser,
+  getDB,
+  requireAuth,
+} from "@/lib/api-helpers";
 import { ServiceError } from "@/lib/service-error";
 import {
   clearNotifications,
   listNotifications,
   markNotificationsRead,
 } from "@/services/notification.service";
-
 
 // GET /api/notifications — fetch user's notifications (most recent first)
 const GET = async ({ request, params }: any) => {
@@ -26,11 +30,14 @@ const GET = async ({ request, params }: any) => {
     return apiSuccess(result);
   } catch (e) {
     if (e instanceof ServiceError) {
-      return Response.json({ error: e.message, code: e.code }, { status: e.status });
+      return Response.json(
+        { error: e.message, code: e.code },
+        { status: e.status },
+      );
     }
     throw e;
   }
-}
+};
 
 // PATCH /api/notifications — mark notifications as read
 const PATCH = async ({ request, params }: any) => {
@@ -50,11 +57,14 @@ const PATCH = async ({ request, params }: any) => {
     return apiSuccess({ success: true });
   } catch (e) {
     if (e instanceof ServiceError) {
-      return Response.json({ error: e.message, code: e.code }, { status: e.status });
+      return Response.json(
+        { error: e.message, code: e.code },
+        { status: e.status },
+      );
     }
     throw e;
   }
-}
+};
 
 // DELETE /api/notifications — clear all notifications
 const DELETE = async ({ request, params }: any) => {
@@ -67,15 +77,14 @@ const DELETE = async ({ request, params }: any) => {
   await broadcastToUser(userId, "NOTIFICATIONS_CLEAR", {});
 
   return apiSuccess({ cleared: true });
-}
+};
 
-
-export const Route = createFileRoute('/api/notifications')({
+export const Route = createFileRoute("/api/notifications")({
   server: {
     handlers: {
       GET,
       PATCH,
       DELETE,
-    }
-  }
+    },
+  },
 });

@@ -13,7 +13,12 @@ describe("remote track stream reducers", () => {
       alice: { "cam-video-alice": cam },
     };
 
-    const next = upsertRemoteTrackStream(initial, "alice", "screen-video-alice", screen);
+    const next = upsertRemoteTrackStream(
+      initial,
+      "alice",
+      "screen-video-alice",
+      screen,
+    );
 
     expect(next).toEqual({
       alice: {
@@ -38,7 +43,11 @@ describe("remote track stream reducers", () => {
       },
     };
 
-    const next = removeRemoteTrackStream(initial, "alice", "screen-video-alice");
+    const next = removeRemoteTrackStream(
+      initial,
+      "alice",
+      "screen-video-alice",
+    );
 
     expect(next).toEqual({
       alice: {
@@ -59,7 +68,9 @@ describe("remote track stream reducers", () => {
       },
     };
 
-    expect(removeRemoteTrackStream(initial, "alice", "cam-video-alice")).toEqual({});
+    expect(
+      removeRemoteTrackStream(initial, "alice", "cam-video-alice"),
+    ).toEqual({});
   });
 
   it("returns the same object when removing an unknown track", () => {
@@ -70,6 +81,8 @@ describe("remote track stream reducers", () => {
       },
     };
 
-    expect(removeRemoteTrackStream(initial, "alice", "screen-video-alice")).toBe(initial);
+    expect(
+      removeRemoteTrackStream(initial, "alice", "screen-video-alice"),
+    ).toBe(initial);
   });
 });

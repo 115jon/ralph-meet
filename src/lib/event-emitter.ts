@@ -3,7 +3,10 @@ export type EventHandler<T> = (data: T) => void;
 export class TypedEventEmitter<EventMap> {
   private handlers = new Map<keyof EventMap, Set<EventHandler<any>>>();
 
-  on<K extends keyof EventMap>(event: K, handler: EventHandler<EventMap[K]>): () => void {
+  on<K extends keyof EventMap>(
+    event: K,
+    handler: EventHandler<EventMap[K]>,
+  ): () => void {
     if (!this.handlers.has(event)) {
       this.handlers.set(event, new Set());
     }

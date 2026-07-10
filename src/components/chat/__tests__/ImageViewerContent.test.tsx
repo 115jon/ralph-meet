@@ -2,7 +2,9 @@ import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const useVideoPlaybackAvailabilityMock = vi.fn((_request?: unknown) => "playable");
+const useVideoPlaybackAvailabilityMock = vi.fn(
+  (_request?: unknown) => "playable",
+);
 
 vi.mock("@/components/chat/VideoAttachment", () => ({
   default: ({
@@ -26,7 +28,8 @@ vi.mock("@/components/chat/VideoAttachment", () => ({
 }));
 
 vi.mock("@/lib/video-playback-availability", () => ({
-  useVideoPlaybackAvailability: (request: unknown) => useVideoPlaybackAvailabilityMock(request),
+  useVideoPlaybackAvailability: (request: unknown) =>
+    useVideoPlaybackAvailabilityMock(request),
 }));
 
 import { ImageViewerContent } from "@/components/chat/ImageViewerContent";
@@ -69,11 +72,13 @@ describe("ImageViewerContent", () => {
         setLocalState={() => {}}
         getUrl={() => "https://media.example.com/video.mp4"}
         getPosterUrl={() => "https://media.example.com/poster.jpg"}
-      />
+      />,
     );
 
     expect(markup).toContain('data-src="https://media.example.com/video.mp4"');
-    expect(markup).toContain('data-poster="https://media.example.com/poster.jpg"');
+    expect(markup).toContain(
+      'data-poster="https://media.example.com/poster.jpg"',
+    );
     expect(markup).toContain('data-fallback-poster="true"');
     expect(markup).toContain('data-playback-mode="default"');
   });
@@ -92,7 +97,7 @@ describe("ImageViewerContent", () => {
         setLocalState={() => {}}
         getUrl={() => "https://media.example.com/video.mp4"}
         getPosterUrl={() => "https://media.example.com/poster.jpg"}
-      />
+      />,
     );
 
     expect(markup).toContain('src="https://media.example.com/poster.jpg"');
@@ -112,11 +117,13 @@ describe("ImageViewerContent", () => {
         setLocalState={() => {}}
         getUrl={() => "https://media.example.com/gif.mp4"}
         getPosterUrl={() => "https://media.example.com/gif-poster.jpg"}
-      />
+      />,
     );
 
     expect(markup).toContain('data-playback-mode="animated"');
-    expect(markup).toContain('data-poster="https://media.example.com/gif-poster.jpg"');
+    expect(markup).toContain(
+      'data-poster="https://media.example.com/gif-poster.jpg"',
+    );
   });
 
   it("renders the sensitive-media overlay when the current attachment should be blurred", () => {
@@ -132,7 +139,7 @@ describe("ImageViewerContent", () => {
         setLocalState={() => {}}
         getUrl={() => "https://media.example.com/video.mp4"}
         getPosterUrl={() => "https://media.example.com/poster.jpg"}
-      />
+      />,
     );
 
     expect(markup).toContain("Sensitive Media");

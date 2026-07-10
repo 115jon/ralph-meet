@@ -1,16 +1,22 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute } from "@tanstack/react-router";
 
 import { apiError, apiSuccess, getDB, requireAuth } from "@/lib/api-helpers";
 import { ServiceError } from "@/lib/service-error";
 import { kickMember } from "@/services/server.service";
-import { executeAuditLog, executeBroadcast, executeInvalidation } from "@/services/service-helpers";
-
+import {
+  executeAuditLog,
+  executeBroadcast,
+  executeInvalidation,
+} from "@/services/service-helpers";
 
 // PATCH /api/servers/:id/members/:userId — update a member's role
 // DEPRECATED for RBAC system. Role updates handled in PUT /api/servers/:id/members/:userId/roles
 const PATCH = async ({ request, params }: any) => {
-  return apiError("Deprecated. Use /api/servers/:id/members/:userId/roles", 400);
-}
+  return apiError(
+    "Deprecated. Use /api/servers/:id/members/:userId/roles",
+    400,
+  );
+};
 
 // DELETE /api/servers/:id/members/:userId — kick a member
 const DELETE = async ({ request, params }: any) => {
@@ -32,18 +38,20 @@ const DELETE = async ({ request, params }: any) => {
     return apiSuccess({ kicked: true });
   } catch (e) {
     if (e instanceof ServiceError) {
-      return Response.json({ error: e.message, code: e.code }, { status: e.status });
+      return Response.json(
+        { error: e.message, code: e.code },
+        { status: e.status },
+      );
     }
     throw e;
   }
-}
+};
 
-
-export const Route = createFileRoute('/api/servers/$id/members/$userId')({
+export const Route = createFileRoute("/api/servers/$id/members/$userId")({
   server: {
     handlers: {
       PATCH,
       DELETE,
-    }
-  }
+    },
+  },
 });

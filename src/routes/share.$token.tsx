@@ -4,7 +4,10 @@ import { hydrateInstagramEmbedsForShare } from "@/lib/share-embed-refresh";
 import { buildShareMetadata } from "@/lib/share-metadata";
 import { ServiceError } from "@/lib/service-error";
 import { getPublicWebUrl } from "@/lib/platform";
-import { getPublicMessageShare, type MessageShare } from "@/services/message-share.service";
+import {
+  getPublicMessageShare,
+  type MessageShare,
+} from "@/services/message-share.service";
 import { createFileRoute } from "@tanstack/react-router";
 import { createServerFn } from "@tanstack/react-start";
 
@@ -21,11 +24,16 @@ const loadPublicShare = createServerFn({ method: "GET" })
     const token = typeof data?.token === "string" ? data.token : "";
     try {
       const share = await hydrateInstagramEmbedsForShare(
-        await getPublicMessageShare(getDB(), token, new Date(), { incrementView: false }),
+        await getPublicMessageShare(getDB(), token, new Date(), {
+          incrementView: false,
+        }),
       );
       return { share, gone: false, origin };
     } catch (error) {
-      if (error instanceof ServiceError && (error.status === 404 || error.status === 410)) {
+      if (
+        error instanceof ServiceError &&
+        (error.status === 404 || error.status === 410)
+      ) {
         return { share: null, gone: true, origin };
       }
       throw error;
@@ -38,9 +46,15 @@ function shareHead(data?: ShareLoaderData) {
       meta: [
         { title: "Shared Message - Ralph Meet" },
         { name: "robots", content: "noindex, nofollow" },
-        { name: "description", content: "This Ralph Meet message share is unavailable." },
+        {
+          name: "description",
+          content: "This Ralph Meet message share is unavailable.",
+        },
         { property: "og:title", content: "Shared Message - Ralph Meet" },
-        { property: "og:description", content: "This Ralph Meet message share is unavailable." },
+        {
+          property: "og:description",
+          content: "This Ralph Meet message share is unavailable.",
+        },
         { property: "og:site_name", content: "Ralph Meet" },
       ],
     };
@@ -52,15 +66,27 @@ function shareHead(data?: ShareLoaderData) {
   const imageMediaUrl =
     media?.type === "image"
       ? media.url
-      : data.share.snapshot.embeds.find((embed) => embed.video?.url === media?.url && embed.thumbnail?.url)?.thumbnail?.url ??
-        data.share.snapshot.embeds.find((embed) => embed.thumbnail?.url)?.thumbnail?.url;
+      : (data.share.snapshot.embeds.find(
+          (embed) => embed.video?.url === media?.url && embed.thumbnail?.url,
+        )?.thumbnail?.url ??
+        data.share.snapshot.embeds.find((embed) => embed.thumbnail?.url)
+          ?.thumbnail?.url);
   const meta = [
     { title: metadata.title },
     { name: "robots", content: metadata.robots },
-    { property: "og:type", content: isInstagramMinimal && media?.type === "video" ? "video.other" : "article" },
+    {
+      property: "og:type",
+      content:
+        isInstagramMinimal && media?.type === "video"
+          ? "video.other"
+          : "article",
+    },
     { property: "og:title", content: metadata.title },
     { property: "og:url", content: metadata.shareUrl },
-    { name: "twitter:card", content: media ? "summary_large_image" : "summary" },
+    {
+      name: "twitter:card",
+      content: media ? "summary_large_image" : "summary",
+    },
   ];
 
   if (metadata.description) {
@@ -86,13 +112,19 @@ function shareHead(data?: ShareLoaderData) {
     meta.push(
       { property: "og:image", content: imageMediaUrl },
       { property: "og:image:secure_url", content: imageMediaUrl },
-      { name: "twitter:image", content: imageMediaUrl }
+      { name: "twitter:image", content: imageMediaUrl },
     );
     if (media?.width) {
-      meta.push({ property: "og:image:width", content: media.width.toString() });
+      meta.push({
+        property: "og:image:width",
+        content: media.width.toString(),
+      });
     }
     if (media?.height) {
-      meta.push({ property: "og:image:height", content: media.height.toString() });
+      meta.push({
+        property: "og:image:height",
+        content: media.height.toString(),
+      });
     }
   }
 
@@ -102,19 +134,34 @@ function shareHead(data?: ShareLoaderData) {
       { property: "og:video:secure_url", content: media.url },
       { property: "og:video:url", content: media.url },
       { name: "twitter:player:stream", content: media.url },
-      { name: "twitter:player:width", content: (media.width ?? 480).toString() },
-      { name: "twitter:player:height", content: (media.height ?? 600).toString() }
+      {
+        name: "twitter:player:width",
+        content: (media.width ?? 480).toString(),
+      },
+      {
+        name: "twitter:player:height",
+        content: (media.height ?? 600).toString(),
+      },
     );
     if (media.width) {
-      meta.push({ property: "og:video:width", content: media.width.toString() });
+      meta.push({
+        property: "og:video:width",
+        content: media.width.toString(),
+      });
     }
     if (media.height) {
-      meta.push({ property: "og:video:height", content: media.height.toString() });
+      meta.push({
+        property: "og:video:height",
+        content: media.height.toString(),
+      });
     }
     if (media.contentType) {
       meta.push(
         { property: "og:video:type", content: media.contentType },
-        { name: "twitter:player:stream:content_type", content: media.contentType }
+        {
+          name: "twitter:player:stream:content_type",
+          content: media.contentType,
+        },
       );
     }
   }
@@ -141,5 +188,11 @@ export const Route = createFileRoute("/share/$token")({
 function SharedMessageRoute() {
   const { token } = Route.useParams();
   const data = Route.useLoaderData();
-  return <SharedMessagePage token={token} initialShare={data.share} initialGone={data.gone} />;
+  return (
+    <SharedMessagePage
+      token={token}
+      initialShare={data.share}
+      initialGone={data.gone}
+    />
+  );
 }

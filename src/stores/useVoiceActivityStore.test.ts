@@ -53,6 +53,8 @@ describe("useVoiceActivityStore", () => {
     });
 
     expect(store.getChannelActivity("voice-2")?.activity).toBe("warp-rush");
-    expect(store.getUserActivity("pilot", "voice-2")?.activity).toBe("warp-rush");
+    expect(store.getUserActivity("pilot", "voice-2")?.activity).toBe(
+      "warp-rush",
+    );
   });
 });

@@ -20,10 +20,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import {
-  createKovaAuthClient,
-  type KovaAuthClient,
-} from "./client";
+import { createKovaAuthClient, type KovaAuthClient } from "./client";
 import { resolveAuthUrl } from "./key";
 import { injectAppearanceVars } from "./styles/inject";
 import type {
@@ -63,8 +60,8 @@ const ALL_OAUTH_PROVIDERS: OAuthProvider[] = [
   { id: "apple", label: "Apple" },
   { id: "facebook", label: "Facebook" },
 ];
-const DEFAULT_OAUTH_PROVIDERS = ALL_OAUTH_PROVIDERS.filter(p =>
-  ["google", "discord", "github", "microsoft"].includes(p.id)
+const DEFAULT_OAUTH_PROVIDERS = ALL_OAUTH_PROVIDERS.filter((p) =>
+  ["google", "discord", "github", "microsoft"].includes(p.id),
 );
 
 // ── Server appearance payload shape ──────────────────────────────────────────
@@ -137,7 +134,10 @@ function readStoredSessionToken(publishableKey?: string) {
   return key ? window.localStorage.getItem(key) : null;
 }
 
-function writeStoredSessionToken(publishableKey: string | undefined, token: string | null) {
+function writeStoredSessionToken(
+  publishableKey: string | undefined,
+  token: string | null,
+) {
   if (typeof window === "undefined") return;
   const key = sessionStorageKey(publishableKey);
   if (!key) return;
@@ -182,7 +182,7 @@ export function KovaAuthProvider({
   const resolvedAuthUrl = useMemo(
     () => resolveAuthUrl({ publishableKey, authUrl }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [publishableKey, authUrl]
+    [publishableKey, authUrl],
   );
 
   // ── Session token for cross-origin Bearer auth ───────────────────────────────
@@ -191,14 +191,20 @@ export function KovaAuthProvider({
   // header. When set (after exchange-code on cross-origin OAuth return), the
   // client is recreated exactly once with the Authorization header injected.
   const [sessionToken, setSessionToken] = useState<string | null>(
-    () => initialSessionToken ?? readStoredSessionToken(publishableKey)
+    () => initialSessionToken ?? readStoredSessionToken(publishableKey),
   );
-  const setPersistentSessionToken = useCallback((token: string | null) => {
-    writeStoredSessionToken(publishableKey, token);
-    setSessionToken(token);
-    onSessionTokenChange?.(token);
-  }, [publishableKey, onSessionTokenChange]);
-  const clearSessionToken = useCallback(() => setPersistentSessionToken(null), [setPersistentSessionToken]);
+  const setPersistentSessionToken = useCallback(
+    (token: string | null) => {
+      writeStoredSessionToken(publishableKey, token);
+      setSessionToken(token);
+      onSessionTokenChange?.(token);
+    },
+    [publishableKey, onSessionTokenChange],
+  );
+  const clearSessionToken = useCallback(
+    () => setPersistentSessionToken(null),
+    [setPersistentSessionToken],
+  );
 
   useEffect(() => {
     if (initialSessionToken === undefined) return;
@@ -207,17 +213,22 @@ export function KovaAuthProvider({
 
   // ── Auth client — recreated only when Bearer token changes ────────────────
   const client = useMemo(
-    () => createKovaAuthClient({
-      authUrl: resolvedAuthUrl,
-      publishableKey,
-      plugins,
-      sessionOptions,
-      ...(sessionToken
-        ? { fetchOptions: { headers: { Authorization: `Bearer ${sessionToken}` } } }
-        : {}),
-    }),
+    () =>
+      createKovaAuthClient({
+        authUrl: resolvedAuthUrl,
+        publishableKey,
+        plugins,
+        sessionOptions,
+        ...(sessionToken
+          ? {
+              fetchOptions: {
+                headers: { Authorization: `Bearer ${sessionToken}` },
+              },
+            }
+          : {}),
+      }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [resolvedAuthUrl, publishableKey, sessionToken]
+    [resolvedAuthUrl, publishableKey, sessionToken],
   );
 
   // ── Single session subscription — shared across all hooks ────────────────
@@ -228,21 +239,36 @@ export function KovaAuthProvider({
     if (sessionResult.isPending || !sessionResult.data?.user) return;
 
     let cancelled = false;
-    void fetch(`${resolvedAuthUrl}/api/pub/apps/${publishableKey}/session-token`, {
-      method: "POST",
-      credentials: "include",
-      headers: { "X-Publishable-Key": publishableKey },
-    })
-      .then(r => r.ok ? (r.json() as Promise<{ sessionToken?: string }>) : null)
-      .then(data => {
-        if (!cancelled && data?.sessionToken) setPersistentSessionToken(data.sessionToken);
+    void fetch(
+      `${resolvedAuthUrl}/api/pub/apps/${publishableKey}/session-token`,
+      {
+        method: "POST",
+        credentials: "include",
+        headers: { "X-Publishable-Key": publishableKey },
+      },
+    )
+      .then((r) =>
+        r.ok ? (r.json() as Promise<{ sessionToken?: string }>) : null,
+      )
+      .then((data) => {
+        if (!cancelled && data?.sessionToken)
+          setPersistentSessionToken(data.sessionToken);
       })
-      .catch(() => { /* best-effort: normal sign-in still redirects if needed */ });
+      .catch(() => {
+        /* best-effort: normal sign-in still redirects if needed */
+      });
 
     return () => {
       cancelled = true;
     };
-  }, [publishableKey, resolvedAuthUrl, sessionResult.data, sessionResult.isPending, sessionToken, setPersistentSessionToken]);
+  }, [
+    publishableKey,
+    resolvedAuthUrl,
+    sessionResult.data,
+    sessionResult.isPending,
+    sessionToken,
+    setPersistentSessionToken,
+  ]);
 
   // ── Detect OAuth transfer code on mount ──────────────────────────────────
   // After the cross-origin OAuth flow lands at the consumer app with
@@ -258,13 +284,21 @@ export function KovaAuthProvider({
     cleanUrl.searchParams.delete("kova_auth_code");
     window.history.replaceState({}, "", cleanUrl.toString());
 
-    void fetch(`${resolvedAuthUrl}/api/pub/apps/${publishableKey}/exchange-code`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-Publishable-Key": publishableKey },
-      body: JSON.stringify({ code }),
-    })
-      .then(r => r.ok ? (r.json() as Promise<{ sessionToken?: string }>) : null)
-      .then(data => {
+    void fetch(
+      `${resolvedAuthUrl}/api/pub/apps/${publishableKey}/exchange-code`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Publishable-Key": publishableKey,
+        },
+        body: JSON.stringify({ code }),
+      },
+    )
+      .then((r) =>
+        r.ok ? (r.json() as Promise<{ sessionToken?: string }>) : null,
+      )
+      .then((data) => {
         if (!data?.sessionToken) return;
         setPersistentSessionToken(data.sessionToken);
         // Register the user in app_user immediately with the Bearer token.
@@ -275,9 +309,13 @@ export function KovaAuthProvider({
           method: "POST",
           credentials: "include",
           headers: { Authorization: `Bearer ${data.sessionToken}` },
-        }).catch(() => { /* best-effort */ });
+        }).catch(() => {
+          /* best-effort */
+        });
       })
-      .catch(() => { /* best-effort */ });
+      .catch(() => {
+        /* best-effort */
+      });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resolvedAuthUrl, publishableKey, setPersistentSessionToken]); // intentionally run once on mount
 
@@ -288,7 +326,8 @@ export function KovaAuthProvider({
   }, [sessionToken]);
 
   // ── Server appearance ─────────────────────────────────────────────────────
-  const [serverAppearance, setServerAppearance] = useState<ServerAppearance | null>(null);
+  const [serverAppearance, setServerAppearance] =
+    useState<ServerAppearance | null>(null);
 
   useEffect(() => {
     if (!publishableKey) return;
@@ -299,10 +338,13 @@ export function KovaAuthProvider({
     void fetch(`${resolvedAuthUrl}/api/pub/apps/${publishableKey}/appearance`, {
       cache: "no-store",
     })
-      .then(r => r.ok ? (r.json() as Promise<ServerAppearance>) : null)
-      .then(data => { if (data) setServerAppearance(data); })
-      .catch(() => { /* progressive enhancement — never blocks sign-in */ });
-
+      .then((r) => (r.ok ? (r.json() as Promise<ServerAppearance>) : null))
+      .then((data) => {
+        if (data) setServerAppearance(data);
+      })
+      .catch(() => {
+        /* progressive enhancement — never blocks sign-in */
+      });
   }, [resolvedAuthUrl, publishableKey]);
 
   // Inject/update favicon from server only when explicitly enabled.
@@ -324,13 +366,26 @@ export function KovaAuthProvider({
   const vars = useMemo<Required<AppearanceVariables>>(() => {
     const serverOverrides: Partial<AppearanceVariables> = serverAppearance
       ? {
-        ...(serverAppearance.primaryColor ? { colorPrimary: serverAppearance.primaryColor } : {}),
-        ...(serverAppearance.primaryColor ? { colorPrimaryHover: serverAppearance.primaryColor } : {}),
-        ...(serverAppearance.backgroundColor ? { colorBackground: serverAppearance.backgroundColor } : {}),
-      }
+          ...(serverAppearance.primaryColor
+            ? { colorPrimary: serverAppearance.primaryColor }
+            : {}),
+          ...(serverAppearance.primaryColor
+            ? { colorPrimaryHover: serverAppearance.primaryColor }
+            : {}),
+          ...(serverAppearance.backgroundColor
+            ? { colorBackground: serverAppearance.backgroundColor }
+            : {}),
+        }
       : {};
-    const merged = { ...DEFAULT_VARS, ...serverOverrides, ...(appearance?.variables ?? {}) };
-    if (!appearance?.variables?.colorPrimaryHover && merged.colorPrimary !== DEFAULT_VARS.colorPrimary) {
+    const merged = {
+      ...DEFAULT_VARS,
+      ...serverOverrides,
+      ...(appearance?.variables ?? {}),
+    };
+    if (
+      !appearance?.variables?.colorPrimaryHover &&
+      merged.colorPrimary !== DEFAULT_VARS.colorPrimary
+    ) {
       merged.colorPrimaryHover = merged.colorPrimary;
     }
     return merged;
@@ -345,8 +400,8 @@ export function KovaAuthProvider({
   const resolvedProviders = useMemo<OAuthProvider[]>(() => {
     if (oauthProviders) return oauthProviders;
     if (serverAppearance) {
-      return ALL_OAUTH_PROVIDERS.filter(p =>
-        (serverAppearance.enabledProviders).includes(p.id)
+      return ALL_OAUTH_PROVIDERS.filter((p) =>
+        serverAppearance.enabledProviders.includes(p.id),
       );
     }
     return DEFAULT_OAUTH_PROVIDERS;
@@ -354,26 +409,48 @@ export function KovaAuthProvider({
 
   const value = useMemo<KovaAuthContextValue>(
     () => ({
-      client, authUrl: resolvedAuthUrl,
+      client,
+      authUrl: resolvedAuthUrl,
       publishableKey,
-      appearance: appearance ?? {}, vars,
+      appearance: appearance ?? {},
+      vars,
       oauthProviders: resolvedProviders,
       serverAppearance,
       isAppearanceLoaded: !publishableKey || serverAppearance !== null,
-      afterSignInUrl, afterSignUpUrl, afterSignOutUrl,
+      afterSignInUrl,
+      afterSignUpUrl,
+      afterSignOutUrl,
       mode,
       isPlatformAdmin,
       sessionResult,
       sessionToken:
-        sessionToken
-        ?? ((sessionResult.data?.session as unknown as Record<string, unknown> | undefined)?.["token"] as string | undefined)
-        ?? null,
+        sessionToken ??
+        ((
+          sessionResult.data?.session as unknown as
+            | Record<string, unknown>
+            | undefined
+        )?.["token"] as string | undefined) ??
+        null,
       clearSessionToken,
       hasBearerSession: sessionToken !== null,
     }),
-    [client, resolvedAuthUrl, publishableKey, appearance, vars, resolvedProviders,
-      serverAppearance, afterSignInUrl, afterSignUpUrl, afterSignOutUrl,
-      mode, isPlatformAdmin, sessionResult, clearSessionToken, sessionToken]
+    [
+      client,
+      resolvedAuthUrl,
+      publishableKey,
+      appearance,
+      vars,
+      resolvedProviders,
+      serverAppearance,
+      afterSignInUrl,
+      afterSignUpUrl,
+      afterSignOutUrl,
+      mode,
+      isPlatformAdmin,
+      sessionResult,
+      clearSessionToken,
+      sessionToken,
+    ],
   );
 
   return (
@@ -390,7 +467,7 @@ export function useKovaAuth(): KovaAuthContextValue {
   if (!ctx) {
     throw new Error(
       "[KovaAuth] `useKovaAuth` was called outside of <KovaAuthProvider>. " +
-      "Make sure your component is a descendant of <KovaAuthProvider>."
+        "Make sure your component is a descendant of <KovaAuthProvider>.",
     );
   }
   return ctx;
@@ -398,7 +475,10 @@ export function useKovaAuth(): KovaAuthContextValue {
 
 // ── mergeAppearance ───────────────────────────────────────────────────────────
 
-export function mergeAppearance(base: Appearance, override?: Appearance): Appearance {
+export function mergeAppearance(
+  base: Appearance,
+  override?: Appearance,
+): Appearance {
   if (!override) return base;
   return {
     variables: { ...base.variables, ...override.variables },

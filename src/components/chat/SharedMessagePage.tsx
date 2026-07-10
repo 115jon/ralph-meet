@@ -51,7 +51,11 @@ interface SharedMessagePageProps {
   initialGone?: boolean;
 }
 
-export default function SharedMessagePage({ token, initialShare = null, initialGone = false }: SharedMessagePageProps) {
+export default function SharedMessagePage({
+  token,
+  initialShare = null,
+  initialGone = false,
+}: SharedMessagePageProps) {
   const [share, setShare] = useState<PublicShare | null>(initialShare);
   const [gone, setGone] = useState(initialGone);
   const [loading, setLoading] = useState(!initialShare && !initialGone);
@@ -62,7 +66,9 @@ export default function SharedMessagePage({ token, initialShare = null, initialG
     fetch(`/api/shared-messages/${token}`)
       .then(async (response) => {
         if (!response.ok) {
-          const error = new Error("Failed to load share") as Error & { status?: number };
+          const error = new Error("Failed to load share") as Error & {
+            status?: number;
+          };
           error.status = response.status;
           throw error;
         }
@@ -91,7 +97,9 @@ export default function SharedMessagePage({ token, initialShare = null, initialG
           </div>
           <div>
             <p className="text-sm font-bold text-rm-text">Ralph Meet</p>
-            <p className="text-xs text-rm-text-muted">Shared message snapshot</p>
+            <p className="text-xs text-rm-text-muted">
+              Shared message snapshot
+            </p>
           </div>
         </header>
 
@@ -120,12 +128,21 @@ export default function SharedMessagePage({ token, initialShare = null, initialG
               source={share.snapshot.source}
               originalEdited={share.original_edited}
               avatarUrl={avatarUrl(share.snapshot.author.avatar_url)}
-              mediaUrlForAttachment={(attachment) => publicMediaUrl(token, attachment)}
+              mediaUrlForAttachment={(attachment) =>
+                publicMediaUrl(token, attachment)
+              }
             />
 
             <footer className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-rm-border pt-4 text-xs text-rm-text-muted">
-              <span>{share.expires_at ? `Expires ${formatDate(share.expires_at)}` : "Permanent share"}</span>
-              <a href="mailto:abuse@115jon.site" className="font-semibold text-primary hover:underline">
+              <span>
+                {share.expires_at
+                  ? `Expires ${formatDate(share.expires_at)}`
+                  : "Permanent share"}
+              </span>
+              <a
+                href="mailto:abuse@115jon.site"
+                className="font-semibold text-primary hover:underline"
+              >
                 Report this share
               </a>
             </footer>

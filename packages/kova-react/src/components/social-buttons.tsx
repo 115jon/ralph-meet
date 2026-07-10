@@ -82,7 +82,7 @@ function isCrossOriginDomain(authUrl: string): boolean {
 function buildSdkBounceUrl(
   authUrl: string,
   publishableKey: string,
-  redirectUri: string
+  redirectUri: string,
 ): string {
   const bounce = new URL(`${authUrl}/api/hosted/oauth-complete`);
   bounce.searchParams.set("mode", "sdk");
@@ -96,9 +96,11 @@ function buildSdkOAuthStartUrl(
   publishableKey: string,
   provider: string,
   redirectUri: string,
-  errorCallbackURL: string
+  errorCallbackURL: string,
 ): string {
-  const start = new URL(`${authUrl}/api/pub/apps/${publishableKey}/oauth/start`);
+  const start = new URL(
+    `${authUrl}/api/pub/apps/${publishableKey}/oauth/start`,
+  );
   start.searchParams.set("provider", provider);
   start.searchParams.set("redirect_uri", redirectUri);
   start.searchParams.set("error_callback_url", errorCallbackURL);
@@ -153,14 +155,16 @@ export function SocialButtons({
   if (!oauthProviders.length) return null;
 
   const absCallback = resolveAbsoluteUrl(authUrl, callbackURL);
-  const absError = resolveAbsoluteUrl(authUrl, errorCallbackURL ?? "/sign-in?error=oauth");
+  const absError = resolveAbsoluteUrl(
+    authUrl,
+    errorCallbackURL ?? "/sign-in?error=oauth",
+  );
 
   // SDK applications always route OAuth through the bounce handler so the
   // server can mint an application-scoped session token.
-  const finalCallback =
-    publishableKey
-      ? buildSdkBounceUrl(authUrl, publishableKey, absCallback)
-      : absCallback;
+  const finalCallback = publishableKey
+    ? buildSdkBounceUrl(authUrl, publishableKey, absCallback)
+    : absCallback;
 
   const handleSocial = async (providerId: string) => {
     setOauthError(null);
@@ -174,10 +178,16 @@ export function SocialButtons({
             publishableKey,
             redirectUri: absCallback,
             startedAt: Date.now(),
-          })
+          }),
         );
         window.location.assign(
-          buildSdkOAuthStartUrl(authUrl, publishableKey, providerId, absCallback, absError)
+          buildSdkOAuthStartUrl(
+            authUrl,
+            publishableKey,
+            providerId,
+            absCallback,
+            absError,
+          ),
         );
         return;
       }
@@ -193,7 +203,10 @@ export function SocialButtons({
         setOauthError(oauthErrorMessage(r.error.error ?? "", r.error.message));
       }
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "OAuth sign-in failed. Please try again.";
+      const msg =
+        err instanceof Error
+          ? err.message
+          : "OAuth sign-in failed. Please try again.";
       setOauthError(msg);
     } finally {
       setLoadingProvider(null);
@@ -201,7 +214,10 @@ export function SocialButtons({
   };
 
   return (
-    <div data-ra-element="socialButtonsRoot" style={elements?.socialButtonsRoot}>
+    <div
+      data-ra-element="socialButtonsRoot"
+      style={elements?.socialButtonsRoot}
+    >
       {oauthError && <Alert variant="error">{oauthError}</Alert>}
       {oauthProviders.map((p) => (
         <button

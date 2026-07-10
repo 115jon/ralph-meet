@@ -1,4 +1,3 @@
-
 import { isDesktop, isTauri } from "@/lib/platform";
 import { isDarkAppTheme, NEXT_THEME_NAMES } from "@/lib/theme-preferences";
 import { useAppearanceTheme } from "@/components/chat/useAppearanceTheme";

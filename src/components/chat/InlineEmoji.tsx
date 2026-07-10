@@ -34,7 +34,10 @@ export default function InlineEmoji({
   if (selectable) {
     return (
       <span
-        className={cn("relative inline-block select-text emoji-selectable m-0 p-0", className)}
+        className={cn(
+          "relative inline-block select-text emoji-selectable m-0 p-0",
+          className,
+        )}
         style={{
           margin: 0,
           padding: 0,
@@ -124,7 +127,10 @@ export default function InlineEmoji({
         loading={loading}
         decoding={decoding}
         onError={() => setImageFailed(true)}
-        className={cn("inline-block w-auto select-none object-contain", className)}
+        className={cn(
+          "inline-block w-auto select-none object-contain",
+          className,
+        )}
         style={{
           aspectRatio: "1 / 1",
           height: "1.35em",
@@ -136,7 +142,10 @@ export default function InlineEmoji({
 
   if (native) {
     return (
-      <span className={cn("inline-block select-none leading-none", className)} aria-label={alt}>
+      <span
+        className={cn("inline-block select-none leading-none", className)}
+        aria-label={alt}
+      >
         {native}
       </span>
     );

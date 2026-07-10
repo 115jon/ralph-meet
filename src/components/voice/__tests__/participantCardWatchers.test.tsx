@@ -119,28 +119,15 @@ describe("ParticipantCard stream watchers", () => {
   });
 
   it("hides the watch prompt on a focused tray stream even before the watch toggle catches up", () => {
-    const markup = renderCard(
-      makeScreenItem(),
-      {},
-      {},
-      true,
-      true,
-      true,
-    );
+    const markup = renderCard(makeScreenItem(), {}, {}, true, true, true);
 
     expect(markup).not.toContain("Watch Stream");
   });
 
   it("renders a thumbnail poster for a focused tray stream when live video is suppressed", () => {
-    const markup = renderCard(
-      makeScreenItem(),
-      {},
-      {},
-      true,
-      true,
-      true,
-      { "user-1": "data:image/png;base64,thumb" },
-    );
+    const markup = renderCard(makeScreenItem(), {}, {}, true, true, true, {
+      "user-1": "data:image/png;base64,thumb",
+    });
 
     expect(markup).toContain("data:image/png;base64,thumb");
     expect(markup).not.toContain("Watch Stream");

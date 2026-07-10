@@ -47,10 +47,18 @@ describe("syncSettingsToRust", () => {
       desktopNotifications: true,
     });
 
-    expect(invokeMock).toHaveBeenCalledWith("set_open_on_startup", { enabled: false });
-    expect(invokeMock).toHaveBeenCalledWith("set_close_to_tray", { enabled: true });
-    expect(invokeMock).toHaveBeenCalledWith("set_start_minimized", { enabled: false });
-    expect(invokeMock).not.toHaveBeenCalledWith("set_hardware_acceleration", { enabled: true });
+    expect(invokeMock).toHaveBeenCalledWith("set_open_on_startup", {
+      enabled: false,
+    });
+    expect(invokeMock).toHaveBeenCalledWith("set_close_to_tray", {
+      enabled: true,
+    });
+    expect(invokeMock).toHaveBeenCalledWith("set_start_minimized", {
+      enabled: false,
+    });
+    expect(invokeMock).not.toHaveBeenCalledWith("set_hardware_acceleration", {
+      enabled: true,
+    });
   });
 
   it("persists hardware acceleration only when explicitly requested", async () => {
@@ -65,6 +73,8 @@ describe("syncSettingsToRust", () => {
       { includeHardwareAcceleration: true },
     );
 
-    expect(invokeMock).toHaveBeenCalledWith("set_hardware_acceleration", { enabled: false });
+    expect(invokeMock).toHaveBeenCalledWith("set_hardware_acceleration", {
+      enabled: false,
+    });
   });
 });

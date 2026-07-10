@@ -1,4 +1,3 @@
-
 import { useUserResolution } from "@/hooks/useUserResolution";
 import { apiGet } from "@/lib/api-client";
 import { useCallback, useEffect, useId, useReducer, useRef } from "react";
@@ -26,7 +25,6 @@ interface Props {
   onJump?: (channelId: string, messageId: string) => void;
 }
 
-
 type SearchState = {
   query: string;
   results: SearchResult[];
@@ -36,30 +34,55 @@ type SearchState = {
 };
 
 type SearchAction =
-  | { type: 'SET_QUERY'; payload: string }
-  | { type: 'START_SEARCH' }
-  | { type: 'SEARCH_SUCCESS'; payload: { results: SearchResult[]; total: number } }
-  | { type: 'SEARCH_ERROR' }
-  | { type: 'CLEAR_RESULTS' };
+  | { type: "SET_QUERY"; payload: string }
+  | { type: "START_SEARCH" }
+  | {
+      type: "SEARCH_SUCCESS";
+      payload: { results: SearchResult[]; total: number };
+    }
+  | { type: "SEARCH_ERROR" }
+  | { type: "CLEAR_RESULTS" };
 
 function searchReducer(state: SearchState, action: SearchAction): SearchState {
   switch (action.type) {
-    case 'SET_QUERY': return { ...state, query: action.payload };
-    case 'START_SEARCH': return { ...state, loading: true, searched: true };
-    case 'SEARCH_SUCCESS': return { ...state, loading: false, results: action.payload.results, total: action.payload.total };
-    case 'SEARCH_ERROR': return { ...state, loading: false };
-    case 'CLEAR_RESULTS': return { ...state, results: [], total: 0, searched: false, loading: false };
-    default: return state;
+    case "SET_QUERY":
+      return { ...state, query: action.payload };
+    case "START_SEARCH":
+      return { ...state, loading: true, searched: true };
+    case "SEARCH_SUCCESS":
+      return {
+        ...state,
+        loading: false,
+        results: action.payload.results,
+        total: action.payload.total,
+      };
+    case "SEARCH_ERROR":
+      return { ...state, loading: false };
+    case "CLEAR_RESULTS":
+      return {
+        ...state,
+        results: [],
+        total: 0,
+        searched: false,
+        loading: false,
+      };
+    default:
+      return state;
   }
 }
 
-export default function SearchPanel({ serverId, onClose, onNavigate, onJump }: Props) {
+export default function SearchPanel({
+  serverId,
+  onClose,
+  onNavigate,
+  onJump,
+}: Props) {
   const [state, dispatch] = useReducer(searchReducer, {
     query: "",
     results: [],
     total: 0,
     loading: false,
-    searched: false
+    searched: false,
   });
   const { query, results, total, loading, searched } = state;
 
@@ -77,36 +100,51 @@ export default function SearchPanel({ serverId, onClose, onNavigate, onJump }: P
       if (e.key === "Escape") onClose();
     };
     document.addEventListener("keydown", handleKey, { capture: true });
-    return () => document.removeEventListener("keydown", handleKey, { capture: true });
+    return () =>
+      document.removeEventListener("keydown", handleKey, { capture: true });
   }, [onClose]);
 
-  const doSearch = useCallback(async (q: string) => {
-    if (q.length < 2) {
-      dispatch({ type: 'CLEAR_RESULTS' });
-      return;
-    }
-    dispatch({ type: 'START_SEARCH' });
-    try {
-      const data = await apiGet<{ messages: SearchResult[]; total: number; }>(`/api/servers/${serverId}/search?q=${encodeURIComponent(q)}&limit=25`);
-      dispatch({ type: 'SEARCH_SUCCESS', payload: { results: data.messages, total: data.total } });
-    } catch {
-      dispatch({ type: 'SEARCH_ERROR' });
-    }
-  }, [serverId]);
+  const doSearch = useCallback(
+    async (q: string) => {
+      if (q.length < 2) {
+        dispatch({ type: "CLEAR_RESULTS" });
+        return;
+      }
+      dispatch({ type: "START_SEARCH" });
+      try {
+        const data = await apiGet<{ messages: SearchResult[]; total: number }>(
+          `/api/servers/${serverId}/search?q=${encodeURIComponent(q)}&limit=25`,
+        );
+        dispatch({
+          type: "SEARCH_SUCCESS",
+          payload: { results: data.messages, total: data.total },
+        });
+      } catch {
+        dispatch({ type: "SEARCH_ERROR" });
+      }
+    },
+    [serverId],
+  );
 
-  const handleInput = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const val = e.target.value;
-    dispatch({ type: 'SET_QUERY', payload: val });
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => doSearch(val.trim()), 300);
-  }, [doSearch]);
-
-  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
-    if (e.key === "Enter") {
+  const handleInput = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const val = e.target.value;
+      dispatch({ type: "SET_QUERY", payload: val });
       if (debounceRef.current) clearTimeout(debounceRef.current);
-      doSearch(query.trim());
-    }
-  }, [query, doSearch]);
+      debounceRef.current = setTimeout(() => doSearch(val.trim()), 300);
+    },
+    [doSearch],
+  );
+
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (e.key === "Enter") {
+        if (debounceRef.current) clearTimeout(debounceRef.current);
+        doSearch(query.trim());
+      }
+    },
+    [query, doSearch],
+  );
 
   const highlightMatch = (text: string, q: string) => {
     if (!q) return text;
@@ -114,12 +152,17 @@ export default function SearchPanel({ serverId, onClose, onNavigate, onJump }: P
     if (idx === -1) return text;
     const start = Math.max(0, idx - 40);
     const end = Math.min(text.length, idx + q.length + 40);
-    const snippet = (start > 0 ? "…" : "") + text.slice(start, end) + (end < text.length ? "…" : "");
+    const snippet =
+      (start > 0 ? "…" : "") +
+      text.slice(start, end) +
+      (end < text.length ? "…" : "");
     const matchStart = idx - start + (start > 0 ? 1 : 0);
     return (
       <>
         {snippet.slice(0, matchStart)}
-        <mark className="rounded-sm bg-primary/20 px-0.5 text-rm-text font-bold underline decoration-primary/50 underline-offset-2">{snippet.slice(matchStart, matchStart + q.length)}</mark>
+        <mark className="rounded-sm bg-primary/20 px-0.5 text-rm-text font-bold underline decoration-primary/50 underline-offset-2">
+          {snippet.slice(matchStart, matchStart + q.length)}
+        </mark>
         {snippet.slice(matchStart + q.length)}
       </>
     );
@@ -172,21 +215,31 @@ export default function SearchPanel({ serverId, onClose, onNavigate, onJump }: P
             {loading && (
               <div className="flex items-center justify-center gap-2 py-6 text-primary/60">
                 <Loader2 className="h-4 w-4 animate-spin" />
-                <span className="text-[11px] font-black uppercase tracking-widest text-primary">Searching...</span>
+                <span className="text-[11px] font-black uppercase tracking-widest text-primary">
+                  Searching...
+                </span>
               </div>
             )}
             {!loading && searched && results.length === 0 && (
               <div className="flex flex-col items-center gap-2 py-8 text-center">
                 <Search className="h-6 w-6 text-rm-text-muted/40" />
-                <span className="text-xs text-rm-text-muted font-bold">No results found</span>
-                <span className="text-[11px] text-rm-text-muted/40">Try a different search term</span>
+                <span className="text-xs text-rm-text-muted font-bold">
+                  No results found
+                </span>
+                <span className="text-[11px] text-rm-text-muted/40">
+                  Try a different search term
+                </span>
               </div>
             )}
             {!loading && !searched && (
               <div className="flex flex-col items-center gap-2 py-8 text-center">
                 <Search className="h-6 w-6 text-rm-text-muted/40" />
-                <span className="text-xs text-rm-text-muted font-bold">Search for messages</span>
-                <span className="text-[11px] text-rm-text-muted/40">Type at least 2 characters to search</span>
+                <span className="text-xs text-rm-text-muted font-bold">
+                  Search for messages
+                </span>
+                <span className="text-[11px] text-rm-text-muted/40">
+                  Type at least 2 characters to search
+                </span>
               </div>
             )}
             {!loading && results.length > 0 && (
@@ -214,7 +267,14 @@ export default function SearchPanel({ serverId, onClose, onNavigate, onJump }: P
   );
 }
 
-const SearchResultItem = ({ msg, query, onJump, onNavigate, onClose, highlightMatch }: {
+const SearchResultItem = ({
+  msg,
+  query,
+  onJump,
+  onNavigate,
+  onClose,
+  highlightMatch,
+}: {
   msg: SearchResult;
   query: string;
   onJump?: (channelId: string, messageId: string) => void;
@@ -242,7 +302,9 @@ const SearchResultItem = ({ msg, query, onJump, onNavigate, onClose, highlightMa
           <Hash className="h-3 w-3" />
           {msg.channel_name}
         </span>
-        <span className="font-bold text-rm-text-muted">{authorInfo.displayName}</span>
+        <span className="font-bold text-rm-text-muted">
+          {authorInfo.displayName}
+        </span>
         <span className="ml-auto text-rm-text-muted/60">
           {new Date(msg.created_at).toLocaleDateString()}
         </span>

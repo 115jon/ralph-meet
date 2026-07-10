@@ -66,12 +66,18 @@ interface ListenTogetherResolvedAudioStream {
   expiresAt: number | null;
 }
 
-const localAudioStreamCache = new Map<string, {
-  value: ListenTogetherResolvedAudioStream;
-  expiresAt: number;
-}>();
+const localAudioStreamCache = new Map<
+  string,
+  {
+    value: ListenTogetherResolvedAudioStream;
+    expiresAt: number;
+  }
+>();
 
-const localAudioStreamInFlight = new Map<string, Promise<ListenTogetherResolvedAudioStream>>();
+const localAudioStreamInFlight = new Map<
+  string,
+  Promise<ListenTogetherResolvedAudioStream>
+>();
 
 function getSearchCacheKey(query: string, filter: ListenTogetherSearchFilter) {
   return `v1:listen-together:search:${filter}:${query.trim().toLowerCase()}`;
@@ -94,10 +100,15 @@ function getAudioStreamCacheTtl(expiresAt: number | null | undefined) {
   }
 
   const remainingSeconds = Math.floor((expiresAt - Date.now()) / 1000);
-  return Math.max(15, Math.min(LISTEN_TOGETHER_STREAM_CACHE_TTL_SECONDS, remainingSeconds - 30));
+  return Math.max(
+    15,
+    Math.min(LISTEN_TOGETHER_STREAM_CACHE_TTL_SECONDS, remainingSeconds - 30),
+  );
 }
 
-function getLocalCachedAudioStream(cacheKey: string): ListenTogetherResolvedAudioStream | null {
+function getLocalCachedAudioStream(
+  cacheKey: string,
+): ListenTogetherResolvedAudioStream | null {
   const cached = localAudioStreamCache.get(cacheKey);
   if (!cached) return null;
 
@@ -116,18 +127,16 @@ function setLocalCachedAudioStream(
 ) {
   localAudioStreamCache.set(cacheKey, {
     value,
-    expiresAt: Date.now() + (ttlSeconds * 1000),
+    expiresAt: Date.now() + ttlSeconds * 1000,
   });
 }
 
 async function getSpotifyClient() {
   if (!spotifyClientPromise) {
     spotifyClientPromise = import("spotify-url-info").then((mod) => {
-      const createSpotifyClient = (
-        "default" in mod
-          ? mod.default
-          : mod
-      ) as unknown as (fetchImpl: typeof fetch) => SpotifyClient;
+      const createSpotifyClient = ("default" in mod
+        ? mod.default
+        : mod) as unknown as (fetchImpl: typeof fetch) => SpotifyClient;
 
       return createSpotifyClient(fetch);
     });
@@ -166,20 +175,21 @@ function textFromNode(value: unknown): string | null {
     return null;
   }
 
-  if (typeof value.simpleText === "string") return value.simpleText.trim() || null;
+  if (typeof value.simpleText === "string")
+    return value.simpleText.trim() || null;
   if (typeof value.content === "string") return value.content.trim() || null;
   if (typeof value.text === "string") return value.text.trim() || null;
 
   const nestedText =
-    textFromNode(value.text)
-    ?? textFromNode(value.title)
-    ?? textFromNode(value.simpleText)
-    ?? textFromNode(value.content)
-    ?? textFromNode(value.dynamicTextViewModel)
-    ?? textFromNode(value.accessibilityData)
-    ?? textFromNode(value.accessibility)
-    ?? textFromNode(value.rendererContext)
-    ?? textFromNode(value.label);
+    textFromNode(value.text) ??
+    textFromNode(value.title) ??
+    textFromNode(value.simpleText) ??
+    textFromNode(value.content) ??
+    textFromNode(value.dynamicTextViewModel) ??
+    textFromNode(value.accessibilityData) ??
+    textFromNode(value.accessibility) ??
+    textFromNode(value.rendererContext) ??
+    textFromNode(value.label);
   if (nestedText) {
     return nestedText;
   }
@@ -194,7 +204,9 @@ function textFromNode(value: unknown): string | null {
     if (joined) return joined;
   }
 
-  const metadataParts = Array.isArray(value.metadataParts) ? value.metadataParts : null;
+  const metadataParts = Array.isArray(value.metadataParts)
+    ? value.metadataParts
+    : null;
   if (metadataParts) {
     const joined = metadataParts
       .map((part) => textFromNode(part))
@@ -271,7 +283,7 @@ export function parseDurationSeconds(value: unknown): number {
   if (typeof value === "string") {
     const parts = value.split(":").map((segment) => Number(segment));
     if (parts.every((part) => Number.isFinite(part))) {
-      return parts.reduce((total, part) => (total * 60) + part, 0);
+      return parts.reduce((total, part) => total * 60 + part, 0);
     }
   }
   return 0;
@@ -305,7 +317,10 @@ function buildSpokenDurationVariants(totalSeconds: number): string[] {
   return [...new Set([parts.join(", "), parts.join(" ")])];
 }
 
-function sanitizeResolvedTrackTitle(title: string, durationSeconds: number | null) {
+function sanitizeResolvedTrackTitle(
+  title: string,
+  durationSeconds: number | null,
+) {
   const normalizedTitle = title.replace(/\s+/g, " ").trim();
   if (!normalizedTitle || !durationSeconds) {
     return normalizedTitle;
@@ -329,47 +344,68 @@ export function mapYoutubeVideoNode(
   provider: ListenTogetherProvider = "youtube",
   sourceLabel = provider === "youtube_music" ? "YouTube Music" : "YouTube",
 ): ListenTogetherSearchTrackResult | null {
-  const videoId = input?.video_id ?? input?.id ?? input?.content_id ?? input?.videoId ?? input?.contentId;
-  const metadataRows = metadataRowsFromNode(input?.metadata?.lockupMetadataViewModel?.metadata?.contentMetadataViewModel);
+  const videoId =
+    input?.video_id ??
+    input?.id ??
+    input?.content_id ??
+    input?.videoId ??
+    input?.contentId;
+  const metadataRows = metadataRowsFromNode(
+    input?.metadata?.lockupMetadataViewModel?.metadata
+      ?.contentMetadataViewModel,
+  );
   const rawTitle =
-    textFromNode(input?.title)
-    ?? textFromNode(input?.metadata?.title)
-    ?? textFromNode(input?.metadata?.lockupMetadataViewModel?.title);
+    textFromNode(input?.title) ??
+    textFromNode(input?.metadata?.title) ??
+    textFromNode(input?.metadata?.lockupMetadataViewModel?.title);
   const durationSeconds =
-    (typeof input?.duration?.seconds === "number" && Number.isFinite(input.duration.seconds)
+    (typeof input?.duration?.seconds === "number" &&
+    Number.isFinite(input.duration.seconds)
       ? input.duration.seconds
-      : null)
-    ?? parseDurationSecondsOrNull(textFromNode(input?.length_text))
-    ?? parseDurationSecondsOrNull(textFromNode(input?.lengthText))
-    ?? parseDurationSecondsOrNull(input?.duration?.text)
-    ?? parseDurationSecondsOrNull(
+      : null) ??
+    parseDurationSecondsOrNull(textFromNode(input?.length_text)) ??
+    parseDurationSecondsOrNull(textFromNode(input?.lengthText)) ??
+    parseDurationSecondsOrNull(input?.duration?.text) ??
+    parseDurationSecondsOrNull(
       textFromNode(
-        input?.contentImage?.thumbnailViewModel?.overlays?.[0]?.thumbnailBottomOverlayViewModel?.badges?.[0]?.thumbnailBadgeViewModel?.text,
+        input?.contentImage?.thumbnailViewModel?.overlays?.[0]
+          ?.thumbnailBottomOverlayViewModel?.badges?.[0]
+          ?.thumbnailBadgeViewModel?.text,
       ),
     );
-  const title = rawTitle ? sanitizeResolvedTrackTitle(rawTitle, durationSeconds) : null;
+  const title = rawTitle
+    ? sanitizeResolvedTrackTitle(rawTitle, durationSeconds)
+    : null;
 
-  if (!videoId || !title || !durationSeconds || input?.is_live || input?.is_upcoming) {
+  if (
+    !videoId ||
+    !title ||
+    !durationSeconds ||
+    input?.is_live ||
+    input?.is_upcoming
+  ) {
     return null;
   }
 
   const artist =
-    textFromNode(input?.author?.name)
-    ?? textFromNode(input?.author)
-    ?? textFromNode(input?.short_byline_text)
-    ?? textFromNode(input?.long_byline_text)
-    ?? textFromNode(input?.ownerText)
-    ?? textFromNode(input?.shortBylineText)
-    ?? textFromNode(input?.longBylineText)
-    ?? firstMetadataText(metadataRows, 0)
-    ?? null;
+    textFromNode(input?.author?.name) ??
+    textFromNode(input?.author) ??
+    textFromNode(input?.short_byline_text) ??
+    textFromNode(input?.long_byline_text) ??
+    textFromNode(input?.ownerText) ??
+    textFromNode(input?.shortBylineText) ??
+    textFromNode(input?.longBylineText) ??
+    firstMetadataText(metadataRows, 0) ??
+    null;
 
   const artworkUrl =
-    chooseBestThumbnail(input?.thumbnails)
-    ?? chooseBestThumbnail(input?.thumbnail?.thumbnails)
-    ?? chooseBestThumbnail(input?.thumbnail?.contents)
-    ?? chooseBestThumbnail(input?.thumbnail?.sources)
-    ?? chooseBestThumbnail(input?.contentImage?.thumbnailViewModel?.image?.sources);
+    chooseBestThumbnail(input?.thumbnails) ??
+    chooseBestThumbnail(input?.thumbnail?.thumbnails) ??
+    chooseBestThumbnail(input?.thumbnail?.contents) ??
+    chooseBestThumbnail(input?.thumbnail?.sources) ??
+    chooseBestThumbnail(
+      input?.contentImage?.thumbnailViewModel?.image?.sources,
+    );
 
   return {
     kind: "track",
@@ -389,32 +425,37 @@ export function mapYoutubeVideoNode(
 
 function mapYoutubePlaylistNode(input: any): ListenTogetherSearchResult | null {
   const playlistId =
-    input?.id
-    ?? input?.content_id
-    ?? input?.playlist_id
-    ?? input?.playlistId
-    ?? input?.contentId;
-  const metadataRows = metadataRowsFromNode(input?.metadata?.lockupMetadataViewModel?.metadata?.contentMetadataViewModel);
+    input?.id ??
+    input?.content_id ??
+    input?.playlist_id ??
+    input?.playlistId ??
+    input?.contentId;
+  const metadataRows = metadataRowsFromNode(
+    input?.metadata?.lockupMetadataViewModel?.metadata
+      ?.contentMetadataViewModel,
+  );
   const title =
-    textFromNode(input?.title)
-    ?? textFromNode(input?.metadata?.title)
-    ?? textFromNode(input?.metadata?.lockupMetadataViewModel?.title);
+    textFromNode(input?.title) ??
+    textFromNode(input?.metadata?.title) ??
+    textFromNode(input?.metadata?.lockupMetadataViewModel?.title);
   const subtitle =
-    textFromNode(input?.author?.name)
-    ?? textFromNode(input?.metadata?.subtitle)
-    ?? firstMetadataText(metadataRows, 0)
-    ?? null;
+    textFromNode(input?.author?.name) ??
+    textFromNode(input?.metadata?.subtitle) ??
+    firstMetadataText(metadataRows, 0) ??
+    null;
   const itemCount =
-    numberFromText(textFromNode(input?.video_count))
-    ?? numberFromText(textFromNode(input?.video_count_short))
-    ?? numberFromText(textFromNode(input?.metadata?.subtitle))
-    ?? numberFromText(
+    numberFromText(textFromNode(input?.video_count)) ??
+    numberFromText(textFromNode(input?.video_count_short)) ??
+    numberFromText(textFromNode(input?.metadata?.subtitle)) ??
+    numberFromText(
       textFromNode(
-        input?.contentImage?.collectionThumbnailViewModel?.primaryThumbnail?.thumbnailViewModel?.overlays?.[0]?.thumbnailOverlayBadgeViewModel?.thumbnailBadges?.[0]?.thumbnailBadgeViewModel?.text,
+        input?.contentImage?.collectionThumbnailViewModel?.primaryThumbnail
+          ?.thumbnailViewModel?.overlays?.[0]?.thumbnailOverlayBadgeViewModel
+          ?.thumbnailBadges?.[0]?.thumbnailBadgeViewModel?.text,
       ),
-    )
-    ?? playlistItemCountFromRows(metadataRows)
-    ?? 0;
+    ) ??
+    playlistItemCountFromRows(metadataRows) ??
+    0;
 
   if (!playlistId || !title) {
     return null;
@@ -428,9 +469,12 @@ function mapYoutubePlaylistNode(input: any): ListenTogetherSearchResult | null {
     subtitle,
     itemCount,
     artworkUrl:
-      chooseBestThumbnail(input?.thumbnails)
-      ?? chooseBestThumbnail(input?.thumbnail?.thumbnails)
-      ?? chooseBestThumbnail(input?.contentImage?.collectionThumbnailViewModel?.primaryThumbnail?.thumbnailViewModel?.image?.sources),
+      chooseBestThumbnail(input?.thumbnails) ??
+      chooseBestThumbnail(input?.thumbnail?.thumbnails) ??
+      chooseBestThumbnail(
+        input?.contentImage?.collectionThumbnailViewModel?.primaryThumbnail
+          ?.thumbnailViewModel?.image?.sources,
+      ),
     sourceUrl: buildYoutubePlaylistUrl(playlistId),
   };
 }
@@ -440,16 +484,17 @@ export function extractYouTubeUrl(rawUrl: string): ExtractedYouTubeUrl | null {
     const parsed = new URL(rawUrl);
     const hostname = parsed.hostname.toLowerCase();
     if (
-      hostname !== "youtube.com"
-      && hostname !== "www.youtube.com"
-      && hostname !== "m.youtube.com"
-      && hostname !== "music.youtube.com"
-      && hostname !== "youtu.be"
+      hostname !== "youtube.com" &&
+      hostname !== "www.youtube.com" &&
+      hostname !== "m.youtube.com" &&
+      hostname !== "music.youtube.com" &&
+      hostname !== "youtu.be"
     ) {
       return null;
     }
 
-    const provider = hostname === "music.youtube.com" ? "youtube_music" : "youtube";
+    const provider =
+      hostname === "music.youtube.com" ? "youtube_music" : "youtube";
 
     if (hostname === "youtu.be") {
       const videoId = parsed.pathname.replace(/^\/+/, "").split("/")[0];
@@ -467,7 +512,10 @@ export function extractYouTubeUrl(rawUrl: string): ExtractedYouTubeUrl | null {
       return { provider, videoId, playlistId };
     }
 
-    if (parsed.pathname.startsWith("/shorts/") || parsed.pathname.startsWith("/live/")) {
+    if (
+      parsed.pathname.startsWith("/shorts/") ||
+      parsed.pathname.startsWith("/live/")
+    ) {
       const videoId = parsed.pathname.split("/")[2];
       return videoId ? { provider, videoId } : null;
     }
@@ -492,17 +540,32 @@ function buildSpotifySearchQuery(track: SpotifyTrackLike) {
   return [track.artist, track.name].filter(Boolean).join(" ").trim();
 }
 
-function normalizeSpotifyDurationMs(duration: number | null | undefined): number | null {
-  if (typeof duration !== "number" || !Number.isFinite(duration) || duration <= 0) {
+function normalizeSpotifyDurationMs(
+  duration: number | null | undefined,
+): number | null {
+  if (
+    typeof duration !== "number" ||
+    !Number.isFinite(duration) ||
+    duration <= 0
+  ) {
     return null;
   }
 
   return duration > 10_000 ? Math.round(duration) : Math.round(duration * 1000);
 }
 
-export function scoreYoutubeCandidate(candidate: ListenTogetherTrack, target: SpotifyTrackLike) {
-  const targetTokens = new Set(normalizeText(`${target.artist} ${target.name}`).split(" ").filter(Boolean));
-  const candidateTokens = normalizeText(`${candidate.artist ?? ""} ${candidate.title}`).split(" ").filter(Boolean);
+export function scoreYoutubeCandidate(
+  candidate: ListenTogetherTrack,
+  target: SpotifyTrackLike,
+) {
+  const targetTokens = new Set(
+    normalizeText(`${target.artist} ${target.name}`).split(" ").filter(Boolean),
+  );
+  const candidateTokens = normalizeText(
+    `${candidate.artist ?? ""} ${candidate.title}`,
+  )
+    .split(" ")
+    .filter(Boolean);
   const tokenHits = candidateTokens.reduce(
     (count, token) => count + (targetTokens.has(token) ? 1 : 0),
     0,
@@ -513,13 +576,18 @@ export function scoreYoutubeCandidate(candidate: ListenTogetherTrack, target: Sp
       ? 0
       : Math.abs(candidate.durationMs - targetDurationMs) / 1000;
 
-  const exactTitleBoost = normalizeText(candidate.title).includes(normalizeText(target.name)) ? 8 : 0;
+  const exactTitleBoost = normalizeText(candidate.title).includes(
+    normalizeText(target.name),
+  )
+    ? 8
+    : 0;
   const exactArtistBoost =
-    candidate.artist && normalizeText(candidate.artist).includes(normalizeText(target.artist))
+    candidate.artist &&
+    normalizeText(candidate.artist).includes(normalizeText(target.artist))
       ? 6
       : 0;
 
-  return (tokenHits * 4) + exactTitleBoost + exactArtistBoost - durationPenalty;
+  return tokenHits * 4 + exactTitleBoost + exactArtistBoost - durationPenalty;
 }
 
 async function searchYoutubeTracks(query: string, limit = 10) {
@@ -540,7 +608,10 @@ async function resolveSpotifyTrackToYoutube(
   if (candidates.length === 0) return null;
 
   const best = [...candidates]
-    .map((candidate) => ({ candidate, score: scoreYoutubeCandidate(candidate, track) }))
+    .map((candidate) => ({
+      candidate,
+      score: scoreYoutubeCandidate(candidate, track),
+    }))
     .sort((left, right) => right.score - left.score)[0];
 
   if (!best || best.score < 4) return null;
@@ -560,17 +631,23 @@ async function resolveYoutubeVideo(
   provider: "youtube" | "youtube_music",
 ): Promise<ListenTogetherTrack | null> {
   try {
-    const resolved = await resolveYouTubePlayback(buildYoutubeWatchUrl(videoId), {
-      preferredKind: "audio",
-      includeFormats: false,
-    });
+    const resolved = await resolveYouTubePlayback(
+      buildYoutubeWatchUrl(videoId),
+      {
+        preferredKind: "audio",
+        includeFormats: false,
+      },
+    );
 
     if (resolved.title && resolved.durationSeconds && !resolved.isLive) {
       return {
         id: `${provider}:${resolved.videoId}`,
         provider,
         videoId: resolved.videoId,
-        title: sanitizeResolvedTrackTitle(resolved.title, resolved.durationSeconds),
+        title: sanitizeResolvedTrackTitle(
+          resolved.title,
+          resolved.durationSeconds,
+        ),
         artist: resolved.author,
         album: null,
         durationMs: resolved.durationSeconds * 1000,
@@ -578,8 +655,8 @@ async function resolveYoutubeVideo(
         canonicalUrl: buildYoutubeWatchUrl(resolved.videoId),
         sourceUrl: buildYoutubeWatchUrl(resolved.videoId),
         sourceLabel: provider === "youtube_music" ? "YouTube Music" : "YouTube",
-        };
-      }
+      };
+    }
   } catch (error) {
     log.warn("yt-dlp-backed YouTube metadata resolution failed", error);
   }
@@ -592,7 +669,9 @@ function mapYoutubePlaylistHeaderToCollection(
   header: Record<string, unknown> | null,
   tracks: ListenTogetherTrack[],
 ): ListenTogetherResolveCollectionMeta {
-  const metadataRows = metadataRowsFromNode((header as any)?.metadata?.contentMetadataViewModel);
+  const metadataRows = metadataRowsFromNode(
+    (header as any)?.metadata?.contentMetadataViewModel,
+  );
   const subtitleText = firstMetadataText(metadataRows, 0);
 
   return {
@@ -605,9 +684,12 @@ function mapYoutubePlaylistHeaderToCollection(
       playlistItemCountFromRows(metadataRows) ?? tracks.length,
     ),
     artworkUrl:
-      chooseBestThumbnail((header as any)?.heroImage?.contentPreviewImageViewModel?.image?.sources)
-      ?? tracks[0]?.artworkUrl
-      ?? null,
+      chooseBestThumbnail(
+        (header as any)?.heroImage?.contentPreviewImageViewModel?.image
+          ?.sources,
+      ) ??
+      tracks[0]?.artworkUrl ??
+      null,
     sourceUrl: buildYoutubePlaylistUrl(playlistId),
   };
 }
@@ -615,12 +697,19 @@ function mapYoutubePlaylistHeaderToCollection(
 async function resolveYoutubePlaylist(
   playlistId: string,
 ): Promise<ListenTogetherResolveResponse> {
-  const playlist = await browseYouTubePlaylistCatalog(playlistId, LISTEN_TOGETHER_IMPORT_LIMIT);
+  const playlist = await browseYouTubePlaylistCatalog(
+    playlistId,
+    LISTEN_TOGETHER_IMPORT_LIMIT,
+  );
   const tracks = playlist.items
     .map((item) => mapYoutubeVideoNode(item, "youtube", "YouTube"))
     .filter((item): item is ListenTogetherSearchTrackResult => !!item)
     .slice(0, LISTEN_TOGETHER_IMPORT_LIMIT);
-  const collection = mapYoutubePlaylistHeaderToCollection(playlistId, playlist.header, tracks);
+  const collection = mapYoutubePlaylistHeaderToCollection(
+    playlistId,
+    playlist.header,
+    tracks,
+  );
 
   return {
     kind: "collection",
@@ -632,7 +721,9 @@ async function resolveYoutubePlaylist(
   };
 }
 
-async function resolveSpotifyUrl(rawUrl: string): Promise<ListenTogetherResolveResponse> {
+async function resolveSpotifyUrl(
+  rawUrl: string,
+): Promise<ListenTogetherResolveResponse> {
   const spotify = await getSpotifyClient();
   const details = await spotify.getDetails(rawUrl);
   const sourceType = details.preview.type;
@@ -726,7 +817,9 @@ export async function searchListenTogether(
       cursor: null,
     };
 
-    cacheSet(cacheKey, response, LISTEN_TOGETHER_SEARCH_TTL_SECONDS).catch(() => {});
+    cacheSet(cacheKey, response, LISTEN_TOGETHER_SEARCH_TTL_SECONDS).catch(
+      () => {},
+    );
     return response;
   } catch (error) {
     log.warn("listen-together search failed", {
@@ -755,14 +848,19 @@ export async function resolveListenTogetherUrl(
   const youtubeUrl = extractYouTubeUrl(trimmed);
 
   if (youtubeUrl?.videoId) {
-    const track = await resolveYoutubeVideo(youtubeUrl.videoId, youtubeUrl.provider);
+    const track = await resolveYoutubeVideo(
+      youtubeUrl.videoId,
+      youtubeUrl.provider,
+    );
     response = {
       kind: "track",
       tracks: track ? [track] : [],
       collection: null,
       resolvedCount: track ? 1 : 0,
       skippedCount: track ? 0 : 1,
-      skippedItems: track ? [] : [{ title: trimmed, reason: "Could not resolve YouTube video" }],
+      skippedItems: track
+        ? []
+        : [{ title: trimmed, reason: "Could not resolve YouTube video" }],
     };
   } else if (youtubeUrl?.playlistId) {
     response = await resolveYoutubePlaylist(youtubeUrl.playlistId);
@@ -772,7 +870,9 @@ export async function resolveListenTogetherUrl(
     throw new Error("Only YouTube and Spotify URLs are supported");
   }
 
-  cacheSet(cacheKey, response, LISTEN_TOGETHER_RESOLVE_TTL_SECONDS).catch(() => {});
+  cacheSet(cacheKey, response, LISTEN_TOGETHER_RESOLVE_TTL_SECONDS).catch(
+    () => {},
+  );
   return response;
 }
 
@@ -821,7 +921,9 @@ export async function resolveListenTogetherAudioStream(
           contentLength: resolved.selectedFormat.contentLength,
           expiresAt: resolved.selectedFormat.expiresAt,
         };
-        const ttlSeconds = getAudioStreamCacheTtl(resolved.selectedFormat.expiresAt);
+        const ttlSeconds = getAudioStreamCacheTtl(
+          resolved.selectedFormat.expiresAt,
+        );
         setLocalCachedAudioStream(cacheKey, response, ttlSeconds);
         cacheSet(cacheKey, response, ttlSeconds).catch(() => {});
         return response;

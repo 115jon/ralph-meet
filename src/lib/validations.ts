@@ -13,12 +13,21 @@ export const ChannelNameSchema = z
 export const CreateChannelSchema = z.object({
   name: z.string().min(1).max(100),
   channel_type: z.enum(["text", "voice", "dm"]).default("text"),
-  category_id: z.uuid().nullable().optional().or(z.string().length(0)).transform(v => v === "" ? null : v),
+  category_id: z
+    .uuid()
+    .nullable()
+    .optional()
+    .or(z.string().length(0))
+    .transform((v) => (v === "" ? null : v)),
   description: z.string().max(1024).nullable().optional(),
 });
 
 export const CreateCategorySchema = z.object({
-  name: z.string().min(1).max(100).transform(v => v.trim().toUpperCase()),
+  name: z
+    .string()
+    .min(1)
+    .max(100)
+    .transform((v) => v.trim().toUpperCase()),
 });
 
 /**
@@ -26,13 +35,17 @@ export const CreateCategorySchema = z.object({
  * Text channels: lowercase, collapse whitespace into hyphens, preserve visible Unicode.
  * Voice channels: trimmed, allowed spaces and special chars.
  */
-export function sanitizeChannelName(name: string, type: "text" | "voice" | "dm", isFinal: boolean = false): string {
+export function sanitizeChannelName(
+  name: string,
+  type: "text" | "voice" | "dm",
+  isFinal: boolean = false,
+): string {
   if (type === "text") {
     let sanitized = name
       .toLowerCase()
-      .replace(/\s+/gu, "-")         // Discord-style spacing for text channels
+      .replace(/\s+/gu, "-") // Discord-style spacing for text channels
       .replace(/[\u0000-\u001F\u007F-\u009F]/g, "") // Strip control chars but keep visible Unicode
-      .replace(/-+/g, "-");          // Collapse multiple hyphens
+      .replace(/-+/g, "-"); // Collapse multiple hyphens
 
     if (isFinal) {
       sanitized = sanitized.replace(/^-+|-+$/g, ""); // Trim hyphens from ends if final
@@ -45,7 +58,11 @@ export function sanitizeChannelName(name: string, type: "text" | "voice" | "dm",
 // ── API Route Input Schemas ────────────────────────────────────────────────
 
 export const CreateServerSchema = z.object({
-  name: z.string().min(1, "Name is required").max(100, "Name is too long").transform(v => v.trim()),
+  name: z
+    .string()
+    .min(1, "Name is required")
+    .max(100, "Name is too long")
+    .transform((v) => v.trim()),
   icon_url: z.string().min(1).nullable().optional(),
 });
 
@@ -58,29 +75,41 @@ export const SendMessageSchema = z.object({
 
 export const EditMessageSchema = z.object({
   message_id: z.string().uuid("Invalid message ID"),
-  content: z.string().min(1, "Content is required").max(4000, "Message too long").transform(v => v.trim()),
+  content: z
+    .string()
+    .min(1, "Content is required")
+    .max(4000, "Message too long")
+    .transform((v) => v.trim()),
 });
 
 export const DeleteMessageSchema = z.object({
   message_id: z.string().uuid("Invalid message ID"),
 });
 
-export const UpdateServerSchema = z.object({
-  name: z.string().min(1).max(100).transform(v => v.trim()).optional(),
-  icon_url: z.string().min(1).nullable().optional(),
-  invites_paused: z.boolean().optional(),
-  allow_public_shares: z.boolean().optional(),
-  show_source_in_shares: z.boolean().optional(),
-  allow_share_indexing: z.boolean().optional(),
-}).refine(d =>
-  d.name ||
-  d.icon_url !== undefined ||
-  d.invites_paused !== undefined ||
-  d.allow_public_shares !== undefined ||
-  d.show_source_in_shares !== undefined ||
-  d.allow_share_indexing !== undefined,
-  { message: "No changes provided" }
-);
+export const UpdateServerSchema = z
+  .object({
+    name: z
+      .string()
+      .min(1)
+      .max(100)
+      .transform((v) => v.trim())
+      .optional(),
+    icon_url: z.string().min(1).nullable().optional(),
+    invites_paused: z.boolean().optional(),
+    allow_public_shares: z.boolean().optional(),
+    show_source_in_shares: z.boolean().optional(),
+    allow_share_indexing: z.boolean().optional(),
+  })
+  .refine(
+    (d) =>
+      d.name ||
+      d.icon_url !== undefined ||
+      d.invites_paused !== undefined ||
+      d.allow_public_shares !== undefined ||
+      d.show_source_in_shares !== undefined ||
+      d.allow_share_indexing !== undefined,
+    { message: "No changes provided" },
+  );
 
 export const UpdateRoleSchema = z.object({
   role: z.number().int().min(0).max(2),

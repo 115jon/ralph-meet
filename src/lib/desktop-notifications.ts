@@ -26,13 +26,21 @@ export function getDesktopNotificationBadgeState(input: {
   unreadDmChannelIds?: Iterable<string>;
   unreadServerChannelIds?: Iterable<string>;
 }): DesktopNotificationBadgeState {
-  const unreadNotifications = input.notifications.filter((notification) => !notification.is_read);
+  const unreadNotifications = input.notifications.filter(
+    (notification) => !notification.is_read,
+  );
   const unreadNotificationCount = unreadNotifications.length;
   const unreadDmSet = new Set(input.unreadDmChannelIds ?? []);
   const unreadServerSet = new Set(input.unreadServerChannelIds ?? []);
 
-  const hasUnread = unreadNotificationCount > 0 || unreadDmSet.size > 0 || unreadServerSet.size > 0;
-  const indicatorCount = unreadNotificationCount > 0 ? Math.min(unreadNotificationCount, MAX_BADGE_COUNT) : 0;
+  const hasUnread =
+    unreadNotificationCount > 0 ||
+    unreadDmSet.size > 0 ||
+    unreadServerSet.size > 0;
+  const indicatorCount =
+    unreadNotificationCount > 0
+      ? Math.min(unreadNotificationCount, MAX_BADGE_COUNT)
+      : 0;
   const showDot = hasUnread && indicatorCount === 0;
 
   return {
@@ -40,7 +48,8 @@ export function getDesktopNotificationBadgeState(input: {
     indicatorCount,
     hasUnread,
     showDot,
-    overlayLabel: indicatorCount > 0 ? String(indicatorCount) : showDot ? "dot" : null,
+    overlayLabel:
+      indicatorCount > 0 ? String(indicatorCount) : showDot ? "dot" : null,
   };
 }
 
@@ -78,10 +87,13 @@ export function getUnreadChannelState(input: {
   const unreadServerChannelIds: string[] = [];
   const dmChannelIdSet = new Set(input.dmChannelIds);
 
-  for (const [channelId, lastMessageTimestamp] of Object.entries(input.lastMessageAt)) {
+  for (const [channelId, lastMessageTimestamp] of Object.entries(
+    input.lastMessageAt,
+  )) {
     if (!lastMessageTimestamp) continue;
     const lastReadTimestamp = input.readStates[channelId];
-    if (lastReadTimestamp && lastMessageTimestamp <= lastReadTimestamp) continue;
+    if (lastReadTimestamp && lastMessageTimestamp <= lastReadTimestamp)
+      continue;
 
     if (dmChannelIdSet.has(channelId)) {
       unreadDmChannelIds.push(channelId);
@@ -113,7 +125,10 @@ export function getUnreadDocumentTitle(
 ): string {
   if (!badge.hasUnread) return baseTitle;
   if (badge.indicatorCount > 0) {
-    const countLabel = badge.unreadCount > MAX_BADGE_COUNT ? `${MAX_BADGE_COUNT}+` : String(badge.indicatorCount);
+    const countLabel =
+      badge.unreadCount > MAX_BADGE_COUNT
+        ? `${MAX_BADGE_COUNT}+`
+        : String(badge.indicatorCount);
     return `(${countLabel}) ${baseTitle}`;
   }
   return `(•) ${baseTitle}`;

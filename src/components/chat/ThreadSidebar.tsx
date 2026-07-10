@@ -1,4 +1,3 @@
-
 import { apiGet, apiPost } from "@/lib/api-client";
 import type { Message } from "@/lib/types";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -25,9 +24,14 @@ function formatDate(iso: string): string {
   const yesterday = new Date(today);
   yesterday.setDate(today.getDate() - 1);
 
-  const time = d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit", hour12: true });
+  const time = d.toLocaleTimeString([], {
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  });
   if (d.toDateString() === today.toDateString()) return `Today at ${time}`;
-  if (d.toDateString() === yesterday.toDateString()) return `Yesterday at ${time}`;
+  if (d.toDateString() === yesterday.toDateString())
+    return `Yesterday at ${time}`;
   return `${d.toLocaleDateString([], { month: "2-digit", day: "2-digit", year: "numeric" })} ${time}`;
 }
 
@@ -42,7 +46,7 @@ export default function ThreadSidebar({
   onUnpin,
   onJump,
   onBan,
-  onClose
+  onClose,
 }: Props) {
   const [root, setRoot] = useState<Message | null>(null);
   const [replies, setReplies] = useState<Message[]>([]);
@@ -50,19 +54,24 @@ export default function ThreadSidebar({
   const [error, setError] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
-  const fetchThread = useCallback(async (silent = false) => {
-    if (!silent) setLoading(true);
-    if (!silent) setError(null);
-    try {
-      const data = await apiGet<{ root: Message; replies: Message[] }>(`/api/channels/${channelId}/thread?message_id=${rootMessageId}`);
-      setRoot(data.root);
-      setReplies(data.replies);
-    } catch (err: any) {
-      if (!silent) setError(err.message || "Failed to load thread");
-    } finally {
-      if (!silent) setLoading(false);
-    }
-  }, [channelId, rootMessageId]);
+  const fetchThread = useCallback(
+    async (silent = false) => {
+      if (!silent) setLoading(true);
+      if (!silent) setError(null);
+      try {
+        const data = await apiGet<{ root: Message; replies: Message[] }>(
+          `/api/channels/${channelId}/thread?message_id=${rootMessageId}`,
+        );
+        setRoot(data.root);
+        setReplies(data.replies);
+      } catch (err: any) {
+        if (!silent) setError(err.message || "Failed to load thread");
+      } finally {
+        if (!silent) setLoading(false);
+      }
+    },
+    [channelId, rootMessageId],
+  );
 
   useEffect(() => {
     fetchThread();
@@ -91,7 +100,9 @@ export default function ThreadSidebar({
         } else if (event === "MESSAGE_DELETE") {
           setReplies((prev) => prev.filter((r) => r.id !== data.id));
         }
-      } catch { /* ignore */ }
+      } catch {
+        /* ignore */
+      }
     };
 
     window.addEventListener("chat-gateway-event", handler);
@@ -102,49 +113,55 @@ export default function ThreadSidebar({
     };
   }, [rootMessageId]);
 
-  const handleSendReply = useCallback(async (content: string) => {
-    const tempId = `temp-${Date.now()}`;
-    const tempMsg: Message = {
-      id: tempId,
-      channel_id: channelId,
-      author_id: currentUserId || "",
-      content,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-      reply_to_id: rootMessageId,
-      is_pinned: false,
-      attachments: [],
-      author: {
-        id: currentUserId || "",
-        username: "You",
-        image_url: "",
-        created_at: new Date().toISOString(),
-      } as any,
-    };
-
-    // Optimistically add to replies
-    setReplies(prev => [...prev, tempMsg]);
-
-    try {
-      const newMsg = await apiPost<Message>(`/api/channels/${channelId}/messages`, {
+  const handleSendReply = useCallback(
+    async (content: string) => {
+      const tempId = `temp-${Date.now()}`;
+      const tempMsg: Message = {
+        id: tempId,
+        channel_id: channelId,
+        author_id: currentUserId || "",
         content,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
         reply_to_id: rootMessageId,
-      });
+        is_pinned: false,
+        attachments: [],
+        author: {
+          id: currentUserId || "",
+          username: "You",
+          image_url: "",
+          created_at: new Date().toISOString(),
+        } as any,
+      };
 
-      // Deduplicate: If WS already inserted the real message, just delete the temp one
-      setReplies(prev => {
-        if (prev.some(m => m.id === newMsg.id && m.id !== tempId)) {
-          return prev.filter(m => m.id !== tempId);
-        }
-        // Otherwise replace temp message with the actual REST response message
-        return prev.map(m => m.id === tempId ? newMsg : m);
-      });
-    } catch (err: any) {
-      console.error("Failed to send reply:", err);
-      // Revert optimistic add on failure
-      setReplies(prev => prev.filter(m => m.id !== tempId));
-    }
-  }, [channelId, rootMessageId, currentUserId]);
+      // Optimistically add to replies
+      setReplies((prev) => [...prev, tempMsg]);
+
+      try {
+        const newMsg = await apiPost<Message>(
+          `/api/channels/${channelId}/messages`,
+          {
+            content,
+            reply_to_id: rootMessageId,
+          },
+        );
+
+        // Deduplicate: If WS already inserted the real message, just delete the temp one
+        setReplies((prev) => {
+          if (prev.some((m) => m.id === newMsg.id && m.id !== tempId)) {
+            return prev.filter((m) => m.id !== tempId);
+          }
+          // Otherwise replace temp message with the actual REST response message
+          return prev.map((m) => (m.id === tempId ? newMsg : m));
+        });
+      } catch (err: any) {
+        console.error("Failed to send reply:", err);
+        // Revert optimistic add on failure
+        setReplies((prev) => prev.filter((m) => m.id !== tempId));
+      }
+    },
+    [channelId, rootMessageId, currentUserId],
+  );
 
   return (
     <div className="flex h-full w-[380px] flex-col border-l border-rm-border bg-rm-bg-primary">
@@ -171,7 +188,9 @@ export default function ThreadSidebar({
             <Loader2 className="h-5 w-5 animate-spin text-rm-text-muted" />
           </div>
         ) : error ? (
-          <div className="flex h-full items-center justify-center text-sm text-red-400">{error}</div>
+          <div className="flex h-full items-center justify-center text-sm text-red-400">
+            {error}
+          </div>
         ) : (
           <div className="flex flex-col gap-1 pb-4">
             {/* Root message */}
@@ -215,7 +234,7 @@ export default function ThreadSidebar({
                 if (hasSameAuthor) {
                   const prevTime = new Date(prev.created_at).getTime();
                   const curTime = new Date(reply.created_at).getTime();
-                  showHeader = (curTime - prevTime) > 5 * 60 * 1000;
+                  showHeader = curTime - prevTime > 5 * 60 * 1000;
                 }
               }
 
@@ -249,7 +268,11 @@ export default function ThreadSidebar({
   );
 }
 
-function ThreadReplyInput({ onSend }: { onSend: (content: string) => Promise<void> }) {
+function ThreadReplyInput({
+  onSend,
+}: {
+  onSend: (content: string) => Promise<void>;
+}) {
   const [value, setValue] = useState("");
   const [sending, setSending] = useState(false);
 
@@ -269,7 +292,12 @@ function ThreadReplyInput({ onSend }: { onSend: (content: string) => Promise<voi
           value={value}
           onChange={(e) => setValue(e.target.value)}
           aria-label="Reply to thread"
-          onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSubmit(); } }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              handleSubmit();
+            }
+          }}
           placeholder="Reply to thread…"
           className="flex-1 bg-transparent text-sm text-rm-text outline-none placeholder:text-rm-text-muted/30"
         />

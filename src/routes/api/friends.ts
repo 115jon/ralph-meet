@@ -1,4 +1,4 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute } from "@tanstack/react-router";
 
 import { apiError, apiSuccess, getDB, requireAuth } from "@/lib/api-helpers";
 import { ServiceError } from "@/lib/service-error";
@@ -11,7 +11,6 @@ import {
   sendFriendRequest,
 } from "@/services/social.service";
 
-
 // GET /api/friends — list all relationships for the authenticated user
 const GET = async ({ request, params }: any) => {
   const authResult = await requireAuth();
@@ -21,7 +20,7 @@ const GET = async ({ request, params }: any) => {
   const db = getDB();
   const result = await listRelationships(db, userId);
   return apiSuccess(result);
-}
+};
 
 // POST /api/friends — send a friend request
 const POST = async ({ request, params }: any) => {
@@ -43,14 +42,20 @@ const POST = async ({ request, params }: any) => {
       await executeBroadcast(b);
     }
 
-    return apiSuccess({ user: result.user, type: result.type }, result.type === 3 ? 201 : 200);
+    return apiSuccess(
+      { user: result.user, type: result.type },
+      result.type === 3 ? 201 : 200,
+    );
   } catch (e) {
     if (e instanceof ServiceError) {
-      return Response.json({ error: e.message, code: e.code }, { status: e.status });
+      return Response.json(
+        { error: e.message, code: e.code },
+        { status: e.status },
+      );
     }
     throw e;
   }
-}
+};
 
 // PUT /api/friends — accept or block a relationship
 const PUT = async ({ request, params }: any) => {
@@ -58,7 +63,10 @@ const PUT = async ({ request, params }: any) => {
   if (authResult instanceof Response) return authResult;
   const { userId } = authResult;
 
-  const body = (await request.json()) as { target_user_id: string; action: "accept" | "block" };
+  const body = (await request.json()) as {
+    target_user_id: string;
+    action: "accept" | "block";
+  };
   if (!body.target_user_id || !body.action) {
     return apiError("target_user_id and action are required", 400);
   }
@@ -85,11 +93,14 @@ const PUT = async ({ request, params }: any) => {
     return apiError("Invalid action", 400);
   } catch (e) {
     if (e instanceof ServiceError) {
-      return Response.json({ error: e.message, code: e.code }, { status: e.status });
+      return Response.json(
+        { error: e.message, code: e.code },
+        { status: e.status },
+      );
     }
     throw e;
   }
-}
+};
 
 // DELETE /api/friends — remove a friend or cancel/reject a request
 const DELETE = async ({ request, params }: any) => {
@@ -110,16 +121,15 @@ const DELETE = async ({ request, params }: any) => {
   }
 
   return apiSuccess({ success: true });
-}
+};
 
-
-export const Route = createFileRoute('/api/friends')({
+export const Route = createFileRoute("/api/friends")({
   server: {
     handlers: {
       GET,
       POST,
       PUT,
       DELETE,
-    }
-  }
+    },
+  },
 });

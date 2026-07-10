@@ -30,9 +30,10 @@ const POST = async ({ request, params }: any) => {
   const { id: messageId } = params;
   const db = getDB();
 
-  const source = await db.prepare(
-    `SELECT channel_id FROM messages WHERE id = ?`
-  ).bind(messageId).first() as { channel_id: string } | null;
+  const source = (await db
+    .prepare(`SELECT channel_id FROM messages WHERE id = ?`)
+    .bind(messageId)
+    .first()) as { channel_id: string } | null;
 
   if (!source) return apiError("Message not found", 404);
 

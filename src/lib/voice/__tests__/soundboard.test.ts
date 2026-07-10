@@ -19,10 +19,12 @@ class FakeAudio {
   }
 
   addEventListener(type: string, listener: EventListenerOrEventListenerObject) {
-    const handler = typeof listener === "function"
-      ? (event?: Event) => listener(event as Event)
-      : (event?: Event) => listener.handleEvent(event as Event);
-    const listeners = this.listeners.get(type) ?? new Set<(event?: Event) => void>();
+    const handler =
+      typeof listener === "function"
+        ? (event?: Event) => listener(event as Event)
+        : (event?: Event) => listener.handleEvent(event as Event);
+    const listeners =
+      this.listeners.get(type) ?? new Set<(event?: Event) => void>();
     listeners.add(handler);
     this.listeners.set(type, listeners);
   }
@@ -73,8 +75,10 @@ describe("soundboard playback runtime", () => {
   });
 
   it("syncs paused state when audio is paused or resumed outside the picker controls", async () => {
-    const { playSoundboardPlayback, stopSoundboardPlayback } = await import("@/lib/voice/soundboard");
-    const { useVoiceSoundboardStore } = await import("@/stores/useVoiceSoundboardStore");
+    const { playSoundboardPlayback, stopSoundboardPlayback } =
+      await import("@/lib/voice/soundboard");
+    const { useVoiceSoundboardStore } =
+      await import("@/stores/useVoiceSoundboardStore");
 
     useVoiceSoundboardStore.setState({
       activePlaybacks: {},
@@ -94,15 +98,23 @@ describe("soundboard playback runtime", () => {
     const audio = FakeAudio.instances[0];
 
     await vi.advanceTimersByTimeAsync(500);
-    expect(useVoiceSoundboardStore.getState().activePlaybacks["pb-1"]?.paused).toBe(false);
+    expect(
+      useVoiceSoundboardStore.getState().activePlaybacks["pb-1"]?.paused,
+    ).toBe(false);
 
     audio.pause();
-    expect(useVoiceSoundboardStore.getState().activePlaybacks["pb-1"]?.paused).toBe(true);
+    expect(
+      useVoiceSoundboardStore.getState().activePlaybacks["pb-1"]?.paused,
+    ).toBe(true);
 
     await audio.play();
-    expect(useVoiceSoundboardStore.getState().activePlaybacks["pb-1"]?.paused).toBe(false);
+    expect(
+      useVoiceSoundboardStore.getState().activePlaybacks["pb-1"]?.paused,
+    ).toBe(false);
 
     stopSoundboardPlayback("pb-1");
-    expect(useVoiceSoundboardStore.getState().activePlaybacks["pb-1"]).toBeUndefined();
+    expect(
+      useVoiceSoundboardStore.getState().activePlaybacks["pb-1"],
+    ).toBeUndefined();
   });
 });

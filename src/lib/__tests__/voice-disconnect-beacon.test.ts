@@ -12,7 +12,10 @@ vi.mock("@/lib/platform", () => ({
   isTauri: vi.fn(() => false),
 }));
 
-import { getDesktopToken, getStoredKovaAuthSessionToken } from "@/lib/desktop-auth";
+import {
+  getDesktopToken,
+  getStoredKovaAuthSessionToken,
+} from "@/lib/desktop-auth";
 import { sendVoiceDisconnectBeacon } from "@/lib/voice-disconnect-beacon";
 
 describe("sendVoiceDisconnectBeacon", () => {
@@ -22,7 +25,9 @@ describe("sendVoiceDisconnectBeacon", () => {
   beforeEach(() => {
     vi.mocked(getDesktopToken).mockReturnValue(null);
     vi.mocked(getStoredKovaAuthSessionToken).mockReturnValue(null);
-    globalThis.fetch = vi.fn(() => Promise.resolve(new Response(null, { status: 202 }))) as typeof fetch;
+    globalThis.fetch = vi.fn(() =>
+      Promise.resolve(new Response(null, { status: 202 })),
+    ) as typeof fetch;
     Object.defineProperty(navigator, "sendBeacon", {
       configurable: true,
       writable: true,
@@ -64,16 +69,19 @@ describe("sendVoiceDisconnectBeacon", () => {
     });
 
     expect(sent).toBe(true);
-    expect(globalThis.fetch).toHaveBeenCalledWith("/api/channels/vc-1/voice-disconnect", expect.objectContaining({
-      method: "POST",
-      keepalive: true,
-      credentials: "include",
-      headers: expect.objectContaining({
-        Authorization: "Bearer token-123",
-        "X-Gateway-Session-Id": "gw-1",
-        "X-Voice-Session-Id": "voice-1",
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      "/api/channels/vc-1/voice-disconnect",
+      expect.objectContaining({
+        method: "POST",
+        keepalive: true,
+        credentials: "include",
+        headers: expect.objectContaining({
+          Authorization: "Bearer token-123",
+          "X-Gateway-Session-Id": "gw-1",
+          "X-Voice-Session-Id": "voice-1",
+        }),
       }),
-    }));
+    );
     expect(navigator.sendBeacon).not.toHaveBeenCalled();
   });
 

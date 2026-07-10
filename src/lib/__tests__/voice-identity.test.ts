@@ -58,5 +58,4 @@ describe("resolveVoiceIdentity", () => {
     expect(identity.displayName).toBe("alice-new");
     expect(identity.username).toBe("alice-new");
   });
-
 });

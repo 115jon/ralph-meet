@@ -30,16 +30,28 @@ export interface StatsAccessor {
 export class ConnectionStatsMonitor {
   // -- Track-level stats --
   private statsInterval: ReturnType<typeof setInterval> | null = null;
-  private remoteTrackStats = new Map<string, {
-    fps: number; bitrate: number; width: number; height: number;
-    timestamp: number; frames: number; bytes: number;
-  }>();
+  private remoteTrackStats = new Map<
+    string,
+    {
+      fps: number;
+      bitrate: number;
+      width: number;
+      height: number;
+      timestamp: number;
+      frames: number;
+      bytes: number;
+    }
+  >();
 
   // -- Connection stats for Voice Details panel --
   private connStatsInterval: ReturnType<typeof setInterval> | null = null;
   private connStatsCache: VoiceConnectionStats | null = null;
   private connStatsPingHistory: { time: string; ping: number }[] = [];
-  private connStatsPrevBytes: { sent: number; received: number; timestamp: number } | null = null;
+  private connStatsPrevBytes: {
+    sent: number;
+    received: number;
+    timestamp: number;
+  } | null = null;
 
   // -- Push-style listeners: notified on every tick instead of polling --
   private connStatsListeners = new Set<(stats: VoiceConnectionStats) => void>();
@@ -56,13 +68,24 @@ export class ConnectionStatsMonitor {
     bytesReceived: number;
     bytesSent: number;
   }[] = [];
-  private debugInboundHistory: Map<string, {
-    time: string; bitrate: number; packetsReceived: number;
-    packetsLost: number; jitter: number;
-  }[]> = new Map();
-  private debugPrevInbound: Map<string, {
-    bytes: number; packets: number; timestamp: number;
-  }> = new Map();
+  private debugInboundHistory: Map<
+    string,
+    {
+      time: string;
+      bitrate: number;
+      packetsReceived: number;
+      packetsLost: number;
+      jitter: number;
+    }[]
+  > = new Map();
+  private debugPrevInbound: Map<
+    string,
+    {
+      bytes: number;
+      packets: number;
+      timestamp: number;
+    }
+  > = new Map();
 
   // -- UUID → Clerk ID mapping for getStatsByClerkId --
   private uuidToClerk = new Map<string, string>();
@@ -87,7 +110,7 @@ export class ConnectionStatsMonitor {
     return this.remoteTrackStats.get(trackName);
   }
 
-  getStatsByClerkId(clerkId: string, trackPrefix: 'cam' | 'screen') {
+  getStatsByClerkId(clerkId: string, trackPrefix: "cam" | "screen") {
     let uuid: string | null = null;
     for (const [u, c] of Array.from(this.uuidToClerk.entries())) {
       if (c === clerkId) {
@@ -109,15 +132,17 @@ export class ConnectionStatsMonitor {
         const now = Date.now();
         const pulledTracks = this.accessor.getPulledTracks();
 
-        stats.forEach(report => {
-          if (report.type === 'inbound-rtp' && report.kind === 'video') {
+        stats.forEach((report) => {
+          if (report.type === "inbound-rtp" && report.kind === "video") {
             // Chrome: trackIdentifier, Firefox fallback: mid
             const trackId = (report as any).trackIdentifier;
             let trackInfo = trackId
-              ? pulledTracks.find(t => t.track?.id === trackId)
+              ? pulledTracks.find((t) => t.track?.id === trackId)
               : undefined;
             if (!trackInfo && (report as any).mid != null) {
-              trackInfo = pulledTracks.find(t => t.mid === (report as any).mid);
+              trackInfo = pulledTracks.find(
+                (t) => t.mid === (report as any).mid,
+              );
             }
             if (!trackInfo) return;
 
@@ -135,14 +160,32 @@ export class ConnectionStatsMonitor {
               if (dt > 0.5) {
                 const fps = Math.max(0, df / dt);
                 const bitrate = Math.max(0, (db * 8) / dt);
-                this.remoteTrackStats.set(trackInfo.track_name, { fps, bitrate, width, height, timestamp: now, frames, bytes });
+                this.remoteTrackStats.set(trackInfo.track_name, {
+                  fps,
+                  bitrate,
+                  width,
+                  height,
+                  timestamp: now,
+                  frames,
+                  bytes,
+                });
               }
             } else {
-              this.remoteTrackStats.set(trackInfo.track_name, { fps: 0, bitrate: 0, width, height, timestamp: now, frames, bytes });
+              this.remoteTrackStats.set(trackInfo.track_name, {
+                fps: 0,
+                bitrate: 0,
+                width,
+                height,
+                timestamp: now,
+                frames,
+                bytes,
+              });
             }
           }
         });
-      } catch { /* ignore */ }
+      } catch {
+        /* ignore */
+      }
     }, 2000);
   }
 
@@ -180,8 +223,16 @@ export class ConnectionStatsMonitor {
         // to get complete stats.
         let pushStats: RTCStatsReport | null = null;
         let pullStats: RTCStatsReport | null = null;
-        try { if (pushPC) pushStats = await pushPC.getStats(); } catch { /* ignore */ }
-        try { if (pullPC) pullStats = await pullPC.getStats(); } catch { /* ignore */ }
+        try {
+          if (pushPC) pushStats = await pushPC.getStats();
+        } catch {
+          /* ignore */
+        }
+        try {
+          if (pullPC) pullStats = await pullPC.getStats();
+        } catch {
+          /* ignore */
+        }
         if (!pushStats && !pullStats) return;
 
         let mediaRtt = 0;
@@ -217,14 +268,21 @@ export class ConnectionStatsMonitor {
           if (selectedId) return selectedId;
           // 2) Chrome: succeeded + nominated
           s.forEach((report: any) => {
-            if (report.type === "candidate-pair" && report.state === "succeeded" && report.nominated) {
+            if (
+              report.type === "candidate-pair" &&
+              report.state === "succeeded" &&
+              report.nominated
+            ) {
               selectedId = report.id;
             }
           });
           if (selectedId) return selectedId;
           // 3) Firefox non-standard: selected boolean
           s.forEach((report: any) => {
-            if (report.type === "candidate-pair" && (report as any).selected === true) {
+            if (
+              report.type === "candidate-pair" &&
+              (report as any).selected === true
+            ) {
               selectedId = report.id;
             }
           });
@@ -248,9 +306,15 @@ export class ConnectionStatsMonitor {
 
             // Transport counters from candidate-pair
             bytesSent = Math.max(bytesSent, activePair.bytesSent || 0);
-            bytesReceived = Math.max(bytesReceived, activePair.bytesReceived || 0);
+            bytesReceived = Math.max(
+              bytesReceived,
+              activePair.bytesReceived || 0,
+            );
             packetsSent = Math.max(packetsSent, activePair.packetsSent || 0);
-            packetsReceived = Math.max(packetsReceived, activePair.packetsReceived || 0);
+            packetsReceived = Math.max(
+              packetsReceived,
+              activePair.packetsReceived || 0,
+            );
 
             // Resolve local/remote candidate addresses.
             // Prefer host candidates over relay/srflx for the "local" label
@@ -263,9 +327,10 @@ export class ConnectionStatsMonitor {
                 const addr = lc.address || lc.ip || "?";
                 const port = lc.port || "?";
                 const ctype = lc.candidateType || "";
-                localAddress = ctype && ctype !== "host"
-                  ? `${addr}:${port} (${ctype})`
-                  : `${addr}:${port}`;
+                localAddress =
+                  ctype && ctype !== "host"
+                    ? `${addr}:${port} (${ctype})`
+                    : `${addr}:${port}`;
               }
             }
             if (remoteCand) {
@@ -274,9 +339,10 @@ export class ConnectionStatsMonitor {
                 const addr = rc.address || rc.ip || "?";
                 const port = rc.port || "?";
                 const ctype = rc.candidateType || "";
-                remoteAddress = ctype && ctype !== "host"
-                  ? `${addr}:${port} (${ctype})`
-                  : `${addr}:${port}`;
+                remoteAddress =
+                  ctype && ctype !== "host"
+                    ? `${addr}:${port} (${ctype})`
+                    : `${addr}:${port}`;
               }
             }
           }
@@ -285,9 +351,15 @@ export class ConnectionStatsMonitor {
           iceStats.forEach((report: any) => {
             if (report.type === "transport") {
               bytesSent = Math.max(bytesSent, report.bytesSent || 0);
-              bytesReceived = Math.max(bytesReceived, report.bytesReceived || 0);
+              bytesReceived = Math.max(
+                bytesReceived,
+                report.bytesReceived || 0,
+              );
               packetsSent = Math.max(packetsSent, report.packetsSent || 0);
-              packetsReceived = Math.max(packetsReceived, report.packetsReceived || 0);
+              packetsReceived = Math.max(
+                packetsReceived,
+                report.packetsReceived || 0,
+              );
             }
           });
         }
@@ -300,7 +372,10 @@ export class ConnectionStatsMonitor {
 
         if (pushStats) {
           // Collect codec map from push stats
-          const pushCodecMap = new Map<string, { mimeType: string; payloadType: number }>();
+          const pushCodecMap = new Map<
+            string,
+            { mimeType: string; payloadType: number }
+          >();
           pushStats.forEach((report: any) => {
             if (report.type === "codec") {
               pushCodecMap.set(report.id, {
@@ -340,7 +415,11 @@ export class ConnectionStatsMonitor {
                 report.totalRoundTripTime != null &&
                 report.roundTripTimeMeasurements > 0
               ) {
-                remoteInboundRtts.push((report.totalRoundTripTime / report.roundTripTimeMeasurements) * 1000);
+                remoteInboundRtts.push(
+                  (report.totalRoundTripTime /
+                    report.roundTripTimeMeasurements) *
+                    1000,
+                );
               }
             }
           });
@@ -359,25 +438,42 @@ export class ConnectionStatsMonitor {
 
             // Also check pull PC's transport for byte counters
             if (report.type === "transport") {
-              bytesReceived = Math.max(bytesReceived, report.bytesReceived || 0);
-              packetsReceived = Math.max(packetsReceived, report.packetsReceived || 0);
+              bytesReceived = Math.max(
+                bytesReceived,
+                report.bytesReceived || 0,
+              );
+              packetsReceived = Math.max(
+                packetsReceived,
+                report.packetsReceived || 0,
+              );
             }
 
             // Pull PC's candidate-pair may also have useful counters
-            if (report.type === "candidate-pair" &&
+            if (
+              report.type === "candidate-pair" &&
               ((report as any).selected === true ||
-                (report.state === "succeeded" && report.nominated))) {
-              bytesReceived = Math.max(bytesReceived, report.bytesReceived || 0);
-              packetsReceived = Math.max(packetsReceived, report.packetsReceived || 0);
+                (report.state === "succeeded" && report.nominated))
+            ) {
+              bytesReceived = Math.max(
+                bytesReceived,
+                report.bytesReceived || 0,
+              );
+              packetsReceived = Math.max(
+                packetsReceived,
+                report.packetsReceived || 0,
+              );
             }
           });
         }
 
         // ── Merge: prefer RTP aggregates when ICE-level counters are missing
         if (bytesSent === 0 && rtpBytesSent > 0) bytesSent = rtpBytesSent;
-        if (bytesReceived === 0 && rtpBytesReceived > 0) bytesReceived = rtpBytesReceived;
-        if (packetsSent === 0 && rtpPacketsSent > 0) packetsSent = rtpPacketsSent;
-        if (packetsReceived === 0 && rtpPacketsReceived > 0) packetsReceived = rtpPacketsReceived;
+        if (bytesReceived === 0 && rtpBytesReceived > 0)
+          bytesReceived = rtpBytesReceived;
+        if (packetsSent === 0 && rtpPacketsSent > 0)
+          packetsSent = rtpPacketsSent;
+        if (packetsReceived === 0 && rtpPacketsReceived > 0)
+          packetsReceived = rtpPacketsReceived;
 
         // ── RTT selection (most important fix) ──────────────────────────
         // PREFER remote-inbound-rtp.roundTripTime (RTCP SR->RR based):
@@ -386,7 +482,8 @@ export class ConnectionStatsMonitor {
         //   - Leaves ping at 0 until a receiver report is available
         if (remoteInboundRtts.length > 0) {
           mediaRtt = Math.round(
-            remoteInboundRtts.reduce((sum, value) => sum + value, 0) / remoteInboundRtts.length
+            remoteInboundRtts.reduce((sum, value) => sum + value, 0) /
+              remoteInboundRtts.length,
           );
         }
 
@@ -396,7 +493,10 @@ export class ConnectionStatsMonitor {
         // Skip zero readings — they come from ticks that fired before ICE
         // established (currentRoundTripTime is 0 until a candidate pair is
         // nominated), and would skew the average ping downward.
-        const timeStr = new Date(now).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+        const timeStr = new Date(now).toLocaleTimeString([], {
+          hour: "2-digit",
+          minute: "2-digit",
+        });
         if (ping > 0) {
           this.connStatsPingHistory.push({ time: timeStr, ping });
           if (this.connStatsPingHistory.length > 30) {
@@ -405,9 +505,13 @@ export class ConnectionStatsMonitor {
         }
 
         // Calculate average ping from history
-        const avgPing = this.connStatsPingHistory.length > 0
-          ? Math.round(this.connStatsPingHistory.reduce((sum, p) => sum + p.ping, 0) / this.connStatsPingHistory.length)
-          : ping;
+        const avgPing =
+          this.connStatsPingHistory.length > 0
+            ? Math.round(
+                this.connStatsPingHistory.reduce((sum, p) => sum + p.ping, 0) /
+                  this.connStatsPingHistory.length,
+              )
+            : ping;
 
         // Calculate bitrate deltas
         let outboundBitrate = 0;
@@ -415,15 +519,26 @@ export class ConnectionStatsMonitor {
         if (this.connStatsPrevBytes) {
           const dt = (now - this.connStatsPrevBytes.timestamp) / 1000;
           if (dt > 0.5) {
-            outboundBitrate = Math.max(0, ((bytesSent - this.connStatsPrevBytes.sent) * 8) / dt);
-            inboundBitrate = Math.max(0, ((bytesReceived - this.connStatsPrevBytes.received) * 8) / dt);
+            outboundBitrate = Math.max(
+              0,
+              ((bytesSent - this.connStatsPrevBytes.sent) * 8) / dt,
+            );
+            inboundBitrate = Math.max(
+              0,
+              ((bytesReceived - this.connStatsPrevBytes.received) * 8) / dt,
+            );
           }
         }
-        this.connStatsPrevBytes = { sent: bytesSent, received: bytesReceived, timestamp: now };
+        this.connStatsPrevBytes = {
+          sent: bytesSent,
+          received: bytesReceived,
+          timestamp: now,
+        };
 
         // Calculate packet loss rate
         const totalPackets = packetsSent + packetsLost;
-        const packetLossRate = totalPackets > 0 ? packetsLost / totalPackets : 0;
+        const packetLossRate =
+          totalPackets > 0 ? packetsLost / totalPackets : 0;
 
         // Try to get audio level from local audio track settings
         if (pushPC) {
@@ -472,10 +587,16 @@ export class ConnectionStatsMonitor {
         const isFirstSnapshot = this.connStatsCache === null;
         this.connStatsCache = snapshot;
         if (isFirstSnapshot) {
-          statsLog.info(`First snapshot ready — ping=${ping}ms, listeners=${this.connStatsListeners.size}`);
+          statsLog.info(
+            `First snapshot ready — ping=${ping}ms, listeners=${this.connStatsListeners.size}`,
+          );
         }
         for (const cb of this.connStatsListeners) {
-          try { cb(snapshot); } catch { /* ignore listener errors */ }
+          try {
+            cb(snapshot);
+          } catch {
+            /* ignore listener errors */
+          }
         }
 
         // -- Debug time-series: append transport-level history --
@@ -494,7 +615,9 @@ export class ConnectionStatsMonitor {
 
         // -- Debug: collect per-track inbound stats from pullPC --
         // Reuse pullStats from above if available, otherwise re-fetch
-        const debugPullStats = pullStats || (pullPC ? await pullPC.getStats().catch(() => null) : null);
+        const debugPullStats =
+          pullStats ||
+          (pullPC ? await pullPC.getStats().catch(() => null) : null);
         if (debugPullStats) {
           const pullNow = Date.now();
           const pulledTracks = this.accessor.getPulledTracks();
@@ -504,12 +627,12 @@ export class ConnectionStatsMonitor {
               // or may have mid-based identification. Try both.
               const trackId = report.trackIdentifier;
               let trackInfo = trackId
-                ? pulledTracks.find(t => t.track?.id === trackId)
+                ? pulledTracks.find((t) => t.track?.id === trackId)
                 : undefined;
 
               // Firefox fallback: match by mid if trackIdentifier is absent
               if (!trackInfo && report.mid != null) {
-                trackInfo = pulledTracks.find(t => t.mid === report.mid);
+                trackInfo = pulledTracks.find((t) => t.mid === report.mid);
               }
 
               const trackName = trackInfo?.track_name || `ssrc-${report.ssrc}`;
@@ -524,7 +647,11 @@ export class ConnectionStatsMonitor {
                   bitrate = Math.max(0, ((bytes - prev.bytes) * 8) / dt);
                 }
               }
-              this.debugPrevInbound.set(trackName, { bytes, packets: pkts, timestamp: pullNow });
+              this.debugPrevInbound.set(trackName, {
+                bytes,
+                packets: pkts,
+                timestamp: pullNow,
+              });
 
               if (!this.debugInboundHistory.has(trackName)) {
                 this.debugInboundHistory.set(trackName, []);
@@ -559,14 +686,20 @@ export class ConnectionStatsMonitor {
    * If a snapshot is already cached it is delivered synchronously to the new
    * listener so the first render doesn't have to wait.
    */
-  subscribeConnectionStats(cb: (stats: VoiceConnectionStats) => void): () => void {
+  subscribeConnectionStats(
+    cb: (stats: VoiceConnectionStats) => void,
+  ): () => void {
     this.connStatsListeners.add(cb);
     // Deliver the current snapshot immediately if available.
     if (this.connStatsCache) {
-      statsLog.info(`Subscriber added — delivering cached snapshot (ping=${this.connStatsCache.ping}ms)`);
+      statsLog.info(
+        `Subscriber added — delivering cached snapshot (ping=${this.connStatsCache.ping}ms)`,
+      );
       cb(this.connStatsCache);
     } else {
-      statsLog.info(`Subscriber added — no snapshot yet, will push on next tick`);
+      statsLog.info(
+        `Subscriber added — no snapshot yet, will push on next tick`,
+      );
     }
     return () => {
       this.connStatsListeners.delete(cb);
@@ -604,10 +737,33 @@ export class ConnectionStatsMonitor {
     connectionState: string;
     participantId: string | null;
     roomSlug: string;
-    transportHistory: { time: string; availableOutgoingBitrate: number; ping: number; outboundBitrate: number; inboundBitrate: number; packetsReceived: number; packetsSent: number; bytesReceived: number; bytesSent: number }[];
-    inboundHistory: Record<string, { time: string; bitrate: number; packetsReceived: number; packetsLost: number; jitter: number }[]>;
+    transportHistory: {
+      time: string;
+      availableOutgoingBitrate: number;
+      ping: number;
+      outboundBitrate: number;
+      inboundBitrate: number;
+      packetsReceived: number;
+      packetsSent: number;
+      bytesReceived: number;
+      bytesSent: number;
+    }[];
+    inboundHistory: Record<
+      string,
+      {
+        time: string;
+        bitrate: number;
+        packetsReceived: number;
+        packetsLost: number;
+        jitter: number;
+      }[]
+    >;
     connStats: VoiceConnectionStats | null;
-    pulledTracks: { track_name: string; participant_id: string; kind: string }[];
+    pulledTracks: {
+      track_name: string;
+      participant_id: string;
+      kind: string;
+    }[];
   } {
     const inbound: Record<string, any[]> = {};
     for (const [key, val] of this.debugInboundHistory.entries()) {
@@ -620,7 +776,7 @@ export class ConnectionStatsMonitor {
       transportHistory: [...this.debugHistory],
       inboundHistory: inbound,
       connStats: this.connStatsCache,
-      pulledTracks: this.accessor.getPulledTracks().map(t => ({
+      pulledTracks: this.accessor.getPulledTracks().map((t) => ({
         track_name: t.track_name,
         participant_id: t.participant_id,
         kind: t.kind,
@@ -655,7 +811,15 @@ export class ConnectionStatsMonitor {
             outboundRtp.push({
               type: report.kind || "audio",
               ssrc: report.ssrc,
-              codec: codec ? { id: codec.payloadType, name: (codec.mimeType || "").replace(/^(audio|video)\//, "") } : null,
+              codec: codec
+                ? {
+                    id: codec.payloadType,
+                    name: (codec.mimeType || "").replace(
+                      /^(audio|video)\//,
+                      "",
+                    ),
+                  }
+                : null,
               bytesSent: report.bytesSent || 0,
               packetsSent: report.packetsSent || 0,
               packetsLost: 0,
@@ -666,7 +830,9 @@ export class ConnectionStatsMonitor {
             });
           }
         });
-      } catch { /* ignore */ }
+      } catch {
+        /* ignore */
+      }
     }
 
     // Collect inbound from pullPC
@@ -689,42 +855,46 @@ export class ConnectionStatsMonitor {
             });
           }
         });
-      } catch { /* ignore */ }
+      } catch {
+        /* ignore */
+      }
     }
 
-    return [[
-      {
-        mediaEngineConnectionId: `SFU-${this.accessor.getParticipantId() || "unknown"}`,
-        transport: {
-          availableOutgoingBitrate: connStats?.availableOutgoingBitrate || 0,
-          ping: connStats?.ping || 0,
-          localAddress: connStats?.localAddress || "(unknown)",
-          packerDelay: 0,
-          receiverReports: [],
-          receiverBitrateEstimate: 0,
-          outboundBitrateEstimate: connStats?.outboundBitrate || 0,
-          inboundBitrateEstimate: connStats?.inboundBitrate || 0,
-          packetsReceived: connStats?.packetsReceived || 0,
-          packetsSent: connStats?.packetsSent || 0,
-          bytesReceived: connStats?.bytesReceived || 0,
-          bytesSent: connStats?.bytesSent || 0,
-        },
-        audioDevice: {
-          input: {
-            sessionSampleRate: connStats?.sampleRate || 48000,
+    return [
+      [
+        {
+          mediaEngineConnectionId: `SFU-${this.accessor.getParticipantId() || "unknown"}`,
+          transport: {
+            availableOutgoingBitrate: connStats?.availableOutgoingBitrate || 0,
+            ping: connStats?.ping || 0,
+            localAddress: connStats?.localAddress || "(unknown)",
+            packerDelay: 0,
+            receiverReports: [],
+            receiverBitrateEstimate: 0,
+            outboundBitrateEstimate: connStats?.outboundBitrate || 0,
+            inboundBitrateEstimate: connStats?.inboundBitrate || 0,
+            packetsReceived: connStats?.packetsReceived || 0,
+            packetsSent: connStats?.packetsSent || 0,
+            bytesReceived: connStats?.bytesReceived || 0,
+            bytesSent: connStats?.bytesSent || 0,
           },
-          output: {
-            sessionSampleRate: connStats?.sampleRate || 48000,
+          audioDevice: {
+            input: {
+              sessionSampleRate: connStats?.sampleRate || 48000,
+            },
+            output: {
+              sessionSampleRate: connStats?.sampleRate || 48000,
+            },
           },
+          rtp: {
+            inbound: inboundRtp,
+            outbound: outboundRtp,
+          },
+          context: "default",
+          index: 0,
         },
-        rtp: {
-          inbound: inboundRtp,
-          outbound: outboundRtp,
-        },
-        context: "default",
-        index: 0,
-      },
-    ]];
+      ],
+    ];
   }
 
   /** Dispose all monitoring resources. */

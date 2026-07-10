@@ -1,9 +1,16 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute } from "@tanstack/react-router";
 
-import { apiSuccess, broadcastToUser, getDB, requireAuth } from "@/lib/api-helpers";
+import {
+  apiSuccess,
+  broadcastToUser,
+  getDB,
+  requireAuth,
+} from "@/lib/api-helpers";
 import { requireChannelAccess } from "@/lib/require-channel-access";
-import { markChannelAsRead, markChannelUnreadFromMessage } from "@/services/message.service";
-
+import {
+  markChannelAsRead,
+  markChannelUnreadFromMessage,
+} from "@/services/message.service";
 
 // PUT /api/channels/:id/read-state — mark channel as read (upsert)
 const PUT = async ({ params }: any) => {
@@ -21,7 +28,7 @@ const PUT = async ({ params }: any) => {
   await broadcastToUser(userId, "READ_STATE_UPDATE", result);
 
   return apiSuccess(result);
-}
+};
 
 // PATCH /api/channels/:id/read-state — mark unread starting at a message
 const PATCH = async ({ request, params }: any) => {
@@ -31,7 +38,8 @@ const PATCH = async ({ request, params }: any) => {
 
   const { id: channelId } = params;
   const body = await request.json().catch(() => ({}));
-  const messageId = typeof body.message_id === "string" ? body.message_id : null;
+  const messageId =
+    typeof body.message_id === "string" ? body.message_id : null;
 
   if (!messageId) {
     return new Response(JSON.stringify({ error: "message_id is required" }), {
@@ -44,18 +52,22 @@ const PATCH = async ({ request, params }: any) => {
   if (accessResult instanceof Response) return accessResult;
 
   const db = getDB();
-  const result = await markChannelUnreadFromMessage(db, userId, channelId, messageId);
+  const result = await markChannelUnreadFromMessage(
+    db,
+    userId,
+    channelId,
+    messageId,
+  );
   await broadcastToUser(userId, "READ_STATE_UPDATE", result);
 
   return apiSuccess(result);
-}
+};
 
-
-export const Route = createFileRoute('/api/channels/$id/read-state')({
+export const Route = createFileRoute("/api/channels/$id/read-state")({
   server: {
     handlers: {
       PUT,
       PATCH,
-    }
-  }
+    },
+  },
 });

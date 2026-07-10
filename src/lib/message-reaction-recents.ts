@@ -29,8 +29,9 @@ function dedupeRecentItems(items: EmojiRecentItem[]): EmojiRecentItem[] {
 }
 
 function getFallbackReactionItems(): EmojiRecentItem[] {
-  return FALLBACK_REACTION_SHORTCODES
-    .map((shortcode) => resolveNativeEmojiShortcode(shortcode))
+  return FALLBACK_REACTION_SHORTCODES.map((shortcode) =>
+    resolveNativeEmojiShortcode(shortcode),
+  )
     .filter((emoji): emoji is NonNullable<typeof emoji> => Boolean(emoji))
     .map((emoji) => toNativeEmojiRecentItem(emoji));
 }
@@ -42,6 +43,8 @@ export function getQuickReactionItems(limit = 5): EmojiRecentItem[] {
   ]).slice(0, limit);
 }
 
-export function rememberRecentReaction(item: EmojiRecentItem): EmojiRecentItem[] {
+export function rememberRecentReaction(
+  item: EmojiRecentItem,
+): EmojiRecentItem[] {
   return rememberRecentEmoji(item);
 }

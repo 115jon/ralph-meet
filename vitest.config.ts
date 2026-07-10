@@ -7,7 +7,12 @@ export default defineConfig({
     environment: "node",
     setupFiles: ["./src/test/setup-dom.ts"],
     include: ["src/**/*.test.ts", "src/**/*.test.tsx", "worker/**/*.test.ts"],
-    exclude: ["node_modules", ".next", ".open-next", "worker/__tests__/**/*.worker.test.ts"],
+    exclude: [
+      "node_modules",
+      ".next",
+      ".open-next",
+      "worker/__tests__/**/*.worker.test.ts",
+    ],
     coverage: {
       provider: "v8",
       include: ["src/lib/**/*.ts", "worker/**/*.ts"],
@@ -19,14 +24,32 @@ export default defineConfig({
       "@": path.resolve(__dirname, "./src"),
       "cloudflare:workers": path.resolve(
         __dirname,
-        "./src/test/shims/cloudflare-workers.ts"
+        "./src/test/shims/cloudflare-workers.ts",
       ),
-      "@tauri-apps/plugin-shell": path.resolve(__dirname, "./src/shims/tauri-plugin-shell.ts"),
-      "@tauri-apps/plugin-updater": path.resolve(__dirname, "./src/shims/tauri-plugin-updater.ts"),
-      "@tauri-apps/plugin-process": path.resolve(__dirname, "./src/shims/tauri-plugin-process.ts"),
-      "@tauri-apps/plugin-autostart": path.resolve(__dirname, "./src/shims/tauri-plugin-autostart.ts"),
-      "@tauri-apps/plugin-notification": path.resolve(__dirname, "./src/shims/tauri-plugin-notification.ts"),
-      "tauri-plugin-status-bar-color-api": path.resolve(__dirname, "./src/shims/tauri-plugin-status-bar-color-api.ts"),
+      "@tauri-apps/plugin-shell": path.resolve(
+        __dirname,
+        "./src/shims/tauri-plugin-shell.ts",
+      ),
+      "@tauri-apps/plugin-updater": path.resolve(
+        __dirname,
+        "./src/shims/tauri-plugin-updater.ts",
+      ),
+      "@tauri-apps/plugin-process": path.resolve(
+        __dirname,
+        "./src/shims/tauri-plugin-process.ts",
+      ),
+      "@tauri-apps/plugin-autostart": path.resolve(
+        __dirname,
+        "./src/shims/tauri-plugin-autostart.ts",
+      ),
+      "@tauri-apps/plugin-notification": path.resolve(
+        __dirname,
+        "./src/shims/tauri-plugin-notification.ts",
+      ),
+      "tauri-plugin-status-bar-color-api": path.resolve(
+        __dirname,
+        "./src/shims/tauri-plugin-status-bar-color-api.ts",
+      ),
     },
   },
 });

@@ -1,7 +1,16 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { apiError, getBucket, getCorsHeaders, requireAuth } from "@/lib/api-helpers";
-import { DELETE as deleteBackground, GET as listBackgrounds, POST as uploadBackground } from "../camera-backgrounds";
+import {
+  apiError,
+  getBucket,
+  getCorsHeaders,
+  requireAuth,
+} from "@/lib/api-helpers";
+import {
+  DELETE as deleteBackground,
+  GET as listBackgrounds,
+  POST as uploadBackground,
+} from "../camera-backgrounds";
 
 const BACKGROUND_PREFIX = "camera-backgrounds";
 const DANGEROUS_CONTENT_TYPES = new Set([
@@ -38,7 +47,8 @@ const GET = async (context: any) => {
     return apiError("Background not found", 404, undefined, request);
   }
 
-  let contentType = object.httpMetadata?.contentType || "application/octet-stream";
+  let contentType =
+    object.httpMetadata?.contentType || "application/octet-stream";
   if (DANGEROUS_CONTENT_TYPES.has(contentType)) {
     contentType = "application/octet-stream";
   }
@@ -47,7 +57,10 @@ const GET = async (context: any) => {
   const headers = new Headers();
   object.writeHttpMetadata(headers);
   headers.set("Content-Type", contentType);
-  headers.set("Content-Disposition", `inline; filename="${filename.replace(/"/g, "")}"`);
+  headers.set(
+    "Content-Disposition",
+    `inline; filename="${filename.replace(/"/g, "")}"`,
+  );
   headers.set("Cache-Control", "private, max-age=31536000, immutable");
   // Vary: Origin ensures the browser caches separate responses for CORS vs no-CORS requests.
   // Without this, the <img> tag (no-CORS, no ACAO in response) poisons the cache for the
@@ -56,7 +69,10 @@ const GET = async (context: any) => {
   headers.set("Content-Length", object.size.toString());
   headers.set("ETag", object.httpEtag);
   headers.set("X-Content-Type-Options", "nosniff");
-  headers.set("Content-Security-Policy", "default-src 'none'; img-src 'self' data:; media-src 'none'; script-src 'none'; style-src 'unsafe-inline'");
+  headers.set(
+    "Content-Security-Policy",
+    "default-src 'none'; img-src 'self' data:; media-src 'none'; script-src 'none'; style-src 'unsafe-inline'",
+  );
   headers.set("X-Frame-Options", "DENY");
   headers.set("Referrer-Policy", "no-referrer");
   headers.set("Cross-Origin-Resource-Policy", "cross-origin");

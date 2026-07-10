@@ -37,7 +37,11 @@ function parseRange(rangeHeader: string | null): {
   if (start && end) {
     const reqStart = parseInt(start, 10);
     const reqEnd = parseInt(end, 10);
-    return { rangeOption: { offset: reqStart, length: reqEnd - reqStart + 1 }, reqStart, reqEnd };
+    return {
+      rangeOption: { offset: reqStart, length: reqEnd - reqStart + 1 },
+      reqStart,
+      reqEnd,
+    };
   }
 
   return {};
@@ -48,20 +52,36 @@ const GET = async ({ request, params }: any) => {
   const key = `attachments/${_splat ?? ""}`;
 
   try {
-    const share = await getPublicMessageShare(getDB(), token, new Date(), { incrementView: false });
-    const attachment = share.snapshot.attachments.find((item) => item.file_key === key);
-    const isAllowedMedia = attachment?.content_type?.startsWith("image/") || isPlayableVideo(attachment?.content_type);
+    const share = await getPublicMessageShare(getDB(), token, new Date(), {
+      incrementView: false,
+    });
+    const attachment = share.snapshot.attachments.find(
+      (item) => item.file_key === key,
+    );
+    const isAllowedMedia =
+      attachment?.content_type?.startsWith("image/") ||
+      isPlayableVideo(attachment?.content_type);
     if (!attachment || !isAllowedMedia) {
       return apiError("File not found", 404);
     }
 
     const rangeHeader = request.headers.get("Range");
-    const { rangeOption, reqStart, reqEnd, reqSuffix } = parseRange(rangeHeader);
-    const object = await getBucket().get(key, rangeOption ? { range: rangeOption } : undefined);
+    const { rangeOption, reqStart, reqEnd, reqSuffix } =
+      parseRange(rangeHeader);
+    const object = await getBucket().get(
+      key,
+      rangeOption ? { range: rangeOption } : undefined,
+    );
     if (!object) return apiError("File not found", 404);
 
-    let contentType = object.httpMetadata?.contentType || attachment.content_type || "application/octet-stream";
-    if (DANGEROUS_CONTENT_TYPES.has(contentType) || !(contentType.startsWith("image/") || isPlayableVideo(contentType))) {
+    let contentType =
+      object.httpMetadata?.contentType ||
+      attachment.content_type ||
+      "application/octet-stream";
+    if (
+      DANGEROUS_CONTENT_TYPES.has(contentType) ||
+      !(contentType.startsWith("image/") || isPlayableVideo(contentType))
+    ) {
       contentType = "application/octet-stream";
     }
 
@@ -69,9 +89,15 @@ const GET = async ({ request, params }: any) => {
     object.writeHttpMetadata(headers);
     headers.set("Content-Type", contentType);
     headers.set("Accept-Ranges", "bytes");
-    headers.set("Content-Disposition", `inline; filename="${attachment.filename.replace(/"/g, "")}"`);
+    headers.set(
+      "Content-Disposition",
+      `inline; filename="${attachment.filename.replace(/"/g, "")}"`,
+    );
     headers.set("X-Content-Type-Options", "nosniff");
-    headers.set("Content-Security-Policy", "default-src 'none'; img-src 'self' data:; script-src 'none';");
+    headers.set(
+      "Content-Security-Policy",
+      "default-src 'none'; img-src 'self' data:; script-src 'none';",
+    );
     headers.set("X-Frame-Options", "DENY");
     headers.set("Referrer-Policy", "no-referrer");
     headers.set("Cross-Origin-Resource-Policy", "cross-origin");
@@ -106,11 +132,17 @@ const GET = async ({ request, params }: any) => {
         if (typeof r.length === "number") length = r.length;
       }
 
-      headers.set("Content-Range", `bytes ${offset}-${offset + length - 1}/${object.size}`);
+      headers.set(
+        "Content-Range",
+        `bytes ${offset}-${offset + length - 1}/${object.size}`,
+      );
       headers.set("Content-Length", length.toString());
     } else {
       headers.set("Content-Length", object.size.toString());
-      headers.set("Cache-Control", contentType.startsWith("video/") ? "no-store" : "public, max-age=86400");
+      headers.set(
+        "Cache-Control",
+        contentType.startsWith("video/") ? "no-store" : "public, max-age=86400",
+      );
     }
 
     if (request.method === "HEAD") {

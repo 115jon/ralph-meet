@@ -39,10 +39,18 @@ export function VoiceLanding({
             />
           )}
           <Volume2 size={18} />
-          <InlineEmojiText text={channelName} className="text-sm font-bold text-rm-text tracking-tight" />
+          <InlineEmojiText
+            text={channelName}
+            className="text-sm font-bold text-rm-text tracking-tight"
+          />
         </div>
         {!showTextChat && (
-          <IconButton icon={MessageSquare} variant="muted" size="sm" onClick={onToggleTextChat} />
+          <IconButton
+            icon={MessageSquare}
+            variant="muted"
+            size="sm"
+            onClick={onToggleTextChat}
+          />
         )}
       </div>
 
@@ -52,19 +60,26 @@ export function VoiceLanding({
         </h2>
         <p className="text-sm text-rm-text-muted font-medium">
           {vcMembers.length === 0
-            ? 'No one is currently in voice'
-            : `${vcMembers.length} ${vcMembers.length === 1 ? 'person' : 'people'} in voice`}
+            ? "No one is currently in voice"
+            : `${vcMembers.length} ${vcMembers.length === 1 ? "person" : "people"} in voice`}
         </p>
 
         {vcMembers.length > 0 && (
           <div className="flex items-center gap-2 mt-2">
             {vcMembers.slice(0, 5).map((m) => (
-              <div key={m.clerk_user_id} className="w-8 h-8 rounded-full bg-rm-bg-elevated overflow-visible ring-1 ring-rm-border">
+              <div
+                key={m.clerk_user_id}
+                className="w-8 h-8 rounded-full bg-rm-bg-elevated overflow-visible ring-1 ring-rm-border"
+              >
                 {m.avatar_url ? (
-                  <AvatarImage src={getAuthAssetUrl(m.avatar_url)} alt="" display={m.avatar_display} />
+                  <AvatarImage
+                    src={getAuthAssetUrl(m.avatar_url)}
+                    alt=""
+                    display={m.avatar_display}
+                  />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center text-xs font-bold text-rm-text-muted">
-                    {m.name?.[0]?.toUpperCase() || '?'}
+                    {m.name?.[0]?.toUpperCase() || "?"}
                   </div>
                 )}
               </div>

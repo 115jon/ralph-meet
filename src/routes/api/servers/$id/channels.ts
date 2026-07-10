@@ -1,13 +1,20 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute } from "@tanstack/react-router";
 
 import { apiError, apiSuccess, getDB, requireAuth } from "@/lib/api-helpers";
 import { cacheFetch, CacheKey, CacheTTL } from "@/lib/cache";
 import { PERMISSIONS } from "@/lib/permissions";
-import { getVisibleChannels, requirePermission } from "@/lib/require-permission";
+import {
+  getVisibleChannels,
+  requirePermission,
+} from "@/lib/require-permission";
 import { ServiceError } from "@/lib/service-error";
 import { CreateChannelSchema } from "@/lib/validations";
 import { createChannel, listServerChannels } from "@/services/channel.service";
-import { executeAuditLog, executeBroadcast, executeInvalidation } from "@/services/service-helpers";
+import {
+  executeAuditLog,
+  executeBroadcast,
+  executeInvalidation,
+} from "@/services/service-helpers";
 
 import { z } from "zod";
 
@@ -21,9 +28,10 @@ const GET = async ({ request, params }: any) => {
   const db = getDB();
 
   // Verify membership
-  const member = await db.prepare(
-    `SELECT 1 FROM server_members WHERE server_id = ? AND user_id = ?`
-  ).bind(serverId, userId).first();
+  const member = await db
+    .prepare(`SELECT 1 FROM server_members WHERE server_id = ? AND user_id = ?`)
+    .bind(serverId, userId)
+    .first();
 
   if (!member) {
     return apiError("Not a member", 403);
@@ -33,16 +41,20 @@ const GET = async ({ request, params }: any) => {
   const data = await cacheFetch(
     CacheKey.serverChannels(serverId),
     CacheTTL.SERVER_CHANNELS,
-    () => listServerChannels(db, serverId)
+    () => listServerChannels(db, serverId),
   );
 
-  const visibleChannels = await getVisibleChannels(serverId, userId, data.channels);
+  const visibleChannels = await getVisibleChannels(
+    serverId,
+    userId,
+    data.channels,
+  );
 
   return apiSuccess({
     categories: data.categories,
     channels: visibleChannels,
   });
-}
+};
 
 // POST /api/servers/:id/channels — create a channel
 const POST = async ({ request, params }: any) => {
@@ -54,8 +66,10 @@ const POST = async ({ request, params }: any) => {
   const db = getDB();
 
   const permResult = await requirePermission(
-    serverId, userId, PERMISSIONS.MANAGE_CHANNELS,
-    "Insufficient permissions (MANAGE_CHANNELS required)"
+    serverId,
+    userId,
+    PERMISSIONS.MANAGE_CHANNELS,
+    "Insufficient permissions (MANAGE_CHANNELS required)",
   );
   if (permResult instanceof Response) return permResult;
 
@@ -80,18 +94,20 @@ const POST = async ({ request, params }: any) => {
     return apiSuccess(result.channel, 201);
   } catch (e) {
     if (e instanceof ServiceError) {
-      return Response.json({ error: e.message, code: e.code }, { status: e.status });
+      return Response.json(
+        { error: e.message, code: e.code },
+        { status: e.status },
+      );
     }
     throw e;
   }
-}
+};
 
-
-export const Route = createFileRoute('/api/servers/$id/channels')({
+export const Route = createFileRoute("/api/servers/$id/channels")({
   server: {
     handlers: {
       GET,
       POST,
-    }
-  }
+    },
+  },
 });

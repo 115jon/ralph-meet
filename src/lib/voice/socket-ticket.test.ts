@@ -99,11 +99,23 @@ describe("socket tickets", () => {
   it("rejects missing, duplicate, and unsupported websocket protocols", async () => {
     const ticket = await issueSocketTicket(claims, secret);
 
-    expect(parseSocketTicketProtocols(null)).toEqual({ ok: false, reason: "missing" });
-    expect(parseSocketTicketProtocols("ralph.realtime.v1")).toEqual({ ok: false, reason: "missing" });
-    expect(parseSocketTicketProtocols(`ralph.realtime.v1, ralph.ticket.${ticket}, ralph.ticket.${ticket}`))
-      .toEqual({ ok: false, reason: "multiple" });
-    expect(parseSocketTicketProtocols(`ralph.realtime.v1, ralph.ticket.${ticket}, unknown.protocol`))
-      .toEqual({ ok: false, reason: "invalid" });
+    expect(parseSocketTicketProtocols(null)).toEqual({
+      ok: false,
+      reason: "missing",
+    });
+    expect(parseSocketTicketProtocols("ralph.realtime.v1")).toEqual({
+      ok: false,
+      reason: "missing",
+    });
+    expect(
+      parseSocketTicketProtocols(
+        `ralph.realtime.v1, ralph.ticket.${ticket}, ralph.ticket.${ticket}`,
+      ),
+    ).toEqual({ ok: false, reason: "multiple" });
+    expect(
+      parseSocketTicketProtocols(
+        `ralph.realtime.v1, ralph.ticket.${ticket}, unknown.protocol`,
+      ),
+    ).toEqual({ ok: false, reason: "invalid" });
   });
 });

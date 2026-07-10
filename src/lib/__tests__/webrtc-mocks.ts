@@ -1,9 +1,9 @@
-import { vi } from 'vitest';
+import { vi } from "vitest";
 
 export class MockRTCPeerConnection {
-  connectionState = 'new';
-  iceConnectionState = 'new';
-  signalingState = 'stable';
+  connectionState = "new";
+  iceConnectionState = "new";
+  signalingState = "stable";
   localDescription: any = null;
   remoteDescription: any = null;
 
@@ -12,18 +12,21 @@ export class MockRTCPeerConnection {
   addTransceiver = vi.fn((trackOrKind, init) => {
     const transceiver = {
       mid: `mock-mid-${this.transceivers.length}`,
-      direction: init?.direction || 'sendrecv',
+      direction: init?.direction || "sendrecv",
       sender: {
-        track: typeof trackOrKind !== 'string' ? trackOrKind : null,
+        track: typeof trackOrKind !== "string" ? trackOrKind : null,
         replaceTrack: vi.fn(),
         getParameters: vi.fn(() => ({ encodings: init?.sendEncodings || [] })),
-        setParameters: vi.fn().mockResolvedValue(undefined)
+        setParameters: vi.fn().mockResolvedValue(undefined),
       },
       receiver: {
-        track: { kind: typeof trackOrKind === 'string' ? trackOrKind : trackOrKind.kind }
+        track: {
+          kind:
+            typeof trackOrKind === "string" ? trackOrKind : trackOrKind.kind,
+        },
       },
       setCodecPreferences: vi.fn(),
-      stop: vi.fn()
+      stop: vi.fn(),
     };
 
     // Add a dummy catch to the sender so replacing track mock rejection gets caught
@@ -35,8 +38,14 @@ export class MockRTCPeerConnection {
 
   getTransceivers = vi.fn(() => this.transceivers);
 
-  createOffer = vi.fn().mockResolvedValue({ type: 'offer', sdp: 'v=0\r\no=- 0 0 IN IP4 0.0.0.0\r\n' });
-  createAnswer = vi.fn().mockResolvedValue({ type: 'answer', sdp: 'v=0\r\no=- 0 0 IN IP4 0.0.0.0\r\n' });
+  createOffer = vi.fn().mockResolvedValue({
+    type: "offer",
+    sdp: "v=0\r\no=- 0 0 IN IP4 0.0.0.0\r\n",
+  });
+  createAnswer = vi.fn().mockResolvedValue({
+    type: "answer",
+    sdp: "v=0\r\no=- 0 0 IN IP4 0.0.0.0\r\n",
+  });
 
   setLocalDescription = vi.fn(async (desc) => {
     this.localDescription = desc;
@@ -50,12 +59,12 @@ export class MockRTCPeerConnection {
 
   addEventListener = vi.fn((event, handler) => {
     // Simulate immediate connection for both ice and connection state changes
-    if (event === 'iceconnectionstatechange') {
-      this.iceConnectionState = 'connected';
+    if (event === "iceconnectionstatechange") {
+      this.iceConnectionState = "connected";
       handler();
     }
-    if (event === 'connectionstatechange') {
-      this.connectionState = 'connected';
+    if (event === "connectionstatechange") {
+      this.connectionState = "connected";
       handler();
     }
   });
@@ -68,7 +77,7 @@ export class MockMediaStreamTrack {
   id: string;
   label: string;
   enabled = true;
-  contentHint = '';
+  contentHint = "";
   constructor(kind: string) {
     this.kind = kind;
     this.id = `mock-${kind}-${Math.random()}`;
@@ -91,23 +100,23 @@ export class MockMediaStream {
     return this.tracks;
   }
   getAudioTracks() {
-    return this.tracks.filter(track => track.kind === 'audio');
+    return this.tracks.filter((track) => track.kind === "audio");
   }
   getVideoTracks() {
-    return this.tracks.filter(track => track.kind === 'video');
+    return this.tracks.filter((track) => track.kind === "video");
   }
 }
 
 export function setupWebRTCMocks() {
-  vi.stubGlobal('RTCPeerConnection', MockRTCPeerConnection);
-  vi.stubGlobal('MediaStreamTrack', MockMediaStreamTrack);
-  vi.stubGlobal('MediaStream', MockMediaStream);
-  vi.stubGlobal('RTCRtpSender', {
+  vi.stubGlobal("RTCPeerConnection", MockRTCPeerConnection);
+  vi.stubGlobal("MediaStreamTrack", MockMediaStreamTrack);
+  vi.stubGlobal("MediaStream", MockMediaStream);
+  vi.stubGlobal("RTCRtpSender", {
     getCapabilities: vi.fn(() => ({
       codecs: [
-        { mimeType: 'audio/opus', clockRate: 48000, channels: 2 },
-        { mimeType: 'audio/PCMU', clockRate: 8000, channels: 1 }
-      ]
-    }))
+        { mimeType: "audio/opus", clockRate: 48000, channels: 2 },
+        { mimeType: "audio/PCMU", clockRate: 8000, channels: 1 },
+      ],
+    })),
   });
 }

@@ -13,17 +13,18 @@ vi.mock("@/lib/useMediaDevices", () => ({
 }));
 
 vi.mock("@/stores/useVoiceSettingsStore", () => ({
-  useVoiceSettingsStore: (selector: (state: any) => unknown) => selector({
-    getSettings: () => ({
-      cameraBackground: { type: "none" },
-      customCameraBackgrounds: [],
-      videoDeviceId: null,
-      cameraQuality: "720p",
-      alwaysPreviewVideo: false,
+  useVoiceSettingsStore: (selector: (state: any) => unknown) =>
+    selector({
+      getSettings: () => ({
+        cameraBackground: { type: "none" },
+        customCameraBackgrounds: [],
+        videoDeviceId: null,
+        cameraQuality: "720p",
+        alwaysPreviewVideo: false,
+      }),
+      setDevice: () => {},
+      updateUserSettings: () => {},
     }),
-    setDevice: () => {},
-    updateUserSettings: () => {},
-  }),
 }));
 
 describe("dialog positioning regression guard", () => {
@@ -55,10 +56,7 @@ describe("dialog positioning regression guard", () => {
 
   it("keeps the camera settings dialog in normal flow for overlay centering", () => {
     const markup = renderToStaticMarkup(
-      <CameraSettingsModal
-        isOpen
-        onClose={() => {}}
-      />,
+      <CameraSettingsModal isOpen onClose={() => {}} />,
     );
 
     expect(markup).toContain('<dialog open="" class="relative m-0');

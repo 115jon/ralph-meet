@@ -32,7 +32,12 @@ export type DisplayNameFontId =
   | "eight-bit"
   | "vampyre";
 
-export type DisplayNameEffectId = "solid" | "gradient" | "neon" | "toon" | "pop";
+export type DisplayNameEffectId =
+  | "solid"
+  | "gradient"
+  | "neon"
+  | "toon"
+  | "pop";
 
 export interface DisplayNameStyle {
   font: DisplayNameFontId;
@@ -116,9 +121,13 @@ export function normalizeHexColor(value: unknown): string | null {
   const trimmed = value.trim();
   if (!HEX_COLOR_RE.test(trimmed)) return null;
   const hex = trimmed.startsWith("#") ? trimmed.slice(1) : trimmed;
-  const expanded = hex.length === 3
-    ? hex.split("").map(char => `${char}${char}`).join("")
-    : hex;
+  const expanded =
+    hex.length === 3
+      ? hex
+          .split("")
+          .map((char) => `${char}${char}`)
+          .join("")
+      : hex;
   return `#${expanded.toUpperCase()}`;
 }
 
@@ -130,8 +139,8 @@ export function sanitizeProfileCustomizationInput(
   const banner = normalizeHexColor(input.profile_banner_color);
 
   if (
-    accent === LEGACY_DEFAULT_PROFILE_THEME.accent
-    && background === LEGACY_DEFAULT_PROFILE_THEME.background
+    accent === LEGACY_DEFAULT_PROFILE_THEME.accent &&
+    background === LEGACY_DEFAULT_PROFILE_THEME.background
   ) {
     return {
       profile_accent_color: null,
@@ -147,9 +156,7 @@ export function sanitizeProfileCustomizationInput(
   };
 }
 
-export function applyProfileThemeDefaults(
-  input: ProfileCustomizationInput,
-): {
+export function applyProfileThemeDefaults(input: ProfileCustomizationInput): {
   profile_accent_color: string;
   profile_background_color: string;
   profile_banner_color: string | null;
@@ -157,8 +164,10 @@ export function applyProfileThemeDefaults(
   const sanitized = sanitizeProfileCustomizationInput(input);
 
   return {
-    profile_accent_color: sanitized.profile_accent_color ?? DEFAULT_PROFILE_THEME.accent,
-    profile_background_color: sanitized.profile_background_color ?? DEFAULT_PROFILE_THEME.background,
+    profile_accent_color:
+      sanitized.profile_accent_color ?? DEFAULT_PROFILE_THEME.accent,
+    profile_background_color:
+      sanitized.profile_background_color ?? DEFAULT_PROFILE_THEME.background,
     profile_banner_color: sanitized.profile_banner_color,
   };
 }
@@ -188,9 +197,7 @@ function normalizeBrowserComputedColor(value: string) {
   const computedColor = window.getComputedStyle(probe).color;
   probe.remove();
 
-  return computedColor && computedColor !== value
-    ? computedColor
-    : null;
+  return computedColor && computedColor !== value ? computedColor : null;
 }
 
 export function normalizeDisplayColor(value: unknown): string | null {
@@ -241,7 +248,9 @@ function hexToRgb(hex: string) {
 
 function rgbToHex(r: number, g: number, b: number) {
   return `#${[r, g, b]
-    .map(channel => clamp(Math.round(channel), 0, 255).toString(16).padStart(2, "0"))
+    .map((channel) =>
+      clamp(Math.round(channel), 0, 255).toString(16).padStart(2, "0"),
+    )
     .join("")
     .toUpperCase()}`;
 }
@@ -260,9 +269,9 @@ export function hexToHsv(hex: string): HsvColor {
     if (max === red) {
       hue = 60 * (((green - blue) / delta) % 6);
     } else if (max === green) {
-      hue = 60 * (((blue - red) / delta) + 2);
+      hue = 60 * ((blue - red) / delta + 2);
     } else {
-      hue = 60 * (((red - green) / delta) + 4);
+      hue = 60 * ((red - green) / delta + 4);
     }
   }
 
@@ -321,7 +330,11 @@ export function withAlpha(hex: string, alpha: number) {
   return `rgba(${r}, ${g}, ${b}, ${clamp(alpha, 0, 1)})`;
 }
 
-export function mixHexColors(baseHex: string, targetHex: string, targetWeight: number) {
+export function mixHexColors(
+  baseHex: string,
+  targetHex: string,
+  targetWeight: number,
+) {
   const weight = clamp(targetWeight, 0, 1);
   const base = hexToRgb(baseHex);
   const target = hexToRgb(targetHex);
@@ -341,7 +354,7 @@ function getRelativeLuminance(hex: string) {
       : ((normalized + 0.055) / 1.055) ** 2.4;
   });
 
-  return (0.2126 * channels[0]) + (0.7152 * channels[1]) + (0.0722 * channels[2]);
+  return 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2];
 }
 
 export function getContrastRatio(foreground: string, background: string) {
@@ -374,8 +387,11 @@ function pickReadableDisplayNameColor(
   fallbackTextColor: string,
   minContrastRatio: number,
 ) {
-  const normalizedDesired = normalizeDisplayColor(desiredColor) ?? fallbackTextColor;
-  const normalizedFallback = normalizeDisplayColor(fallbackTextColor) ?? getContrastTextColor(backgroundColor);
+  const normalizedDesired =
+    normalizeDisplayColor(desiredColor) ?? fallbackTextColor;
+  const normalizedFallback =
+    normalizeDisplayColor(fallbackTextColor) ??
+    getContrastTextColor(backgroundColor);
   const contrastAnchor = getContrastTextColor(backgroundColor);
 
   const candidates = [
@@ -415,8 +431,8 @@ export function resolveReadableDisplayNameStyle(
   if (!backgroundColor) return normalizedStyle;
 
   const fallbackTextColor =
-    normalizeDisplayColor(options.fallbackTextColor)
-    ?? getContrastTextColor(backgroundColor);
+    normalizeDisplayColor(options.fallbackTextColor) ??
+    getContrastTextColor(backgroundColor);
   const minContrastRatio = options.minContrastRatio ?? 3;
 
   return {
@@ -436,7 +452,9 @@ export function resolveReadableDisplayNameStyle(
   } satisfies DisplayNameStyle;
 }
 
-export function normalizeDisplayNameStyle(value: unknown): DisplayNameStyle | null {
+export function normalizeDisplayNameStyle(
+  value: unknown,
+): DisplayNameStyle | null {
   if (value == null) return null;
 
   let parsed: unknown = value;
@@ -475,7 +493,9 @@ export function normalizeDisplayNameStyle(value: unknown): DisplayNameStyle | nu
   };
 }
 
-export function serializeDisplayNameStyle(style: DisplayNameStyle | null | undefined) {
+export function serializeDisplayNameStyle(
+  style: DisplayNameStyle | null | undefined,
+) {
   const normalized = normalizeDisplayNameStyle(style);
   return normalized ? JSON.stringify(normalized) : null;
 }
@@ -501,7 +521,7 @@ export const DISPLAY_NAME_FONT_OPTIONS: Array<{
     label: "Tempo",
     sample: "Hype",
     style: {
-      fontFamily: "\"Bungee\", \"Trebuchet MS\", var(--font-sans), sans-serif",
+      fontFamily: '"Bungee", "Trebuchet MS", var(--font-sans), sans-serif',
       fontWeight: 600,
       letterSpacing: "0.02em",
       textTransform: "uppercase",
@@ -512,7 +532,7 @@ export const DISPLAY_NAME_FONT_OPTIONS: Array<{
     label: "Sakura",
     sample: "Bloom",
     style: {
-      fontFamily: "\"Permanent Marker\", \"Segoe Print\", cursive",
+      fontFamily: '"Permanent Marker", "Segoe Print", cursive',
       fontWeight: 400,
       letterSpacing: "0.01em",
       transform: "rotate(-2deg)",
@@ -523,7 +543,8 @@ export const DISPLAY_NAME_FONT_OPTIONS: Array<{
     label: "Jellybean",
     sample: "Soft",
     style: {
-      fontFamily: "\"Fredoka\", \"Arial Rounded MT Bold\", var(--font-sans), sans-serif",
+      fontFamily:
+        '"Fredoka", "Arial Rounded MT Bold", var(--font-sans), sans-serif',
       fontWeight: 700,
       letterSpacing: "-0.04em",
     },
@@ -533,7 +554,7 @@ export const DISPLAY_NAME_FONT_OPTIONS: Array<{
     label: "Modern",
     sample: "Muse",
     style: {
-      fontFamily: "\"Cormorant Garamond\", Georgia, serif",
+      fontFamily: '"Cormorant Garamond", Georgia, serif',
       fontWeight: 700,
       fontStyle: "italic",
       letterSpacing: "-0.025em",
@@ -544,7 +565,7 @@ export const DISPLAY_NAME_FONT_OPTIONS: Array<{
     label: "Medieval",
     sample: "Crest",
     style: {
-      fontFamily: "\"Cinzel\", \"Goudy Text MT\", Georgia, serif",
+      fontFamily: '"Cinzel", "Goudy Text MT", Georgia, serif',
       fontWeight: 700,
       letterSpacing: "0.045em",
       textTransform: "uppercase",
@@ -555,7 +576,7 @@ export const DISPLAY_NAME_FONT_OPTIONS: Array<{
     label: "8 Bit",
     sample: "PLAY",
     style: {
-      fontFamily: "\"Press Start 2P\", \"Courier New\", monospace",
+      fontFamily: '"Press Start 2P", "Courier New", monospace',
       fontWeight: 400,
       letterSpacing: "0.02em",
       lineHeight: 1,
@@ -567,7 +588,7 @@ export const DISPLAY_NAME_FONT_OPTIONS: Array<{
     label: "Vampyre",
     sample: "Noct",
     style: {
-      fontFamily: "\"UnifrakturMaguntia\", \"Old English Text MT\", Georgia, serif",
+      fontFamily: '"UnifrakturMaguntia", "Old English Text MT", Georgia, serif',
       fontWeight: 400,
       letterSpacing: "0.02em",
     },
@@ -585,20 +606,45 @@ export const DISPLAY_NAME_EFFECT_OPTIONS: Array<{
   { id: "pop", label: "Pop" },
 ];
 
-export function getDisplayNameFontStyle(font: DisplayNameFontId): CSSProperties {
-  return DISPLAY_NAME_FONT_OPTIONS.find(option => option.id === font)?.style ?? DISPLAY_NAME_FONT_OPTIONS[0].style;
+export function getDisplayNameFontStyle(
+  font: DisplayNameFontId,
+): CSSProperties {
+  return (
+    DISPLAY_NAME_FONT_OPTIONS.find((option) => option.id === font)?.style ??
+    DISPLAY_NAME_FONT_OPTIONS[0].style
+  );
 }
 
-export function getDisplayNameEffectStyle(style: DisplayNameStyle): CSSProperties {
-  const primaryColor = normalizeHexColor(style.primaryColor) ?? DEFAULT_DISPLAY_NAME_STYLE.primaryColor;
-  const secondaryColor = normalizeHexColor(style.secondaryColor) ?? DEFAULT_DISPLAY_NAME_STYLE.secondaryColor;
-  const primaryHighlightAnchor = getRelativeLuminance(primaryColor) > 0.62 ? "#111827" : "#FFFFFF";
-  const secondaryHighlightAnchor = getRelativeLuminance(secondaryColor) > 0.62 ? "#111827" : "#FFFFFF";
+export function getDisplayNameEffectStyle(
+  style: DisplayNameStyle,
+): CSSProperties {
+  const primaryColor =
+    normalizeHexColor(style.primaryColor) ??
+    DEFAULT_DISPLAY_NAME_STYLE.primaryColor;
+  const secondaryColor =
+    normalizeHexColor(style.secondaryColor) ??
+    DEFAULT_DISPLAY_NAME_STYLE.secondaryColor;
+  const primaryHighlightAnchor =
+    getRelativeLuminance(primaryColor) > 0.62 ? "#111827" : "#FFFFFF";
+  const secondaryHighlightAnchor =
+    getRelativeLuminance(secondaryColor) > 0.62 ? "#111827" : "#FFFFFF";
   const darkOutline = withAlpha("#111827", 0.24);
   const subtleOutline = withAlpha("#FFFFFF", 0.12);
-  const brightPrimary = mixHexColors(primaryColor, primaryHighlightAnchor, 0.08);
-  const brightSecondary = mixHexColors(secondaryColor, secondaryHighlightAnchor, 0.06);
-  const frostedSecondary = mixHexColors(secondaryColor, secondaryHighlightAnchor, 0.18);
+  const brightPrimary = mixHexColors(
+    primaryColor,
+    primaryHighlightAnchor,
+    0.08,
+  );
+  const brightSecondary = mixHexColors(
+    secondaryColor,
+    secondaryHighlightAnchor,
+    0.06,
+  );
+  const frostedSecondary = mixHexColors(
+    secondaryColor,
+    secondaryHighlightAnchor,
+    0.18,
+  );
 
   switch (style.effect) {
     case "gradient":
@@ -632,7 +678,8 @@ export function getDisplayNameEffectStyle(style: DisplayNameStyle): CSSPropertie
       return {
         color: mixHexColors(primaryColor, primaryHighlightAnchor, 0.1),
         textShadow: `0 1px 0 ${subtleOutline}, 0 2px 0 ${withAlpha(secondaryColor, 0.88)}, 0 4px 0 ${withAlpha(secondaryColor, 0.52)}, 0 8px 16px ${withAlpha(secondaryColor, 0.18)}, 0 2px 8px ${withAlpha("#000000", 0.14)}`,
-        animation: "rm-display-name-pop 2.35s cubic-bezier(0.33, 1, 0.68, 1) infinite",
+        animation:
+          "rm-display-name-pop 2.35s cubic-bezier(0.33, 1, 0.68, 1) infinite",
         willChange: "translate",
       };
     case "solid":
@@ -644,23 +691,46 @@ export function getDisplayNameEffectStyle(style: DisplayNameStyle): CSSPropertie
   }
 }
 
-export function getDisplayNameStyleLabel(style: DisplayNameStyle | null | undefined) {
+export function getDisplayNameStyleLabel(
+  style: DisplayNameStyle | null | undefined,
+) {
   const normalized = normalizeDisplayNameStyle(style);
   if (!normalized) return "Default";
 
-  const fontLabel = DISPLAY_NAME_FONT_OPTIONS.find(option => option.id === normalized.font)?.label ?? "Style";
-  const effectLabel = DISPLAY_NAME_EFFECT_OPTIONS.find(option => option.id === normalized.effect)?.label ?? "Solid";
+  const fontLabel =
+    DISPLAY_NAME_FONT_OPTIONS.find((option) => option.id === normalized.font)
+      ?.label ?? "Style";
+  const effectLabel =
+    DISPLAY_NAME_EFFECT_OPTIONS.find(
+      (option) => option.id === normalized.effect,
+    )?.label ?? "Solid";
   return `${fontLabel} + ${effectLabel}`;
 }
 
 export function createRandomDisplayNameStyle() {
-  const font = DISPLAY_NAME_FONT_OPTIONS[Math.floor(Math.random() * DISPLAY_NAME_FONT_OPTIONS.length)]?.id ?? DEFAULT_DISPLAY_NAME_STYLE.font;
-  const effect = DISPLAY_NAME_EFFECT_OPTIONS[Math.floor(Math.random() * DISPLAY_NAME_EFFECT_OPTIONS.length)]?.id ?? DEFAULT_DISPLAY_NAME_STYLE.effect;
-  const primaryColor = DISPLAY_NAME_COLOR_SWATCHES[Math.floor(Math.random() * DISPLAY_NAME_COLOR_SWATCHES.length)] ?? DEFAULT_DISPLAY_NAME_STYLE.primaryColor;
-  let secondaryColor = DISPLAY_NAME_COLOR_SWATCHES[Math.floor(Math.random() * DISPLAY_NAME_COLOR_SWATCHES.length)] ?? DEFAULT_DISPLAY_NAME_STYLE.secondaryColor;
+  const font =
+    DISPLAY_NAME_FONT_OPTIONS[
+      Math.floor(Math.random() * DISPLAY_NAME_FONT_OPTIONS.length)
+    ]?.id ?? DEFAULT_DISPLAY_NAME_STYLE.font;
+  const effect =
+    DISPLAY_NAME_EFFECT_OPTIONS[
+      Math.floor(Math.random() * DISPLAY_NAME_EFFECT_OPTIONS.length)
+    ]?.id ?? DEFAULT_DISPLAY_NAME_STYLE.effect;
+  const primaryColor =
+    DISPLAY_NAME_COLOR_SWATCHES[
+      Math.floor(Math.random() * DISPLAY_NAME_COLOR_SWATCHES.length)
+    ] ?? DEFAULT_DISPLAY_NAME_STYLE.primaryColor;
+  let secondaryColor =
+    DISPLAY_NAME_COLOR_SWATCHES[
+      Math.floor(Math.random() * DISPLAY_NAME_COLOR_SWATCHES.length)
+    ] ?? DEFAULT_DISPLAY_NAME_STYLE.secondaryColor;
 
   if (secondaryColor === primaryColor) {
-    secondaryColor = DISPLAY_NAME_COLOR_SWATCHES[(DISPLAY_NAME_COLOR_SWATCHES.indexOf(primaryColor) + 3) % DISPLAY_NAME_COLOR_SWATCHES.length] ?? DEFAULT_DISPLAY_NAME_STYLE.secondaryColor;
+    secondaryColor =
+      DISPLAY_NAME_COLOR_SWATCHES[
+        (DISPLAY_NAME_COLOR_SWATCHES.indexOf(primaryColor) + 3) %
+          DISPLAY_NAME_COLOR_SWATCHES.length
+      ] ?? DEFAULT_DISPLAY_NAME_STYLE.secondaryColor;
   }
 
   return {
@@ -671,7 +741,9 @@ export function createRandomDisplayNameStyle() {
   } satisfies DisplayNameStyle;
 }
 
-export function resolveProfileTheme(input: ProfileCustomizationInput): ResolvedProfileTheme {
+export function resolveProfileTheme(
+  input: ProfileCustomizationInput,
+): ResolvedProfileTheme {
   const {
     profile_accent_color: resolvedAccent,
     profile_background_color: resolvedBackground,
@@ -682,25 +754,53 @@ export function resolveProfileTheme(input: ProfileCustomizationInput): ResolvedP
   const text = isLightSurface ? "#16161F" : "#F8FAFC";
   const panelBase = isLightSurface ? "#FFFFFF" : "#07080D";
 
-  const surfaceTop = mixHexColors(resolvedBackground, "#FFFFFF", isLightSurface ? 0.16 : 0.06);
-  const surfaceMid = mixHexColors(resolvedBackground, resolvedAccent, isLightSurface ? 0.2 : 0.18);
-  const surfaceBottom = mixHexColors(resolvedBackground, resolvedAccent, isLightSurface ? 0.38 : 0.28);
-  const bannerFallback = banner
-    ?? `linear-gradient(135deg, ${mixHexColors(resolvedAccent, "#FFFFFF", isLightSurface ? 0.22 : 0.08)}, ${mixHexColors(resolvedBackground, resolvedAccent, isLightSurface ? 0.34 : 0.18)} 58%, ${mixHexColors(resolvedBackground, "#000000", 0.14)} 100%)`;
+  const surfaceTop = mixHexColors(
+    resolvedBackground,
+    "#FFFFFF",
+    isLightSurface ? 0.16 : 0.06,
+  );
+  const surfaceMid = mixHexColors(
+    resolvedBackground,
+    resolvedAccent,
+    isLightSurface ? 0.2 : 0.18,
+  );
+  const surfaceBottom = mixHexColors(
+    resolvedBackground,
+    resolvedAccent,
+    isLightSurface ? 0.38 : 0.28,
+  );
+  const bannerFallback =
+    banner ??
+    `linear-gradient(135deg, ${mixHexColors(resolvedAccent, "#FFFFFF", isLightSurface ? 0.22 : 0.08)}, ${mixHexColors(resolvedBackground, resolvedAccent, isLightSurface ? 0.34 : 0.18)} 58%, ${mixHexColors(resolvedBackground, "#000000", 0.14)} 100%)`;
 
   return {
     variables: {
       "--rm-profile-custom-accent": resolvedAccent,
-      "--rm-profile-custom-accent-muted": withAlpha(resolvedAccent, isLightSurface ? 0.16 : 0.24),
+      "--rm-profile-custom-accent-muted": withAlpha(
+        resolvedAccent,
+        isLightSurface ? 0.16 : 0.24,
+      ),
       "--rm-profile-custom-text": text,
       "--rm-profile-custom-muted": withAlpha(text, 0.74),
       "--rm-profile-custom-ghost": withAlpha(text, 0.52),
-      "--rm-profile-custom-card-bg": withAlpha(panelBase, isLightSurface ? 0.56 : 0.26),
-      "--rm-profile-custom-card-bg-strong": withAlpha(panelBase, isLightSurface ? 0.68 : 0.34),
-      "--rm-profile-custom-card-border": withAlpha(text, isLightSurface ? 0.1 : 0.12),
+      "--rm-profile-custom-card-bg": withAlpha(
+        panelBase,
+        isLightSurface ? 0.56 : 0.26,
+      ),
+      "--rm-profile-custom-card-bg-strong": withAlpha(
+        panelBase,
+        isLightSurface ? 0.68 : 0.34,
+      ),
+      "--rm-profile-custom-card-border": withAlpha(
+        text,
+        isLightSurface ? 0.1 : 0.12,
+      ),
       "--rm-profile-custom-button-bg": resolvedAccent,
       "--rm-profile-custom-button-text": getContrastTextColor(resolvedAccent),
-      "--rm-profile-custom-button-shadow": withAlpha(resolvedAccent, isLightSurface ? 0.28 : 0.34),
+      "--rm-profile-custom-button-shadow": withAlpha(
+        resolvedAccent,
+        isLightSurface ? 0.28 : 0.34,
+      ),
       "--rm-profile-custom-surface": `linear-gradient(180deg, ${surfaceTop} 0%, ${surfaceMid} 56%, ${surfaceBottom} 100%)`,
       "--rm-profile-custom-surface-overlay": `radial-gradient(circle at top, ${withAlpha("#FFFFFF", isLightSurface ? 0.36 : 0.08)}, transparent 34%), linear-gradient(180deg, ${withAlpha("#FFFFFF", isLightSurface ? 0.08 : 0.02)}, ${withAlpha("#000000", isLightSurface ? 0.04 : 0.2)} 100%)`,
       "--rm-profile-custom-surface-overlay-strong": `radial-gradient(circle at top, ${withAlpha("#FFFFFF", isLightSurface ? 0.42 : 0.1)}, transparent 32%), linear-gradient(180deg, ${withAlpha("#FFFFFF", isLightSurface ? 0.12 : 0.04)}, ${withAlpha("#000000", isLightSurface ? 0.06 : 0.28)} 100%)`,
@@ -714,6 +814,8 @@ export function resolveProfileTheme(input: ProfileCustomizationInput): ResolvedP
   };
 }
 
-export function getProfileThemeVariables(input: ProfileCustomizationInput): CSSProperties {
+export function getProfileThemeVariables(
+  input: ProfileCustomizationInput,
+): CSSProperties {
   return resolveProfileTheme(input).variables;
 }

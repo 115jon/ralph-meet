@@ -9,6 +9,8 @@ describe("sanitizeChannelName", () => {
   });
 
   it("still normalizes text-channel whitespace into hyphens", () => {
-    expect(sanitizeChannelName("My Cool Channel!!!", "text", true)).toBe("my-cool-channel!!!");
+    expect(sanitizeChannelName("My Cool Channel!!!", "text", true)).toBe(
+      "my-cool-channel!!!",
+    );
   });
 });

@@ -66,7 +66,11 @@ function escapeHtml(value: string): string {
 }
 
 function displayAuthor(share: MessageShare): string {
-  return share.snapshot.author.display_name || share.snapshot.author.username || "Unknown";
+  return (
+    share.snapshot.author.display_name ||
+    share.snapshot.author.username ||
+    "Unknown"
+  );
 }
 
 function encodeMediaPath(fileKey: string): string {
@@ -77,14 +81,25 @@ function encodeMediaPath(fileKey: string): string {
     .join("/");
 }
 
-export function getShareMediaUrl(origin: string, token: string, attachment: Attachment): string {
+export function getShareMediaUrl(
+  origin: string,
+  token: string,
+  attachment: Attachment,
+): string {
   return `${origin}/api/shared-messages/${encodeURIComponent(token)}/media/${encodeMediaPath(attachment.file_key)}`;
 }
 
-function firstAttachmentMedia(origin: string, share: MessageShare): SharePreviewMedia | undefined {
+function firstAttachmentMedia(
+  origin: string,
+  share: MessageShare,
+): SharePreviewMedia | undefined {
   const attachment =
-    share.snapshot.attachments.find((item) => item.content_type?.startsWith("image/")) ??
-    share.snapshot.attachments.find((item) => isPlayableVideo(item.content_type));
+    share.snapshot.attachments.find((item) =>
+      item.content_type?.startsWith("image/"),
+    ) ??
+    share.snapshot.attachments.find((item) =>
+      isPlayableVideo(item.content_type),
+    );
 
   if (!attachment) return undefined;
   const contentType = attachment.content_type;
@@ -95,7 +110,10 @@ function firstAttachmentMedia(origin: string, share: MessageShare): SharePreview
   };
 }
 
-function mediaFromEmbed(origin: string, embed: EmbedInfo): SharePreviewMedia | undefined {
+function mediaFromEmbed(
+  origin: string,
+  embed: EmbedInfo,
+): SharePreviewMedia | undefined {
   let hostname = "";
   try {
     hostname = new URL(embed.url).hostname.toLowerCase();
@@ -103,14 +121,20 @@ function mediaFromEmbed(origin: string, embed: EmbedInfo): SharePreviewMedia | u
     hostname = "";
   }
 
-  if (embed.provider?.name?.toLowerCase() === "tiktok" || hostname.includes("tiktok.com")) {
-    const firstVideo = embed.media?.find((item) => item.type === "video" && item.url);
+  if (
+    embed.provider?.name?.toLowerCase() === "tiktok" ||
+    hostname.includes("tiktok.com")
+  ) {
+    const firstVideo = embed.media?.find(
+      (item) => item.type === "video" && item.url,
+    );
     if (firstVideo?.url) {
       const proxyUrl = `${origin}/api/proxy-media?url=${encodeURIComponent(firstVideo.url)}&sourceUrl=${encodeURIComponent(embed.url)}`;
       return {
         type: "video",
         url: proxyUrl,
-        contentType: firstVideo.contentType || embed.video?.contentType || "video/mp4",
+        contentType:
+          firstVideo.contentType || embed.video?.contentType || "video/mp4",
         width: firstVideo.width ?? embed.video?.width,
         height: firstVideo.height ?? embed.video?.height,
       };
@@ -134,7 +158,10 @@ function mediaFromEmbed(origin: string, embed: EmbedInfo): SharePreviewMedia | u
     };
   }
 
-  if (embed.provider?.name?.toLowerCase() === "instagram" || hostname.includes("instagram.com")) {
+  if (
+    embed.provider?.name?.toLowerCase() === "instagram" ||
+    hostname.includes("instagram.com")
+  ) {
     if (embed.video?.url && embed.video.kind !== "player") {
       return {
         type: "video",
@@ -186,7 +213,10 @@ function mediaFromEmbed(origin: string, embed: EmbedInfo): SharePreviewMedia | u
   return undefined;
 }
 
-function selectEmbedPreview(origin: string, embeds: EmbedInfo[]): SelectedEmbed | undefined {
+function selectEmbedPreview(
+  origin: string,
+  embeds: EmbedInfo[],
+): SelectedEmbed | undefined {
   for (const embed of embeds) {
     const media = mediaFromEmbed(origin, embed);
     if (media?.type === "video") return { embed, media };
@@ -197,7 +227,13 @@ function selectEmbedPreview(origin: string, embeds: EmbedInfo[]): SelectedEmbed 
     if (media) return { embed, media };
   }
 
-  const embed = embeds.find((item) => item.rawTitle || item.rawDescription || item.author?.name || item.provider?.name);
+  const embed = embeds.find(
+    (item) =>
+      item.rawTitle ||
+      item.rawDescription ||
+      item.author?.name ||
+      item.provider?.name,
+  );
   return embed ? { embed } : undefined;
 }
 
@@ -205,7 +241,9 @@ function titleFromEmbed(embed: EmbedInfo | undefined): string | undefined {
   return embed?.rawTitle ?? embed?.author?.name ?? embed?.provider?.name;
 }
 
-function descriptionFromEmbed(embed: EmbedInfo | undefined): string | undefined {
+function descriptionFromEmbed(
+  embed: EmbedInfo | undefined,
+): string | undefined {
   return embed?.rawDescription ?? embed?.rawTitle ?? embed?.author?.name;
 }
 
@@ -220,7 +258,10 @@ function isInstagramEmbed(embed: EmbedInfo | undefined): boolean {
   }
 }
 
-export function buildShareMetadata(origin: string, share: MessageShare): ShareMetadata {
+export function buildShareMetadata(
+  origin: string,
+  share: MessageShare,
+): ShareMetadata {
   const authorName = displayAuthor(share);
   const rawCleanedContent = cleanContent(share.snapshot.content);
   const cleanedContent = truncate(rawCleanedContent, MAX_DESCRIPTION_LENGTH);
@@ -229,7 +270,9 @@ export function buildShareMetadata(origin: string, share: MessageShare): ShareMe
   const embedDescription = descriptionFromEmbed(selectedEmbed?.embed);
   const isLinkOnlyShare = !rawCleanedContent && !!selectedEmbed;
   const isInstagramMinimal =
-    isLinkOnlyShare && selectedEmbed?.media?.type === "video" && isInstagramEmbed(selectedEmbed.embed);
+    isLinkOnlyShare &&
+    selectedEmbed?.media?.type === "video" &&
+    isInstagramEmbed(selectedEmbed.embed);
   const title = truncate(
     isInstagramMinimal
       ? embedTitle || "Instagram Reel"
@@ -256,7 +299,8 @@ export function buildShareMetadata(origin: string, share: MessageShare): ShareMe
     const providerStr = selectedEmbed.embed.provider.name.toLowerCase();
     if (providerStr === "tiktok") embedColor = "#ff0050";
     else if (providerStr === "youtube") embedColor = "#ff0000";
-    else if (providerStr === "twitter" || providerStr === "x") embedColor = "#1da1f2";
+    else if (providerStr === "twitter" || providerStr === "x")
+      embedColor = "#1da1f2";
     else if (providerStr === "twitch") embedColor = "#9146ff";
     else if (providerStr === "github") embedColor = "#24292e";
     else if (providerStr === "spotify") embedColor = "#1db954";
@@ -268,10 +312,14 @@ export function buildShareMetadata(origin: string, share: MessageShare): ShareMe
   let authorUrl: string | undefined;
 
   if (isLinkOnlyShare && selectedEmbed?.embed) {
-    if (selectedEmbed.embed.provider?.name) providerName = selectedEmbed.embed.provider.name;
-    if (selectedEmbed.embed.provider?.url) providerUrl = selectedEmbed.embed.provider.url;
-    if (selectedEmbed.embed.author?.name) finalAuthorName = selectedEmbed.embed.author.name;
-    if (selectedEmbed.embed.author?.url) authorUrl = selectedEmbed.embed.author.url;
+    if (selectedEmbed.embed.provider?.name)
+      providerName = selectedEmbed.embed.provider.name;
+    if (selectedEmbed.embed.provider?.url)
+      providerUrl = selectedEmbed.embed.provider.url;
+    if (selectedEmbed.embed.author?.name)
+      finalAuthorName = selectedEmbed.embed.author.name;
+    if (selectedEmbed.embed.author?.url)
+      authorUrl = selectedEmbed.embed.author.url;
   }
 
   const metadata: ShareMetadata = {
@@ -299,24 +347,33 @@ export function buildShareMetadata(origin: string, share: MessageShare): ShareMe
 
 export function buildShareOEmbed(metadata: ShareMetadata) {
   const media = metadata.media;
-  const isTikTokVideo = media?.type === "video" && metadata.providerName.toLowerCase() === "tiktok";
+  const isTikTokVideo =
+    media?.type === "video" && metadata.providerName.toLowerCase() === "tiktok";
   const html = isTikTokVideo
     ? `<video controls playsinline preload="metadata" src="${escapeHtml(media.url)}"${metadata.thumbnailUrl ? ` poster="${escapeHtml(metadata.thumbnailUrl)}"` : ""}></video>`
     : `<blockquote><strong>${escapeHtml(metadata.authorName)}</strong>${metadata.description ? `: ${escapeHtml(metadata.description)}` : ""}</blockquote>`;
 
   return {
     version: "1.0",
-    type: media?.type === "image" ? "photo" : media?.type === "video" ? "video" : "rich",
+    type:
+      media?.type === "image"
+        ? "photo"
+        : media?.type === "video"
+          ? "video"
+          : "rich",
     provider_name: metadata.providerName,
     provider_url: metadata.providerUrl,
     title: metadata.title,
     author_name: metadata.authorName,
     author_url: metadata.authorUrl,
-    url: media?.type === "image" || isTikTokVideo ? media.url : metadata.shareUrl,
+    url:
+      media?.type === "image" || isTikTokVideo ? media.url : metadata.shareUrl,
     html,
     width: media?.width ?? 520,
     height: media?.height ?? 320,
-    thumbnail_url: metadata.thumbnailUrl ?? (media?.type === "image" ? media.url : undefined),
+    thumbnail_url:
+      metadata.thumbnailUrl ??
+      (media?.type === "image" ? media.url : undefined),
     thumbnail_width: media?.width,
     thumbnail_height: media?.height,
   };

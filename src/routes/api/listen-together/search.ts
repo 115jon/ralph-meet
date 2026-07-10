@@ -1,8 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import {
-  requireActiveVoiceRoomSession,
-  requireAuth,
-} from "@/lib/api-helpers";
+import { requireActiveVoiceRoomSession, requireAuth } from "@/lib/api-helpers";
 import { clog } from "@/lib/console-logger";
 import { searchListenTogether } from "@/services/listen-together.service";
 
@@ -15,17 +12,20 @@ const GET = async ({ request }: any) => {
 
   const url = new URL(request.url);
   const query = url.searchParams.get("q")?.trim() ?? "";
-  const filter = url.searchParams.get("filter") === "collection" ? "collection" : "track";
+  const filter =
+    url.searchParams.get("filter") === "collection" ? "collection" : "track";
   const roomSlug = url.searchParams.get("roomSlug")?.trim();
   const serverId = url.searchParams.get("serverId")?.trim() ?? null;
   const channelId = url.searchParams.get("channelId")?.trim() ?? null;
-  const cf = (request as Request & {
-    cf?: {
-      country?: string;
-      regionCode?: string;
-      colo?: string;
-    };
-  }).cf;
+  const cf = (
+    request as Request & {
+      cf?: {
+        country?: string;
+        regionCode?: string;
+        colo?: string;
+      };
+    }
+  ).cf;
 
   if (!roomSlug) {
     searchLog.warn("Rejecting listen together search without room slug", {
@@ -38,7 +38,10 @@ const GET = async ({ request }: any) => {
       regionCode: cf?.regionCode ?? null,
       colo: cf?.colo ?? null,
     });
-    return Response.json({ error: "Missing roomSlug parameter" }, { status: 400 });
+    return Response.json(
+      { error: "Missing roomSlug parameter" },
+      { status: 400 },
+    );
   }
 
   const sessionCheck = await requireActiveVoiceRoomSession(
@@ -48,7 +51,8 @@ const GET = async ({ request }: any) => {
     {
       serverId,
       channelId,
-      errorMessage: "You must be actively connected to this voice room to search Listen Together.",
+      errorMessage:
+        "You must be actively connected to this voice room to search Listen Together.",
     },
   );
   if (sessionCheck instanceof Response) return sessionCheck;

@@ -4,14 +4,18 @@ import {
   getBundleConstituentItems,
   isBundleFullyApplied,
 } from "@/lib/collectible-selection";
-import type { CollectibleCatalogItem, CollectiblesCatalog } from "@/lib/collectibles-catalog";
+import type {
+  CollectibleCatalogItem,
+  CollectiblesCatalog,
+} from "@/lib/collectibles-catalog";
 import { describe, expect, it } from "vitest";
 
 function makeCatalogItem(
-  overrides: Partial<CollectibleCatalogItem> & Pick<
-    CollectibleCatalogItem,
-    "id" | "skuId" | "name" | "kind" | "productType" | "itemType"
-  >,
+  overrides: Partial<CollectibleCatalogItem> &
+    Pick<
+      CollectibleCatalogItem,
+      "id" | "skuId" | "name" | "kind" | "productType" | "itemType"
+    >,
 ): CollectibleCatalogItem {
   return {
     summary: "",
@@ -35,14 +39,19 @@ describe("collectibleItemToSelection", () => {
       categoryName: "Dungeons & Dragons",
       productType: 0,
       itemType: 1,
-      previewUrl: "https://cdn.discordapp.com/media/v1/collectibles-shop/effect/preview",
-      staticUrl: "https://cdn.discordapp.com/media/v1/collectibles-shop/effect/static",
+      previewUrl:
+        "https://cdn.discordapp.com/media/v1/collectibles-shop/effect/preview",
+      staticUrl:
+        "https://cdn.discordapp.com/media/v1/collectibles-shop/effect/static",
       animatedUrl: "https://cdn.discordapp.com/assets/content/dice-roll-a",
       profileEffect: {
         animationType: 2,
-        thumbnailPreviewSrc: "https://cdn.discordapp.com/media/v1/collectibles-shop/effect/thumb",
-        reducedMotionSrc: "https://cdn.discordapp.com/media/v1/collectibles-shop/effect/reduced",
-        staticFrameSrc: "https://cdn.discordapp.com/media/v1/collectibles-shop/effect/frame",
+        thumbnailPreviewSrc:
+          "https://cdn.discordapp.com/media/v1/collectibles-shop/effect/thumb",
+        reducedMotionSrc:
+          "https://cdn.discordapp.com/media/v1/collectibles-shop/effect/reduced",
+        staticFrameSrc:
+          "https://cdn.discordapp.com/media/v1/collectibles-shop/effect/frame",
         effects: [
           {
             src: "https://cdn.discordapp.com/assets/content/dice-roll-a",
@@ -71,11 +80,16 @@ describe("collectibleItemToSelection", () => {
         skuId: "123",
         name: "D20 Roll",
         animationType: 2,
-        previewUrl: "https://cdn.discordapp.com/media/v1/collectibles-shop/effect/preview",
-        thumbnailPreviewSrc: "https://cdn.discordapp.com/media/v1/collectibles-shop/effect/thumb",
-        reducedMotionSrc: "https://cdn.discordapp.com/media/v1/collectibles-shop/effect/reduced",
-        staticFrameSrc: "https://cdn.discordapp.com/media/v1/collectibles-shop/effect/frame",
-        staticUrl: "https://cdn.discordapp.com/media/v1/collectibles-shop/effect/static",
+        previewUrl:
+          "https://cdn.discordapp.com/media/v1/collectibles-shop/effect/preview",
+        thumbnailPreviewSrc:
+          "https://cdn.discordapp.com/media/v1/collectibles-shop/effect/thumb",
+        reducedMotionSrc:
+          "https://cdn.discordapp.com/media/v1/collectibles-shop/effect/reduced",
+        staticFrameSrc:
+          "https://cdn.discordapp.com/media/v1/collectibles-shop/effect/frame",
+        staticUrl:
+          "https://cdn.discordapp.com/media/v1/collectibles-shop/effect/static",
         animatedUrl: "https://cdn.discordapp.com/assets/content/dice-roll-a",
         effectUrls: ["https://cdn.discordapp.com/assets/content/dice-roll-a"],
         effects: [
@@ -110,8 +124,10 @@ describe("collectibleItemToSelection", () => {
       kind: "nameplate",
       productType: 0,
       itemType: 2,
-      staticUrl: "https://cdn.discordapp.com/assets/collectibles/buzzstatic.png",
-      animatedUrl: "https://cdn.discordapp.com/assets/collectibles/buzzasset.webm",
+      staticUrl:
+        "https://cdn.discordapp.com/assets/collectibles/buzzstatic.png",
+      animatedUrl:
+        "https://cdn.discordapp.com/assets/collectibles/buzzasset.webm",
       palette: "violet",
     });
 
@@ -119,8 +135,10 @@ describe("collectibleItemToSelection", () => {
       nameplate: {
         skuId: "123",
         name: "Buzz Lightyear",
-        staticUrl: "https://cdn.discordapp.com/assets/collectibles/buzzstatic.png",
-        animatedUrl: "https://cdn.discordapp.com/assets/collectibles/buzzasset.webm",
+        staticUrl:
+          "https://cdn.discordapp.com/assets/collectibles/buzzstatic.png",
+        animatedUrl:
+          "https://cdn.discordapp.com/assets/collectibles/buzzasset.webm",
         palette: "violet",
       },
     });
@@ -138,8 +156,10 @@ describe("bundle collectible helpers", () => {
     kind: "profile_effect",
     productType: 1005,
     itemType: 1,
-    staticUrl: "https://cdn.discordapp.com/media/v1/collectibles-shop/effect/static",
-    animatedUrl: "https://cdn.discordapp.com/assets/content/falling-with-style-a",
+    staticUrl:
+      "https://cdn.discordapp.com/media/v1/collectibles-shop/effect/static",
+    animatedUrl:
+      "https://cdn.discordapp.com/assets/content/falling-with-style-a",
     profileEffect: {
       effects: [
         {
@@ -166,8 +186,10 @@ describe("bundle collectible helpers", () => {
     productType: 0,
     itemType: 0,
     asset: "buzz-lightyear",
-    staticUrl: "https://cdn.discordapp.com/avatar-decoration-presets/buzz-lightyear.png?size=240&passthrough=true",
-    animatedUrl: "https://cdn.discordapp.com/avatar-decoration-presets/buzz-lightyear.png?size=4096&passthrough=true",
+    staticUrl:
+      "https://cdn.discordapp.com/avatar-decoration-presets/buzz-lightyear.png?size=240&passthrough=true",
+    animatedUrl:
+      "https://cdn.discordapp.com/avatar-decoration-presets/buzz-lightyear.png?size=4096&passthrough=true",
   });
   const nameplate = makeCatalogItem({
     id: "nameplate:buzz",
@@ -179,7 +201,8 @@ describe("bundle collectible helpers", () => {
     productType: 0,
     itemType: 2,
     staticUrl: "https://cdn.discordapp.com/assets/collectibles/buzzstatic.png",
-    animatedUrl: "https://cdn.discordapp.com/assets/collectibles/buzzasset.webm",
+    animatedUrl:
+      "https://cdn.discordapp.com/assets/collectibles/buzzasset.webm",
     palette: "violet",
   });
   const catalog: CollectiblesCatalog = {
@@ -221,7 +244,11 @@ describe("bundle collectible helpers", () => {
       },
     });
 
-    expect(isBundleFullyApplied(fullyAppliedDisplay, catalog, bundle)).toBe(true);
-    expect(isBundleFullyApplied(effectOnlyDisplay, catalog, bundle)).toBe(false);
+    expect(isBundleFullyApplied(fullyAppliedDisplay, catalog, bundle)).toBe(
+      true,
+    );
+    expect(isBundleFullyApplied(effectOnlyDisplay, catalog, bundle)).toBe(
+      false,
+    );
   });
 });

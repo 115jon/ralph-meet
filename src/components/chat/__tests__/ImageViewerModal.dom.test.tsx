@@ -85,29 +85,49 @@ describe("ImageViewerModal drag navigation", () => {
     render(<ImageViewerModal />);
 
     const stage = screen.getByTestId("image-viewer-stage");
-    Object.defineProperty(stage, "clientWidth", { configurable: true, value: 320 });
+    Object.defineProperty(stage, "clientWidth", {
+      configurable: true,
+      value: 320,
+    });
 
-    expect(screen.getByTestId("image-viewer-image")).toHaveAttribute("src", "https://cdn.example.com/one.jpg");
+    expect(screen.getByTestId("image-viewer-image")).toHaveAttribute(
+      "src",
+      "https://cdn.example.com/one.jpg",
+    );
 
     fireEvent.touchStart(stage, { touches: [{ clientX: 260, clientY: 120 }] });
     fireEvent.touchMove(stage, { touches: [{ clientX: 120, clientY: 126 }] });
-    fireEvent.touchEnd(stage, { changedTouches: [{ clientX: 120, clientY: 126 }] });
+    fireEvent.touchEnd(stage, {
+      changedTouches: [{ clientX: 120, clientY: 126 }],
+    });
 
-    expect(screen.getByTestId("image-viewer-image")).toHaveAttribute("src", "https://cdn.example.com/two.jpg");
+    expect(screen.getByTestId("image-viewer-image")).toHaveAttribute(
+      "src",
+      "https://cdn.example.com/two.jpg",
+    );
   });
 
   it("advances to the next image on a mouse drag", () => {
     render(<ImageViewerModal />);
 
     const stage = screen.getByTestId("image-viewer-stage");
-    Object.defineProperty(stage, "clientWidth", { configurable: true, value: 320 });
+    Object.defineProperty(stage, "clientWidth", {
+      configurable: true,
+      value: 320,
+    });
 
-    expect(screen.getByTestId("image-viewer-image")).toHaveAttribute("src", "https://cdn.example.com/one.jpg");
+    expect(screen.getByTestId("image-viewer-image")).toHaveAttribute(
+      "src",
+      "https://cdn.example.com/one.jpg",
+    );
 
     fireEvent.mouseDown(stage, { button: 0, clientX: 260, clientY: 120 });
     fireEvent.mouseMove(stage, { clientX: 120, clientY: 122 });
     fireEvent.mouseUp(stage, { clientX: 120, clientY: 122 });
 
-    expect(screen.getByTestId("image-viewer-image")).toHaveAttribute("src", "https://cdn.example.com/two.jpg");
+    expect(screen.getByTestId("image-viewer-image")).toHaveAttribute(
+      "src",
+      "https://cdn.example.com/two.jpg",
+    );
   });
 });

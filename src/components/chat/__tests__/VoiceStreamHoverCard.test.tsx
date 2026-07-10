@@ -7,16 +7,15 @@ import { VoiceStreamHoverCard } from "../VoiceStreamHoverCard";
 describe("VoiceStreamHoverCard", () => {
   it("renders the live placeholder card for remote streams without a thumbnail", () => {
     const markup = renderToStaticMarkup(
-      <VoiceStreamHoverCard
-        displayName="Ala"
-        thumbnailUrl={null}
-      />,
+      <VoiceStreamHoverCard displayName="Ala" thumbnailUrl={null} />,
     );
 
     expect(markup).toContain("Streaming now");
     expect(markup).toContain("LIVE");
     expect(markup).toContain("Watch Stream");
-    expect(markup).toContain("Preview syncing now. A fresh frame should appear in a moment.");
+    expect(markup).toContain(
+      "Preview syncing now. A fresh frame should appear in a moment.",
+    );
   });
 
   it("renders the current-user state with the streaming label and thumbnail", () => {
@@ -31,7 +30,7 @@ describe("VoiceStreamHoverCard", () => {
 
     expect(markup).toContain("Open Stream");
     expect(markup).toContain("data:image/png;base64,abc");
-    expect(markup).not.toContain("aria-disabled=\"true\"");
-    expect(markup).not.toContain("disabled=\"\"");
+    expect(markup).not.toContain('aria-disabled="true"');
+    expect(markup).not.toContain('disabled=""');
   });
 });

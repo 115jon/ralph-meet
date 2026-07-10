@@ -32,10 +32,15 @@ type RawChannelRecord = {
   created_at: string;
 };
 
-function parseStoredVoiceChannelStatus(row: Pick<RawChannelRecord, "voice_status_text" | "voice_status_media">): VoiceChannelStatus | null {
+function parseStoredVoiceChannelStatus(
+  row: Pick<RawChannelRecord, "voice_status_text" | "voice_status_media">,
+): VoiceChannelStatus | null {
   let media: unknown = null;
 
-  if (typeof row.voice_status_media === "string" && row.voice_status_media.trim()) {
+  if (
+    typeof row.voice_status_media === "string" &&
+    row.voice_status_media.trim()
+  ) {
     try {
       media = JSON.parse(row.voice_status_media);
     } catch {
@@ -49,7 +54,10 @@ function parseStoredVoiceChannelStatus(row: Pick<RawChannelRecord, "voice_status
   });
 }
 
-function mapChannelRecord(row: RawChannelRecord): { id: string; [key: string]: unknown } {
+function mapChannelRecord(row: RawChannelRecord): {
+  id: string;
+  [key: string]: unknown;
+} {
   const {
     allow_public_shares,
     voice_status_text: _voiceStatusText,
@@ -59,7 +67,8 @@ function mapChannelRecord(row: RawChannelRecord): { id: string; [key: string]: u
 
   return {
     ...rest,
-    allow_public_shares: allow_public_shares == null ? null : allow_public_shares === 1,
+    allow_public_shares:
+      allow_public_shares == null ? null : allow_public_shares === 1,
     voice_status: parseStoredVoiceChannelStatus(row),
   };
 }
@@ -68,7 +77,7 @@ function mapChannelRecord(row: RawChannelRecord): { id: string; [key: string]: u
 
 export async function deleteChannel(
   db: D1Database,
-  channelId: string
+  channelId: string,
 ): Promise<{
   serverId: string;
   cacheKeysToInvalidate: string[];
@@ -76,15 +85,13 @@ export async function deleteChannel(
   auditLog: AuditLogDescriptor;
 }> {
   const channel = (await db
-    .prepare(
-      `SELECT server_id, name, channel_type FROM channels WHERE id = ?`
-    )
+    .prepare(`SELECT server_id, name, channel_type FROM channels WHERE id = ?`)
     .bind(channelId)
     .first()) as {
-      server_id: string;
-      name: string;
-      channel_type: string;
-    } | null;
+    server_id: string;
+    name: string;
+    channel_type: string;
+  } | null;
 
   if (!channel) {
     throw ServiceError.notFound("Channel not found");
@@ -122,7 +129,7 @@ export async function updateChannel(
   db: D1Database,
   channelId: string,
   actorId: string,
-  input: UpdateChannelInput
+  input: UpdateChannelInput,
 ): Promise<{
   channel: Record<string, unknown>;
   cacheKeysToInvalidate: string[];
@@ -131,7 +138,7 @@ export async function updateChannel(
 }> {
   const existing = (await db
     .prepare(
-      `SELECT id, server_id, name, description, channel_type, category_id, position, allow_public_shares, voice_status_text, voice_status_media, created_at FROM channels WHERE id = ?`
+      `SELECT id, server_id, name, description, channel_type, category_id, position, allow_public_shares, voice_status_text, voice_status_media, created_at FROM channels WHERE id = ?`,
     )
     .bind(channelId)
     .first()) as RawChannelRecord | null;
@@ -148,7 +155,7 @@ export async function updateChannel(
     const sanitized = sanitizeChannelName(
       input.name,
       existing.channel_type as "text" | "voice" | "dm",
-      true
+      true,
     );
     if (!sanitized) {
       throw ServiceError.badRequest("Invalid channel name");
@@ -168,9 +175,17 @@ export async function updateChannel(
   }
   let newAllowPublicShares = existing.allow_public_shares;
   if (input.allow_public_shares !== undefined) {
-    const next = input.allow_public_shares === null ? null : input.allow_public_shares ? 1 : 0;
+    const next =
+      input.allow_public_shares === null
+        ? null
+        : input.allow_public_shares
+          ? 1
+          : 0;
     if (next !== existing.allow_public_shares) {
-      changes.allow_public_shares = { old: existing.allow_public_shares, new: next };
+      changes.allow_public_shares = {
+        old: existing.allow_public_shares,
+        new: next,
+      };
       newAllowPublicShares = next;
     }
   }
@@ -181,7 +196,11 @@ export async function updateChannel(
     return {
       channel: currentChannel,
       cacheKeysToInvalidate: [],
-      broadcast: { type: "all", event: "CHANNEL_UPDATE", data: { server_id: existing.server_id, channel: currentChannel } },
+      broadcast: {
+        type: "all",
+        event: "CHANNEL_UPDATE",
+        data: { server_id: existing.server_id, channel: currentChannel },
+      },
       auditLog: {
         serverId: existing.server_id,
         actorId,
@@ -194,7 +213,7 @@ export async function updateChannel(
 
   await db
     .prepare(
-      `UPDATE channels SET name = ?, description = ?, allow_public_shares = ? WHERE id = ?`
+      `UPDATE channels SET name = ?, description = ?, allow_public_shares = ? WHERE id = ?`,
     )
     .bind(newName, newDescription, newAllowPublicShares, channelId)
     .run();
@@ -228,7 +247,7 @@ export async function updateVoiceChannelStatus(
   db: D1Database,
   channelId: string,
   actorId: string,
-  status: VoiceChannelStatus | null
+  status: VoiceChannelStatus | null,
 ): Promise<{
   channel: Record<string, unknown>;
   cacheKeysToInvalidate: string[];
@@ -237,7 +256,7 @@ export async function updateVoiceChannelStatus(
 }> {
   const existing = (await db
     .prepare(
-      `SELECT id, server_id, name, description, channel_type, category_id, position, allow_public_shares, voice_status_text, voice_status_media, created_at FROM channels WHERE id = ?`
+      `SELECT id, server_id, name, description, channel_type, category_id, position, allow_public_shares, voice_status_text, voice_status_media, created_at FROM channels WHERE id = ?`,
     )
     .bind(channelId)
     .first()) as RawChannelRecord | null;
@@ -247,21 +266,32 @@ export async function updateVoiceChannelStatus(
   }
 
   if (existing.channel_type !== "voice") {
-    throw ServiceError.badRequest("Only voice channels can have a voice status");
+    throw ServiceError.badRequest(
+      "Only voice channels can have a voice status",
+    );
   }
 
   const previousStatus = parseStoredVoiceChannelStatus(existing);
   const nextStatus = sanitizeVoiceChannelStatus(status);
   const nextText = nextStatus?.text ?? null;
   const nextMedia = nextStatus?.media ? JSON.stringify(nextStatus.media) : null;
-  const previousMedia = previousStatus?.media ? JSON.stringify(previousStatus.media) : null;
+  const previousMedia = previousStatus?.media
+    ? JSON.stringify(previousStatus.media)
+    : null;
 
-  if ((previousStatus?.text ?? null) === nextText && previousMedia === nextMedia) {
+  if (
+    (previousStatus?.text ?? null) === nextText &&
+    previousMedia === nextMedia
+  ) {
     const currentChannel = mapChannelRecord(existing);
     return {
       channel: currentChannel,
       cacheKeysToInvalidate: [],
-      broadcast: { type: "all", event: "CHANNEL_UPDATE", data: { server_id: existing.server_id, channel: currentChannel } },
+      broadcast: {
+        type: "all",
+        event: "CHANNEL_UPDATE",
+        data: { server_id: existing.server_id, channel: currentChannel },
+      },
       auditLog: {
         serverId: existing.server_id,
         actorId,
@@ -274,7 +304,7 @@ export async function updateVoiceChannelStatus(
 
   await db
     .prepare(
-      `UPDATE channels SET voice_status_text = ?, voice_status_media = ? WHERE id = ?`
+      `UPDATE channels SET voice_status_text = ?, voice_status_media = ? WHERE id = ?`,
     )
     .bind(nextText, nextMedia, channelId)
     .run();
@@ -321,7 +351,7 @@ export async function createChannel(
   db: D1Database,
   serverId: string,
   actorId: string,
-  input: CreateChannelInput
+  input: CreateChannelInput,
 ): Promise<{
   channel: Record<string, unknown>;
   cacheKeysToInvalidate: string[];
@@ -332,7 +362,7 @@ export async function createChannel(
   const sanitizedName = sanitizeChannelName(
     input.name,
     channelType as "text" | "voice" | "dm",
-    true
+    true,
   );
 
   if (!sanitizedName) {
@@ -345,7 +375,7 @@ export async function createChannel(
   // Get next position
   const posRow = (await db
     .prepare(
-      `SELECT COALESCE(MAX(position), -1) + 1 as next_pos FROM channels WHERE server_id = ?`
+      `SELECT COALESCE(MAX(position), -1) + 1 as next_pos FROM channels WHERE server_id = ?`,
     )
     .bind(serverId)
     .first()) as { next_pos: number } | null;
@@ -353,7 +383,7 @@ export async function createChannel(
   await db
     .prepare(
       `INSERT INTO channels (id, server_id, name, description, channel_type, category_id, position, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .bind(
       channelId,
@@ -363,7 +393,7 @@ export async function createChannel(
       channelType,
       input.category_id ?? null,
       posRow?.next_pos ?? 0,
-      now
+      now,
     )
     .run();
 
@@ -406,29 +436,32 @@ export async function createChannel(
 
 export async function listServerChannels(
   db: D1Database,
-  serverId: string
+  serverId: string,
 ): Promise<{
-  categories: Array<{ id: string;[key: string]: unknown }>;
-  channels: Array<{ id: string;[key: string]: unknown }>;
+  categories: Array<{ id: string; [key: string]: unknown }>;
+  channels: Array<{ id: string; [key: string]: unknown }>;
 }> {
   const [catResult, chanResult] = await Promise.all([
     db
-      .prepare(
-        `SELECT * FROM categories WHERE server_id = ? ORDER BY rank ASC`
-      )
+      .prepare(`SELECT * FROM categories WHERE server_id = ? ORDER BY rank ASC`)
       .bind(serverId)
       .all(),
     db
       .prepare(
-        `SELECT * FROM channels WHERE server_id = ? ORDER BY position ASC`
+        `SELECT * FROM channels WHERE server_id = ? ORDER BY position ASC`,
       )
       .bind(serverId)
       .all(),
   ]);
 
   return {
-    categories: (catResult.results ?? []) as Array<{ id: string;[key: string]: unknown }>,
-    channels: ((chanResult.results ?? []) as RawChannelRecord[]).map((row) => mapChannelRecord(row)),
+    categories: (catResult.results ?? []) as Array<{
+      id: string;
+      [key: string]: unknown;
+    }>,
+    channels: ((chanResult.results ?? []) as RawChannelRecord[]).map((row) =>
+      mapChannelRecord(row),
+    ),
   };
 }
 
@@ -436,12 +469,12 @@ export async function listServerChannels(
 
 export async function listPermissionOverrides(
   db: D1Database,
-  channelId: string
+  channelId: string,
 ): Promise<Record<string, unknown>[]> {
-  const channel = await db
+  const channel = (await db
     .prepare(`SELECT server_id FROM channels WHERE id = ?`)
     .bind(channelId)
-    .first() as { server_id: string } | null;
+    .first()) as { server_id: string } | null;
 
   if (!channel?.server_id) {
     throw ServiceError.notFound("Channel not found");
@@ -451,7 +484,7 @@ export async function listPermissionOverrides(
     .prepare(
       `SELECT id, target_id, target_type, allow, deny
        FROM channel_permission_overrides
-       WHERE channel_id = ?`
+       WHERE channel_id = ?`,
     )
     .bind(channelId)
     .all();
@@ -465,14 +498,14 @@ export async function upsertPermissionOverride(
   db: D1Database,
   channelId: string,
   targetId: string,
-  targetType: 'role' | 'user',
+  targetType: "role" | "user",
   allow: number,
-  deny: number
+  deny: number,
 ): Promise<{ serverId: string; broadcast: BroadcastDescriptor }> {
-  const channel = await db
+  const channel = (await db
     .prepare(`SELECT server_id FROM channels WHERE id = ?`)
     .bind(channelId)
-    .first() as { server_id: string } | null;
+    .first()) as { server_id: string } | null;
 
   if (!channel?.server_id) {
     throw ServiceError.notFound("Channel not found");
@@ -480,11 +513,14 @@ export async function upsertPermissionOverride(
 
   const id = _genId();
 
-  await db.prepare(
-    `INSERT INTO channel_permission_overrides (id, channel_id, target_id, target_type, allow, deny)
+  await db
+    .prepare(
+      `INSERT INTO channel_permission_overrides (id, channel_id, target_id, target_type, allow, deny)
      VALUES (?, ?, ?, ?, ?, ?)
-     ON CONFLICT(channel_id, target_id) DO UPDATE SET allow = excluded.allow, deny = excluded.deny`
-  ).bind(id, channelId, targetId, targetType, allow, deny).run();
+     ON CONFLICT(channel_id, target_id) DO UPDATE SET allow = excluded.allow, deny = excluded.deny`,
+    )
+    .bind(id, channelId, targetId, targetType, allow, deny)
+    .run();
 
   return {
     serverId: channel.server_id,
@@ -501,20 +537,23 @@ export async function upsertPermissionOverride(
 export async function deletePermissionOverride(
   db: D1Database,
   channelId: string,
-  targetId: string
+  targetId: string,
 ): Promise<{ serverId: string; broadcast: BroadcastDescriptor }> {
-  const channel = await db
+  const channel = (await db
     .prepare(`SELECT server_id FROM channels WHERE id = ?`)
     .bind(channelId)
-    .first() as { server_id: string } | null;
+    .first()) as { server_id: string } | null;
 
   if (!channel?.server_id) {
     throw ServiceError.notFound("Channel not found");
   }
 
-  await db.prepare(
-    `DELETE FROM channel_permission_overrides WHERE channel_id = ? AND target_id = ?`
-  ).bind(channelId, targetId).run();
+  await db
+    .prepare(
+      `DELETE FROM channel_permission_overrides WHERE channel_id = ? AND target_id = ?`,
+    )
+    .bind(channelId, targetId)
+    .run();
 
   return {
     serverId: channel.server_id,
@@ -529,14 +568,18 @@ export async function deletePermissionOverride(
 // ─── reorderChannels ─────────────────────────────────────────────────────────
 
 export interface ReorderInput {
-  channels?: Array<{ id: string; position: number; category_id: string | null }>;
+  channels?: Array<{
+    id: string;
+    position: number;
+    category_id: string | null;
+  }>;
   categories?: Array<{ id: string; rank: number }>;
 }
 
 export async function reorderChannels(
   db: D1Database,
   serverId: string,
-  input: ReorderInput
+  input: ReorderInput,
 ): Promise<{
   cacheKeysToInvalidate: string[];
   broadcast: BroadcastDescriptor;
@@ -546,9 +589,11 @@ export async function reorderChannels(
   if (input.channels?.length) {
     for (const ch of input.channels) {
       statements.push(
-        db.prepare(
-          `UPDATE channels SET position = ?, category_id = ? WHERE id = ? AND server_id = ?`
-        ).bind(ch.position, ch.category_id, ch.id, serverId)
+        db
+          .prepare(
+            `UPDATE channels SET position = ?, category_id = ? WHERE id = ? AND server_id = ?`,
+          )
+          .bind(ch.position, ch.category_id, ch.id, serverId),
       );
     }
   }
@@ -556,9 +601,11 @@ export async function reorderChannels(
   if (input.categories?.length) {
     for (const cat of input.categories) {
       statements.push(
-        db.prepare(
-          `UPDATE categories SET rank = ? WHERE id = ? AND server_id = ?`
-        ).bind(cat.rank, cat.id, serverId)
+        db
+          .prepare(
+            `UPDATE categories SET rank = ? WHERE id = ? AND server_id = ?`,
+          )
+          .bind(cat.rank, cat.id, serverId),
       );
     }
   }

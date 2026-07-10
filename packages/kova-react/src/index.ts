@@ -53,7 +53,11 @@ export { useUser } from "./hooks/use-user";
  * Use `useRateLimit()` to build custom forms that react to 429 responses.
  * Use `extractRetryAfter()` to parse `Retry-After` from any Better Auth error shape.
  */
-export { extractRetryAfter, rateLimitMessage, useRateLimit } from "./hooks/use-rate-limit";
+export {
+  extractRetryAfter,
+  rateLimitMessage,
+  useRateLimit,
+} from "./hooks/use-rate-limit";
 export type { UseRateLimitReturn } from "./hooks/use-rate-limit";
 
 /**
@@ -80,12 +84,14 @@ export type {
   AppearanceElements,
   AppearanceVariables,
   // Domain models (linked accounts)
-  LinkedAccount, OAuthProvider,
+  LinkedAccount,
+  OAuthProvider,
   OrgSwitcherProps,
   PluginConfig,
   ProtectProps,
   // Config
-  KovaAuthConfig, KovaMembership,
+  KovaAuthConfig,
+  KovaMembership,
   KovaOrganization,
   KovaSession,
   KovaUser,
@@ -95,7 +101,8 @@ export type {
   SignUpProps,
   // Hook returns
   UseLinkedAccountsReturn,
-  UseOrganizationReturn, UserButtonProps, UseSessionReturn,
-  UseUserReturn
+  UseOrganizationReturn,
+  UserButtonProps,
+  UseSessionReturn,
+  UseUserReturn,
 } from "./types";
-

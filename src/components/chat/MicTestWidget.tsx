@@ -68,14 +68,15 @@ export function MicTestWidget({
   const thresholdPercent = Math.min(100, (threshold / 50) * 100);
 
   const processingSignature = useMemo(
-    () => [
-      processing.noiseSuppression,
-      processing.echoCancellation,
-      processing.autoSensitivity,
-      processing.streamHighFidelity,
-      processing.noiseReductionEnabled,
-      processing.noiseReductionProvider,
-    ].join(":"),
+    () =>
+      [
+        processing.noiseSuppression,
+        processing.echoCancellation,
+        processing.autoSensitivity,
+        processing.streamHighFidelity,
+        processing.noiseReductionEnabled,
+        processing.noiseReductionProvider,
+      ].join(":"),
     [
       processing.autoSensitivity,
       processing.echoCancellation,
@@ -86,17 +87,20 @@ export function MicTestWidget({
     ],
   );
 
-  const clearDetachedResources = useCallback((resources: DetachedTestResources) => {
-    resources.previewAudio?.pause();
-    if (resources.previewAudio) {
-      resources.previewAudio.srcObject = null;
-    }
-    resources.previewStream?.getTracks().forEach((track) => track.stop());
-    resources.analysisStream?.getTracks().forEach((track) => track.stop());
-    resources.processor?.destroy();
-    resources.stream?.getTracks().forEach((track) => track.stop());
-    resources.audioContext?.close().catch(() => { });
-  }, []);
+  const clearDetachedResources = useCallback(
+    (resources: DetachedTestResources) => {
+      resources.previewAudio?.pause();
+      if (resources.previewAudio) {
+        resources.previewAudio.srcObject = null;
+      }
+      resources.previewStream?.getTracks().forEach((track) => track.stop());
+      resources.analysisStream?.getTracks().forEach((track) => track.stop());
+      resources.processor?.destroy();
+      resources.stream?.getTracks().forEach((track) => track.stop());
+      resources.audioContext?.close().catch(() => {});
+    },
+    [],
+  );
 
   const resetMeterState = useCallback(() => {
     meterStateRef.current = {
@@ -108,179 +112,212 @@ export function MicTestWidget({
     setIsSpeaking(false);
   }, []);
 
-  const stopTest = useCallback((options?: { preserveUi?: boolean; cancelPendingStart?: boolean }) => {
-    if (options?.cancelPendingStart) {
-      startRequestRef.current += 1;
-    }
-    if (rafRef.current) cancelAnimationFrame(rafRef.current);
-    rafRef.current = 0;
-    if (previewAudioRef.current) {
-      previewAudioRef.current.pause();
-      previewAudioRef.current.srcObject = null;
-    }
-    previewAudioRef.current = null;
-    previewStreamRef.current?.getTracks().forEach((track) => track.stop());
-    previewStreamRef.current = null;
-    analysisStreamRef.current?.getTracks().forEach((track) => track.stop());
-    analysisStreamRef.current = null;
-    processorRef.current?.destroy();
-    processorRef.current = null;
-    streamRef.current?.getTracks().forEach((track) => track.stop());
-    streamRef.current = null;
-    audioCtxRef.current?.close().catch(() => { });
-    audioCtxRef.current = null;
-    analyserRef.current = null;
-    if (!options?.preserveUi) {
-      resetMeterState();
-      setHeardAudio(false);
-      setIsActive(false);
-    }
-  }, [resetMeterState]);
-
-  const startTest = useCallback(async (options?: { preserveUi?: boolean }) => {
-    const requestId = startRequestRef.current + 1;
-    startRequestRef.current = requestId;
-
-    // Keep the loopback panel visually stable while we rebuild the processing path.
-    stopTest({ preserveUi: options?.preserveUi, cancelPendingStart: false });
-    if (!options?.preserveUi) {
-      setHeardAudio(false);
-    }
-
-    const resources: DetachedTestResources = {
-      stream: null,
-      analysisStream: null,
-      previewStream: null,
-      previewAudio: null,
-      processor: null,
-      audioContext: null,
-    };
-
-    try {
-      const capture = resolveCaptureAudioProcessing(processing);
-      const useExact = inputDeviceId && inputDeviceId !== "default" && !inputDeviceId.startsWith("native:");
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          deviceId: useExact ? { exact: inputDeviceId } : undefined,
-          noiseSuppression: capture.noiseSuppression,
-          echoCancellation: capture.echoCancellation,
-          autoGainControl: capture.autoGainControl,
-          channelCount: 2,
-        },
-      });
-      resources.stream = stream;
-
-      const processor = await createLocalAudioProcessor(stream, processing);
-      resources.processor = processor;
-      const analysisStream = processor?.createMonitorStream()
-        ?? new MediaStream([stream.getAudioTracks()[0].clone()]);
-      const previewStream = processor?.createMonitorStream()
-        ?? new MediaStream([stream.getAudioTracks()[0].clone()]);
-      resources.analysisStream = analysisStream;
-      resources.previewStream = previewStream;
-
-      const ctx = new AudioContext();
-      const analyser = ctx.createAnalyser();
-      analyser.fftSize = 512;
-      analyser.smoothingTimeConstant = 0.3;
-      const source = ctx.createMediaStreamSource(analysisStream);
-      source.connect(analyser);
-      ctx.resume().catch(() => { });
-      resources.audioContext = ctx;
-
-      const previewAudio = new Audio();
-      previewAudio.autoplay = true;
-      previewAudio.muted = false;
-      (previewAudio as HTMLAudioElement & { playsInline?: boolean }).playsInline = true;
-      previewAudio.srcObject = previewStream;
-      resources.previewAudio = previewAudio;
-
-      const sinkId = outputDeviceId === "default" || outputDeviceId.startsWith("native:")
-        ? ""
-        : outputDeviceId;
-      const sinkable = previewAudio as HTMLAudioElement & { setSinkId?: (nextSinkId: string) => Promise<void> };
-      if (typeof sinkable.setSinkId === "function") {
-        await sinkable.setSinkId(sinkId).catch(() => { });
+  const stopTest = useCallback(
+    (options?: { preserveUi?: boolean; cancelPendingStart?: boolean }) => {
+      if (options?.cancelPendingStart) {
+        startRequestRef.current += 1;
       }
-      await previewAudio.play().then(() => {
-        if (startRequestRef.current === requestId) {
-          setHeardAudio(true);
-        }
-      }).catch(() => {
-        if (!options?.preserveUi && startRequestRef.current === requestId) {
-          setHeardAudio(false);
-        }
-      });
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      rafRef.current = 0;
+      if (previewAudioRef.current) {
+        previewAudioRef.current.pause();
+        previewAudioRef.current.srcObject = null;
+      }
+      previewAudioRef.current = null;
+      previewStreamRef.current?.getTracks().forEach((track) => track.stop());
+      previewStreamRef.current = null;
+      analysisStreamRef.current?.getTracks().forEach((track) => track.stop());
+      analysisStreamRef.current = null;
+      processorRef.current?.destroy();
+      processorRef.current = null;
+      streamRef.current?.getTracks().forEach((track) => track.stop());
+      streamRef.current = null;
+      audioCtxRef.current?.close().catch(() => {});
+      audioCtxRef.current = null;
+      analyserRef.current = null;
+      if (!options?.preserveUi) {
+        resetMeterState();
+        setHeardAudio(false);
+        setIsActive(false);
+      }
+    },
+    [resetMeterState],
+  );
 
-      if (startRequestRef.current !== requestId) {
-        clearDetachedResources(resources);
-        return;
+  const startTest = useCallback(
+    async (options?: { preserveUi?: boolean }) => {
+      const requestId = startRequestRef.current + 1;
+      startRequestRef.current = requestId;
+
+      // Keep the loopback panel visually stable while we rebuild the processing path.
+      stopTest({ preserveUi: options?.preserveUi, cancelPendingStart: false });
+      if (!options?.preserveUi) {
+        setHeardAudio(false);
       }
 
-      streamRef.current = stream;
-      processorRef.current = processor;
-      analysisStreamRef.current = analysisStream;
-      previewStreamRef.current = previewStream;
-      previewAudioRef.current = previewAudio;
-      audioCtxRef.current = ctx;
-      analyserRef.current = analyser;
-
-      const dataArray = new Uint8Array(analyser.frequencyBinCount);
-      const tick = () => {
-        if (!analyserRef.current) return;
-        analyserRef.current.getByteTimeDomainData(dataArray);
-        let sum = 0;
-        for (let i = 0; i < dataArray.length; i++) {
-          const value = (dataArray[i] - 128) / 128.0;
-          sum += value * value;
-        }
-        const currentRms = Math.sqrt(sum / dataArray.length) * 100;
-        const previousMeterState = meterStateRef.current;
-        const smoothedRms = previousMeterState.smoothedRms > 0
-          ? (previousMeterState.smoothedRms * (1 - RMS_SMOOTHING)) + (currentRms * RMS_SMOOTHING)
-          : currentRms;
-        const now = performance.now();
-        const exitThreshold = threshold * SPEAKING_EXIT_RATIO;
-        let nextSpeaking = previousMeterState.isSpeaking;
-        let lastSpeechAt = previousMeterState.lastSpeechAt;
-
-        if (smoothedRms >= threshold) {
-          nextSpeaking = true;
-          lastSpeechAt = now;
-        } else if (previousMeterState.isSpeaking && (now - previousMeterState.lastSpeechAt) < SPEAKING_HOLD_MS) {
-          nextSpeaking = true;
-        } else if (smoothedRms <= exitThreshold) {
-          nextSpeaking = false;
-        }
-
-        meterStateRef.current = {
-          smoothedRms,
-          isSpeaking: nextSpeaking,
-          lastSpeechAt,
-        };
-
-        setRms(smoothedRms);
-        setIsSpeaking((previous) => previous === nextSpeaking ? previous : nextSpeaking);
-        rafRef.current = requestAnimationFrame(tick);
+      const resources: DetachedTestResources = {
+        stream: null,
+        analysisStream: null,
+        previewStream: null,
+        previewAudio: null,
+        processor: null,
+        audioContext: null,
       };
 
-      rafRef.current = requestAnimationFrame(tick);
-      setIsActive(true);
-    } catch (error) {
-      if (startRequestRef.current === requestId) {
-        log.error("Failed to start mic test:", error);
-        stopTest({ cancelPendingStart: true });
-      } else {
-        clearDetachedResources(resources);
+      try {
+        const capture = resolveCaptureAudioProcessing(processing);
+        const useExact =
+          inputDeviceId &&
+          inputDeviceId !== "default" &&
+          !inputDeviceId.startsWith("native:");
+        const stream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            deviceId: useExact ? { exact: inputDeviceId } : undefined,
+            noiseSuppression: capture.noiseSuppression,
+            echoCancellation: capture.echoCancellation,
+            autoGainControl: capture.autoGainControl,
+            channelCount: 2,
+          },
+        });
+        resources.stream = stream;
+
+        const processor = await createLocalAudioProcessor(stream, processing);
+        resources.processor = processor;
+        const analysisStream =
+          processor?.createMonitorStream() ??
+          new MediaStream([stream.getAudioTracks()[0].clone()]);
+        const previewStream =
+          processor?.createMonitorStream() ??
+          new MediaStream([stream.getAudioTracks()[0].clone()]);
+        resources.analysisStream = analysisStream;
+        resources.previewStream = previewStream;
+
+        const ctx = new AudioContext();
+        const analyser = ctx.createAnalyser();
+        analyser.fftSize = 512;
+        analyser.smoothingTimeConstant = 0.3;
+        const source = ctx.createMediaStreamSource(analysisStream);
+        source.connect(analyser);
+        ctx.resume().catch(() => {});
+        resources.audioContext = ctx;
+
+        const previewAudio = new Audio();
+        previewAudio.autoplay = true;
+        previewAudio.muted = false;
+        (
+          previewAudio as HTMLAudioElement & { playsInline?: boolean }
+        ).playsInline = true;
+        previewAudio.srcObject = previewStream;
+        resources.previewAudio = previewAudio;
+
+        const sinkId =
+          outputDeviceId === "default" || outputDeviceId.startsWith("native:")
+            ? ""
+            : outputDeviceId;
+        const sinkable = previewAudio as HTMLAudioElement & {
+          setSinkId?: (nextSinkId: string) => Promise<void>;
+        };
+        if (typeof sinkable.setSinkId === "function") {
+          await sinkable.setSinkId(sinkId).catch(() => {});
+        }
+        await previewAudio
+          .play()
+          .then(() => {
+            if (startRequestRef.current === requestId) {
+              setHeardAudio(true);
+            }
+          })
+          .catch(() => {
+            if (!options?.preserveUi && startRequestRef.current === requestId) {
+              setHeardAudio(false);
+            }
+          });
+
+        if (startRequestRef.current !== requestId) {
+          clearDetachedResources(resources);
+          return;
+        }
+
+        streamRef.current = stream;
+        processorRef.current = processor;
+        analysisStreamRef.current = analysisStream;
+        previewStreamRef.current = previewStream;
+        previewAudioRef.current = previewAudio;
+        audioCtxRef.current = ctx;
+        analyserRef.current = analyser;
+
+        const dataArray = new Uint8Array(analyser.frequencyBinCount);
+        const tick = () => {
+          if (!analyserRef.current) return;
+          analyserRef.current.getByteTimeDomainData(dataArray);
+          let sum = 0;
+          for (let i = 0; i < dataArray.length; i++) {
+            const value = (dataArray[i] - 128) / 128.0;
+            sum += value * value;
+          }
+          const currentRms = Math.sqrt(sum / dataArray.length) * 100;
+          const previousMeterState = meterStateRef.current;
+          const smoothedRms =
+            previousMeterState.smoothedRms > 0
+              ? previousMeterState.smoothedRms * (1 - RMS_SMOOTHING) +
+                currentRms * RMS_SMOOTHING
+              : currentRms;
+          const now = performance.now();
+          const exitThreshold = threshold * SPEAKING_EXIT_RATIO;
+          let nextSpeaking = previousMeterState.isSpeaking;
+          let lastSpeechAt = previousMeterState.lastSpeechAt;
+
+          if (smoothedRms >= threshold) {
+            nextSpeaking = true;
+            lastSpeechAt = now;
+          } else if (
+            previousMeterState.isSpeaking &&
+            now - previousMeterState.lastSpeechAt < SPEAKING_HOLD_MS
+          ) {
+            nextSpeaking = true;
+          } else if (smoothedRms <= exitThreshold) {
+            nextSpeaking = false;
+          }
+
+          meterStateRef.current = {
+            smoothedRms,
+            isSpeaking: nextSpeaking,
+            lastSpeechAt,
+          };
+
+          setRms(smoothedRms);
+          setIsSpeaking((previous) =>
+            previous === nextSpeaking ? previous : nextSpeaking,
+          );
+          rafRef.current = requestAnimationFrame(tick);
+        };
+
+        rafRef.current = requestAnimationFrame(tick);
+        setIsActive(true);
+      } catch (error) {
+        if (startRequestRef.current === requestId) {
+          log.error("Failed to start mic test:", error);
+          stopTest({ cancelPendingStart: true });
+        } else {
+          clearDetachedResources(resources);
+        }
       }
-    }
-  }, [clearDetachedResources, inputDeviceId, outputDeviceId, processing, stopTest, threshold]);
+    },
+    [
+      clearDetachedResources,
+      inputDeviceId,
+      outputDeviceId,
+      processing,
+      stopTest,
+      threshold,
+    ],
+  );
 
   useEffect(() => {
     if (!isActive) return;
 
     const timeoutId = window.setTimeout(() => {
-      startTest({ preserveUi: true }).catch(() => { });
+      startTest({ preserveUi: true }).catch(() => {});
     }, 120);
 
     return () => window.clearTimeout(timeoutId);
@@ -315,7 +352,7 @@ export function MicTestWidget({
               if (isActive) {
                 stopTest({ cancelPendingStart: true });
               } else {
-                startTest().catch(() => { });
+                startTest().catch(() => {});
               }
             }}
             className={`shrink-0 rounded-lg border px-3 py-2 text-xs font-bold transition-all ${
@@ -335,7 +372,10 @@ export function MicTestWidget({
               const start = (index / METER_BARS) * 100;
               const end = ((index + 1) / METER_BARS) * 100;
               const isFilled = isActive && barPercent >= start;
-              const marksThreshold = !autoSensitivity && thresholdPercent >= start && thresholdPercent < end;
+              const marksThreshold =
+                !autoSensitivity &&
+                thresholdPercent >= start &&
+                thresholdPercent < end;
 
               return (
                 <div
@@ -363,13 +403,15 @@ export function MicTestWidget({
                 : "Live meter running. Browser blocked local playback, but the processing path is active."
               : "Start a loopback test to hear how your microphone sounds after cleanup."}
           </span>
-          <span className={`shrink-0 font-bold uppercase tracking-wider ${
-            isActive
-              ? isSpeaking
-                ? "text-emerald-300"
-                : "text-sky-300"
-              : "text-rm-text-muted/70"
-          }`}>
+          <span
+            className={`shrink-0 font-bold uppercase tracking-wider ${
+              isActive
+                ? isSpeaking
+                  ? "text-emerald-300"
+                  : "text-sky-300"
+                : "text-rm-text-muted/70"
+            }`}
+          >
             {isActive ? (isSpeaking ? "Speaking" : "Listening") : "Idle"}
           </span>
         </div>

@@ -34,29 +34,28 @@ function initGlobalBackListener() {
 
   // Tauri Native Listener (handles Android back button in native Tauri app)
   if (isTauri() && isMobile()) {
-    Promise.all([
-      import("@tauri-apps/api/app"),
-      import("@tauri-apps/api/core")
-    ]).then(([{ onBackButtonPress }, { invoke }]) => {
-      globalInvoke = invoke;
+    Promise.all([import("@tauri-apps/api/app"), import("@tauri-apps/api/core")])
+      .then(([{ onBackButtonPress }, { invoke }]) => {
+        globalInvoke = invoke;
 
-      onBackButtonPress((event) => {
-        // Execute the LIFO queue of specific back handlers
-        const handled = executeBackHandlers();
+        onBackButtonPress((event) => {
+          // Execute the LIFO queue of specific back handlers
+          const handled = executeBackHandlers();
 
-        // If none of our app's specific hooks consumed the back button:
-        if (!handled) {
-          if (event.canGoBack) {
-            window.history.back();
-          } else {
-            // If the WebView itself has no remaining history, close the application.
-            if (globalInvoke) {
-              globalInvoke("exit_app").catch(console.error);
+          // If none of our app's specific hooks consumed the back button:
+          if (!handled) {
+            if (event.canGoBack) {
+              window.history.back();
+            } else {
+              // If the WebView itself has no remaining history, close the application.
+              if (globalInvoke) {
+                globalInvoke("exit_app").catch(console.error);
+              }
             }
           }
-        }
-      }).catch(console.error);
-    }).catch(console.error);
+        }).catch(console.error);
+      })
+      .catch(console.error);
   }
 }
 
@@ -115,12 +114,12 @@ export function useBackButton(handler: BackHandler, active: boolean = true) {
 
     return () => {
       cleanup();
-      
+
       // If closed manually (not via back button), we must pop history to keep it clean
       if (isPushedRef.current && typeof window !== "undefined" && !isTauri()) {
         isPushedRef.current = false;
         statesToPop++;
-        
+
         if (popTimeout) clearTimeout(popTimeout);
         popTimeout = setTimeout(popHistory, 10);
       }

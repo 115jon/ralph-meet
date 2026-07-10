@@ -40,7 +40,9 @@ describe("warp rush course", () => {
   it("keeps the first obstacle beyond the intro grace distance", () => {
     const course = createWarpRushCourse("voice-channel-123");
 
-    expect(course.obstacles[0]?.distance).toBeGreaterThanOrEqual(WARP_RUSH_INTRO_DISTANCE);
+    expect(course.obstacles[0]?.distance).toBeGreaterThanOrEqual(
+      WARP_RUSH_INTRO_DISTANCE,
+    );
   });
 
   it("renders upcoming rings and obstacles ahead of the ship", () => {
@@ -48,12 +50,22 @@ describe("warp rush course", () => {
     const obstacle = course.obstacles[0];
     const ring = course.rings[0];
     if (!obstacle || !ring) {
-      throw new Error("Expected the course generator to create both obstacles and rings.");
+      throw new Error(
+        "Expected the course generator to create both obstacles and rings.",
+      );
     }
 
-    const obstacleAhead = getWarpRushObstacleRenderState(obstacle, 0, course.loopLength);
+    const obstacleAhead = getWarpRushObstacleRenderState(
+      obstacle,
+      0,
+      course.loopLength,
+    );
     const ringAhead = getWarpRushRingRenderState(ring, 0, course.loopLength);
-    const obstacleBehind = getWarpRushObstacleRenderState(obstacle, obstacle.distance + 4, course.loopLength);
+    const obstacleBehind = getWarpRushObstacleRenderState(
+      obstacle,
+      obstacle.distance + 4,
+      course.loopLength,
+    );
 
     expect(obstacleAhead.z).toBeLessThan(WARP_RUSH_SHIP_Z);
     expect(ringAhead.z).toBeLessThan(WARP_RUSH_SHIP_Z);
@@ -64,7 +76,11 @@ describe("warp rush course", () => {
     const highFps = runSimulation(1 / 144);
     const lowFps = runSimulation(1 / 20);
 
-    expect(Math.abs(highFps.worldDistance - lowFps.worldDistance)).toBeLessThanOrEqual(WARP_RUSH_BASE_SPEED * WARP_RUSH_STEP_SECONDS + 0.001);
+    expect(
+      Math.abs(highFps.worldDistance - lowFps.worldDistance),
+    ).toBeLessThanOrEqual(
+      WARP_RUSH_BASE_SPEED * WARP_RUSH_STEP_SECONDS + 0.001,
+    );
     expect(Math.abs(highFps.score - lowFps.score)).toBeLessThanOrEqual(5);
     expect(highFps.crashed).toBe(lowFps.crashed);
   });

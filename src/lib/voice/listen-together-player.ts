@@ -77,8 +77,9 @@ export function getListenTogetherPlaybackPlan(args: {
 
   const shouldLoad = args.playback.src !== args.streamUrl;
   const shouldSeek =
-    shouldLoad
-    || Math.abs(args.playback.currentTimeMs - args.snapshot.positionMs) > tolerance;
+    shouldLoad ||
+    Math.abs(args.playback.currentTimeMs - args.snapshot.positionMs) >
+      tolerance;
 
   return {
     nextSrc: args.streamUrl,

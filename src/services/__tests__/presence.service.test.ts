@@ -86,7 +86,7 @@ describe("updatePresence", () => {
 
   it("throws 400 for invalid status value", async () => {
     await expect(
-      updatePresence(db as any, USER_ID, { status: "invisible" as any })
+      updatePresence(db as any, USER_ID, { status: "invisible" as any }),
     ).rejects.toHaveProperty("status", 400);
   });
 

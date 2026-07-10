@@ -98,6 +98,8 @@ export async function channels(): Promise<NotificationChannel[]> {
   return [];
 }
 
-export async function onAction(_cb: (notification: NotificationActionEvent) => void): Promise<() => void> {
+export async function onAction(
+  _cb: (notification: NotificationActionEvent) => void,
+): Promise<() => void> {
   return async () => {};
 }

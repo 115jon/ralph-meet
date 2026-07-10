@@ -30,7 +30,10 @@ export function isComposerCustomEmojiPlaceholder(char: string): boolean {
   if (!char) return false;
 
   const codePoint = char.charCodeAt(0);
-  return codePoint >= CUSTOM_EMOJI_PLACEHOLDER_START && codePoint <= CUSTOM_EMOJI_PLACEHOLDER_END;
+  return (
+    codePoint >= CUSTOM_EMOJI_PLACEHOLDER_START &&
+    codePoint <= CUSTOM_EMOJI_PLACEHOLDER_END
+  );
 }
 
 export function allocateComposerCustomEmojiPlaceholder(
@@ -39,10 +42,16 @@ export function allocateComposerCustomEmojiPlaceholder(
 ): string {
   const reservedPlaceholders = new Set([
     ...Object.keys(composerCustomEmojiMap),
-    ...Array.from(value).filter((char) => isComposerCustomEmojiPlaceholder(char)),
+    ...Array.from(value).filter((char) =>
+      isComposerCustomEmojiPlaceholder(char),
+    ),
   ]);
 
-  for (let codePoint = CUSTOM_EMOJI_PLACEHOLDER_START; codePoint <= CUSTOM_EMOJI_PLACEHOLDER_END; codePoint += 1) {
+  for (
+    let codePoint = CUSTOM_EMOJI_PLACEHOLDER_START;
+    codePoint <= CUSTOM_EMOJI_PLACEHOLDER_END;
+    codePoint += 1
+  ) {
     const placeholder = String.fromCharCode(codePoint);
     if (!reservedPlaceholders.has(placeholder)) {
       return placeholder;
@@ -57,7 +66,9 @@ export function pruneComposerCustomEmojiMap(
   composerCustomEmojiMap: ComposerCustomEmojiMap,
 ): ComposerCustomEmojiMap {
   return Object.fromEntries(
-    Object.entries(composerCustomEmojiMap).filter(([placeholder]) => value.includes(placeholder)),
+    Object.entries(composerCustomEmojiMap).filter(([placeholder]) =>
+      value.includes(placeholder),
+    ),
   );
 }
 
@@ -72,7 +83,10 @@ export function expandComposerCustomEmojiPlaceholders(
   for (const char of value) {
     const customEmoji = composerCustomEmojiMap[char];
     if (customEmoji) {
-      expandedValue += buildCustomEmojiToken(customEmoji.shortcode, customEmoji.id);
+      expandedValue += buildCustomEmojiToken(
+        customEmoji.shortcode,
+        customEmoji.id,
+      );
     } else {
       expandedValue += char;
     }

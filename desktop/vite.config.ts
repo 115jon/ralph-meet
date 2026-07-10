@@ -17,39 +17,71 @@ const shimDir = path.resolve(rootDir, "src/shims");
  */
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, rootDir, "");
-  const baseApiUrl = process.env.VITE_API_BASE_URL || env.VITE_API_BASE_URL || "http://localhost:5173";
-  const baseWsUrl = baseApiUrl.replace(/^https:/, "wss:").replace(/^http:/, "ws:");
+  const baseApiUrl =
+    process.env.VITE_API_BASE_URL ||
+    env.VITE_API_BASE_URL ||
+    "http://localhost:5173";
+  const baseWsUrl = baseApiUrl
+    .replace(/^https:/, "wss:")
+    .replace(/^http:/, "ws:");
 
   return {
     root: import.meta.dirname,
     envDir: rootDir,
     publicDir: path.resolve(rootDir, "public"),
-    plugins: [
-      viteReact(),
-      tailwindcss(),
-    ],
+    plugins: [viteReact(), tailwindcss()],
     resolve: {
       alias: {
         "@": path.resolve(rootDir, "src"),
-        "@kova/react": path.resolve(rootDir, "packages/kova-react/dist/index.js"),
+        "@kova/react": path.resolve(
+          rootDir,
+          "packages/kova-react/dist/index.js",
+        ),
 
         // ── Tauri plugin resolution ────────────────────────────────────
         // These live in desktop/node_modules but are imported from ../src/.
         // Without explicit aliases, Vite walks up to root node_modules
         // (which doesn't have them). Map them directly.
-        "@tauri-apps/plugin-shell": path.resolve(import.meta.dirname, "node_modules/@tauri-apps/plugin-shell"),
-        "@tauri-apps/plugin-updater": path.resolve(import.meta.dirname, "node_modules/@tauri-apps/plugin-updater"),
-        "@tauri-apps/plugin-process": path.resolve(import.meta.dirname, "node_modules/@tauri-apps/plugin-process"),
-        "@tauri-apps/plugin-autostart": path.resolve(import.meta.dirname, "node_modules/@tauri-apps/plugin-autostart"),
-        "@tauri-apps/plugin-notification": path.resolve(import.meta.dirname, "node_modules/@tauri-apps/plugin-notification"),
+        "@tauri-apps/plugin-shell": path.resolve(
+          import.meta.dirname,
+          "node_modules/@tauri-apps/plugin-shell",
+        ),
+        "@tauri-apps/plugin-updater": path.resolve(
+          import.meta.dirname,
+          "node_modules/@tauri-apps/plugin-updater",
+        ),
+        "@tauri-apps/plugin-process": path.resolve(
+          import.meta.dirname,
+          "node_modules/@tauri-apps/plugin-process",
+        ),
+        "@tauri-apps/plugin-autostart": path.resolve(
+          import.meta.dirname,
+          "node_modules/@tauri-apps/plugin-autostart",
+        ),
+        "@tauri-apps/plugin-notification": path.resolve(
+          import.meta.dirname,
+          "node_modules/@tauri-apps/plugin-notification",
+        ),
 
         // ── Shims for server-only / Cloudflare-only imports ────────────
-        "cloudflare:workers": path.resolve(import.meta.dirname, "shims/cloudflare-workers.ts"),
+        "cloudflare:workers": path.resolve(
+          import.meta.dirname,
+          "shims/cloudflare-workers.ts",
+        ),
 
         // ── Shims for mobile-only Tauri plugins ─────────────────────────
-        "tauri-plugin-status-bar-color-api": path.resolve(rootDir, "src/shims/tauri-plugin-status-bar-color-api.ts"),
-        "@tanstack/react-start/server": path.resolve(import.meta.dirname, "shims/tanstack-react-start-server.ts"),
-        "@tanstack/react-start": path.resolve(import.meta.dirname, "shims/tanstack-react-start.ts"),
+        "tauri-plugin-status-bar-color-api": path.resolve(
+          rootDir,
+          "src/shims/tauri-plugin-status-bar-color-api.ts",
+        ),
+        "@tanstack/react-start/server": path.resolve(
+          import.meta.dirname,
+          "shims/tanstack-react-start-server.ts",
+        ),
+        "@tanstack/react-start": path.resolve(
+          import.meta.dirname,
+          "shims/tanstack-react-start.ts",
+        ),
         // ── use-sync-external-store shims (shared with web config) ─────
         "use-sync-external-store/shim/with-selector": path.resolve(
           shimDir,
@@ -150,7 +182,10 @@ export default defineConfig(({ mode }) => {
 
                   // Allow cross-origin access from Tauri's custom origin
                   res.setHeader("access-control-allow-origin", "*");
-                  res.setHeader("access-control-expose-headers", "Content-Range, Content-Length, Accept-Ranges");
+                  res.setHeader(
+                    "access-control-expose-headers",
+                    "Content-Range, Content-Length, Accept-Ranges",
+                  );
 
                   res.writeHead(206);
                   res.end(body);

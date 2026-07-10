@@ -70,13 +70,19 @@ export const LocalMenu: React.FC<LocalMenuProps> = ({
           label="Stop Streaming"
           danger
           onMouseEnter={clearSubmenu}
-          onClick={() => { onToggleScreenShare?.(); onClose(); }}
+          onClick={() => {
+            onToggleScreenShare?.();
+            onClose();
+          }}
           rightElement={<MonitorX size={18} className="text-rose-500" />}
         />
         <MenuItem
           label="Change Stream"
           onMouseEnter={clearSubmenu}
-          onClick={() => { onChangeSource?.(); onClose(); }}
+          onClick={() => {
+            onChangeSource?.();
+            onClose();
+          }}
           rightElement={<Share2 size={18} className="text-[#dbdee1]/40" />}
         />
 
@@ -137,7 +143,10 @@ export const LocalMenu: React.FC<LocalMenuProps> = ({
               label="Disconnect"
               danger
               onMouseEnter={clearSubmenu}
-              onClick={() => { onLeave?.(); onClose(); }}
+              onClick={() => {
+                onLeave?.();
+                onClose();
+              }}
             />
           </>
         )}
@@ -147,10 +156,24 @@ export const LocalMenu: React.FC<LocalMenuProps> = ({
 
   return (
     <>
-      <MenuItem label="Profile" onMouseEnter={clearSubmenu} onClick={handleProfile} />
+      <MenuItem
+        label="Profile"
+        onMouseEnter={clearSubmenu}
+        onClick={handleProfile}
+      />
       <Divider />
-      <MenuItem label="Mute" checked={!!isMuted} onMouseEnter={clearSubmenu} onClick={onToggleMute} />
-      <MenuItem label="Deafen" checked={!!isDeafened} onMouseEnter={clearSubmenu} onClick={onToggleDeafen} />
+      <MenuItem
+        label="Mute"
+        checked={!!isMuted}
+        onMouseEnter={clearSubmenu}
+        onClick={onToggleMute}
+      />
+      <MenuItem
+        label="Deafen"
+        checked={!!isDeafened}
+        onMouseEnter={clearSubmenu}
+        onClick={onToggleDeafen}
+      />
 
       <SubMenuItem
         label="Apps"
@@ -179,14 +202,29 @@ export const LocalMenu: React.FC<LocalMenuProps> = ({
         </>
       )}
 
-      <MenuItem label="Show Non-Video Participants" onMouseEnter={clearSubmenu} checked={true} onClick={onClose} />
+      <MenuItem
+        label="Show Non-Video Participants"
+        onMouseEnter={clearSubmenu}
+        checked={true}
+        onClick={onClose}
+      />
 
       <Divider />
 
       {isModerator && (
         <>
-          <MenuItem label="Server Mute" danger onMouseEnter={clearSubmenu} onClick={handleServerMute} />
-          <MenuItem label="Server Deafen" danger onMouseEnter={clearSubmenu} onClick={handleServerDeafen} />
+          <MenuItem
+            label="Server Mute"
+            danger
+            onMouseEnter={clearSubmenu}
+            onClick={handleServerMute}
+          />
+          <MenuItem
+            label="Server Deafen"
+            danger
+            onMouseEnter={clearSubmenu}
+            onClick={handleServerDeafen}
+          />
           <Divider />
         </>
       )}
@@ -197,7 +235,10 @@ export const LocalMenu: React.FC<LocalMenuProps> = ({
             label="Disconnect"
             danger
             onMouseEnter={clearSubmenu}
-            onClick={() => { onLeave?.(); onClose(); }}
+            onClick={() => {
+              onLeave?.();
+              onClose();
+            }}
           />
           <Divider />
         </>
@@ -207,7 +248,11 @@ export const LocalMenu: React.FC<LocalMenuProps> = ({
         label="Copy User ID"
         onMouseEnter={clearSubmenu}
         onClick={handleCopyId}
-        rightElement={<span className="text-[10px] bg-rm-bg-active px-1 rounded text-rm-text-muted/40 font-bold shadow-sm">ID</span>}
+        rightElement={
+          <span className="text-[10px] bg-rm-bg-active px-1 rounded text-rm-text-muted/40 font-bold shadow-sm">
+            ID
+          </span>
+        }
       />
     </>
   );

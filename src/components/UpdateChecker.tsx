@@ -76,7 +76,9 @@ export function UpdateChecker() {
           case "Progress":
             downloaded += event.data.chunkLength;
             if (contentLength > 0) {
-              setProgress(Math.min(100, Math.round((downloaded / contentLength) * 100)));
+              setProgress(
+                Math.min(100, Math.round((downloaded / contentLength) * 100)),
+              );
             }
             break;
           case "Finished":
@@ -166,7 +168,9 @@ export function UpdateChecker() {
 
       {status === "ready" && (
         <div className="flex flex-col gap-1">
-          <p className="text-sm font-semibold text-rm-text">Update installed!</p>
+          <p className="text-sm font-semibold text-rm-text">
+            Update installed!
+          </p>
           <p className="text-xs text-rm-text-muted">Restarting...</p>
         </div>
       )}

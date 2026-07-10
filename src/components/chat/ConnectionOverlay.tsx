@@ -46,7 +46,7 @@ export function ConnectionOverlay() {
       hasConnected: false,
       tipIndex: 0,
       tipVisible: true,
-    }
+    },
   );
 
   const isReconnecting = state.hasConnected && !connected;
@@ -106,7 +106,8 @@ export function ConnectionOverlay() {
     if (state.fadeOut) return "Connected!";
     if (!state.hasConnected) return "Connecting...";
     if (reconnectAttempt <= 1) return "Reconnecting...";
-    if (reconnectAttempt <= 5) return `Reconnecting — attempt ${reconnectAttempt}`;
+    if (reconnectAttempt <= 5)
+      return `Reconnecting — attempt ${reconnectAttempt}`;
     return `Still reconnecting — attempt ${reconnectAttempt}`;
   };
 
@@ -127,7 +128,8 @@ export function ConnectionOverlay() {
       <div
         className="absolute top-[45%] left-1/2 w-[320px] h-[320px] rounded-full pointer-events-none animate-[conn-glow_3s_ease-in-out_infinite]"
         style={{
-          background: "radial-gradient(circle, var(--rm-glow) 0%, transparent 70%)",
+          background:
+            "radial-gradient(circle, var(--rm-glow) 0%, transparent 70%)",
           transform: "translate(-50%, -50%)",
         }}
       />
@@ -162,8 +164,9 @@ export function ConnectionOverlay() {
       {/* Rotating tip */}
       {!state.fadeOut && (
         <p
-          className={`mt-2 text-[13px] font-normal tracking-[0.01em] z-10 text-rm-text-muted transition-opacity duration-400 ${state.tipVisible ? "opacity-100" : "opacity-0"
-            }`}
+          className={`mt-2 text-[13px] font-normal tracking-[0.01em] z-10 text-rm-text-muted transition-opacity duration-400 ${
+            state.tipVisible ? "opacity-100" : "opacity-0"
+          }`}
         >
           {tips[state.tipIndex]}
         </p>

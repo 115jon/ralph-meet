@@ -81,6 +81,8 @@ describe("VoiceDetailsPanel", () => {
       />,
     );
 
-    expect(await screen.findByText("Connected · gathering live metrics…")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Connected · gathering live metrics…"),
+    ).toBeInTheDocument();
   });
 });

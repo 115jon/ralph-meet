@@ -76,8 +76,8 @@ export function useLinkedAccounts(): UseLinkedAccountsReturn {
               createdAt: normaliseDate(a.createdAt),
               accessToken: a.accessToken ?? null,
               scopes: a.scopes ?? undefined,
-            })
-          )
+            }),
+          ),
         );
         setError(null);
       }
@@ -132,7 +132,7 @@ export function useLinkedAccounts(): UseLinkedAccountsReturn {
         setIsUpdating(false);
       }
     },
-    [client]
+    [client],
   );
 
   return {

@@ -18,7 +18,7 @@ function renderPlainText(
   emojiClassName: string | undefined,
   selectable: boolean,
 ) {
-  return splitTextByNativeEmoji(text).map((part, index) => (
+  return splitTextByNativeEmoji(text).map((part, index) =>
     part.type === "emoji" ? (
       <EmojiToken
         key={`${keyPrefix}-emoji-${index}`}
@@ -26,8 +26,10 @@ function renderPlainText(
         className={emojiClassName}
         selectable={selectable}
       />
-    ) : part.value
-  ));
+    ) : (
+      part.value
+    ),
+  );
 }
 
 export default function InlineEmojiText({
@@ -46,7 +48,14 @@ export default function InlineEmojiText({
     const index = match.index ?? 0;
 
     if (index > lastIndex) {
-      nodes.push(...renderPlainText(text.slice(lastIndex, index), `text-${index}`, emojiClassName, selectable));
+      nodes.push(
+        ...renderPlainText(
+          text.slice(lastIndex, index),
+          `text-${index}`,
+          emojiClassName,
+          selectable,
+        ),
+      );
     }
 
     nodes.push(
@@ -63,7 +72,14 @@ export default function InlineEmojiText({
   }
 
   if (lastIndex < text.length) {
-    nodes.push(...renderPlainText(text.slice(lastIndex), `tail-${lastIndex}`, emojiClassName, selectable));
+    nodes.push(
+      ...renderPlainText(
+        text.slice(lastIndex),
+        `tail-${lastIndex}`,
+        emojiClassName,
+        selectable,
+      ),
+    );
   }
 
   return <span className={className}>{nodes.length > 0 ? nodes : text}</span>;

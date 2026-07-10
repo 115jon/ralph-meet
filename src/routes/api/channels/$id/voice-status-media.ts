@@ -1,6 +1,14 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { apiError, apiSuccess, genId, getBucket, getDB, requireActiveVoiceChannelSession, requireAuth } from "@/lib/api-helpers";
+import {
+  apiError,
+  apiSuccess,
+  genId,
+  getBucket,
+  getDB,
+  requireActiveVoiceChannelSession,
+  requireAuth,
+} from "@/lib/api-helpers";
 import { logger } from "@/lib/logger";
 import { PERMISSIONS } from "@/lib/permissions";
 import { checkRateLimitDO, RATE_LIMITS } from "@/lib/rate-limit";
@@ -21,7 +29,9 @@ import {
 } from "@/services/voice-status-media.service";
 import type { VoiceChannelStatusMedia } from "@/lib/types";
 
-function extensionForVoiceStatusMedia(contentType: VoiceChannelStatusMedia["preview_content_type"]): string {
+function extensionForVoiceStatusMedia(
+  contentType: VoiceChannelStatusMedia["preview_content_type"],
+): string {
   switch (contentType) {
     case "image/gif":
       return "gif";
@@ -54,7 +64,10 @@ function parseDimensionField(value: FormDataEntryValue | null): number {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 1;
 }
 
-async function requireVoiceStatusMediaAccess(request: Request, channelId: string) {
+async function requireVoiceStatusMediaAccess(
+  request: Request,
+  channelId: string,
+) {
   const authResult = await requireAuth(request);
   if (authResult instanceof Response) return authResult;
   const { userId } = authResult;
@@ -63,7 +76,12 @@ async function requireVoiceStatusMediaAccess(request: Request, channelId: string
   if (accessResult instanceof Response) return accessResult;
 
   if (!accessResult.serverId) {
-    return apiError("Voice status media is only available for server voice channels", 400, undefined, request);
+    return apiError(
+      "Voice status media is only available for server voice channels",
+      400,
+      undefined,
+      request,
+    );
   }
 
   const permissionResult = await requireChannelPermission(
@@ -82,7 +100,8 @@ async function requireVoiceStatusMediaAccess(request: Request, channelId: string
     accessResult.serverId,
     "You must be actively connected to this voice channel to manage its media status.",
   );
-  if (activeVoiceSessionResult instanceof Response) return activeVoiceSessionResult;
+  if (activeVoiceSessionResult instanceof Response)
+    return activeVoiceSessionResult;
 
   return {
     userId,
@@ -95,7 +114,11 @@ const GET = async ({ request, params }: any) => {
   const access = await requireVoiceStatusMediaAccess(request, channelId);
   if (access instanceof Response) return access;
 
-  const items = await listRecentVoiceStatusMediaAssets(getDB(), access.serverId, MAX_VOICE_STATUS_MEDIA_RECENTS);
+  const items = await listRecentVoiceStatusMediaAssets(
+    getDB(),
+    access.serverId,
+    MAX_VOICE_STATUS_MEDIA_RECENTS,
+  );
   return apiSuccess({ items }, 200, request);
 };
 
@@ -104,7 +127,11 @@ const POST = async ({ request, params }: any) => {
   const access = await requireVoiceStatusMediaAccess(request, channelId);
   if (access instanceof Response) return access;
 
-  const rl = await checkRateLimitDO(access.userId, "voice-status-media-upload", RATE_LIMITS.FILE_UPLOAD);
+  const rl = await checkRateLimitDO(
+    access.userId,
+    "voice-status-media-upload",
+    RATE_LIMITS.FILE_UPLOAD,
+  );
   if (rl) return rl;
 
   const contentTypeHeader = request.headers.get("content-type") ?? "";
@@ -118,19 +145,33 @@ const POST = async ({ request, params }: any) => {
     }
 
     if (file.size > MAX_VOICE_STATUS_MEDIA_UPLOAD_BYTES) {
-      return apiError("Voice status media must be 25 MB or smaller.", 413, undefined, request);
+      return apiError(
+        "Voice status media must be 25 MB or smaller.",
+        413,
+        undefined,
+        request,
+      );
     }
 
     const contentType = getVoiceStatusMediaUploadContentType(file);
     if (!contentType) {
-      return apiError("Only GIF, PNG, JPG, WEBP, MP4, and WEBM files are supported.", 415, undefined, request);
+      return apiError(
+        "Only GIF, PNG, JPG, WEBP, MP4, and WEBM files are supported.",
+        415,
+        undefined,
+        request,
+      );
     }
 
     const filename = sanitizeUploadFilename(file.name);
     const previewWidth = parseDimensionField(formData.get("preview_width"));
     const previewHeight = parseDimensionField(formData.get("preview_height"));
     const assetId = genId();
-    const fileKey = buildVoiceStatusMediaStorageKey(access.serverId, assetId, filename);
+    const fileKey = buildVoiceStatusMediaStorageKey(
+      access.serverId,
+      assetId,
+      filename,
+    );
     const buffer = await file.arrayBuffer();
     const bucket = getBucket();
 
@@ -161,7 +202,10 @@ const POST = async ({ request, params }: any) => {
           userId: access.userId,
           channelId,
           fileKey,
-          error: cleanupError instanceof Error ? cleanupError.message : String(cleanupError),
+          error:
+            cleanupError instanceof Error
+              ? cleanupError.message
+              : String(cleanupError),
         });
       }
 
@@ -170,7 +214,9 @@ const POST = async ({ request, params }: any) => {
   }
 
   const body = await request.json();
-  const media = sanitizeVoiceChannelStatusMedia((body as { media?: unknown }).media);
+  const media = sanitizeVoiceChannelStatusMedia(
+    (body as { media?: unknown }).media,
+  );
   if (!media) {
     return apiError("No valid media was provided.", 400, undefined, request);
   }
@@ -192,15 +238,19 @@ const POST = async ({ request, params }: any) => {
     sizeBytes: 0,
   });
 
-  return apiSuccess({
-    item: {
-      ...item,
-      media: {
-        ...media,
-        id: item.id,
+  return apiSuccess(
+    {
+      item: {
+        ...item,
+        media: {
+          ...media,
+          id: item.id,
+        },
       },
     },
-  }, 201, request);
+    201,
+    request,
+  );
 };
 
 export const Route = createFileRoute("/api/channels/$id/voice-status-media")({

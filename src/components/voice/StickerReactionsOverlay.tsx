@@ -35,7 +35,10 @@ const CLEANUP_DELAY_MS = 4000;
 // Component
 // ---------------------------------------------------------------------------
 
-export function StickerReactionsOverlay({ sfu, senderUserId }: StickerReactionsOverlayProps) {
+export function StickerReactionsOverlay({
+  sfu,
+  senderUserId,
+}: StickerReactionsOverlayProps) {
   const [stickers, setStickers] = useState<StickerItem[]>([]);
 
   // `sfu.on(...)` returns the unsubscribe function from EventEmitter.on.
@@ -49,7 +52,8 @@ export function StickerReactionsOverlay({ sfu, senderUserId }: StickerReactionsO
       // Per-card filtering: skip only if user_id is present and belongs to a different user.
       // If user_id is absent (e.g. worker DB lookup failed), fall back to showing on all cards.
       if (senderUserId !== undefined) {
-        const eventUserId = typeof event.user_id === "string" ? event.user_id : null;
+        const eventUserId =
+          typeof event.user_id === "string" ? event.user_id : null;
         if (eventUserId !== null && eventUserId !== senderUserId) return;
       }
 
@@ -57,12 +61,16 @@ export function StickerReactionsOverlay({ sfu, senderUserId }: StickerReactionsO
       if (!stickerUrl) return;
 
       // Determine content type — fall back to URL-based inference for older events
-      const rawContentType = typeof event.contentType === "string" ? event.contentType : "";
+      const rawContentType =
+        typeof event.contentType === "string" ? event.contentType : "";
       const contentType =
         rawContentType ||
-        (stickerUrl.includes(".mp4") || stickerUrl.includes("/clips/") ? "video/mp4" : "image/gif");
+        (stickerUrl.includes(".mp4") || stickerUrl.includes("/clips/")
+          ? "video/mp4"
+          : "image/gif");
 
-      const displayMode = typeof event.displayMode === "string" ? event.displayMode : "single";
+      const displayMode =
+        typeof event.displayMode === "string" ? event.displayMode : "single";
       const newItems: StickerItem[] = [];
 
       if (displayMode === "single") {
@@ -73,8 +81,12 @@ export function StickerReactionsOverlay({ sfu, senderUserId }: StickerReactionsO
           id,
           url: stickerUrl,
           contentType,
-          className: "animate-reaction-single absolute bottom-0 w-16 h-16 pointer-events-none object-contain z-50",
-          style: { left: `${left}%`, "--rot": `${rot}deg` } as React.CSSProperties,
+          className:
+            "animate-reaction-single absolute bottom-0 w-16 h-16 pointer-events-none object-contain z-50",
+          style: {
+            left: `${left}%`,
+            "--rot": `${rot}deg`,
+          } as React.CSSProperties,
         });
       } else if (displayMode === "burst") {
         const count = 8;
@@ -91,7 +103,8 @@ export function StickerReactionsOverlay({ sfu, senderUserId }: StickerReactionsO
             id,
             url: stickerUrl,
             contentType,
-            className: "animate-reaction-burst absolute bottom-4 left-1/2 w-12 h-12 pointer-events-none object-contain z-50",
+            className:
+              "animate-reaction-burst absolute bottom-4 left-1/2 w-12 h-12 pointer-events-none object-contain z-50",
             style: {
               "--tx": `${tx}px`,
               "--ty": `${ty}px`,
@@ -111,7 +124,8 @@ export function StickerReactionsOverlay({ sfu, senderUserId }: StickerReactionsO
             id,
             url: stickerUrl,
             contentType,
-            className: "animate-reaction-rain absolute top-0 w-12 h-12 pointer-events-none object-contain z-50",
+            className:
+              "animate-reaction-rain absolute top-0 w-12 h-12 pointer-events-none object-contain z-50",
             style: {
               left: `${left}%`,
               "--rot": `${rot}deg`,
@@ -127,8 +141,12 @@ export function StickerReactionsOverlay({ sfu, senderUserId }: StickerReactionsO
           id,
           url: stickerUrl,
           contentType,
-          className: "animate-reaction-bounce absolute top-0 w-16 h-16 pointer-events-none object-contain z-50",
-          style: { left: `${left}%`, "--rot": `${rot}deg` } as React.CSSProperties,
+          className:
+            "animate-reaction-bounce absolute top-0 w-16 h-16 pointer-events-none object-contain z-50",
+          style: {
+            left: `${left}%`,
+            "--rot": `${rot}deg`,
+          } as React.CSSProperties,
         });
       }
 

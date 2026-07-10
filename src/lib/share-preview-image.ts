@@ -21,7 +21,12 @@ function crc32(bytes: Uint8Array): number {
 }
 
 function u32(value: number): number[] {
-  return [(value >>> 24) & 0xff, (value >>> 16) & 0xff, (value >>> 8) & 0xff, value & 0xff];
+  return [
+    (value >>> 24) & 0xff,
+    (value >>> 16) & 0xff,
+    (value >>> 8) & 0xff,
+    value & 0xff,
+  ];
 }
 
 function ascii(value: string): number[] {
@@ -34,12 +39,7 @@ function chunk(type: string, data: Uint8Array): number[] {
   crcInput.set(typeBytes, 0);
   crcInput.set(data, typeBytes.length);
 
-  return [
-    ...u32(data.length),
-    ...typeBytes,
-    ...data,
-    ...u32(crc32(crcInput)),
-  ];
+  return [...u32(data.length), ...typeBytes, ...data, ...u32(crc32(crcInput))];
 }
 
 function adler32(bytes: Uint8Array): number {
@@ -60,7 +60,7 @@ function zlibStore(bytes: Uint8Array): Uint8Array {
     const length = Math.min(65535, bytes.length - offset);
     const isLast = offset + length >= bytes.length;
     blocks.push(isLast ? 0x01 : 0x00, length & 0xff, (length >>> 8) & 0xff);
-    const nlen = (~length) & 0xffff;
+    const nlen = ~length & 0xffff;
     blocks.push(nlen & 0xff, (nlen >>> 8) & 0xff);
     for (let i = 0; i < length; i += 1) {
       blocks.push(bytes[offset + i]);
@@ -76,14 +76,24 @@ function mix(a: number, b: number, t: number): number {
   return Math.round(a + (b - a) * t);
 }
 
-function setPixel(data: Uint8Array, index: number, r: number, g: number, b: number, a = 255) {
+function setPixel(
+  data: Uint8Array,
+  index: number,
+  r: number,
+  g: number,
+  b: number,
+  a = 255,
+) {
   data[index] = r;
   data[index + 1] = g;
   data[index + 2] = b;
   data[index + 3] = a;
 }
 
-export function createTikTokSharePreviewPng(width = 600, height = 315): Uint8Array {
+export function createTikTokSharePreviewPng(
+  width = 600,
+  height = 315,
+): Uint8Array {
   const stride = width * 4 + 1;
   const raw = new Uint8Array(stride * height);
   const cx = width / 2;
@@ -96,15 +106,28 @@ export function createTikTokSharePreviewPng(width = 600, height = 315): Uint8Arr
       const t = (x / width) * 0.7 + (y / height) * 0.3;
       const dist = Math.hypot((x - cx) / width, (y - cy) / height);
       const glow = Math.max(0, 1 - dist * 2.4);
-      const pink = Math.max(0, 1 - Math.hypot((x - width * 0.72) / width, (y - height * 0.22) / height) * 4);
-      const cyan = Math.max(0, 1 - Math.hypot((x - width * 0.26) / width, (y - height * 0.78) / height) * 4);
+      const pink = Math.max(
+        0,
+        1 -
+          Math.hypot((x - width * 0.72) / width, (y - height * 0.22) / height) *
+            4,
+      );
+      const cyan = Math.max(
+        0,
+        1 -
+          Math.hypot((x - width * 0.26) / width, (y - height * 0.78) / height) *
+            4,
+      );
       const i = row + 1 + x * 4;
       setPixel(
         raw,
         i,
         mix(12, 24, t) + Math.round(pink * 210) + Math.round(glow * 18),
         mix(12, 18, t) + Math.round(cyan * 210) + Math.round(glow * 14),
-        mix(18, 32, t) + Math.round(pink * 70) + Math.round(cyan * 95) + Math.round(glow * 22)
+        mix(18, 32, t) +
+          Math.round(pink * 70) +
+          Math.round(cyan * 95) +
+          Math.round(glow * 22),
       );
     }
   }
@@ -129,9 +152,12 @@ export function createTikTokSharePreviewPng(width = 600, height = 315): Uint8Arr
       }
 
       const [a, b, c] = triangle;
-      const area = (b[1] - c[1]) * (a[0] - c[0]) + (c[0] - b[0]) * (a[1] - c[1]);
-      const s = ((b[1] - c[1]) * (x - c[0]) + (c[0] - b[0]) * (y - c[1])) / area;
-      const t = ((c[1] - a[1]) * (x - c[0]) + (a[0] - c[0]) * (y - c[1])) / area;
+      const area =
+        (b[1] - c[1]) * (a[0] - c[0]) + (c[0] - b[0]) * (a[1] - c[1]);
+      const s =
+        ((b[1] - c[1]) * (x - c[0]) + (c[0] - b[0]) * (y - c[1])) / area;
+      const t =
+        ((c[1] - a[1]) * (x - c[0]) + (a[0] - c[0]) * (y - c[1])) / area;
       const u = 1 - s - t;
       if (s >= 0 && t >= 0 && u >= 0) {
         setPixel(raw, i, 16, 17, 24);
@@ -139,15 +165,7 @@ export function createTikTokSharePreviewPng(width = 600, height = 315): Uint8Arr
     }
   }
 
-  const ihdr = new Uint8Array([
-    ...u32(width),
-    ...u32(height),
-    8,
-    6,
-    0,
-    0,
-    0,
-  ]);
+  const ihdr = new Uint8Array([...u32(width), ...u32(height), 8, 6, 0, 0, 0]);
   const png = [
     ...PNG_SIGNATURE,
     ...chunk("IHDR", ihdr),

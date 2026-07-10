@@ -13,7 +13,9 @@ export function MessageInputPlaceholder({
   replyDisplayName,
   className,
 }: MessageInputPlaceholderProps) {
-  const text = replyDisplayName ? `Reply to ${replyDisplayName}…` : `Message #${channelName}`;
+  const text = replyDisplayName
+    ? `Reply to ${replyDisplayName}…`
+    : `Message #${channelName}`;
 
   return (
     <InlineEmojiText

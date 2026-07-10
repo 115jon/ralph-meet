@@ -1,10 +1,9 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute } from "@tanstack/react-router";
 
 import { apiSuccess, getDB, requireAuth } from "@/lib/api-helpers";
 import { ServiceError } from "@/lib/service-error";
 import { getPresence, updatePresence } from "@/services/presence.service";
 import { executeBroadcast } from "@/services/service-helpers";
-
 
 // GET /api/presence — fetch current user's presence
 const GET = async ({ request, params }: any) => {
@@ -16,7 +15,7 @@ const GET = async ({ request, params }: any) => {
   const result = await getPresence(db, userId);
 
   return apiSuccess(result);
-}
+};
 
 // POST /api/presence — update user's presence status
 const POST = async ({ request, params }: any) => {
@@ -39,21 +38,26 @@ const POST = async ({ request, params }: any) => {
 
     await executeBroadcast(result.broadcast);
 
-    return apiSuccess({ status: result.status, custom_status: result.custom_status });
+    return apiSuccess({
+      status: result.status,
+      custom_status: result.custom_status,
+    });
   } catch (e) {
     if (e instanceof ServiceError) {
-      return Response.json({ error: e.message, code: e.code }, { status: e.status });
+      return Response.json(
+        { error: e.message, code: e.code },
+        { status: e.status },
+      );
     }
     throw e;
   }
-}
+};
 
-
-export const Route = createFileRoute('/api/presence')({
+export const Route = createFileRoute("/api/presence")({
   server: {
     handlers: {
       GET,
       POST,
-    }
-  }
+    },
+  },
 });

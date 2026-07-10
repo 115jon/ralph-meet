@@ -3,7 +3,10 @@ import rnnoiseWasmUrl from "@sapphi-red/web-noise-suppressor/rnnoise.wasm?url";
 import rnnoiseWorkletUrl from "@sapphi-red/web-noise-suppressor/rnnoiseWorklet.js?url";
 
 export type NoiseReductionProviderId = "rnnoise" | "krisp-browser";
-export type LocalAudioProcessingMode = "passthrough" | "true-stereo" | "rnnoise";
+export type LocalAudioProcessingMode =
+  | "passthrough"
+  | "true-stereo"
+  | "rnnoise";
 
 export interface VoiceAudioProcessingSettings {
   noiseSuppression: boolean;
@@ -27,9 +30,13 @@ export interface LocalAudioProcessorHandle {
   destroy: () => void;
 }
 
-export const DEFAULT_NOISE_REDUCTION_PROVIDER: NoiseReductionProviderId = "rnnoise";
+export const DEFAULT_NOISE_REDUCTION_PROVIDER: NoiseReductionProviderId =
+  "rnnoise";
 
-export const NOISE_REDUCTION_PROVIDER_LABELS: Record<NoiseReductionProviderId, string> = {
+export const NOISE_REDUCTION_PROVIDER_LABELS: Record<
+  NoiseReductionProviderId,
+  string
+> = {
   rnnoise: "RNNoise",
   "krisp-browser": "Krisp Browser SDK",
 };
@@ -40,22 +47,27 @@ const MAX_CHANNELS = 2;
 let rnnoiseBinaryPromise: Promise<ArrayBuffer> | null = null;
 type RnnoiseModule = typeof import("@sapphi-red/web-noise-suppressor");
 
-export function isNoiseReductionProviderSupported(provider: NoiseReductionProviderId): boolean {
+export function isNoiseReductionProviderSupported(
+  provider: NoiseReductionProviderId,
+): boolean {
   if (provider === "krisp-browser") {
     return false;
   }
 
   return (
-    typeof window !== "undefined"
-    && typeof AudioContext !== "undefined"
-    && typeof AudioWorkletNode !== "undefined"
+    typeof window !== "undefined" &&
+    typeof AudioContext !== "undefined" &&
+    typeof AudioWorkletNode !== "undefined"
   );
 }
 
 export function resolveLocalAudioProcessingMode(
   settings: VoiceAudioProcessingSettings,
 ): LocalAudioProcessingMode {
-  if (settings.noiseReductionEnabled && settings.noiseReductionProvider === "rnnoise") {
+  if (
+    settings.noiseReductionEnabled &&
+    settings.noiseReductionProvider === "rnnoise"
+  ) {
     return "rnnoise";
   }
 
@@ -78,7 +90,9 @@ export function resolveCaptureAudioProcessing(
   }
 
   return {
-    noiseSuppression: settings.noiseReductionEnabled ? false : settings.noiseSuppression,
+    noiseSuppression: settings.noiseReductionEnabled
+      ? false
+      : settings.noiseSuppression,
     echoCancellation: settings.echoCancellation,
     autoGainControl: settings.autoSensitivity,
   };
@@ -107,16 +121,20 @@ function configureChannelGraph(
   destination.channelInterpretation = "discrete";
 }
 
-function createPassthroughProcessor(track: MediaStreamTrack): LocalAudioProcessorHandle {
+function createPassthroughProcessor(
+  track: MediaStreamTrack,
+): LocalAudioProcessorHandle {
   return {
     mode: "passthrough",
     processedStream: new MediaStream([track]),
     createMonitorStream: () => new MediaStream([track.clone()]),
-    destroy: () => { },
+    destroy: () => {},
   };
 }
 
-function createTrueStereoProcessor(track: MediaStreamTrack): LocalAudioProcessorHandle {
+function createTrueStereoProcessor(
+  track: MediaStreamTrack,
+): LocalAudioProcessorHandle {
   const context = new AudioContext({ sampleRate: WORKLET_SAMPLE_RATE });
   const inputTrack = track.clone();
   const sourceStream = new MediaStream([inputTrack]);
@@ -125,12 +143,12 @@ function createTrueStereoProcessor(track: MediaStreamTrack): LocalAudioProcessor
 
   configureChannelGraph(source, destination, getEffectiveChannelCount(track));
   source.connect(destination);
-  context.resume().catch(() => { });
+  context.resume().catch(() => {});
 
   const outputTrack = destination.stream.getAudioTracks()[0];
   if (!outputTrack) {
     inputTrack.stop();
-    context.close().catch(() => { });
+    context.close().catch(() => {});
     return createPassthroughProcessor(track);
   }
 
@@ -148,12 +166,14 @@ function createTrueStereoProcessor(track: MediaStreamTrack): LocalAudioProcessor
       }
       outputTrack.stop();
       inputTrack.stop();
-      context.close().catch(() => { });
+      context.close().catch(() => {});
     },
   };
 }
 
-async function loadRnnoiseBinaryOnce(loadRnnoiseFn: RnnoiseModule["loadRnnoise"]): Promise<ArrayBuffer> {
+async function loadRnnoiseBinaryOnce(
+  loadRnnoiseFn: RnnoiseModule["loadRnnoise"],
+): Promise<ArrayBuffer> {
   rnnoiseBinaryPromise ??= loadRnnoiseFn({
     url: rnnoiseWasmUrl,
     simdUrl: rnnoiseSimdWasmUrl,
@@ -162,9 +182,12 @@ async function loadRnnoiseBinaryOnce(loadRnnoiseFn: RnnoiseModule["loadRnnoise"]
   return rnnoiseBinaryPromise;
 }
 
-async function createRnnoiseProcessor(track: MediaStreamTrack): Promise<LocalAudioProcessorHandle> {
+async function createRnnoiseProcessor(
+  track: MediaStreamTrack,
+): Promise<LocalAudioProcessorHandle> {
   const context = new AudioContext({ sampleRate: WORKLET_SAMPLE_RATE });
-  const { RnnoiseWorkletNode, loadRnnoise } = await import("@sapphi-red/web-noise-suppressor");
+  const { RnnoiseWorkletNode, loadRnnoise } =
+    await import("@sapphi-red/web-noise-suppressor");
   await context.audioWorklet.addModule(rnnoiseWorkletUrl);
 
   const wasmBinary = await loadRnnoiseBinaryOnce(loadRnnoise);
@@ -183,7 +206,7 @@ async function createRnnoiseProcessor(track: MediaStreamTrack): Promise<LocalAud
 
   source.connect(rnnoise);
   rnnoise.connect(destination);
-  context.resume().catch(() => { });
+  context.resume().catch(() => {});
 
   const outputTrack = destination.stream.getAudioTracks()[0];
   if (!outputTrack) {
@@ -194,7 +217,7 @@ async function createRnnoiseProcessor(track: MediaStreamTrack): Promise<LocalAud
       // Ignore teardown races.
     }
     inputTrack.stop();
-    context.close().catch(() => { });
+    context.close().catch(() => {});
     return createPassthroughProcessor(track);
   }
 
@@ -218,7 +241,7 @@ async function createRnnoiseProcessor(track: MediaStreamTrack): Promise<LocalAud
       }
       outputTrack.stop();
       inputTrack.stop();
-      context.close().catch(() => { });
+      context.close().catch(() => {});
     },
   };
 }
@@ -233,7 +256,10 @@ export async function createLocalAudioProcessor(
   }
 
   const mode = resolveLocalAudioProcessingMode(settings);
-  if (mode === "rnnoise" && isNoiseReductionProviderSupported(settings.noiseReductionProvider)) {
+  if (
+    mode === "rnnoise" &&
+    isNoiseReductionProviderSupported(settings.noiseReductionProvider)
+  ) {
     return createRnnoiseProcessor(audioTrack);
   }
 

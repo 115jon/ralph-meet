@@ -11,7 +11,11 @@ interface DMListPanelProps {
   dmChannels: any[];
   activeChannelId: string | null;
   onSelectDm: (channelId: string) => void;
-  isUnread: (channelId: string, readStates: Record<string, string>, lastMessageAt: Record<string, string>) => boolean;
+  isUnread: (
+    channelId: string,
+    readStates: Record<string, string>,
+    lastMessageAt: Record<string, string>,
+  ) => boolean;
   state: any;
   handleDmContextMenu: (e: React.MouseEvent, dm: any) => void;
   dispatch: React.Dispatch<any>;
@@ -27,12 +31,12 @@ export function DMListPanel({
   dispatch,
 }: DMListPanelProps) {
   // Compute per-DM unread notification counts
-  const notifications = useChatStore(s => s.notifications);
+  const notifications = useChatStore((s) => s.notifications);
   const dmUnreadCounts = useMemo(() => {
     const counts: Record<string, number> = {};
     for (const n of notifications) {
       if (n.is_read) continue;
-      if (n.type === 'dm' || n.type === 'mention' || n.type === 'reply') {
+      if (n.type === "dm" || n.type === "mention" || n.type === "reply") {
         // Only count for DM channels (server_id is null for DMs)
         if (!n.server_id) {
           counts[n.channel_id] = (counts[n.channel_id] ?? 0) + 1;
@@ -55,9 +59,14 @@ export function DMListPanel({
           </div>
         )}
         {dmChannels.map((dm) => {
-          const dmIsUnread = activeChannelId !== dm.id && isUnread(dm.id, state.readStates, state.lastMessageAt);
+          const dmIsUnread =
+            activeChannelId !== dm.id &&
+            isUnread(dm.id, state.readStates, state.lastMessageAt);
           const dmNotifCount = dmUnreadCounts[dm.id] ?? 0;
-          const displayName = getDisplayName(dm.recipient, dm.name ?? "Unknown");
+          const displayName = getDisplayName(
+            dm.recipient,
+            dm.name ?? "Unknown",
+          );
           return (
             <div
               key={dm.id}
@@ -65,7 +74,7 @@ export function DMListPanel({
                 "group relative flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left transition-all",
                 activeChannelId === dm.id
                   ? "bg-rm-bg-elevated text-rm-text shadow-sm"
-                  : "text-rm-text-muted hover:bg-rm-bg-elevated/50 hover:text-rm-text-secondary"
+                  : "text-rm-text-muted hover:bg-rm-bg-elevated/50 hover:text-rm-text-secondary",
               )}
             >
               <button
@@ -85,23 +94,37 @@ export function DMListPanel({
                   className="relative z-20 flex h-8 w-8 cursor-pointer items-center justify-center overflow-visible rounded-full border-0 bg-primary p-0 text-xs font-bold text-primary-foreground ring-1 ring-white/10 outline-none hover:ring-white/30"
                   onClick={(e) => {
                     e.stopPropagation();
-                    dispatch({ type: 'SET_POPOVER', user: dm.recipient, anchor: e.currentTarget });
+                    dispatch({
+                      type: "SET_POPOVER",
+                      user: dm.recipient,
+                      anchor: e.currentTarget,
+                    });
                   }}
                   aria-label={`View ${displayName}'s profile`}
                 >
                   {dm.recipient?.avatar_url ? (
-                    <AvatarImage src={getAuthAssetUrl(dm.recipient.avatar_url)} alt="" display={dm.recipient.avatar_display} />
+                    <AvatarImage
+                      src={getAuthAssetUrl(dm.recipient.avatar_url)}
+                      alt=""
+                      display={dm.recipient.avatar_display}
+                    />
                   ) : (
                     getDisplayInitial(dm.recipient, "?")
                   )}
                 </button>
                 {/* Status dot */}
-                <div className={cn(
-                  "absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-rm-sidebar",
-                  dm.recipient?.status === "online" ? "bg-emerald-500" :
-                    dm.recipient?.status === "idle" ? "bg-amber-500" :
-                      dm.recipient?.status === "dnd" ? "bg-rose-500" : "bg-zinc-500"
-                )} />
+                <div
+                  className={cn(
+                    "absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-rm-sidebar",
+                    dm.recipient?.status === "online"
+                      ? "bg-emerald-500"
+                      : dm.recipient?.status === "idle"
+                        ? "bg-amber-500"
+                        : dm.recipient?.status === "dnd"
+                          ? "bg-rose-500"
+                          : "bg-zinc-500",
+                  )}
+                />
               </div>
               <div className="min-w-0 flex-1">
                 <UserDisplayName
@@ -109,14 +132,20 @@ export function DMListPanel({
                   fallback={dm.name ?? "Unknown"}
                   className={cn(
                     "block truncate text-[13px] font-medium leading-tight transition-colors",
-                    activeChannelId === dm.id ? "text-rm-text" : "text-rm-text-secondary",
+                    activeChannelId === dm.id
+                      ? "text-rm-text"
+                      : "text-rm-text-secondary",
                     dmIsUnread && "font-semibold text-rm-text",
                   )}
                 />
                 <span className="block truncate text-[11px] text-rm-text-muted leading-tight">
-                  {dm.recipient?.status === "online" ? "Online" :
-                    dm.recipient?.status === "idle" ? "Idle" :
-                      dm.recipient?.status === "dnd" ? "Do Not Disturb" : "Offline"}
+                  {dm.recipient?.status === "online"
+                    ? "Online"
+                    : dm.recipient?.status === "idle"
+                      ? "Idle"
+                      : dm.recipient?.status === "dnd"
+                        ? "Do Not Disturb"
+                        : "Offline"}
                 </span>
               </div>
               {/* DM unread count badge */}

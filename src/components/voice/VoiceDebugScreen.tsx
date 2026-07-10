@@ -1,16 +1,32 @@
 import { clog } from "@/lib/console-logger";
 import type { SFUClient, VoiceConnectionStats } from "@/lib/sfu-client";
 import { buildVoiceDiagnosticsBundle } from "@/lib/voice/diagnostics";
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import InlineEmojiText from "@/components/chat/InlineEmojiText";
 
 const log = clog("VoiceDebug");
 
-const AreaChart = lazy(() => import("recharts").then(m => ({ default: m.AreaChart })));
-const Area = lazy(() => import("recharts").then(m => ({ default: m.Area })));
-const ResponsiveContainer = lazy(() => import("recharts").then(m => ({ default: m.ResponsiveContainer })));
-const XAxis = lazy(() => import("recharts").then(m => ({ default: m.XAxis })));
-const YAxis = lazy(() => import("recharts").then(m => ({ default: m.YAxis })));
+const AreaChart = lazy(() =>
+  import("recharts").then((m) => ({ default: m.AreaChart })),
+);
+const Area = lazy(() => import("recharts").then((m) => ({ default: m.Area })));
+const ResponsiveContainer = lazy(() =>
+  import("recharts").then((m) => ({ default: m.ResponsiveContainer })),
+);
+const XAxis = lazy(() =>
+  import("recharts").then((m) => ({ default: m.XAxis })),
+);
+const YAxis = lazy(() =>
+  import("recharts").then((m) => ({ default: m.YAxis })),
+);
 const CHART_MARGIN = { top: 4, right: 4, bottom: 0, left: 0 };
 const AXIS_TICK_STYLE = { fontSize: 9, fill: "var(--rm-text-muted)" };
 const DEBUG_REFRESH_INTERVAL_MS = 1000;
@@ -27,8 +43,27 @@ interface DebugData {
   connectionState: string;
   participantId: string | null;
   roomSlug: string;
-  transportHistory: { time: string; availableOutgoingBitrate: number; ping: number; outboundBitrate: number; inboundBitrate: number; packetsReceived: number; packetsSent: number; bytesReceived: number; bytesSent: number }[];
-  inboundHistory: Record<string, { time: string; bitrate: number; packetsReceived: number; packetsLost: number; jitter: number }[]>;
+  transportHistory: {
+    time: string;
+    availableOutgoingBitrate: number;
+    ping: number;
+    outboundBitrate: number;
+    inboundBitrate: number;
+    packetsReceived: number;
+    packetsSent: number;
+    bytesReceived: number;
+    bytesSent: number;
+  }[];
+  inboundHistory: Record<
+    string,
+    {
+      time: string;
+      bitrate: number;
+      packetsReceived: number;
+      packetsLost: number;
+      jitter: number;
+    }[]
+  >;
   connStats: VoiceConnectionStats | null;
   pulledTracks: { track_name: string; participant_id: string; kind: string }[];
 }
@@ -42,9 +77,8 @@ const formatBytes = (b: number) => {
 
 const formatKbps = (v: number) => `${Math.max(0, v / 1000).toFixed(2)} Kbps`;
 
-const formatConnectionStateLabel = (state: string) => state
-  .replace(/-/g, " ")
-  .replace(/\b\w/g, (char) => char.toUpperCase());
+const formatConnectionStateLabel = (state: string) =>
+  state.replace(/-/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
 
 const formatRelativeSampleTime = (timestamp: number | null | undefined) => {
   if (!timestamp) return "Awaiting sample";
@@ -54,7 +88,11 @@ const formatRelativeSampleTime = (timestamp: number | null | undefined) => {
   return `${Math.round(ageMs / 60_000)}m ago`;
 };
 
-export function VoiceDebugScreen({ sfu, onClose, channelName = "Voice" }: VoiceDebugScreenProps) {
+export function VoiceDebugScreen({
+  sfu,
+  onClose,
+  channelName = "Voice",
+}: VoiceDebugScreenProps) {
   const [section, setSection] = useState<SidebarSection>("transport");
   const [data, setData] = useState<DebugData | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -71,7 +109,9 @@ export function VoiceDebugScreen({ sfu, onClose, channelName = "Voice" }: VoiceD
 
   // Close on escape
   useEffect(() => {
-    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
   }, [onClose]);
@@ -87,10 +127,16 @@ export function VoiceDebugScreen({ sfu, onClose, channelName = "Voice" }: VoiceD
         locationHref: window.location.href,
         userAgent: navigator.userAgent,
       });
-      await navigator.clipboard.writeText(JSON.stringify({
-        ...diagnostics,
-        liveDebug: data,
-      }, null, 2));
+      await navigator.clipboard.writeText(
+        JSON.stringify(
+          {
+            ...diagnostics,
+            liveDebug: data,
+          },
+          null,
+          2,
+        ),
+      );
       const btn = document.getElementById("copy-stats-btn");
       if (btn) {
         const originalText = btn.innerText;
@@ -110,7 +156,9 @@ export function VoiceDebugScreen({ sfu, onClose, channelName = "Voice" }: VoiceD
     return (
       <div className="fixed inset-0 z-[9999] bg-[#111214] flex flex-col items-center justify-center gap-4">
         <div className="w-8 h-8 border-4 border-rm-accent/30 border-t-rm-accent rounded-full animate-spin" />
-        <p className="text-rm-text-muted text-[13px] font-medium animate-pulse">Gathering RTC metrics…</p>
+        <p className="text-rm-text-muted text-[13px] font-medium animate-pulse">
+          Gathering RTC metrics…
+        </p>
       </div>
     );
   }
@@ -119,7 +167,9 @@ export function VoiceDebugScreen({ sfu, onClose, channelName = "Voice" }: VoiceD
   const stats = data.connStats;
   const sessionState = stats?.connectionState ?? data.connectionState;
   const publishState = stats?.publishConnectionState ?? "idle";
-  const subscribeState = stats?.subscribeConnectionState ?? (data.pulledTracks.length > 0 ? "connecting" : "idle");
+  const subscribeState =
+    stats?.subscribeConnectionState ??
+    (data.pulledTracks.length > 0 ? "connecting" : "idle");
   const remoteTrackCount = stats?.remoteTrackCount ?? data.pulledTracks.length;
   const lastSampleLabel = formatRelativeSampleTime(stats?.timestamp ?? null);
   const isConnected = sessionState === "connected";
@@ -130,7 +180,9 @@ export function VoiceDebugScreen({ sfu, onClose, channelName = "Voice" }: VoiceD
       <div className="flex items-center justify-between px-3 sm:px-5 py-2.5 sm:py-3 border-b border-rm-border bg-rm-bg-surface gap-2">
         <div className="flex items-center gap-2 sm:gap-3 min-w-0">
           <div className="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full bg-rm-status-online animate-pulse shrink-0" />
-          <span className="font-bold text-[13px] sm:text-[15px] text-rm-text tracking-tight truncate">RTC DEBUG: {data.roomSlug}</span>
+          <span className="font-bold text-[13px] sm:text-[15px] text-rm-text tracking-tight truncate">
+            RTC DEBUG: {data.roomSlug}
+          </span>
         </div>
         <div className="flex items-center gap-2 sm:gap-3 shrink-0">
           <button
@@ -154,43 +206,103 @@ export function VoiceDebugScreen({ sfu, onClose, channelName = "Voice" }: VoiceD
         <div className="sm:w-52 shrink-0 sm:border-r border-b sm:border-b-0 border-rm-border bg-rm-bg-surface sm:p-4 sm:space-y-4 sm:overflow-y-auto">
           {/* Mobile: horizontal strip */}
           <div className="flex sm:hidden items-center gap-2 px-3 py-2 overflow-x-auto scrollbar-none">
-            <InlineEmojiText text={channelName} className="text-[12px] font-bold text-rm-text shrink-0" />
-            <span className={`text-[10px] font-semibold shrink-0 ${isConnected ? "text-rm-status-online" : "text-rm-status-idle"}`}>
+            <InlineEmojiText
+              text={channelName}
+              className="text-[12px] font-bold text-rm-text shrink-0"
+            />
+            <span
+              className={`text-[10px] font-semibold shrink-0 ${isConnected ? "text-rm-status-online" : "text-rm-status-idle"}`}
+            >
               {isConnected ? "●" : "○"}
             </span>
             <div className="w-px h-4 bg-rm-border mx-1" />
-            <SidebarItem id="transport" label="Transport" active={section} onSelect={setSection} />
-            <SidebarItem id="outbound" label="Outbound" active={section} onSelect={setSection} />
-            {inboundTrackNames.map(name => {
-              const shortName = name.replace(/^(cam|screen)-(audio|video)-/, "").slice(0, 10);
-              const kind = name.includes("audio") ? "🔊" : name.includes("video") ? "📹" : "⬇";
-              return <SidebarItem key={name} id={name} label={`${kind} ${shortName}`} active={section} onSelect={setSection} />;
+            <SidebarItem
+              id="transport"
+              label="Transport"
+              active={section}
+              onSelect={setSection}
+            />
+            <SidebarItem
+              id="outbound"
+              label="Outbound"
+              active={section}
+              onSelect={setSection}
+            />
+            {inboundTrackNames.map((name) => {
+              const shortName = name
+                .replace(/^(cam|screen)-(audio|video)-/, "")
+                .slice(0, 10);
+              const kind = name.includes("audio")
+                ? "🔊"
+                : name.includes("video")
+                  ? "📹"
+                  : "⬇";
+              return (
+                <SidebarItem
+                  key={name}
+                  id={name}
+                  label={`${kind} ${shortName}`}
+                  active={section}
+                  onSelect={setSection}
+                />
+              );
             })}
           </div>
 
           {/* Desktop: vertical sidebar */}
           <div className="hidden sm:block space-y-4">
             <div className="space-y-1">
-              <InlineEmojiText text={channelName} className="text-[14px] font-bold text-rm-text" />
-              <p className={`text-[11px] font-semibold ${isConnected ? "text-rm-status-online" : "text-rm-status-idle"}`}>
+              <InlineEmojiText
+                text={channelName}
+                className="text-[14px] font-bold text-rm-text"
+              />
+              <p
+                className={`text-[11px] font-semibold ${isConnected ? "text-rm-status-online" : "text-rm-status-idle"}`}
+              >
                 {formatConnectionStateLabel(sessionState)}
               </p>
             </div>
 
             <div className="space-y-0.5">
-              <p className="text-[10px] font-bold text-rm-text-muted uppercase tracking-wider mb-1">RTC Debug: Default</p>
-              <SidebarItem id="transport" label="Transport" active={section} onSelect={setSection} />
-              <SidebarItem id="outbound" label="Outbound" active={section} onSelect={setSection} />
+              <p className="text-[10px] font-bold text-rm-text-muted uppercase tracking-wider mb-1">
+                RTC Debug: Default
+              </p>
+              <SidebarItem
+                id="transport"
+                label="Transport"
+                active={section}
+                onSelect={setSection}
+              />
+              <SidebarItem
+                id="outbound"
+                label="Outbound"
+                active={section}
+                onSelect={setSection}
+              />
             </div>
 
             {inboundTrackNames.length > 0 && (
               <div className="space-y-0.5">
-                <p className="text-[10px] font-bold text-rm-text-muted uppercase tracking-wider mb-1">Inbound</p>
-                {inboundTrackNames.map(name => {
-                  const shortName = name.replace(/^(cam|screen)-(audio|video)-/, "").slice(0, 12);
-                  const kind = name.includes("audio") ? "🔊" : name.includes("video") ? "📹" : "⬇";
+                <p className="text-[10px] font-bold text-rm-text-muted uppercase tracking-wider mb-1">
+                  Inbound
+                </p>
+                {inboundTrackNames.map((name) => {
+                  const shortName = name
+                    .replace(/^(cam|screen)-(audio|video)-/, "")
+                    .slice(0, 12);
+                  const kind = name.includes("audio")
+                    ? "🔊"
+                    : name.includes("video")
+                      ? "📹"
+                      : "⬇";
                   return (
-                    <SidebarItem key={name} id={name} label={`${kind} ${shortName}`} active={section} onSelect={setSection} />
+                    <SidebarItem
+                      key={name}
+                      id={name}
+                      label={`${kind} ${shortName}`}
+                      active={section}
+                      onSelect={setSection}
+                    />
                   );
                 })}
               </div>
@@ -201,10 +313,22 @@ export function VoiceDebugScreen({ sfu, onClose, channelName = "Voice" }: VoiceD
         {/* Main content */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5 sm:space-y-6">
           <div className="grid grid-cols-2 gap-3 xl:grid-cols-5">
-            <OverviewCard label="Session" value={formatConnectionStateLabel(sessionState)} />
-            <OverviewCard label="Publish" value={formatConnectionStateLabel(publishState)} />
-            <OverviewCard label="Subscribe" value={formatConnectionStateLabel(subscribeState)} />
-            <OverviewCard label="Remote Tracks" value={String(remoteTrackCount)} />
+            <OverviewCard
+              label="Session"
+              value={formatConnectionStateLabel(sessionState)}
+            />
+            <OverviewCard
+              label="Publish"
+              value={formatConnectionStateLabel(publishState)}
+            />
+            <OverviewCard
+              label="Subscribe"
+              value={formatConnectionStateLabel(subscribeState)}
+            />
+            <OverviewCard
+              label="Remote Tracks"
+              value={String(remoteTrackCount)}
+            />
             <OverviewCard label="Last Sample" value={lastSampleLabel} />
           </div>
           {section === "transport" && <TransportSection data={data} />}
@@ -220,7 +344,12 @@ export function VoiceDebugScreen({ sfu, onClose, channelName = "Voice" }: VoiceD
 
 // ── Sidebar Item ────────────────────────────────────────────────────────
 
-function SidebarItem({ id, label, active, onSelect }: {
+function SidebarItem({
+  id,
+  label,
+  active,
+  onSelect,
+}: {
   id: string;
   label: string;
   active: string;
@@ -230,10 +359,11 @@ function SidebarItem({ id, label, active, onSelect }: {
   return (
     <button
       onClick={() => onSelect(id)}
-      className={`sm:w-full text-left px-2.5 sm:px-2 py-1 rounded text-[12px] font-medium transition-colors whitespace-nowrap shrink-0 ${isActive
-        ? "bg-rm-bg-active text-rm-text"
-        : "text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text"
-        }`}
+      className={`sm:w-full text-left px-2.5 sm:px-2 py-1 rounded text-[12px] font-medium transition-colors whitespace-nowrap shrink-0 ${
+        isActive
+          ? "bg-rm-bg-active text-rm-text"
+          : "text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text"
+      }`}
     >
       {label}
     </button>
@@ -242,7 +372,13 @@ function SidebarItem({ id, label, active, onSelect }: {
 
 // ── Mini Chart Component ────────────────────────────────────────────────
 
-function MiniChart({ data, dataKey, color = "var(--rm-accent)", unit = "", height = 80 }: {
+function MiniChart({
+  data,
+  dataKey,
+  color = "var(--rm-accent)",
+  unit = "",
+  height = 80,
+}: {
   data: any[];
   dataKey: string;
   color?: string;
@@ -250,22 +386,34 @@ function MiniChart({ data, dataKey, color = "var(--rm-accent)", unit = "", heigh
   height?: number;
 }) {
   if (!data || data.length === 0) {
-    return <div className="h-20 flex items-center justify-center text-[11px] text-rm-text-muted">No data</div>;
+    return (
+      <div className="h-20 flex items-center justify-center text-[11px] text-rm-text-muted">
+        No data
+      </div>
+    );
   }
 
   // If plotting a bitrate, divide raw value by 1000 so the chart plots Kbps
   const isBitrate = dataKey.toLowerCase().includes("bitrate");
-  const processedData = data.map(d => ({
+  const processedData = data.map((d) => ({
     ...d,
-    [dataKey]: isBitrate ? Math.max(0, (d[dataKey] ?? 0) / 1000) : (d[dataKey] ?? 0)
+    [dataKey]: isBitrate
+      ? Math.max(0, (d[dataKey] ?? 0) / 1000)
+      : (d[dataKey] ?? 0),
   }));
-  const maxVal = Math.max(...processedData.map(d => d[dataKey]), 1);
+  const maxVal = Math.max(...processedData.map((d) => d[dataKey]), 1);
   const yMax = Math.ceil(maxVal * 1.2);
   const yDomain = useMemo(() => [0, yMax] as const, [yMax]);
   const formatTick = useCallback((value: number) => `${value}${unit}`, [unit]);
 
   return (
-    <Suspense fallback={<div className="h-20 w-full flex items-center justify-center text-[10px] text-rm-text-muted">Loading chart...</div>}>
+    <Suspense
+      fallback={
+        <div className="h-20 w-full flex items-center justify-center text-[10px] text-rm-text-muted">
+          Loading chart...
+        </div>
+      }
+    >
       <ResponsiveContainer width="100%" height={height}>
         <AreaChart data={processedData} margin={CHART_MARGIN}>
           <defs>
@@ -313,7 +461,9 @@ function StatRow({ label, value }: { label: string; value: string | number }) {
   return (
     <div className="flex items-center justify-between py-1.5 border-b border-rm-border">
       <span className="text-rm-text-muted text-[13px]">{label}</span>
-      <span className="text-rm-text font-semibold tabular-nums text-[13px]">{value}</span>
+      <span className="text-rm-text font-semibold tabular-nums text-[13px]">
+        {value}
+      </span>
     </div>
   );
 }
@@ -321,7 +471,9 @@ function StatRow({ label, value }: { label: string; value: string | number }) {
 function OverviewCard({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-xl border border-rm-border bg-rm-bg-surface px-3 py-3 shadow-sm">
-      <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-rm-text-muted/70">{label}</p>
+      <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-rm-text-muted/70">
+        {label}
+      </p>
       <p className="mt-1 text-[14px] font-bold text-rm-text">{value}</p>
     </div>
   );
@@ -329,7 +481,14 @@ function OverviewCard({ label, value }: { label: string; value: string }) {
 
 // ── Chart Card ──────────────────────────────────────────────────────────
 
-function ChartCard({ title, value, data, dataKey, color, unit }: {
+function ChartCard({
+  title,
+  value,
+  data,
+  dataKey,
+  color,
+  unit,
+}: {
   title: string;
   value: string;
   data: any[];
@@ -341,7 +500,9 @@ function ChartCard({ title, value, data, dataKey, color, unit }: {
     <div className="space-y-1">
       <div className="flex items-baseline justify-between">
         <span className="text-[13px] font-semibold text-rm-text">{title}</span>
-        <span className="text-[13px] font-semibold text-rm-text tabular-nums">{value}</span>
+        <span className="text-[13px] font-semibold text-rm-text tabular-nums">
+          {value}
+        </span>
       </div>
       <div className="bg-rm-bg-surface rounded-lg p-3 border border-rm-border shadow-sm">
         <MiniChart data={data} dataKey={dataKey} color={color} unit={unit} />
@@ -358,7 +519,9 @@ function TransportSection({ data }: { data: DebugData }) {
   const latest = history[history.length - 1];
   const sessionState = stats?.connectionState ?? data.connectionState;
   const publishState = stats?.publishConnectionState ?? "idle";
-  const subscribeState = stats?.subscribeConnectionState ?? (data.pulledTracks.length > 0 ? "connecting" : "idle");
+  const subscribeState =
+    stats?.subscribeConnectionState ??
+    (data.pulledTracks.length > 0 ? "connecting" : "idle");
   const remoteTrackCount = stats?.remoteTrackCount ?? data.pulledTracks.length;
 
   return (
@@ -389,8 +552,14 @@ function TransportSection({ data }: { data: DebugData }) {
 
       {/* Static stats */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <StatRow label="Local Address" value={stats?.localAddress || "(unknown)"} />
-        <StatRow label="Remote Address" value={stats?.remoteAddress || "(unknown)"} />
+        <StatRow
+          label="Local Address"
+          value={stats?.localAddress || "(unknown)"}
+        />
+        <StatRow
+          label="Remote Address"
+          value={stats?.remoteAddress || "(unknown)"}
+        />
       </div>
 
       {/* Row 2: Outbound + Inbound Bitrate Estimate */}
@@ -455,12 +624,29 @@ function TransportSection({ data }: { data: DebugData }) {
 
       {/* Additional stats */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <StatRow label="Codec" value={stats?.codec ? `${stats.codec.name} (${stats.codec.id})` : "N/A"} />
+        <StatRow
+          label="Codec"
+          value={
+            stats?.codec ? `${stats.codec.name} (${stats.codec.id})` : "N/A"
+          }
+        />
         <StatRow label="Sample Rate" value={`${stats?.sampleRate ?? 0} Hz`} />
-        <StatRow label="Packet Loss Rate" value={`${((stats?.packetLossRate ?? 0) * 100).toFixed(2)}%`} />
-        <StatRow label="Session State" value={formatConnectionStateLabel(sessionState)} />
-        <StatRow label="Publish Transport" value={formatConnectionStateLabel(publishState)} />
-        <StatRow label="Subscribe Transport" value={formatConnectionStateLabel(subscribeState)} />
+        <StatRow
+          label="Packet Loss Rate"
+          value={`${((stats?.packetLossRate ?? 0) * 100).toFixed(2)}%`}
+        />
+        <StatRow
+          label="Session State"
+          value={formatConnectionStateLabel(sessionState)}
+        />
+        <StatRow
+          label="Publish Transport"
+          value={formatConnectionStateLabel(publishState)}
+        />
+        <StatRow
+          label="Subscribe Transport"
+          value={formatConnectionStateLabel(subscribeState)}
+        />
         <StatRow label="Remote Tracks" value={remoteTrackCount} />
       </div>
     </div>
@@ -500,10 +686,21 @@ function OutboundSection({ data }: { data: DebugData }) {
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <StatRow label="Codec" value={stats?.codec ? `${stats.codec.name} (${stats.codec.id})` : "N/A"} />
-        <StatRow label="Frames Encoded" value={(stats?.framesEncoded ?? 0).toLocaleString()} />
+        <StatRow
+          label="Codec"
+          value={
+            stats?.codec ? `${stats.codec.name} (${stats.codec.id})` : "N/A"
+          }
+        />
+        <StatRow
+          label="Frames Encoded"
+          value={(stats?.framesEncoded ?? 0).toLocaleString()}
+        />
         <StatRow label="Sample Rate" value={`${stats?.sampleRate ?? 0} Hz`} />
-        <StatRow label="Audio Level" value={(stats?.audioLevel ?? 0).toFixed(4)} />
+        <StatRow
+          label="Audio Level"
+          value={(stats?.audioLevel ?? 0).toFixed(4)}
+        />
       </div>
     </div>
   );
@@ -511,10 +708,16 @@ function OutboundSection({ data }: { data: DebugData }) {
 
 // ── Inbound Section (per-track) ─────────────────────────────────────────
 
-function InboundSection({ trackName, data }: { trackName: string; data: DebugData }) {
+function InboundSection({
+  trackName,
+  data,
+}: {
+  trackName: string;
+  data: DebugData;
+}) {
   const history = data.inboundHistory[trackName] || [];
   const latest = history[history.length - 1];
-  const track = data.pulledTracks.find(t => t.track_name === trackName);
+  const track = data.pulledTracks.find((t) => t.track_name === trackName);
 
   return (
     <div className="space-y-5">
@@ -523,7 +726,10 @@ function InboundSection({ trackName, data }: { trackName: string; data: DebugDat
       </h2>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <StatRow label="Participant ID" value={track?.participant_id || "unknown"} />
+        <StatRow
+          label="Participant ID"
+          value={track?.participant_id || "unknown"}
+        />
         <StatRow label="Kind" value={track?.kind || "unknown"} />
       </div>
 
@@ -547,8 +753,14 @@ function InboundSection({ trackName, data }: { trackName: string; data: DebugDat
       </div>
 
       <div className="grid grid-cols-2 gap-4">
-        <StatRow label="Packets Lost" value={(latest?.packetsLost ?? 0).toLocaleString()} />
-        <StatRow label="Jitter" value={`${((latest?.jitter ?? 0) * 1000).toFixed(2)} ms`} />
+        <StatRow
+          label="Packets Lost"
+          value={(latest?.packetsLost ?? 0).toLocaleString()}
+        />
+        <StatRow
+          label="Jitter"
+          value={`${((latest?.jitter ?? 0) * 1000).toFixed(2)} ms`}
+        />
       </div>
     </div>
   );

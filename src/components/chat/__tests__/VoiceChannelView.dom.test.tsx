@@ -12,11 +12,13 @@ vi.mock("@/hooks/useVoiceChannel", () => ({
 
 vi.mock("@/stores/useVoiceActivityStore", () => ({
   isVoiceActivityType: () => false,
-  useVoiceActivityStore: (selector: (state: {
-    getUserActivity: () => null;
-    setUserActivity: () => void;
-    clearUserActivity: () => void;
-  }) => unknown) =>
+  useVoiceActivityStore: (
+    selector: (state: {
+      getUserActivity: () => null;
+      setUserActivity: () => void;
+      clearUserActivity: () => void;
+    }) => unknown,
+  ) =>
     selector({
       getUserActivity: () => null,
       setUserActivity: () => {},
@@ -146,7 +148,9 @@ describe("VoiceChannelView stream snapshot export", () => {
     await waitFor(() => expect(onStreamStateUpdate).toHaveBeenCalledTimes(1));
     onStreamStateUpdate.mock.calls[0]?.[0].toggleScreenShare();
     expect(firstToggleScreenShare).toHaveBeenCalledTimes(1);
-    expect(onStreamStateUpdate.mock.calls[0]?.[0].onToggleAlwaysShowStreamPreview).toBe(firstToggleAlwaysShow);
+    expect(
+      onStreamStateUpdate.mock.calls[0]?.[0].onToggleAlwaysShowStreamPreview,
+    ).toBe(firstToggleAlwaysShow);
 
     const secondToggleScreenShare = vi.fn();
     const secondToggleAlwaysShow = vi.fn();
@@ -170,6 +174,8 @@ describe("VoiceChannelView stream snapshot export", () => {
     await waitFor(() => expect(onStreamStateUpdate).toHaveBeenCalledTimes(2));
     onStreamStateUpdate.mock.calls[1]?.[0].toggleScreenShare();
     expect(secondToggleScreenShare).toHaveBeenCalledTimes(1);
-    expect(onStreamStateUpdate.mock.calls[1]?.[0].onToggleAlwaysShowStreamPreview).toBe(secondToggleAlwaysShow);
+    expect(
+      onStreamStateUpdate.mock.calls[1]?.[0].onToggleAlwaysShowStreamPreview,
+    ).toBe(secondToggleAlwaysShow);
   });
 });

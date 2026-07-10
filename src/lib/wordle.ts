@@ -13,7 +13,8 @@ export function getNewYorkDateKey(date = new Date()) {
     month: "2-digit",
     day: "2-digit",
   }).formatToParts(date);
-  const part = (type: string) => parts.find((value) => value.type === type)?.value;
+  const part = (type: string) =>
+    parts.find((value) => value.type === type)?.value;
   return `${part("year")}-${part("month")}-${part("day")}`;
 }
 
@@ -21,7 +22,10 @@ export function getNytWordleUrl(date = new Date()) {
   return `https://www.nytimes.com/svc/wordle/v2/${getNewYorkDateKey(date)}.json`;
 }
 
-export async function fetchNytWordlePuzzle(date = new Date(), fetcher: typeof fetch = fetch): Promise<WordlePuzzle> {
+export async function fetchNytWordlePuzzle(
+  date = new Date(),
+  fetcher: typeof fetch = fetch,
+): Promise<WordlePuzzle> {
   const key = getNewYorkDateKey(date);
   const response = await fetcher(getNytWordleUrl(date), {
     headers: {
@@ -35,14 +39,17 @@ export async function fetchNytWordlePuzzle(date = new Date(), fetcher: typeof fe
     throw new Error("NYT Wordle returned non-JSON response");
   }
 
-  const data = await response.json() as {
+  const data = (await response.json()) as {
     id?: number;
     print_date?: string;
     solution?: string;
     editor?: string;
   };
 
-  if (typeof data.solution !== "string" || !/^[a-zA-Z]{5}$/.test(data.solution)) {
+  if (
+    typeof data.solution !== "string" ||
+    !/^[a-zA-Z]{5}$/.test(data.solution)
+  ) {
     throw new Error("NYT Wordle payload missing valid solution");
   }
 

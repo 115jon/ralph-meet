@@ -5,8 +5,16 @@ import { AvatarImage } from "./AvatarImage";
 import { Hash } from "./Icons";
 import InlineEmojiText from "./InlineEmojiText";
 
-export const ChatWelcomeContent = memo(function ChatWelcomeContent({ isDM, channelName, channelId }: { isDM: boolean; channelName: string; channelId: string | null }) {
-  const dmChannels = useChatStore(s => s.dmChannels);
+export const ChatWelcomeContent = memo(function ChatWelcomeContent({
+  isDM,
+  channelName,
+  channelId,
+}: {
+  isDM: boolean;
+  channelName: string;
+  channelId: string | null;
+}) {
+  const dmChannels = useChatStore((s) => s.dmChannels);
 
   const dmRecipient = useMemo(() => {
     if (!isDM || !channelId) return null;
@@ -41,7 +49,12 @@ export const ChatWelcomeContent = memo(function ChatWelcomeContent({ isDM, chann
           </h2>
           <p className="max-w-md text-[14px] font-medium leading-relaxed text-rm-text-muted">
             This is the absolute beginning of your direct message history with{" "}
-            <span className="text-rm-text-secondary font-semibold">{dmRecipient?.display_name ?? dmRecipient?.username ?? channelName}</span>. Be kind, be bold, and let the conversation flow.
+            <span className="text-rm-text-secondary font-semibold">
+              {dmRecipient?.display_name ??
+                dmRecipient?.username ??
+                channelName}
+            </span>
+            . Be kind, be bold, and let the conversation flow.
           </p>
           <div className="flex gap-3 mt-6">
             <button className="rounded-lg bg-rm-bg-hover border border-rm-border px-4 py-2 text-[12px] font-bold text-rm-text transition-all hover:bg-rm-bg-active active:scale-95">
@@ -61,7 +74,9 @@ export const ChatWelcomeContent = memo(function ChatWelcomeContent({ isDM, chann
             <InlineEmojiText text={`Welcome to #${channelName}`} />
           </h3>
           <p className="max-w-lg text-sm font-medium leading-relaxed text-rm-text-muted">
-            <InlineEmojiText text={`This is the absolute beginning of the #${channelName} channel. Start a conversation, forge new paths, and let your frequencies align.`} />
+            <InlineEmojiText
+              text={`This is the absolute beginning of the #${channelName} channel. Start a conversation, forge new paths, and let your frequencies align.`}
+            />
           </p>
         </>
       )}

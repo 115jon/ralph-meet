@@ -1,11 +1,10 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute } from "@tanstack/react-router";
 
 import { apiError, apiSuccess, getDB, requireAuth } from "@/lib/api-helpers";
 import { PERMISSIONS } from "@/lib/permissions";
 import { requireChannelPermission } from "@/lib/require-permission";
 import { ServiceError } from "@/lib/service-error";
 import { listPermissionOverrides } from "@/services/channel.service";
-
 
 const GET = async ({ request, params }: any) => {
   const authResult = await requireAuth();
@@ -16,10 +15,10 @@ const GET = async ({ request, params }: any) => {
   const db = getDB();
 
   // Need to get serverId for permission check
-  const channel = await db
+  const channel = (await db
     .prepare(`SELECT server_id FROM channels WHERE id = ?`)
     .bind(channelId)
-    .first() as { server_id: string } | null;
+    .first()) as { server_id: string } | null;
 
   if (!channel || !channel.server_id) {
     return apiError("Channel not found", 404);
@@ -30,7 +29,7 @@ const GET = async ({ request, params }: any) => {
     channel.server_id,
     channelId,
     userId,
-    PERMISSIONS.MANAGE_CHANNELS
+    PERMISSIONS.MANAGE_CHANNELS,
   );
   if (permResult instanceof Response) return permResult;
 
@@ -43,13 +42,12 @@ const GET = async ({ request, params }: any) => {
     }
     throw e;
   }
-}
+};
 
-
-export const Route = createFileRoute('/api/channels/$id/permissions')({
+export const Route = createFileRoute("/api/channels/$id/permissions")({
   server: {
     handlers: {
       GET,
-    }
-  }
+    },
+  },
 });

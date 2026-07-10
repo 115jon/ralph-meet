@@ -46,18 +46,26 @@ export function useListenTogetherPlaybackState(
   roomSlug?: string | null,
 ): ListenTogetherPlaybackState {
   const snapshot = useListenTogetherStore((state) =>
-    roomSlug ? state.rooms[roomSlug]?.snapshot ?? null : null,
+    roomSlug ? (state.rooms[roomSlug]?.snapshot ?? null) : null,
   );
   const localVolume = useListenTogetherStore((state) =>
-    roomSlug ? state.rooms[roomSlug]?.localVolume ?? 1 : 1,
+    roomSlug ? (state.rooms[roomSlug]?.localVolume ?? 1) : 1,
   );
   const error = useListenTogetherStore((state) =>
-    roomSlug ? state.rooms[roomSlug]?.error ?? null : null,
+    roomSlug ? (state.rooms[roomSlug]?.error ?? null) : null,
   );
-  const setLocalVolume = useListenTogetherStore((state) => state.setLocalVolume);
-  const loudnessEnabled = useListenTogetherAudioSettingsStore((state) => state.enabled);
-  const loudnessPreset = useListenTogetherAudioSettingsStore((state) => state.preset);
-  const updateLoudnessSettings = useListenTogetherAudioSettingsStore((state) => state.updateSettings);
+  const setLocalVolume = useListenTogetherStore(
+    (state) => state.setLocalVolume,
+  );
+  const loudnessEnabled = useListenTogetherAudioSettingsStore(
+    (state) => state.enabled,
+  );
+  const loudnessPreset = useListenTogetherAudioSettingsStore(
+    (state) => state.preset,
+  );
+  const updateLoudnessSettings = useListenTogetherAudioSettingsStore(
+    (state) => state.updateSettings,
+  );
   const [playbackNowMs, setPlaybackNowMs] = useState(0);
 
   useEffect(() => {
@@ -73,15 +81,20 @@ export function useListenTogetherPlaybackState(
   }, [snapshot?.currentEntry, snapshot?.paused]);
 
   const currentEntry = snapshot?.currentEntry ?? null;
-  const durationMs = snapshot?.durationMs ?? currentEntry?.track.durationMs ?? 0;
+  const durationMs =
+    snapshot?.durationMs ?? currentEntry?.track.durationMs ?? 0;
   const effectiveSeekValue = snapshot
     ? clampListenTogetherPosition(
-      Math.max(
-        snapshot.positionMs,
-        getListenTogetherPositionMs(snapshot, durationMs, playbackNowMs || snapshot.anchorUpdatedAt || 0),
-      ),
-      durationMs,
-    )
+        Math.max(
+          snapshot.positionMs,
+          getListenTogetherPositionMs(
+            snapshot,
+            durationMs,
+            playbackNowMs || snapshot.anchorUpdatedAt || 0,
+          ),
+        ),
+        durationMs,
+      )
     : 0;
 
   return {

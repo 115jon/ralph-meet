@@ -46,7 +46,10 @@ export function CustomSelect({
   }, []);
 
   return (
-    <div className={cn("relative", isOpen && "z-[450]", className)} ref={containerRef}>
+    <div
+      className={cn("relative", isOpen && "z-[450]", className)}
+      ref={containerRef}
+    >
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
@@ -75,7 +78,10 @@ export function CustomSelect({
             menuClassName,
           )}
         >
-          <div role="listbox" className="max-h-60 overflow-y-auto custom-scrollbar">
+          <div
+            role="listbox"
+            className="max-h-60 overflow-y-auto custom-scrollbar"
+          >
             {options.map((opt) => (
               <button
                 key={opt.value}

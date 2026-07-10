@@ -4,11 +4,19 @@ import {
   createCameraBackgroundEffect,
   getCameraBackgroundEffectKey,
 } from "./camera-background-effects";
-import { MockMediaStream, MockMediaStreamTrack } from "./__tests__/webrtc-mocks";
+import {
+  MockMediaStream,
+  MockMediaStreamTrack,
+} from "./__tests__/webrtc-mocks";
 
 function mockTrack(width = 1280, height = 720) {
   const track = new MockMediaStreamTrack("video") as any;
-  track.getSettings = vi.fn(() => ({ width, height, frameRate: 30, deviceId: "camera-1" }));
+  track.getSettings = vi.fn(() => ({
+    width,
+    height,
+    frameRate: 30,
+    deviceId: "camera-1",
+  }));
   return track as MediaStreamTrack;
 }
 
@@ -79,7 +87,9 @@ function mockCanvasEnvironment(outputTrack: MediaStreamTrack) {
 }
 
 function getMaskContext(contexts: any[]) {
-  const context = contexts.find((candidate) => candidate.putImageData.mock.calls.length > 0);
+  const context = contexts.find(
+    (candidate) => candidate.putImageData.mock.calls.length > 0,
+  );
   if (!context) throw new Error("Expected mask canvas writes");
   return context;
 }
@@ -93,16 +103,29 @@ describe("camera background effects", () => {
     const setting: CameraBackgroundSetting = { type: "image", id: "bg-1" };
 
     expect(getCameraBackgroundEffectKey({ type: "none" }, [])).toBe("none");
-    expect(getCameraBackgroundEffectKey({ type: "blur", strength: "light" }, [])).toBe("blur:light");
-    expect(getCameraBackgroundEffectKey(setting, [
-      { id: "bg-1", name: "one.webp", url: "/api/camera-backgrounds/bg-1/one.webp", contentType: "image/webp", sizeBytes: 123, createdAt: 1 },
-    ])).toBe("image:bg-1:1");
+    expect(
+      getCameraBackgroundEffectKey({ type: "blur", strength: "light" }, []),
+    ).toBe("blur:light");
+    expect(
+      getCameraBackgroundEffectKey(setting, [
+        {
+          id: "bg-1",
+          name: "one.webp",
+          url: "/api/camera-backgrounds/bg-1/one.webp",
+          contentType: "image/webp",
+          sizeBytes: 123,
+          createdAt: 1,
+        },
+      ]),
+    ).toBe("image:bg-1:1");
   });
 
   it("loads uploaded image backgrounds from URL sources with CORS enabled", async () => {
     vi.stubGlobal("MediaStream", MockMediaStream);
     const outputTrack = new MockMediaStreamTrack("video") as any;
-    const { body, contexts, document, image } = mockCanvasEnvironment(outputTrack as MediaStreamTrack);
+    const { body, contexts, document, image } = mockCanvasEnvironment(
+      outputTrack as MediaStreamTrack,
+    );
     const createSegmenter = vi.fn().mockResolvedValue({
       segmentForVideo: vi.fn(() => ({
         categoryMask: {
@@ -116,14 +139,16 @@ describe("camera background effects", () => {
     const effect = await createCameraBackgroundEffect(
       mockTrack(),
       { type: "image", id: "bg-1" },
-      [{
-        id: "bg-1",
-        name: "animated.webp",
-        url: "/api/camera-backgrounds/bg-1/animated.webp",
-        contentType: "image/webp",
-        sizeBytes: 123,
-        createdAt: 1,
-      }],
+      [
+        {
+          id: "bg-1",
+          name: "animated.webp",
+          url: "/api/camera-backgrounds/bg-1/animated.webp",
+          contentType: "image/webp",
+          sizeBytes: 123,
+          createdAt: 1,
+        },
+      ],
       {
         createSegmenter,
         document,
@@ -136,7 +161,11 @@ describe("camera background effects", () => {
     expect(image.crossOrigin).toBeNull();
     expect(image.decode).toHaveBeenCalledTimes(1);
     expect(body.appendChild).toHaveBeenCalledWith(image);
-    expect(contexts.some((ctx) => ctx.drawImage.mock.calls.some((call: any[]) => call[0] === image))).toBe(true);
+    expect(
+      contexts.some((ctx) =>
+        ctx.drawImage.mock.calls.some((call: any[]) => call[0] === image),
+      ),
+    ).toBe(true);
 
     effect?.stop();
 
@@ -146,9 +175,21 @@ describe("camera background effects", () => {
   it("draws animated image backgrounds from decoded frames", async () => {
     vi.stubGlobal("MediaStream", MockMediaStream);
     const outputTrack = new MockMediaStreamTrack("video") as any;
-    const { contexts, document } = mockCanvasEnvironment(outputTrack as MediaStreamTrack);
-    const frame0 = { displayWidth: 640, displayHeight: 360, duration: 40_000, close: vi.fn() } as any;
-    const frame1 = { displayWidth: 640, displayHeight: 360, duration: 40_000, close: vi.fn() } as any;
+    const { contexts, document } = mockCanvasEnvironment(
+      outputTrack as MediaStreamTrack,
+    );
+    const frame0 = {
+      displayWidth: 640,
+      displayHeight: 360,
+      duration: 40_000,
+      close: vi.fn(),
+    } as any;
+    const frame1 = {
+      displayWidth: 640,
+      displayHeight: 360,
+      duration: 40_000,
+      close: vi.fn(),
+    } as any;
     const buffer = new ArrayBuffer(8);
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
@@ -156,9 +197,11 @@ describe("camera background effects", () => {
       headers: { get: vi.fn(() => "image/webp") },
       arrayBuffer: vi.fn().mockResolvedValue(buffer),
     });
-    const decodeMock = vi.fn(({ frameIndex }: { frameIndex: number }) => Promise.resolve({
-      image: frameIndex === 0 ? frame0 : frame1,
-    }));
+    const decodeMock = vi.fn(({ frameIndex }: { frameIndex: number }) =>
+      Promise.resolve({
+        image: frameIndex === 0 ? frame0 : frame1,
+      }),
+    );
     const decoderClose = vi.fn();
     const decoderInits: any[] = [];
 
@@ -188,14 +231,16 @@ describe("camera background effects", () => {
     const effect = await createCameraBackgroundEffect(
       mockTrack(),
       { type: "image", id: "bg-1" },
-      [{
-        id: "bg-1",
-        name: "animated.webp",
-        url: "/api/camera-backgrounds/bg-1/animated.webp",
-        contentType: "image/webp",
-        sizeBytes: 123,
-        createdAt: 1,
-      }],
+      [
+        {
+          id: "bg-1",
+          name: "animated.webp",
+          url: "/api/camera-backgrounds/bg-1/animated.webp",
+          contentType: "image/webp",
+          sizeBytes: 123,
+          createdAt: 1,
+        },
+      ],
       {
         createSegmenter,
         document,
@@ -208,9 +253,16 @@ describe("camera background effects", () => {
     );
 
     expect(effect).not.toBeNull();
-    expect(fetchMock).toHaveBeenCalledWith("/api/camera-backgrounds/bg-1/animated.webp", { credentials: "omit" });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/camera-backgrounds/bg-1/animated.webp",
+      { credentials: "omit" },
+    );
     expect(decoderInits[0]).toEqual({ data: buffer, type: "image/webp" });
-    expect(contexts.some((ctx) => ctx.drawImage.mock.calls.some((call: any[]) => call[0] === frame0))).toBe(true);
+    expect(
+      contexts.some((ctx) =>
+        ctx.drawImage.mock.calls.some((call: any[]) => call[0] === frame0),
+      ),
+    ).toBe(true);
 
     const runRaf = (timestamp: number) => {
       const callback = rafCallback;
@@ -223,7 +275,11 @@ describe("camera background effects", () => {
     await Promise.resolve();
     runRaf(80);
 
-    expect(contexts.some((ctx) => ctx.drawImage.mock.calls.some((call: any[]) => call[0] === frame1))).toBe(true);
+    expect(
+      contexts.some((ctx) =>
+        ctx.drawImage.mock.calls.some((call: any[]) => call[0] === frame1),
+      ),
+    ).toBe(true);
 
     effect?.stop();
 
@@ -235,7 +291,11 @@ describe("camera background effects", () => {
   it("does not allocate a processor when no background is selected", async () => {
     const createSegmenter = vi.fn();
 
-    await expect(createCameraBackgroundEffect(mockTrack(), { type: "none" }, [], { createSegmenter })).resolves.toBeNull();
+    await expect(
+      createCameraBackgroundEffect(mockTrack(), { type: "none" }, [], {
+        createSegmenter,
+      }),
+    ).resolves.toBeNull();
 
     expect(createSegmenter).not.toHaveBeenCalled();
   });
@@ -243,8 +303,14 @@ describe("camera background effects", () => {
   it("creates a processed canvas stream for blur and releases it on stop", async () => {
     vi.stubGlobal("MediaStream", MockMediaStream);
     const outputTrack = new MockMediaStreamTrack("video") as any;
-    outputTrack.getSettings = vi.fn(() => ({ width: 1280, height: 720, frameRate: 24 }));
-    const { contexts, document, video } = mockCanvasEnvironment(outputTrack as MediaStreamTrack);
+    outputTrack.getSettings = vi.fn(() => ({
+      width: 1280,
+      height: 720,
+      frameRate: 24,
+    }));
+    const { contexts, document, video } = mockCanvasEnvironment(
+      outputTrack as MediaStreamTrack,
+    );
     const closeResult = vi.fn();
     const closeMask = vi.fn();
     const segmentForVideo = vi.fn(() => ({
@@ -275,7 +341,9 @@ describe("camera background effects", () => {
     expect(effect?.stream.getVideoTracks()[0]).toBe(outputTrack);
     expect(createSegmenter).toHaveBeenCalledTimes(1);
     expect(segmentForVideo).toHaveBeenCalledWith(video, 123);
-    expect(contexts.some((ctx) => ctx.drawImage.mock.calls.length > 0)).toBe(true);
+    expect(contexts.some((ctx) => ctx.drawImage.mock.calls.length > 0)).toBe(
+      true,
+    );
 
     effect?.stop();
 
@@ -287,18 +355,18 @@ describe("camera background effects", () => {
   it("treats selfie segmenter category 0 as the foreground subject", async () => {
     vi.stubGlobal("MediaStream", MockMediaStream);
     const outputTrack = new MockMediaStreamTrack("video") as any;
-    const { contexts, document } = mockCanvasEnvironment(outputTrack as MediaStreamTrack);
+    const { contexts, document } = mockCanvasEnvironment(
+      outputTrack as MediaStreamTrack,
+    );
     const segmentForVideo = vi.fn(() => ({
       categoryMask: {
         width: 5,
         height: 5,
-        getAsUint8Array: () => new Uint8Array([
-          1, 1, 1, 1, 1,
-          1, 0, 0, 0, 1,
-          1, 0, 0, 0, 1,
-          1, 0, 0, 0, 1,
-          1, 1, 1, 1, 1,
-        ]),
+        getAsUint8Array: () =>
+          new Uint8Array([
+            1, 1, 1, 1, 1, 1, 0, 0, 0, 1, 1, 0, 0, 0, 1, 1, 0, 0, 0, 1, 1, 1, 1,
+            1, 1,
+          ]),
       },
     }));
     const createSegmenter = vi.fn().mockResolvedValue({ segmentForVideo });
@@ -328,7 +396,9 @@ describe("camera background effects", () => {
   it("prefers confidence masks when available so the subject edge stays soft", async () => {
     vi.stubGlobal("MediaStream", MockMediaStream);
     const outputTrack = new MockMediaStreamTrack("video") as any;
-    const { contexts, document } = mockCanvasEnvironment(outputTrack as MediaStreamTrack);
+    const { contexts, document } = mockCanvasEnvironment(
+      outputTrack as MediaStreamTrack,
+    );
     const segmentForVideo = vi.fn(() => ({
       categoryMask: {
         width: 2,

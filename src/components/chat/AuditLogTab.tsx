@@ -1,11 +1,10 @@
-
 import { getDisplayInitial, getDisplayName } from "@/lib/display-name";
 import { getAuthAssetUrl } from "@/lib/platform";
-import { apiGet } from '@/lib/api-client';
-import type { ServerAuditLog } from '@/lib/types';
-import { useEffect, useReducer } from 'react';
-import { AvatarImage } from './AvatarImage';
-import { Loader2 } from './Icons';
+import { apiGet } from "@/lib/api-client";
+import type { ServerAuditLog } from "@/lib/types";
+import { useEffect, useReducer } from "react";
+import { AvatarImage } from "./AvatarImage";
+import { Loader2 } from "./Icons";
 
 interface AuditLogTabProps {
   serverId: string;
@@ -18,17 +17,17 @@ interface State {
 }
 
 type Action =
-  | { type: 'FETCH_START' }
-  | { type: 'FETCH_SUCCESS'; payload: ServerAuditLog[] }
-  | { type: 'FETCH_ERROR'; payload: string };
+  | { type: "FETCH_START" }
+  | { type: "FETCH_SUCCESS"; payload: ServerAuditLog[] }
+  | { type: "FETCH_ERROR"; payload: string };
 
 function reducer(state: State, action: Action): State {
   switch (action.type) {
-    case 'FETCH_START':
+    case "FETCH_START":
       return { ...state, loading: true, error: null };
-    case 'FETCH_SUCCESS':
+    case "FETCH_SUCCESS":
       return { ...state, loading: false, logs: action.payload };
-    case 'FETCH_ERROR':
+    case "FETCH_ERROR":
       return { ...state, loading: false, error: action.payload };
     default:
       return state;
@@ -46,26 +45,36 @@ export default function AuditLogTab({ serverId }: AuditLogTabProps) {
     let mounted = true;
 
     async function fetchLogs() {
-      dispatch({ type: 'FETCH_START' });
+      dispatch({ type: "FETCH_START" });
       try {
-        const data = await apiGet<ServerAuditLog[]>(`/api/servers/${serverId}/audit-logs`);
+        const data = await apiGet<ServerAuditLog[]>(
+          `/api/servers/${serverId}/audit-logs`,
+        );
 
         if (mounted) {
-          dispatch({ type: 'FETCH_SUCCESS', payload: data });
+          dispatch({ type: "FETCH_SUCCESS", payload: data });
         }
       } catch (err: any) {
         if (mounted) {
-          dispatch({ type: 'FETCH_ERROR', payload: err.message || 'An error occurred' });
+          dispatch({
+            type: "FETCH_ERROR",
+            payload: err.message || "An error occurred",
+          });
         }
       }
     }
 
     fetchLogs();
-    return () => { mounted = false; };
+    return () => {
+      mounted = false;
+    };
   }, [serverId]);
 
   const formatActionType = (type: string) => {
-    return type.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()).join(' ');
+    return type
+      .split("_")
+      .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+      .join(" ");
   };
 
   const formatChanges = (changes: any) => {
@@ -73,17 +82,19 @@ export default function AuditLogTab({ serverId }: AuditLogTabProps) {
 
     return Object.entries(changes).map(([key, value]) => {
       let displayValue = String(value);
-      if (typeof value === 'object') {
+      if (typeof value === "object") {
         displayValue = JSON.stringify(value);
       }
-      if (value === null || value === undefined || value === '') {
-        displayValue = 'None / Removed';
+      if (value === null || value === undefined || value === "") {
+        displayValue = "None / Removed";
       }
 
       return (
         <div key={key} className="text-xs text-rm-text-muted mt-1 flex gap-2">
           <span className="font-semibold text-rm-text-secondary">{key}:</span>
-          <span className="truncate max-w-[200px]" title={displayValue}>{displayValue}</span>
+          <span className="truncate max-w-[200px]" title={displayValue}>
+            {displayValue}
+          </span>
         </div>
       );
     });
@@ -120,7 +131,10 @@ export default function AuditLogTab({ serverId }: AuditLogTabProps) {
 
   return (
     <div className="animate-in fade-in slide-in-from-right-4 duration-300 w-full pb-8">
-      <h2 id="server-settings-title" className="mb-6 text-xl font-bold text-rm-text">
+      <h2
+        id="server-settings-title"
+        className="mb-6 text-xl font-bold text-rm-text"
+      >
         Audit Log
       </h2>
 
@@ -129,60 +143,75 @@ export default function AuditLogTab({ serverId }: AuditLogTabProps) {
       </p>
 
       <div className="space-y-4 max-w-2xl relative before:absolute before:inset-0 before:ml-5 before:-translate-x-px before:h-full before:w-0.5 before:bg-gradient-to-b before:from-transparent before:via-rm-border before:to-transparent">
-        {state.logs.map((log) => (
+        {state.logs.map((log) =>
           (() => {
             const actorDisplayName = getDisplayName(log.actor);
             return (
-          <div key={log.id} className="relative flex items-start gap-4 group">
-            {/* Icon/Timeline Dot */}
-            <div className="flex items-center justify-center w-10 h-10 rounded-full border-4 border-rm-bg-primary bg-rm-bg-surface text-rm-text-muted shadow shrink-0 overflow-hidden relative z-10">
-              {log.actor?.avatar_url ? (
-                <AvatarImage src={getAuthAssetUrl(log.actor.avatar_url)} alt="Avatar" display={log.actor.avatar_display} />
-              ) : (
-                <span className="text-xs font-bold">{getDisplayInitial(log.actor)}</span>
-              )}
-            </div>
-
-            {/* Card Content */}
-            <div className="flex-1 min-w-0 rounded-xl border border-rm-border bg-rm-bg-surface p-4 shadow shadow-black/5 transition-all hover:border-primary/30">
-              <div className="flex justify-between items-start mb-2">
-                <div className="flex gap-2 items-center">
-                  <span className="font-semibold text-sm text-rm-text">{actorDisplayName}</span>
-                  <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-primary/10 text-primary uppercase tracking-wider">
-                    {formatActionType(log.action_type)}
-                  </span>
+              <div
+                key={log.id}
+                className="relative flex items-start gap-4 group"
+              >
+                {/* Icon/Timeline Dot */}
+                <div className="flex items-center justify-center w-10 h-10 rounded-full border-4 border-rm-bg-primary bg-rm-bg-surface text-rm-text-muted shadow shrink-0 overflow-hidden relative z-10">
+                  {log.actor?.avatar_url ? (
+                    <AvatarImage
+                      src={getAuthAssetUrl(log.actor.avatar_url)}
+                      alt="Avatar"
+                      display={log.actor.avatar_display}
+                    />
+                  ) : (
+                    <span className="text-xs font-bold">
+                      {getDisplayInitial(log.actor)}
+                    </span>
+                  )}
                 </div>
-              </div>
 
-              <div className="text-xs text-rm-text-muted mb-3 flex items-center gap-2">
-                <span>{new Date(log.created_at).toLocaleString()}</span>
-                {log.target_id && (
-                  <>
-                    <span>•</span>
-                    <span className="font-mono bg-rm-bg-hover px-1.5 py-0.5 rounded text-[10px]">Target: {log.target_id}</span>
-                  </>
-                )}
-              </div>
-
-              {log.reason && (
-                <div className="mt-2 text-sm text-rm-text border-l-2 border-rm-border pl-3 italic">
-                  "{log.reason}"
-                </div>
-              )}
-
-              {log.changes && Object.keys(log.changes).length > 0 && (
-                <div className="mt-3 bg-rm-bg-hover/50 rounded-lg p-3 border border-rm-border/50">
-                  <span className="text-[10px] font-bold uppercase tracking-widest text-rm-text-muted mb-1 block">Changes</span>
-                  <div className="space-y-1">
-                    {formatChanges(log.changes)}
+                {/* Card Content */}
+                <div className="flex-1 min-w-0 rounded-xl border border-rm-border bg-rm-bg-surface p-4 shadow shadow-black/5 transition-all hover:border-primary/30">
+                  <div className="flex justify-between items-start mb-2">
+                    <div className="flex gap-2 items-center">
+                      <span className="font-semibold text-sm text-rm-text">
+                        {actorDisplayName}
+                      </span>
+                      <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-primary/10 text-primary uppercase tracking-wider">
+                        {formatActionType(log.action_type)}
+                      </span>
+                    </div>
                   </div>
+
+                  <div className="text-xs text-rm-text-muted mb-3 flex items-center gap-2">
+                    <span>{new Date(log.created_at).toLocaleString()}</span>
+                    {log.target_id && (
+                      <>
+                        <span>•</span>
+                        <span className="font-mono bg-rm-bg-hover px-1.5 py-0.5 rounded text-[10px]">
+                          Target: {log.target_id}
+                        </span>
+                      </>
+                    )}
+                  </div>
+
+                  {log.reason && (
+                    <div className="mt-2 text-sm text-rm-text border-l-2 border-rm-border pl-3 italic">
+                      "{log.reason}"
+                    </div>
+                  )}
+
+                  {log.changes && Object.keys(log.changes).length > 0 && (
+                    <div className="mt-3 bg-rm-bg-hover/50 rounded-lg p-3 border border-rm-border/50">
+                      <span className="text-[10px] font-bold uppercase tracking-widest text-rm-text-muted mb-1 block">
+                        Changes
+                      </span>
+                      <div className="space-y-1">
+                        {formatChanges(log.changes)}
+                      </div>
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
-          </div>
+              </div>
             );
-          })()
-        ))}
+          })(),
+        )}
       </div>
     </div>
   );

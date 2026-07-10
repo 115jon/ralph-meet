@@ -9,7 +9,9 @@ import {
 } from "@/lib/desktop-notifications";
 import { describe, expect, it } from "vitest";
 
-function makeNotification(overrides: Partial<AppNotification> = {}): AppNotification {
+function makeNotification(
+  overrides: Partial<AppNotification> = {},
+): AppNotification {
   return {
     id: "notif-1",
     type: "mention",
@@ -27,7 +29,10 @@ function makeNotification(overrides: Partial<AppNotification> = {}): AppNotifica
 describe("getDesktopNotificationBadgeState", () => {
   it("uses unread notifications as the numeric badge count", () => {
     const state = getDesktopNotificationBadgeState({
-      notifications: [makeNotification(), makeNotification({ id: "notif-2", type: "dm" })],
+      notifications: [
+        makeNotification(),
+        makeNotification({ id: "notif-2", type: "dm" }),
+      ],
     });
 
     expect(state.unreadCount).toBe(2);
@@ -170,7 +175,12 @@ describe("getUnreadChannelState", () => {
 describe("toDesktopNotificationSyncPayload", () => {
   it("maps numeric badge state to a native sync payload", () => {
     const payload = toDesktopNotificationSyncPayload(
-      getDesktopNotificationBadgeState({ notifications: [makeNotification(), makeNotification({ id: "notif-2" })] }),
+      getDesktopNotificationBadgeState({
+        notifications: [
+          makeNotification(),
+          makeNotification({ id: "notif-2" }),
+        ],
+      }),
     );
 
     expect(payload).toEqual({
@@ -182,7 +192,10 @@ describe("toDesktopNotificationSyncPayload", () => {
 
   it("maps dot-only unread state to a native sync payload", () => {
     const payload = toDesktopNotificationSyncPayload(
-      getDesktopNotificationBadgeState({ notifications: [], unreadDmChannelIds: ["dm-1"] }),
+      getDesktopNotificationBadgeState({
+        notifications: [],
+        unreadDmChannelIds: ["dm-1"],
+      }),
     );
 
     expect(payload).toEqual({

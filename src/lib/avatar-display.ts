@@ -112,7 +112,10 @@ function isFiniteNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
 }
 
-function cleanString(value: unknown, maxLength = MAX_NAME_LENGTH): string | null {
+function cleanString(
+  value: unknown,
+  maxLength = MAX_NAME_LENGTH,
+): string | null {
   if (typeof value !== "string") return null;
   const trimmed = value.trim();
   if (!trimmed) return null;
@@ -139,7 +142,10 @@ function cleanAssetUrl(value: unknown): string | null {
   }
 }
 
-function cleanOptionalNumber(value: unknown, maxValue = 5000): number | undefined {
+function cleanOptionalNumber(
+  value: unknown,
+  maxValue = 5000,
+): number | undefined {
   if (!isFiniteNumber(value) || value < 0 || value > maxValue) return undefined;
   return Math.round(value);
 }
@@ -158,18 +164,32 @@ export function normalizeAvatarDisplay(value: unknown): AvatarDisplay | null {
   const input = parseAvatarDisplayInput(value);
   if (!input || typeof input !== "object") return null;
 
-  const candidate = input as { version?: unknown; crop?: Partial<AvatarCropRect>; collectibles?: unknown };
+  const candidate = input as {
+    version?: unknown;
+    crop?: Partial<AvatarCropRect>;
+    collectibles?: unknown;
+  };
   const crop = candidate.crop;
   if (candidate.version !== 1) return null;
 
   let normalizedCrop: AvatarCropRect | undefined;
   if (crop !== undefined) {
     const { x, y, width, height } = crop;
-    if (!isFiniteNumber(x) || !isFiniteNumber(y) || !isFiniteNumber(width) || !isFiniteNumber(height)) {
+    if (
+      !isFiniteNumber(x) ||
+      !isFiniteNumber(y) ||
+      !isFiniteNumber(width) ||
+      !isFiniteNumber(height)
+    ) {
       return null;
     }
 
-    if (width < MIN_CROP_SIZE || height < MIN_CROP_SIZE || width > MAX_PERCENT || height > MAX_PERCENT) {
+    if (
+      width < MIN_CROP_SIZE ||
+      height < MIN_CROP_SIZE ||
+      width > MAX_PERCENT ||
+      height > MAX_PERCENT
+    ) {
       return null;
     }
 
@@ -205,7 +225,9 @@ function formatPercent(value: number): string {
   return `${Object.is(rounded, -0) ? 0 : rounded}%`;
 }
 
-export function avatarDisplayToImageStyle(value: unknown): AvatarImageStyle | undefined {
+export function avatarDisplayToImageStyle(
+  value: unknown,
+): AvatarImageStyle | undefined {
   const display = normalizeAvatarDisplay(value);
   if (!display?.crop) return undefined;
 
@@ -222,7 +244,9 @@ export function avatarDisplayToImageStyle(value: unknown): AvatarImageStyle | un
   };
 }
 
-function normalizeAvatarCollectibles(value: unknown): AvatarCollectibles | undefined {
+function normalizeAvatarCollectibles(
+  value: unknown,
+): AvatarCollectibles | undefined {
   if (!value || typeof value !== "object") return undefined;
   const input = value as Record<string, unknown>;
   const collectibles: AvatarCollectibles = {};
@@ -242,7 +266,9 @@ function normalizeAvatarCollectibles(value: unknown): AvatarCollectibles | undef
   return Object.keys(collectibles).length > 0 ? collectibles : undefined;
 }
 
-function normalizeAvatarDecoration(value: unknown): AvatarDecorationSelection | undefined {
+function normalizeAvatarDecoration(
+  value: unknown,
+): AvatarDecorationSelection | undefined {
   if (!value || typeof value !== "object") return undefined;
   const input = value as Record<string, unknown>;
   const skuId = cleanString(input.skuId, 64);
@@ -253,7 +279,9 @@ function normalizeAvatarDecoration(value: unknown): AvatarDecorationSelection | 
   return { skuId, name, asset, imageUrl };
 }
 
-function normalizeProfileEffect(value: unknown): ProfileEffectSelection | undefined {
+function normalizeProfileEffect(
+  value: unknown,
+): ProfileEffectSelection | undefined {
   if (!value || typeof value !== "object") return undefined;
   const input = value as Record<string, unknown>;
   const skuId = cleanString(input.skuId, 64);
@@ -262,51 +290,63 @@ function normalizeProfileEffect(value: unknown): ProfileEffectSelection | undefi
 
   const effects = Array.isArray(input.effects)
     ? input.effects
-      .map((effect) => {
-        if (!effect || typeof effect !== "object") return null;
-        const row = effect as Record<string, unknown>;
-        const randomizedSources = Array.isArray(row.randomizedSources)
-          ? row.randomizedSources
-            .map((source) => {
-              if (!source || typeof source !== "object") return null;
-              const src = cleanAssetUrl((source as Record<string, unknown>).src);
-              return src ? { src } : null;
-            })
-            .filter((source): source is { src: string } => source !== null)
-            .slice(0, 12)
-          : [];
-        const src = cleanAssetUrl(row.src) ?? randomizedSources[0]?.src ?? null;
-        if (!src) return null;
-        const layer: ProfileEffectLayer = {
-          src,
-          loop: typeof row.loop === "boolean" ? row.loop : undefined,
-          duration: isFiniteNumber(row.duration) ? row.duration : undefined,
-          start: isFiniteNumber(row.start) ? row.start : undefined,
-          loopDelay: isFiniteNumber(row.loopDelay) ? row.loopDelay : undefined,
-          zIndex: isFiniteNumber(row.zIndex) ? row.zIndex : undefined,
-          width: cleanOptionalNumber(row.width),
-          height: cleanOptionalNumber(row.height),
-          position:
-            row.position && typeof row.position === "object"
-              ? (() => {
-                  const position = row.position as Record<string, unknown>;
-                  const x = cleanOptionalNumber(position.x);
-                  const y = cleanOptionalNumber(position.y);
-                  if (x == null || y == null) return undefined;
-                  return { x, y };
-                })()
+        .map((effect) => {
+          if (!effect || typeof effect !== "object") return null;
+          const row = effect as Record<string, unknown>;
+          const randomizedSources = Array.isArray(row.randomizedSources)
+            ? row.randomizedSources
+                .map((source) => {
+                  if (!source || typeof source !== "object") return null;
+                  const src = cleanAssetUrl(
+                    (source as Record<string, unknown>).src,
+                  );
+                  return src ? { src } : null;
+                })
+                .filter((source): source is { src: string } => source !== null)
+                .slice(0, 12)
+            : [];
+          const src =
+            cleanAssetUrl(row.src) ?? randomizedSources[0]?.src ?? null;
+          if (!src) return null;
+          const layer: ProfileEffectLayer = {
+            src,
+            loop: typeof row.loop === "boolean" ? row.loop : undefined,
+            duration: isFiniteNumber(row.duration) ? row.duration : undefined,
+            start: isFiniteNumber(row.start) ? row.start : undefined,
+            loopDelay: isFiniteNumber(row.loopDelay)
+              ? row.loopDelay
               : undefined,
-          randomizedSources: randomizedSources.length ? randomizedSources : undefined,
-        };
-        return layer;
-      })
-      .filter((effect): effect is ProfileEffectLayer => effect !== null)
-      .slice(0, 12)
+            zIndex: isFiniteNumber(row.zIndex) ? row.zIndex : undefined,
+            width: cleanOptionalNumber(row.width),
+            height: cleanOptionalNumber(row.height),
+            position:
+              row.position && typeof row.position === "object"
+                ? (() => {
+                    const position = row.position as Record<string, unknown>;
+                    const x = cleanOptionalNumber(position.x);
+                    const y = cleanOptionalNumber(position.y);
+                    if (x == null || y == null) return undefined;
+                    return { x, y };
+                  })()
+                : undefined,
+            randomizedSources: randomizedSources.length
+              ? randomizedSources
+              : undefined,
+          };
+          return layer;
+        })
+        .filter((effect): effect is ProfileEffectLayer => effect !== null)
+        .slice(0, 12)
     : [];
   const legacyEffectUrls = Array.isArray(input.effectUrls)
-    ? input.effectUrls.map(cleanAssetUrl).filter((url): url is string => Boolean(url)).slice(0, 12)
+    ? input.effectUrls
+        .map(cleanAssetUrl)
+        .filter((url): url is string => Boolean(url))
+        .slice(0, 12)
     : [];
-  const effectUrls = effects.length ? effects.map((effect) => effect.src) : legacyEffectUrls;
+  const effectUrls = effects.length
+    ? effects.map((effect) => effect.src)
+    : legacyEffectUrls;
   const previewUrl = cleanAssetUrl(input.previewUrl);
   const thumbnailPreviewSrc = cleanAssetUrl(input.thumbnailPreviewSrc);
   const reducedMotionSrc = cleanAssetUrl(input.reducedMotionSrc);
@@ -329,7 +369,9 @@ function normalizeProfileEffect(value: unknown): ProfileEffectSelection | undefi
   return {
     skuId,
     name,
-    animationType: isFiniteNumber(input.animationType) ? Math.round(input.animationType) : undefined,
+    animationType: isFiniteNumber(input.animationType)
+      ? Math.round(input.animationType)
+      : undefined,
     previewUrl: previewUrl ?? undefined,
     thumbnailPreviewSrc: thumbnailPreviewSrc ?? undefined,
     reducedMotionSrc: reducedMotionSrc ?? undefined,
@@ -350,10 +392,18 @@ function normalizeNameplate(value: unknown): NameplateSelection | undefined {
   const animatedUrl = cleanAssetUrl(input.animatedUrl);
   const palette = cleanString(input.palette, 64);
   if (!skuId || !name || !staticUrl) return undefined;
-  return { skuId, name, staticUrl, animatedUrl: animatedUrl ?? undefined, palette: palette ?? undefined };
+  return {
+    skuId,
+    name,
+    staticUrl,
+    animatedUrl: animatedUrl ?? undefined,
+    palette: palette ?? undefined,
+  };
 }
 
-function normalizeProfileFrame(value: unknown): ProfileFrameSelection | undefined {
+function normalizeProfileFrame(
+  value: unknown,
+): ProfileFrameSelection | undefined {
   if (!value || typeof value !== "object") return undefined;
   const input = value as Record<string, unknown>;
   const skuId = cleanString(input.skuId, 64);
@@ -374,12 +424,14 @@ function normalizeProfileFrame(value: unknown): ProfileFrameSelection | undefine
         id,
         src,
         type,
-        order: row.order === "back" ? "back" as const : "front" as const,
+        order: row.order === "back" ? ("back" as const) : ("front" as const),
         anchor,
         responsive: row.responsive === true,
       };
     })
-    .filter((layer): layer is ProfileFrameSelection["layers"][number] => Boolean(layer))
+    .filter((layer): layer is ProfileFrameSelection["layers"][number] =>
+      Boolean(layer),
+    )
     .slice(0, MAX_FRAME_LAYERS);
 
   if (!layers.length) return undefined;
@@ -400,15 +452,21 @@ function normalizePositiveNumber(value: unknown, fallback: number) {
   return Math.round(value);
 }
 
-export function getAvatarCollectibles(value: unknown): AvatarCollectibles | undefined {
+export function getAvatarCollectibles(
+  value: unknown,
+): AvatarCollectibles | undefined {
   return normalizeAvatarDisplay(value)?.collectibles;
 }
 
-export function getAvatarDecoration(value: unknown): AvatarDecorationSelection | undefined {
+export function getAvatarDecoration(
+  value: unknown,
+): AvatarDecorationSelection | undefined {
   return getAvatarCollectibles(value)?.avatarDecoration;
 }
 
-export function getProfileEffect(value: unknown): ProfileEffectSelection | undefined {
+export function getProfileEffect(
+  value: unknown,
+): ProfileEffectSelection | undefined {
   return getAvatarCollectibles(value)?.profileEffect;
 }
 
@@ -420,9 +478,13 @@ export function getProfileEffectLayers(value: unknown): ProfileEffectLayer[] {
     ? effect.effects
     : effect.effectUrls.map((src, index) => ({ src, zIndex: index }));
 
-  return [...layers].sort((left, right) => (left.zIndex ?? 0) - (right.zIndex ?? 0));
+  return [...layers].sort(
+    (left, right) => (left.zIndex ?? 0) - (right.zIndex ?? 0),
+  );
 }
 
-export function getProfileFrame(value: unknown): ProfileFrameSelection | undefined {
+export function getProfileFrame(
+  value: unknown,
+): ProfileFrameSelection | undefined {
   return getAvatarCollectibles(value)?.profileFrame;
 }

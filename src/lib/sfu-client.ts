@@ -6,7 +6,7 @@ import {
   type IceServer,
   type SFUEventMap,
   type TrackInfo,
-  type VoiceConnectionStats
+  type VoiceConnectionStats,
 } from "./types";
 import { AudioPipeline } from "./voice/audio-pipeline";
 import { ConnectionStatsMonitor } from "./voice/stats-monitor";
@@ -49,7 +49,10 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
     serverId?: string;
     username?: string;
     displayName?: string | null;
-    avatarDisplay?: import("@/lib/avatar-display").AvatarDisplay | string | null;
+    avatarDisplay?:
+      | import("@/lib/avatar-display").AvatarDisplay
+      | string
+      | null;
   } | null = null;
 
   private isLeaving = false;
@@ -109,7 +112,8 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
       getUnsubscribedMids: () => this.unsubscribedTrackMids,
       getUnsubscribedNames: () => this.unsubscribedTrackNames,
       pcReadyPromise: () => this.pcReadyPromise,
-      waitForPushNegotiationDone: (prefix, t) => this.waitForPushNegotiationDone(prefix, t),
+      waitForPushNegotiationDone: (prefix, t) =>
+        this.waitForPushNegotiationDone(prefix, t),
       waitForPushAnswer: (prefix, t) => this.waitForPushAnswer(prefix, t),
     });
 
@@ -121,26 +125,33 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
           this.voiceGW.disconnect();
           this.connectVoice();
         }
-      }
+      },
     );
 
     // --- Submodules ---
-    this.on('create-screen-pc' as any, () => {
+    this.on("create-screen-pc" as any, () => {
       if (!this.negotiator.screenPushPC) this.createScreenPushPC();
     });
 
     this.vad = new VoiceActivityDetector({
       onSpeakingChange: (isSpeaking, flags) => {
         if (this.participantId) {
-          this.emit("vad-speaking", { participantId: this.participantId, isSpeaking });
-          this.emit("speaking", { participantId: this.participantId, speaking: flags });
+          this.emit("vad-speaking", {
+            participantId: this.participantId,
+            isSpeaking,
+          });
+          this.emit("speaking", {
+            participantId: this.participantId,
+            speaking: flags,
+          });
         }
       },
       onAudioStalled: (isStalled: boolean) => {
         this.emit("audio-stalled", isStalled);
       },
       sendSpeaking: (flags) => this.sendSpeaking(flags),
-      getAudioTransceiver: () => this.negotiator.getPushTransceiver(`cam-audio-${this.participantId}`),
+      getAudioTransceiver: () =>
+        this.negotiator.getPushTransceiver(`cam-audio-${this.participantId}`),
       getParticipantId: () => this.participantId,
     });
 
@@ -164,14 +175,18 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
       stallThresholdTicks: 30,
       shouldTreatAsStall: () => this.hasRecentlySpeakingRemote(),
       onStall: () => {
-        sfuLog.warn("AudioSentinel detected inbound-rtp stall! Triggering auto-recovery...");
+        sfuLog.warn(
+          "AudioSentinel detected inbound-rtp stall! Triggering auto-recovery...",
+        );
         this.emit("audio-stalled", true);
         if (!this.isLeaving) {
           // Instead of immediately resetting pull PC (which races with VoiceGW
           // reconnects), use the serialized recovery coordinator if VoiceGW
           // is reconnecting, otherwise do a targeted pull reset.
           if (!this.voiceGW.isReady) {
-            sfuLog.info("AudioSentinel: VoiceGW not ready, deferring to reconnect recovery");
+            sfuLog.info(
+              "AudioSentinel: VoiceGW not ready, deferring to reconnect recovery",
+            );
             // Recovery will happen when VoiceGW re-identifies via handleVoiceGWReconnectRecovery
           } else {
             const tracksToRestore = [...this.negotiator.pulledTracks];
@@ -181,7 +196,7 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
       },
       onRecover: () => {
         this.emit("audio-stalled", false);
-      }
+      },
     });
 
     this.wireRoomEvents();
@@ -201,7 +216,9 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
         this.pcReadyResolve = null;
       }
 
-      const othersTracks = e.tracksToQueue.filter(t => t.participant_id !== this.participantId);
+      const othersTracks = e.tracksToQueue.filter(
+        (t) => t.participant_id !== this.participantId,
+      );
       this.pendingPullTracks.push(...othersTracks);
 
       this.emit("joined", {
@@ -222,7 +239,10 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
         this.voiceGW.updateVoiceToken(e.voiceToken);
       }
       if (e.participants) {
-        this.emit("participants-sync", { participants: e.participants, spatialAudioState: (e as any).spatialAudioState });
+        this.emit("participants-sync", {
+          participants: e.participants,
+          spatialAudioState: (e as any).spatialAudioState,
+        });
       }
       this.scheduleCredentialRefresh();
       if (!this.negotiator.pullPC) this.createPeerConnections();
@@ -243,13 +263,19 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
       if (!this.isLeaving) this.emit("disconnected", undefined as never);
     });
     this.roomGW.on("error", (e) => this.emit("error", { message: e.message }));
-    this.roomGW.on("participant-joined", (e) => this.emit("participant-joined", e));
+    this.roomGW.on("participant-joined", (e) =>
+      this.emit("participant-joined", e),
+    );
     this.roomGW.on("participant-left", (e) => {
       this.audio.removeParticipantVolume(e.participantId);
-      this.negotiator.pulledTracks = this.negotiator.pulledTracks.filter(t => t.participant_id !== e.participantId);
+      this.negotiator.pulledTracks = this.negotiator.pulledTracks.filter(
+        (t) => t.participant_id !== e.participantId,
+      );
       this.emit("participant-left", e);
     });
-    this.roomGW.on("voice-state-update", (e) => this.emit("voice-state-update", e as any));
+    this.roomGW.on("voice-state-update", (e) =>
+      this.emit("voice-state-update", e as any),
+    );
     this.voiceGW.on("speaking", (e) => {
       if (e.participantId !== this.participantId) {
         if (e.speaking) {
@@ -265,7 +291,7 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
 
   private wireVoiceEvents() {
     this.voiceGW.on("error", (e) => {
-      if (e.operation === 'pull' && this.isStalePullSignal(e.request_id)) {
+      if (e.operation === "pull" && this.isStalePullSignal(e.request_id)) {
         sfuLog.warn(`Ignoring stale pull error for request ${e.request_id}`);
         return;
       }
@@ -289,14 +315,26 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
           sfuLog.error("Failed to parse pull-retry", err);
         }
       } else if (e.message === "Voice token expired" || e.code === 4004) {
-        sfuLog.warn("Voice token is expired, emitting event to force RoomGW reconnect...");
+        sfuLog.warn(
+          "Voice token is expired, emitting event to force RoomGW reconnect...",
+        );
         this.emit("voice-token-expired", undefined as never);
       } else if (e.message === "pull-session-expired") {
-        sfuLog.warn("Server reported expired pull SFU session; rebuilding pull PC and re-pulling tracks");
-        this.resetPullAndRepull([...this.negotiator.pulledTracks, ...this.pendingPullTracks]);
+        sfuLog.warn(
+          "Server reported expired pull SFU session; rebuilding pull PC and re-pulling tracks",
+        );
+        this.resetPullAndRepull([
+          ...this.negotiator.pulledTracks,
+          ...this.pendingPullTracks,
+        ]);
       } else if (e.message === "session-dead-reconnect") {
-        sfuLog.warn("Server reported dead SFU session; rebuilding pull side from remembered tracks");
-        this.resetPullAndRepull([...this.negotiator.pulledTracks, ...this.pendingPullTracks]);
+        sfuLog.warn(
+          "Server reported dead SFU session; rebuilding pull side from remembered tracks",
+        );
+        this.resetPullAndRepull([
+          ...this.negotiator.pulledTracks,
+          ...this.pendingPullTracks,
+        ]);
       } else {
         this.rejectPendingSignalWaiters(new Error(e.message));
         this.emit("error", { message: e.message });
@@ -318,12 +356,17 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
       // VoiceReady can be empty during reconnect races, so only a non-empty
       // server list is authoritative enough to purge local pull state.
       const serverTracks = this.uniqueTrackList(e.tracks || []);
-      const serverNames = new Set(serverTracks.map(t => t.track_name));
+      const serverNames = new Set(serverTracks.map((t) => t.track_name));
 
       // Queue server tracks that are not already represented by local pull state.
-      const existingNames = new Set(this.pendingPullTracks.map(t => t.track_name));
+      const existingNames = new Set(
+        this.pendingPullTracks.map((t) => t.track_name),
+      );
       for (const track of serverTracks) {
-        if (this.shouldPullServerTrack(track) && !existingNames.has(track.track_name)) {
+        if (
+          this.shouldPullServerTrack(track) &&
+          !existingNames.has(track.track_name)
+        ) {
           this.pendingPullTracks.push(track);
           existingNames.add(track.track_name);
         }
@@ -332,12 +375,14 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
       // Only purge pending tracks if server returned a non-empty track list.
       // Empty list means the other participant hasn't re-published yet — keep queued state.
       if (serverNames.size > 0) {
-        this.pendingPullTracks = this.pendingPullTracks.filter(t => serverNames.has(t.track_name));
+        this.pendingPullTracks = this.pendingPullTracks.filter((t) =>
+          serverNames.has(t.track_name),
+        );
       }
       if (serverNames.size > 0) {
         const orphaned = this.negotiator.pulledTracks
-          .map(t => t.track_name)
-          .filter(n => !serverNames.has(n));
+          .map((t) => t.track_name)
+          .filter((n) => !serverNames.has(n));
 
         if (orphaned.length > 0) {
           sfuLog.warn(`Evicting ${orphaned.length} orphaned tracks`);
@@ -349,8 +394,11 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
       // BUT only if the pull PeerConnection is dead — if it's alive, audio is
       // already flowing over UDP and re-pulling would disrupt it.
       const pullState = this.negotiator.pullPC?.iceConnectionState;
-      const pullPCActive = pullState === "connected" || pullState === "completed";
-      const pullPCFresh = (pullState === "new" || pullState === "checking") && this.negotiator.pulledTracks.length === 0;
+      const pullPCActive =
+        pullState === "connected" || pullState === "completed";
+      const pullPCFresh =
+        (pullState === "new" || pullState === "checking") &&
+        this.negotiator.pulledTracks.length === 0;
       const pullPCUsable = pullPCActive || pullPCFresh;
       const tracksToRepull = this.uniqueTrackList([
         ...serverTracks,
@@ -360,14 +408,23 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
 
       if (pullPCActive && serverTracks.length > 0) {
         const desyncedTracks = serverTracks.filter((track) => {
-          const existing = this.negotiator.pulledTracks.find((pt) => pt.track_name === track.track_name);
+          const existing = this.negotiator.pulledTracks.find(
+            (pt) => pt.track_name === track.track_name,
+          );
           if (!existing) return false;
-          if (track.session_id && existing.session_id && track.session_id !== existing.session_id) return false;
+          if (
+            track.session_id &&
+            existing.session_id &&
+            track.session_id !== existing.session_id
+          )
+            return false;
           return !this.hasLivePullReceiver(existing);
         });
 
         if (desyncedTracks.length > 0) {
-          sfuLog.warn(`Pull PC is connected but ${desyncedTracks.length} receiver(s) are missing/stale; rebuilding pull session: ${desyncedTracks.map(t => t.track_name).join(", ")}`);
+          sfuLog.warn(
+            `Pull PC is connected but ${desyncedTracks.length} receiver(s) are missing/stale; rebuilding pull session: ${desyncedTracks.map((t) => t.track_name).join(", ")}`,
+          );
           this.resetPullAndRepull(tracksToRepull);
           return;
         }
@@ -375,26 +432,36 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
 
       if (pullPCUsable) {
         if (pullPCActive) {
-          sfuLog.info("Pull PC is alive — skipping re-pull, audio continues uninterrupted ✓");
+          sfuLog.info(
+            "Pull PC is alive — skipping re-pull, audio continues uninterrupted ✓",
+          );
         } else {
-          sfuLog.info(`Pull PC is fresh (state=${pullState}) — using it for initial pull`);
+          sfuLog.info(
+            `Pull PC is fresh (state=${pullState}) — using it for initial pull`,
+          );
         }
       } else {
         // Pull PC is dead or was never connected — create a fresh one
         // CRITICAL: This MUST happen here in the voice-ready handler, not in the
         // recovery coordinator, because we need the fresh PC BEFORE calling pullTracks().
         if (this.negotiator.pullPC) {
-          sfuLog.warn(`Pull PC is dead (state=${this.negotiator.pullPC.iceConnectionState}) — closing stale PC and creating fresh one`);
+          sfuLog.warn(
+            `Pull PC is dead (state=${this.negotiator.pullPC.iceConnectionState}) — closing stale PC and creating fresh one`,
+          );
         } else {
           sfuLog.warn("Pull PC is null — creating fresh one");
         }
         this.resetServerPullSession();
         this.pullEpoch++;
-        this.rtcSessionManager.resetPullSession(this.isLeaving, () => this.connectVoice());
+        this.rtcSessionManager.resetPullSession(this.isLeaving, () =>
+          this.connectVoice(),
+        );
         this.createPeerConnections();
 
         if (tracksToRepull.length > 0) {
-          sfuLog.info(`Re-queuing ${tracksToRepull.length} tracks for fresh pull PC`);
+          sfuLog.info(
+            `Re-queuing ${tracksToRepull.length} tracks for fresh pull PC`,
+          );
           this.pendingPullTracks = this.uniqueTrackList(tracksToRepull);
         }
       }
@@ -403,15 +470,21 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
       if (this.pendingPullTracks.length > 0) {
         const toPull = [...this.pendingPullTracks];
         this.pendingPullTracks = [];
-        sfuLog.info(`Pulling ${toPull.length} tracks: ${toPull.map(t => t.track_name).join(', ')}`);
+        sfuLog.info(
+          `Pulling ${toPull.length} tracks: ${toPull.map((t) => t.track_name).join(", ")}`,
+        );
         this.pullTracks(toPull);
       }
     });
 
     this.voiceGW.on("tracks-ready", (e) => {
-      const isPush = e.tracks.some(t => t.participant_id === this.participantId);
+      const isPush = e.tracks.some(
+        (t) => t.participant_id === this.participantId,
+      );
       if (!isPush) {
-        sfuLog.info(`Remote tracks ready: ${e.tracks.map(t => t.track_name).join(', ')}`);
+        sfuLog.info(
+          `Remote tracks ready: ${e.tracks.map((t) => t.track_name).join(", ")}`,
+        );
         this.rtcSessionManager.clearDisconnectTimer("pull");
       }
     });
@@ -424,81 +497,104 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
       // ICE restart answers are no longer supported
       if (sd.ice_restart) return;
 
-      const isPush = sd.sdp_type === 'answer';
-      const prefix = isPush ? (sd.push_prefix || this.negotiator.getPrefixBySessionId(sd.session_id) || 'cam') : undefined;
+      const isPush = sd.sdp_type === "answer";
+      const prefix = isPush
+        ? sd.push_prefix ||
+          this.negotiator.getPrefixBySessionId(sd.session_id) ||
+          "cam"
+        : undefined;
 
       if (!isPush) {
         if (this.isStalePullSignal(sd.request_id)) {
-          sfuLog.warn(`Ignoring stale pull SDP offer for request ${sd.request_id}`);
+          sfuLog.warn(
+            `Ignoring stale pull SDP offer for request ${sd.request_id}`,
+          );
           return;
         }
 
-        this.negotiator.handleSessionDescription(sd, 'pull').then(() => {
-          if (this.pullResolver) {
-            const resolve = this.pullResolver;
-            this.pullResolver = null;
-            this.pullRetryCount = 0;
-            this.pullResetCount = 0;
-            resolve();
-          }
-        }).catch(err => {
-          sfuLog.error("handleSessionDescription error:", err);
-          if (err instanceof DOMException && (err.message.includes("media type") || err.message.includes("m-lines"))) {
-            const tracksToRestore = [...this.negotiator.pulledTracks];
-            this.resetPullAndRepull(tracksToRestore);
-          } else {
-            this.emit("error", { message: `SDP handling error: ${err}` });
-          }
-        });
-      } else if (prefix === 'screen' && (this.nativeScreenSharePending || this.nativeScreenShareActive)) {
-        this.handleNativeScreenShareAnswer(sd).then(() => {
-          if (this.screenPushResolver) {
-            const resolve = this.screenPushResolver;
-            this.screenPushResolver = null;
-            this.screenPushRejector = null;
-            resolve();
-          }
-        }).catch(err => {
-          sfuLog.error("Native screen SDP error:", err);
-          if (this.screenPushRejector) {
-            const reject = this.screenPushRejector;
-            this.screenPushRejector = null;
-            reject(err);
-          }
-        });
+        this.negotiator
+          .handleSessionDescription(sd, "pull")
+          .then(() => {
+            if (this.pullResolver) {
+              const resolve = this.pullResolver;
+              this.pullResolver = null;
+              this.pullRetryCount = 0;
+              this.pullResetCount = 0;
+              resolve();
+            }
+          })
+          .catch((err) => {
+            sfuLog.error("handleSessionDescription error:", err);
+            if (
+              err instanceof DOMException &&
+              (err.message.includes("media type") ||
+                err.message.includes("m-lines"))
+            ) {
+              const tracksToRestore = [...this.negotiator.pulledTracks];
+              this.resetPullAndRepull(tracksToRestore);
+            } else {
+              this.emit("error", { message: `SDP handling error: ${err}` });
+            }
+          });
+      } else if (
+        prefix === "screen" &&
+        (this.nativeScreenSharePending || this.nativeScreenShareActive)
+      ) {
+        this.handleNativeScreenShareAnswer(sd)
+          .then(() => {
+            if (this.screenPushResolver) {
+              const resolve = this.screenPushResolver;
+              this.screenPushResolver = null;
+              this.screenPushRejector = null;
+              resolve();
+            }
+          })
+          .catch((err) => {
+            sfuLog.error("Native screen SDP error:", err);
+            if (this.screenPushRejector) {
+              const reject = this.screenPushRejector;
+              this.screenPushRejector = null;
+              reject(err);
+            }
+          });
       } else {
-        this.negotiator.handleSessionDescription(sd, 'push', prefix).then(() => {
-          if (prefix === 'screen' && this.screenPushResolver) {
-            const resolve = this.screenPushResolver;
-            this.screenPushResolver = null;
-            this.screenPushRejector = null;
-            resolve();
-          } else if (this.camPushResolver) {
-            const resolve = this.camPushResolver;
-            this.camPushResolver = null;
-            this.camPushRejector = null;
-            resolve();
-          }
-        }).catch(err => {
-          sfuLog.error("Push SDP error:", err);
-          if (prefix === 'screen' && this.screenPushRejector) {
-            const reject = this.screenPushRejector;
-            this.screenPushRejector = null;
-            reject(err);
-          } else if (this.camPushRejector) {
-            const reject = this.camPushRejector;
-            this.camPushRejector = null;
-            reject(err);
-          }
-        });
+        this.negotiator
+          .handleSessionDescription(sd, "push", prefix)
+          .then(() => {
+            if (prefix === "screen" && this.screenPushResolver) {
+              const resolve = this.screenPushResolver;
+              this.screenPushResolver = null;
+              this.screenPushRejector = null;
+              resolve();
+            } else if (this.camPushResolver) {
+              const resolve = this.camPushResolver;
+              this.camPushResolver = null;
+              this.camPushRejector = null;
+              resolve();
+            }
+          })
+          .catch((err) => {
+            sfuLog.error("Push SDP error:", err);
+            if (prefix === "screen" && this.screenPushRejector) {
+              const reject = this.screenPushRejector;
+              this.screenPushRejector = null;
+              reject(err);
+            } else if (this.camPushRejector) {
+              const reject = this.camPushRejector;
+              this.camPushRejector = null;
+              reject(err);
+            }
+          });
       }
     });
 
     this.voiceGW.on("negotiation-done", (e) => {
       sfuLog.info(`NegotiationDone received`);
-      if (e.operation === 'pull') {
+      if (e.operation === "pull") {
         if (this.isStalePullSignal(e.request_id)) {
-          sfuLog.warn(`Ignoring stale pull NegotiationDone for request ${e.request_id}`);
+          sfuLog.warn(
+            `Ignoring stale pull NegotiationDone for request ${e.request_id}`,
+          );
           return;
         }
         if (this.pullNegotiationResolve) {
@@ -511,14 +607,14 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
         return;
       }
 
-      if (e.operation === 'push') {
-        if (e.push_prefix === 'screen' && this.screenPushNegotiationResolve) {
+      if (e.operation === "push") {
+        if (e.push_prefix === "screen" && this.screenPushNegotiationResolve) {
           const resolve = this.screenPushNegotiationResolve;
           this.screenPushNegotiationResolve = null;
           resolve();
           return;
         }
-        if (e.push_prefix === 'cam' && this.camPushNegotiationResolve) {
+        if (e.push_prefix === "cam" && this.camPushNegotiationResolve) {
           const resolve = this.camPushNegotiationResolve;
           this.camPushNegotiationResolve = null;
           resolve();
@@ -527,8 +623,11 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
         }
       }
 
-      const camPCStable = this.negotiator.camPushPC?.signalingState === 'stable';
-      const preferScreen = this.screenPushNegotiationResolve && (!this.camPushNegotiationResolve || camPCStable);
+      const camPCStable =
+        this.negotiator.camPushPC?.signalingState === "stable";
+      const preferScreen =
+        this.screenPushNegotiationResolve &&
+        (!this.camPushNegotiationResolve || camPCStable);
 
       if (!preferScreen && this.camPushNegotiationResolve) {
         const resolve = this.camPushNegotiationResolve;
@@ -550,42 +649,67 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
 
     this.voiceGW.on("track-offered", (v) => {
       // Ignore our own tracks so we don't pull them back from the server (echo)
-      if (v.session_id === this.participantId || v.participant_id === this.participantId) {
+      if (
+        v.session_id === this.participantId ||
+        v.participant_id === this.participantId
+      ) {
         return;
       }
 
       // Server informs us about a new track available
       if (this.unsubscribedTrackNames.has(v.track_name)) {
-        sfuLog.info(`Ignoring track-offered for unsubscribed track: ${v.track_name}`);
+        sfuLog.info(
+          `Ignoring track-offered for unsubscribed track: ${v.track_name}`,
+        );
         return;
       }
-      const isNew = !this.negotiator.pulledTracks.some(t => t.track_name === v.track_name);
+      const isNew = !this.negotiator.pulledTracks.some(
+        (t) => t.track_name === v.track_name,
+      );
       if (isNew) {
-        const offeredTrack = { session_id: v.session_id, track_name: v.track_name, kind: v.kind, participant_id: v.participant_id };
+        const offeredTrack = {
+          session_id: v.session_id,
+          track_name: v.track_name,
+          kind: v.kind,
+          participant_id: v.participant_id,
+        };
         // Ensure pull PC is alive — if dead (e.g. after sentinel reset), recreate
         const pullState = this.negotiator.pullPC?.iceConnectionState;
-        const pullUsable = pullState === "connected" || pullState === "completed" || pullState === "new" || pullState === "checking";
+        const pullUsable =
+          pullState === "connected" ||
+          pullState === "completed" ||
+          pullState === "new" ||
+          pullState === "checking";
         if (!pullUsable || !this.negotiator.pullPC) {
-          sfuLog.warn(`track-offered: Pull PC unusable (state=${pullState ?? 'null'}) — recreating before pull`);
-          this.resetPullAndRepull([...this.negotiator.pulledTracks, offeredTrack]);
+          sfuLog.warn(
+            `track-offered: Pull PC unusable (state=${pullState ?? "null"}) — recreating before pull`,
+          );
+          this.resetPullAndRepull([
+            ...this.negotiator.pulledTracks,
+            offeredTrack,
+          ]);
           return;
         }
         this.pullTracks([offeredTrack]);
       }
     });
 
-    this.voiceGW.on("stop-tracks", (st) => this.handleStopTracks(st.track_names));
+    this.voiceGW.on("stop-tracks", (st) =>
+      this.handleStopTracks(st.track_names),
+    );
 
     this.voiceGW.on("kicked", () => {
-      sfuLog.warn("Kicked from VoiceGateway (replaced by new connection). Leaving room.");
+      sfuLog.warn(
+        "Kicked from VoiceGateway (replaced by new connection). Leaving room.",
+      );
       this.disconnect();
       this.emit("kicked", undefined as never);
     });
 
     this.voiceGW.on("disconnected", () => {
       this.cancelPendingSignalWaiters();
-      this.pcReadyPromise = new Promise(r => this.pcReadyResolve = r);
-      this.voiceReadyPromise = new Promise(r => this.voiceReadyResolve = r);
+      this.pcReadyPromise = new Promise((r) => (this.pcReadyResolve = r));
+      this.voiceReadyPromise = new Promise((r) => (this.voiceReadyResolve = r));
 
       // Fix 1 (P0): Serialized reconnect — wait for VoiceGW to re-identify
       // before resetting any sessions. This prevents the triple-reset storm
@@ -598,16 +722,22 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
 
   private handleStopTracks(trackNames: string[]) {
     // Capture track info before removing
-    const toRemove = this.negotiator.pulledTracks.filter(t => trackNames.includes(t.track_name));
+    const toRemove = this.negotiator.pulledTracks.filter((t) =>
+      trackNames.includes(t.track_name),
+    );
 
     // 1. Remove from local list
-    this.negotiator.pulledTracks = this.negotiator.pulledTracks.filter(t => !trackNames.includes(t.track_name));
+    this.negotiator.pulledTracks = this.negotiator.pulledTracks.filter(
+      (t) => !trackNames.includes(t.track_name),
+    );
 
     // 2. Tear down WebRTC receiver mappings
     for (const trackInfo of toRemove) {
       const mid = trackInfo.mid;
       if (mid) {
-        const transceiver = this.negotiator.pullPC?.getTransceivers().find(t => t.mid === mid);
+        const transceiver = this.negotiator.pullPC
+          ?.getTransceivers()
+          .find((t) => t.mid === mid);
         if (transceiver?.receiver?.track) {
           transceiver.receiver.track.stop();
           // Emit removal
@@ -615,7 +745,7 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
             participantId: trackInfo.participant_id,
             track: transceiver.receiver.track,
             trackInfo,
-            action: "remove"
+            action: "remove",
           });
         }
         this.emittedMids.delete(mid);
@@ -631,13 +761,24 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
     clerkUserId?: string,
     username?: string,
     displayName?: string | null,
-    avatarDisplay?: import("@/lib/avatar-display").AvatarDisplay | string | null,
+    avatarDisplay?:
+      | import("@/lib/avatar-display").AvatarDisplay
+      | string
+      | null,
     options?: { channelId?: string; serverId?: string },
   ) {
     this.isLeaving = false;
-    this.connectArgs = { name, avatarUrl, clerkUserId, username, displayName, avatarDisplay, ...options };
-    this.pcReadyPromise = new Promise(r => this.pcReadyResolve = r);
-    this.voiceReadyPromise = new Promise(r => this.voiceReadyResolve = r);
+    this.connectArgs = {
+      name,
+      avatarUrl,
+      clerkUserId,
+      username,
+      displayName,
+      avatarDisplay,
+      ...options,
+    };
+    this.pcReadyPromise = new Promise((r) => (this.pcReadyResolve = r));
+    this.voiceReadyPromise = new Promise((r) => (this.voiceReadyResolve = r));
 
     this.roomGW.connectRoom({
       name,
@@ -649,7 +790,7 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
       clerkUserId,
       serverId: options?.serverId,
       roomSlug: this.roomSlug,
-      wsUrlGenerator: wsUrl
+      wsUrlGenerator: wsUrl,
     });
   }
 
@@ -657,12 +798,19 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
     this.iceServers = iceServers;
     const config = { iceServers: this.iceServers };
 
-    for (const pc of [this.negotiator.camPushPC, this.negotiator.screenPushPC, this.negotiator.pullPC]) {
+    for (const pc of [
+      this.negotiator.camPushPC,
+      this.negotiator.screenPushPC,
+      this.negotiator.pullPC,
+    ]) {
       if (!pc || pc.signalingState === "closed") continue;
       try {
         pc.setConfiguration(config);
       } catch (err) {
-        sfuLog.warn("Failed to apply refreshed ICE servers to PeerConnection", err);
+        sfuLog.warn(
+          "Failed to apply refreshed ICE servers to PeerConnection",
+          err,
+        );
       }
     }
   }
@@ -675,7 +823,9 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
       this.credentialRefreshTimer = null;
       if (this.isLeaving) return;
 
-      sfuLog.info("Refreshing voice token and TURN credentials without reconnecting RoomGW");
+      sfuLog.info(
+        "Refreshing voice token and TURN credentials without reconnecting RoomGW",
+      );
       if (this.roomGW.isReady) {
         this.roomGW.requestCredentialRefresh();
       } else {
@@ -688,10 +838,14 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
   public refreshVoiceCredentials() {
     if (this.isLeaving) return;
     if (this.roomGW.isReady) {
-      sfuLog.info("Requesting fresh voice token and TURN credentials over existing RoomGW");
+      sfuLog.info(
+        "Requesting fresh voice token and TURN credentials over existing RoomGW",
+      );
       this.roomGW.requestCredentialRefresh();
     } else {
-      sfuLog.warn("RoomGW is not ready; reconnecting to refresh voice credentials");
+      sfuLog.warn(
+        "RoomGW is not ready; reconnecting to refresh voice credentials",
+      );
       this.roomGW.forceReconnect();
     }
   }
@@ -705,10 +859,16 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
 
   private connectVoice() {
     if (!this.participantId || !this.voiceToken) return;
-    this.voiceGW.connectVoice(this.participantId, this.voiceToken, this.roomSlug, wsUrl, {
-      channelId: this.connectArgs?.channelId,
-      serverId: this.connectArgs?.serverId,
-    });
+    this.voiceGW.connectVoice(
+      this.participantId,
+      this.voiceToken,
+      this.roomSlug,
+      wsUrl,
+      {
+        channelId: this.connectArgs?.channelId,
+        serverId: this.connectArgs?.serverId,
+      },
+    );
   }
 
   private uniqueTrackList(tracks: TrackInfo[]) {
@@ -734,14 +894,22 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
   }
 
   private shouldPullServerTrack(track: TrackInfo) {
-    const existing = this.negotiator.pulledTracks.find((pt) => pt.track_name === track.track_name);
+    const existing = this.negotiator.pulledTracks.find(
+      (pt) => pt.track_name === track.track_name,
+    );
     if (!existing) return true;
-    return !!(track.session_id && existing.session_id && track.session_id !== existing.session_id);
+    return !!(
+      track.session_id &&
+      existing.session_id &&
+      track.session_id !== existing.session_id
+    );
   }
 
   private hasLivePullReceiver(track: TrackInfo) {
     if (!this.negotiator.pullPC || !track.mid) return false;
-    const transceiver = this.negotiator.pullPC.getTransceivers().find((t) => t.mid === track.mid);
+    const transceiver = this.negotiator.pullPC
+      .getTransceivers()
+      .find((t) => t.mid === track.mid);
     const receiverTrack = transceiver?.receiver?.track;
     return !!receiverTrack && receiverTrack.readyState !== "ended";
   }
@@ -756,7 +924,11 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
   }
 
   private isStalePullSignal(requestId?: string) {
-    return !!requestId && !!this.activePullRequestId && requestId !== this.activePullRequestId;
+    return (
+      !!requestId &&
+      !!this.activePullRequestId &&
+      requestId !== this.activePullRequestId
+    );
   }
 
   private rejectPendingPullWaiters(reason: any) {
@@ -791,7 +963,9 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
     this.pullQueue = Promise.resolve();
     this.resetServerPullSession();
     this.pullEpoch++;
-    this.rtcSessionManager.resetPullSession(this.isLeaving, () => this.connectVoice());
+    this.rtcSessionManager.resetPullSession(this.isLeaving, () =>
+      this.connectVoice(),
+    );
     this.createPeerConnections();
     if (tracks.length > 0) this.pullTracks(tracks);
   }
@@ -819,8 +993,8 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
     this.stats.stopStatsMonitoring();
     this.stats.stopConnectionStatsMonitoring();
 
-    this.negotiator.resetPushSession('cam');
-    this.negotiator.resetPushSession('screen');
+    this.negotiator.resetPushSession("cam");
+    this.negotiator.resetPushSession("screen");
     this.negotiator.resetPullSession();
   }
 
@@ -835,7 +1009,11 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
     if (pushState === "failed" || pullState === "failed") return "failed";
     if (pushState === "disconnected") return "disconnected";
     if (pullState === "disconnected") return "disconnected";
-    if (pushState === "connected" && (pullState === "connected" || pullState === "idle")) return "connected";
+    if (
+      pushState === "connected" &&
+      (pullState === "connected" || pullState === "idle")
+    )
+      return "connected";
 
     return "connecting";
   }
@@ -845,7 +1023,9 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
   }
 
   public getSubscribeConnectionState() {
-    const hasInboundMedia = this.pendingPullTracks.length > 0 || this.negotiator.pulledTracks.length > 0;
+    const hasInboundMedia =
+      this.pendingPullTracks.length > 0 ||
+      this.negotiator.pulledTracks.length > 0;
     if (!hasInboundMedia) return "idle";
     return this.negotiator.pullPC?.connectionState || "connecting";
   }
@@ -853,7 +1033,7 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
   public sendChatMessage(content: string) {
     this.roomGW.send({
       op: VoiceOpcode.MessageCreate,
-      d: { channel_id: this.roomSlug, content, nonce: String(Math.random()) }
+      d: { channel_id: this.roomSlug, content, nonce: String(Math.random()) },
     });
   }
 
@@ -881,7 +1061,11 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
     this.audio.setParticipantVolume(participantId, volume);
   }
 
-  public setTrackVolume(participantId: string, trackName: string, volume: number) {
+  public setTrackVolume(
+    participantId: string,
+    trackName: string,
+    volume: number,
+  ) {
     this.audio.setTrackVolume(participantId, trackName, volume);
   }
 
@@ -893,7 +1077,11 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
     this.audio.setTrackPan(participantId, trackName, pan);
   }
 
-  public applyVolumeToTrack(pId: string, track: MediaStreamTrack, name: string) {
+  public applyVolumeToTrack(
+    pId: string,
+    track: MediaStreamTrack,
+    name: string,
+  ) {
     return this.audio.applyVolumeToTrack(pId, track, name);
   }
 
@@ -901,7 +1089,12 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
     this.audio.resumeAudioContext();
   }
 
-  public setRemoteTrackSubscription(participantId: string, trackName: string, subscribe: boolean, rid?: string) {
+  public setRemoteTrackSubscription(
+    participantId: string,
+    trackName: string,
+    subscribe: boolean,
+    rid?: string,
+  ) {
     if (subscribe) {
       this.unsubscribedTrackNames.delete(trackName);
       if (rid) this.trackRids.set(trackName, rid);
@@ -909,10 +1102,16 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
       this.unsubscribedTrackNames.add(trackName);
       // Wait for 1 second before doing full stop tracks to allow for double-renders
       setTimeout(() => {
-        if (this.unsubscribedTrackNames.has(trackName)) { // Still unsubscribed?
-          const track = this.negotiator.pulledTracks.find(t => t.track_name === trackName);
+        if (this.unsubscribedTrackNames.has(trackName)) {
+          // Still unsubscribed?
+          const track = this.negotiator.pulledTracks.find(
+            (t) => t.track_name === trackName,
+          );
           if (track) {
-            this.voiceGW.send({ op: VoiceOpcode.StopTracks, d: { track_names: [trackName] } });
+            this.voiceGW.send({
+              op: VoiceOpcode.StopTracks,
+              d: { track_names: [trackName] },
+            });
             this.handleStopTracks([trackName]);
           }
         }
@@ -930,7 +1129,7 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
       await this.voiceReadyPromise;
     }
     await this.negotiator.publishTracks(stream, prefix);
-    if (prefix === 'cam') {
+    if (prefix === "cam") {
       this.vad.start(stream);
       this.stats.startStatsMonitoring();
       this.stats.startConnectionStatsMonitoring();
@@ -949,19 +1148,28 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
     }
 
     // Filter unsubscribed etc
-    const toPull = unique.filter(t => !this.unsubscribedTrackNames.has(t.track_name));
+    const toPull = unique.filter(
+      (t) => !this.unsubscribedTrackNames.has(t.track_name),
+    );
     if (toPull.length === 0) return;
 
     if (!this.voiceGW.isReady) {
-      sfuLog.warn(`VoiceGW not ready, queueing ${toPull.length} tracks to pull...`);
+      sfuLog.warn(
+        `VoiceGW not ready, queueing ${toPull.length} tracks to pull...`,
+      );
       this.pendingPullTracks.push(...toPull);
       return;
     }
 
     this.pullQueue = this.pullQueue.then(async () => {
       const epoch = this.pullEpoch;
-      if (this.negotiator.pullPC && this.negotiator.pullPC.signalingState !== "stable") {
-        sfuLog.warn(`pullTracks: signaling state is '${this.negotiator.pullPC.signalingState}', deferring ${toPull.length} tracks`);
+      if (
+        this.negotiator.pullPC &&
+        this.negotiator.pullPC.signalingState !== "stable"
+      ) {
+        sfuLog.warn(
+          `pullTracks: signaling state is '${this.negotiator.pullPC.signalingState}', deferring ${toPull.length} tracks`,
+        );
         this.pendingPullTracks.push(...toPull);
         return;
       }
@@ -970,10 +1178,18 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
       this.pendingPullTracks = [];
 
       const newTracks = allTracks.filter((nt) => {
-        const existing = this.negotiator.pulledTracks.find((pt) => pt.track_name === nt.track_name);
+        const existing = this.negotiator.pulledTracks.find(
+          (pt) => pt.track_name === nt.track_name,
+        );
         if (!existing) return true;
-        if (nt.session_id && existing.session_id && nt.session_id !== existing.session_id) {
-          this.negotiator.pulledTracks = this.negotiator.pulledTracks.filter(t => t !== existing);
+        if (
+          nt.session_id &&
+          existing.session_id &&
+          nt.session_id !== existing.session_id
+        ) {
+          this.negotiator.pulledTracks = this.negotiator.pulledTracks.filter(
+            (t) => t !== existing,
+          );
           if (existing.mid) this.emittedMids.delete(existing.mid);
           return true;
         }
@@ -984,9 +1200,11 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
 
       if (newTracks.length === 0) return;
 
-      const pullTracksPayload = newTracks.map(t => {
+      const pullTracksPayload = newTracks.map((t) => {
         const explicitRid = t.rid || this.trackRids.get(t.track_name);
-        const defaultRid = t.track_name.startsWith("cam-video-") ? "h" : undefined;
+        const defaultRid = t.track_name.startsWith("cam-video-")
+          ? "h"
+          : undefined;
         return {
           participant_id: t.participant_id,
           track_name: t.track_name,
@@ -997,7 +1215,9 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
       });
 
       this.stats.startStatsMonitoring();
-      sfuLog.info(`Requesting SFU tracks (new only): ${newTracks.map(t => t.track_name).join(", ")}`);
+      sfuLog.info(
+        `Requesting SFU tracks (new only): ${newTracks.map((t) => t.track_name).join(", ")}`,
+      );
 
       try {
         const requestId = this.nextRequestId("pull");
@@ -1005,8 +1225,8 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
         const negotiationDonePromise = this.waitForPullNegotiationDone(10000);
         const offerPromise = this.waitForPullOffer(10000);
 
-        negotiationDonePromise.catch(() => { });
-        offerPromise.catch(() => { });
+        negotiationDonePromise.catch(() => {});
+        offerPromise.catch(() => {});
 
         this.voiceGW.send({
           op: VoiceOpcode.SelectProtocol,
@@ -1022,14 +1242,23 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
       } catch (err: any) {
         if (err.message && err.message.startsWith("pull-retry:")) {
           try {
-            const trackNames: string[] = JSON.parse(err.message.split("pull-retry:")[1]);
-            sfuLog.warn(`SFU returned empty_track_error. Retrying pull in 1s for: ${trackNames.join(", ")}`);
+            const trackNames: string[] = JSON.parse(
+              err.message.split("pull-retry:")[1],
+            );
+            sfuLog.warn(
+              `SFU returned empty_track_error. Retrying pull in 1s for: ${trackNames.join(", ")}`,
+            );
             this.activePullRequestId = null;
             setTimeout(() => {
               if (!this.isLeaving) {
-                const tracksToRetry = this.negotiator.pulledTracks.filter(t => trackNames.includes(t.track_name));
+                const tracksToRetry = this.negotiator.pulledTracks.filter((t) =>
+                  trackNames.includes(t.track_name),
+                );
                 if (tracksToRetry.length > 0) {
-                  this.negotiator.pulledTracks = this.negotiator.pulledTracks.filter(t => !trackNames.includes(t.track_name));
+                  this.negotiator.pulledTracks =
+                    this.negotiator.pulledTracks.filter(
+                      (t) => !trackNames.includes(t.track_name),
+                    );
                   this.pullTracks(tracksToRetry);
                 }
               }
@@ -1072,10 +1301,14 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
         if (state === "connected" || state === "completed") {
           this.rtcSessionManager.clearDisconnectTimer("pull");
         } else if (state === "disconnected") {
-          this.rtcSessionManager.handleDisconnectGraceTimer("pull", this.isLeaving, () => {
-            const tracksToRestore = [...this.negotiator.pulledTracks];
-            this.resetPullAndRepull(tracksToRestore);
-          });
+          this.rtcSessionManager.handleDisconnectGraceTimer(
+            "pull",
+            this.isLeaving,
+            () => {
+              const tracksToRestore = [...this.negotiator.pulledTracks];
+              this.resetPullAndRepull(tracksToRestore);
+            },
+          );
         } else if (state === "failed") {
           const tracksToRestore = [...this.negotiator.pulledTracks];
           this.resetPullAndRepull(tracksToRestore);
@@ -1087,10 +1320,14 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
         if (state === "connected") {
           this.rtcSessionManager.clearDisconnectTimer("pull");
         } else if (state === "disconnected") {
-          this.rtcSessionManager.handleDisconnectGraceTimer("pull", this.isLeaving, () => {
-            const tracksToRestore = [...this.negotiator.pulledTracks];
-            this.resetPullAndRepull(tracksToRestore);
-          });
+          this.rtcSessionManager.handleDisconnectGraceTimer(
+            "pull",
+            this.isLeaving,
+            () => {
+              const tracksToRestore = [...this.negotiator.pulledTracks];
+              this.resetPullAndRepull(tracksToRestore);
+            },
+          );
         } else if (state === "failed") {
           const tracksToRestore = [...this.negotiator.pulledTracks];
           this.resetPullAndRepull(tracksToRestore);
@@ -1103,10 +1340,17 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
 
         // Use a timeout to wait for SDP metadata propagation if not immediately available
         const attemptFire = (attempts = 0) => {
-          const info = mid ? this.negotiator.pulledTracks.find(t => t.mid === mid) : undefined;
+          const info = mid
+            ? this.negotiator.pulledTracks.find((t) => t.mid === mid)
+            : undefined;
           if (info) {
             this.emittedMids.add(mid!);
-            this.emit("remote-track", { participantId: info.participant_id, track: t, trackInfo: info, action: "add" } as any);
+            this.emit("remote-track", {
+              participantId: info.participant_id,
+              track: t,
+              trackInfo: info,
+              action: "add",
+            } as any);
           } else if (attempts < 10) {
             setTimeout(() => attemptFire(attempts + 1), 100);
           }
@@ -1117,13 +1361,19 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
   }
 
   private createScreenPushPC() {
-    this.negotiator.screenPushPC = new RTCPeerConnection({ iceServers: this.iceServers });
+    this.negotiator.screenPushPC = new RTCPeerConnection({
+      iceServers: this.iceServers,
+    });
     this.negotiator.screenPushPC.oniceconnectionstatechange = () => {
       const state = this.negotiator.screenPushPC?.iceConnectionState;
       if (state === "connected" || state === "completed") {
         this.rtcSessionManager.clearDisconnectTimer("screenPush");
       } else if (state === "disconnected") {
-        this.rtcSessionManager.handleDisconnectGraceTimer("screenPush", this.isLeaving, () => this.resetScreenPush());
+        this.rtcSessionManager.handleDisconnectGraceTimer(
+          "screenPush",
+          this.isLeaving,
+          () => this.resetScreenPush(),
+        );
       } else if (state === "failed") {
         this.resetScreenPush();
       }
@@ -1133,7 +1383,11 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
       if (state === "connected") {
         this.rtcSessionManager.clearDisconnectTimer("screenPush");
       } else if (state === "disconnected") {
-        this.rtcSessionManager.handleDisconnectGraceTimer("screenPush", this.isLeaving, () => this.resetScreenPush());
+        this.rtcSessionManager.handleDisconnectGraceTimer(
+          "screenPush",
+          this.isLeaving,
+          () => this.resetScreenPush(),
+        );
       } else if (state === "failed") {
         this.resetScreenPush();
       }
@@ -1142,8 +1396,13 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
 
   // ── Orchestration Methods ───────────────────────────────────────────────
 
-  public async replaceTrack(trackName: string, newTrack: MediaStreamTrack | null) {
-    const pc = trackName.startsWith('screen-') ? this.negotiator.screenPushPC : this.negotiator.camPushPC;
+  public async replaceTrack(
+    trackName: string,
+    newTrack: MediaStreamTrack | null,
+  ) {
+    const pc = trackName.startsWith("screen-")
+      ? this.negotiator.screenPushPC
+      : this.negotiator.camPushPC;
     if (!pc) return;
 
     const transceiver = this.negotiator.getPushTransceiver(trackName);
@@ -1152,14 +1411,20 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
     }
   }
 
-  public setPublishedTrackEnabled(trackName: string, enabled: boolean): boolean {
+  public setPublishedTrackEnabled(
+    trackName: string,
+    enabled: boolean,
+  ): boolean {
     const track = this.negotiator.getPushTransceiver(trackName)?.sender.track;
     if (!track) return false;
     track.enabled = enabled;
     return true;
   }
 
-  private async invokeNative<T>(command: string, args?: Record<string, unknown>): Promise<T> {
+  private async invokeNative<T>(
+    command: string,
+    args?: Record<string, unknown>,
+  ): Promise<T> {
     const { invoke } = await import("@tauri-apps/api/core");
     return invoke<T>(command, args);
   }
@@ -1180,7 +1445,9 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
       throw new Error("Cannot start native screen share before joining voice");
     }
     if (!this.voiceGW.isReady) {
-      sfuLog.warn("VoiceGW not ready, waiting to publish native screen share...");
+      sfuLog.warn(
+        "VoiceGW not ready, waiting to publish native screen share...",
+      );
       await this.voiceReadyPromise;
     }
 
@@ -1188,26 +1455,34 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
     const audioTrackName = `screen-audio-${this.participantId}`;
     const pushTracks = [
       { track_name: videoTrackName, mid: "0", kind: "video" as const },
-      ...(options.withAudio ? [{ track_name: audioTrackName, mid: "1", kind: "audio" as const }] : []),
+      ...(options.withAudio
+        ? [{ track_name: audioTrackName, mid: "1", kind: "audio" as const }]
+        : []),
     ];
 
     this.nativeScreenSharePending = true;
     this.nativeScreenTrackNames = pushTracks.map((track) => track.track_name);
 
-    const offer = await this.invokeNative<{ sdp: string; type: "offer" }>("start_native_screen_share", {
-      sourceId: options.sourceId,
-      sourceName: options.sourceName ?? null,
-      quality: options.quality,
-      trackName: videoTrackName,
-      audioTrackName,
-      withAudio: options.withAudio,
-      iceServers: this.iceServers,
-    });
+    const offer = await this.invokeNative<{ sdp: string; type: "offer" }>(
+      "start_native_screen_share",
+      {
+        sourceId: options.sourceId,
+        sourceName: options.sourceName ?? null,
+        quality: options.quality,
+        trackName: videoTrackName,
+        audioTrackName,
+        withAudio: options.withAudio,
+        iceServers: this.iceServers,
+      },
+    );
 
-    const negotiationDonePromise = this.waitForPushNegotiationDone('screen', 10000);
-    const answerPromise = this.waitForPushAnswer('screen', 10000);
-    negotiationDonePromise.catch(() => { });
-    answerPromise.catch(() => { });
+    const negotiationDonePromise = this.waitForPushNegotiationDone(
+      "screen",
+      10000,
+    );
+    const answerPromise = this.waitForPushAnswer("screen", 10000);
+    negotiationDonePromise.catch(() => {});
+    answerPromise.catch(() => {});
 
     this.voiceGW.send({
       op: VoiceOpcode.SelectProtocol,
@@ -1221,7 +1496,9 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
 
     await answerPromise;
     await negotiationDonePromise;
-    await this.invokeNative<string>("wait_native_screen_share_connected", { timeoutMs: 10000 });
+    await this.invokeNative<string>("wait_native_screen_share_connected", {
+      timeoutMs: 10000,
+    });
 
     this.voiceGW.send({
       op: VoiceOpcode.TracksReady,
@@ -1248,7 +1525,10 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
       sfuLog.warn("Failed to stop native screen share", err);
     }
     if (trackNames.length > 0) {
-      this.voiceGW.send({ op: VoiceOpcode.StopTracks, d: { track_names: trackNames } });
+      this.voiceGW.send({
+        op: VoiceOpcode.StopTracks,
+        d: { track_names: trackNames },
+      });
     }
   }
 
@@ -1267,11 +1547,16 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
   public async updateNativeScreenQuality(quality: string): Promise<boolean> {
     if (!this.isNativeScreenShareActive) return false;
     try {
-      await this.invokeNative<void>("update_native_screen_quality", { quality });
+      await this.invokeNative<void>("update_native_screen_quality", {
+        quality,
+      });
       sfuLog.info("Native screen quality switched in place", { quality });
       return true;
     } catch (err) {
-      sfuLog.warn("In-place native quality switch failed; caller may restart", err);
+      sfuLog.warn(
+        "In-place native quality switch failed; caller may restart",
+        err,
+      );
       return false;
     }
   }
@@ -1441,12 +1726,17 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
     return this.previewLoopbackStream;
   }
 
-  public async updateSenderEncoding(trackName: string, encoding: Partial<RTCRtpEncodingParameters>) {
+  public async updateSenderEncoding(
+    trackName: string,
+    encoding: Partial<RTCRtpEncodingParameters>,
+  ) {
     const transceiver = this.negotiator.getPushTransceiver(trackName);
     if (!transceiver) return;
 
     const parameters = transceiver.sender.getParameters();
-    parameters.encodings = parameters.encodings?.length ? parameters.encodings : [{}];
+    parameters.encodings = parameters.encodings?.length
+      ? parameters.encodings
+      : [{}];
     parameters.encodings = parameters.encodings.map((current) => ({
       ...current,
       ...encoding,
@@ -1465,7 +1755,7 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
       d: { track_names: trackNames },
     });
 
-    const allScreen = trackNames.every(n => n.startsWith('screen-'));
+    const allScreen = trackNames.every((n) => n.startsWith("screen-"));
     if (allScreen) {
       const pcToClose = this.negotiator.screenPushPC;
       setTimeout(() => {
@@ -1475,7 +1765,10 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
       }, 500);
     }
 
-    this.emit("tracks-stopped", { participantId: this.participantId ?? "", trackNames });
+    this.emit("tracks-stopped", {
+      participantId: this.participantId ?? "",
+      trackNames,
+    });
   }
 
   public createTrueStereoStream(stream: MediaStream): MediaStream {
@@ -1491,7 +1784,11 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
       if (state === "connected" || state === "completed") {
         this.rtcSessionManager.clearDisconnectTimer("camPush");
       } else if (state === "disconnected") {
-        this.rtcSessionManager.handleDisconnectGraceTimer("camPush", this.isLeaving, () => this.resetCamPush());
+        this.rtcSessionManager.handleDisconnectGraceTimer(
+          "camPush",
+          this.isLeaving,
+          () => this.resetCamPush(),
+        );
       } else if (state === "failed") {
         this.resetCamPush();
       }
@@ -1501,7 +1798,11 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
       if (state === "connected") {
         this.rtcSessionManager.clearDisconnectTimer("camPush");
       } else if (state === "disconnected") {
-        this.rtcSessionManager.handleDisconnectGraceTimer("camPush", this.isLeaving, () => this.resetCamPush());
+        this.rtcSessionManager.handleDisconnectGraceTimer(
+          "camPush",
+          this.isLeaving,
+          () => this.resetCamPush(),
+        );
       } else if (state === "failed") {
         this.resetCamPush();
       }
@@ -1520,14 +1821,17 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
   // 3. We need to add/remove tracks (new participant events)
   private handleVoiceGWReconnectRecovery() {
     if (this.reconnectRecoveryPromise) {
-      sfuLog.info("VoiceGW recovery already in progress, joining existing recovery");
+      sfuLog.info(
+        "VoiceGW recovery already in progress, joining existing recovery",
+      );
       return this.reconnectRecoveryPromise;
     }
 
-    this.reconnectRecoveryPromise = this.runVoiceGWReconnectRecovery()
-      .finally(() => {
+    this.reconnectRecoveryPromise = this.runVoiceGWReconnectRecovery().finally(
+      () => {
         this.reconnectRecoveryPromise = null;
-      });
+      },
+    );
 
     return this.reconnectRecoveryPromise;
   }
@@ -1535,29 +1839,40 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
   private async runVoiceGWReconnectRecovery() {
     const RECOVERY_TIMEOUT_MS = 30_000; // give backoff more time since audio is still flowing
 
-    sfuLog.info("VoiceGW signaling lost — audio continues on UDP, waiting for WS re-identify...");
+    sfuLog.info(
+      "VoiceGW signaling lost — audio continues on UDP, waiting for WS re-identify...",
+    );
 
     // Check if PeerConnections are actually alive
-    const camPCAlive = this.negotiator.camPushPC?.iceConnectionState === "connected" ||
+    const camPCAlive =
+      this.negotiator.camPushPC?.iceConnectionState === "connected" ||
       this.negotiator.camPushPC?.iceConnectionState === "completed";
-    const pullPCAlive = this.negotiator.pullPC?.iceConnectionState === "connected" ||
+    const pullPCAlive =
+      this.negotiator.pullPC?.iceConnectionState === "connected" ||
       this.negotiator.pullPC?.iceConnectionState === "completed";
 
     if (camPCAlive || pullPCAlive) {
-      sfuLog.info(`PeerConnections still alive (push=${camPCAlive}, pull=${pullPCAlive}) — zero-interruption recovery`);
+      sfuLog.info(
+        `PeerConnections still alive (push=${camPCAlive}, pull=${pullPCAlive}) — zero-interruption recovery`,
+      );
     }
 
     try {
       await Promise.race([
         this.voiceReadyPromise,
         new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error("VoiceGW re-identify timeout")), RECOVERY_TIMEOUT_MS)
+          setTimeout(
+            () => reject(new Error("VoiceGW re-identify timeout")),
+            RECOVERY_TIMEOUT_MS,
+          ),
         ),
       ]);
     } catch {
       if (this.isLeaving) return;
 
-      sfuLog.warn("VoiceGW failed to re-identify within 30s — forcing fresh token via RoomGW cycle");
+      sfuLog.warn(
+        "VoiceGW failed to re-identify within 30s — forcing fresh token via RoomGW cycle",
+      );
 
       // Force RoomGW cycle to get fresh token — but DO NOT tear down PeerConnections!
       // The PCs may still be alive and flowing audio.
@@ -1568,34 +1883,48 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
 
     // VoiceGW re-identified successfully!
     if (this.isLeaving) return;
-    sfuLog.info("VoiceGW signaling restored — checking if PCs need recovery...");
+    sfuLog.info(
+      "VoiceGW signaling restored — checking if PCs need recovery...",
+    );
 
     // Check both push AND pull PeerConnections independently
-    const camPCStillAlive = this.negotiator.camPushPC?.iceConnectionState === "connected" ||
+    const camPCStillAlive =
+      this.negotiator.camPushPC?.iceConnectionState === "connected" ||
       this.negotiator.camPushPC?.iceConnectionState === "completed";
-    const pullPCStillAlive = this.negotiator.pullPC?.iceConnectionState === "connected" ||
+    const pullPCStillAlive =
+      this.negotiator.pullPC?.iceConnectionState === "connected" ||
       this.negotiator.pullPC?.iceConnectionState === "completed";
 
     if (!camPCStillAlive && this.negotiator.camPushPC) {
-      sfuLog.warn("Cam PeerConnection died during WS outage — closing stale PC and creating fresh one");
-      try { this.negotiator.camPushPC.close(); } catch { }
+      sfuLog.warn(
+        "Cam PeerConnection died during WS outage — closing stale PC and creating fresh one",
+      );
+      try {
+        this.negotiator.camPushPC.close();
+      } catch {}
       // CRITICAL: Clear old transceivers/publishedTrackNames/sessionId so publishTracks()
       // creates fresh transceivers on the new PC instead of reusing dead ones.
-      this.negotiator.resetPushSession('cam');
+      this.negotiator.resetPushSession("cam");
       this.negotiator.camPushPC = null;
       this.createPeerConnections();
       this.emit("voice-reconnected", undefined as never);
     } else if (!this.negotiator.camPushPC) {
-      sfuLog.warn("Cam PeerConnection is null — creating fresh PC and triggering re-publish");
-      this.negotiator.resetPushSession('cam');
+      sfuLog.warn(
+        "Cam PeerConnection is null — creating fresh PC and triggering re-publish",
+      );
+      this.negotiator.resetPushSession("cam");
       this.createPeerConnections();
       this.emit("voice-reconnected", undefined as never);
     } else {
-      sfuLog.info("Push PC survived WS outage — outbound audio uninterrupted ✓");
+      sfuLog.info(
+        "Push PC survived WS outage — outbound audio uninterrupted ✓",
+      );
     }
 
     if (!pullPCStillAlive) {
-      sfuLog.info(`Pull PC is dead (state=${this.negotiator.pullPC?.iceConnectionState ?? 'null'}) — voice-ready handler will recreate and re-pull`);
+      sfuLog.info(
+        `Pull PC is dead (state=${this.negotiator.pullPC?.iceConnectionState ?? "null"}) — voice-ready handler will recreate and re-pull`,
+      );
       // NOTE: Pull PC recreation is handled by the voice-ready handler (which runs
       // BEFORE this code since it resolves the voiceReadyPromise we just awaited).
       // Do NOT recreate here — voice-ready already did it and called pullTracks().
@@ -1612,7 +1941,7 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
       () => {
         this.createPeerConnections();
         this.emit("voice-reconnected", undefined as never);
-      }
+      },
     );
   }
 
@@ -1624,11 +1953,14 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
       () => {
         this.createScreenPushPC();
         this.emit("voice-reconnected", undefined as never);
-      }
+      },
     );
   }
 
-  private get RTCWaiters(): Set<{ resolve: (d?: any) => void; reject: (e: any) => void }> {
+  private get RTCWaiters(): Set<{
+    resolve: (d?: any) => void;
+    reject: (e: any) => void;
+  }> {
     return (this.negotiator as any).waiters || new Set();
   }
 
@@ -1671,7 +2003,7 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
   private waitForSignal(
     setter: (resolve: () => void, reject?: (reason?: any) => void) => void,
     timeoutMs: number,
-    label: string
+    label: string,
   ): Promise<void> {
     return new Promise<void>((resolve, reject) => {
       let isDone = false;
@@ -1685,48 +2017,90 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
       }, timeoutMs);
 
       const wrappedResolve = () => {
-        if (!isDone) { isDone = true; clearTimeout(timeoutId); resolve(); }
+        if (!isDone) {
+          isDone = true;
+          clearTimeout(timeoutId);
+          resolve();
+        }
       };
       const wrappedReject = (reason: any) => {
-        if (!isDone) { isDone = true; clearTimeout(timeoutId); reject(reason); }
+        if (!isDone) {
+          isDone = true;
+          clearTimeout(timeoutId);
+          reject(reason);
+        }
       };
 
       setter(wrappedResolve, wrappedReject);
     });
   }
 
-  private waitForPushAnswer(prefix: 'cam' | 'screen' = 'cam', timeoutMs = 10000) {
-    if (prefix === 'screen') {
-      return this.waitForSignal((res, rej) => {
-        this.screenPushResolver = res;
-        this.screenPushRejector = rej || null;
-      }, timeoutMs, "Screen Push SDP Answer");
+  private waitForPushAnswer(
+    prefix: "cam" | "screen" = "cam",
+    timeoutMs = 10000,
+  ) {
+    if (prefix === "screen") {
+      return this.waitForSignal(
+        (res, rej) => {
+          this.screenPushResolver = res;
+          this.screenPushRejector = rej || null;
+        },
+        timeoutMs,
+        "Screen Push SDP Answer",
+      );
     }
-    return this.waitForSignal((res, rej) => {
-      this.camPushResolver = res;
-      this.camPushRejector = rej || null;
-    }, timeoutMs, "Cam Push SDP Answer");
+    return this.waitForSignal(
+      (res, rej) => {
+        this.camPushResolver = res;
+        this.camPushRejector = rej || null;
+      },
+      timeoutMs,
+      "Cam Push SDP Answer",
+    );
   }
 
   private waitForPullOffer(timeoutMs = 10000) {
-    return this.waitForSignal((res, rej) => {
-      this.pullResolver = res;
-      this.pullRejector = rej || null;
-    }, timeoutMs, "Pull SDP Offer");
+    return this.waitForSignal(
+      (res, rej) => {
+        this.pullResolver = res;
+        this.pullRejector = rej || null;
+      },
+      timeoutMs,
+      "Pull SDP Offer",
+    );
   }
 
-  private async waitForPushNegotiationDone(prefix: 'cam' | 'screen' = 'cam', timeoutMs = 10000) {
-    if (prefix === 'screen') {
-      return this.waitForSignal((res) => { this.screenPushNegotiationResolve = res; }, timeoutMs, "Screen Push Negotiation Done");
+  private async waitForPushNegotiationDone(
+    prefix: "cam" | "screen" = "cam",
+    timeoutMs = 10000,
+  ) {
+    if (prefix === "screen") {
+      return this.waitForSignal(
+        (res) => {
+          this.screenPushNegotiationResolve = res;
+        },
+        timeoutMs,
+        "Screen Push Negotiation Done",
+      );
     }
-    return this.waitForSignal((res) => { this.camPushNegotiationResolve = res; }, timeoutMs, "Cam Push Negotiation Done");
+    return this.waitForSignal(
+      (res) => {
+        this.camPushNegotiationResolve = res;
+      },
+      timeoutMs,
+      "Cam Push Negotiation Done",
+    );
   }
 
   private async waitForPullNegotiationDone(timeoutMs = 10000) {
-    return this.waitForSignal((res, rej) => {
-      this.pullNegotiationResolve = res;
-      this.pullNegotiationRejector = rej || null;
-    }, timeoutMs, "Pull Negotiation Done");
+    return this.waitForSignal(
+      (res, rej) => {
+        this.pullNegotiationResolve = res;
+        this.pullNegotiationRejector = rej || null;
+      },
+      timeoutMs,
+      "Pull Negotiation Done",
+    );
   }
 
   public getDebugData() {
@@ -1737,7 +2111,7 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
     return this.stats.getDetailedStats();
   }
 
-  public getStatsByClerkId(clerkId: string, trackPrefix: 'cam' | 'screen') {
+  public getStatsByClerkId(clerkId: string, trackPrefix: "cam" | "screen") {
     return this.stats.getStatsByClerkId(clerkId, trackPrefix);
   }
 

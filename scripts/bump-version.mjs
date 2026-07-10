@@ -1,69 +1,73 @@
-import { execSync } from 'child_process';
-import fs from 'fs';
-import path from 'path';
+import { execSync } from "child_process";
+import fs from "fs";
+import path from "path";
 
 // Files to update with the new version
 const FILES_TO_UPDATE = [
   {
-    path: 'package.json',
-    type: 'json',
-    keyPath: ['version']
+    path: "package.json",
+    type: "json",
+    keyPath: ["version"],
   },
   {
-    path: 'desktop/package.json',
-    type: 'json',
-    keyPath: ['version']
+    path: "desktop/package.json",
+    type: "json",
+    keyPath: ["version"],
   },
   {
-    path: 'desktop/src-tauri/tauri.conf.json',
-    type: 'json',
-    keyPath: ['version']
+    path: "desktop/src-tauri/tauri.conf.json",
+    type: "json",
+    keyPath: ["version"],
   },
   {
-    path: 'desktop/src-tauri/Cargo.toml',
-    type: 'toml',
-    regex: /^version\s*=\s*"([^"]+)"/m
+    path: "desktop/src-tauri/Cargo.toml",
+    type: "toml",
+    regex: /^version\s*=\s*"([^"]+)"/m,
   },
   {
-    path: 'desktop/installer/installer.csproj',
-    type: 'xml',
-    regex: /<Version>([^<]+)<\/Version>/
+    path: "desktop/installer/installer.csproj",
+    type: "xml",
+    regex: /<Version>([^<]+)<\/Version>/,
   },
   {
-    path: 'packages/kova-react/package.json',
-    type: 'json',
-    keyPath: ['version']
+    path: "packages/kova-react/package.json",
+    type: "json",
+    keyPath: ["version"],
   },
   {
-    path: 'mobile/package.json',
-    type: 'json',
-    keyPath: ['version']
+    path: "mobile/package.json",
+    type: "json",
+    keyPath: ["version"],
   },
   {
-    path: 'mobile/src-tauri/tauri.conf.json',
-    type: 'json',
-    keyPath: ['version']
+    path: "mobile/src-tauri/tauri.conf.json",
+    type: "json",
+    keyPath: ["version"],
   },
   {
-    path: 'mobile/src-tauri/Cargo.toml',
-    type: 'toml',
-    regex: /^version\s*=\s*"([^"]+)"/m
-  }
+    path: "mobile/src-tauri/Cargo.toml",
+    type: "toml",
+    regex: /^version\s*=\s*"([^"]+)"/m,
+  },
 ];
 
 function getLatestTag() {
   try {
-    return execSync('git describe --tags --abbrev=0', { encoding: 'utf8' }).trim();
+    return execSync("git describe --tags --abbrev=0", {
+      encoding: "utf8",
+    }).trim();
   } catch (error) {
-    console.log('⚠️ No git tags found. Defaulting to v0.0.0.');
-    return 'v0.0.0';
+    console.log("⚠️ No git tags found. Defaulting to v0.0.0.");
+    return "v0.0.0";
   }
 }
 
 function getCommitsSince(tag) {
   try {
-    const log = execSync(`git log ${tag}..HEAD --oneline`, { encoding: 'utf8' }).trim();
-    return log ? log.split('\n') : [];
+    const log = execSync(`git log ${tag}..HEAD --oneline`, {
+      encoding: "utf8",
+    }).trim();
+    return log ? log.split("\n") : [];
   } catch (error) {
     console.error(`❌ Failed to get commits since ${tag}:`, error.message);
     return [];
@@ -72,31 +76,35 @@ function getCommitsSince(tag) {
 
 function determineBumpType(commits) {
   if (commits.length === 0) {
-    return 'none';
+    return "none";
   }
 
-  let bump = 'none';
+  let bump = "none";
 
   for (const commit of commits) {
     // Clean up the hash to get the message
-    const message = commit.substring(commit.indexOf(' ') + 1).trim();
+    const message = commit.substring(commit.indexOf(" ") + 1).trim();
 
     // Check for breaking change markers
-    const isBreaking = message.includes('BREAKING CHANGE') || 
-                       /^[a-zA-Z0-9_-]+\([^)]+\)!:/.test(message) || 
-                       /^[a-zA-Z0-9_-]+!:/.test(message);
+    const isBreaking =
+      message.includes("BREAKING CHANGE") ||
+      /^[a-zA-Z0-9_-]+\([^)]+\)!:/.test(message) ||
+      /^[a-zA-Z0-9_-]+!:/.test(message);
 
     if (isBreaking) {
-      return 'major'; // Highest precedence
+      return "major"; // Highest precedence
     }
 
-    if (message.startsWith('feat')) {
-      bump = 'minor'; // Takes precedence over patch
-    } else if ((message.startsWith('fix') || message.startsWith('perf')) && bump !== 'minor') {
-      bump = 'patch';
-    } else if (bump === 'none') {
+    if (message.startsWith("feat")) {
+      bump = "minor"; // Takes precedence over patch
+    } else if (
+      (message.startsWith("fix") || message.startsWith("perf")) &&
+      bump !== "minor"
+    ) {
+      bump = "patch";
+    } else if (bump === "none") {
       // For chores, docs, refactor, ci, etc., default to patch bump if there are changes
-      bump = 'patch';
+      bump = "patch";
     }
   }
 
@@ -104,7 +112,7 @@ function determineBumpType(commits) {
 }
 
 function bumpVersion(currentVersion, bumpType) {
-  const parts = currentVersion.replace(/^v/, '').split('.').map(Number);
+  const parts = currentVersion.replace(/^v/, "").split(".").map(Number);
   if (parts.length !== 3 || parts.some(isNaN)) {
     throw new Error(`Invalid version format: ${currentVersion}`);
   }
@@ -112,16 +120,16 @@ function bumpVersion(currentVersion, bumpType) {
   let [major, minor, patch] = parts;
 
   switch (bumpType) {
-    case 'major':
+    case "major":
       major += 1;
       minor = 0;
       patch = 0;
       break;
-    case 'minor':
+    case "minor":
       minor += 1;
       patch = 0;
       break;
-    case 'patch':
+    case "patch":
       patch += 1;
       break;
     default:
@@ -159,24 +167,27 @@ function updateFile(fileInfo, newVersion) {
     return false;
   }
 
-  const content = fs.readFileSync(filePath, 'utf8');
+  const content = fs.readFileSync(filePath, "utf8");
 
-  if (fileInfo.type === 'json') {
+  if (fileInfo.type === "json") {
     const json = JSON.parse(content);
     setNestedValue(json, fileInfo.keyPath, newVersion);
     // Write back with 2 spaces indentation and trailing newline
-    fs.writeFileSync(filePath, JSON.stringify(json, null, 2) + '\n', 'utf8');
+    fs.writeFileSync(filePath, JSON.stringify(json, null, 2) + "\n", "utf8");
     console.log(`✅ Updated JSON: ${fileInfo.path} -> ${newVersion}`);
     return true;
-  } 
-  
-  if (fileInfo.type === 'toml') {
+  }
+
+  if (fileInfo.type === "toml") {
     if (fileInfo.regex) {
       const match = content.match(fileInfo.regex);
       if (match) {
         // Replace first occurrence of version = "..."
-        const updatedContent = content.replace(fileInfo.regex, `version = "${newVersion}"`);
-        fs.writeFileSync(filePath, updatedContent, 'utf8');
+        const updatedContent = content.replace(
+          fileInfo.regex,
+          `version = "${newVersion}"`,
+        );
+        fs.writeFileSync(filePath, updatedContent, "utf8");
         console.log(`✅ Updated TOML: ${fileInfo.path} -> ${newVersion}`);
         return true;
       }
@@ -185,12 +196,15 @@ function updateFile(fileInfo, newVersion) {
     return false;
   }
 
-  if (fileInfo.type === 'xml') {
+  if (fileInfo.type === "xml") {
     if (fileInfo.regex) {
       const match = content.match(fileInfo.regex);
       if (match) {
-        const updatedContent = content.replace(fileInfo.regex, `<Version>${newVersion}</Version>`);
-        fs.writeFileSync(filePath, updatedContent, 'utf8');
+        const updatedContent = content.replace(
+          fileInfo.regex,
+          `<Version>${newVersion}</Version>`,
+        );
+        fs.writeFileSync(filePath, updatedContent, "utf8");
         console.log(`✅ Updated XML: ${fileInfo.path} -> ${newVersion}`);
         return true;
       }
@@ -203,36 +217,38 @@ function updateFile(fileInfo, newVersion) {
 }
 
 function main() {
-  console.log('🔍 Analyzing Git history for version recommendation...');
+  console.log("🔍 Analyzing Git history for version recommendation...");
 
   const latestTag = getLatestTag();
   console.log(`📌 Latest release tag: ${latestTag}`);
 
   const commits = getCommitsSince(latestTag);
   console.log(`📝 Commits since ${latestTag}: ${commits.length}`);
-  commits.forEach(commit => console.log(`   - ${commit}`));
+  commits.forEach((commit) => console.log(`   - ${commit}`));
 
   const bumpType = determineBumpType(commits);
   console.log(`📈 Recommended bump type: ${bumpType.toUpperCase()}`);
 
-  if (bumpType === 'none') {
-    console.log('✅ No new release commits detected. Version remains unchanged.');
+  if (bumpType === "none") {
+    console.log(
+      "✅ No new release commits detected. Version remains unchanged.",
+    );
     return;
   }
 
   // Get current version from root package.json
-  const rootPackagePath = path.resolve(process.cwd(), 'package.json');
-  const rootJson = JSON.parse(fs.readFileSync(rootPackagePath, 'utf8'));
+  const rootPackagePath = path.resolve(process.cwd(), "package.json");
+  const rootJson = JSON.parse(fs.readFileSync(rootPackagePath, "utf8"));
   const currentVersion = rootJson.version;
 
   const nextVersion = bumpVersion(currentVersion, bumpType);
   console.log(`🚀 Bumping version: ${currentVersion} -> ${nextVersion}`);
 
   // Check if dry run (passed via CLI flag)
-  const isDryRun = process.argv.includes('--dry-run');
+  const isDryRun = process.argv.includes("--dry-run");
   if (isDryRun) {
-    console.log('\n✨ [DRY RUN] Would update the following files:');
-    FILES_TO_UPDATE.forEach(file => {
+    console.log("\n✨ [DRY RUN] Would update the following files:");
+    FILES_TO_UPDATE.forEach((file) => {
       const filePath = path.resolve(process.cwd(), file.path);
       if (fs.existsSync(filePath)) {
         console.log(`   - ${file.path}`);
@@ -241,7 +257,7 @@ function main() {
     return;
   }
 
-  console.log('\n✏️ Writing updates...');
+  console.log("\n✏️ Writing updates...");
   let updatedCount = 0;
   for (const file of FILES_TO_UPDATE) {
     if (updateFile(file, nextVersion)) {
@@ -249,9 +265,13 @@ function main() {
     }
   }
 
-  console.log(`\n🎉 Success! Updated ${updatedCount} files to version ${nextVersion}.`);
-  console.log('👉 Next steps:');
-  console.log(`   1. Commit these changes: git commit -m "chore(release): bump version to ${nextVersion}"`);
+  console.log(
+    `\n🎉 Success! Updated ${updatedCount} files to version ${nextVersion}.`,
+  );
+  console.log("👉 Next steps:");
+  console.log(
+    `   1. Commit these changes: git commit -m "chore(release): bump version to ${nextVersion}"`,
+  );
   console.log(`   2. Tag the release: git tag v${nextVersion}`);
   console.log(`   3. Push the tag: git push origin v${nextVersion}`);
 }

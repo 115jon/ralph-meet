@@ -40,7 +40,7 @@ export interface MockD1 {
   mockQuery(
     pattern: RegExp | string,
     response: D1Result | Record<string, unknown> | null,
-    bindingsMatch?: unknown[]
+    bindingsMatch?: unknown[],
   ): void;
 
   /** All recorded query calls */
@@ -91,7 +91,7 @@ export function createMockD1(): MockD1 {
 
   function findResponse(
     sql: string,
-    bindings: unknown[]
+    bindings: unknown[],
   ): D1Result | Record<string, unknown> | null | undefined {
     // Search in reverse so more recently added rules take priority
     for (let i = rules.length - 1; i >= 0; i--) {
@@ -134,7 +134,10 @@ export function createMockD1(): MockD1 {
           return response as any;
         }
         // Otherwise wrap it
-        return { results: [response as Record<string, unknown>], success: true };
+        return {
+          results: [response as Record<string, unknown>],
+          success: true,
+        };
       },
 
       async first<T = Record<string, unknown>>(): Promise<T | null> {
@@ -176,7 +179,7 @@ export function createMockD1(): MockD1 {
     mockQuery(
       pattern: RegExp | string,
       response: D1Result | Record<string, unknown> | null,
-      bindingsMatch?: unknown[]
+      bindingsMatch?: unknown[],
     ) {
       rules.push({ pattern, response, bindingsMatch });
     },
@@ -190,7 +193,7 @@ export function createMockD1(): MockD1 {
       if (!found) {
         const allSqls = calls.map((c) => `  - ${c.sql}`).join("\n");
         throw new Error(
-          `Expected query matching ${pattern} to have been called.\nActual queries:\n${allSqls || "  (none)"}`
+          `Expected query matching ${pattern} to have been called.\nActual queries:\n${allSqls || "  (none)"}`,
         );
       }
     },
@@ -199,17 +202,17 @@ export function createMockD1(): MockD1 {
       const found = calls.some(
         (c) =>
           matchesPattern(c.sql, pattern) &&
-          matchesBindings(c.bindings, expectedBindings)
+          matchesBindings(c.bindings, expectedBindings),
       );
       if (!found) {
         const matching = calls.filter((c) => matchesPattern(c.sql, pattern));
         const details = matching.length
           ? matching
-            .map((c) => `  bindings: ${JSON.stringify(c.bindings)}`)
-            .join("\n")
+              .map((c) => `  bindings: ${JSON.stringify(c.bindings)}`)
+              .join("\n")
           : "  (no matching queries found)";
         throw new Error(
-          `Expected query matching ${pattern} to have been called with bindings including ${JSON.stringify(expectedBindings)}.\nMatching queries:\n${details}`
+          `Expected query matching ${pattern} to have been called with bindings including ${JSON.stringify(expectedBindings)}.\nMatching queries:\n${details}`,
         );
       }
     },
@@ -218,7 +221,7 @@ export function createMockD1(): MockD1 {
       const found = calls.some((c) => matchesPattern(c.sql, pattern));
       if (found) {
         throw new Error(
-          `Expected query matching ${pattern} to NOT have been called, but it was.`
+          `Expected query matching ${pattern} to NOT have been called, but it was.`,
         );
       }
     },

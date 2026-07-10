@@ -1,4 +1,3 @@
-
 import { getDesktopAuthHandoffToken } from "@/lib/desktop-auth";
 import { isTauri } from "@/lib/platform";
 import { useChatStore } from "@/stores/chat-store";
@@ -19,9 +18,9 @@ type ChatGatewayProps = {
 
 export function ChatGateway({ authenticatedUserId }: ChatGatewayProps) {
   const { userId, isLoaded } = useAuth();
-  const initGateway = useChatStore(s => s.gateway.initGateway);
-  const setClerkUserId = useChatStore(s => s.gateway.setClerkUserId);
-  const disconnectGateway = useChatStore(s => s.gateway.disconnectGateway);
+  const initGateway = useChatStore((s) => s.gateway.initGateway);
+  const setClerkUserId = useChatStore((s) => s.gateway.setClerkUserId);
+  const disconnectGateway = useChatStore((s) => s.gateway.disconnectGateway);
   const navigate = useNavigate();
 
   const tokenReady = isLoaded || !!getDesktopAuthHandoffToken();
@@ -76,20 +75,26 @@ export function ChatGateway({ authenticatedUserId }: ChatGatewayProps) {
           if (cancelled) return;
           const code = extractInviteCode(event.payload);
           if (code) {
-            navigate({ to: '/invite/$code', params: { code } } as any);
+            navigate({ to: "/invite/$code", params: { code } } as any);
           }
         };
 
         const u1 = await listen("deep-link", handler);
         const u2 = await listen("deep-link://new-url", handler);
-        return () => { cancelled = true; u1(); u2(); };
+        return () => {
+          cancelled = true;
+          u1();
+          u2();
+        };
       } catch {
         return undefined;
       }
     }
 
     const cleanup = listenForInvites();
-    return () => { cleanup.then((fn) => fn?.()); };
+    return () => {
+      cleanup.then((fn) => fn?.());
+    };
   }, [navigate]);
 
   return null;

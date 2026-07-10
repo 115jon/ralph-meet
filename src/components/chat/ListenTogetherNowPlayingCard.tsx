@@ -1,11 +1,24 @@
 import { AvatarImage } from "@/components/chat/AvatarImage";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { getAuthAssetUrl } from "@/lib/platform";
 import type { SFUClient } from "@/lib/sfu-client";
 import { cn } from "@/lib/utils";
 import type { ListenTogetherPlaybackState } from "./listen-together-playback";
 import { formatListenTogetherDuration } from "./listen-together-playback";
-import { Headphones, ListMusic, Pause, Play, ShieldCheck, SkipForward, Trash2 } from "lucide-react";
+import {
+  Headphones,
+  ListMusic,
+  Pause,
+  Play,
+  ShieldCheck,
+  SkipForward,
+  Trash2,
+} from "lucide-react";
 import { LISTEN_TOGETHER_LOUDNESS_PRESET_OPTIONS } from "@/lib/voice/listen-together-audio";
 
 interface ListenTogetherNowPlayingCardProps {
@@ -50,10 +63,12 @@ export function ListenTogetherNowPlayingCard({
     if (variant === "mini") return null;
     return (
       <TooltipProvider delayDuration={100}>
-        <div className={cn(
-          "rounded-[22px] border border-dashed border-rm-border bg-rm-bg-hover/30 px-4 py-10 text-center text-sm text-rm-text-muted",
-          className,
-        )}>
+        <div
+          className={cn(
+            "rounded-[22px] border border-dashed border-rm-border bg-rm-bg-hover/30 px-4 py-10 text-center text-sm text-rm-text-muted",
+            className,
+          )}
+        >
           Queue a track to start listening together.
         </div>
       </TooltipProvider>
@@ -61,26 +76,28 @@ export function ListenTogetherNowPlayingCard({
   }
 
   const queueCount = snapshot?.queue?.length ?? 0;
-  const subtitle = [currentEntry.track.artist, currentEntry.track.album]
-    .filter(Boolean)
-    .join(" • ") || currentEntry.track.sourceLabel;
-  const requesterLine = queueCount > 1
-    ? `Requested by ${currentEntry.requester.displayName} • ${queueCount} queued`
-    : `Requested by ${currentEntry.requester.displayName}`;
+  const subtitle =
+    [currentEntry.track.artist, currentEntry.track.album]
+      .filter(Boolean)
+      .join(" • ") || currentEntry.track.sourceLabel;
+  const requesterLine =
+    queueCount > 1
+      ? `Requested by ${currentEntry.requester.displayName} • ${queueCount} queued`
+      : `Requested by ${currentEntry.requester.displayName}`;
   const syncBadge = error
     ? {
-      label: "Issue",
-      className: "border-red-500/20 bg-red-500/12 text-red-200",
-    }
+        label: "Issue",
+        className: "border-red-500/20 bg-red-500/12 text-red-200",
+      }
     : snapshot?.paused
       ? {
-        label: "Paused",
-        className: "border-white/8 bg-rm-bg-hover/80 text-rm-text-muted",
-      }
+          label: "Paused",
+          className: "border-white/8 bg-rm-bg-hover/80 text-rm-text-muted",
+        }
       : {
-        label: "Sync",
-        className: "border-primary/20 bg-primary/10 text-primary",
-      };
+          label: "Sync",
+          className: "border-primary/20 bg-primary/10 text-primary",
+        };
   const iconButtonClass = cn(
     "inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/6 bg-rm-bg-hover/75 text-rm-text-muted transition-colors hover:bg-rm-bg-active hover:text-rm-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30",
     !canControl && "cursor-not-allowed opacity-50",
@@ -111,16 +128,20 @@ export function ListenTogetherNowPlayingCard({
   );
   const titleTriggerClassName = cn(
     "block truncate rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-2 focus-visible:ring-offset-rm-bg-elevated",
-    variant === "mini" ? "text-[13px] font-bold leading-tight text-rm-text" : "text-base font-black text-rm-text",
+    variant === "mini"
+      ? "text-[13px] font-bold leading-tight text-rm-text"
+      : "text-base font-black text-rm-text",
   );
 
   if (variant === "mini") {
     return (
       <TooltipProvider delayDuration={100}>
-        <div className={cn(
-          "rounded-[20px] border border-white/6 bg-rm-bg-elevated/70 px-3 py-3 shadow-[0_18px_40px_rgba(0,0,0,0.22),inset_0_1px_0_rgba(255,255,255,0.04)] backdrop-blur-sm",
-          className,
-        )}>
+        <div
+          className={cn(
+            "rounded-[20px] border border-white/6 bg-rm-bg-elevated/70 px-3 py-3 shadow-[0_18px_40px_rgba(0,0,0,0.22),inset_0_1px_0_rgba(255,255,255,0.04)] backdrop-blur-sm",
+            className,
+          )}
+        >
           <div className="flex items-start gap-3">
             <div className="h-12 w-12 shrink-0 overflow-hidden rounded-[16px] bg-rm-bg-hover/70 ring-1 ring-white/5">
               {artwork}
@@ -138,18 +159,27 @@ export function ListenTogetherNowPlayingCard({
                         {currentEntry.track.title}
                       </span>
                     </TooltipTrigger>
-                    <TooltipContent side="top" align="start" sideOffset={10} className="max-w-[280px] bg-rm-bg-floating text-rm-text-primary">
-                      <p className="break-words text-sm font-semibold">{currentEntry.track.title}</p>
+                    <TooltipContent
+                      side="top"
+                      align="start"
+                      sideOffset={10}
+                      className="max-w-[280px] bg-rm-bg-floating text-rm-text-primary"
+                    >
+                      <p className="break-words text-sm font-semibold">
+                        {currentEntry.track.title}
+                      </p>
                     </TooltipContent>
                   </Tooltip>
                   <div className="mt-1 truncate text-[11px] text-rm-text-muted">
                     {subtitle}
                   </div>
                 </div>
-                <div className={cn(
-                  "inline-flex shrink-0 rounded-full border px-2 py-0.5 text-[9px] font-black uppercase tracking-[0.18em]",
-                  syncBadge.className,
-                )}>
+                <div
+                  className={cn(
+                    "inline-flex shrink-0 rounded-full border px-2 py-0.5 text-[9px] font-black uppercase tracking-[0.18em]",
+                    syncBadge.className,
+                  )}
+                >
                   {syncBadge.label}
                 </div>
               </div>
@@ -215,9 +245,17 @@ export function ListenTogetherNowPlayingCard({
                 }}
                 disabled={!canControl}
                 className={iconButtonClass}
-                aria-label={snapshot?.paused ? "Resume shared playback" : "Pause shared playback"}
+                aria-label={
+                  snapshot?.paused
+                    ? "Resume shared playback"
+                    : "Pause shared playback"
+                }
               >
-                {snapshot?.paused ? <Play className="h-3.5 w-3.5" /> : <Pause className="h-3.5 w-3.5" />}
+                {snapshot?.paused ? (
+                  <Play className="h-3.5 w-3.5" />
+                ) : (
+                  <Pause className="h-3.5 w-3.5" />
+                )}
               </button>
               <button
                 type="button"
@@ -260,11 +298,20 @@ export function ListenTogetherNowPlayingCard({
                       {currentEntry.track.title}
                     </span>
                   </TooltipTrigger>
-                  <TooltipContent side="top" align="start" sideOffset={10} className="max-w-[320px] bg-rm-bg-floating text-rm-text-primary">
-                    <p className="break-words text-sm font-semibold">{currentEntry.track.title}</p>
+                  <TooltipContent
+                    side="top"
+                    align="start"
+                    sideOffset={10}
+                    className="max-w-[320px] bg-rm-bg-floating text-rm-text-primary"
+                  >
+                    <p className="break-words text-sm font-semibold">
+                      {currentEntry.track.title}
+                    </p>
                   </TooltipContent>
                 </Tooltip>
-                <div className="mt-1 truncate text-sm text-rm-text-muted">{subtitle}</div>
+                <div className="mt-1 truncate text-sm text-rm-text-muted">
+                  {subtitle}
+                </div>
               </div>
               {queueCount > 0 && (
                 <span className="rounded-full border border-rm-border bg-rm-bg-hover/70 px-2 py-1 text-[10px] font-black uppercase tracking-[0.14em] text-rm-text-muted">
@@ -325,7 +372,11 @@ export function ListenTogetherNowPlayingCard({
               "inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/15 px-3 py-2 text-xs font-bold text-primary transition hover:bg-primary/20 disabled:cursor-not-allowed disabled:opacity-50",
             )}
           >
-            {snapshot?.paused ? <Play className="h-3.5 w-3.5" /> : <Pause className="h-3.5 w-3.5" />}
+            {snapshot?.paused ? (
+              <Play className="h-3.5 w-3.5" />
+            ) : (
+              <Pause className="h-3.5 w-3.5" />
+            )}
             {snapshot?.paused ? "Resume" : "Pause"}
           </button>
           <button
@@ -404,8 +455,14 @@ export function ListenTogetherNowPlayingCard({
               type="button"
               role="switch"
               aria-checked={loudnessEnabled}
-              aria-label={loudnessEnabled ? "Turn off loudness control" : "Turn on loudness control"}
-              onClick={() => updateLoudnessSettings({ enabled: !loudnessEnabled })}
+              aria-label={
+                loudnessEnabled
+                  ? "Turn off loudness control"
+                  : "Turn on loudness control"
+              }
+              onClick={() =>
+                updateLoudnessSettings({ enabled: !loudnessEnabled })
+              }
               className={cn(
                 "relative h-5 w-9 shrink-0 rounded-full border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30",
                 loudnessEnabled
@@ -413,31 +470,35 @@ export function ListenTogetherNowPlayingCard({
                   : "border-rm-border bg-rm-bg-hover",
               )}
             >
-              <span className={cn(
-                "absolute top-0.5 h-3.5 w-3.5 rounded-full bg-white shadow-sm transition-transform",
-                loudnessEnabled ? "translate-x-4" : "translate-x-0.5",
-              )} />
+              <span
+                className={cn(
+                  "absolute top-0.5 h-3.5 w-3.5 rounded-full bg-white shadow-sm transition-transform",
+                  loudnessEnabled ? "translate-x-4" : "translate-x-0.5",
+                )}
+              />
             </button>
           </div>
           <div className="mt-2 flex items-center gap-1 rounded-md bg-rm-bg-elevated/60 p-1">
-            {LISTEN_TOGETHER_LOUDNESS_PRESET_OPTIONS.map(([preset, { label }]) => (
-              <button
-                key={preset}
-                type="button"
-                disabled={!loudnessEnabled}
-                aria-label={`Use ${label.toLowerCase()} loudness control`}
-                aria-pressed={loudnessPreset === preset}
-                onClick={() => updateLoudnessSettings({ preset })}
-                className={cn(
-                  "min-w-0 flex-1 rounded px-2 py-1.5 text-[10px] font-bold transition-colors disabled:cursor-not-allowed disabled:opacity-45",
-                  loudnessPreset === preset
-                    ? "bg-rm-bg-active text-rm-text shadow-sm"
-                    : "text-rm-text-muted hover:text-rm-text",
-                )}
-              >
-                {label}
-              </button>
-            ))}
+            {LISTEN_TOGETHER_LOUDNESS_PRESET_OPTIONS.map(
+              ([preset, { label }]) => (
+                <button
+                  key={preset}
+                  type="button"
+                  disabled={!loudnessEnabled}
+                  aria-label={`Use ${label.toLowerCase()} loudness control`}
+                  aria-pressed={loudnessPreset === preset}
+                  onClick={() => updateLoudnessSettings({ preset })}
+                  className={cn(
+                    "min-w-0 flex-1 rounded px-2 py-1.5 text-[10px] font-bold transition-colors disabled:cursor-not-allowed disabled:opacity-45",
+                    loudnessPreset === preset
+                      ? "bg-rm-bg-active text-rm-text shadow-sm"
+                      : "text-rm-text-muted hover:text-rm-text",
+                  )}
+                >
+                  {label}
+                </button>
+              ),
+            )}
           </div>
         </div>
       </div>

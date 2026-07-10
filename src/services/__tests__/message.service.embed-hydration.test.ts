@@ -61,7 +61,8 @@ describe("listMessages embed hydration", () => {
         author: {
           name: "tasyiu",
           url: "https://www.instagram.com/tasyiu",
-          iconURL: "https://scontent-ord5-1.cdninstagram.com/avatar.jpg?oe=6A53095B",
+          iconURL:
+            "https://scontent-ord5-1.cdninstagram.com/avatar.jpg?oe=6A53095B",
           isVerified: true,
         },
         metrics: {
@@ -73,22 +74,25 @@ describe("listMessages embed hydration", () => {
     ];
 
     db.mockQuery("WHERE m.channel_id = ? ORDER BY m.created_at DESC LIMIT ?", {
-      results: [{
-        id: "msg_1",
-        channel_id: CHANNEL_ID,
-        author_id: USER_ID,
-        content: "https://www.instagram.com/p/DZ9DK2RgNSk/?igsh=MXV1bnhwem9iMmY4bA==",
-        reply_to_id: null,
-        is_pinned: 0,
-        created_at: "2026-07-07T18:00:00.000Z",
-        updated_at: null,
-        author_username: "alice",
-        author_display_name: null,
-        author_avatar_url: null,
-        author_avatar_display: null,
-        embeds: JSON.stringify(staleEmbeds),
-        reply_count: 0,
-      }],
+      results: [
+        {
+          id: "msg_1",
+          channel_id: CHANNEL_ID,
+          author_id: USER_ID,
+          content:
+            "https://www.instagram.com/p/DZ9DK2RgNSk/?igsh=MXV1bnhwem9iMmY4bA==",
+          reply_to_id: null,
+          is_pinned: 0,
+          created_at: "2026-07-07T18:00:00.000Z",
+          updated_at: null,
+          author_username: "alice",
+          author_display_name: null,
+          author_avatar_url: null,
+          author_avatar_display: null,
+          embeds: JSON.stringify(staleEmbeds),
+          reply_count: 0,
+        },
+      ],
     });
 
     hoisted.hydrateSocialEmbedsMock.mockResolvedValue(hydratedEmbeds);

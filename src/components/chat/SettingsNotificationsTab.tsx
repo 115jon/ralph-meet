@@ -4,7 +4,17 @@ import { isDesktop } from "@/lib/platform";
 import { useDesktopSettingsStore } from "@/stores/useDesktopSettingsStore";
 import { useSoundSettingsStore } from "@/stores/useSoundSettingsStore";
 import { useUser } from "@kova/react";
-import { Bell, BellRing, Headphones, Laptop, Mic, MonitorUp, Volume2, VolumeX, Zap } from "lucide-react";
+import {
+  Bell,
+  BellRing,
+  Headphones,
+  Laptop,
+  Mic,
+  MonitorUp,
+  Volume2,
+  VolumeX,
+  Zap,
+} from "lucide-react";
 import { useEffect } from "react";
 import { useShallow } from "zustand/shallow";
 import { SettingsSwitch } from "./SettingsSwitch";
@@ -12,11 +22,17 @@ import { SettingsSwitch } from "./SettingsSwitch";
 export default function SettingsNotificationsTab() {
   const { user } = useUser();
   const settingsUserId = user?.id ?? null;
-  const soundSettings = useSoundSettingsStore(useShallow((s) => s.getSettings(settingsUserId)));
+  const soundSettings = useSoundSettingsStore(
+    useShallow((s) => s.getSettings(settingsUserId)),
+  );
   const updateSoundSettings = useSoundSettingsStore((s) => s.updateSettings);
   const setSoundCurrentUser = useSoundSettingsStore((s) => s.setCurrentUser);
-  const desktopNotifications = useDesktopSettingsStore((s) => s.desktopNotifications);
-  const updateDesktopSettings = useDesktopSettingsStore((s) => s.updateSettings);
+  const desktopNotifications = useDesktopSettingsStore(
+    (s) => s.desktopNotifications,
+  );
+  const updateDesktopSettings = useDesktopSettingsStore(
+    (s) => s.updateSettings,
+  );
   const isDesktopApp = isDesktop();
 
   useEffect(() => {
@@ -49,12 +65,20 @@ export default function SettingsNotificationsTab() {
 
             <div className="rounded-xl overflow-hidden bg-rm-bg-surface border border-rm-border">
               <SettingsToggleRow
-                icon={<div className="w-10 h-10 shrink-0 rounded-xl border border-sky-500/20 bg-sky-500/10 flex items-center justify-center text-sky-400"><BellRing size={18} /></div>}
+                icon={
+                  <div className="w-10 h-10 shrink-0 rounded-xl border border-sky-500/20 bg-sky-500/10 flex items-center justify-center text-sky-400">
+                    <BellRing size={18} />
+                  </div>
+                }
                 rawIcon
                 label="Enable Desktop Notifications"
                 description="Show native notifications for mentions, replies, direct messages, and unread activity while Ralph Meet runs on your desktop."
                 checked={desktopNotifications}
-                onChange={() => updateDesktopSettings({ desktopNotifications: !desktopNotifications })}
+                onChange={() =>
+                  updateDesktopSettings({
+                    desktopNotifications: !desktopNotifications,
+                  })
+                }
                 className="bg-sky-500/5"
               />
             </div>
@@ -74,17 +98,30 @@ export default function SettingsNotificationsTab() {
             <div className="group flex flex-col sm:flex-row sm:items-center justify-between p-4 hover:bg-rm-bg-elevated/40 transition-all gap-4 sm:gap-6 bg-rm-accent/5">
               <div className="flex items-start gap-4">
                 <div className="w-10 h-10 shrink-0 rounded-xl bg-rm-accent flex items-center justify-center text-white shadow-md shadow-rm-accent/20">
-                  {soundSettings.soundsEnabled ? <Volume2 size={20} /> : <VolumeX size={20} />}
+                  {soundSettings.soundsEnabled ? (
+                    <Volume2 size={20} />
+                  ) : (
+                    <VolumeX size={20} />
+                  )}
                 </div>
                 <div>
-                  <h4 className="text-[14px] font-bold text-rm-text">Enable Sound Effects</h4>
-                  <p className="text-[12px] text-rm-text-muted opacity-80">Master switch for all in-app sounds</p>
+                  <h4 className="text-[14px] font-bold text-rm-text">
+                    Enable Sound Effects
+                  </h4>
+                  <p className="text-[12px] text-rm-text-muted opacity-80">
+                    Master switch for all in-app sounds
+                  </p>
                 </div>
               </div>
               <div className="flex justify-end w-full sm:w-auto">
                 <SettingsSwitch
                   checked={soundSettings.soundsEnabled}
-                  onChange={() => updateSoundSettings({ soundsEnabled: !soundSettings.soundsEnabled }, settingsUserId ?? undefined)}
+                  onChange={() =>
+                    updateSoundSettings(
+                      { soundsEnabled: !soundSettings.soundsEnabled },
+                      settingsUserId ?? undefined,
+                    )
+                  }
                 />
               </div>
             </div>
@@ -92,7 +129,10 @@ export default function SettingsNotificationsTab() {
             {soundSettings.soundsEnabled && (
               <div className="p-4 space-y-4 bg-transparent fade-in animate-in">
                 <div className="flex justify-between items-end">
-                  <label htmlFor="sound-volume" className="text-[11px] font-bold uppercase tracking-wider text-rm-text-muted">
+                  <label
+                    htmlFor="sound-volume"
+                    className="text-[11px] font-bold uppercase tracking-wider text-rm-text-muted"
+                  >
                     Master Volume
                   </label>
                   <span className="text-sm font-black text-rm-accent tabular-nums">
@@ -105,7 +145,12 @@ export default function SettingsNotificationsTab() {
                   min="0"
                   max="100"
                   value={soundSettings.soundVolume}
-                  onChange={(e) => updateSoundSettings({ soundVolume: parseInt(e.target.value) }, settingsUserId ?? undefined)}
+                  onChange={(e) =>
+                    updateSoundSettings(
+                      { soundVolume: parseInt(e.target.value) },
+                      settingsUserId ?? undefined,
+                    )
+                  }
                   className="w-full h-1.5 bg-rm-bg-elevated rounded-full appearance-none cursor-pointer accent-rm-accent transition-all"
                 />
               </div>
@@ -166,12 +211,23 @@ export default function SettingsNotificationsTab() {
               ].map((opt) => (
                 <SettingsToggleRow
                   key={opt.id}
-                  icon={<div className={`w-10 h-10 shrink-0 rounded-xl border flex items-center justify-center ${opt.bgColor} ${opt.color}`}>{opt.icon}</div>}
+                  icon={
+                    <div
+                      className={`w-10 h-10 shrink-0 rounded-xl border flex items-center justify-center ${opt.bgColor} ${opt.color}`}
+                    >
+                      {opt.icon}
+                    </div>
+                  }
                   rawIcon
                   label={opt.label}
                   description={opt.desc}
                   checked={soundSettings[opt.id]}
-                  onChange={() => updateSoundSettings({ [opt.id]: !soundSettings[opt.id] }, settingsUserId ?? undefined)}
+                  onChange={() =>
+                    updateSoundSettings(
+                      { [opt.id]: !soundSettings[opt.id] },
+                      settingsUserId ?? undefined,
+                    )
+                  }
                 />
               ))}
             </div>

@@ -1,4 +1,9 @@
-export type CameraQualityId = "480p30" | "720p30" | "720p60" | "1080p30" | "1080p60";
+export type CameraQualityId =
+  | "480p30"
+  | "720p30"
+  | "720p60"
+  | "1080p30"
+  | "1080p60";
 
 export interface CameraQualityProfile {
   id: CameraQualityId;
@@ -54,8 +59,13 @@ export const CAMERA_QUALITY_PROFILES: CameraQualityProfile[] = [
   },
 ];
 
-export function getCameraQualityProfile(id?: string | null): CameraQualityProfile {
-  return CAMERA_QUALITY_PROFILES.find((profile) => profile.id === id) ?? CAMERA_QUALITY_PROFILES[1];
+export function getCameraQualityProfile(
+  id?: string | null,
+): CameraQualityProfile {
+  return (
+    CAMERA_QUALITY_PROFILES.find((profile) => profile.id === id) ??
+    CAMERA_QUALITY_PROFILES[1]
+  );
 }
 
 export function buildCameraVideoConstraints({
@@ -76,7 +86,9 @@ export function buildCameraVideoConstraints({
   };
 
   if (deviceId && deviceId !== "default") {
-    constraints.deviceId = exactDevice ? { exact: deviceId } : { ideal: deviceId };
+    constraints.deviceId = exactDevice
+      ? { exact: deviceId }
+      : { ideal: deviceId };
   }
 
   return constraints;

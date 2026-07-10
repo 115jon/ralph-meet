@@ -28,7 +28,15 @@ vi.mock("@/stores/useImageViewerStore", () => ({
 }));
 
 vi.mock("@/components/chat/VideoAttachment", () => ({
-  default: ({ src, poster, aspectRatio }: { src: string; poster?: string; aspectRatio?: number }) =>
+  default: ({
+    src,
+    poster,
+    aspectRatio,
+  }: {
+    src: string;
+    poster?: string;
+    aspectRatio?: number;
+  }) =>
     React.createElement("div", {
       "data-testid": "video-attachment",
       "data-src": src,
@@ -64,6 +72,8 @@ describe("LinkEmbed Instagram preview URLs", () => {
       fields: [],
     });
 
-    expect(markup).toContain("https://meet.test/api/proxy-media?url=https%3A%2F%2Fscontent-ord5-1.cdninstagram.com%2Fthumb.jpg");
+    expect(markup).toContain(
+      "https://meet.test/api/proxy-media?url=https%3A%2F%2Fscontent-ord5-1.cdninstagram.com%2Fthumb.jpg",
+    );
   });
 });

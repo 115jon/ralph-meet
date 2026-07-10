@@ -1,4 +1,4 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute } from "@tanstack/react-router";
 
 import { apiError, apiSuccess, getDB, requireAuth } from "@/lib/api-helpers";
 import { ServiceError } from "@/lib/service-error";
@@ -25,13 +25,12 @@ const GET = async ({ request, params }: any) => {
     console.error("Failed to fetch user profile:", e);
     return apiError("Failed to fetch profile", 500);
   }
-}
+};
 
-
-export const Route = createFileRoute('/api/users/$id/profile')({
+export const Route = createFileRoute("/api/users/$id/profile")({
   server: {
     handlers: {
       GET,
-    }
-  }
+    },
+  },
 });

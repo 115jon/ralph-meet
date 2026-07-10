@@ -2,7 +2,12 @@ import { AvatarImage } from "@/components/chat/AvatarImage";
 import { ButtonBase } from "@/components/ui/button-base";
 import { getDisplayInitial, getDisplayName } from "@/lib/display-name";
 
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useContextMenu } from "@/hooks/useContextMenu";
 import { apiDelete, apiGet } from "@/lib/api-client";
 import { clog } from "@/lib/console-logger";
@@ -11,7 +16,7 @@ import { isVideo } from "@/lib/media";
 import { PERMISSIONS } from "@/lib/permissions";
 import { getAuthAssetUrl, getDownloadUrl, getMediaUrl } from "@/lib/platform";
 import { buildProxyMediaPath } from "@/lib/proxy-media-url";
-import type { Attachment, Message, Role, User } from '@/lib/types';
+import type { Attachment, Message, Role, User } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import type { VideoPlaybackAvailabilityRequest } from "@/lib/video-playback-availability";
 import { primeVideoPlaybackAvailability } from "@/lib/video-playback-availability";
@@ -19,10 +24,36 @@ import { useChatActions, useChatStore } from "@/stores/chat-store";
 import { useCallStore } from "@/stores/useCallStore";
 import type { ViewerContext } from "@/stores/useImageViewerStore";
 import { useImageViewerActions } from "@/stores/useImageViewerStore";
-import { ArrowLeft, Bell, ChevronRight, Download, ExternalLink, Hash, Image, ImageOff, Link2, MessageCircle, RefreshCw, Search, Settings, TriangleAlert, UserPlus, WifiOff } from "lucide-react";
+import {
+  ArrowLeft,
+  Bell,
+  ChevronRight,
+  Download,
+  ExternalLink,
+  Hash,
+  Image,
+  ImageOff,
+  Link2,
+  MessageCircle,
+  RefreshCw,
+  Search,
+  Settings,
+  TriangleAlert,
+  UserPlus,
+  WifiOff,
+} from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import ContextMenu from "./ContextMenu";
-import { AlertTriangle, AtSign, Copy, Crown, MessageSquare, Phone, Pin, User as UserIcon } from "./Icons";
+import {
+  AlertTriangle,
+  AtSign,
+  Copy,
+  Crown,
+  MessageSquare,
+  Phone,
+  Pin,
+  User as UserIcon,
+} from "./Icons";
 import InlineEmojiText from "./InlineEmojiText";
 import { MarkdownRenderer } from "./MarkdownRenderer";
 import MobileProfileSheet from "./MobileProfileSheet";
@@ -37,7 +68,7 @@ const log = clog("MemberList");
 
 // ── Types ────────────────────────────────────────────────────────────────
 
-type TabId = 'members' | 'media' | 'pins' | 'threads' | 'links' | 'files';
+type TabId = "members" | "media" | "pins" | "threads" | "links" | "files";
 
 interface MediaItem {
   id: string;
@@ -51,7 +82,13 @@ interface MediaItem {
   source_kind: "attachment" | "embed";
   thumbnail_url?: string | null;
   is_gif?: boolean;
-  author: { id: string; username: string; display_name?: string | null; avatar_url: string | null; avatar_display?: User["avatar_display"] };
+  author: {
+    id: string;
+    username: string;
+    display_name?: string | null;
+    avatar_url: string | null;
+    avatar_display?: User["avatar_display"];
+  };
   created_at: string;
 }
 
@@ -59,14 +96,26 @@ interface LinkItem {
   id: string;
   message_id: string;
   content: string;
-  author: { id: string; username: string; display_name?: string | null; avatar_url: string | null; avatar_display?: User["avatar_display"] };
+  author: {
+    id: string;
+    username: string;
+    display_name?: string | null;
+    avatar_url: string | null;
+    avatar_display?: User["avatar_display"];
+  };
   created_at: string;
 }
 
 interface ThreadItem {
   id: string;
   content: string;
-  author: { id: string; username: string; display_name?: string | null; avatar_url: string | null; avatar_display?: User["avatar_display"] };
+  author: {
+    id: string;
+    username: string;
+    display_name?: string | null;
+    avatar_url: string | null;
+    avatar_display?: User["avatar_display"];
+  };
   reply_count: number;
   last_reply_at: string;
   created_at: string;
@@ -105,12 +154,17 @@ interface MemberListProps {
 
 const getHighestRole = (roles?: Role[]) => {
   if (!roles || roles.length === 0) return null;
-  return roles.reduce((highest, current) =>
-    current.position > highest.position ? current : highest
-    , roles[0]);
+  return roles.reduce(
+    (highest, current) =>
+      current.position > highest.position ? current : highest,
+    roles[0],
+  );
 };
 
-function compareMembersByRole(a: { user: User; roles?: Role[] }, b: { user: User; roles?: Role[] }) {
+function compareMembersByRole(
+  a: { user: User; roles?: Role[] },
+  b: { user: User; roles?: Role[] },
+) {
   const roleA = getHighestRole(a.roles)?.position ?? -1;
   const roleB = getHighestRole(b.roles)?.position ?? -1;
   if (roleA !== roleB) return roleB - roleA;
@@ -141,45 +195,63 @@ function formatRelativeTime(iso: string): string {
   if (diffHours < 24) return `${diffHours}h ago`;
   const diffDays = Math.floor(diffHours / 24);
   if (diffDays < 7) return `${diffDays}d ago`;
-  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
 function extractUrls(text: string): string[] {
   const regex = /https?:\/\/[^\s<>)"'\]]+/g;
-  return Array.from(text.matchAll(regex)).map(m => m[0]);
+  return Array.from(text.matchAll(regex)).map((m) => m[0]);
 }
 
 // Tabs
 
 const TABS: { id: TabId; label: string }[] = [
-  { id: 'members', label: 'Members' },
-  { id: 'media', label: 'Media' },
-  { id: 'pins', label: 'Pins' },
-  { id: 'threads', label: 'Threads' },
-  { id: 'links', label: 'Links' },
-  { id: 'files', label: 'Files' },
+  { id: "members", label: "Members" },
+  { id: "media", label: "Media" },
+  { id: "pins", label: "Pins" },
+  { id: "threads", label: "Threads" },
+  { id: "links", label: "Links" },
+  { id: "files", label: "Files" },
 ];
 
 // Main component
 
 export default function MemberList({
-  members, onlineUsers, typingUsers, currentUserId, onBan, onKick, onClose, channelName,
-  channelId, serverId,
-  onOpenSearch, onOpenSettings, onInviteClick,
-  pinnedMessages, loadingPins, canUnpin: _canUnpin, onUnpin: _onUnpin, onJumpToMessage,
+  members,
+  onlineUsers,
+  typingUsers,
+  currentUserId,
+  onBan,
+  onKick,
+  onClose,
+  channelName,
+  channelId,
+  serverId,
+  onOpenSearch,
+  onOpenSettings,
+  onInviteClick,
+  pinnedMessages,
+  loadingPins,
+  canUnpin: _canUnpin,
+  onUnpin: _onUnpin,
+  onJumpToMessage,
   onOpenThread,
-  showDetails, onToggleDetails, isDM
+  showDetails,
+  onToggleDetails,
+  isDM,
 }: MemberListProps) {
   const { menu, openMenu, closeMenu, isClosing } = useContextMenu();
   const { openDm, dispatch, setProfileUser } = useChatActions();
-  const presencePlatformsByUserId = useChatStore((state) => state.presencePlatformsByUserId);
+  const presencePlatformsByUserId = useChatStore(
+    (state) => state.presencePlatformsByUserId,
+  );
   const { open: openImageViewer } = useImageViewerActions();
   const [state, setState] = useState({
     popoverUser: null as User | null,
     popoverAnchor: null as HTMLElement | null,
     mobileProfileUser: null as { user: User; roles?: Role[] } | null,
     mobileProfileUserClosing: false,
-    activeTab: 'members' as TabId,
+    activeTab: "members" as TabId,
     mediaItems: [] as MediaItem[],
     linkItems: [] as LinkItem[],
     fileItems: [] as MediaItem[],
@@ -191,14 +263,20 @@ export default function MemberList({
   // Reset tab when desktop details mode is closed
   useEffect(() => {
     if (!showDetails) {
-      const t = setTimeout(() => setState(prev => ({ ...prev, activeTab: 'members' })), 0);
+      const t = setTimeout(
+        () => setState((prev) => ({ ...prev, activeTab: "members" })),
+        0,
+      );
       return () => clearTimeout(t);
     }
   }, [showDetails]);
 
   // Reset tab when channel changes
   useEffect(() => {
-    const t = setTimeout(() => setState(prev => ({ ...prev, activeTab: 'members' })), 0);
+    const t = setTimeout(
+      () => setState((prev) => ({ ...prev, activeTab: "members" })),
+      0,
+    );
     return () => clearTimeout(t);
   }, [channelId]);
 
@@ -207,29 +285,37 @@ export default function MemberList({
     if (!channelId) return;
 
     const loadTabData = async () => {
-      setState(prev => ({ ...prev, tabLoading: true, tabError: null }));
+      setState((prev) => ({ ...prev, tabLoading: true, tabError: null }));
 
       const partialState: Partial<typeof state> = { tabLoading: false };
 
       try {
         switch (state.activeTab) {
-          case 'media': {
-            const data = await apiGet<{ items: MediaItem[] }>(`/api/channels/${channelId}/media?type=images`);
+          case "media": {
+            const data = await apiGet<{ items: MediaItem[] }>(
+              `/api/channels/${channelId}/media?type=images`,
+            );
             partialState.mediaItems = data.items ?? [];
             break;
           }
-          case 'links': {
-            const data = await apiGet<{ items: LinkItem[] }>(`/api/channels/${channelId}/media?type=links`);
+          case "links": {
+            const data = await apiGet<{ items: LinkItem[] }>(
+              `/api/channels/${channelId}/media?type=links`,
+            );
             partialState.linkItems = data.items ?? [];
             break;
           }
-          case 'files': {
-            const data = await apiGet<{ items: MediaItem[] }>(`/api/channels/${channelId}/media?type=files`);
+          case "files": {
+            const data = await apiGet<{ items: MediaItem[] }>(
+              `/api/channels/${channelId}/media?type=files`,
+            );
             partialState.fileItems = data.items ?? [];
             break;
           }
-          case 'threads': {
-            const data = await apiGet<{ threads: ThreadItem[] }>(`/api/channels/${channelId}/threads`);
+          case "threads": {
+            const data = await apiGet<{ threads: ThreadItem[] }>(
+              `/api/channels/${channelId}/threads`,
+            );
             partialState.threads = data.threads ?? [];
             break;
           }
@@ -247,36 +333,41 @@ export default function MemberList({
         partialState.tabError = errMsg;
       }
 
-      setState(prev => ({ ...prev, ...partialState }));
+      setState((prev) => ({ ...prev, ...partialState }));
     };
 
-    if (state.activeTab !== 'members' && state.activeTab !== 'pins') {
+    if (state.activeTab !== "members" && state.activeTab !== "pins") {
       loadTabData();
     }
   }, [state.activeTab, channelId]);
 
   // Retry handler for error states
   const handleRetry = useCallback(() => {
-    setState(prev => ({ ...prev, tabError: null, tabLoading: false }));
+    setState((prev) => ({ ...prev, tabError: null, tabLoading: false }));
     // Force re-trigger by toggling tab
     const tab = state.activeTab;
-    setState(prev => ({ ...prev, activeTab: 'members' }));
-    setTimeout(() => setState(prev => ({ ...prev, activeTab: tab })), 0);
+    setState((prev) => ({ ...prev, activeTab: "members" }));
+    setTimeout(() => setState((prev) => ({ ...prev, activeTab: tab })), 0);
   }, [state.activeTab]);
 
   // Member list logic
-  const online = members.filter((m) => onlineUsers.has(m.user.id) && m.user.status !== 'offline');
-  const offline = members.filter((m) => !onlineUsers.has(m.user.id) || m.user.status === 'offline');
+  const online = members.filter(
+    (m) => onlineUsers.has(m.user.id) && m.user.status !== "offline",
+  );
+  const offline = members.filter(
+    (m) => !onlineUsers.has(m.user.id) || m.user.status === "offline",
+  );
 
   const sortedOnline = online.toSorted(compareMembersByRole);
   const sortedOffline = offline.toSorted(compareMembersByRole);
 
   // Group online members by highest role
   const groups: { name: string; members: typeof sortedOnline }[] = [];
-  const addGroup = (member: typeof sortedOnline[0]) => {
+  const addGroup = (member: (typeof sortedOnline)[0]) => {
     const highestRole = getHighestRole(member.roles);
-    const groupName = highestRole && !highestRole.is_default ? highestRole.name : "ONLINE";
-    let group = groups.find(g => g.name === groupName);
+    const groupName =
+      highestRole && !highestRole.is_default ? highestRole.name : "ONLINE";
+    let group = groups.find((g) => g.name === groupName);
     if (!group) {
       group = { name: groupName, members: [] };
       groups.push(group);
@@ -288,106 +379,141 @@ export default function MemberList({
 
   // Stable close callback that clears both popoverUser AND popoverAnchor
   const closePopover = useCallback(() => {
-    setState(prev => ({ ...prev, popoverUser: null, popoverAnchor: null }));
+    setState((prev) => ({ ...prev, popoverUser: null, popoverAnchor: null }));
   }, []);
 
   // Shared member click/context-menu handlers
-  const handleMemberClick = useCallback((e: React.MouseEvent<HTMLButtonElement>, user: User, memberRoles?: Role[]) => {
-    // On mobile, show full-screen profile sheet
-    if (window.innerWidth < 768) {
-      setState(prev => ({ ...prev, mobileProfileUser: { user, roles: memberRoles } }));
-      return;
-    }
-    // On desktop, toggle popover: close if same user, open if different
-    const anchor = e.currentTarget;
-    setState(prev => {
-      if (prev.popoverUser?.id === user.id) {
-        return { ...prev, popoverUser: null, popoverAnchor: null };
+  const handleMemberClick = useCallback(
+    (
+      e: React.MouseEvent<HTMLButtonElement>,
+      user: User,
+      memberRoles?: Role[],
+    ) => {
+      // On mobile, show full-screen profile sheet
+      if (window.innerWidth < 768) {
+        setState((prev) => ({
+          ...prev,
+          mobileProfileUser: { user, roles: memberRoles },
+        }));
+        return;
       }
-      return { ...prev, popoverAnchor: anchor, popoverUser: user };
-    });
-  }, []);
+      // On desktop, toggle popover: close if same user, open if different
+      const anchor = e.currentTarget;
+      setState((prev) => {
+        if (prev.popoverUser?.id === user.id) {
+          return { ...prev, popoverUser: null, popoverAnchor: null };
+        }
+        return { ...prev, popoverAnchor: anchor, popoverUser: user };
+      });
+    },
+    [],
+  );
 
-  const handleMemberContext = useCallback(async (e: React.MouseEvent, member: { user: User; roles?: Role[] }) => {
-    e.preventDefault();
+  const handleMemberContext = useCallback(
+    async (e: React.MouseEvent, member: { user: User; roles?: Role[] }) => {
+      e.preventDefault();
 
-    // Check if we should hide the call option (already in call or ringing this user)
-    const callState = useCallStore.getState();
-    const dmChannels = useChatStore.getState().dmChannels;
-    const dmForUser = dmChannels.find((d: any) => d.recipient?.id === member.user.id);
+      // Check if we should hide the call option (already in call or ringing this user)
+      const callState = useCallStore.getState();
+      const dmChannels = useChatStore.getState().dmChannels;
+      const dmForUser = dmChannels.find(
+        (d: any) => d.recipient?.id === member.user.id,
+      );
 
-    const isRingingThisUser =
-      callState.status === "ringing_outgoing" && callState.remoteUser?.id === member.user.id;
-    const isInCallWithUser =
-      callState.status === "active" && dmForUser && callState.channelId === dmForUser.id && callState.hasJoinedSFU;
-    const hideCallOption = isRingingThisUser || isInCallWithUser;
+      const isRingingThisUser =
+        callState.status === "ringing_outgoing" &&
+        callState.remoteUser?.id === member.user.id;
+      const isInCallWithUser =
+        callState.status === "active" &&
+        dmForUser &&
+        callState.channelId === dmForUser.id &&
+        callState.hasJoinedSFU;
+      const hideCallOption = isRingingThisUser || isInCallWithUser;
 
-    openMenu(e, [
-      {
-        label: "Profile",
-        icon: <UserIcon className="h-4 w-4" />,
-        onClick: () => setProfileUser(member.user),
-      },
-      {
-        label: "Message",
-        icon: <MessageSquare className="h-4 w-4" />,
-        onClick: async () => {
-          const channelId = await openDm(member.user.id);
-          if (channelId) {
-            dispatch({ type: "SWITCH_SERVER", serverId: "@me", channelId });
-          }
+      openMenu(e, [
+        {
+          label: "Profile",
+          icon: <UserIcon className="h-4 w-4" />,
+          onClick: () => setProfileUser(member.user),
         },
-      },
-      ...(!hideCallOption ? [{
-        label: "Start a Call",
-        icon: <Phone className="h-4 w-4" />,
-        onClick: async () => {
-          const channelId = dmForUser?.id ?? await openDm(member.user.id);
-          if (channelId) {
-            dispatch({ type: "SWITCH_SERVER", serverId: "@me", channelId });
-            window.dispatchEvent(new CustomEvent("request-start-call", {
-              detail: {
-                userId: member.user.id,
-                displayName: member.user.display_name ?? member.user.username,
-                channelId,
-              }
-            }));
-          }
+        {
+          label: "Message",
+          icon: <MessageSquare className="h-4 w-4" />,
+          onClick: async () => {
+            const channelId = await openDm(member.user.id);
+            if (channelId) {
+              dispatch({ type: "SWITCH_SERVER", serverId: "@me", channelId });
+            }
+          },
         },
-      }] : []),
-      {
-        label: "Copy ID",
-        icon: <Copy className="h-4 w-4" />,
-        onClick: () => navigator.clipboard.writeText(member.user.id),
-        divider: !!onBan && member.user.id !== currentUserId,
-      },
-      ...(onBan && member.user.id !== currentUserId ? [{
-        label: "Ban",
-        icon: <AlertTriangle className="h-4 w-4" />,
-        onClick: () => onBan(member.user.id, member.user.username),
-        variant: "danger" as const,
-      }] : []),
-    ]);
-  }, [openMenu, setProfileUser, openDm, dispatch, onBan, currentUserId]);
+        ...(!hideCallOption
+          ? [
+              {
+                label: "Start a Call",
+                icon: <Phone className="h-4 w-4" />,
+                onClick: async () => {
+                  const channelId =
+                    dmForUser?.id ?? (await openDm(member.user.id));
+                  if (channelId) {
+                    dispatch({
+                      type: "SWITCH_SERVER",
+                      serverId: "@me",
+                      channelId,
+                    });
+                    window.dispatchEvent(
+                      new CustomEvent("request-start-call", {
+                        detail: {
+                          userId: member.user.id,
+                          displayName:
+                            member.user.display_name ?? member.user.username,
+                          channelId,
+                        },
+                      }),
+                    );
+                  }
+                },
+              },
+            ]
+          : []),
+        {
+          label: "Copy ID",
+          icon: <Copy className="h-4 w-4" />,
+          onClick: () => navigator.clipboard.writeText(member.user.id),
+          divider: !!onBan && member.user.id !== currentUserId,
+        },
+        ...(onBan && member.user.id !== currentUserId
+          ? [
+              {
+                label: "Ban",
+                icon: <AlertTriangle className="h-4 w-4" />,
+                onClick: () => onBan(member.user.id, member.user.username),
+                variant: "danger" as const,
+              },
+            ]
+          : []),
+      ]);
+    },
+    [openMenu, setProfileUser, openDm, dispatch, onBan, currentUserId],
+  );
 
-  const handleKick = useCallback(async (userId: string, username: string) => {
-    if (onKick) {
-      await onKick(userId, username);
-      return;
-    }
-    if (!serverId || serverId === "@me") return;
-    if (!confirm(`Kick ${username}?`)) return;
-    try {
-      await apiDelete(`/api/servers/${serverId}/members/${userId}`);
-    } catch (err) {
-      log.error("Failed to kick member:", err);
-    }
-  }, [onKick, serverId]);
+  const handleKick = useCallback(
+    async (userId: string, username: string) => {
+      if (onKick) {
+        await onKick(userId, username);
+        return;
+      }
+      if (!serverId || serverId === "@me") return;
+      if (!confirm(`Kick ${username}?`)) return;
+      try {
+        await apiDelete(`/api/servers/${serverId}/members/${userId}`);
+      } catch (err) {
+        log.error("Failed to kick member:", err);
+      }
+    },
+    [onKick, serverId],
+  );
 
   // Tab content renderers
-
-
-
 
   return (
     <TooltipProvider delayDuration={0}>
@@ -398,71 +524,146 @@ export default function MemberList({
           // Desktop: static sidebar, width depends on details mode
           showDetails
             ? "lg:static lg:z-auto lg:w-[360px] lg:bg-rm-bg-sidebar lg:shadow-none lg:animate-none"
-            : "lg:static lg:z-auto lg:w-60 lg:bg-rm-bg-sidebar lg:shadow-none lg:animate-none"
+            : "lg:static lg:z-auto lg:w-60 lg:bg-rm-bg-sidebar lg:shadow-none lg:animate-none",
         )}
       >
-        <MobileHeader onClose={onClose} onOpenSearch={onOpenSearch} onOpenSettings={onOpenSettings} />
+        <MobileHeader
+          onClose={onClose}
+          onOpenSearch={onOpenSearch}
+          onOpenSettings={onOpenSettings}
+        />
 
         {/* Desktop details header - only shown when details mode is active */}
         {showDetails && (
-          <DesktopHeader channelName={channelName} onToggleDetails={onToggleDetails} isDM={isDM} />
+          <DesktopHeader
+            channelName={channelName}
+            onToggleDetails={onToggleDetails}
+            isDM={isDM}
+          />
         )}
 
         <div className="flex-1 flex flex-col px-4 pt-2 lg:pt-4 lg:px-2 overflow-y-auto custom-scrollbar relative pb-10">
-
           <MemberListTabs
             channelName={channelName}
             activeTab={state.activeTab}
-            onTabChange={(tabId) => setState(prev => ({ ...prev, activeTab: tabId }))}
+            onTabChange={(tabId) =>
+              setState((prev) => ({ ...prev, activeTab: tabId }))
+            }
             showDetails={showDetails}
             isDM={isDM}
           />
 
           {/* Mobile-only Invite Button */}
-          {!isDM && <MobileInviteButton onInviteClick={onInviteClick} onClose={onClose} />}
+          {!isDM && (
+            <MobileInviteButton
+              onInviteClick={onInviteClick}
+              onClose={onClose}
+            />
+          )}
 
           {/* Tab Content */}
           {(() => {
             switch (state.activeTab) {
-              case 'members': return <MembersTabContent groups={groups} sortedOffline={sortedOffline} sortedOnline={sortedOnline} typingUsers={typingUsers} currentUserId={currentUserId} onMemberClick={handleMemberClick} onMemberContext={handleMemberContext} presencePlatformsByUserId={presencePlatformsByUserId} />;
-              case 'media': return <MediaTabContent loading={state.tabLoading} error={state.tabError} items={state.mediaItems} openImageViewer={openImageViewer} onRetry={handleRetry} onJumpToMessage={onJumpToMessage} onClose={onClose} />;
-              case 'pins': return <PinsTabContent loading={loadingPins} messages={pinnedMessages} onJumpToMessage={(id: string) => { onJumpToMessage?.(id); onClose?.(); }} />;
-              case 'threads': return <ThreadsTabContent loading={state.tabLoading} error={state.tabError} threads={state.threads} onOpenThread={(id: string) => { onOpenThread?.(id); onClose?.(); }} onRetry={handleRetry} />;
-              case 'links': return <LinksTabContent loading={state.tabLoading} error={state.tabError} items={state.linkItems} channelName={channelName} onRetry={handleRetry} />;
-              case 'files': return <FilesTabContent loading={state.tabLoading} error={state.tabError} items={state.fileItems} channelName={channelName} onRetry={handleRetry} onJumpToMessage={onJumpToMessage} onClose={onClose} />;
-              default: return null;
+              case "members":
+                return (
+                  <MembersTabContent
+                    groups={groups}
+                    sortedOffline={sortedOffline}
+                    sortedOnline={sortedOnline}
+                    typingUsers={typingUsers}
+                    currentUserId={currentUserId}
+                    onMemberClick={handleMemberClick}
+                    onMemberContext={handleMemberContext}
+                    presencePlatformsByUserId={presencePlatformsByUserId}
+                  />
+                );
+              case "media":
+                return (
+                  <MediaTabContent
+                    loading={state.tabLoading}
+                    error={state.tabError}
+                    items={state.mediaItems}
+                    openImageViewer={openImageViewer}
+                    onRetry={handleRetry}
+                    onJumpToMessage={onJumpToMessage}
+                    onClose={onClose}
+                  />
+                );
+              case "pins":
+                return (
+                  <PinsTabContent
+                    loading={loadingPins}
+                    messages={pinnedMessages}
+                    onJumpToMessage={(id: string) => {
+                      onJumpToMessage?.(id);
+                      onClose?.();
+                    }}
+                  />
+                );
+              case "threads":
+                return (
+                  <ThreadsTabContent
+                    loading={state.tabLoading}
+                    error={state.tabError}
+                    threads={state.threads}
+                    onOpenThread={(id: string) => {
+                      onOpenThread?.(id);
+                      onClose?.();
+                    }}
+                    onRetry={handleRetry}
+                  />
+                );
+              case "links":
+                return (
+                  <LinksTabContent
+                    loading={state.tabLoading}
+                    error={state.tabError}
+                    items={state.linkItems}
+                    channelName={channelName}
+                    onRetry={handleRetry}
+                  />
+                );
+              case "files":
+                return (
+                  <FilesTabContent
+                    loading={state.tabLoading}
+                    error={state.tabError}
+                    items={state.fileItems}
+                    channelName={channelName}
+                    onRetry={handleRetry}
+                    onJumpToMessage={onJumpToMessage}
+                    onClose={onClose}
+                  />
+                );
+              default:
+                return null;
             }
           })()}
         </div>
 
-        {
-          menu.isOpen && (
-            <ContextMenu
-              x={menu.x}
-              y={menu.y}
-              items={menu.items}
-              onClose={closeMenu}
-              isClosing={isClosing}
-            />
-          )
-        }
+        {menu.isOpen && (
+          <ContextMenu
+            x={menu.x}
+            y={menu.y}
+            items={menu.items}
+            onClose={closeMenu}
+            isClosing={isClosing}
+          />
+        )}
 
-
-        {
-          state.popoverUser && state.popoverAnchor && (
-            <UserProfilePopover
-              userId={state.popoverUser.id}
-              username={state.popoverUser.username}
-              displayName={state.popoverUser.display_name}
-              avatarUrl={state.popoverUser.avatar_url}
-              avatarDisplay={state.popoverUser.avatar_display}
-              seedUser={state.popoverUser}
-              anchorEl={state.popoverAnchor}
-              side="left"
-              onClose={closePopover}
-            />
-          )
-        }
+        {state.popoverUser && state.popoverAnchor && (
+          <UserProfilePopover
+            userId={state.popoverUser.id}
+            username={state.popoverUser.username}
+            displayName={state.popoverUser.display_name}
+            avatarUrl={state.popoverUser.avatar_url}
+            avatarDisplay={state.popoverUser.avatar_display}
+            seedUser={state.popoverUser}
+            anchorEl={state.popoverAnchor}
+            side="left"
+            onClose={closePopover}
+          />
+        )}
 
         {state.mobileProfileUser && (
           <MobileProfileSheet
@@ -470,29 +671,44 @@ export default function MemberList({
             roles={state.mobileProfileUser.roles}
             isClosing={state.mobileProfileUserClosing}
             onClose={() => {
-              setState(prev => ({ ...prev, mobileProfileUserClosing: true }));
+              setState((prev) => ({ ...prev, mobileProfileUserClosing: true }));
               setTimeout(() => {
-                setState(prev => ({ ...prev, mobileProfileUser: null, mobileProfileUserClosing: false }));
+                setState((prev) => ({
+                  ...prev,
+                  mobileProfileUser: null,
+                  mobileProfileUserClosing: false,
+                }));
               }, 300);
             }}
             onBan={onBan}
             onKick={handleKick}
           />
         )}
-      </div >
+      </div>
     </TooltipProvider>
   );
 }
 
 // ── Shared Sub-components ────────────────────────────────────────────────
 
-function MobileHeader({ onClose, onOpenSearch, onOpenSettings }: { onClose?: () => void, onOpenSearch?: () => void, onOpenSettings?: () => void }) {
+function MobileHeader({
+  onClose,
+  onOpenSearch,
+  onOpenSettings,
+}: {
+  onClose?: () => void;
+  onOpenSearch?: () => void;
+  onOpenSettings?: () => void;
+}) {
   return (
     <div
       className="flex items-center justify-between pb-4 px-4 lg:hidden sticky top-0 bg-transparent z-10 shrink-0 border-b border-rm-border/30"
-      style={{ paddingTop: 'calc(16px + var(--safe-area-top, 0px))' }}
+      style={{ paddingTop: "calc(16px + var(--safe-area-top, 0px))" }}
     >
-      <ButtonBase onClick={onClose} className="p-1 -ml-1 text-rm-text-muted hover:text-rm-text transition-colors">
+      <ButtonBase
+        onClick={onClose}
+        className="p-1 -ml-1 text-rm-text-muted hover:text-rm-text transition-colors"
+      >
         <ArrowLeft size={24} />
       </ButtonBase>
       <div className="flex items-center gap-5 text-rm-text-muted">
@@ -508,7 +724,10 @@ function MobileHeader({ onClose, onOpenSearch, onOpenSettings }: { onClose?: () 
         <ButtonBase className="hover:text-rm-text transition-colors">
           <Bell size={22} />
         </ButtonBase>
-        <ButtonBase className="hover:text-rm-text transition-colors" onClick={onOpenSettings}>
+        <ButtonBase
+          className="hover:text-rm-text transition-colors"
+          onClick={onOpenSettings}
+        >
           <Settings size={22} />
         </ButtonBase>
       </div>
@@ -516,13 +735,27 @@ function MobileHeader({ onClose, onOpenSearch, onOpenSettings }: { onClose?: () 
   );
 }
 
-function DesktopHeader({ channelName, onToggleDetails, isDM }: { channelName?: string, onToggleDetails?: () => void, isDM?: boolean }) {
+function DesktopHeader({
+  channelName,
+  onToggleDetails,
+  isDM,
+}: {
+  channelName?: string;
+  onToggleDetails?: () => void;
+  isDM?: boolean;
+}) {
   return (
     <div className="hidden lg:flex items-center justify-between px-4 py-3 border-b border-rm-border bg-transparent shrink-0">
       <div className="flex items-center gap-2 min-w-0">
-        {isDM ? <AtSign className="h-[18px] w-[18px] text-rm-text-muted shrink-0" /> : <Hash className="h-[18px] w-[18px] text-rm-text-muted shrink-0" />}
+        {isDM ? (
+          <AtSign className="h-[18px] w-[18px] text-rm-text-muted shrink-0" />
+        ) : (
+          <Hash className="h-[18px] w-[18px] text-rm-text-muted shrink-0" />
+        )}
         <h2 className="text-[15px] font-bold text-rm-text-primary truncate">
-          <InlineEmojiText text={channelName || (isDM ? 'details' : 'general')} />
+          <InlineEmojiText
+            text={channelName || (isDM ? "details" : "general")}
+          />
         </h2>
       </div>
       <Tooltip>
@@ -534,7 +767,11 @@ function DesktopHeader({ channelName, onToggleDetails, isDM }: { channelName?: s
             <ArrowLeft size={18} />
           </ButtonBase>
         </TooltipTrigger>
-        <TooltipContent side="top" sideOffset={10} className="rounded-lg border-none bg-rm-bg-floating px-3 py-2 text-[12px] font-bold text-rm-text-primary shadow-xl">
+        <TooltipContent
+          side="top"
+          sideOffset={10}
+          className="rounded-lg border-none bg-rm-bg-floating px-3 py-2 text-[12px] font-bold text-rm-text-primary shadow-xl"
+        >
           Close details
         </TooltipContent>
       </Tooltip>
@@ -542,20 +779,40 @@ function DesktopHeader({ channelName, onToggleDetails, isDM }: { channelName?: s
   );
 }
 
-function MemberListTabs({ channelName, activeTab, onTabChange, showDetails, isDM }: { channelName?: string, activeTab: TabId, onTabChange: (id: TabId) => void, showDetails?: boolean, isDM?: boolean }) {
+function MemberListTabs({
+  channelName,
+  activeTab,
+  onTabChange,
+  showDetails,
+  isDM,
+}: {
+  channelName?: string;
+  activeTab: TabId;
+  onTabChange: (id: TabId) => void;
+  showDetails?: boolean;
+  isDM?: boolean;
+}) {
   return (
     <>
       <div className="lg:hidden mb-6 shrink-0">
         <div className="flex items-center gap-2 mb-1">
-          {isDM ? <AtSign className="h-[24px] w-[24px] text-rm-text-muted shrink-0" /> : <Hash className="h-[24px] w-[24px] text-rm-text-muted shrink-0" />}
+          {isDM ? (
+            <AtSign className="h-[24px] w-[24px] text-rm-text-muted shrink-0" />
+          ) : (
+            <Hash className="h-[24px] w-[24px] text-rm-text-muted shrink-0" />
+          )}
           <h1 className="text-[26px] font-extrabold text-rm-text-primary tracking-tight leading-none truncate">
-            <InlineEmojiText text={channelName || (isDM ? 'details' : 'general')} />
+            <InlineEmojiText
+              text={channelName || (isDM ? "details" : "general")}
+            />
           </h1>
         </div>
-        <p className="text-[13px] font-medium text-rm-text-muted mb-6 ml-8">{isDM ? "Direct Message" : "Text Channel"}</p>
+        <p className="text-[13px] font-medium text-rm-text-muted mb-6 ml-8">
+          {isDM ? "Direct Message" : "Text Channel"}
+        </p>
 
         <div className="flex gap-6 overflow-x-auto custom-scrollbar no-scrollbar text-[15px] font-semibold text-rm-text-muted border-b border-rm-border pb-2.5">
-          {TABS.map(tab => (
+          {TABS.map((tab) => (
             <div
               key={tab.id}
               role="tab"
@@ -563,7 +820,9 @@ function MemberListTabs({ channelName, activeTab, onTabChange, showDetails, isDM
               aria-selected={activeTab === tab.id}
               className={cn(
                 "shrink-0 cursor-pointer transition-colors relative outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-2 focus-visible:ring-offset-rm-bg-primary rounded-sm",
-                activeTab === tab.id ? "text-rm-text-primary" : "hover:text-rm-text"
+                activeTab === tab.id
+                  ? "text-rm-text-primary"
+                  : "hover:text-rm-text",
               )}
               onClick={() => onTabChange(tab.id as TabId)}
               onKeyDown={(e) => {
@@ -585,7 +844,7 @@ function MemberListTabs({ channelName, activeTab, onTabChange, showDetails, isDM
       {showDetails && (
         <div className="hidden lg:block mb-4 shrink-0 px-2">
           <div className="flex gap-4 overflow-x-auto custom-scrollbar no-scrollbar text-[13px] font-semibold text-rm-text-muted border-b border-rm-border pb-2">
-            {TABS.map(tab => (
+            {TABS.map((tab) => (
               <div
                 key={tab.id}
                 role="tab"
@@ -593,7 +852,9 @@ function MemberListTabs({ channelName, activeTab, onTabChange, showDetails, isDM
                 aria-selected={activeTab === tab.id}
                 className={cn(
                   "shrink-0 cursor-pointer transition-colors relative py-1 outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-2 focus-visible:ring-offset-rm-bg-primary rounded-sm",
-                  activeTab === tab.id ? "text-rm-text-primary" : "hover:text-rm-text"
+                  activeTab === tab.id
+                    ? "text-rm-text-primary"
+                    : "hover:text-rm-text",
                 )}
                 onClick={() => onTabChange(tab.id as TabId)}
                 onKeyDown={(e) => {
@@ -616,7 +877,13 @@ function MemberListTabs({ channelName, activeTab, onTabChange, showDetails, isDM
   );
 }
 
-function MobileInviteButton({ onInviteClick, onClose }: { onInviteClick?: () => void, onClose?: () => void }) {
+function MobileInviteButton({
+  onInviteClick,
+  onClose,
+}: {
+  onInviteClick?: () => void;
+  onClose?: () => void;
+}) {
   return (
     <div className="lg:hidden mb-6 shrink-0 pt-2">
       <ButtonBase
@@ -630,7 +897,9 @@ function MobileInviteButton({ onInviteClick, onClose }: { onInviteClick?: () => 
           <div className="p-2 bg-primary rounded-full text-primary-foreground border border-rm-border/50">
             <UserPlus size={18} fill="currentColor" className="opacity-90" />
           </div>
-          <span className="font-bold text-[16px] text-rm-text-primary">Invite Members</span>
+          <span className="font-bold text-[16px] text-rm-text-primary">
+            Invite Members
+          </span>
         </div>
         <ChevronRight size={20} className="text-rm-text-muted" />
       </ButtonBase>
@@ -646,8 +915,15 @@ interface MembersTabContentProps {
   presencePlatformsByUserId: Record<string, User["presence_platforms"]>;
   typingUsers?: Set<string>;
   currentUserId?: string;
-  onMemberClick: (e: React.MouseEvent<HTMLButtonElement>, user: User, roles?: Role[]) => void;
-  onMemberContext: (e: React.MouseEvent, member: { user: User; roles?: Role[] }) => void;
+  onMemberClick: (
+    e: React.MouseEvent<HTMLButtonElement>,
+    user: User,
+    roles?: Role[],
+  ) => void;
+  onMemberContext: (
+    e: React.MouseEvent,
+    member: { user: User; roles?: Role[] },
+  ) => void;
 }
 function MembersTabContent({
   groups,
@@ -661,20 +937,25 @@ function MembersTabContent({
 }: MembersTabContentProps) {
   return (
     <>
-      {groups.map(group => (
+      {groups.map((group) => (
         <div key={group.name}>
           <div className="flex items-center px-2 py-[10px] text-[11px] font-bold text-rm-text-muted">
             <span className="uppercase">{group.name}</span>
-            <span className="ml-[6px] text-[11px] font-semibold tracking-[-0.02em]">{group.members.length}</span>
+            <span className="ml-[6px] text-[11px] font-semibold tracking-[-0.02em]">
+              {group.members.length}
+            </span>
           </div>
-          {group.members.map(member => (
+          {group.members.map((member) => (
             <MemberItem
               key={member.user.id}
               member={member}
               isOnline={true}
               isTyping={typingUsers?.has(member.user.id)}
               isMe={member.user.id === currentUserId}
-              platforms={presencePlatformsByUserId[member.user.id] ?? member.user.presence_platforms}
+              platforms={
+                presencePlatformsByUserId[member.user.id] ??
+                member.user.presence_platforms
+              }
               onClick={(e) => onMemberClick(e, member.user, member.roles)}
               onContextMenu={(e) => onMemberContext(e, member)}
             />
@@ -686,16 +967,21 @@ function MembersTabContent({
         <div>
           <div className="flex items-center px-2 py-[10px] text-[11px] font-bold text-rm-text-muted">
             <span className="uppercase">Offline</span>
-            <span className="ml-[6px] text-[11px] font-semibold tracking-[-0.02em]">{sortedOffline.length}</span>
+            <span className="ml-[6px] text-[11px] font-semibold tracking-[-0.02em]">
+              {sortedOffline.length}
+            </span>
           </div>
-          {sortedOffline.map(m => (
+          {sortedOffline.map((m) => (
             <MemberItem
               key={m.user.id}
               member={m}
               isOnline={false}
               isTyping={typingUsers?.has(m.user.id)}
               isMe={m.user.id === currentUserId}
-              platforms={presencePlatformsByUserId[m.user.id] ?? m.user.presence_platforms}
+              platforms={
+                presencePlatformsByUserId[m.user.id] ??
+                m.user.presence_platforms
+              }
               onClick={(e) => onMemberClick(e, m.user, m.roles)}
               onContextMenu={(e) => onMemberContext(e, m)}
             />
@@ -704,7 +990,9 @@ function MembersTabContent({
       )}
 
       {sortedOnline.length === 0 && sortedOffline.length === 0 && (
-        <div className="py-4 text-center text-xs text-rm-text-muted">No members found</div>
+        <div className="py-4 text-center text-xs text-rm-text-muted">
+          No members found
+        </div>
       )}
     </>
   );
@@ -714,20 +1002,38 @@ interface MediaTabContentProps {
   loading: boolean;
   error: string | null;
   items: MediaItem[];
-  openImageViewer: (attachments: Attachment[], index: number, context?: ViewerContext) => void;
+  openImageViewer: (
+    attachments: Attachment[],
+    index: number,
+    context?: ViewerContext,
+  ) => void;
   onRetry: () => void;
   onJumpToMessage?: (messageId: string) => void;
   onClose?: () => void;
 }
-function MediaTabContent({ loading, error, items, openImageViewer, onRetry, onJumpToMessage, onClose }: MediaTabContentProps) {
-  const getMediaItemSourceUrl = useCallback((item: MediaItem) => item.url || item.file_key, []);
-  const getMediaItemPlaybackUrl = useCallback((item: MediaItem) => {
-    const sourceUrl = item.source_url ?? undefined;
-    if (item.source_kind === "embed" && isVideo(item.content_type)) {
-      return buildProxyMediaPath(getMediaItemSourceUrl(item), sourceUrl);
-    }
-    return getMediaItemSourceUrl(item);
-  }, [getMediaItemSourceUrl]);
+function MediaTabContent({
+  loading,
+  error,
+  items,
+  openImageViewer,
+  onRetry,
+  onJumpToMessage,
+  onClose,
+}: MediaTabContentProps) {
+  const getMediaItemSourceUrl = useCallback(
+    (item: MediaItem) => item.url || item.file_key,
+    [],
+  );
+  const getMediaItemPlaybackUrl = useCallback(
+    (item: MediaItem) => {
+      const sourceUrl = item.source_url ?? undefined;
+      if (item.source_kind === "embed" && isVideo(item.content_type)) {
+        return buildProxyMediaPath(getMediaItemSourceUrl(item), sourceUrl);
+      }
+      return getMediaItemSourceUrl(item);
+    },
+    [getMediaItemSourceUrl],
+  );
   const getMediaItemPosterUrl = useCallback((item: MediaItem) => {
     const thumbnailUrl = item.thumbnail_url?.trim();
     if (!thumbnailUrl) return null;
@@ -737,40 +1043,51 @@ function MediaTabContent({ loading, error, items, openImageViewer, onRetry, onJu
       : thumbnailUrl;
   }, []);
 
-  const mediaToAttachment = useCallback((item: MediaItem): Attachment => ({
-    id: item.id,
-    message_id: item.message_id,
-    filename: item.filename,
-    file_key: item.file_key,
-    content_type: item.content_type,
-    size_bytes: item.size_bytes,
-    url: isVideo(item.content_type) ? getMediaItemPlaybackUrl(item) : getMediaItemSourceUrl(item),
-    isGif: item.is_gif,
-    thumbnailUrl: item.thumbnail_url ?? null,
-    sourceUrl: item.source_url ?? null,
-  }), [getMediaItemPlaybackUrl, getMediaItemSourceUrl]);
+  const mediaToAttachment = useCallback(
+    (item: MediaItem): Attachment => ({
+      id: item.id,
+      message_id: item.message_id,
+      filename: item.filename,
+      file_key: item.file_key,
+      content_type: item.content_type,
+      size_bytes: item.size_bytes,
+      url: isVideo(item.content_type)
+        ? getMediaItemPlaybackUrl(item)
+        : getMediaItemSourceUrl(item),
+      isGif: item.is_gif,
+      thumbnailUrl: item.thumbnail_url ?? null,
+      sourceUrl: item.source_url ?? null,
+    }),
+    [getMediaItemPlaybackUrl, getMediaItemSourceUrl],
+  );
 
-  const handleMediaClick = useCallback((index: number) => {
-    const attachments = items.map(mediaToAttachment);
-    const item = items[index];
-    openImageViewer(attachments, index, {
-      username: item.author.username,
-      display_name: item.author.display_name ?? null,
-      avatar_url: item.author.avatar_url,
-      avatar_display: item.author.avatar_display,
-      created_at: item.created_at,
-      onJumpToMessage: onJumpToMessage
-        ? (messageId: string) => {
-          onJumpToMessage(messageId);
-          onClose?.();
-        }
-        : undefined,
-    });
-  }, [items, mediaToAttachment, onClose, onJumpToMessage, openImageViewer]);
+  const handleMediaClick = useCallback(
+    (index: number) => {
+      const attachments = items.map(mediaToAttachment);
+      const item = items[index];
+      openImageViewer(attachments, index, {
+        username: item.author.username,
+        display_name: item.author.display_name ?? null,
+        avatar_url: item.author.avatar_url,
+        avatar_display: item.author.avatar_display,
+        created_at: item.created_at,
+        onJumpToMessage: onJumpToMessage
+          ? (messageId: string) => {
+              onJumpToMessage(messageId);
+              onClose?.();
+            }
+          : undefined,
+      });
+    },
+    [items, mediaToAttachment, onClose, onJumpToMessage, openImageViewer],
+  );
 
   if (loading) return <MediaSkeletonGrid />;
   if (error) return <TabErrorState message={error} onRetry={onRetry} />;
-  if (items.length === 0) return <TabEmptyState icon={<Image size={40} />} label="No media shared yet" />;
+  if (items.length === 0)
+    return (
+      <TabEmptyState icon={<Image size={40} />} label="No media shared yet" />
+    );
 
   return (
     <div className="grid grid-cols-3 gap-1.5">
@@ -786,7 +1103,11 @@ function MediaTabContent({ loading, error, items, openImageViewer, onRetry, onJu
             <div className="absolute top-1.5 right-1.5 z-10">
               <div className="h-6 w-6 rounded-full overflow-visible border-2 border-black/30 shadow-md bg-rm-bg-elevated">
                 {item.author.avatar_url ? (
-                  <AvatarImage src={getAuthAssetUrl(item.author.avatar_url)} alt={displayName} display={item.author.avatar_display} />
+                  <AvatarImage
+                    src={getAuthAssetUrl(item.author.avatar_url)}
+                    alt={displayName}
+                    display={item.author.avatar_display}
+                  />
                 ) : (
                   <div className="h-full w-full flex items-center justify-center bg-primary text-[9px] font-bold text-primary-foreground">
                     {getDisplayInitial(item.author)}
@@ -795,20 +1116,34 @@ function MediaTabContent({ loading, error, items, openImageViewer, onRetry, onJu
               </div>
             </div>
             <MediaGridImage
-              src={isItemVideo ? getMediaUrl(getMediaItemPlaybackUrl(item)) : getAuthAssetUrl(getMediaItemSourceUrl(item))}
+              src={
+                isItemVideo
+                  ? getMediaUrl(getMediaItemPlaybackUrl(item))
+                  : getAuthAssetUrl(getMediaItemSourceUrl(item))
+              }
               alt={item.filename}
               isVideo={isItemVideo}
-              posterSrc={isItemVideo ? getMediaItemPosterUrl(item) ?? undefined : undefined}
-              playbackProbe={isItemVideo && !item.is_gif ? {
-                src: getMediaUrl(getMediaItemPlaybackUrl(item)),
-                contentType: item.content_type,
-                posterUrl: getMediaItemPosterUrl(item) ?? undefined,
-                sourceUrl: item.source_url ?? undefined,
-                isAnimated: false,
-              } : undefined}
+              posterSrc={
+                isItemVideo
+                  ? (getMediaItemPosterUrl(item) ?? undefined)
+                  : undefined
+              }
+              playbackProbe={
+                isItemVideo && !item.is_gif
+                  ? {
+                      src: getMediaUrl(getMediaItemPlaybackUrl(item)),
+                      contentType: item.content_type,
+                      posterUrl: getMediaItemPosterUrl(item) ?? undefined,
+                      sourceUrl: item.source_url ?? undefined,
+                      isAnimated: false,
+                    }
+                  : undefined
+              }
             />
             <div className="absolute inset-0 bg-linear-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-2">
-              <span className="text-[10px] font-bold text-white truncate">{item.filename}</span>
+              <span className="text-[10px] font-bold text-white truncate">
+                {item.filename}
+              </span>
             </div>
           </ButtonBase>
         );
@@ -822,14 +1157,20 @@ interface PinsTabContentProps {
   messages?: Message[];
   onJumpToMessage: (id: string) => void;
 }
-function PinsTabContent({ loading, messages, onJumpToMessage }: PinsTabContentProps) {
+function PinsTabContent({
+  loading,
+  messages,
+  onJumpToMessage,
+}: PinsTabContentProps) {
   if (loading) return <TabSpinnerState />;
   if (!messages || messages.length === 0) {
-    return <TabEmptyState icon={<Pin size={40} />} label="No pinned messages" />;
+    return (
+      <TabEmptyState icon={<Pin size={40} />} label="No pinned messages" />
+    );
   }
   return (
     <div className="space-y-3">
-      {messages.map(msg => (
+      {messages.map((msg) =>
         (() => {
           const displayName = getDisplayName(msg.author);
           return (
@@ -841,13 +1182,21 @@ function PinsTabContent({ loading, messages, onJumpToMessage }: PinsTabContentPr
               <div className="flex items-center gap-2 mb-1.5">
                 <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[9px] font-bold text-primary overflow-visible">
                   {msg.author?.avatar_url ? (
-                    <AvatarImage src={getAuthAssetUrl(msg.author.avatar_url)} alt="" display={msg.author.avatar_display} />
+                    <AvatarImage
+                      src={getAuthAssetUrl(msg.author.avatar_url)}
+                      alt=""
+                      display={msg.author.avatar_display}
+                    />
                   ) : (
                     getDisplayInitial(msg.author)
                   )}
                 </div>
-                <span className="text-[12px] font-bold text-rm-text-primary truncate">{displayName}</span>
-                <span className="text-[10px] text-rm-text-muted ml-auto shrink-0">{formatRelativeTime(msg.created_at)}</span>
+                <span className="text-[12px] font-bold text-rm-text-primary truncate">
+                  {displayName}
+                </span>
+                <span className="text-[10px] text-rm-text-muted ml-auto shrink-0">
+                  {formatRelativeTime(msg.created_at)}
+                </span>
               </div>
               <div className="text-[13px] text-rm-text-secondary line-clamp-2 leading-relaxed">
                 <MarkdownRenderer content={msg.content.slice(0, 200)} />
@@ -855,13 +1204,16 @@ function PinsTabContent({ loading, messages, onJumpToMessage }: PinsTabContentPr
               {msg.attachments && msg.attachments.length > 0 && (
                 <div className="mt-2 flex items-center gap-1.5 text-[10px] text-rm-text-muted">
                   <Image size={12} />
-                  <span>{msg.attachments.length} attachment{msg.attachments.length > 1 ? 's' : ''}</span>
+                  <span>
+                    {msg.attachments.length} attachment
+                    {msg.attachments.length > 1 ? "s" : ""}
+                  </span>
                 </div>
               )}
             </ButtonBase>
           );
-        })()
-      ))}
+        })(),
+      )}
     </div>
   );
 }
@@ -873,13 +1225,25 @@ interface ThreadsTabContentProps {
   onOpenThread: (id: string) => void;
   onRetry: () => void;
 }
-function ThreadsTabContent({ loading, error, threads, onOpenThread, onRetry }: ThreadsTabContentProps) {
+function ThreadsTabContent({
+  loading,
+  error,
+  threads,
+  onOpenThread,
+  onRetry,
+}: ThreadsTabContentProps) {
   if (loading) return <TabSpinnerState />;
   if (error) return <TabErrorState message={error} onRetry={onRetry} />;
-  if (threads.length === 0) return <TabEmptyState icon={<MessageCircle size={40} />} label="No threads in this channel" />;
+  if (threads.length === 0)
+    return (
+      <TabEmptyState
+        icon={<MessageCircle size={40} />}
+        label="No threads in this channel"
+      />
+    );
   return (
     <div className="space-y-2.5">
-      {threads.map(thread => (
+      {threads.map((thread) =>
         (() => {
           const displayName = getDisplayName(thread.author);
           return (
@@ -891,12 +1255,18 @@ function ThreadsTabContent({ loading, error, threads, onOpenThread, onRetry }: T
               <div className="flex items-center gap-2 mb-1.5">
                 <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[9px] font-bold text-primary overflow-visible">
                   {thread.author.avatar_url ? (
-                    <AvatarImage src={getAuthAssetUrl(thread.author.avatar_url)} alt="" display={thread.author.avatar_display} />
+                    <AvatarImage
+                      src={getAuthAssetUrl(thread.author.avatar_url)}
+                      alt=""
+                      display={thread.author.avatar_display}
+                    />
                   ) : (
                     getDisplayInitial(thread.author)
                   )}
                 </div>
-                <span className="text-[12px] font-bold text-rm-text-primary truncate">{displayName}</span>
+                <span className="text-[12px] font-bold text-rm-text-primary truncate">
+                  {displayName}
+                </span>
               </div>
               <div className="text-[13px] text-rm-text-secondary line-clamp-2 leading-relaxed mb-2">
                 {thread.content}
@@ -905,14 +1275,16 @@ function ThreadsTabContent({ loading, error, threads, onOpenThread, onRetry }: T
                 <div className="flex items-center gap-1">
                   <MessageCircle size={12} />
                   <span className="font-semibold">{thread.reply_count}</span>
-                  <span>{thread.reply_count === 1 ? 'reply' : 'replies'}</span>
+                  <span>{thread.reply_count === 1 ? "reply" : "replies"}</span>
                 </div>
-                <span className="text-[10px]">{formatRelativeTime(thread.last_reply_at)}</span>
+                <span className="text-[10px]">
+                  {formatRelativeTime(thread.last_reply_at)}
+                </span>
               </div>
             </ButtonBase>
           );
-        })()
-      ))}
+        })(),
+      )}
     </div>
   );
 }
@@ -924,27 +1296,45 @@ interface LinksTabContentProps {
   channelName?: string;
   onRetry: () => void;
 }
-function LinksTabContent({ loading, error, items, channelName, onRetry }: LinksTabContentProps) {
+function LinksTabContent({
+  loading,
+  error,
+  items,
+  channelName,
+  onRetry,
+}: LinksTabContentProps) {
   if (loading) return <TabSpinnerState />;
   if (error) return <TabErrorState message={error} onRetry={onRetry} />;
-  if (items.length === 0) return <TabEmptyState icon={<Link2 size={40} />} label="No links shared yet" />;
+  if (items.length === 0)
+    return (
+      <TabEmptyState icon={<Link2 size={40} />} label="No links shared yet" />
+    );
   return (
     <div className="space-y-2.5">
-      {items.map(item => {
+      {items.map((item) => {
         const urls = extractUrls(item.content);
         const displayName = getDisplayName(item.author);
 
         return (
-          <div key={item.id} className="bg-rm-bg-elevated border border-rm-border/30 rounded-xl p-3.5 transition-colors hover:bg-rm-bg-hover">
+          <div
+            key={item.id}
+            className="bg-rm-bg-elevated border border-rm-border/30 rounded-xl p-3.5 transition-colors hover:bg-rm-bg-hover"
+          >
             <div className="flex items-center gap-2 mb-2">
               <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[9px] font-bold text-primary overflow-visible">
                 {item.author.avatar_url ? (
-                  <AvatarImage src={getAuthAssetUrl(item.author.avatar_url)} alt={displayName} display={item.author.avatar_display} />
+                  <AvatarImage
+                    src={getAuthAssetUrl(item.author.avatar_url)}
+                    alt={displayName}
+                    display={item.author.avatar_display}
+                  />
                 ) : (
                   getDisplayInitial(item.author)
                 )}
               </div>
-              <span className="text-[12px] font-bold text-rm-text-primary truncate">{displayName}</span>
+              <span className="text-[12px] font-bold text-rm-text-primary truncate">
+                {displayName}
+              </span>
               {channelName && (
                 <>
                   <span className="text-rm-text-muted/30">&middot;</span>
@@ -954,7 +1344,9 @@ function LinksTabContent({ loading, error, items, channelName, onRetry }: LinksT
                   </span>
                 </>
               )}
-              <span className="text-[10px] text-rm-text-muted ml-auto shrink-0">{formatRelativeTime(item.created_at)}</span>
+              <span className="text-[10px] text-rm-text-muted ml-auto shrink-0">
+                {formatRelativeTime(item.created_at)}
+              </span>
             </div>
             {urls.map((url) => (
               <a
@@ -984,20 +1376,41 @@ interface FilesTabContentProps {
   onJumpToMessage?: (id: string) => void;
   onClose?: () => void;
 }
-function FilesTabContent({ loading, error, items, channelName, onRetry, onJumpToMessage, onClose }: FilesTabContentProps) {
+function FilesTabContent({
+  loading,
+  error,
+  items,
+  channelName,
+  onRetry,
+  onJumpToMessage,
+  onClose,
+}: FilesTabContentProps) {
   if (loading) return <TabSpinnerState />;
   if (error) return <TabErrorState message={error} onRetry={onRetry} />;
   if (items.length === 0) {
-    const { Icon: EmptyIcon } = getFileIcon('file.txt');
-    return <TabEmptyState icon={<EmptyIcon size={40} />} label="No files shared yet" />;
+    const { Icon: EmptyIcon } = getFileIcon("file.txt");
+    return (
+      <TabEmptyState
+        icon={<EmptyIcon size={40} />}
+        label="No files shared yet"
+      />
+    );
   }
   return (
     <div className="space-y-2">
-      {items.map(item => {
-        const { Icon: FileTypeIcon, colorClass } = getFileIcon(item.filename, item.content_type);
-        const uploadDate = new Date(item.created_at).toLocaleDateString(undefined, {
-          month: 'short', day: 'numeric', year: 'numeric'
-        });
+      {items.map((item) => {
+        const { Icon: FileTypeIcon, colorClass } = getFileIcon(
+          item.filename,
+          item.content_type,
+        );
+        const uploadDate = new Date(item.created_at).toLocaleDateString(
+          undefined,
+          {
+            month: "short",
+            day: "numeric",
+            year: "numeric",
+          },
+        );
         const displayName = getDisplayName(item.author);
         return (
           <div
@@ -1012,27 +1425,44 @@ function FilesTabContent({ loading, error, items, channelName, onRetry, onJumpTo
               aria-label={`Jump to shared file ${item.filename}`}
               className="absolute inset-0 z-10 rounded-xl outline-none"
             />
-            <div className={cn("flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-rm-bg-surface border border-rm-border/30", colorClass)}>
+            <div
+              className={cn(
+                "flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-rm-bg-surface border border-rm-border/30",
+                colorClass,
+              )}
+            >
               <FileTypeIcon size={22} />
             </div>
             <div className="flex-1 min-w-0">
-              <div className="text-[13px] font-bold text-rm-text-primary truncate">{item.filename}</div>
+              <div className="text-[13px] font-bold text-rm-text-primary truncate">
+                {item.filename}
+              </div>
               <div className="flex items-center gap-2 mt-0.5">
-                <span className="text-[11px] text-rm-text-muted">{formatFileSize(item.size_bytes)}</span>
+                <span className="text-[11px] text-rm-text-muted">
+                  {formatFileSize(item.size_bytes)}
+                </span>
                 <span className="text-rm-text-muted/30">&middot;</span>
-                <span className="text-[11px] text-rm-text-muted">{uploadDate}</span>
+                <span className="text-[11px] text-rm-text-muted">
+                  {uploadDate}
+                </span>
               </div>
               <div className="flex items-center gap-1.5 mt-1">
                 <div className="h-4 w-4 rounded-full overflow-visible bg-rm-bg-surface border border-rm-border/30 shrink-0">
                   {item.author.avatar_url ? (
-                    <AvatarImage src={getAuthAssetUrl(item.author.avatar_url)} alt={displayName} display={item.author.avatar_display} />
+                    <AvatarImage
+                      src={getAuthAssetUrl(item.author.avatar_url)}
+                      alt={displayName}
+                      display={item.author.avatar_display}
+                    />
                   ) : (
                     <div className="h-full w-full flex items-center justify-center bg-primary text-[7px] font-bold text-primary-foreground">
                       {getDisplayInitial(item.author)}
                     </div>
                   )}
                 </div>
-                <span className="text-[11px] font-medium text-rm-text-muted truncate">{displayName}</span>
+                <span className="text-[11px] font-medium text-rm-text-muted truncate">
+                  {displayName}
+                </span>
                 {channelName && (
                   <>
                     <span className="text-rm-text-muted/30">&middot;</span>
@@ -1055,7 +1485,11 @@ function FilesTabContent({ loading, error, items, channelName, onRetry, onJumpTo
                   <Download size={16} />
                 </a>
               </TooltipTrigger>
-              <TooltipContent side="top" sideOffset={10} className="rounded-lg border-none bg-rm-bg-floating px-3 py-2 text-[12px] font-bold text-rm-text-primary shadow-xl">
+              <TooltipContent
+                side="top"
+                sideOffset={10}
+                className="rounded-lg border-none bg-rm-bg-floating px-3 py-2 text-[12px] font-bold text-rm-text-primary shadow-xl"
+              >
                 Download
               </TooltipContent>
             </Tooltip>
@@ -1073,7 +1507,9 @@ function TabSpinnerState() {
   return (
     <div className="flex flex-col items-center justify-center py-16 gap-3">
       <div className="h-6 w-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-      <span className="text-[12px] font-bold text-rm-text-muted">Loading...</span>
+      <span className="text-[12px] font-bold text-rm-text-muted">
+        Loading...
+      </span>
     </div>
   );
 }
@@ -1083,7 +1519,10 @@ function MediaSkeletonGrid() {
   return (
     <div className="grid grid-cols-3 gap-1.5">
       {Array.from({ length: 9 }).map((_, i) => (
-        <div key={i} className="aspect-square rounded-xl overflow-hidden bg-rm-bg-elevated border border-rm-border/20 relative">
+        <div
+          key={i}
+          className="aspect-square rounded-xl overflow-hidden bg-rm-bg-elevated border border-rm-border/20 relative"
+        >
           {/* Shimmer animation */}
           <div className="absolute inset-0 bg-linear-to-r from-transparent via-rm-text-muted/5 to-transparent animate-shimmer" />
           {/* Fake avatar skeleton */}
@@ -1149,7 +1588,7 @@ function MediaGridImage({
             alt={alt}
             className={cn(
               "w-full h-full object-cover transition-all duration-300 group-hover:scale-105",
-              loaded ? "opacity-100" : "opacity-0"
+              loaded ? "opacity-100" : "opacity-0",
             )}
             loading="lazy"
             onLoad={() => setLoaded(true)}
@@ -1172,13 +1611,13 @@ function MediaGridImage({
           </div>
         )}
         <video
-          src={src.includes('#') ? src : `${src}#t=0.001`}
+          src={src.includes("#") ? src : `${src}#t=0.001`}
           muted
           preload="metadata"
           aria-label={alt}
           className={cn(
             "w-full h-full object-cover transition-all duration-300 group-hover:scale-105",
-            loaded ? "opacity-100" : "opacity-0"
+            loaded ? "opacity-100" : "opacity-0",
           )}
           onLoadedData={() => setLoaded(true)}
           onError={() => setError(true)}
@@ -1205,7 +1644,7 @@ function MediaGridImage({
         alt={alt}
         className={cn(
           "w-full h-full object-cover transition-all duration-300 group-hover:scale-105",
-          loaded ? "opacity-100" : "opacity-0"
+          loaded ? "opacity-100" : "opacity-0",
         )}
         loading="lazy"
         onLoad={() => setLoaded(true)}
@@ -1216,7 +1655,13 @@ function MediaGridImage({
 }
 
 /** Error state with graphic and retry option */
-function TabErrorState({ message, onRetry }: { message: string; onRetry: () => void }) {
+function TabErrorState({
+  message,
+  onRetry,
+}: {
+  message: string;
+  onRetry: () => void;
+}) {
   return (
     <div className="flex flex-col items-center justify-center py-16 gap-5">
       {/* Error graphic */}
@@ -1230,8 +1675,12 @@ function TabErrorState({ message, onRetry }: { message: string; onRetry: () => v
       </div>
 
       <div className="text-center space-y-1.5">
-        <p className="text-[14px] font-bold text-rm-text-primary">Failed to load</p>
-        <p className="text-[12px] text-rm-text-muted max-w-[200px] leading-relaxed">{message}</p>
+        <p className="text-[14px] font-bold text-rm-text-primary">
+          Failed to load
+        </p>
+        <p className="text-[12px] text-rm-text-muted max-w-[200px] leading-relaxed">
+          {message}
+        </p>
       </div>
 
       <ButtonBase
@@ -1245,7 +1694,13 @@ function TabErrorState({ message, onRetry }: { message: string; onRetry: () => v
   );
 }
 
-function TabEmptyState({ icon, label }: { icon: React.ReactNode; label: string }) {
+function TabEmptyState({
+  icon,
+  label,
+}: {
+  icon: React.ReactNode;
+  label: string;
+}) {
   return (
     <div className="flex flex-col items-center justify-center py-16 gap-4 text-rm-text-muted">
       <div className="opacity-20">{icon}</div>
@@ -1253,7 +1708,6 @@ function TabEmptyState({ icon, label }: { icon: React.ReactNode; label: string }
     </div>
   );
 }
-
 
 function MemberItem({
   member,
@@ -1277,11 +1731,15 @@ function MemberItem({
   const hasNameplate = nameplatePresentation.hasNameplate;
   const nameplateTheme = nameplatePresentation.theme;
   const highestRole = getHighestRole(member.roles);
-  const isAdmin = Boolean((highestRole?.permissions ?? 0) & PERMISSIONS.ADMINISTRATOR);
-  const shouldExtendNameplateMask = hasNameplate && (Boolean(platforms?.length) || isAdmin);
+  const isAdmin = Boolean(
+    (highestRole?.permissions ?? 0) & PERMISSIONS.ADMINISTRATOR,
+  );
+  const shouldExtendNameplateMask =
+    hasNameplate && (Boolean(platforms?.length) || isAdmin);
   const buttonRef = useRef<HTMLButtonElement | null>(null);
   const trailingIconsRef = useRef<HTMLDivElement | null>(null);
-  const [nameplateMaskFullOpacityStart, setNameplateMaskFullOpacityStart] = useState<number | undefined>(undefined);
+  const [nameplateMaskFullOpacityStart, setNameplateMaskFullOpacityStart] =
+    useState<number | undefined>(undefined);
 
   useEffect(() => {
     if (!shouldExtendNameplateMask) {
@@ -1299,10 +1757,17 @@ function MemberItem({
 
       const nextFullOpacityStart = Math.min(
         99,
-        Math.max(92.86, ((trailingIconsRect.right - rootRect.left + 12) / rootRect.width) * 100),
+        Math.max(
+          92.86,
+          ((trailingIconsRect.right - rootRect.left + 12) / rootRect.width) *
+            100,
+        ),
       );
       setNameplateMaskFullOpacityStart((current) => {
-        if (current != null && Math.abs(current - nextFullOpacityStart) < 0.25) {
+        if (
+          current != null &&
+          Math.abs(current - nextFullOpacityStart) < 0.25
+        ) {
           return current;
         }
         return nextFullOpacityStart;
@@ -1328,19 +1793,27 @@ function MemberItem({
       className={cn(
         "group relative flex w-full cursor-pointer items-center gap-3 overflow-hidden border-0 bg-transparent p-0 text-left transition-colors lg:gap-2.5",
         "bg-rm-bg-elevated px-3.5 py-3 mb-2 rounded-2xl", // mobile
-        hasNameplate ? "border border-transparent" : "border border-rm-border/30",
+        hasNameplate
+          ? "border border-transparent"
+          : "border border-rm-border/30",
         hasNameplate && "isolate",
         hasNameplate
           ? "lg:bg-transparent lg:px-2 lg:py-1.5 lg:mb-0 lg:rounded-md lg:border-transparent lg:hover:bg-white/8"
           : "lg:bg-transparent lg:px-2 lg:py-1.5 lg:mb-0 lg:rounded-md lg:border-transparent lg:hover:bg-rm-bg-hover", // desktop
-        !isOnline && "opacity-60 grayscale hover:opacity-100 hover:grayscale-0"
+        !isOnline && "opacity-60 grayscale hover:opacity-100 hover:grayscale-0",
       )}
-      style={hasNameplate && nameplateTheme ? {
-        boxShadow: `inset 0 1px 0 ${nameplateTheme.rowBorder}, 0 0 0 1px ${nameplateTheme.rowBorder}, 0 14px 28px ${nameplateTheme.rowGlow}`,
-      } : undefined}
-      onClick={(e) => { if (e.button === 0) onClick?.(e); }}
+      style={
+        hasNameplate && nameplateTheme
+          ? {
+              boxShadow: `inset 0 1px 0 ${nameplateTheme.rowBorder}, 0 0 0 1px ${nameplateTheme.rowBorder}, 0 14px 28px ${nameplateTheme.rowGlow}`,
+            }
+          : undefined
+      }
+      onClick={(e) => {
+        if (e.button === 0) onClick?.(e);
+      }}
       onContextMenu={onContextMenu}
-      aria-label={`${displayName} (${isOnline ? 'Online' : 'Offline'})`}
+      aria-label={`${displayName} (${isOnline ? "Online" : "Offline"})`}
     >
       {hasNameplate && (
         <>
@@ -1348,38 +1821,52 @@ function MemberItem({
             user={member.user}
             alt={`${displayName} nameplate`}
             className="pointer-events-none z-0 opacity-[0.98]"
-            maskFullOpacityStartPercent={shouldExtendNameplateMask ? nameplateMaskFullOpacityStart : undefined}
+            maskFullOpacityStartPercent={
+              shouldExtendNameplateMask
+                ? nameplateMaskFullOpacityStart
+                : undefined
+            }
           />
         </>
       )}
       <div className="relative z-10">
         <div className="flex h-10 w-10 lg:h-8 lg:w-8 shrink-0 items-center justify-center overflow-visible rounded-full bg-primary text-xs font-bold text-primary-foreground border border-rm-border transition-all group-hover:ring-2 group-hover:ring-primary/20">
           {member.user.avatar_url ? (
-            <AvatarImage src={getAuthAssetUrl(member.user.avatar_url)} alt={displayName} display={member.user.avatar_display} />
+            <AvatarImage
+              src={getAuthAssetUrl(member.user.avatar_url)}
+              alt={displayName}
+              display={member.user.avatar_display}
+            />
           ) : (
             getDisplayInitial(member.user)
           )}
         </div>
-        {isTyping && (member.user.status !== 'offline' || isMe) ? (
-          <div className={cn(
-            "absolute -bottom-0.5 -right-0.5 z-20 flex h-4 w-5 lg:h-3.5 lg:w-4.5 items-center justify-center gap-0.5 rounded-full border-2 border-rm-bg-elevated lg:border-rm-bg-sidebar px-0.5",
-            (isMe && member.user.status === 'offline') ? "bg-rm-text-muted/40" : "bg-primary"
-          )}>
+        {isTyping && (member.user.status !== "offline" || isMe) ? (
+          <div
+            className={cn(
+              "absolute -bottom-0.5 -right-0.5 z-20 flex h-4 w-5 lg:h-3.5 lg:w-4.5 items-center justify-center gap-0.5 rounded-full border-2 border-rm-bg-elevated lg:border-rm-bg-sidebar px-0.5",
+              isMe && member.user.status === "offline"
+                ? "bg-rm-text-muted/40"
+                : "bg-primary",
+            )}
+          >
             <span className="h-0.5 w-0.5 rounded-full bg-rm-bg-primary animate-[pulse_900ms_cubic-bezier(0.16,1,0.3,1)_infinite]" />
             <span className="h-0.5 w-0.5 rounded-full bg-rm-bg-primary animate-[pulse_900ms_cubic-bezier(0.16,1,0.3,1)_infinite] [animation-delay:150ms]" />
             <span className="h-0.5 w-0.5 rounded-full bg-rm-bg-primary animate-[pulse_900ms_cubic-bezier(0.16,1,0.3,1)_infinite] [animation-delay:300ms]" />
           </div>
         ) : (
-          <div className={cn(
-            "absolute -bottom-0.5 -right-0.5 z-20 h-3.5 w-3.5 lg:h-3 lg:w-3 rounded-full border-2 border-rm-bg-elevated lg:border-rm-bg-sidebar transition-colors",
-            isOnline ? (statusColors[member.user.status ?? "online"]) : "bg-rm-text-muted/40"
-          )} />
+          <div
+            className={cn(
+              "absolute -bottom-0.5 -right-0.5 z-20 h-3.5 w-3.5 lg:h-3 lg:w-3 rounded-full border-2 border-rm-bg-elevated lg:border-rm-bg-sidebar transition-colors",
+              isOnline
+                ? statusColors[member.user.status ?? "online"]
+                : "bg-rm-text-muted/40",
+            )}
+          />
         )}
       </div>
       <div className="relative z-10 min-w-0 flex-1">
-        <div className={cn(
-          "relative min-w-0 px-2 -ml-1 py-1",
-        )}>
+        <div className={cn("relative min-w-0 px-2 -ml-1 py-1")}>
           <div className="relative min-w-0">
             <div className="flex min-w-0 items-center gap-1.5">
               <div className="min-w-0 shrink">
@@ -1395,12 +1882,17 @@ function MemberItem({
                         : "group-hover:text-rm-text",
                   )}
                   minContrastRatio={hasNameplate ? 2.8 : undefined}
-                  style={!hasNameplate && isOnline && !member.user.display_name_style
+                  style={
+                    !hasNameplate && isOnline && !member.user.display_name_style
                       ? { color: highestRole?.color || undefined }
-                      : undefined}
+                      : undefined
+                  }
                 />
               </div>
-              <div ref={trailingIconsRef} className="flex shrink-0 items-center gap-1.5 pl-0.5">
+              <div
+                ref={trailingIconsRef}
+                className="flex shrink-0 items-center gap-1.5 pl-0.5"
+              >
                 <UserPlatformIndicators
                   userId={member.user.id}
                   platforms={platforms}
@@ -1415,7 +1907,11 @@ function MemberItem({
                         <Crown className="h-3 w-3 fill-primary/20 text-primary" />
                       </span>
                     </TooltipTrigger>
-                    <TooltipContent side="top" sideOffset={8} className="rounded-lg border-none bg-rm-bg-floating px-3 py-2 text-[12px] font-bold text-rm-text-primary shadow-xl">
+                    <TooltipContent
+                      side="top"
+                      sideOffset={8}
+                      className="rounded-lg border-none bg-rm-bg-floating px-3 py-2 text-[12px] font-bold text-rm-text-primary shadow-xl"
+                    >
                       Administrator
                     </TooltipContent>
                   </Tooltip>
@@ -1424,10 +1920,14 @@ function MemberItem({
             </div>
 
             {member.user.custom_status && (
-              <div className={cn(
-                "mt-0.5 truncate text-[11px] font-medium italic",
-                hasNameplate ? "text-rm-text-secondary" : "text-rm-text-muted",
-              )}>
+              <div
+                className={cn(
+                  "mt-0.5 truncate text-[11px] font-medium italic",
+                  hasNameplate
+                    ? "text-rm-text-secondary"
+                    : "text-rm-text-muted",
+                )}
+              >
                 {member.user.custom_status}
               </div>
             )}
@@ -1437,4 +1937,3 @@ function MemberItem({
     </ButtonBase>
   );
 }
-

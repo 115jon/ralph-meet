@@ -15,7 +15,7 @@ function ctx(): AudioContext {
   }
   // Resume suspended context (autoplay policy)
   if (_ctx.state === "suspended") {
-    _ctx.resume().catch(() => { });
+    _ctx.resume().catch(() => {});
     // Notify UI that interaction is needed
     if (_interactionCallback) _interactionCallback();
   }
@@ -44,7 +44,11 @@ export function onSoundInteractionNeeded(cb: (() => void) | null) {
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
 /** Create a gain node that fades out over `duration` seconds */
-function fadeOut(a: AudioContext, startGain: number, duration: number): GainNode {
+function fadeOut(
+  a: AudioContext,
+  startGain: number,
+  duration: number,
+): GainNode {
   const g = a.createGain();
   g.gain.setValueAtTime(startGain, a.currentTime);
   g.gain.exponentialRampToValueAtTime(0.001, a.currentTime + duration);
@@ -57,7 +61,7 @@ function tone(
   duration: number,
   volume = 0.15,
   type: OscillatorType = "sine",
-  delay = 0
+  delay = 0,
 ) {
   const a = ctx();
   const osc = a.createOscillator();
@@ -143,7 +147,6 @@ function chime(baseFreq: number, duration = 0.4, volume = 0.08) {
   osc3.stop(now + duration + 0.05);
 }
 
-
 // ── Public Sound Effects ────────────────────────────────────────────────────
 
 /** Discord-style ascending two-tone: someone joined voice */
@@ -178,7 +181,7 @@ export function playUndeafen() {
 
 /** Soft chime — new notification (mention, reply, DM) */
 export function playNotification() {
-  chime(1047, 0.35, 0.1);   // C6
+  chime(1047, 0.35, 0.1); // C6
   setTimeout(() => chime(1319, 0.3, 0.07), 120); // E6
 }
 
@@ -207,7 +210,7 @@ export function playDisconnect() {
 
   const osc = a.createOscillator();
   osc.type = "sine";
-  osc.frequency.setValueAtTime(523, now);  // C5
+  osc.frequency.setValueAtTime(523, now); // C5
   osc.frequency.exponentialRampToValueAtTime(330, now + 0.2); // E4
 
   const g = a.createGain();
@@ -221,9 +224,9 @@ export function playDisconnect() {
 
 /** Three-tone connection chime — you connected to voice */
 export function playConnected() {
-  tone(523, 0.1, 0.1, "sine", 0);       // C5
-  tone(659, 0.1, 0.1, "sine", 0.1);     // E5
-  tone(784, 0.15, 0.1, "sine", 0.2);    // G5
+  tone(523, 0.1, 0.1, "sine", 0); // C5
+  tone(659, 0.1, 0.1, "sine", 0.1); // E5
+  tone(784, 0.15, 0.1, "sine", 0.2); // G5
 }
 
 /** Incoming call ring — repeated chime pattern */
@@ -299,9 +302,9 @@ export function playOutgoingRingStop() {
 
 /** Call connected — short ascending 3-tone chime */
 export function playCallConnect() {
-  tone(523, 0.08, 0.1, "sine", 0);     // C5
-  tone(659, 0.08, 0.1, "sine", 0.09);  // E5
-  tone(880, 0.15, 0.1, "sine", 0.18);  // A5
+  tone(523, 0.08, 0.1, "sine", 0); // C5
+  tone(659, 0.08, 0.1, "sine", 0.09); // E5
+  tone(880, 0.15, 0.1, "sine", 0.18); // A5
 }
 
 /** Call ended — warm descending two-tone */

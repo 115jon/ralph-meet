@@ -7,13 +7,13 @@ import { NATIVE_EMOJI_STYLE_VERSION } from "@/lib/emoji";
 
 describe("EmojiToken selection rendering", () => {
   it("renders native emoji with selectable text backing when requested", () => {
-    const markup = renderToStaticMarkup(
-      <EmojiToken value="😂" selectable />,
-    );
+    const markup = renderToStaticMarkup(<EmojiToken value="😂" selectable />);
 
     expect(markup).toContain("select-text");
     expect(markup).toContain("text-transparent");
-    expect(markup).toContain(`emoji-datasource-twitter@${NATIVE_EMOJI_STYLE_VERSION}`);
+    expect(markup).toContain(
+      `emoji-datasource-twitter@${NATIVE_EMOJI_STYLE_VERSION}`,
+    );
     expect(markup).toContain("😂");
   });
 

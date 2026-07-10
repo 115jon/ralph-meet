@@ -75,14 +75,14 @@ export class VoiceActivityDetector {
 
       // Explicitly resume in case it's suspended
       this.contextResumed = false;
-      this.audioContext.resume().catch(() => { });
+      this.audioContext.resume().catch(() => {});
 
       const dataArray = new Uint8Array(this.analyser.frequencyBinCount);
 
       // Listen for context state changes so we can apply the pending gate
       // when the context transitions to 'running' (user gesture on Firefox).
-      this.audioContext.addEventListener('statechange', () => {
-        if (this.audioContext?.state === 'running' && !this.contextResumed) {
+      this.audioContext.addEventListener("statechange", () => {
+        if (this.audioContext?.state === "running" && !this.contextResumed) {
           this.contextResumed = true;
           if (DEBUG) vadLog.info("AudioContext resumed via statechange");
           // Now that we can actually detect speech, apply the pending gate
@@ -100,14 +100,17 @@ export class VoiceActivityDetector {
         // Auto-resume: Chrome suspends AudioContexts created before user
         // gesture. Try to resume every tick until it succeeds. Once the
         // user has interacted with the page, resume() will work.
-        if (!this.contextResumed && this.audioContext.state === 'suspended') {
-          this.audioContext.resume().then(() => {
-            this.contextResumed = true;
-            if (DEBUG) vadLog.info("AudioContext resumed");
-          }).catch(() => { });
+        if (!this.contextResumed && this.audioContext.state === "suspended") {
+          this.audioContext
+            .resume()
+            .then(() => {
+              this.contextResumed = true;
+              if (DEBUG) vadLog.info("AudioContext resumed");
+            })
+            .catch(() => {});
           return; // skip this tick — data is stale while suspended
         }
-        if (this.audioContext.state === 'running') {
+        if (this.audioContext.state === "running") {
           this.contextResumed = true;
         }
 
@@ -128,14 +131,16 @@ export class VoiceActivityDetector {
           } else if (!this.isStalled && now - this.pureSilenceStart >= 5000) {
             this.isStalled = true;
             this.callbacks.onAudioStalled?.(true);
-            if (DEBUG) vadLog.warn("Audio hardware stalled: 0 RMS straight for 5s");
+            if (DEBUG)
+              vadLog.warn("Audio hardware stalled: 0 RMS straight for 5s");
           }
         } else {
           this.pureSilenceStart = 0;
           if (this.isStalled) {
             this.isStalled = false;
             this.callbacks.onAudioStalled?.(false);
-            if (DEBUG) vadLog.info("Audio hardware recovered: Non-zero RMS detected");
+            if (DEBUG)
+              vadLog.info("Audio hardware recovered: Non-zero RMS detected");
           }
         }
 
@@ -213,7 +218,7 @@ export class VoiceActivityDetector {
       this.vadTrack = null;
     }
     if (this.audioContext) {
-      this.audioContext.close().catch(() => { });
+      this.audioContext.close().catch(() => {});
       this.audioContext = null;
     }
     this.analyser = null;
@@ -251,11 +256,14 @@ export class VoiceActivityDetector {
    * Resume the VAD's AudioContext after a user gesture.
    */
   resumeContext(): void {
-    if (this.audioContext && this.audioContext.state === 'suspended') {
-      this.audioContext.resume().then(() => {
-        this.contextResumed = true;
-        if (DEBUG) vadLog.info("AudioContext resumed");
-      }).catch(() => { });
+    if (this.audioContext && this.audioContext.state === "suspended") {
+      this.audioContext
+        .resume()
+        .then(() => {
+          this.contextResumed = true;
+          if (DEBUG) vadLog.info("AudioContext resumed");
+        })
+        .catch(() => {});
     }
   }
 
@@ -291,7 +299,10 @@ export class VoiceActivityDetector {
 
     const transceiver = this.callbacks.getAudioTransceiver();
     if (!transceiver) {
-      if (DEBUG) vadLog.info(`Gate deferred: no transceiver (pid=${this.callbacks.getParticipantId()})`);
+      if (DEBUG)
+        vadLog.info(
+          `Gate deferred: no transceiver (pid=${this.callbacks.getParticipantId()})`,
+        );
       return;
     }
 
@@ -300,7 +311,10 @@ export class VoiceActivityDetector {
     // audio track inactive and garbage-collect it. VAD now drives speaking state
     // only; user mute still uses MediaStreamTrack.enabled.
     this.isGated = gated;
-    if (DEBUG) vadLog.info(`Audio gate ${gated ? "ON ■ (silence)" : "OFF ▶ (speaking)"}`);
+    if (DEBUG)
+      vadLog.info(
+        `Audio gate ${gated ? "ON ■ (silence)" : "OFF ▶ (speaking)"}`,
+      );
   }
 
   /** Get the most recent RMS level (0-100 scale) for live UI feedback. */

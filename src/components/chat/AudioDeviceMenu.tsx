@@ -13,10 +13,23 @@ import { useMediaDevices } from "@/lib/useMediaDevices";
 import { cn } from "@/lib/utils";
 import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
 import { useUser } from "@kova/react";
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import { createPortal } from "react-dom";
 import { useShallow } from "zustand/shallow";
-import { Check, ChevronRight, Headphones, Mic, Settings, Volume2 } from "./Icons";
+import {
+  Check,
+  ChevronRight,
+  Headphones,
+  Mic,
+  Settings,
+  Volume2,
+} from "./Icons";
 
 interface AudioDeviceMenuProps {
   mode: "input" | "output";
@@ -26,11 +39,18 @@ interface AudioDeviceMenuProps {
   anchorRef: React.RefObject<HTMLElement | null>;
 }
 
-export function AudioDeviceMenu({ mode, onClose, onOpenVoiceSettings, anchorRef }: AudioDeviceMenuProps) {
+export function AudioDeviceMenu({
+  mode,
+  onClose,
+  onOpenVoiceSettings,
+  anchorRef,
+}: AudioDeviceMenuProps) {
   const { user } = useUser();
   const settingsUserId = user?.id ?? null;
   const { audioInputs, audioOutputs } = useMediaDevices();
-  const vSettings = useVoiceSettingsStore(useShallow((s) => s.getSettings(settingsUserId)));
+  const vSettings = useVoiceSettingsStore(
+    useShallow((s) => s.getSettings(settingsUserId)),
+  );
   const setDevice = useVoiceSettingsStore((s) => s.setDevice);
   const updateUserSettings = useVoiceSettingsStore((s) => s.updateUserSettings);
 
@@ -43,28 +63,31 @@ export function AudioDeviceMenu({ mode, onClose, onOpenVoiceSettings, anchorRef 
 
   const defaultInput = audioInputs.find((d) => d.deviceId === "default");
   const defaultOutput = audioOutputs.find((d) => d.deviceId === "default");
-  const devices = mode === "input"
-    ? [
-      {
-        deviceId: "default",
-        label: defaultInput?.label || "Default Microphone",
-        groupId: defaultInput?.groupId,
-        kind: "audioinput" as MediaDeviceKind,
-      },
-      ...audioInputs.filter(d => d.deviceId !== "default"),
-    ]
-    : [
-      {
-        deviceId: "default",
-        label: defaultOutput?.label || "Default Speaker",
-        groupId: defaultOutput?.groupId,
-        kind: "audiooutput" as MediaDeviceKind,
-      },
-      ...audioOutputs.filter(d => d.deviceId !== "default"),
-    ];
+  const devices =
+    mode === "input"
+      ? [
+          {
+            deviceId: "default",
+            label: defaultInput?.label || "Default Microphone",
+            groupId: defaultInput?.groupId,
+            kind: "audioinput" as MediaDeviceKind,
+          },
+          ...audioInputs.filter((d) => d.deviceId !== "default"),
+        ]
+      : [
+          {
+            deviceId: "default",
+            label: defaultOutput?.label || "Default Speaker",
+            groupId: defaultOutput?.groupId,
+            kind: "audiooutput" as MediaDeviceKind,
+          },
+          ...audioOutputs.filter((d) => d.deviceId !== "default"),
+        ];
 
-  const currentDeviceId = mode === "input" ? vSettings.inputDeviceId : vSettings.outputDeviceId;
-  const volume = mode === "input" ? vSettings.inputVolume : vSettings.outputVolume;
+  const currentDeviceId =
+    mode === "input" ? vSettings.inputDeviceId : vSettings.outputDeviceId;
+  const volume =
+    mode === "input" ? vSettings.inputVolume : vSettings.outputVolume;
 
   // Position main menu above anchor
   useLayoutEffect(() => {
@@ -156,7 +179,10 @@ export function AudioDeviceMenu({ mode, onClose, onOpenVoiceSettings, anchorRef 
 
   const handleVolumeChange = (val: number) => {
     const key = mode === "input" ? "inputVolume" : "outputVolume";
-    updateUserSettings((s) => ({ ...s, [key]: val }), settingsUserId ?? undefined);
+    updateUserSettings(
+      (s) => ({ ...s, [key]: val }),
+      settingsUserId ?? undefined,
+    );
   };
 
   const handleDeviceHover = (entering: boolean) => {
@@ -209,7 +235,7 @@ export function AudioDeviceMenu({ mode, onClose, onOpenVoiceSettings, anchorRef 
                   "w-full text-left px-3 py-2 text-[12px] font-medium rounded-lg transition-colors flex items-center justify-between group",
                   showDeviceSubmenu
                     ? "bg-rm-accent/10 text-rm-accent"
-                    : "text-rm-text hover:bg-rm-bg-hover"
+                    : "text-rm-text hover:bg-rm-bg-hover",
                 )}
               >
                 <span className="flex items-center gap-2 min-w-0 flex-1">
@@ -217,11 +243,15 @@ export function AudioDeviceMenu({ mode, onClose, onOpenVoiceSettings, anchorRef 
                   <span className="flex flex-col min-w-0">
                     <span className="leading-tight">{deviceLabel}</span>
                     <span className="text-[10px] text-rm-text-muted/60 font-normal truncate leading-tight">
-                      {devices.find(d => d.deviceId === currentDeviceId)?.label ?? "Default"}
+                      {devices.find((d) => d.deviceId === currentDeviceId)
+                        ?.label ?? "Default"}
                     </span>
                   </span>
                 </span>
-                <ChevronRight size={12} className="transition-transform duration-200 shrink-0" />
+                <ChevronRight
+                  size={12}
+                  className="transition-transform duration-200 shrink-0"
+                />
               </button>
             </div>
 
@@ -242,11 +272,15 @@ export function AudioDeviceMenu({ mode, onClose, onOpenVoiceSettings, anchorRef 
               <div className="group/slider relative h-1.5 rounded-full bg-rm-bg-primary">
                 <div
                   className="absolute left-0 top-0 h-full rounded-full bg-primary transition-all"
-                  style={{ width: `${Math.min(100, (volume / (mode === "output" ? 200 : 100)) * 100)}%` }}
+                  style={{
+                    width: `${Math.min(100, (volume / (mode === "output" ? 200 : 100)) * 100)}%`,
+                  }}
                 />
                 <div
                   className="pointer-events-none absolute top-1/2 h-3 w-3 -translate-y-1/2 rounded-full border border-rm-border bg-rm-bg-surface opacity-0 shadow-lg transition-opacity group-hover/slider:opacity-100"
-                  style={{ left: `calc(${Math.min(100, (volume / (mode === "output" ? 200 : 100)) * 100)}% - 6px)` }}
+                  style={{
+                    left: `calc(${Math.min(100, (volume / (mode === "output" ? 200 : 100)) * 100)}% - 6px)`,
+                  }}
                 />
                 <input
                   type="range"
@@ -254,7 +288,9 @@ export function AudioDeviceMenu({ mode, onClose, onOpenVoiceSettings, anchorRef 
                   max={mode === "output" ? 200 : 100}
                   step="1"
                   value={volume}
-                  aria-label={mode === "input" ? "Input volume" : "Output volume"}
+                  aria-label={
+                    mode === "input" ? "Input volume" : "Output volume"
+                  }
                   onChange={(e) => handleVolumeChange(parseInt(e.target.value))}
                   className="absolute inset-0 z-10 w-full h-full cursor-pointer opacity-0"
                 />
@@ -300,16 +336,24 @@ export function AudioDeviceMenu({ mode, onClose, onOpenVoiceSettings, anchorRef 
                       "w-full text-left px-3 py-2 text-[11px] font-medium rounded-lg transition-all flex items-center gap-2",
                       isSelected
                         ? "bg-rm-accent/10 text-rm-accent"
-                        : "text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text"
+                        : "text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text",
                     )}
                   >
-                    <div className={cn(
-                      "w-3.5 h-3.5 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors",
-                      isSelected
-                        ? "border-rm-accent bg-rm-accent"
-                        : "border-rm-text-muted/30"
-                    )}>
-                      {isSelected && <Check size={8} className="text-white" strokeWidth={3} />}
+                    <div
+                      className={cn(
+                        "w-3.5 h-3.5 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors",
+                        isSelected
+                          ? "border-rm-accent bg-rm-accent"
+                          : "border-rm-text-muted/30",
+                      )}
+                    >
+                      {isSelected && (
+                        <Check
+                          size={8}
+                          className="text-white"
+                          strokeWidth={3}
+                        />
+                      )}
                     </div>
                     <span className="truncate">{device.label}</span>
                   </button>
@@ -320,6 +364,6 @@ export function AudioDeviceMenu({ mode, onClose, onOpenVoiceSettings, anchorRef 
         </div>
       )}
     </>,
-    document.body
+    document.body,
   );
 }

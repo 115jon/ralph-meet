@@ -1,7 +1,11 @@
 import { BaseModal } from "@/components/ui/BaseModal";
 import { apiGet, apiPatch, apiPost, apiUpload } from "@/lib/api-client";
 import { getAuthAssetUrl, getMediaUrl } from "@/lib/platform";
-import type { Channel, VoiceChannelStatusMedia, VoiceChannelStatusMediaAsset } from "@/lib/types";
+import type {
+  Channel,
+  VoiceChannelStatusMedia,
+  VoiceChannelStatusMediaAsset,
+} from "@/lib/types";
 import { voiceChannelStatusMediaFromGifItem } from "@/lib/voice-channel-status";
 import { useChatActions } from "@/stores/chat-store";
 import { Loader2, Sparkles, Upload, X } from "lucide-react";
@@ -26,7 +30,9 @@ interface VoiceChannelMediaStatusModalProps {
   onClose: () => void;
 }
 
-function dedupeAssets(items: VoiceChannelStatusMediaAsset[]): VoiceChannelStatusMediaAsset[] {
+function dedupeAssets(
+  items: VoiceChannelStatusMediaAsset[],
+): VoiceChannelStatusMediaAsset[] {
   const seen = new Set<string>();
   return items.filter((item) => {
     if (seen.has(item.id)) return false;
@@ -35,7 +41,9 @@ function dedupeAssets(items: VoiceChannelStatusMediaAsset[]): VoiceChannelStatus
   });
 }
 
-function readMediaDimensions(file: File): Promise<{ width: number; height: number }> {
+function readMediaDimensions(
+  file: File,
+): Promise<{ width: number; height: number }> {
   const objectUrl = URL.createObjectURL(file);
 
   return new Promise((resolve, reject) => {
@@ -93,7 +101,9 @@ function VoiceStatusMediaTile({
     >
       <div
         className="w-full overflow-hidden rounded-[14px] bg-rm-bg-hover"
-        style={{ aspectRatio: `${Math.max(1, media.preview_width)} / ${Math.max(1, media.preview_height)}` }}
+        style={{
+          aspectRatio: `${Math.max(1, media.preview_width)} / ${Math.max(1, media.preview_height)}`,
+        }}
       >
         {media.preview_content_type.startsWith("video/") ? (
           <video
@@ -156,7 +166,9 @@ export default function VoiceChannelMediaStatusModal({
   isClosing,
 }: VoiceChannelMediaStatusModalProps) {
   const { dispatch } = useChatActions();
-  const [recentItems, setRecentItems] = useState<VoiceChannelStatusMediaAsset[]>([]);
+  const [recentItems, setRecentItems] = useState<
+    VoiceChannelStatusMediaAsset[]
+  >([]);
   const [loadingRecents, setLoadingRecents] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [applying, setApplying] = useState(false);
@@ -165,7 +177,8 @@ export default function VoiceChannelMediaStatusModal({
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const voiceSessionHeaders = useMemo(
-    () => (voiceSessionId ? { "X-Voice-Session-Id": voiceSessionId } : undefined),
+    () =>
+      voiceSessionId ? { "X-Voice-Session-Id": voiceSessionId } : undefined,
     [voiceSessionId],
   );
 
@@ -175,9 +188,12 @@ export default function VoiceChannelMediaStatusModal({
     setLoadingRecents(true);
     setError(null);
 
-    void apiGet<VoiceStatusMediaListResponse>(`/api/channels/${channel.id}/voice-status-media`, {
-      headers: voiceSessionHeaders,
-    })
+    void apiGet<VoiceStatusMediaListResponse>(
+      `/api/channels/${channel.id}/voice-status-media`,
+      {
+        headers: voiceSessionHeaders,
+      },
+    )
       .then((response) => {
         if (!cancelled) {
           setRecentItems(response.items);
@@ -185,7 +201,9 @@ export default function VoiceChannelMediaStatusModal({
       })
       .catch((err) => {
         if (!cancelled) {
-          setError(err instanceof Error ? err.message : "Failed to load recent media");
+          setError(
+            err instanceof Error ? err.message : "Failed to load recent media",
+          );
           setRecentItems([]);
         }
       })
@@ -206,16 +224,22 @@ export default function VoiceChannelMediaStatusModal({
     setError(null);
 
     try {
-      const updatedChannel = await apiPatch<Channel>(`/api/channels/${channel.id}/voice-status`, {
-        voice_status: {
-          text: channel.voice_status?.text ?? null,
-          media,
+      const updatedChannel = await apiPatch<Channel>(
+        `/api/channels/${channel.id}/voice-status`,
+        {
+          voice_status: {
+            text: channel.voice_status?.text ?? null,
+            media,
+          },
         },
-      }, { headers: voiceSessionHeaders });
+        { headers: voiceSessionHeaders },
+      );
       dispatch({ type: "UPSERT_CHANNEL", channel: updatedChannel });
       onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to update channel media");
+      setError(
+        err instanceof Error ? err.message : "Failed to update channel media",
+      );
     } finally {
       setApplying(false);
     }
@@ -255,7 +279,10 @@ export default function VoiceChannelMediaStatusModal({
     setError(null);
 
     try {
-      const response = await apiPost<VoiceStatusMediaUploadResponse, { media: VoiceChannelStatusMedia }>(
+      const response = await apiPost<
+        VoiceStatusMediaUploadResponse,
+        { media: VoiceChannelStatusMedia }
+      >(
         `/api/channels/${channel.id}/voice-status-media`,
         { media },
         { headers: voiceSessionHeaders },
@@ -263,16 +290,22 @@ export default function VoiceChannelMediaStatusModal({
 
       setRecentItems((current) => dedupeAssets([response.item, ...current]));
       setShowGifPicker(false);
-      const updatedChannel = await apiPatch<Channel>(`/api/channels/${channel.id}/voice-status`, {
-        voice_status: {
-          text: channel.voice_status?.text ?? null,
-          media: response.item.media,
+      const updatedChannel = await apiPatch<Channel>(
+        `/api/channels/${channel.id}/voice-status`,
+        {
+          voice_status: {
+            text: channel.voice_status?.text ?? null,
+            media: response.item.media,
+          },
         },
-      }, { headers: voiceSessionHeaders });
+        { headers: voiceSessionHeaders },
+      );
       dispatch({ type: "UPSERT_CHANNEL", channel: updatedChannel });
       onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to update channel media");
+      setError(
+        err instanceof Error ? err.message : "Failed to update channel media",
+      );
       setShowGifPicker(false);
     } finally {
       setApplying(false);
@@ -286,19 +319,32 @@ export default function VoiceChannelMediaStatusModal({
     <BaseModal onClose={onClose}>
       <>
         <div
-          className={cn("fixed inset-0 z-1000 bg-black/50 backdrop-blur-sm", isClosing ? "animate-out fade-out duration-200" : "animate-in fade-in duration-200")}
+          className={cn(
+            "fixed inset-0 z-1000 bg-black/50 backdrop-blur-sm",
+            isClosing
+              ? "animate-out fade-out duration-200"
+              : "animate-in fade-in duration-200",
+          )}
           onClick={onClose}
           aria-hidden="true"
         />
         <div className="fixed inset-0 z-1001 flex items-center justify-center p-4">
           <dialog
             open
-            className={cn("picker-panel relative m-0 w-full max-w-[520px] rounded-[22px] border p-0 shadow-2xl outline-none backdrop-blur-2xl", isClosing ? "animate-out fade-out zoom-out-95 duration-200" : "animate-in fade-in zoom-in-95 duration-200")}
+            className={cn(
+              "picker-panel relative m-0 w-full max-w-[520px] rounded-[22px] border p-0 shadow-2xl outline-none backdrop-blur-2xl",
+              isClosing
+                ? "animate-out fade-out zoom-out-95 duration-200"
+                : "animate-in fade-in zoom-in-95 duration-200",
+            )}
             aria-labelledby="voice-channel-media-status-title"
           >
             <div className="flex items-start justify-between gap-4 px-6 py-5">
               <div>
-                <h2 id="voice-channel-media-status-title" className="text-[32px] font-black tracking-tight text-rm-text">
+                <h2
+                  id="voice-channel-media-status-title"
+                  className="text-[32px] font-black tracking-tight text-rm-text"
+                >
                   Set the vibe
                 </h2>
                 <p className="mt-2 text-sm text-rm-text-muted">
@@ -323,9 +369,17 @@ export default function VoiceChannelMediaStatusModal({
                   disabled={isBusy}
                   className="group flex min-h-[138px] flex-col items-center justify-center rounded-[20px] border border-rm-border bg-rm-bg-surface px-4 py-5 text-center transition-colors hover:bg-rm-bg-hover disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  {uploading ? <Loader2 className="mb-4 h-8 w-8 animate-spin text-rm-text" /> : <Upload className="mb-4 h-8 w-8 text-rm-text-muted group-hover:text-rm-text" />}
-                  <span className="text-[18px] font-bold text-rm-text">Server Uploads</span>
-                  <span className="mt-1 text-xs text-rm-text-muted">Upload your own image or clip</span>
+                  {uploading ? (
+                    <Loader2 className="mb-4 h-8 w-8 animate-spin text-rm-text" />
+                  ) : (
+                    <Upload className="mb-4 h-8 w-8 text-rm-text-muted group-hover:text-rm-text" />
+                  )}
+                  <span className="text-[18px] font-bold text-rm-text">
+                    Server Uploads
+                  </span>
+                  <span className="mt-1 text-xs text-rm-text-muted">
+                    Upload your own image or clip
+                  </span>
                 </button>
 
                 <button
@@ -340,8 +394,12 @@ export default function VoiceChannelMediaStatusModal({
                     <div className="mb-3 inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-rm-bg-hover text-rm-text">
                       <Sparkles className="h-5 w-5" />
                     </div>
-                    <span className="text-[18px] font-bold text-rm-text">Choose GIF</span>
-                    <span className="mt-1 text-xs text-rm-text-muted">Open the GIF picker</span>
+                    <span className="text-[18px] font-bold text-rm-text">
+                      Choose GIF
+                    </span>
+                    <span className="mt-1 text-xs text-rm-text-muted">
+                      Open the GIF picker
+                    </span>
                   </div>
                 </button>
               </div>
@@ -360,12 +418,14 @@ export default function VoiceChannelMediaStatusModal({
                 }}
               />
 
-              {(loadingRecents || hasRecents) ? (
+              {loadingRecents || hasRecents ? (
                 <div>
                   <div className="mb-3 flex items-center justify-between gap-3">
                     <h3 className="text-sm font-bold text-rm-text">Recents</h3>
                     {loadingRecents ? (
-                      <span className="text-xs text-rm-text-muted">Loading...</span>
+                      <span className="text-xs text-rm-text-muted">
+                        Loading...
+                      </span>
                     ) : null}
                   </div>
 

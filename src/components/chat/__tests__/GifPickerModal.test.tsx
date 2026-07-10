@@ -22,14 +22,18 @@ describe("GifPickerModal recent queries rendering", () => {
     };
     vi.stubGlobal("localStorage", {
       getItem: (key: string) => store[key] || null,
-      setItem: (key: string, value: string) => { store[key] = value; },
-      removeItem: (key: string) => { delete store[key]; },
+      setItem: (key: string, value: string) => {
+        store[key] = value;
+      },
+      removeItem: (key: string) => {
+        delete store[key];
+      },
     });
   });
 
   it("renders base structure without errors", () => {
     const markup = renderToStaticMarkup(
-      <GifPickerModal onClose={() => {}} onSelect={async () => {}} skipAuth />
+      <GifPickerModal onClose={() => {}} onSelect={async () => {}} skipAuth />,
     );
 
     expect(markup).toContain("Favorites");

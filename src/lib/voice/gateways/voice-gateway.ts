@@ -1,18 +1,43 @@
-import { VoiceOpcode, type NegotiationDonePayload, type ServerMessage, type SessionDescriptionPayload, type TrackInfo } from "@/lib/types";
+import {
+  VoiceOpcode,
+  type NegotiationDonePayload,
+  type ServerMessage,
+  type SessionDescriptionPayload,
+  type TrackInfo,
+} from "@/lib/types";
 import { fetchSocketProtocols } from "@/lib/voice/socket-ticket-client";
 import { BaseGateway, type BaseGatewayEvents } from "./base-gateway";
 
 export interface VoiceGatewayEvents extends BaseGatewayEvents {
-  "voice-ready": { speaking?: Record<string, number>, tracks?: TrackInfo[], sfu_session_transferred?: boolean };
+  "voice-ready": {
+    speaking?: Record<string, number>;
+    tracks?: TrackInfo[];
+    sfu_session_transferred?: boolean;
+  };
   "tracks-ready": { tracks: TrackInfo[] };
-  "track-offered": { track_name: string; session_id: string; kind: 'audio' | 'video'; participant_id: string };
-  "ice-candidate": { session_id: string; candidate: string; sdpMid: string; sdpMLineIndex: number };
+  "track-offered": {
+    track_name: string;
+    session_id: string;
+    kind: "audio" | "video";
+    participant_id: string;
+  };
+  "ice-candidate": {
+    session_id: string;
+    candidate: string;
+    sdpMid: string;
+    sdpMLineIndex: number;
+  };
   "session-description": SessionDescriptionPayload;
   "negotiation-done": NegotiationDonePayload;
-  "speaking": { participantId: string; speaking: number };
+  speaking: { participantId: string; speaking: number };
   "stop-tracks": { track_names: string[] };
   "app-event": Record<string, unknown>;
-  "error": { message: string; code?: number; request_id?: string; operation?: 'push' | 'pull' };
+  error: {
+    message: string;
+    code?: number;
+    request_id?: string;
+    operation?: "push" | "pull";
+  };
 }
 
 export class VoiceGateway extends BaseGateway<VoiceGatewayEvents> {
@@ -60,8 +85,14 @@ export class VoiceGateway extends BaseGateway<VoiceGatewayEvents> {
         roomSlug: this.roomSlug,
         serverId: this.ticketContext.serverId,
       });
-      if (this.isLeaving || requestGeneration !== this.connectionRequestGeneration) return;
-      const url = this.wsUrlGenerator(`/api/channels/${this.roomSlug}/voice?v=1`);
+      if (
+        this.isLeaving ||
+        requestGeneration !== this.connectionRequestGeneration
+      )
+        return;
+      const url = this.wsUrlGenerator(
+        `/api/channels/${this.roomSlug}/voice?v=1`,
+      );
       super.connect(url, resetReconnectAttempt, protocols);
     } catch (error) {
       this.log.error("Failed to open voice socket", error);
@@ -83,8 +114,15 @@ export class VoiceGateway extends BaseGateway<VoiceGatewayEvents> {
   }
 
   protected performReconnect() {
-    if (this.participantId && this.voiceToken && this.roomSlug && this.wsUrlGenerator) {
-      this.log.info("Voice connection lost — attempting to reconnect while preserving WebRTC peer connections");
+    if (
+      this.participantId &&
+      this.voiceToken &&
+      this.roomSlug &&
+      this.wsUrlGenerator
+    ) {
+      this.log.info(
+        "Voice connection lost — attempting to reconnect while preserving WebRTC peer connections",
+      );
       void this.openVoiceSocket(false);
     }
   }
@@ -96,13 +134,16 @@ export class VoiceGateway extends BaseGateway<VoiceGatewayEvents> {
         this.log.info(`Hello received, interval=${hello.heartbeat_interval}ms`);
         this.heartbeat.start(hello.heartbeat_interval);
 
-        this.send({
-          op: VoiceOpcode.VoiceIdentify,
-          d: {
-            participant_id: this.participantId!,
-            voice_token: this.voiceToken!,
+        this.send(
+          {
+            op: VoiceOpcode.VoiceIdentify,
+            d: {
+              participant_id: this.participantId!,
+              voice_token: this.voiceToken!,
+            },
           },
-        }, true);
+          true,
+        );
         break;
       }
 
@@ -121,7 +162,10 @@ export class VoiceGateway extends BaseGateway<VoiceGatewayEvents> {
 
         if (vr.speaking) {
           Object.entries(vr.speaking).forEach(([pId, speaking]) => {
-            this.emit("speaking", { participantId: pId, speaking: speaking as number });
+            this.emit("speaking", {
+              participantId: pId,
+              speaking: speaking as number,
+            });
           });
         }
         break;
@@ -167,13 +211,21 @@ export class VoiceGateway extends BaseGateway<VoiceGatewayEvents> {
 
       case VoiceOpcode.Error: {
         const err = msg.d as any;
-        this.emit("error", { message: err.message, code: err.code, request_id: err.request_id, operation: err.operation });
+        this.emit("error", {
+          message: err.message,
+          code: err.code,
+          request_id: err.request_id,
+          operation: err.operation,
+        });
         break;
       }
 
       case VoiceOpcode.Speaking: {
         const speak = msg.d as any;
-        this.emit("speaking", { participantId: speak.participant_id, speaking: speak.speaking });
+        this.emit("speaking", {
+          participantId: speak.participant_id,
+          speaking: speak.speaking,
+        });
         break;
       }
 

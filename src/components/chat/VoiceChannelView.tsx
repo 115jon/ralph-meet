@@ -1,11 +1,25 @@
 import { useVoiceChannel } from "@/hooks/useVoiceChannel";
-import type { ScreenShareOptions, ScreenShareSourceState } from "@/lib/screen-share-types";
+import type {
+  ScreenShareOptions,
+  ScreenShareSourceState,
+} from "@/lib/screen-share-types";
 import type { StreamWatchersByStreamer } from "@/lib/stream-watchers";
 import { cn } from "@/lib/utils";
 import { getAvailableStreamQualities } from "@/lib/voice/utils";
-import { isVoiceActivityType, useVoiceActivityStore } from "@/stores/useVoiceActivityStore";
+import {
+  isVoiceActivityType,
+  useVoiceActivityStore,
+} from "@/stores/useVoiceActivityStore";
 
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { ParticipantCard } from "../voice/ParticipantCard";
 import { VoiceControls } from "../voice/VoiceControls";
 import { VoiceGrid } from "../voice/VoiceGrid";
@@ -14,13 +28,19 @@ import { VoiceLanding } from "../voice/VoiceLanding";
 import { ChevronUp } from "./Icons";
 
 const UnifiedScreenShareModal = lazy(() =>
-  import("@/components/UnifiedScreenShareModal").then((mod) => ({ default: mod.UnifiedScreenShareModal }))
+  import("@/components/UnifiedScreenShareModal").then((mod) => ({
+    default: mod.UnifiedScreenShareModal,
+  })),
 );
 const WordleActivityStage = lazy(() =>
-  import("./WordleActivityStage").then((mod) => ({ default: mod.WordleActivityStage }))
+  import("./WordleActivityStage").then((mod) => ({
+    default: mod.WordleActivityStage,
+  })),
 );
 const WarpRushActivityStage = lazy(() =>
-  import("./WarpRushActivityStage").then((mod) => ({ default: mod.WarpRushActivityStage }))
+  import("./WarpRushActivityStage").then((mod) => ({
+    default: mod.WarpRushActivityStage,
+  })),
 );
 
 export interface VoiceSessionStreamState {
@@ -150,12 +170,19 @@ export default function VoiceChannelView({
     setIsScreenModalOpen(true);
   }, []);
   const localUserId = useMemo(
-    () => gridItems.find((item) => item.isLocal)?.userId ?? settingsUserId ?? null,
-    [gridItems, settingsUserId]
+    () =>
+      gridItems.find((item) => item.isLocal)?.userId ?? settingsUserId ?? null,
+    [gridItems, settingsUserId],
   );
-  const activeActivity = useVoiceActivityStore((state) => state.getUserActivity(localUserId, channelId));
-  const setUserActivity = useVoiceActivityStore((state) => state.setUserActivity);
-  const clearUserActivity = useVoiceActivityStore((state) => state.clearUserActivity);
+  const activeActivity = useVoiceActivityStore((state) =>
+    state.getUserActivity(localUserId, channelId),
+  );
+  const setUserActivity = useVoiceActivityStore(
+    (state) => state.setUserActivity,
+  );
+  const clearUserActivity = useVoiceActivityStore(
+    (state) => state.clearUserActivity,
+  );
 
   const containerRef = useRef<HTMLDivElement>(null);
   const lastUpdateRef = useRef<string>("");
@@ -186,7 +213,9 @@ export default function VoiceChannelView({
 
   const watchAndFocusStreamByUserId = useCallback(
     (userId: string) => {
-      const screenItem = gridItemsRef.current.find((item) => item.type === "screen" && item.userId === userId);
+      const screenItem = gridItemsRef.current.find(
+        (item) => item.type === "screen" && item.userId === userId,
+      );
       if (!screenItem) {
         return false;
       }
@@ -207,16 +236,17 @@ export default function VoiceChannelView({
     if (!sfu) return;
     return sfu.on("app-event", (event) => {
       if (
-        event.type === "activity.start"
-        && event.channelId === channelId
-        && typeof event.userId === "string"
-        && isVoiceActivityType(event.activity)
+        event.type === "activity.start" &&
+        event.channelId === channelId &&
+        typeof event.userId === "string" &&
+        isVoiceActivityType(event.activity)
       ) {
         setUserActivity({
           userId: event.userId,
           channelId,
           activity: event.activity,
-          startedAt: typeof event.startedAt === "number" ? event.startedAt : Date.now(),
+          startedAt:
+            typeof event.startedAt === "number" ? event.startedAt : Date.now(),
         });
       }
       if (event.type === "activity.leave" && typeof event.userId === "string") {
@@ -224,7 +254,6 @@ export default function VoiceChannelView({
       }
     });
   }, [sfu, channelId, setUserActivity, clearUserActivity]);
-
 
   // Expose local stream state to parent
   useEffect(() => {
@@ -254,10 +283,12 @@ export default function VoiceChannelView({
       streamThumbnailSignature: JSON.stringify(streamThumbnails),
       watcherSignature: JSON.stringify(
         Object.fromEntries(
-          Object.entries(watchersByStreamer).map(([streamerUserId, watchers]) => [
-            streamerUserId,
-            watchers.map((watcher) => watcher.userId),
-          ]),
+          Object.entries(watchersByStreamer).map(
+            ([streamerUserId, watchers]) => [
+              streamerUserId,
+              watchers.map((watcher) => watcher.userId),
+            ],
+          ),
         ),
       ),
       currentScreenSourceSignature: currentScreenSource
@@ -275,19 +306,23 @@ export default function VoiceChannelView({
       alwaysShowStreamPreview,
     };
     const stateHash = JSON.stringify(currentState);
-    const callbacksChanged = !lastActionRefs.current
-      || lastActionRefs.current.toggleMic !== toggleMic
-      || lastActionRefs.current.toggleDeafen !== toggleDeafen
-      || lastActionRefs.current.toggleScreenShare !== toggleScreenShare
-      || lastActionRefs.current.toggleStreamAudio !== onToggleStreamAudio
-      || lastActionRefs.current.toggleCamera !== toggleCamera
-      || lastActionRefs.current.handleLeave !== handleLeave
-      || lastActionRefs.current.openScreenShareModal !== openScreenShareModal
-      || lastActionRefs.current.onToggleWatch !== onToggleWatch
-      || lastActionRefs.current.watchAndFocusStreamByUserId !== watchAndFocusStreamByUserId
-      || lastActionRefs.current.updateSharedSpatialAudioState !== updateSharedSpatialAudioState
-      || lastActionRefs.current.togglePreviewHidden !== togglePreviewHidden
-      || lastActionRefs.current.onToggleAlwaysShowStreamPreview !== onToggleAlwaysShowStreamPreview;
+    const callbacksChanged =
+      !lastActionRefs.current ||
+      lastActionRefs.current.toggleMic !== toggleMic ||
+      lastActionRefs.current.toggleDeafen !== toggleDeafen ||
+      lastActionRefs.current.toggleScreenShare !== toggleScreenShare ||
+      lastActionRefs.current.toggleStreamAudio !== onToggleStreamAudio ||
+      lastActionRefs.current.toggleCamera !== toggleCamera ||
+      lastActionRefs.current.handleLeave !== handleLeave ||
+      lastActionRefs.current.openScreenShareModal !== openScreenShareModal ||
+      lastActionRefs.current.onToggleWatch !== onToggleWatch ||
+      lastActionRefs.current.watchAndFocusStreamByUserId !==
+        watchAndFocusStreamByUserId ||
+      lastActionRefs.current.updateSharedSpatialAudioState !==
+        updateSharedSpatialAudioState ||
+      lastActionRefs.current.togglePreviewHidden !== togglePreviewHidden ||
+      lastActionRefs.current.onToggleAlwaysShowStreamPreview !==
+        onToggleAlwaysShowStreamPreview;
     if (stateHash === lastUpdateRef.current && !callbacksChanged) return;
     lastUpdateRef.current = stateHash;
     lastActionRefs.current = {
@@ -328,7 +363,10 @@ export default function VoiceChannelView({
         toggleScreenShare({
           ...options,
           quality: options.quality || currentScreenQuality,
-          withAudio: options.withAudio !== undefined ? options.withAudio : isStreamingAudio,
+          withAudio:
+            options.withAudio !== undefined
+              ? options.withAudio
+              : isStreamingAudio,
         });
       },
       toggleStreamAudio: onToggleStreamAudio,
@@ -352,14 +390,50 @@ export default function VoiceChannelView({
       togglePreviewHidden,
       onToggleAlwaysShowStreamPreview,
     });
-  }, [joined, isScreenSharing, isStreamingAudio, alwaysShowStreamPreview, currentScreenQuality, currentScreenSource, toggleMic, toggleDeafen, toggleScreenShare, onToggleStreamAudio, isMicOn, isDeafened, isCameraActive, hasCamera, hasMicrophone, toggleCamera, handleLeave, openScreenShareModal, onStreamStateUpdate, availableQualities, sfu, gridItems, streamThumbnails, watchedStreams, watchersByStreamer, onToggleWatch, watchAndFocusStreamByUserId, spatialAudioState, updateSharedSpatialAudioState, settingsUserId, channelId, roomSlug, voiceSessionId, isPreviewHidden, togglePreviewHidden, onToggleAlwaysShowStreamPreview]);
-
+  }, [
+    joined,
+    isScreenSharing,
+    isStreamingAudio,
+    alwaysShowStreamPreview,
+    currentScreenQuality,
+    currentScreenSource,
+    toggleMic,
+    toggleDeafen,
+    toggleScreenShare,
+    onToggleStreamAudio,
+    isMicOn,
+    isDeafened,
+    isCameraActive,
+    hasCamera,
+    hasMicrophone,
+    toggleCamera,
+    handleLeave,
+    openScreenShareModal,
+    onStreamStateUpdate,
+    availableQualities,
+    sfu,
+    gridItems,
+    streamThumbnails,
+    watchedStreams,
+    watchersByStreamer,
+    onToggleWatch,
+    watchAndFocusStreamByUserId,
+    spatialAudioState,
+    updateSharedSpatialAudioState,
+    settingsUserId,
+    channelId,
+    roomSlug,
+    voiceSessionId,
+    isPreviewHidden,
+    togglePreviewHidden,
+    onToggleAlwaysShowStreamPreview,
+  ]);
 
   // Fullscreen change listener
   useEffect(() => {
     const handleFs = () => setIsFullscreen(!!document.fullscreenElement);
-    document.addEventListener('fullscreenchange', handleFs);
-    return () => document.removeEventListener('fullscreenchange', handleFs);
+    document.addEventListener("fullscreenchange", handleFs);
+    return () => document.removeEventListener("fullscreenchange", handleFs);
   }, []);
 
   const toggleFs = () => {
@@ -374,39 +448,45 @@ export default function VoiceChannelView({
   };
 
   const focusedItem = gridItems.find((i) => i.id === focusedId);
-  const focusedWatchers = focusedItem?.type === "screen"
-    && focusedItem.userId
-    && (focusedItem.isLocal || !!watchedStreams[focusedItem.userId])
-    ? (watchersByStreamer[focusedItem.userId] ?? [])
-    : [];
+  const focusedWatchers =
+    focusedItem?.type === "screen" &&
+    focusedItem.userId &&
+    (focusedItem.isLocal || !!watchedStreams[focusedItem.userId])
+      ? (watchersByStreamer[focusedItem.userId] ?? [])
+      : [];
   const wordleParticipants = useMemo(() => {
-    const participants: Array<{ userId: string; name: string; avatar: string | null | undefined }> = [];
+    const participants: Array<{
+      userId: string;
+      name: string;
+      avatar: string | null | undefined;
+    }> = [];
     for (const item of gridItems) {
       if (item.type === "avatar" || item.type === "camera") {
-        participants.push({ userId: item.userId, name: item.name, avatar: item.avatar });
+        participants.push({
+          userId: item.userId,
+          name: item.name,
+          avatar: item.avatar,
+        });
       }
     }
     return participants;
   }, [gridItems]);
-  const activityStage = activeActivity?.activity === "wordle"
-    ? (
-        <WordleActivityStage
-          sfu={sfu}
-          channelId={channelId}
-          localUserId={localUserId}
-          participants={wordleParticipants}
-        />
-      )
-    : activeActivity?.activity === "warp-rush"
-      ? (
-          <WarpRushActivityStage
-            sfu={sfu}
-            channelId={channelId}
-            localUserId={localUserId}
-            participants={wordleParticipants}
-          />
-        )
-      : null;
+  const activityStage =
+    activeActivity?.activity === "wordle" ? (
+      <WordleActivityStage
+        sfu={sfu}
+        channelId={channelId}
+        localUserId={localUserId}
+        participants={wordleParticipants}
+      />
+    ) : activeActivity?.activity === "warp-rush" ? (
+      <WarpRushActivityStage
+        sfu={sfu}
+        channelId={channelId}
+        localUserId={localUserId}
+        participants={wordleParticipants}
+      />
+    ) : null;
 
   // ── Not-connected landing page ──
   if (!joined) {
@@ -452,7 +532,10 @@ export default function VoiceChannelView({
 
   // ── Connected state ──
   return (
-    <div ref={containerRef} className="flex-1 flex flex-col bg-rm-bg-primary relative overflow-hidden group/cinema">
+    <div
+      ref={containerRef}
+      className="flex-1 flex flex-col bg-rm-bg-primary relative overflow-hidden group/cinema"
+    >
       {/* Absolute Header Overlay */}
       <VoiceHeader
         channelName={channelName}
@@ -476,8 +559,12 @@ export default function VoiceChannelView({
                 fallback={
                   <div className="flex h-full w-full items-center justify-center bg-[radial-gradient(circle_at_top,rgba(34,211,238,0.18),rgba(2,6,23,0.98)_55%)] px-6 text-center text-rm-text">
                     <div>
-                      <div className="text-xs uppercase tracking-[0.28em] text-cyan-200/80">Loading Activity</div>
-                      <div className="mt-3 text-2xl font-black">Preparing the stage...</div>
+                      <div className="text-xs uppercase tracking-[0.28em] text-cyan-200/80">
+                        Loading Activity
+                      </div>
+                      <div className="mt-3 text-2xl font-black">
+                        Preparing the stage...
+                      </div>
                     </div>
                   </div>
                 }
@@ -504,12 +591,20 @@ export default function VoiceChannelView({
           {/* Members Tray */}
           {focusedId && showMembers && (
             <div className="p-4 bg-rm-bg-primary/20 backdrop-blur-sm animate-in slide-in-from-bottom-2 duration-300 w-full overflow-hidden border-b border-rm-border">
-              <div className="flex items-center gap-4 w-full overflow-x-auto no-scrollbar px-6 justify-start sm:justify-center" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
-                {gridItems.map(item => (
-                  <div key={item.id} className={cn(
-                    "w-44 sm:w-52 aspect-video shrink-0 transition-all duration-300 py-2",
-                    focusedId === item.id ? "" : "opacity-70 hover:opacity-100"
-                  )}>
+              <div
+                className="flex items-center gap-4 w-full overflow-x-auto no-scrollbar px-6 justify-start sm:justify-center"
+                style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
+              >
+                {gridItems.map((item) => (
+                  <div
+                    key={item.id}
+                    className={cn(
+                      "w-44 sm:w-52 aspect-video shrink-0 transition-all duration-300 py-2",
+                      focusedId === item.id
+                        ? ""
+                        : "opacity-70 hover:opacity-100",
+                    )}
+                  >
                     <ParticipantCard
                       item={item}
                       isFocused={focusedId === item.id}
@@ -519,7 +614,9 @@ export default function VoiceChannelView({
                       streamThumbnails={streamThumbnails}
                       voiceActions={voiceActions}
                       suppressVideo={focusedId === item.id}
-                      onClick={() => setFocusedId(focusedId === item.id ? null : item.id)}
+                      onClick={() =>
+                        setFocusedId(focusedId === item.id ? null : item.id)
+                      }
                     />
                   </div>
                 ))}
@@ -547,7 +644,11 @@ export default function VoiceChannelView({
             leaveActivity={() => {
               if (localUserId) {
                 clearUserActivity(localUserId);
-                sfu?.voiceGW.sendAppEvent({ type: "activity.leave", userId: localUserId, channelId });
+                sfu?.voiceGW.sendAppEvent({
+                  type: "activity.leave",
+                  userId: localUserId,
+                  channelId,
+                });
               }
             }}
             isFullscreen={isFullscreen}
@@ -577,8 +678,6 @@ export default function VoiceChannelView({
           availableQualities={voiceActions.availableQualities}
         />
       </Suspense>
-
-
     </div>
   );
 }

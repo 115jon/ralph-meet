@@ -65,8 +65,9 @@ export async function createGeneratedEmoji(
   const updatedAt = input.updatedAt ?? createdAt;
   const status = input.status ?? "pending";
 
-  await db.prepare(
-    `INSERT INTO generated_emojis (
+  await db
+    .prepare(
+      `INSERT INTO generated_emojis (
       id,
       user_id,
       shortcode,
@@ -74,16 +75,18 @@ export async function createGeneratedEmoji(
       status,
       created_at,
       updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?)`
-  ).bind(
-    input.id,
-    input.userId,
-    input.shortcode,
-    input.prompt,
-    status,
-    createdAt,
-    updatedAt,
-  ).run();
+    ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    )
+    .bind(
+      input.id,
+      input.userId,
+      input.shortcode,
+      input.prompt,
+      status,
+      createdAt,
+      updatedAt,
+    )
+    .run();
 
   return {
     id: input.id,
@@ -113,22 +116,25 @@ export async function markGeneratedEmojiReady(
 ): Promise<void> {
   const updatedAt = input.updatedAt ?? new Date().toISOString();
 
-  await db.prepare(
-    `UPDATE generated_emojis
+  await db
+    .prepare(
+      `UPDATE generated_emojis
      SET file_key = ?,
          content_type = ?,
          size_bytes = ?,
          status = 'ready',
          error_message = NULL,
          updated_at = ?
-     WHERE id = ?`
-  ).bind(
-    input.fileKey,
-    input.contentType,
-    input.sizeBytes,
-    updatedAt,
-    input.id,
-  ).run();
+     WHERE id = ?`,
+    )
+    .bind(
+      input.fileKey,
+      input.contentType,
+      input.sizeBytes,
+      updatedAt,
+      input.id,
+    )
+    .run();
 }
 
 export async function markGeneratedEmojiFailed(
@@ -141,17 +147,16 @@ export async function markGeneratedEmojiFailed(
 ): Promise<void> {
   const updatedAt = input.updatedAt ?? new Date().toISOString();
 
-  await db.prepare(
-    `UPDATE generated_emojis
+  await db
+    .prepare(
+      `UPDATE generated_emojis
      SET status = 'failed',
          error_message = ?,
          updated_at = ?
-     WHERE id = ?`
-  ).bind(
-    input.errorMessage ?? "Generation failed",
-    updatedAt,
-    input.id,
-  ).run();
+     WHERE id = ?`,
+    )
+    .bind(input.errorMessage ?? "Generation failed", updatedAt, input.id)
+    .run();
 }
 
 export async function listUserGeneratedEmojis(
@@ -159,8 +164,9 @@ export async function listUserGeneratedEmojis(
   userId: string,
   limit = 48,
 ): Promise<GeneratedEmoji[]> {
-  const { results } = await db.prepare(
-    `SELECT
+  const { results } = await db
+    .prepare(
+      `SELECT
       id,
       user_id,
       shortcode,
@@ -175,8 +181,10 @@ export async function listUserGeneratedEmojis(
      FROM generated_emojis
      WHERE user_id = ?
      ORDER BY created_at DESC
-     LIMIT ?`
-  ).bind(userId, limit).all();
+     LIMIT ?`,
+    )
+    .bind(userId, limit)
+    .all();
 
   return ((results ?? []) as GeneratedEmojiRow[]).map(mapGeneratedEmoji);
 }
@@ -188,8 +196,9 @@ export async function listGeneratedEmojisByIds(
   if (ids.length === 0) return [];
 
   const placeholders = ids.map(() => "?").join(", ");
-  const { results } = await db.prepare(
-    `SELECT
+  const { results } = await db
+    .prepare(
+      `SELECT
       id,
       user_id,
       shortcode,
@@ -202,23 +211,28 @@ export async function listGeneratedEmojisByIds(
       created_at,
       updated_at
      FROM generated_emojis
-     WHERE id IN (${placeholders})`
-  ).bind(...ids).all();
+     WHERE id IN (${placeholders})`,
+    )
+    .bind(...ids)
+    .all();
 
   const byId = new Map<string, GeneratedEmoji>();
   for (const row of (results ?? []) as GeneratedEmojiRow[]) {
     byId.set(row.id, mapGeneratedEmoji(row));
   }
 
-  return ids.map((id) => byId.get(id)).filter((item): item is GeneratedEmoji => Boolean(item));
+  return ids
+    .map((id) => byId.get(id))
+    .filter((item): item is GeneratedEmoji => Boolean(item));
 }
 
 export async function getGeneratedEmojiAssetById(
   db: D1Database,
   id: string,
 ): Promise<GeneratedEmojiAssetRecord | null> {
-  const row = await db.prepare(
-    `SELECT
+  const row = await db
+    .prepare(
+      `SELECT
       id,
       user_id,
       shortcode,
@@ -231,8 +245,10 @@ export async function getGeneratedEmojiAssetById(
       created_at,
       updated_at
      FROM generated_emojis
-     WHERE id = ?`
-  ).bind(id).first<GeneratedEmojiRow>();
+     WHERE id = ?`,
+    )
+    .bind(id)
+    .first<GeneratedEmojiRow>();
 
   return row ? withAssetRecord(row) : null;
 }

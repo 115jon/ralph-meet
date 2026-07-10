@@ -22,7 +22,13 @@ export interface Notification {
   channel_id: unknown;
   server_id: unknown;
   message_id: unknown;
-  from_user: { id: unknown; username: string; display_name: string | null; avatar_url: unknown; avatar_display: AvatarDisplay | string | null };
+  from_user: {
+    id: unknown;
+    username: string;
+    display_name: string | null;
+    avatar_url: unknown;
+    avatar_display: AvatarDisplay | string | null;
+  };
   content: unknown;
   is_read: boolean;
   created_at: unknown;
@@ -33,7 +39,7 @@ export interface Notification {
 export async function listNotifications(
   db: D1Database,
   userId: string,
-  opts: ListNotificationsOptions
+  opts: ListNotificationsOptions,
 ): Promise<{ notifications: Notification[]; unread_count: number }> {
   const cappedLimit = Math.min(opts.limit, 100);
 
@@ -56,14 +62,14 @@ export async function listNotifications(
        LEFT JOIN servers s ON s.id = n.server_id
        ${whereClause}
        ORDER BY n.created_at DESC
-       LIMIT ?`
+       LIMIT ?`,
     )
     .bind(userId, cappedLimit)
     .all();
 
   const countRow = (await db
     .prepare(
-      `SELECT COUNT(*) as count FROM notifications WHERE user_id = ? AND is_read = 0`
+      `SELECT COUNT(*) as count FROM notifications WHERE user_id = ? AND is_read = 0`,
     )
     .bind(userId)
     .first()) as { count: number } | null;
@@ -80,14 +86,15 @@ export async function listNotifications(
         username: (r.from_username as string) ?? "Unknown",
         display_name: (r.from_display_name as string) ?? null,
         avatar_url: r.from_avatar_url,
-        avatar_display: (r.from_avatar_display as AvatarDisplay | string | null) ?? null,
+        avatar_display:
+          (r.from_avatar_display as AvatarDisplay | string | null) ?? null,
       },
       content: r.content,
       is_read: !!r.is_read,
       created_at: r.created_at,
       channel_name: r.channel_name,
       server_name: r.server_name,
-    })
+    }),
   );
 
   return {
@@ -106,12 +113,12 @@ export interface MarkReadInput {
 export async function markNotificationsRead(
   db: D1Database,
   userId: string,
-  input: MarkReadInput
+  input: MarkReadInput,
 ): Promise<void> {
   if (input.all) {
     await db
       .prepare(
-        `UPDATE notifications SET is_read = 1 WHERE user_id = ? AND is_read = 0`
+        `UPDATE notifications SET is_read = 1 WHERE user_id = ? AND is_read = 0`,
       )
       .bind(userId)
       .run();
@@ -122,7 +129,7 @@ export async function markNotificationsRead(
     const placeholders = input.ids.map(() => "?").join(",");
     await db
       .prepare(
-        `UPDATE notifications SET is_read = 1 WHERE user_id = ? AND id IN (${placeholders})`
+        `UPDATE notifications SET is_read = 1 WHERE user_id = ? AND id IN (${placeholders})`,
       )
       .bind(userId, ...input.ids)
       .run();
@@ -136,7 +143,7 @@ export async function markNotificationsRead(
 
 export async function clearNotifications(
   db: D1Database,
-  userId: string
+  userId: string,
 ): Promise<void> {
   await db
     .prepare(`DELETE FROM notifications WHERE user_id = ?`)

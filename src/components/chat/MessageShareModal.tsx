@@ -24,16 +24,26 @@ const expiryOptions: Array<{ value: ShareExpiry; label: string }> = [
   { value: "never", label: "Never" },
 ];
 
-export default function MessageShareModal({ message, onClose, onCreateShare, onManageShares, isClosing }: MessageShareModalProps) {
+export default function MessageShareModal({
+  message,
+  onClose,
+  onCreateShare,
+  onManageShares,
+  isClosing,
+}: MessageShareModalProps) {
   const [expires, setExpires] = useState<ShareExpiry>("30d");
   const [shareUrl, setShareUrl] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [copyState, setCopyState] = useState<"idle" | "copied">("idle");
   const [error, setError] = useState<string | null>(null);
 
-  const avatarUrl = message.author?.avatar_url ? getAuthAssetUrl(message.author.avatar_url) : null;
+  const avatarUrl = message.author?.avatar_url
+    ? getAuthAssetUrl(message.author.avatar_url)
+    : null;
   const omittedAttachmentCount = (message.attachments ?? []).filter(
-    (attachment) => !attachment.content_type?.startsWith("image/") && !isPlayableVideo(attachment.content_type)
+    (attachment) =>
+      !attachment.content_type?.startsWith("image/") &&
+      !isPlayableVideo(attachment.content_type),
   ).length;
 
   useEffect(() => {
@@ -50,7 +60,7 @@ export default function MessageShareModal({ message, onClose, onCreateShare, onM
       setShareUrl(url);
       await navigator.clipboard.writeText(url).then(
         () => setCopyState("copied"),
-        () => setCopyState("idle")
+        () => setCopyState("idle"),
       );
     } catch (err: any) {
       setError(err?.message || "This message cannot be shared publicly.");
@@ -68,7 +78,12 @@ export default function MessageShareModal({ message, onClose, onCreateShare, onM
   return (
     <BaseModal onClose={onClose}>
       <div
-        className={cn("fixed inset-0 z-[1100] flex items-end justify-center bg-black/60 p-0 backdrop-blur-sm md:items-center md:p-6", isClosing ? "animate-out fade-out duration-200" : "animate-in fade-in duration-200")}
+        className={cn(
+          "fixed inset-0 z-[1100] flex items-end justify-center bg-black/60 p-0 backdrop-blur-sm md:items-center md:p-6",
+          isClosing
+            ? "animate-out fade-out duration-200"
+            : "animate-in fade-in duration-200",
+        )}
         onClick={(event) => {
           if (event.target === event.currentTarget) {
             onClose();
@@ -78,7 +93,12 @@ export default function MessageShareModal({ message, onClose, onCreateShare, onM
       >
         <dialog
           open
-          className={cn("relative m-0 flex max-h-[calc(100dvh-16px)] w-full max-w-[560px] flex-col overflow-hidden rounded-t-xl border border-rm-border bg-rm-bg-primary p-0 shadow-2xl outline-none md:max-h-[min(760px,calc(100dvh-48px))] md:rounded-xl", isClosing ? "animate-out fade-out zoom-out-95 duration-200" : "animate-in fade-in zoom-in-95 duration-200")}
+          className={cn(
+            "relative m-0 flex max-h-[calc(100dvh-16px)] w-full max-w-[560px] flex-col overflow-hidden rounded-t-xl border border-rm-border bg-rm-bg-primary p-0 shadow-2xl outline-none md:max-h-[min(760px,calc(100dvh-48px))] md:rounded-xl",
+            isClosing
+              ? "animate-out fade-out zoom-out-95 duration-200"
+              : "animate-in fade-in zoom-in-95 duration-200",
+          )}
           aria-labelledby="message-share-title"
         >
           <div className="flex shrink-0 items-center justify-between border-b border-rm-border px-5 py-4">
@@ -87,10 +107,15 @@ export default function MessageShareModal({ message, onClose, onCreateShare, onM
                 <Share2 className="h-4 w-4" />
               </div>
               <div>
-                <h2 id="message-share-title" className="text-base font-bold text-rm-text">
+                <h2
+                  id="message-share-title"
+                  className="text-base font-bold text-rm-text"
+                >
                   Share Message
                 </h2>
-                <p className="text-xs text-rm-text-muted">Creates a public snapshot link</p>
+                <p className="text-xs text-rm-text-muted">
+                  Creates a public snapshot link
+                </p>
               </div>
             </div>
             <button
@@ -119,10 +144,17 @@ export default function MessageShareModal({ message, onClose, onCreateShare, onM
                 attachments={message.attachments ?? []}
                 omittedAttachmentCount={omittedAttachmentCount}
                 embeds={message.embeds ?? []}
-                reactions={message.reactions?.map((reaction) => ({ emoji: reaction.emoji, count: reaction.count })) ?? []}
+                reactions={
+                  message.reactions?.map((reaction) => ({
+                    emoji: reaction.emoji,
+                    count: reaction.count,
+                  })) ?? []
+                }
                 replyCount={message.reply_count ?? 0}
                 avatarUrl={avatarUrl}
-                mediaUrlForAttachment={(attachment) => getMediaUrl(attachment.url || `/api/${attachment.file_key}`)}
+                mediaUrlForAttachment={(attachment) =>
+                  getMediaUrl(attachment.url || `/api/${attachment.file_key}`)
+                }
                 compact
                 previewMedia
               />
@@ -143,7 +175,7 @@ export default function MessageShareModal({ message, onClose, onCreateShare, onM
                         "rounded-lg border px-3 py-2 text-sm font-bold transition",
                         expires === option.value
                           ? "border-primary bg-primary/10 text-primary"
-                          : "border-rm-border bg-rm-bg-surface text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text"
+                          : "border-rm-border bg-rm-bg-surface text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text",
                       )}
                     >
                       {option.label}
@@ -161,7 +193,10 @@ export default function MessageShareModal({ message, onClose, onCreateShare, onM
 
             {shareUrl && (
               <div className="space-y-3">
-                <label htmlFor="message-share-url" className="text-xs font-bold uppercase tracking-wider text-rm-text-muted">
+                <label
+                  htmlFor="message-share-url"
+                  className="text-xs font-bold uppercase tracking-wider text-rm-text-muted"
+                >
                   Public Link
                 </label>
                 <div className="flex gap-2">
@@ -176,7 +211,11 @@ export default function MessageShareModal({ message, onClose, onCreateShare, onM
                     onClick={copyLink}
                     className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-bold text-primary-foreground transition hover:brightness-110"
                   >
-                    {copyState === "copied" ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                    {copyState === "copied" ? (
+                      <Check className="h-4 w-4" />
+                    ) : (
+                      <Copy className="h-4 w-4" />
+                    )}
                     {copyState === "copied" ? "Copied" : "Copy"}
                   </button>
                 </div>
@@ -217,7 +256,11 @@ export default function MessageShareModal({ message, onClose, onCreateShare, onM
                 disabled={creating}
                 className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-bold text-primary-foreground transition hover:brightness-110 disabled:opacity-50"
               >
-                {creating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Share2 className="h-4 w-4" />}
+                {creating ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Share2 className="h-4 w-4" />
+                )}
                 {creating ? "Creating..." : "Create Link"}
               </button>
             )}

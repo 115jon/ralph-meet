@@ -9,7 +9,15 @@ const GET = async () => {
       },
     });
   } catch (error) {
-    return Response.json({ error: error instanceof Error ? error.message : "Unable to load today's Wordle" }, { status: 502 });
+    return Response.json(
+      {
+        error:
+          error instanceof Error
+            ? error.message
+            : "Unable to load today's Wordle",
+      },
+      { status: 502 },
+    );
   }
 };
 

@@ -20,44 +20,52 @@ interface FallbackUser {
  * It checks the server members list first, then the friends/relationships list,
  * and finally falls back to the object provided by the DB endpoint.
  */
-export function useUserResolution(userId?: string | null, fallback?: FallbackUser | null) {
-  const user = useChatStore(s =>
-    userId && s.user?.id === userId ? s.user : undefined
+export function useUserResolution(
+  userId?: string | null,
+  fallback?: FallbackUser | null,
+) {
+  const user = useChatStore((s) =>
+    userId && s.user?.id === userId ? s.user : undefined,
   );
 
   // Use a targeted selector so the component doesn't over-render when other members change
-  const member = useChatStore(s =>
-    userId ? s.members.find(m => m.user.id === userId) : undefined
+  const member = useChatStore((s) =>
+    userId ? s.members.find((m) => m.user.id === userId) : undefined,
   );
 
-  const cachedMember = useChatStore(s =>
+  const cachedMember = useChatStore((s) =>
     userId
       ? Object.values(s.membersByServerId)
-        .flat()
-        .find(m => m.user.id === userId)
-      : undefined
+          .flat()
+          .find((m) => m.user.id === userId)
+      : undefined,
   );
 
-  const relationship = useChatStore(s =>
-    userId ? s.relationships.find(r => r.user.id === userId) : undefined
+  const relationship = useChatStore((s) =>
+    userId ? s.relationships.find((r) => r.user.id === userId) : undefined,
   );
 
-  const dmRecipient = useChatStore(s =>
-    userId ? s.dmChannels.find(dm => dm.recipient?.id === userId)?.recipient : undefined
+  const dmRecipient = useChatStore((s) =>
+    userId
+      ? s.dmChannels.find((dm) => dm.recipient?.id === userId)?.recipient
+      : undefined,
   );
 
-  const resolvedUser = user
-    || member?.user
-    || cachedMember?.user
-    || relationship?.user
-    || dmRecipient
-    || fallback;
+  const resolvedUser =
+    user ||
+    member?.user ||
+    cachedMember?.user ||
+    relationship?.user ||
+    dmRecipient ||
+    fallback;
 
   const username = resolvedUser?.username || fallback?.username || "Unknown";
   const displayName = getDisplayName(resolvedUser, username);
   const avatarUrl = resolvedUser?.avatar_url || fallback?.avatar_url || null;
-  const avatarDisplay = resolvedUser?.avatar_display ?? fallback?.avatar_display ?? null;
-  const displayNameStyle = resolvedUser?.display_name_style ?? fallback?.display_name_style ?? null;
+  const avatarDisplay =
+    resolvedUser?.avatar_display ?? fallback?.avatar_display ?? null;
+  const displayNameStyle =
+    resolvedUser?.display_name_style ?? fallback?.display_name_style ?? null;
 
   return { username, displayName, avatarUrl, avatarDisplay, displayNameStyle };
 }

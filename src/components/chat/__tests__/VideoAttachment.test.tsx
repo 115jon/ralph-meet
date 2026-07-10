@@ -45,7 +45,9 @@ vi.mock("@/components/chat/GifProviderBranding", () => ({
 
 import VideoAttachment from "@/components/chat/VideoAttachment";
 
-function render(props: Partial<React.ComponentProps<typeof VideoAttachment>> = {}): string {
+function render(
+  props: Partial<React.ComponentProps<typeof VideoAttachment>> = {},
+): string {
   return renderToStaticMarkup(
     <VideoAttachment
       src="https://meet.test/api/proxy-media?url=https%3A%2F%2Fvideo.twimg.com%2Fext_tw_video%2Fsample.mp4"
@@ -66,10 +68,12 @@ describe("VideoAttachment", () => {
   });
 
   it("keeps metadata preload for non-proxied videos", () => {
-    expect(render({
-      src: "https://cdn.example.com/video.mp4",
-      poster: "https://cdn.example.com/poster.jpg",
-    })).toContain('preload="metadata"');
+    expect(
+      render({
+        src: "https://cdn.example.com/video.mp4",
+        poster: "https://cdn.example.com/poster.jpg",
+      }),
+    ).toContain('preload="metadata"');
   });
 
   it("keeps poster overlays contained inside explicit video boxes", () => {

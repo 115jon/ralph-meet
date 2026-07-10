@@ -1,7 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { type EmojiRecentItem, resolveNativeEmojiShortcode, toNativeEmojiRecentItem } from "../emoji";
-import { getQuickReactionItems, rememberRecentReaction } from "../message-reaction-recents";
+import {
+  type EmojiRecentItem,
+  resolveNativeEmojiShortcode,
+  toNativeEmojiRecentItem,
+} from "../emoji";
+import {
+  getQuickReactionItems,
+  rememberRecentReaction,
+} from "../message-reaction-recents";
 
 describe("message reaction recents", () => {
   beforeEach(() => {

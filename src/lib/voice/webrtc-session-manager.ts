@@ -20,12 +20,13 @@ export class WebRTCSessionManager {
   private static readonly DISCONNECT_GRACE_MS = 30_000;
   private pullDisconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private camPushDisconnectTimer: ReturnType<typeof setTimeout> | null = null;
-  private screenPushDisconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private screenPushDisconnectTimer: ReturnType<typeof setTimeout> | null =
+    null;
 
   constructor(
     private negotiator: TrackNegotiator,
     private voiceGateway: VoiceGateway,
-    private chatGatewayReconnectFn: () => void
+    private chatGatewayReconnectFn: () => void,
   ) {
     this.log = clog("SFU:SessionMgr");
   }
@@ -38,15 +39,19 @@ export class WebRTCSessionManager {
       pc.getSenders().forEach((s) => {
         if (s.track) {
           s.track.onended = null;
-          s.replaceTrack(null).catch(() => { });
+          s.replaceTrack(null).catch(() => {});
           s.track.stop();
         }
-        try { pc.removeTrack(s); } catch { }
+        try {
+          pc.removeTrack(s);
+        } catch {}
       });
     } catch (e) {
       this.log.warn("Expected error while safely closing senders:", e);
     }
-    try { pc.close(); } catch { }
+    try {
+      pc.close();
+    } catch {}
   }
 
   public clearAllDisconnectTimers() {
@@ -69,12 +74,18 @@ export class WebRTCSessionManager {
     }
   }
 
-  public handleDisconnectGraceTimer(type: "pull" | "camPush" | "screenPush", isLeaving: boolean, resetFn: () => void) {
+  public handleDisconnectGraceTimer(
+    type: "pull" | "camPush" | "screenPush",
+    isLeaving: boolean,
+    resetFn: () => void,
+  ) {
     if (isLeaving) return;
     this.clearDisconnectTimer(type);
 
     const timer = setTimeout(() => {
-      this.log.error(`[F2] ${type} connection disconnected permanently — tearing down and requesting fresh tracks`);
+      this.log.error(
+        `[F2] ${type} connection disconnected permanently — tearing down and requesting fresh tracks`,
+      );
       resetFn();
     }, WebRTCSessionManager.DISCONNECT_GRACE_MS);
 
@@ -91,7 +102,10 @@ export class WebRTCSessionManager {
 
   // ── Circuit Breakers ────────────────────────────────────────────────
 
-  public resetPullSession(isLeaving: boolean, forceSignalingReconnect: () => void) {
+  public resetPullSession(
+    isLeaving: boolean,
+    forceSignalingReconnect: () => void,
+  ) {
     if (isLeaving) return;
     this.pullResetCount++;
     if (this.pullResetCount > 3) {
@@ -102,11 +116,15 @@ export class WebRTCSessionManager {
       }, 30_000);
       return;
     }
-    this.log.warn(`Resetting pull session and PeerConnection (attempt ${this.pullResetCount}/3)`);
+    this.log.warn(
+      `Resetting pull session and PeerConnection (attempt ${this.pullResetCount}/3)`,
+    );
 
     // If signaling is dead, force VoiceGW reconnect
     if (!this.voiceGateway.isReady) {
-      this.log.warn("Signaling is dead during pull reset — forcing VoiceGW reconnect");
+      this.log.warn(
+        "Signaling is dead during pull reset — forcing VoiceGW reconnect",
+      );
       forceSignalingReconnect();
     }
 
@@ -118,7 +136,12 @@ export class WebRTCSessionManager {
     // In a real integration, the caller would call pullTracks() after returning.
   }
 
-  public resetPushSession(isScreen: boolean, isLeaving: boolean, forceSignalingReconnect: () => void, triggerRepublish: () => void) {
+  public resetPushSession(
+    isScreen: boolean,
+    isLeaving: boolean,
+    forceSignalingReconnect: () => void,
+    triggerRepublish: () => void,
+  ) {
     const now = Date.now();
     if (now - this.pushResetLastTime > 30_000) {
       this.pushResetCount = 0;
@@ -135,16 +158,22 @@ export class WebRTCSessionManager {
       }, 30_000);
       return;
     }
-    this.log.warn(`Resetting ${isScreen ? "screen" : "cam"} push PC (attempt ${this.pushResetCount}/3)`);
+    this.log.warn(
+      `Resetting ${isScreen ? "screen" : "cam"} push PC (attempt ${this.pushResetCount}/3)`,
+    );
 
     if (!this.voiceGateway.isReady) {
-      this.log.warn("Signaling is dead during push reset — forcing VoiceGW reconnect");
+      this.log.warn(
+        "Signaling is dead during push reset — forcing VoiceGW reconnect",
+      );
       forceSignalingReconnect();
     }
 
     // Stop tracks on server
-    const trackPrefix = isScreen ? 'screen-' : 'cam-';
-    const trackNames = [...this.negotiator.publishedTrackNames].filter(n => n.startsWith(trackPrefix));
+    const trackPrefix = isScreen ? "screen-" : "cam-";
+    const trackNames = [...this.negotiator.publishedTrackNames].filter((n) =>
+      n.startsWith(trackPrefix),
+    );
     if (trackNames.length > 0) {
       for (const name of trackNames) {
         this.negotiator.teardownTransceiver(name);
@@ -156,7 +185,9 @@ export class WebRTCSessionManager {
     }
 
     // Close old PC
-    const pc = isScreen ? this.negotiator.screenPushPC : this.negotiator.camPushPC;
+    const pc = isScreen
+      ? this.negotiator.screenPushPC
+      : this.negotiator.camPushPC;
     if (pc) {
       pc.onconnectionstatechange = null;
       pc.oniceconnectionstatechange = null;
@@ -166,7 +197,7 @@ export class WebRTCSessionManager {
       else this.negotiator.camPushPC = null;
     }
 
-    this.negotiator.resetPushSession(isScreen ? 'screen' : 'cam');
+    this.negotiator.resetPushSession(isScreen ? "screen" : "cam");
 
     // Caller handles creating new PC and wiring handlers (triggerRepublish).
     triggerRepublish();
@@ -175,5 +206,4 @@ export class WebRTCSessionManager {
   public getPullEpoch() {
     return this.pullEpoch;
   }
-
 }

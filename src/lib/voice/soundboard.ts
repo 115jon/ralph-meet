@@ -78,12 +78,18 @@ export function resumeSoundboardPlayback(playbackId: string) {
   controller?.resume?.();
 }
 
-export function setSoundboardPlaybackVolume(playbackId: string, volume: number) {
+export function setSoundboardPlaybackVolume(
+  playbackId: string,
+  volume: number,
+) {
   const controller = activeControllers.get(playbackId);
   controller?.setVolume?.(normalizeVolume(volume));
 }
 
-export function stopSoundboardPlaybacksByOwner(ownerId: string, serverKey?: string) {
+export function stopSoundboardPlaybacksByOwner(
+  ownerId: string,
+  serverKey?: string,
+) {
   for (const controller of activeControllers.values()) {
     if (controller.ownerId !== ownerId) continue;
     if (serverKey && controller.serverKey !== serverKey) continue;
@@ -150,7 +156,9 @@ function dataUrlToObjectUrl(dataUrl: string): string | null {
 
 let masterVolume = 1.0;
 if (typeof localStorage !== "undefined") {
-  masterVolume = Number(localStorage.getItem("voice-soundboard:master-volume") ?? "1");
+  masterVolume = Number(
+    localStorage.getItem("voice-soundboard:master-volume") ?? "1",
+  );
 }
 
 export function setSoundboardMasterVolume(volume: number) {
@@ -188,8 +196,13 @@ export function playSoundboardPlayback({
   stopSoundboardPlayback(playbackId);
   const initialVolume = normalizeVolume(volume) * masterVolume;
 
-  const objectUrl = !mediaUrl && dataUrl?.startsWith("data:") ? dataUrlToObjectUrl(dataUrl) : null;
-  const audioSource = mediaUrl ? getMediaUrl(mediaUrl) : objectUrl ?? (dataUrl?.startsWith("data:") ? undefined : dataUrl);
+  const objectUrl =
+    !mediaUrl && dataUrl?.startsWith("data:")
+      ? dataUrlToObjectUrl(dataUrl)
+      : null;
+  const audioSource = mediaUrl
+    ? getMediaUrl(mediaUrl)
+    : (objectUrl ?? (dataUrl?.startsWith("data:") ? undefined : dataUrl));
   if (audioSource) {
     const audio = new Audio(audioSource);
     let finished = false;
@@ -208,32 +221,43 @@ export function playSoundboardPlayback({
       cleanupPlayback(playbackId);
     };
 
-    registerPlayback(playbackId, ownerId, serverKey, name, isLocal, initialVolume, {
+    registerPlayback(
+      playbackId,
       ownerId,
       serverKey,
-      stop: finalize,
-      pause: () => {
-        if (finished) return;
-        requestedPaused = true;
-        if (!audio.paused) audio.pause();
-        syncPausedState(true);
+      name,
+      isLocal,
+      initialVolume,
+      {
+        ownerId,
+        serverKey,
+        stop: finalize,
+        pause: () => {
+          if (finished) return;
+          requestedPaused = true;
+          if (!audio.paused) audio.pause();
+          syncPausedState(true);
+        },
+        resume: () => {
+          if (finished) return;
+          requestedPaused = false;
+          void audio
+            .play()
+            .then(() => {
+              syncPausedState(false);
+            })
+            .catch(finalize);
+        },
+        setVolume: (nextVolume) => {
+          audio.volume = nextVolume;
+          const controller = activeControllers.get(playbackId);
+          if (controller) controller.volume = nextVolume;
+          useVoiceSoundboardStore
+            .getState()
+            .setPlaybackVolume(playbackId, nextVolume);
+        },
       },
-      resume: () => {
-        if (finished) return;
-        requestedPaused = false;
-        void audio.play()
-          .then(() => {
-            syncPausedState(false);
-          })
-          .catch(finalize);
-      },
-      setVolume: (nextVolume) => {
-        audio.volume = nextVolume;
-        const controller = activeControllers.get(playbackId);
-        if (controller) controller.volume = nextVolume;
-        useVoiceSoundboardStore.getState().setPlaybackVolume(playbackId, nextVolume);
-      },
-    });
+    );
     const controller = activeControllers.get(playbackId);
     if (controller) controller.rawVolume = normalizeVolume(volume);
 
@@ -252,7 +276,9 @@ export function playSoundboardPlayback({
 
     const play = () => {
       if (finished) return;
-      const elapsed = receivedAt ? Math.max(0, (Date.now() - receivedAt) / 1000) : 0;
+      const elapsed = receivedAt
+        ? Math.max(0, (Date.now() - receivedAt) / 1000)
+        : 0;
       if (elapsed > 0) {
         if (Number.isFinite(audio.duration) && elapsed >= audio.duration) {
           finalize();
@@ -277,8 +303,13 @@ export function playSoundboardPlayback({
     return;
   }
 
-  const sound = DEFAULT_SOUNDBOARD_SOUNDS.find((entry) => entry.id === soundId) ?? DEFAULT_SOUNDBOARD_SOUNDS[0];
-  const AudioContextCtor = window.AudioContext || (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+  const sound =
+    DEFAULT_SOUNDBOARD_SOUNDS.find((entry) => entry.id === soundId) ??
+    DEFAULT_SOUNDBOARD_SOUNDS[0];
+  const AudioContextCtor =
+    window.AudioContext ||
+    (window as Window & { webkitAudioContext?: typeof AudioContext })
+      .webkitAudioContext;
   if (!AudioContextCtor) return;
 
   const ctx = new AudioContextCtor();
@@ -300,21 +331,32 @@ export function playSoundboardPlayback({
   osc.type = sound.id === "pop" ? "triangle" : "sine";
   osc.frequency.value = sound.tone;
   gain.gain.setValueAtTime(initialVolume, ctx.currentTime);
-  gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + sound.duration);
+  gain.gain.exponentialRampToValueAtTime(
+    0.001,
+    ctx.currentTime + sound.duration,
+  );
   osc.connect(gain);
   gain.connect(ctx.destination);
   osc.onended = finalize;
 
-  registerPlayback(playbackId, ownerId, serverKey, name, isLocal, initialVolume, {
+  registerPlayback(
+    playbackId,
     ownerId,
     serverKey,
-    stop: () => {
-      try {
-        osc.stop();
-      } catch {}
-      finalize();
+    name,
+    isLocal,
+    initialVolume,
+    {
+      ownerId,
+      serverKey,
+      stop: () => {
+        try {
+          osc.stop();
+        } catch {}
+        finalize();
+      },
     },
-  });
+  );
   const controller = activeControllers.get(playbackId);
   if (controller) controller.rawVolume = normalizeVolume(volume);
 

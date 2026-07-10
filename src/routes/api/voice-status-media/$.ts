@@ -1,6 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { apiError, getBucket, getCorsHeaders, getDB, requireAuth } from "@/lib/api-helpers";
+import {
+  apiError,
+  getBucket,
+  getCorsHeaders,
+  getDB,
+  requireAuth,
+} from "@/lib/api-helpers";
 import { getVoiceStatusMediaAssetById } from "@/services/voice-status-media.service";
 
 const DANGEROUS_CONTENT_TYPES = new Set([
@@ -88,12 +94,18 @@ const GET = async ({ request, params }: any) => {
     }
   }
 
-  const object = await bucket.get(asset.fileKey, hasValidRange ? { range: rangeOption } : undefined);
+  const object = await bucket.get(
+    asset.fileKey,
+    hasValidRange ? { range: rangeOption } : undefined,
+  );
   if (!object) {
     return apiError("Voice status media not found", 404, undefined, request);
   }
 
-  let contentType = object.httpMetadata?.contentType || asset.content_type || "application/octet-stream";
+  let contentType =
+    object.httpMetadata?.contentType ||
+    asset.content_type ||
+    "application/octet-stream";
   if (DANGEROUS_CONTENT_TYPES.has(contentType)) {
     contentType = "application/octet-stream";
   }
@@ -105,7 +117,10 @@ const GET = async ({ request, params }: any) => {
   headers.set("Accept-Ranges", "bytes");
   headers.set("ETag", object.etag);
   headers.set("X-Content-Type-Options", "nosniff");
-  headers.set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; img-src 'self' data:; media-src 'self'; script-src 'none';");
+  headers.set(
+    "Content-Security-Policy",
+    "default-src 'none'; style-src 'unsafe-inline'; img-src 'self' data:; media-src 'self'; script-src 'none';",
+  );
   headers.set("Cross-Origin-Resource-Policy", "cross-origin");
 
   let status = 200;
@@ -130,7 +145,10 @@ const GET = async ({ request, params }: any) => {
       const invalidRangeHeaders = new Headers(getCorsHeaders(request));
       invalidRangeHeaders.set("Content-Range", `bytes */${object.size}`);
       invalidRangeHeaders.set("X-Content-Type-Options", "nosniff");
-      invalidRangeHeaders.set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; img-src 'self' data:; media-src 'self'; script-src 'none';");
+      invalidRangeHeaders.set(
+        "Content-Security-Policy",
+        "default-src 'none'; style-src 'unsafe-inline'; img-src 'self' data:; media-src 'self'; script-src 'none';",
+      );
       return new Response(null, { status: 416, headers: invalidRangeHeaders });
     }
 
@@ -140,11 +158,18 @@ const GET = async ({ request, params }: any) => {
       if (typeof range.length === "number") length = range.length;
     }
 
-    headers.set("Content-Range", `bytes ${offset}-${offset + length - 1}/${object.size}`);
+    headers.set(
+      "Content-Range",
+      `bytes ${offset}-${offset + length - 1}/${object.size}`,
+    );
     headers.set("Content-Length", length.toString());
   } else {
-    const isMedia = contentType.startsWith("video/") || contentType.startsWith("audio/");
-    headers.set("Cache-Control", isMedia ? "no-store" : "public, max-age=0, must-revalidate");
+    const isMedia =
+      contentType.startsWith("video/") || contentType.startsWith("audio/");
+    headers.set(
+      "Cache-Control",
+      isMedia ? "no-store" : "public, max-age=0, must-revalidate",
+    );
     headers.set("Content-Length", object.size.toString());
   }
 

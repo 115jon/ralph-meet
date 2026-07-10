@@ -10,11 +10,7 @@
   },
   "surfaces": {
     "score": {
-      "excludeCategories": [
-        "Security",
-        "Bugs",
-        "Maintainability"
-      ]
+      "excludeCategories": ["Security", "Bugs", "Maintainability"]
     }
   }
 }

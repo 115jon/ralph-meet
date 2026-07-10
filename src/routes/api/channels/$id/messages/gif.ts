@@ -1,6 +1,12 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute } from "@tanstack/react-router";
 
-import { apiError, apiSuccess, genId, getDB, requireAuth } from "@/lib/api-helpers";
+import {
+  apiError,
+  apiSuccess,
+  genId,
+  getDB,
+  requireAuth,
+} from "@/lib/api-helpers";
 import {
   MAX_GIF_UPLOAD_BYTES,
   normalizeGifPickerContentType,
@@ -34,7 +40,10 @@ const EXTERNAL_MEDIA_HOSTS = new Set([
   "vxtwitter.com",
 ]);
 
-function sanitizeGifFilename(filename: string | undefined, contentType: string): string {
+function sanitizeGifFilename(
+  filename: string | undefined,
+  contentType: string,
+): string {
   const fallbackExt =
     contentType === "video/mp4"
       ? "mp4"
@@ -55,21 +64,32 @@ function normalizeGifContentType(contentType: string | undefined) {
   return normalizeGifPickerContentType(contentType);
 }
 
-function normalizeUploadProvider(provider: GifUploadBody["provider"]): GifProvider {
+function normalizeUploadProvider(
+  provider: GifUploadBody["provider"],
+): GifProvider {
   if (provider === "tenor" || provider === "external") return provider;
   return "klipy";
 }
 
 function isAllowedProviderUrl(url: URL, provider: HostedGifProvider) {
-  return PROVIDER_HOSTS[provider].some((host) => url.hostname === host || url.hostname.endsWith(`.${host}`));
+  return PROVIDER_HOSTS[provider].some(
+    (host) => url.hostname === host || url.hostname.endsWith(`.${host}`),
+  );
 }
 
 function isAllowedLocalMediaUrl(url: URL, requestUrl: URL, rawUrl: string) {
   const trimmed = rawUrl.trim();
-  if (trimmed.startsWith("/api/attachments/") || trimmed.startsWith("/api/proxy-media?")) return true;
+  if (
+    trimmed.startsWith("/api/attachments/") ||
+    trimmed.startsWith("/api/proxy-media?")
+  )
+    return true;
 
   if (url.origin !== requestUrl.origin) return false;
-  return url.pathname.startsWith("/api/attachments/") || url.pathname === "/api/proxy-media";
+  return (
+    url.pathname.startsWith("/api/attachments/") ||
+    url.pathname === "/api/proxy-media"
+  );
 }
 
 function isAllowedExternalMediaUrl(url: URL) {
@@ -87,7 +107,11 @@ const POST = async ({ params, request }: any) => {
   const { userId } = authResult;
   const { id: channelId } = params;
 
-  const rl = await checkRateLimitDO(userId, "file-upload", RATE_LIMITS.FILE_UPLOAD);
+  const rl = await checkRateLimitDO(
+    userId,
+    "file-upload",
+    RATE_LIMITS.FILE_UPLOAD,
+  );
   if (rl) return rl;
 
   const accessResult = await requireChannelAccess(userId, channelId);
@@ -101,7 +125,7 @@ const POST = async ({ params, request }: any) => {
     }
   }
 
-  const body = await request.json() as GifUploadBody;
+  const body = (await request.json()) as GifUploadBody;
   if (!body.source_url) {
     return apiError("source_url required", 400);
   }
@@ -116,11 +140,18 @@ const POST = async ({ params, request }: any) => {
     return apiError("Invalid GIF source URL", 400);
   }
 
-  if (provider === "external" && !isAllowedLocalMediaUrl(parsedSourceUrl, requestUrl, body.source_url) && !isAllowedExternalMediaUrl(parsedSourceUrl)) {
+  if (
+    provider === "external" &&
+    !isAllowedLocalMediaUrl(parsedSourceUrl, requestUrl, body.source_url) &&
+    !isAllowedExternalMediaUrl(parsedSourceUrl)
+  ) {
     return apiError("GIF source host is not allowed for this provider", 400);
   }
 
-  if (provider !== "external" && !isAllowedProviderUrl(parsedSourceUrl, provider)) {
+  if (
+    provider !== "external" &&
+    !isAllowedProviderUrl(parsedSourceUrl, provider)
+  ) {
     return apiError("GIF source host is not allowed for this provider", 400);
   }
 
@@ -134,26 +165,44 @@ const POST = async ({ params, request }: any) => {
   const now = new Date().toISOString();
   const filename = sanitizeGifFilename(body.filename, contentType);
   const key = body.source_url;
-  const sizeBytes = Number.isFinite(reportedSize) && reportedSize > 0 ? Math.floor(reportedSize) : 0;
+  const sizeBytes =
+    Number.isFinite(reportedSize) && reportedSize > 0
+      ? Math.floor(reportedSize)
+      : 0;
 
-  await db.prepare(
-    `INSERT INTO attachments (id, message_id, filename, file_key, content_type, size_bytes, user_id, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-  ).bind(attachmentId, null, filename, key, contentType, sizeBytes, userId, now).run();
+  await db
+    .prepare(
+      `INSERT INTO attachments (id, message_id, filename, file_key, content_type, size_bytes, user_id, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    )
+    .bind(
+      attachmentId,
+      null,
+      filename,
+      key,
+      contentType,
+      sizeBytes,
+      userId,
+      now,
+    )
+    .run();
 
-  return apiSuccess({
-    id: attachmentId,
-    file_url: key,
-    file_name: filename,
-    file_size: sizeBytes,
-    content_type: contentType,
-  }, 201);
+  return apiSuccess(
+    {
+      id: attachmentId,
+      file_url: key,
+      file_name: filename,
+      file_size: sizeBytes,
+      content_type: contentType,
+    },
+    201,
+  );
 };
 
-export const Route = createFileRoute('/api/channels/$id/messages/gif')({
+export const Route = createFileRoute("/api/channels/$id/messages/gif")({
   server: {
     handlers: {
       POST,
-    }
-  }
+    },
+  },
 });

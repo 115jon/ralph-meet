@@ -104,7 +104,10 @@ function extractMessage(err: unknown): string {
   if (err instanceof Error) return err.message;
   if (typeof (err as { message?: unknown }).message === "string")
     return (err as { message: string }).message;
-  if (typeof (err as { error?: { message?: unknown } }).error?.message === "string")
+  if (
+    typeof (err as { error?: { message?: unknown } }).error?.message ===
+    "string"
+  )
     return (err as { error: { message: string } }).error.message;
   return "An unexpected error occurred.";
 }
@@ -133,32 +136,31 @@ export function useSignIn(): UseSignInReturn {
   const [isLoading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [twoFactorRequired, setTwoFactorRequired] = useState(false);
-  const [retryAfterSeconds, setRetryAfterSeconds] = useState<number | null>(null);
+  const [retryAfterSeconds, setRetryAfterSeconds] = useState<number | null>(
+    null,
+  );
 
   const clearError = useCallback(() => setError(null), []);
 
-  const run = useCallback(
-    async <T>(fn: () => Promise<T>): Promise<T> => {
-      setLoading(true);
-      setError(null);
-      try {
-        return await fn();
-      } catch (err) {
-        setError(extractMessage(err));
-        // Surface Retry-After for all rate-limited actions
-        if (is429(err)) {
-          const secs = extractRetryAfter(err);
-          setRetryAfterSeconds(secs);
-        } else {
-          setRetryAfterSeconds(null);
-        }
-        throw err;
-      } finally {
-        setLoading(false);
+  const run = useCallback(async <T>(fn: () => Promise<T>): Promise<T> => {
+    setLoading(true);
+    setError(null);
+    try {
+      return await fn();
+    } catch (err) {
+      setError(extractMessage(err));
+      // Surface Retry-After for all rate-limited actions
+      if (is429(err)) {
+        const secs = extractRetryAfter(err);
+        setRetryAfterSeconds(secs);
+      } else {
+        setRetryAfterSeconds(null);
       }
-    },
-    []
-  );
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   const signInEmail = useCallback(
     async (opts: SignInEmailOpts) => {
@@ -194,7 +196,9 @@ export function useSignIn(): UseSignInReturn {
           },
         });
         // Check if the response body signals 2FA is required
-        const body = (res as unknown as { data?: { twoFactorRedirect?: boolean } })?.data;
+        const body = (
+          res as unknown as { data?: { twoFactorRedirect?: boolean } }
+        )?.data;
         if (body?.twoFactorRedirect) {
           setTwoFactorRequired(true);
           return { twoFactorRequired: true };
@@ -202,15 +206,22 @@ export function useSignIn(): UseSignInReturn {
         return {};
       });
     },
-    [client, afterSignInUrl, run]
+    [client, afterSignInUrl, run],
   );
 
   const signInMagicLink = useCallback(
     async (opts: SignInMagicLinkOpts) => {
       await run(async () => {
-        await (client as unknown as {
-          signIn: { magicLink: (o: { email: string; callbackURL: string }) => Promise<unknown> };
-        }).signIn.magicLink({
+        await (
+          client as unknown as {
+            signIn: {
+              magicLink: (o: {
+                email: string;
+                callbackURL: string;
+              }) => Promise<unknown>;
+            };
+          }
+        ).signIn.magicLink({
           email: opts.email,
           callbackURL: opts.callbackURL ?? afterSignInUrl,
         });
@@ -218,7 +229,7 @@ export function useSignIn(): UseSignInReturn {
         setRetryAfterSeconds(null);
       });
     },
-    [client, afterSignInUrl, run]
+    [client, afterSignInUrl, run],
   );
 
   const signInSocial = useCallback(
@@ -232,36 +243,40 @@ export function useSignIn(): UseSignInReturn {
         setRetryAfterSeconds(null);
       });
     },
-    [client, afterSignInUrl, run]
+    [client, afterSignInUrl, run],
   );
 
   const signInPasskey = useCallback(
     async (opts: SignInPasskeyOpts = {}) => {
       await run(async () => {
-        await (client as unknown as {
-          signIn: {
-            passkey: (o: { callbackURL: string }) => Promise<unknown>;
-          };
-        }).signIn.passkey({
+        await (
+          client as unknown as {
+            signIn: {
+              passkey: (o: { callbackURL: string }) => Promise<unknown>;
+            };
+          }
+        ).signIn.passkey({
           callbackURL: opts.callbackURL ?? afterSignInUrl,
         });
         setRetryAfterSeconds(null);
       });
     },
-    [client, afterSignInUrl, run]
+    [client, afterSignInUrl, run],
   );
 
   const signInTotp = useCallback(
     async (opts: SignInTOTPOpts) => {
       await run(async () => {
-        await (client as unknown as {
-          twoFactor: {
-            verifyTotp: (o: {
-              code: string;
-              callbackURL: string;
-            }) => Promise<unknown>;
-          };
-        }).twoFactor.verifyTotp({
+        await (
+          client as unknown as {
+            twoFactor: {
+              verifyTotp: (o: {
+                code: string;
+                callbackURL: string;
+              }) => Promise<unknown>;
+            };
+          }
+        ).twoFactor.verifyTotp({
           code: opts.code,
           callbackURL: afterSignInUrl,
         });
@@ -269,22 +284,24 @@ export function useSignIn(): UseSignInReturn {
         setRetryAfterSeconds(null);
       });
     },
-    [client, afterSignInUrl, run]
+    [client, afterSignInUrl, run],
   );
 
   const signInEmailOtp = useCallback(
     async (opts: SignInEmailOtpVerifyOpts) => {
       await run(async () => {
-        await (client as unknown as {
-          twoFactor: {
-            verifyOtp: (o: { code: string }) => Promise<unknown>;
-          };
-        }).twoFactor.verifyOtp({ code: opts.otp });
+        await (
+          client as unknown as {
+            twoFactor: {
+              verifyOtp: (o: { code: string }) => Promise<unknown>;
+            };
+          }
+        ).twoFactor.verifyOtp({ code: opts.otp });
         setTwoFactorRequired(false);
         setRetryAfterSeconds(null);
       });
     },
-    [client, run]
+    [client, run],
   );
 
   return {

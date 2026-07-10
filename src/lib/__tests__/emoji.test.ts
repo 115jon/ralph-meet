@@ -46,23 +46,35 @@ describe("emoji helpers", () => {
   it("searches the emoji catalog by shortcode and keywords", () => {
     const results = searchNativeEmojis("pizza");
 
-    expect(results.some((emoji) => emoji.preferredShortcode === "pizza" || emoji.shortcodes.includes("pizza"))).toBe(true);
+    expect(
+      results.some(
+        (emoji) =>
+          emoji.preferredShortcode === "pizza" ||
+          emoji.shortcodes.includes("pizza"),
+      ),
+    ).toBe(true);
   });
 
   it("exposes curated category labels and icons for the picker", () => {
     const categories = getNativeEmojiCategories();
-    const food = categories.find((category) => category.label === "Food & Drink");
+    const food = categories.find(
+      (category) => category.label === "Food & Drink",
+    );
 
     expect(food?.label).toBe("Food & Drink");
     expect(food?.iconShortcode).toBe("pizza");
   });
 
   it("builds discord-style custom emoji tokens", () => {
-    expect(buildCustomEmojiToken("party_blob", "emoji-123")).toBe("<:party_blob:emoji-123>");
+    expect(buildCustomEmojiToken("party_blob", "emoji-123")).toBe(
+      "<:party_blob:emoji-123>",
+    );
   });
 
   it("extracts custom emoji ids from message text", () => {
-    expect(extractCustomEmojiIds("hi <:party_blob:one> and <:spark_pizza:two>")).toEqual(["one", "two"]);
+    expect(
+      extractCustomEmojiIds("hi <:party_blob:one> and <:spark_pizza:two>"),
+    ).toEqual(["one", "two"]);
   });
 
   it("parses custom emoji tokens", () => {

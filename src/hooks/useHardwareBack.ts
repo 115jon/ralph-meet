@@ -12,7 +12,7 @@ function popHistory() {
 
 /**
  * A hook that enables the hardware/browser back button to close modals or go back in UI layers.
- * 
+ *
  * @param isActive Whether the layer is currently active (e.g. modal is open)
  * @param onBack Function to call when the back button is pressed
  */
@@ -39,13 +39,13 @@ export function useHardwareBack(isActive: boolean, onBack: () => void) {
 
     return () => {
       window.removeEventListener("popstate", handlePopState);
-      
+
       // If the component unmounts or isActive becomes false but the user didn't press back,
       // we need to remove the state we pushed to keep history clean.
       if (isPushedRef.current) {
         isPushedRef.current = false;
         statesToPop++;
-        
+
         if (popTimeout) clearTimeout(popTimeout);
         popTimeout = setTimeout(popHistory, 10);
       }

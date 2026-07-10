@@ -218,6 +218,7 @@ function parseRetryAfterHeaders(headers: Headers): number | null {
  */
 export function rateLimitMessage(secondsRemaining: number): string {
   if (secondsRemaining <= 0) return "You can try again now.";
-  if (secondsRemaining === 1) return "Too many attempts. Try again in 1 second.";
+  if (secondsRemaining === 1)
+    return "Too many attempts. Try again in 1 second.";
   return `Too many attempts. Try again in ${secondsRemaining}s.`;
 }

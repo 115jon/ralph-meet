@@ -1,4 +1,7 @@
-import type { ListenTogetherQueueEntrySeed, ListenTogetherTrack } from "@/lib/listen-together";
+import type {
+  ListenTogetherQueueEntrySeed,
+  ListenTogetherTrack,
+} from "@/lib/listen-together";
 import { createListenTogetherState } from "@/lib/listen-together";
 import {
   enqueueListenTogetherEntries,
@@ -7,7 +10,11 @@ import {
 } from "@/lib/voice/listen-together-state";
 import { describe, expect, it } from "vitest";
 
-function makeTrack(id: string, title: string, durationMs = 180_000): ListenTogetherTrack {
+function makeTrack(
+  id: string,
+  title: string,
+  durationMs = 180_000,
+): ListenTogetherTrack {
   return {
     id,
     provider: "youtube",
@@ -23,7 +30,10 @@ function makeTrack(id: string, title: string, durationMs = 180_000): ListenToget
   };
 }
 
-function makeSeed(track: ListenTogetherTrack, overrides: Partial<ListenTogetherQueueEntrySeed> = {}): ListenTogetherQueueEntrySeed {
+function makeSeed(
+  track: ListenTogetherTrack,
+  overrides: Partial<ListenTogetherQueueEntrySeed> = {},
+): ListenTogetherQueueEntrySeed {
   return {
     track,
     requester: {
@@ -91,17 +101,34 @@ describe("listen together room state helpers", () => {
       [],
       createListenTogetherState("room-1", 10),
       [
-        makeSeed(makeTrack("track-1", "First"), { importBatchId, importBatchLabel: "Playlist A" }),
-        makeSeed(makeTrack("track-2", "Second"), { importBatchId, importBatchLabel: "Playlist A" }),
-        makeSeed(makeTrack("track-3", "Third"), { importBatchId, importBatchLabel: "Playlist A" }),
+        makeSeed(makeTrack("track-1", "First"), {
+          importBatchId,
+          importBatchLabel: "Playlist A",
+        }),
+        makeSeed(makeTrack("track-2", "Second"), {
+          importBatchId,
+          importBatchLabel: "Playlist A",
+        }),
+        makeSeed(makeTrack("track-3", "Third"), {
+          importBatchId,
+          importBatchLabel: "Playlist A",
+        }),
       ],
       "append",
       10,
     );
 
-    expect(result.queue.map((entry) => entry.track.title)).toEqual(["First", "Second", "Third"]);
-    expect(new Set(result.queue.map((entry) => entry.importBatchId))).toEqual(new Set([importBatchId]));
-    expect(new Set(result.queue.map((entry) => entry.importBatchLabel))).toEqual(new Set(["Playlist A"]));
+    expect(result.queue.map((entry) => entry.track.title)).toEqual([
+      "First",
+      "Second",
+      "Third",
+    ]);
+    expect(new Set(result.queue.map((entry) => entry.importBatchId))).toEqual(
+      new Set([importBatchId]),
+    );
+    expect(
+      new Set(result.queue.map((entry) => entry.importBatchLabel)),
+    ).toEqual(new Set(["Playlist A"]));
   });
 
   it("freezes playback at the current position when the room empties", () => {
@@ -114,7 +141,12 @@ describe("listen together room state helpers", () => {
       1_000,
     );
 
-    const frozen = freezeListenTogetherPlayback("room-1", started.queue, started.state, 4_500);
+    const frozen = freezeListenTogetherPlayback(
+      "room-1",
+      started.queue,
+      started.state,
+      4_500,
+    );
 
     expect(frozen.state.paused).toBe(true);
     expect(frozen.state.anchorPositionMs).toBe(3_500);
@@ -134,7 +166,12 @@ describe("listen together room state helpers", () => {
       1_000,
     );
 
-    const skipped = skipListenTogether("room-1", started.queue, started.state, 2_000);
+    const skipped = skipListenTogether(
+      "room-1",
+      started.queue,
+      started.state,
+      2_000,
+    );
 
     expect(skipped.queue.map((entry) => entry.track.title)).toEqual(["Next"]);
     expect(skipped.state.currentEntryId).toBe(skipped.queue[0].entryId);

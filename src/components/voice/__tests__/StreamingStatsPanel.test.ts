@@ -30,9 +30,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import type {
-  NativeShareStatsSnapshot,
-} from "@/types/native-share-stats";
+import type { NativeShareStatsSnapshot } from "@/types/native-share-stats";
 import type { NativeShareStatsState } from "@/hooks/useNativeShareStats";
 
 // ── Mock the live-stats hook so we control every render state ───────────────
@@ -281,7 +279,9 @@ describe("StreamingStatsPanel — render states", () => {
     for (const state of states) {
       setHook(state);
       expect(() => render({ shareActive: true })).not.toThrow();
-      expect(() => render({ emphasized: true, shareActive: true })).not.toThrow();
+      expect(() =>
+        render({ emphasized: true, shareActive: true }),
+      ).not.toThrow();
     }
   });
 });
@@ -372,9 +372,9 @@ describe("streamingStats display helpers — state matrix", () => {
         }),
       ),
     ).toBe(false);
-    expect(
-      hasLiveCaptureActivity(makeSnapshot({ captured_frames: 5 })),
-    ).toBe(true);
+    expect(hasLiveCaptureActivity(makeSnapshot({ captured_frames: 5 }))).toBe(
+      true,
+    );
     expect(
       hasLiveCaptureActivity(makeSnapshot({ capture_unavailable: true })),
     ).toBe(true);

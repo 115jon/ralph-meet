@@ -19,7 +19,7 @@ export interface ServerSoundboardSound {
 
 export async function listServerSoundboardSounds(
   db: D1Database,
-  serverId: string
+  serverId: string,
 ): Promise<ServerSoundboardSound[]> {
   const { results } = await db
     .prepare(
@@ -37,7 +37,7 @@ export async function listServerSoundboardSounds(
          COALESCE(a.sound_volume, 1.0) AS sound_volume
        FROM attachments a
        WHERE a.soundboard_server_id = ?
-       ORDER BY a.created_at DESC`
+       ORDER BY a.created_at DESC`,
     )
     .bind(serverId)
     .all();
@@ -51,7 +51,9 @@ export async function listServerSoundboardSounds(
     file_url: getAttachmentUrl(row.file_key as string),
     content_type: row.content_type as string,
     size_bytes: Number(row.size_bytes ?? 0),
-    name: row.sound_name ? String(row.sound_name) : String(row.filename ?? "Sound").replace(/\.[^.]+$/, ""),
+    name: row.sound_name
+      ? String(row.sound_name)
+      : String(row.filename ?? "Sound").replace(/\.[^.]+$/, ""),
     emoji: row.sound_emoji ? String(row.sound_emoji) : undefined,
     volume: Number(row.sound_volume ?? 1.0),
     created_at: row.created_at as string,

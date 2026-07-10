@@ -7,12 +7,22 @@ import { X } from "./Icons";
 import { ReplyPreviewContent } from "./ReplyPreviewContent";
 import { UserDisplayName } from "./UserDisplayName";
 
-export function ReplyIndicator({ replyTo, onCancelReply, isClosing }: { replyTo: Message; onCancelReply?: () => void; isClosing?: boolean }) {
+export function ReplyIndicator({
+  replyTo,
+  onCancelReply,
+  isClosing,
+}: {
+  replyTo: Message;
+  onCancelReply?: () => void;
+  isClosing?: boolean;
+}) {
   return (
-    <div className={cn(
-      "flex animate-in slide-in-from-bottom-2 items-center justify-between rounded-t-2xl border-b border-rm-border bg-primary/5 px-4 py-2 duration-200",
-      isClosing && "animate-out fade-out slide-out-to-bottom-2"
-    )}>
+    <div
+      className={cn(
+        "flex animate-in slide-in-from-bottom-2 items-center justify-between rounded-t-2xl border-b border-rm-border bg-primary/5 px-4 py-2 duration-200",
+        isClosing && "animate-out fade-out slide-out-to-bottom-2",
+      )}
+    >
       <div className="flex items-center gap-2 overflow-hidden">
         <span className="whitespace-nowrap text-[10px] font-semibold uppercase tracking-widest text-primary">
           Replying to
@@ -20,7 +30,11 @@ export function ReplyIndicator({ replyTo, onCancelReply, isClosing }: { replyTo:
         <div className="flex items-center gap-1.5 overflow-hidden">
           <div className="flex h-4 w-4 shrink-0 items-center justify-center overflow-visible rounded-full bg-rm-bg-surface text-[8px] font-bold text-rm-text-muted border border-rm-border">
             {replyTo.author?.avatar_url ? (
-              <AvatarImage src={getAuthAssetUrl(replyTo.author.avatar_url)} alt="" display={replyTo.author.avatar_display} />
+              <AvatarImage
+                src={getAuthAssetUrl(replyTo.author.avatar_url)}
+                alt=""
+                display={replyTo.author.avatar_display}
+              />
             ) : (
               getDisplayInitial(replyTo.author)
             )}
@@ -31,7 +45,12 @@ export function ReplyIndicator({ replyTo, onCancelReply, isClosing }: { replyTo:
           />
         </div>
         <span className="truncate text-[12px] font-medium text-rm-text-muted ml-1">
-          <ReplyPreviewContent content={replyTo.content} attachmentsCount={replyTo.attachment_count ?? replyTo.attachments?.length ?? 0} />
+          <ReplyPreviewContent
+            content={replyTo.content}
+            attachmentsCount={
+              replyTo.attachment_count ?? replyTo.attachments?.length ?? 0
+            }
+          />
         </span>
       </div>
       <button

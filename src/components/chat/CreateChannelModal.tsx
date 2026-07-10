@@ -1,4 +1,3 @@
-
 import { BaseModal } from "@/components/ui/BaseModal";
 import { cn } from "@/lib/utils";
 import { sanitizeChannelName } from "@/lib/validations";
@@ -12,7 +11,12 @@ interface Props {
   isClosing?: boolean;
 }
 
-export default function CreateChannelModal({ serverId, defaultCategoryId, onClose, isClosing }: Props) {
+export default function CreateChannelModal({
+  serverId,
+  defaultCategoryId,
+  onClose,
+  isClosing,
+}: Props) {
   const { createChannel, dispatch } = useChatActions();
   const [name, setName] = useState("");
   const [type, setType] = useState<"text" | "voice">("text");
@@ -26,9 +30,6 @@ export default function CreateChannelModal({ serverId, defaultCategoryId, onClos
   }, []);
 
   // Close on Escape
-
-
-
 
   const handleCreate = useCallback(async () => {
     if (creating) return;
@@ -45,7 +46,7 @@ export default function CreateChannelModal({ serverId, defaultCategoryId, onClos
       serverId,
       finalName,
       type,
-      defaultCategoryId || undefined
+      defaultCategoryId || undefined,
     );
 
     // Optimistic UI for immediate navigation (we guess the temp ID will be set by the action)
@@ -64,21 +65,38 @@ export default function CreateChannelModal({ serverId, defaultCategoryId, onClos
       onClose();
     }
     setCreating(false);
-  }, [name, creating, createChannel, serverId, type, defaultCategoryId, dispatch, onClose]);
+  }, [
+    name,
+    creating,
+    createChannel,
+    serverId,
+    type,
+    defaultCategoryId,
+    dispatch,
+    onClose,
+  ]);
 
   return (
     <BaseModal onClose={onClose}>
-        <div className="fixed inset-0 z-200 flex items-center justify-center p-4">
-          {/* Backdrop */}
+      <div className="fixed inset-0 z-200 flex items-center justify-center p-4">
+        {/* Backdrop */}
         <button
           type="button"
-          className={cn("absolute inset-0 border-0 bg-black/60 p-0 backdrop-blur-sm animate-in fade-in duration-300", isClosing && "animate-out fade-out")}
+          className={cn(
+            "absolute inset-0 border-0 bg-black/60 p-0 backdrop-blur-sm animate-in fade-in duration-300",
+            isClosing && "animate-out fade-out",
+          )}
           aria-label="Close create channel modal"
           onClick={onClose}
         />
 
         {/* Modal */}
-        <div className={cn("relative z-10 w-full max-w-md animate-in fade-in zoom-in-95 rounded-2xl border border-rm-border bg-rm-bg-primary p-6 shadow-2xl duration-200", isClosing && "animate-out fade-out zoom-out-95")}>
+        <div
+          className={cn(
+            "relative z-10 w-full max-w-md animate-in fade-in zoom-in-95 rounded-2xl border border-rm-border bg-rm-bg-primary p-6 shadow-2xl duration-200",
+            isClosing && "animate-out fade-out zoom-out-95",
+          )}
+        >
           {/* Close */}
           <button
             type="button"
@@ -90,7 +108,11 @@ export default function CreateChannelModal({ serverId, defaultCategoryId, onClos
           </button>
 
           <h2 className="mb-1 text-center text-xl font-bold text-rm-text flex items-center justify-center gap-2">
-            {type === "text" ? <Hash className="text-rm-text/40" /> : <Volume2 className="text-rm-text/40" />}
+            {type === "text" ? (
+              <Hash className="text-rm-text/40" />
+            ) : (
+              <Volume2 className="text-rm-text/40" />
+            )}
             Create Channel
           </h2>
           <p className="mb-6 text-center text-sm font-medium text-rm-text-muted">
@@ -100,14 +122,19 @@ export default function CreateChannelModal({ serverId, defaultCategoryId, onClos
           <div className="space-y-6">
             {/* Channel Type Selection */}
             <fieldset className="space-y-2">
-              <legend id="channel-type-label" className="px-1 text-[11px] font-bold uppercase tracking-widest text-rm-text-muted/40">
+              <legend
+                id="channel-type-label"
+                className="px-1 text-[11px] font-bold uppercase tracking-widest text-rm-text-muted/40"
+              >
                 Channel Type
               </legend>
               <div className="space-y-2" aria-labelledby="channel-type-label">
                 <label
                   className={cn(
                     "flex items-center gap-4 p-3 rounded-xl border cursor-pointer transition-all group outline-none focus:ring-2 focus:ring-primary/20",
-                    type === "text" ? "bg-rm-bg-active border-primary/50" : "border-rm-border bg-rm-bg-surface/40 hover:bg-rm-bg-hover"
+                    type === "text"
+                      ? "bg-rm-bg-active border-primary/50"
+                      : "border-rm-border bg-rm-bg-surface/40 hover:bg-rm-bg-hover",
                   )}
                 >
                   <input
@@ -118,24 +145,37 @@ export default function CreateChannelModal({ serverId, defaultCategoryId, onClos
                     onChange={() => setType("text")}
                   />
                   <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
-                    <Hash size={24} className="text-primary group-hover:scale-110 transition-transform" />
+                    <Hash
+                      size={24}
+                      className="text-primary group-hover:scale-110 transition-transform"
+                    />
                   </div>
                   <div className="flex-1">
                     <div className="text-rm-text font-semibold">Text</div>
-                    <div className="text-rm-text-muted text-xs">Send messages, images, GIFs, and more.</div>
+                    <div className="text-rm-text-muted text-xs">
+                      Send messages, images, GIFs, and more.
+                    </div>
                   </div>
-                  <div className={cn(
-                    "ml-auto w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all",
-                    type === "text" ? "border-primary" : "border-rm-border group-hover:border-rm-text-muted/20"
-                  )}>
-                    {type === "text" && <div className="w-2.5 h-2.5 bg-primary rounded-full" />}
+                  <div
+                    className={cn(
+                      "ml-auto w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all",
+                      type === "text"
+                        ? "border-primary"
+                        : "border-rm-border group-hover:border-rm-text-muted/20",
+                    )}
+                  >
+                    {type === "text" && (
+                      <div className="w-2.5 h-2.5 bg-primary rounded-full" />
+                    )}
                   </div>
                 </label>
 
                 <label
                   className={cn(
                     "flex items-center gap-4 p-3 rounded-xl border cursor-pointer transition-all group outline-none focus:ring-2 focus:ring-primary/20",
-                    type === "voice" ? "bg-rm-bg-active border-primary/50" : "border-rm-border bg-rm-bg-surface/40 hover:bg-rm-bg-hover"
+                    type === "voice"
+                      ? "bg-rm-bg-active border-primary/50"
+                      : "border-rm-border bg-rm-bg-surface/40 hover:bg-rm-bg-hover",
                   )}
                 >
                   <input
@@ -146,17 +186,28 @@ export default function CreateChannelModal({ serverId, defaultCategoryId, onClos
                     onChange={() => setType("voice")}
                   />
                   <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
-                    <Volume2 size={24} className="text-primary group-hover:scale-110 transition-transform" />
+                    <Volume2
+                      size={24}
+                      className="text-primary group-hover:scale-110 transition-transform"
+                    />
                   </div>
                   <div className="flex-1">
                     <div className="text-rm-text font-semibold">Voice</div>
-                    <div className="text-rm-text-muted text-xs">Hang out with voice, video, and screen share.</div>
+                    <div className="text-rm-text-muted text-xs">
+                      Hang out with voice, video, and screen share.
+                    </div>
                   </div>
-                  <div className={cn(
-                    "ml-auto w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all",
-                    type === "voice" ? "border-primary" : "border-rm-border group-hover:border-rm-text-muted/20"
-                  )}>
-                    {type === "voice" && <div className="w-2.5 h-2.5 bg-primary rounded-full" />}
+                  <div
+                    className={cn(
+                      "ml-auto w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all",
+                      type === "voice"
+                        ? "border-primary"
+                        : "border-rm-border group-hover:border-rm-text-muted/20",
+                    )}
+                  >
+                    {type === "voice" && (
+                      <div className="w-2.5 h-2.5 bg-primary rounded-full" />
+                    )}
                   </div>
                 </label>
               </div>
@@ -164,7 +215,10 @@ export default function CreateChannelModal({ serverId, defaultCategoryId, onClos
 
             {/* Channel Name */}
             <div className="space-y-1.5">
-              <label htmlFor="channel-name" className="text-[11px] font-bold uppercase tracking-widest text-rm-text-muted/40 px-1">
+              <label
+                htmlFor="channel-name"
+                className="text-[11px] font-bold uppercase tracking-widest text-rm-text-muted/40 px-1"
+              >
                 Channel Name
               </label>
               <div className="relative">
@@ -181,11 +235,17 @@ export default function CreateChannelModal({ serverId, defaultCategoryId, onClos
                     setError(null);
                   }}
                   onKeyDown={(e) => e.key === "Enter" && handleCreate()}
-                  placeholder={type === "text" ? "new-channel" : "General Voice"}
+                  placeholder={
+                    type === "text" ? "new-channel" : "General Voice"
+                  }
                   className="w-full rounded-xl border border-rm-border bg-rm-bg-surface pl-10 pr-4 py-3 text-rm-text outline-none transition-all placeholder:text-rm-text-muted/20 focus:border-primary/30 focus:ring-2 focus:ring-primary/20"
                 />
               </div>
-              {error && <p className="mt-1 text-xs font-semibold text-destructive">{error}</p>}
+              {error && (
+                <p className="mt-1 text-xs font-semibold text-destructive">
+                  {error}
+                </p>
+              )}
             </div>
           </div>
 

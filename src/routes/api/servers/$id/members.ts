@@ -1,9 +1,8 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute } from "@tanstack/react-router";
 
 import { apiError, apiSuccess, getDB, requireAuth } from "@/lib/api-helpers";
 import { cacheFetch, CacheKey, CacheTTL } from "@/lib/cache";
 import { listServerMembers } from "@/services/server.service";
-
 
 // GET /api/servers/:id/members — list server members
 const GET = async ({ request, params }: any) => {
@@ -15,9 +14,10 @@ const GET = async ({ request, params }: any) => {
   const db = getDB();
 
   // Verify membership (security check — always hits D1)
-  const member = await db.prepare(
-    `SELECT 1 FROM server_members WHERE server_id = ? AND user_id = ?`
-  ).bind(serverId, userId).first();
+  const member = await db
+    .prepare(`SELECT 1 FROM server_members WHERE server_id = ? AND user_id = ?`)
+    .bind(serverId, userId)
+    .first();
 
   if (!member) {
     return apiError("Not a member", 403);
@@ -27,17 +27,16 @@ const GET = async ({ request, params }: any) => {
   const members = await cacheFetch(
     CacheKey.serverMembers(serverId),
     CacheTTL.SERVER_MEMBERS,
-    () => listServerMembers(db, serverId)
+    () => listServerMembers(db, serverId),
   );
 
   return apiSuccess(members);
-}
+};
 
-
-export const Route = createFileRoute('/api/servers/$id/members')({
+export const Route = createFileRoute("/api/servers/$id/members")({
   server: {
     handlers: {
       GET,
-    }
-  }
+    },
+  },
 });

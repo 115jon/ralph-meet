@@ -66,13 +66,17 @@ const GET = async ({ request, params }: any) => {
     }
   }
 
-  const object = await bucket.get(key, hasValidRange ? { range: rangeOption } : undefined);
+  const object = await bucket.get(
+    key,
+    hasValidRange ? { range: rangeOption } : undefined,
+  );
 
   if (!object) {
     return apiError("Profile asset not found", 404);
   }
 
-  let contentType = object.httpMetadata?.contentType || "application/octet-stream";
+  let contentType =
+    object.httpMetadata?.contentType || "application/octet-stream";
   if (DANGEROUS_CONTENT_TYPES.has(contentType)) {
     contentType = "application/octet-stream";
   }
@@ -84,7 +88,10 @@ const GET = async ({ request, params }: any) => {
   headers.set("Accept-Ranges", "bytes");
   headers.set("ETag", object.etag);
   headers.set("X-Content-Type-Options", "nosniff");
-  headers.set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'");
+  headers.set(
+    "Content-Security-Policy",
+    "default-src 'none'; style-src 'unsafe-inline'",
+  );
 
   let status = 200;
 
@@ -108,7 +115,10 @@ const GET = async ({ request, params }: any) => {
       const invalidRangeHeaders = new Headers();
       invalidRangeHeaders.set("Content-Range", `bytes */${object.size}`);
       invalidRangeHeaders.set("X-Content-Type-Options", "nosniff");
-      invalidRangeHeaders.set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'");
+      invalidRangeHeaders.set(
+        "Content-Security-Policy",
+        "default-src 'none'; style-src 'unsafe-inline'",
+      );
       return new Response(null, { status: 416, headers: invalidRangeHeaders });
     }
 
@@ -118,11 +128,18 @@ const GET = async ({ request, params }: any) => {
       if (typeof range.length === "number") length = range.length;
     }
 
-    headers.set("Content-Range", `bytes ${offset}-${offset + length - 1}/${object.size}`);
+    headers.set(
+      "Content-Range",
+      `bytes ${offset}-${offset + length - 1}/${object.size}`,
+    );
     headers.set("Content-Length", length.toString());
   } else {
-    const isMedia = contentType.startsWith("video/") || contentType.startsWith("audio/");
-    headers.set("Cache-Control", isMedia ? "no-store" : "public, max-age=0, must-revalidate");
+    const isMedia =
+      contentType.startsWith("video/") || contentType.startsWith("audio/");
+    headers.set(
+      "Cache-Control",
+      isMedia ? "no-store" : "public, max-age=0, must-revalidate",
+    );
     headers.set("Content-Length", object.size.toString());
   }
 

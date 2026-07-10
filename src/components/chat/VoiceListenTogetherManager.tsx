@@ -24,7 +24,9 @@ interface VoiceListenTogetherManagerProps {
 }
 
 function isListenTogetherEvent(event: Record<string, unknown>) {
-  return typeof event.type === "string" && event.type.startsWith("listen_together.");
+  return (
+    typeof event.type === "string" && event.type.startsWith("listen_together.")
+  );
 }
 
 const log = clog("ListenTogether");
@@ -35,7 +37,9 @@ function redactListenTogetherStreamUrl(rawUrl: string | null) {
   try {
     const parsed = new URL(
       rawUrl,
-      typeof window !== "undefined" ? window.location.origin : "https://meet.115jon.site",
+      typeof window !== "undefined"
+        ? window.location.origin
+        : "https://meet.115jon.site",
     );
     if (parsed.searchParams.has("token")) {
       parsed.searchParams.set("token", "[redacted]");
@@ -54,13 +58,17 @@ export function VoiceListenTogetherManager({
   channelId,
 }: VoiceListenTogetherManagerProps) {
   const snapshot = useListenTogetherStore((state) =>
-    roomSlug ? state.rooms[roomSlug]?.snapshot ?? null : null,
+    roomSlug ? (state.rooms[roomSlug]?.snapshot ?? null) : null,
   );
   const localVolume = useListenTogetherStore((state) =>
-    roomSlug ? state.rooms[roomSlug]?.localVolume ?? 1 : 1,
+    roomSlug ? (state.rooms[roomSlug]?.localVolume ?? 1) : 1,
   );
-  const loudnessEnabled = useListenTogetherAudioSettingsStore((state) => state.enabled);
-  const loudnessPreset = useListenTogetherAudioSettingsStore((state) => state.preset);
+  const loudnessEnabled = useListenTogetherAudioSettingsStore(
+    (state) => state.enabled,
+  );
+  const loudnessPreset = useListenTogetherAudioSettingsStore(
+    (state) => state.preset,
+  );
   const ensureRoom = useListenTogetherStore((state) => state.ensureRoom);
   const setSnapshot = useListenTogetherStore((state) => state.setSnapshot);
   const setError = useListenTogetherStore((state) => state.setError);
@@ -95,11 +103,14 @@ export function VoiceListenTogetherManager({
       setDesktopAuthToken((currentToken) => {
         if (currentToken === normalizedToken) return currentToken;
 
-        log.info("Desktop auth token changed; refreshing listen together media URL", {
-          roomSlug,
-          hasToken: !!normalizedToken,
-          voiceSessionId,
-        });
+        log.info(
+          "Desktop auth token changed; refreshing listen together media URL",
+          {
+            roomSlug,
+            hasToken: !!normalizedToken,
+            voiceSessionId,
+          },
+        );
         playbackRetryKeyRef.current = null;
         return normalizedToken;
       });
@@ -158,7 +169,8 @@ export function VoiceListenTogetherManager({
       const retryKey = `${activeRoomSlug}:${activeEntry.track.videoId}`;
       if (playbackRetryKeyRef.current !== retryKey) {
         playbackRetryKeyRef.current = retryKey;
-        preferredFormatRef.current = preferredFormatRef.current === "mp4" ? "webm" : "mp4";
+        preferredFormatRef.current =
+          preferredFormatRef.current === "mp4" ? "webm" : "mp4";
         currentSrcRef.current = null;
         audio.pause();
         audio.removeAttribute("src");
@@ -172,10 +184,12 @@ export function VoiceListenTogetherManager({
       }
 
       const mediaErrorCode = audio.error?.code ?? null;
-      const code = mediaErrorCode === 4 ? "PLAYBACK_SRC_NOT_SUPPORTED" : "PLAYBACK_FAILED";
+      const code =
+        mediaErrorCode === 4 ? "PLAYBACK_SRC_NOT_SUPPORTED" : "PLAYBACK_FAILED";
       setError(activeRoomSlug, {
         code,
-        message: "Playback failed after trying multiple supported audio formats.",
+        message:
+          "Playback failed after trying multiple supported audio formats.",
       });
     };
 
@@ -255,7 +269,13 @@ export function VoiceListenTogetherManager({
 
   useEffect(() => {
     const audio = audioRef.current;
-    if (!audio || !sfu || !loudnessEnabled || audioProcessorConnectedRef.current) return;
+    if (
+      !audio ||
+      !sfu ||
+      !loudnessEnabled ||
+      audioProcessorConnectedRef.current
+    )
+      return;
     if (typeof AudioContext === "undefined") return;
     const audioProcessor = audioProcessorRef.current;
     sfu.resumeAudioContext?.();
@@ -263,12 +283,18 @@ export function VoiceListenTogetherManager({
     audioProcessorConnectedRef.current = true;
     audio.volume = 1;
     audioProcessor.setVolume(localVolume);
-    audioProcessor.applySettings({ enabled: loudnessEnabled, preset: loudnessPreset });
+    audioProcessor.applySettings({
+      enabled: loudnessEnabled,
+      preset: loudnessPreset,
+    });
   }, [localVolume, loudnessEnabled, loudnessPreset, sfu]);
 
   useEffect(() => {
     if (!audioProcessorConnectedRef.current) return;
-    audioProcessorRef.current.applySettings({ enabled: loudnessEnabled, preset: loudnessPreset });
+    audioProcessorRef.current.applySettings({
+      enabled: loudnessEnabled,
+      preset: loudnessPreset,
+    });
   }, [loudnessEnabled, loudnessPreset]);
 
   useEffect(() => {
@@ -280,10 +306,10 @@ export function VoiceListenTogetherManager({
       if (event.room_slug !== roomSlug) return;
 
       if (
-        (event.type === "listen_together.snapshot"
-          || event.type === "listen_together.queue.updated"
-          || event.type === "listen_together.playback.updated")
-        && event.snapshot
+        (event.type === "listen_together.snapshot" ||
+          event.type === "listen_together.queue.updated" ||
+          event.type === "listen_together.playback.updated") &&
+        event.snapshot
       ) {
         const nextSnapshot = event.snapshot as ListenTogetherStateSnapshot;
         log.debug("Received listen together snapshot event", {
@@ -302,11 +328,17 @@ export function VoiceListenTogetherManager({
         log.warn("Received listen together room error", {
           roomSlug,
           code: typeof event.code === "string" ? event.code : "UNKNOWN",
-          message: typeof event.message === "string" ? event.message : "Listen Together error",
+          message:
+            typeof event.message === "string"
+              ? event.message
+              : "Listen Together error",
         });
         setError(roomSlug, {
           code: typeof event.code === "string" ? event.code : "UNKNOWN",
-          message: typeof event.message === "string" ? event.message : "Listen Together error",
+          message:
+            typeof event.message === "string"
+              ? event.message
+              : "Listen Together error",
         });
       }
     });
@@ -332,16 +364,17 @@ export function VoiceListenTogetherManager({
     const audio = audioRef.current;
     if (!audio || !roomSlug) return;
 
-    const streamUrl = snapshot?.currentEntry && voiceSessionId
-      ? buildListenTogetherStreamUrl({
-        videoId: snapshot.currentEntry.track.videoId,
-        roomSlug,
-        voiceSessionId,
-        serverId,
-        channelId,
-        preferredFormat: preferredFormatRef.current,
-      })
-      : null;
+    const streamUrl =
+      snapshot?.currentEntry && voiceSessionId
+        ? buildListenTogetherStreamUrl({
+            videoId: snapshot.currentEntry.track.videoId,
+            roomSlug,
+            voiceSessionId,
+            serverId,
+            channelId,
+            preferredFormat: preferredFormatRef.current,
+          })
+        : null;
 
     log.debug("Evaluating listen together playback state", {
       roomSlug,
@@ -406,15 +439,30 @@ export function VoiceListenTogetherManager({
         log.warn("Listen together playback start was blocked", {
           roomSlug,
           message: error instanceof Error ? error.message : String(error),
-          streamUrl: redactListenTogetherStreamUrl(audio.src || currentSrcRef.current),
+          streamUrl: redactListenTogetherStreamUrl(
+            audio.src || currentSrcRef.current,
+          ),
         });
         setError(roomSlug, {
           code: "PLAYBACK_BLOCKED",
-          message: error instanceof Error ? error.message : "Playback could not start locally",
+          message:
+            error instanceof Error
+              ? error.message
+              : "Playback could not start locally",
         });
       });
     }
-  }, [channelId, desktopAuthToken, roomSlug, serverId, setError, sfu, snapshot, sourceAttempt, voiceSessionId]);
+  }, [
+    channelId,
+    desktopAuthToken,
+    roomSlug,
+    serverId,
+    setError,
+    sfu,
+    snapshot,
+    sourceAttempt,
+    voiceSessionId,
+  ]);
 
   return null;
 }

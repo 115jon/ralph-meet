@@ -27,26 +27,33 @@ export function getVoiceChannelPresenceSound(
 ): "join" | "leave" | null {
   if (!myUserId) return null;
 
-  const iAmInChannel = nextMembers.some((member) => member.clerk_user_id === myUserId);
+  const iAmInChannel = nextMembers.some(
+    (member) => member.clerk_user_id === myUserId,
+  );
   if (!iAmInChannel) return null;
 
   const prevIds = new Set(prevMembers.map((member) => member.clerk_user_id));
   const nextIds = new Set(nextMembers.map((member) => member.clerk_user_id));
 
   const someoneJoined = nextMembers.some(
-    (member) => member.clerk_user_id !== myUserId && !prevIds.has(member.clerk_user_id),
+    (member) =>
+      member.clerk_user_id !== myUserId && !prevIds.has(member.clerk_user_id),
   );
   if (someoneJoined) return "join";
 
   const someoneLeft = prevMembers.some(
-    (member) => member.clerk_user_id !== myUserId && !nextIds.has(member.clerk_user_id),
+    (member) =>
+      member.clerk_user_id !== myUserId && !nextIds.has(member.clerk_user_id),
   );
   if (someoneLeft) return "leave";
 
   return null;
 }
 
-function getAppendedMessages(previousMessages: Message[], nextMessages: Message[]): Message[] {
+function getAppendedMessages(
+  previousMessages: Message[],
+  nextMessages: Message[],
+): Message[] {
   if (nextMessages.length <= previousMessages.length) return [];
 
   for (let index = 0; index < previousMessages.length; index += 1) {
@@ -68,7 +75,9 @@ export function shouldPlayCurrentChannelMessageSound(
   const appendedMessages = getAppendedMessages(previousMessages, nextMessages);
   if (appendedMessages.length === 0) return false;
 
-  return appendedMessages.some((message) => message.author_id !== currentUserId);
+  return appendedMessages.some(
+    (message) => message.author_id !== currentUserId,
+  );
 }
 
 export function __resetReconnectSoundGuardForTests(): void {

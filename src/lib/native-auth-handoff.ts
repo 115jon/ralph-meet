@@ -37,7 +37,10 @@ export function getSignInRenderState({
 }: SignInRenderDecisionInput): SignInRenderState {
   if (
     isNativeHandoff &&
-    (!nativeCookieHandoffChecked || !isLoaded || isSignedIn || hasAuthTransferCode)
+    (!nativeCookieHandoffChecked ||
+      !isLoaded ||
+      isSignedIn ||
+      hasAuthTransferCode)
   ) {
     return "native-preparing";
   }

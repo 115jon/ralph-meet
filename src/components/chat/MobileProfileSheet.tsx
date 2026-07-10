@@ -99,7 +99,10 @@ function ProfileBanner({
         alt="Profile banner"
         className="opacity-95"
       />
-      <div className="absolute inset-0" style={{ background: "var(--rm-profile-custom-banner-overlay)" }} />
+      <div
+        className="absolute inset-0"
+        style={{ background: "var(--rm-profile-custom-banner-overlay)" }}
+      />
       <div className="absolute top-0 inset-x-0 flex items-center justify-between p-3 z-10">
         <ButtonBase
           onClick={onClose}
@@ -122,12 +125,18 @@ function ProfileBanner({
   );
 }
 
-function ProfileHeader({ user, isOnline, mutualFriends, mutualServers, isMe }: {
-  user: User,
-  isOnline: boolean,
-  mutualFriends: { count: number },
-  mutualServers: { count: number },
-  isMe: boolean
+function ProfileHeader({
+  user,
+  isOnline,
+  mutualFriends,
+  mutualServers,
+  isMe,
+}: {
+  user: User;
+  isOnline: boolean;
+  mutualFriends: { count: number };
+  mutualServers: { count: number };
+  isMe: boolean;
 }) {
   const displayName = user.display_name?.trim() || user.username;
   const profileTheme = resolveProfileTheme(user);
@@ -138,7 +147,11 @@ function ProfileHeader({ user, isOnline, mutualFriends, mutualServers, isMe }: {
         <div className="relative inline-block">
           <div className="relative flex h-[88px] w-[88px] items-center justify-center overflow-visible rounded-full bg-primary text-3xl font-bold text-primary-foreground ring-[5px] ring-rm-bg-primary">
             {user.avatar_url ? (
-              <AvatarImage src={getAuthAssetUrl(user.avatar_url)} alt={displayName} display={user.avatar_display} />
+              <AvatarImage
+                src={getAuthAssetUrl(user.avatar_url)}
+                alt={displayName}
+                display={user.avatar_display}
+              />
             ) : (
               displayName[0].toUpperCase()
             )}
@@ -149,7 +162,7 @@ function ProfileHeader({ user, isOnline, mutualFriends, mutualServers, isMe }: {
                 "block h-6 w-6 rounded-full",
                 isOnline
                   ? statusColors[user.status ?? "online"]
-                  : statusColors["offline"]
+                  : statusColors["offline"],
               )}
             />
           </div>
@@ -187,26 +200,25 @@ function ProfileHeader({ user, isOnline, mutualFriends, mutualServers, isMe }: {
           </p>
         )}
 
-        {!isMe &&
-          (mutualFriends.count > 0 || mutualServers.count > 0) && (
-            <div className="flex items-center gap-2 mt-2 text-[13px] text-rm-text-muted font-medium">
-              {mutualFriends.count > 0 && (
-                <span>
-                  {mutualFriends.count} Mutual Friend
-                  {mutualFriends.count === 1 ? "" : "s"}
-                </span>
-              )}
-              {mutualFriends.count > 0 && mutualServers.count > 0 && (
-                <span>·</span>
-              )}
-              {mutualServers.count > 0 && (
-                <span>
-                  {mutualServers.count} Mutual Server
-                  {mutualServers.count === 1 ? "" : "s"}
-                </span>
-              )}
-            </div>
-          )}
+        {!isMe && (mutualFriends.count > 0 || mutualServers.count > 0) && (
+          <div className="flex items-center gap-2 mt-2 text-[13px] text-rm-text-muted font-medium">
+            {mutualFriends.count > 0 && (
+              <span>
+                {mutualFriends.count} Mutual Friend
+                {mutualFriends.count === 1 ? "" : "s"}
+              </span>
+            )}
+            {mutualFriends.count > 0 && mutualServers.count > 0 && (
+              <span>·</span>
+            )}
+            {mutualServers.count > 0 && (
+              <span>
+                {mutualServers.count} Mutual Server
+                {mutualServers.count === 1 ? "" : "s"}
+              </span>
+            )}
+          </div>
+        )}
       </div>
     </>
   );
@@ -275,19 +287,31 @@ function ProfileActions({
   );
 }
 
-function ProfileCards({ user, memberRoles, profileReferenceDate, hasModActions, canManage, canKick, canBanPerm, onBan, onKick, onClose }: {
-  user: User,
-  memberRoles: Role[] | undefined,
-  profileReferenceDate: { label: string; value: string },
-  hasModActions: boolean,
-  canManage: boolean,
-  canKick: boolean,
-  canBanPerm: boolean,
-  onBan?: (userId: string, username: string) => void,
-  onKick?: (userId: string, username: string) => void,
-  onClose: () => void
+function ProfileCards({
+  user,
+  memberRoles,
+  profileReferenceDate,
+  hasModActions,
+  canManage,
+  canKick,
+  canBanPerm,
+  onBan,
+  onKick,
+  onClose,
+}: {
+  user: User;
+  memberRoles: Role[] | undefined;
+  profileReferenceDate: { label: string; value: string };
+  hasModActions: boolean;
+  canManage: boolean;
+  canKick: boolean;
+  canBanPerm: boolean;
+  onBan?: (userId: string, username: string) => void;
+  onKick?: (userId: string, username: string) => void;
+  onClose: () => void;
 }) {
-  const visibleMemberRoles = memberRoles?.filter((role) => !role.is_default) ?? [];
+  const visibleMemberRoles =
+    memberRoles?.filter((role) => !role.is_default) ?? [];
 
   return (
     <div className="px-5 mt-6 space-y-3 pb-10">
@@ -321,20 +345,18 @@ function ProfileCards({ user, memberRoles, profileReferenceDate, hasModActions, 
           </h3>
           <div className="flex flex-wrap gap-2">
             {visibleMemberRoles.map((role) => (
+              <div
+                key={role.id}
+                className="flex items-center gap-1.5 rounded-full bg-rm-bg-primary pl-2 pr-3 py-1 border border-rm-border/50 text-[12px] font-medium"
+              >
                 <div
-                  key={role.id}
-                  className="flex items-center gap-1.5 rounded-full bg-rm-bg-primary pl-2 pr-3 py-1 border border-rm-border/50 text-[12px] font-medium"
-                >
-                  <div
-                    className="h-3 w-3 rounded-full shrink-0"
-                    style={{
-                      backgroundColor: role.color || "#94a3b8",
-                    }}
-                  />
-                  <span className="text-rm-text-secondary">
-                    {role.name}
-                  </span>
-                </div>
+                  className="h-3 w-3 rounded-full shrink-0"
+                  style={{
+                    backgroundColor: role.color || "#94a3b8",
+                  }}
+                />
+                <span className="text-rm-text-secondary">{role.name}</span>
+              </div>
             ))}
           </div>
         </div>
@@ -347,11 +369,11 @@ function ProfileCards({ user, memberRoles, profileReferenceDate, hasModActions, 
           </h3>
           <div className="space-y-0.5">
             {canManage && (
-              <ButtonBase disabled className="w-full flex items-center gap-4 px-2 py-3 rounded-xl opacity-60 cursor-not-allowed">
-                <Settings
-                  size={22}
-                  className="text-rm-text-muted shrink-0"
-                />
+              <ButtonBase
+                disabled
+                className="w-full flex items-center gap-4 px-2 py-3 rounded-xl opacity-60 cursor-not-allowed"
+              >
+                <Settings size={22} className="text-rm-text-muted shrink-0" />
                 <span className="text-[15px] font-medium text-rm-text-primary">
                   Manage
                 </span>
@@ -365,10 +387,7 @@ function ProfileCards({ user, memberRoles, profileReferenceDate, hasModActions, 
                 }}
                 className="w-full flex items-center gap-4 px-2 py-3 rounded-xl hover:bg-rm-bg-hover transition-colors"
               >
-                <UserMinus
-                  size={22}
-                  className="text-destructive shrink-0"
-                />
+                <UserMinus size={22} className="text-destructive shrink-0" />
                 <span className="text-[15px] font-medium text-destructive">
                   Kick
                 </span>
@@ -411,19 +430,28 @@ export default function MobileProfileSheet({
   onKick,
   isClosing,
 }: MobileProfileSheetProps) {
-  const { chatUser, members, onlineUsers } = useChatStore(useShallow(s => ({
-    chatUser: s.user,
-    members: s.members,
-    onlineUsers: s.onlineUsers,
-  })));
+  const { chatUser, members, onlineUsers } = useChatStore(
+    useShallow((s) => ({
+      chatUser: s.user,
+      members: s.members,
+      onlineUsers: s.onlineUsers,
+    })),
+  );
   const { openDm, dispatch } = useChatActions();
-  const [profileData, setProfileData] = useState<ProfileFetchState | null>(null);
+  const [profileData, setProfileData] = useState<ProfileFetchState | null>(
+    null,
+  );
 
   const isMe = user.id === chatUser?.id;
-  const activeProfileData = profileData?.userId === user.id ? profileData : null;
+  const activeProfileData =
+    profileData?.userId === user.id ? profileData : null;
   const resolvedUser = activeProfileData?.user ?? user;
-  const mutualFriends = !isMe ? activeProfileData?.mutualFriends ?? EMPTY_MUTUAL_FRIENDS : EMPTY_MUTUAL_FRIENDS;
-  const mutualServers = !isMe ? activeProfileData?.mutualServers ?? EMPTY_MUTUAL_SERVERS : EMPTY_MUTUAL_SERVERS;
+  const mutualFriends = !isMe
+    ? (activeProfileData?.mutualFriends ?? EMPTY_MUTUAL_FRIENDS)
+    : EMPTY_MUTUAL_FRIENDS;
+  const mutualServers = !isMe
+    ? (activeProfileData?.mutualServers ?? EMPTY_MUTUAL_SERVERS)
+    : EMPTY_MUTUAL_SERVERS;
   const profileThemeStyle = resolveProfileTheme(resolvedUser).variables;
   const isOnline = onlineUsers.has(user.id);
   const member = members.find((m) => m.user.id === user.id);
@@ -439,8 +467,7 @@ export default function MobileProfileSheet({
   const canKick = hasPermission(myTotalPerms, PERMISSIONS.KICK_MEMBERS);
   const canBanPerm = hasPermission(myTotalPerms, PERMISSIONS.BAN_MEMBERS);
   const canManage = hasPermission(myTotalPerms, PERMISSIONS.MANAGE_SERVER);
-  const hasModActions =
-    !isMe && (canKick || canBanPerm || canManage);
+  const hasModActions = !isMe && (canKick || canBanPerm || canManage);
 
   useEffect(() => {
     if (isMe || !user.id) return;
@@ -476,10 +503,16 @@ export default function MobileProfileSheet({
 
   return (
     <BaseModal onClose={onClose}>
-      <div className={cn(
-        "fixed inset-0 z-300 flex flex-col bg-rm-bg-primary animate-in slide-in-from-bottom duration-300",
-        isClosing && "animate-out slide-out-to-bottom fade-out"
-      )} style={{ ...profileThemeStyle, backgroundImage: "var(--rm-profile-custom-surface)" }}>
+      <div
+        className={cn(
+          "fixed inset-0 z-300 flex flex-col bg-rm-bg-primary animate-in slide-in-from-bottom duration-300",
+          isClosing && "animate-out slide-out-to-bottom fade-out",
+        )}
+        style={{
+          ...profileThemeStyle,
+          backgroundImage: "var(--rm-profile-custom-surface)",
+        }}
+      >
         <div className="absolute top-2 left-1/2 -translate-x-1/2 w-10 h-1 rounded-full bg-rm-text-muted/30 z-20" />
 
         <ProfileBanner
@@ -498,7 +531,11 @@ export default function MobileProfileSheet({
             isMe={isMe}
           />
 
-          <ProfileActions isMe={isMe} handleMessage={handleMessage} onClose={onClose} />
+          <ProfileActions
+            isMe={isMe}
+            handleMessage={handleMessage}
+            onClose={onClose}
+          />
 
           <ProfileCards
             user={resolvedUser}

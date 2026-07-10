@@ -20,7 +20,7 @@ const VALID_STATUSES = new Set(["online", "idle", "dnd", "offline"]);
 
 export async function getPresence(
   db: D1Database,
-  userId: string
+  userId: string,
 ): Promise<{ status: string; custom_status: string | null }> {
   const user = (await db
     .prepare(`SELECT status, custom_status FROM users WHERE id = ?`)
@@ -43,7 +43,7 @@ export interface UpdatePresenceInput {
 export async function updatePresence(
   db: D1Database,
   userId: string,
-  input: UpdatePresenceInput
+  input: UpdatePresenceInput,
 ): Promise<{
   status: string;
   custom_status: string | null;
@@ -58,7 +58,7 @@ export async function updatePresence(
   try {
     await db
       .prepare(
-        `UPDATE users SET status = ?, custom_status = ?, updated_at = datetime('now') WHERE id = ?`
+        `UPDATE users SET status = ?, custom_status = ?, updated_at = datetime('now') WHERE id = ?`,
       )
       .bind(input.status, customStatus, userId)
       .run();

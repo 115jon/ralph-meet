@@ -1,5 +1,8 @@
 import type { GridItem } from "@/components/voice/types";
-import type { SpatialPlacementMode, SpatialPosition } from "@/stores/useVoiceSettingsStore";
+import type {
+  SpatialPlacementMode,
+  SpatialPosition,
+} from "@/stores/useVoiceSettingsStore";
 
 export interface SpatialParticipant {
   userId: string;
@@ -37,21 +40,38 @@ export const DEFAULT_SHARED_SPATIAL_STATE: SharedSpatialAudioState = {
   updatedAt: 0,
 };
 
-const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
+const clamp = (value: number, min: number, max: number) =>
+  Math.min(max, Math.max(min, value));
 
-export function normalizeSpatialState(state?: Partial<SharedSpatialAudioState> | null): SharedSpatialAudioState {
+export function normalizeSpatialState(
+  state?: Partial<SharedSpatialAudioState> | null,
+): SharedSpatialAudioState {
   return {
     ...DEFAULT_SHARED_SPATIAL_STATE,
     ...state,
-    roomSize: clamp(Math.round(state?.roomSize ?? DEFAULT_SHARED_SPATIAL_STATE.roomSize), 10, 100),
-    distance: clamp(Math.round(state?.distance ?? DEFAULT_SHARED_SPATIAL_STATE.distance), 10, 95),
-    arcAngle: clamp(Math.round(state?.arcAngle ?? DEFAULT_SHARED_SPATIAL_STATE.arcAngle), 30, 180),
+    roomSize: clamp(
+      Math.round(state?.roomSize ?? DEFAULT_SHARED_SPATIAL_STATE.roomSize),
+      10,
+      100,
+    ),
+    distance: clamp(
+      Math.round(state?.distance ?? DEFAULT_SHARED_SPATIAL_STATE.distance),
+      10,
+      95,
+    ),
+    arcAngle: clamp(
+      Math.round(state?.arcAngle ?? DEFAULT_SHARED_SPATIAL_STATE.arcAngle),
+      30,
+      180,
+    ),
     manualPositions: state?.manualPositions ?? {},
     updatedAt: state?.updatedAt ?? Date.now(),
   };
 }
 
-export function remoteSpatialParticipants(items: GridItem[]): SpatialParticipant[] {
+export function remoteSpatialParticipants(
+  items: GridItem[],
+): SpatialParticipant[] {
   const seen = new Set<string>();
   return items
     .filter((item) => !item.isLocal && item.type !== "screen" && item.userId)
@@ -71,22 +91,39 @@ export function remoteSpatialParticipants(items: GridItem[]): SpatialParticipant
 
 export function calculateSpatialPositions(
   participants: Array<{ userId: string }>,
-  state: Pick<SharedSpatialAudioState, "placementMode" | "distance" | "arcAngle" | "manualPositions" | "roomSize">,
+  state: Pick<
+    SharedSpatialAudioState,
+    "placementMode" | "distance" | "arcAngle" | "manualPositions" | "roomSize"
+  >,
 ): Record<string, SpatialPosition> {
   const count = participants.length;
   if (count === 0) return {};
 
   if (state.placementMode === "manual") {
-    return participants.reduce<Record<string, SpatialPosition>>((acc, participant, index) => {
-      acc[participant.userId] = state.manualPositions[participant.userId] ?? autoPosition(index, count, "arc", state.distance, state.arcAngle);
-      return acc;
-    }, {});
+    return participants.reduce<Record<string, SpatialPosition>>(
+      (acc, participant, index) => {
+        acc[participant.userId] =
+          state.manualPositions[participant.userId] ??
+          autoPosition(index, count, "arc", state.distance, state.arcAngle);
+        return acc;
+      },
+      {},
+    );
   }
 
-  return participants.reduce<Record<string, SpatialPosition>>((acc, participant, index) => {
-    acc[participant.userId] = autoPosition(index, count, state.placementMode, state.distance, state.arcAngle);
-    return acc;
-  }, {});
+  return participants.reduce<Record<string, SpatialPosition>>(
+    (acc, participant, index) => {
+      acc[participant.userId] = autoPosition(
+        index,
+        count,
+        state.placementMode,
+        state.distance,
+        state.arcAngle,
+      );
+      return acc;
+    },
+    {},
+  );
 }
 
 function autoPosition(
@@ -116,7 +153,9 @@ function autoPosition(
 
   const spread = count === 1 ? 0 : arcAngle;
   const start = -spread / 2;
-  const angle = (start + (count === 1 ? 0 : (spread * index) / (count - 1))) * (Math.PI / 180);
+  const angle =
+    (start + (count === 1 ? 0 : (spread * index) / (count - 1))) *
+    (Math.PI / 180);
   const radiusX = distance * 0.52;
   const radiusY = distance * 0.34;
   return {
@@ -147,7 +186,11 @@ export function calculateSpatialAudioMix(
   const pan = clamp(dxMeters / Math.max(1.2, roomSideMeters * 0.38), -1, 1);
   const rolloffStartMeters = Math.max(0.75, roomSideMeters * 0.12);
   const rolloffRangeMeters = Math.max(1.5, roomSideMeters * 0.6);
-  const rolloff = clamp((distanceMeters - rolloffStartMeters) / rolloffRangeMeters, 0, 1);
+  const rolloff = clamp(
+    (distanceMeters - rolloffStartMeters) / rolloffRangeMeters,
+    0,
+    1,
+  );
   const gain = clamp(1 - rolloff * 0.68, 0.32, 1);
 
   return { pan, gain, distanceMeters };

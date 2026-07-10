@@ -6,7 +6,7 @@ import {
   EditMessageSchema,
   PinMessageSchema,
   SendMessageSchema,
-  UpdateRoleSchema
+  UpdateRoleSchema,
 } from "./validations";
 
 describe("Zod Validation Schemas", () => {
@@ -92,8 +92,10 @@ describe("Zod Validation Schemas", () => {
     });
 
     it("limits attachment_ids to 10", () => {
-      const ids = Array.from({ length: 11 }, (_, i) =>
-        `${i.toString().padStart(8, "0")}-0000-0000-0000-000000000000`
+      const ids = Array.from(
+        { length: 11 },
+        (_, i) =>
+          `${i.toString().padStart(8, "0")}-0000-0000-0000-000000000000`,
       );
       const result = SendMessageSchema.safeParse({
         content: "test",

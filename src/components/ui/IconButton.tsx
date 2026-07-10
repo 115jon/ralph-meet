@@ -1,4 +1,8 @@
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import React from "react";
 
@@ -34,8 +38,10 @@ const SHAPE_CLASSES = {
   circle: "rounded-full",
 } as const;
 
-interface IconButtonProps
-  extends Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, "children"> {
+interface IconButtonProps extends Omit<
+  React.ButtonHTMLAttributes<HTMLButtonElement>,
+  "children"
+> {
   /** Lucide icon component */
   icon: React.ElementType;
   /** Icon size override (defaults based on button size) */

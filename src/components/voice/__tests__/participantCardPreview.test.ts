@@ -188,24 +188,30 @@ describe("togglePreviewHidden resume flow (Req 5.3)", () => {
 
 describe("togglePreviewHidden resume mechanism", () => {
   it("keeps the desktop app on the dedicated loopback path", () => {
-    expect(resolvePreviewResumeMechanism({
-      isHookActive: true,
-      hasReusablePreviewSource: true,
-    })).toBe("desktop-loopback");
+    expect(
+      resolvePreviewResumeMechanism({
+        isHookActive: true,
+        hasReusablePreviewSource: true,
+      }),
+    ).toBe("desktop-loopback");
   });
 
   it("reopens a reusable desktop source outside the native hook path", () => {
-    expect(resolvePreviewResumeMechanism({
-      isHookActive: false,
-      hasReusablePreviewSource: true,
-    })).toBe("reopen-selected-source");
+    expect(
+      resolvePreviewResumeMechanism({
+        isHookActive: false,
+        hasReusablePreviewSource: true,
+      }),
+    ).toBe("reopen-selected-source");
   });
 
   it("restores the existing browser share stream when no source id exists", () => {
-    expect(resolvePreviewResumeMechanism({
-      isHookActive: false,
-      hasReusablePreviewSource: false,
-    })).toBe("restore-existing-stream");
+    expect(
+      resolvePreviewResumeMechanism({
+        isHookActive: false,
+        hasReusablePreviewSource: false,
+      }),
+    ).toBe("restore-existing-stream");
   });
 });
 
@@ -220,14 +226,18 @@ describe("togglePreviewHidden hide flow", () => {
   });
 
   it("tears down native or hook previews that can be recreated later", () => {
-    expect(resolvePreviewHideState({
-      isHookActive: true,
-      hasReusablePreviewSource: false,
-    }).preserveStream).toBe(false);
+    expect(
+      resolvePreviewHideState({
+        isHookActive: true,
+        hasReusablePreviewSource: false,
+      }).preserveStream,
+    ).toBe(false);
 
-    expect(resolvePreviewHideState({
-      isHookActive: false,
-      hasReusablePreviewSource: true,
-    }).preserveStream).toBe(false);
+    expect(
+      resolvePreviewHideState({
+        isHookActive: false,
+        hasReusablePreviewSource: true,
+      }).preserveStream,
+    ).toBe(false);
   });
 });

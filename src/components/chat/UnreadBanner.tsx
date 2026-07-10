@@ -11,7 +11,11 @@ interface UnreadBannerProps {
   onMarkAsRead: () => void;
 }
 
-export function UnreadBanner({ count, since, onMarkAsRead }: UnreadBannerProps) {
+export function UnreadBanner({
+  count,
+  since,
+  onMarkAsRead,
+}: UnreadBannerProps) {
   const timeStr = new Date(since).toLocaleTimeString([], {
     hour: "numeric",
     minute: "2-digit",

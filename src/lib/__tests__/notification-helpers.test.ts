@@ -6,13 +6,28 @@ describe("getUnreadNotificationIdsForMessage", () => {
     expect(
       getUnreadNotificationIdsForMessage(
         [
-          { id: "n1", message_id: "m1", channel_id: "c1", is_read: false } as any,
-          { id: "n2", message_id: "m1", channel_id: "c1", is_read: true } as any,
-          { id: "n3", message_id: "m2", channel_id: "c1", is_read: false } as any,
+          {
+            id: "n1",
+            message_id: "m1",
+            channel_id: "c1",
+            is_read: false,
+          } as any,
+          {
+            id: "n2",
+            message_id: "m1",
+            channel_id: "c1",
+            is_read: true,
+          } as any,
+          {
+            id: "n3",
+            message_id: "m2",
+            channel_id: "c1",
+            is_read: false,
+          } as any,
         ],
         "m1",
-        "c1"
-      )
+        "c1",
+      ),
     ).toEqual(["n1"]);
   });
 });

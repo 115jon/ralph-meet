@@ -42,9 +42,10 @@ async function syncCachesAndBroadcast(
     cacheDel(CacheKey.userServers(userId)),
   ]);
 
-  const { results: memberships } = await db.prepare(
-    `SELECT server_id FROM server_members WHERE user_id = ?`,
-  ).bind(userId).all();
+  const { results: memberships } = await db
+    .prepare(`SELECT server_id FROM server_members WHERE user_id = ?`)
+    .bind(userId)
+    .all();
   if (memberships?.length) {
     await Promise.all(
       memberships.map((m: Record<string, unknown>) =>
@@ -53,9 +54,18 @@ async function syncCachesAndBroadcast(
     );
   }
 
-  const userRow = await db.prepare(
-    `SELECT avatar_url, avatar_display, theme_preference, theme_sync_enabled, updated_at FROM users WHERE id = ?`,
-  ).bind(userId).first() as { avatar_url: string | null; avatar_display: string | null; theme_preference: string | null; theme_sync_enabled: number; updated_at: string | null } | null;
+  const userRow = (await db
+    .prepare(
+      `SELECT avatar_url, avatar_display, theme_preference, theme_sync_enabled, updated_at FROM users WHERE id = ?`,
+    )
+    .bind(userId)
+    .first()) as {
+    avatar_url: string | null;
+    avatar_display: string | null;
+    theme_preference: string | null;
+    theme_sync_enabled: number;
+    updated_at: string | null;
+  } | null;
 
   logger.info("User synced from Ralph Auth webhook", { userId, event });
 
@@ -77,15 +87,30 @@ const POST = async ({ request }: any) => {
     request.headers.get("x-webhook-signature");
 
   const webhookSecret =
-    (env as unknown as CloudflareEnv & { KOVA_AUTH_WEBHOOK_SECRET?: string; RALPH_AUTH_WEBHOOK_SECRET?: string }).KOVA_AUTH_WEBHOOK_SECRET ??
-    (env as unknown as CloudflareEnv & { KOVA_AUTH_WEBHOOK_SECRET?: string; RALPH_AUTH_WEBHOOK_SECRET?: string }).RALPH_AUTH_WEBHOOK_SECRET;
+    (
+      env as unknown as CloudflareEnv & {
+        KOVA_AUTH_WEBHOOK_SECRET?: string;
+        RALPH_AUTH_WEBHOOK_SECRET?: string;
+      }
+    ).KOVA_AUTH_WEBHOOK_SECRET ??
+    (
+      env as unknown as CloudflareEnv & {
+        KOVA_AUTH_WEBHOOK_SECRET?: string;
+        RALPH_AUTH_WEBHOOK_SECRET?: string;
+      }
+    ).RALPH_AUTH_WEBHOOK_SECRET;
 
   if (!webhookSecret) {
-    logger.error("KOVA_AUTH_WEBHOOK_SECRET / RALPH_AUTH_WEBHOOK_SECRET not configured");
+    logger.error(
+      "KOVA_AUTH_WEBHOOK_SECRET / RALPH_AUTH_WEBHOOK_SECRET not configured",
+    );
     return apiError("Server misconfigured", 500);
   }
 
-  if (!signature || !(await verifyWebhookSignature(rawBody, signature, webhookSecret))) {
+  if (
+    !signature ||
+    !(await verifyWebhookSignature(rawBody, signature, webhookSecret))
+  ) {
     logger.security("webhook_signature_invalid", {
       path: "/api/auth/sync",
       has_signature: !!signature,
@@ -111,13 +136,13 @@ const POST = async ({ request }: any) => {
   if (rl) return rl;
 
   const db = getDB();
-  const username = user.username ?? usernameFromEmail(user.email ?? user.actorEmail) ?? `user_${userId.slice(-6)}`;
+  const username =
+    user.username ??
+    usernameFromEmail(user.email ?? user.actorEmail) ??
+    `user_${userId.slice(-6)}`;
   const fullName = [user.firstName, user.lastName].filter(Boolean).join(" ");
   const displayName =
-    user.displayName ??
-    user.name ??
-    user.actorName ??
-    (fullName || username);
+    user.displayName ?? user.name ?? user.actorName ?? (fullName || username);
   const avatarUrl = user.avatarUrl ?? user.imageUrl ?? user.image ?? null;
   const bio = user.bio ?? null;
   const defaultProfileTheme = applyProfileThemeDefaults({});
@@ -126,8 +151,9 @@ const POST = async ({ request }: any) => {
     case "user.created":
     case "user.signUp":
     case "user.signed_up": {
-      await db.prepare(
-        `INSERT INTO users (id, username, display_name, avatar_url, bio, status, profile_accent_color, profile_background_color, created_at)
+      await db
+        .prepare(
+          `INSERT INTO users (id, username, display_name, avatar_url, bio, status, profile_accent_color, profile_background_color, created_at)
          VALUES (?, ?, ?, ?, ?, 'online', ?, ?, ?)
          ON CONFLICT(id) DO UPDATE SET
            username = excluded.username,
@@ -139,24 +165,27 @@ const POST = async ({ request }: any) => {
            bio = COALESCE(users.bio, excluded.bio),
            profile_accent_color = COALESCE(users.profile_accent_color, excluded.profile_accent_color),
            profile_background_color = COALESCE(users.profile_background_color, excluded.profile_background_color)`,
-      ).bind(
-        userId,
-        username,
-        displayName,
-        avatarUrl,
-        bio,
-        defaultProfileTheme.profile_accent_color,
-        defaultProfileTheme.profile_background_color,
-        new Date().toISOString(),
-      ).run();
+        )
+        .bind(
+          userId,
+          username,
+          displayName,
+          avatarUrl,
+          bio,
+          defaultProfileTheme.profile_accent_color,
+          defaultProfileTheme.profile_background_color,
+          new Date().toISOString(),
+        )
+        .run();
 
       await syncCachesAndBroadcast(db, userId, username, event);
       break;
     }
     case "user.updated":
     case "user.update": {
-      await db.prepare(
-        `UPDATE users SET
+      await db
+        .prepare(
+          `UPDATE users SET
            username = ?,
            display_name = CASE
              WHEN display_name IS NOT NULL AND display_name != '' THEN display_name
@@ -168,14 +197,19 @@ const POST = async ({ request }: any) => {
            END,
            bio = COALESCE(bio, ?)
          WHERE id = ?`,
-      ).bind(username, displayName, avatarUrl, bio, userId).run();
+        )
+        .bind(username, displayName, avatarUrl, bio, userId)
+        .run();
 
       await syncCachesAndBroadcast(db, userId, username, event);
       break;
     }
     case "user.deleted":
     case "user.delete": {
-      await db.prepare(`UPDATE users SET status = 'offline' WHERE id = ?`).bind(userId).run();
+      await db
+        .prepare(`UPDATE users SET status = 'offline' WHERE id = ?`)
+        .bind(userId)
+        .run();
       await cacheDel(CacheKey.userProfile(userId));
       logger.info("User deleted from Ralph Auth webhook", { userId });
       break;
@@ -185,10 +219,17 @@ const POST = async ({ request }: any) => {
   return apiSuccess({ success: true });
 };
 
-async function verifyWebhookSignature(rawBody: string, signature: string, secret: string): Promise<boolean> {
+async function verifyWebhookSignature(
+  rawBody: string,
+  signature: string,
+  secret: string,
+): Promise<boolean> {
   const expected = await hmacSha256(rawBody, secret);
   const cleaned = signature.replace(/^sha256=/, "");
-  return timingSafeEqual(cleaned, expected.hex) || timingSafeEqual(cleaned, expected.base64);
+  return (
+    timingSafeEqual(cleaned, expected.hex) ||
+    timingSafeEqual(cleaned, expected.base64)
+  );
 }
 
 async function hmacSha256(rawBody: string, secret: string) {
@@ -202,7 +243,9 @@ async function hmacSha256(rawBody: string, secret: string) {
   );
   const digest = await crypto.subtle.sign("HMAC", key, encoder.encode(rawBody));
   const bytes = new Uint8Array(digest);
-  const hex = Array.from(bytes).map((b) => b.toString(16).padStart(2, "0")).join("");
+  const hex = Array.from(bytes)
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
   const base64 = btoa(String.fromCharCode(...bytes));
   return { hex, base64 };
 }

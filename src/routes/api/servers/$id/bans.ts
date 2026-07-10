@@ -1,11 +1,14 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute } from "@tanstack/react-router";
 
 import { apiSuccess, getDB, requireAuth } from "@/lib/api-helpers";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 import { ServiceError } from "@/lib/service-error";
 import { banUser, listBans, unbanUser } from "@/services/ban.service";
-import { executeAuditLog, executeBroadcast, executeInvalidation } from "@/services/service-helpers";
-
+import {
+  executeAuditLog,
+  executeBroadcast,
+  executeInvalidation,
+} from "@/services/service-helpers";
 
 // GET /api/servers/:id/bans — list banned users
 const GET = async ({ request, params }: any) => {
@@ -21,11 +24,14 @@ const GET = async ({ request, params }: any) => {
     return apiSuccess(bans);
   } catch (e) {
     if (e instanceof ServiceError) {
-      return Response.json({ error: e.message, code: e.code }, { status: e.status });
+      return Response.json(
+        { error: e.message, code: e.code },
+        { status: e.status },
+      );
     }
     throw e;
   }
-}
+};
 
 // POST /api/servers/:id/bans — ban a user
 const POST = async ({ request, params }: any) => {
@@ -58,11 +64,14 @@ const POST = async ({ request, params }: any) => {
     return apiSuccess({ banned: true, user_id: body.user_id }, 201);
   } catch (e) {
     if (e instanceof ServiceError) {
-      return Response.json({ error: e.message, code: e.code }, { status: e.status });
+      return Response.json(
+        { error: e.message, code: e.code },
+        { status: e.status },
+      );
     }
     throw e;
   }
-}
+};
 
 // DELETE /api/servers/:id/bans — unban a user
 const DELETE = async ({ request, params }: any) => {
@@ -86,19 +95,21 @@ const DELETE = async ({ request, params }: any) => {
     return apiSuccess({ unbanned: true, user_id: body.user_id });
   } catch (e) {
     if (e instanceof ServiceError) {
-      return Response.json({ error: e.message, code: e.code }, { status: e.status });
+      return Response.json(
+        { error: e.message, code: e.code },
+        { status: e.status },
+      );
     }
     throw e;
   }
-}
+};
 
-
-export const Route = createFileRoute('/api/servers/$id/bans')({
+export const Route = createFileRoute("/api/servers/$id/bans")({
   server: {
     handlers: {
       GET,
       POST,
       DELETE,
-    }
-  }
+    },
+  },
 });

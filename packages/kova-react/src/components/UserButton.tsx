@@ -65,9 +65,12 @@ function MultiSessionSection({
         listDeviceSessions: () => Promise<{ data?: DeviceSession[] | null }>;
       };
     };
-    ms.multiSession?.listDeviceSessions().then((res) => {
-      setSessions(res.data ?? []);
-    }).catch(() => setSessions([]));
+    ms.multiSession
+      ?.listDeviceSessions()
+      .then((res) => {
+        setSessions(res.data ?? []);
+      })
+      .catch(() => setSessions([]));
   }, [client]);
 
   const others = sessions.filter((s) => s.user.id !== currentUserId);
@@ -242,10 +245,7 @@ export function UserButton({
   };
 
   return (
-    <div
-      data-ra-root
-      style={{ position: "relative", display: "inline-flex" }}
-    >
+    <div data-ra-root style={{ position: "relative", display: "inline-flex" }}>
       {/* Trigger */}
       <button
         ref={triggerRef}

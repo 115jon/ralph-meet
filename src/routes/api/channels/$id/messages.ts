@@ -1,6 +1,15 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute } from "@tanstack/react-router";
 
-import { apiError, apiSuccess, broadcastToChannel, broadcastToServerMembers, broadcastToUser, genId, getDB, requireAuth } from "@/lib/api-helpers";
+import {
+  apiError,
+  apiSuccess,
+  broadcastToChannel,
+  broadcastToServerMembers,
+  broadcastToUser,
+  genId,
+  getDB,
+  requireAuth,
+} from "@/lib/api-helpers";
 import { hasPermission, PERMISSIONS } from "@/lib/permissions";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 import { requireChannelAccess } from "@/lib/require-channel-access";
@@ -13,7 +22,7 @@ import {
   editMessage,
   generateMessageNotifications,
   getDMRecipients,
-  listMessages
+  listMessages,
 } from "@/services/message.service";
 
 const embedLog = clog("embed");
@@ -43,20 +52,31 @@ const GET = async ({ request, params }: any) => {
       around: url.searchParams.get("around"),
     });
 
-    if (result.mode === 'around') {
-      return apiSuccess({ messages: result.messages, hasMoreBefore: result.hasMoreBefore, hasMoreAfter: result.hasMoreAfter });
+    if (result.mode === "around") {
+      return apiSuccess({
+        messages: result.messages,
+        hasMoreBefore: result.hasMoreBefore,
+        hasMoreAfter: result.hasMoreAfter,
+      });
     }
-    if (result.mode === 'after') {
-      return apiSuccess({ messages: result.messages, hasMoreAfter: result.hasMoreAfter });
+    if (result.mode === "after") {
+      return apiSuccess({
+        messages: result.messages,
+        hasMoreAfter: result.hasMoreAfter,
+      });
     }
-    return apiSuccess({ messages: result.messages, hasMoreBefore: result.hasMoreBefore, hasMoreAfter: result.hasMoreAfter });
+    return apiSuccess({
+      messages: result.messages,
+      hasMoreBefore: result.hasMoreBefore,
+      hasMoreAfter: result.hasMoreAfter,
+    });
   } catch (e) {
     if (e instanceof ServiceError) {
       return apiError(e.message, e.status, e.code);
     }
     throw e;
   }
-}
+};
 
 // POST /api/channels/:id/messages — send a message
 const POST = async ({ request, params }: any) => {
@@ -74,7 +94,10 @@ const POST = async ({ request, params }: any) => {
   if (serverId) {
     const perms = await getUserChannelPermissions(serverId, channelId, userId);
     if (perms === null || !hasPermission(perms, PERMISSIONS.SEND_MESSAGES)) {
-      return apiError("You do not have permission to send messages in this channel", 403);
+      return apiError(
+        "You do not have permission to send messages in this channel",
+        403,
+      );
     }
   }
 
@@ -82,7 +105,7 @@ const POST = async ({ request, params }: any) => {
   const rl = checkRateLimit(userId, "message-send", RATE_LIMITS.MESSAGE_SEND);
   if (rl) return rl;
 
-  const body = await request.json() as {
+  const body = (await request.json()) as {
     content: string;
     reply_to_id?: string;
     nonce?: string;
@@ -117,15 +140,21 @@ const POST = async ({ request, params }: any) => {
   // Asynchronously resolve embeds and deliver via MESSAGE_UPDATE
   // (still within request lifecycle since Workers can't fire-and-forget)
   try {
-    const { extractAndProcessEmbeds } = await import("@/services/embed-fetcher");
+    const { extractAndProcessEmbeds } =
+      await import("@/services/embed-fetcher");
     const contentToScan = body.content ?? "";
-    embedLog.info(`Scanning content for URLs: "${contentToScan.substring(0, 200)}"`);
+    embedLog.info(
+      `Scanning content for URLs: "${contentToScan.substring(0, 200)}"`,
+    );
     const embeds = await extractAndProcessEmbeds(contentToScan);
-    embedLog.info(`Resolved ${embeds.length} embed(s) for message ${messageId}`);
+    embedLog.info(
+      `Resolved ${embeds.length} embed(s) for message ${messageId}`,
+    );
     if (embeds.length > 0) {
-      await db.prepare(
-        `UPDATE messages SET embeds = ? WHERE id = ?`
-      ).bind(JSON.stringify(embeds), messageId).run();
+      await db
+        .prepare(`UPDATE messages SET embeds = ? WHERE id = ?`)
+        .bind(JSON.stringify(embeds), messageId)
+        .run();
       embedLog.info(`Saved embeds to DB for message ${messageId}`);
 
       const embedUpdate = { id: messageId, channel_id: channelId, embeds };
@@ -148,7 +177,12 @@ const POST = async ({ request, params }: any) => {
 
   // Notification generation
   try {
-    const author = message.author as { id: unknown; username: string; display_name?: string | null; avatar_url: unknown };
+    const author = message.author as {
+      id: unknown;
+      username: string;
+      display_name?: string | null;
+      avatar_url: unknown;
+    };
     const notifBroadcasts = await generateMessageNotifications(db, genId, {
       channelId,
       messageId,
@@ -167,8 +201,7 @@ const POST = async ({ request, params }: any) => {
   }
 
   return apiSuccess(message, 201);
-}
-
+};
 
 // PATCH /api/channels/:id/messages — edit a message
 const PATCH = async ({ request, params }: any) => {
@@ -181,7 +214,11 @@ const PATCH = async ({ request, params }: any) => {
   const accessResult = await requireChannelAccess(userId, channelId);
   if (accessResult instanceof Response) return accessResult;
 
-  const body = await request.json() as { message_id: string; content?: string; embeds?: any[] };
+  const body = (await request.json()) as {
+    message_id: string;
+    content?: string;
+    embeds?: any[];
+  };
 
   if (!body.message_id) {
     return apiError("message_id required", 400);
@@ -198,18 +235,28 @@ const PATCH = async ({ request, params }: any) => {
     // If clearing embeds (no content change)
     if (Array.isArray(body.embeds) && !body.content?.trim()) {
       // Verify ownership
-      const msg = await db.prepare(
-        `SELECT author_id FROM messages WHERE id = ? AND channel_id = ?`
-      ).bind(body.message_id, channelId).first() as { author_id: string } | null;
+      const msg = (await db
+        .prepare(
+          `SELECT author_id FROM messages WHERE id = ? AND channel_id = ?`,
+        )
+        .bind(body.message_id, channelId)
+        .first()) as { author_id: string } | null;
       if (!msg) return apiError("Message not found", 404);
       if (msg.author_id !== userId) return apiError("Not your message", 403);
 
-      await db.prepare(
-        `UPDATE messages SET embeds = ? WHERE id = ?`
-      ).bind(JSON.stringify(body.embeds), body.message_id).run();
+      await db
+        .prepare(`UPDATE messages SET embeds = ? WHERE id = ?`)
+        .bind(JSON.stringify(body.embeds), body.message_id)
+        .run();
 
-      const update = { id: body.message_id, channel_id: channelId, embeds: body.embeds };
-      const { serverId: editServerId } = accessResult as { serverId: string | null };
+      const update = {
+        id: body.message_id,
+        channel_id: channelId,
+        embeds: body.embeds,
+      };
+      const { serverId: editServerId } = accessResult as {
+        serverId: string | null;
+      };
       if (editServerId) {
         await broadcastToServerMembers(editServerId, "MESSAGE_UPDATE", update);
       } else {
@@ -219,8 +266,16 @@ const PATCH = async ({ request, params }: any) => {
     }
 
     // Normal content edit
-    const update = await editMessage(db, channelId, userId, body.message_id, body.content!);
-    const { serverId: editServerId } = accessResult as { serverId: string | null };
+    const update = await editMessage(
+      db,
+      channelId,
+      userId,
+      body.message_id,
+      body.content!,
+    );
+    const { serverId: editServerId } = accessResult as {
+      serverId: string | null;
+    };
     if (editServerId) {
       await broadcastToServerMembers(editServerId, "MESSAGE_UPDATE", update);
     } else {
@@ -233,7 +288,7 @@ const PATCH = async ({ request, params }: any) => {
     }
     throw e;
   }
-}
+};
 
 // DELETE /api/channels/:id/messages — delete a message
 const DELETE = async ({ request, params }: any) => {
@@ -246,7 +301,7 @@ const DELETE = async ({ request, params }: any) => {
   const accessResult = await requireChannelAccess(userId, channelId);
   if (accessResult instanceof Response) return accessResult;
 
-  const body = await request.json() as { message_id: string };
+  const body = (await request.json()) as { message_id: string };
 
   if (!body.message_id) {
     return apiError("message_id required", 400);
@@ -259,7 +314,8 @@ const DELETE = async ({ request, params }: any) => {
   let hasModPerm = false;
   if (serverId) {
     const perms = await getUserChannelPermissions(serverId, channelId, userId);
-    hasModPerm = perms !== null && hasPermission(perms, PERMISSIONS.MANAGE_MESSAGES);
+    hasModPerm =
+      perms !== null && hasPermission(perms, PERMISSIONS.MANAGE_MESSAGES);
   }
 
   try {
@@ -284,16 +340,15 @@ const DELETE = async ({ request, params }: any) => {
     }
     throw e;
   }
-}
+};
 
-
-export const Route = createFileRoute('/api/channels/$id/messages')({
+export const Route = createFileRoute("/api/channels/$id/messages")({
   server: {
     handlers: {
       GET,
       POST,
       PATCH,
       DELETE,
-    }
-  }
+    },
+  },
 });

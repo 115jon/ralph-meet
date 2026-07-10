@@ -82,7 +82,7 @@ describe("sendFriendRequest", () => {
 
   it("throws 404 when target user not found", async () => {
     await expect(
-      sendFriendRequest(db as any, USER_ID, "nonexistent")
+      sendFriendRequest(db as any, USER_ID, "nonexistent"),
     ).rejects.toHaveProperty("status", 404);
   });
 
@@ -90,7 +90,7 @@ describe("sendFriendRequest", () => {
     db.mockQuery("FROM users WHERE username", userRow({ id: USER_ID }));
 
     await expect(
-      sendFriendRequest(db as any, USER_ID, "bob")
+      sendFriendRequest(db as any, USER_ID, "bob"),
     ).rejects.toHaveProperty("status", 400);
   });
 
@@ -99,7 +99,7 @@ describe("sendFriendRequest", () => {
     db.mockQuery("FROM relationships WHERE user_id", { type: 0 });
 
     await expect(
-      sendFriendRequest(db as any, USER_ID, "bob")
+      sendFriendRequest(db as any, USER_ID, "bob"),
     ).rejects.toHaveProperty("status", 409);
   });
 
@@ -123,7 +123,10 @@ describe("acceptFriendRequest", () => {
   });
 
   it("accepts pending request", async () => {
-    db.mockQuery("FROM relationships WHERE user_id", { "1": 1 }, [USER_ID, TARGET_ID]);
+    db.mockQuery("FROM relationships WHERE user_id", { "1": 1 }, [
+      USER_ID,
+      TARGET_ID,
+    ]);
 
     const result = await acceptFriendRequest(db as any, USER_ID, TARGET_ID);
     expect(result.type).toBe(0);
@@ -134,7 +137,7 @@ describe("acceptFriendRequest", () => {
     // No mock for pending → first() returns null
 
     await expect(
-      acceptFriendRequest(db as any, USER_ID, TARGET_ID)
+      acceptFriendRequest(db as any, USER_ID, TARGET_ID),
     ).rejects.toHaveProperty("status", 404);
   });
 });
@@ -228,7 +231,11 @@ describe("getOrCreateDM", () => {
     db.mockQuery("FROM users WHERE id", userRow(), [TARGET_ID]);
     // No existing DM → default null
     // Current user for broadcast
-    db.mockQuery("FROM users WHERE id", userRow({ id: USER_ID, username: "alice" }), [USER_ID]);
+    db.mockQuery(
+      "FROM users WHERE id",
+      userRow({ id: USER_ID, username: "alice" }),
+      [USER_ID],
+    );
 
     const result = await getOrCreateDM(db as any, USER_ID, TARGET_ID);
     expect(result.isNew).toBe(true);
@@ -254,13 +261,13 @@ describe("getOrCreateDM", () => {
 
   it("throws 400 when DMing yourself", async () => {
     await expect(
-      getOrCreateDM(db as any, USER_ID, USER_ID)
+      getOrCreateDM(db as any, USER_ID, USER_ID),
     ).rejects.toHaveProperty("status", 400);
   });
 
   it("throws 404 when target user not found", async () => {
     await expect(
-      getOrCreateDM(db as any, USER_ID, "nonexistent")
+      getOrCreateDM(db as any, USER_ID, "nonexistent"),
     ).rejects.toHaveProperty("status", 404);
   });
 });
@@ -302,9 +309,7 @@ describe("listInvites", () => {
 
   it("returns invite list", async () => {
     db.mockQuery("FROM invites", {
-      results: [
-        { code: "abc", server_id: SERVER_ID, uses: 0, max_uses: null },
-      ],
+      results: [{ code: "abc", server_id: SERVER_ID, uses: 0, max_uses: null }],
     });
 
     const result = await listInvites(db as any, SERVER_ID, false);
@@ -349,13 +354,7 @@ describe("joinServer", () => {
       created_at: NOW,
     });
 
-    const result = await joinServer(
-      db as any,
-      "abc",
-      USER_ID,
-      "alice",
-      null
-    );
+    const result = await joinServer(db as any, "abc", USER_ID, "alice", null);
 
     expect(result.joined).toBe(true);
     db.assertCalled(/INSERT INTO server_members/);
@@ -375,7 +374,9 @@ describe("joinServer", () => {
         }),
       ]),
     );
-    const memberAdd = result.broadcasts?.find((broadcast) => broadcast.event === "GUILD_MEMBER_ADD");
+    const memberAdd = result.broadcasts?.find(
+      (broadcast) => broadcast.event === "GUILD_MEMBER_ADD",
+    );
     expect(memberAdd).toBeDefined();
     expect((memberAdd?.data as any).roles[0]).toMatchObject({
       id: "role_everyone",
@@ -386,7 +387,7 @@ describe("joinServer", () => {
 
   it("throws 404 for invalid invite code", async () => {
     await expect(
-      joinServer(db as any, "bad_code", USER_ID, "alice", null)
+      joinServer(db as any, "bad_code", USER_ID, "alice", null),
     ).rejects.toHaveProperty("status", 404);
   });
 
@@ -407,7 +408,7 @@ describe("joinServer", () => {
     });
 
     await expect(
-      joinServer(db as any, "abc", USER_ID, "alice", null)
+      joinServer(db as any, "abc", USER_ID, "alice", null),
     ).rejects.toHaveProperty("status", 403);
   });
 
@@ -428,13 +429,7 @@ describe("joinServer", () => {
     });
     db.mockQuery("FROM server_members WHERE server_id", { "1": 1 });
 
-    const result = await joinServer(
-      db as any,
-      "abc",
-      USER_ID,
-      "alice",
-      null
-    );
+    const result = await joinServer(db as any, "abc", USER_ID, "alice", null);
     expect(result.already_member).toBe(true);
   });
 });

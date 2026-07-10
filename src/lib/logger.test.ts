@@ -7,7 +7,7 @@ describe("logger", () => {
   });
 
   it("outputs structured JSON with correct fields", () => {
-    const spy = vi.spyOn(console, "info").mockImplementation(() => { });
+    const spy = vi.spyOn(console, "info").mockImplementation(() => {});
     logger.info("test message", { userId: "u1" });
 
     expect(spy).toHaveBeenCalledOnce();
@@ -21,10 +21,10 @@ describe("logger", () => {
   });
 
   it("logs at all levels", () => {
-    const debugSpy = vi.spyOn(console, "debug").mockImplementation(() => { });
-    const infoSpy = vi.spyOn(console, "info").mockImplementation(() => { });
-    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => { });
-    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => { });
+    const debugSpy = vi.spyOn(console, "debug").mockImplementation(() => {});
+    const infoSpy = vi.spyOn(console, "info").mockImplementation(() => {});
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
     logger.debug("debug msg");
     logger.info("info msg");
@@ -38,7 +38,7 @@ describe("logger", () => {
   });
 
   it("security() logs with event field", () => {
-    const spy = vi.spyOn(console, "warn").mockImplementation(() => { });
+    const spy = vi.spyOn(console, "warn").mockImplementation(() => {});
     logger.security("rate_limit_exceeded", { ip: "1.2.3.4" });
 
     const output = JSON.parse(spy.mock.calls[0][0]);
@@ -48,7 +48,7 @@ describe("logger", () => {
   });
 
   it("request() logs with method, path, status", () => {
-    const spy = vi.spyOn(console, "info").mockImplementation(() => { });
+    const spy = vi.spyOn(console, "info").mockImplementation(() => {});
     logger.request("GET", "/api/servers", 200, 42);
 
     const output = JSON.parse(spy.mock.calls[0][0]);

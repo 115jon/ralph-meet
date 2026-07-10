@@ -9,28 +9,48 @@ function useDevicesState() {
   const [sessionError, setSessionError] = useState<string | null>(null);
 
   return {
-    sessions, setSessions,
-    sessionsLoading, setSessionsLoading,
-    sessionError, setSessionError
+    sessions,
+    setSessions,
+    sessionsLoading,
+    setSessionsLoading,
+    sessionError,
+    setSessionError,
   };
 }
 
-function DeviceRow({ session, onRevoke, now }: { session: any, onRevoke: (id: string) => void, now: number }) {
+function DeviceRow({
+  session,
+  onRevoke,
+  now,
+}: {
+  session: any;
+  onRevoke: (id: string) => void;
+  now: number;
+}) {
   const Icon = session.activity?.isMobile ? Smartphone : Monitor;
 
-  const browserName = session.activity?.browserName || (session.activity?.isMobile ? "Mobile Client" : "Desktop Client");
-  const deviceType = session.activity?.deviceType || (session.activity?.isMobile ? "Mobile" : "Desktop");
+  const browserName =
+    session.activity?.browserName ||
+    (session.activity?.isMobile ? "Mobile Client" : "Desktop Client");
+  const deviceType =
+    session.activity?.deviceType ||
+    (session.activity?.isMobile ? "Mobile" : "Desktop");
   const title = `${deviceType} · ${browserName}`.toUpperCase();
 
-  const location = [session.activity?.city, session.activity?.country].filter(Boolean).join(", ") || "Unknown Location";
+  const location =
+    [session.activity?.city, session.activity?.country]
+      .filter(Boolean)
+      .join(", ") || "Unknown Location";
 
   let timeAgo = "Unknown time";
   if (session.lastActiveAt) {
     const minDiff = Math.floor((now - session.lastActiveAt) / 60000);
     if (minDiff < 1) timeAgo = "less than a minute ago";
     else if (minDiff < 60) timeAgo = `less than an hour ago`;
-    else if (minDiff < 1440) timeAgo = `${Math.floor(minDiff / 60)} hour${Math.floor(minDiff / 60) === 1 ? '' : 's'} ago`;
-    else timeAgo = `${Math.floor(minDiff / 1440)} day${Math.floor(minDiff / 1440) === 1 ? '' : 's'} ago`;
+    else if (minDiff < 1440)
+      timeAgo = `${Math.floor(minDiff / 60)} hour${Math.floor(minDiff / 60) === 1 ? "" : "s"} ago`;
+    else
+      timeAgo = `${Math.floor(minDiff / 1440)} day${Math.floor(minDiff / 1440) === 1 ? "" : "s"} ago`;
   }
 
   return (
@@ -40,9 +60,12 @@ function DeviceRow({ session, onRevoke, now }: { session: any, onRevoke: (id: st
           <Icon size={22} />
         </div>
         <div className="flex-1 min-w-0 flex flex-col gap-0.5">
-          <h4 className="text-[13px] font-bold text-rm-text truncate">{title}</h4>
+          <h4 className="text-[13px] font-bold text-rm-text truncate">
+            {title}
+          </h4>
           <p className="text-[13px] text-rm-text-muted truncate">
-            {location}{!session.isCurrent && ` · ${timeAgo}`}
+            {location}
+            {!session.isCurrent && ` · ${timeAgo}`}
           </p>
         </div>
       </div>
@@ -62,9 +85,12 @@ function DeviceRow({ session, onRevoke, now }: { session: any, onRevoke: (id: st
 
 export default function SettingsDevicesTab() {
   const {
-    sessions, setSessions,
-    sessionsLoading, setSessionsLoading,
-    sessionError, setSessionError
+    sessions,
+    setSessions,
+    sessionsLoading,
+    setSessionsLoading,
+    sessionError,
+    setSessionError,
   } = useDevicesState();
 
   const fetchSessions = useCallback(async () => {
@@ -102,9 +128,13 @@ export default function SettingsDevicesTab() {
         Devices
       </h1>
       <p className="text-sm text-rm-text-muted mb-8 leading-relaxed">
-        Here are all the devices that are currently logged in with your Ralph Meet account. You can log out of each one individually or all other devices.
-        <br /><br />
-        If you see an entry you don't recognize, log out of that device and change your account password immediately.
+        Here are all the devices that are currently logged in with your Ralph
+        Meet account. You can log out of each one individually or all other
+        devices.
+        <br />
+        <br />
+        If you see an entry you don't recognize, log out of that device and
+        change your account password immediately.
       </p>
 
       {sessionError && (
@@ -126,8 +156,13 @@ export default function SettingsDevicesTab() {
                 Current Device
               </h3>
               <div className="bg-rm-bg-surface border border-rm-border rounded-xl flex flex-col divide-y divide-rm-border">
-                {currentSessions.map(s => (
-                  <DeviceRow key={s.id} session={s} onRevoke={handleRevokeSession} now={Date.now()} />
+                {currentSessions.map((s) => (
+                  <DeviceRow
+                    key={s.id}
+                    session={s}
+                    onRevoke={handleRevokeSession}
+                    now={Date.now()}
+                  />
                 ))}
               </div>
             </section>
@@ -139,8 +174,13 @@ export default function SettingsDevicesTab() {
                 Other Devices
               </h3>
               <div className="bg-rm-bg-surface border border-rm-border rounded-xl flex flex-col divide-y divide-rm-border">
-                {otherSessions.map(s => (
-                  <DeviceRow key={s.id} session={s} onRevoke={handleRevokeSession} now={Date.now()} />
+                {otherSessions.map((s) => (
+                  <DeviceRow
+                    key={s.id}
+                    session={s}
+                    onRevoke={handleRevokeSession}
+                    now={Date.now()}
+                  />
                 ))}
               </div>
             </section>

@@ -24,9 +24,13 @@ declare module "@tanstack/react-router" {
   }
 }
 
-void invoke("plugin:edge-to-edge|enable").catch(() => console.warn("Failed to enable edge-to-edge"));
+void invoke("plugin:edge-to-edge|enable").catch(() =>
+  console.warn("Failed to enable edge-to-edge"),
+);
 
-void invoke<{ top: number; bottom: number; left: number; right: number }>("plugin:edge-to-edge|get_safe_area_insets")
+void invoke<{ top: number; bottom: number; left: number; right: number }>(
+  "plugin:edge-to-edge|get_safe_area_insets",
+)
   .then((insets) => {
     if (!insets) return;
     const style = document.documentElement.style;

@@ -119,11 +119,7 @@ describe("stream watcher helpers", () => {
 
   it("preserves optimistic local watch intents until the snapshot catches up", () => {
     expect(
-      resolveWatchedStreamsWithPendingIntents(
-        {},
-        "user-9",
-        { "user-1": true },
-      ),
+      resolveWatchedStreamsWithPendingIntents({}, "user-9", { "user-1": true }),
     ).toEqual({
       watchedStreams: { "user-1": true },
       pendingIntents: { "user-1": true },
@@ -160,13 +156,27 @@ describe("stream watcher helpers", () => {
     expect(
       getLocalScreenStreamWatchers(
         [
-          makeGridItem({ id: "local-camera", userId: "user-1", isLocal: true, type: "camera" }),
-          makeGridItem({ id: "local-screen", userId: "user-1", isLocal: true, type: "screen" }),
+          makeGridItem({
+            id: "local-camera",
+            userId: "user-1",
+            isLocal: true,
+            type: "camera",
+          }),
+          makeGridItem({
+            id: "local-screen",
+            userId: "user-1",
+            isLocal: true,
+            type: "screen",
+          }),
         ],
         {
-          "user-1": [{ userId: "user-2", name: "Bob", avatar: null, isLocal: false }],
+          "user-1": [
+            { userId: "user-2", name: "Bob", avatar: null, isLocal: false },
+          ],
         },
       ),
-    ).toEqual([{ userId: "user-2", name: "Bob", avatar: null, isLocal: false }]);
+    ).toEqual([
+      { userId: "user-2", name: "Bob", avatar: null, isLocal: false },
+    ]);
   });
 });

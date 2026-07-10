@@ -9,11 +9,17 @@ import {
   listCameraBackgrounds,
   uploadCameraBackground,
 } from "@/lib/camera-backgrounds";
-import { CAMERA_QUALITY_PROFILES, buildCameraVideoConstraints } from "@/lib/camera-quality";
+import {
+  CAMERA_QUALITY_PROFILES,
+  buildCameraVideoConstraints,
+} from "@/lib/camera-quality";
 import { getAuthAssetUrl } from "@/lib/platform";
 import { useMediaDevices } from "@/lib/useMediaDevices";
 import { cn } from "@/lib/utils";
-import type { CameraBackgroundSetting, CustomCameraBackground } from "@/stores/useVoiceSettingsStore";
+import type {
+  CameraBackgroundSetting,
+  CustomCameraBackground,
+} from "@/stores/useVoiceSettingsStore";
 import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
 import { useUser } from "@kova/react";
 import { Ban, Check, Sparkles, Trash2, Upload } from "lucide-react";
@@ -26,17 +32,17 @@ const BACKGROUND_OPTIONS: Array<{
   label: string;
   value: CameraBackgroundSetting;
 }> = [
-    {
-      id: "none",
-      label: "None",
-      value: { type: "none" },
-    },
-    {
-      id: "blur",
-      label: "Blur",
-      value: { type: "blur", strength: "strong" },
-    },
-  ];
+  {
+    id: "none",
+    label: "None",
+    value: { type: "none" },
+  },
+  {
+    id: "blur",
+    label: "Blur",
+    value: { type: "blur", strength: "strong" },
+  },
+];
 
 function backgroundOptionId(setting: CameraBackgroundSetting): string {
   if (setting.type === "blur") return "blur";
@@ -48,7 +54,9 @@ export default function SettingsCameraTab() {
   const { user } = useUser();
   const settingsUserId = user?.id ?? null;
   const { videoInputs } = useMediaDevices();
-  const vSettings = useVoiceSettingsStore(useShallow((s) => s.getSettings(settingsUserId)));
+  const vSettings = useVoiceSettingsStore(
+    useShallow((s) => s.getSettings(settingsUserId)),
+  );
   const setDevice = useVoiceSettingsStore((s) => s.setDevice);
   const updateUserSettings = useVoiceSettingsStore((s) => s.updateUserSettings);
   const setCurrentUser = useVoiceSettingsStore((s) => s.setCurrentUser);
@@ -62,15 +70,18 @@ export default function SettingsCameraTab() {
   const [isUploadingBackground, setIsUploadingBackground] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const latestCameraBackgroundRef = useRef(vSettings.cameraBackground);
-  const latestCustomCameraBackgroundsRef = useRef(vSettings.customCameraBackgrounds ?? []);
+  const latestCustomCameraBackgroundsRef = useRef(
+    vSettings.customCameraBackgrounds ?? [],
+  );
   latestCameraBackgroundRef.current = vSettings.cameraBackground;
-  latestCustomCameraBackgroundsRef.current = vSettings.customCameraBackgrounds ?? [];
+  latestCustomCameraBackgroundsRef.current =
+    vSettings.customCameraBackgrounds ?? [];
 
   useEffect(() => {
     const initStore = () => {
       if (settingsUserId) {
         const storeUser = useVoiceSettingsStore.getState().currentUser;
-        if (!storeUser || !storeUser.startsWith('room-')) {
+        if (!storeUser || !storeUser.startsWith("room-")) {
           setCurrentUser(settingsUserId);
         }
       }
@@ -78,49 +89,52 @@ export default function SettingsCameraTab() {
     initStore();
   }, [settingsUserId, setCurrentUser]);
 
-  const applyPreviewStream = useCallback(async (
-    stream: MediaStream | null,
-    cameraBackground: CameraBackgroundSetting,
-    customCameraBackgrounds: CustomCameraBackground[],
-  ) => {
-    const requestId = ++previewRequestIdRef.current;
-    previewEffectRef.current?.stop?.();
-    previewEffectRef.current = null;
+  const applyPreviewStream = useCallback(
+    async (
+      stream: MediaStream | null,
+      cameraBackground: CameraBackgroundSetting,
+      customCameraBackgrounds: CustomCameraBackground[],
+    ) => {
+      const requestId = ++previewRequestIdRef.current;
+      previewEffectRef.current?.stop?.();
+      previewEffectRef.current = null;
 
-    if (!stream) {
-      setPreviewStream(null);
-      return;
-    }
-
-    const videoTrack = stream.getVideoTracks()[0];
-    if (!videoTrack || cameraBackground.type === "none") {
-      setPreviewStream(stream);
-      return;
-    }
-
-    try {
-      const effect = await createCameraBackgroundEffect(
-        videoTrack,
-        cameraBackground,
-        customCameraBackgrounds
-      );
-      if (previewRequestIdRef.current !== requestId) {
-        effect?.stop?.();
+      if (!stream) {
+        setPreviewStream(null);
         return;
       }
-      if (effect) {
-        previewEffectRef.current = effect;
-        setPreviewStream(effect.stream);
-      } else {
+
+      const videoTrack = stream.getVideoTracks()[0];
+      if (!videoTrack || cameraBackground.type === "none") {
         setPreviewStream(stream);
+        return;
       }
-    } catch (err) {
-      if (previewRequestIdRef.current === requestId) {
-        console.error("Failed to apply background effect:", err);
-        setPreviewStream(stream);
+
+      try {
+        const effect = await createCameraBackgroundEffect(
+          videoTrack,
+          cameraBackground,
+          customCameraBackgrounds,
+        );
+        if (previewRequestIdRef.current !== requestId) {
+          effect?.stop?.();
+          return;
+        }
+        if (effect) {
+          previewEffectRef.current = effect;
+          setPreviewStream(effect.stream);
+        } else {
+          setPreviewStream(stream);
+        }
+      } catch (err) {
+        if (previewRequestIdRef.current === requestId) {
+          console.error("Failed to apply background effect:", err);
+          setPreviewStream(stream);
+        }
       }
-    }
-  }, []);
+    },
+    [],
+  );
 
   // Load camera backgrounds
   useEffect(() => {
@@ -130,15 +144,28 @@ export default function SettingsCameraTab() {
       .then((backgrounds) => {
         if (cancelled) return;
         updateUserSettings((current) => {
-          const localOnlyBackgrounds = (current.customCameraBackgrounds ?? []).filter((background) => background.dataUrl && !background.url);
-          const customCameraBackgrounds = [...backgrounds, ...localOnlyBackgrounds];
-          const selectedBackgroundId = current.cameraBackground.type === "image" ? current.cameraBackground.id : null;
-          const selectedBackgroundMissing = !!selectedBackgroundId
-            && !customCameraBackgrounds.some((background) => background.id === selectedBackgroundId);
+          const localOnlyBackgrounds = (
+            current.customCameraBackgrounds ?? []
+          ).filter((background) => background.dataUrl && !background.url);
+          const customCameraBackgrounds = [
+            ...backgrounds,
+            ...localOnlyBackgrounds,
+          ];
+          const selectedBackgroundId =
+            current.cameraBackground.type === "image"
+              ? current.cameraBackground.id
+              : null;
+          const selectedBackgroundMissing =
+            !!selectedBackgroundId &&
+            !customCameraBackgrounds.some(
+              (background) => background.id === selectedBackgroundId,
+            );
 
           return {
             ...current,
-            cameraBackground: selectedBackgroundMissing ? { type: "none" } : current.cameraBackground,
+            cameraBackground: selectedBackgroundMissing
+              ? { type: "none" }
+              : current.cameraBackground,
             customCameraBackgrounds,
           };
         }, settingsUserId ?? undefined);
@@ -146,7 +173,11 @@ export default function SettingsCameraTab() {
       .catch((error) => {
         if (cancelled) return;
         const status = (error as any)?.status;
-        setUploadError(status === 401 ? "Sign in to sync uploaded backgrounds." : "Could not load saved backgrounds.");
+        setUploadError(
+          status === 401
+            ? "Sign in to sync uploaded backgrounds."
+            : "Could not load saved backgrounds.",
+        );
       })
       .finally(() => {
         if (!cancelled) setIsLoadingBackgrounds(false);
@@ -217,7 +248,11 @@ export default function SettingsCameraTab() {
       vSettings.cameraBackground,
       vSettings.customCameraBackgrounds ?? [],
     );
-  }, [applyPreviewStream, vSettings.cameraBackground, vSettings.customCameraBackgrounds]);
+  }, [
+    applyPreviewStream,
+    vSettings.cameraBackground,
+    vSettings.customCameraBackgrounds,
+  ]);
 
   const handleUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.currentTarget.files?.[0];
@@ -233,19 +268,30 @@ export default function SettingsCameraTab() {
     setIsUploadingBackground(true);
     try {
       const background = await uploadCameraBackground(file);
-      updateUserSettings((current) => ({
-        ...current,
-        cameraBackground: { type: "image", id: background.id },
-        customCameraBackgrounds: [
-          background,
-          ...(current.customCameraBackgrounds ?? []).filter((candidate) => candidate.id !== background.id),
-        ],
-      }), settingsUserId ?? undefined);
+      updateUserSettings(
+        (current) => ({
+          ...current,
+          cameraBackground: { type: "image", id: background.id },
+          customCameraBackgrounds: [
+            background,
+            ...(current.customCameraBackgrounds ?? []).filter(
+              (candidate) => candidate.id !== background.id,
+            ),
+          ],
+        }),
+        settingsUserId ?? undefined,
+      );
       setUploadError(null);
     } catch (error) {
       const status = (error as any)?.status;
-      if (status === 401) setUploadError("Sign in to upload synced backgrounds.");
-      else setUploadError(error instanceof Error ? error.message : "Could not upload that image.");
+      if (status === 401)
+        setUploadError("Sign in to upload synced backgrounds.");
+      else
+        setUploadError(
+          error instanceof Error
+            ? error.message
+            : "Could not upload that image.",
+        );
     } finally {
       setIsUploadingBackground(false);
     }
@@ -256,18 +302,29 @@ export default function SettingsCameraTab() {
       try {
         await deleteCameraBackground(background.id);
       } catch (error) {
-        setUploadError(error instanceof Error ? error.message : "Could not remove that background.");
+        setUploadError(
+          error instanceof Error
+            ? error.message
+            : "Could not remove that background.",
+        );
         return;
       }
     }
 
-    updateUserSettings((current) => ({
-      ...current,
-      cameraBackground: current.cameraBackground.type === "image" && current.cameraBackground.id === background.id
-        ? { type: "none" }
-        : current.cameraBackground,
-      customCameraBackgrounds: (current.customCameraBackgrounds ?? []).filter((candidate) => candidate.id !== background.id),
-    }), settingsUserId ?? undefined);
+    updateUserSettings(
+      (current) => ({
+        ...current,
+        cameraBackground:
+          current.cameraBackground.type === "image" &&
+          current.cameraBackground.id === background.id
+            ? { type: "none" }
+            : current.cameraBackground,
+        customCameraBackgrounds: (current.customCameraBackgrounds ?? []).filter(
+          (candidate) => candidate.id !== background.id,
+        ),
+      }),
+      settingsUserId ?? undefined,
+    );
     setUploadError(null);
   };
 
@@ -282,7 +339,8 @@ export default function SettingsCameraTab() {
         Camera
       </h1>
       <p className="text-sm text-rm-text-muted mb-6 md:mb-10">
-        Configure your video input device, capture quality, and virtual backgrounds.
+        Configure your video input device, capture quality, and virtual
+        backgrounds.
       </p>
 
       <div className="space-y-10">
@@ -293,7 +351,11 @@ export default function SettingsCameraTab() {
           </h3>
           <div className="relative aspect-video w-full max-w-[480px] overflow-hidden rounded-xl bg-black border border-rm-border flex items-center justify-center">
             {previewStream && (
-              <VideoPlayer stream={previewStream} isLocal={true} className="h-full w-full object-contain bg-black" />
+              <VideoPlayer
+                stream={previewStream}
+                isLocal={true}
+                className="h-full w-full object-contain bg-black"
+              />
             )}
           </div>
         </section>
@@ -332,22 +394,41 @@ export default function SettingsCameraTab() {
               return (
                 <button
                   key={profile.id}
-                  onClick={() => updateUserSettings((current: any) => ({ ...current, cameraQuality: profile.id }), settingsUserId ?? undefined)}
+                  onClick={() =>
+                    updateUserSettings(
+                      (current: any) => ({
+                        ...current,
+                        cameraQuality: profile.id,
+                      }),
+                      settingsUserId ?? undefined,
+                    )
+                  }
                   className={cn(
                     "group rounded-xl border p-3 text-left outline-none transition-all",
                     isSelected
                       ? "border-primary bg-primary/5 ring-1 ring-primary"
-                      : "border-rm-border bg-rm-bg-surface/40 hover:border-rm-text/20 hover:bg-rm-bg-surface/60"
+                      : "border-rm-border bg-rm-bg-surface/40 hover:border-rm-text/20 hover:bg-rm-bg-surface/60",
                   )}
                 >
                   <div className="mb-1 flex items-center justify-between">
                     <div className="flex items-center gap-1.5">
-                      <span className={cn("text-xs font-bold", isSelected ? "text-primary" : "text-rm-text")}>{profile.label}</span>
-                      <span className="rounded-md bg-rm-bg-elevated/40 px-1 py-0.5 text-[8px] font-black text-rm-text-muted">{profile.fps} FPS</span>
+                      <span
+                        className={cn(
+                          "text-xs font-bold",
+                          isSelected ? "text-primary" : "text-rm-text",
+                        )}
+                      >
+                        {profile.label}
+                      </span>
+                      <span className="rounded-md bg-rm-bg-elevated/40 px-1 py-0.5 text-[8px] font-black text-rm-text-muted">
+                        {profile.fps} FPS
+                      </span>
                     </div>
                     {isSelected && <Check size={12} className="text-primary" />}
                   </div>
-                  <p className="text-[9px] leading-tight text-rm-text-muted">{profile.width}x{profile.height}</p>
+                  <p className="text-[9px] leading-tight text-rm-text-muted">
+                    {profile.width}x{profile.height}
+                  </p>
                 </button>
               );
             })}
@@ -368,28 +449,45 @@ export default function SettingsCameraTab() {
               disabled={isUploadingBackground}
               className="flex items-center gap-1.5 rounded-lg border border-rm-border bg-rm-bg-surface/40 px-2.5 py-1.5 text-[10px] font-black text-rm-text-muted transition-colors hover:text-rm-text"
             >
-              <Upload size={12} /> {isUploadingBackground ? "Uploading" : "Upload Image"}
+              <Upload size={12} />{" "}
+              {isUploadingBackground ? "Uploading" : "Upload Image"}
             </button>
-            <input ref={fileInputRef} type="file" accept={CAMERA_BACKGROUND_ACCEPT} className="hidden" onChange={handleUpload} aria-label="Upload video background image" />
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept={CAMERA_BACKGROUND_ACCEPT}
+              className="hidden"
+              onChange={handleUpload}
+              aria-label="Upload video background image"
+            />
           </div>
 
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 max-w-[480px]">
             {BACKGROUND_OPTIONS.map((option) => {
-              const currentBgId = vSettings.cameraBackground.type === "blur"
-                ? "blur"
-                : vSettings.cameraBackground.type === "image"
-                  ? `image-${vSettings.cameraBackground.id}`
-                  : "none";
+              const currentBgId =
+                vSettings.cameraBackground.type === "blur"
+                  ? "blur"
+                  : vSettings.cameraBackground.type === "image"
+                    ? `image-${vSettings.cameraBackground.id}`
+                    : "none";
               const isSelected = currentBgId === option.id;
               return (
                 <button
                   key={option.id}
-                  onClick={() => updateUserSettings((current: any) => ({ ...current, cameraBackground: option.value }), settingsUserId ?? undefined)}
+                  onClick={() =>
+                    updateUserSettings(
+                      (current: any) => ({
+                        ...current,
+                        cameraBackground: option.value,
+                      }),
+                      settingsUserId ?? undefined,
+                    )
+                  }
                   className={cn(
                     "group relative flex flex-col rounded-xl border p-2.5 text-left outline-none transition-all",
                     isSelected
                       ? "border-primary bg-primary/5 ring-1 ring-primary"
-                      : "border-rm-border bg-rm-bg-surface/40 hover:border-rm-text/20 hover:bg-rm-bg-surface/60"
+                      : "border-rm-border bg-rm-bg-surface/40 hover:border-rm-text/20 hover:bg-rm-bg-surface/60",
                   )}
                 >
                   {option.id === "none" ? (
@@ -400,33 +498,85 @@ export default function SettingsCameraTab() {
                     <div className="relative mb-2 flex h-16 w-full items-center justify-center overflow-hidden rounded-lg bg-rm-bg-elevated/40 transition-all group-hover:scale-[1.02]">
                       <div className="absolute inset-0 bg-gradient-to-tr from-primary/30 via-rm-accent/25 to-rm-accent/40 filter blur-[8px]" />
                       <div className="absolute inset-0 bg-black/15" />
-                      <Sparkles size={20} className="relative z-10 text-white/80" />
+                      <Sparkles
+                        size={20}
+                        className="relative z-10 text-white/80"
+                      />
                     </div>
                   )}
-                  <span className={cn("text-xs font-bold", isSelected ? "text-primary" : "text-rm-text")}>{option.label}</span>
-                  {isSelected && <div className="absolute top-2 right-2 rounded-full bg-primary p-0.5 text-primary-foreground"><Check size={10} /></div>}
+                  <span
+                    className={cn(
+                      "text-xs font-bold",
+                      isSelected ? "text-primary" : "text-rm-text",
+                    )}
+                  >
+                    {option.label}
+                  </span>
+                  {isSelected && (
+                    <div className="absolute top-2 right-2 rounded-full bg-primary p-0.5 text-primary-foreground">
+                      <Check size={10} />
+                    </div>
+                  )}
                 </button>
               );
             })}
 
             {(vSettings.customCameraBackgrounds ?? []).map((background) => {
-              const currentBgId = vSettings.cameraBackground.type === "image" ? `image-${vSettings.cameraBackground.id}` : null;
+              const currentBgId =
+                vSettings.cameraBackground.type === "image"
+                  ? `image-${vSettings.cameraBackground.id}`
+                  : null;
               const isSelected = currentBgId === `image-${background.id}`;
               return (
                 <div
                   key={background.id}
                   className={cn(
                     "group relative overflow-hidden rounded-xl border bg-rm-bg-surface/40 outline-none transition-all",
-                    isSelected ? "border-primary ring-1 ring-primary" : "border-rm-border hover:border-rm-text/20"
+                    isSelected
+                      ? "border-primary ring-1 ring-primary"
+                      : "border-rm-border hover:border-rm-text/20",
                   )}
                 >
-                  <button onClick={() => updateUserSettings((current: any) => ({ ...current, cameraBackground: { type: "image", id: background.id } }), settingsUserId ?? undefined)} className="block w-full p-2 text-left">
-                    <img src={background.url ? getAuthAssetUrl(background.url) : background.dataUrl} alt="" className="h-16 w-full rounded-lg object-cover" />
+                  <button
+                    onClick={() =>
+                      updateUserSettings(
+                        (current: any) => ({
+                          ...current,
+                          cameraBackground: {
+                            type: "image",
+                            id: background.id,
+                          },
+                        }),
+                        settingsUserId ?? undefined,
+                      )
+                    }
+                    className="block w-full p-2 text-left"
+                  >
+                    <img
+                      src={
+                        background.url
+                          ? getAuthAssetUrl(background.url)
+                          : background.dataUrl
+                      }
+                      alt=""
+                      className="h-16 w-full rounded-lg object-cover"
+                    />
                     <div className="mt-2 flex items-center justify-between gap-2 px-1">
-                      <span className={cn("truncate text-xs font-bold", isSelected ? "text-primary" : "text-rm-text")}>{background.name}</span>
+                      <span
+                        className={cn(
+                          "truncate text-xs font-bold",
+                          isSelected ? "text-primary" : "text-rm-text",
+                        )}
+                      >
+                        {background.name}
+                      </span>
                     </div>
                   </button>
-                  {isSelected && <div className="absolute top-3 right-8 rounded-full bg-primary p-0.5 text-primary-foreground"><Check size={10} /></div>}
+                  {isSelected && (
+                    <div className="absolute top-3 right-8 rounded-full bg-primary p-0.5 text-primary-foreground">
+                      <Check size={10} />
+                    </div>
+                  )}
                   <button
                     onClick={() => void removeBackground(background)}
                     className="absolute right-2 top-2 rounded-md bg-black/60 p-1 text-white/80 opacity-0 transition-opacity hover:text-white group-hover:opacity-100"
@@ -438,8 +588,16 @@ export default function SettingsCameraTab() {
               );
             })}
           </div>
-          {isLoadingBackgrounds && <p className="px-1 text-xs font-medium text-rm-text-muted">Loading saved backgrounds...</p>}
-          {uploadError && <p className="px-1 text-xs font-medium text-destructive">{uploadError}</p>}
+          {isLoadingBackgrounds && (
+            <p className="px-1 text-xs font-medium text-rm-text-muted">
+              Loading saved backgrounds...
+            </p>
+          )}
+          {uploadError && (
+            <p className="px-1 text-xs font-medium text-destructive">
+              {uploadError}
+            </p>
+          )}
         </section>
 
         <Separator className="bg-rm-border" />
@@ -447,28 +605,39 @@ export default function SettingsCameraTab() {
         {/* Always Preview Video Toggle */}
         <section className="flex items-center justify-between p-3.5 rounded-xl bg-rm-bg-elevated/50 border border-rm-border hover:bg-rm-bg-hover transition-all max-w-[480px]">
           <div>
-            <h4 className="text-[13px] font-bold text-rm-text">Always Preview Video</h4>
-            <p className="text-[11px] text-rm-text-muted">Show preview modal before starting video chat</p>
+            <h4 className="text-[13px] font-bold text-rm-text">
+              Always Preview Video
+            </h4>
+            <p className="text-[11px] text-rm-text-muted">
+              Show preview modal before starting video chat
+            </p>
           </div>
           <button
             type="button"
             onClick={() => {
-              updateUserSettings((current: any) => ({
-                ...current,
-                alwaysPreviewVideo: !current.alwaysPreviewVideo,
-              }), settingsUserId ?? undefined);
+              updateUserSettings(
+                (current: any) => ({
+                  ...current,
+                  alwaysPreviewVideo: !current.alwaysPreviewVideo,
+                }),
+                settingsUserId ?? undefined,
+              );
             }}
             aria-label="Always preview video"
             aria-pressed={vSettings.alwaysPreviewVideo}
             className={cn(
               "relative w-10 h-5 rounded-full transition-colors duration-200 outline-none",
-              vSettings.alwaysPreviewVideo ? "bg-primary" : "bg-rm-bg-elevated border border-rm-border"
+              vSettings.alwaysPreviewVideo
+                ? "bg-primary"
+                : "bg-rm-bg-elevated border border-rm-border",
             )}
           >
-            <span className={cn(
-              "absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform duration-200",
-              vSettings.alwaysPreviewVideo && "translate-x-5"
-            )} />
+            <span
+              className={cn(
+                "absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform duration-200",
+                vSettings.alwaysPreviewVideo && "translate-x-5",
+              )}
+            />
           </button>
         </section>
       </div>

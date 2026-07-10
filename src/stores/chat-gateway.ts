@@ -6,10 +6,17 @@ import {
   shouldNativeNotifyForChannelActivity,
   shouldNativeNotifyForMessage,
 } from "@/lib/desktop-notifications";
-import { MOBILE_ACTION_TYPE_ID, showNativeDesktopToast, syncDesktopNotificationState } from "@/lib/desktop-native-sync";
+import {
+  MOBILE_ACTION_TYPE_ID,
+  showNativeDesktopToast,
+  syncDesktopNotificationState,
+} from "@/lib/desktop-native-sync";
 import { apiPut } from "@/lib/api-client";
 import { getCurrentPresencePlatform, isTauri, wsUrl } from "@/lib/platform";
-import { normalizePresencePlatforms, type PresencePlatform } from "@/lib/presence-platform";
+import {
+  normalizePresencePlatforms,
+  type PresencePlatform,
+} from "@/lib/presence-platform";
 import { fetchSocketProtocols } from "@/lib/voice/socket-ticket-client";
 import {
   areReconnectSoundsSuppressed,
@@ -25,9 +32,15 @@ import {
   playRingStart,
   playRingStop,
   playVoiceJoin,
-  playVoiceLeave
+  playVoiceLeave,
 } from "@/lib/sounds";
-import type { Channel, Notification as AppNotification, Message, Role, Server } from "@/lib/types";
+import type {
+  Channel,
+  Notification as AppNotification,
+  Message,
+  Role,
+  Server,
+} from "@/lib/types";
 import { HeartbeatManager } from "@/lib/voice/heartbeat-manager";
 import type { ChatRestActions } from "./chat-actions";
 import { useCallStore } from "./useCallStore";
@@ -44,7 +57,11 @@ export interface ChatGatewayActions {
   subscribeChannel: (channelId: string) => void;
   unsubscribeChannel: (channelId: string) => void;
   subscribeServer: (serverId: string) => void;
-  sendVoiceChannelJoin: (channelId: string, selfMute?: boolean, startedAt?: number | null) => void;
+  sendVoiceChannelJoin: (
+    channelId: string,
+    selfMute?: boolean,
+    startedAt?: number | null,
+  ) => void;
   sendVoiceChannelLeave: (channelId?: string) => void;
   sendVoiceStateUpdate: (data: {
     self_mute?: boolean;
@@ -67,14 +84,16 @@ export interface ChatGatewayActions {
 export function createChatGateway(
   get: () => ChatState,
   dispatch: (action: ChatAction) => void,
-  actions: ChatRestActions
+  actions: ChatRestActions,
 ): ChatGatewayActions {
   let ws: WebSocket | null = null;
   let seq = 0;
   // Raw heartbeat — must match setWebSocketAutoResponse pattern exactly (no extra fields)
   const HEARTBEAT_MSG = JSON.stringify({ op: 3 });
   const hb = new HeartbeatManager("ChatGW", {
-    sendBeat: () => { if (ws?.readyState === WebSocket.OPEN) ws.send(HEARTBEAT_MSG); },
+    sendBeat: () => {
+      if (ws?.readyState === WebSocket.OPEN) ws.send(HEARTBEAT_MSG);
+    },
     onZombie: () => ws?.close(),
   });
   const typingTimers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -105,11 +124,12 @@ export function createChatGateway(
 
   const syncDesktopState = async () => {
     const state = get();
-    const { unreadDmChannelIds, unreadServerChannelIds } = getUnreadChannelState({
-      lastMessageAt: state.lastMessageAt,
-      readStates: state.readStates,
-      dmChannelIds: state.dmChannels.map((dm) => dm.id),
-    });
+    const { unreadDmChannelIds, unreadServerChannelIds } =
+      getUnreadChannelState({
+        lastMessageAt: state.lastMessageAt,
+        readStates: state.readStates,
+        dmChannelIds: state.dmChannels.map((dm) => dm.id),
+      });
 
     await syncDesktopNotificationState({
       notifications: state.notifications,
@@ -144,28 +164,47 @@ export function createChatGateway(
   const handleDispatch = (d: { event: string; data: any }) => {
     if (import.meta.env.DEV) chatLog.info(`Event: ${d.event}`, d.data);
     if (typeof window !== "undefined") {
-      window.dispatchEvent(new CustomEvent("chat-gateway-event", { detail: d }));
+      window.dispatchEvent(
+        new CustomEvent("chat-gateway-event", { detail: d }),
+      );
     }
     switch (d.event) {
       case "MESSAGE_CREATE": {
         const msg = d.data as Message;
         dispatch({ type: "APPEND_MESSAGE", message: msg });
-        dispatch({ type: "CLEAR_TYPING", channelId: msg.channel_id, userId: msg.author_id });
-        dispatch({ type: "UPDATE_LAST_MESSAGE", channelId: msg.channel_id, timestamp: msg.created_at });
+        dispatch({
+          type: "CLEAR_TYPING",
+          channelId: msg.channel_id,
+          userId: msg.author_id,
+        });
+        dispatch({
+          type: "UPDATE_LAST_MESSAGE",
+          channelId: msg.channel_id,
+          timestamp: msg.created_at,
+        });
 
         const state = get();
-        const isKnown = state.channels.some(c => c.id === msg.channel_id) ||
-          state.dmChannels.some(d => d.id === msg.channel_id);
+        const isKnown =
+          state.channels.some((c) => c.id === msg.channel_id) ||
+          state.dmChannels.some((d) => d.id === msg.channel_id);
         if (!isKnown) {
           actions.loadDmChannels();
         }
 
         if (msg.channel_id === state.activeChannelId) {
-          dispatch({ type: "UPDATE_READ_STATE", channelId: msg.channel_id, timestamp: msg.created_at });
-          void apiPut(`/api/channels/${msg.channel_id}/read-state`, {}).catch(() => { });
+          dispatch({
+            type: "UPDATE_READ_STATE",
+            channelId: msg.channel_id,
+            timestamp: msg.created_at,
+          });
+          void apiPut(`/api/channels/${msg.channel_id}/read-state`, {}).catch(
+            () => {},
+          );
         }
 
-        const isDmChannel = state.dmChannels.some((dm) => dm.id === msg.channel_id);
+        const isDmChannel = state.dmChannels.some(
+          (dm) => dm.id === msg.channel_id,
+        );
         if (
           !isDmChannel &&
           msg.author_id !== state.user?.id &&
@@ -174,25 +213,41 @@ export function createChatGateway(
             channelId: msg.channel_id,
             activeChannelId: state.activeChannelId,
             focused: document.hasFocus(),
-            desktopNotificationsEnabled: useDesktopSettingsStore.getState().desktopNotifications,
+            desktopNotificationsEnabled:
+              useDesktopSettingsStore.getState().desktopNotifications,
           })
         ) {
-          const channel = state.channels.find((candidate) => candidate.id === msg.channel_id)
-            ?? Object.values(state.channelsByServerId).flat().find((candidate) => candidate.id === msg.channel_id);
+          const channel =
+            state.channels.find(
+              (candidate) => candidate.id === msg.channel_id,
+            ) ??
+            Object.values(state.channelsByServerId)
+              .flat()
+              .find((candidate) => candidate.id === msg.channel_id);
           const server = channel?.server_id
-            ? state.servers.find((candidate) => candidate.id === channel.server_id)
+            ? state.servers.find(
+                (candidate) => candidate.id === channel.server_id,
+              )
             : null;
           const title = channel?.name
             ? `${getDisplayName(msg.author, "Someone")} in #${channel.name}`
             : `${getDisplayName(msg.author, "Someone")} sent a message`;
-          const imageAttachment = msg.attachments?.find((attachment) => attachment.content_type?.startsWith("image/"));
+          const imageAttachment = msg.attachments?.find((attachment) =>
+            attachment.content_type?.startsWith("image/"),
+          );
           const body = msg.content?.trim()
-            ? server?.name ? `${server.name}\n${msg.content.slice(0, 200)}` : msg.content.slice(0, 200)
-            : imageAttachment ? "Sent a photo" : (server?.name ?? "New server message");
+            ? server?.name
+              ? `${server.name}\n${msg.content.slice(0, 200)}`
+              : msg.content.slice(0, 200)
+            : imageAttachment
+              ? "Sent a photo"
+              : (server?.name ?? "New server message");
           void showNativeDesktopToast({
             title,
             body,
-            largeBody: msg.content?.trim() ? msg.content.slice(0, 1000) : undefined,
+            largeBody: msg.content?.trim()
+              ? msg.content.slice(0, 1000)
+              : undefined,
             summary: server?.name,
             group: channel?.server_id ?? msg.channel_id,
             icon: msg.author?.avatar_url ?? undefined,
@@ -234,9 +289,13 @@ export function createChatGateway(
         typingTimers.set(
           timerKey,
           setTimeout(() => {
-            dispatch({ type: "CLEAR_TYPING", channelId: channel_id, userId: uid });
+            dispatch({
+              type: "CLEAR_TYPING",
+              channelId: channel_id,
+              userId: uid,
+            });
             typingTimers.delete(timerKey);
-          }, 8000)
+          }, 8000),
         );
         break;
       }
@@ -262,7 +321,9 @@ export function createChatGateway(
           userId: d.data.user_id,
           status: d.data.status,
           customStatus: d.data.custom_status,
-          platforms: d.data.platforms ? normalizePresencePlatforms(d.data.platforms) : undefined,
+          platforms: d.data.platforms
+            ? normalizePresencePlatforms(d.data.platforms)
+            : undefined,
         });
         if (d.data.status === "offline") {
           dispatch({ type: "USER_OFFLINE", userId: d.data.user_id });
@@ -271,7 +332,8 @@ export function createChatGateway(
           const callState = useCallStore.getState();
           if (
             callState.remoteUser?.id === d.data.user_id &&
-            (callState.status === "ringing_outgoing" || callState.status === "ringing_incoming")
+            (callState.status === "ringing_outgoing" ||
+              callState.status === "ringing_incoming")
           ) {
             chatLog.info("Remote user went offline, cancelling ringing call.");
             callState.endCall("disconnected");
@@ -287,20 +349,25 @@ export function createChatGateway(
         if (Array.isArray(d.data.users)) {
           dispatch({
             type: "SET_PRESENCE_USERS",
-            users: d.data.users.map((user: {
-              user_id: string;
-              status?: "online" | "idle" | "dnd" | "offline";
-              custom_status?: string | null;
-              platforms?: PresencePlatform[];
-            }) => ({
-              userId: user.user_id,
-              status: user.status ?? "online",
-              customStatus: user.custom_status,
-              platforms: normalizePresencePlatforms(user.platforms),
-            })),
+            users: d.data.users.map(
+              (user: {
+                user_id: string;
+                status?: "online" | "idle" | "dnd" | "offline";
+                custom_status?: string | null;
+                platforms?: PresencePlatform[];
+              }) => ({
+                userId: user.user_id,
+                status: user.status ?? "online",
+                customStatus: user.custom_status,
+                platforms: normalizePresencePlatforms(user.platforms),
+              }),
+            ),
           });
         } else {
-          dispatch({ type: "SET_ONLINE_USERS", userIds: d.data.user_ids ?? [] });
+          dispatch({
+            type: "SET_ONLINE_USERS",
+            userIds: d.data.user_ids ?? [],
+          });
         }
         break;
       case "GUILD_MEMBER_ADD":
@@ -331,13 +398,21 @@ export function createChatGateway(
           window.dispatchEvent(new CustomEvent("force-voice-disconnect"));
           dispatch({ type: "REMOVE_SERVER", serverId: removedServerId });
         } else {
-          dispatch({ type: "REMOVE_MEMBER", serverId: removedServerId, userId: removedUserId });
+          dispatch({
+            type: "REMOVE_MEMBER",
+            serverId: removedServerId,
+            userId: removedUserId,
+          });
           dispatch({ type: "USER_OFFLINE", userId: removedUserId });
         }
         break;
       }
       case "GUILD_MEMBER_UPDATE": {
-        const p = d.data as { server_id: string; user_id: string; roles?: Role[] };
+        const p = d.data as {
+          server_id: string;
+          user_id: string;
+          roles?: Role[];
+        };
         dispatch({
           type: "UPDATE_MEMBER_ROLES",
           serverId: p.server_id,
@@ -378,7 +453,10 @@ export function createChatGateway(
           username?: string;
           display_name?: string;
           avatar_url?: string;
-          avatar_display?: import("@/lib/avatar-display").AvatarDisplay | string | null;
+          avatar_display?:
+            | import("@/lib/avatar-display").AvatarDisplay
+            | string
+            | null;
           banner_url?: string;
           banner_content_type?: string;
           nameplate_url?: string;
@@ -386,10 +464,15 @@ export function createChatGateway(
           profile_accent_color?: string | null;
           profile_background_color?: string | null;
           profile_banner_color?: string | null;
-          display_name_style?: import("@/lib/profile-customization").DisplayNameStyle | string | null;
+          display_name_style?:
+            | import("@/lib/profile-customization").DisplayNameStyle
+            | string
+            | null;
           theme_preference?: string | null;
           theme_sync_enabled?: boolean;
-          media_content_filter?: import("@/lib/media-content-filter").MediaContentFilter | null;
+          media_content_filter?:
+            | import("@/lib/media-content-filter").MediaContentFilter
+            | null;
           bio?: string | null;
           pronouns?: string | null;
           updated_at?: string;
@@ -429,7 +512,10 @@ export function createChatGateway(
         dispatch({ type: "REMOVE_SERVER", serverId: d.data.id });
         break;
       case "CHANNEL_UPDATE": {
-        const { server_id, channel } = d.data as { server_id?: string; channel?: Channel };
+        const { server_id, channel } = d.data as {
+          server_id?: string;
+          channel?: Channel;
+        };
         if (channel?.id) {
           dispatch({ type: "UPSERT_CHANNEL", channel });
         } else if (server_id) {
@@ -479,7 +565,12 @@ export function createChatGateway(
         void syncDesktopState();
         break;
       case "MESSAGE_PIN":
-        dispatch({ type: "PIN_MESSAGE", messageId: d.data.id, pinned: true, fullMessage: d.data });
+        dispatch({
+          type: "PIN_MESSAGE",
+          messageId: d.data.id,
+          pinned: true,
+          fullMessage: d.data,
+        });
         break;
       case "MESSAGE_UNPIN":
         dispatch({ type: "PIN_MESSAGE", messageId: d.data.id, pinned: false });
@@ -506,8 +597,15 @@ export function createChatGateway(
         const myId = get().user?.id ?? clerkUserId;
 
         // Ignore state replays while we are rebuilding after a normal gateway reconnect.
-        if (isSoundEnabled("voiceJoinLeave") && !areReconnectSoundsSuppressed()) {
-          const sound = getVoiceChannelPresenceSound(prevMembers, nextMembers, myId);
+        if (
+          isSoundEnabled("voiceJoinLeave") &&
+          !areReconnectSoundsSuppressed()
+        ) {
+          const sound = getVoiceChannelPresenceSound(
+            prevMembers,
+            nextMembers,
+            myId,
+          );
           if (sound === "join") playVoiceJoin();
           else if (sound === "leave") playVoiceLeave();
         }
@@ -519,7 +617,10 @@ export function createChatGateway(
         dispatch({ type: "ADD_NOTIFICATION", notification: notif });
 
         // Play notification sound
-        if (isSoundEnabled("notifications") && !areReconnectSoundsSuppressed()) {
+        if (
+          isSoundEnabled("notifications") &&
+          !areReconnectSoundsSuppressed()
+        ) {
           playNotification();
         }
 
@@ -533,15 +634,17 @@ export function createChatGateway(
             notification: notif,
             activeChannelId: get().activeChannelId,
             focused: document.hasFocus(),
-            desktopNotificationsEnabled: useDesktopSettingsStore.getState().desktopNotifications,
+            desktopNotificationsEnabled:
+              useDesktopSettingsStore.getState().desktopNotifications,
           })
         ) {
           const authorName = getDisplayName(notif.from_user, "Someone");
-          const title = notif.type === "mention"
-            ? `${authorName} mentioned you`
-            : notif.type === "reply"
-              ? `${authorName} replied to you`
-              : `${authorName} sent you a direct message`;
+          const title =
+            notif.type === "mention"
+              ? `${authorName} mentioned you`
+              : notif.type === "reply"
+                ? `${authorName} replied to you`
+                : `${authorName} sent you a direct message`;
 
           void showNativeDesktopToast({
             title,
@@ -569,7 +672,15 @@ export function createChatGateway(
 
       case "CALL_RING": {
         // Incoming call
-        const { call_id, caller_id, caller_name, caller_username, caller_display_name, caller_avatar, channel_id } = d.data;
+        const {
+          call_id,
+          caller_id,
+          caller_name,
+          caller_username,
+          caller_display_name,
+          caller_avatar,
+          channel_id,
+        } = d.data;
         const callState = useCallStore.getState();
         const currentUser = get().user;
 
@@ -585,17 +696,25 @@ export function createChatGateway(
         if (isSoundEnabled("calls")) playRingStart();
         callState.setIncomingCall({
           callId: call_id,
-          remoteUser: { id: caller_id, username: caller_username ?? caller_name, display_name: caller_display_name ?? caller_name, avatar_url: caller_avatar },
+          remoteUser: {
+            id: caller_id,
+            username: caller_username ?? caller_name,
+            display_name: caller_display_name ?? caller_name,
+            avatar_url: caller_avatar,
+          },
           channelId: channel_id,
           voiceRoomId,
         });
 
-        if (shouldNativeNotifyForChannelActivity({
-          channelId: channel_id,
-          activeChannelId: get().activeChannelId,
-          focused: document.hasFocus(),
-          desktopNotificationsEnabled: useDesktopSettingsStore.getState().desktopNotifications,
-        })) {
+        if (
+          shouldNativeNotifyForChannelActivity({
+            channelId: channel_id,
+            activeChannelId: get().activeChannelId,
+            focused: document.hasFocus(),
+            desktopNotificationsEnabled:
+              useDesktopSettingsStore.getState().desktopNotifications,
+          })
+        ) {
           void showNativeDesktopToast({
             title: `Incoming call from ${caller_display_name ?? caller_username ?? caller_name}`,
             body: "Open Ralph Meet to answer.",
@@ -615,7 +734,15 @@ export function createChatGateway(
       }
       case "CALL_RINGING": {
         // Outgoing call is officially ringing on their end
-        const { call_id, callee_id, callee_name, callee_username, callee_display_name, callee_avatar, channel_id } = d.data;
+        const {
+          call_id,
+          callee_id,
+          callee_name,
+          callee_username,
+          callee_display_name,
+          callee_avatar,
+          channel_id,
+        } = d.data;
         const callState = useCallStore.getState();
         const currentUser = get().user;
 
@@ -624,7 +751,12 @@ export function createChatGateway(
 
         callState.setOutgoingCall({
           callId: call_id,
-          remoteUser: { id: callee_id, username: callee_username ?? callee_name, display_name: callee_display_name ?? callee_name, avatar_url: callee_avatar },
+          remoteUser: {
+            id: callee_id,
+            username: callee_username ?? callee_name,
+            display_name: callee_display_name ?? callee_name,
+            avatar_url: callee_avatar,
+          },
           channelId: channel_id,
           voiceRoomId,
         });
@@ -632,8 +764,15 @@ export function createChatGateway(
 
         // Navigate caller to the DM channel (replaces the old OutgoingCallModal overlay)
         const state = get();
-        if (state.activeServerId !== "@me" || state.activeChannelId !== channel_id) {
-          dispatch({ type: "SWITCH_SERVER", serverId: "@me", channelId: channel_id });
+        if (
+          state.activeServerId !== "@me" ||
+          state.activeChannelId !== channel_id
+        ) {
+          dispatch({
+            type: "SWITCH_SERVER",
+            serverId: "@me",
+            channelId: channel_id,
+          });
         }
         break;
       }
@@ -662,7 +801,14 @@ export function createChatGateway(
           // Otherwise, the ring was cancelled, declined (for callee), or timed out (for callee).
           const wasActive = callState.status !== "idle";
 
-          if (wasActive && isSoundEnabled("calls") && reason !== "busy" && reason !== "unavailable" && reason !== "invalid" && reason !== "declined") {
+          if (
+            wasActive &&
+            isSoundEnabled("calls") &&
+            reason !== "busy" &&
+            reason !== "unavailable" &&
+            reason !== "invalid" &&
+            reason !== "declined"
+          ) {
             playCallEnd();
           }
           callState.endCall(reason);
@@ -694,7 +840,10 @@ export function createChatGateway(
         break;
       }
       case 2: {
-        gatewaySessionId = typeof msg.d?.participant_id === "string" ? msg.d.participant_id : gatewaySessionId;
+        gatewaySessionId =
+          typeof msg.d?.participant_id === "string"
+            ? msg.d.participant_id
+            : gatewaySessionId;
         gatewayReady = true;
         const currentStatus = get().user?.status;
         if (currentStatus && currentStatus !== "online") {
@@ -726,7 +875,9 @@ export function createChatGateway(
 
           void Promise.allSettled([
             actions.bootstrapChat(),
-            activeChannel ? actions.loadMessages(activeChannel) : Promise.resolve(),
+            activeChannel
+              ? actions.loadMessages(activeChannel)
+              : Promise.resolve(),
           ]).finally(() => {
             release();
             if (releaseReconnectSoundSuppression === release) {
@@ -756,9 +907,9 @@ export function createChatGateway(
   let connecting = false;
   let ticketRequestGeneration = 0;
 
-  const BACKOFF_BASE = 1000;       // 1 second
-  const BACKOFF_MAX = 30_000;      // 30 seconds cap
-  const BACKOFF_JITTER = 500;      // random jitter up to 500ms
+  const BACKOFF_BASE = 1000; // 1 second
+  const BACKOFF_MAX = 30_000; // 30 seconds cap
+  const BACKOFF_JITTER = 500; // random jitter up to 500ms
 
   const getBackoffDelay = (attempt: number) => {
     const delay = Math.min(BACKOFF_BASE * Math.pow(2, attempt), BACKOFF_MAX);
@@ -773,7 +924,9 @@ export function createChatGateway(
     dispatch({ type: "SET_RECONNECT_ATTEMPT", attempt: reconnectAttempt });
 
     const delay = getBackoffDelay(reconnectAttempt - 1);
-    chatLog.info(`Reconnecting in ${Math.round(delay)}ms (attempt ${reconnectAttempt})`);
+    chatLog.info(
+      `Reconnecting in ${Math.round(delay)}ms (attempt ${reconnectAttempt})`,
+    );
 
     reconnectTimeout = setTimeout(() => {
       reconnectTimeout = null;
@@ -824,11 +977,12 @@ export function createChatGateway(
     try {
       const protocols = await fetchSocketProtocols({ audience: "global" });
       if (
-        intentionalDisconnect
-        || ws
-        || requestGeneration !== ticketRequestGeneration
-        || ticketUserId !== clerkUserId
-      ) return;
+        intentionalDisconnect ||
+        ws ||
+        requestGeneration !== ticketRequestGeneration ||
+        ticketUserId !== clerkUserId
+      )
+        return;
 
       const url = wsUrl("/api/gateway");
       ws = new WebSocket(url, protocols);
@@ -908,16 +1062,34 @@ export function createChatGateway(
     disconnectGateway,
     setClerkUserId,
     getSessionId: () => gatewaySessionId,
-    subscribeChannel: (channelId: string) => sendWhenReady({ op: 27, d: { channel_id: channelId } }),
-    unsubscribeChannel: (channelId: string) => sendWhenReady({ op: 28, d: { channel_id: channelId } }),
-    subscribeServer: (serverId: string) => sendWhenReady({ op: 35, d: { server_id: serverId } }),
-    sendVoiceChannelJoin: (channelId: string, selfMute?: boolean, startedAt?: number | null) =>
-      sendWhenReady({ op: 33, d: { channel_id: channelId, self_mute: selfMute ?? true, started_at: startedAt ?? undefined } }),
-    sendVoiceChannelLeave: (channelId?: string) => sendWhenReady({ op: 34, d: { channel_id: channelId } }),
+    subscribeChannel: (channelId: string) =>
+      sendWhenReady({ op: 27, d: { channel_id: channelId } }),
+    unsubscribeChannel: (channelId: string) =>
+      sendWhenReady({ op: 28, d: { channel_id: channelId } }),
+    subscribeServer: (serverId: string) =>
+      sendWhenReady({ op: 35, d: { server_id: serverId } }),
+    sendVoiceChannelJoin: (
+      channelId: string,
+      selfMute?: boolean,
+      startedAt?: number | null,
+    ) =>
+      sendWhenReady({
+        op: 33,
+        d: {
+          channel_id: channelId,
+          self_mute: selfMute ?? true,
+          started_at: startedAt ?? undefined,
+        },
+      }),
+    sendVoiceChannelLeave: (channelId?: string) =>
+      sendWhenReady({ op: 34, d: { channel_id: channelId } }),
     sendVoiceStateUpdate: (data) => sendWhenReady({ op: 15, d: data }),
     sendGateway,
     sendCallInitiate: (targetUserId: string, channelId: string) =>
-      sendWhenReady({ op: 36, d: { target_user_id: targetUserId, channel_id: channelId } }),
+      sendWhenReady({
+        op: 36,
+        d: { target_user_id: targetUserId, channel_id: channelId },
+      }),
     sendCallAccept: (callId: string) =>
       sendWhenReady({ op: 37, d: { call_id: callId } }),
     sendCallDecline: (callId: string) =>

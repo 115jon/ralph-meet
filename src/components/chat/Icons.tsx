@@ -64,7 +64,7 @@ import {
   XCircle as XCircleIcon,
   X as XIcon,
   Zap as ZapIcon,
-  type LucideProps
+  type LucideProps,
 } from "lucide-react";
 import { memo } from "react";
 
@@ -75,73 +75,134 @@ import { memo } from "react";
  * re-execution unless props change.
  */
 
-export const AlertTriangle = memo((props: LucideProps) => <AlertTriangleIcon {...props} />);
+export const AlertTriangle = memo((props: LucideProps) => (
+  <AlertTriangleIcon {...props} />
+));
 export const AtSign = memo((props: LucideProps) => <AtSignIcon {...props} />);
 export const Ban = memo((props: LucideProps) => <BanIcon {...props} />);
 export const Bell = memo((props: LucideProps) => <BellIcon {...props} />);
-export const CameraOff = memo((props: LucideProps) => <CameraOffIcon {...props} />);
+export const CameraOff = memo((props: LucideProps) => (
+  <CameraOffIcon {...props} />
+));
 export const Camera = memo((props: LucideProps) => <CameraIcon {...props} />);
 export const Check = memo((props: LucideProps) => <CheckIcon {...props} />);
-export const ChevronDown = memo((props: LucideProps) => <ChevronDownIcon {...props} />);
-export const ChevronRight = memo((props: LucideProps) => <ChevronRightIcon {...props} />);
-export const ChevronUp = memo((props: LucideProps) => <ChevronUpIcon {...props} />);
-export const ClipboardList = memo((props: LucideProps) => <ClipboardListIcon {...props} />);
+export const ChevronDown = memo((props: LucideProps) => (
+  <ChevronDownIcon {...props} />
+));
+export const ChevronRight = memo((props: LucideProps) => (
+  <ChevronRightIcon {...props} />
+));
+export const ChevronUp = memo((props: LucideProps) => (
+  <ChevronUpIcon {...props} />
+));
+export const ClipboardList = memo((props: LucideProps) => (
+  <ClipboardListIcon {...props} />
+));
 export const Copy = memo((props: LucideProps) => <CopyIcon {...props} />);
-export const CornerUpLeft = memo((props: LucideProps) => <CornerUpLeftIcon {...props} />);
-export const Download = memo((props: LucideProps) => <DownloadIcon {...props} />);
-export const FileIcon = memo((props: LucideProps) => <FileIconIcon {...props} />);
+export const CornerUpLeft = memo((props: LucideProps) => (
+  <CornerUpLeftIcon {...props} />
+));
+export const Download = memo((props: LucideProps) => (
+  <DownloadIcon {...props} />
+));
+export const FileIcon = memo((props: LucideProps) => (
+  <FileIconIcon {...props} />
+));
 export const Forward = memo((props: LucideProps) => <ForwardIcon {...props} />);
-export const Gamepad2 = memo((props: LucideProps) => <Gamepad2Icon {...props} />);
+export const Gamepad2 = memo((props: LucideProps) => (
+  <Gamepad2Icon {...props} />
+));
 export const Gift = memo((props: LucideProps) => <GiftIcon {...props} />);
 export const Gif = memo(({ size = 24, ...props }: LucideProps) => (
-  <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" {...props}>
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    {...props}
+  >
     <path d="M0 0h24v24H0z" fill="none" />
-    <path fill="currentColor" d="M5 21q-.825 0-1.412-.587T3 19V5q0-.825.588-1.412T5 3h14q.825 0 1.413.588T21 5v14q0 .825-.587 1.413T19 21zm6-6h1.5V9H11zm-4 0h2q.425 0 .713-.288T10 14v-2H8.5v1.5h-1v-3H10V10q0-.425-.288-.712T9 9H7q-.425 0-.712.288T6 10v4q0 .425.288.713T7 15m7 0h1.5v-2h2v-1.5h-2v-1h3V9H14z" />
+    <path
+      fill="currentColor"
+      d="M5 21q-.825 0-1.412-.587T3 19V5q0-.825.588-1.412T5 3h14q.825 0 1.413.588T21 5v14q0 .825-.587 1.413T19 21zm6-6h1.5V9H11zm-4 0h2q.425 0 .713-.288T10 14v-2H8.5v1.5h-1v-3H10V10q0-.425-.288-.712T9 9H7q-.425 0-.712.288T6 10v4q0 .425.288.713T7 15m7 0h1.5v-2h2v-1.5h-2v-1h3V9H14z"
+    />
   </svg>
 ));
 export const Hash = memo((props: LucideProps) => <HashIcon {...props} />);
-export const Headphones = memo((props: LucideProps) => <HeadphonesIcon {...props} />);
+export const Headphones = memo((props: LucideProps) => (
+  <HeadphonesIcon {...props} />
+));
 export const Home = memo((props: LucideProps) => <HomeIcon {...props} />);
 export const Info = memo((props: LucideProps) => <InfoIcon {...props} />);
 export const Link = memo((props: LucideProps) => <LinkIcon {...props} />);
 export const Loader2 = memo((props: LucideProps) => <Loader2Icon {...props} />);
-export const MailOpen = memo((props: LucideProps) => <MailOpenIcon {...props} />);
-export const Maximize2 = memo((props: LucideProps) => <Maximize2Icon {...props} />);
+export const MailOpen = memo((props: LucideProps) => (
+  <MailOpenIcon {...props} />
+));
+export const Maximize2 = memo((props: LucideProps) => (
+  <Maximize2Icon {...props} />
+));
 export const Menu = memo((props: LucideProps) => <MenuIcon {...props} />);
-export const MessageSquare = memo((props: LucideProps) => <MessageSquareIcon {...props} />);
+export const MessageSquare = memo((props: LucideProps) => (
+  <MessageSquareIcon {...props} />
+));
 export const Mic = memo((props: LucideProps) => <MicIcon {...props} />);
 export const MicOff = memo((props: LucideProps) => <MicOffIcon {...props} />);
-export const Minimize = memo((props: LucideProps) => <MinimizeIcon {...props} />);
+export const Minimize = memo((props: LucideProps) => (
+  <MinimizeIcon {...props} />
+));
 export const Monitor = memo((props: LucideProps) => <MonitorIcon {...props} />);
-export const MonitorX = memo((props: LucideProps) => <MonitorXIcon {...props} />);
-export const MoreHorizontal = memo((props: LucideProps) => <MoreHorizontalIcon {...props} />);
+export const MonitorX = memo((props: LucideProps) => (
+  <MonitorXIcon {...props} />
+));
+export const MoreHorizontal = memo((props: LucideProps) => (
+  <MoreHorizontalIcon {...props} />
+));
 export const Music = memo((props: LucideProps) => <MusicIcon {...props} />);
 export const Phone = memo((props: LucideProps) => <PhoneIcon {...props} />);
 export const Pin = memo((props: LucideProps) => <PinIcon {...props} />);
 export const Plus = memo((props: LucideProps) => <PlusIcon {...props} />);
 export const Radio = memo((props: LucideProps) => <RadioIcon {...props} />);
 export const Search = memo((props: LucideProps) => <SearchIcon {...props} />);
-export const Settings = memo((props: LucideProps) => <SettingsIcon {...props} />);
-export const Settings2 = memo((props: LucideProps) => <Settings2Icon {...props} />);
+export const Settings = memo((props: LucideProps) => (
+  <SettingsIcon {...props} />
+));
+export const Settings2 = memo((props: LucideProps) => (
+  <Settings2Icon {...props} />
+));
 export const Share2 = memo((props: LucideProps) => <Share2Icon {...props} />);
 export const Shield = memo((props: LucideProps) => <ShieldIcon {...props} />);
-export const ShieldCheck = memo((props: LucideProps) => <ShieldCheckIcon {...props} />);
+export const ShieldCheck = memo((props: LucideProps) => (
+  <ShieldCheckIcon {...props} />
+));
 export const Smile = memo((props: LucideProps) => <SmileIcon {...props} />);
-export const SignalHigh = memo((props: LucideProps) => <SignalHighIcon {...props} />);
-export const Sparkles = memo((props: LucideProps) => <SparklesIcon {...props} />);
+export const SignalHigh = memo((props: LucideProps) => (
+  <SignalHighIcon {...props} />
+));
+export const Sparkles = memo((props: LucideProps) => (
+  <SparklesIcon {...props} />
+));
 export const Speaker = memo((props: LucideProps) => <SpeakerIcon {...props} />);
 export const Sticker = memo((props: LucideProps) => <StickerIcon {...props} />);
 export const Tag = memo((props: LucideProps) => <TagIcon {...props} />);
 export const Trash2 = memo((props: LucideProps) => <Trash2Icon {...props} />);
-export const UserPlus = memo((props: LucideProps) => <UserPlusIcon {...props} />);
+export const UserPlus = memo((props: LucideProps) => (
+  <UserPlusIcon {...props} />
+));
 export const Users = memo((props: LucideProps) => <UsersIcon {...props} />);
 export const Video = memo((props: LucideProps) => <VideoIcon {...props} />);
-export const VideoOff = memo((props: LucideProps) => <VideoOffIcon {...props} />);
+export const VideoOff = memo((props: LucideProps) => (
+  <VideoOffIcon {...props} />
+));
 export const Volume2 = memo((props: LucideProps) => <Volume2Icon {...props} />);
 export const X = memo((props: LucideProps) => <XIcon {...props} />);
 export const XCircle = memo((props: LucideProps) => <XCircleIcon {...props} />);
-export const MoreVertical = memo((props: LucideProps) => <MoreVerticalIcon {...props} />);
-export const UserMinus = memo((props: LucideProps) => <UserMinusIcon {...props} />);
+export const MoreVertical = memo((props: LucideProps) => (
+  <MoreVerticalIcon {...props} />
+));
+export const UserMinus = memo((props: LucideProps) => (
+  <UserMinusIcon {...props} />
+));
 export const Zap = memo((props: LucideProps) => <ZapIcon {...props} />);
 export const Edit2 = memo((props: LucideProps) => <Edit2Icon {...props} />);
 export const Crown = memo((props: LucideProps) => <CrownIcon {...props} />);

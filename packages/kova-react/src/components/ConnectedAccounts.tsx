@@ -63,7 +63,9 @@ function displayLabel(providerId: string): string {
 
 function ProviderDisplayIcon({ provider }: { provider: string }) {
   if (provider === "credential") {
-    return <KeyIcon size={15} style={{ color: "var(--ra-color-text-secondary)" }} />;
+    return (
+      <KeyIcon size={15} style={{ color: "var(--ra-color-text-secondary)" }} />
+    );
   }
   return <ProviderIcon provider={provider} size={15} />;
 }
@@ -93,14 +95,14 @@ export function ConnectedAccounts({
       // If we get here the redirect did NOT happen (error).
       setLinkingProvider(null);
     },
-    [linkAccount, callbackURL]
+    [linkAccount, callbackURL],
   );
 
   // Filter providers: always include credential; for OAuth ones, only show if
   // configured in the <KovaAuthProvider oauthProviders> list.
   const activeOAuthIds = new Set(oauthProviders.map((p) => p.id));
   const visibleProviders = providers.filter(
-    (p) => p === "credential" || activeOAuthIds.has(p)
+    (p) => p === "credential" || activeOAuthIds.has(p),
   );
 
   const connectedIds = new Set(accounts.map((a) => a.providerId));
@@ -131,15 +133,15 @@ export function ConnectedAccounts({
   const gridStyle =
     layout === "wide"
       ? {
-        display: "grid",
-        gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))",
-        gap: 6,
-      }
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))",
+          gap: 6,
+        }
       : {
-        display: "flex",
-        flexDirection: "column" as const,
-        gap: 4,
-      };
+          display: "flex",
+          flexDirection: "column" as const,
+          gap: 4,
+        };
 
   return (
     <div

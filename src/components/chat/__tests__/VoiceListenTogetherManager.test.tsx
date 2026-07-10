@@ -110,7 +110,9 @@ describe("VoiceListenTogetherManager", () => {
         },
       },
     });
-    (window as typeof window & { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__ = {};
+    (
+      window as typeof window & { __TAURI_INTERNALS__?: unknown }
+    ).__TAURI_INTERNALS__ = {};
     localStorage.setItem("desktop_auth_token", "desktop-token-1");
   });
 
@@ -119,7 +121,8 @@ describe("VoiceListenTogetherManager", () => {
     vi.unstubAllGlobals();
     useListenTogetherStore.setState({ rooms: {} });
     localStorage.clear();
-    delete (window as typeof window & { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__;
+    delete (window as typeof window & { __TAURI_INTERNALS__?: unknown })
+      .__TAURI_INTERNALS__;
   });
 
   it("refreshes the audio stream src when the desktop auth token changes", async () => {
@@ -140,9 +143,11 @@ describe("VoiceListenTogetherManager", () => {
 
     act(() => {
       localStorage.setItem("desktop_auth_token", "desktop-token-2");
-      window.dispatchEvent(new CustomEvent("ralphmeet:desktop-token-change", {
-        detail: "desktop-token-2",
-      }));
+      window.dispatchEvent(
+        new CustomEvent("ralphmeet:desktop-token-change", {
+          detail: "desktop-token-2",
+        }),
+      );
     });
 
     await waitFor(() => {
@@ -178,7 +183,9 @@ describe("VoiceListenTogetherManager", () => {
     );
 
     await waitFor(() => {
-      expect(MockAudio.instances[0]?.src).toContain("sessionId=voice-session-1");
+      expect(MockAudio.instances[0]?.src).toContain(
+        "sessionId=voice-session-1",
+      );
     });
 
     rerender(
@@ -190,7 +197,9 @@ describe("VoiceListenTogetherManager", () => {
     );
 
     await waitFor(() => {
-      expect(MockAudio.instances[0]?.src).toContain("sessionId=voice-session-2");
+      expect(MockAudio.instances[0]?.src).toContain(
+        "sessionId=voice-session-2",
+      );
     });
   });
 });

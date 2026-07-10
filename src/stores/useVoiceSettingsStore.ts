@@ -1,4 +1,3 @@
-
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { CameraQualityId } from "@/lib/camera-quality";
@@ -101,21 +100,34 @@ interface VoiceSettingsState {
   setPeerAttenuation: (peerId: string, enabled: boolean) => void;
   setPeerAttenuationStrength: (peerId: string, strength: number) => void;
   setPeerSoundboardMuted: (peerId: string, muted: boolean) => void;
-  updateSpatialSettings: (updater: (s: SpatialAudioSettings) => SpatialAudioSettings, userId?: string) => void;
-  setSpatialManualPosition: (peerId: string, position: SpatialPosition, userId?: string) => void;
+  updateSpatialSettings: (
+    updater: (s: SpatialAudioSettings) => SpatialAudioSettings,
+    userId?: string,
+  ) => void;
+  setSpatialManualPosition: (
+    peerId: string,
+    position: SpatialPosition,
+    userId?: string,
+  ) => void;
   resetSpatialSettings: (userId?: string) => void;
 
   // Global actions
   setIsMuted: (muted: boolean) => void;
   setIsDeafened: (deafened: boolean) => void;
   setDevice: (
-    kind: 'input' | 'output' | 'video',
+    kind: "input" | "output" | "video",
     deviceId: string,
     userId?: string,
-    meta?: { label?: string; groupId?: string }
+    meta?: { label?: string; groupId?: string },
   ) => void;
-  setScreenShareDefaults: (defaults: { quality: string; withAudio: boolean }, userId?: string) => void;
-  updateUserSettings: (updater: (s: UserSettings) => UserSettings, userId?: string) => void;
+  setScreenShareDefaults: (
+    defaults: { quality: string; withAudio: boolean },
+    userId?: string,
+  ) => void;
+  updateUserSettings: (
+    updater: (s: UserSettings) => UserSettings,
+    userId?: string,
+  ) => void;
 }
 
 const defaultSettings: UserSettings = {
@@ -172,13 +184,17 @@ const defaultPeerSettings: PeerSettings = {
   soundboardMuted: false,
 };
 
-export function normalizePeerSettings(peer?: Partial<PeerSettings>): PeerSettings {
-  const volume = typeof peer?.volume === "number" ? peer.volume : defaultPeerSettings.volume;
+export function normalizePeerSettings(
+  peer?: Partial<PeerSettings>,
+): PeerSettings {
+  const volume =
+    typeof peer?.volume === "number" ? peer.volume : defaultPeerSettings.volume;
   return {
     ...defaultPeerSettings,
     ...peer,
     volume,
-    streamVolume: typeof peer?.streamVolume === "number" ? peer.streamVolume : volume,
+    streamVolume:
+      typeof peer?.streamVolume === "number" ? peer.streamVolume : volume,
   };
 }
 
@@ -188,12 +204,13 @@ function migrateRoomScopedSettings(state: VoiceSettingsState): void {
   if (!state?.userSettings) return;
 
   const roomKeys = Object.keys(state.userSettings).filter(
-    (uid) => uid.startsWith("room-") && uid !== ROOM_GUEST_SETTINGS_USER_ID
+    (uid) => uid.startsWith("room-") && uid !== ROOM_GUEST_SETTINGS_USER_ID,
   );
   if (roomKeys.length === 0) return;
 
   if (!state.userSettings[ROOM_GUEST_SETTINGS_USER_ID]) {
-    state.userSettings[ROOM_GUEST_SETTINGS_USER_ID] = state.userSettings[roomKeys[0]];
+    state.userSettings[ROOM_GUEST_SETTINGS_USER_ID] =
+      state.userSettings[roomKeys[0]];
   }
 
   for (const uid of roomKeys) {
@@ -226,23 +243,29 @@ export const useVoiceSettingsStore = create<VoiceSettingsState>()(
           Object.entries(raw.peerSettings ?? {}).map(([peerId, peer]) => [
             peerId,
             normalizePeerSettings(peer as Partial<PeerSettings>),
-          ])
+          ]),
         );
         const merged = { ...defaultSettings, ...raw, peerSettings };
         // Tag the merged object with the raw reference for identity checking
-        Object.defineProperty(merged, '__raw', { value: raw, enumerable: false });
+        Object.defineProperty(merged, "__raw", {
+          value: raw,
+          enumerable: false,
+        });
         get()._cache[uid] = merged;
         return merged;
       },
 
-      updateUserSettings: (updater: (s: UserSettings) => UserSettings, userId?: string) => {
+      updateUserSettings: (
+        updater: (s: UserSettings) => UserSettings,
+        userId?: string,
+      ) => {
         const uid = userId ?? get().currentUser;
         if (!uid) return;
         set((state) => ({
           userSettings: {
             ...state.userSettings,
-            [uid]: updater(state.userSettings[uid] || { ...defaultSettings })
-          }
+            [uid]: updater(state.userSettings[uid] || { ...defaultSettings }),
+          },
         }));
       },
 
@@ -258,10 +281,10 @@ export const useVoiceSettingsStore = create<VoiceSettingsState>()(
               ...current,
               peerSettings: {
                 ...current.peerSettings,
-                [peerId]: { ...peer, volume }
-              }
-            }
-          }
+                [peerId]: { ...peer, volume },
+              },
+            },
+          },
         }));
       },
 
@@ -277,10 +300,10 @@ export const useVoiceSettingsStore = create<VoiceSettingsState>()(
               ...current,
               peerSettings: {
                 ...current.peerSettings,
-                [peerId]: { ...peer, streamVolume }
-              }
-            }
-          }
+                [peerId]: { ...peer, streamVolume },
+              },
+            },
+          },
         }));
       },
 
@@ -296,10 +319,10 @@ export const useVoiceSettingsStore = create<VoiceSettingsState>()(
               ...current,
               peerSettings: {
                 ...current.peerSettings,
-                [peerId]: { ...peer, muted }
-              }
-            }
-          }
+                [peerId]: { ...peer, muted },
+              },
+            },
+          },
         }));
       },
 
@@ -315,10 +338,10 @@ export const useVoiceSettingsStore = create<VoiceSettingsState>()(
               ...current,
               peerSettings: {
                 ...current.peerSettings,
-                [peerId]: { ...peer, alwaysHear }
-              }
-            }
-          }
+                [peerId]: { ...peer, alwaysHear },
+              },
+            },
+          },
         }));
       },
 
@@ -334,10 +357,10 @@ export const useVoiceSettingsStore = create<VoiceSettingsState>()(
               ...current,
               peerSettings: {
                 ...current.peerSettings,
-                [peerId]: { ...peer, attenuationEnabled: enabled }
-              }
-            }
-          }
+                [peerId]: { ...peer, attenuationEnabled: enabled },
+              },
+            },
+          },
         }));
       },
 
@@ -353,10 +376,10 @@ export const useVoiceSettingsStore = create<VoiceSettingsState>()(
               ...current,
               peerSettings: {
                 ...current.peerSettings,
-                [peerId]: { ...peer, attenuationStrength: strength }
-              }
-            }
-          }
+                [peerId]: { ...peer, attenuationStrength: strength },
+              },
+            },
+          },
         }));
       },
 
@@ -372,10 +395,10 @@ export const useVoiceSettingsStore = create<VoiceSettingsState>()(
               ...current,
               peerSettings: {
                 ...current.peerSettings,
-                [peerId]: { ...peer, soundboardMuted }
-              }
-            }
-          }
+                [peerId]: { ...peer, soundboardMuted },
+              },
+            },
+          },
         }));
       },
 
@@ -457,9 +480,11 @@ export const useVoiceSettingsStore = create<VoiceSettingsState>()(
               isMuted,
               isDeafened: nextDeaf,
               // If we are NOT currently deafened, any mute toggle is "manual" and should be remembered
-              wasMutedBeforeDeafen: !nextDeaf ? isMuted : current.wasMutedBeforeDeafen
-            }
-          }
+              wasMutedBeforeDeafen: !nextDeaf
+                ? isMuted
+                : current.wasMutedBeforeDeafen,
+            },
+          },
         }));
       },
 
@@ -477,9 +502,9 @@ export const useVoiceSettingsStore = create<VoiceSettingsState>()(
                 ...current,
                 isDeafened: true,
                 isMuted: true,
-                wasMutedBeforeDeafen: current.isMuted
-              }
-            }
+                wasMutedBeforeDeafen: current.isMuted,
+              },
+            },
           }));
         } else {
           // Undeafening: restore from memory
@@ -489,9 +514,9 @@ export const useVoiceSettingsStore = create<VoiceSettingsState>()(
               [uid]: {
                 ...current,
                 isDeafened: false,
-                isMuted: current.wasMutedBeforeDeafen
-              }
-            }
+                isMuted: current.wasMutedBeforeDeafen,
+              },
+            },
           }));
         }
       },
@@ -500,9 +525,24 @@ export const useVoiceSettingsStore = create<VoiceSettingsState>()(
         const uid = userId ?? get().currentUser;
         if (!uid) return;
         const current = get().getSettings(uid);
-        const key = kind === 'input' ? 'inputDeviceId' : kind === 'output' ? 'outputDeviceId' : 'videoDeviceId';
-        const labelKey = kind === 'input' ? 'inputDeviceLabel' : kind === 'output' ? 'outputDeviceLabel' : 'videoDeviceLabel';
-        const groupKey = kind === 'input' ? 'inputDeviceGroupId' : kind === 'output' ? 'outputDeviceGroupId' : 'videoDeviceGroupId';
+        const key =
+          kind === "input"
+            ? "inputDeviceId"
+            : kind === "output"
+              ? "outputDeviceId"
+              : "videoDeviceId";
+        const labelKey =
+          kind === "input"
+            ? "inputDeviceLabel"
+            : kind === "output"
+              ? "outputDeviceLabel"
+              : "videoDeviceLabel";
+        const groupKey =
+          kind === "input"
+            ? "inputDeviceGroupId"
+            : kind === "output"
+              ? "outputDeviceGroupId"
+              : "videoDeviceGroupId";
         set((state) => ({
           userSettings: {
             ...state.userSettings,
@@ -511,8 +551,8 @@ export const useVoiceSettingsStore = create<VoiceSettingsState>()(
               [key]: deviceId,
               [labelKey]: meta?.label,
               [groupKey]: meta?.groupId,
-            }
-          }
+            },
+          },
         }));
       },
 
@@ -566,6 +606,6 @@ export const useVoiceSettingsStore = create<VoiceSettingsState>()(
         }
         return state;
       },
-    }
-  )
+    },
+  ),
 );

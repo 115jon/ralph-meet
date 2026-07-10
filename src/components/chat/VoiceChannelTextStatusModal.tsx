@@ -42,7 +42,9 @@ export default function VoiceChannelTextStatusModal({
   const preservedMedia = channel.voice_status?.media ?? null;
   const normalizedText = normalizeVoiceChannelStatusText(text) ?? "";
   const hasChanges = normalizedText !== initialText;
-  const voiceSessionHeaders = voiceSessionId ? { "X-Voice-Session-Id": voiceSessionId } : undefined;
+  const voiceSessionHeaders = voiceSessionId
+    ? { "X-Voice-Session-Id": voiceSessionId }
+    : undefined;
 
   const payload = useMemo(() => {
     if (!normalizedText && !preservedMedia) return null;
@@ -58,13 +60,19 @@ export default function VoiceChannelTextStatusModal({
     setError(null);
 
     try {
-      const updatedChannel = await apiPatch<Channel>(`/api/channels/${channel.id}/voice-status`, {
-        voice_status: payload,
-      }, { headers: voiceSessionHeaders });
+      const updatedChannel = await apiPatch<Channel>(
+        `/api/channels/${channel.id}/voice-status`,
+        {
+          voice_status: payload,
+        },
+        { headers: voiceSessionHeaders },
+      );
       dispatch({ type: "UPSERT_CHANNEL", channel: updatedChannel });
       onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to save channel status");
+      setError(
+        err instanceof Error ? err.message : "Failed to save channel status",
+      );
     } finally {
       setSaving(false);
     }
@@ -74,14 +82,22 @@ export default function VoiceChannelTextStatusModal({
     <BaseModal onClose={onClose}>
       <>
         <div
-          className={cn("fixed inset-0 z-1000 bg-black/50 backdrop-blur-sm duration-200", isClosing ? "animate-out fade-out" : "animate-in fade-in")}
+          className={cn(
+            "fixed inset-0 z-1000 bg-black/50 backdrop-blur-sm duration-200",
+            isClosing ? "animate-out fade-out" : "animate-in fade-in",
+          )}
           onClick={onClose}
           aria-hidden="true"
         />
         <div className="fixed inset-0 z-1001 flex items-center justify-center p-4">
           <dialog
             open
-            className={cn("picker-panel relative m-0 w-full max-w-[540px] rounded-[22px] border p-0 shadow-2xl outline-none backdrop-blur-2xl duration-200", isClosing ? "animate-out fade-out zoom-out-95" : "animate-in zoom-in-95")}
+            className={cn(
+              "picker-panel relative m-0 w-full max-w-[540px] rounded-[22px] border p-0 shadow-2xl outline-none backdrop-blur-2xl duration-200",
+              isClosing
+                ? "animate-out fade-out zoom-out-95"
+                : "animate-in zoom-in-95",
+            )}
             aria-labelledby="voice-channel-text-status-title"
           >
             <div className="relative rounded-t-[22px] border-b border-rm-border bg-gradient-to-b from-primary/10 to-transparent px-6 pb-7 pt-6">
@@ -101,7 +117,10 @@ export default function VoiceChannelTextStatusModal({
               </div>
 
               <div className="text-center">
-                <h2 id="voice-channel-text-status-title" className="text-[22px] font-black tracking-tight text-rm-text sm:text-[26px]">
+                <h2
+                  id="voice-channel-text-status-title"
+                  className="text-[22px] font-black tracking-tight text-rm-text sm:text-[26px]"
+                >
                   What are we chatting about?
                 </h2>
                 <p className="mt-2 text-sm text-rm-text-muted sm:text-[15px]">
@@ -111,7 +130,10 @@ export default function VoiceChannelTextStatusModal({
             </div>
 
             <div className="px-6 pb-6 pt-5">
-              <label htmlFor="voice-channel-status-text" className="mb-2 block text-sm font-bold text-rm-text">
+              <label
+                htmlFor="voice-channel-status-text"
+                className="mb-2 block text-sm font-bold text-rm-text"
+              >
                 Status
               </label>
 
@@ -119,7 +141,14 @@ export default function VoiceChannelTextStatusModal({
                 <input
                   id="voice-channel-status-text"
                   value={text}
-                  onChange={(event) => setText(event.target.value.slice(0, MAX_VOICE_CHANNEL_STATUS_TEXT))}
+                  onChange={(event) =>
+                    setText(
+                      event.target.value.slice(
+                        0,
+                        MAX_VOICE_CHANNEL_STATUS_TEXT,
+                      ),
+                    )
+                  }
                   placeholder={`Status for ${channel.name}`}
                   className="picker-search-input h-11 w-full rounded-[12px] border px-4 pr-12 text-[15px] outline-none transition placeholder:text-rm-text-muted focus:border-primary/60"
                   maxLength={MAX_VOICE_CHANNEL_STATUS_TEXT}
@@ -138,7 +167,12 @@ export default function VoiceChannelTextStatusModal({
                   <EmojiPicker
                     placement="top-end"
                     onSelect={(emoji) => {
-                      setText((current) => (current + emoji).slice(0, MAX_VOICE_CHANNEL_STATUS_TEXT));
+                      setText((current) =>
+                        (current + emoji).slice(
+                          0,
+                          MAX_VOICE_CHANNEL_STATUS_TEXT,
+                        ),
+                      );
                       setShowEmojiPicker(false);
                     }}
                     onClose={() => setShowEmojiPicker(false)}

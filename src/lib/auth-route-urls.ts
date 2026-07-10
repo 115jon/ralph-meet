@@ -3,7 +3,10 @@ export type AuthRouteSearch = {
   native_handoff?: string;
 };
 
-export function buildAuthRouteUrl(route: "/sign-in" | "/sign-up", search: AuthRouteSearch): string {
+export function buildAuthRouteUrl(
+  route: "/sign-in" | "/sign-up",
+  search: AuthRouteSearch,
+): string {
   const params = new URLSearchParams();
 
   if (search.redirect_url) {
@@ -18,7 +21,10 @@ export function buildAuthRouteUrl(route: "/sign-in" | "/sign-up", search: AuthRo
   return query ? `${route}?${query}` : route;
 }
 
-export function buildPostAuthSignInUrl(redirectUrl: string, nativeHandoff?: string): string {
+export function buildPostAuthSignInUrl(
+  redirectUrl: string,
+  nativeHandoff?: string,
+): string {
   return buildAuthRouteUrl("/sign-in", {
     redirect_url: redirectUrl,
     native_handoff: nativeHandoff,

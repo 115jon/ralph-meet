@@ -51,8 +51,20 @@ type UserProfileRow = Omit<UserProfile, "display_name_style"> & {
 
 export interface MutualInfo {
   userId: string;
-  mutualServers: { count: number; items: Array<{ id: string; name: string; icon_url: string | null }> };
-  mutualFriends: { count: number; items: Array<{ id: string; username: string; display_name: string | null; avatar_url: string | null; avatar_display: AvatarDisplay | null }> };
+  mutualServers: {
+    count: number;
+    items: Array<{ id: string; name: string; icon_url: string | null }>;
+  };
+  mutualFriends: {
+    count: number;
+    items: Array<{
+      id: string;
+      username: string;
+      display_name: string | null;
+      avatar_url: string | null;
+      avatar_display: AvatarDisplay | null;
+    }>;
+  };
 }
 
 const MAX_PREVIEW = 6;
@@ -61,12 +73,14 @@ const MAX_PREVIEW = 6;
 
 export async function getMe(
   db: D1Database,
-  userId: string
+  userId: string,
 ): Promise<UserProfile> {
   await ensureUserProfileSchema(db);
 
   const user = await db
-    .prepare(`SELECT id, username, display_name, avatar_url, avatar_display, banner_url, banner_content_type, nameplate_url, nameplate_content_type, profile_accent_color, profile_background_color, profile_banner_color, display_name_style, theme_preference, theme_sync_enabled, media_content_filter, updated_at, created_at, bio, pronouns, status, custom_status FROM users WHERE id = ?`)
+    .prepare(
+      `SELECT id, username, display_name, avatar_url, avatar_display, banner_url, banner_content_type, nameplate_url, nameplate_content_type, profile_accent_color, profile_background_color, profile_banner_color, display_name_style, theme_preference, theme_sync_enabled, media_content_filter, updated_at, created_at, bio, pronouns, status, custom_status FROM users WHERE id = ?`,
+    )
     .bind(userId)
     .first<UserProfileRow>();
 
@@ -91,35 +105,49 @@ export async function getMe(
 export async function getUserProfileMutuals(
   db: D1Database,
   targetUserId: string,
-  currentUserId: string
+  currentUserId: string,
 ): Promise<MutualInfo> {
   const results = await db.batch([
-    db.prepare(`
+    db
+      .prepare(
+        `
       SELECT COUNT(*) as count
       FROM server_members sm1
       JOIN server_members sm2 ON sm1.server_id = sm2.server_id
       WHERE sm1.user_id = ? AND sm2.user_id = ?
-    `).bind(targetUserId, currentUserId),
+    `,
+      )
+      .bind(targetUserId, currentUserId),
 
-    db.prepare(`
+    db
+      .prepare(
+        `
       SELECT s.id, s.name, s.icon_url
       FROM servers s
       JOIN server_members sm1 ON s.id = sm1.server_id
       JOIN server_members sm2 ON s.id = sm2.server_id
       WHERE sm1.user_id = ? AND sm2.user_id = ?
       LIMIT ?
-    `).bind(targetUserId, currentUserId, MAX_PREVIEW),
+    `,
+      )
+      .bind(targetUserId, currentUserId, MAX_PREVIEW),
 
-    db.prepare(`
+    db
+      .prepare(
+        `
       SELECT COUNT(*) as count
       FROM relationships r1
       JOIN relationships r2
         ON r1.target_user_id = r2.target_user_id
       WHERE r1.user_id = ? AND r1.type = 0
         AND r2.user_id = ? AND r2.type = 0
-    `).bind(targetUserId, currentUserId),
+    `,
+      )
+      .bind(targetUserId, currentUserId),
 
-    db.prepare(`
+    db
+      .prepare(
+        `
       SELECT u.id, u.username, u.display_name, u.avatar_url, u.avatar_display
       FROM users u
       JOIN relationships r1 ON u.id = r1.target_user_id
@@ -127,7 +155,9 @@ export async function getUserProfileMutuals(
       WHERE r1.user_id = ? AND r1.type = 0
         AND r2.user_id = ? AND r2.type = 0
       LIMIT ?
-    `).bind(targetUserId, currentUserId, MAX_PREVIEW),
+    `,
+      )
+      .bind(targetUserId, currentUserId, MAX_PREVIEW),
   ]);
 
   const serverCount = (results[0].results?.[0] as any)?.count || 0;
@@ -154,25 +184,38 @@ export async function updateAvatarUrl(
   db: D1Database,
   userId: string,
   avatarUrl: string,
-  avatarDisplay?: AvatarDisplay | null
-) : Promise<{ username: string | null; serverIds: string[]; avatarUrl: string; avatarDisplay: AvatarDisplay | null; updatedAt: string }> {
+  avatarDisplay?: AvatarDisplay | null,
+): Promise<{
+  username: string | null;
+  serverIds: string[];
+  avatarUrl: string;
+  avatarDisplay: AvatarDisplay | null;
+  updatedAt: string;
+}> {
   const updatedAt = new Date().toISOString();
   const serializedDisplay = serializeAvatarDisplay(avatarDisplay);
-  await db.prepare(
-    `UPDATE users SET avatar_url = ?, avatar_display = ?, updated_at = ? WHERE id = ?`
-  ).bind(avatarUrl, serializedDisplay, updatedAt, userId).run();
+  await db
+    .prepare(
+      `UPDATE users SET avatar_url = ?, avatar_display = ?, updated_at = ? WHERE id = ?`,
+    )
+    .bind(avatarUrl, serializedDisplay, updatedAt, userId)
+    .run();
 
-  const { results: memberships } = await db.prepare(
-    `SELECT server_id FROM server_members WHERE user_id = ?`
-  ).bind(userId).all();
+  const { results: memberships } = await db
+    .prepare(`SELECT server_id FROM server_members WHERE user_id = ?`)
+    .bind(userId)
+    .all();
 
-  const userRow = await db.prepare(
-    `SELECT username, avatar_display FROM users WHERE id = ?`
-  ).bind(userId).first() as { username: string; avatar_display: string | null } | null;
+  const userRow = (await db
+    .prepare(`SELECT username, avatar_display FROM users WHERE id = ?`)
+    .bind(userId)
+    .first()) as { username: string; avatar_display: string | null } | null;
 
   return {
     username: userRow?.username ?? null,
-    serverIds: (memberships ?? []).map((m: Record<string, unknown>) => m.server_id as string),
+    serverIds: (memberships ?? []).map(
+      (m: Record<string, unknown>) => m.server_id as string,
+    ),
     avatarUrl,
     avatarDisplay: normalizeAvatarDisplay(userRow?.avatar_display),
     updatedAt,
@@ -188,28 +231,50 @@ export async function updateProfileAsset(
   username: string | null;
   serverIds: string[];
   updatedAt: string;
-  user: Pick<UserProfile, "banner_url" | "banner_content_type" | "nameplate_url" | "nameplate_content_type">;
+  user: Pick<
+    UserProfile,
+    | "banner_url"
+    | "banner_content_type"
+    | "nameplate_url"
+    | "nameplate_content_type"
+  >;
 }> {
   const updatedAt = new Date().toISOString();
   const versionedUrl = withVersionedAssetUrl(asset.url, updatedAt);
   const urlColumn = `${kind}_url`;
   const contentTypeColumn = `${kind}_content_type`;
 
-  await db.prepare(
-    `UPDATE users SET ${urlColumn} = ?, ${contentTypeColumn} = ?, updated_at = ? WHERE id = ?`
-  ).bind(versionedUrl, asset.contentType, updatedAt, userId).run();
+  await db
+    .prepare(
+      `UPDATE users SET ${urlColumn} = ?, ${contentTypeColumn} = ?, updated_at = ? WHERE id = ?`,
+    )
+    .bind(versionedUrl, asset.contentType, updatedAt, userId)
+    .run();
 
-  const { results: memberships } = await db.prepare(
-    `SELECT server_id FROM server_members WHERE user_id = ?`
-  ).bind(userId).all();
+  const { results: memberships } = await db
+    .prepare(`SELECT server_id FROM server_members WHERE user_id = ?`)
+    .bind(userId)
+    .all();
 
-  const userRow = await db.prepare(
-    `SELECT username, banner_url, banner_content_type, nameplate_url, nameplate_content_type FROM users WHERE id = ?`
-  ).bind(userId).first() as Pick<UserProfile, "username" | "banner_url" | "banner_content_type" | "nameplate_url" | "nameplate_content_type"> | null;
+  const userRow = (await db
+    .prepare(
+      `SELECT username, banner_url, banner_content_type, nameplate_url, nameplate_content_type FROM users WHERE id = ?`,
+    )
+    .bind(userId)
+    .first()) as Pick<
+    UserProfile,
+    | "username"
+    | "banner_url"
+    | "banner_content_type"
+    | "nameplate_url"
+    | "nameplate_content_type"
+  > | null;
 
   return {
     username: userRow?.username ?? null,
-    serverIds: (memberships ?? []).map((m: Record<string, unknown>) => m.server_id as string),
+    serverIds: (memberships ?? []).map(
+      (m: Record<string, unknown>) => m.server_id as string,
+    ),
     updatedAt,
     user: {
       banner_url: userRow?.banner_url ?? null,
@@ -228,27 +293,49 @@ export async function clearProfileAsset(
   username: string | null;
   serverIds: string[];
   updatedAt: string;
-  user: Pick<UserProfile, "banner_url" | "banner_content_type" | "nameplate_url" | "nameplate_content_type">;
+  user: Pick<
+    UserProfile,
+    | "banner_url"
+    | "banner_content_type"
+    | "nameplate_url"
+    | "nameplate_content_type"
+  >;
 }> {
   const updatedAt = new Date().toISOString();
   const urlColumn = `${kind}_url`;
   const contentTypeColumn = `${kind}_content_type`;
 
-  await db.prepare(
-    `UPDATE users SET ${urlColumn} = NULL, ${contentTypeColumn} = NULL, updated_at = ? WHERE id = ?`
-  ).bind(updatedAt, userId).run();
+  await db
+    .prepare(
+      `UPDATE users SET ${urlColumn} = NULL, ${contentTypeColumn} = NULL, updated_at = ? WHERE id = ?`,
+    )
+    .bind(updatedAt, userId)
+    .run();
 
-  const { results: memberships } = await db.prepare(
-    `SELECT server_id FROM server_members WHERE user_id = ?`
-  ).bind(userId).all();
+  const { results: memberships } = await db
+    .prepare(`SELECT server_id FROM server_members WHERE user_id = ?`)
+    .bind(userId)
+    .all();
 
-  const userRow = await db.prepare(
-    `SELECT username, banner_url, banner_content_type, nameplate_url, nameplate_content_type FROM users WHERE id = ?`
-  ).bind(userId).first() as Pick<UserProfile, "username" | "banner_url" | "banner_content_type" | "nameplate_url" | "nameplate_content_type"> | null;
+  const userRow = (await db
+    .prepare(
+      `SELECT username, banner_url, banner_content_type, nameplate_url, nameplate_content_type FROM users WHERE id = ?`,
+    )
+    .bind(userId)
+    .first()) as Pick<
+    UserProfile,
+    | "username"
+    | "banner_url"
+    | "banner_content_type"
+    | "nameplate_url"
+    | "nameplate_content_type"
+  > | null;
 
   return {
     username: userRow?.username ?? null,
-    serverIds: (memberships ?? []).map((m: Record<string, unknown>) => m.server_id as string),
+    serverIds: (memberships ?? []).map(
+      (m: Record<string, unknown>) => m.server_id as string,
+    ),
     updatedAt,
     user: {
       banner_url: userRow?.banner_url ?? null,
@@ -263,30 +350,36 @@ export async function clearProfileAsset(
 
 export async function fetchReadStates(
   db: D1Database,
-  userId: string
+  userId: string,
 ): Promise<{
   read_states: Record<string, unknown>[];
   last_messages: Record<string, unknown>[];
 }> {
   const [readResult, latestResult] = await Promise.all([
-    db.prepare(
-      `SELECT rs.channel_id, rs.last_read_at
+    db
+      .prepare(
+        `SELECT rs.channel_id, rs.last_read_at
        FROM read_states rs
        INNER JOIN channels c ON c.id = rs.channel_id
        LEFT JOIN server_members sm ON sm.server_id = c.server_id AND sm.user_id = ?
        LEFT JOIN dm_recipients dm ON dm.channel_id = c.id AND dm.user_id = ?
-       WHERE rs.user_id = ? AND (sm.user_id IS NOT NULL OR dm.user_id IS NOT NULL)`
-    ).bind(userId, userId, userId).all(),
+       WHERE rs.user_id = ? AND (sm.user_id IS NOT NULL OR dm.user_id IS NOT NULL)`,
+      )
+      .bind(userId, userId, userId)
+      .all(),
 
-    db.prepare(
-      `SELECT m.channel_id, MAX(m.created_at) as last_message_at
+    db
+      .prepare(
+        `SELECT m.channel_id, MAX(m.created_at) as last_message_at
        FROM messages m
        INNER JOIN channels c ON c.id = m.channel_id
        LEFT JOIN server_members sm ON sm.server_id = c.server_id AND sm.user_id = ?
        LEFT JOIN dm_recipients dm ON dm.channel_id = c.id AND dm.user_id = ?
        WHERE (sm.user_id IS NOT NULL OR dm.user_id IS NOT NULL)
-       GROUP BY m.channel_id`
-    ).bind(userId, userId).all(),
+       GROUP BY m.channel_id`,
+      )
+      .bind(userId, userId)
+      .all(),
   ]);
 
   return {
@@ -306,13 +399,18 @@ export interface FormattedAuditLog {
   changes: unknown;
   reason: string | null;
   created_at: string;
-  actor: { id: string; username: string; display_name: string | null; avatar_url: string | null };
+  actor: {
+    id: string;
+    username: string;
+    display_name: string | null;
+    avatar_url: string | null;
+  };
 }
 
 export async function fetchAuditLogs(
   db: D1Database,
   serverId: string,
-  opts: { limit?: number; page?: number } = {}
+  opts: { limit?: number; page?: number } = {},
 ): Promise<FormattedAuditLog[]> {
   const limit = Math.min(opts.limit ?? 50, 100);
   const page = Math.max(opts.page ?? 1, 1);
@@ -329,7 +427,7 @@ export async function fetchAuditLogs(
        JOIN users u ON a.actor_id = u.id
        WHERE a.server_id = ?
        ORDER BY a.created_at DESC
-       LIMIT ? OFFSET ?`
+       LIMIT ? OFFSET ?`,
     )
     .bind(serverId, limit, offset)
     .all();
@@ -337,7 +435,9 @@ export async function fetchAuditLogs(
   return (results ?? []).map((row: any) => {
     let parsedChanges = null;
     if (row.changes) {
-      try { parsedChanges = JSON.parse(row.changes as string); } catch { }
+      try {
+        parsedChanges = JSON.parse(row.changes as string);
+      } catch {}
     }
 
     return {

@@ -20,17 +20,25 @@ interface CameraBackgroundListResponse {
   backgrounds: CameraBackgroundAsset[];
 }
 
-export async function listCameraBackgrounds(): Promise<CameraBackgroundAsset[]> {
-  const response = await apiGet<CameraBackgroundListResponse>("/api/camera-backgrounds");
+export async function listCameraBackgrounds(): Promise<
+  CameraBackgroundAsset[]
+> {
+  const response = await apiGet<CameraBackgroundListResponse>(
+    "/api/camera-backgrounds",
+  );
   return response.backgrounds;
 }
 
-export async function uploadCameraBackground(file: File): Promise<CameraBackgroundAsset> {
+export async function uploadCameraBackground(
+  file: File,
+): Promise<CameraBackgroundAsset> {
   const formData = new FormData();
   formData.append("file", file);
   return apiUpload<CameraBackgroundAsset>("/api/camera-backgrounds", formData);
 }
 
 export async function deleteCameraBackground(id: string): Promise<void> {
-  await apiDelete<{ ok: true }, { id: string }>("/api/camera-backgrounds", { id });
+  await apiDelete<{ ok: true }, { id: string }>("/api/camera-backgrounds", {
+    id,
+  });
 }

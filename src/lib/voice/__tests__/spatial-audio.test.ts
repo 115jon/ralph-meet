@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { calculateSpatialAudioMix, calculateSpatialPositions, spatialPanFromPosition } from "../spatial-audio";
+import {
+  calculateSpatialAudioMix,
+  calculateSpatialPositions,
+  spatialPanFromPosition,
+} from "../spatial-audio";
 
 const participants = (count: number) =>
   Array.from({ length: count }, (_, index) => ({ userId: `u${index + 1}` }));
@@ -36,7 +40,9 @@ describe("spatial audio placement", () => {
       manualPositions: {},
     });
 
-    expect(Math.abs(wide.u2.x - wide.u1.x)).toBeGreaterThan(Math.abs(narrow.u2.x - narrow.u1.x));
+    expect(Math.abs(wide.u2.x - wide.u1.x)).toBeGreaterThan(
+      Math.abs(narrow.u2.x - narrow.u1.x),
+    );
   });
 
   it("keeps grid positions within bounds", () => {
@@ -75,8 +81,16 @@ describe("spatial audio placement", () => {
   });
 
   it("calculates pan and attenuation from room-relative distance", () => {
-    const close = calculateSpatialAudioMix({ x: 50, y: 78 }, { x: 58, y: 74 }, 40);
-    const far = calculateSpatialAudioMix({ x: 50, y: 78 }, { x: 92, y: 18 }, 40);
+    const close = calculateSpatialAudioMix(
+      { x: 50, y: 78 },
+      { x: 58, y: 74 },
+      40,
+    );
+    const far = calculateSpatialAudioMix(
+      { x: 50, y: 78 },
+      { x: 92, y: 18 },
+      40,
+    );
 
     expect(close.pan).toBeGreaterThan(0);
     expect(far.pan).toBeGreaterThan(close.pan);

@@ -1,6 +1,9 @@
 import { clog } from "@/lib/console-logger";
 import { getAuthAssetUrl } from "@/lib/platform";
-import type { CameraBackgroundSetting, CustomCameraBackground } from "@/stores/useVoiceSettingsStore";
+import type {
+  CameraBackgroundSetting,
+  CustomCameraBackground,
+} from "@/stores/useVoiceSettingsStore";
 
 const bgLog = clog("CameraBackground");
 
@@ -36,7 +39,10 @@ interface SegmenterResult {
 }
 
 interface CameraSegmenter {
-  segmentForVideo: (videoFrame: TexImageSource, timestamp: number) => SegmenterResult;
+  segmentForVideo: (
+    videoFrame: TexImageSource,
+    timestamp: number,
+  ) => SegmenterResult;
 }
 
 interface LoadedBackgroundImage {
@@ -53,7 +59,9 @@ type DecodedAnimationFrame = CanvasImageSource & {
 interface LoadedAnimatedBackgroundImage {
   kind: "animated";
   decoder: {
-    decode: (options: { frameIndex: number }) => Promise<{ image: DecodedAnimationFrame }>;
+    decode: (options: {
+      frameIndex: number;
+    }) => Promise<{ image: DecodedAnimationFrame }>;
     close?: () => void;
   };
   frame: DecodedAnimationFrame;
@@ -68,7 +76,12 @@ interface LoadedAnimatedBackgroundImage {
 
 type LoadedBackground = LoadedBackgroundImage | LoadedAnimatedBackgroundImage;
 
-const ANIMATED_BACKGROUND_MIME_TYPES = new Set(["image/gif", "image/webp", "image/avif", "image/apng"]);
+const ANIMATED_BACKGROUND_MIME_TYPES = new Set([
+  "image/gif",
+  "image/webp",
+  "image/avif",
+  "image/apng",
+]);
 const DEFAULT_ANIMATION_FRAME_DURATION_MS = 100;
 const MIN_ANIMATION_FRAME_DURATION_MS = 20;
 
@@ -96,7 +109,9 @@ export function getCameraBackgroundEffectKey(
   if (setting.type === "none") return "none";
   if (setting.type === "blur") return `blur:${setting.strength}`;
 
-  const background = customBackgrounds.find((candidate) => candidate.id === setting.id);
+  const background = customBackgrounds.find(
+    (candidate) => candidate.id === setting.id,
+  );
   return background ? `image:${setting.id}:${background.createdAt}` : "none";
 }
 
@@ -114,31 +129,40 @@ function getBackgroundImageSource(
   customBackgrounds: CustomCameraBackground[],
 ): { src: string; contentType?: string } | null {
   if (setting.type !== "image") return null;
-  const background = customBackgrounds.find((candidate) => candidate.id === setting.id);
+  const background = customBackgrounds.find(
+    (candidate) => candidate.id === setting.id,
+  );
   if (!background) return null;
-  const src = background.url ? getAuthAssetUrl(background.url) : background.dataUrl;
+  const src = background.url
+    ? getAuthAssetUrl(background.url)
+    : background.dataUrl;
   return src ? { src, contentType: background.contentType } : null;
 }
 
 async function defaultCreateSegmenter(): Promise<CameraSegmenter> {
   if (!segmenterPromise) {
     segmenterPromise = (async () => {
-      const { FilesetResolver, ImageSegmenter } = await import("@mediapipe/tasks-vision");
+      const { FilesetResolver, ImageSegmenter } =
+        await import("@mediapipe/tasks-vision");
       const vision = await FilesetResolver.forVisionTasks(MEDIAPIPE_WASM_URL);
-      const create = (delegate: "GPU" | "CPU") => ImageSegmenter.createFromOptions(vision, {
-        baseOptions: {
-          modelAssetPath: SELFIE_SEGMENTER_MODEL_URL,
-          delegate,
-        },
-        runningMode: "VIDEO",
-        outputCategoryMask: true,
-        outputConfidenceMasks: true,
-      });
+      const create = (delegate: "GPU" | "CPU") =>
+        ImageSegmenter.createFromOptions(vision, {
+          baseOptions: {
+            modelAssetPath: SELFIE_SEGMENTER_MODEL_URL,
+            delegate,
+          },
+          runningMode: "VIDEO",
+          outputCategoryMask: true,
+          outputConfidenceMasks: true,
+        });
 
       try {
         return await create("GPU");
       } catch (error) {
-        bgLog.warn("GPU selfie segmentation unavailable; falling back to CPU", error);
+        bgLog.warn(
+          "GPU selfie segmentation unavailable; falling back to CPU",
+          error,
+        );
         return create("CPU");
       }
     })().catch((error) => {
@@ -150,11 +174,24 @@ async function defaultCreateSegmenter(): Promise<CameraSegmenter> {
   return segmenterPromise;
 }
 
-function getOutputSize(track: MediaStreamTrack): { width: number; height: number } {
+function getOutputSize(track: MediaStreamTrack): {
+  width: number;
+  height: number;
+} {
   const settings = track.getSettings?.() ?? {};
-  const sourceWidth = typeof settings.width === "number" && settings.width > 0 ? settings.width : MAX_EFFECT_WIDTH;
-  const sourceHeight = typeof settings.height === "number" && settings.height > 0 ? settings.height : MAX_EFFECT_HEIGHT;
-  const scale = Math.min(1, MAX_EFFECT_WIDTH / sourceWidth, MAX_EFFECT_HEIGHT / sourceHeight);
+  const sourceWidth =
+    typeof settings.width === "number" && settings.width > 0
+      ? settings.width
+      : MAX_EFFECT_WIDTH;
+  const sourceHeight =
+    typeof settings.height === "number" && settings.height > 0
+      ? settings.height
+      : MAX_EFFECT_HEIGHT;
+  const scale = Math.min(
+    1,
+    MAX_EFFECT_WIDTH / sourceWidth,
+    MAX_EFFECT_HEIGHT / sourceHeight,
+  );
 
   return {
     width: Math.max(2, Math.round(sourceWidth * scale)),
@@ -162,36 +199,86 @@ function getOutputSize(track: MediaStreamTrack): { width: number; height: number
   };
 }
 
-function drawCover(ctx: CanvasRenderingContext2D, source: CanvasImageSource, width: number, height: number, scale = 1) {
+function drawCover(
+  ctx: CanvasRenderingContext2D,
+  source: CanvasImageSource,
+  width: number,
+  height: number,
+  scale = 1,
+) {
   const anySource = source as any;
-  const sourceWidth = anySource.videoWidth || anySource.naturalWidth || anySource.displayWidth || anySource.width || width;
-  const sourceHeight = anySource.videoHeight || anySource.naturalHeight || anySource.displayHeight || anySource.height || height;
+  const sourceWidth =
+    anySource.videoWidth ||
+    anySource.naturalWidth ||
+    anySource.displayWidth ||
+    anySource.width ||
+    width;
+  const sourceHeight =
+    anySource.videoHeight ||
+    anySource.naturalHeight ||
+    anySource.displayHeight ||
+    anySource.height ||
+    height;
   const ratio = Math.max(width / sourceWidth, height / sourceHeight) * scale;
   const drawWidth = sourceWidth * ratio;
   const drawHeight = sourceHeight * ratio;
-  ctx.drawImage(source, (width - drawWidth) / 2, (height - drawHeight) / 2, drawWidth, drawHeight);
+  ctx.drawImage(
+    source,
+    (width - drawWidth) / 2,
+    (height - drawHeight) / 2,
+    drawWidth,
+    drawHeight,
+  );
 }
 
-function getTexImageSize(source: TexImageSource): { width: number; height: number } {
+function getTexImageSize(source: TexImageSource): {
+  width: number;
+  height: number;
+} {
   const anySource = source as any;
   return {
-    width: Math.max(1, anySource.videoWidth || anySource.naturalWidth || anySource.displayWidth || anySource.width || DEFAULT_MASK_DIMENSION),
-    height: Math.max(1, anySource.videoHeight || anySource.naturalHeight || anySource.displayHeight || anySource.height || DEFAULT_MASK_DIMENSION),
+    width: Math.max(
+      1,
+      anySource.videoWidth ||
+        anySource.naturalWidth ||
+        anySource.displayWidth ||
+        anySource.width ||
+        DEFAULT_MASK_DIMENSION,
+    ),
+    height: Math.max(
+      1,
+      anySource.videoHeight ||
+        anySource.naturalHeight ||
+        anySource.displayHeight ||
+        anySource.height ||
+        DEFAULT_MASK_DIMENSION,
+    ),
   };
 }
 
 function getAnimationFrameDurationMs(frame: DecodedAnimationFrame): number {
-  const durationMs = typeof frame.duration === "number" && frame.duration > 0
-    ? frame.duration / 1000
-    : DEFAULT_ANIMATION_FRAME_DURATION_MS;
+  const durationMs =
+    typeof frame.duration === "number" && frame.duration > 0
+      ? frame.duration / 1000
+      : DEFAULT_ANIMATION_FRAME_DURATION_MS;
   return Math.max(MIN_ANIMATION_FRAME_DURATION_MS, durationMs);
 }
 
-function queueNextAnimationFrame(background: LoadedAnimatedBackgroundImage, timestamp: number) {
-  if (background.stopped || background.decoding || background.nextFrameAt === null || timestamp < background.nextFrameAt) return;
+function queueNextAnimationFrame(
+  background: LoadedAnimatedBackgroundImage,
+  timestamp: number,
+) {
+  if (
+    background.stopped ||
+    background.decoding ||
+    background.nextFrameAt === null ||
+    timestamp < background.nextFrameAt
+  )
+    return;
 
   const frameIndex = background.nextFrameIndex;
-  background.decoding = background.decoder.decode({ frameIndex })
+  background.decoding = background.decoder
+    .decode({ frameIndex })
     .then(({ image }) => {
       if (background.stopped) {
         image.close?.();
@@ -234,7 +321,10 @@ function drawLoadedBackground(
   drawCover(ctx, background.image, width, height);
 }
 
-function attachBackgroundImagePlayback(image: HTMLImageElement, doc: Document): () => void {
+function attachBackgroundImagePlayback(
+  image: HTMLImageElement,
+  doc: Document,
+): () => void {
   const body = doc.body;
   if (!body?.appendChild) return () => {};
 
@@ -255,7 +345,10 @@ function attachBackgroundImagePlayback(image: HTMLImageElement, doc: Document): 
   return () => image.remove?.();
 }
 
-async function loadImage(dataUrl: string, doc: Document): Promise<LoadedBackgroundImage | null> {
+async function loadImage(
+  dataUrl: string,
+  doc: Document,
+): Promise<LoadedBackgroundImage | null> {
   const image = doc.createElement("img");
   image.decoding = "async";
   // Do NOT set crossOrigin here: the URL already contains a ?token= query param for auth.
@@ -270,7 +363,8 @@ async function loadImage(dataUrl: string, doc: Document): Promise<LoadedBackgrou
     else if (!image.complete) {
       await new Promise<void>((resolve, reject) => {
         image.onload = () => resolve();
-        image.onerror = () => reject(new Error("Could not load camera background image"));
+        image.onerror = () =>
+          reject(new Error("Could not load camera background image"));
       });
     }
     return { kind: "static", image, cleanup };
@@ -281,8 +375,12 @@ async function loadImage(dataUrl: string, doc: Document): Promise<LoadedBackgrou
   }
 }
 
-async function loadAnimatedImage(source: string, contentType?: string): Promise<LoadedAnimatedBackgroundImage | null> {
-  const mimeType = normalizeMimeType(contentType) || mimeTypeFromDataUrl(source);
+async function loadAnimatedImage(
+  source: string,
+  contentType?: string,
+): Promise<LoadedAnimatedBackgroundImage | null> {
+  const mimeType =
+    normalizeMimeType(contentType) || mimeTypeFromDataUrl(source);
   if (!ANIMATED_BACKGROUND_MIME_TYPES.has(mimeType)) return null;
 
   const ImageDecoderCtor = (globalThis as any).ImageDecoder;
@@ -295,22 +393,30 @@ async function loadAnimatedImage(source: string, contentType?: string): Promise<
     // "include" forces CORS mode which can fail when the request originates from a
     // null/opaque security context (e.g. a MediaStream processing frame in CEF).
     const response = await fetch(source, { credentials: "omit" });
-    if (!response.ok) throw new Error(`Could not fetch animated background (${response.status})`);
+    if (!response.ok)
+      throw new Error(
+        `Could not fetch animated background (${response.status})`,
+      );
 
-    const responseMimeType = normalizeMimeType(response.headers.get("Content-Type")) || mimeType;
+    const responseMimeType =
+      normalizeMimeType(response.headers.get("Content-Type")) || mimeType;
     if (!ANIMATED_BACKGROUND_MIME_TYPES.has(responseMimeType)) return null;
 
     const decoderInit = {
       data: await response.arrayBuffer(),
       type: responseMimeType,
     };
-    const createdDecoder = new ImageDecoderCtor(decoderInit) as LoadedAnimatedBackgroundImage["decoder"] & {
+    const createdDecoder = new ImageDecoderCtor(
+      decoderInit,
+    ) as LoadedAnimatedBackgroundImage["decoder"] & {
       tracks: { ready: Promise<void>; selectedTrack?: { frameCount?: number } };
     };
     decoder = createdDecoder;
     await createdDecoder.tracks.ready;
 
-    const frameCount = Number(createdDecoder.tracks.selectedTrack?.frameCount ?? 1);
+    const frameCount = Number(
+      createdDecoder.tracks.selectedTrack?.frameCount ?? 1,
+    );
     if (!Number.isFinite(frameCount) || frameCount <= 1) {
       createdDecoder.close?.();
       return null;
@@ -336,13 +442,23 @@ async function loadAnimatedImage(source: string, contentType?: string): Promise<
     return background;
   } catch (error) {
     decoder?.close?.();
-    bgLog.warn("Animated camera background failed to decode; falling back to static image", error);
+    bgLog.warn(
+      "Animated camera background failed to decode; falling back to static image",
+      error,
+    );
     return null;
   }
 }
 
-async function loadBackgroundImage(source: string, doc: Document, contentType?: string): Promise<LoadedBackground | null> {
-  return await loadAnimatedImage(source, contentType) ?? await loadImage(source, doc);
+async function loadBackgroundImage(
+  source: string,
+  doc: Document,
+  contentType?: string,
+): Promise<LoadedBackground | null> {
+  return (
+    (await loadAnimatedImage(source, contentType)) ??
+    (await loadImage(source, doc))
+  );
 }
 
 function clamp01(value: number): number {
@@ -350,13 +466,18 @@ function clamp01(value: number): number {
 }
 
 function smoothstep(edge0: number, edge1: number, value: number): number {
-  const normalized = clamp01((value - edge0) / Math.max(edge1 - edge0, Number.EPSILON));
+  const normalized = clamp01(
+    (value - edge0) / Math.max(edge1 - edge0, Number.EPSILON),
+  );
   return normalized * normalized * (3 - 2 * normalized);
 }
 
-function selectForegroundConfidenceMask(result: SegmenterResult): SegmenterMask | null {
+function selectForegroundConfidenceMask(
+  result: SegmenterResult,
+): SegmenterMask | null {
   if (!result.confidenceMasks?.length) return null;
-  if (result.confidenceMasks.length === 1 || !result.categoryMask) return result.confidenceMasks[0];
+  if (result.confidenceMasks.length === 1 || !result.categoryMask)
+    return result.confidenceMasks[0];
 
   const categoryData = result.categoryMask.getAsUint8Array();
   let bestMask: SegmenterMask | null = null;
@@ -382,8 +503,10 @@ function selectForegroundConfidenceMask(result: SegmenterResult): SegmenterMask 
       }
     }
 
-    const foregroundMean = foregroundCount > 0 ? foregroundSum / foregroundCount : 0;
-    const backgroundMean = backgroundCount > 0 ? backgroundSum / backgroundCount : 0;
+    const foregroundMean =
+      foregroundCount > 0 ? foregroundSum / foregroundCount : 0;
+    const backgroundMean =
+      backgroundCount > 0 ? backgroundSum / backgroundCount : 0;
     const separation = foregroundMean - backgroundMean;
     if (separation > bestScore) {
       bestScore = separation;
@@ -414,7 +537,14 @@ function maskToCanvas(
     const confidenceData = confidenceMask.getAsFloat32Array();
     for (let index = 0; index < width * height; index++) {
       const pixel = index * 4;
-      const alpha = Math.round(255 * smoothstep(MASK_CONFIDENCE_EDGE_MIN, MASK_CONFIDENCE_EDGE_MAX, confidenceData[index] ?? 0));
+      const alpha = Math.round(
+        255 *
+          smoothstep(
+            MASK_CONFIDENCE_EDGE_MIN,
+            MASK_CONFIDENCE_EDGE_MAX,
+            confidenceData[index] ?? 0,
+          ),
+      );
       imageData.data[pixel] = 255;
       imageData.data[pixel + 1] = 255;
       imageData.data[pixel + 2] = 255;
@@ -436,7 +566,8 @@ function maskToCanvas(
     const tempBuf2 = new Uint8Array(maskData.length);
 
     for (let iter = 0; iter < iterations; iter++) {
-      const src = iter === 0 ? currentMask : (iter % 2 === 1 ? tempBuf1 : tempBuf2);
+      const src =
+        iter === 0 ? currentMask : iter % 2 === 1 ? tempBuf1 : tempBuf2;
       const dest = iter % 2 === 0 ? tempBuf1 : tempBuf2;
 
       for (let y = 0; y < height; y++) {
@@ -448,10 +579,14 @@ function maskToCanvas(
             continue;
           }
           if (
-            x > 0 && src[idx - 1] === 0 &&
-            x < width - 1 && src[idx + 1] === 0 &&
-            y > 0 && src[idx - width] === 0 &&
-            y < height - 1 && src[idx + width] === 0
+            x > 0 &&
+            src[idx - 1] === 0 &&
+            x < width - 1 &&
+            src[idx + 1] === 0 &&
+            y > 0 &&
+            src[idx - width] === 0 &&
+            y < height - 1 &&
+            src[idx + width] === 0
           ) {
             dest[idx] = 0;
           } else {
@@ -477,7 +612,11 @@ function maskToCanvas(
 class WebGLCompositor {
   private gl: WebGLRenderingContext;
   private program: WebGLProgram;
-  private textures: { video: WebGLTexture; bg: WebGLTexture; mask: WebGLTexture };
+  private textures: {
+    video: WebGLTexture;
+    bg: WebGLTexture;
+    mask: WebGLTexture;
+  };
 
   constructor(gl: WebGLRenderingContext) {
     this.gl = gl;
@@ -539,12 +678,7 @@ class WebGLCompositor {
 
     // Setup quad vertices
     const vertices = new Float32Array([
-      -1, -1,
-       1, -1,
-      -1,  1,
-      -1,  1,
-       1, -1,
-       1,  1,
+      -1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1,
     ]);
     const buffer = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
@@ -588,7 +722,11 @@ class WebGLCompositor {
     return texture;
   }
 
-  public composite(video: TexImageSource, bg: TexImageSource, mask: TexImageSource) {
+  public composite(
+    video: TexImageSource,
+    bg: TexImageSource,
+    mask: TexImageSource,
+  ) {
     const gl = this.gl;
     gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
     gl.useProgram(this.program);
@@ -659,12 +797,19 @@ export async function createCameraBackgroundEffect(
   let compositor: WebGLCompositor | null = null;
   let ctx2d: CanvasRenderingContext2D | null = null;
 
-  const gl = canvas.getContext("webgl", { alpha: false, antialias: false, premultipliedAlpha: false });
+  const gl = canvas.getContext("webgl", {
+    alpha: false,
+    antialias: false,
+    premultipliedAlpha: false,
+  });
   if (gl) {
     try {
       compositor = new WebGLCompositor(gl);
     } catch (error) {
-      bgLog.warn("Failed to initialize WebGL compositor; falling back to 2D canvas", error);
+      bgLog.warn(
+        "Failed to initialize WebGL compositor; falling back to 2D canvas",
+        error,
+      );
     }
   }
 
@@ -708,7 +853,9 @@ export async function createCameraBackgroundEffect(
   }
 
   const imageSource = getBackgroundImageSource(setting, customBackgrounds);
-  const loadedBackgroundImage = imageSource ? await loadBackgroundImage(imageSource.src, doc, imageSource.contentType) : null;
+  const loadedBackgroundImage = imageSource
+    ? await loadBackgroundImage(imageSource.src, doc, imageSource.contentType)
+    : null;
 
   video.muted = true;
   video.playsInline = true;
@@ -717,7 +864,10 @@ export async function createCameraBackgroundEffect(
   try {
     await video.play();
   } catch (error) {
-    bgLog.warn("Camera background processor could not start video playback", error);
+    bgLog.warn(
+      "Camera background processor could not start video playback",
+      error,
+    );
     loadedBackgroundImage?.cleanup();
     video.srcObject = null;
     return null;
@@ -732,8 +882,12 @@ export async function createCameraBackgroundEffect(
   }
   track.contentHint = "motion";
 
-  const requestAnimationFrame = options.requestAnimationFrame ?? globalThis.requestAnimationFrame?.bind(globalThis);
-  const cancelAnimationFrame = options.cancelAnimationFrame ?? globalThis.cancelAnimationFrame?.bind(globalThis);
+  const requestAnimationFrame =
+    options.requestAnimationFrame ??
+    globalThis.requestAnimationFrame?.bind(globalThis);
+  const cancelAnimationFrame =
+    options.cancelAnimationFrame ??
+    globalThis.cancelAnimationFrame?.bind(globalThis);
   const now = options.now ?? (() => performance.now());
   let raf = 0;
   let stopped = false;
@@ -749,7 +903,12 @@ export async function createCameraBackgroundEffect(
         const result = segmenter.segmentForVideo(video, timestamp);
         const foregroundConfidenceMask = selectForegroundConfidenceMask(result);
         if (result.categoryMask || foregroundConfidenceMask) {
-          maskToCanvas(result.categoryMask, foregroundConfidenceMask, maskCanvas, maskCtx);
+          maskToCanvas(
+            result.categoryMask,
+            foregroundConfidenceMask,
+            maskCanvas,
+            maskCtx,
+          );
           hasMask = true;
         } else {
           hasMask = false;
@@ -764,7 +923,13 @@ export async function createCameraBackgroundEffect(
     // Render background onto bgCanvas
     if (setting.type === "image" && loadedBackgroundImage) {
       bgCtx.filter = "none";
-      drawLoadedBackground(bgCtx, loadedBackgroundImage, width, height, timestamp);
+      drawLoadedBackground(
+        bgCtx,
+        loadedBackgroundImage,
+        width,
+        height,
+        timestamp,
+      );
     } else if (setting.type === "blur") {
       bgCtx.filter = `blur(${BLUR_BACKGROUND_PX[setting.strength]}px)`;
       drawCover(bgCtx, video, width, height, BLUR_BACKGROUND_SCALE);

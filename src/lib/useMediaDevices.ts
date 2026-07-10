@@ -52,45 +52,69 @@ if (typeof navigator !== "undefined" && navigator.mediaDevices) {
   // Quick permission check — sets hasMic/hasCam flags synchronously-ish
   if (navigator.permissions?.query) {
     Promise.all([
-      navigator.permissions.query({ name: "microphone" as PermissionName }).catch(() => null),
-      navigator.permissions.query({ name: "camera" as PermissionName }).catch(() => null),
-    ]).then(([micPerm, camPerm]) => {
-      const hasMic = micPerm?.state === "granted";
-      const hasCam = camPerm?.state === "granted";
-      if (hasMic || hasCam) {
-        useMediaDeviceStore.getState()._update({ hasMicrophone: hasMic, hasCamera: hasCam });
-      }
-    }).catch(() => { /* not supported — fall through to enumerateDevices */ });
+      navigator.permissions
+        .query({ name: "microphone" as PermissionName })
+        .catch(() => null),
+      navigator.permissions
+        .query({ name: "camera" as PermissionName })
+        .catch(() => null),
+    ])
+      .then(([micPerm, camPerm]) => {
+        const hasMic = micPerm?.state === "granted";
+        const hasCam = camPerm?.state === "granted";
+        if (hasMic || hasCam) {
+          useMediaDeviceStore
+            .getState()
+            ._update({ hasMicrophone: hasMic, hasCamera: hasCam });
+        }
+      })
+      .catch(() => {
+        /* not supported — fall through to enumerateDevices */
+      });
   }
 
   // Full enumerate for device labels — slower but needed for the device picker menus.
   // hasMicrophone/hasCamera may already be true from the permission check above,
   // so this call only blocks device label display, not join/publish flow.
   if (navigator.mediaDevices.enumerateDevices) {
-    navigator.mediaDevices.enumerateDevices().then((devices) => {
-      const hasMic = devices.some((d) => d.kind === "audioinput");
-      const hasCam = devices.some((d) => d.kind === "videoinput");
-      useMediaDeviceStore.getState()._update({ hasMicrophone: hasMic, hasCamera: hasCam });
-    }).catch(() => { /* ignore — we'll retry on full mount */ });
+    navigator.mediaDevices
+      .enumerateDevices()
+      .then((devices) => {
+        const hasMic = devices.some((d) => d.kind === "audioinput");
+        const hasCam = devices.some((d) => d.kind === "videoinput");
+        useMediaDeviceStore
+          .getState()
+          ._update({ hasMicrophone: hasMic, hasCamera: hasCam });
+      })
+      .catch(() => {
+        /* ignore — we'll retry on full mount */
+      });
 
     // Keep the store current when devices are plugged/unplugged, even before
     // any component mounts useMediaDevices().
     navigator.mediaDevices.addEventListener("devicechange", () => {
-      navigator.mediaDevices.enumerateDevices().then((devices) => {
-        const hasMic = devices.some((d) => d.kind === "audioinput");
-        const hasCam = devices.some((d) => d.kind === "videoinput");
-        useMediaDeviceStore.getState()._update({ hasMicrophone: hasMic, hasCamera: hasCam });
-      }).catch(() => { });
+      navigator.mediaDevices
+        .enumerateDevices()
+        .then((devices) => {
+          const hasMic = devices.some((d) => d.kind === "audioinput");
+          const hasCam = devices.some((d) => d.kind === "videoinput");
+          useMediaDeviceStore
+            .getState()
+            ._update({ hasMicrophone: hasMic, hasCamera: hasCam });
+        })
+        .catch(() => {});
     });
   }
 }
 
 /** Read-only selector for components that only need hasMicrophone / hasCamera */
 export function useDeviceAvailability() {
-  return useMediaDeviceStore(useShallow((s) => ({
-    hasMicrophone: s.hasMicrophone,
-    hasCamera: s.hasCamera,
-  })));
+  return useMediaDeviceStore(
+    useShallow((s) => ({
+      hasMicrophone: s.hasMicrophone,
+      hasCamera: s.hasCamera,
+    })),
+  );
 }
 
 interface AudioConstraintOptions {
@@ -114,28 +138,43 @@ export function useMediaDevices(): MediaDeviceState {
 
     const enumerate = async () => {
       try {
-        if (typeof navigator === "undefined" || !navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) {
-          mediaLog.warn("navigator.mediaDevices.enumerateDevices is not supported in this environment");
+        if (
+          typeof navigator === "undefined" ||
+          !navigator.mediaDevices ||
+          !navigator.mediaDevices.enumerateDevices
+        ) {
+          mediaLog.warn(
+            "navigator.mediaDevices.enumerateDevices is not supported in this environment",
+          );
           update({ hasMicrophone: false, hasCamera: false });
           return;
         }
 
         mediaLog.debug("Requesting device list...");
         const snapshot = await getMediaDeviceSnapshot();
-        mediaLog.debug("Raw devices:", JSON.stringify(snapshot.rawDevices.map(d => ({
-          kind: d.kind,
-          deviceId: d.deviceId?.substring(0, 12) + "...",
-          groupId: d.groupId?.substring(0, 8) + "...",
-          label: d.label || "(empty)",
-        }))));
+        mediaLog.debug(
+          "Raw devices:",
+          JSON.stringify(
+            snapshot.rawDevices.map((d) => ({
+              kind: d.kind,
+              deviceId: d.deviceId?.substring(0, 12) + "...",
+              groupId: d.groupId?.substring(0, 8) + "...",
+              label: d.label || "(empty)",
+            })),
+          ),
+        );
 
         mediaLog.debug("Found counts:", {
           mics: snapshot.audioInputs.length,
           cams: snapshot.videoInputs.length,
           speakers: snapshot.audioOutputs.length,
           nativeAudioDevices: snapshot.nativeAudioDevices.length,
-          nativeAudioInputs: snapshot.nativeAudioDevices.filter((device) => device.kind === "audioinput").length,
-          nativeAudioOutputs: snapshot.nativeAudioDevices.filter((device) => device.kind === "audiooutput").length,
+          nativeAudioInputs: snapshot.nativeAudioDevices.filter(
+            (device) => device.kind === "audioinput",
+          ).length,
+          nativeAudioOutputs: snapshot.nativeAudioDevices.filter(
+            (device) => device.kind === "audiooutput",
+          ).length,
         });
 
         update({
@@ -173,7 +212,7 @@ export function useMediaDevices(): MediaDeviceState {
         };
         status.addEventListener("change", onChange);
         permissionCleanups.push(() =>
-          status.removeEventListener("change", onChange)
+          status.removeEventListener("change", onChange),
         );
       } catch {
         // permissions.query not supported for this name — skip
@@ -208,7 +247,7 @@ export function useMediaDevices(): MediaDeviceState {
 /** Apply audio constraints to an existing stream when settings change */
 export function useAudioConstraintSync(
   stream: MediaStream | null,
-  opts: AudioConstraintOptions
+  opts: AudioConstraintOptions,
 ) {
   useEffect(() => {
     if (!stream) return;
@@ -224,5 +263,10 @@ export function useAudioConstraintSync(
       .catch((err) => {
         mediaLog.warn("Failed to apply audio constraints:", err);
       });
-  }, [stream, opts.noiseSuppression, opts.echoCancellation, opts.autoGainControl]);
+  }, [
+    stream,
+    opts.noiseSuppression,
+    opts.echoCancellation,
+    opts.autoGainControl,
+  ]);
 }

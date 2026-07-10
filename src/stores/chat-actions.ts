@@ -16,31 +16,81 @@ import type {
 import { useMediaSafetySettingsStore } from "./useMediaSafetySettingsStore";
 
 export interface ChatRestActions {
-  sendMessage: (channelId: string, content: string, replyToId?: string, replyTo?: Message, attachmentIds?: string[], optimisticAttachments?: Attachment[], nsfwAttachmentIds?: string[]) => Promise<void>;
+  sendMessage: (
+    channelId: string,
+    content: string,
+    replyToId?: string,
+    replyTo?: Message,
+    attachmentIds?: string[],
+    optimisticAttachments?: Attachment[],
+    nsfwAttachmentIds?: string[],
+  ) => Promise<void>;
   sendTyping: (channelId: string) => Promise<void>;
-  addReaction: (channelId: string, messageId: string, emoji: string) => Promise<void>;
-  removeReaction: (channelId: string, messageId: string, emoji: string) => Promise<void>;
+  addReaction: (
+    channelId: string,
+    messageId: string,
+    emoji: string,
+  ) => Promise<void>;
+  removeReaction: (
+    channelId: string,
+    messageId: string,
+    emoji: string,
+  ) => Promise<void>;
   deleteMessage: (channelId: string, messageId: string) => Promise<void>;
   editMessage: (messageId: string, content: string) => Promise<void>;
   removeEmbeds: (channelId: string, messageId: string) => Promise<void>;
-  createMessageShare: (messageId: string, expires?: "7d" | "30d" | "90d" | "never") => Promise<string>;
-  loadMessages: (channelId: string, before?: string) => Promise<{ messages: Message[]; hasMoreBefore: boolean; hasMoreAfter: boolean }>;
-  loadMessagesAround: (channelId: string, messageId: string) => Promise<{ hasMoreBefore: boolean; hasMoreAfter: boolean }>;
-  loadMessagesAfter: (channelId: string, after: string) => Promise<{ hasMoreAfter: boolean }>;
+  createMessageShare: (
+    messageId: string,
+    expires?: "7d" | "30d" | "90d" | "never",
+  ) => Promise<string>;
+  loadMessages: (
+    channelId: string,
+    before?: string,
+  ) => Promise<{
+    messages: Message[];
+    hasMoreBefore: boolean;
+    hasMoreAfter: boolean;
+  }>;
+  loadMessagesAround: (
+    channelId: string,
+    messageId: string,
+  ) => Promise<{ hasMoreBefore: boolean; hasMoreAfter: boolean }>;
+  loadMessagesAfter: (
+    channelId: string,
+    after: string,
+  ) => Promise<{ hasMoreAfter: boolean }>;
   loadServers: () => Promise<void>;
-  loadChannels: (serverId: string, options?: { force?: boolean }) => Promise<void>;
-  loadMembers: (serverId: string, options?: { force?: boolean }) => Promise<void>;
+  loadChannels: (
+    serverId: string,
+    options?: { force?: boolean },
+  ) => Promise<void>;
+  loadMembers: (
+    serverId: string,
+    options?: { force?: boolean },
+  ) => Promise<void>;
   createServer: (name: string, iconUrl?: string) => Promise<Server | null>;
-  createChannel: (serverId: string, name: string, type?: string, categoryId?: string) => Promise<Channel | null>;
+  createChannel: (
+    serverId: string,
+    name: string,
+    type?: string,
+    categoryId?: string,
+  ) => Promise<Channel | null>;
   deleteChannel: (channelId: string) => Promise<void>;
   createCategory: (serverId: string, name: string) => Promise<Category | null>;
   deleteCategory: (serverId: string, categoryId: string) => Promise<void>;
-  updateStatus: (status: "online" | "idle" | "dnd" | "offline", custom_status?: string | null) => void;
+  updateStatus: (
+    status: "online" | "idle" | "dnd" | "offline",
+    custom_status?: string | null,
+  ) => void;
   loadProfile: () => Promise<void>;
   loadCurrentUser: () => Promise<void>;
   loadReadStates: () => Promise<void>;
   markChannelRead: (channelId: string) => void;
-  markChannelUnread: (channelId: string, messageId: string, messageCreatedAt: string) => Promise<void>;
+  markChannelUnread: (
+    channelId: string,
+    messageId: string,
+    messageCreatedAt: string,
+  ) => Promise<void>;
   pinMessage: (channelId: string, messageId: string) => Promise<void>;
   unpinMessage: (channelId: string, messageId: string) => Promise<void>;
   loadPins: (channelId: string, force?: boolean) => Promise<void>;
@@ -48,10 +98,20 @@ export interface ChatRestActions {
   loadRelationships: () => Promise<void>;
   openDm: (targetUserId: string) => Promise<string | null>;
   loadNotifications: () => Promise<void>;
-  bootstrapChat: (options?: { includeNotifications?: boolean }) => Promise<void>;
+  bootstrapChat: (options?: {
+    includeNotifications?: boolean;
+  }) => Promise<void>;
   markNotificationsRead: (ids?: string[]) => Promise<void>;
   clearNotifications: () => Promise<void>;
-  reorderChannels: (serverId: string, channels?: Array<{ id: string; position: number; category_id: string | null }>, categories?: Array<{ id: string; rank: number }>) => Promise<void>;
+  reorderChannels: (
+    serverId: string,
+    channels?: Array<{
+      id: string;
+      position: number;
+      category_id: string | null;
+    }>,
+    categories?: Array<{ id: string; rank: number }>,
+  ) => Promise<void>;
 }
 
 type MessagePage = {
@@ -60,7 +120,10 @@ type MessagePage = {
   hasMoreAfter: boolean;
 };
 
-function normalizeMessagePage(data: Message[] | Partial<MessagePage> | null | undefined, limit = 50): MessagePage {
+function normalizeMessagePage(
+  data: Message[] | Partial<MessagePage> | null | undefined,
+  limit = 50,
+): MessagePage {
   if (Array.isArray(data)) {
     return {
       messages: data,
@@ -72,24 +135,29 @@ function normalizeMessagePage(data: Message[] | Partial<MessagePage> | null | un
   const messages = Array.isArray(data?.messages) ? data.messages : [];
   return {
     messages,
-    hasMoreBefore: typeof data?.hasMoreBefore === "boolean" ? data.hasMoreBefore : messages.length >= limit,
-    hasMoreAfter: typeof data?.hasMoreAfter === "boolean" ? data.hasMoreAfter : false,
+    hasMoreBefore:
+      typeof data?.hasMoreBefore === "boolean"
+        ? data.hasMoreBefore
+        : messages.length >= limit,
+    hasMoreAfter:
+      typeof data?.hasMoreAfter === "boolean" ? data.hasMoreAfter : false,
   };
 }
 
 export function createChatActions(
   get: () => ChatState,
-  dispatch: (action: ChatAction) => void
+  dispatch: (action: ChatAction) => void,
 ): ChatRestActions {
   let inFlightBootstrap: Promise<void> | null = null;
 
   const syncDesktopNotifications = async () => {
     const state = get();
-    const { unreadDmChannelIds, unreadServerChannelIds } = getUnreadChannelState({
-      lastMessageAt: state.lastMessageAt,
-      readStates: state.readStates,
-      dmChannelIds: state.dmChannels.map((dm) => dm.id),
-    });
+    const { unreadDmChannelIds, unreadServerChannelIds } =
+      getUnreadChannelState({
+        lastMessageAt: state.lastMessageAt,
+        readStates: state.readStates,
+        dmChannelIds: state.dmChannels.map((dm) => dm.id),
+      });
 
     await syncDesktopNotificationState({
       notifications: state.notifications,
@@ -98,7 +166,15 @@ export function createChatActions(
     });
   };
 
-  const sendMessage = async (channelId: string, content: string, replyToId?: string, replyToMsg?: Message, attachmentIds?: string[], optimisticAttachments?: Attachment[], nsfwAttachmentIds?: string[]) => {
+  const sendMessage = async (
+    channelId: string,
+    content: string,
+    replyToId?: string,
+    replyToMsg?: Message,
+    attachmentIds?: string[],
+    optimisticAttachments?: Attachment[],
+    nsfwAttachmentIds?: string[],
+  ) => {
     const nonce = crypto.randomUUID();
     const user = get().user;
 
@@ -106,20 +182,24 @@ export function createChatActions(
       id: `pending-${nonce}`,
       channel_id: channelId,
       author_id: user?.id ?? "",
-      author: user ? {
-        id: user.id,
-        username: user.username,
-        display_name: user.display_name,
-        avatar_url: user.avatar_url,
-      } : undefined,
+      author: user
+        ? {
+            id: user.id,
+            username: user.username,
+            display_name: user.display_name,
+            avatar_url: user.avatar_url,
+          }
+        : undefined,
       content,
       reply_to_id: replyToId,
-      reply_to: replyToMsg ? {
-        id: replyToMsg.id,
-        content: replyToMsg.content.slice(0, 200),
-        author_id: replyToMsg.author_id,
-        author: replyToMsg.author,
-      } as Message : undefined,
+      reply_to: replyToMsg
+        ? ({
+            id: replyToMsg.id,
+            content: replyToMsg.content.slice(0, 200),
+            author_id: replyToMsg.author_id,
+            author: replyToMsg.author,
+          } as Message)
+        : undefined,
       is_pinned: false,
       created_at: new Date().toISOString(),
       attachments: optimisticAttachments ?? [],
@@ -146,44 +226,66 @@ export function createChatActions(
   const editMessage = async (messageId: string, content: string) => {
     const channelId = get().activeChannelId;
     if (!channelId) return;
-    await apiPatch(`/api/channels/${channelId}/messages`, { message_id: messageId, content });
+    await apiPatch(`/api/channels/${channelId}/messages`, {
+      message_id: messageId,
+      content,
+    });
   };
 
   const deleteMessage = async (channelId: string, messageId: string) => {
-    await apiDelete(`/api/channels/${channelId}/messages`, { message_id: messageId });
+    await apiDelete(`/api/channels/${channelId}/messages`, {
+      message_id: messageId,
+    });
   };
 
   const removeEmbeds = async (channelId: string, messageId: string) => {
     // Optimistically clear embeds locally
     dispatch({ type: "UPDATE_MESSAGE", id: messageId, embeds: [] });
     try {
-      await apiPatch(`/api/channels/${channelId}/messages`, { message_id: messageId, embeds: [] });
+      await apiPatch(`/api/channels/${channelId}/messages`, {
+        message_id: messageId,
+        embeds: [],
+      });
     } catch {
       // If error, the MESSAGE_UPDATE broadcast won't come, but we already cleared locally
     }
   };
 
-  const addReaction = async (channelId: string, messageId: string, emoji: string) => {
+  const addReaction = async (
+    channelId: string,
+    messageId: string,
+    emoji: string,
+  ) => {
     const user = get().user;
     if (!user) return;
 
     dispatch({ type: "ADD_REACTION", messageId, emoji, userId: user.id });
 
     try {
-      await apiPut(`/api/channels/${channelId}/reactions`, { message_id: messageId, emoji });
+      await apiPut(`/api/channels/${channelId}/reactions`, {
+        message_id: messageId,
+        emoji,
+      });
     } catch {
       dispatch({ type: "REMOVE_REACTION", messageId, emoji, userId: user.id });
     }
   };
 
-  const removeReaction = async (channelId: string, messageId: string, emoji: string) => {
+  const removeReaction = async (
+    channelId: string,
+    messageId: string,
+    emoji: string,
+  ) => {
     const user = get().user;
     if (!user) return;
 
     dispatch({ type: "REMOVE_REACTION", messageId, emoji, userId: user.id });
 
     try {
-      await apiDelete(`/api/channels/${channelId}/reactions`, { message_id: messageId, emoji });
+      await apiDelete(`/api/channels/${channelId}/reactions`, {
+        message_id: messageId,
+        emoji,
+      });
     } catch {
       dispatch({ type: "ADD_REACTION", messageId, emoji, userId: user.id });
     }
@@ -195,11 +297,16 @@ export function createChatActions(
     });
   };
 
-  const loadMessages = async (channelId: string, before?: string): Promise<MessagePage> => {
+  const loadMessages = async (
+    channelId: string,
+    before?: string,
+  ): Promise<MessagePage> => {
     const params = new URLSearchParams({ limit: "50" });
     if (before) params.set("before", before);
     try {
-      const data = await apiGet<MessagePage | Message[]>(`/api/channels/${channelId}/messages?${params}`);
+      const data = await apiGet<MessagePage | Message[]>(
+        `/api/channels/${channelId}/messages?${params}`,
+      );
       const normalized = normalizeMessagePage(data);
       const messages = normalized.messages;
       if (get().activeChannelId !== channelId) {
@@ -214,7 +321,12 @@ export function createChatActions(
           hasMoreAfter: normalized.hasMoreAfter,
         });
       } else {
-        dispatch({ type: "PREPEND_MESSAGES", messages, channelId, hasMoreBefore: normalized.hasMoreBefore });
+        dispatch({
+          type: "PREPEND_MESSAGES",
+          messages,
+          channelId,
+          hasMoreBefore: normalized.hasMoreBefore,
+        });
       }
       return normalized;
     } catch {
@@ -224,11 +336,11 @@ export function createChatActions(
 
   const loadMessagesAround = async (
     channelId: string,
-    messageId: string
+    messageId: string,
   ): Promise<{ hasMoreBefore: boolean; hasMoreAfter: boolean }> => {
     try {
       const data = await apiGet<MessagePage | Message[]>(
-        `/api/channels/${channelId}/messages?around=${encodeURIComponent(messageId)}`
+        `/api/channels/${channelId}/messages?around=${encodeURIComponent(messageId)}`,
       );
       const normalized = normalizeMessagePage(data);
       if (get().activeChannelId === channelId) {
@@ -240,7 +352,10 @@ export function createChatActions(
           hasMoreAfter: normalized.hasMoreAfter,
         });
       }
-      return { hasMoreBefore: normalized.hasMoreBefore, hasMoreAfter: normalized.hasMoreAfter };
+      return {
+        hasMoreBefore: normalized.hasMoreBefore,
+        hasMoreAfter: normalized.hasMoreAfter,
+      };
     } catch {
       return { hasMoreBefore: false, hasMoreAfter: false };
     }
@@ -248,15 +363,20 @@ export function createChatActions(
 
   const loadMessagesAfter = async (
     channelId: string,
-    after: string
+    after: string,
   ): Promise<{ hasMoreAfter: boolean }> => {
     try {
       const data = await apiGet<MessagePage | Message[]>(
-        `/api/channels/${channelId}/messages?after=${encodeURIComponent(after)}&limit=50`
+        `/api/channels/${channelId}/messages?after=${encodeURIComponent(after)}&limit=50`,
       );
       const normalized = normalizeMessagePage(data);
       if (get().activeChannelId === channelId) {
-        dispatch({ type: "APPEND_MESSAGES_AFTER", messages: normalized.messages, channelId, hasMoreAfter: normalized.hasMoreAfter });
+        dispatch({
+          type: "APPEND_MESSAGES_AFTER",
+          messages: normalized.messages,
+          channelId,
+          hasMoreAfter: normalized.hasMoreAfter,
+        });
       }
       return { hasMoreAfter: normalized.hasMoreAfter };
     } catch {
@@ -271,30 +391,58 @@ export function createChatActions(
       if (Array.isArray(servers)) {
         dispatch({ type: "SET_SERVERS", servers });
       }
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
   };
 
-  const loadChannels = async (serverId: string, options?: { force?: boolean }) => {
+  const loadChannels = async (
+    serverId: string,
+    options?: { force?: boolean },
+  ) => {
     if (!options?.force && get().channelsLoadedByServerId[serverId]) return;
 
     try {
-      const data = await apiGet<{ channels: Channel[]; categories?: Category[] }>(`/api/servers/${serverId}/channels`);
-      dispatch({ type: "SET_CHANNELS_AND_CATEGORIES", serverId, channels: data.channels ?? [], categories: data.categories ?? [] });
-    } catch { /* ignore */ }
+      const data = await apiGet<{
+        channels: Channel[];
+        categories?: Category[];
+      }>(`/api/servers/${serverId}/channels`);
+      dispatch({
+        type: "SET_CHANNELS_AND_CATEGORIES",
+        serverId,
+        channels: data.channels ?? [],
+        categories: data.categories ?? [],
+      });
+    } catch {
+      /* ignore */
+    }
   };
 
-  const loadMembers = async (serverId: string, options?: { force?: boolean }) => {
+  const loadMembers = async (
+    serverId: string,
+    options?: { force?: boolean },
+  ) => {
     if (!options?.force && get().membersLoadedByServerId[serverId]) return;
 
     try {
-      const members = await apiGet<Array<{ user: User; role: number }>>(`/api/servers/${serverId}/members`);
+      const members = await apiGet<Array<{ user: User; role: number }>>(
+        `/api/servers/${serverId}/members`,
+      );
       dispatch({ type: "SET_MEMBERS", serverId, members });
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
   };
 
-  const createServer = async (name: string, iconUrl?: string): Promise<Server | null> => {
+  const createServer = async (
+    name: string,
+    iconUrl?: string,
+  ): Promise<Server | null> => {
     try {
-      const server = await apiPost<Server>("/api/servers", { name, icon_url: iconUrl });
+      const server = await apiPost<Server>("/api/servers", {
+        name,
+        icon_url: iconUrl,
+      });
       dispatch({ type: "ADD_SERVER", server });
       return server;
     } catch {
@@ -302,7 +450,12 @@ export function createChatActions(
     }
   };
 
-  const createChannel = async (serverId: string, name: string, type?: string, categoryId?: string): Promise<Channel | null> => {
+  const createChannel = async (
+    serverId: string,
+    name: string,
+    type?: string,
+    categoryId?: string,
+  ): Promise<Channel | null> => {
     const tempId = `temp-${crypto.randomUUID()}`;
     const tempChannel: Channel = {
       id: tempId,
@@ -316,12 +469,19 @@ export function createChatActions(
     dispatch({ type: "ADD_CHANNEL_OPTIMISTIC", channel: tempChannel });
 
     try {
-      const channel = await apiPost<Channel>(`/api/servers/${serverId}/channels`, {
-        name,
-        channel_type: type ?? "text",
-        category_id: categoryId,
+      const channel = await apiPost<Channel>(
+        `/api/servers/${serverId}/channels`,
+        {
+          name,
+          channel_type: type ?? "text",
+          category_id: categoryId,
+        },
+      );
+      dispatch({
+        type: "UPDATE_CHANNEL_ID",
+        oldId: tempId,
+        newChannel: channel,
       });
-      dispatch({ type: "UPDATE_CHANNEL_ID", oldId: tempId, newChannel: channel });
       return channel;
     } catch {
       dispatch({ type: "REMOVE_CHANNEL", channelId: tempId });
@@ -329,9 +489,15 @@ export function createChatActions(
     }
   };
 
-  const createCategory = async (serverId: string, name: string): Promise<Category | null> => {
+  const createCategory = async (
+    serverId: string,
+    name: string,
+  ): Promise<Category | null> => {
     try {
-      const category = await apiPost<Category>(`/api/servers/${serverId}/categories`, { name });
+      const category = await apiPost<Category>(
+        `/api/servers/${serverId}/categories`,
+        { name },
+      );
       dispatch({ type: "ADD_CATEGORY", category });
       return category;
     } catch {
@@ -347,11 +513,14 @@ export function createChatActions(
     await apiDelete(`/api/servers/${serverId}/categories/${categoryId}`);
   };
 
-  const updateStatus = (status: "online" | "idle" | "dnd" | "offline", custom_status?: string | null) => {
+  const updateStatus = (
+    status: "online" | "idle" | "dnd" | "offline",
+    custom_status?: string | null,
+  ) => {
     dispatch({ type: "SET_STATUS", status, customStatus: custom_status });
 
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('user-status', status);
+    if (typeof window !== "undefined") {
+      localStorage.setItem("user-status", status);
     }
 
     apiPost("/api/presence", { status, custom_status }).catch(console.error);
@@ -359,9 +528,17 @@ export function createChatActions(
 
   const loadProfile = async () => {
     try {
-      const data = await apiGet<{ status: string; custom_status?: string }>("/api/presence");
-      dispatch({ type: "SET_STATUS", status: data.status as "online" | "idle" | "dnd" | "offline", customStatus: data.custom_status });
-    } catch { /* ignore */ }
+      const data = await apiGet<{ status: string; custom_status?: string }>(
+        "/api/presence",
+      );
+      dispatch({
+        type: "SET_STATUS",
+        status: data.status as "online" | "idle" | "dnd" | "offline",
+        customStatus: data.custom_status,
+      });
+    } catch {
+      /* ignore */
+    }
   };
 
   const loadCurrentUser = async () => {
@@ -371,7 +548,10 @@ export function createChatActions(
         username: string;
         display_name: string | null;
         avatar_url: string | null;
-        avatar_display?: import("@/lib/avatar-display").AvatarDisplay | string | null;
+        avatar_display?:
+          | import("@/lib/avatar-display").AvatarDisplay
+          | string
+          | null;
         banner_url: string | null;
         banner_content_type: string | null;
         nameplate_url: string | null;
@@ -379,7 +559,10 @@ export function createChatActions(
         profile_accent_color: string | null;
         profile_background_color: string | null;
         profile_banner_color: string | null;
-        display_name_style?: import("@/lib/profile-customization").DisplayNameStyle | string | null;
+        display_name_style?:
+          | import("@/lib/profile-customization").DisplayNameStyle
+          | string
+          | null;
         theme_preference: string | null;
         theme_sync_enabled: number;
         media_content_filter: string;
@@ -397,7 +580,8 @@ export function createChatActions(
         user: {
           id: profile.id,
           username: profile.username || current?.username || "Guest",
-          display_name: (profile.display_name || current?.display_name) ?? undefined,
+          display_name:
+            (profile.display_name || current?.display_name) ?? undefined,
           avatar_url: (profile.avatar_url || current?.avatar_url) ?? undefined,
           avatar_display: profile.avatar_display ?? current?.avatar_display,
           banner_url: profile.banner_url ?? undefined,
@@ -405,12 +589,15 @@ export function createChatActions(
           nameplate_url: profile.nameplate_url ?? undefined,
           nameplate_content_type: profile.nameplate_content_type ?? undefined,
           profile_accent_color: profile.profile_accent_color ?? undefined,
-          profile_background_color: profile.profile_background_color ?? undefined,
+          profile_background_color:
+            profile.profile_background_color ?? undefined,
           profile_banner_color: profile.profile_banner_color ?? undefined,
           display_name_style: profile.display_name_style ?? undefined,
           theme_preference: profile.theme_preference ?? undefined,
           theme_sync_enabled: profile.theme_sync_enabled === 1,
-          media_content_filter: parseMediaContentFilter(profile.media_content_filter),
+          media_content_filter: parseMediaContentFilter(
+            profile.media_content_filter,
+          ),
           updated_at: profile.updated_at ?? current?.updated_at,
           created_at: profile.created_at ?? current?.created_at,
           bio: profile.bio ?? current?.bio,
@@ -436,7 +623,9 @@ export function createChatActions(
         display_name_style: profile.display_name_style,
         theme_preference: profile.theme_preference,
         theme_sync_enabled: profile.theme_sync_enabled === 1,
-        media_content_filter: parseMediaContentFilter(profile.media_content_filter),
+        media_content_filter: parseMediaContentFilter(
+          profile.media_content_filter,
+        ),
         created_at: profile.created_at,
         username: profile.username,
         display_name: profile.display_name,
@@ -445,10 +634,15 @@ export function createChatActions(
         updated_at: profile.updated_at ?? undefined,
       });
       useMediaSafetySettingsStore.getState().setCurrentUser(profile.id);
-      useMediaSafetySettingsStore.getState().hydrateSettings({
-        contentFilter: parseMediaContentFilter(profile.media_content_filter),
-      }, profile.id);
-    } catch { /* ignore */ }
+      useMediaSafetySettingsStore.getState().hydrateSettings(
+        {
+          contentFilter: parseMediaContentFilter(profile.media_content_filter),
+        },
+        profile.id,
+      );
+    } catch {
+      /* ignore */
+    }
   };
 
   const loadReadStates = async () => {
@@ -467,32 +661,46 @@ export function createChatActions(
       }
       dispatch({ type: "SET_READ_STATES", readStates, lastMessageAt });
       await syncDesktopNotifications();
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
   };
 
   const markChannelRead = (channelId: string) => {
     const now = new Date().toISOString();
     dispatch({ type: "UPDATE_READ_STATE", channelId, timestamp: now });
     void syncDesktopNotifications();
-    apiPut(`/api/channels/${channelId}/read-state`, {}).catch(() => { });
+    apiPut(`/api/channels/${channelId}/read-state`, {}).catch(() => {});
   };
 
-  const markChannelUnread = async (channelId: string, messageId: string, messageCreatedAt: string) => {
+  const markChannelUnread = async (
+    channelId: string,
+    messageId: string,
+    messageCreatedAt: string,
+  ) => {
     const previous = get().readStates[channelId];
     const createdAt = Date.parse(messageCreatedAt);
     const optimisticTimestamp = Number.isNaN(createdAt)
       ? new Date(0).toISOString()
       : new Date(Math.max(0, createdAt - 1)).toISOString();
 
-    dispatch({ type: "UPDATE_READ_STATE", channelId, timestamp: optimisticTimestamp });
+    dispatch({
+      type: "UPDATE_READ_STATE",
+      channelId,
+      timestamp: optimisticTimestamp,
+    });
     void syncDesktopNotifications();
 
     try {
-      const result = await apiPatch<{ channel_id: string; last_read_at: string }>(
-        `/api/channels/${channelId}/read-state`,
-        { message_id: messageId }
-      );
-      dispatch({ type: "UPDATE_READ_STATE", channelId, timestamp: result.last_read_at });
+      const result = await apiPatch<{
+        channel_id: string;
+        last_read_at: string;
+      }>(`/api/channels/${channelId}/read-state`, { message_id: messageId });
+      dispatch({
+        type: "UPDATE_READ_STATE",
+        channelId,
+        timestamp: result.last_read_at,
+      });
       await syncDesktopNotifications();
     } catch {
       if (previous) {
@@ -503,11 +711,19 @@ export function createChatActions(
   };
 
   const pinMessage = async (channelId: string, messageId: string) => {
-    const fullMsg = get().messages.find(m => m.id === messageId);
-    dispatch({ type: "PIN_MESSAGE", messageId, pinned: true, fullMessage: fullMsg });
+    const fullMsg = get().messages.find((m) => m.id === messageId);
+    dispatch({
+      type: "PIN_MESSAGE",
+      messageId,
+      pinned: true,
+      fullMessage: fullMsg,
+    });
 
     try {
-      await apiPut(`/api/channels/${channelId}/pins`, { message_id: messageId, pinned: true });
+      await apiPut(`/api/channels/${channelId}/pins`, {
+        message_id: messageId,
+        pinned: true,
+      });
     } catch {
       dispatch({ type: "PIN_MESSAGE", messageId, pinned: false });
     }
@@ -517,10 +733,18 @@ export function createChatActions(
     dispatch({ type: "PIN_MESSAGE", messageId, pinned: false });
 
     try {
-      await apiPut(`/api/channels/${channelId}/pins`, { message_id: messageId, pinned: false });
+      await apiPut(`/api/channels/${channelId}/pins`, {
+        message_id: messageId,
+        pinned: false,
+      });
     } catch {
-      const fullMsg = get().messages.find(m => m.id === messageId);
-      dispatch({ type: "PIN_MESSAGE", messageId, pinned: true, fullMessage: fullMsg });
+      const fullMsg = get().messages.find((m) => m.id === messageId);
+      dispatch({
+        type: "PIN_MESSAGE",
+        messageId,
+        pinned: true,
+        fullMessage: fullMsg,
+      });
     }
   };
 
@@ -529,7 +753,9 @@ export function createChatActions(
 
     dispatch({ type: "SET_LOADING_PINS", loading: true });
     try {
-      const messages = await apiGet<Message[]>(`/api/channels/${channelId}/pins`);
+      const messages = await apiGet<Message[]>(
+        `/api/channels/${channelId}/pins`,
+      );
       dispatch({ type: "SET_PINNED_MESSAGES", messages, channelId });
     } catch {
       dispatch({ type: "SET_LOADING_PINS", loading: false });
@@ -538,17 +764,25 @@ export function createChatActions(
 
   const loadDmChannels = async () => {
     try {
-      const data = await apiGet<Array<{ id: string; name: string; recipient: User }>>("/api/dms");
+      const data =
+        await apiGet<Array<{ id: string; name: string; recipient: User }>>(
+          "/api/dms",
+        );
       if (Array.isArray(data)) {
         dispatch({ type: "SET_DM_CHANNELS", dmChannels: data });
         await syncDesktopNotifications();
       }
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
   };
 
   const openDm = async (targetUserId: string): Promise<string | null> => {
     try {
-      const data = await apiPost<{ id: string; name: string; recipient: User }>("/api/dms", { target_user_id: targetUserId });
+      const data = await apiPost<{ id: string; name: string; recipient: User }>(
+        "/api/dms",
+        { target_user_id: targetUserId },
+      );
       dispatch({ type: "ADD_DM_CHANNEL", dmChannel: data });
       return data.id;
     } catch {
@@ -562,23 +796,42 @@ export function createChatActions(
       if (Array.isArray(relationships)) {
         dispatch({ type: "SET_RELATIONSHIPS", relationships });
       }
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
   };
 
   const loadNotifications = async () => {
     try {
-      const data = await apiGet<{ notifications: AppNotification[]; unread_count: number }>("/api/notifications");
-      dispatch({ type: "SET_NOTIFICATIONS", notifications: data.notifications, unreadCount: data.unread_count });
+      const data = await apiGet<{
+        notifications: AppNotification[];
+        unread_count: number;
+      }>("/api/notifications");
+      dispatch({
+        type: "SET_NOTIFICATIONS",
+        notifications: data.notifications,
+        unreadCount: data.unread_count,
+      });
       await syncDesktopNotifications();
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
   };
 
-  const createMessageShare = async (messageId: string, expires: "7d" | "30d" | "90d" | "never" = "30d") => {
-    const data = await apiPost<{ share_url: string }>(`/api/messages/${messageId}/share`, { expires });
+  const createMessageShare = async (
+    messageId: string,
+    expires: "7d" | "30d" | "90d" | "never" = "30d",
+  ) => {
+    const data = await apiPost<{ share_url: string }>(
+      `/api/messages/${messageId}/share`,
+      { expires },
+    );
     return data.share_url;
   };
 
-  const bootstrapChat = async (options?: { includeNotifications?: boolean }) => {
+  const bootstrapChat = async (options?: {
+    includeNotifications?: boolean;
+  }) => {
     if (inFlightBootstrap) return inFlightBootstrap;
 
     const includeNotifications = options?.includeNotifications ?? true;
@@ -619,13 +872,22 @@ export function createChatActions(
 
   const reorderChannels = async (
     serverId: string,
-    channels?: Array<{ id: string; position: number; category_id: string | null }>,
+    channels?: Array<{
+      id: string;
+      position: number;
+      category_id: string | null;
+    }>,
     categories?: Array<{ id: string; rank: number }>,
   ) => {
     try {
-      await apiPatch(`/api/servers/${serverId}/channels/reorder`, { channels, categories });
+      await apiPatch(`/api/servers/${serverId}/channels/reorder`, {
+        channels,
+        categories,
+      });
       await loadChannels(serverId);
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
   };
 
   return {

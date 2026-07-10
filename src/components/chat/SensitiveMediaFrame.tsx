@@ -7,7 +7,9 @@ interface SensitiveMediaFrameProps {
   className?: string;
   mediaClassName?: string;
   overlayClassName?: string;
-  children: React.ReactNode | ((state: { revealed: boolean }) => React.ReactNode);
+  children:
+    | React.ReactNode
+    | ((state: { revealed: boolean }) => React.ReactNode);
 }
 
 export default function SensitiveMediaFrame({
@@ -26,9 +28,8 @@ function SensitiveMediaFrameContent({
 }: Omit<SensitiveMediaFrameProps, "attachmentId">) {
   const [revealed, setRevealed] = useState(false);
 
-  const resolvedChildren = typeof children === "function"
-    ? children({ revealed })
-    : children;
+  const resolvedChildren =
+    typeof children === "function" ? children({ revealed }) : children;
 
   if (!blur || revealed) {
     return <div className={className}>{resolvedChildren}</div>;
@@ -40,7 +41,7 @@ function SensitiveMediaFrameContent({
         aria-hidden="true"
         className={cn(
           "pointer-events-none select-none blur-2xl saturate-50 scale-[1.02]",
-          mediaClassName
+          mediaClassName,
         )}
       >
         {resolvedChildren}
@@ -48,7 +49,7 @@ function SensitiveMediaFrameContent({
       <div
         className={cn(
           "absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/45 px-4 text-center backdrop-blur-[2px]",
-          overlayClassName
+          overlayClassName,
         )}
       >
         <div className="space-y-1">

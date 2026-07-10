@@ -30,7 +30,10 @@ export interface YtDlpCommitSummary {
 export interface YtDlpUpstreamStatus {
   syncedAt: string | null;
   recommendedChannel: YtDlpUpdateChannel;
-  activeBundle: Pick<YtDlpSolverBundle, "version" | "source" | "fetchedAt" | "releaseUrl">;
+  activeBundle: Pick<
+    YtDlpSolverBundle,
+    "version" | "source" | "fetchedAt" | "releaseUrl"
+  >;
   ejsLatest: YtDlpReleaseSummary | null;
   ytDlpStable: YtDlpReleaseSummary | null;
   ytDlpNightly: YtDlpReleaseSummary | null;

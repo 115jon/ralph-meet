@@ -1,7 +1,13 @@
 import { hasPermission, PERMISSIONS } from "@/lib/permissions";
-import type { ScreenShareOptions, ScreenShareSourceState } from "@/lib/screen-share-types";
+import type {
+  ScreenShareOptions,
+  ScreenShareSourceState,
+} from "@/lib/screen-share-types";
 import type { SFUClient } from "@/lib/sfu-client";
-import { getSoundboardServerKey, stopSoundboardPlaybacksByOwner } from "@/lib/voice/soundboard";
+import {
+  getSoundboardServerKey,
+  stopSoundboardPlaybacksByOwner,
+} from "@/lib/voice/soundboard";
 import { useChatStore } from "@/stores/chat-store";
 import { useVoiceSoundboardStore } from "@/stores/useVoiceSoundboardStore";
 import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
@@ -88,28 +94,42 @@ export const StreamContextMenu: React.FC<StreamContextMenuProps> = ({
   const settings = useVoiceSettingsStore(useShallow((s) => s.getSettings()));
 
   const setPeerVolume = useVoiceSettingsStore((s) => s.setPeerVolume);
-  const setPeerStreamVolume = useVoiceSettingsStore((s) => s.setPeerStreamVolume);
+  const setPeerStreamVolume = useVoiceSettingsStore(
+    (s) => s.setPeerStreamVolume,
+  );
   const setPeerMuted = useVoiceSettingsStore((s) => s.setPeerMuted);
   const setPeerAlwaysHear = useVoiceSettingsStore((s) => s.setPeerAlwaysHear);
   const setPeerAttenuation = useVoiceSettingsStore((s) => s.setPeerAttenuation);
-  const setPeerAttenuationStrength = useVoiceSettingsStore((s) => s.setPeerAttenuationStrength);
-  const setPeerSoundboardMuted = useVoiceSettingsStore((s) => s.setPeerSoundboardMuted);
-  const setServerSoundboardMuted = useVoiceSoundboardStore((s) => s.setServerSoundboardMuted);
+  const setPeerAttenuationStrength = useVoiceSettingsStore(
+    (s) => s.setPeerAttenuationStrength,
+  );
+  const setPeerSoundboardMuted = useVoiceSettingsStore(
+    (s) => s.setPeerSoundboardMuted,
+  );
+  const setServerSoundboardMuted = useVoiceSoundboardStore(
+    (s) => s.setServerSoundboardMuted,
+  );
 
   const { user: clerkUser } = useUser();
-  const members = useChatStore(s => s.members);
-  const channels = useChatStore(s => s.channels);
+  const members = useChatStore((s) => s.members);
+  const channels = useChatStore((s) => s.channels);
 
   const myClerkId = clerkUser?.id;
   const isLocal = userId === "me" || userId === myClerkId;
   const resolvedTargetUserId = userId === "me" ? (myClerkId ?? null) : userId;
 
   const myMember = members.find((m: any) => m.user.id === myClerkId);
-  const myTotalPerms = myMember?.roles?.reduce((acc: number, r: any) => acc | r.permissions, 0) ?? 0;
-  const isModerator = hasPermission(myTotalPerms, PERMISSIONS.MANAGE_SERVER) || hasPermission(myTotalPerms, PERMISSIONS.ADMINISTRATOR);
+  const myTotalPerms =
+    myMember?.roles?.reduce((acc: number, r: any) => acc | r.permissions, 0) ??
+    0;
+  const isModerator =
+    hasPermission(myTotalPerms, PERMISSIONS.MANAGE_SERVER) ||
+    hasPermission(myTotalPerms, PERMISSIONS.ADMINISTRATOR);
   const canToggleServerSoundboardMute = !!sfu && !!serverId && isModerator;
   const soundboardServerKey = getSoundboardServerKey(serverId);
-  const serverSoundboardMuted = useVoiceSoundboardStore((s) => !!s.serverMutedByServer[soundboardServerKey]?.[userId]);
+  const serverSoundboardMuted = useVoiceSoundboardStore(
+    (s) => !!s.serverMutedByServer[soundboardServerKey]?.[userId],
+  );
 
   const voiceChannels = channels.filter((c: any) => c.channel_type === "voice");
 
@@ -123,28 +143,31 @@ export const StreamContextMenu: React.FC<StreamContextMenuProps> = ({
     currentMousePos.current = { x: e.clientX, y: e.clientY };
   }, []);
 
-  const handleMouseEnterRoot = useCallback((label: string | null) => {
-    if (aimingTimeoutRef.current) {
-      clearTimeout(aimingTimeoutRef.current);
-      aimingTimeoutRef.current = null;
-    }
-
-    const isAimingAtSubmenu = () => {
-      if (!activeSubmenu || !label || label === activeSubmenu) return false;
-      const dx = currentMousePos.current.x - lastMousePos.current.x;
-      return dx > 3;
-    };
-
-    if (isAimingAtSubmenu()) {
-      aimingTimeoutRef.current = setTimeout(() => {
-        setActiveSubmenu(label);
+  const handleMouseEnterRoot = useCallback(
+    (label: string | null) => {
+      if (aimingTimeoutRef.current) {
+        clearTimeout(aimingTimeoutRef.current);
         aimingTimeoutRef.current = null;
-      }, 100);
-      return;
-    }
+      }
 
-    setActiveSubmenu(label);
-  }, [activeSubmenu]);
+      const isAimingAtSubmenu = () => {
+        if (!activeSubmenu || !label || label === activeSubmenu) return false;
+        const dx = currentMousePos.current.x - lastMousePos.current.x;
+        return dx > 3;
+      };
+
+      if (isAimingAtSubmenu()) {
+        aimingTimeoutRef.current = setTimeout(() => {
+          setActiveSubmenu(label);
+          aimingTimeoutRef.current = null;
+        }, 100);
+        return;
+      }
+
+      setActiveSubmenu(label);
+    },
+    [activeSubmenu],
+  );
 
   const peerSetting = settings?.peerSettings?.[userId] || {
     volume: 100,
@@ -158,7 +181,10 @@ export const StreamContextMenu: React.FC<StreamContextMenuProps> = ({
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+      if (
+        containerRef.current &&
+        !containerRef.current.contains(event.target as Node)
+      ) {
         onClose();
       }
     };
@@ -207,7 +233,12 @@ export const StreamContextMenu: React.FC<StreamContextMenuProps> = ({
     const nextMuted = !peerSetting.soundboardMuted;
     setPeerSoundboardMuted(userId, nextMuted);
     if (nextMuted) stopSoundboardPlaybacksByOwner(userId, soundboardServerKey);
-  }, [peerSetting.soundboardMuted, setPeerSoundboardMuted, soundboardServerKey, userId]);
+  }, [
+    peerSetting.soundboardMuted,
+    setPeerSoundboardMuted,
+    soundboardServerKey,
+    userId,
+  ]);
 
   const toggleServerSoundboardMute = useCallback(() => {
     if (!canToggleServerSoundboardMute) return;
@@ -220,7 +251,16 @@ export const StreamContextMenu: React.FC<StreamContextMenuProps> = ({
       muted: nextMuted,
       actor_user_id: localUserId ?? myClerkId ?? null,
     });
-  }, [canToggleServerSoundboardMute, localUserId, myClerkId, serverSoundboardMuted, setServerSoundboardMuted, sfu, soundboardServerKey, userId]);
+  }, [
+    canToggleServerSoundboardMute,
+    localUserId,
+    myClerkId,
+    serverSoundboardMuted,
+    setServerSoundboardMuted,
+    sfu,
+    soundboardServerKey,
+    userId,
+  ]);
 
   const toggleAttenuation = useCallback(() => {
     setPeerAttenuation(userId, !peerSetting.attenuationEnabled);
@@ -231,7 +271,7 @@ export const StreamContextMenu: React.FC<StreamContextMenuProps> = ({
   }, [setPeerAlwaysHear, userId, peerSetting.alwaysHear]);
 
   const handleCopyId = useCallback(() => {
-    navigator.clipboard.writeText(userId === "me" ? (myClerkId || "") : userId);
+    navigator.clipboard.writeText(userId === "me" ? myClerkId || "" : userId);
     onClose();
   }, [userId, myClerkId, onClose]);
 
@@ -245,11 +285,14 @@ export const StreamContextMenu: React.FC<StreamContextMenuProps> = ({
     alert("Server Deafen: coming soon");
   }, [userId]);
 
-  const handleMove = useCallback((targetChannelId: string) => {
-    log.info("Move user", userId, "to channel", targetChannelId);
-    alert("Move To: coming soon");
-    onClose();
-  }, [userId, onClose]);
+  const handleMove = useCallback(
+    (targetChannelId: string) => {
+      log.info("Move user", userId, "to channel", targetChannelId);
+      alert("Move To: coming soon");
+      onClose();
+    },
+    [userId, onClose],
+  );
 
   const handleProfile = useCallback(() => {
     if (resolvedTargetUserId && onOpenProfileUser) {
@@ -269,7 +312,10 @@ export const StreamContextMenu: React.FC<StreamContextMenuProps> = ({
     onClose();
   }, [onClose, onOpenMessage, onOpenMessageUser, resolvedTargetUserId]);
 
-  const clearSubmenu = useCallback(() => handleMouseEnterRoot(null), [handleMouseEnterRoot]);
+  const clearSubmenu = useCallback(
+    () => handleMouseEnterRoot(null),
+    [handleMouseEnterRoot],
+  );
 
   return createPortal(
     <div
@@ -337,7 +383,11 @@ export const StreamContextMenu: React.FC<StreamContextMenuProps> = ({
             handleServerMute={handleServerMute}
             handleServerDeafen={handleServerDeafen}
             serverSoundboardMuted={serverSoundboardMuted}
-            toggleServerSoundboardMute={canToggleServerSoundboardMute ? toggleServerSoundboardMute : undefined}
+            toggleServerSoundboardMute={
+              canToggleServerSoundboardMute
+                ? toggleServerSoundboardMute
+                : undefined
+            }
             onClose={onClose}
             voiceChannels={voiceChannels}
             handleMove={handleMove}
@@ -347,6 +397,6 @@ export const StreamContextMenu: React.FC<StreamContextMenuProps> = ({
         )}
       </div>
     </div>,
-    document.body
+    document.body,
   );
 };

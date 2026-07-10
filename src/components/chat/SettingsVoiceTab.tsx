@@ -5,7 +5,15 @@ import { SettingsToggleRow } from "@/components/ui/SettingsToggleRow";
 import { useMediaDevices } from "@/lib/useMediaDevices";
 import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
 import { useUser } from "@kova/react";
-import { Mic, Monitor, Music, ShieldCheck, Speaker, Volume2, Zap } from "lucide-react";
+import {
+  Mic,
+  Monitor,
+  Music,
+  ShieldCheck,
+  Speaker,
+  Volume2,
+  Zap,
+} from "lucide-react";
 import { useEffect } from "react";
 import { useShallow } from "zustand/shallow";
 import { NoiseReductionPanel } from "./NoiseReductionPanel";
@@ -14,7 +22,9 @@ export default function SettingsVoiceTab() {
   const { user } = useUser();
   const settingsUserId = user?.id ?? null;
   const { audioInputs, audioOutputs } = useMediaDevices();
-  const vSettings = useVoiceSettingsStore(useShallow((s) => s.getSettings(settingsUserId)));
+  const vSettings = useVoiceSettingsStore(
+    useShallow((s) => s.getSettings(settingsUserId)),
+  );
   const setDevice = useVoiceSettingsStore((s) => s.setDevice);
   const updateUserSettings = useVoiceSettingsStore((s) => s.updateUserSettings);
   const setCurrentUser = useVoiceSettingsStore((s) => s.setCurrentUser);
@@ -23,7 +33,7 @@ export default function SettingsVoiceTab() {
     const initStore = () => {
       if (settingsUserId) {
         const storeUser = useVoiceSettingsStore.getState().currentUser;
-        if (!storeUser || !storeUser.startsWith('room-')) {
+        if (!storeUser || !storeUser.startsWith("room-")) {
           setCurrentUser(settingsUserId);
         }
       }
@@ -71,11 +81,18 @@ export default function SettingsVoiceTab() {
   };
 
   const handleVoiceSlider = (key: string, val: number) => {
-    updateUserSettings((s: any) => ({ ...s, [key]: val }), settingsUserId ?? undefined);
+    updateUserSettings(
+      (s: any) => ({ ...s, [key]: val }),
+      settingsUserId ?? undefined,
+    );
   };
 
-  const filteredAudioInputs = audioInputs.filter(d => d.deviceId !== 'default');
-  const filteredAudioOutputs = audioOutputs.filter(d => d.deviceId !== 'default');
+  const filteredAudioInputs = audioInputs.filter(
+    (d) => d.deviceId !== "default",
+  );
+  const filteredAudioOutputs = audioOutputs.filter(
+    (d) => d.deviceId !== "default",
+  );
   const defaultAudioInput = audioInputs.find((d) => d.deviceId === "default");
   const defaultAudioOutput = audioOutputs.find((d) => d.deviceId === "default");
 
@@ -112,7 +129,10 @@ export default function SettingsVoiceTab() {
                     });
                   }}
                   options={[
-                    { value: "default", label: defaultAudioInput?.label || "Default Microphone" },
+                    {
+                      value: "default",
+                      label: defaultAudioInput?.label || "Default Microphone",
+                    },
                     ...filteredAudioInputs.map((d) => ({
                       value: d.deviceId,
                       label: d.label || `Microphone ${d.deviceId.slice(0, 5)}`,
@@ -136,7 +156,10 @@ export default function SettingsVoiceTab() {
                     });
                   }}
                   options={[
-                    { value: "default", label: defaultAudioOutput?.label || "Default Speaker" },
+                    {
+                      value: "default",
+                      label: defaultAudioOutput?.label || "Default Speaker",
+                    },
                     ...filteredAudioOutputs.map((d) => ({
                       value: d.deviceId,
                       label: d.label || `Speaker ${d.deviceId.slice(0, 5)}`,
@@ -160,7 +183,10 @@ export default function SettingsVoiceTab() {
           <div className="bg-rm-bg-surface border border-rm-border rounded-xl flex flex-col p-4 gap-6">
             <div className="space-y-4">
               <div className="flex justify-between items-end px-1">
-                <label htmlFor="output-volume" className="text-[11px] font-bold uppercase tracking-wider text-rm-text-muted">
+                <label
+                  htmlFor="output-volume"
+                  className="text-[11px] font-bold uppercase tracking-wider text-rm-text-muted"
+                >
                   Output Volume
                 </label>
                 <span className="text-sm font-black text-rm-accent tabular-nums">
@@ -173,7 +199,9 @@ export default function SettingsVoiceTab() {
                 min="0"
                 max="200"
                 value={vSettings.outputVolume}
-                onChange={(e) => handleVoiceSlider("outputVolume", parseInt(e.target.value))}
+                onChange={(e) =>
+                  handleVoiceSlider("outputVolume", parseInt(e.target.value))
+                }
                 className="w-full h-1.5 bg-rm-bg-elevated rounded-full appearance-none cursor-pointer accent-rm-accent transition-all"
               />
             </div>
@@ -182,7 +210,10 @@ export default function SettingsVoiceTab() {
                 <Separator className="bg-rm-border -mx-4 w-[calc(100%+2rem)] block max-w-none" />
                 <div className="space-y-4">
                   <div className="flex justify-between items-end px-1">
-                    <label htmlFor="input-sensitivity" className="text-[11px] font-bold uppercase tracking-wider text-rm-text-muted">
+                    <label
+                      htmlFor="input-sensitivity"
+                      className="text-[11px] font-bold uppercase tracking-wider text-rm-text-muted"
+                    >
                       Input Sensitivity
                     </label>
                     <span className="text-sm font-black text-amber-600 dark:text-amber-400 tabular-nums">
@@ -195,7 +226,9 @@ export default function SettingsVoiceTab() {
                     min="-100"
                     max="0"
                     value={vSettings.sensitivity}
-                    onChange={(e) => handleVoiceSlider("sensitivity", parseInt(e.target.value))}
+                    onChange={(e) =>
+                      handleVoiceSlider("sensitivity", parseInt(e.target.value))
+                    }
                     className="w-full h-1.5 bg-rm-bg-elevated rounded-full appearance-none cursor-pointer accent-amber-500 hover:accent-amber-400 transition-all"
                   />
                 </div>

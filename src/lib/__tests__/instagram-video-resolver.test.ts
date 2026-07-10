@@ -34,7 +34,8 @@ describe("resolveInstagramVideoMetadata", () => {
 
     hoisted.cacheGetMock.mockResolvedValue({
       videoUrl: null,
-      thumbnailUrl: "https://scontent-ord5-2.cdninstagram.com/stale-slide-1.jpg?oe=6A53095B",
+      thumbnailUrl:
+        "https://scontent-ord5-2.cdninstagram.com/stale-slide-1.jpg?oe=6A53095B",
       title: "rukia!",
       durationSeconds: null,
       media: [
@@ -54,26 +55,37 @@ describe("resolveInstagramVideoMetadata", () => {
     });
     hoisted.fetchInstagramOEmbedMetadataMock.mockResolvedValue(null);
 
-    vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => {
-      const url = input.toString();
-      if (url.startsWith("https://i.instagram.com/api/v1/media/shortcode/DZ9DK2RgNSk/info/")) {
-        return new Response("not found", {
-          status: 404,
-          headers: {
-            "Content-Type": "text/html; charset=utf-8",
-          },
-        });
-      }
-      if (url.startsWith("https://www.instagram.com/api/v1/media/shortcode/DZ9DK2RgNSk/info/")) {
-        return new Response("not found", {
-          status: 404,
-          headers: {
-            "Content-Type": "text/html; charset=utf-8",
-          },
-        });
-      }
-      if (url === "https://www.instagram.com/p/DZ9DK2RgNSk/") {
-        return new Response(`
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request) => {
+        const url = input.toString();
+        if (
+          url.startsWith(
+            "https://i.instagram.com/api/v1/media/shortcode/DZ9DK2RgNSk/info/",
+          )
+        ) {
+          return new Response("not found", {
+            status: 404,
+            headers: {
+              "Content-Type": "text/html; charset=utf-8",
+            },
+          });
+        }
+        if (
+          url.startsWith(
+            "https://www.instagram.com/api/v1/media/shortcode/DZ9DK2RgNSk/info/",
+          )
+        ) {
+          return new Response("not found", {
+            status: 404,
+            headers: {
+              "Content-Type": "text/html; charset=utf-8",
+            },
+          });
+        }
+        if (url === "https://www.instagram.com/p/DZ9DK2RgNSk/") {
+          return new Response(
+            `
           <html>
             <head>
               <meta property="og:title" content="tas on Instagram: &quot;rukia!&quot;" />
@@ -81,53 +93,75 @@ describe("resolveInstagramVideoMetadata", () => {
               <script type="application/json">{"shared_entity_id":"3926308389746955428"}</script>
             </head>
           </html>
-        `, {
-          status: 200,
-          headers: {
-            "Content-Type": "text/html; charset=utf-8",
-          },
-        });
-      }
-      if (url.startsWith("https://i.instagram.com/api/v1/media/3926308389746955428/info/")) {
-        return Response.json({
-          items: [{
-            caption: { text: "rukia!" },
-            like_count: 1073,
-            comment_count: 15,
-            taken_at: 1782272402,
-            user: {
-              username: "tasyiu",
-              profile_pic_url: "https://scontent-ord5-1.cdninstagram.com/avatar.jpg?oe=6A53095B",
-              is_verified: false,
-            },
-            carousel_media: [
-              {
-                image_versions2: {
-                  candidates: [
-                    { url: "https://scontent-ord5-2.cdninstagram.com/slide-1.jpg?oe=6A53095B", width: 2728, height: 1817 },
-                  ],
-                },
+        `,
+            {
+              status: 200,
+              headers: {
+                "Content-Type": "text/html; charset=utf-8",
               },
+            },
+          );
+        }
+        if (
+          url.startsWith(
+            "https://i.instagram.com/api/v1/media/3926308389746955428/info/",
+          )
+        ) {
+          return Response.json({
+            items: [
               {
-                image_versions2: {
-                  candidates: [
-                    { url: "https://scontent-ord5-1.cdninstagram.com/slide-2.jpg?oe=6A532925", width: 2727, height: 1816 },
-                  ],
+                caption: { text: "rukia!" },
+                like_count: 1073,
+                comment_count: 15,
+                taken_at: 1782272402,
+                user: {
+                  username: "tasyiu",
+                  profile_pic_url:
+                    "https://scontent-ord5-1.cdninstagram.com/avatar.jpg?oe=6A53095B",
+                  is_verified: false,
                 },
+                carousel_media: [
+                  {
+                    image_versions2: {
+                      candidates: [
+                        {
+                          url: "https://scontent-ord5-2.cdninstagram.com/slide-1.jpg?oe=6A53095B",
+                          width: 2728,
+                          height: 1817,
+                        },
+                      ],
+                    },
+                  },
+                  {
+                    image_versions2: {
+                      candidates: [
+                        {
+                          url: "https://scontent-ord5-1.cdninstagram.com/slide-2.jpg?oe=6A532925",
+                          width: 2727,
+                          height: 1816,
+                        },
+                      ],
+                    },
+                  },
+                ],
               },
             ],
-          }],
-        });
-      }
-      throw new Error(`Unexpected fetch: ${url}`);
-    }));
+          });
+        }
+        throw new Error(`Unexpected fetch: ${url}`);
+      }),
+    );
 
-    const result = await resolveInstagramVideoMetadata("https://www.instagram.com/p/DZ9DK2RgNSk/?igsh=MXV1bnhwem9iMmY4bA==");
+    const result = await resolveInstagramVideoMetadata(
+      "https://www.instagram.com/p/DZ9DK2RgNSk/?igsh=MXV1bnhwem9iMmY4bA==",
+    );
 
     expect(result?.title).toBe("rukia!");
     expect(result?.authorName).toBe("tasyiu");
     expect(result?.authorUrl).toBe("https://www.instagram.com/tasyiu");
-    expect(result?.authorAvatarUrl).toBe("https://scontent-ord5-1.cdninstagram.com/avatar.jpg?oe=6A53095B");
+    expect(result?.authorAvatarUrl).toBe(
+      "https://scontent-ord5-1.cdninstagram.com/avatar.jpg?oe=6A53095B",
+    );
     expect(result?.media).toEqual([
       {
         type: "image",
@@ -151,7 +185,8 @@ describe("resolveInstagramVideoMetadata", () => {
 
     hoisted.cacheGetMock.mockResolvedValue({
       videoUrl: null,
-      thumbnailUrl: "https://scontent-ord5-2.cdninstagram.com/stale-slide-1.jpg?oe=6A53095B",
+      thumbnailUrl:
+        "https://scontent-ord5-2.cdninstagram.com/stale-slide-1.jpg?oe=6A53095B",
       title: "rukia!",
       durationSeconds: null,
       media: [
@@ -162,7 +197,8 @@ describe("resolveInstagramVideoMetadata", () => {
           height: 1817,
         },
       ],
-      authorAvatarUrl: "https://scontent-ord5-1.cdninstagram.com/stale-avatar.jpg?oe=6A53095B",
+      authorAvatarUrl:
+        "https://scontent-ord5-1.cdninstagram.com/stale-avatar.jpg?oe=6A53095B",
       authorVerified: true,
       likeCount: 1073,
       commentCount: 15,
@@ -172,26 +208,37 @@ describe("resolveInstagramVideoMetadata", () => {
     });
     hoisted.fetchInstagramOEmbedMetadataMock.mockResolvedValue(null);
 
-    vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => {
-      const url = input.toString();
-      if (url.startsWith("https://i.instagram.com/api/v1/media/shortcode/DZ9DK2RgNSk/info/")) {
-        return new Response("not found", {
-          status: 404,
-          headers: {
-            "Content-Type": "text/html; charset=utf-8",
-          },
-        });
-      }
-      if (url.startsWith("https://www.instagram.com/api/v1/media/shortcode/DZ9DK2RgNSk/info/")) {
-        return new Response("not found", {
-          status: 404,
-          headers: {
-            "Content-Type": "text/html; charset=utf-8",
-          },
-        });
-      }
-      if (url === "https://www.instagram.com/p/DZ9DK2RgNSk/") {
-        return new Response(`
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request) => {
+        const url = input.toString();
+        if (
+          url.startsWith(
+            "https://i.instagram.com/api/v1/media/shortcode/DZ9DK2RgNSk/info/",
+          )
+        ) {
+          return new Response("not found", {
+            status: 404,
+            headers: {
+              "Content-Type": "text/html; charset=utf-8",
+            },
+          });
+        }
+        if (
+          url.startsWith(
+            "https://www.instagram.com/api/v1/media/shortcode/DZ9DK2RgNSk/info/",
+          )
+        ) {
+          return new Response("not found", {
+            status: 404,
+            headers: {
+              "Content-Type": "text/html; charset=utf-8",
+            },
+          });
+        }
+        if (url === "https://www.instagram.com/p/DZ9DK2RgNSk/") {
+          return new Response(
+            `
           <html>
             <head>
               <meta property="og:title" content="tas on Instagram: &quot;rukia!&quot;" />
@@ -199,41 +246,57 @@ describe("resolveInstagramVideoMetadata", () => {
               <script type="application/json">{"shared_entity_id":"3926308389746955428"}</script>
             </head>
           </html>
-        `, {
-          status: 200,
-          headers: {
-            "Content-Type": "text/html; charset=utf-8",
-          },
-        });
-      }
-      if (url.startsWith("https://i.instagram.com/api/v1/media/3926308389746955428/info/")) {
-        return Response.json({
-          items: [{
-            caption: { text: "rukia!" },
-            like_count: 1073,
-            comment_count: 15,
-            taken_at: 1782272402,
-            user: {
-              username: "tasyiu",
-              profile_pic_url: "https://scontent-ord5-1.cdninstagram.com/avatar.jpg?oe=6A53095B",
-              is_verified: true,
+        `,
+            {
+              status: 200,
+              headers: {
+                "Content-Type": "text/html; charset=utf-8",
+              },
             },
-            carousel_media: [
+          );
+        }
+        if (
+          url.startsWith(
+            "https://i.instagram.com/api/v1/media/3926308389746955428/info/",
+          )
+        ) {
+          return Response.json({
+            items: [
               {
-                image_versions2: {
-                  candidates: [
-                    { url: "https://scontent-ord5-2.cdninstagram.com/slide-1.jpg?oe=6A53095B", width: 2728, height: 1817 },
-                  ],
+                caption: { text: "rukia!" },
+                like_count: 1073,
+                comment_count: 15,
+                taken_at: 1782272402,
+                user: {
+                  username: "tasyiu",
+                  profile_pic_url:
+                    "https://scontent-ord5-1.cdninstagram.com/avatar.jpg?oe=6A53095B",
+                  is_verified: true,
                 },
+                carousel_media: [
+                  {
+                    image_versions2: {
+                      candidates: [
+                        {
+                          url: "https://scontent-ord5-2.cdninstagram.com/slide-1.jpg?oe=6A53095B",
+                          width: 2728,
+                          height: 1817,
+                        },
+                      ],
+                    },
+                  },
+                ],
               },
             ],
-          }],
-        });
-      }
-      throw new Error(`Unexpected fetch: ${url}`);
-    }));
+          });
+        }
+        throw new Error(`Unexpected fetch: ${url}`);
+      }),
+    );
 
-    const result = await resolveInstagramVideoMetadata("https://www.instagram.com/p/DZ9DK2RgNSk/?igsh=MXV1bnhwem9iMmY4bA==");
+    const result = await resolveInstagramVideoMetadata(
+      "https://www.instagram.com/p/DZ9DK2RgNSk/?igsh=MXV1bnhwem9iMmY4bA==",
+    );
 
     expect(result?.authorName).toBe("tasyiu");
     expect(result?.authorUrl).toBe("https://www.instagram.com/tasyiu");

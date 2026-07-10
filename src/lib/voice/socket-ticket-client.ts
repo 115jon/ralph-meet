@@ -1,4 +1,7 @@
-import { getDesktopToken, getStoredKovaAuthSessionToken } from "@/lib/desktop-auth";
+import {
+  getDesktopToken,
+  getStoredKovaAuthSessionToken,
+} from "@/lib/desktop-auth";
 import { KOVA_AUTH_PUBLISHABLE_KEY } from "@/lib/kova-auth-config";
 import { getApiBaseUrl, isTauri } from "@/lib/platform";
 import {
@@ -17,7 +20,9 @@ type SocketTicketResponse = {
   ticket?: unknown;
 };
 
-export async function fetchSocketTicket(request: SocketTicketRequest): Promise<string> {
+export async function fetchSocketTicket(
+  request: SocketTicketRequest,
+): Promise<string> {
   const token = getDesktopToken() ?? getStoredKovaAuthSessionToken();
   const headers = new Headers({ "Content-Type": "application/json" });
   if (token) headers.set("Authorization", `Bearer ${token}`);
@@ -36,7 +41,7 @@ export async function fetchSocketTicket(request: SocketTicketRequest): Promise<s
     throw new Error(`Socket ticket request failed (${response.status})`);
   }
 
-  const data = await response.json() as SocketTicketResponse;
+  const data = (await response.json()) as SocketTicketResponse;
   if (typeof data.ticket !== "string" || data.ticket.length === 0) {
     throw new Error("Socket ticket response was invalid");
   }
@@ -44,6 +49,8 @@ export async function fetchSocketTicket(request: SocketTicketRequest): Promise<s
   return data.ticket;
 }
 
-export async function fetchSocketProtocols(request: SocketTicketRequest): Promise<string[]> {
+export async function fetchSocketProtocols(
+  request: SocketTicketRequest,
+): Promise<string[]> {
   return buildSocketTicketProtocols(await fetchSocketTicket(request));
 }

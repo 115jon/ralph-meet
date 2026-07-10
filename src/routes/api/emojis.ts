@@ -1,6 +1,13 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { apiError, apiSuccess, getBucket, getDB, getEnv, requireAuth } from "@/lib/api-helpers";
+import {
+  apiError,
+  apiSuccess,
+  getBucket,
+  getDB,
+  getEnv,
+  requireAuth,
+} from "@/lib/api-helpers";
 import {
   MAX_AI_EMOJI_PROMPT_LENGTH,
   buildGeneratedEmojiShortcode,
@@ -41,7 +48,9 @@ type KlipyGenerateResponse = {
 
 function getKlipyApiKey(): string | null {
   const env = getEnv() as unknown as { KLIPY_API_KEY?: string };
-  return typeof env.KLIPY_API_KEY === "string" && env.KLIPY_API_KEY.trim() ? env.KLIPY_API_KEY.trim() : null;
+  return typeof env.KLIPY_API_KEY === "string" && env.KLIPY_API_KEY.trim()
+    ? env.KLIPY_API_KEY.trim()
+    : null;
 }
 
 async function fetchKlipy(path: string, init?: RequestInit) {
@@ -55,13 +64,17 @@ async function fetchKlipy(path: string, init?: RequestInit) {
     ...init,
     redirect: "error",
     headers: {
-      "User-Agent": "Mozilla/5.0 (compatible; RalphMeet/1.0; +https://ralph.dev)",
+      "User-Agent":
+        "Mozilla/5.0 (compatible; RalphMeet/1.0; +https://ralph.dev)",
       ...(init?.headers ?? {}),
     },
   });
 
   if (!response.ok) {
-    throw new KlipyRequestError(`KLIPY request failed with ${response.status}`, response.status);
+    throw new KlipyRequestError(
+      `KLIPY request failed with ${response.status}`,
+      response.status,
+    );
   }
 
   return response.json();
@@ -90,12 +103,16 @@ function decodeBase64Bytes(value: string): Uint8Array {
   return bytes;
 }
 
-async function syncGeneratedEmoji(item: GeneratedEmoji): Promise<GeneratedEmoji> {
+async function syncGeneratedEmoji(
+  item: GeneratedEmoji,
+): Promise<GeneratedEmoji> {
   if (item.status !== "pending") return item;
 
   try {
     const status = normalizeKlipyGeneratedStatusResponse(
-      await fetchKlipy(`/api/v1/{app_key}/emojis/generated/${encodeURIComponent(item.id)}`),
+      await fetchKlipy(
+        `/api/v1/{app_key}/emojis/generated/${encodeURIComponent(item.id)}`,
+      ),
     );
 
     if (status.status === "failed") {
@@ -111,13 +128,21 @@ async function syncGeneratedEmoji(item: GeneratedEmoji): Promise<GeneratedEmoji>
       };
     }
 
-    if (status.status !== "success" || !status.base64Encoded || !status.mimeType) {
+    if (
+      status.status !== "success" ||
+      !status.base64Encoded ||
+      !status.mimeType
+    ) {
       return item;
     }
 
     const contentType = status.mimeType.toLowerCase();
     const buffer = decodeBase64Bytes(status.base64Encoded);
-    const fileKey = buildGeneratedEmojiStorageKey(item.user_id, item.id, contentType);
+    const fileKey = buildGeneratedEmojiStorageKey(
+      item.user_id,
+      item.id,
+      contentType,
+    );
 
     await getBucket().put(fileKey, buffer, {
       httpMetadata: { contentType },
@@ -144,7 +169,9 @@ async function syncGeneratedEmoji(item: GeneratedEmoji): Promise<GeneratedEmoji>
   }
 }
 
-async function syncGeneratedEmojiList(items: GeneratedEmoji[]): Promise<GeneratedEmoji[]> {
+async function syncGeneratedEmojiList(
+  items: GeneratedEmoji[],
+): Promise<GeneratedEmoji[]> {
   return Promise.all(items.map((item) => syncGeneratedEmoji(item)));
 }
 
@@ -158,18 +185,27 @@ const GET = async ({ request }: any) => {
   try {
     const items = rawIds
       ? await listGeneratedEmojisByIds(
-        getDB(),
-        rawIds
-          .split(",")
-          .map((entry) => entry.trim())
-          .filter(Boolean)
-          .slice(0, 64),
-      )
+          getDB(),
+          rawIds
+            .split(",")
+            .map((entry) => entry.trim())
+            .filter(Boolean)
+            .slice(0, 64),
+        )
       : await listUserGeneratedEmojis(getDB(), authResult.userId, 64);
 
-    return apiSuccess({ items: await syncGeneratedEmojiList(items) }, 200, request);
+    return apiSuccess(
+      { items: await syncGeneratedEmojiList(items) },
+      200,
+      request,
+    );
   } catch (error) {
-    return apiError(error instanceof Error ? error.message : "Failed to load emojis", 500, "EMOJI_LOAD_FAILED", request);
+    return apiError(
+      error instanceof Error ? error.message : "Failed to load emojis",
+      500,
+      "EMOJI_LOAD_FAILED",
+      request,
+    );
   }
 };
 
@@ -185,24 +221,34 @@ const POST = async ({ request }: any) => {
   if (rateLimitResponse) return rateLimitResponse;
 
   try {
-    const body = await request.json() as GenerateEmojiBody;
+    const body = (await request.json()) as GenerateEmojiBody;
     const prompt = normalizePrompt(body.prompt);
     if (!prompt) {
-      return apiError("Emoji prompt is required", 400, "EMOJI_PROMPT_REQUIRED", request);
+      return apiError(
+        "Emoji prompt is required",
+        400,
+        "EMOJI_PROMPT_REQUIRED",
+        request,
+      );
     }
 
     const shortcode = normalizeShortcode(body.shortcode, prompt);
-    const response = await fetchKlipy("/api/v1/{app_key}/emojis/generate", {
+    const response = (await fetchKlipy("/api/v1/{app_key}/emojis/generate", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({ prompt }),
-    }) as KlipyGenerateResponse;
+    })) as KlipyGenerateResponse;
 
     const id = response.data?.id?.trim();
     if (!id) {
-      return apiError("KLIPY did not return an emoji id", 502, "KLIPY_INVALID_EMOJI_RESPONSE", request);
+      return apiError(
+        "KLIPY did not return an emoji id",
+        502,
+        "KLIPY_INVALID_EMOJI_RESPONSE",
+        request,
+      );
     }
 
     const item = await createGeneratedEmoji(getDB(), {
@@ -215,10 +261,20 @@ const POST = async ({ request }: any) => {
     return apiSuccess({ item }, 201, request);
   } catch (error) {
     if (error instanceof KlipyRequestError && error.status === 429) {
-      return apiError("KLIPY is rate limited. Try again shortly.", 429, "KLIPY_RATE_LIMITED", request);
+      return apiError(
+        "KLIPY is rate limited. Try again shortly.",
+        429,
+        "KLIPY_RATE_LIMITED",
+        request,
+      );
     }
 
-    return apiError(error instanceof Error ? error.message : "Failed to generate emoji", 502, "EMOJI_GENERATE_FAILED", request);
+    return apiError(
+      error instanceof Error ? error.message : "Failed to generate emoji",
+      502,
+      "EMOJI_GENERATE_FAILED",
+      request,
+    );
   }
 };
 

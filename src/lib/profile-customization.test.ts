@@ -81,11 +81,13 @@ describe("resolveProfileTheme", () => {
   });
 
   it("treats the legacy default theme pair as an unset profile theme", () => {
-    expect(sanitizeProfileCustomizationInput({
-      profile_accent_color: "#0B0BE6",
-      profile_background_color: "#0055FE",
-      profile_banner_color: null,
-    })).toEqual({
+    expect(
+      sanitizeProfileCustomizationInput({
+        profile_accent_color: "#0B0BE6",
+        profile_background_color: "#0055FE",
+        profile_banner_color: null,
+      }),
+    ).toEqual({
       profile_accent_color: null,
       profile_background_color: null,
       profile_banner_color: null,
@@ -93,11 +95,13 @@ describe("resolveProfileTheme", () => {
   });
 
   it("ignores alpha colors because profile themes only support opaque hex values", () => {
-    expect(sanitizeProfileCustomizationInput({
-      profile_accent_color: "#123456",
-      profile_background_color: "#0055FE80",
-      profile_banner_color: "#ABCDEFCC",
-    })).toEqual({
+    expect(
+      sanitizeProfileCustomizationInput({
+        profile_accent_color: "#123456",
+        profile_background_color: "#0055FE80",
+        profile_banner_color: "#ABCDEFCC",
+      }),
+    ).toEqual({
       profile_accent_color: "#123456",
       profile_background_color: null,
       profile_banner_color: null,
@@ -122,6 +126,8 @@ describe("resolveProfileTheme", () => {
 
     expect(theme.accentColor).toBe(DEFAULT_PROFILE_THEME.accent);
     expect(theme.backgroundColor).toBeTruthy();
-    expect(cssVariables["--rm-profile-custom-surface"]).not.toBe("linear-gradient(180deg, transparent, transparent)");
+    expect(cssVariables["--rm-profile-custom-surface"]).not.toBe(
+      "linear-gradient(180deg, transparent, transparent)",
+    );
   });
 });

@@ -39,12 +39,19 @@ export const LISTEN_TOGETHER_LOUDNESS_PRESETS = {
     makeupGainDb: 6,
     limiterCeilingDb: -2,
   },
-} as const satisfies Record<string, ListenTogetherLoudnessPresetConfig & { label: string }>;
+} as const satisfies Record<
+  string,
+  ListenTogetherLoudnessPresetConfig & { label: string }
+>;
 
-export type ListenTogetherLoudnessPreset = keyof typeof LISTEN_TOGETHER_LOUDNESS_PRESETS;
+export type ListenTogetherLoudnessPreset =
+  keyof typeof LISTEN_TOGETHER_LOUDNESS_PRESETS;
 export const LISTEN_TOGETHER_LOUDNESS_PRESET_OPTIONS = Object.entries(
   LISTEN_TOGETHER_LOUDNESS_PRESETS,
-) as [ListenTogetherLoudnessPreset, (typeof LISTEN_TOGETHER_LOUDNESS_PRESETS)[ListenTogetherLoudnessPreset]][];
+) as [
+  ListenTogetherLoudnessPreset,
+  (typeof LISTEN_TOGETHER_LOUDNESS_PRESETS)[ListenTogetherLoudnessPreset],
+][];
 
 export interface ListenTogetherAudioSettings {
   enabled: boolean;
@@ -55,7 +62,9 @@ function toGain(db: number) {
   return 10 ** (db / 20);
 }
 
-export function getListenTogetherLoudnessPreset(preset: ListenTogetherLoudnessPreset) {
+export function getListenTogetherLoudnessPreset(
+  preset: ListenTogetherLoudnessPreset,
+) {
   return LISTEN_TOGETHER_LOUDNESS_PRESETS[preset];
 }
 
@@ -138,7 +147,11 @@ export class ListenTogetherAudioProcessor {
     const context = this.context;
     const volumeGain = this.volumeGain;
     if (!context || !volumeGain) return;
-    volumeGain.gain.setTargetAtTime(Math.max(0, Math.min(1, volume)), context.currentTime, 0.03);
+    volumeGain.gain.setTargetAtTime(
+      Math.max(0, Math.min(1, volume)),
+      context.currentTime,
+      0.03,
+    );
   }
 
   close() {

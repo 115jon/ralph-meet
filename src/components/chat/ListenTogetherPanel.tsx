@@ -18,15 +18,15 @@ import {
   formatListenTogetherDuration,
   useListenTogetherPlaybackState,
 } from "./listen-together-playback";
+import { Headphones, Link2, Loader2, Play, Search, Trash2 } from "lucide-react";
 import {
-  Headphones,
-  Link2,
-  Loader2,
-  Play,
-  Search,
-  Trash2,
-} from "lucide-react";
-import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+  useCallback,
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 interface ListenTogetherPanelProps {
   sfu: SFUClient | null;
@@ -59,8 +59,11 @@ export function ListenTogetherPanel({
   const searchRequestIdRef = useRef(0);
 
   const [inputValue, setInputValue] = useState("");
-  const [searchFilter, setSearchFilter] = useState<ListenTogetherSearchFilter>("track");
-  const [searchResults, setSearchResults] = useState<ListenTogetherSearchResult[]>([]);
+  const [searchFilter, setSearchFilter] =
+    useState<ListenTogetherSearchFilter>("track");
+  const [searchResults, setSearchResults] = useState<
+    ListenTogetherSearchResult[]
+  >([]);
   const [isSearching, setIsSearching] = useState(false);
   const [isResolving, setIsResolving] = useState(false);
   const [resolveFeedback, setResolveFeedback] = useState<string | null>(null);
@@ -70,10 +73,13 @@ export function ListenTogetherPanel({
     () => getListenTogetherInputMode(trimmedInput),
     [trimmedInput],
   );
-  const deferredSearchQuery = useDeferredValue(inputMode === "search" ? trimmedInput : "");
+  const deferredSearchQuery = useDeferredValue(
+    inputMode === "search" ? trimmedInput : "",
+  );
 
   const voiceSessionHeaders = useMemo(
-    () => (voiceSessionId ? { "X-Voice-Session-Id": voiceSessionId } : undefined),
+    () =>
+      voiceSessionId ? { "X-Voice-Session-Id": voiceSessionId } : undefined,
     [voiceSessionId],
   );
 
@@ -81,13 +87,18 @@ export function ListenTogetherPanel({
     () => ({
       userId: localUserId || currentUser?.id || "guest",
       displayName:
-        currentUser?.display_name?.trim()
-        || currentUser?.username
-        || "You",
+        currentUser?.display_name?.trim() || currentUser?.username || "You",
       avatarUrl: currentUser?.avatar_url ?? null,
       avatarDisplay: currentUser?.avatar_display ?? null,
     }),
-    [currentUser?.avatar_display, currentUser?.avatar_url, currentUser?.display_name, currentUser?.id, currentUser?.username, localUserId],
+    [
+      currentUser?.avatar_display,
+      currentUser?.avatar_url,
+      currentUser?.display_name,
+      currentUser?.id,
+      currentUser?.username,
+      localUserId,
+    ],
   );
 
   useEffect(() => {
@@ -98,49 +109,52 @@ export function ListenTogetherPanel({
     });
   }, [roomSlug, sfu]);
 
-  const runSearch = useCallback(async (query: string, signal?: AbortSignal) => {
-    if (!roomSlug || !voiceSessionHeaders || !query) {
-      if (!signal?.aborted) {
-        setSearchResults([]);
-        setIsSearching(false);
+  const runSearch = useCallback(
+    async (query: string, signal?: AbortSignal) => {
+      if (!roomSlug || !voiceSessionHeaders || !query) {
+        if (!signal?.aborted) {
+          setSearchResults([]);
+          setIsSearching(false);
+        }
+        return;
       }
-      return;
-    }
 
-    const requestId = ++searchRequestIdRef.current;
-    setIsSearching(true);
+      const requestId = ++searchRequestIdRef.current;
+      setIsSearching(true);
 
-    const params = new URLSearchParams({
-      q: query,
-      filter: searchFilter,
-      roomSlug,
-    });
-    if (serverId) params.set("serverId", serverId);
-    if (channelId) params.set("channelId", channelId);
+      const params = new URLSearchParams({
+        q: query,
+        filter: searchFilter,
+        roomSlug,
+      });
+      if (serverId) params.set("serverId", serverId);
+      if (channelId) params.set("channelId", channelId);
 
-    try {
-      const response = await apiGet<ListenTogetherSearchResponse>(
-        `/api/listen-together/search?${params.toString()}`,
-        {
-          signal,
-          headers: voiceSessionHeaders,
-        },
-      );
+      try {
+        const response = await apiGet<ListenTogetherSearchResponse>(
+          `/api/listen-together/search?${params.toString()}`,
+          {
+            signal,
+            headers: voiceSessionHeaders,
+          },
+        );
 
-      if (!signal?.aborted && requestId === searchRequestIdRef.current) {
-        setSearchResults(response.results ?? []);
+        if (!signal?.aborted && requestId === searchRequestIdRef.current) {
+          setSearchResults(response.results ?? []);
+        }
+      } catch (fetchError) {
+        if (!signal?.aborted && requestId === searchRequestIdRef.current) {
+          console.error("Listen Together search failed", fetchError);
+          setSearchResults([]);
+        }
+      } finally {
+        if (!signal?.aborted && requestId === searchRequestIdRef.current) {
+          setIsSearching(false);
+        }
       }
-    } catch (fetchError) {
-      if (!signal?.aborted && requestId === searchRequestIdRef.current) {
-        console.error("Listen Together search failed", fetchError);
-        setSearchResults([]);
-      }
-    } finally {
-      if (!signal?.aborted && requestId === searchRequestIdRef.current) {
-        setIsSearching(false);
-      }
-    }
-  }, [channelId, roomSlug, searchFilter, serverId, voiceSessionHeaders]);
+    },
+    [channelId, roomSlug, searchFilter, serverId, voiceSessionHeaders],
+  );
 
   useEffect(() => {
     if (!roomSlug || !voiceSessionHeaders) {
@@ -202,12 +216,15 @@ export function ListenTogetherPanel({
     setResolveFeedback(null);
 
     try {
-      const response = await apiPost<ListenTogetherResolveResponse, {
-        roomSlug: string;
-        serverId?: string | null;
-        channelId?: string | null;
-        url: string;
-      }>(
+      const response = await apiPost<
+        ListenTogetherResolveResponse,
+        {
+          roomSlug: string;
+          serverId?: string | null;
+          channelId?: string | null;
+          url: string;
+        }
+      >(
         "/api/listen-together/resolve",
         {
           roomSlug,
@@ -225,7 +242,8 @@ export function ListenTogetherPanel({
         return;
       }
 
-      const importBatchId = response.kind === "collection" ? crypto.randomUUID() : null;
+      const importBatchId =
+        response.kind === "collection" ? crypto.randomUUID() : null;
       enqueueTracks(response.tracks, "append", {
         importBatchId,
         importBatchLabel: response.collection?.title ?? null,
@@ -233,7 +251,11 @@ export function ListenTogetherPanel({
       setResolveFeedback(buildResolveFeedback(response));
       setInputValue("");
     } catch (resolveError) {
-      setResolveFeedback(resolveError instanceof Error ? resolveError.message : "Could not resolve that link.");
+      setResolveFeedback(
+        resolveError instanceof Error
+          ? resolveError.message
+          : "Could not resolve that link.",
+      );
     } finally {
       setIsResolving(false);
     }
@@ -284,16 +306,24 @@ export function ListenTogetherPanel({
               </div>
               <button
                 type="submit"
-                disabled={!trimmedInput || !voiceSessionHeaders || (isResolveMode ? isResolving : false)}
+                disabled={
+                  !trimmedInput ||
+                  !voiceSessionHeaders ||
+                  (isResolveMode ? isResolving : false)
+                }
                 className="inline-flex h-11 items-center justify-center rounded-2xl border border-primary/30 bg-primary/15 px-4 text-sm font-black text-primary transition hover:bg-primary/20 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {isResolveMode
-                  ? isResolving
-                    ? <Loader2 className="h-4 w-4 animate-spin" />
-                    : "Resolve & Queue"
-                  : isSearching
-                    ? <Loader2 className="h-4 w-4 animate-spin" />
-                    : "Search"}
+                {isResolveMode ? (
+                  isResolving ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    "Resolve & Queue"
+                  )
+                ) : isSearching ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  "Search"
+                )}
               </button>
             </form>
             <div className="flex flex-wrap gap-2">
@@ -369,18 +399,29 @@ export function ListenTogetherPanel({
                       )}
                     </div>
                     <div className="min-w-0 flex-1">
-                      <div className="truncate text-sm font-bold text-rm-text">{result.title}</div>
-                        <div className="mt-1 truncate text-xs text-rm-text-muted">
-                          {isTrack
-                            ? [result.artist, formatListenTogetherDuration(result.durationMs)].filter(Boolean).join(" • ")
-                            : [result.subtitle, `${result.itemCount} items`].filter(Boolean).join(" • ")}
-                        </div>
+                      <div className="truncate text-sm font-bold text-rm-text">
+                        {result.title}
+                      </div>
+                      <div className="mt-1 truncate text-xs text-rm-text-muted">
+                        {isTrack
+                          ? [
+                              result.artist,
+                              formatListenTogetherDuration(result.durationMs),
+                            ]
+                              .filter(Boolean)
+                              .join(" • ")
+                          : [result.subtitle, `${result.itemCount} items`]
+                              .filter(Boolean)
+                              .join(" • ")}
+                      </div>
                       <div className="mt-3 flex flex-wrap gap-2">
                         {isTrack ? (
                           <>
                             <button
                               type="button"
-                              onClick={() => enqueueTracks([result], "play-next")}
+                              onClick={() =>
+                                enqueueTracks([result], "play-next")
+                              }
                               className="rounded-full border border-primary/30 bg-primary/15 px-3 py-1.5 text-xs font-bold text-primary transition hover:bg-primary/20"
                             >
                               Play Next
@@ -396,7 +437,9 @@ export function ListenTogetherPanel({
                         ) : (
                           <button
                             type="button"
-                            onClick={() => void resolveAndQueue(result.sourceUrl)}
+                            onClick={() =>
+                              void resolveAndQueue(result.sourceUrl)
+                            }
                             className="rounded-full border border-primary/30 bg-primary/15 px-3 py-1.5 text-xs font-bold text-primary transition hover:bg-primary/20"
                           >
                             Queue Collection
@@ -452,7 +495,11 @@ export function ListenTogetherPanel({
                         </div>
                         <div className="h-12 w-12 shrink-0 overflow-hidden rounded-[16px] bg-rm-bg-elevated/60">
                           {entry.track.artworkUrl ? (
-                            <img src={entry.track.artworkUrl} alt="" className="h-full w-full object-cover" />
+                            <img
+                              src={entry.track.artworkUrl}
+                              alt=""
+                              className="h-full w-full object-cover"
+                            />
                           ) : (
                             <div className="flex h-full w-full items-center justify-center text-rm-text-muted">
                               <Headphones className="h-4 w-4" />
@@ -460,20 +507,32 @@ export function ListenTogetherPanel({
                           )}
                         </div>
                         <div className="min-w-0 flex-1">
-                          <div className="truncate text-sm font-bold text-rm-text">{entry.track.title}</div>
+                          <div className="truncate text-sm font-bold text-rm-text">
+                            {entry.track.title}
+                          </div>
                           <div className="hidden">
-                            {[entry.track.artist, entry.requester.displayName].filter(Boolean).join(" • ")}
+                            {[entry.track.artist, entry.requester.displayName]
+                              .filter(Boolean)
+                              .join(" • ")}
                           </div>
                           <div className="mt-1 truncate text-xs text-rm-text-muted">
-                            {[entry.track.artist, formatListenTogetherDuration(entry.track.durationMs)].filter(Boolean).join(" • ")
-                              || entry.track.sourceLabel}
+                            {[
+                              entry.track.artist,
+                              formatListenTogetherDuration(
+                                entry.track.durationMs,
+                              ),
+                            ]
+                              .filter(Boolean)
+                              .join(" • ") || entry.track.sourceLabel}
                           </div>
                           <div className="hidden">
                             <span className="rounded-full border border-rm-border bg-rm-bg-elevated/40 px-2 py-1">
                               {entry.track.sourceLabel}
                             </span>
                             <span className="rounded-full border border-rm-border bg-rm-bg-elevated/40 px-2 py-1">
-                              {formatListenTogetherDuration(entry.track.durationMs)}
+                              {formatListenTogetherDuration(
+                                entry.track.durationMs,
+                              )}
                             </span>
                             {entry.importBatchLabel && (
                               <span className="rounded-full border border-rm-border bg-rm-bg-elevated/40 px-2 py-1">
@@ -486,17 +545,23 @@ export function ListenTogetherPanel({
                               <div className="h-4 w-4 overflow-hidden rounded-full bg-rm-bg-hover">
                                 {entry.requester.avatarUrl ? (
                                   <AvatarImage
-                                    src={getAuthAssetUrl(entry.requester.avatarUrl)}
+                                    src={getAuthAssetUrl(
+                                      entry.requester.avatarUrl,
+                                    )}
                                     alt={`${entry.requester.displayName} avatar`}
                                     display={entry.requester.avatarDisplay}
                                   />
                                 ) : (
                                   <div className="flex h-full w-full items-center justify-center text-[9px] font-black text-rm-text-muted">
-                                    {entry.requester.displayName.charAt(0).toUpperCase()}
+                                    {entry.requester.displayName
+                                      .charAt(0)
+                                      .toUpperCase()}
                                   </div>
                                 )}
                               </div>
-                              <span className="max-w-[140px] truncate">{entry.requester.displayName}</span>
+                              <span className="max-w-[140px] truncate">
+                                {entry.requester.displayName}
+                              </span>
                             </div>
                             <span className="rounded-full border border-rm-border bg-rm-bg-elevated/40 px-2 py-1">
                               {entry.track.sourceLabel}

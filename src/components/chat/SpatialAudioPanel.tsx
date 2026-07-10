@@ -26,7 +26,10 @@ interface SpatialAudioPanelProps {
   localSpatialEnabled: boolean;
   localHighFidelity: boolean;
   localUserId?: string | null;
-  participantCapabilities?: Record<string, { enabled?: boolean; highFidelity?: boolean }>;
+  participantCapabilities?: Record<
+    string,
+    { enabled?: boolean; highFidelity?: boolean }
+  >;
   onLocalSpatialEnabledChange: (enabled: boolean) => void;
   onOpenVoiceSettings: () => void;
   onClose: () => void;
@@ -38,7 +41,10 @@ const MODES: Array<{ value: SpatialPlacementMode; label: string }> = [
   { value: "grid", label: "Grid" },
   { value: "manual", label: "Manual" },
 ];
-const EMPTY_PARTICIPANT_CAPABILITIES: Record<string, { enabled?: boolean; highFidelity?: boolean }> = {};
+const EMPTY_PARTICIPANT_CAPABILITIES: Record<
+  string,
+  { enabled?: boolean; highFidelity?: boolean }
+> = {};
 const SPATIAL_PANEL_GAP = 8;
 const SPATIAL_PANEL_VIEWPORT_PADDING = 12;
 
@@ -54,20 +60,29 @@ function DraggableAvatar({
   inactive: boolean;
 }) {
   const isSelf = participant.name === "You";
-  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
-    id: participant.userId,
-    disabled,
-  });
+  const { attributes, listeners, setNodeRef, transform, isDragging } =
+    useDraggable({
+      id: participant.userId,
+      disabled,
+    });
 
   return (
     <button
       ref={setNodeRef}
       type="button"
-      title={inactive ? `${participant.name} is not hearing spatial audio` : participant.name}
+      title={
+        inactive
+          ? `${participant.name} is not hearing spatial audio`
+          : participant.name
+      }
       className={cn(
         "absolute -translate-x-1/2 -translate-y-1/2 rounded-full border-2 shadow-lg transition-shadow outline-none",
-        isSelf ? "h-9 w-9 border-primary bg-primary shadow-primary/30" : "h-9 w-9 bg-rm-bg-elevated",
-        participant.isSpeaking && !isSelf ? "border-primary shadow-primary/30" : "border-rm-border",
+        isSelf
+          ? "h-9 w-9 border-primary bg-primary shadow-primary/30"
+          : "h-9 w-9 bg-rm-bg-elevated",
+        participant.isSpeaking && !isSelf
+          ? "border-primary shadow-primary/30"
+          : "border-rm-border",
         inactive && "grayscale opacity-55 border-amber-400/70",
         isDragging && "z-20 shadow-2xl",
         disabled ? "cursor-default" : "cursor-grab active:cursor-grabbing",
@@ -127,7 +142,12 @@ export function SpatialAudioPanel({
   const mapRef = useRef<HTMLDivElement>(null);
   const worldRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
-  const panStartRef = useRef<{ x: number; y: number; panX: number; panY: number } | null>(null);
+  const panStartRef = useRef<{
+    x: number;
+    y: number;
+    panX: number;
+    panY: number;
+  } | null>(null);
   const [view, setView] = useState({ zoom: 1, panX: 0, panY: 0 });
   const [panelPosition, setPanelPosition] = useState({
     top: 0,
@@ -136,11 +156,22 @@ export function SpatialAudioPanel({
     ready: false,
   });
   const state = normalizeSpatialState(spatialAudioState);
-  const participants = useMemo<SpatialParticipant[]>(() => [
-    { userId: localUserId || "self", name: "You", isSpatialEnabled: localSpatialEnabled, isHighFidelity: localHighFidelity },
-    ...remoteSpatialParticipants(gridItems),
-  ], [gridItems, localSpatialEnabled, localHighFidelity, localUserId]);
-  const positions = useMemo(() => calculateSpatialPositions(participants, state), [participants, state]);
+  const participants = useMemo<SpatialParticipant[]>(
+    () => [
+      {
+        userId: localUserId || "self",
+        name: "You",
+        isSpatialEnabled: localSpatialEnabled,
+        isHighFidelity: localHighFidelity,
+      },
+      ...remoteSpatialParticipants(gridItems),
+    ],
+    [gridItems, localSpatialEnabled, localHighFidelity, localUserId],
+  );
+  const positions = useMemo(
+    () => calculateSpatialPositions(participants, state),
+    [participants, state],
+  );
   const blocked = !localHighFidelity;
   const roomVisualScale = 1.16 - ((state.roomSize - 10) / 90) * 0.34;
   const totalZoom = view.zoom * roomVisualScale;
@@ -153,17 +184,19 @@ export function SpatialAudioPanel({
       const anchorRect = anchorRef.current?.getBoundingClientRect();
       if (!panelRect || !anchorRect) return;
 
-      const anchorCenterX = anchorRect.left + (anchorRect.width / 2);
-      let left = anchorCenterX - (panelRect.width / 2);
+      const anchorCenterX = anchorRect.left + anchorRect.width / 2;
+      let left = anchorCenterX - panelRect.width / 2;
       left = Math.min(
         Math.max(SPATIAL_PANEL_VIEWPORT_PADDING, left),
         window.innerWidth - panelRect.width - SPATIAL_PANEL_VIEWPORT_PADDING,
       );
 
       const spaceAbove = anchorRect.top - SPATIAL_PANEL_VIEWPORT_PADDING;
-      const spaceBelow = window.innerHeight - anchorRect.bottom - SPATIAL_PANEL_VIEWPORT_PADDING;
-      const openAbove = spaceAbove >= (panelRect.height + SPATIAL_PANEL_GAP)
-        || spaceAbove >= spaceBelow;
+      const spaceBelow =
+        window.innerHeight - anchorRect.bottom - SPATIAL_PANEL_VIEWPORT_PADDING;
+      const openAbove =
+        spaceAbove >= panelRect.height + SPATIAL_PANEL_GAP ||
+        spaceAbove >= spaceBelow;
 
       let top = openAbove
         ? anchorRect.top - panelRect.height - SPATIAL_PANEL_GAP
@@ -185,9 +218,10 @@ export function SpatialAudioPanel({
     window.addEventListener("resize", updatePosition);
     window.addEventListener("scroll", updatePosition, true);
 
-    const resizeObserver = typeof ResizeObserver !== "undefined"
-      ? new ResizeObserver(() => updatePosition())
-      : null;
+    const resizeObserver =
+      typeof ResizeObserver !== "undefined"
+        ? new ResizeObserver(() => updatePosition())
+        : null;
 
     resizeObserver?.observe(panelRef.current);
     if (anchorRef.current) {
@@ -204,19 +238,34 @@ export function SpatialAudioPanel({
   if (!isOpen && !isClosing) return null;
 
   const commit = (patch: Partial<SharedSpatialAudioState>) => {
-    const next = normalizeSpatialState({ ...state, ...patch, updatedAt: Date.now() });
+    const next = normalizeSpatialState({
+      ...state,
+      ...patch,
+      updatedAt: Date.now(),
+    });
     onUpdateSpatialAudioState(next);
   };
 
   const onDragEnd = (event: DragEndEvent) => {
-    if (state.placementMode !== "manual" || !worldRef.current || !event.active?.id) return;
+    if (
+      state.placementMode !== "manual" ||
+      !worldRef.current ||
+      !event.active?.id
+    )
+      return;
     const participantId = String(event.active.id);
     const current = positions[participantId];
     if (!current) return;
     const rect = worldRef.current.getBoundingClientRect();
     const next = {
-      x: Math.min(95, Math.max(5, current.x + (event.delta.x / rect.width) * 100)),
-      y: Math.min(82, Math.max(8, current.y + (event.delta.y / rect.height) * 100)),
+      x: Math.min(
+        95,
+        Math.max(5, current.x + (event.delta.x / rect.width) * 100),
+      ),
+      y: Math.min(
+        82,
+        Math.max(8, current.y + (event.delta.y / rect.height) * 100),
+      ),
     };
     commit({
       placementMode: "manual",
@@ -238,7 +287,12 @@ export function SpatialAudioPanel({
 
   const onMapPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
     if ((event.target as HTMLElement).closest("button,input")) return;
-    panStartRef.current = { x: event.clientX, y: event.clientY, panX: view.panX, panY: view.panY };
+    panStartRef.current = {
+      x: event.clientX,
+      y: event.clientY,
+      panX: view.panX,
+      panY: view.panY,
+    };
     event.currentTarget.setPointerCapture(event.pointerId);
   };
 
@@ -275,12 +329,12 @@ export function SpatialAudioPanel({
         className={cn(
           "fixed z-[1000] w-[min(620px,calc(100vw-24px))] rounded-xl border border-rm-border bg-rm-bg-primary p-4 shadow-2xl",
           panelPosition.placement === "top"
-            ? (isClosing
+            ? isClosing
               ? "origin-bottom animate-out fade-out slide-out-to-bottom-2 zoom-out-95 duration-200"
-              : "origin-bottom animate-in fade-in slide-in-from-bottom-2 duration-200")
-            : (isClosing
+              : "origin-bottom animate-in fade-in slide-in-from-bottom-2 duration-200"
+            : isClosing
               ? "origin-top animate-out fade-out slide-out-to-top-2 zoom-out-95 duration-200"
-              : "origin-top animate-in fade-in slide-in-from-top-2 duration-200"),
+              : "origin-top animate-in fade-in slide-in-from-top-2 duration-200",
         )}
         style={{
           top: panelPosition.top,
@@ -292,9 +346,15 @@ export function SpatialAudioPanel({
         <div className="mb-4 flex items-start justify-between gap-4">
           <div>
             <h3 className="text-sm font-black text-rm-text">Spatial Audio</h3>
-            <p className="mt-1 text-xs text-rm-text-muted">Shared room placement for everyone in this voice session.</p>
+            <p className="mt-1 text-xs text-rm-text-muted">
+              Shared room placement for everyone in this voice session.
+            </p>
           </div>
-          <button type="button" onClick={onClose} className="rounded-md px-2 py-1 text-xs font-bold text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-md px-2 py-1 text-xs font-bold text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text"
+          >
             Close
           </button>
         </div>
@@ -305,7 +365,9 @@ export function SpatialAudioPanel({
               <AlertTriangle size={16} />
               High Fidelity Audio is required to hear spatial audio.
             </div>
-            <Button size="sm" onClick={onOpenVoiceSettings}>Open Voice Settings</Button>
+            <Button size="sm" onClick={onOpenVoiceSettings}>
+              Open Voice Settings
+            </Button>
           </div>
         )}
 
@@ -328,7 +390,9 @@ export function SpatialAudioPanel({
           </button>
           <button
             type="button"
-            onClick={() => commit({ ...normalizeSpatialState(null), updatedAt: Date.now() })}
+            onClick={() =>
+              commit({ ...normalizeSpatialState(null), updatedAt: Date.now() })
+            }
             className="flex items-center gap-2 rounded-lg bg-rm-bg-elevated px-3 py-2 text-xs font-bold text-rm-text-muted hover:text-rm-text"
           >
             <RotateCcw size={14} /> Reset
@@ -343,7 +407,9 @@ export function SpatialAudioPanel({
               onClick={() => commit({ placementMode: mode.value })}
               className={cn(
                 "rounded-md px-3 py-2 text-xs font-bold transition-colors",
-                state.placementMode === mode.value ? "bg-primary text-primary-foreground" : "bg-rm-bg-elevated text-rm-text-muted hover:text-rm-text",
+                state.placementMode === mode.value
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-rm-bg-elevated text-rm-text-muted hover:text-rm-text",
               )}
             >
               {mode.label}
@@ -357,14 +423,24 @@ export function SpatialAudioPanel({
             ["Distance", "distance", 10, 95],
             ["Arc Angle", "arcAngle", 30, 180],
           ].map(([label, key, min, max]) => (
-            <label key={key} className="space-y-2 text-xs font-bold text-rm-text-muted">
-              <span className="flex justify-between"><span>{label}</span><span>{(state as any)[key]}</span></span>
+            <label
+              key={key}
+              className="space-y-2 text-xs font-bold text-rm-text-muted"
+            >
+              <span className="flex justify-between">
+                <span>{label}</span>
+                <span>{(state as any)[key]}</span>
+              </span>
               <input
                 type="range"
                 min={min as number}
                 max={max as number}
                 value={(state as any)[key]}
-                onChange={(event) => commit({ [key]: Number(event.target.value) } as Partial<SharedSpatialAudioState>)}
+                onChange={(event) =>
+                  commit({
+                    [key]: Number(event.target.value),
+                  } as Partial<SharedSpatialAudioState>)
+                }
                 className="w-full accent-primary"
               />
             </label>
@@ -394,9 +470,13 @@ export function SpatialAudioPanel({
                 {state.roomSize} m² room
               </div>
               {participants.map((participant) => {
-                const caps = participant.userId === (localUserId || "self")
-                  ? { enabled: localSpatialEnabled, highFidelity: localHighFidelity }
-                  : participantCapabilities[participant.userId];
+                const caps =
+                  participant.userId === (localUserId || "self")
+                    ? {
+                        enabled: localSpatialEnabled,
+                        highFidelity: localHighFidelity,
+                      }
+                    : participantCapabilities[participant.userId];
                 const inactive = !caps?.enabled || !caps?.highFidelity;
                 return (
                   <DraggableAvatar
@@ -413,7 +493,12 @@ export function SpatialAudioPanel({
               <button
                 type="button"
                 title="Zoom out"
-                onClick={() => setView((current) => ({ ...current, zoom: Math.max(0.65, current.zoom - 0.12) }))}
+                onClick={() =>
+                  setView((current) => ({
+                    ...current,
+                    zoom: Math.max(0.65, current.zoom - 0.12),
+                  }))
+                }
                 className="flex h-8 w-8 items-center justify-center text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text"
               >
                 <Minus size={14} />
@@ -429,7 +514,12 @@ export function SpatialAudioPanel({
               <button
                 type="button"
                 title="Zoom in"
-                onClick={() => setView((current) => ({ ...current, zoom: Math.min(1.8, current.zoom + 0.12) }))}
+                onClick={() =>
+                  setView((current) => ({
+                    ...current,
+                    zoom: Math.min(1.8, current.zoom + 0.12),
+                  }))
+                }
                 className="flex h-8 w-8 items-center justify-center text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text"
               >
                 <Plus size={14} />

@@ -100,7 +100,7 @@ export async function verifyWebhookSignature(
   rawBody: string,
   signature: string,
   secret: string,
-  options: VerifyOptions = {}
+  options: VerifyOptions = {},
 ): Promise<boolean> {
   try {
     // ── Parse the signature header ──────────────────────────────────────────
@@ -147,7 +147,7 @@ export async function verifyWebhookSignature(
 
 async function computeHmacSha256Hex(
   secret: string,
-  message: string
+  message: string,
 ): Promise<string> {
   const enc = new TextEncoder();
   const key = await globalThis.crypto.subtle.importKey(
@@ -155,9 +155,13 @@ async function computeHmacSha256Hex(
     enc.encode(secret),
     { name: "HMAC", hash: "SHA-256" },
     false,
-    ["sign"]
+    ["sign"],
   );
-  const sig = await globalThis.crypto.subtle.sign("HMAC", key, enc.encode(message));
+  const sig = await globalThis.crypto.subtle.sign(
+    "HMAC",
+    key,
+    enc.encode(message),
+  );
   return Array.from(new Uint8Array(sig))
     .map((b) => b.toString(16).padStart(2, "0"))
     .join("");

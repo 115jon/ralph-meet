@@ -23,7 +23,12 @@ import { AvatarImage } from "./AvatarImage";
  * No overlay or blur — just a floating card with caller info and two buttons.
  */
 export function IncomingCallModal() {
-  const { status, callId, remoteUser, channelId: callChannelId } = useCallStore();
+  const {
+    status,
+    callId,
+    remoteUser,
+    channelId: callChannelId,
+  } = useCallStore();
   const gateway = useChatStore((s) => s.gateway);
   const activeChannelId = useChatStore((s) => s.activeChannelId);
   const dispatch = useChatStore((s) => s.dispatch);
@@ -42,8 +47,15 @@ export function IncomingCallModal() {
     };
   }, [status]);
 
-  const shouldRender = useDelayUnmount(status === "ringing_incoming" && !!remoteUser && !!callId, 200);
-  const isClosing = !(status === "ringing_incoming" && !!remoteUser && !!callId);
+  const shouldRender = useDelayUnmount(
+    status === "ringing_incoming" && !!remoteUser && !!callId,
+    200,
+  );
+  const isClosing = !(
+    status === "ringing_incoming" &&
+    !!remoteUser &&
+    !!callId
+  );
 
   if (!shouldRender || !remoteUser || !callId) return null;
   if (activeChannelId === callChannelId) return null; // Already viewing the DM, inline region handles it!
@@ -58,7 +70,11 @@ export function IncomingCallModal() {
     // Navigate to the DM channel
     if (callChannelId) {
       if (useChatStore.getState().activeServerId !== "@me") {
-        dispatch({ type: "SWITCH_SERVER", serverId: "@me", channelId: callChannelId });
+        dispatch({
+          type: "SWITCH_SERVER",
+          serverId: "@me",
+          channelId: callChannelId,
+        });
       } else {
         dispatch({ type: "SET_ACTIVE_CHANNEL", channelId: callChannelId });
       }
@@ -74,13 +90,29 @@ export function IncomingCallModal() {
     : undefined;
 
   return (
-    <div className={cn("fixed inset-0 z-100 flex items-center justify-center pointer-events-none", isClosing && "animate-out fade-out duration-200")}>
-      <div className={cn("pointer-events-auto flex flex-col items-center w-[280px] rounded-xl bg-rm-bg-elevated shadow-2xl p-6", isClosing ? "animate-out fade-out zoom-out-95 duration-200" : "animate-in fade-in zoom-in-95 duration-200")}>
+    <div
+      className={cn(
+        "fixed inset-0 z-100 flex items-center justify-center pointer-events-none",
+        isClosing && "animate-out fade-out duration-200",
+      )}
+    >
+      <div
+        className={cn(
+          "pointer-events-auto flex flex-col items-center w-[280px] rounded-xl bg-rm-bg-elevated shadow-2xl p-6",
+          isClosing
+            ? "animate-out fade-out zoom-out-95 duration-200"
+            : "animate-in fade-in zoom-in-95 duration-200",
+        )}
+      >
         {/* Avatar with theme-aware pulsing outline */}
         <div className="relative mb-4">
           <div className="h-[72px] w-[72px] rounded-full border-[3px] border-rm-text-muted/40 animate-pulse overflow-visible bg-rm-bg-surface">
             {avatarSrc ? (
-              <AvatarImage src={avatarSrc} alt={activeCaller.displayName} display={activeCaller.avatarDisplay} />
+              <AvatarImage
+                src={avatarSrc}
+                alt={activeCaller.displayName}
+                display={activeCaller.avatarDisplay}
+              />
             ) : (
               <div className="h-full w-full flex items-center justify-center text-2xl font-bold text-rm-text-muted">
                 {activeCaller.displayName[0]?.toUpperCase()}
@@ -90,8 +122,12 @@ export function IncomingCallModal() {
         </div>
 
         {/* Caller info */}
-        <h2 className="text-sm font-bold text-rm-text">{activeCaller.displayName}</h2>
-        <p className="text-xs text-rm-text-muted mt-0.5 mb-5">Incoming Call...</p>
+        <h2 className="text-sm font-bold text-rm-text">
+          {activeCaller.displayName}
+        </h2>
+        <p className="text-xs text-rm-text-muted mt-0.5 mb-5">
+          Incoming Call...
+        </p>
 
         {/* Buttons */}
         <div className="flex items-center gap-3">

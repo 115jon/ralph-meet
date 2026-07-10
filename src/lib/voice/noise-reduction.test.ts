@@ -5,7 +5,9 @@ import {
   type VoiceAudioProcessingSettings,
 } from "./noise-reduction";
 
-function makeSettings(overrides: Partial<VoiceAudioProcessingSettings> = {}): VoiceAudioProcessingSettings {
+function makeSettings(
+  overrides: Partial<VoiceAudioProcessingSettings> = {},
+): VoiceAudioProcessingSettings {
   return {
     noiseSuppression: true,
     echoCancellation: true,
@@ -19,16 +21,24 @@ function makeSettings(overrides: Partial<VoiceAudioProcessingSettings> = {}): Vo
 
 describe("noise reduction helpers", () => {
   it("prefers rnnoise mode over high-fidelity pass-through when cleanup is enabled", () => {
-    expect(resolveLocalAudioProcessingMode(makeSettings({
-      noiseReductionEnabled: true,
-      streamHighFidelity: true,
-    }))).toBe("rnnoise");
+    expect(
+      resolveLocalAudioProcessingMode(
+        makeSettings({
+          noiseReductionEnabled: true,
+          streamHighFidelity: true,
+        }),
+      ),
+    ).toBe("rnnoise");
   });
 
   it("disables browser noise suppression while keeping capture echo cancellation and agc", () => {
-    expect(resolveCaptureAudioProcessing(makeSettings({
-      noiseReductionEnabled: true,
-    }))).toEqual({
+    expect(
+      resolveCaptureAudioProcessing(
+        makeSettings({
+          noiseReductionEnabled: true,
+        }),
+      ),
+    ).toEqual({
       noiseSuppression: false,
       echoCancellation: true,
       autoGainControl: true,
@@ -36,10 +46,14 @@ describe("noise reduction helpers", () => {
   });
 
   it("turns off all browser capture processing in high-fidelity mode", () => {
-    expect(resolveCaptureAudioProcessing(makeSettings({
-      streamHighFidelity: true,
-      noiseReductionEnabled: false,
-    }))).toEqual({
+    expect(
+      resolveCaptureAudioProcessing(
+        makeSettings({
+          streamHighFidelity: true,
+          noiseReductionEnabled: false,
+        }),
+      ),
+    ).toEqual({
       noiseSuppression: false,
       echoCancellation: false,
       autoGainControl: false,

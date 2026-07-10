@@ -34,11 +34,26 @@ const ignoredWatchPaths = [
  */
 const tauriShims: Record<string, string> = {
   "@tauri-apps/plugin-shell": path.resolve(shimDir, "tauri-plugin-shell.ts"),
-  "@tauri-apps/plugin-updater": path.resolve(shimDir, "tauri-plugin-updater.ts"),
-  "@tauri-apps/plugin-process": path.resolve(shimDir, "tauri-plugin-process.ts"),
-  "@tauri-apps/plugin-autostart": path.resolve(shimDir, "tauri-plugin-autostart.ts"),
-  "@tauri-apps/plugin-notification": path.resolve(shimDir, "tauri-plugin-notification.ts"),
-  "tauri-plugin-status-bar-color-api": path.resolve(shimDir, "tauri-plugin-status-bar-color-api.ts"),
+  "@tauri-apps/plugin-updater": path.resolve(
+    shimDir,
+    "tauri-plugin-updater.ts",
+  ),
+  "@tauri-apps/plugin-process": path.resolve(
+    shimDir,
+    "tauri-plugin-process.ts",
+  ),
+  "@tauri-apps/plugin-autostart": path.resolve(
+    shimDir,
+    "tauri-plugin-autostart.ts",
+  ),
+  "@tauri-apps/plugin-notification": path.resolve(
+    shimDir,
+    "tauri-plugin-notification.ts",
+  ),
+  "tauri-plugin-status-bar-color-api": path.resolve(
+    shimDir,
+    "tauri-plugin-status-bar-color-api.ts",
+  ),
 };
 
 function clientEnvironmentShims(): Plugin {
@@ -75,16 +90,14 @@ export default defineConfig({
       ignored: ignoredWatchPaths,
     },
     fs: {
-      strict: false
+      strict: false,
     },
   },
   plugins: [
     killerInstincts({ autoKill: true }),
     cloudflare({
       viteEnvironment: { name: "ssr" },
-      auxiliaryWorkers: [
-        { configPath: "./worker/wrangler.toml" },
-      ],
+      auxiliaryWorkers: [{ configPath: "./worker/wrangler.toml" }],
     }),
     clientEnvironmentShims(),
     tanstackStart({
@@ -100,7 +113,10 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": path.resolve(import.meta.dirname, "src"),
-      "@kova/react": path.resolve(import.meta.dirname, "packages/kova-react/dist/index.js"),
+      "@kova/react": path.resolve(
+        import.meta.dirname,
+        "packages/kova-react/dist/index.js",
+      ),
       "use-sync-external-store/shim/with-selector": path.resolve(
         shimDir,
         "use-sync-external-store-with-selector.ts",
