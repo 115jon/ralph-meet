@@ -1,0 +1,9 @@
+# Release, native-runtime, policy, and signing changes require maintainer review.
+/.github/workflows/ @115jon
+/desktop/installer/ @115jon
+/desktop/src-tauri/ @115jon
+/desktop/src-tauri/resources/obs-capture/ @115jon
+/CODE_SIGNING_POLICY.md @115jon
+/PRIVACY.md @115jon
+/SECURITY.md @115jon
+/LICENSE @115jon

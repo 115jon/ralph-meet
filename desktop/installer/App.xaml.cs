@@ -10,6 +10,7 @@ namespace Installer
     {
         public static bool IsSilentLaunch { get; private set; }
         public static bool IsUninstallLaunch { get; private set; }
+        public static InstallLaunchPlan InstallPlan { get; private set; }
 
         protected override void OnStartup(StartupEventArgs e)
         {
@@ -44,9 +45,7 @@ namespace Installer
                 arg.Equals("/S", StringComparison.OrdinalIgnoreCase) || 
                 arg.Equals("/s", StringComparison.OrdinalIgnoreCase) || 
                 arg.Equals("--silent", StringComparison.OrdinalIgnoreCase) || 
-                arg.Equals("-silent", StringComparison.OrdinalIgnoreCase) || 
-                arg.Equals("--passive", StringComparison.OrdinalIgnoreCase) || 
-                arg.Equals("-passive", StringComparison.OrdinalIgnoreCase)
+                arg.Equals("-silent", StringComparison.OrdinalIgnoreCase)
             );
 
             bool isUninstall = e.Args.Any(arg => 
@@ -91,9 +90,18 @@ namespace Installer
 
             if (isSilent)
             {
+                InstallPlan = InstallLaunchPlan.Create(e.Args, InstallerConsentStore.ExistsAtDefaultPath());
+                if (InstallPlan.Mode == InstallLaunchMode.InteractiveInstall)
+                {
+                    InstallerLogger.Info("Opening the interactive disclosure for an installation without a recorded choice.");
+                    IsSilentLaunch = false;
+                    base.OnStartup(e);
+                    return;
+                }
+
                 try
                 {
-                    InstallerLogic.RunInstallationAsync().GetAwaiter().GetResult();
+                    InstallerLogic.RunInstallationAsync(InstallPlan.LaunchApplicationAfterInstall).GetAwaiter().GetResult();
                 }
                 catch (Exception ex)
                 {

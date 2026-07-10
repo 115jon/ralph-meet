@@ -1,12 +1,13 @@
 import { useState, useEffect } from "react";
 import { SettingsToggleRow } from "@/components/ui/SettingsToggleRow";
 import { getOSName, useDesktopSettingsStore } from "@/stores/useDesktopSettingsStore";
-import { Monitor, Power, X, RefreshCw, CheckCircle2, AlertTriangle } from "lucide-react";
+import { Monitor, Power, X, RefreshCw, CheckCircle2, AlertTriangle, Download } from "lucide-react";
 import { useAppUpdater } from "@/hooks/useAppUpdater";
 
 export default function SettingsOSTab() {
   const osName = getOSName();
   const desktopSettings = useDesktopSettingsStore();
+  const loadAutomaticUpdateChecks = useDesktopSettingsStore((state) => state.loadAutomaticUpdateChecks);
   const { status, updateMeta, downloadProgress, error, checkForUpdate, applyUpdate } = useAppUpdater();
   const [appVersion, setAppVersion] = useState<string>("");
 
@@ -17,6 +18,10 @@ export default function SettingsOSTab() {
       });
     }
   }, []);
+
+  useEffect(() => {
+    void loadAutomaticUpdateChecks();
+  }, [loadAutomaticUpdateChecks]);
 
   const toggles = [
     {
@@ -45,6 +50,15 @@ export default function SettingsOSTab() {
       bgColor: "bg-sky-500/10 border-sky-500/20",
       checked: desktopSettings.closeToTray,
       onChange: () => desktopSettings.updateSettings({ closeToTray: !desktopSettings.closeToTray }),
+    },
+    {
+      label: "Check for Updates Automatically",
+      description: "Check Ralph Meet's release channel in the background. Downloads and installation still require your action.",
+      icon: <Download size={18} />,
+      color: "text-amber-400",
+      bgColor: "bg-amber-500/10 border-amber-500/20",
+      checked: desktopSettings.automaticUpdateChecks,
+      onChange: () => desktopSettings.updateSettings({ automaticUpdateChecks: !desktopSettings.automaticUpdateChecks }),
     },
   ];
 

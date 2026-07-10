@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "component": {
+    "name": "Ralph Meet OBS capture component",
+    "upstream": "https://github.com/obsproject/obs-studio",
+    "upstream_version": "32.1.2",
+    "upstream_tag_commit": "c17423ce05899ecb93f678601b3feaa8a469b180",
+    "upstream_commit": "fb4d98bf88fae5fc85cb11fc57f7c5e309282194",
+    "license": "GPL-2.0-only"
+  },
+  "build_inputs": {
+    "detours": "e4bfd6b03e50de46b47abfbd1e46b384f0c5f833",
+    "vulkan_headers": "577baa05033cf1d9236b3d078ca4b3269ed87a2b",
+    "toolchain": "unrecorded",
+    "vulkan_feature_state": "unrecorded"
+  },
+  "foundation_disposition": {
+    "direct_signing": "blocked",
+    "included_unsigned": "blocked pending SignPath determination",
+    "blockers": [
+      "The source is vendored rather than maintained as a visible GitHub fork.",
+      "Release CI does not pin all build inputs or toolchain versions.",
+      "The Foundation must determine whether documented user-authorized graphics injection satisfies its no-hacking-tools condition."
+    ]
+  }
+}

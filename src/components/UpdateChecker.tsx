@@ -1,4 +1,5 @@
 import { isDesktop } from "@/lib/platform";
+import { loadAutomaticUpdateCheckPreference, shouldRunAutomaticUpdateCheck } from "@/lib/automatic-update-preference";
 import { restartDesktopApp } from "@/lib/desktop-restart";
 import { clog } from "@/lib/console-logger";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -105,13 +106,24 @@ export function UpdateChecker() {
   useEffect(() => {
     if (!isDesktop()) return;
 
-    // Delay initial check by 10 seconds to let the app settle
-    const initialDelay = setTimeout(checkForUpdate, 10_000);
-    const interval = setInterval(checkForUpdate, 30 * 60 * 1000);
+    let cancelled = false;
+    let initialDelay: ReturnType<typeof setTimeout> | undefined;
+    let interval: ReturnType<typeof setInterval> | undefined;
+
+    async function scheduleAutomaticChecks() {
+      const preference = await loadAutomaticUpdateCheckPreference();
+      if (cancelled || !shouldRunAutomaticUpdateCheck(preference)) return;
+
+      initialDelay = setTimeout(checkForUpdate, 10_000);
+      interval = setInterval(checkForUpdate, 30 * 60 * 1000);
+    }
+
+    void scheduleAutomaticChecks();
 
     return () => {
-      clearTimeout(initialDelay);
-      clearInterval(interval);
+      cancelled = true;
+      if (initialDelay) clearTimeout(initialDelay);
+      if (interval) clearInterval(interval);
     };
   }, [checkForUpdate]);
 

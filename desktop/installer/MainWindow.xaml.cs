@@ -1,11 +1,13 @@
 using System;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media.Animation;
+using System.Windows.Navigation;
 using System.Windows.Threading;
 
 namespace Installer
@@ -76,22 +78,7 @@ namespace Installer
                 return;
             }
 
-            try
-            {
-                await RunInstallationAsync();
-                StatusText.Text = "Launching...";
-                await Task.Delay(1000);
-
-                Application.Current.Shutdown();
-            }
-            catch (Exception ex)
-            {
-                InstallerLogger.Error("Interactive installation failed.", ex);
-                StatusText.Text = "Install failed";
-                DetailText.Text = InstallerLogger.AppendLogPath(ex.Message);
-                DetailText.Visibility = Visibility.Visible;
-                ProgressContainer.Visibility = Visibility.Collapsed;
-            }
+            ConfigureForInteractiveInstall();
         }
 
         private async Task RunInstallationAsync()
@@ -101,6 +88,8 @@ namespace Installer
                 Title = "Ralph Meet Setup";
                 StatusText.Text = "Extracting files...";
                 DetailText.Visibility = Visibility.Collapsed;
+                AutomaticUpdatesCheckBox.Visibility = Visibility.Collapsed;
+                PolicyText.Visibility = Visibility.Collapsed;
                 ActionButtonsPanel.Visibility = Visibility.Collapsed;
                 ProgressContainer.Visibility = Visibility.Visible;
             });
@@ -119,8 +108,30 @@ namespace Installer
             CancelButton.IsEnabled = true;
         }
 
+        private void ConfigureForInteractiveInstall()
+        {
+            Title = "Ralph Meet Setup";
+            StatusText.Text = "Install Ralph Meet?";
+            DetailText.Text = "Ralph Meet connects to its account, chat, and update services. Game capture is optional and only activates when you enable it in the app.";
+            DetailText.Visibility = Visibility.Visible;
+            AutomaticUpdatesCheckBox.Visibility = Visibility.Visible;
+            PolicyText.Visibility = Visibility.Visible;
+            ProgressContainer.Visibility = Visibility.Collapsed;
+            ActionButtonsPanel.Visibility = Visibility.Visible;
+            ConfirmButton.Content = "Install";
+            ConfirmButton.Background = System.Windows.Media.Brushes.Indigo;
+            ConfirmButton.IsEnabled = true;
+            CancelButton.IsEnabled = true;
+        }
+
         private async void ConfirmButton_Click(object sender, RoutedEventArgs e)
         {
+            if (!App.IsUninstallLaunch)
+            {
+                await InstallInteractivelyAsync();
+                return;
+            }
+
             ConfirmButton.IsEnabled = false;
             CancelButton.IsEnabled = false;
             ActionButtonsPanel.Visibility = Visibility.Collapsed;
@@ -152,6 +163,40 @@ namespace Installer
         private void CancelButton_Click(object sender, RoutedEventArgs e)
         {
             Application.Current.Shutdown();
+        }
+
+        private async Task InstallInteractivelyAsync()
+        {
+            InstallerConsentStore.SaveDefault(new InstallerConsent
+            {
+                AutomaticUpdateChecksEnabled = AutomaticUpdatesCheckBox.IsChecked == true,
+                AcceptedAtUtc = DateTime.UtcNow.ToString("o")
+            });
+
+            ConfirmButton.IsEnabled = false;
+            CancelButton.IsEnabled = false;
+
+            try
+            {
+                await RunInstallationAsync();
+                StatusText.Text = "Launching...";
+                await Task.Delay(1000);
+                Application.Current.Shutdown();
+            }
+            catch (Exception ex)
+            {
+                InstallerLogger.Error("Interactive installation failed.", ex);
+                StatusText.Text = "Install failed";
+                DetailText.Text = InstallerLogger.AppendLogPath(ex.Message);
+                DetailText.Visibility = Visibility.Visible;
+                ProgressContainer.Visibility = Visibility.Collapsed;
+            }
+        }
+
+        private void PrivacyPolicy_RequestNavigate(object sender, RequestNavigateEventArgs e)
+        {
+            Process.Start(new ProcessStartInfo(e.Uri.AbsoluteUri) { UseShellExecute = true });
+            e.Handled = true;
         }
 
         private void Window_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)

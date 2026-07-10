@@ -24,6 +24,8 @@ export interface DesktopSettings {
   hardwareAcceleration: boolean;
   /** Show native OS notifications for desktop chat activity */
   desktopNotifications: boolean;
+  /** Check GitHub Releases for desktop updates without a manual request */
+  automaticUpdateChecks: boolean;
 }
 
 interface DesktopSettingsState extends DesktopSettings {
@@ -31,10 +33,13 @@ interface DesktopSettingsState extends DesktopSettings {
   updateSettings: (updates: Partial<DesktopSettings>) => void;
   /** Sync all current settings to the Rust backend (call on app startup) */
   syncToBackend: () => Promise<void>;
+  /** Read the installer-approved automatic-update preference without overwriting it */
+  loadAutomaticUpdateChecks: () => Promise<void>;
 }
 
 type SyncDesktopSettingsOptions = {
   includeHardwareAcceleration?: boolean;
+  includeAutomaticUpdateChecks?: boolean;
 };
 
 const defaults: DesktopSettings = {
@@ -43,6 +48,7 @@ const defaults: DesktopSettings = {
   closeToTray: true,
   hardwareAcceleration: true,
   desktopNotifications: true,
+  automaticUpdateChecks: false,
 };
 
 /**
@@ -102,12 +108,20 @@ export const useDesktopSettingsStore = create<DesktopSettingsState>()(
         const state = { ...get(), ...updates };
         syncSettingsToRust(state, {
           includeHardwareAcceleration: Object.prototype.hasOwnProperty.call(updates, "hardwareAcceleration"),
+          includeAutomaticUpdateChecks: Object.prototype.hasOwnProperty.call(updates, "automaticUpdateChecks"),
         });
       },
 
       syncToBackend: async () => {
         const state = get();
         await syncSettingsToRust(state);
+      },
+
+      loadAutomaticUpdateChecks: async () => {
+        const preference = await tauriInvoke<boolean | null>("get_automatic_update_checks");
+        if (typeof preference === "boolean") {
+          set({ automaticUpdateChecks: preference });
+        }
       },
     }),
     {
@@ -152,6 +166,10 @@ async function syncSettingsToRust(
 
   // Sync start-minimized preference to Rust AtomicBool
   await tauriInvoke("set_start_minimized", { enabled: settings.startMinimized });
+
+  if (options.includeAutomaticUpdateChecks) {
+    await tauriInvoke("set_automatic_update_checks", { enabled: settings.automaticUpdateChecks });
+  }
 
   if (options.includeHardwareAcceleration) {
     // Persist renderer acceleration preference only during the explicit restart flow.

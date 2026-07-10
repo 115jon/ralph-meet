@@ -1,4 +1,5 @@
 import splashLogo from "@/assets/splash-logo.svg";
+import { loadAutomaticUpdateCheckPreference, shouldRunAutomaticUpdateCheck } from "@/lib/automatic-update-preference";
 import { restartDesktopApp } from "@/lib/desktop-restart";
 import { useEffect, useState } from "react";
 
@@ -101,12 +102,24 @@ export function StandaloneUpdater() {
       }
     }
 
-    // Delay so the window has time to paint and acts as a nice splash screen
-    const timer = setTimeout(runUpdateCheck, 2500);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+
+    async function start() {
+      const preference = await loadAutomaticUpdateCheckPreference();
+      if (!shouldRunAutomaticUpdateCheck(preference)) {
+        await showStartingThenSwitch();
+        return;
+      }
+
+      // Delay so the window has time to paint and acts as a nice splash screen
+      timer = setTimeout(runUpdateCheck, 2500);
+    }
+
+    void start();
 
     return () => {
       mounted = false;
-      clearTimeout(timer);
+      if (timer) clearTimeout(timer);
     };
   }, []);
 

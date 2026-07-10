@@ -48,6 +48,8 @@
     "allow-restart-app",
     "allow-set-close-to-tray",
     "allow-set-start-minimized",
+    "allow-get-automatic-update-checks",
+    "allow-set-automatic-update-checks",
     "allow-set-title-bar-dark-mode",
     "allow-set-taskbar-notification-attention",
     "allow-sync-taskbar-thumbnail-toolbar",
