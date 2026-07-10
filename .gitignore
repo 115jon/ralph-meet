@@ -97,7 +97,7 @@ desktop/installer/Assets/payload.zip
 .codex-logs/
 
 # Analysis / handoff / audit notes that are not part of the shipped product.
-docs/NATIVE_SCREEN_SHARE_HANDOFF.md
+/docs/
 
 # Owned_Capture_Component — GPLv2 binaries (Forked_Hook_DLL + Owned_Injector)
 # built from OBS win-capture sources for the game-capture-hook feature. The
