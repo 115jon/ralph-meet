@@ -40,6 +40,7 @@ export class VoiceGateway extends BaseGateway<VoiceGatewayEvents> {
     this.roomSlug = roomSlug;
     this.wsUrlGenerator = wsUrlGenerator;
     this.ticketContext = ticketContext;
+    this.isLeaving = false;
 
     void this.openVoiceSocket(true);
   }
