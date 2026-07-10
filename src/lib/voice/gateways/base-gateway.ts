@@ -17,6 +17,7 @@ export abstract class BaseGateway<EventMap extends Record<string, any>> extends 
   protected msgQueue: ClientMessage[] = [];
   protected isIdentified = false;
   protected isLeaving = false;
+  protected connectionRequestGeneration = 0;
 
   private static readonly BACKOFF_BASE_MS = 500;
   private static readonly BACKOFF_MAX_MS = 10_000;
@@ -40,7 +41,7 @@ export abstract class BaseGateway<EventMap extends Record<string, any>> extends 
   /**
    * Called to establish the WebSocket connection.
    */
-  public connect(url: string, resetReconnectAttempt = true) {
+  public connect(url: string, resetReconnectAttempt = true, protocols?: string[]) {
     this.isLeaving = false;
     if (resetReconnectAttempt) {
       this.reconnectAttempt = 0;
@@ -55,7 +56,7 @@ export abstract class BaseGateway<EventMap extends Record<string, any>> extends 
     this.isIdentified = false;
     this.msgQueue = [];
 
-    this.ws = new WebSocket(url);
+    this.ws = protocols ? new WebSocket(url, protocols) : new WebSocket(url);
 
     this.ws.onopen = () => {
       this.log.info("WebSocket connected, waiting for Hello");
@@ -79,6 +80,13 @@ export abstract class BaseGateway<EventMap extends Record<string, any>> extends 
           this.log.warn("Session was replaced by a new connection in another tab/device. Not reconnecting.");
           this.isLeaving = true;
           this.emit("kicked", undefined as never);
+          this.emit("disconnected", undefined as never);
+          return;
+        }
+
+        if (event.code === 4008) {
+          this.log.warn("Realtime admission was rejected. Not reconnecting.");
+          this.isLeaving = true;
           this.emit("disconnected", undefined as never);
           return;
         }
@@ -165,6 +173,7 @@ export abstract class BaseGateway<EventMap extends Record<string, any>> extends 
 
   public disconnect() {
     this.isLeaving = true;
+    this.connectionRequestGeneration++;
     this.heartbeat.stop();
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer);
@@ -182,6 +191,7 @@ export abstract class BaseGateway<EventMap extends Record<string, any>> extends 
   }
 
   public forceReconnect() {
+    this.connectionRequestGeneration++;
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;

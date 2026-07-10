@@ -1,11 +1,15 @@
-const SOCKET_TICKET_VERSION = "v1";
+const SOCKET_TICKET_VERSION = "rt1";
+const SOCKET_PROTOCOL_NAME = "ralph.realtime.v1";
+const SOCKET_TICKET_PROTOCOL_PREFIX = "ralph.ticket.";
 const textEncoder = new TextEncoder();
 const ticketTokenPattern = /^[A-Za-z0-9_-]+$/;
 const roomSlugPattern = /^[A-Za-z0-9][A-Za-z0-9_-]{0,199}$/;
 
+export type RealtimeAccessMode = "authenticated" | "public-demo";
 export type SocketTicketAudience = "global" | "room" | "voice";
 
 export interface SocketTicketClaims {
+  accessMode: RealtimeAccessMode;
   audience: SocketTicketAudience;
   expiresAt: number;
   nonce: string;
@@ -14,17 +18,27 @@ export interface SocketTicketClaims {
 }
 
 export interface SocketTicketVerificationContext {
+  accessMode?: RealtimeAccessMode;
   audience: SocketTicketAudience;
   now: number;
   roomSlug: string;
+}
+
+export interface SocketTicketProtocolResult {
+  responseProtocol: string;
+  ticket: string;
 }
 
 export type SocketTicketVerification =
   | { ok: true; claims: SocketTicketClaims }
   | {
     ok: false;
-    reason: "audience_mismatch" | "expired" | "invalid" | "room_mismatch";
+    reason: "audience_mismatch" | "expired" | "invalid" | "mode_mismatch" | "room_mismatch";
   };
+
+export type SocketTicketProtocolParseResult =
+  | { ok: true; value: SocketTicketProtocolResult }
+  | { ok: false; reason: "invalid" | "missing" | "multiple" };
 
 export async function issueSocketTicket(
   claims: SocketTicketClaims,
@@ -71,6 +85,9 @@ export async function verifySocketTicket(
   if (!claims) {
     return { ok: false, reason: "invalid" };
   }
+  if (context.accessMode && context.accessMode !== claims.accessMode) {
+    return { ok: false, reason: "mode_mismatch" };
+  }
   if (context.now >= claims.expiresAt) {
     return { ok: false, reason: "expired" };
   }
@@ -84,9 +101,53 @@ export async function verifySocketTicket(
   return { ok: true, claims };
 }
 
+export function buildSocketTicketProtocols(ticket: string): string[] {
+  if (typeof ticket !== "string" || ticket.length === 0) {
+    throw new Error("Cannot build WebSocket protocols without a ticket");
+  }
+  return [SOCKET_PROTOCOL_NAME, `${SOCKET_TICKET_PROTOCOL_PREFIX}${ticket}`];
+}
+
+export function parseSocketTicketProtocols(header: string | null): SocketTicketProtocolParseResult {
+  if (!header) return { ok: false, reason: "missing" };
+
+  const protocols = header
+    .split(",")
+    .map((value) => value.trim())
+    .filter((value) => value.length > 0);
+
+  let hasRealtimeProtocol = false;
+  let ticket: string | null = null;
+  for (const protocol of protocols) {
+    if (protocol === SOCKET_PROTOCOL_NAME) {
+      if (hasRealtimeProtocol) return { ok: false, reason: "multiple" };
+      hasRealtimeProtocol = true;
+      continue;
+    }
+    if (protocol.startsWith(SOCKET_TICKET_PROTOCOL_PREFIX)) {
+      if (ticket !== null) return { ok: false, reason: "multiple" };
+      ticket = protocol.slice(SOCKET_TICKET_PROTOCOL_PREFIX.length);
+      continue;
+    }
+    return { ok: false, reason: "invalid" };
+  }
+
+  if (!hasRealtimeProtocol || !ticket) return { ok: false, reason: "missing" };
+  if (ticket.length > 4096) return { ok: false, reason: "invalid" };
+
+  return {
+    ok: true,
+    value: {
+      responseProtocol: SOCKET_PROTOCOL_NAME,
+      ticket,
+    },
+  };
+}
+
 function isValidClaims(value: SocketTicketClaims): boolean {
   return (
     isSocketTicketAudience(value.audience)
+    && isRealtimeAccessMode(value.accessMode)
     && Number.isFinite(value.expiresAt)
     && value.expiresAt > 0
     && roomSlugPattern.test(value.roomSlug)
@@ -103,6 +164,7 @@ function parseClaims(bytes: Uint8Array): SocketTicketClaims | null {
     if (!isRecord(value)) return null;
 
     const claims: SocketTicketClaims = {
+      accessMode: value.accessMode as RealtimeAccessMode,
       audience: value.audience as SocketTicketAudience,
       expiresAt: value.expiresAt as number,
       nonce: value.nonce as string,
@@ -118,6 +180,10 @@ function parseClaims(bytes: Uint8Array): SocketTicketClaims | null {
 
 function isSocketTicketAudience(value: unknown): value is SocketTicketAudience {
   return value === "global" || value === "room" || value === "voice";
+}
+
+function isRealtimeAccessMode(value: unknown): value is RealtimeAccessMode {
+  return value === "authenticated" || value === "public-demo";
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

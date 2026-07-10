@@ -9,6 +9,7 @@ compatibility_flags = [
 # ── Secrets ───────────────────────────────────────────────────────────────
 # Set these via `wrangler secret put <NAME>` (never commit secret values):
 #   wrangler secret put CALLS_APP_SECRET
+#   wrangler secret put REALTIME_TICKET_SECRET
 #   wrangler secret put KLIPY_API_KEY
 #   wrangler secret put TURN_TOKEN_SECRET
 #   wrangler secret put RALPH_AUTH_WEBHOOK_SECRET  # only if /api/auth/sync webhooks are enabled
@@ -19,6 +20,7 @@ TURN_TOKEN_ID = "7355d949dedf888e6d89a5298f3ffde7"
 KOVA_AUTH_URL = "https://auth.115jon.site"
 VITE_KOVA_AUTH_URL = "https://auth.115jon.site"
 VITE_KOVA_AUTH_PUBLISHABLE_KEY = "pk_dev_fhygLR-eApZ4HvSfu-v-LEGFp7WAsgkLRhlveveNzhk"
+REALTIME_ALLOWED_ORIGINS = "https://meet.115jon.site,http://localhost:5173,http://localhost:1420,http://tauri.localhost,https://tauri.localhost"
 
 # ── Durable Objects (hosted in auxiliary worker) ────────────────────────
 # script_name tells the runtime these DO classes live in a separate worker,

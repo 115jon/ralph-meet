@@ -1,13 +1,46 @@
 import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
+import { issueSocketTicket, verifySocketTicket } from "../../src/lib/voice/socket-ticket";
+import {
+  appendRealtimeAdmissionHeaders,
+  createRealtimeAdmissionContext,
+} from "../realtime-admission";
 
 const textEncoder = new TextEncoder();
+const TEST_SUBJECT = "user-test";
 
-async function openVoiceSocket(roomName = crypto.randomUUID()): Promise<WebSocket> {
+async function createAdmissionHeaders(
+  roomName: string,
+  subject = TEST_SUBJECT,
+  accessMode: "authenticated" | "public-demo" = "authenticated",
+) {
+  const ticket = await issueSocketTicket({
+    accessMode,
+    audience: "voice",
+    expiresAt: Date.now() + 60_000,
+    nonce: crypto.randomUUID(),
+    roomSlug: roomName,
+    subject,
+  }, env.CALLS_APP_SECRET);
+  const verification = await verifySocketTicket(ticket, env.CALLS_APP_SECRET, {
+    accessMode,
+    audience: "voice",
+    now: Date.now(),
+    roomSlug: roomName,
+  });
+  if (!verification.ok) throw new Error("Expected test ticket to verify");
+  return appendRealtimeAdmissionHeaders(new Headers({ Upgrade: "websocket" }), await createRealtimeAdmissionContext(verification.claims));
+}
+
+async function openVoiceSocket(
+  roomName = crypto.randomUUID(),
+  subject = TEST_SUBJECT,
+  accessMode: "authenticated" | "public-demo" = "authenticated",
+): Promise<WebSocket> {
   const roomId = env.VOICE_ROOM.idFromName(roomName);
   const room = env.VOICE_ROOM.get(roomId);
   const response = await room.fetch(`https://internal/api/channels/${roomName}/voice?v=1`, {
-    headers: { Upgrade: "websocket" },
+    headers: await createAdmissionHeaders(roomName, subject, accessMode),
   });
 
   expect(response.status).toBe(101);
@@ -30,8 +63,15 @@ async function nextJsonMessage(socket: WebSocket): Promise<{ op: number; d: unkn
   return JSON.parse(message.data) as { op: number; d: unknown };
 }
 
-async function issueVoiceToken(participantId: string, roomName: string): Promise<string> {
-  const payload = `${participantId}:${roomName}:${Date.now()}:user-${participantId}`;
+async function nextMessageWithOpcode(socket: WebSocket, opcode: number): Promise<{ op: number; d: unknown }> {
+  while (true) {
+    const message = await nextJsonMessage(socket);
+    if (message.op === opcode) return message;
+  }
+}
+
+async function issueVoiceToken(participantId: string, roomName: string, subject = TEST_SUBJECT): Promise<string> {
+  const payload = `${participantId}:${roomName}:${Date.now()}:${subject}`;
   const key = await crypto.subtle.importKey(
     "raw",
     textEncoder.encode(env.CALLS_APP_SECRET),
@@ -44,13 +84,13 @@ async function issueVoiceToken(participantId: string, roomName: string): Promise
   return `${payload}.${encodedSignature}`;
 }
 
-async function identifyVoiceSocket(socket: WebSocket, participantId: string, roomName: string) {
+async function identifyVoiceSocket(socket: WebSocket, participantId: string, roomName: string, subject = TEST_SUBJECT) {
   const response = nextJsonMessage(socket);
   socket.send(JSON.stringify({
     op: 100,
     d: {
       participant_id: participantId,
-      voice_token: await issueVoiceToken(participantId, roomName),
+      voice_token: await issueVoiceToken(participantId, roomName, subject),
     },
   }));
 
@@ -65,7 +105,7 @@ describe("VoiceRoom lifecycle", () => {
     const roomId = env.VOICE_ROOM.idFromName("lifecycle-test-room");
     const room = env.VOICE_ROOM.get(roomId);
     const response = await room.fetch("https://internal/api/channels/lifecycle-test-room/voice?v=1", {
-      headers: { Upgrade: "websocket" },
+      headers: await createAdmissionHeaders("lifecycle-test-room"),
     });
 
     expect(response.status).toBe(101);
@@ -112,6 +152,47 @@ describe("VoiceRoom lifecycle", () => {
     expect(await response).toMatchObject({
       op: 6,
       d: { seq: 0 },
+    });
+
+    socket.close();
+  });
+
+  it("rejects a voice token for a subject other than the admitted socket", async () => {
+    const roomName = crypto.randomUUID();
+    const participantId = crypto.randomUUID();
+    const socket = await openVoiceSocket(roomName);
+    const response = nextJsonMessage(socket);
+
+    socket.send(JSON.stringify({
+      op: 100,
+      d: {
+        participant_id: participantId,
+        voice_token: await issueVoiceToken(participantId, roomName, "other-user"),
+      },
+    }));
+
+    expect(await response).toMatchObject({
+      op: 18,
+      d: { code: 4008, message: "Voice token subject mismatch" },
+    });
+
+    socket.close();
+  });
+
+  it("limits public-demo sockets to temporary demo chat events", async () => {
+    const roomName = crypto.randomUUID();
+    const subject = "demo-test-subject";
+    const participantId = crypto.randomUUID();
+    const socket = await openVoiceSocket(roomName, subject, "public-demo");
+    await identifyVoiceSocket(socket, participantId, roomName, subject);
+    socket.send(JSON.stringify({
+      op: 106,
+      d: { type: "activity.start", name: "not allowed" },
+    }));
+
+    expect(await nextMessageWithOpcode(socket, 18)).toMatchObject({
+      op: 18,
+      d: { code: 4003, message: "Voice app event is unavailable in public demo rooms" },
     });
 
     socket.close();

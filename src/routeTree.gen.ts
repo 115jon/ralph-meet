@@ -38,6 +38,7 @@ import { Route as ApiAvatarUploadRouteImport } from './routes/api/avatar-upload'
 import { Route as ApiAccountClaimsRouteImport } from './routes/api/account-claims'
 import { Route as ApiSharesIndexRouteImport } from './routes/api/shares/index'
 import { Route as ApiWordleTodayRouteImport } from './routes/api/wordle/today'
+import { Route as ApiVoiceSocketTicketRouteImport } from './routes/api/voice/socket-ticket'
 import { Route as ApiVoiceStatusMediaSplatRouteImport } from './routes/api/voice-status-media/$'
 import { Route as ApiUsersMeRouteImport } from './routes/api/users/me'
 import { Route as ApiSharesIdRouteImport } from './routes/api/shares/$id'
@@ -241,6 +242,11 @@ const ApiSharesIndexRoute = ApiSharesIndexRouteImport.update({
 const ApiWordleTodayRoute = ApiWordleTodayRouteImport.update({
   id: '/api/wordle/today',
   path: '/api/wordle/today',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiVoiceSocketTicketRoute = ApiVoiceSocketTicketRouteImport.update({
+  id: '/api/voice/socket-ticket',
+  path: '/api/voice/socket-ticket',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiVoiceStatusMediaSplatRoute =
@@ -603,6 +609,7 @@ export interface FileRoutesByFullPath {
   '/api/shared-messages/$token': typeof ApiSharedMessagesTokenRouteWithChildren
   '/api/shares/$id': typeof ApiSharesIdRoute
   '/api/users/me': typeof ApiUsersMeRoute
+  '/api/voice/socket-ticket': typeof ApiVoiceSocketTicketRoute
   '/api/voice-status-media/$': typeof ApiVoiceStatusMediaSplatRoute
   '/api/wordle/today': typeof ApiWordleTodayRoute
   '/api/shares/': typeof ApiSharesIndexRoute
@@ -693,6 +700,7 @@ export interface FileRoutesByTo {
   '/api/shared-messages/$token': typeof ApiSharedMessagesTokenRouteWithChildren
   '/api/shares/$id': typeof ApiSharesIdRoute
   '/api/users/me': typeof ApiUsersMeRoute
+  '/api/voice/socket-ticket': typeof ApiVoiceSocketTicketRoute
   '/api/voice-status-media/$': typeof ApiVoiceStatusMediaSplatRoute
   '/api/wordle/today': typeof ApiWordleTodayRoute
   '/api/shares': typeof ApiSharesIndexRoute
@@ -784,6 +792,7 @@ export interface FileRoutesById {
   '/api/shared-messages/$token': typeof ApiSharedMessagesTokenRouteWithChildren
   '/api/shares/$id': typeof ApiSharesIdRoute
   '/api/users/me': typeof ApiUsersMeRoute
+  '/api/voice/socket-ticket': typeof ApiVoiceSocketTicketRoute
   '/api/voice-status-media/$': typeof ApiVoiceStatusMediaSplatRoute
   '/api/wordle/today': typeof ApiWordleTodayRoute
   '/api/shares/': typeof ApiSharesIndexRoute
@@ -876,6 +885,7 @@ export interface FileRouteTypes {
     | '/api/shared-messages/$token'
     | '/api/shares/$id'
     | '/api/users/me'
+    | '/api/voice/socket-ticket'
     | '/api/voice-status-media/$'
     | '/api/wordle/today'
     | '/api/shares/'
@@ -966,6 +976,7 @@ export interface FileRouteTypes {
     | '/api/shared-messages/$token'
     | '/api/shares/$id'
     | '/api/users/me'
+    | '/api/voice/socket-ticket'
     | '/api/voice-status-media/$'
     | '/api/wordle/today'
     | '/api/shares'
@@ -1056,6 +1067,7 @@ export interface FileRouteTypes {
     | '/api/shared-messages/$token'
     | '/api/shares/$id'
     | '/api/users/me'
+    | '/api/voice/socket-ticket'
     | '/api/voice-status-media/$'
     | '/api/wordle/today'
     | '/api/shares/'
@@ -1143,6 +1155,7 @@ export interface RootRouteChildren {
   ApiSharedMessagesTokenRoute: typeof ApiSharedMessagesTokenRouteWithChildren
   ApiSharesIdRoute: typeof ApiSharesIdRoute
   ApiUsersMeRoute: typeof ApiUsersMeRoute
+  ApiVoiceSocketTicketRoute: typeof ApiVoiceSocketTicketRoute
   ApiVoiceStatusMediaSplatRoute: typeof ApiVoiceStatusMediaSplatRoute
   ApiWordleTodayRoute: typeof ApiWordleTodayRoute
   ApiSharesIndexRoute: typeof ApiSharesIndexRoute
@@ -1355,6 +1368,13 @@ declare module '@tanstack/react-router' {
       path: '/api/wordle/today'
       fullPath: '/api/wordle/today'
       preLoaderRoute: typeof ApiWordleTodayRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/voice/socket-ticket': {
+      id: '/api/voice/socket-ticket'
+      path: '/api/voice/socket-ticket'
+      fullPath: '/api/voice/socket-ticket'
+      preLoaderRoute: typeof ApiVoiceSocketTicketRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/voice-status-media/$': {
@@ -2049,6 +2069,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiSharedMessagesTokenRoute: ApiSharedMessagesTokenRouteWithChildren,
   ApiSharesIdRoute: ApiSharesIdRoute,
   ApiUsersMeRoute: ApiUsersMeRoute,
+  ApiVoiceSocketTicketRoute: ApiVoiceSocketTicketRoute,
   ApiVoiceStatusMediaSplatRoute: ApiVoiceStatusMediaSplatRoute,
   ApiWordleTodayRoute: ApiWordleTodayRoute,
   ApiSharesIndexRoute: ApiSharesIndexRoute,

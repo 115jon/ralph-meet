@@ -10,6 +10,7 @@ import { MOBILE_ACTION_TYPE_ID, showNativeDesktopToast, syncDesktopNotificationS
 import { apiPut } from "@/lib/api-client";
 import { getCurrentPresencePlatform, isTauri, wsUrl } from "@/lib/platform";
 import { normalizePresencePlatforms, type PresencePlatform } from "@/lib/presence-platform";
+import { fetchSocketProtocols } from "@/lib/voice/socket-ticket-client";
 import {
   areReconnectSoundsSuppressed,
   beginReconnectSoundSuppression,
@@ -752,6 +753,8 @@ export function createChatGateway(
   let reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
   let reconnectAttempt = 0;
   let intentionalDisconnect = false;
+  let connecting = false;
+  let ticketRequestGeneration = 0;
 
   const BACKOFF_BASE = 1000;       // 1 second
   const BACKOFF_MAX = 30_000;      // 30 seconds cap
@@ -782,6 +785,8 @@ export function createChatGateway(
 
   const disconnectGateway = () => {
     intentionalDisconnect = true;
+    connecting = false;
+    ticketRequestGeneration++;
     releaseReconnectSoundSuppression?.();
     releaseReconnectSoundSuppression = null;
     if (reconnectTimeout) {
@@ -801,42 +806,73 @@ export function createChatGateway(
   };
 
   const initGateway = (userId: string | null | undefined) => {
-    if (ws) return; // Already connected or connecting
+    if (clerkUserId !== userId && (ws || connecting)) {
+      disconnectGateway();
+    }
+    if (ws || connecting) return; // Already connected or connecting
 
     intentionalDisconnect = false;
     clerkUserId = userId;
-    const url = wsUrl("/api/gateway");
+    void openGatewaySocket();
+  };
 
-    ws = new WebSocket(url);
+  const openGatewaySocket = async () => {
+    if (ws || connecting || intentionalDisconnect) return;
+    connecting = true;
+    const requestGeneration = ++ticketRequestGeneration;
+    const ticketUserId = clerkUserId;
+    try {
+      const protocols = await fetchSocketProtocols({ audience: "global" });
+      if (
+        intentionalDisconnect
+        || ws
+        || requestGeneration !== ticketRequestGeneration
+        || ticketUserId !== clerkUserId
+      ) return;
 
-    ws.onopen = () => {
-      chatLog.info("Connected");
-      reconnectAttempt = 0;
-      dispatch({ type: "SET_CONNECTED", connected: true });
-      dispatch({ type: "SET_RECONNECT_ATTEMPT", attempt: 0 });
-    };
+      const url = wsUrl("/api/gateway");
+      ws = new WebSocket(url, protocols);
 
-    ws.onmessage = (event) => {
-      try {
-        const msg = JSON.parse(event.data);
-        handleGatewayMessage(msg);
-      } catch {
-        chatLog.warn("Invalid message:", event.data);
-      }
-    };
+      ws.onopen = () => {
+        chatLog.info("Connected");
+        reconnectAttempt = 0;
+        dispatch({ type: "SET_CONNECTED", connected: true });
+        dispatch({ type: "SET_RECONNECT_ATTEMPT", attempt: 0 });
+      };
 
-    ws.onclose = () => {
-      chatLog.info("Disconnected");
-      dispatch({ type: "SET_CONNECTED", connected: false });
+      ws.onmessage = (event) => {
+        try {
+          const msg = JSON.parse(event.data);
+          handleGatewayMessage(msg);
+        } catch {
+          chatLog.warn("Invalid message:", event.data);
+        }
+      };
 
-      hb.stop();
-      ws = null;
-      gatewayReady = false;
-      identified = false;
+      ws.onclose = (event) => {
+        chatLog.info("Disconnected");
+        dispatch({ type: "SET_CONNECTED", connected: false });
 
-      // Auto-reconnect unless intentionally disconnected
+        hb.stop();
+        ws = null;
+        gatewayReady = false;
+        identified = false;
+
+        if (event.code === 4008) {
+          intentionalDisconnect = true;
+          chatLog.warn("Realtime admission was rejected. Not reconnecting.");
+          return;
+        }
+
+        // Auto-reconnect unless intentionally disconnected
+        scheduleReconnect();
+      };
+    } catch (error) {
+      chatLog.warn("Could not obtain gateway ticket", error);
       scheduleReconnect();
-    };
+    } finally {
+      connecting = false;
+    }
   };
 
   const setClerkUserId = (userId: string | null | undefined) => {
