@@ -64,6 +64,23 @@ function makePlaybackState(
 }
 
 describe("ListenTogetherNowPlayingCard", () => {
+  it("anchors the loudness switch thumb inside its track", () => {
+    render(
+      <ListenTogetherNowPlayingCard
+        playback={makePlaybackState()}
+        sfu={{ voiceGW: { sendAppEvent: vi.fn() } } as never}
+        roomSlug="room-1"
+        variant="panel"
+      />,
+    );
+
+    const thumb = screen
+      .getByRole("switch", { name: "Turn off loudness control" })
+      .querySelector("span");
+
+    expect(thumb).toHaveClass("left-0.5");
+  });
+
   it("updates local loudness control without sending a room command", async () => {
     const playback = makePlaybackState({
       loudnessEnabled: true,
