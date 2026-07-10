@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "component": {
+    "name": "CEF runtime",
+    "version": "144.0.16+g4231b34+chromium-144.0.7559.231",
+    "source_url": "https://github.com/chromiumembedded/cef",
+    "cef_commit": "4231b34521b3db93f01ed468c1d2c4435eaa0410",
+    "chromium_commit": "523d8b83478e992b99dcbfdf347e06e4e7ac9371",
+    "chromium_version": "144.0.7559.231"
+  },
+  "distribution": {
+    "asset_url": "https://github.com/115jon/ralph-meet/releases/download/cef-build-assets/cef-windows-x64.zip",
+    "asset_sha256": "1a38ffb5d4a7259eefc0e7ace063ea7c2d8112f6fb91f97cb95f132362f7c068",
+    "asset_bytes": 167651626,
+    "asset_immutable": false,
+    "source_build_attested": false
+  },
+  "build": {
+    "branch": "7559",
+    "distribution": "minimal-distrib x64",
+    "gn_args": {
+      "is_official_build": true,
+      "use_thin_lto": false,
+      "proprietary_codecs": true,
+      "ffmpeg_branding": "Chrome",
+      "enable_widevine": true
+    },
+    "patch_manifest_sha256": null,
+    "toolchain": null
+  },
+  "foundation_disposition": {
+    "direct_signing": "blocked",
+    "included_unsigned": "blocked pending SignPath determination",
+    "blockers": [
+      "The published archive is not proven to derive from the recorded local source build.",
+      "The recorded build enables Widevine support and requires a no-Widevine rebuild before any OSS eligibility claim.",
+      "All bundled CEF/Chromium/FFmpeg components require release-specific license evidence."
+    ]
+  }
+}

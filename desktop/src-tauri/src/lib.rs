@@ -87,6 +87,13 @@ struct DesktopRuntimeSettings {
     hardware_acceleration: bool,
 }
 
+#[derive(serde::Deserialize, serde::Serialize)]
+#[serde(rename_all = "PascalCase")]
+struct InstallerConsent {
+    automatic_update_checks_enabled: bool,
+    accepted_at_utc: Option<String>,
+}
+
 #[derive(Clone, serde::Deserialize)]
 struct PersistedWindowStateEntry {
     width: u32,
@@ -471,6 +478,23 @@ fn runtime_settings_path() -> Option<std::path::PathBuf> {
                 .join(".config")
                 .join(APP_DATA_DIRECTORY_NAME)
                 .join("runtime-settings.json")
+        })
+    }
+}
+
+fn installer_consent_path() -> Option<std::path::PathBuf> {
+    #[cfg(target_os = "windows")]
+    {
+        windows_app_data_root().map(|base| base.join("installer-consent.json"))
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        std::env::var_os("HOME").map(|base| {
+            std::path::PathBuf::from(base)
+                .join(".config")
+                .join(APP_DATA_DIRECTORY_NAME)
+                .join("installer-consent.json")
         })
     }
 }
@@ -1129,6 +1153,8 @@ pub fn run() {
             set_hardware_acceleration,
             set_close_to_tray,
             set_start_minimized,
+            get_automatic_update_checks,
+            set_automatic_update_checks,
             thumbnail_toolbar::sync_taskbar_thumbnail_toolbar,
             window::set_title_bar_dark_mode,
             window::set_taskbar_notification_attention,
@@ -1160,6 +1186,34 @@ fn set_close_to_tray(state: tauri::State<'_, DesktopSettings>, enabled: bool) {
 fn set_start_minimized(state: tauri::State<'_, DesktopSettings>, enabled: bool) {
     state.start_minimized.store(enabled, Ordering::Relaxed);
     log::info!("[Settings] start_minimized = {}", enabled);
+}
+
+#[tauri::command]
+fn get_automatic_update_checks() -> Option<bool> {
+    let path = installer_consent_path()?;
+    let raw = std::fs::read_to_string(path).ok()?;
+    serde_json::from_str::<InstallerConsent>(&raw)
+        .ok()
+        .map(|consent| consent.automatic_update_checks_enabled)
+}
+
+#[tauri::command]
+fn set_automatic_update_checks(enabled: bool) -> Result<(), String> {
+    let path = installer_consent_path()
+        .ok_or_else(|| "installer consent path unavailable".to_string())?;
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).map_err(|err| err.to_string())?;
+    }
+
+    let existing = std::fs::read_to_string(&path)
+        .ok()
+        .and_then(|raw| serde_json::from_str::<InstallerConsent>(&raw).ok());
+    let consent = InstallerConsent {
+        automatic_update_checks_enabled: enabled,
+        accepted_at_utc: existing.and_then(|value| value.accepted_at_utc),
+    };
+    let raw = serde_json::to_string_pretty(&consent).map_err(|err| err.to_string())?;
+    std::fs::write(path, raw).map_err(|err| err.to_string())
 }
 
 #[tauri::command]

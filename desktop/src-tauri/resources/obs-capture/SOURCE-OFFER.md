@@ -40,7 +40,8 @@ distributor hereby makes the following written offer, **valid for at least three
 > above, under the terms of the GNU General Public License, version 2.
 
 To exercise this offer, or to obtain the corresponding source directly, contact
-the ralph-meet maintainers through the project's public repository.
+the Ralph Meet maintainer at <115jon@proton.me> or through the project's public
+repository.
 
 > **Distribution note:** When the desktop app is distributed online, the
 > corresponding source is made available for the full period the binary is

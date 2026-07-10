@@ -13,17 +13,19 @@ distributed under, satisfying the dependency/attribution-record requirement
 > (`src-tauri/Cargo.lock`, the workspace `pnpm-lock.yaml`) and are not duplicated
 > here.
 
+Included upstream binaries must not be described as Ralph Meet-signed merely
+because they are packaged by the installer.
+
 ---
 
 ## Owned_Capture_Component (forked OBS Studio `win-capture`) — GPLv2
 
 The `game-capture-hook` Cargo feature ships the **Owned_Capture_Component**: a
-project-owned game-capture payload (Forked_Hook_DLL) and injector
+separately licensed game-capture payload (Forked_Hook_DLL) and injector
 (Owned_Injector) **built from the source of** OBS Studio's `win-capture`
-plugin. ralph-meet has been relicensed to be **GPLv2-compatible** so it may
-build and link from OBS `win-capture` sources; the resulting fork is
-distributed under GPLv2 with its complete corresponding source made available
-(Requirement 11.1–11.3).
+plugin. The component is distributed under GPL-2.0-only with its complete
+corresponding source made available. Ralph Meet-owned host code communicates
+with this component through its documented IPC boundary.
 
 ### Components (name, upstream version, license) — Requirement 11.5
 
@@ -74,12 +76,21 @@ least three years, per GPLv2 §3) ships at
 
 ### License posture (linkage)
 
-ralph-meet is relicensed to be **GPLv2-compatible** for the purpose of building
-and linking from OBS `win-capture` sources. The Forked_Hook_DLL is injected
+Ralph Meet-owned host code is GPL-3.0-or-later. The Forked_Hook_DLL is injected
 into the **target game's process** (never into the desktop binary) and the
 Owned_Injector runs as a **standalone child process**; the host interacts with
-them over the shared-texture IPC protocol. The precise relicensing mechanics and
-the full set of files the GPLv2 obligation reaches are flagged in the
-`owned-game-capture-hook` requirements (Assumptions and Risks) as needing
-human/legal confirmation; this record documents the obligations and does not
+them over the shared-texture IPC protocol. The capture component remains
+GPL-2.0-only. This record documents the distribution boundary and does not
 constitute legal advice.
+
+## CEF/Chromium runtime — upstream included component
+
+The desktop release also includes a custom CEF/Chromium runtime obtained from
+the locked release archive referenced by
+`desktop/src-tauri/cef-runtime.lock.json`. The runtime includes native PE files,
+CEF resources, and locale packs. It is not Ralph Meet-owned source and is not an
+initial direct-signing candidate.
+
+CEF redistribution notices, archive identity, build flags, and the exact payload
+hash must accompany each release. The runtime remains included unsigned unless
+its provenance and signing scope are separately accepted by SignPath Foundation.

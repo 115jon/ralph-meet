@@ -269,8 +269,31 @@ jobs:
           # Copy obs-capture directory if present
           $srcObsCapture = Join-Path $ReleaseDir "obs-capture"
           if (Test-Path $srcObsCapture) {
-              Copy-Item -Path $srcObsCapture -Destination $stageDir -Recurse -Force
+            Copy-Item -Path $srcObsCapture -Destination $stageDir -Recurse -Force
           }
+
+          $manifest = Get-ChildItem -LiteralPath $stageDir -File -Recurse |
+            Sort-Object FullName |
+            ForEach-Object {
+              $relativePath = $_.FullName.Substring($stageDir.Length).TrimStart('\') -replace '\\', '/'
+              $classification = if ($relativePath -eq "RalphMeet.exe") {
+                "first-party-signing-candidate"
+              } elseif ($relativePath.StartsWith("obs-capture/")) {
+                "included-unsigned-obs-component"
+              } elseif ($relativePath.StartsWith("locales/") -or $relativePath -match "^(libcef|chrome_elf|libEGL|libGLESv2|d3dcompiler_47|dxil|dxcompiler|vk_swiftshader|vulkan-1|bootstrap)") {
+                "included-unsigned-cef-component"
+              } else {
+                "included-runtime-resource"
+              }
+
+              [PSCustomObject]@{
+                path = $relativePath
+                bytes = $_.Length
+                sha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath $_.FullName).Hash.ToLowerInvariant()
+                classification = $classification
+              }
+            }
+          $manifest | ConvertTo-Json -Depth 4 | Set-Content -Path "desktop/installer/Assets/payload-manifest.json" -Encoding utf8
 
           if (Get-Command 7z -ErrorAction SilentlyContinue) {
               & 7z a -tzip -mx=9 $PayloadZip "$stageDir\*" | Out-Null
@@ -279,6 +302,19 @@ jobs:
           }
 
           Remove-Item -Path $stageDir -Recurse -Force
+
+      - name: Generate release checksums
+        shell: pwsh
+        run: |
+          $paths = @(
+            "desktop/installer/Assets/payload.zip",
+            "desktop/installer/Assets/payload-manifest.json"
+          )
+          $checksums = $paths | ForEach-Object {
+            $hash = Get-FileHash -Algorithm SHA256 -LiteralPath $_
+            "$($hash.Hash.ToLowerInvariant())  $($_ -replace '\\', '/')"
+          }
+          $checksums | Set-Content -Path "desktop/installer/Assets/checksums.txt" -Encoding ascii
 
       - name: Build C# installer
         shell: pwsh
@@ -353,8 +389,22 @@ jobs:
 
           # 4. Upload artifacts to the release
           $LatestJsonPath = "desktop/installer/bin/Release/net48/latest.json"
+          $ReleaseChecksumsPath = "desktop/installer/bin/Release/net48/checksums.txt"
+          $ChecksumInputs = @(
+            $SetupRenamePath,
+            "$SetupRenamePath.sig",
+            $LatestJsonPath,
+            "desktop/installer/Assets/payload.zip",
+            "desktop/installer/Assets/payload-manifest.json"
+          )
+          $ChecksumInputs | ForEach-Object {
+            $hash = Get-FileHash -Algorithm SHA256 -LiteralPath $_
+            "$($hash.Hash.ToLowerInvariant())  $($_ -replace '\\', '/')"
+          } | Set-Content -Path $ReleaseChecksumsPath -Encoding ascii
           gh release upload $env:RELEASE_TAG $SetupRenamePath --clobber -R ${{ github.repository }}
           gh release upload $env:RELEASE_TAG $LatestJsonPath --clobber -R ${{ github.repository }}
+          gh release upload $env:RELEASE_TAG $ReleaseChecksumsPath --clobber -R ${{ github.repository }}
+          gh release upload $env:RELEASE_TAG "desktop/installer/Assets/payload-manifest.json" --clobber -R ${{ github.repository }}
 
           # 5. Publish the release and mark it as latest
           gh release edit $env:RELEASE_TAG --draft=false --latest -R ${{ github.repository }}

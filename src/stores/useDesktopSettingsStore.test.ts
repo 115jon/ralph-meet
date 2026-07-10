@@ -43,8 +43,9 @@ describe("syncSettingsToRust", () => {
       openOnStartup: false,
       startMinimized: false,
       closeToTray: true,
-      hardwareAcceleration: true,
-      desktopNotifications: true,
+        hardwareAcceleration: true,
+        desktopNotifications: true,
+        automaticUpdateChecks: false,
     });
 
     expect(invokeMock).toHaveBeenCalledWith("set_open_on_startup", { enabled: false });
@@ -61,6 +62,7 @@ describe("syncSettingsToRust", () => {
         closeToTray: false,
         hardwareAcceleration: false,
         desktopNotifications: true,
+        automaticUpdateChecks: false,
       },
       { includeHardwareAcceleration: true },
     );

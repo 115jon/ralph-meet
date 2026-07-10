@@ -11,6 +11,8 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as SignUpRouteImport } from './routes/sign-up'
 import { Route as SignInRouteImport } from './routes/sign-in'
+import { Route as PrivacyRouteImport } from './routes/privacy'
+import { Route as CodeSigningPolicyRouteImport } from './routes/code-signing-policy'
 import { Route as ChatRouteImport } from './routes/chat'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ShareTokenRouteImport } from './routes/share.$token'
@@ -107,6 +109,16 @@ const SignUpRoute = SignUpRouteImport.update({
 const SignInRoute = SignInRouteImport.update({
   id: '/sign-in',
   path: '/sign-in',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PrivacyRoute = PrivacyRouteImport.update({
+  id: '/privacy',
+  path: '/privacy',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CodeSigningPolicyRoute = CodeSigningPolicyRouteImport.update({
+  id: '/code-signing-policy',
+  path: '/code-signing-policy',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ChatRoute = ChatRouteImport.update({
@@ -564,6 +576,8 @@ const ApiServersIdMembersUserIdRolesRoute =
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/chat': typeof ChatRouteWithChildren
+  '/code-signing-policy': typeof CodeSigningPolicyRoute
+  '/privacy': typeof PrivacyRoute
   '/sign-in': typeof SignInRoute
   '/sign-up': typeof SignUpRoute
   '/api/account-claims': typeof ApiAccountClaimsRoute
@@ -655,6 +669,8 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/chat': typeof ChatRouteWithChildren
+  '/code-signing-policy': typeof CodeSigningPolicyRoute
+  '/privacy': typeof PrivacyRoute
   '/sign-in': typeof SignInRoute
   '/sign-up': typeof SignUpRoute
   '/api/account-claims': typeof ApiAccountClaimsRoute
@@ -747,6 +763,8 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/chat': typeof ChatRouteWithChildren
+  '/code-signing-policy': typeof CodeSigningPolicyRoute
+  '/privacy': typeof PrivacyRoute
   '/sign-in': typeof SignInRoute
   '/sign-up': typeof SignUpRoute
   '/api/account-claims': typeof ApiAccountClaimsRoute
@@ -840,6 +858,8 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/chat'
+    | '/code-signing-policy'
+    | '/privacy'
     | '/sign-in'
     | '/sign-up'
     | '/api/account-claims'
@@ -931,6 +951,8 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/chat'
+    | '/code-signing-policy'
+    | '/privacy'
     | '/sign-in'
     | '/sign-up'
     | '/api/account-claims'
@@ -1022,6 +1044,8 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/chat'
+    | '/code-signing-policy'
+    | '/privacy'
     | '/sign-in'
     | '/sign-up'
     | '/api/account-claims'
@@ -1114,6 +1138,8 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   ChatRoute: typeof ChatRouteWithChildren
+  CodeSigningPolicyRoute: typeof CodeSigningPolicyRoute
+  PrivacyRoute: typeof PrivacyRoute
   SignInRoute: typeof SignInRoute
   SignUpRoute: typeof SignUpRoute
   ApiAccountClaimsRoute: typeof ApiAccountClaimsRoute
@@ -1179,6 +1205,20 @@ declare module '@tanstack/react-router' {
       path: '/sign-in'
       fullPath: '/sign-in'
       preLoaderRoute: typeof SignInRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/privacy': {
+      id: '/privacy'
+      path: '/privacy'
+      fullPath: '/privacy'
+      preLoaderRoute: typeof PrivacyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/code-signing-policy': {
+      id: '/code-signing-policy'
+      path: '/code-signing-policy'
+      fullPath: '/code-signing-policy'
+      preLoaderRoute: typeof CodeSigningPolicyRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/chat': {
@@ -2028,6 +2068,8 @@ const ApiSharedMessagesTokenRouteWithChildren =
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   ChatRoute: ChatRouteWithChildren,
+  CodeSigningPolicyRoute: CodeSigningPolicyRoute,
+  PrivacyRoute: PrivacyRoute,
   SignInRoute: SignInRoute,
   SignUpRoute: SignUpRoute,
   ApiAccountClaimsRoute: ApiAccountClaimsRoute,

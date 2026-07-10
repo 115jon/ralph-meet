@@ -3,8 +3,8 @@ name = "ralph-meet-desktop"
 version = "1.19.1"
 description = "Ralph Meet — Real-Time Communication Desktop Client"
 authors = ["115jon"]
-license = "MIT"
-repository = ""
+license = "GPL-3.0-or-later"
+repository = "https://github.com/115jon/ralph-meet"
 edition = "2021"
 rust-version = "1.77.2"
 

@@ -1233,7 +1233,7 @@ function HomePageFooter() {
               </li>
               <li>
                 <a
-                  href="https://github.com/115jon/ralph-meet/releases/download/v1.9.0/RalphMeetSetup.exe"
+                  href="https://github.com/115jon/ralph-meet/releases/latest"
                   className="transition-colors hover:text-rm-text-secondary"
                 >
                   Download App (Win)
@@ -1290,12 +1290,15 @@ function HomePageFooter() {
             <ul className="flex flex-col gap-2 text-xs font-medium text-rm-text-muted">
               <li>
                 <a
-                  href="https://www.cloudflare.com/privacypolicy/"
-                  target="_blank"
-                  rel="noreferrer"
+                  href="/privacy"
                   className="transition-colors hover:text-rm-text-secondary"
                 >
                   Privacy Policy
+                </a>
+              </li>
+              <li>
+                <a href="/code-signing-policy" className="transition-colors hover:text-rm-text-secondary">
+                  Code Signing Policy
                 </a>
               </li>
             </ul>
@@ -1305,7 +1308,7 @@ function HomePageFooter() {
         {/* Bottom Bar */}
         <div className="flex flex-col items-center justify-between gap-4 border-t border-rm-border/40 pt-8 sm:flex-row">
           <p className="text-center text-xs font-medium text-rm-text-muted">
-            &copy; {new Date().getFullYear()} Ralph Meet. All rights reserved.
+            &copy; {new Date().getFullYear()} Ralph Meet. GPL-3.0-or-later for Ralph Meet-owned source.
           </p>
         </div>
       </div>

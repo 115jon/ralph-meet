@@ -188,6 +188,14 @@ const OWNED_CAPTURE_COPY_ARTIFACTS: &[(&str, &str)] = &[
 /// register them with the Vulkan loader.
 const OWNED_CAPTURE_OPTIONAL_ARTIFACTS: &[&str] = &["obs-vulkan64.json", "obs-vulkan32.json"];
 
+/// GPL and attribution material that must ship with every capture-enabled
+/// payload, alongside the corresponding binaries.
+const OWNED_CAPTURE_NOTICE_ARTIFACTS: &[&str] = &[
+    "LICENSE-GPLv2.txt",
+    "ATTRIBUTION.md",
+    "SOURCE-OFFER.md",
+];
+
 /// Copy each Owned_Capture_Component artifact from the source resource dir to
 /// the build's output (next to the binary), tolerating a locked
 /// `Forked_Hook_DLL` per Requirement 7.
@@ -245,6 +253,22 @@ fn place_owned_capture_artifacts_next_to_binary() {
                 );
             }
         }
+    }
+
+    for name in OWNED_CAPTURE_NOTICE_ARTIFACTS {
+        let src = source_dir.join(name);
+        let dest = dest_dir.join(name);
+        println!("cargo:rerun-if-changed={}", src.display());
+        if !src.is_file() {
+            panic!("Required GPL notice is missing from the capture component: {}", src.display());
+        }
+        std::fs::copy(&src, &dest).unwrap_or_else(|err| {
+            panic!(
+                "Could not package required GPL notice {} at {}: {err}",
+                src.display(),
+                dest.display()
+            )
+        });
     }
 }
 

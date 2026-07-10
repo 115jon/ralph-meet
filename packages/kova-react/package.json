@@ -3,7 +3,7 @@
   "version": "1.19.1",
   "description": "Drop-in React SDK for kova-auth — embeddable sign-in/up forms, user button, org switcher, and route protection.",
   "author": "kova-auth",
-  "license": "MIT",
+  "license": "GPL-3.0-or-later",
   "type": "module",
   "sideEffects": false,
   "scripts": {
