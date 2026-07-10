@@ -1442,6 +1442,10 @@ export function useVoiceChannel({
       mode === "room" ? undefined : username,
       mode === "room" ? null : displayName,
       mode === "room" ? null : chatUserAvatarDisplay,
+      {
+        channelId: channelId ?? undefined,
+        serverId: serverId ?? undefined,
+      },
     );
     sfu.resumeAudioContext();
     localStreamRef.current = new MediaStream();

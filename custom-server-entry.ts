@@ -15,7 +15,18 @@ import { getCorsHeaders, handleCorsPreflightIfNeeded } from "./src/lib/api-helpe
 import { buildHealthzPayload } from "./src/lib/healthz";
 import { handleYtDlpRequest } from "./src/lib/ytdlp/http";
 import { syncYtDlpUpstream } from "./src/lib/ytdlp/upstream";
+import {
+  parseSocketTicketProtocols,
+  verifySocketTicket,
+  type SocketTicketAudience,
+} from "./src/lib/voice/socket-ticket";
 import { RateLimiter } from "./worker/rate-limiter";
+import {
+  appendRealtimeAdmissionHeaders,
+  createRealtimeAdmissionContext,
+  getRealtimeAdmissionConfig,
+  stripRealtimeAdmissionHeaders,
+} from "./worker/realtime-admission";
 
 // NOTE: DO classes (MeetingRoom, VoiceRoom, RateLimiterDO) are hosted in
 // a separate auxiliary worker (worker/do-entry.ts) to prevent module-level
@@ -43,6 +54,15 @@ function requireWebSocket(request: Request): Response | null {
   return null;
 }
 
+type VerifiedWebSocketRequest = {
+  request: Request;
+  responseProtocol: string;
+};
+
+function unauthorizedWebSocket(reason: string) {
+  return new Response(reason, { status: 401 });
+}
+
 function withDesktopCors(request: Request, response: Response): Response {
   try {
     const headers = getCorsHeaders(request);
@@ -68,7 +88,76 @@ function withDesktopCors(request: Request, response: Response): Response {
 interface Env {
   MEETING_ROOM: DurableObjectNamespace;
   VOICE_ROOM: DurableObjectNamespace;
+  REALTIME_ALLOWED_ORIGINS?: string;
+  REALTIME_TICKET_SECRET?: string;
   [key: string]: unknown;
+}
+
+function isAllowedRealtimeOrigin(request: Request, env: Env): boolean {
+  const origin = request.headers.get("Origin");
+  if (!origin) return false;
+
+  const allowedOrigins = new Set([
+    new URL(request.url).origin,
+    "http://tauri.localhost",
+    "https://tauri.localhost",
+    ...(env.REALTIME_ALLOWED_ORIGINS ?? "").split(",").map((value) => value.trim()).filter(Boolean),
+  ]);
+  return allowedOrigins.has(origin);
+}
+
+async function requireAuthenticatedWebSocket(
+  request: Request,
+  env: Env,
+  audience: SocketTicketAudience,
+  roomSlug: string,
+): Promise<VerifiedWebSocketRequest | Response> {
+  const upgradeError = requireWebSocket(request);
+  if (upgradeError) return upgradeError;
+  if (!isAllowedRealtimeOrigin(request, env)) return new Response("Realtime origin is not allowed", { status: 403 });
+
+  const config = getRealtimeAdmissionConfig(env);
+  if (!config.ok) return unauthorizedWebSocket("Realtime admission is not configured");
+
+  const protocol = parseSocketTicketProtocols(request.headers.get("Sec-WebSocket-Protocol"));
+  if (!protocol.ok) return unauthorizedWebSocket("Missing realtime capability");
+
+  const verification = await verifySocketTicket(protocol.value.ticket, config.config.ticketSecret, {
+    audience,
+    now: Date.now(),
+    roomSlug,
+  });
+  if (!verification.ok) return unauthorizedWebSocket("Invalid realtime capability");
+
+  const context = await createRealtimeAdmissionContext(verification.claims);
+  const headers = appendRealtimeAdmissionHeaders(stripRealtimeAdmissionHeaders(new Headers(request.headers)), context);
+  headers.delete("Sec-WebSocket-Protocol");
+  headers.set("Sec-WebSocket-Protocol", protocol.value.responseProtocol);
+
+  const consumeNamespace = env.MEETING_ROOM as DurableObjectNamespace;
+  const consumeStub = consumeNamespace.get(consumeNamespace.idFromName(roomSlug));
+  const consumeResponse = await consumeStub.fetch("https://internal/consume-realtime-admission", {
+    method: "POST",
+    headers,
+  });
+  if (!consumeResponse.ok) return unauthorizedWebSocket("Realtime capability already used");
+
+  return {
+    request: new Request(request, { headers }),
+    responseProtocol: protocol.value.responseProtocol,
+  };
+}
+
+function withWebSocketProtocol(response: Response, protocol: string): Response {
+  if (response.status !== 101) return response;
+  const headers = new Headers(response.headers);
+  headers.set("Sec-WebSocket-Protocol", protocol);
+  return new Response(null, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+    webSocket: response.webSocket,
+  });
 }
 
 export default {
@@ -129,39 +218,39 @@ export default {
 
     // ── Global Main Gateway WebSocket → MeetingRoom DO ────────────────
     if (url.pathname === "/api/gateway") {
-      const err = requireWebSocket(request);
-      if (err) return err;
+      const verified = await requireAuthenticatedWebSocket(request, env, "global", "global-gateway");
+      if (verified instanceof Response) return verified;
 
       const doNamespace = env.MEETING_ROOM as DurableObjectNamespace;
       const id = doNamespace.idFromName("global-gateway");
       const stub = doNamespace.get(id);
-      return stub.fetch(request);
+      return withWebSocketProtocol(await stub.fetch(verified.request), verified.responseProtocol);
     }
 
     // ── Channel-scoped Main Gateway → MeetingRoom DO ──────────────────
     const wsMatch = url.pathname.match(/^\/api\/channels\/([^/]+)\/ws$/);
     if (wsMatch) {
-      const err = requireWebSocket(request);
-      if (err) return err;
-
       const channelId = wsMatch[1];
+      const verified = await requireAuthenticatedWebSocket(request, env, "room", channelId);
+      if (verified instanceof Response) return verified;
+
       const doNamespace = env.MEETING_ROOM as DurableObjectNamespace;
       const id = doNamespace.idFromName(channelId);
       const stub = doNamespace.get(id);
-      return stub.fetch(request);
+      return withWebSocketProtocol(await stub.fetch(verified.request), verified.responseProtocol);
     }
 
     // ── Voice Gateway WebSocket → VoiceRoom DO ────────────────────────
     const voiceMatch = url.pathname.match(/^\/api\/channels\/([^/]+)\/voice$/);
     if (voiceMatch) {
-      const err = requireWebSocket(request);
-      if (err) return err;
-
       const channelId = voiceMatch[1];
+      const verified = await requireAuthenticatedWebSocket(request, env, "voice", channelId);
+      if (verified instanceof Response) return verified;
+
       const doNamespace = env.VOICE_ROOM as DurableObjectNamespace;
       const id = doNamespace.idFromName(channelId);
       const stub = doNamespace.get(id);
-      return stub.fetch(request);
+      return withWebSocketProtocol(await stub.fetch(verified.request), verified.responseProtocol);
     }
 
     // ── Everything else → TanStack Start ──────────────────────────────

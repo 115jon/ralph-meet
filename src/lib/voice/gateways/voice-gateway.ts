@@ -1,4 +1,5 @@
 import { VoiceOpcode, type NegotiationDonePayload, type ServerMessage, type SessionDescriptionPayload, type TrackInfo } from "@/lib/types";
+import { fetchSocketProtocols } from "@/lib/voice/socket-ticket-client";
 import { BaseGateway, type BaseGatewayEvents } from "./base-gateway";
 
 export interface VoiceGatewayEvents extends BaseGatewayEvents {
@@ -19,19 +20,61 @@ export class VoiceGateway extends BaseGateway<VoiceGatewayEvents> {
   private voiceToken: string | null = null;
   private roomSlug: string | null = null;
   private wsUrlGenerator: ((path: string) => string) | null = null;
+  private ticketContext: { channelId?: string; serverId?: string } = {};
+  private connecting = false;
+  private reconnectQueued = false;
 
   constructor() {
     super("VoiceGW", VoiceOpcode.Heartbeat);
   }
 
-  public connectVoice(participantId: string, voiceToken: string, roomSlug: string, wsUrlGenerator: (path: string) => string) {
+  public connectVoice(
+    participantId: string,
+    voiceToken: string,
+    roomSlug: string,
+    wsUrlGenerator: (path: string) => string,
+    ticketContext: { channelId?: string; serverId?: string },
+  ) {
     this.participantId = participantId;
     this.voiceToken = voiceToken;
     this.roomSlug = roomSlug;
     this.wsUrlGenerator = wsUrlGenerator;
+    this.ticketContext = ticketContext;
 
-    const url = wsUrlGenerator(`/api/channels/${roomSlug}/voice?v=1`);
-    super.connect(url);
+    void this.openVoiceSocket(true);
+  }
+
+  private async openVoiceSocket(resetReconnectAttempt: boolean) {
+    if (!this.roomSlug || !this.wsUrlGenerator) return;
+    if (this.connecting) {
+      this.reconnectQueued = true;
+      return;
+    }
+    this.connecting = true;
+    const requestGeneration = ++this.connectionRequestGeneration;
+    try {
+      const protocols = await fetchSocketProtocols({
+        audience: "voice",
+        channelId: this.ticketContext.channelId,
+        roomSlug: this.roomSlug,
+        serverId: this.ticketContext.serverId,
+      });
+      if (this.isLeaving || requestGeneration !== this.connectionRequestGeneration) return;
+      const url = this.wsUrlGenerator(`/api/channels/${this.roomSlug}/voice?v=1`);
+      super.connect(url, resetReconnectAttempt, protocols);
+    } catch (error) {
+      this.log.error("Failed to open voice socket", error);
+      this.emit("error", { message: "Could not open voice socket" });
+      this.scheduleReconnect();
+    } finally {
+      this.connecting = false;
+      if (this.reconnectQueued && !this.isLeaving) {
+        this.reconnectQueued = false;
+        void this.openVoiceSocket(false);
+      } else {
+        this.reconnectQueued = false;
+      }
+    }
   }
 
   public updateVoiceToken(token: string) {
@@ -41,8 +84,7 @@ export class VoiceGateway extends BaseGateway<VoiceGatewayEvents> {
   protected performReconnect() {
     if (this.participantId && this.voiceToken && this.roomSlug && this.wsUrlGenerator) {
       this.log.info("Voice connection lost — attempting to reconnect while preserving WebRTC peer connections");
-      const url = this.wsUrlGenerator(`/api/channels/${this.roomSlug}/voice?v=1`);
-      super.connect(url, false);
+      void this.openVoiceSocket(false);
     }
   }
 

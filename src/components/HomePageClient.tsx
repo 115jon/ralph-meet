@@ -1323,14 +1323,14 @@ export default function HomePageClient() {
       Math.random().toString(36).substring(2, 8) +
       "-" +
       Math.random().toString(36).substring(2, 6);
-    navigate({ to: `/room/${slug}` });
+    navigate({ to: "/room/$slug", params: { slug } });
   };
 
   const joinRoom = (e: React.FormEvent) => {
     e.preventDefault();
     const trimmed = room.trim().toLowerCase().replace(/\s+/g, "-");
     if (trimmed) {
-      navigate({ to: `/room/${trimmed}` });
+      navigate({ to: "/room/$slug", params: { slug: trimmed } });
     }
   };
 

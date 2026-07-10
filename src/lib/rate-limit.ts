@@ -111,6 +111,38 @@ export async function checkRateLimitDO(
   }
 }
 
+export async function checkRateLimitDOFailClosed(
+  shardId: string,
+  action: string,
+  opts: RateLimitOptions,
+): Promise<Response | null> {
+  const id = env.RATE_LIMITER.idFromName(shardId);
+  const stub = env.RATE_LIMITER.get(id);
+
+  try {
+    const response = await stub.fetch("https://internal/rate-limit", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action, limit: opts.limit, windowMs: opts.windowMs }),
+    });
+    if (!response.ok) {
+      return Response.json({ error: "Rate limit service unavailable" }, { status: 503 });
+    }
+
+    const result = await response.json() as { allowed: boolean; resetMs: number };
+    if (result.allowed) return null;
+    return Response.json(
+      { error: "Rate limit exceeded. Please slow down." },
+      {
+        status: 429,
+        headers: { "Retry-After": String(Math.ceil(result.resetMs / 1000)) },
+      },
+    );
+  } catch {
+    return Response.json({ error: "Rate limit service unavailable" }, { status: 503 });
+  }
+}
+
 /**
  * Check rate limit for a user + action combination.
  * This uses an ephemeral in-memory store. Best-effort protection.

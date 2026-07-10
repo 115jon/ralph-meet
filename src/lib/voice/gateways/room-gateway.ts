@@ -1,4 +1,5 @@
 import { VoiceOpcode, type IceServer, type ServerMessage, type TrackInfo, type VoiceState } from "@/lib/types";
+import { fetchSocketProtocols } from "@/lib/voice/socket-ticket-client";
 import type { SharedSpatialAudioState } from "@/lib/voice/spatial-audio";
 import { BaseGateway, type BaseGatewayEvents } from "./base-gateway";
 
@@ -28,6 +29,8 @@ export interface ConnectOptions {
   avatarUrl?: string;
   avatarDisplay?: import("@/lib/avatar-display").AvatarDisplay | string | null;
   clerkUserId?: string;
+  channelId?: string;
+  serverId?: string;
   roomSlug: string;
   wsUrlGenerator: (path: string) => string;
 }
@@ -37,6 +40,8 @@ export class RoomGateway extends BaseGateway<RoomGatewayEvents> {
   private participantId: string | null = null;
   private lastSeqAck = -1;
   private options: ConnectOptions | null = null;
+  private connecting = false;
+  private reconnectQueued = false;
 
   constructor() {
     super("RoomGW", VoiceOpcode.Heartbeat);
@@ -44,8 +49,44 @@ export class RoomGateway extends BaseGateway<RoomGatewayEvents> {
 
   public connectRoom(options: ConnectOptions) {
     this.options = options;
-    const url = options.wsUrlGenerator(`/api/channels/${options.roomSlug}/ws?v=1`);
-    super.connect(url);
+    void this.openRoomSocket(true);
+  }
+
+  private async openRoomSocket(resetReconnectAttempt: boolean) {
+    if (!this.options) return;
+    if (this.connecting) {
+      this.reconnectQueued = true;
+      return;
+    }
+    this.connecting = true;
+    const requestGeneration = ++this.connectionRequestGeneration;
+    try {
+      const audience = this.options.roomSlug === "global-gateway" ? "global" : "room";
+      const protocols = await fetchSocketProtocols({
+        audience,
+        channelId: this.options.channelId,
+        roomSlug: this.options.roomSlug,
+        serverId: this.options.serverId,
+      });
+      if (this.isLeaving || requestGeneration !== this.connectionRequestGeneration) return;
+      const path = audience === "global"
+        ? "/api/gateway"
+        : `/api/channels/${this.options.roomSlug}/ws?v=1`;
+      const url = this.options.wsUrlGenerator(path);
+      super.connect(url, resetReconnectAttempt, protocols);
+    } catch (error) {
+      this.log.error("Failed to open room socket", error);
+      this.emit("error", { message: "Could not open room socket" } as RoomGatewayEvents["error"]);
+      this.scheduleReconnect();
+    } finally {
+      this.connecting = false;
+      if (this.reconnectQueued && !this.isLeaving) {
+        this.reconnectQueued = false;
+        void this.openRoomSocket(false);
+      } else {
+        this.reconnectQueued = false;
+      }
+    }
   }
 
   public disconnect() {
@@ -59,8 +100,7 @@ export class RoomGateway extends BaseGateway<RoomGatewayEvents> {
     if (this.options) {
       this.log.info("Attempting reconnect...");
       this.isIdentified = false;
-      const url = this.options.wsUrlGenerator(`/api/channels/${this.options.roomSlug}/ws?v=1`);
-      super.connect(url, false);
+      void this.openRoomSocket(false);
     }
   }
 

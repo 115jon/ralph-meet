@@ -44,7 +44,9 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
   private connectArgs: {
     name: string;
     avatarUrl?: string;
+    channelId?: string;
     clerkUserId?: string;
+    serverId?: string;
     username?: string;
     displayName?: string | null;
     avatarDisplay?: import("@/lib/avatar-display").AvatarDisplay | string | null;
@@ -630,9 +632,10 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
     username?: string,
     displayName?: string | null,
     avatarDisplay?: import("@/lib/avatar-display").AvatarDisplay | string | null,
+    options?: { channelId?: string; serverId?: string },
   ) {
     this.isLeaving = false;
-    this.connectArgs = { name, avatarUrl, clerkUserId, username, displayName, avatarDisplay };
+    this.connectArgs = { name, avatarUrl, clerkUserId, username, displayName, avatarDisplay, ...options };
     this.pcReadyPromise = new Promise(r => this.pcReadyResolve = r);
     this.voiceReadyPromise = new Promise(r => this.voiceReadyResolve = r);
 
@@ -642,7 +645,9 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
       displayName,
       avatarUrl,
       avatarDisplay,
+      channelId: options?.channelId,
       clerkUserId,
+      serverId: options?.serverId,
       roomSlug: this.roomSlug,
       wsUrlGenerator: wsUrl
     });
@@ -700,7 +705,10 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
 
   private connectVoice() {
     if (!this.participantId || !this.voiceToken) return;
-    this.voiceGW.connectVoice(this.participantId, this.voiceToken, this.roomSlug, wsUrl);
+    this.voiceGW.connectVoice(this.participantId, this.voiceToken, this.roomSlug, wsUrl, {
+      channelId: this.connectArgs?.channelId,
+      serverId: this.connectArgs?.serverId,
+    });
   }
 
   private uniqueTrackList(tracks: TrackInfo[]) {

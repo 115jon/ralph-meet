@@ -23,6 +23,7 @@ import {
 import { normalizePresencePlatform, type PresencePlatform } from "../src/lib/presence-platform";
 import { getNextVoicePresenceAlarmTime, refreshVoiceMemberIdentity } from "../src/lib/voice-presence";
 import { filterVoiceChannelStatesPayload } from "../src/lib/voice-channel-state-filter";
+import { getRealtimeAdmissionFromHeaders } from "./realtime-admission";
 
 const log = clog("ChatGW");
 const meetingLog = clog("MeetingRoom");
@@ -86,6 +87,7 @@ const enum Op {
 const enum CloseCode {
   UnknownOpcode = 4001,
   NotAuthenticated = 4003,
+  AdmissionRejected = 4008,
   AlreadyAuthenticated = 4005,
   SessionInvalid = 4006,
   SessionTimeout = 4009,
@@ -143,6 +145,11 @@ type ServerMsg = GatewayMessage;
 
 // Data stored on each WebSocket via serializeAttachment/deserializeAttachment
 interface WsAttachment {
+  admission?: {
+    accessMode: "authenticated" | "public-demo";
+    connectionGeneration: string;
+    subject: string;
+  };
   id: string;
   name: string;
   username?: string;
@@ -269,6 +276,22 @@ export class MeetingRoom extends DurableObject<Env> {
 
   constructor(public ctx: DurableObjectState, public env: Env) {
     super(ctx, env);
+
+    this.ctx.storage.sql.exec(`
+      CREATE TABLE IF NOT EXISTS realtime_ticket_nonces (
+        nonce_digest TEXT PRIMARY KEY,
+        access_mode TEXT NOT NULL,
+        audience TEXT NOT NULL,
+        room_slug TEXT NOT NULL,
+        subject TEXT NOT NULL,
+        connection_generation TEXT NOT NULL,
+        expires_at INTEGER NOT NULL,
+        consumed_at INTEGER NOT NULL
+      );
+    `);
+    this.ctx.storage.sql.exec(
+      "CREATE INDEX IF NOT EXISTS idx_realtime_ticket_nonces_expires ON realtime_ticket_nonces(expires_at)",
+    );
 
     // Cloudflare's auto-response absorbs messages at the edge, preventing the DO
     // from updating the `last_heartbeat` timestamp, which causes the zombie
@@ -407,6 +430,10 @@ export class MeetingRoom extends DurableObject<Env> {
     const url = new URL(request.url);
     const gatewayVersion = parseInt(url.searchParams.get("v") ?? "1", 10);
 
+    if (url.pathname === "/consume-realtime-admission" && request.method === "POST") {
+      return this.consumeRealtimeAdmission(request);
+    }
+
     // Extract channel ID or slug from URL path
     const channelMatch = url.pathname.match(/\/api\/channels\/([^/]+)\/ws/);
     if (channelMatch) {
@@ -421,9 +448,22 @@ export class MeetingRoom extends DurableObject<Env> {
     }
 
     if (url.pathname.endsWith("/ws") || url.pathname === "/api/gateway") {
+      const admission = getRealtimeAdmissionFromHeaders(request.headers);
+      const expectedAudience = url.pathname === "/api/gateway" ? "global" : "room";
+      if (!admission || admission.audience !== expectedAudience || admission.roomSlug !== this.roomSlug) {
+        return new Response("Unauthorized", { status: 401 });
+      }
+
       const pair = new WebSocketPair();
       const [client, server] = Object.values(pair);
       this.ctx.acceptWebSocket(server);
+      server.serializeAttachment({
+        admission: {
+          accessMode: admission.accessMode,
+          connectionGeneration: admission.connectionGeneration,
+          subject: admission.subject,
+        },
+      });
 
       log.info(`New connection, gateway_version=${gatewayVersion}`);
 
@@ -540,6 +580,57 @@ export class MeetingRoom extends DurableObject<Env> {
     return new Response("Not found", { status: 404 });
   }
 
+  private consumeRealtimeAdmission(request: Request): Response {
+    const admission = getRealtimeAdmissionFromHeaders(request.headers);
+    if (!admission) {
+      return Response.json({ ok: false, reason: "missing_admission" }, { status: 401 });
+    }
+    if (this.roomSlug === "unknown") {
+      this.roomSlug = admission.roomSlug;
+      this.ctx.storage.put("roomSlug", this.roomSlug).catch(() => { });
+    }
+    if (admission.roomSlug !== this.roomSlug) {
+      return Response.json({ ok: false, reason: "room_mismatch" }, { status: 401 });
+    }
+    if (admission.audience !== "room" && admission.audience !== "voice" && admission.audience !== "global") {
+      return Response.json({ ok: false, reason: "audience_mismatch" }, { status: 401 });
+    }
+    if (Date.now() >= admission.expiresAt) {
+      return Response.json({ ok: false, reason: "expired" }, { status: 401 });
+    }
+
+    try {
+      this.ctx.storage.sql.exec(
+        `DELETE FROM realtime_ticket_nonces WHERE expires_at <= ?`,
+        Date.now(),
+      );
+      this.ctx.storage.sql.exec(
+        `INSERT INTO realtime_ticket_nonces (
+          nonce_digest,
+          access_mode,
+          audience,
+          room_slug,
+          subject,
+          connection_generation,
+          expires_at,
+          consumed_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        admission.nonceDigest,
+        admission.accessMode,
+        admission.audience,
+        admission.roomSlug,
+        admission.subject,
+        admission.connectionGeneration,
+        admission.expiresAt,
+        Date.now(),
+      );
+
+      return Response.json({ ok: true });
+    } catch {
+      return Response.json({ ok: false, reason: "replayed" }, { status: 401 });
+    }
+  }
+
   async webSocketMessage(ws: WebSocket, rawMsg: string | ArrayBuffer) {
     if (typeof rawMsg !== "string") return;
     if (this.env.DEBUG) log.info(`webSocketMessage received: ${rawMsg.substring(0, 100)}`);
@@ -559,6 +650,14 @@ export class MeetingRoom extends DurableObject<Env> {
       this.sendTo(ws, {
         op: Op.Error,
         d: { code: CloseCode.UnknownOpcode, message: "Missing opcode" },
+      });
+      return;
+    }
+
+    if (this.getSessionAdmission(ws)?.accessMode === "public-demo" && !this.isAllowedPublicDemoOpcode(msg.op)) {
+      this.sendTo(ws, {
+        op: Op.Error,
+        d: { code: CloseCode.NotAuthenticated, message: "Operation is unavailable in public demo rooms" },
       });
       return;
     }
@@ -798,9 +897,25 @@ export class MeetingRoom extends DurableObject<Env> {
 
   private persist(ws: WebSocket, data: WsAttachment) {
     const wasEmpty = this.sessions.size === 0;
-    this.sessions.set(ws, data);
-    ws.serializeAttachment(data);
+    const admission = data.admission ?? this.getSessionAdmission(ws) ?? undefined;
+    const nextData = admission ? { ...data, admission } : data;
+    this.sessions.set(ws, nextData);
+    ws.serializeAttachment(nextData);
     if (wasEmpty) this.scheduleAlarm();
+  }
+
+  private getSessionAdmission(ws: WebSocket): WsAttachment["admission"] | undefined {
+    const attachment = ws.deserializeAttachment() as Partial<WsAttachment> | null;
+    return attachment?.admission;
+  }
+
+  private isAllowedPublicDemoOpcode(op: number): boolean {
+    return op === Op.Identify
+      || op === Op.Heartbeat
+      || op === Op.Resume
+      || op === Op.RefreshVoiceCredentials
+      || op === Op.VoiceStateUpdate
+      || op === Op.ClientDisconnect;
   }
 
   private getPresencePlatformsForUser(clerkUserId: string, options?: { excludeWs?: WebSocket }): PresencePlatform[] {
@@ -1326,21 +1441,30 @@ export class MeetingRoom extends DurableObject<Env> {
     }
 
     try {
+      const admission = this.getSessionAdmission(ws);
+      if (!admission) {
+        this.sendTo(ws, {
+          op: Op.Error,
+          d: { code: CloseCode.NotAuthenticated, message: "Missing realtime admission" },
+        });
+        return;
+      }
       const participantId = crypto.randomUUID();
+      const admittedUserId = admission.accessMode === "authenticated" ? admission.subject : undefined;
 
       // Run all async sub-tasks in parallel to reduce time-to-Ready.
       // Previously these ran sequentially, adding the SUM of their latencies.
       // Now total latency = max(single call) instead of sum(all calls).
       const [iceServers, profile, userRow, voiceToken] = await Promise.all([
         this.generateTurnCredentials(),
-        d.clerk_user_id ? this.fetchClerkProfile(d.clerk_user_id) : null,
-        d.clerk_user_id
+        admittedUserId ? this.fetchClerkProfile(admittedUserId) : null,
+        admittedUserId
           ? this.env.DB.prepare("SELECT status FROM users WHERE id = ?")
-            .bind(d.clerk_user_id)
+            .bind(admittedUserId)
             .first<{ status: string }>()
             .catch((e: unknown) => { identifyLog.error("D1 status fetch failed:", e); return null; })
           : null,
-        this.generateVoiceToken(participantId, d.clerk_user_id),
+        this.generateVoiceToken(participantId, admission.subject),
       ]);
 
       // Resolve actual profile from Clerk if possible
@@ -1363,7 +1487,7 @@ export class MeetingRoom extends DurableObject<Env> {
         resolvedStatus = userRow.status as any;
       }
 
-      meetingLog.info(`Identify: name=${resolvedName}, avatar=${resolvedAvatar}, clerk=${d.clerk_user_id}`);
+      meetingLog.info(`Identify: name=${resolvedName}, avatar=${resolvedAvatar}, subject=${admittedUserId ?? "anonymous"}`);
 
       // Build roster
       const participants: VoiceState[] = [];
@@ -1379,7 +1503,7 @@ export class MeetingRoom extends DurableObject<Env> {
         avatar_url: resolvedAvatar,
         avatar_display: resolvedAvatarDisplay,
         platform: resolvedPlatform,
-        clerk_user_id: d.clerk_user_id,
+        clerk_user_id: admittedUserId,
         stream_preview_url: null,
         self_mute: true,
         self_deaf: false,
@@ -1526,11 +1650,21 @@ export class MeetingRoom extends DurableObject<Env> {
 
   private async handleResume(ws: WebSocket, d: { session_id: string; seq_ack: number }) {
     const oldAttachment = this.resumableSessions.get(d.session_id);
+    const admission = this.getSessionAdmission(ws);
     if (!oldAttachment) {
       this.sendTo(ws, {
         op: Op.Error,
         d: { code: CloseCode.SessionInvalid, message: "Session not found for resume" },
       });
+      return;
+    }
+
+    if (!admission || oldAttachment.admission?.subject !== admission.subject) {
+      this.sendTo(ws, {
+        op: Op.Error,
+        d: { code: CloseCode.AdmissionRejected, message: "Resume subject mismatch" },
+      });
+      try { ws.close(CloseCode.AdmissionRejected, "Resume subject mismatch"); } catch { }
       return;
     }
 
@@ -1601,7 +1735,7 @@ export class MeetingRoom extends DurableObject<Env> {
     // on the Voice Gateway. Without this, the client reuses the stale token
     // from the initial Identify, which will eventually expire (1h TTL).
     const [freshVoiceToken, freshIceServers] = await Promise.all([
-      this.generateVoiceToken(oldAttachment.id, oldAttachment.clerk_user_id),
+      this.generateVoiceToken(oldAttachment.id, oldAttachment.admission?.subject),
       this.generateTurnCredentials(),
     ]);
 
@@ -1631,7 +1765,7 @@ export class MeetingRoom extends DurableObject<Env> {
     if (!session) return;
 
     const [freshVoiceToken, freshIceServers] = await Promise.all([
-      this.generateVoiceToken(session.id, session.clerk_user_id),
+      this.generateVoiceToken(session.id, session.admission?.subject),
       this.generateTurnCredentials(),
     ]);
 
@@ -1668,6 +1802,21 @@ export class MeetingRoom extends DurableObject<Env> {
   ) {
     const session = this.requireSession(ws);
     if (!session) return;
+
+    const isPublicDemo = session.admission?.accessMode === "public-demo";
+    if (
+      isPublicDemo
+      && (d.stream_preview_url !== undefined
+        || d.spatial_audio_enabled !== undefined
+        || d.spatial_audio_high_fidelity !== undefined
+        || d.spatial_audio_state !== undefined)
+    ) {
+      this.sendTo(ws, {
+        op: Op.Error,
+        d: { code: CloseCode.NotAuthenticated, message: "Voice state field is unavailable in public demo rooms" },
+      });
+      return;
+    }
 
     if (d.self_mute !== undefined) session.self_mute = d.self_mute;
     if (d.self_deaf !== undefined) session.self_deaf = d.self_deaf;

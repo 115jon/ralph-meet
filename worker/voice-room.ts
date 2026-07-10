@@ -38,6 +38,7 @@ import {
 } from "../src/lib/voice/listen-together-state";
 import { getNextVoicePresenceAlarmTime } from "../src/lib/voice-presence";
 import { toSafeSfuFailure } from "./sfu-diagnostics";
+import { getRealtimeAdmissionFromHeaders } from "./realtime-admission";
 
 const log = clog("VoiceGW");
 const roomLog = clog("VoiceRoom");
@@ -86,6 +87,7 @@ const enum CloseCode {
   NotAuthenticated = 4003,
   AlreadyAuthenticated = 4005,
   AuthenticationFailed = 4004,
+  AdmissionRejected = 4008,
 }
 
 // ── Interfaces ──────────────────────────────────────────────────────────────
@@ -141,6 +143,11 @@ interface DemoChatMessage {
 
 // WebSocket attachment for voice sessions
 interface VoiceAttachment {
+  admission?: {
+    accessMode: "authenticated" | "public-demo";
+    connectionGeneration: string;
+    subject: string;
+  };
   participant_id: string;
   connection_id?: string;
 }
@@ -293,9 +300,21 @@ export class VoiceRoom extends DurableObject<Env> {
     }
 
     if (url.pathname.endsWith("/voice")) {
+      const admission = getRealtimeAdmissionFromHeaders(request.headers);
+      if (!admission || admission.audience !== "voice" || admission.roomSlug !== this.roomSlug) {
+        return new Response("Unauthorized", { status: 401 });
+      }
+
       const pair = new WebSocketPair();
       const [client, server] = Object.values(pair);
       this.ctx.acceptWebSocket(server);
+      server.serializeAttachment({
+        admission: {
+          accessMode: admission.accessMode,
+          connectionGeneration: admission.connectionGeneration,
+          subject: admission.subject,
+        },
+      });
 
       log.info(`New connection, gateway_version=${gatewayVersion}`);
 
@@ -349,6 +368,14 @@ export class VoiceRoom extends DurableObject<Env> {
       this.sendTo(ws, {
         op: Op.Error,
         d: { code: CloseCode.UnknownOpcode, message: "Missing opcode" },
+      });
+      return;
+    }
+
+    if (this.isPublicDemoSocket(ws) && !this.isAllowedPublicDemoOpcode(msg.op)) {
+      this.sendTo(ws, {
+        op: Op.Error,
+        d: { code: CloseCode.NotAuthenticated, message: "Operation is unavailable in public demo rooms" },
       });
       return;
     }
@@ -909,6 +936,26 @@ export class VoiceRoom extends DurableObject<Env> {
     return ws.deserializeAttachment() as VoiceAttachment | null;
   }
 
+  private isPublicDemoSocket(ws: WebSocket): boolean {
+    return this.getVoiceAttachment(ws)?.admission?.accessMode === "public-demo";
+  }
+
+  private isAllowedPublicDemoOpcode(op: number): boolean {
+    return op === Op.VoiceIdentify
+      || op === Op.Heartbeat
+      || op === Op.SelectProtocol
+      || op === Op.Video
+      || op === Op.StopTracks
+      || op === Op.Answer
+      || op === Op.TracksReady
+      || op === Op.Speaking
+      || op === Op.ClientDisconnect
+      || op === Op.TrackUpdate
+      || op === Op.IceRestart
+      || op === Op.ResetPullSession
+      || op === Op.VoiceAppEvent;
+  }
+
   private async disconnectParticipantImmediately(participantId: string): Promise<boolean> {
     const ws = this.getWsByParticipant(participantId);
     if (ws) {
@@ -1077,12 +1124,6 @@ export class VoiceRoom extends DurableObject<Env> {
     const sig = d.voice_token.slice(dotIdx + 1);
     const parts = payload.split(":");
 
-    if (!this.roomSlug && parts.length >= 2) {
-      const storedSlug = await this.ctx.storage.get<string>("roomSlug");
-      if (storedSlug) this.roomSlug = storedSlug;
-      if (!this.roomSlug) this.roomSlug = parts[1];
-    }
-
     if (parts.length < 3 || parts[0] !== d.participant_id || parts[1] !== this.roomSlug) {
       this.sendTo(ws, {
         op: Op.Error,
@@ -1094,7 +1135,18 @@ export class VoiceRoom extends DurableObject<Env> {
     const tokenTimestamp = parseInt(parts[2], 10);
     const TOKEN_VALIDITY_MS = 60 * 60 * 1000;
     const tokenAge = Date.now() - tokenTimestamp;
-    const clerkUserId = parts.length >= 4 && parts[3] !== "anonymous" ? parts[3] : undefined;
+    const tokenSubject = parts.length >= 4 ? parts[3] : "";
+    const admission = this.getVoiceAttachment(ws)?.admission;
+
+    if (!admission || tokenSubject !== admission.subject) {
+      this.sendTo(ws, {
+        op: Op.Error,
+        d: { code: CloseCode.AdmissionRejected, message: "Voice token subject mismatch" },
+      });
+      try { ws.close(CloseCode.AdmissionRejected, "Voice token subject mismatch"); } catch { }
+      return;
+    }
+    const clerkUserId = admission.accessMode === "authenticated" ? admission.subject : undefined;
 
     if (isNaN(tokenTimestamp) || tokenAge > TOKEN_VALIDITY_MS) {
       this.sendTo(ws, {
@@ -1124,7 +1176,11 @@ export class VoiceRoom extends DurableObject<Env> {
     }
 
     const connectionId = crypto.randomUUID();
-    const attachment: VoiceAttachment = { participant_id: d.participant_id, connection_id: connectionId };
+    const attachment: VoiceAttachment = {
+      admission,
+      participant_id: d.participant_id,
+      connection_id: connectionId,
+    };
 
     let push_session_cam: string | null = null;
     let push_session_screen: string | null = null;
@@ -1736,6 +1792,20 @@ export class VoiceRoom extends DurableObject<Env> {
 
     const type = typeof d.type === "string" ? d.type : "";
     const callerUserId = this.getUserIdForParticipant(pid);
+
+    if (this.isPublicDemoSocket(ws)) {
+      if (type === "demo.chat.send") {
+        this.handleDemoChatSend(ws, pid, d);
+      } else if (type === "demo.chat.history.request") {
+        this.sendDemoChatHistory(ws);
+      } else {
+        this.sendTo(ws, {
+          op: Op.Error,
+          d: { code: CloseCode.NotAuthenticated, message: "Voice app event is unavailable in public demo rooms" },
+        });
+      }
+      return;
+    }
 
     if (type.startsWith("listen_together.")) {
       this.handleListenTogetherCommand(ws, d as ListenTogetherCommand, callerUserId);
