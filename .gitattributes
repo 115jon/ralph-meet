@@ -1,0 +1,76 @@
+# Default to LF for all text files across platforms.
+* text=auto eol=lf
+
+# Source, configuration, and documentation formats.
+*.js text eol=lf
+*.jsx text eol=lf
+*.ts text eol=lf
+*.tsx text eol=lf
+*.cjs text eol=lf
+*.mjs text eol=lf
+*.cts text eol=lf
+*.mts text eol=lf
+*.css text eol=lf
+*.scss text eol=lf
+*.sass text eol=lf
+*.html text eol=lf
+*.htm text eol=lf
+*.svg text eol=lf
+*.json text eol=lf
+*.jsonc text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.toml text eol=lf
+*.md text eol=lf
+*.mdx text eol=lf
+*.rs text eol=lf
+*.cs text eol=lf
+*.csproj text eol=lf
+*.props text eol=lf
+*.targets text eol=lf
+*.sh text eol=lf
+*.command text eol=lf
+
+# Windows-native scripts and configuration files require CRLF.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+*.psm1 text eol=crlf
+*.psd1 text eol=crlf
+*.reg text eol=crlf
+*.sln text eol=crlf
+*.[iI][nN][iI] text eol=crlf
+
+# Binary assets must never be line-ending normalized.
+*.png -text
+*.jpg -text
+*.jpeg -text
+*.gif -text
+*.webp -text
+*.avif -text
+*.ico -text
+*.icns -text
+*.mp4 -text
+*.webm -text
+*.m4a -text
+*.mp3 -text
+*.wav -text
+*.ogg -text
+*.flac -text
+*.woff -text
+*.woff2 -text
+*.ttf -text
+*.otf -text
+*.wasm -text
+*.tflite -text
+*.dll -text
+*.exe -text
+*.pdb -text
+*.lib -text
+*.a -text
+*.so -text
+*.dylib -text
+*.zip -text
+*.gz -text
+*.7z -text
+*.pdf -text

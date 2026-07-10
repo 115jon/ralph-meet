@@ -128,3 +128,6 @@ mobile/src-tauri/vendored_crates/tauri-plugin-clerk/.prettierrc.json
 # MediaPipe local assets
 /public/mediapipe/
 
+# Showcase
+showcase/
+
