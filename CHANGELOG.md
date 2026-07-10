@@ -1,5 +1,32 @@
 # Changelog
 
+## [1.20.0](https://github.com/115jon/ralph-meet/compare/v1.19.1...v1.20.0) (2026-07-10)
+
+
+### Features
+
+* **listen-together:** ✨ add local loudness control ([7c86974](https://github.com/115jon/ralph-meet/commit/7c86974973750ff9dedd3102ed4b55f6381ab28c))
+* **voice:** 🔒 add realtime socket admission ([0b1b1b5](https://github.com/115jon/ralph-meet/commit/0b1b1b5fbedc3e04bcfe1fd3cb937b8a38a03c8d))
+* **voice:** 🔒 add realtime socket admission ([12b4ab7](https://github.com/115jon/ralph-meet/commit/12b4ab7ad40cb71e12b57bca70ac37041e286fe1))
+
+
+### Bug Fixes
+
+* **desktop:** 🐛 default installed capture policy to wgc-enabled ([84c777f](https://github.com/115jon/ralph-meet/commit/84c777f5959e3cebcbacbaaaa44e149425399da9))
+* **desktop:** 🐛 persist settings and relaunch safely ([4b42b6f](https://github.com/115jon/ralph-meet/commit/4b42b6f358915f0633ba195cbc42037a05a8bbb4))
+* **listen-together:** 🐛 contain loudness switch thumb ([443a945](https://github.com/115jon/ralph-meet/commit/443a9452a914d66d0edd38a5c63a1f524dd7c26d))
+* **listen-together:** 🐛 refresh stale playback urls and add logs ([e238d54](https://github.com/115jon/ralph-meet/commit/e238d543ec64af364e407e77090d053b50d4b377))
+* **sync:** 🐛 propagate cross-session chat updates ([fec8f54](https://github.com/115jon/ralph-meet/commit/fec8f544a1d1a47a18b788f5b13e5e1a2faaaa23))
+* **voice:** 🐛 restore admitted websocket upgrades ([bfe84f9](https://github.com/115jon/ralph-meet/commit/bfe84f95765a294dde9e067442ba952bbb8ed6db))
+* **voice:** 🐛 start socket after ticket fetch ([41192a0](https://github.com/115jon/ralph-meet/commit/41192a074b992d5a8de6f6f0f29d68d979bbe5df))
+* **voice:** 🐛 wire mini preview context menu actions ([16e89ff](https://github.com/115jon/ralph-meet/commit/16e89ffde0972777af37d6b0ff1e2e4d7740ba98))
+* **voice:** 🔒 harden sfu lifecycle diagnostics ([91179df](https://github.com/115jon/ralph-meet/commit/91179df3bb3eca3ed1e2c99f80185d2303b4fb95))
+
+
+### Performance Improvements
+
+* **theme:** ⚡️ simplify theme rendering and bundle fonts ([0b7f612](https://github.com/115jon/ralph-meet/commit/0b7f612af4ee3d5727f2b224d9f9611db8fead5b))
+
 ## [1.19.1](https://github.com/115jon/ralph-meet/compare/v1.19.0...v1.19.1) (2026-07-09)
 
 ### Bug Fixes
