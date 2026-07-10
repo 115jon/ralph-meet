@@ -10,6 +10,8 @@ import {
   detectPreferredListenTogetherAudioFormat,
   getListenTogetherPlaybackPlan,
 } from "@/lib/voice/listen-together-player";
+import { ListenTogetherAudioProcessor } from "@/lib/voice/listen-together-audio";
+import { useListenTogetherAudioSettingsStore } from "@/stores/useListenTogetherAudioSettingsStore";
 import { useListenTogetherStore } from "@/stores/useListenTogetherStore";
 import { useEffect, useRef, useState } from "react";
 
@@ -57,12 +59,16 @@ export function VoiceListenTogetherManager({
   const localVolume = useListenTogetherStore((state) =>
     roomSlug ? state.rooms[roomSlug]?.localVolume ?? 1 : 1,
   );
+  const loudnessEnabled = useListenTogetherAudioSettingsStore((state) => state.enabled);
+  const loudnessPreset = useListenTogetherAudioSettingsStore((state) => state.preset);
   const ensureRoom = useListenTogetherStore((state) => state.ensureRoom);
   const setSnapshot = useListenTogetherStore((state) => state.setSnapshot);
   const setError = useListenTogetherStore((state) => state.setError);
   const clearRoom = useListenTogetherStore((state) => state.clearRoom);
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const audioProcessorRef = useRef(new ListenTogetherAudioProcessor());
+  const audioProcessorConnectedRef = useRef(false);
   const currentSrcRef = useRef<string | null>(null);
   const preferredFormatRef = useRef(detectPreferredListenTogetherAudioFormat());
   const playbackRetryKeyRef = useRef<string | null>(null);
@@ -102,13 +108,17 @@ export function VoiceListenTogetherManager({
 
   useEffect(() => {
     const audio = new Audio();
+    const audioProcessor = audioProcessorRef.current;
     audio.preload = "auto";
+    audio.crossOrigin = "anonymous";
     audioRef.current = audio;
 
     return () => {
       audio.pause();
       audio.removeAttribute("src");
       audio.load();
+      audioProcessor.close();
+      audioProcessorConnectedRef.current = false;
       currentSrcRef.current = null;
       audioRef.current = null;
     };
@@ -234,10 +244,32 @@ export function VoiceListenTogetherManager({
   }, [clearRoom, ensureRoom, roomSlug]);
 
   useEffect(() => {
-    if (audioRef.current) {
-      audioRef.current.volume = localVolume;
+    const audio = audioRef.current;
+    if (!audio) return;
+    if (audioProcessorConnectedRef.current) {
+      audioProcessorRef.current.setVolume(localVolume);
+      return;
     }
+    audio.volume = localVolume;
   }, [localVolume]);
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio || !sfu || !loudnessEnabled || audioProcessorConnectedRef.current) return;
+    if (typeof AudioContext === "undefined") return;
+    const audioProcessor = audioProcessorRef.current;
+    sfu.resumeAudioContext?.();
+    if (!audioProcessor.connect(audio, sfu.audio.getAudioContext())) return;
+    audioProcessorConnectedRef.current = true;
+    audio.volume = 1;
+    audioProcessor.setVolume(localVolume);
+    audioProcessor.applySettings({ enabled: loudnessEnabled, preset: loudnessPreset });
+  }, [localVolume, loudnessEnabled, loudnessPreset, sfu]);
+
+  useEffect(() => {
+    if (!audioProcessorConnectedRef.current) return;
+    audioProcessorRef.current.applySettings({ enabled: loudnessEnabled, preset: loudnessPreset });
+  }, [loudnessEnabled, loudnessPreset]);
 
   useEffect(() => {
     if (!sfu || !roomSlug) return;
@@ -369,6 +401,7 @@ export function VoiceListenTogetherManager({
     }
 
     if (plan.shouldPlay) {
+      sfu?.resumeAudioContext?.();
       void audio.play().catch((error) => {
         log.warn("Listen together playback start was blocked", {
           roomSlug,
@@ -381,7 +414,7 @@ export function VoiceListenTogetherManager({
         });
       });
     }
-  }, [channelId, desktopAuthToken, roomSlug, serverId, setError, snapshot, sourceAttempt, voiceSessionId]);
+  }, [channelId, desktopAuthToken, roomSlug, serverId, setError, sfu, snapshot, sourceAttempt, voiceSessionId]);
 
   return null;
 }

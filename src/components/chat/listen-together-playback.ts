@@ -8,6 +8,8 @@ import {
   type ListenTogetherRoomState,
   useListenTogetherStore,
 } from "@/stores/useListenTogetherStore";
+import type { ListenTogetherLoudnessPreset } from "@/lib/voice/listen-together-audio";
+import { useListenTogetherAudioSettingsStore } from "@/stores/useListenTogetherAudioSettingsStore";
 import { useEffect, useState } from "react";
 
 export interface ListenTogetherPlaybackState {
@@ -16,8 +18,14 @@ export interface ListenTogetherPlaybackState {
   effectiveSeekValue: number;
   error: ListenTogetherRoomState["error"];
   localVolume: number;
+  loudnessEnabled: boolean;
+  loudnessPreset: ListenTogetherLoudnessPreset;
   progressMax: number;
   setLocalVolume: (roomSlug: string, volume: number) => void;
+  updateLoudnessSettings: (updates: {
+    enabled?: boolean;
+    preset?: ListenTogetherLoudnessPreset;
+  }) => void;
   snapshot: ListenTogetherStateSnapshot | null;
 }
 
@@ -47,6 +55,9 @@ export function useListenTogetherPlaybackState(
     roomSlug ? state.rooms[roomSlug]?.error ?? null : null,
   );
   const setLocalVolume = useListenTogetherStore((state) => state.setLocalVolume);
+  const loudnessEnabled = useListenTogetherAudioSettingsStore((state) => state.enabled);
+  const loudnessPreset = useListenTogetherAudioSettingsStore((state) => state.preset);
+  const updateLoudnessSettings = useListenTogetherAudioSettingsStore((state) => state.updateSettings);
   const [playbackNowMs, setPlaybackNowMs] = useState(0);
 
   useEffect(() => {
@@ -79,8 +90,11 @@ export function useListenTogetherPlaybackState(
     effectiveSeekValue,
     error,
     localVolume,
+    loudnessEnabled,
+    loudnessPreset,
     progressMax: Math.max(1, durationMs),
     setLocalVolume,
+    updateLoudnessSettings,
     snapshot,
   };
 }

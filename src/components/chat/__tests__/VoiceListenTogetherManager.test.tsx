@@ -10,6 +10,7 @@ class MockAudio extends EventTarget {
   public static instances: MockAudio[] = [];
 
   public preload = "";
+  public crossOrigin: string | null = null;
   public volume = 1;
   public currentTime = 0;
   public paused = true;
@@ -146,6 +147,22 @@ describe("VoiceListenTogetherManager", () => {
 
     await waitFor(() => {
       expect(MockAudio.instances[0]?.src).toContain("token=desktop-token-2");
+    });
+  });
+
+  it("uses anonymous CORS mode for desktop audio before assigning the stream", async () => {
+    const sfu = makeSfu();
+
+    render(
+      <VoiceListenTogetherManager
+        sfu={sfu as never}
+        roomSlug="room-1"
+        voiceSessionId="voice-session-1"
+      />,
+    );
+
+    await waitFor(() => {
+      expect(MockAudio.instances[0]?.crossOrigin).toBe("anonymous");
     });
   });
 

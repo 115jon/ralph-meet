@@ -5,7 +5,8 @@ import type { SFUClient } from "@/lib/sfu-client";
 import { cn } from "@/lib/utils";
 import type { ListenTogetherPlaybackState } from "./listen-together-playback";
 import { formatListenTogetherDuration } from "./listen-together-playback";
-import { Headphones, ListMusic, Pause, Play, SkipForward, Trash2 } from "lucide-react";
+import { Headphones, ListMusic, Pause, Play, ShieldCheck, SkipForward, Trash2 } from "lucide-react";
+import { LISTEN_TOGETHER_LOUDNESS_PRESET_OPTIONS } from "@/lib/voice/listen-together-audio";
 
 interface ListenTogetherNowPlayingCardProps {
   playback: ListenTogetherPlaybackState;
@@ -30,8 +31,11 @@ export function ListenTogetherNowPlayingCard({
     effectiveSeekValue,
     error,
     localVolume,
+    loudnessEnabled,
+    loudnessPreset,
     progressMax,
     setLocalVolume,
+    updateLoudnessSettings,
     snapshot,
   } = playback;
 
@@ -389,6 +393,53 @@ export function ListenTogetherNowPlayingCard({
             className="h-1.5 w-full cursor-pointer accent-primary disabled:cursor-not-allowed"
           />
         </label>
+
+        <div className="border-t border-rm-border pt-3">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex min-w-0 items-center gap-2 text-[11px] font-black uppercase tracking-[0.16em] text-rm-text-muted">
+              <ShieldCheck className="h-3.5 w-3.5 shrink-0 text-primary" />
+              <span className="truncate">Loudness Control</span>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={loudnessEnabled}
+              aria-label={loudnessEnabled ? "Turn off loudness control" : "Turn on loudness control"}
+              onClick={() => updateLoudnessSettings({ enabled: !loudnessEnabled })}
+              className={cn(
+                "relative h-5 w-9 shrink-0 rounded-full border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30",
+                loudnessEnabled
+                  ? "border-primary/50 bg-primary"
+                  : "border-rm-border bg-rm-bg-hover",
+              )}
+            >
+              <span className={cn(
+                "absolute top-0.5 h-3.5 w-3.5 rounded-full bg-white shadow-sm transition-transform",
+                loudnessEnabled ? "translate-x-4" : "translate-x-0.5",
+              )} />
+            </button>
+          </div>
+          <div className="mt-2 flex items-center gap-1 rounded-md bg-rm-bg-elevated/60 p-1">
+            {LISTEN_TOGETHER_LOUDNESS_PRESET_OPTIONS.map(([preset, { label }]) => (
+              <button
+                key={preset}
+                type="button"
+                disabled={!loudnessEnabled}
+                aria-label={`Use ${label.toLowerCase()} loudness control`}
+                aria-pressed={loudnessPreset === preset}
+                onClick={() => updateLoudnessSettings({ preset })}
+                className={cn(
+                  "min-w-0 flex-1 rounded px-2 py-1.5 text-[10px] font-bold transition-colors disabled:cursor-not-allowed disabled:opacity-45",
+                  loudnessPreset === preset
+                    ? "bg-rm-bg-active text-rm-text shadow-sm"
+                    : "text-rm-text-muted hover:text-rm-text",
+                )}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
     </TooltipProvider>
   );

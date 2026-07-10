@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 
 import type { ListenTogetherPlaybackState } from "@/components/chat/listen-together-playback";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { ListenTogetherNowPlayingCard } from "../ListenTogetherNowPlayingCard";
 
@@ -40,8 +41,11 @@ function makePlaybackState(
     effectiveSeekValue: 5_000,
     error: null,
     localVolume: 1,
+    loudnessEnabled: true,
+    loudnessPreset: "balanced",
     progressMax: currentEntry.track.durationMs,
     setLocalVolume: vi.fn(),
+    updateLoudnessSettings: vi.fn(),
     snapshot: {
       roomSlug: "room-1",
       revision: 1,
@@ -60,6 +64,35 @@ function makePlaybackState(
 }
 
 describe("ListenTogetherNowPlayingCard", () => {
+  it("updates local loudness control without sending a room command", async () => {
+    const playback = makePlaybackState({
+      loudnessEnabled: true,
+      loudnessPreset: "balanced",
+      updateLoudnessSettings: vi.fn(),
+    });
+    const sendAppEvent = vi.fn();
+    const user = userEvent.setup();
+
+    render(
+      <ListenTogetherNowPlayingCard
+        playback={playback}
+        sfu={{ voiceGW: { sendAppEvent } } as never}
+        roomSlug="room-1"
+        variant="panel"
+      />,
+    );
+
+    await user.click(screen.getByRole("switch", { name: "Turn off loudness control" }));
+    await user.click(screen.getByRole("button", { name: "Use night loudness control" }));
+
+    expect(screen.getByRole("button", { name: "Use balanced loudness control" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(playback.updateLoudnessSettings).toHaveBeenCalledWith({ enabled: false });
+    expect(playback.updateLoudnessSettings).toHaveBeenCalledWith({ preset: "night" });
+    expect(sendAppEvent).not.toHaveBeenCalled();
+  });
   it("renders a compact mini player and forwards control actions", () => {
     const sendAppEvent = vi.fn();
     const onOpenQueue = vi.fn();

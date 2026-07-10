@@ -129,6 +129,22 @@ export class AudioPipeline {
     }
   }
 
+  /**
+   * Returns the shared output context so local media can follow the same
+   * gesture-resume and output-device path as voice tracks.
+   */
+  getAudioContext(): AudioContext {
+    if (!this.volumeContext || this.volumeContext.state === "closed") {
+      if (_prewarmedContext && _prewarmedContext.state !== "closed") {
+        this.volumeContext = _prewarmedContext;
+        _prewarmedContext = null;
+      } else {
+        this.volumeContext = new AudioContext();
+      }
+    }
+    return this.volumeContext;
+  }
+
   setParticipantPan(participantId: string, pan: number): void {
     const clamped = Math.max(-1, Math.min(pan, 1));
     const panners = this.spatialPanners.get(participantId);
