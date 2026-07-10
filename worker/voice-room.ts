@@ -323,7 +323,11 @@ export class VoiceRoom extends DurableObject<Env> {
         d: { heartbeat_interval: VOICE_HEARTBEAT_INTERVAL_MS, gateway_version: gatewayVersion },
       });
 
-      return new Response(null, { status: 101, webSocket: client } as any);
+      return new Response(null, {
+        status: 101,
+        headers: { "Sec-WebSocket-Protocol": "ralph.realtime.v1" },
+        webSocket: client,
+      } as any);
     }
 
     if (url.pathname === "/disconnect-participant" && request.method === "POST") {

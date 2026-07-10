@@ -56,7 +56,6 @@ function requireWebSocket(request: Request): Response | null {
 
 type VerifiedWebSocketRequest = {
   request: Request;
-  responseProtocol: string;
 };
 
 function unauthorizedWebSocket(reason: string) {
@@ -136,28 +135,17 @@ async function requireAuthenticatedWebSocket(
 
   const consumeNamespace = env.MEETING_ROOM as DurableObjectNamespace;
   const consumeStub = consumeNamespace.get(consumeNamespace.idFromName(roomSlug));
+  const consumeHeaders = appendRealtimeAdmissionHeaders(new Headers(), context);
   const consumeResponse = await consumeStub.fetch("https://internal/consume-realtime-admission", {
     method: "POST",
-    headers,
+    // Do not copy browser upgrade headers onto this ordinary internal POST.
+    headers: consumeHeaders,
   });
   if (!consumeResponse.ok) return unauthorizedWebSocket("Realtime capability already used");
 
   return {
     request: new Request(request, { headers }),
-    responseProtocol: protocol.value.responseProtocol,
   };
-}
-
-function withWebSocketProtocol(response: Response, protocol: string): Response {
-  if (response.status !== 101) return response;
-  const headers = new Headers(response.headers);
-  headers.set("Sec-WebSocket-Protocol", protocol);
-  return new Response(null, {
-    status: response.status,
-    statusText: response.statusText,
-    headers,
-    webSocket: response.webSocket,
-  });
 }
 
 export default {
@@ -224,7 +212,7 @@ export default {
       const doNamespace = env.MEETING_ROOM as DurableObjectNamespace;
       const id = doNamespace.idFromName("global-gateway");
       const stub = doNamespace.get(id);
-      return withWebSocketProtocol(await stub.fetch(verified.request), verified.responseProtocol);
+      return stub.fetch(verified.request);
     }
 
     // ── Channel-scoped Main Gateway → MeetingRoom DO ──────────────────
@@ -237,7 +225,7 @@ export default {
       const doNamespace = env.MEETING_ROOM as DurableObjectNamespace;
       const id = doNamespace.idFromName(channelId);
       const stub = doNamespace.get(id);
-      return withWebSocketProtocol(await stub.fetch(verified.request), verified.responseProtocol);
+      return stub.fetch(verified.request);
     }
 
     // ── Voice Gateway WebSocket → VoiceRoom DO ────────────────────────
@@ -250,7 +238,7 @@ export default {
       const doNamespace = env.VOICE_ROOM as DurableObjectNamespace;
       const id = doNamespace.idFromName(channelId);
       const stub = doNamespace.get(id);
-      return withWebSocketProtocol(await stub.fetch(verified.request), verified.responseProtocol);
+      return stub.fetch(verified.request);
     }
 
     // ── Everything else → TanStack Start ──────────────────────────────

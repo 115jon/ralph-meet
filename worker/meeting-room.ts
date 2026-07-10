@@ -472,7 +472,11 @@ export class MeetingRoom extends DurableObject<Env> {
         d: { heartbeat_interval: HEARTBEAT_INTERVAL_MS, gateway_version: gatewayVersion },
       });
 
-      return new Response(null, { status: 101, webSocket: client });
+      return new Response(null, {
+        status: 101,
+        headers: { "Sec-WebSocket-Protocol": "ralph.realtime.v1" },
+        webSocket: client,
+      });
     }
 
     // Internal broadcast endpoint — called by REST API routes after persisting to D1

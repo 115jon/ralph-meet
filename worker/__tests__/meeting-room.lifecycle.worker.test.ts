@@ -23,7 +23,10 @@ async function createAdmissionHeaders(roomName: string, audience: "global" | "ro
     roomSlug,
   });
   if (!verification.ok) throw new Error("Expected test ticket to verify");
-  return appendRealtimeAdmissionHeaders(new Headers({ Upgrade: "websocket" }), await createRealtimeAdmissionContext(verification.claims));
+  return appendRealtimeAdmissionHeaders(new Headers({
+    Upgrade: "websocket",
+    "Sec-WebSocket-Protocol": "ralph.realtime.v1",
+  }), await createRealtimeAdmissionContext(verification.claims));
 }
 
 async function openMeetingSocket(roomName = crypto.randomUUID()): Promise<WebSocket> {
@@ -63,6 +66,7 @@ describe("MeetingRoom lifecycle", () => {
 
     expect(response.status).toBe(101);
     expect(response.webSocket).not.toBeNull();
+    expect(response.headers.get("Sec-WebSocket-Protocol")).toBe("ralph.realtime.v1");
 
     const socket = response.webSocket;
     if (!socket) {
