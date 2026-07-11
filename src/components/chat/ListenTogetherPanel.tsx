@@ -1,6 +1,7 @@
 import { AvatarImage } from "@/components/chat/AvatarImage";
 import { apiGet, apiPost } from "@/lib/api-client";
 import {
+  convertSearchTrackToMusicTrack,
   getListenTogetherInputMode,
   type ListenTogetherEnqueueMode,
   type ListenTogetherResolveResponse,
@@ -420,7 +421,10 @@ export function ListenTogetherPanel({
                             <button
                               type="button"
                               onClick={() =>
-                                enqueueTracks([result], "play-next")
+                                enqueueTracks(
+                                  [convertSearchTrackToMusicTrack(result)],
+                                  "play-next",
+                                )
                               }
                               className="rounded-full border border-primary/30 bg-primary/15 px-3 py-1.5 text-xs font-bold text-primary transition hover:bg-primary/20"
                             >
@@ -428,7 +432,12 @@ export function ListenTogetherPanel({
                             </button>
                             <button
                               type="button"
-                              onClick={() => enqueueTracks([result], "append")}
+                              onClick={() =>
+                                enqueueTracks(
+                                  [convertSearchTrackToMusicTrack(result)],
+                                  "append",
+                                )
+                              }
                               className="rounded-full border border-rm-border bg-rm-bg-elevated/60 px-3 py-1.5 text-xs font-bold text-rm-text transition hover:bg-rm-bg-active"
                             >
                               Queue
@@ -518,9 +527,11 @@ export function ListenTogetherPanel({
                           <div className="mt-1 truncate text-xs text-rm-text-muted">
                             {[
                               entry.track.artist,
-                              formatListenTogetherDuration(
-                                entry.track.durationMs,
-                              ),
+                              entry.track.kind === "music"
+                                ? formatListenTogetherDuration(
+                                    entry.track.durationMs,
+                                  )
+                                : null,
                             ]
                               .filter(Boolean)
                               .join(" • ") || entry.track.sourceLabel}
@@ -529,11 +540,13 @@ export function ListenTogetherPanel({
                             <span className="rounded-full border border-rm-border bg-rm-bg-elevated/40 px-2 py-1">
                               {entry.track.sourceLabel}
                             </span>
-                            <span className="rounded-full border border-rm-border bg-rm-bg-elevated/40 px-2 py-1">
-                              {formatListenTogetherDuration(
-                                entry.track.durationMs,
-                              )}
-                            </span>
+                            {entry.track.kind === "music" && (
+                              <span className="rounded-full border border-rm-border bg-rm-bg-elevated/40 px-2 py-1">
+                                {formatListenTogetherDuration(
+                                  entry.track.durationMs,
+                                )}
+                              </span>
+                            )}
                             {entry.importBatchLabel && (
                               <span className="rounded-full border border-rm-border bg-rm-bg-elevated/40 px-2 py-1">
                                 {entry.importBatchLabel}

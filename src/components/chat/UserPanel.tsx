@@ -118,11 +118,9 @@ const statusColors: Record<string, string> = {
 };
 
 function CallDashboardSection({
-  serverId,
   onOpenActivities,
   onOpenSoundboard,
 }: {
-  serverId?: string | null;
   onOpenActivities?: () => void;
   onOpenSoundboard?: () => void;
 }) {
@@ -209,7 +207,7 @@ function CallDashboardSection({
         voiceSettingsUserId={useChatStore.getState().user?.id}
         roomSlug={callRoomSlug}
         voiceSessionId={callVoiceSessionId}
-        serverId={serverId}
+        serverId={null}
         onOpenActivities={onOpenActivities}
         onOpenSoundboard={onOpenSoundboard}
         showNoiseReductionShortcut
@@ -458,7 +456,6 @@ export default function UserPanel({
         {/* ACTIVE CALL dashboard (reuses VoiceDashboard) */}
         <div className="relative z-10">
           <CallDashboardSection
-            serverId={serverId}
             onOpenActivities={onOpenActivities}
             onOpenSoundboard={onOpenSoundboard}
           />

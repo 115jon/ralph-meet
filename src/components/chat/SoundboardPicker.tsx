@@ -20,8 +20,6 @@ import {
   Volume2,
   Upload,
   Play,
-  Pause,
-  Square,
   Radio,
   Trash2,
   Star,
@@ -39,26 +37,21 @@ import {
 import { createPortal } from "react-dom";
 import type { SFUClient } from "@/lib/sfu-client";
 
-import { useVoiceSoundboardStore } from "@/stores/useVoiceSoundboardStore";
-import { useUserResolution } from "@/hooks/useUserResolution";
-import { getAuthAssetUrl } from "@/lib/platform";
-import { getDisplayInitial } from "@/lib/display-name";
+import { useChatStore } from "@/stores/chat-store";
 import {
   DEFAULT_SOUNDBOARD_SOUNDS,
   MAX_SOUNDBOARD_UPLOAD_BYTES,
   getSoundboardServerKey,
-  pauseSoundboardPlayback,
-  resumeSoundboardPlayback,
   stopSoundboardPlayback,
   setSoundboardMasterVolume,
   getSoundboardMasterVolume,
   playSoundboardPlayback,
 } from "@/lib/voice/soundboard";
 import EmojiToken from "./EmojiToken";
-import { AvatarImage } from "./AvatarImage";
 import { UploadSoundModal, type UploadSoundData } from "./UploadSoundModal";
 import { useDelayUnmount } from "@/hooks/useDelayUnmount";
 import { ListenTogetherPanel } from "./ListenTogetherPanel";
+import { ActiveSoundboardEffectList } from "./ActiveSoundboardEffectList";
 
 interface Props {
   isClosing?: boolean;
@@ -126,6 +119,7 @@ interface SoundboardCatalogUpdatedEvent {
 const FAVORITES_SECTION_ID = "favorites";
 const CUSTOM_SECTION_ID = "custom-sounds";
 const DEFAULT_SECTION_ID = "default-sounds";
+const MAX_LOCAL_SOUNDBOARD_DATA_URL_BYTES = 512 * 1024;
 
 function isSoundboardAudioFile(file: File) {
   if (file.type.startsWith("audio/")) return true;
@@ -157,104 +151,6 @@ function readStoredSounds(key: string): CustomSound[] {
 function writeStoredSounds(key: string, sounds: CustomSound[]) {
   if (typeof window === "undefined") return;
   localStorage.setItem(key, JSON.stringify(sounds));
-}
-
-function NowPlayingItem({
-  playback,
-  localUserId,
-  serverKey,
-  sfu,
-  setPlaybackPaused,
-}: any) {
-  const authorInfo = useUserResolution(playback.ownerId);
-  const isPreview = playback.playbackId === "local-preview";
-
-  return (
-    <div
-      className={cn(
-        "space-y-2 rounded-md px-3 py-2 text-xs font-bold border",
-        isPreview
-          ? "bg-blue-500/10 text-blue-50 border-blue-500/20"
-          : "bg-rm-bg-hover text-rm-text border-rm-border/30",
-      )}
-    >
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2 truncate">
-          {!isPreview && (
-            <div className="h-6 w-6 shrink-0 rounded-full bg-rm-bg-surface overflow-hidden flex items-center justify-center border border-rm-border">
-              {authorInfo.avatarUrl ? (
-                <AvatarImage
-                  src={getAuthAssetUrl(authorInfo.avatarUrl)}
-                  alt=""
-                  display={authorInfo.avatarDisplay}
-                />
-              ) : (
-                <span className="text-[10px] text-rm-text-muted font-bold uppercase">
-                  {getDisplayInitial({ name: authorInfo.displayName })}
-                </span>
-              )}
-            </div>
-          )}
-          {isPreview && (
-            <div className="h-6 w-6 shrink-0 rounded-full bg-blue-500/20 text-blue-400 overflow-hidden flex items-center justify-center border border-blue-500/30">
-              <Headphones size={12} />
-            </div>
-          )}
-          <div className="flex flex-col min-w-0">
-            <span className="truncate">{playback.name}</span>
-            <span
-              className={cn(
-                "text-[10px] font-normal truncate",
-                isPreview ? "text-blue-300" : "text-rm-text-muted",
-              )}
-            >
-              {isPreview
-                ? "Local Preview"
-                : `Played by ${authorInfo.displayName}`}
-            </span>
-          </div>
-        </div>
-        <div className="flex shrink-0 items-center gap-1">
-          {playback.ownerId === localUserId && (
-            <button
-              type="button"
-              onClick={() =>
-                setPlaybackPaused(playback.playbackId, !playback.paused)
-              }
-              className={cn(
-                "flex items-center gap-1 rounded px-2 py-1 hover:bg-rm-bg-active hover:text-rm-text",
-                isPreview
-                  ? "text-blue-300 hover:bg-blue-500/20"
-                  : "text-rm-text-muted",
-              )}
-            >
-              {playback.paused ? <Play size={12} /> : <Pause size={12} />}
-            </button>
-          )}
-          <button
-            type="button"
-            onClick={() => {
-              stopSoundboardPlayback(playback.playbackId);
-              if (!isPreview) {
-                sfu?.voiceGW.sendAppEvent({
-                  type: "soundboard.stop",
-                  server_key: serverKey,
-                  user_id: localUserId,
-                  playback_id: playback.playbackId,
-                });
-              }
-            }}
-            className={cn(
-              "flex items-center gap-1 rounded px-2 py-1 hover:bg-red-500/20 hover:text-red-400",
-              isPreview ? "text-blue-300" : "text-rm-text-muted",
-            )}
-          >
-            <Square size={11} />
-          </button>
-        </div>
-      </div>
-    </div>
-  );
 }
 
 function SectionHeader({
@@ -374,7 +270,6 @@ export default function SoundboardPicker({
   const sectionRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const activePlaybacks = useVoiceSoundboardStore((s) => s.activePlaybacks);
   const isServerSoundboard = !!serverId && serverId !== "@me";
 
   useEffect(() => {
@@ -508,22 +403,30 @@ export default function SoundboardPicker({
       if (
         !sound ||
         typeof sound.id !== "string" ||
-        typeof sound.name !== "string" ||
-        typeof sound.file_url !== "string"
+        typeof sound.name !== "string"
       ) {
         return;
       }
-      const nextSound: CustomSound = {
-        id: sound.id,
-        name: sound.name,
-        mediaUrl: sound.file_url,
-        emoji: sound.emoji,
-        volume: sound.volume,
-      };
-      setServerSounds((prev) => [
-        nextSound,
-        ...prev.filter((entry) => entry.id !== nextSound.id),
-      ]);
+      const soundId = sound.id;
+      const soundName = sound.name;
+      setServerSounds((prev) => {
+        const existing = prev.find((entry) => entry.id === soundId);
+        if (!existing && typeof sound.file_url !== "string") return prev;
+        const nextSound: CustomSound = {
+          ...(existing ?? {}),
+          id: soundId,
+          name: soundName,
+          ...(typeof sound.file_url === "string"
+            ? { mediaUrl: sound.file_url }
+            : {}),
+          ...(typeof sound.emoji === "string" ? { emoji: sound.emoji } : {}),
+          ...(typeof sound.volume === "number" ? { volume: sound.volume } : {}),
+        };
+        return [
+          nextSound,
+          ...prev.filter((entry) => entry.id !== nextSound.id),
+        ];
+      });
     });
   }, [isServerSoundboard, sfu, serverKey]);
 
@@ -752,7 +655,39 @@ export default function SoundboardPicker({
     mediaUrl?: string;
     volume?: number;
     emoji?: string;
+    soundType?: "myinstants" | "custom" | "default" | "radio";
+    artworkUrl?: string;
   }) => {
+    // Radio stations are enqueued to Listen Together instead of soundboard.play
+    if (sound.soundType === "radio" && roomSlug && sfu) {
+      const currentUser = useChatStore.getState().user;
+      const requester = {
+        userId: localUserId || currentUser?.id || "guest",
+        displayName:
+          currentUser?.display_name?.trim() || currentUser?.username || "You",
+        avatarUrl: currentUser?.avatar_url ?? null,
+        avatarDisplay: currentUser?.avatar_display ?? null,
+      };
+
+      sfu.voiceGW.sendAppEvent({
+        type: "listen_together.enqueue",
+        room_slug: roomSlug,
+        mode: "append",
+        entries: [
+          {
+            track: {
+              kind: "radio",
+              station_uuid: sound.id,
+              provider: "radio",
+              title: sound.name,
+            },
+            requester,
+          },
+        ],
+      });
+      return;
+    }
+
     // Generate a deterministic playback ID so that playing the same sound
     // again by the same user automatically cancels their previous stream
     // locally for all clients and updates the same UI entry in the store.
@@ -799,21 +734,6 @@ export default function SoundboardPicker({
         receivedAt: Date.now(),
       });
     }, 0);
-  };
-
-  const setPlaybackPaused = (playbackId: string, paused: boolean) => {
-    if (paused) pauseSoundboardPlayback(playbackId);
-    else resumeSoundboardPlayback(playbackId);
-
-    if (playbackId !== "local-preview") {
-      sfu?.voiceGW.sendAppEvent({
-        type: "soundboard.pause-set",
-        server_key: serverKey,
-        user_id: localUserId,
-        playback_id: playbackId,
-        paused,
-      });
-    }
   };
 
   const handleDeleteSound = async (id: string, e: React.MouseEvent) => {
@@ -901,6 +821,11 @@ export default function SoundboardPicker({
         throw new Error("Only audio files can be uploaded to the soundboard.");
       }
       if (!isServerSoundboard) {
+        if (file.size > MAX_LOCAL_SOUNDBOARD_DATA_URL_BYTES) {
+          throw new Error(
+            "Custom sounds must be 512 KiB or smaller to play for everyone.",
+          );
+        }
         const dataUrl = await fileToDataUrl(file);
         const nextSound = {
           id: crypto.randomUUID(),
@@ -999,10 +924,6 @@ export default function SoundboardPicker({
       "bottom-start": "top-[calc(100%+10px)] -left-2 origin-top-left",
       "bottom-end": "top-[calc(100%+10px)] right-0 origin-top-right",
     }[placement] || "bottom-[calc(100%+10px)] right-0 origin-bottom-right";
-
-  const allServerPlaybacks = Object.values(activePlaybacks)
-    .filter((playback) => playback.serverKey === serverKey)
-    .sort((a, b) => b.startedAt - a.startedAt);
 
   return createPortal(
     <>
@@ -1356,6 +1277,8 @@ export default function SoundboardPicker({
                                           id: sound.id,
                                           name: sound.title,
                                           mediaUrl: sound.url,
+                                          soundType: "radio",
+                                          artworkUrl: sound.emoji,
                                         })
                                       }
                                     />
@@ -1961,6 +1884,8 @@ export default function SoundboardPicker({
                                     id: station.stationuuid,
                                     name: station.name,
                                     mediaUrl: station.url_resolved,
+                                    soundType: "radio",
+                                    artworkUrl: station.favicon || undefined,
                                   })
                                 }
                               />
@@ -2065,29 +1990,14 @@ export default function SoundboardPicker({
               <div className="mb-3 h-[105px] flex flex-col">
                 <div className="mb-1 shrink-0 text-[10px] font-black uppercase tracking-widest text-rm-text-muted flex items-center justify-between">
                   <span>Now Playing</span>
-                  {allServerPlaybacks.length > 0 && (
-                    <span className="text-rm-text-muted/50 font-normal">
-                      {allServerPlaybacks.length} active
-                    </span>
-                  )}
                 </div>
                 <div className="space-y-1.5 flex-1 overflow-y-auto no-scrollbar relative">
-                  {allServerPlaybacks.length > 0 ? (
-                    allServerPlaybacks.map((playback) => (
-                      <NowPlayingItem
-                        key={playback.playbackId}
-                        playback={playback}
-                        localUserId={localUserId}
-                        serverKey={serverKey}
-                        sfu={sfu}
-                        setPlaybackPaused={setPlaybackPaused}
-                      />
-                    ))
-                  ) : (
-                    <div className="absolute inset-0 flex items-center justify-center text-xs text-rm-text-muted/50 border border-dashed border-rm-border rounded-xl bg-rm-bg-surface/10">
-                      Nothing is playing
-                    </div>
-                  )}
+                  <ActiveSoundboardEffectList
+                    serverId={serverId}
+                    localUserId={localUserId}
+                    sfu={sfu}
+                    variant="compact"
+                  />
                 </div>
               </div>
               <div className="flex gap-2 sm:gap-3 items-center w-full">

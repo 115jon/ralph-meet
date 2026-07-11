@@ -75,11 +75,13 @@ export function getListenTogetherPlaybackPlan(args: {
     };
   }
 
+  const isRadio = currentEntry.track.kind === "radio";
   const shouldLoad = args.playback.src !== args.streamUrl;
   const shouldSeek =
-    shouldLoad ||
-    Math.abs(args.playback.currentTimeMs - args.snapshot.positionMs) >
-      tolerance;
+    !isRadio &&
+    (shouldLoad ||
+      Math.abs(args.playback.currentTimeMs - args.snapshot.positionMs) >
+        tolerance);
 
   return {
     nextSrc: args.streamUrl,

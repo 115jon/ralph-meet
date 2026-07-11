@@ -1,6 +1,9 @@
 // @vitest-environment jsdom
 
-import type { ListenTogetherStateSnapshot } from "@/lib/listen-together";
+import type {
+  ListenTogetherStateSnapshot,
+  ListenTogetherRadioTrack,
+} from "@/lib/listen-together";
 import {
   buildListenTogetherStreamUrl,
   getListenTogetherPlaybackPlan,
@@ -20,6 +23,7 @@ function makeSnapshot(
       avatarDisplay: null,
     },
     track: {
+      kind: "music" as const,
       id: "track-1",
       provider: "youtube" as const,
       videoId: "video-1",
@@ -46,6 +50,49 @@ function makeSnapshot(
     currentEntry,
     positionMs: 10_000,
     durationMs: currentEntry.track.durationMs,
+    ...overrides,
+  };
+}
+
+function makeRadioSnapshot(
+  overrides: Partial<ListenTogetherStateSnapshot> = {},
+): ListenTogetherStateSnapshot {
+  const radioTrack: ListenTogetherRadioTrack = {
+    kind: "radio",
+    id: "radio-1",
+    provider: "radio",
+    title: "Live Radio Station",
+    artist: null,
+    artworkUrl: null,
+    canonicalUrl: "https://stream.example.com/live",
+    streamUrl: "https://stream.example.com/live",
+    sourceLabel: "Live Radio",
+  };
+
+  const currentEntry = {
+    entryId: "radio-entry-1",
+    requestedAt: 1_000,
+    requester: {
+      userId: "user-1",
+      displayName: "Alice",
+      avatarUrl: null,
+      avatarDisplay: null,
+    },
+    track: radioTrack,
+  };
+
+  return {
+    roomSlug: "room-1",
+    revision: 1,
+    paused: false,
+    currentEntryId: currentEntry.entryId,
+    anchorPositionMs: 0,
+    anchorUpdatedAt: 1_000,
+    lastUpdatedAt: 1_000,
+    queue: [currentEntry],
+    currentEntry,
+    positionMs: 0,
+    durationMs: null,
     ...overrides,
   };
 }
@@ -112,6 +159,39 @@ describe("listen together playback plan", () => {
     expect(plan.nextSrc).toBeNull();
     expect(plan.shouldPause).toBe(true);
     expect(plan.shouldPlay).toBe(false);
+  });
+
+  it("uses direct stream URL for radio tracks", () => {
+    const radioSnapshot = makeRadioSnapshot();
+    const plan = getListenTogetherPlaybackPlan({
+      snapshot: radioSnapshot,
+      playback: {
+        src: null,
+        currentTimeMs: 0,
+        paused: true,
+      },
+      streamUrl: "https://stream.example.com/live",
+    });
+
+    expect(plan.nextSrc).toBe("https://stream.example.com/live");
+    expect(plan.shouldLoad).toBe(true);
+    expect(plan.shouldPlay).toBe(true);
+  });
+
+  it("does not seek for radio tracks", () => {
+    const radioSnapshot = makeRadioSnapshot({ positionMs: 50_000 });
+    const plan = getListenTogetherPlaybackPlan({
+      snapshot: radioSnapshot,
+      playback: {
+        src: "https://stream.example.com/live",
+        currentTimeMs: 10_000,
+        paused: false,
+      },
+      streamUrl: "https://stream.example.com/live",
+    });
+
+    expect(plan.seekToMs).toBeNull();
+    expect(plan.shouldLoad).toBe(false);
   });
 });
 

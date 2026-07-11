@@ -3,7 +3,11 @@ export const LISTEN_TOGETHER_DRIFT_TOLERANCE_MS = 750;
 export const LISTEN_TOGETHER_SEARCH_TTL_SECONDS = 180;
 export const LISTEN_TOGETHER_RESOLVE_TTL_SECONDS = 600;
 
-export type ListenTogetherProvider = "youtube" | "youtube_music" | "spotify";
+export type ListenTogetherMusicProvider =
+  | "youtube"
+  | "youtube_music"
+  | "spotify";
+export type ListenTogetherProvider = ListenTogetherMusicProvider | "radio";
 export type ListenTogetherSearchFilter = "track" | "collection";
 export type ListenTogetherEnqueueMode = "append" | "play-next";
 
@@ -14,9 +18,10 @@ export interface ListenTogetherRequester {
   avatarDisplay?: string | null;
 }
 
-export interface ListenTogetherTrack {
+export interface ListenTogetherMusicTrack {
+  kind: "music";
   id: string;
-  provider: ListenTogetherProvider;
+  provider: ListenTogetherMusicProvider;
   videoId: string;
   title: string;
   artist?: string | null;
@@ -28,14 +33,41 @@ export interface ListenTogetherTrack {
   sourceLabel: string;
 }
 
-export interface ListenTogetherSearchTrackResult extends ListenTogetherTrack {
+export interface ListenTogetherRadioTrack {
+  kind: "radio";
+  id: string;
+  provider: "radio";
+  title: string;
+  artist?: string | null;
+  artworkUrl?: string | null;
+  canonicalUrl: string;
+  streamUrl: string;
+  sourceLabel: string;
+}
+
+export type ListenTogetherTrack =
+  | ListenTogetherMusicTrack
+  | ListenTogetherRadioTrack;
+
+export interface ListenTogetherSearchTrackResult {
   kind: "track";
+  id: string;
+  provider: ListenTogetherMusicProvider;
+  videoId: string;
+  title: string;
+  artist?: string | null;
+  album?: string | null;
+  durationMs: number;
+  artworkUrl?: string | null;
+  canonicalUrl: string;
+  sourceUrl?: string | null;
+  sourceLabel: string;
 }
 
 export interface ListenTogetherSearchCollectionResult {
   kind: "collection";
   id: string;
-  provider: ListenTogetherProvider;
+  provider: ListenTogetherMusicProvider;
   title: string;
   subtitle?: string | null;
   itemCount: number;
@@ -55,7 +87,7 @@ export interface ListenTogetherSearchResponse {
 
 export interface ListenTogetherResolveCollectionMeta {
   id: string;
-  provider: ListenTogetherProvider;
+  provider: ListenTogetherMusicProvider;
   title: string;
   subtitle?: string | null;
   itemCount: number;
@@ -228,6 +260,31 @@ export function getListenTogetherCurrentEntry(
   return queue.find((entry) => entry.entryId === currentEntryId) ?? null;
 }
 
+export function getListenTogetherTrackDuration(
+  track: ListenTogetherTrack,
+): number | null {
+  return track.kind === "music" ? track.durationMs : null;
+}
+
+export function convertSearchTrackToMusicTrack(
+  searchTrack: ListenTogetherSearchTrackResult,
+): ListenTogetherMusicTrack {
+  return {
+    kind: "music",
+    id: searchTrack.id,
+    provider: searchTrack.provider,
+    videoId: searchTrack.videoId,
+    title: searchTrack.title,
+    artist: searchTrack.artist,
+    album: searchTrack.album,
+    durationMs: searchTrack.durationMs,
+    artworkUrl: searchTrack.artworkUrl,
+    canonicalUrl: searchTrack.canonicalUrl,
+    sourceUrl: searchTrack.sourceUrl,
+    sourceLabel: searchTrack.sourceLabel,
+  };
+}
+
 export function getListenTogetherPositionMs(
   state: Pick<
     ListenTogetherPersistentState,
@@ -254,7 +311,9 @@ export function buildListenTogetherSnapshot(
     queue,
     state.currentEntryId,
   );
-  const durationMs = currentEntry?.track.durationMs ?? null;
+  const durationMs = currentEntry
+    ? getListenTogetherTrackDuration(currentEntry.track)
+    : null;
   return {
     ...state,
     queue,

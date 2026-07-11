@@ -94,14 +94,9 @@ const VoiceAppsModal = lazy(() =>
     default: mod.VoiceAppsModal,
   })),
 );
-const VoiceSoundboardManager = lazy(() =>
-  import("@/components/chat/VoiceSoundboardManager").then((mod) => ({
-    default: mod.VoiceSoundboardManager,
-  })),
-);
-const VoiceListenTogetherManager = lazy(() =>
-  import("@/components/chat/VoiceListenTogetherManager").then((mod) => ({
-    default: mod.VoiceListenTogetherManager,
+const VoiceMediaManager = lazy(() =>
+  import("@/components/chat/VoiceMediaManager").then((mod) => ({
+    default: mod.VoiceMediaManager,
   })),
 );
 
@@ -1590,17 +1585,13 @@ export default function ChatPage() {
 
         {(localStreamState?.sfu ?? null) && (
           <Suspense fallback={null}>
-            <VoiceSoundboardManager
-              sfu={localStreamState?.sfu ?? null}
-              serverId={voiceState.serverId ?? activeServerId}
-              localUserId={user?.id}
-            />
-            <VoiceListenTogetherManager
+            <VoiceMediaManager
               sfu={localStreamState?.sfu ?? null}
               serverId={voiceState.serverId ?? activeServerId}
               channelId={localStreamState?.channelId ?? voiceState.channelId}
               roomSlug={localStreamState?.roomSlug}
               voiceSessionId={localStreamState?.voiceSessionId}
+              localUserId={user?.id}
             />
           </Suspense>
         )}

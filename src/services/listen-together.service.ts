@@ -1,10 +1,11 @@
 import { cacheGet, cacheSet } from "@/lib/cache";
 import { clog } from "@/lib/console-logger";
 import {
+  convertSearchTrackToMusicTrack,
   LISTEN_TOGETHER_IMPORT_LIMIT,
   LISTEN_TOGETHER_RESOLVE_TTL_SECONDS,
   LISTEN_TOGETHER_SEARCH_TTL_SECONDS,
-  type ListenTogetherProvider,
+  type ListenTogetherMusicProvider,
   type ListenTogetherResolveCollectionMeta,
   type ListenTogetherResolveResponse,
   type ListenTogetherSearchFilter,
@@ -341,7 +342,7 @@ function sanitizeResolvedTrackTitle(
 
 export function mapYoutubeVideoNode(
   input: any,
-  provider: ListenTogetherProvider = "youtube",
+  provider: ListenTogetherMusicProvider = "youtube",
   sourceLabel = provider === "youtube_music" ? "YouTube Music" : "YouTube",
 ): ListenTogetherSearchTrackResult | null {
   const videoId =
@@ -571,10 +572,12 @@ export function scoreYoutubeCandidate(
     0,
   );
   const targetDurationMs = normalizeSpotifyDurationMs(target.duration);
+  const candidateDurationMs =
+    candidate.kind === "music" ? candidate.durationMs : null;
   const durationPenalty =
-    targetDurationMs === null
+    targetDurationMs === null || candidateDurationMs === null
       ? 0
-      : Math.abs(candidate.durationMs - targetDurationMs) / 1000;
+      : Math.abs(candidateDurationMs - targetDurationMs) / 1000;
 
   const exactTitleBoost = normalizeText(candidate.title).includes(
     normalizeText(target.name),
@@ -610,17 +613,26 @@ async function resolveSpotifyTrackToYoutube(
   const best = [...candidates]
     .map((candidate) => ({
       candidate,
-      score: scoreYoutubeCandidate(candidate, track),
+      score: scoreYoutubeCandidate(
+        convertSearchTrackToMusicTrack(candidate),
+        track,
+      ),
     }))
     .sort((left, right) => right.score - left.score)[0];
 
   if (!best || best.score < 4) return null;
 
   return {
-    ...best.candidate,
+    kind: "music",
     id: `spotify:${best.candidate.videoId}`,
     provider: "spotify",
+    videoId: best.candidate.videoId,
+    title: best.candidate.title,
     artist: track.artist || best.candidate.artist,
+    album: best.candidate.album,
+    durationMs: best.candidate.durationMs,
+    artworkUrl: best.candidate.artworkUrl,
+    canonicalUrl: best.candidate.canonicalUrl,
     sourceUrl,
     sourceLabel: "Spotify",
   };
@@ -641,6 +653,7 @@ async function resolveYoutubeVideo(
 
     if (resolved.title && resolved.durationSeconds && !resolved.isLive) {
       return {
+        kind: "music",
         id: `${provider}:${resolved.videoId}`,
         provider,
         videoId: resolved.videoId,
@@ -701,10 +714,11 @@ async function resolveYoutubePlaylist(
     playlistId,
     LISTEN_TOGETHER_IMPORT_LIMIT,
   );
-  const tracks = playlist.items
+  const searchResults = playlist.items
     .map((item) => mapYoutubeVideoNode(item, "youtube", "YouTube"))
     .filter((item): item is ListenTogetherSearchTrackResult => !!item)
     .slice(0, LISTEN_TOGETHER_IMPORT_LIMIT);
+  const tracks = searchResults.map(convertSearchTrackToMusicTrack);
   const collection = mapYoutubePlaylistHeaderToCollection(
     playlistId,
     playlist.header,

@@ -11,7 +11,7 @@
 // When the call ends, unmounting <ActiveCallSession> triggers cleanup.
 // ============================================================================
 
-import { VoiceListenTogetherManager } from "@/components/chat/VoiceListenTogetherManager";
+import { VoiceMediaManager } from "@/components/chat/VoiceMediaManager";
 import { useVoiceChannel } from "@/hooks/useVoiceChannel";
 import { useChatStore } from "@/stores/chat-store";
 import { useCallStore } from "@/stores/useCallStore";
@@ -52,8 +52,7 @@ function ActiveCallSession({
   voiceRoomId: string;
   channelId: string;
 }) {
-  const callId = useCallStore((s) => s.callId);
-  const gateway = useChatStore((s) => s.gateway);
+  const localUserId = useChatStore((s) => s.user?.id);
 
   const voice = useVoiceChannel({
     channelId,
@@ -151,11 +150,13 @@ function ActiveCallSession({
   }, []);
 
   return (
-    <VoiceListenTogetherManager
+    <VoiceMediaManager
       sfu={voice.sfu}
+      serverId={null}
+      channelId={channelId}
       roomSlug={voice.roomSlug}
       voiceSessionId={voice.voiceSessionId}
-      channelId={channelId}
+      localUserId={localUserId}
     />
   );
 }

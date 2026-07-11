@@ -4,6 +4,7 @@ import {
   createListenTogetherState,
   getListenTogetherCurrentEntry,
   getListenTogetherPositionMs,
+  getListenTogetherTrackDuration,
   type ListenTogetherEnqueueMode,
   type ListenTogetherPersistentState,
   type ListenTogetherQueueEntry,
@@ -90,10 +91,8 @@ function getEntryDuration(
   queue: ListenTogetherQueueEntry[],
   currentEntryId: string | null,
 ): number | null {
-  return (
-    getListenTogetherCurrentEntry(queue, currentEntryId)?.track.durationMs ??
-    null
-  );
+  const entry = getListenTogetherCurrentEntry(queue, currentEntryId);
+  return entry ? getListenTogetherTrackDuration(entry.track) : null;
 }
 
 export function ensureListenTogetherState(

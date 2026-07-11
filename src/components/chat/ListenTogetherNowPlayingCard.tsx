@@ -77,7 +77,10 @@ export function ListenTogetherNowPlayingCard({
 
   const queueCount = snapshot?.queue?.length ?? 0;
   const subtitle =
-    [currentEntry.track.artist, currentEntry.track.album]
+    [
+      currentEntry.track.artist,
+      currentEntry.track.kind === "music" ? currentEntry.track.album : null,
+    ]
       .filter(Boolean)
       .join(" • ") || currentEntry.track.sourceLabel;
   const requesterLine =

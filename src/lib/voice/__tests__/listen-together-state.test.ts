@@ -1,6 +1,7 @@
 import type {
   ListenTogetherQueueEntrySeed,
   ListenTogetherTrack,
+  ListenTogetherRadioTrack,
 } from "@/lib/listen-together";
 import { createListenTogetherState } from "@/lib/listen-together";
 import {
@@ -16,6 +17,7 @@ function makeTrack(
   durationMs = 180_000,
 ): ListenTogetherTrack {
   return {
+    kind: "music",
     id,
     provider: "youtube",
     videoId: `${id}-video`,
@@ -27,6 +29,24 @@ function makeTrack(
     canonicalUrl: `https://www.youtube.com/watch?v=${id}-video`,
     sourceUrl: null,
     sourceLabel: "YouTube",
+  };
+}
+
+function makeRadioTrack(
+  id: string,
+  title: string,
+  streamUrl: string,
+): ListenTogetherRadioTrack {
+  return {
+    kind: "radio",
+    id,
+    provider: "radio",
+    title,
+    artist: null,
+    artworkUrl: null,
+    canonicalUrl: streamUrl,
+    streamUrl,
+    sourceLabel: "Live Radio",
   };
 }
 
@@ -174,6 +194,59 @@ describe("listen together room state helpers", () => {
     );
 
     expect(skipped.queue.map((entry) => entry.track.title)).toEqual(["Next"]);
+    expect(skipped.state.currentEntryId).toBe(skipped.queue[0].entryId);
+  });
+
+  it("enqueues a radio track with infinite duration", () => {
+    const now = 1_000;
+    const radioTrack = makeRadioTrack(
+      "radio-1",
+      "Live Station",
+      "https://stream.example.com/live",
+    );
+
+    const result = enqueueListenTogetherEntries(
+      "room-1",
+      [],
+      createListenTogetherState("room-1", now),
+      [makeSeed(radioTrack)],
+      "append",
+      now,
+    );
+
+    expect(result.queue).toHaveLength(1);
+    expect(result.queue[0].track.kind).toBe("radio");
+    expect(result.state.currentEntryId).toBe(result.queue[0].entryId);
+  });
+
+  it("allows manual skip from radio to next track", () => {
+    const started = enqueueListenTogetherEntries(
+      "room-1",
+      [],
+      createListenTogetherState("room-1", 1_000),
+      [
+        makeSeed(
+          makeRadioTrack(
+            "radio-1",
+            "Live Radio",
+            "https://stream.example.com/live",
+          ),
+        ),
+        makeSeed(makeTrack("track-1", "Next Song")),
+      ],
+      "append",
+      1_000,
+    );
+
+    const skipped = skipListenTogether(
+      "room-1",
+      started.queue,
+      started.state,
+      2_000,
+    );
+
+    expect(skipped.queue).toHaveLength(1);
+    expect(skipped.queue[0].track.kind).toBe("music");
     expect(skipped.state.currentEntryId).toBe(skipped.queue[0].entryId);
   });
 });

@@ -19,6 +19,7 @@ function makePlaybackState(
       avatarDisplay: null,
     },
     track: {
+      kind: "music" as const,
       id: "track-1",
       provider: "youtube" as const,
       videoId: "video-1",

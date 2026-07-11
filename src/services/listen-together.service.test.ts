@@ -70,6 +70,7 @@ describe("listen together provider helpers", () => {
 
     const closeMatch = scoreYoutubeCandidate(
       {
+        kind: "music",
         id: "youtube:good",
         provider: "youtube",
         videoId: "good",
@@ -87,6 +88,7 @@ describe("listen together provider helpers", () => {
 
     const weakMatch = scoreYoutubeCandidate(
       {
+        kind: "music",
         id: "youtube:weak",
         provider: "youtube",
         videoId: "weak",
@@ -108,6 +110,7 @@ describe("listen together provider helpers", () => {
   it("accepts spotify duration values that are already in milliseconds", () => {
     const closeMatch = scoreYoutubeCandidate(
       {
+        kind: "music",
         id: "youtube:good-ms",
         provider: "youtube",
         videoId: "good-ms",

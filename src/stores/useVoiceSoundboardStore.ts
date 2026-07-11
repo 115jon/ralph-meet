@@ -11,7 +11,7 @@ export interface SoundboardPlaybackState {
   volume: number;
 }
 
-interface VoiceSoundboardStore {
+export interface VoiceSoundboardStore {
   activePlaybacks: Record<string, SoundboardPlaybackState>;
   serverMutedByServer: Record<string, Record<string, boolean>>;
   upsertPlayback: (playback: SoundboardPlaybackState) => void;

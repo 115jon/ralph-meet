@@ -9,7 +9,6 @@ import {
   stopSoundboardPlaybacksByOwner,
 } from "@/lib/voice/soundboard";
 import { useChatStore } from "@/stores/chat-store";
-import { useVoiceSoundboardStore } from "@/stores/useVoiceSoundboardStore";
 import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
 import { useUser } from "@kova/react";
 import React, { useCallback, useEffect, useRef, useState } from "react";
@@ -106,9 +105,6 @@ export const StreamContextMenu: React.FC<StreamContextMenuProps> = ({
   const setPeerSoundboardMuted = useVoiceSettingsStore(
     (s) => s.setPeerSoundboardMuted,
   );
-  const setServerSoundboardMuted = useVoiceSoundboardStore(
-    (s) => s.setServerSoundboardMuted,
-  );
 
   const { user: clerkUser } = useUser();
   const members = useChatStore((s) => s.members);
@@ -125,11 +121,7 @@ export const StreamContextMenu: React.FC<StreamContextMenuProps> = ({
   const isModerator =
     hasPermission(myTotalPerms, PERMISSIONS.MANAGE_SERVER) ||
     hasPermission(myTotalPerms, PERMISSIONS.ADMINISTRATOR);
-  const canToggleServerSoundboardMute = !!sfu && !!serverId && isModerator;
   const soundboardServerKey = getSoundboardServerKey(serverId);
-  const serverSoundboardMuted = useVoiceSoundboardStore(
-    (s) => !!s.serverMutedByServer[soundboardServerKey]?.[userId],
-  );
 
   const voiceChannels = channels.filter((c: any) => c.channel_type === "voice");
 
@@ -236,28 +228,6 @@ export const StreamContextMenu: React.FC<StreamContextMenuProps> = ({
   }, [
     peerSetting.soundboardMuted,
     setPeerSoundboardMuted,
-    soundboardServerKey,
-    userId,
-  ]);
-
-  const toggleServerSoundboardMute = useCallback(() => {
-    if (!canToggleServerSoundboardMute) return;
-    const nextMuted = !serverSoundboardMuted;
-    setServerSoundboardMuted(soundboardServerKey, userId, nextMuted);
-    sfu?.voiceGW.sendAppEvent({
-      type: "soundboard.server-mute-set",
-      server_key: soundboardServerKey,
-      target_user_id: userId,
-      muted: nextMuted,
-      actor_user_id: localUserId ?? myClerkId ?? null,
-    });
-  }, [
-    canToggleServerSoundboardMute,
-    localUserId,
-    myClerkId,
-    serverSoundboardMuted,
-    setServerSoundboardMuted,
-    sfu,
     soundboardServerKey,
     userId,
   ]);
@@ -382,12 +352,6 @@ export const StreamContextMenu: React.FC<StreamContextMenuProps> = ({
             isModerator={isModerator}
             handleServerMute={handleServerMute}
             handleServerDeafen={handleServerDeafen}
-            serverSoundboardMuted={serverSoundboardMuted}
-            toggleServerSoundboardMute={
-              canToggleServerSoundboardMute
-                ? toggleServerSoundboardMute
-                : undefined
-            }
             onClose={onClose}
             voiceChannels={voiceChannels}
             handleMove={handleMove}

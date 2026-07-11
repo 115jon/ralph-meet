@@ -81,8 +81,7 @@ export function useListenTogetherPlaybackState(
   }, [snapshot?.currentEntry, snapshot?.paused]);
 
   const currentEntry = snapshot?.currentEntry ?? null;
-  const durationMs =
-    snapshot?.durationMs ?? currentEntry?.track.durationMs ?? 0;
+  const durationMs = snapshot?.durationMs ?? 0;
   const effectiveSeekValue = snapshot
     ? clampListenTogetherPosition(
         Math.max(
