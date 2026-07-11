@@ -22,6 +22,7 @@ type AppearanceThemeHookOptions = {
 
 export function useAppearanceTheme(options?: AppearanceThemeHookOptions) {
   const user = useChatStore((s) => s.user);
+  const userId = user?.id;
   const dispatch = useChatStore((s) => s.dispatch);
   const { theme, setTheme } = useTheme();
   const seededSyncRef = useRef(false);
@@ -65,11 +66,11 @@ export function useAppearanceTheme(options?: AppearanceThemeHookOptions) {
 
   const persistAppearance = useCallback(
     async (nextTheme: AppTheme | null, syncEnabled: boolean) => {
-      if (!user?.id) return;
+      if (!userId) return;
 
       dispatch({
         type: "UPDATE_MEMBER_PROFILE",
-        userId: user.id,
+        userId,
         theme_preference: nextTheme,
         theme_sync_enabled: syncEnabled,
       });
@@ -83,7 +84,7 @@ export function useAppearanceTheme(options?: AppearanceThemeHookOptions) {
         void useChatStore.getState().actions.loadCurrentUser();
       }
     },
-    [dispatch, user?.id],
+    [dispatch, userId],
   );
 
   const setAppearanceTheme = useCallback(

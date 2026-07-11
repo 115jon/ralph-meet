@@ -19,7 +19,7 @@ type ChatGatewayProps = {
 export function ChatGateway({ authenticatedUserId }: ChatGatewayProps) {
   const { userId, isLoaded } = useAuth();
   const initGateway = useChatStore((s) => s.gateway.initGateway);
-  const setClerkUserId = useChatStore((s) => s.gateway.setClerkUserId);
+  const _setClerkUserId = useChatStore((s) => s.gateway.setClerkUserId);
   const disconnectGateway = useChatStore((s) => s.gateway.disconnectGateway);
   const navigate = useNavigate();
 

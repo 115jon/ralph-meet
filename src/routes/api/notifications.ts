@@ -14,7 +14,7 @@ import {
 } from "@/services/notification.service";
 
 // GET /api/notifications — fetch user's notifications (most recent first)
-const GET = async ({ request, params }: any) => {
+const GET = async ({ request, params: _params }: any) => {
   const authResult = await requireAuth();
   if (authResult instanceof Response) return authResult;
   const { userId } = authResult;
@@ -40,7 +40,7 @@ const GET = async ({ request, params }: any) => {
 };
 
 // PATCH /api/notifications — mark notifications as read
-const PATCH = async ({ request, params }: any) => {
+const PATCH = async ({ request, params: _params }: any) => {
   const authResult = await requireAuth();
   if (authResult instanceof Response) return authResult;
   const { userId } = authResult;
@@ -67,7 +67,7 @@ const PATCH = async ({ request, params }: any) => {
 };
 
 // DELETE /api/notifications — clear all notifications
-const DELETE = async ({ request, params }: any) => {
+const DELETE = async ({ request: _request, params: _params }: any) => {
   const authResult = await requireAuth();
   if (authResult instanceof Response) return authResult;
   const { userId } = authResult;

@@ -107,9 +107,14 @@ export function VoiceDetailsPanel({
 
   useEffect(() => {
     if (isOpen) return;
-    setPanelPosition((current) =>
-      current.ready ? { ...current, ready: false } : current,
-    );
+
+    const timeoutId = window.setTimeout(() => {
+      setPanelPosition((current) =>
+        current.ready ? { ...current, ready: false } : current,
+      );
+    }, 0);
+
+    return () => window.clearTimeout(timeoutId);
   }, [isOpen]);
 
   useEffect(() => {
@@ -212,7 +217,7 @@ export function VoiceDetailsPanel({
       clearTimeout(timer);
       document.removeEventListener("mousedown", handler);
     };
-  }, [isOpen, onClose]);
+  }, [isOpen, onClose, triggerRef]);
 
   // Close on Escape
   useEffect(() => {
@@ -428,6 +433,22 @@ function ConnectionTab({
     },
   ];
 
+  const chartData =
+    stats && stats.pingHistory.length > 0
+      ? stats.pingHistory
+      : [{ time: "now", ping: 0 }];
+
+  const maxPing = Math.max(...chartData.map((d) => d.ping), 20);
+  const yMax = Math.ceil(maxPing / 10) * 10;
+  const yDomain = useMemo(() => [0, yMax] as const, [yMax]);
+  const formatPing = useCallback(
+    (value: number | string | readonly (number | string)[] | undefined) => {
+      const pingValue = Array.isArray(value) ? (value[0] ?? 0) : (value ?? 0);
+      return [`${pingValue} ms`, "Ping"] as const;
+    },
+    [],
+  );
+
   if (!stats) {
     return (
       <div className="space-y-3">
@@ -454,22 +475,6 @@ function ConnectionTab({
       </div>
     );
   }
-
-  const chartData =
-    stats.pingHistory.length > 0
-      ? stats.pingHistory
-      : [{ time: "now", ping: 0 }];
-
-  const maxPing = Math.max(...chartData.map((d) => d.ping), 20);
-  const yMax = Math.ceil(maxPing / 10) * 10;
-  const yDomain = useMemo(() => [0, yMax] as const, [yMax]);
-  const formatPing = useCallback(
-    (value: number | string | readonly (number | string)[] | undefined) => {
-      const pingValue = Array.isArray(value) ? (value[0] ?? 0) : (value ?? 0);
-      return [`${pingValue} ms`, "Ping"] as const;
-    },
-    [],
-  );
 
   return (
     <div className="space-y-3">

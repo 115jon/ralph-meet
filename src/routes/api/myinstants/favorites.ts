@@ -17,7 +17,7 @@ const GET = async ({ request }: { request: Request }) => {
       .all();
 
     return apiSuccess({ favorites: results || [] });
-  } catch (error) {
+  } catch {
     return apiError("Failed to fetch favorites", 500);
   }
 };
@@ -66,7 +66,7 @@ const POST = async ({ request }: { request: Request }) => {
     }
 
     return apiSuccess({ success: true });
-  } catch (error) {
+  } catch {
     return apiError("Failed to update favorite", 500);
   }
 };

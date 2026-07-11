@@ -22,7 +22,7 @@ export function OutgoingCallModal() {
     status === "ringing_outgoing" && !!remoteUser && !!callId,
     200,
   );
-  const isClosing = !(
+  const _isClosing = !(
     status === "ringing_outgoing" &&
     !!remoteUser &&
     !!callId

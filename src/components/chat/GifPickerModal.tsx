@@ -85,8 +85,6 @@ function useColumnsCount(expanded: boolean) {
 
   useEffect(() => {
     if (!expanded) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setCols(2);
       return;
     }
 
@@ -113,7 +111,7 @@ function useColumnsCount(expanded: boolean) {
     };
   }, [expanded]);
 
-  return cols;
+  return expanded ? cols : 2;
 }
 
 interface GifPickerModalProps {
@@ -646,7 +644,7 @@ export default function GifPickerModal({
       cancelled = true;
       controller.abort();
     };
-  }, [provider, mediaType, requestApiQuerySuffix, skipAuth]);
+  }, [provider, mediaType, requestApiQuerySuffix, skipAuth, categoriesCache]);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
@@ -1250,7 +1248,6 @@ export default function GifPickerModal({
 
   useEffect(() => {
     if (expanded) return;
-    let frameId: number;
     const updatePosition = () => {
       if (!markerRef?.current) {
         setDynamicStyle({ opacity: 1 });
@@ -1287,7 +1284,7 @@ export default function GifPickerModal({
       setDynamicStyle(style);
     };
 
-    frameId = window.requestAnimationFrame(updatePosition);
+    const frameId = window.requestAnimationFrame(updatePosition);
     window.addEventListener("resize", updatePosition);
     return () => {
       window.removeEventListener("resize", updatePosition);
@@ -1948,14 +1945,9 @@ const GifTile = memo(function GifTile({
   clipsMuted: boolean;
   onToggleClipsMuted: () => void;
 }) {
-  const gifId = getGifItemIdentityKey(gif);
   const [loadedDuration, setLoadedDuration] = useState<number | undefined>(
     undefined,
   );
-
-  useEffect(() => {
-    setLoadedDuration(undefined);
-  }, [gifId]);
 
   const duration = loadedDuration ?? gif.duration;
 

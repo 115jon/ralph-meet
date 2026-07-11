@@ -206,7 +206,7 @@ function CustomEmojiCard({
   onSelect: (emoji: GeneratedEmoji) => void;
 }) {
   const isReady = emoji.status === "ready" && Boolean(emoji.image_url);
-  const isFailed = emoji.status === "failed";
+  const _isFailed = emoji.status === "failed";
   const isPending = emoji.status === "pending";
 
   return (
@@ -582,7 +582,6 @@ export default function EmojiPicker({
   }, [activeCategory, generatedEmojis.length, nativeCategories]);
 
   useEffect(() => {
-    let frameId: number;
     const updatePosition = () => {
       if (!markerRef.current) return;
       if (window.innerWidth < 640) {
@@ -622,7 +621,7 @@ export default function EmojiPicker({
       setDynamicStyle(style);
     };
 
-    frameId = window.requestAnimationFrame(updatePosition);
+    const frameId = window.requestAnimationFrame(updatePosition);
     window.addEventListener("resize", updatePosition);
     return () => {
       window.removeEventListener("resize", updatePosition);

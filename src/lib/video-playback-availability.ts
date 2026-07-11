@@ -1,5 +1,5 @@
 import { isVideo } from "@/lib/media";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useSyncExternalStore } from "react";
 
 export type VideoPlaybackAvailability = "checking" | "playable" | "poster";
 
@@ -157,34 +157,21 @@ function getAvailabilitySnapshot(
 export function useVideoPlaybackAvailability(
   request: VideoPlaybackAvailabilityRequest,
 ): VideoPlaybackAvailability {
-  const cacheKey = useMemo(
-    () => getAvailabilityCacheKey(request),
-    [
-      request.contentType,
-      request.isAnimated,
-      request.posterUrl,
-      request.sourceUrl,
-      request.src,
-    ],
-  );
-  const [availability, setAvailability] = useState<VideoPlaybackAvailability>(
+  const cacheKey = getAvailabilityCacheKey(request);
+  const availability = useSyncExternalStore(
+    (listener) =>
+      cacheKey ? subscribeAvailability(cacheKey, listener) : () => {},
+    () => getAvailabilitySnapshot(request),
     () => getAvailabilitySnapshot(request),
   );
 
   useEffect(() => {
-    if (!cacheKey) {
-      setAvailability("playable");
-      return;
-    }
+    if (!cacheKey) return;
 
-    setAvailability(getAvailabilitySnapshot(request));
-    const unsubscribe = subscribeAvailability(cacheKey, () => {
-      setAvailability(getAvailabilitySnapshot(request));
-    });
     void primeVideoPlaybackAvailability(request);
-    return unsubscribe;
   }, [
     cacheKey,
+    request,
     request.contentType,
     request.isAnimated,
     request.posterUrl,

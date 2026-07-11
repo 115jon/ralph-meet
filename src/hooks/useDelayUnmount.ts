@@ -7,21 +7,19 @@ import { useEffect, useState } from "react";
  * @returns A boolean indicating if the component should still be rendered in the DOM
  */
 export function useDelayUnmount(isMounted: boolean, delayTime: number) {
-  const [shouldRender, setShouldRender] = useState(false);
+  const [shouldRender, setShouldRender] = useState(isMounted);
 
   useEffect(() => {
     let timeoutId: NodeJS.Timeout;
 
-    if (isMounted && !shouldRender) {
-      setShouldRender(true);
-    } else if (!isMounted && shouldRender) {
+    if (!isMounted && shouldRender) {
       timeoutId = setTimeout(() => setShouldRender(false), delayTime);
     }
 
     return () => clearTimeout(timeoutId);
   }, [isMounted, delayTime, shouldRender]);
 
-  return shouldRender;
+  return isMounted || shouldRender;
 }
 
 /**

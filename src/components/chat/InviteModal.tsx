@@ -2,7 +2,7 @@ import { BaseModal } from "@/components/ui/BaseModal";
 import { apiPost } from "@/lib/api-client";
 import { getWebOrigin } from "@/lib/platform";
 import { cn } from "@/lib/utils";
-import { useEffect, useState } from "react";
+import { useEffect as _useEffect, useState } from "react";
 import { Check, Copy, Loader2, X } from "./Icons";
 interface InviteModalProps {
   serverId: string;

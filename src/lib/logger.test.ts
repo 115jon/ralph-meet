@@ -21,7 +21,7 @@ describe("logger", () => {
   });
 
   it("logs at all levels", () => {
-    const debugSpy = vi.spyOn(console, "debug").mockImplementation(() => {});
+    const _debugSpy = vi.spyOn(console, "debug").mockImplementation(() => {});
     const infoSpy = vi.spyOn(console, "info").mockImplementation(() => {});
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});

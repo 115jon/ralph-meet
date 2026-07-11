@@ -22,7 +22,7 @@ import {
 import { useBackButton } from "@/hooks/useBackButton";
 import { getUnreadChannelState } from "@/lib/desktop-notifications";
 import {
-  MOBILE_ACTION_TYPE_ID,
+  MOBILE_ACTION_TYPE_ID as _MOBILE_ACTION_TYPE_ID,
   syncDesktopNotificationState,
 } from "@/lib/desktop-native-sync";
 import { hasPermission, PERMISSIONS } from "@/lib/permissions";
@@ -190,7 +190,7 @@ export default function ChatPage() {
     ui,
     uiDispatch,
     voiceState,
-    setVoiceState,
+    setVoiceState: _setVoiceState,
     localStreamState,
     setLocalStreamState,
     handleSelectServer,
@@ -619,9 +619,6 @@ export default function ChatPage() {
   }, [
     alwaysShowStreamPreview,
     localStreamState,
-    localStreamState?.isPreviewHidden,
-    localStreamState?.isScreenSharing,
-    localStreamState?.togglePreviewHidden,
     shouldRenderFloatingStreamPreview,
   ]);
 

@@ -11,7 +11,7 @@ const SERVER_ID = "server_123";
 
 // BAN_MEMBERS = 1 << 6 = 64, ADMINISTRATOR = 1 << 0 = 1
 const BAN_MEMBERS = 64;
-const ADMINISTRATOR = 1;
+const _ADMINISTRATOR = 1;
 
 function banRow(overrides: Record<string, unknown> = {}) {
   return {

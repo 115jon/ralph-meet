@@ -16,7 +16,7 @@ import { updateAvatarUrl } from "@/services/user.service";
 import { normalizeAvatarDisplay } from "@/lib/avatar-display";
 
 // POST /api/avatar-upload — upload a user avatar to R2
-const POST = async ({ request, params }: any) => {
+const POST = async ({ request, params: _params }: any) => {
   const authResult = await requireAuth(request);
   if (authResult instanceof Response) return authResult;
   const { userId } = authResult;

@@ -10,7 +10,7 @@ import {
 import { joinServer } from "@/services/social.service";
 
 // POST /api/invites/:code/join — accept an invite and join a server
-const POST = async ({ request, params }: any) => {
+const POST = async ({ request: _request, params }: any) => {
   const authResult = await requireAuth();
   if (authResult instanceof Response) return authResult;
   const { userId } = authResult;

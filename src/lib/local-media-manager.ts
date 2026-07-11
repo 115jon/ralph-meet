@@ -325,7 +325,7 @@ export function startEarlyMic(
   if (streamPromise) return streamPromise; // already in-flight
 
   lmLog.debug("Starting early mic acquisition...");
-  const useExact = !!(audio.deviceId && audio.deviceId !== "default");
+  const _useExact = !!(audio.deviceId && audio.deviceId !== "default");
   streamPromise = resolveStoredDeviceId(
     "audioinput",
     audio.deviceId,

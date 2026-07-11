@@ -11,7 +11,7 @@ import {
 } from "@/services/service-helpers";
 
 // DELETE /api/servers/:id/categories/:categoryId — delete a category
-const DELETE = async ({ request, params }: any) => {
+const DELETE = async ({ request: _request, params }: any) => {
   const authResult = await requireAuth();
   if (authResult instanceof Response) return authResult;
   const { userId } = authResult;

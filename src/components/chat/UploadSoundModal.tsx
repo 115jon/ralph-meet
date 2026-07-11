@@ -1,6 +1,6 @@
 import { useId, useState, useRef, Suspense, lazy } from "react";
 import { Upload, X, Smile, Loader2 } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn as _cn } from "@/lib/utils";
 
 import EmojiToken from "./EmojiToken";
 
@@ -32,7 +32,7 @@ export function UploadSoundModal({
   onUpload,
   isUploading,
   editSound,
-  isClosing,
+  isClosing: _isClosing,
 }: UploadSoundModalProps) {
   const [file, setFile] = useState<File | null>(null);
   const [soundName, setSoundName] = useState(editSound?.name ?? "");

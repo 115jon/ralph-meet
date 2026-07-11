@@ -181,7 +181,7 @@ export function KovaAuthProvider({
 
   const resolvedAuthUrl = useMemo(
     () => resolveAuthUrl({ publishableKey, authUrl }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
     [publishableKey, authUrl],
   );
 
@@ -316,7 +316,6 @@ export function KovaAuthProvider({
       .catch(() => {
         /* best-effort */
       });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resolvedAuthUrl, publishableKey, setPersistentSessionToken]); // intentionally run once on mount
 
   useEffect(() => {

@@ -44,7 +44,7 @@ const BACKGROUND_OPTIONS: Array<{
   },
 ];
 
-function backgroundOptionId(setting: CameraBackgroundSetting): string {
+function _backgroundOptionId(setting: CameraBackgroundSetting): string {
   if (setting.type === "blur") return "blur";
   if (setting.type === "image") return `image-${setting.id}`;
   return "none";

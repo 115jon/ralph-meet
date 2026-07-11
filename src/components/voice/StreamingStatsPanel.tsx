@@ -83,7 +83,6 @@ export function StreamingStatsPanel({
   useEffect(() => {
     if (!data) {
       prevSampleRef.current = null;
-      setFps(0);
       return;
     }
     const now = Date.now();
@@ -113,7 +112,7 @@ export function StreamingStatsPanel({
     <StreamingStatsContent
       data={data}
       stale={stale}
-      fps={fps}
+      fps={data ? fps : 0}
       emphasized={emphasized}
       className={className}
     />

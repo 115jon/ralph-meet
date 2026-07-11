@@ -12,7 +12,7 @@ import {
 import { createServer, listUserServers } from "@/services/server.service";
 
 // GET /api/servers — list servers the current user is a member of
-const GET = async ({ request, params }: any) => {
+const GET = async ({ request, params: _params }: any) => {
   const authResult = await requireAuth(request);
   if (authResult instanceof Response) return authResult;
   const { userId } = authResult;
@@ -30,7 +30,7 @@ const GET = async ({ request, params }: any) => {
 };
 
 // POST /api/servers — create a new server
-const POST = async ({ request, params }: any) => {
+const POST = async ({ request, params: _params }: any) => {
   const authResult = await requireAuth(request);
   if (authResult instanceof Response) return authResult;
   const { userId } = authResult;

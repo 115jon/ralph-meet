@@ -4,7 +4,7 @@ import { BaseModal } from "@/components/ui/BaseModal";
 import { VOICE_SWITCH_CONFIRM_KEY } from "@/components/chat/voice-confirmation-preferences";
 import { cn } from "@/lib/utils";
 import { X } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 
 // ── LocalStorage key for "Don't ask again" ─────────────────────────────────
 const DONT_ASK_KEY = VOICE_SWITCH_CONFIRM_KEY;
@@ -39,12 +39,27 @@ export function VoiceSwitchModal({
   onCancel,
   isClosing,
 }: VoiceSwitchModalProps) {
-  const [dontAskAgain, setDontAskAgain] = useState(false);
+  if (!open) return null;
 
-  // Reset the checkbox when modal opens
-  useEffect(() => {
-    if (open) setDontAskAgain(false);
-  }, [open]);
+  return (
+    <OpenVoiceSwitchModal
+      targetName={targetName}
+      currentType={currentType}
+      onConfirm={onConfirm}
+      onCancel={onCancel}
+      isClosing={isClosing}
+    />
+  );
+}
+
+function OpenVoiceSwitchModal({
+  targetName,
+  currentType,
+  onConfirm,
+  onCancel,
+  isClosing,
+}: Omit<VoiceSwitchModalProps, "open">) {
+  const [dontAskAgain, setDontAskAgain] = useState(false);
 
   const handleConfirm = useCallback(() => {
     if (dontAskAgain) {
@@ -56,8 +71,6 @@ export function VoiceSwitchModal({
     }
     onConfirm();
   }, [dontAskAgain, onConfirm]);
-
-  if (!open) return null;
 
   const bodyText =
     currentType === "call"

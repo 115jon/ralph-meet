@@ -44,7 +44,7 @@ const PATCH = async ({ request, params }: any) => {
 };
 
 // DELETE /api/servers/:id/roles/:roleId — delete a role
-const DELETE = async ({ request, params }: any) => {
+const DELETE = async ({ request: _request, params }: any) => {
   const authResult = await requireAuth();
   if (authResult instanceof Response) return authResult;
   const { userId } = authResult;

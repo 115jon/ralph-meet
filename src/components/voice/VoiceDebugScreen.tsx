@@ -385,14 +385,6 @@ function MiniChart({
   unit?: string;
   height?: number;
 }) {
-  if (!data || data.length === 0) {
-    return (
-      <div className="h-20 flex items-center justify-center text-[11px] text-rm-text-muted">
-        No data
-      </div>
-    );
-  }
-
   // If plotting a bitrate, divide raw value by 1000 so the chart plots Kbps
   const isBitrate = dataKey.toLowerCase().includes("bitrate");
   const processedData = data.map((d) => ({
@@ -405,6 +397,14 @@ function MiniChart({
   const yMax = Math.ceil(maxVal * 1.2);
   const yDomain = useMemo(() => [0, yMax] as const, [yMax]);
   const formatTick = useCallback((value: number) => `${value}${unit}`, [unit]);
+
+  if (!data || data.length === 0) {
+    return (
+      <div className="h-20 flex items-center justify-center text-[11px] text-rm-text-muted">
+        No data
+      </div>
+    );
+  }
 
   return (
     <Suspense

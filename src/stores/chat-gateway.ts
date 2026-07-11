@@ -12,7 +12,11 @@ import {
   syncDesktopNotificationState,
 } from "@/lib/desktop-native-sync";
 import { apiPut } from "@/lib/api-client";
-import { getCurrentPresencePlatform, isTauri, wsUrl } from "@/lib/platform";
+import {
+  getCurrentPresencePlatform,
+  isTauri as _isTauri,
+  wsUrl,
+} from "@/lib/platform";
 import {
   normalizePresencePlatforms,
   type PresencePlatform,
@@ -87,7 +91,6 @@ export function createChatGateway(
   actions: ChatRestActions,
 ): ChatGatewayActions {
   let ws: WebSocket | null = null;
-  let seq = 0;
   // Raw heartbeat — must match setWebSocketAutoResponse pattern exactly (no extra fields)
   const HEARTBEAT_MSG = JSON.stringify({ op: 3 });
   const hb = new HeartbeatManager("ChatGW", {
@@ -777,7 +780,7 @@ export function createChatGateway(
         break;
       }
       case "CALL_RING_STOP": {
-        const { call_id, reason } = d.data;
+        const { call_id: _call_id, reason } = d.data;
         const callState = useCallStore.getState();
 
         playRingStop();
@@ -891,7 +894,6 @@ export function createChatGateway(
       case 6: {
         // HeartbeatACK — auto-response sends {"op":6} with no `d`, guard accordingly.
         hb.onAck();
-        if (msg.d?.seq != null) seq = msg.d.seq;
         break;
       }
       case 19: {

@@ -714,7 +714,6 @@ export function useVoiceChannel({
     audioBlocked,
     remoteStreams,
     participantsVersion,
-    participants,
     audioStalled,
     spatialAudioState,
   } = voiceState;
@@ -1008,14 +1007,24 @@ export function useVoiceChannel({
       };
     }),
   );
-  const audioProcessingSettings: VoiceAudioProcessingSettings = {
-    noiseSuppression,
-    echoCancellation,
-    autoSensitivity,
-    streamHighFidelity,
-    noiseReductionEnabled,
-    noiseReductionProvider,
-  };
+  const audioProcessingSettings = useMemo<VoiceAudioProcessingSettings>(
+    () => ({
+      noiseSuppression,
+      echoCancellation,
+      autoSensitivity,
+      streamHighFidelity,
+      noiseReductionEnabled,
+      noiseReductionProvider,
+    }),
+    [
+      autoSensitivity,
+      echoCancellation,
+      noiseReductionEnabled,
+      noiseReductionProvider,
+      noiseSuppression,
+      streamHighFidelity,
+    ],
+  );
 
   const setCurrentUser = useVoiceSettingsStore((s) => s.setCurrentUser);
   const setIsMuted = useVoiceSettingsStore((s) => s.setIsMuted);
@@ -1141,6 +1150,7 @@ export function useVoiceChannel({
     voiceChannelStates,
     channelId,
     focusedId,
+    mode,
   ]);
 
   useEffect(() => {
@@ -1159,7 +1169,13 @@ export function useVoiceChannel({
       spatial_audio_high_fidelity: streamHighFidelity,
       spatial_audio_state: nextSpatialAudioState,
     });
-  }, [joined, spatialAudioEnabled, streamHighFidelity, sendVoiceStateUpdate]);
+  }, [
+    joined,
+    spatialAudioEnabled,
+    streamHighFidelity,
+    sendVoiceStateUpdate,
+    spatialAudioState,
+  ]);
 
   useEffect(() => {
     if (!channelId) return;
@@ -1877,6 +1893,10 @@ export function useVoiceChannel({
     chatUserAvatarDisplay,
     chatUserDisplayName,
     chatUsername,
+    autoJoin,
+    chatConnected,
+    currentVoiceChannelStartedAt,
+    joined,
   ]);
 
   useEffect(() => {
@@ -1952,8 +1972,6 @@ export function useVoiceChannel({
       // means the initial publish is delayed. Instead, we always call getUserMedia
       // and let it throw NotFoundError if there's genuinely no mic (caught below).
       // hasMicrophone remains a dep so the effect re-runs when a mic is plugged in.
-      const wantAudio = true;
-
       try {
         // Skip if the current stream already uses the requested devices
         // AND the same audio processing settings. This prevents a redundant
@@ -2209,6 +2227,7 @@ export function useVoiceChannel({
     echoCancellation,
     autoSensitivity,
     streamHighFidelity,
+    audioProcessingSettings,
     setDevice,
     stopCameraBackgroundEffect,
   ]);
@@ -2230,14 +2249,6 @@ export function useVoiceChannel({
 
     sfuRef.current.vad.setThreshold(threshold);
   }, [autoSensitivity, sensitivity]);
-
-  const enableNoiseGate = useCallback(() => {
-    if (!sfuRef.current) return;
-    // Always enable noise gate — replaceTrack(null) during silence provides
-    // a secondary bandwidth defense on top of Opus DTX. The audio pipeline
-    // should be identical for both voice channels and calls.
-    sfuRef.current.vad.enableNoiseGate();
-  }, []);
 
   const setMasterVolume = useCallback((outputVolume: number) => {
     if (!sfuRef.current) return;
@@ -2318,6 +2329,7 @@ export function useVoiceChannel({
     isStreamingAudio,
     joined,
     sendVoiceStateUpdate,
+    mode,
   ]);
 
   // We need to keep a ref to `joined` because the cleanup function
@@ -2362,6 +2374,10 @@ export function useVoiceChannel({
   }, [channelId, serverId, mode]);
 
   useEffect(() => {
+    const participants = participantsRef.current;
+    const uuidToClerk = uuidToClerkRef.current;
+    const thumbnails = capturingThumbnails.current;
+
     return () => {
       if (sfuRef.current) {
         vcLog.info("Voice lifecycle teardown", {
@@ -2386,10 +2402,10 @@ export function useVoiceChannel({
           t.stop();
         });
 
-        participantsRef.current.clear();
+        participants.clear();
         remoteAggregatorsRef.current = {};
-        uuidToClerkRef.current.clear();
-        capturingThumbnails.current.clear();
+        uuidToClerk.clear();
+        thumbnails.clear();
 
         voiceDispatch({ type: "LEFT" });
 
@@ -2411,7 +2427,13 @@ export function useVoiceChannel({
         sendVoiceChannelLeave(channelId); // Leave gateway presence if we were in
       }
     };
-  }, [channelId, sendVoiceChannelLeave, mode, stopCameraBackgroundEffect]);
+  }, [
+    channelId,
+    sendVoiceChannelLeave,
+    mode,
+    serverId,
+    stopCameraBackgroundEffect,
+  ]);
 
   // Listen for forced disconnects (e.g. user was banned/kicked from the server)
   useEffect(() => {
@@ -2465,6 +2487,7 @@ export function useVoiceChannel({
     channelId,
     isCall,
     mode,
+    serverId,
     stopCameraBackgroundEffect,
   ]);
 
@@ -2519,6 +2542,7 @@ export function useVoiceChannel({
     isCall,
     channelId,
     mode,
+    serverId,
     stopCameraBackgroundEffect,
   ]);
 
@@ -3717,7 +3741,8 @@ export function useVoiceChannel({
     }
 
     return items;
-    // participantsVersion forces re-computation when SFU participants change (calls)
+    // Ref-backed SFU participants need this revision to invalidate the snapshot.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     joined,
     user,
@@ -3726,7 +3751,6 @@ export function useVoiceChannel({
     chatUserAvatarDisplay,
     chatUserDisplayName,
     chatUsername,
-    localStreamRef.current,
     isMicOn,
     isDeafened,
     isScreenSharing,
@@ -3737,7 +3761,6 @@ export function useVoiceChannel({
     channelId,
     peerSettings,
     isCameraOn,
-    isCall,
     participantsVersion,
     mode,
   ]);
@@ -3793,7 +3816,6 @@ export function useVoiceChannel({
     },
     [
       channelId,
-      focusedId,
       gridItems,
       isDeafened,
       mode,

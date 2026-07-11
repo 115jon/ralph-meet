@@ -122,7 +122,7 @@ export default function ServerList({
   unreadDms = EMPTY_UNREAD_DMS,
   onSelectDm,
   onMarkServerRead,
-  onMarkAllRead,
+  onMarkAllRead: _onMarkAllRead,
 }: Props) {
   const [showCreate, setShowCreate] = useState(false);
   const shouldRenderCreateServer = useDelayUnmount(showCreate, 200);

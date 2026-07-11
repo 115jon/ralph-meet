@@ -11,7 +11,7 @@ import {
 } from "@/services/service-helpers";
 
 // GET /api/servers/:id/bans — list banned users
-const GET = async ({ request, params }: any) => {
+const GET = async ({ request: _request, params }: any) => {
   const authResult = await requireAuth();
   if (authResult instanceof Response) return authResult;
   const { userId } = authResult;

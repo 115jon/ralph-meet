@@ -59,7 +59,7 @@ export function resolveAbsoluteUrl(authUrl: string, path?: string): string {
  *   authUrl = https://auth.115jon.site
  *   appOrigin = https://example.workers.dev  → different registrable domain
  */
-function isCrossOriginDomain(authUrl: string): boolean {
+function _isCrossOriginDomain(authUrl: string): boolean {
   if (typeof window === "undefined") return false;
   try {
     const authHostname = new URL(authUrl).hostname;

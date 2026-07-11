@@ -71,7 +71,7 @@ const PUT = async ({ request, params }: any) => {
 };
 
 // DELETE /api/channels/:id/permissions/:targetId — remove an override
-const DELETE = async ({ request, params }: any) => {
+const DELETE = async ({ request: _request, params }: any) => {
   const authResult = await requireAuth();
   if (authResult instanceof Response) return authResult;
   const { userId } = authResult;

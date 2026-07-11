@@ -919,7 +919,9 @@ const TikTokEmbed = memo(
   }) => {
     const [hydratedPayload, setHydratedPayload] =
       useState<TikTokHydrationPayload | null>(null);
-    const [player, setPlayer] = useState<TikTokPlayerState>({ mode: "idle" });
+    const [player, setPlayer] = useState<TikTokPlayerState>(() => ({
+      mode: getTikTokRenderableMedia(embed).length === 0 ? "loading" : "idle",
+    }));
     const [activeIndex, setActiveIndex] = useState(0);
     const [measuredMediaDimensions, setMeasuredMediaDimensions] = useState<
       Record<string, MediaDimensions>
@@ -1036,27 +1038,12 @@ const TikTokEmbed = memo(
           })();
 
     useEffect(() => {
-      fetchedRef.current = false;
-      setHydratedPayload(null);
-      setPlayer({ mode: "idle" });
-      setActiveIndex(0);
-      setMeasuredMediaDimensions({});
-      setDragOffset(0);
-      setIsDragging(false);
-      setIsAudioPlaying(false);
-    }, [hydrationSignature]);
-
-    useEffect(() => {
       if (!displayEmbed.url || fetchedRef.current) return;
 
       fetchedRef.current = true;
       const controller =
         typeof AbortController !== "undefined" ? new AbortController() : null;
       let isActive = true;
-
-      if (media.length === 0) {
-        setPlayer({ mode: "loading" });
-      }
 
       fetch(
         apiUrl(
@@ -4425,6 +4412,7 @@ export const LinkEmbed = memo(
     } else if (providerName === "tiktok") {
       embedContent = (
         <TikTokEmbed
+          key={getTikTokHydrationSignature(embed)}
           embed={embed}
           onMediaPlay={onMediaPlay}
           messageId={messageId}

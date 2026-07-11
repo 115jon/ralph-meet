@@ -22,6 +22,10 @@ export default tseslint.config(
       "desktop/",
       "mobile/",
       "src/routeTree.gen.ts",
+      // Third-party minified yt-dlp solver payloads are consumed as opaque
+      // runtime assets; linting them creates hundreds of non-actionable
+      // diagnostics that cannot be repaired locally.
+      "src/lib/ytdlp/assets/*.min.js",
     ],
   },
 
@@ -108,6 +112,34 @@ export default tseslint.config(
       // ── General ───────────────────────────────────────────────────────
       "no-empty": ["error", { allowEmptyCatch: true }],
       "prefer-const": "warn",
+    },
+  },
+
+  // TanStack route modules must co-locate route definitions and route exports.
+  {
+    files: ["src/routes/**/*.{ts,tsx}"],
+    rules: {
+      "react-refresh/only-export-components": "off",
+    },
+  },
+
+  // These modules deliberately export shared helpers beside their components.
+  // Moving them would change established import contracts without improving HMR.
+  {
+    files: [
+      "packages/kova-react/src/components/icons.tsx",
+      "packages/kova-react/src/components/social-buttons.tsx",
+      "packages/kova-react/src/context.tsx",
+      "src/components/DesktopScreenPickerUI.tsx",
+      "src/components/StandaloneUpdater.tsx",
+      "src/components/chat/ImageViewerToolbar.tsx",
+      "src/components/chat/ProfileCollectiblesLayer.tsx",
+      "src/components/chat/ReplyPreviewContent.tsx",
+      "src/components/ui/badge.tsx",
+      "src/components/ui/button.tsx",
+    ],
+    rules: {
+      "react-refresh/only-export-components": "off",
     },
   },
 );

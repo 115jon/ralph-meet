@@ -11,7 +11,7 @@ import {
 
 // PATCH /api/servers/:id/members/:userId — update a member's role
 // DEPRECATED for RBAC system. Role updates handled in PUT /api/servers/:id/members/:userId/roles
-const PATCH = async ({ request, params }: any) => {
+const PATCH = async ({ request: _request, params: _params }: any) => {
   return apiError(
     "Deprecated. Use /api/servers/:id/members/:userId/roles",
     400,
@@ -19,7 +19,7 @@ const PATCH = async ({ request, params }: any) => {
 };
 
 // DELETE /api/servers/:id/members/:userId — kick a member
-const DELETE = async ({ request, params }: any) => {
+const DELETE = async ({ request: _request, params }: any) => {
   const authResult = await requireAuth();
   if (authResult instanceof Response) return authResult;
   const { userId: actorId } = authResult;

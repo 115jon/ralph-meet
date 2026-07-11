@@ -52,6 +52,8 @@ export function useAuth(): UseAuthReturn {
   const session = result.data;
   const user = session?.user ?? null;
   const rawSession = session?.session ?? null;
+  const rawSessionToken =
+    (rawSession as { token?: string | null } | null)?.token ?? null;
 
   const signOut = useCallback(
     async (callbackURL?: string) => {
@@ -84,9 +86,9 @@ export function useAuth(): UseAuthReturn {
       } else {
         // Same-origin cookie flow: call the server to invalidate ONLY this specific session.
         // Using `client.signOut()` with multi-session enabled deletes ALL sessions on the device.
-        if (rawSession?.token && (client as any).multiSession) {
+        if (rawSessionToken && (client as any).multiSession) {
           await (client as any).multiSession.revokeDeviceSession({
-            sessionToken: rawSession.token,
+            sessionToken: rawSessionToken,
           });
         } else {
           try {
@@ -100,14 +102,14 @@ export function useAuth(): UseAuthReturn {
       }
     },
     [
-      client,
-      authUrl,
-      publishableKey,
       afterSignOutUrl,
+      authUrl,
       clearSessionToken,
+      client,
       hasBearerSession,
+      publishableKey,
+      rawSessionToken,
       sessionToken,
-      rawSession?.token,
     ],
   );
 
@@ -119,16 +121,10 @@ export function useAuth(): UseAuthReturn {
     isLoaded,
     isSignedIn: !!user,
     userId: user?.id ?? null,
-    sessionId:
-      sessionToken ??
-      (rawSession as { token?: string | null } | null)?.token ??
-      null,
+    sessionId: sessionToken ?? rawSessionToken ?? null,
     orgId: activeOrgId,
     orgRole: null,
-    getToken: async () =>
-      sessionToken ??
-      (rawSession as { token?: string | null } | null)?.token ??
-      null,
+    getToken: async () => sessionToken ?? rawSessionToken ?? null,
     signOut,
   };
 }

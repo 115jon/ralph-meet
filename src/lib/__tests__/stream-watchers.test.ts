@@ -98,8 +98,20 @@ describe("stream watcher helpers", () => {
     );
 
     expect(identities["user-1"]).toEqual([
-      { userId: "user-2", name: "Bob", avatar: "/bob.png", isLocal: false },
-      { userId: "user-3", name: "You", avatar: null, isLocal: true },
+      {
+        userId: "user-2",
+        name: "Bob",
+        avatar: "/bob.png",
+        avatarDisplay: null,
+        isLocal: false,
+      },
+      {
+        userId: "user-3",
+        name: "You",
+        avatar: null,
+        avatarDisplay: null,
+        isLocal: true,
+      },
     ]);
   });
 

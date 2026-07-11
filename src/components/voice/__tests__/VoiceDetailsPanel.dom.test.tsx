@@ -5,7 +5,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { VoiceDetailsPanel } from "../VoiceDetailsPanel";
 
-const useVoiceStatsMock = vi.fn(() => null);
+const { useVoiceStatsMock } = vi.hoisted(() => ({
+  useVoiceStatsMock: vi.fn(() => null),
+}));
 
 vi.mock("@/hooks/useVoiceStats", () => ({
   useVoiceStats: useVoiceStatsMock,

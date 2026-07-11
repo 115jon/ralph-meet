@@ -3,7 +3,7 @@ import { parseCustomEmojiToken } from "@/lib/emoji";
 import type { GifPickerItem, GifPickerMediaType } from "@/lib/gif-picker";
 import type { Message, User } from "@/lib/types";
 import { useChatStore } from "@/stores/chat-store";
-import { useCallback, useEffect, useReducer, useRef } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useRef } from "react";
 
 import {
   allocateComposerCustomEmojiPlaceholder,
@@ -185,14 +185,20 @@ export function useMessageInput({
       )
     : null;
 
-  const mentionCandidates = mentionQuery
-    ? members
-        .map((m: any) => m.user)
-        .filter((u: User) =>
-          u.username.toLowerCase().includes(mentionQuery.text.toLowerCase()),
-        )
-        .slice(0, 5)
-    : [];
+  const mentionCandidates = useMemo(
+    () =>
+      mentionQuery
+        ? members
+            .map((m: any) => m.user)
+            .filter((u: User) =>
+              u.username
+                .toLowerCase()
+                .includes(mentionQuery.text.toLowerCase()),
+            )
+            .slice(0, 5)
+        : [],
+    [members, mentionQuery],
+  );
 
   const updateMentionQuery = useCallback(
     (textValue: string, selectionStart: number) => {

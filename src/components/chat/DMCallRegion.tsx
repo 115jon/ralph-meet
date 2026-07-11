@@ -23,6 +23,7 @@ import {
   lazy,
   Suspense,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type MouseEvent,
@@ -56,7 +57,7 @@ export function DMCallRegion({ channelId }: { channelId: string }) {
     callId,
     remoteUser,
     channelId: callChannelId,
-    startedAt,
+    startedAt: _startedAt,
     hasConnected,
     hasJoinedSFU,
     voiceRoomId,
@@ -100,10 +101,13 @@ export function DMCallRegion({ channelId }: { channelId: string }) {
   const [isChatHidden, setIsChatHidden] = useState(false);
 
   const focusedId = callVoice.focusedId;
-  const setFocusedId = callVoice.setFocusedId || (() => {});
+  const setFocusedId = useMemo(
+    () => callVoice.setFocusedId ?? (() => {}),
+    [callVoice.setFocusedId],
+  );
   const watchersByStreamer = callVoice.watchersByStreamer;
 
-  const prevVideoCount = useRef<number>(0);
+  const _prevVideoCount = useRef<number>(0);
   const prevFirstScreenId = useRef<string | null>(null);
 
   // Auto-reset UI and auto-focus streams

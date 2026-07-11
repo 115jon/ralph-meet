@@ -6,7 +6,7 @@ import { getPresence, updatePresence } from "@/services/presence.service";
 import { executeBroadcast } from "@/services/service-helpers";
 
 // GET /api/presence — fetch current user's presence
-const GET = async ({ request, params }: any) => {
+const GET = async ({ request, params: _params }: any) => {
   const authResult = await requireAuth(request);
   if (authResult instanceof Response) return authResult;
   const { userId } = authResult;
@@ -18,7 +18,7 @@ const GET = async ({ request, params }: any) => {
 };
 
 // POST /api/presence — update user's presence status
-const POST = async ({ request, params }: any) => {
+const POST = async ({ request, params: _params }: any) => {
   const authResult = await requireAuth(request);
   if (authResult instanceof Response) return authResult;
   const { userId } = authResult;

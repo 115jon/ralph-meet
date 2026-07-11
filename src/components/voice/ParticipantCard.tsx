@@ -43,7 +43,7 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
   item,
   isFocused,
   isTray,
-  globalDeafened,
+  globalDeafened: _globalDeafened,
   onClick,
   voiceActions,
   watchedStreams,
@@ -60,16 +60,23 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
   const [dominantColor, setDominantColor] = useState<string | null>(null);
 
   useEffect(() => {
-    if (item.avatar) {
-      extractDominantColor(getAuthAssetUrl(item.avatar)).then(
-        (color: string | null) => {
-          if (color) setDominantColor(color);
-        },
-      );
-    } else {
-      setDominantColor(null);
-    }
+    if (!item.avatar) return;
+
+    let isActive = true;
+    extractDominantColor(getAuthAssetUrl(item.avatar)).then(
+      (color: string | null) => {
+        if (isActive) {
+          setDominantColor(color);
+        }
+      },
+    );
+
+    return () => {
+      isActive = false;
+    };
   }, [item.avatar]);
+
+  const resolvedDominantColor = item.avatar ? dominantColor : null;
 
   const isScreen = item.type === "screen";
   const isCamera = item.type === "camera";
@@ -151,7 +158,7 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
               backgroundColor:
                 (isCamera || isScreen) && shouldRenderVideo
                   ? "black"
-                  : dominantColor || undefined,
+                  : resolvedDominantColor || undefined,
             }}
           />
         )}

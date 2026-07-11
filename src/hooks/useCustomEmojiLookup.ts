@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useReducer } from "react";
+import { useEffect, useReducer } from "react";
 
 import { apiGet } from "@/lib/api-client";
 import type { GeneratedEmoji, GeneratedEmojiListResponse } from "@/lib/emoji";
@@ -64,11 +64,8 @@ async function ensureCustomEmojiIds(ids: string[]): Promise<void> {
 export function useCustomEmojiLookup(
   ids: string[],
 ): Record<string, GeneratedEmoji> {
-  const normalizedIds = useMemo(
-    () => Array.from(new Set(ids.filter(Boolean))),
-    [ids.join(",")],
-  );
-  const [version, forceRender] = useReducer((value: number) => value + 1, 0);
+  const normalizedIds = Array.from(new Set(ids.filter(Boolean)));
+  const [, forceRender] = useReducer((value: number) => value + 1, 0);
 
   useEffect(() => {
     const handleCacheChange = () => {
@@ -82,35 +79,21 @@ export function useCustomEmojiLookup(
   }, []);
 
   useEffect(() => {
-    if (normalizedIds.length === 0) return;
+    const effectIds = Array.from(new Set(ids.filter(Boolean)));
+    if (effectIds.length === 0) return;
 
-    let cancelled = false;
+    void ensureCustomEmojiIds(effectIds).catch(() => {
+      // Inline rendering can gracefully fall back to raw token text.
+    });
+  }, [ids]);
 
-    void ensureCustomEmojiIds(normalizedIds)
-      .then(() => {
-        if (!cancelled) {
-          forceRender();
-        }
-      })
-      .catch(() => {
-        // Inline rendering can gracefully fall back to raw token text.
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [normalizedIds.join(",")]);
-
-  return useMemo(() => {
-    const map: Record<string, GeneratedEmoji> = {};
-
-    for (const id of normalizedIds) {
-      const item = emojiCache.get(id);
-      if (item) {
-        map[id] = item;
-      }
+  const map: Record<string, GeneratedEmoji> = {};
+  for (const id of normalizedIds) {
+    const item = emojiCache.get(id);
+    if (item) {
+      map[id] = item;
     }
+  }
 
-    return map;
-  }, [normalizedIds.join(","), normalizedIds.length, version]);
+  return map;
 }

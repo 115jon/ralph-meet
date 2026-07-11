@@ -12,7 +12,7 @@ import {
 } from "@/services/social.service";
 
 // GET /api/friends — list all relationships for the authenticated user
-const GET = async ({ request, params }: any) => {
+const GET = async ({ request: _request, params: _params }: any) => {
   const authResult = await requireAuth();
   if (authResult instanceof Response) return authResult;
   const { userId } = authResult;
@@ -23,7 +23,7 @@ const GET = async ({ request, params }: any) => {
 };
 
 // POST /api/friends — send a friend request
-const POST = async ({ request, params }: any) => {
+const POST = async ({ request, params: _params }: any) => {
   const authResult = await requireAuth();
   if (authResult instanceof Response) return authResult;
   const { userId } = authResult;
@@ -58,7 +58,7 @@ const POST = async ({ request, params }: any) => {
 };
 
 // PUT /api/friends — accept or block a relationship
-const PUT = async ({ request, params }: any) => {
+const PUT = async ({ request, params: _params }: any) => {
   const authResult = await requireAuth();
   if (authResult instanceof Response) return authResult;
   const { userId } = authResult;
@@ -103,7 +103,7 @@ const PUT = async ({ request, params }: any) => {
 };
 
 // DELETE /api/friends — remove a friend or cancel/reject a request
-const DELETE = async ({ request, params }: any) => {
+const DELETE = async ({ request, params: _params }: any) => {
   const authResult = await requireAuth();
   if (authResult instanceof Response) return authResult;
   const { userId } = authResult;

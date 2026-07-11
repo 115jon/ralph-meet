@@ -191,21 +191,25 @@ export function AvatarFrameEditor({
   useEffect(() => {
     if (!naturalSize || didApplyInitial) return;
 
-    const normalized = normalizeAvatarDisplay(initialDisplay);
-    if (normalized?.crop) {
-      const next = viewportFromDisplay(
-        { ...normalized, crop: normalized.crop },
-        naturalSize.width,
-        naturalSize.height,
-        viewportSize,
-      );
-      setZoom(next.zoom);
-      setOffset(next.offset);
-    } else {
-      setZoom(MIN_ZOOM);
-      setOffset({ x: 0, y: 0 });
-    }
-    setDidApplyInitial(true);
+    const frameId = requestAnimationFrame(() => {
+      const normalized = normalizeAvatarDisplay(initialDisplay);
+      if (normalized?.crop) {
+        const next = viewportFromDisplay(
+          { ...normalized, crop: normalized.crop },
+          naturalSize.width,
+          naturalSize.height,
+          viewportSize,
+        );
+        setZoom(next.zoom);
+        setOffset(next.offset);
+      } else {
+        setZoom(MIN_ZOOM);
+        setOffset({ x: 0, y: 0 });
+      }
+      setDidApplyInitial(true);
+    });
+
+    return () => cancelAnimationFrame(frameId);
   }, [didApplyInitial, initialDisplay, naturalSize, viewportSize]);
 
   const currentDisplay = useMemo(() => {

@@ -130,7 +130,8 @@ export function AudioDeviceMenu({
 
   useLayoutEffect(() => {
     if (showDeviceSubmenu) {
-      updateSubmenuPos();
+      const frameId = requestAnimationFrame(updateSubmenuPos);
+      return () => cancelAnimationFrame(frameId);
     }
   }, [showDeviceSubmenu, updateSubmenuPos]);
 

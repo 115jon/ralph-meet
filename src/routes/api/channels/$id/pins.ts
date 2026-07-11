@@ -15,7 +15,7 @@ import {
 import { executeBroadcast } from "@/services/service-helpers";
 
 // GET /api/channels/:id/pins — get all pinned messages in the channel
-const GET = async ({ request, params }: any) => {
+const GET = async ({ request: _request, params }: any) => {
   const authResult = await requireAuth();
   if (authResult instanceof Response) return authResult;
   const { userId } = authResult;
@@ -91,7 +91,7 @@ const PUT = async ({ request, params }: any) => {
 
   try {
     if (body.pinned) {
-      const result = await pinMessage(db, channelId, body.message_id);
+      const _result = await pinMessage(db, channelId, body.message_id);
 
       // For pin broadcasts, fetch the full message for clients
       const { results } = await db

@@ -948,7 +948,7 @@ const GET = async ({ request }: any) => {
     );
 
     let endpoint = "";
-    let params: GifApiParams = {};
+    const params: GifApiParams = {};
     const cacheConfig = query ? TENOR_SEARCH_CACHE : TENOR_FEATURED_CACHE;
 
     if (provider === "klipy" && isNativeKlipyMediaType(mediaType)) {

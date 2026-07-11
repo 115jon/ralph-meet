@@ -44,7 +44,7 @@ export function onSoundInteractionNeeded(cb: (() => void) | null) {
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
 /** Create a gain node that fades out over `duration` seconds */
-function fadeOut(
+function _fadeOut(
   a: AudioContext,
   startGain: number,
   duration: number,

@@ -65,7 +65,7 @@ type Tab = "voice" | "camera" | "appearance";
 export default function RoomSettingsModal({
   onClose,
   settingsUserId,
-  isClosing,
+  isClosing: _isClosing,
 }: RoomSettingsModalProps) {
   const { theme, setTheme } = useTheme();
   const [activeTab, setActiveTab] = useState<Tab>("voice");

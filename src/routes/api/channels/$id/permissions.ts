@@ -6,7 +6,7 @@ import { requireChannelPermission } from "@/lib/require-permission";
 import { ServiceError } from "@/lib/service-error";
 import { listPermissionOverrides } from "@/services/channel.service";
 
-const GET = async ({ request, params }: any) => {
+const GET = async ({ request: _request, params }: any) => {
   const authResult = await requireAuth();
   if (authResult instanceof Response) return authResult;
   const { userId } = authResult;

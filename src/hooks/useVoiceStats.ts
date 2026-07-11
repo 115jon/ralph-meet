@@ -1,5 +1,5 @@
 import type { SFUClient, VoiceConnectionStats } from "@/lib/sfu-client";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 
 /**
  * Subscribes to SFU connection stats updates via the monitor's push API.
@@ -23,17 +23,12 @@ export function useVoiceStats(
   sfu: SFUClient | null,
   enabled: boolean,
 ): VoiceConnectionStats | null {
-  const [stats, setStats] = useState<VoiceConnectionStats | null>(null);
-  // Track the last sfu instance so we can clear stats when sfu changes
-  // (e.g. disconnect → reconnect), but NOT when only `enabled` changes.
-  const sfuRef = useRef<SFUClient | null>(null);
+  const [snapshot, setSnapshot] = useState<{
+    sfu: SFUClient | null;
+    stats: VoiceConnectionStats | null;
+  }>({ sfu: null, stats: null });
 
   useEffect(() => {
-    // When the SFU instance changes (or goes null), discard stale stats.
-    if (sfu !== sfuRef.current) {
-      sfuRef.current = sfu;
-      setStats(null);
-    }
     if (!sfu) {
       // Panel hidden: keep the last snapshot so it shows instantly on reopen.
       // Or SFU is null, so we can't subscribe anyway.
@@ -46,9 +41,11 @@ export function useVoiceStats(
 
     // subscribeConnectionStats delivers the current snapshot synchronously
     // (if one exists) and then pushes future snapshots as they arrive.
-    const unsubscribe = sfu.subscribeConnectionStats(setStats);
+    const unsubscribe = sfu.subscribeConnectionStats((stats) => {
+      setSnapshot({ sfu, stats });
+    });
     return unsubscribe;
   }, [sfu, enabled]);
 
-  return stats;
+  return snapshot.sfu === sfu ? snapshot.stats : null;
 }

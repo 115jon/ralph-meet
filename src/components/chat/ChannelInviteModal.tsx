@@ -40,7 +40,7 @@ export default function ChannelInviteModal({
     copied: false,
     invitedUsers: new Set(),
   });
-  const [invitedUsers, setInvitedUsers] = useState<Set<string>>(new Set());
+  const [_invitedUsers, _setInvitedUsers] = useState<Set<string>>(new Set());
 
   // Filter to accepted friends only (type 0)
   const friends = useMemo(

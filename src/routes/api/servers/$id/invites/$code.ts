@@ -7,7 +7,7 @@ import { ServiceError } from "@/lib/service-error";
 import { revokeInvite } from "@/services/social.service";
 
 // DELETE /api/servers/:id/invites/:code — revoke an invite
-const DELETE = async ({ request, params }: any) => {
+const DELETE = async ({ request: _request, params }: any) => {
   const authResult = await requireAuth();
   if (authResult instanceof Response) return authResult;
   const { userId } = authResult;

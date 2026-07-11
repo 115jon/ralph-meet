@@ -209,13 +209,12 @@ export function useKovaAuthTokenSync(
 ): { tokenReady: boolean } {
   const isTauri = isTauriRuntime();
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const [tokenReady, setTokenReady] = useState(() => !!getDesktopToken());
+  const [tokenReady, setTokenReady] = useState(() =>
+    isTauri ? !!getDesktopToken() : true,
+  );
 
   const sync = useCallback(async () => {
-    if (!isTauri) {
-      setTokenReady(true);
-      return;
-    }
+    if (!isTauri) return;
 
     try {
       const token = await getToken();
@@ -256,10 +255,7 @@ export function useKovaAuthTokenSync(
   }, [getToken, isTauri]);
 
   useEffect(() => {
-    if (!isTauri) {
-      setTokenReady(true);
-      return;
-    }
+    if (!isTauri) return;
 
     const timeout = setTimeout(() => void sync(), 0);
     intervalRef.current = setInterval(() => void sync(), 50_000);

@@ -45,7 +45,8 @@ describe("createCategory", () => {
   });
 
   it("throws 400 when name is empty", async () => {
-    const { ServiceError } = await import("../../lib/service-error");
+    const { ServiceError: _ServiceError } =
+      await import("../../lib/service-error");
     await expect(
       createCategory(db as any, SERVER_ID, USER_ID, { name: "  " }),
     ).rejects.toHaveProperty("status", 400);

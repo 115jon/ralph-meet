@@ -83,9 +83,9 @@ export const StreamContextMenu: React.FC<StreamContextMenuProps> = ({
   onOpenProfileUser,
   onOpenMessageUser,
   showDisconnect = true,
-  sfu,
+  sfu: _sfu,
   serverId,
-  localUserId,
+  localUserId: _localUserId,
   alwaysShowStreamPreview,
   onToggleAlwaysShowStreamPreview,
 }) => {

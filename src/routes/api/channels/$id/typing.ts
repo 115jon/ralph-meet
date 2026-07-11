@@ -4,7 +4,7 @@ import { broadcastToChannel, requireAuth } from "@/lib/api-helpers";
 import { requireChannelAccess } from "@/lib/require-channel-access";
 
 // POST /api/channels/:id/typing — send typing indicator
-const POST = async ({ request, params }: any) => {
+const POST = async ({ request: _request, params }: any) => {
   const authResult = await requireAuth();
   if (authResult instanceof Response) return authResult;
   const { userId } = authResult;

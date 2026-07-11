@@ -61,7 +61,7 @@ const PATCH = async ({ request, params }: any) => {
 };
 
 // DELETE /api/servers/:id/settings — delete a server (owner only)
-const DELETE = async ({ request, params }: any) => {
+const DELETE = async ({ request: _request, params }: any) => {
   const authResult = await requireAuth();
   if (authResult instanceof Response) return authResult;
   const { userId } = authResult;

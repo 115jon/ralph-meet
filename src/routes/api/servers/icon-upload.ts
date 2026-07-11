@@ -12,7 +12,7 @@ import { logger } from "@/lib/logger";
 import { checkRateLimitDO, RATE_LIMITS } from "@/lib/rate-limit";
 
 // POST /api/servers/icon-upload — upload a server icon to R2
-const POST = async ({ request, params }: any) => {
+const POST = async ({ request, params: _params }: any) => {
   const authResult = await requireAuth();
   if (authResult instanceof Response) return authResult;
   const { userId } = authResult;

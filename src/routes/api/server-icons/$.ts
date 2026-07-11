@@ -5,7 +5,7 @@ import { apiError, getBucket } from "@/lib/api-helpers";
 // GET /api/server-icons/{filename}
 // Serves server icons from R2 — publicly accessible (no auth)
 // so they can be displayed in <img> tags without token issues.
-const GET = async ({ request, params }: any) => {
+const GET = async ({ request: _request, params }: any) => {
   const { _splat } = params as { _splat?: string };
   const splatPath = _splat || "";
   const key = `server-icons/${splatPath}`;

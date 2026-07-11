@@ -56,7 +56,7 @@ function getLatestTag() {
     return execSync("git describe --tags --abbrev=0", {
       encoding: "utf8",
     }).trim();
-  } catch (error) {
+  } catch {
     console.log("⚠️ No git tags found. Defaulting to v0.0.0.");
     return "v0.0.0";
   }
@@ -139,7 +139,7 @@ function bumpVersion(currentVersion, bumpType) {
   return `${major}.${minor}.${patch}`;
 }
 
-function getNestedValue(obj, keyPath) {
+function _getNestedValue(obj, keyPath) {
   let current = obj;
   for (const key of keyPath) {
     if (current === undefined || current === null) return undefined;

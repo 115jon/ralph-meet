@@ -4,7 +4,7 @@ export const ChannelNameSchema = z
   .string()
   .min(1, "Name is required")
   .max(100, "Name is too long")
-  .transform((val, ctx) => {
+  .transform((val) => {
     // We'll pass the type during validation if needed,
     // but for shared schema we'll just trim.
     return val.trim();
@@ -44,7 +44,12 @@ export function sanitizeChannelName(
     let sanitized = name
       .toLowerCase()
       .replace(/\s+/gu, "-") // Discord-style spacing for text channels
-      .replace(/[\u0000-\u001F\u007F-\u009F]/g, "") // Strip control chars but keep visible Unicode
+      .split("")
+      .filter((character) => {
+        const code = character.charCodeAt(0);
+        return code > 0x1f && (code < 0x7f || code > 0x9f);
+      })
+      .join("") // Strip control chars but keep visible Unicode
       .replace(/-+/g, "-"); // Collapse multiple hyphens
 
     if (isFinal) {

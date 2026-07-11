@@ -30,7 +30,7 @@ export function setRoleIdGenerator(fn: () => string): void {
 
 // ─── Shared helper ───────────────────────────────────────────────────────────
 
-async function getActorPermissions(
+async function _getActorPermissions(
   db: D1Database,
   serverId: string,
   userId: string,

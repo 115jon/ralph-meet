@@ -6,7 +6,7 @@ import { createRole, listServerRoles } from "@/services/role.service";
 import { executeAuditLog } from "@/services/service-helpers";
 
 // GET /api/servers/:id/roles — list all roles for a server
-const GET = async ({ request, params }: any) => {
+const GET = async ({ request: _request, params }: any) => {
   const authResult = await requireAuth();
   if (authResult instanceof Response) return authResult;
   const { userId } = authResult;

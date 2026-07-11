@@ -18,7 +18,7 @@ interface Props {
   onClose: () => void;
 }
 
-function formatDate(iso: string): string {
+function _formatDate(iso: string): string {
   const d = new Date(iso);
   const today = new Date();
   const yesterday = new Date(today);

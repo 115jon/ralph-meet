@@ -6,7 +6,7 @@ import { executeBroadcast } from "@/services/service-helpers";
 import { getOrCreateDM, listDMs } from "@/services/social.service";
 
 // GET /api/dms — list all DM channels for the authenticated user
-const GET = async ({ request, params }: any) => {
+const GET = async ({ request: _request, params: _params }: any) => {
   const authResult = await requireAuth();
   if (authResult instanceof Response) return authResult;
   const { userId } = authResult;
@@ -17,7 +17,7 @@ const GET = async ({ request, params }: any) => {
 };
 
 // POST /api/dms — open or create a DM with a user
-const POST = async ({ request, params }: any) => {
+const POST = async ({ request, params: _params }: any) => {
   const authResult = await requireAuth();
   if (authResult instanceof Response) return authResult;
   const { userId } = authResult;
