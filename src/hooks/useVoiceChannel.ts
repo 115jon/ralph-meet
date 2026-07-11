@@ -74,6 +74,7 @@ import {
 import { useShallow } from "zustand/shallow";
 import type { ScreenShareSourceState } from "@/lib/screen-share-types";
 import { useNativeShareStats } from "@/hooks/useNativeShareStats";
+import { useSpatialAudioSync } from "@/hooks/useSpatialAudioSync";
 
 const vcLog = clog("VoiceChannel");
 const screenLog = clog("ScreenShare");
@@ -1153,29 +1154,14 @@ export function useVoiceChannel({
     mode,
   ]);
 
-  useEffect(() => {
-    if (!joined) return;
-    const nextSpatialAudioState = normalizeSpatialState({
-      ...spatialAudioState,
-      enabled: spatialAudioEnabled,
-      updatedAt: Date.now(),
-    });
-    voiceDispatch({
-      type: "SET_SPATIAL_AUDIO_STATE",
-      payload: nextSpatialAudioState,
-    });
-    sendVoiceStateUpdate({
-      spatial_audio_enabled: spatialAudioEnabled,
-      spatial_audio_high_fidelity: streamHighFidelity,
-      spatial_audio_state: nextSpatialAudioState,
-    });
-  }, [
+  useSpatialAudioSync({
     joined,
     spatialAudioEnabled,
     streamHighFidelity,
-    sendVoiceStateUpdate,
     spatialAudioState,
-  ]);
+    dispatch: voiceDispatch,
+    sendVoiceStateUpdate,
+  });
 
   useEffect(() => {
     if (!channelId) return;
