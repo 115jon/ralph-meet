@@ -149,6 +149,34 @@ describe("ListenTogetherNowPlayingCard", () => {
     });
   });
 
+  it("allows the mini player seek control to shrink within its time row", () => {
+    render(
+      <ListenTogetherNowPlayingCard
+        playback={makePlaybackState()}
+        sfu={{ voiceGW: { sendAppEvent: vi.fn() } } as never}
+        roomSlug="room-1"
+        variant="mini"
+      />,
+    );
+
+    expect(screen.getByLabelText("Seek Track One")).toHaveClass("min-w-0");
+  });
+
+  it("uses the semantic destructive color for an issue badge", () => {
+    render(
+      <ListenTogetherNowPlayingCard
+        playback={makePlaybackState({
+          error: { code: "PLAYBACK_ERROR", message: "Playback failed" },
+        })}
+        sfu={{ voiceGW: { sendAppEvent: vi.fn() } } as never}
+        roomSlug="room-1"
+        variant="mini"
+      />,
+    );
+
+    expect(screen.getByText("Issue")).toHaveClass("text-destructive");
+  });
+
   it("stays hidden in mini mode when nothing is currently playing", () => {
     const playback = makePlaybackState({
       currentEntry: null,

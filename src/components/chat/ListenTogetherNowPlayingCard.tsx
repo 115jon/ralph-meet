@@ -87,12 +87,12 @@ export function ListenTogetherNowPlayingCard({
   const syncBadge = error
     ? {
         label: "Issue",
-        className: "border-red-500/20 bg-red-500/12 text-red-200",
+        className: "border-destructive/20 bg-destructive/10 text-destructive",
       }
     : snapshot?.paused
       ? {
           label: "Paused",
-          className: "border-white/8 bg-rm-bg-hover/80 text-rm-text-muted",
+          className: "border-border bg-muted text-muted-foreground",
         }
       : {
           label: "Sync",
@@ -210,7 +210,7 @@ export function ListenTogetherNowPlayingCard({
                     positionMs: Number(event.currentTarget.value),
                   });
                 }}
-                className="h-1.5 flex-1 cursor-pointer accent-primary disabled:cursor-not-allowed"
+                className="h-1.5 min-w-0 flex-1 cursor-pointer accent-primary disabled:cursor-not-allowed"
               />
               <span className="min-w-[34px] text-right text-[10px] text-rm-text-muted/75 tabular-nums">
                 {formatListenTogetherDuration(durationMs)}
@@ -352,7 +352,7 @@ export function ListenTogetherNowPlayingCard({
         </div>
 
         {error && (
-          <div className="rounded-[18px] border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs text-red-300">
+          <div className="rounded-[18px] border border-destructive/20 bg-destructive/10 px-3 py-2 text-xs text-destructive">
             {error.message}
           </div>
         )}
@@ -403,7 +403,7 @@ export function ListenTogetherNowPlayingCard({
               });
             }}
             disabled={!canControl}
-            className="inline-flex items-center gap-2 rounded-full border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs font-bold text-red-300 transition hover:bg-red-500/15 disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex items-center gap-2 rounded-full border border-destructive/20 bg-destructive/10 px-3 py-2 text-xs font-bold text-destructive transition hover:bg-destructive/15 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Trash2 className="h-3.5 w-3.5" />
             Remove

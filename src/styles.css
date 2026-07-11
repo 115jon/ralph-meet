@@ -301,7 +301,7 @@
   --rm-accent-dim: rgba(88, 101, 242, 0.1);
   --rm-glow: rgba(88, 101, 242, 0.25);
 
-  --destructive: oklch(0.65 0.2 25);
+  --destructive: oklch(0.52 0.2 25);
   --destructive-foreground: oklch(0.98 0 0);
   --warning: oklch(0.8 0.17 70);
   --warning-foreground: oklch(0.2 0.01 270);
@@ -338,7 +338,7 @@
   --accent: #e1f3f0;
   --accent-foreground: #00a399;
 
-  --destructive: oklch(0.6 0.18 25);
+  --destructive: oklch(0.52 0.18 25);
   --destructive-foreground: #ffffff;
 
   --warning: oklch(0.75 0.15 70);
@@ -508,7 +508,7 @@
   --accent: #f1f3f9;
   --accent-foreground: #e50914;
 
-  --destructive: oklch(0.6 0.18 25);
+  --destructive: oklch(0.52 0.18 25);
   --destructive-foreground: #ffffff;
 
   --warning: oklch(0.75 0.15 70);
