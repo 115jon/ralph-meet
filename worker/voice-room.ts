@@ -16,14 +16,12 @@ import {
 } from "../src/lib/voice/connection-generation";
 import {
   buildListenTogetherSnapshot,
-  createListenTogetherState,
   isValidListenTogetherVideoId,
   LISTEN_TOGETHER_IMPORT_LIMIT,
   type ListenTogetherCommand,
   type ListenTogetherEnqueueCommand,
   type ListenTogetherEvent,
   type ListenTogetherMusicProvider,
-  type ListenTogetherMusicTrack,
   type ListenTogetherPersistentState,
   type ListenTogetherQueueEntry,
   type ListenTogetherStateSnapshot,
@@ -49,6 +47,7 @@ import {
   type DemoChatMessage,
 } from "./voice-room/demo-chat-store";
 import { StreamWatcherStore } from "./voice-room/stream-watcher-store";
+import { ListenTogetherStore } from "./voice-room/listen-together-store";
 
 const log = clog("VoiceGW");
 const roomLog = clog("VoiceRoom");
@@ -168,6 +167,7 @@ export class VoiceRoom extends DurableObject<Env> {
   private sql: SqlStorage;
   private demoChatStore: DemoChatStore;
   private streamWatcherStore: StreamWatcherStore;
+  private listenTogetherStore: ListenTogetherStore;
   private roomSlug: string = "";
   private radioStationCache = new Map<
     string,
@@ -190,6 +190,10 @@ export class VoiceRoom extends DurableObject<Env> {
     this.sql = this.ctx.storage.sql;
     this.demoChatStore = new DemoChatStore(this.sql, DEMO_CHAT_MAX_MESSAGES);
     this.streamWatcherStore = new StreamWatcherStore(this.sql);
+    this.listenTogetherStore = new ListenTogetherStore(
+      this.sql,
+      () => this.roomSlug,
+    );
 
     // Removed setWebSocketAutoResponse.
     // Cloudflare's auto-response absorbs messages at the edge, preventing the DO
@@ -700,111 +704,18 @@ export class VoiceRoom extends DurableObject<Env> {
   }
 
   private loadListenTogetherState(): ListenTogetherPersistentState {
-    const row = [
-      ...this.sql.exec(
-        `SELECT room_slug, revision, paused, current_entry_id, anchor_position_ms, anchor_updated_at, last_updated_at
-       FROM listen_together_state
-       WHERE id = 1`,
-      ),
-    ][0];
-
-    if (!row) {
-      const initial = createListenTogetherState(this.roomSlug || "");
-      this.saveListenTogetherState(initial);
-      return initial;
-    }
-
-    return {
-      roomSlug: this.roomSlug || String(row.room_slug ?? ""),
-      revision: Number(row.revision ?? 0),
-      paused: Number(row.paused ?? 1) === 1,
-      currentEntryId:
-        typeof row.current_entry_id === "string" ? row.current_entry_id : null,
-      anchorPositionMs: Number(row.anchor_position_ms ?? 0),
-      anchorUpdatedAt:
-        typeof row.anchor_updated_at === "number" ||
-        typeof row.anchor_updated_at === "string"
-          ? Number(row.anchor_updated_at)
-          : null,
-      lastUpdatedAt: Number(row.last_updated_at ?? 0),
-    };
-  }
-
-  private saveListenTogetherState(state: ListenTogetherPersistentState) {
-    this.sql.exec(
-      `INSERT INTO listen_together_state (
-         id,
-         room_slug,
-         revision,
-         paused,
-         current_entry_id,
-         anchor_position_ms,
-         anchor_updated_at,
-         last_updated_at
-       )
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-       ON CONFLICT(id) DO UPDATE SET
-         room_slug = excluded.room_slug,
-         revision = excluded.revision,
-         paused = excluded.paused,
-         current_entry_id = excluded.current_entry_id,
-         anchor_position_ms = excluded.anchor_position_ms,
-         anchor_updated_at = excluded.anchor_updated_at,
-         last_updated_at = excluded.last_updated_at`,
-      1,
-      state.roomSlug,
-      state.revision,
-      state.paused ? 1 : 0,
-      state.currentEntryId,
-      state.anchorPositionMs,
-      state.anchorUpdatedAt,
-      state.lastUpdatedAt,
-    );
+    return this.listenTogetherStore.loadState();
   }
 
   private loadListenTogetherQueue(): ListenTogetherQueueEntry[] {
-    const queue: ListenTogetherQueueEntry[] = [];
-    for (const row of this.sql.exec(
-      `SELECT entry_json FROM listen_together_queue ORDER BY sort_order ASC`,
-    )) {
-      try {
-        const parsed = JSON.parse(
-          String(row.entry_json),
-        ) as ListenTogetherQueueEntry;
-        if (parsed?.entryId) {
-          // Normalize legacy entries lacking `kind` to `kind: "music"`.
-          if (parsed.track && !parsed.track.kind) {
-            (parsed.track as ListenTogetherMusicTrack).kind = "music";
-          }
-          queue.push(parsed);
-        }
-      } catch {
-        // Ignore malformed persisted entries.
-      }
-    }
-    return queue;
-  }
-
-  private saveListenTogetherQueue(queue: ListenTogetherQueueEntry[]) {
-    this.sql.exec(`DELETE FROM listen_together_queue`);
-    queue.forEach((entry, index) => {
-      this.sql.exec(
-        `INSERT INTO listen_together_queue (entry_id, sort_order, entry_json, requested_at)
-         VALUES (?, ?, ?, ?)`,
-        entry.entryId,
-        index,
-        JSON.stringify(entry),
-        entry.requestedAt,
-      );
-    });
+    return this.listenTogetherStore.loadQueue();
   }
 
   private persistListenTogetherState(
     state: ListenTogetherPersistentState,
     queue: ListenTogetherQueueEntry[],
   ) {
-    this.saveListenTogetherState(state);
-    this.saveListenTogetherQueue(queue);
+    this.listenTogetherStore.persist(state, queue);
   }
 
   private getListenTogetherSnapshot(
