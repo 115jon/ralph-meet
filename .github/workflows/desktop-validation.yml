@@ -67,7 +67,7 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable (2026-07-11)
         with:
-          components: rustfmt
+          components: llvm-tools
 
       - name: Check desktop Rust crate
         # The existing desktop lockfile predates the current manifest and is
