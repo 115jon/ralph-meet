@@ -20,8 +20,14 @@ import {
   isReconnectWithinGrace,
   shouldKeepResumableSession,
 } from "../src/lib/voice/connection-generation";
-import { normalizePresencePlatform, type PresencePlatform } from "../src/lib/presence-platform";
-import { getNextVoicePresenceAlarmTime, refreshVoiceMemberIdentity } from "../src/lib/voice-presence";
+import {
+  normalizePresencePlatform,
+  type PresencePlatform,
+} from "../src/lib/presence-platform";
+import {
+  getNextVoicePresenceAlarmTime,
+  refreshVoiceMemberIdentity,
+} from "../src/lib/voice-presence";
 import { filterVoiceChannelStatesPayload } from "../src/lib/voice-channel-state-filter";
 import { getRealtimeAdmissionFromHeaders } from "./realtime-admission";
 
@@ -213,10 +219,10 @@ interface SpatialAudioState {
 /** A pending (ringing) or active call between two users */
 interface PendingCall {
   callId: string;
-  callerId: string;      // clerk_user_id of caller
-  calleeId: string;      // clerk_user_id of callee
-  channelId: string;     // DM channel ID
-  voiceRoomId: string;   // SFU room slug for media
+  callerId: string; // clerk_user_id of caller
+  calleeId: string; // clerk_user_id of callee
+  channelId: string; // DM channel ID
+  voiceRoomId: string; // SFU room slug for media
   timeout: ReturnType<typeof setTimeout>;
   callerName: string;
   callerUsername?: string;
@@ -232,10 +238,10 @@ interface PendingCall {
 
 const HEARTBEAT_INTERVAL_MS = 15_000;
 const PROFILE_REFRESH_COOLDOWN_MS = 10_000;
-const ZOMBIE_TIMEOUT_MS = HEARTBEAT_INTERVAL_MS * 3;  // 45s — 3 missed heartbeats
-const PRUNE_ALARM_INTERVAL_MS = 300_000;                // 5 min safety-net — client zombie detection fires first
-const CALL_RING_TIMEOUT_MS = 30_000;                   // auto-cancel after 30s
-const RESUME_GRACE_PERIOD_MS = 120_000;                // 2 min — keep session resumable after disconnect
+const ZOMBIE_TIMEOUT_MS = HEARTBEAT_INTERVAL_MS * 3; // 45s — 3 missed heartbeats
+const PRUNE_ALARM_INTERVAL_MS = 300_000; // 5 min safety-net — client zombie detection fires first
+const CALL_RING_TIMEOUT_MS = 30_000; // auto-cancel after 30s
+const RESUME_GRACE_PERIOD_MS = 120_000; // 2 min — keep session resumable after disconnect
 
 // ── MeetingRoom Durable Object ──────────────────────────────────────────────
 
@@ -245,14 +251,16 @@ export class MeetingRoom extends DurableObject<Env> {
   private profileRefreshCooldowns: Map<string, number> = new Map();
   private resumableSessions: Map<string, WsAttachment> = new Map();
   /** Per-participant replay buffer: participantId → [{seq, msg}] */
-  private replayBuffers: Map<string, Array<{ seq: number; msg: ServerMsg }>> = new Map();
+  private replayBuffers: Map<string, Array<{ seq: number; msg: ServerMsg }>> =
+    new Map();
   private static readonly MAX_REPLAY_BUFFER = 100;
   /** Channel → Set<WebSocket> — tracks which clients are subscribed to which channels (typing/presence only) */
   private channelSubscriptions: Map<string, Set<WebSocket>> = new Map();
   /** Server → Set<WebSocket> — tracks which clients are members of which servers (message delivery) */
   private serverSubscriptions: Map<string, Set<WebSocket>> = new Map();
   /** Voice channel presence: channelId → Map<clerkUserId, member info> */
-  private voiceChannelMembers: Map<string, Map<string, VoiceChannelMember>> = new Map();
+  private voiceChannelMembers: Map<string, Map<string, VoiceChannelMember>> =
+    new Map();
   /** Pending calls: calleeId → PendingCall (only one pending per callee) */
   private pendingCalls: Map<string, PendingCall> = new Map();
   /** Recently accepted calls (callId), acts as a TTL cache to prevent Op 33/Op 37 race conditions */
@@ -262,19 +270,26 @@ export class MeetingRoom extends DurableObject<Env> {
   /** Shared spatial audio layouts: room/channel id -> state */
   private spatialAudioStates: Map<string, SpatialAudioState> = new Map();
   /** Channel metadata cache used for permission-filtered voice state delivery */
-  private channelMetaCache: Map<string, { server_id: string | null; channel_type: string }> = new Map();
+  private channelMetaCache: Map<
+    string,
+    { server_id: string | null; channel_type: string }
+  > = new Map();
   /** Resumable session expiry: participantId → epoch ms when disconnect happened */
   private resumableSessionExpiry: Map<string, number> = new Map();
   /** Debounced D1 presence writes: clerkId → latest status */
   private presenceD1Pending: Map<string, string> = new Map();
   /** Debounce timer handles for presence writes */
-  private presenceD1Timers: Map<string, ReturnType<typeof setTimeout>> = new Map();
+  private presenceD1Timers: Map<string, ReturnType<typeof setTimeout>> =
+    new Map();
   /** Dirty storage keys pending batch flush */
   private dirtyStorage: Map<string, unknown> = new Map();
   /** Per-channel voice member keys scheduled for deletion */
   private deletedVcKeys: Set<string> = new Set();
 
-  constructor(public ctx: DurableObjectState, public env: Env) {
+  constructor(
+    public ctx: DurableObjectState,
+    public env: Env,
+  ) {
     super(ctx, env);
 
     this.ctx.storage.sql.exec(`
@@ -335,11 +350,15 @@ export class MeetingRoom extends DurableObject<Env> {
     // Restore voice channel members from storage (async, blockConcurrencyWhile)
     this.ctx.blockConcurrencyWhile(async () => {
       // Restore roomSlug (survives hibernation)
-      const storedSlug = await this.ctx.storage.get("roomSlug") as string | undefined;
+      const storedSlug = (await this.ctx.storage.get("roomSlug")) as
+        | string
+        | undefined;
       if (storedSlug) this.roomSlug = storedSlug;
 
       // Restore resumable sessions from storage
-      const storedResumable = await this.ctx.storage.get("resumableSessions") as Record<string, WsAttachment> | undefined;
+      const storedResumable = (await this.ctx.storage.get(
+        "resumableSessions",
+      )) as Record<string, WsAttachment> | undefined;
       if (storedResumable) {
         for (const [id, attachment] of Object.entries(storedResumable)) {
           this.resumableSessions.set(id, attachment);
@@ -362,7 +381,9 @@ export class MeetingRoom extends DurableObject<Env> {
 
       // One-time migration: move old single-key format to per-channel keys
       if (vcEntries.size === 0) {
-        const oldStored = await this.ctx.storage.get("voiceChannelMembers") as Record<string, VoiceChannelMember[]> | undefined;
+        const oldStored = (await this.ctx.storage.get(
+          "voiceChannelMembers",
+        )) as Record<string, VoiceChannelMember[]> | undefined;
         if (oldStored) {
           const migrationBatch: Record<string, VoiceChannelMember[]> = {};
           for (const channelId of Object.keys(oldStored)) {
@@ -380,12 +401,16 @@ export class MeetingRoom extends DurableObject<Env> {
             await this.ctx.storage.put(migrationBatch);
           }
           await this.ctx.storage.delete("voiceChannelMembers");
-          log.info(`Migrated voiceChannelMembers to per-channel keys (${Object.keys(migrationBatch).length} channels)`);
+          log.info(
+            `Migrated voiceChannelMembers to per-channel keys (${Object.keys(migrationBatch).length} channels)`,
+          );
         }
       }
 
       // Restore voice channel started timestamps
-      const storedStartedAt = await this.ctx.storage.get("voiceChannelStartedAt") as Record<string, number> | undefined;
+      const storedStartedAt = (await this.ctx.storage.get(
+        "voiceChannelStartedAt",
+      )) as Record<string, number> | undefined;
       if (storedStartedAt) {
         for (const [channelId, ts] of Object.entries(storedStartedAt)) {
           this.voiceChannelStartedAt.set(channelId, ts);
@@ -393,7 +418,9 @@ export class MeetingRoom extends DurableObject<Env> {
       }
 
       // Restore resumable session expiry map
-      const storedExpiry = await this.ctx.storage.get("resumableSessionExpiry") as Record<string, number> | undefined;
+      const storedExpiry = (await this.ctx.storage.get(
+        "resumableSessionExpiry",
+      )) as Record<string, number> | undefined;
       if (storedExpiry) {
         for (const [id, ts] of Object.entries(storedExpiry)) {
           this.resumableSessionExpiry.set(id, ts);
@@ -430,7 +457,10 @@ export class MeetingRoom extends DurableObject<Env> {
     const url = new URL(request.url);
     const gatewayVersion = parseInt(url.searchParams.get("v") ?? "1", 10);
 
-    if (url.pathname === "/consume-realtime-admission" && request.method === "POST") {
+    if (
+      url.pathname === "/consume-realtime-admission" &&
+      request.method === "POST"
+    ) {
       return this.consumeRealtimeAdmission(request);
     }
 
@@ -439,18 +469,23 @@ export class MeetingRoom extends DurableObject<Env> {
     if (channelMatch) {
       this.roomSlug = channelMatch[1];
       // Persist for hibernation survival
-      this.ctx.storage.put("roomSlug", this.roomSlug).catch(() => { });
+      this.ctx.storage.put("roomSlug", this.roomSlug).catch(() => {});
     }
     // Also support /api/gateway (global gateway)
     if (url.pathname === "/api/gateway") {
       this.roomSlug = "global-gateway";
-      this.ctx.storage.put("roomSlug", this.roomSlug).catch(() => { });
+      this.ctx.storage.put("roomSlug", this.roomSlug).catch(() => {});
     }
 
     if (url.pathname.endsWith("/ws") || url.pathname === "/api/gateway") {
       const admission = getRealtimeAdmissionFromHeaders(request.headers);
-      const expectedAudience = url.pathname === "/api/gateway" ? "global" : "room";
-      if (!admission || admission.audience !== expectedAudience || admission.roomSlug !== this.roomSlug) {
+      const expectedAudience =
+        url.pathname === "/api/gateway" ? "global" : "room";
+      if (
+        !admission ||
+        admission.audience !== expectedAudience ||
+        admission.roomSlug !== this.roomSlug
+      ) {
         return new Response("Unauthorized", { status: 401 });
       }
 
@@ -469,7 +504,10 @@ export class MeetingRoom extends DurableObject<Env> {
 
       this.sendTo(server, {
         op: Op.Hello,
-        d: { heartbeat_interval: HEARTBEAT_INTERVAL_MS, gateway_version: gatewayVersion },
+        d: {
+          heartbeat_interval: HEARTBEAT_INTERVAL_MS,
+          gateway_version: gatewayVersion,
+        },
       });
 
       return new Response(null, {
@@ -482,7 +520,7 @@ export class MeetingRoom extends DurableObject<Env> {
     // Internal broadcast endpoint — called by REST API routes after persisting to D1
     if (url.pathname === "/broadcast" && request.method === "POST") {
       try {
-        const body = await request.json() as {
+        const body = (await request.json()) as {
           channel_id?: string;
           server_id?: string;
           target_user_id?: string;
@@ -494,7 +532,9 @@ export class MeetingRoom extends DurableObject<Env> {
           op: Op.Dispatch,
           d: { event: body.event, data: body.data },
         };
-        log.info(`Internal broadcast: event=${body.event}, type=${body.broadcast_all ? 'all' : body.target_user_id ? 'user' : 'channel'}, recipient=${body.target_user_id || body.channel_id || 'all'}`);
+        log.info(
+          `Internal broadcast: event=${body.event}, type=${body.broadcast_all ? "all" : body.target_user_id ? "user" : "channel"}, recipient=${body.target_user_id || body.channel_id || "all"}`,
+        );
 
         if (body.broadcast_all) {
           this.broadcast(dispatchMsg);
@@ -513,7 +553,7 @@ export class MeetingRoom extends DurableObject<Env> {
 
     if (url.pathname === "/voice-session-check" && request.method === "POST") {
       try {
-        const body = await request.json() as {
+        const body = (await request.json()) as {
           user_id?: string;
           channel_id?: string;
           session_id?: string | null;
@@ -522,13 +562,20 @@ export class MeetingRoom extends DurableObject<Env> {
         };
 
         const userId = typeof body.user_id === "string" ? body.user_id : "";
-        const channelId = typeof body.channel_id === "string" ? body.channel_id : "";
-        const sessionId = typeof body.session_id === "string" && body.session_id.trim() ? body.session_id.trim() : null;
+        const channelId =
+          typeof body.channel_id === "string" ? body.channel_id : "";
+        const sessionId =
+          typeof body.session_id === "string" && body.session_id.trim()
+            ? body.session_id.trim()
+            : null;
         const requireExactSession = body.require_exact_session === true;
         const requireChannelMatch = body.require_channel_match !== false;
 
         if (!userId || (requireChannelMatch && !channelId)) {
-          return Response.json({ error: "Missing voice session lookup fields" }, { status: 400 });
+          return Response.json(
+            { error: "Missing voice session lookup fields" },
+            { status: 400 },
+          );
         }
 
         let userMatchedScope = false;
@@ -536,7 +583,8 @@ export class MeetingRoom extends DurableObject<Env> {
 
         for (const attachment of this.sessions.values()) {
           if (attachment.clerk_user_id !== userId) continue;
-          if (requireChannelMatch && attachment.voice_channel_id !== channelId) continue;
+          if (requireChannelMatch && attachment.voice_channel_id !== channelId)
+            continue;
 
           userMatchedScope = true;
           if (sessionId && attachment.id === sessionId) {
@@ -551,33 +599,48 @@ export class MeetingRoom extends DurableObject<Env> {
           exact_session_matched: exactSessionMatched,
         });
       } catch (error) {
-        return Response.json({ error: `Voice session check error: ${error}` }, { status: 500 });
+        return Response.json(
+          { error: `Voice session check error: ${error}` },
+          { status: 500 },
+        );
       }
     }
 
     if (url.pathname === "/disconnect-session" && request.method === "POST") {
       try {
-        const body = await request.json() as {
+        const body = (await request.json()) as {
           user_id?: string;
           channel_id?: string;
           session_id?: string | null;
         };
 
         const userId = typeof body.user_id === "string" ? body.user_id : "";
-        const channelId = typeof body.channel_id === "string" ? body.channel_id : undefined;
-        const sessionId = typeof body.session_id === "string" && body.session_id.trim()
-          ? body.session_id.trim()
-          : null;
+        const channelId =
+          typeof body.channel_id === "string" ? body.channel_id : undefined;
+        const sessionId =
+          typeof body.session_id === "string" && body.session_id.trim()
+            ? body.session_id.trim()
+            : null;
 
         if (!userId || !sessionId) {
-          return Response.json({ error: "Missing disconnect session fields" }, { status: 400 });
+          return Response.json(
+            { error: "Missing disconnect session fields" },
+            { status: 400 },
+          );
         }
 
-        const disconnected = await this.disconnectSessionImmediately(userId, sessionId, channelId);
+        const disconnected = await this.disconnectSessionImmediately(
+          userId,
+          sessionId,
+          channelId,
+        );
         this.flushDirtyStorage();
         return Response.json({ disconnected }, { status: 200 });
       } catch (error) {
-        return Response.json({ error: `Disconnect session error: ${error}` }, { status: 500 });
+        return Response.json(
+          { error: `Disconnect session error: ${error}` },
+          { status: 500 },
+        );
       }
     }
 
@@ -587,17 +650,30 @@ export class MeetingRoom extends DurableObject<Env> {
   private consumeRealtimeAdmission(request: Request): Response {
     const admission = getRealtimeAdmissionFromHeaders(request.headers);
     if (!admission) {
-      return Response.json({ ok: false, reason: "missing_admission" }, { status: 401 });
+      return Response.json(
+        { ok: false, reason: "missing_admission" },
+        { status: 401 },
+      );
     }
     if (this.roomSlug === "unknown") {
       this.roomSlug = admission.roomSlug;
-      this.ctx.storage.put("roomSlug", this.roomSlug).catch(() => { });
+      this.ctx.storage.put("roomSlug", this.roomSlug).catch(() => {});
     }
     if (admission.roomSlug !== this.roomSlug) {
-      return Response.json({ ok: false, reason: "room_mismatch" }, { status: 401 });
+      return Response.json(
+        { ok: false, reason: "room_mismatch" },
+        { status: 401 },
+      );
     }
-    if (admission.audience !== "room" && admission.audience !== "voice" && admission.audience !== "global") {
-      return Response.json({ ok: false, reason: "audience_mismatch" }, { status: 401 });
+    if (
+      admission.audience !== "room" &&
+      admission.audience !== "voice" &&
+      admission.audience !== "global"
+    ) {
+      return Response.json(
+        { ok: false, reason: "audience_mismatch" },
+        { status: 401 },
+      );
     }
     if (Date.now() >= admission.expiresAt) {
       return Response.json({ ok: false, reason: "expired" }, { status: 401 });
@@ -637,7 +713,8 @@ export class MeetingRoom extends DurableObject<Env> {
 
   async webSocketMessage(ws: WebSocket, rawMsg: string | ArrayBuffer) {
     if (typeof rawMsg !== "string") return;
-    if (this.env.DEBUG) log.info(`webSocketMessage received: ${rawMsg.substring(0, 100)}`);
+    if (this.env.DEBUG)
+      log.info(`webSocketMessage received: ${rawMsg.substring(0, 100)}`);
 
     let msg: GatewayMessage;
     try {
@@ -658,10 +735,16 @@ export class MeetingRoom extends DurableObject<Env> {
       return;
     }
 
-    if (this.getSessionAdmission(ws)?.accessMode === "public-demo" && !this.isAllowedPublicDemoOpcode(msg.op)) {
+    if (
+      this.getSessionAdmission(ws)?.accessMode === "public-demo" &&
+      !this.isAllowedPublicDemoOpcode(msg.op)
+    ) {
       this.sendTo(ws, {
         op: Op.Error,
-        d: { code: CloseCode.NotAuthenticated, message: "Operation is unavailable in public demo rooms" },
+        d: {
+          code: CloseCode.NotAuthenticated,
+          message: "Operation is unavailable in public demo rooms",
+        },
       });
       return;
     }
@@ -764,7 +847,10 @@ export class MeetingRoom extends DurableObject<Env> {
       default:
         this.sendTo(ws, {
           op: Op.Error,
-          d: { code: CloseCode.UnknownOpcode, message: `Unknown opcode: ${msg.op}` },
+          d: {
+            code: CloseCode.UnknownOpcode,
+            message: `Unknown opcode: ${msg.op}`,
+          },
         });
     }
 
@@ -775,7 +861,11 @@ export class MeetingRoom extends DurableObject<Env> {
   async webSocketClose(ws: WebSocket, code: number, reason: string) {
     await this.handleLeave(ws, false, false);
     this.flushDirtyStorage();
-    try { ws.close(code, reason); } catch { /* already closed */ }
+    try {
+      ws.close(code, reason);
+    } catch {
+      /* already closed */
+    }
   }
 
   async webSocketError(ws: WebSocket) {
@@ -795,14 +885,18 @@ export class MeetingRoom extends DurableObject<Env> {
         let lastActivity = session.last_heartbeat ?? 0;
 
         if (lastActivity && now - lastActivity >= ZOMBIE_TIMEOUT_MS) {
-          log.info(`Pruning zombie: ${session.id} (${session.name}), ` +
-            `last_activity=${Math.round((now - lastActivity) / 1000)}s ago`);
+          log.info(
+            `Pruning zombie: ${session.id} (${session.name}), ` +
+              `last_activity=${Math.round((now - lastActivity) / 1000)}s ago`,
+          );
           zombies.push(ws);
         }
       }
 
       for (const ws of zombies) {
-        try { await this.handleLeave(ws, false, true); } catch (e) {
+        try {
+          await this.handleLeave(ws, false, true);
+        } catch (e) {
           log.error(`alarm: handleLeave threw for zombie session:`, e);
         }
       }
@@ -811,7 +905,9 @@ export class MeetingRoom extends DurableObject<Env> {
       let resumableChanged = false;
       for (const [id, disconnectedAt] of this.resumableSessionExpiry) {
         if (now - disconnectedAt >= RESUME_GRACE_PERIOD_MS) {
-          log.info(`Pruning expired resumable session: ${id} (disconnected ${Math.round((now - disconnectedAt) / 1000)}s ago)`);
+          log.info(
+            `Pruning expired resumable session: ${id} (disconnected ${Math.round((now - disconnectedAt) / 1000)}s ago)`,
+          );
           // Broadcast the deferred VoiceStateUpdate "leave" — the abrupt
           // disconnect path skips this to avoid premature removal from
           // other clients' participant lists during brief reconnects.
@@ -856,24 +952,36 @@ export class MeetingRoom extends DurableObject<Env> {
     const deadlines: number[] = [];
 
     for (const [, session] of this.sessions) {
-      if (session.last_heartbeat) deadlines.push(session.last_heartbeat + ZOMBIE_TIMEOUT_MS);
+      if (session.last_heartbeat)
+        deadlines.push(session.last_heartbeat + ZOMBIE_TIMEOUT_MS);
     }
     for (const disconnectedAt of this.resumableSessionExpiry.values()) {
       deadlines.push(disconnectedAt + RESUME_GRACE_PERIOD_MS);
     }
 
-    return getNextVoicePresenceAlarmTime(now, PRUNE_ALARM_INTERVAL_MS, deadlines);
+    return getNextVoicePresenceAlarmTime(
+      now,
+      PRUNE_ALARM_INTERVAL_MS,
+      deadlines,
+    );
   }
 
   private scheduleAlarm() {
     const now = Date.now();
     const nextAlarm = this.getNextAlarmTime(now);
 
-    this.ctx.storage.getAlarm().then((currentAlarm) => {
-      if (currentAlarm === null || currentAlarm <= now || nextAlarm < currentAlarm) {
-        return this.ctx.storage.setAlarm(nextAlarm);
-      }
-    }).catch(() => { });
+    this.ctx.storage
+      .getAlarm()
+      .then((currentAlarm) => {
+        if (
+          currentAlarm === null ||
+          currentAlarm <= now ||
+          nextAlarm < currentAlarm
+        ) {
+          return this.ctx.storage.setAlarm(nextAlarm);
+        }
+      })
+      .catch(() => {});
   }
 
   // ── Batched storage writes ─────────────────────────────────────────────
@@ -889,40 +997,49 @@ export class MeetingRoom extends DurableObject<Env> {
     if (this.deletedVcKeys.size > 0) {
       const keys = [...this.deletedVcKeys];
       this.deletedVcKeys.clear();
-      this.ctx.storage.delete(keys).catch(() => { });
+      this.ctx.storage.delete(keys).catch(() => {});
     }
     if (this.dirtyStorage.size === 0) return;
     const entries = Object.fromEntries(this.dirtyStorage);
     this.dirtyStorage.clear();
-    this.ctx.storage.put(entries).catch(() => { });
+    this.ctx.storage.put(entries).catch(() => {});
   }
 
   // ── Helpers ────────────────────────────────────────────────────────────
 
   private persist(ws: WebSocket, data: WsAttachment) {
     const wasEmpty = this.sessions.size === 0;
-    const admission = data.admission ?? this.getSessionAdmission(ws) ?? undefined;
+    const admission =
+      data.admission ?? this.getSessionAdmission(ws) ?? undefined;
     const nextData = admission ? { ...data, admission } : data;
     this.sessions.set(ws, nextData);
     ws.serializeAttachment(nextData);
     if (wasEmpty) this.scheduleAlarm();
   }
 
-  private getSessionAdmission(ws: WebSocket): WsAttachment["admission"] | undefined {
-    const attachment = ws.deserializeAttachment() as Partial<WsAttachment> | null;
+  private getSessionAdmission(
+    ws: WebSocket,
+  ): WsAttachment["admission"] | undefined {
+    const attachment =
+      ws.deserializeAttachment() as Partial<WsAttachment> | null;
     return attachment?.admission;
   }
 
   private isAllowedPublicDemoOpcode(op: number): boolean {
-    return op === Op.Identify
-      || op === Op.Heartbeat
-      || op === Op.Resume
-      || op === Op.RefreshVoiceCredentials
-      || op === Op.VoiceStateUpdate
-      || op === Op.ClientDisconnect;
+    return (
+      op === Op.Identify ||
+      op === Op.Heartbeat ||
+      op === Op.Resume ||
+      op === Op.RefreshVoiceCredentials ||
+      op === Op.VoiceStateUpdate ||
+      op === Op.ClientDisconnect
+    );
   }
 
-  private getPresencePlatformsForUser(clerkUserId: string, options?: { excludeWs?: WebSocket }): PresencePlatform[] {
+  private getPresencePlatformsForUser(
+    clerkUserId: string,
+    options?: { excludeWs?: WebSocket },
+  ): PresencePlatform[] {
     const orderedPlatforms: PresencePlatform[] = [];
     const seen = new Set<PresencePlatform>();
 
@@ -952,7 +1069,10 @@ export class MeetingRoom extends DurableObject<Env> {
     return "offline";
   }
 
-  private buildPresenceSnapshotForUser(clerkUserId: string, options?: { excludeWs?: WebSocket }) {
+  private buildPresenceSnapshotForUser(
+    clerkUserId: string,
+    options?: { excludeWs?: WebSocket },
+  ) {
     return {
       user_id: clerkUserId,
       status: this.getPresenceStatusForUser(clerkUserId, options),
@@ -969,9 +1089,13 @@ export class MeetingRoom extends DurableObject<Env> {
       }
     }
 
-    const users = Array.from(userIds).map((userId) => this.buildPresenceSnapshotForUser(userId));
+    const users = Array.from(userIds).map((userId) =>
+      this.buildPresenceSnapshotForUser(userId),
+    );
     return {
-      user_ids: users.filter((user) => user.status !== "offline").map((user) => user.user_id),
+      user_ids: users
+        .filter((user) => user.status !== "offline")
+        .map((user) => user.user_id),
       users,
     };
   }
@@ -1019,7 +1143,11 @@ export class MeetingRoom extends DurableObject<Env> {
         if (spatial) spatialAudioStates[channelId] = spatial;
       }
     }
-    return { voice_states: voiceStates, voice_started_at: voiceStartedAt, spatial_audio_states: spatialAudioStates };
+    return {
+      voice_states: voiceStates,
+      voice_started_at: voiceStartedAt,
+      spatial_audio_states: spatialAudioStates,
+    };
   }
 
   private buildVoiceChannelStateUpdateMessage(channelId: string): ServerMsg {
@@ -1038,7 +1166,9 @@ export class MeetingRoom extends DurableObject<Env> {
     };
   }
 
-  private async getChannelMeta(channelId: string): Promise<{ server_id: string | null; channel_type: string } | null> {
+  private async getChannelMeta(
+    channelId: string,
+  ): Promise<{ server_id: string | null; channel_type: string } | null> {
     const cached = this.channelMetaCache.get(channelId);
     if (cached) return cached;
 
@@ -1054,7 +1184,10 @@ export class MeetingRoom extends DurableObject<Env> {
     return channel;
   }
 
-  private async fetchServerMemberRolesForUser(serverId: string, userId: string): Promise<ChannelVisibilityRole[]> {
+  private async fetchServerMemberRolesForUser(
+    serverId: string,
+    userId: string,
+  ): Promise<ChannelVisibilityRole[]> {
     const { results } = await this.env.DB.prepare(
       `SELECT r.id, r.permissions, r.is_default
        FROM server_members sm
@@ -1069,7 +1202,10 @@ export class MeetingRoom extends DurableObject<Env> {
     return (results ?? []) as ChannelVisibilityRole[];
   }
 
-  private async canUserAccessVoiceChannel(channelId: string, userId: string): Promise<boolean> {
+  private async canUserAccessVoiceChannel(
+    channelId: string,
+    userId: string,
+  ): Promise<boolean> {
     const channel = await this.getChannelMeta(channelId);
     if (!channel) return false;
 
@@ -1084,11 +1220,15 @@ export class MeetingRoom extends DurableObject<Env> {
       return !!recipient;
     }
 
-    const userRoles = await this.fetchServerMemberRolesForUser(channel.server_id, userId);
+    const userRoles = await this.fetchServerMemberRolesForUser(
+      channel.server_id,
+      userId,
+    );
     if (userRoles.length === 0) return false;
 
     const roleIds = userRoles.map((role) => role.id);
-    const placeholders = roleIds.length > 0 ? roleIds.map(() => "?").join(",") : "''";
+    const placeholders =
+      roleIds.length > 0 ? roleIds.map(() => "?").join(",") : "''";
     const { results: overrides } = await this.env.DB.prepare(
       `SELECT channel_id, target_id, target_type, allow, deny
        FROM channel_permission_overrides
@@ -1120,7 +1260,9 @@ export class MeetingRoom extends DurableObject<Env> {
     const visibleChannelIds = new Set<string>();
 
     for (const channelId of Object.keys(data.voice_states)) {
-      if (await this.canUserAccessVoiceChannel(channelId, session.clerk_user_id)) {
+      if (
+        await this.canUserAccessVoiceChannel(channelId, session.clerk_user_id)
+      ) {
         visibleChannelIds.add(channelId);
       }
     }
@@ -1137,12 +1279,21 @@ export class MeetingRoom extends DurableObject<Env> {
     });
   }
 
-  private async broadcastVoiceChannelState(channelId: string, excludeWs?: WebSocket) {
+  private async broadcastVoiceChannelState(
+    channelId: string,
+    excludeWs?: WebSocket,
+  ) {
     const message = this.buildVoiceChannelStateUpdateMessage(channelId);
 
     for (const [ws, session] of this.sessions) {
       if (ws === excludeWs || !session.clerk_user_id) continue;
-      if (!(await this.canUserAccessVoiceChannel(channelId, session.clerk_user_id))) continue;
+      if (
+        !(await this.canUserAccessVoiceChannel(
+          channelId,
+          session.clerk_user_id,
+        ))
+      )
+        continue;
 
       this.pushReplayBuffer(session.id, session.seq, message);
       this.sendTo(ws, message);
@@ -1160,10 +1311,17 @@ export class MeetingRoom extends DurableObject<Env> {
     return members;
   }
 
-  private markVoiceMemberConnected(channelId: string, session: WsAttachment, joinedAt?: number) {
+  private markVoiceMemberConnected(
+    channelId: string,
+    session: WsAttachment,
+    joinedAt?: number,
+  ) {
     if (!session.clerk_user_id) return;
 
-    const members = this.ensureVoiceChannelMembers(channelId, joinedAt ?? Date.now());
+    const members = this.ensureVoiceChannelMembers(
+      channelId,
+      joinedAt ?? Date.now(),
+    );
     const existing = members.get(session.clerk_user_id);
     members.set(session.clerk_user_id, {
       ...existing,
@@ -1185,12 +1343,20 @@ export class MeetingRoom extends DurableObject<Env> {
       self_stream_audio: session.self_stream_audio,
       spatial_audio_enabled: session.spatial_audio_enabled,
       spatial_audio_high_fidelity: session.spatial_audio_high_fidelity,
-      joined_at: existing?.joined_at ?? joinedAt ?? this.voiceChannelStartedAt.get(channelId) ?? Date.now(),
+      joined_at:
+        existing?.joined_at ??
+        joinedAt ??
+        this.voiceChannelStartedAt.get(channelId) ??
+        Date.now(),
     });
     this.persistVoiceChannelMembers();
   }
 
-  private markVoiceMemberReconnecting(session: WsAttachment, disconnectedAt: number, excludeWs?: WebSocket) {
+  private markVoiceMemberReconnecting(
+    session: WsAttachment,
+    disconnectedAt: number,
+    excludeWs?: WebSocket,
+  ) {
     if (!session.voice_channel_id || !session.clerk_user_id) return;
 
     const members = this.ensureVoiceChannelMembers(session.voice_channel_id);
@@ -1215,10 +1381,15 @@ export class MeetingRoom extends DurableObject<Env> {
       self_stream_audio: session.self_stream_audio,
       spatial_audio_enabled: session.spatial_audio_enabled,
       spatial_audio_high_fidelity: session.spatial_audio_high_fidelity,
-      joined_at: existing?.joined_at ?? this.voiceChannelStartedAt.get(session.voice_channel_id) ?? disconnectedAt,
+      joined_at:
+        existing?.joined_at ??
+        this.voiceChannelStartedAt.get(session.voice_channel_id) ??
+        disconnectedAt,
     });
     this.persistVoiceChannelMembers();
-    this.ctx.waitUntil(this.broadcastVoiceChannelState(session.voice_channel_id, excludeWs));
+    this.ctx.waitUntil(
+      this.broadcastVoiceChannelState(session.voice_channel_id, excludeWs),
+    );
   }
 
   /** Remove voice channel members that don't have a live or resumable session */
@@ -1250,7 +1421,9 @@ export class MeetingRoom extends DurableObject<Env> {
           members.delete(clerkId);
           changed = true;
           changedChannelIds.add(channelId);
-          log.info(`Reconcile: removed stale voice member ${clerkId} from channel ${channelId}`);
+          log.info(
+            `Reconcile: removed stale voice member ${clerkId} from channel ${channelId}`,
+          );
         }
       }
       if (members.size === 0) {
@@ -1329,7 +1502,12 @@ export class MeetingRoom extends DurableObject<Env> {
     if (ws) {
       const session = this.getSession(ws);
       if (!session || session.clerk_user_id !== userId) return false;
-      if (channelId && session.voice_channel_id && session.voice_channel_id !== channelId) return false;
+      if (
+        channelId &&
+        session.voice_channel_id &&
+        session.voice_channel_id !== channelId
+      )
+        return false;
 
       await this.handleLeave(ws, true, true);
       return true;
@@ -1340,7 +1518,11 @@ export class MeetingRoom extends DurableObject<Env> {
       return false;
     }
 
-    if (channelId && resumable.voice_channel_id && resumable.voice_channel_id !== channelId) {
+    if (
+      channelId &&
+      resumable.voice_channel_id &&
+      resumable.voice_channel_id !== channelId
+    ) {
       return false;
     }
 
@@ -1372,7 +1554,10 @@ export class MeetingRoom extends DurableObject<Env> {
   // ── Voice token generation ─────────────────────────────────────────────
   // HMAC-signed token: "payload.signature" where payload = "participant_id:room_slug:timestamp"
 
-  private async generateVoiceToken(participantId: string, clerkUserId?: string): Promise<string> {
+  private async generateVoiceToken(
+    participantId: string,
+    clerkUserId?: string,
+  ): Promise<string> {
     try {
       if (!this.env.CALLS_APP_SECRET) {
         meetingLog.warn("CALLS_APP_SECRET not set, skipping voice token");
@@ -1385,12 +1570,12 @@ export class MeetingRoom extends DurableObject<Env> {
         new TextEncoder().encode(this.env.CALLS_APP_SECRET),
         { name: "HMAC", hash: "SHA-256" },
         false,
-        ["sign"]
+        ["sign"],
       );
       const sigBuf = await crypto.subtle.sign(
         "HMAC",
         key,
-        new TextEncoder().encode(payload)
+        new TextEncoder().encode(payload),
       );
       const sig = btoa(String.fromCharCode(...new Uint8Array(sigBuf)));
       return `${payload}.${sig}`;
@@ -1400,8 +1585,12 @@ export class MeetingRoom extends DurableObject<Env> {
     }
   }
 
-  private get roomSlug(): string { return this._roomSlug; }
-  private set roomSlug(val: string) { this._roomSlug = val; }
+  private get roomSlug(): string {
+    return this._roomSlug;
+  }
+  private set roomSlug(val: string) {
+    this._roomSlug = val;
+  }
 
   /** Persist resumable sessions to storage for hibernation survival */
   private persistResumableSessions() {
@@ -1433,13 +1622,16 @@ export class MeetingRoom extends DurableObject<Env> {
       avatar_display?: string | null;
       clerk_user_id?: string;
       platform?: PresencePlatform;
-    }
+    },
   ) {
     if (this.getSession(ws)) {
       log.info(`AlreadyAuthenticated — session exists for this WS`);
       this.sendTo(ws, {
         op: Op.Error,
-        d: { code: CloseCode.AlreadyAuthenticated, message: "Already identified" },
+        d: {
+          code: CloseCode.AlreadyAuthenticated,
+          message: "Already identified",
+        },
       });
       return;
     }
@@ -1449,12 +1641,18 @@ export class MeetingRoom extends DurableObject<Env> {
       if (!admission) {
         this.sendTo(ws, {
           op: Op.Error,
-          d: { code: CloseCode.NotAuthenticated, message: "Missing realtime admission" },
+          d: {
+            code: CloseCode.NotAuthenticated,
+            message: "Missing realtime admission",
+          },
         });
         return;
       }
       const participantId = crypto.randomUUID();
-      const admittedUserId = admission.accessMode === "authenticated" ? admission.subject : undefined;
+      const admittedUserId =
+        admission.accessMode === "authenticated"
+          ? admission.subject
+          : undefined;
 
       // Run all async sub-tasks in parallel to reduce time-to-Ready.
       // Previously these ran sequentially, adding the SUM of their latencies.
@@ -1464,9 +1662,12 @@ export class MeetingRoom extends DurableObject<Env> {
         admittedUserId ? this.fetchClerkProfile(admittedUserId) : null,
         admittedUserId
           ? this.env.DB.prepare("SELECT status FROM users WHERE id = ?")
-            .bind(admittedUserId)
-            .first<{ status: string }>()
-            .catch((e: unknown) => { identifyLog.error("D1 status fetch failed:", e); return null; })
+              .bind(admittedUserId)
+              .first<{ status: string }>()
+              .catch((e: unknown) => {
+                identifyLog.error("D1 status fetch failed:", e);
+                return null;
+              })
           : null,
         this.generateVoiceToken(participantId, admission.subject),
       ]);
@@ -1491,7 +1692,9 @@ export class MeetingRoom extends DurableObject<Env> {
         resolvedStatus = userRow.status as any;
       }
 
-      meetingLog.info(`Identify: name=${resolvedName}, avatar=${resolvedAvatar}, subject=${admittedUserId ?? "anonymous"}`);
+      meetingLog.info(
+        `Identify: name=${resolvedName}, avatar=${resolvedAvatar}, subject=${admittedUserId ?? "anonymous"}`,
+      );
 
       // Build roster
       const participants: VoiceState[] = [];
@@ -1500,6 +1703,7 @@ export class MeetingRoom extends DurableObject<Env> {
       }
 
       const attachment: WsAttachment = {
+        admission,
         id: participantId,
         name: resolvedName,
         username: resolvedUsername,
@@ -1530,13 +1734,16 @@ export class MeetingRoom extends DurableObject<Env> {
           const existing = members.get(attachment.clerk_user_id);
           if (!existing) continue;
 
-          members.set(attachment.clerk_user_id, refreshVoiceMemberIdentity(existing, {
-            name: attachment.name,
-            username: attachment.username,
-            display_name: attachment.display_name,
-            avatar_url: attachment.avatar_url,
-            avatar_display: attachment.avatar_display,
-          }));
+          members.set(
+            attachment.clerk_user_id,
+            refreshVoiceMemberIdentity(existing, {
+              name: attachment.name,
+              username: attachment.username,
+              display_name: attachment.display_name,
+              avatar_url: attachment.avatar_url,
+              avatar_display: attachment.avatar_display,
+            }),
+          );
           this.persistVoiceChannelMembers();
           this.ctx.waitUntil(this.broadcastVoiceChannelState(channelId, ws));
           break;
@@ -1556,13 +1763,17 @@ export class MeetingRoom extends DurableObject<Env> {
           participants,
           heartbeat_interval: HEARTBEAT_INTERVAL_MS,
           voice_token: voiceToken,
-          spatial_audio_state: this.spatialAudioStates.get(attachment.voice_channel_id || this.roomSlug),
+          spatial_audio_state: this.spatialAudioStates.get(
+            attachment.voice_channel_id || this.roomSlug,
+          ),
         },
       });
 
       this.ctx.waitUntil(this.sendVoiceChannelStates(ws));
       if (attachment.voice_channel_id) {
-        this.ctx.waitUntil(this.broadcastVoiceChannelState(attachment.voice_channel_id));
+        this.ctx.waitUntil(
+          this.broadcastVoiceChannelState(attachment.voice_channel_id),
+        );
       }
 
       // Op 15: VoiceStateUpdate (join) to everyone else
@@ -1574,12 +1785,14 @@ export class MeetingRoom extends DurableObject<Env> {
             action: "join",
           },
         },
-        ws
+        ws,
       );
 
       // Broadcast PRESENCE_UPDATE (online) to all clients if this user has a clerk_user_id
       if (attachment.clerk_user_id) {
-        const presenceSnapshot = this.buildPresenceSnapshotForUser(attachment.clerk_user_id);
+        const presenceSnapshot = this.buildPresenceSnapshotForUser(
+          attachment.clerk_user_id,
+        );
         this.broadcast(
           {
             op: Op.Dispatch,
@@ -1588,7 +1801,7 @@ export class MeetingRoom extends DurableObject<Env> {
               data: presenceSnapshot,
             },
           },
-          ws
+          ws,
         );
 
         // Resume Pending Ringing upon Identify
@@ -1596,20 +1809,22 @@ export class MeetingRoom extends DurableObject<Env> {
 
         const pending = this.findPendingCallForUser(userId);
         if (pending && pending.calleeId === userId) {
-          log.info(`Found pending call (as callee) for ${userId}: callId=${pending.callId}`);
+          log.info(
+            `Found pending call (as callee) for ${userId}: callId=${pending.callId}`,
+          );
           this.sendTo(ws, {
             op: Op.Dispatch,
             d: {
               event: "CALL_RING",
-        data: {
-          call_id: pending.callId,
-          caller_id: pending.callerId,
-          caller_name: pending.callerName,
-          caller_username: pending.callerUsername,
-          caller_display_name: pending.callerDisplayName,
-          caller_avatar: pending.callerAvatar,
-          channel_id: pending.channelId,
-          is_reconnect: true,
+              data: {
+                call_id: pending.callId,
+                caller_id: pending.callerId,
+                caller_name: pending.callerName,
+                caller_username: pending.callerUsername,
+                caller_display_name: pending.callerDisplayName,
+                caller_avatar: pending.callerAvatar,
+                channel_id: pending.channelId,
+                is_reconnect: true,
               },
             },
           });
@@ -1619,7 +1834,10 @@ export class MeetingRoom extends DurableObject<Env> {
       meetingLog.error("handleIdentify crashed:", err);
       this.sendTo(ws, {
         op: Op.Error,
-        d: { code: 4000, message: `Identify failed: ${err instanceof Error ? err.message : 'Unknown error'}` },
+        d: {
+          code: 4000,
+          message: `Identify failed: ${err instanceof Error ? err.message : "Unknown error"}`,
+        },
       });
     }
   }
@@ -1652,13 +1870,19 @@ export class MeetingRoom extends DurableObject<Env> {
 
   // ── Op 7: Resume ──────────────────────────────────────────────────────
 
-  private async handleResume(ws: WebSocket, d: { session_id: string; seq_ack: number }) {
+  private async handleResume(
+    ws: WebSocket,
+    d: { session_id: string; seq_ack: number },
+  ) {
     const oldAttachment = this.resumableSessions.get(d.session_id);
     const admission = this.getSessionAdmission(ws);
     if (!oldAttachment) {
       this.sendTo(ws, {
         op: Op.Error,
-        d: { code: CloseCode.SessionInvalid, message: "Session not found for resume" },
+        d: {
+          code: CloseCode.SessionInvalid,
+          message: "Session not found for resume",
+        },
       });
       return;
     }
@@ -1666,16 +1890,25 @@ export class MeetingRoom extends DurableObject<Env> {
     if (!admission || oldAttachment.admission?.subject !== admission.subject) {
       this.sendTo(ws, {
         op: Op.Error,
-        d: { code: CloseCode.AdmissionRejected, message: "Resume subject mismatch" },
+        d: {
+          code: CloseCode.AdmissionRejected,
+          message: "Resume subject mismatch",
+        },
       });
-      try { ws.close(CloseCode.AdmissionRejected, "Resume subject mismatch"); } catch { }
+      try {
+        ws.close(CloseCode.AdmissionRejected, "Resume subject mismatch");
+      } catch {}
       return;
     }
 
     const disconnectedAt = this.resumableSessionExpiry.get(d.session_id);
     if (
       typeof disconnectedAt === "number" &&
-      !isReconnectWithinGrace(disconnectedAt, Date.now(), RESUME_GRACE_PERIOD_MS)
+      !isReconnectWithinGrace(
+        disconnectedAt,
+        Date.now(),
+        RESUME_GRACE_PERIOD_MS,
+      )
     ) {
       this.resumableSessions.delete(d.session_id);
       this.persistResumableSessions();
@@ -1683,7 +1916,10 @@ export class MeetingRoom extends DurableObject<Env> {
       this.persistResumableSessionExpiry();
       this.sendTo(ws, {
         op: Op.Error,
-        d: { code: CloseCode.SessionInvalid, message: "Session expired for resume" },
+        d: {
+          code: CloseCode.SessionInvalid,
+          message: "Session expired for resume",
+        },
       });
       return;
     }
@@ -1722,14 +1958,19 @@ export class MeetingRoom extends DurableObject<Env> {
     // sessions — but if reconcileVoiceMembers() ran during the disconnect
     // window (or a future code path removed them), re-ensure membership.
     if (oldAttachment.voice_channel_id && oldAttachment.clerk_user_id) {
-      this.markVoiceMemberConnected(oldAttachment.voice_channel_id, oldAttachment);
+      this.markVoiceMemberConnected(
+        oldAttachment.voice_channel_id,
+        oldAttachment,
+      );
       await this.broadcastVoiceChannelState(oldAttachment.voice_channel_id);
     }
 
     // Replay buffered messages the client missed
     const buffer = this.replayBuffers.get(d.session_id) ?? [];
     const missed = buffer.filter((entry) => entry.seq > d.seq_ack);
-    log.info(`Resumed session: ${d.session_id}, replaying ${missed.length} messages (seq_ack=${d.seq_ack})`);
+    log.info(
+      `Resumed session: ${d.session_id}, replaying ${missed.length} messages (seq_ack=${d.seq_ack})`,
+    );
 
     for (const entry of missed) {
       this.sendTo(ws, entry.msg);
@@ -1739,7 +1980,10 @@ export class MeetingRoom extends DurableObject<Env> {
     // on the Voice Gateway. Without this, the client reuses the stale token
     // from the initial Identify, which will eventually expire (1h TTL).
     const [freshVoiceToken, freshIceServers] = await Promise.all([
-      this.generateVoiceToken(oldAttachment.id, oldAttachment.admission?.subject),
+      this.generateVoiceToken(
+        oldAttachment.id,
+        oldAttachment.admission?.subject,
+      ),
       this.generateTurnCredentials(),
     ]);
 
@@ -1754,7 +1998,9 @@ export class MeetingRoom extends DurableObject<Env> {
         voice_token: freshVoiceToken,
         ice_servers: freshIceServers,
         participants,
-        spatial_audio_state: this.spatialAudioStates.get(oldAttachment.voice_channel_id || this.roomSlug),
+        spatial_audio_state: this.spatialAudioStates.get(
+          oldAttachment.voice_channel_id || this.roomSlug,
+        ),
       },
     });
 
@@ -1802,22 +2048,25 @@ export class MeetingRoom extends DurableObject<Env> {
       spatial_audio_enabled?: boolean;
       spatial_audio_high_fidelity?: boolean;
       spatial_audio_state?: SpatialAudioState;
-    }
+    },
   ) {
     const session = this.requireSession(ws);
     if (!session) return;
 
     const isPublicDemo = session.admission?.accessMode === "public-demo";
     if (
-      isPublicDemo
-      && (d.stream_preview_url !== undefined
-        || d.spatial_audio_enabled !== undefined
-        || d.spatial_audio_high_fidelity !== undefined
-        || d.spatial_audio_state !== undefined)
+      isPublicDemo &&
+      (d.stream_preview_url !== undefined ||
+        d.spatial_audio_enabled !== undefined ||
+        d.spatial_audio_high_fidelity !== undefined ||
+        d.spatial_audio_state !== undefined)
     ) {
       this.sendTo(ws, {
         op: Op.Error,
-        d: { code: CloseCode.NotAuthenticated, message: "Voice state field is unavailable in public demo rooms" },
+        d: {
+          code: CloseCode.NotAuthenticated,
+          message: "Voice state field is unavailable in public demo rooms",
+        },
       });
       return;
     }
@@ -1826,10 +2075,14 @@ export class MeetingRoom extends DurableObject<Env> {
     if (d.self_deaf !== undefined) session.self_deaf = d.self_deaf;
     if (d.self_video !== undefined) session.self_video = d.self_video;
     if (d.self_stream !== undefined) session.self_stream = d.self_stream;
-    if (d.self_stream_audio !== undefined) session.self_stream_audio = d.self_stream_audio;
-    if (d.stream_preview_url !== undefined) session.stream_preview_url = d.stream_preview_url;
-    if (d.spatial_audio_enabled !== undefined) session.spatial_audio_enabled = d.spatial_audio_enabled;
-    if (d.spatial_audio_high_fidelity !== undefined) session.spatial_audio_high_fidelity = d.spatial_audio_high_fidelity;
+    if (d.self_stream_audio !== undefined)
+      session.self_stream_audio = d.self_stream_audio;
+    if (d.stream_preview_url !== undefined)
+      session.stream_preview_url = d.stream_preview_url;
+    if (d.spatial_audio_enabled !== undefined)
+      session.spatial_audio_enabled = d.spatial_audio_enabled;
+    if (d.spatial_audio_high_fidelity !== undefined)
+      session.spatial_audio_high_fidelity = d.spatial_audio_high_fidelity;
     const spatialRoomKey = session.voice_channel_id || this.roomSlug;
     if (d.spatial_audio_state) {
       this.spatialAudioStates.set(spatialRoomKey, {
@@ -1849,19 +2102,24 @@ export class MeetingRoom extends DurableObject<Env> {
           spatial_audio_state: this.spatialAudioStates.get(spatialRoomKey),
         },
       },
-      ws
+      ws,
     );
 
     // Also update the voice channel sidebar state if user is in a VC
     if (session.voice_channel_id && session.clerk_user_id) {
       this.markVoiceMemberConnected(session.voice_channel_id, session);
-      this.ctx.waitUntil(this.broadcastVoiceChannelState(session.voice_channel_id));
+      this.ctx.waitUntil(
+        this.broadcastVoiceChannelState(session.voice_channel_id),
+      );
     }
   }
 
   // ── Op 26: PresenceUpdate (C→S) ──────────────────────────────────────────
 
-  private handlePresenceUpdate(ws: WebSocket, d: { status: "online" | "idle" | "dnd" | "offline" }) {
+  private handlePresenceUpdate(
+    ws: WebSocket,
+    d: { status: "online" | "idle" | "dnd" | "offline" },
+  ) {
     const session = this.requireSession(ws);
     if (!session) return;
 
@@ -1878,7 +2136,9 @@ export class MeetingRoom extends DurableObject<Env> {
       this.debouncePersistPresence(session.clerk_user_id, d.status);
 
       // 3. Broadcast to all
-      const presenceSnapshot = this.buildPresenceSnapshotForUser(session.clerk_user_id);
+      const presenceSnapshot = this.buildPresenceSnapshotForUser(
+        session.clerk_user_id,
+      );
       this.broadcast({
         op: Op.Dispatch,
         d: {
@@ -1908,27 +2168,33 @@ export class MeetingRoom extends DurableObject<Env> {
       this.presenceD1Pending.delete(clerkId);
       if (!finalStatus) return;
 
-      this.ctx.waitUntil((async () => {
-        try {
-          await this.env.DB.prepare("UPDATE users SET status = ?, updated_at = ? WHERE id = ?")
-            .bind(finalStatus, new Date().toISOString(), clerkId)
-            .run();
+      this.ctx.waitUntil(
+        (async () => {
+          try {
+            await this.env.DB.prepare(
+              "UPDATE users SET status = ?, updated_at = ? WHERE id = ?",
+            )
+              .bind(finalStatus, new Date().toISOString(), clerkId)
+              .run();
 
-          const { results } = await this.env.DB.prepare("SELECT server_id FROM server_members WHERE user_id = ?")
-            .bind(clerkId)
-            .all();
+            const { results } = await this.env.DB.prepare(
+              "SELECT server_id FROM server_members WHERE user_id = ?",
+            )
+              .bind(clerkId)
+              .all();
 
-          if (results) {
-            for (const row of results) {
-              const serverId = row.server_id as string;
-              const cacheKey = `v1:server:members:${serverId}`;
-              this.env.CACHE.delete(cacheKey).catch(() => { });
+            if (results) {
+              for (const row of results) {
+                const serverId = row.server_id as string;
+                const cacheKey = `v1:server:members:${serverId}`;
+                this.env.CACHE.delete(cacheKey).catch(() => {});
+              }
             }
+          } catch (e) {
+            presenceLog.error("D1 update failed:", e);
           }
-        } catch (e) {
-          presenceLog.error("D1 update failed:", e);
-        }
-      })());
+        })(),
+      );
     }, 2000);
 
     this.presenceD1Timers.set(clerkId, timer);
@@ -1966,7 +2232,7 @@ export class MeetingRoom extends DurableObject<Env> {
             avatar_display: verified.avatarDisplay ?? null,
           },
         },
-        ws
+        ws,
       );
 
       // Also update the voice channel sidebar state if user is in a VC
@@ -1993,17 +2259,32 @@ export class MeetingRoom extends DurableObject<Env> {
 
   // ── Leave / Disconnect ─────────────────────────────────────────────────
 
-  private async handleLeave(ws: WebSocket, intentional: boolean = false, closeSocket: boolean = true) {
+  private async handleLeave(
+    ws: WebSocket,
+    intentional: boolean = false,
+    closeSocket: boolean = true,
+  ) {
     const session = this.getSession(ws);
     if (!session) return;
 
     // Broadcast updated presence/platform state before cleanup
     if (session.clerk_user_id) {
-      let nextSnapshot: { user_id: string; status: "online" | "idle" | "dnd" | "offline"; platforms: PresencePlatform[] } | null = null;
+      let nextSnapshot: {
+        user_id: string;
+        status: "online" | "idle" | "dnd" | "offline";
+        platforms: PresencePlatform[];
+      } | null = null;
 
       for (const [otherWs, otherSession] of this.sessions) {
-        if (otherWs === ws || otherSession.clerk_user_id !== session.clerk_user_id) continue;
-        nextSnapshot = this.buildPresenceSnapshotForUser(session.clerk_user_id, { excludeWs: ws });
+        if (
+          otherWs === ws ||
+          otherSession.clerk_user_id !== session.clerk_user_id
+        )
+          continue;
+        nextSnapshot = this.buildPresenceSnapshotForUser(
+          session.clerk_user_id,
+          { excludeWs: ws },
+        );
         break;
       }
 
@@ -2019,7 +2300,7 @@ export class MeetingRoom extends DurableObject<Env> {
             },
           },
         },
-        ws
+        ws,
       );
     }
 
@@ -2081,30 +2362,49 @@ export class MeetingRoom extends DurableObject<Env> {
             action: "leave",
           },
         },
-        ws
+        ws,
       );
     }
 
     if (closeSocket) {
-      try { ws.close(1000, "Left room"); } catch { /* already closed */ }
+      try {
+        ws.close(1000, "Left room");
+      } catch {
+        /* already closed */
+      }
     }
   }
 
   // ── Clerk profile verification ─────────────────────────────────────────
 
-  private async fetchClerkProfile(clerkUserId: string): Promise<{ name: string; username?: string; displayName?: string | null; avatarUrl?: string; avatarDisplay?: string | null } | null> {
+  private async fetchClerkProfile(
+    clerkUserId: string,
+  ): Promise<{
+    name: string;
+    username?: string;
+    displayName?: string | null;
+    avatarUrl?: string;
+    avatarDisplay?: string | null;
+  } | null> {
     try {
       // 1. Check D1 first for custom avatar (R2) and username
       let d1Name: string | null = null;
       let d1Username: string | null = null;
       let d1DisplayName: string | null = null;
-      let d1Avatar: string | null = null;    // R2 custom upload only
+      let d1Avatar: string | null = null; // R2 custom upload only
       let d1AnyAvatar: string | null = null; // Any stored avatar (incl. Clerk URL from ensureUser)
       let d1AvatarDisplay: string | null = null;
       try {
         const row = await this.env.DB.prepare(
-          "SELECT username, display_name, avatar_url, avatar_display FROM users WHERE id = ?"
-        ).bind(clerkUserId).first<{ username: string; display_name: string | null; avatar_url: string | null; avatar_display: string | null }>();
+          "SELECT username, display_name, avatar_url, avatar_display FROM users WHERE id = ?",
+        )
+          .bind(clerkUserId)
+          .first<{
+            username: string;
+            display_name: string | null;
+            avatar_url: string | null;
+            avatar_display: string | null;
+          }>();
         if (row) {
           d1Username = row.username;
           d1DisplayName = row.display_name;
@@ -2126,16 +2426,21 @@ export class MeetingRoom extends DurableObject<Env> {
       let clerkData: ClerkCached | null = null;
       try {
         clerkData = await this.env.CACHE.get<ClerkCached>(cacheKey, "json");
-      } catch { /* cache miss or parse error */ }
+      } catch {
+        /* cache miss or parse error */
+      }
 
       if (!clerkData) {
         // 3. Fetch from Clerk API (cache miss)
-        const res = await fetch(`https://api.clerk.com/v1/users/${clerkUserId}`, {
-          headers: {
-            Authorization: `Bearer ${this.env.CLERK_SECRET_KEY}`,
-            "Content-Type": "application/json",
+        const res = await fetch(
+          `https://api.clerk.com/v1/users/${clerkUserId}`,
+          {
+            headers: {
+              Authorization: `Bearer ${this.env.CLERK_SECRET_KEY}`,
+              "Content-Type": "application/json",
+            },
           },
-        });
+        );
         if (!res.ok) {
           meetingLog.error(`Clerk API error: ${res.status}`);
           if (d1Name) {
@@ -2149,22 +2454,25 @@ export class MeetingRoom extends DurableObject<Env> {
           }
           return null;
         }
-        const user = await res.json() as {
+        const user = (await res.json()) as {
           username?: string;
           first_name?: string;
           last_name?: string;
           image_url?: string;
           unsafe_metadata?: { displayName?: string };
         };
-        const clerkName = user.unsafe_metadata?.displayName
-          || [user.first_name, user.last_name].filter(Boolean).join(" ")
-          || user.username
-          || "Guest";
+        const clerkName =
+          user.unsafe_metadata?.displayName ||
+          [user.first_name, user.last_name].filter(Boolean).join(" ") ||
+          user.username ||
+          "Guest";
 
         clerkData = { name: clerkName, imageUrl: user.image_url };
 
         // Store in KV with 5min TTL (fire-and-forget)
-        this.env.CACHE.put(cacheKey, JSON.stringify(clerkData), { expirationTtl: 300 }).catch(() => { });
+        this.env.CACHE.put(cacheKey, JSON.stringify(clerkData), {
+          expirationTtl: 300,
+        }).catch(() => {});
       }
 
       return {
@@ -2201,10 +2509,15 @@ export class MeetingRoom extends DurableObject<Env> {
       if (!resp.ok) return [stun];
 
       const data = (await resp.json()) as {
-        iceServers?: Array<{ urls?: string[]; username?: string; credential?: string }>;
+        iceServers?: Array<{
+          urls?: string[];
+          username?: string;
+          credential?: string;
+        }>;
       };
 
-      if (!Array.isArray(data.iceServers) || data.iceServers.length === 0) return [stun];
+      if (!Array.isArray(data.iceServers) || data.iceServers.length === 0)
+        return [stun];
 
       const servers = data.iceServers
         .filter((s) => s.urls && s.urls.length > 0)
@@ -2212,23 +2525,31 @@ export class MeetingRoom extends DurableObject<Env> {
         .map((s) => {
           // Firefox limits STUN/TURN servers to avoid discovery slowdowns.
           // Filter to only the most reliable transports: UDP 3478 and TCP/TLS 443
-          const filteredUrls = (s.urls ?? []).filter(url =>
-            url.includes(':3478?transport=udp') ||
-            url.includes(':443?transport=tcp') ||
-            url.startsWith('stun:') // Keep basic STUN
+          const filteredUrls = (s.urls ?? []).filter(
+            (url) =>
+              url.includes(":3478?transport=udp") ||
+              url.includes(":443?transport=tcp") ||
+              url.startsWith("stun:"), // Keep basic STUN
           );
 
           return {
-            urls: filteredUrls.length > 0 ? filteredUrls : (s.urls ?? []).slice(0, 2),
+            urls:
+              filteredUrls.length > 0
+                ? filteredUrls
+                : (s.urls ?? []).slice(0, 2),
             username: s.username,
             credential: s.credential,
           };
         });
 
-      meetingLog.info(`Generated TURN credentials, count=${servers.length}, flatUrls=${servers.flatMap(s => s.urls).length}`);
+      meetingLog.info(
+        `Generated TURN credentials, count=${servers.length}, flatUrls=${servers.flatMap((s) => s.urls).length}`,
+      );
       return servers.length > 0 ? servers : [stun];
     } catch {
-      meetingLog.warn(`Failed generating TURN credentials, falling back to STUN`);
+      meetingLog.warn(
+        `Failed generating TURN credentials, falling back to STUN`,
+      );
       return [stun];
     }
   }
@@ -2236,7 +2557,11 @@ export class MeetingRoom extends DurableObject<Env> {
   // ── Utilities ─────────────────────────────────────────────────────────
 
   private sendTo(ws: WebSocket, msg: ServerMsg) {
-    try { ws.send(JSON.stringify(msg)); } catch { /* closed */ }
+    try {
+      ws.send(JSON.stringify(msg));
+    } catch {
+      /* closed */
+    }
   }
 
   /** Push a message into a participant's replay buffer */
@@ -2257,12 +2582,20 @@ export class MeetingRoom extends DurableObject<Env> {
     for (const [ws, session] of this.sessions) {
       if (ws === excludeWs) continue;
       this.pushReplayBuffer(session.id, session.seq, msg);
-      try { ws.send(json); } catch { /* skip dead */ }
+      try {
+        ws.send(json);
+      } catch {
+        /* skip dead */
+      }
     }
   }
 
   /** Send a message to all clients subscribed to a specific channel */
-  private broadcastToChannel(channelId: string, msg: ServerMsg, excludeWs?: WebSocket) {
+  private broadcastToChannel(
+    channelId: string,
+    msg: ServerMsg,
+    excludeWs?: WebSocket,
+  ) {
     const subscribers = this.channelSubscriptions.get(channelId);
     if (!subscribers) return;
 
@@ -2271,12 +2604,20 @@ export class MeetingRoom extends DurableObject<Env> {
       if (ws === excludeWs) continue;
       const session = this.getSession(ws);
       if (session) this.pushReplayBuffer(session.id, session.seq, msg);
-      try { ws.send(json); } catch { /* skip dead */ }
+      try {
+        ws.send(json);
+      } catch {
+        /* skip dead */
+      }
     }
   }
 
   /** Send a message to all sessions that are members of a server */
-  private broadcastToServerMembers(serverId: string, msg: ServerMsg, excludeWs?: WebSocket) {
+  private broadcastToServerMembers(
+    serverId: string,
+    msg: ServerMsg,
+    excludeWs?: WebSocket,
+  ) {
     const subscribers = this.serverSubscriptions.get(serverId);
     if (!subscribers) return;
 
@@ -2285,7 +2626,11 @@ export class MeetingRoom extends DurableObject<Env> {
       if (ws === excludeWs) continue;
       const session = this.getSession(ws);
       if (session) this.pushReplayBuffer(session.id, session.seq, msg);
-      try { ws.send(json); } catch { /* skip dead */ }
+      try {
+        ws.send(json);
+      } catch {
+        /* skip dead */
+      }
     }
   }
 
@@ -2299,7 +2644,9 @@ export class MeetingRoom extends DurableObject<Env> {
         try {
           ws.send(json);
           count++;
-        } catch { /* skip dead */ }
+        } catch {
+          /* skip dead */
+        }
       }
     }
     log.info(`broadcastToUser ${userId}: sent to ${count} sessions`);
@@ -2353,24 +2700,28 @@ export class MeetingRoom extends DurableObject<Env> {
     }
 
     session.subscribed_channels = session.subscribed_channels.filter(
-      (id) => id !== d.channel_id
+      (id) => id !== d.channel_id,
     );
     this.persist(ws, session);
   }
 
   // ── Op 33: VoiceChannelJoin ────────────────────────────────────────────
 
-  private normalizeVoiceChannelStartedAt(startedAt: unknown): number | undefined {
-    if (typeof startedAt !== "number" || !Number.isFinite(startedAt)) return undefined;
+  private normalizeVoiceChannelStartedAt(
+    startedAt: unknown,
+  ): number | undefined {
+    if (typeof startedAt !== "number" || !Number.isFinite(startedAt))
+      return undefined;
     const now = Date.now();
     const maxRestoreAgeMs = 7 * 24 * 60 * 60 * 1000;
-    if (startedAt < now - maxRestoreAgeMs || startedAt > now + 60_000) return undefined;
+    if (startedAt < now - maxRestoreAgeMs || startedAt > now + 60_000)
+      return undefined;
     return startedAt;
   }
 
   private handleVoiceChannelJoin(
     ws: WebSocket,
-    d: { channel_id: string; self_mute?: boolean; started_at?: number }
+    d: { channel_id: string; self_mute?: boolean; started_at?: number },
   ) {
     const session = this.requireSession(ws);
     if (!session || !d.channel_id || !session.clerk_user_id) return;
@@ -2393,9 +2744,14 @@ export class MeetingRoom extends DurableObject<Env> {
         member.connection_state = "connected";
         member.disconnected_at = null;
         member.reconnect_expires_at = null;
-        const candidateStartedAt = this.normalizeVoiceChannelStartedAt(d.started_at);
+        const candidateStartedAt = this.normalizeVoiceChannelStartedAt(
+          d.started_at,
+        );
         if (candidateStartedAt) {
-          member.joined_at = Math.min(member.joined_at ?? candidateStartedAt, candidateStartedAt);
+          member.joined_at = Math.min(
+            member.joined_at ?? candidateStartedAt,
+            candidateStartedAt,
+          );
           const currentStartedAt = this.voiceChannelStartedAt.get(d.channel_id);
           if (!currentStartedAt || candidateStartedAt < currentStartedAt) {
             this.voiceChannelStartedAt.set(d.channel_id, candidateStartedAt);
@@ -2420,14 +2776,16 @@ export class MeetingRoom extends DurableObject<Env> {
       members = new Map();
       this.voiceChannelMembers.set(d.channel_id, members);
       // First member — record channel start time
-      const candidateStartedAt = this.normalizeVoiceChannelStartedAt(d.started_at) ?? Date.now();
+      const candidateStartedAt =
+        this.normalizeVoiceChannelStartedAt(d.started_at) ?? Date.now();
       this.voiceChannelStartedAt.set(d.channel_id, candidateStartedAt);
       this.persistVoiceChannelStartedAt();
     }
 
-    const joinedAt = this.normalizeVoiceChannelStartedAt(d.started_at)
-      ?? this.voiceChannelStartedAt.get(d.channel_id)
-      ?? Date.now();
+    const joinedAt =
+      this.normalizeVoiceChannelStartedAt(d.started_at) ??
+      this.voiceChannelStartedAt.get(d.channel_id) ??
+      Date.now();
 
     const member: VoiceChannelMember = {
       clerk_user_id: session.clerk_user_id,
@@ -2461,7 +2819,9 @@ export class MeetingRoom extends DurableObject<Env> {
     // we should treat the call as accepted and stop the ringing.
     const pending = this.pendingCalls.get(session.clerk_user_id);
     if (pending && pending.channelId === d.channel_id) {
-      log.info(`${session.name} manually joined ringing DM, implicitly accepting call ${pending.callId}`);
+      log.info(
+        `${session.name} manually joined ringing DM, implicitly accepting call ${pending.callId}`,
+      );
 
       const callIdToCache = pending.callId;
       clearTimeout(pending.timeout);
@@ -2471,7 +2831,13 @@ export class MeetingRoom extends DurableObject<Env> {
       this.acceptedCalls.add(callIdToCache);
       setTimeout(() => this.acceptedCalls.delete(callIdToCache), 10000);
 
-      const evt = { op: Op.Dispatch, d: { event: "CALL_RING_STOP", data: { call_id: callIdToCache, reason: "accepted" } } };
+      const evt = {
+        op: Op.Dispatch,
+        d: {
+          event: "CALL_RING_STOP",
+          data: { call_id: callIdToCache, reason: "accepted" },
+        },
+      };
       this.broadcastToUser(pending.callerId, evt);
       this.broadcastToUser(pending.calleeId, evt);
     }
@@ -2487,8 +2853,14 @@ export class MeetingRoom extends DurableObject<Env> {
 
     // Protection against race conditions (e.g., leaving a previous channel after
     // already successfully connecting to a new one or initiating a call).
-    if (d?.channel_id && session.voice_channel_id && session.voice_channel_id !== d.channel_id) {
-      log.info(`Ignored stale VoiceChannelLeave for ${d.channel_id}; currently in ${session.voice_channel_id}`);
+    if (
+      d?.channel_id &&
+      session.voice_channel_id &&
+      session.voice_channel_id !== d.channel_id
+    ) {
+      log.info(
+        `Ignored stale VoiceChannelLeave for ${d.channel_id}; currently in ${session.voice_channel_id}`,
+      );
       return;
     }
 
@@ -2528,12 +2900,20 @@ export class MeetingRoom extends DurableObject<Env> {
         }
       }
       if (abandonedPendingCall) {
-        log.info(`DM Call ${abandonedPendingCall.callId} emptied during ring, cancelling pending...`);
+        log.info(
+          `DM Call ${abandonedPendingCall.callId} emptied during ring, cancelling pending...`,
+        );
         clearTimeout(abandonedPendingCall.timeout);
         this.pendingCalls.delete(abandonedPendingCall.calleeId);
 
         // Tell both parties the ring stopped
-        const endMsg = { op: Op.Dispatch, d: { event: "CALL_RING_STOP", data: { call_id: abandonedPendingCall.callId, reason: "abandoned" } } };
+        const endMsg = {
+          op: Op.Dispatch,
+          d: {
+            event: "CALL_RING_STOP",
+            data: { call_id: abandonedPendingCall.callId, reason: "abandoned" },
+          },
+        };
         this.broadcastToUser(abandonedPendingCall.callerId, endMsg);
         this.broadcastToUser(abandonedPendingCall.calleeId, endMsg);
       }
@@ -2545,10 +2925,14 @@ export class MeetingRoom extends DurableObject<Env> {
     log.info(`${session.name} left voice channel ${channelId}`);
   }
 
-
   private async handleMessageCreate(
     ws: WebSocket,
-    d: { channel_id: string; content: string; reply_to_id?: string; nonce?: string }
+    d: {
+      channel_id: string;
+      content: string;
+      reply_to_id?: string;
+      nonce?: string;
+    },
   ) {
     const session = this.requireSession(ws);
     if (!session || !d.channel_id || !d.content) return;
@@ -2556,7 +2940,10 @@ export class MeetingRoom extends DurableObject<Env> {
     if (this.roomSlug !== "global-gateway") {
       this.sendTo(ws, {
         op: Op.Error,
-        d: { code: 4000, message: "This gateway cannot create persisted channel messages" },
+        d: {
+          code: 4000,
+          message: "This gateway cannot create persisted channel messages",
+        },
       });
       return;
     }
@@ -2568,9 +2955,16 @@ export class MeetingRoom extends DurableObject<Env> {
     try {
       await this.env.DB.prepare(
         `INSERT INTO messages (id, channel_id, author_id, content, reply_to_id, created_at)
-         VALUES (?, ?, ?, ?, ?, ?)`
+         VALUES (?, ?, ?, ?, ?, ?)`,
       )
-        .bind(messageId, d.channel_id, session.clerk_user_id ?? session.id, d.content, d.reply_to_id ?? null, now)
+        .bind(
+          messageId,
+          d.channel_id,
+          session.clerk_user_id ?? session.id,
+          d.content,
+          d.reply_to_id ?? null,
+          now,
+        )
         .run();
     } catch (err) {
       log.error("Failed to insert message:", err);
@@ -2609,39 +3003,43 @@ export class MeetingRoom extends DurableObject<Env> {
     });
 
     // Asynchronously fetch embeds without blocking the initial send
-    this.ctx.waitUntil((async () => {
-      const embeds = await extractAndProcessEmbeds(d.content);
-      if (embeds.length > 0) {
-        try {
-          // Store embeds in the database
-          await this.env.DB.prepare(
-            `UPDATE messages SET embeds = ? WHERE id = ?`
-          ).bind(JSON.stringify(embeds), messageId).run();
+    this.ctx.waitUntil(
+      (async () => {
+        const embeds = await extractAndProcessEmbeds(d.content);
+        if (embeds.length > 0) {
+          try {
+            // Store embeds in the database
+            await this.env.DB.prepare(
+              `UPDATE messages SET embeds = ? WHERE id = ?`,
+            )
+              .bind(JSON.stringify(embeds), messageId)
+              .run();
 
-          // Dispatch update event to clients
-          this.broadcastToChannel(d.channel_id, {
-            op: Op.Dispatch,
-            d: {
-              event: "MESSAGE_UPDATE",
-              data: {
-                id: messageId,
-                channel_id: d.channel_id,
-                embeds: embeds
-              }
-            }
-          });
-        } catch (e) {
-          log.error("Failed to update message with embeds:", e);
+            // Dispatch update event to clients
+            this.broadcastToChannel(d.channel_id, {
+              op: Op.Dispatch,
+              d: {
+                event: "MESSAGE_UPDATE",
+                data: {
+                  id: messageId,
+                  channel_id: d.channel_id,
+                  embeds: embeds,
+                },
+              },
+            });
+          } catch (e) {
+            log.error("Failed to update message with embeds:", e);
+          }
         }
-      }
-    })());
+      })(),
+    );
   }
 
   // ── Op 21: MessageUpdate ──────────────────────────────────────────────
 
   private async handleMessageUpdate(
     ws: WebSocket,
-    d: { message_id: string; content: string }
+    d: { message_id: string; content: string },
   ) {
     const session = this.requireSession(ws);
     if (!session || !d.message_id || !d.content) return;
@@ -2653,7 +3051,7 @@ export class MeetingRoom extends DurableObject<Env> {
     try {
       const result = await this.env.DB.prepare(
         `UPDATE messages SET content = ?, updated_at = ?
-         WHERE id = ? AND author_id = ?`
+         WHERE id = ? AND author_id = ?`,
       )
         .bind(d.content, now, d.message_id, authorId)
         .run();
@@ -2672,8 +3070,10 @@ export class MeetingRoom extends DurableObject<Env> {
 
     // Look up channel_id for the message to dispatch
     const row = await this.env.DB.prepare(
-      `SELECT channel_id FROM messages WHERE id = ?`
-    ).bind(d.message_id).first<{ channel_id: string }>();
+      `SELECT channel_id FROM messages WHERE id = ?`,
+    )
+      .bind(d.message_id)
+      .first<{ channel_id: string }>();
 
     if (row) {
       this.broadcastToChannel(row.channel_id, {
@@ -2690,30 +3090,34 @@ export class MeetingRoom extends DurableObject<Env> {
       });
 
       // Asynchronously fetch new embeds if content changed
-      this.ctx.waitUntil((async () => {
-        const embeds = await extractAndProcessEmbeds(d.content);
-        if (embeds.length > 0) {
-          try {
-            await this.env.DB.prepare(
-              `UPDATE messages SET embeds = ? WHERE id = ?`
-            ).bind(JSON.stringify(embeds), d.message_id).run();
+      this.ctx.waitUntil(
+        (async () => {
+          const embeds = await extractAndProcessEmbeds(d.content);
+          if (embeds.length > 0) {
+            try {
+              await this.env.DB.prepare(
+                `UPDATE messages SET embeds = ? WHERE id = ?`,
+              )
+                .bind(JSON.stringify(embeds), d.message_id)
+                .run();
 
-            this.broadcastToChannel(row.channel_id, {
-              op: Op.Dispatch,
-              d: {
-                event: "MESSAGE_UPDATE",
-                data: {
-                  id: d.message_id,
-                  channel_id: row.channel_id,
-                  embeds: embeds
-                }
-              }
-            });
-          } catch (e) {
-            log.error("Failed to update message with new embeds:", e);
+              this.broadcastToChannel(row.channel_id, {
+                op: Op.Dispatch,
+                d: {
+                  event: "MESSAGE_UPDATE",
+                  data: {
+                    id: d.message_id,
+                    channel_id: row.channel_id,
+                    embeds: embeds,
+                  },
+                },
+              });
+            } catch (e) {
+              log.error("Failed to update message with new embeds:", e);
+            }
           }
-        }
-      })());
+        })(),
+      );
     }
   }
 
@@ -2721,7 +3125,7 @@ export class MeetingRoom extends DurableObject<Env> {
 
   private async handleMessageDelete(
     ws: WebSocket,
-    d: { message_id: string; channel_id: string }
+    d: { message_id: string; channel_id: string },
   ) {
     const session = this.requireSession(ws);
     if (!session || !d.message_id || !d.channel_id) return;
@@ -2731,7 +3135,7 @@ export class MeetingRoom extends DurableObject<Env> {
     try {
       // Delete only if author (or could add server admin check later)
       const result = await this.env.DB.prepare(
-        `DELETE FROM messages WHERE id = ? AND author_id = ?`
+        `DELETE FROM messages WHERE id = ? AND author_id = ?`,
       )
         .bind(d.message_id, authorId)
         .run();
@@ -2778,7 +3182,7 @@ export class MeetingRoom extends DurableObject<Env> {
           },
         },
       },
-      ws // exclude sender
+      ws, // exclude sender
     );
   }
 
@@ -2786,7 +3190,7 @@ export class MeetingRoom extends DurableObject<Env> {
 
   private async handleReactionAdd(
     ws: WebSocket,
-    d: { channel_id: string; message_id: string; emoji: string }
+    d: { channel_id: string; message_id: string; emoji: string },
   ) {
     const session = this.requireSession(ws);
     if (!session || !d.channel_id || !d.message_id || !d.emoji) return;
@@ -2797,7 +3201,7 @@ export class MeetingRoom extends DurableObject<Env> {
     try {
       await this.env.DB.prepare(
         `INSERT OR IGNORE INTO message_reactions (message_id, user_id, emoji, created_at)
-         VALUES (?, ?, ?, ?)`
+         VALUES (?, ?, ?, ?)`,
       )
         .bind(d.message_id, userId, d.emoji, now)
         .run();
@@ -2824,7 +3228,7 @@ export class MeetingRoom extends DurableObject<Env> {
 
   private async handleReactionRemove(
     ws: WebSocket,
-    d: { channel_id: string; message_id: string; emoji: string }
+    d: { channel_id: string; message_id: string; emoji: string },
   ) {
     const session = this.requireSession(ws);
     if (!session || !d.channel_id || !d.message_id || !d.emoji) return;
@@ -2833,7 +3237,7 @@ export class MeetingRoom extends DurableObject<Env> {
 
     try {
       await this.env.DB.prepare(
-        `DELETE FROM message_reactions WHERE message_id = ? AND user_id = ? AND emoji = ?`
+        `DELETE FROM message_reactions WHERE message_id = ? AND user_id = ? AND emoji = ?`,
       )
         .bind(d.message_id, userId, d.emoji)
         .run();
@@ -2898,11 +3302,15 @@ export class MeetingRoom extends DurableObject<Env> {
     // Validate membership against D1
     try {
       const row = await this.env.DB.prepare(
-        "SELECT 1 FROM server_members WHERE server_id = ? AND user_id = ?"
-      ).bind(d.server_id, session.clerk_user_id).first();
+        "SELECT 1 FROM server_members WHERE server_id = ? AND user_id = ?",
+      )
+        .bind(d.server_id, session.clerk_user_id)
+        .first();
 
       if (!row) {
-        log.info(`ServerSubscribe denied: ${session.name} is not member of ${d.server_id}`);
+        log.info(
+          `ServerSubscribe denied: ${session.name} is not member of ${d.server_id}`,
+        );
         return;
       }
     } catch (e) {
@@ -2930,10 +3338,16 @@ export class MeetingRoom extends DurableObject<Env> {
 
   private async handleCallInitiate(
     ws: WebSocket,
-    d: { target_user_id: string; channel_id: string }
+    d: { target_user_id: string; channel_id: string },
   ) {
     const session = this.requireSession(ws);
-    if (!session || !session.clerk_user_id || !d.target_user_id || !d.channel_id) return;
+    if (
+      !session ||
+      !session.clerk_user_id ||
+      !d.target_user_id ||
+      !d.channel_id
+    )
+      return;
 
     const callerId = session.clerk_user_id;
     const calleeId = d.target_user_id;
@@ -2942,7 +3356,10 @@ export class MeetingRoom extends DurableObject<Env> {
     if (callerId === calleeId) {
       this.sendTo(ws, {
         op: Op.Dispatch,
-        d: { event: "CALL_RING_STOP", data: { call_id: null, reason: "invalid" } },
+        d: {
+          event: "CALL_RING_STOP",
+          data: { call_id: null, reason: "invalid" },
+        },
       });
       return;
     }
@@ -2968,13 +3385,18 @@ export class MeetingRoom extends DurableObject<Env> {
     // Check relationship: must not be blocked
     try {
       const rel = await this.env.DB.prepare(
-        "SELECT type FROM relationships WHERE user_id = ? AND target_user_id = ?"
-      ).bind(calleeId, callerId).first<{ type: number }>();
+        "SELECT type FROM relationships WHERE user_id = ? AND target_user_id = ?",
+      )
+        .bind(calleeId, callerId)
+        .first<{ type: number }>();
       if (rel?.type === 1) {
         // Blocked — silently fail
         this.sendTo(ws, {
           op: Op.Dispatch,
-          d: { event: "CALL_RING_STOP", data: { call_id: null, reason: "unavailable" } },
+          d: {
+            event: "CALL_RING_STOP",
+            data: { call_id: null, reason: "unavailable" },
+          },
         });
         return;
       }
@@ -3001,7 +3423,10 @@ export class MeetingRoom extends DurableObject<Env> {
     if (!calleeOnline) {
       this.sendTo(ws, {
         op: Op.Dispatch,
-        d: { event: "CALL_RING_STOP", data: { call_id: null, reason: "unavailable" } },
+        d: {
+          event: "CALL_RING_STOP",
+          data: { call_id: null, reason: "unavailable" },
+        },
       });
       return;
     }
@@ -3032,14 +3457,22 @@ export class MeetingRoom extends DurableObject<Env> {
         // Tell the caller the ringing timed out (but they stay in the call)
         this.broadcastToUser(callerId, {
           op: Op.Dispatch,
-          d: { event: "CALL_RING_STOP", data: { call_id: callId, reason: "timeout" } },
+          d: {
+            event: "CALL_RING_STOP",
+            data: { call_id: callId, reason: "timeout" },
+          },
         });
         // Tell the callee the ringing timed out
         this.broadcastToUser(calleeId, {
           op: Op.Dispatch,
-          d: { event: "CALL_RING_STOP", data: { call_id: callId, reason: "timeout" } },
+          d: {
+            event: "CALL_RING_STOP",
+            data: { call_id: callId, reason: "timeout" },
+          },
         });
-        log.info(`Call ${callId} ring timed out (caller stays in voice channel)`);
+        log.info(
+          `Call ${callId} ring timed out (caller stays in voice channel)`,
+        );
       }
     }, CALL_RING_TIMEOUT_MS);
 
@@ -3115,7 +3548,9 @@ export class MeetingRoom extends DurableObject<Env> {
     const calleeId = session.clerk_user_id;
 
     if (this.acceptedCalls.has(d.call_id)) {
-      log.info(`Ignored Op 37 for ${d.call_id} — call was already implicitly/recently accepted.`);
+      log.info(
+        `Ignored Op 37 for ${d.call_id} — call was already implicitly/recently accepted.`,
+      );
       return;
     }
 
@@ -3126,7 +3561,10 @@ export class MeetingRoom extends DurableObject<Env> {
       // But just to be safe, we just send "expired" if we really can't find it.
       this.sendTo(ws, {
         op: Op.Dispatch,
-        d: { event: "CALL_RING_STOP", data: { call_id: d.call_id, reason: "expired" } },
+        d: {
+          event: "CALL_RING_STOP",
+          data: { call_id: d.call_id, reason: "expired" },
+        },
       });
       return;
     }
@@ -3156,11 +3594,17 @@ export class MeetingRoom extends DurableObject<Env> {
     // Notify both parties that ringing should stop
     this.broadcastToUser(pending.callerId, {
       op: Op.Dispatch,
-      d: { event: "CALL_RING_STOP", data: { call_id: pending.callId, reason: "accepted" } },
+      d: {
+        event: "CALL_RING_STOP",
+        data: { call_id: pending.callId, reason: "accepted" },
+      },
     });
     this.broadcastToUser(pending.calleeId, {
       op: Op.Dispatch,
-      d: { event: "CALL_RING_STOP", data: { call_id: pending.callId, reason: "accepted" } },
+      d: {
+        event: "CALL_RING_STOP",
+        data: { call_id: pending.callId, reason: "accepted" },
+      },
     });
 
     log.info(`Call accepted: ${pending.callId}`);
@@ -3182,11 +3626,17 @@ export class MeetingRoom extends DurableObject<Env> {
     // Notify both parties that ringing should stop
     this.broadcastToUser(pending.callerId, {
       op: Op.Dispatch,
-      d: { event: "CALL_RING_STOP", data: { call_id: pending.callId, reason: "declined" } },
+      d: {
+        event: "CALL_RING_STOP",
+        data: { call_id: pending.callId, reason: "declined" },
+      },
     });
     this.broadcastToUser(pending.calleeId, {
       op: Op.Dispatch,
-      d: { event: "CALL_RING_STOP", data: { call_id: pending.callId, reason: "declined" } },
+      d: {
+        event: "CALL_RING_STOP",
+        data: { call_id: pending.callId, reason: "declined" },
+      },
     });
 
     log.info(`Call declined: ${pending.callId}`);
@@ -3220,11 +3670,17 @@ export class MeetingRoom extends DurableObject<Env> {
 
       this.broadcastToUser(pending.calleeId, {
         op: Op.Dispatch,
-        d: { event: "CALL_RING_STOP", data: { call_id: pending.callId, reason: "cancelled" } },
+        d: {
+          event: "CALL_RING_STOP",
+          data: { call_id: pending.callId, reason: "cancelled" },
+        },
       });
       this.broadcastToUser(pending.callerId, {
         op: Op.Dispatch,
-        d: { event: "CALL_RING_STOP", data: { call_id: pending.callId, reason: "cancelled" } },
+        d: {
+          event: "CALL_RING_STOP",
+          data: { call_id: pending.callId, reason: "cancelled" },
+        },
       });
       log.info(`Call cancelled by caller: ${pending.callId}`);
     }
@@ -3244,17 +3700,24 @@ export class MeetingRoom extends DurableObject<Env> {
 
   /** Clean up all calls for a user (called on disconnect/leave) */
   private cleanupCallsForUser(userId: string, reason: string) {
-    log.info(`cleanupCallsForUser(${userId}, ${reason}): pendingCalls.size=${this.pendingCalls.size}`);
+    log.info(
+      `cleanupCallsForUser(${userId}, ${reason}): pendingCalls.size=${this.pendingCalls.size}`,
+    );
 
     // Clean up pending calls (as callee)
     const pendingAsCallee = this.pendingCalls.get(userId);
     if (pendingAsCallee) {
-      log.info(`Cleaning up pending call as callee: callId=${pendingAsCallee.callId}`);
+      log.info(
+        `Cleaning up pending call as callee: callId=${pendingAsCallee.callId}`,
+      );
       clearTimeout(pendingAsCallee.timeout);
       this.pendingCalls.delete(userId);
       this.broadcastToUser(pendingAsCallee.callerId, {
         op: Op.Dispatch,
-        d: { event: "CALL_RING_STOP", data: { call_id: pendingAsCallee.callId, reason } },
+        d: {
+          event: "CALL_RING_STOP",
+          data: { call_id: pendingAsCallee.callId, reason },
+        },
       });
     }
 
@@ -3266,7 +3729,10 @@ export class MeetingRoom extends DurableObject<Env> {
         this.pendingCalls.delete(calleeId);
         this.broadcastToUser(calleeId, {
           op: Op.Dispatch,
-          d: { event: "CALL_RING_STOP", data: { call_id: call.callId, reason } },
+          d: {
+            event: "CALL_RING_STOP",
+            data: { call_id: call.callId, reason },
+          },
         });
       }
     }

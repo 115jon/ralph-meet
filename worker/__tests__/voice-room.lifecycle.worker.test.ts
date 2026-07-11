@@ -92,6 +92,27 @@ async function nextJsonMessage(
   return JSON.parse(message.data) as { op: number; d: unknown };
 }
 
+async function hasMessageWithOpcode(
+  socket: WebSocket,
+  opcode: number,
+  timeoutMs = 75,
+): Promise<boolean> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => {
+      socket.removeEventListener("message", onMessage);
+      resolve(false);
+    }, timeoutMs);
+    const onMessage = (event: MessageEvent<string>) => {
+      const message = JSON.parse(event.data) as { op: number };
+      if (message.op !== opcode) return;
+      clearTimeout(timer);
+      socket.removeEventListener("message", onMessage);
+      resolve(true);
+    };
+    socket.addEventListener("message", onMessage);
+  });
+}
+
 async function nextMessageWithOpcode(
   socket: WebSocket,
   opcode: number,
@@ -114,6 +135,16 @@ async function nextMessageWithOpcodeAndType(
       if (d?.type === eventType) return message;
     }
   }
+}
+
+async function mockCallsApi(
+  roomName: string,
+  handler: (request: Request) => Response | Promise<Response>,
+) {
+  const room = env.VOICE_ROOM.get(env.VOICE_ROOM.idFromName(roomName));
+  await runInDurableObject(room, () => {
+    globalThis.fetch = async (input) => handler(new Request(input));
+  });
 }
 
 function listenTogetherMusicEntry(durationMs = 1_000) {
@@ -285,6 +316,86 @@ describe("VoiceRoom lifecycle", () => {
     });
 
     socket.close();
+  });
+
+  it("keeps negotiated tracks private until TracksReady promotes them", async () => {
+    const roomName = crypto.randomUUID();
+    let sessionNumber = 0;
+    await mockCallsApi(roomName, async (request) => {
+      const url = new URL(request.url);
+      if (url.pathname.endsWith("/sessions/new")) {
+        sessionNumber += 1;
+        return Response.json({ sessionId: `session-${sessionNumber}` });
+      }
+      if (url.pathname.endsWith("/tracks/new")) {
+        return Response.json({
+          sessionDescription: { type: "answer", sdp: "answer-sdp" },
+          tracks: [
+            {
+              location: "local",
+              trackName: "cam-audio",
+              mid: "0",
+            },
+          ],
+        });
+      }
+      throw new Error(
+        `Unexpected Calls request: ${request.method} ${request.url}`,
+      );
+    });
+
+    const publisher = await openVoiceSocket(roomName);
+    await identifyVoiceSocket(publisher, crypto.randomUUID(), roomName);
+    const observer = await openVoiceSocket(roomName, "observer-user");
+    await identifyVoiceSocket(
+      observer,
+      crypto.randomUUID(),
+      roomName,
+      "observer-user",
+    );
+
+    const description = nextMessageWithOpcode(publisher, 4);
+    publisher.send(
+      JSON.stringify({
+        op: 1,
+        d: {
+          sdp: "offer-sdp",
+          push_prefix: "cam",
+          push_tracks: [{ track_name: "cam-audio", kind: "audio", mid: "0" }],
+          pull_tracks: [],
+          request_id: "push-1",
+        },
+      }),
+    );
+    expect(await description).toMatchObject({
+      op: 4,
+      d: {
+        session_id: expect.any(String),
+        tracks: [
+          { track_name: "cam-audio", participant_id: expect.any(String) },
+        ],
+      },
+    });
+
+    expect(await hasMessageWithOpcode(observer, 12)).toBe(false);
+
+    publisher.send(
+      JSON.stringify({
+        op: 102,
+        d: { track_names: ["cam-audio"] },
+      }),
+    );
+    expect(await nextMessageWithOpcode(observer, 12)).toMatchObject({
+      op: 12,
+      d: {
+        tracks: [
+          { track_name: "cam-audio", session_id: expect.any(String), mid: "0" },
+        ],
+      },
+    });
+
+    publisher.close();
+    observer.close();
   });
 
   it("limits public-demo sockets to temporary demo chat events", async () => {
