@@ -48,6 +48,7 @@ import {
   type DemoChatGifPayload,
   type DemoChatMessage,
 } from "./voice-room/demo-chat-store";
+import { StreamWatcherStore } from "./voice-room/stream-watcher-store";
 
 const log = clog("VoiceGW");
 const roomLog = clog("VoiceRoom");
@@ -166,6 +167,7 @@ export class VoiceRoom extends DurableObject<Env> {
   public env: Env;
   private sql: SqlStorage;
   private demoChatStore: DemoChatStore;
+  private streamWatcherStore: StreamWatcherStore;
   private roomSlug: string = "";
   private radioStationCache = new Map<
     string,
@@ -187,6 +189,7 @@ export class VoiceRoom extends DurableObject<Env> {
     this.env = env;
     this.sql = this.ctx.storage.sql;
     this.demoChatStore = new DemoChatStore(this.sql, DEMO_CHAT_MAX_MESSAGES);
+    this.streamWatcherStore = new StreamWatcherStore(this.sql);
 
     // Removed setWebSocketAutoResponse.
     // Cloudflare's auto-response absorbs messages at the edge, preventing the DO
@@ -1566,19 +1569,7 @@ export class VoiceRoom extends DurableObject<Env> {
   }
 
   private getStreamWatcherSnapshot() {
-    const watchersByStreamer: Record<string, string[]> = {};
-    for (const row of this.sql.exec(
-      `SELECT streamer_user_id, viewer_user_id
-       FROM stream_watchers
-       ORDER BY created_at ASC, viewer_user_id ASC`,
-    )) {
-      const streamerUserId = row.streamer_user_id as string;
-      const viewerUserId = row.viewer_user_id as string;
-      if (!watchersByStreamer[streamerUserId])
-        watchersByStreamer[streamerUserId] = [];
-      watchersByStreamer[streamerUserId].push(viewerUserId);
-    }
-    return watchersByStreamer;
+    return this.streamWatcherStore.snapshot();
   }
 
   private sendStreamWatcherSnapshot(ws: WebSocket) {
@@ -1602,56 +1593,15 @@ export class VoiceRoom extends DurableObject<Env> {
   }
 
   private deleteStreamWatcher(streamerUserId: string, viewerUserId: string) {
-    const hadExisting =
-      [
-        ...this.sql.exec(
-          "SELECT 1 FROM stream_watchers WHERE streamer_user_id = ? AND viewer_user_id = ? LIMIT 1",
-          streamerUserId,
-          viewerUserId,
-        ),
-      ].length > 0;
-    if (hadExisting) {
-      this.sql.exec(
-        "DELETE FROM stream_watchers WHERE streamer_user_id = ? AND viewer_user_id = ?",
-        streamerUserId,
-        viewerUserId,
-      );
-    }
-    return hadExisting;
+    return this.streamWatcherStore.remove(streamerUserId, viewerUserId);
   }
 
   private clearStreamWatchersByViewerUserId(viewerUserId: string) {
-    const hadExisting =
-      [
-        ...this.sql.exec(
-          "SELECT 1 FROM stream_watchers WHERE viewer_user_id = ? LIMIT 1",
-          viewerUserId,
-        ),
-      ].length > 0;
-    if (hadExisting) {
-      this.sql.exec(
-        "DELETE FROM stream_watchers WHERE viewer_user_id = ?",
-        viewerUserId,
-      );
-    }
-    return hadExisting;
+    return this.streamWatcherStore.clearByViewer(viewerUserId);
   }
 
   private clearStreamWatchersByStreamerUserId(streamerUserId: string) {
-    const hadExisting =
-      [
-        ...this.sql.exec(
-          "SELECT 1 FROM stream_watchers WHERE streamer_user_id = ? LIMIT 1",
-          streamerUserId,
-        ),
-      ].length > 0;
-    if (hadExisting) {
-      this.sql.exec(
-        "DELETE FROM stream_watchers WHERE streamer_user_id = ?",
-        streamerUserId,
-      );
-    }
-    return hadExisting;
+    return this.streamWatcherStore.clearByStreamer(streamerUserId);
   }
 
   private clearStreamWatchersByParticipantId(participantId: string) {
@@ -2777,43 +2727,14 @@ export class VoiceRoom extends DurableObject<Env> {
         return;
       }
 
-      const existingRows = [
-        ...this.sql.exec(
-          `SELECT streamer_participant_id, viewer_participant_id
-         FROM stream_watchers
-         WHERE streamer_user_id = ? AND viewer_user_id = ?`,
-          streamerUserId,
-          callerUserId,
-        ),
-      ];
-      const alreadyUpToDate =
-        existingRows.length > 0 &&
-        (existingRows[0].streamer_participant_id as string) ===
-          streamerParticipantId &&
-        (existingRows[0].viewer_participant_id as string) === pid;
-
-      if (!alreadyUpToDate) {
-        this.sql.exec(
-          `INSERT INTO stream_watchers (
-             streamer_user_id,
-             viewer_user_id,
-             streamer_participant_id,
-             viewer_participant_id,
-             created_at
-           )
-           VALUES (?, ?, ?, ?, ?)
-           ON CONFLICT(streamer_user_id, viewer_user_id) DO UPDATE SET
-             streamer_participant_id = excluded.streamer_participant_id,
-             viewer_participant_id = excluded.viewer_participant_id,
-             created_at = excluded.created_at`,
-          streamerUserId,
-          callerUserId,
-          streamerParticipantId,
-          pid,
-          Date.now(),
-        );
-        this.broadcastStreamWatcherSnapshot();
-      }
+      const didChange = this.streamWatcherStore.upsert({
+        streamerUserId,
+        viewerUserId: callerUserId,
+        streamerParticipantId,
+        viewerParticipantId: pid,
+        createdAt: Date.now(),
+      });
+      if (didChange) this.broadcastStreamWatcherSnapshot();
       return;
     }
 
