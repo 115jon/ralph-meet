@@ -31,6 +31,7 @@ import {
 import { filterVoiceChannelStatesPayload } from "../src/lib/voice-channel-state-filter";
 import { getRealtimeAdmissionFromHeaders } from "./realtime-admission";
 import { resolveMeetingProfile } from "./meeting-room/profile-resolver";
+import { generateTurnCredentials as resolveTurnCredentials } from "./meeting-room/turn-credentials";
 import { issueVoiceToken } from "./voice-token";
 
 const log = clog("ChatGW");
@@ -102,12 +103,6 @@ const enum CloseCode {
 }
 
 // ── Shared interfaces ───────────────────────────────────────────────────────
-
-interface IceServer {
-  urls: string[];
-  username?: string;
-  credential?: string;
-}
 
 interface TrackInfo {
   participant_id: string;
@@ -2393,68 +2388,13 @@ export class MeetingRoom extends DurableObject<Env> {
 
   // ── TURN credentials ──────────────────────────────────────────────────
 
-  private async generateTurnCredentials(): Promise<IceServer[]> {
-    const stun: IceServer = { urls: ["stun:stun.cloudflare.com:3478"] };
-
-    if (!this.env.TURN_TOKEN_ID || !this.env.TURN_TOKEN_SECRET) return [stun];
-
-    try {
-      const url = `https://rtc.live.cloudflare.com/v1/turn/keys/${this.env.TURN_TOKEN_ID}/credentials/generate-ice-servers`;
-      const resp = await fetch(url, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${this.env.TURN_TOKEN_SECRET}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ ttl: 48 * 60 * 60 }),
-      });
-
-      if (!resp.ok) return [stun];
-
-      const data = (await resp.json()) as {
-        iceServers?: Array<{
-          urls?: string[];
-          username?: string;
-          credential?: string;
-        }>;
-      };
-
-      if (!Array.isArray(data.iceServers) || data.iceServers.length === 0)
-        return [stun];
-
-      const servers = data.iceServers
-        .filter((s) => s.urls && s.urls.length > 0)
-        .slice(0, 2)
-        .map((s) => {
-          // Firefox limits STUN/TURN servers to avoid discovery slowdowns.
-          // Filter to only the most reliable transports: UDP 3478 and TCP/TLS 443
-          const filteredUrls = (s.urls ?? []).filter(
-            (url) =>
-              url.includes(":3478?transport=udp") ||
-              url.includes(":443?transport=tcp") ||
-              url.startsWith("stun:"), // Keep basic STUN
-          );
-
-          return {
-            urls:
-              filteredUrls.length > 0
-                ? filteredUrls
-                : (s.urls ?? []).slice(0, 2),
-            username: s.username,
-            credential: s.credential,
-          };
-        });
-
-      meetingLog.info(
-        `Generated TURN credentials, count=${servers.length}, flatUrls=${servers.flatMap((s) => s.urls).length}`,
-      );
-      return servers.length > 0 ? servers : [stun];
-    } catch {
-      meetingLog.warn(
-        `Failed generating TURN credentials, falling back to STUN`,
-      );
-      return [stun];
-    }
+  private async generateTurnCredentials() {
+    return resolveTurnCredentials({
+      tokenId: this.env.TURN_TOKEN_ID,
+      tokenSecret: this.env.TURN_TOKEN_SECRET,
+      fetch,
+      log: meetingLog,
+    });
   }
 
   // ── Utilities ─────────────────────────────────────────────────────────
