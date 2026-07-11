@@ -1,4 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const { logInfo } = vi.hoisted(() => ({ logInfo: vi.fn() }));
+
+vi.mock("@/lib/console-logger", () => ({
+  clog: () => ({
+    debug: vi.fn(),
+    info: logInfo,
+    warn: vi.fn(),
+    error: vi.fn(),
+  }),
+}));
+
 import { SFUClient } from "../sfu-client";
 
 import {
@@ -71,6 +83,21 @@ describe("SFUClient Baseline Tests", () => {
       expect(client.getPublishConnectionState()).toBe("connected");
       expect(client.getSubscribeConnectionState()).toBe("idle");
       expect(client.getConnectionState()).toBe("connected");
+    });
+  });
+
+  describe("disconnect", () => {
+    it("logs the caller's teardown reason before closing the session", () => {
+      client.disconnect("component-unmount");
+
+      expect(logInfo).toHaveBeenCalledWith(
+        "Disconnecting SFU client",
+        expect.objectContaining({
+          reason: "component-unmount",
+          roomSlug: "test-room",
+          participantId: "p123",
+        }),
+      );
     });
   });
 

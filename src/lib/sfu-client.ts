@@ -23,6 +23,13 @@ const CREDENTIAL_REFRESH_MS = 47 * 60 * 60 * 1000;
 
 export type { SFUEventMap, VoiceConnectionStats } from "./types";
 
+export type SFUDisconnectReason =
+  | "component-unmount"
+  | "forced-disconnect"
+  | "user-leave"
+  | "voice-gateway-kicked"
+  | "unknown";
+
 export class SFUClient extends TypedEventEmitter<SFUEventMap> {
   // --- Gateways & Managers ---
   public readonly roomGW: RoomGateway;
@@ -702,7 +709,7 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
       sfuLog.warn(
         "Kicked from VoiceGateway (replaced by new connection). Leaving room.",
       );
-      this.disconnect();
+      this.disconnect("voice-gateway-kicked");
       this.emit("kicked", undefined as never);
     });
 
@@ -970,7 +977,15 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
     if (tracks.length > 0) this.pullTracks(tracks);
   }
 
-  public disconnect() {
+  public disconnect(reason: SFUDisconnectReason = "unknown") {
+    sfuLog.info("Disconnecting SFU client", {
+      reason,
+      roomSlug: this.roomSlug,
+      participantId: this.participantId,
+      connectionState: this.getConnectionState(),
+      roomGateway: this.roomGW.getDebugState(),
+      voiceGateway: this.voiceGW.getDebugState(),
+    });
     this.isLeaving = true;
     this.clearCredentialRefreshTimer();
     this.rtcSessionManager.clearAllDisconnectTimers();

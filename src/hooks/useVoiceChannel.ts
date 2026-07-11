@@ -2364,7 +2364,14 @@ export function useVoiceChannel({
   useEffect(() => {
     return () => {
       if (sfuRef.current) {
-        sfuRef.current.disconnect();
+        vcLog.info("Voice lifecycle teardown", {
+          reason: "component-unmount",
+          channelId,
+          serverId,
+          mode,
+          joined: joinedRef.current,
+        });
+        sfuRef.current.disconnect("component-unmount");
         sfuRef.current = null;
         setSfuInstance(null);
         stopCameraBackgroundEffect(true);
@@ -2410,6 +2417,13 @@ export function useVoiceChannel({
   useEffect(() => {
     const handleForceDisconnect = () => {
       if (sfuRef.current) {
+        vcLog.warn("Voice lifecycle teardown", {
+          reason: "forced-disconnect",
+          channelId,
+          serverId,
+          mode,
+          joined: joinedRef.current,
+        });
         // Play disconnect sound before cleanup (skip for calls — gateway plays call-end sound)
         if (
           !isCall &&
@@ -2417,7 +2431,7 @@ export function useVoiceChannel({
         ) {
           playDisconnect();
         }
-        sfuRef.current.disconnect();
+        sfuRef.current.disconnect("forced-disconnect");
         sfuRef.current = null;
         stopCameraBackgroundEffect(true);
         publishedAudioProcessorRef.current?.destroy();
@@ -2455,6 +2469,13 @@ export function useVoiceChannel({
   ]);
 
   const handleLeave = useCallback(() => {
+    vcLog.info("Voice lifecycle teardown", {
+      reason: "user-leave",
+      channelId,
+      serverId,
+      mode,
+      joined: joinedRef.current,
+    });
     // Play disconnect sound (skip for calls — gateway plays call-end sound)
     if (
       !isCall &&
@@ -2462,7 +2483,7 @@ export function useVoiceChannel({
     ) {
       playDisconnect();
     }
-    sfuRef.current?.disconnect();
+    sfuRef.current?.disconnect("user-leave");
     sfuRef.current = null;
     setSfuInstance(null);
     stopCameraBackgroundEffect(true);
