@@ -49,6 +49,7 @@ import {
 import { StreamWatcherStore } from "./voice-room/stream-watcher-store";
 import { ListenTogetherStore } from "./voice-room/listen-together-store";
 import { RadioStationResolver } from "./voice-room/radio-station-resolver";
+import { SfuClient } from "./voice-room/sfu-client";
 
 const log = clog("VoiceGW");
 const roomLog = clog("VoiceRoom");
@@ -165,6 +166,7 @@ export class VoiceRoom extends DurableObject<Env> {
   private streamWatcherStore: StreamWatcherStore;
   private listenTogetherStore: ListenTogetherStore;
   private radioStationResolver: RadioStationResolver;
+  private sfuClient: SfuClient;
   private roomSlug: string = "";
   private listenTogetherCommandQueue: Promise<void> = Promise.resolve();
 
@@ -181,6 +183,12 @@ export class VoiceRoom extends DurableObject<Env> {
     );
     this.radioStationResolver = new RadioStationResolver({
       fetch: (...args) => globalThis.fetch(...args),
+    });
+    this.sfuClient = new SfuClient({
+      appId: this.env.CALLS_APP_ID,
+      secret: this.env.CALLS_APP_SECRET,
+      fetch: (...args) => globalThis.fetch(...args),
+      log: sfuLog,
     });
 
     // Removed setWebSocketAutoResponse.
@@ -3334,49 +3342,7 @@ export class VoiceRoom extends DurableObject<Env> {
     method: string,
     path: string,
   ): Promise<Record<string, unknown>> {
-    const url = `https://rtc.live.cloudflare.com/v1/apps/${this.env.CALLS_APP_ID}/${path}`;
-
-    for (let attempt = 0; attempt < 2; attempt++) {
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 10_000);
-      try {
-        const resp = await fetch(url, {
-          method,
-          signal: controller.signal,
-          headers: {
-            Authorization: `Bearer ${this.env.CALLS_APP_SECRET}`,
-          },
-        });
-
-        const text = await resp.text();
-
-        if (resp.ok) return JSON.parse(text);
-
-        // Retry once on 5xx (server error) after a short delay
-        if (resp.status >= 500 && attempt === 0) {
-          sfuLog.warn(
-            `${method} ${path} returned ${resp.status}, retrying in 500ms...`,
-          );
-          await new Promise((r) => setTimeout(r, 500));
-          continue;
-        }
-
-        sfuLog.error(
-          "SFU request failed",
-          toSafeSfuFailure({
-            attempt,
-            operation: `${method} ${path}`,
-            requestId: resp.headers.get("cf-ray"),
-            status: resp.status,
-          }),
-        );
-        throw new Error(`SFU ${method} ${path} failed (${resp.status})`);
-      } finally {
-        clearTimeout(timer);
-      }
-    }
-
-    throw new Error(`SFU ${method} ${path} failed after retry`);
+    return this.sfuClient.fetch(method, path);
   }
 
   private async sfuPost(
@@ -3398,52 +3364,7 @@ export class VoiceRoom extends DurableObject<Env> {
     path: string,
     body: Record<string, unknown>,
   ): Promise<Record<string, unknown>> {
-    const url = `https://rtc.live.cloudflare.com/v1/apps/${this.env.CALLS_APP_ID}/${path}`;
-    const jsonBody = JSON.stringify(body);
-
-    for (let attempt = 0; attempt < 2; attempt++) {
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 10_000);
-      try {
-        const resp = await fetch(url, {
-          method,
-          signal: controller.signal,
-          headers: {
-            Authorization: `Bearer ${this.env.CALLS_APP_SECRET}`,
-            "Content-Type": "application/json",
-          },
-          body: jsonBody,
-        });
-
-        const text = await resp.text();
-
-        if (resp.ok) return JSON.parse(text);
-
-        // Retry once on 5xx (server error) after a short delay
-        if (resp.status >= 500 && attempt === 0) {
-          sfuLog.warn(
-            `${method} ${path} returned ${resp.status}, retrying in 500ms...`,
-          );
-          await new Promise((r) => setTimeout(r, 500));
-          continue;
-        }
-
-        sfuLog.error(
-          "SFU request failed",
-          toSafeSfuFailure({
-            attempt,
-            operation: `${method} ${path}`,
-            requestId: resp.headers.get("cf-ray"),
-            status: resp.status,
-          }),
-        );
-        throw new Error(`SFU ${method} ${path} failed (${resp.status})`);
-      } finally {
-        clearTimeout(timer);
-      }
-    }
-
-    throw new Error(`SFU ${method} ${path} failed after retry`);
+    return this.sfuClient.request(method, path, body);
   }
 
   private sendTo(ws: WebSocket, msg: ServerMsg) {
