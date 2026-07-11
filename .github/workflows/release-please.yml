@@ -23,7 +23,7 @@ jobs:
       # release-please owns version bumps, CHANGELOG.md, the GitHub Release, and the vX.Y.Z tag.
       # It will create the Release with proper changelog notes.
       # The pushed tag triggers desktop-release.yml which uploads the assets to the existing release.
-      - uses: googleapis/release-please-action@v4
+      - uses: googleapis/release-please-action@8b8fd2cc23b2e18957157a9d923d75aa0c6f6ad5 # v4
         id: release
         with:
           # A PAT is required so the pushed tag triggers desktop-release.yml.
