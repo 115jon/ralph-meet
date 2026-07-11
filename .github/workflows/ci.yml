@@ -77,7 +77,9 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Run unit tests
-        run: pnpm run test
+        # The range-probe suite contacts YouTube and is an explicit live probe,
+        # not a deterministic unit test. Keep it opt-in so CI is repeatable.
+        run: pnpm exec vitest run --exclude src/lib/__tests__/ytdlp-range-probe.live.test.ts
 
   worker-runtime:
     name: worker-runtime
