@@ -16,14 +16,12 @@ import {
 } from "../src/lib/voice/connection-generation";
 import {
   buildListenTogetherSnapshot,
-  createListenTogetherState,
   isValidListenTogetherVideoId,
   LISTEN_TOGETHER_IMPORT_LIMIT,
   type ListenTogetherCommand,
   type ListenTogetherEnqueueCommand,
   type ListenTogetherEvent,
   type ListenTogetherMusicProvider,
-  type ListenTogetherMusicTrack,
   type ListenTogetherPersistentState,
   type ListenTogetherQueueEntry,
   type ListenTogetherStateSnapshot,
@@ -42,6 +40,16 @@ import {
 import { getNextVoicePresenceAlarmTime } from "../src/lib/voice-presence";
 import { toSafeSfuFailure } from "./sfu-diagnostics";
 import { getRealtimeAdmissionFromHeaders } from "./realtime-admission";
+import { verifyVoiceToken } from "./voice-token";
+import {
+  DemoChatStore,
+  type DemoChatGifPayload,
+  type DemoChatMessage,
+} from "./voice-room/demo-chat-store";
+import { StreamWatcherStore } from "./voice-room/stream-watcher-store";
+import { ListenTogetherStore } from "./voice-room/listen-together-store";
+import { RadioStationResolver } from "./voice-room/radio-station-resolver";
+import { SfuClient } from "./voice-room/sfu-client";
 
 const log = clog("VoiceGW");
 const roomLog = clog("VoiceRoom");
@@ -123,26 +131,6 @@ interface GatewayMessage {
 
 type ServerMsg = GatewayMessage;
 
-interface DemoChatGifPayload {
-  url: string;
-  content_type: "image/gif" | "video/mp4";
-  title?: string;
-  source_url?: string;
-  provider?: "klipy" | "tenor";
-  width?: number;
-  height?: number;
-}
-
-interface DemoChatMessage {
-  id: string;
-  participant_id: string;
-  author_name: string;
-  content: string;
-  gif?: DemoChatGifPayload;
-  created_at: number;
-  expires_at: number;
-}
-
 // WebSocket attachment for voice sessions
 interface VoiceAttachment {
   admission?: {
@@ -163,14 +151,9 @@ const SFU_SESSION_REUSE_GRACE_MS = 20_000;
 const DEMO_CHAT_TTL_MS = 10 * 60 * 1000;
 const DEMO_CHAT_MAX_MESSAGES = 75;
 const DEMO_CHAT_MAX_CONTENT_LENGTH = 1_000;
-const RADIO_BROWSER_API_HOST = "de1.api.radio-browser.info";
 const RADIO_STATION_UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const MAX_RADIO_STATION_LOOKUPS_PER_ENQUEUE = 5;
-const RADIO_STATION_CACHE_TTL_MS = 60_000;
-const RADIO_STATION_FETCH_TIMEOUT_MS = 5_000;
-const RADIO_STATION_RESOLUTIONS_PER_MINUTE = 10;
-const RADIO_STATION_RESOLUTION_WINDOW_MS = 60_000;
 const MAX_SOUNDBOARD_DATA_URL_BYTES = 512 * 1024;
 
 // ── VoiceRoom Durable Object ────────────────────────────────────────────────
@@ -179,19 +162,12 @@ export class VoiceRoom extends DurableObject<Env> {
   public ctx: DurableObjectState;
   public env: Env;
   private sql: SqlStorage;
+  private demoChatStore: DemoChatStore;
+  private streamWatcherStore: StreamWatcherStore;
+  private listenTogetherStore: ListenTogetherStore;
+  private radioStationResolver: RadioStationResolver;
+  private sfuClient: SfuClient;
   private roomSlug: string = "";
-  private radioStationCache = new Map<
-    string,
-    {
-      expiresAt: number;
-      station: Awaited<ReturnType<VoiceRoom["resolveRadioStation"]>>;
-    }
-  >();
-  private radioStationResolutions = new Map<
-    string,
-    Promise<Awaited<ReturnType<VoiceRoom["resolveRadioStation"]>>>
-  >();
-  private radioStationResolutionAttempts = new Map<string, number[]>();
   private listenTogetherCommandQueue: Promise<void> = Promise.resolve();
 
   constructor(ctx: DurableObjectState, env: Env) {
@@ -199,6 +175,21 @@ export class VoiceRoom extends DurableObject<Env> {
     this.ctx = ctx;
     this.env = env;
     this.sql = this.ctx.storage.sql;
+    this.demoChatStore = new DemoChatStore(this.sql, DEMO_CHAT_MAX_MESSAGES);
+    this.streamWatcherStore = new StreamWatcherStore(this.sql);
+    this.listenTogetherStore = new ListenTogetherStore(
+      this.sql,
+      () => this.roomSlug,
+    );
+    this.radioStationResolver = new RadioStationResolver({
+      fetch: (...args) => globalThis.fetch(...args),
+    });
+    this.sfuClient = new SfuClient({
+      appId: this.env.CALLS_APP_ID,
+      secret: this.env.CALLS_APP_SECRET,
+      fetch: (...args) => globalThis.fetch(...args),
+      log: sfuLog,
+    });
 
     // Removed setWebSocketAutoResponse.
     // Cloudflare's auto-response absorbs messages at the edge, preventing the DO
@@ -555,7 +546,7 @@ export class VoiceRoom extends DurableObject<Env> {
     const now = Date.now();
     const zombies: string[] = [];
 
-    this.pruneDemoChatMessages(now);
+    this.demoChatStore.pruneExpired(now);
 
     // Check active participants for zombie timeouts using SQLite
     const participants = this.sql.exec(
@@ -709,111 +700,18 @@ export class VoiceRoom extends DurableObject<Env> {
   }
 
   private loadListenTogetherState(): ListenTogetherPersistentState {
-    const row = [
-      ...this.sql.exec(
-        `SELECT room_slug, revision, paused, current_entry_id, anchor_position_ms, anchor_updated_at, last_updated_at
-       FROM listen_together_state
-       WHERE id = 1`,
-      ),
-    ][0];
-
-    if (!row) {
-      const initial = createListenTogetherState(this.roomSlug || "");
-      this.saveListenTogetherState(initial);
-      return initial;
-    }
-
-    return {
-      roomSlug: this.roomSlug || String(row.room_slug ?? ""),
-      revision: Number(row.revision ?? 0),
-      paused: Number(row.paused ?? 1) === 1,
-      currentEntryId:
-        typeof row.current_entry_id === "string" ? row.current_entry_id : null,
-      anchorPositionMs: Number(row.anchor_position_ms ?? 0),
-      anchorUpdatedAt:
-        typeof row.anchor_updated_at === "number" ||
-        typeof row.anchor_updated_at === "string"
-          ? Number(row.anchor_updated_at)
-          : null,
-      lastUpdatedAt: Number(row.last_updated_at ?? 0),
-    };
-  }
-
-  private saveListenTogetherState(state: ListenTogetherPersistentState) {
-    this.sql.exec(
-      `INSERT INTO listen_together_state (
-         id,
-         room_slug,
-         revision,
-         paused,
-         current_entry_id,
-         anchor_position_ms,
-         anchor_updated_at,
-         last_updated_at
-       )
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-       ON CONFLICT(id) DO UPDATE SET
-         room_slug = excluded.room_slug,
-         revision = excluded.revision,
-         paused = excluded.paused,
-         current_entry_id = excluded.current_entry_id,
-         anchor_position_ms = excluded.anchor_position_ms,
-         anchor_updated_at = excluded.anchor_updated_at,
-         last_updated_at = excluded.last_updated_at`,
-      1,
-      state.roomSlug,
-      state.revision,
-      state.paused ? 1 : 0,
-      state.currentEntryId,
-      state.anchorPositionMs,
-      state.anchorUpdatedAt,
-      state.lastUpdatedAt,
-    );
+    return this.listenTogetherStore.loadState();
   }
 
   private loadListenTogetherQueue(): ListenTogetherQueueEntry[] {
-    const queue: ListenTogetherQueueEntry[] = [];
-    for (const row of this.sql.exec(
-      `SELECT entry_json FROM listen_together_queue ORDER BY sort_order ASC`,
-    )) {
-      try {
-        const parsed = JSON.parse(
-          String(row.entry_json),
-        ) as ListenTogetherQueueEntry;
-        if (parsed?.entryId) {
-          // Normalize legacy entries lacking `kind` to `kind: "music"`.
-          if (parsed.track && !parsed.track.kind) {
-            (parsed.track as ListenTogetherMusicTrack).kind = "music";
-          }
-          queue.push(parsed);
-        }
-      } catch {
-        // Ignore malformed persisted entries.
-      }
-    }
-    return queue;
-  }
-
-  private saveListenTogetherQueue(queue: ListenTogetherQueueEntry[]) {
-    this.sql.exec(`DELETE FROM listen_together_queue`);
-    queue.forEach((entry, index) => {
-      this.sql.exec(
-        `INSERT INTO listen_together_queue (entry_id, sort_order, entry_json, requested_at)
-         VALUES (?, ?, ?, ?)`,
-        entry.entryId,
-        index,
-        JSON.stringify(entry),
-        entry.requestedAt,
-      );
-    });
+    return this.listenTogetherStore.loadQueue();
   }
 
   private persistListenTogetherState(
     state: ListenTogetherPersistentState,
     queue: ListenTogetherQueueEntry[],
   ) {
-    this.saveListenTogetherState(state);
-    this.saveListenTogetherQueue(queue);
+    this.listenTogetherStore.persist(state, queue);
   }
 
   private getListenTogetherSnapshot(
@@ -1133,96 +1031,11 @@ export class VoiceRoom extends DurableObject<Env> {
     return sanitizedEntries;
   }
 
-  private canResolveRadioStationForUser(userId: string | null): boolean {
-    const now = Date.now();
-    const key = userId ?? "anonymous";
-    const attempts = (
-      this.radioStationResolutionAttempts.get(key) ?? []
-    ).filter(
-      (attemptedAt) => now - attemptedAt < RADIO_STATION_RESOLUTION_WINDOW_MS,
-    );
-    if (attempts.length >= RADIO_STATION_RESOLUTIONS_PER_MINUTE) {
-      return false;
-    }
-    attempts.push(now);
-    this.radioStationResolutionAttempts.set(key, attempts);
-    return true;
-  }
-
   private async resolveRadioStation(
     stationUuid: string,
     callerUserId: string | null,
   ) {
-    const cached = this.radioStationCache.get(stationUuid);
-    if (cached && cached.expiresAt > Date.now()) return cached.station;
-
-    const inFlight = this.radioStationResolutions.get(stationUuid);
-    if (inFlight) return inFlight;
-    if (!this.canResolveRadioStationForUser(callerUserId)) return null;
-
-    const resolution = this.fetchRadioStation(stationUuid);
-    this.radioStationResolutions.set(stationUuid, resolution);
-    try {
-      return await resolution;
-    } finally {
-      this.radioStationResolutions.delete(stationUuid);
-    }
-  }
-
-  private async fetchRadioStation(stationUuid: string) {
-    interface RadioBrowserStation {
-      stationuuid?: unknown;
-      name?: unknown;
-      url_resolved?: unknown;
-      homepage?: unknown;
-      favicon?: unknown;
-    }
-
-    let resolvedStation: Awaited<ReturnType<VoiceRoom["resolveRadioStation"]>> =
-      null;
-    const controller = new AbortController();
-    const timeout = setTimeout(
-      () => controller.abort(),
-      RADIO_STATION_FETCH_TIMEOUT_MS,
-    );
-    try {
-      const response = await fetch(
-        `https://${RADIO_BROWSER_API_HOST}/json/stations/byuuid/${encodeURIComponent(stationUuid)}`,
-        { signal: controller.signal },
-      );
-      if (!response.ok) return null;
-      const stations = (await response.json()) as unknown;
-      if (!Array.isArray(stations) || stations.length !== 1) return null;
-      const station = stations[0] as RadioBrowserStation;
-      if (station.stationuuid !== stationUuid) return null;
-      const title =
-        typeof station.name === "string"
-          ? station.name.trim().slice(0, 160)
-          : "";
-      const streamUrl = this.sanitizePublicHttpsUrl(station.url_resolved);
-      if (!title || !streamUrl) return null;
-
-      resolvedStation = {
-        kind: "radio" as const,
-        id: stationUuid,
-        provider: "radio" as const,
-        title,
-        artworkUrl: this.sanitizePublicHttpsUrl(station.favicon),
-        canonicalUrl:
-          this.sanitizePublicHttpsUrl(station.homepage) ?? streamUrl.origin,
-        streamUrl: streamUrl.href,
-        sourceLabel: "Live Radio",
-      };
-    } catch {
-      resolvedStation = null;
-    } finally {
-      clearTimeout(timeout);
-    }
-    this.radioStationCache.set(stationUuid, {
-      expiresAt: Date.now() + RADIO_STATION_CACHE_TTL_MS,
-      station: resolvedStation,
-    });
-    return resolvedStation;
+    return this.radioStationResolver.resolve(stationUuid, callerUserId);
   }
 
   private isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -1230,47 +1043,6 @@ export class VoiceRoom extends DurableObject<Env> {
       return false;
     const prototype = Object.getPrototypeOf(value);
     return prototype === Object.prototype || prototype === null;
-  }
-
-  private sanitizePublicHttpsUrl(value: unknown): URL | null {
-    if (typeof value !== "string" || value.length === 0 || value.length > 2048)
-      return null;
-    try {
-      const url = new URL(value);
-      const hostname = url.hostname.toLowerCase();
-      if (
-        url.protocol !== "https:" ||
-        url.username ||
-        url.password ||
-        hostname === "localhost" ||
-        hostname.endsWith(".localhost") ||
-        hostname.endsWith(".local") ||
-        this.isPrivateIpLiteral(hostname)
-      ) {
-        return null;
-      }
-      return url;
-    } catch {
-      return null;
-    }
-  }
-
-  private isPrivateIpLiteral(hostname: string): boolean {
-    const ipv4 = hostname.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
-    if (ipv4) {
-      const octets = ipv4.slice(1).map(Number);
-      if (octets.some((octet) => octet > 255)) return true;
-      const [first, second] = octets;
-      return (
-        first === 0 ||
-        first === 10 ||
-        first === 127 ||
-        (first === 169 && second === 254) ||
-        (first === 172 && second >= 16 && second <= 31) ||
-        (first === 192 && second === 168)
-      );
-    }
-    return hostname.includes(":");
   }
 
   private handleListenTogetherCommand(
@@ -1578,19 +1350,7 @@ export class VoiceRoom extends DurableObject<Env> {
   }
 
   private getStreamWatcherSnapshot() {
-    const watchersByStreamer: Record<string, string[]> = {};
-    for (const row of this.sql.exec(
-      `SELECT streamer_user_id, viewer_user_id
-       FROM stream_watchers
-       ORDER BY created_at ASC, viewer_user_id ASC`,
-    )) {
-      const streamerUserId = row.streamer_user_id as string;
-      const viewerUserId = row.viewer_user_id as string;
-      if (!watchersByStreamer[streamerUserId])
-        watchersByStreamer[streamerUserId] = [];
-      watchersByStreamer[streamerUserId].push(viewerUserId);
-    }
-    return watchersByStreamer;
+    return this.streamWatcherStore.snapshot();
   }
 
   private sendStreamWatcherSnapshot(ws: WebSocket) {
@@ -1614,56 +1374,15 @@ export class VoiceRoom extends DurableObject<Env> {
   }
 
   private deleteStreamWatcher(streamerUserId: string, viewerUserId: string) {
-    const hadExisting =
-      [
-        ...this.sql.exec(
-          "SELECT 1 FROM stream_watchers WHERE streamer_user_id = ? AND viewer_user_id = ? LIMIT 1",
-          streamerUserId,
-          viewerUserId,
-        ),
-      ].length > 0;
-    if (hadExisting) {
-      this.sql.exec(
-        "DELETE FROM stream_watchers WHERE streamer_user_id = ? AND viewer_user_id = ?",
-        streamerUserId,
-        viewerUserId,
-      );
-    }
-    return hadExisting;
+    return this.streamWatcherStore.remove(streamerUserId, viewerUserId);
   }
 
   private clearStreamWatchersByViewerUserId(viewerUserId: string) {
-    const hadExisting =
-      [
-        ...this.sql.exec(
-          "SELECT 1 FROM stream_watchers WHERE viewer_user_id = ? LIMIT 1",
-          viewerUserId,
-        ),
-      ].length > 0;
-    if (hadExisting) {
-      this.sql.exec(
-        "DELETE FROM stream_watchers WHERE viewer_user_id = ?",
-        viewerUserId,
-      );
-    }
-    return hadExisting;
+    return this.streamWatcherStore.clearByViewer(viewerUserId);
   }
 
   private clearStreamWatchersByStreamerUserId(streamerUserId: string) {
-    const hadExisting =
-      [
-        ...this.sql.exec(
-          "SELECT 1 FROM stream_watchers WHERE streamer_user_id = ? LIMIT 1",
-          streamerUserId,
-        ),
-      ].length > 0;
-    if (hadExisting) {
-      this.sql.exec(
-        "DELETE FROM stream_watchers WHERE streamer_user_id = ?",
-        streamerUserId,
-      );
-    }
-    return hadExisting;
+    return this.streamWatcherStore.clearByStreamer(streamerUserId);
   }
 
   private clearStreamWatchersByParticipantId(participantId: string) {
@@ -1691,45 +1410,16 @@ export class VoiceRoom extends DurableObject<Env> {
       return;
     }
 
-    // Validate HMAC-signed voice_token: "participant_id:room_slug:timestamp.signature"
-    const dotIdx = d.voice_token.lastIndexOf(".");
-    if (dotIdx === -1) {
-      this.sendTo(ws, {
-        op: Op.Error,
-        d: {
-          code: CloseCode.AuthenticationFailed,
-          message: "Invalid voice token format",
-        },
-      });
-      return;
-    }
-
-    const payload = d.voice_token.slice(0, dotIdx);
-    const sig = d.voice_token.slice(dotIdx + 1);
-    const parts = payload.split(":");
-
-    if (
-      parts.length < 3 ||
-      parts[0] !== d.participant_id ||
-      parts[1] !== this.roomSlug
-    ) {
-      this.sendTo(ws, {
-        op: Op.Error,
-        d: {
-          code: CloseCode.AuthenticationFailed,
-          message: "Invalid voice token",
-        },
-      });
-      return;
-    }
-
-    const tokenTimestamp = parseInt(parts[2], 10);
-    const TOKEN_VALIDITY_MS = 60 * 60 * 1000;
-    const tokenAge = Date.now() - tokenTimestamp;
-    const tokenSubject = parts.length >= 4 ? parts[3] : "";
     const admission = this.getVoiceAttachment(ws)?.admission;
+    const verification = await verifyVoiceToken({
+      token: d.voice_token,
+      participantId: d.participant_id,
+      roomSlug: this.roomSlug,
+      secret: this.env.CALLS_APP_SECRET,
+      expectedSubject: admission?.subject,
+    });
 
-    if (!admission || tokenSubject !== admission.subject) {
+    if (!admission || verification.reason === "subject") {
       this.sendTo(ws, {
         op: Op.Error,
         d: {
@@ -1742,10 +1432,30 @@ export class VoiceRoom extends DurableObject<Env> {
       } catch {}
       return;
     }
-    const clerkUserId =
-      admission.accessMode === "authenticated" ? admission.subject : undefined;
 
-    if (isNaN(tokenTimestamp) || tokenAge > TOKEN_VALIDITY_MS) {
+    if (verification.reason === "format") {
+      this.sendTo(ws, {
+        op: Op.Error,
+        d: {
+          code: CloseCode.AuthenticationFailed,
+          message: "Invalid voice token format",
+        },
+      });
+      return;
+    }
+
+    if (verification.reason === "identity") {
+      this.sendTo(ws, {
+        op: Op.Error,
+        d: {
+          code: CloseCode.AuthenticationFailed,
+          message: "Invalid voice token",
+        },
+      });
+      return;
+    }
+
+    if (verification.reason === "expired") {
       this.sendTo(ws, {
         op: Op.Error,
         d: {
@@ -1756,23 +1466,7 @@ export class VoiceRoom extends DurableObject<Env> {
       return;
     }
 
-    try {
-      const key = await crypto.subtle.importKey(
-        "raw",
-        new TextEncoder().encode(this.env.CALLS_APP_SECRET),
-        { name: "HMAC", hash: "SHA-256" },
-        false,
-        ["verify"],
-      );
-      const sigBytes = Uint8Array.from(atob(sig), (c) => c.charCodeAt(0));
-      const valid = await crypto.subtle.verify(
-        "HMAC",
-        key,
-        sigBytes,
-        new TextEncoder().encode(payload),
-      );
-      if (!valid) throw new Error("Invalid signature");
-    } catch {
+    if (verification.reason === "signature") {
       this.sendTo(ws, {
         op: Op.Error,
         d: {
@@ -1782,6 +1476,9 @@ export class VoiceRoom extends DurableObject<Env> {
       });
       return;
     }
+
+    const clerkUserId =
+      admission.accessMode === "authenticated" ? admission.subject : undefined;
 
     const connectionId = crypto.randomUUID();
     const attachment: VoiceAttachment = {
@@ -2811,43 +2508,14 @@ export class VoiceRoom extends DurableObject<Env> {
         return;
       }
 
-      const existingRows = [
-        ...this.sql.exec(
-          `SELECT streamer_participant_id, viewer_participant_id
-         FROM stream_watchers
-         WHERE streamer_user_id = ? AND viewer_user_id = ?`,
-          streamerUserId,
-          callerUserId,
-        ),
-      ];
-      const alreadyUpToDate =
-        existingRows.length > 0 &&
-        (existingRows[0].streamer_participant_id as string) ===
-          streamerParticipantId &&
-        (existingRows[0].viewer_participant_id as string) === pid;
-
-      if (!alreadyUpToDate) {
-        this.sql.exec(
-          `INSERT INTO stream_watchers (
-             streamer_user_id,
-             viewer_user_id,
-             streamer_participant_id,
-             viewer_participant_id,
-             created_at
-           )
-           VALUES (?, ?, ?, ?, ?)
-           ON CONFLICT(streamer_user_id, viewer_user_id) DO UPDATE SET
-             streamer_participant_id = excluded.streamer_participant_id,
-             viewer_participant_id = excluded.viewer_participant_id,
-             created_at = excluded.created_at`,
-          streamerUserId,
-          callerUserId,
-          streamerParticipantId,
-          pid,
-          Date.now(),
-        );
-        this.broadcastStreamWatcherSnapshot();
-      }
+      const didChange = this.streamWatcherStore.upsert({
+        streamerUserId,
+        viewerUserId: callerUserId,
+        streamerParticipantId,
+        viewerParticipantId: pid,
+        createdAt: Date.now(),
+      });
+      if (didChange) this.broadcastStreamWatcherSnapshot();
       return;
     }
 
@@ -3012,19 +2680,7 @@ export class VoiceRoom extends DurableObject<Env> {
       expires_at: now + DEMO_CHAT_TTL_MS,
     };
 
-    this.pruneDemoChatMessages(now);
-    this.sql.exec(
-      `INSERT INTO demo_chat_messages (id, participant_id, author_name, content, gif_json, created_at, expires_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      message.id,
-      message.participant_id,
-      message.author_name,
-      message.content,
-      message.gif ? JSON.stringify(message.gif) : null,
-      message.created_at,
-      message.expires_at,
-    );
-    this.pruneDemoChatOverflow();
+    this.demoChatStore.append(message, now);
 
     this.broadcast({
       op: Op.VoiceAppEvent,
@@ -3038,41 +2694,7 @@ export class VoiceRoom extends DurableObject<Env> {
 
   private sendDemoChatHistory(ws: WebSocket) {
     const now = Date.now();
-    this.pruneDemoChatMessages(now);
-
-    const rows = [
-      ...this.sql.exec(
-        `SELECT id, participant_id, author_name, content, gif_json, created_at, expires_at
-       FROM demo_chat_messages
-       WHERE expires_at > ?
-       ORDER BY created_at ASC
-       LIMIT ?`,
-        now,
-        DEMO_CHAT_MAX_MESSAGES,
-      ),
-    ];
-
-    const messages: DemoChatMessage[] = rows.map((row) => {
-      const gifJson = row.gif_json as string | null;
-      let gif: DemoChatGifPayload | undefined;
-      if (gifJson) {
-        try {
-          gif = JSON.parse(gifJson) as DemoChatGifPayload;
-        } catch {
-          gif = undefined;
-        }
-      }
-
-      return {
-        id: row.id as string,
-        participant_id: row.participant_id as string,
-        author_name: row.author_name as string,
-        content: row.content as string,
-        ...(gif ? { gif } : {}),
-        created_at: row.created_at as number,
-        expires_at: row.expires_at as number,
-      };
-    });
+    const messages = this.demoChatStore.listLive(now);
 
     this.sendTo(ws, {
       op: Op.VoiceAppEvent,
@@ -3143,22 +2765,6 @@ export class VoiceRoom extends DurableObject<Env> {
       normalized === "messagecreate" ||
       normalized === "messagesend" ||
       normalized === "channelmessagecreate"
-    );
-  }
-
-  private pruneDemoChatMessages(now = Date.now()) {
-    this.sql.exec(`DELETE FROM demo_chat_messages WHERE expires_at <= ?`, now);
-  }
-
-  private pruneDemoChatOverflow() {
-    this.sql.exec(
-      `DELETE FROM demo_chat_messages
-       WHERE id NOT IN (
-         SELECT id FROM demo_chat_messages
-         ORDER BY created_at DESC
-         LIMIT ?
-       )`,
-      DEMO_CHAT_MAX_MESSAGES,
     );
   }
 
@@ -3736,49 +3342,7 @@ export class VoiceRoom extends DurableObject<Env> {
     method: string,
     path: string,
   ): Promise<Record<string, unknown>> {
-    const url = `https://rtc.live.cloudflare.com/v1/apps/${this.env.CALLS_APP_ID}/${path}`;
-
-    for (let attempt = 0; attempt < 2; attempt++) {
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 10_000);
-      try {
-        const resp = await fetch(url, {
-          method,
-          signal: controller.signal,
-          headers: {
-            Authorization: `Bearer ${this.env.CALLS_APP_SECRET}`,
-          },
-        });
-
-        const text = await resp.text();
-
-        if (resp.ok) return JSON.parse(text);
-
-        // Retry once on 5xx (server error) after a short delay
-        if (resp.status >= 500 && attempt === 0) {
-          sfuLog.warn(
-            `${method} ${path} returned ${resp.status}, retrying in 500ms...`,
-          );
-          await new Promise((r) => setTimeout(r, 500));
-          continue;
-        }
-
-        sfuLog.error(
-          "SFU request failed",
-          toSafeSfuFailure({
-            attempt,
-            operation: `${method} ${path}`,
-            requestId: resp.headers.get("cf-ray"),
-            status: resp.status,
-          }),
-        );
-        throw new Error(`SFU ${method} ${path} failed (${resp.status})`);
-      } finally {
-        clearTimeout(timer);
-      }
-    }
-
-    throw new Error(`SFU ${method} ${path} failed after retry`);
+    return this.sfuClient.fetch(method, path);
   }
 
   private async sfuPost(
@@ -3800,52 +3364,7 @@ export class VoiceRoom extends DurableObject<Env> {
     path: string,
     body: Record<string, unknown>,
   ): Promise<Record<string, unknown>> {
-    const url = `https://rtc.live.cloudflare.com/v1/apps/${this.env.CALLS_APP_ID}/${path}`;
-    const jsonBody = JSON.stringify(body);
-
-    for (let attempt = 0; attempt < 2; attempt++) {
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 10_000);
-      try {
-        const resp = await fetch(url, {
-          method,
-          signal: controller.signal,
-          headers: {
-            Authorization: `Bearer ${this.env.CALLS_APP_SECRET}`,
-            "Content-Type": "application/json",
-          },
-          body: jsonBody,
-        });
-
-        const text = await resp.text();
-
-        if (resp.ok) return JSON.parse(text);
-
-        // Retry once on 5xx (server error) after a short delay
-        if (resp.status >= 500 && attempt === 0) {
-          sfuLog.warn(
-            `${method} ${path} returned ${resp.status}, retrying in 500ms...`,
-          );
-          await new Promise((r) => setTimeout(r, 500));
-          continue;
-        }
-
-        sfuLog.error(
-          "SFU request failed",
-          toSafeSfuFailure({
-            attempt,
-            operation: `${method} ${path}`,
-            requestId: resp.headers.get("cf-ray"),
-            status: resp.status,
-          }),
-        );
-        throw new Error(`SFU ${method} ${path} failed (${resp.status})`);
-      } finally {
-        clearTimeout(timer);
-      }
-    }
-
-    throw new Error(`SFU ${method} ${path} failed after retry`);
+    return this.sfuClient.request(method, path, body);
   }
 
   private sendTo(ws: WebSocket, msg: ServerMsg) {
