@@ -30,6 +30,7 @@ import {
 } from "../src/lib/voice-presence";
 import { filterVoiceChannelStatesPayload } from "../src/lib/voice-channel-state-filter";
 import { getRealtimeAdmissionFromHeaders } from "./realtime-admission";
+import { resolveMeetingProfile } from "./meeting-room/profile-resolver";
 import { issueVoiceToken } from "./voice-token";
 
 const log = clog("ChatGW");
@@ -2376,101 +2377,14 @@ export class MeetingRoom extends DurableObject<Env> {
     avatarDisplay?: string | null;
   } | null> {
     try {
-      // 1. Check D1 first for custom avatar (R2) and username
-      let d1Name: string | null = null;
-      let d1Username: string | null = null;
-      let d1DisplayName: string | null = null;
-      let d1Avatar: string | null = null; // R2 custom upload only
-      let d1AnyAvatar: string | null = null; // Any stored avatar (incl. Clerk URL from ensureUser)
-      let d1AvatarDisplay: string | null = null;
-      try {
-        const row = await this.env.DB.prepare(
-          "SELECT username, display_name, avatar_url, avatar_display FROM users WHERE id = ?",
-        )
-          .bind(clerkUserId)
-          .first<{
-            username: string;
-            display_name: string | null;
-            avatar_url: string | null;
-            avatar_display: string | null;
-          }>();
-        if (row) {
-          d1Username = row.username;
-          d1DisplayName = row.display_name;
-          d1Name = row.display_name?.trim() || row.username;
-          d1AnyAvatar = row.avatar_url;
-          d1AvatarDisplay = row.avatar_display;
-          // Only use D1 avatar if it's an R2 path (custom upload)
-          if (row.avatar_url?.startsWith("/api/avatars/")) {
-            d1Avatar = row.avatar_url;
-          }
-        }
-      } catch (e) {
-        meetingLog.error("D1 profile fetch failed:", e);
-      }
-
-      // 2. Check KV cache for Clerk profile (5min TTL)
-      const cacheKey = `clerk:profile:${clerkUserId}`;
-      type ClerkCached = { name: string; imageUrl?: string };
-      let clerkData: ClerkCached | null = null;
-      try {
-        clerkData = await this.env.CACHE.get<ClerkCached>(cacheKey, "json");
-      } catch {
-        /* cache miss or parse error */
-      }
-
-      if (!clerkData) {
-        // 3. Fetch from Clerk API (cache miss)
-        const res = await fetch(
-          `https://api.clerk.com/v1/users/${clerkUserId}`,
-          {
-            headers: {
-              Authorization: `Bearer ${this.env.CLERK_SECRET_KEY}`,
-              "Content-Type": "application/json",
-            },
-          },
-        );
-        if (!res.ok) {
-          meetingLog.error(`Clerk API error: ${res.status}`);
-          if (d1Name) {
-            return {
-              name: d1Name,
-              username: d1Username ?? d1Name,
-              displayName: d1DisplayName,
-              avatarUrl: d1Avatar ?? d1AnyAvatar ?? undefined,
-              avatarDisplay: d1AvatarDisplay,
-            };
-          }
-          return null;
-        }
-        const user = (await res.json()) as {
-          username?: string;
-          first_name?: string;
-          last_name?: string;
-          image_url?: string;
-          unsafe_metadata?: { displayName?: string };
-        };
-        const clerkName =
-          user.unsafe_metadata?.displayName ||
-          [user.first_name, user.last_name].filter(Boolean).join(" ") ||
-          user.username ||
-          "Guest";
-
-        clerkData = { name: clerkName, imageUrl: user.image_url };
-
-        // Store in KV with 5min TTL (fire-and-forget)
-        this.env.CACHE.put(cacheKey, JSON.stringify(clerkData), {
-          expirationTtl: 300,
-        }).catch(() => {});
-      }
-
-      return {
-        name: d1Name || clerkData.name,
-        username: d1Username ?? d1Name ?? clerkData.name,
-        displayName: d1DisplayName,
-        avatarUrl: d1Avatar ?? clerkData.imageUrl,
-        avatarDisplay: d1AvatarDisplay,
-      };
+      return await resolveMeetingProfile({
+        db: this.env.DB,
+        cache: this.env.CACHE,
+        clerkSecret: this.env.CLERK_SECRET_KEY,
+        fetch,
+        log: meetingLog,
+        userId: clerkUserId,
+      });
     } catch (err) {
       meetingLog.error("Failed to fetch Clerk profile:", err);
       return null;
