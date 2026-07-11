@@ -13,6 +13,7 @@ export default defineConfig({
   ],
   test: {
     include: ["worker/__tests__/**/*.worker.test.ts"],
+    silent: process.env.CI === "true",
   },
   resolve: {
     alias: {
