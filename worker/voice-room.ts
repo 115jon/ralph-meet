@@ -48,6 +48,7 @@ import {
 } from "./voice-room/demo-chat-store";
 import { StreamWatcherStore } from "./voice-room/stream-watcher-store";
 import { ListenTogetherStore } from "./voice-room/listen-together-store";
+import { RadioStationResolver } from "./voice-room/radio-station-resolver";
 
 const log = clog("VoiceGW");
 const roomLog = clog("VoiceRoom");
@@ -149,14 +150,9 @@ const SFU_SESSION_REUSE_GRACE_MS = 20_000;
 const DEMO_CHAT_TTL_MS = 10 * 60 * 1000;
 const DEMO_CHAT_MAX_MESSAGES = 75;
 const DEMO_CHAT_MAX_CONTENT_LENGTH = 1_000;
-const RADIO_BROWSER_API_HOST = "de1.api.radio-browser.info";
 const RADIO_STATION_UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const MAX_RADIO_STATION_LOOKUPS_PER_ENQUEUE = 5;
-const RADIO_STATION_CACHE_TTL_MS = 60_000;
-const RADIO_STATION_FETCH_TIMEOUT_MS = 5_000;
-const RADIO_STATION_RESOLUTIONS_PER_MINUTE = 10;
-const RADIO_STATION_RESOLUTION_WINDOW_MS = 60_000;
 const MAX_SOUNDBOARD_DATA_URL_BYTES = 512 * 1024;
 
 // ── VoiceRoom Durable Object ────────────────────────────────────────────────
@@ -168,19 +164,8 @@ export class VoiceRoom extends DurableObject<Env> {
   private demoChatStore: DemoChatStore;
   private streamWatcherStore: StreamWatcherStore;
   private listenTogetherStore: ListenTogetherStore;
+  private radioStationResolver: RadioStationResolver;
   private roomSlug: string = "";
-  private radioStationCache = new Map<
-    string,
-    {
-      expiresAt: number;
-      station: Awaited<ReturnType<VoiceRoom["resolveRadioStation"]>>;
-    }
-  >();
-  private radioStationResolutions = new Map<
-    string,
-    Promise<Awaited<ReturnType<VoiceRoom["resolveRadioStation"]>>>
-  >();
-  private radioStationResolutionAttempts = new Map<string, number[]>();
   private listenTogetherCommandQueue: Promise<void> = Promise.resolve();
 
   constructor(ctx: DurableObjectState, env: Env) {
@@ -194,6 +179,9 @@ export class VoiceRoom extends DurableObject<Env> {
       this.sql,
       () => this.roomSlug,
     );
+    this.radioStationResolver = new RadioStationResolver({
+      fetch: (...args) => globalThis.fetch(...args),
+    });
 
     // Removed setWebSocketAutoResponse.
     // Cloudflare's auto-response absorbs messages at the edge, preventing the DO
@@ -1035,96 +1023,11 @@ export class VoiceRoom extends DurableObject<Env> {
     return sanitizedEntries;
   }
 
-  private canResolveRadioStationForUser(userId: string | null): boolean {
-    const now = Date.now();
-    const key = userId ?? "anonymous";
-    const attempts = (
-      this.radioStationResolutionAttempts.get(key) ?? []
-    ).filter(
-      (attemptedAt) => now - attemptedAt < RADIO_STATION_RESOLUTION_WINDOW_MS,
-    );
-    if (attempts.length >= RADIO_STATION_RESOLUTIONS_PER_MINUTE) {
-      return false;
-    }
-    attempts.push(now);
-    this.radioStationResolutionAttempts.set(key, attempts);
-    return true;
-  }
-
   private async resolveRadioStation(
     stationUuid: string,
     callerUserId: string | null,
   ) {
-    const cached = this.radioStationCache.get(stationUuid);
-    if (cached && cached.expiresAt > Date.now()) return cached.station;
-
-    const inFlight = this.radioStationResolutions.get(stationUuid);
-    if (inFlight) return inFlight;
-    if (!this.canResolveRadioStationForUser(callerUserId)) return null;
-
-    const resolution = this.fetchRadioStation(stationUuid);
-    this.radioStationResolutions.set(stationUuid, resolution);
-    try {
-      return await resolution;
-    } finally {
-      this.radioStationResolutions.delete(stationUuid);
-    }
-  }
-
-  private async fetchRadioStation(stationUuid: string) {
-    interface RadioBrowserStation {
-      stationuuid?: unknown;
-      name?: unknown;
-      url_resolved?: unknown;
-      homepage?: unknown;
-      favicon?: unknown;
-    }
-
-    let resolvedStation: Awaited<ReturnType<VoiceRoom["resolveRadioStation"]>> =
-      null;
-    const controller = new AbortController();
-    const timeout = setTimeout(
-      () => controller.abort(),
-      RADIO_STATION_FETCH_TIMEOUT_MS,
-    );
-    try {
-      const response = await fetch(
-        `https://${RADIO_BROWSER_API_HOST}/json/stations/byuuid/${encodeURIComponent(stationUuid)}`,
-        { signal: controller.signal },
-      );
-      if (!response.ok) return null;
-      const stations = (await response.json()) as unknown;
-      if (!Array.isArray(stations) || stations.length !== 1) return null;
-      const station = stations[0] as RadioBrowserStation;
-      if (station.stationuuid !== stationUuid) return null;
-      const title =
-        typeof station.name === "string"
-          ? station.name.trim().slice(0, 160)
-          : "";
-      const streamUrl = this.sanitizePublicHttpsUrl(station.url_resolved);
-      if (!title || !streamUrl) return null;
-
-      resolvedStation = {
-        kind: "radio" as const,
-        id: stationUuid,
-        provider: "radio" as const,
-        title,
-        artworkUrl: this.sanitizePublicHttpsUrl(station.favicon),
-        canonicalUrl:
-          this.sanitizePublicHttpsUrl(station.homepage) ?? streamUrl.origin,
-        streamUrl: streamUrl.href,
-        sourceLabel: "Live Radio",
-      };
-    } catch {
-      resolvedStation = null;
-    } finally {
-      clearTimeout(timeout);
-    }
-    this.radioStationCache.set(stationUuid, {
-      expiresAt: Date.now() + RADIO_STATION_CACHE_TTL_MS,
-      station: resolvedStation,
-    });
-    return resolvedStation;
+    return this.radioStationResolver.resolve(stationUuid, callerUserId);
   }
 
   private isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -1132,47 +1035,6 @@ export class VoiceRoom extends DurableObject<Env> {
       return false;
     const prototype = Object.getPrototypeOf(value);
     return prototype === Object.prototype || prototype === null;
-  }
-
-  private sanitizePublicHttpsUrl(value: unknown): URL | null {
-    if (typeof value !== "string" || value.length === 0 || value.length > 2048)
-      return null;
-    try {
-      const url = new URL(value);
-      const hostname = url.hostname.toLowerCase();
-      if (
-        url.protocol !== "https:" ||
-        url.username ||
-        url.password ||
-        hostname === "localhost" ||
-        hostname.endsWith(".localhost") ||
-        hostname.endsWith(".local") ||
-        this.isPrivateIpLiteral(hostname)
-      ) {
-        return null;
-      }
-      return url;
-    } catch {
-      return null;
-    }
-  }
-
-  private isPrivateIpLiteral(hostname: string): boolean {
-    const ipv4 = hostname.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
-    if (ipv4) {
-      const octets = ipv4.slice(1).map(Number);
-      if (octets.some((octet) => octet > 255)) return true;
-      const [first, second] = octets;
-      return (
-        first === 0 ||
-        first === 10 ||
-        first === 127 ||
-        (first === 169 && second === 254) ||
-        (first === 172 && second >= 16 && second <= 31) ||
-        (first === 192 && second === 168)
-      );
-    }
-    return hostname.includes(":");
   }
 
   private handleListenTogetherCommand(
