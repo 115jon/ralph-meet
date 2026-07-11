@@ -1,0 +1,98 @@
+name: Desktop Validation
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/desktop-validation.yml"
+      - "desktop/**"
+      - "packages/kova-react/**"
+      - "src/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - "tsconfig*.json"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CEF_PATH: D:\cef
+
+concurrency:
+  group: desktop-validation-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  desktop:
+    name: desktop
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          submodules: recursive
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@008330803749db0355799c700092d9a85fd074e9 # v6.0.9
+        with:
+          version: 10
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install desktop dependencies
+        run: pnpm install --filter ralph-meet-desktop... --frozen-lockfile
+
+      - name: Build shared package
+        run: pnpm --filter @kova/react build
+
+      - name: Build desktop frontend
+        run: pnpm --dir desktop run build:vite
+
+      - name: Restore CEF runtime cache
+        id: cef-cache
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: D:\cef
+          # Bump v1 when the cef-build-assets release asset changes.
+          key: desktop-cef-${{ runner.os }}-${{ runner.arch }}-v1
+
+      - name: Download custom CEF
+        if: steps.cef-cache.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: |
+          gh release download cef-build-assets --repo ${{ github.repository }} --pattern "cef-windows-x64.zip" --dir cef-temp
+          Expand-Archive -Path cef-temp/cef-windows-x64.zip -DestinationPath D:\cef
+          Remove-Item -Recurse -Force cef-temp
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Save CEF runtime cache
+        if: steps.cef-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: D:\cef
+          key: desktop-cef-${{ runner.os }}-${{ runner.arch }}-v1
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable (2026-07-11)
+        with:
+          components: llvm-tools
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@42dc69e1aa15d09112580998cf2ef0119e2e91ae # v2
+        with:
+          workspaces: desktop/src-tauri -> target
+
+      - name: Check desktop Rust crate
+        # The existing desktop lockfile predates the current manifest and is
+        # intentionally not enforced by the tag-driven Desktop Release job.
+        # Match that established release behavior instead of making lockfile
+        # repair part of this validation workflow.
+        run: cargo check --manifest-path desktop/src-tauri/Cargo.toml
