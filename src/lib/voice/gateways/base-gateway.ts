@@ -69,7 +69,6 @@ export abstract class BaseGateway<
     }
 
     this.isIdentified = false;
-    this.msgQueue = [];
 
     this.ws = protocols ? new WebSocket(url, protocols) : new WebSocket(url);
 
@@ -220,6 +219,7 @@ export abstract class BaseGateway<
       this.ws = null;
     }
     this.isIdentified = false;
+    this.msgQueue = [];
   }
 
   public forceReconnect() {

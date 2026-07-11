@@ -181,34 +181,30 @@ export async function makeSyntheticRangeResponse(
   upstream: Response,
   range: string,
 ) {
-  const match = range.trim().match(/^bytes=(\d*)-(\d*)$/);
-  if (!match) return null;
-
-  const contentLength = Number(upstream.headers.get("Content-Length"));
-  if (!Number.isFinite(contentLength) || contentLength <= 0) return null;
-
-  const startText = match[1];
-  const endText = match[2];
-  let start: number;
-  let end: number;
-
-  if (!startText && endText) {
-    const suffixLength = Number(endText);
-    if (!Number.isFinite(suffixLength) || suffixLength <= 0) return null;
-    start = Math.max(0, contentLength - suffixLength);
-    end = contentLength - 1;
-  } else {
-    start = Number(startText);
-    end = endText ? Number(endText) : contentLength - 1;
+  const sourceRange = upstream.headers
+    .get("Content-Range")
+    ?.match(/^bytes\s+(\d+)-(\d+)\/(\d+)$/i);
+  const sourceStart = sourceRange ? Number(sourceRange[1]) : 0;
+  const sourceEnd = sourceRange
+    ? Number(sourceRange[2])
+    : Number(upstream.headers.get("Content-Length")) - 1;
+  const contentLength = sourceRange
+    ? Number(sourceRange[3])
+    : Number(upstream.headers.get("Content-Length"));
+  if (
+    !Number.isFinite(sourceStart) ||
+    !Number.isFinite(sourceEnd) ||
+    !Number.isFinite(contentLength) ||
+    sourceStart < 0 ||
+    sourceEnd < sourceStart ||
+    contentLength <= sourceEnd
+  ) {
+    return null;
   }
 
-  if (
-    !Number.isFinite(start) ||
-    !Number.isFinite(end) ||
-    start < 0 ||
-    end < start ||
-    start >= contentLength
-  ) {
+  const requestedRange = parseByteRange(range, contentLength);
+  if (requestedRange === null) return null;
+  if (requestedRange === "invalid") {
     return new Response(null, {
       status: 416,
       headers: {
@@ -218,8 +214,11 @@ export async function makeSyntheticRangeResponse(
     });
   }
 
+  const { start, end } = requestedRange;
+  if (start < sourceStart || end > sourceEnd) return null;
+
   const buffer = new Uint8Array(await upstream.arrayBuffer());
-  const sliced = buffer.slice(start, Math.min(end + 1, buffer.length));
+  const sliced = buffer.slice(start - sourceStart, end - sourceStart + 1);
   const headers = buildProxyHeaders(upstream.headers);
   headers.set("Accept-Ranges", "bytes");
   headers.set(
@@ -232,6 +231,25 @@ export async function makeSyntheticRangeResponse(
     status: 206,
     headers,
   });
+}
+
+function upstreamRangeMatchesRequest(
+  upstreamContentRange: string | null,
+  requestedRange: string,
+) {
+  const upstreamRange = upstreamContentRange?.match(
+    /^bytes\s+(\d+)-(\d+)\/(\d+)$/i,
+  );
+  if (!upstreamRange) return false;
+
+  const contentLength = Number(upstreamRange[3]);
+  const parsedRequest = parseByteRange(requestedRange, contentLength);
+  if (!parsedRequest || parsedRequest === "invalid") return false;
+
+  return (
+    Number(upstreamRange[1]) === parsedRequest.start &&
+    Number(upstreamRange[2]) === parsedRequest.end
+  );
 }
 
 export function normalizeListenTogetherUpstreamRange(
@@ -546,7 +564,15 @@ export async function proxyListenTogetherStream(
       );
     }
 
-    if (includeBody && range && upstream.status === 200) {
+    if (
+      includeBody &&
+      range &&
+      (upstream.status === 200 ||
+        !upstreamRangeMatchesRequest(
+          upstream.headers.get("Content-Range"),
+          range,
+        ))
+    ) {
       const syntheticRange = await makeSyntheticRangeResponse(
         upstream.clone(),
         range,

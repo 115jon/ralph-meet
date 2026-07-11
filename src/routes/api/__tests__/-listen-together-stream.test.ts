@@ -71,6 +71,31 @@ describe("listen together stream proxy helpers", () => {
     ).toBe("bytes=0-1");
   });
 
+  it("trims an upstream partial response that exceeds the requested range", async () => {
+    const upstream = new Response(
+      new Uint8Array([100, 101, 102, 103, 104, 105, 106, 107, 108, 109]),
+      {
+        status: 206,
+        headers: {
+          "Content-Length": "10",
+          "Content-Range": "bytes 100-109/1000",
+          "Content-Type": "audio/mp4",
+        },
+      },
+    );
+
+    const response = await makeSyntheticRangeResponse(
+      upstream,
+      "bytes=102-105",
+    );
+    expect(response?.status).toBe(206);
+    expect(response?.headers.get("Content-Range")).toBe("bytes 102-105/1000");
+    expect(response?.headers.get("Content-Length")).toBe("4");
+    expect(Array.from(new Uint8Array(await response!.arrayBuffer()))).toEqual([
+      102, 103, 104, 105,
+    ]);
+  });
+
   it("uses a tiny probe range for HEAD-style metadata requests", () => {
     expect(
       normalizeListenTogetherUpstreamRange(null, { includeBody: false }),
