@@ -43,6 +43,11 @@ import { getNextVoicePresenceAlarmTime } from "../src/lib/voice-presence";
 import { toSafeSfuFailure } from "./sfu-diagnostics";
 import { getRealtimeAdmissionFromHeaders } from "./realtime-admission";
 import { verifyVoiceToken } from "./voice-token";
+import {
+  DemoChatStore,
+  type DemoChatGifPayload,
+  type DemoChatMessage,
+} from "./voice-room/demo-chat-store";
 
 const log = clog("VoiceGW");
 const roomLog = clog("VoiceRoom");
@@ -124,26 +129,6 @@ interface GatewayMessage {
 
 type ServerMsg = GatewayMessage;
 
-interface DemoChatGifPayload {
-  url: string;
-  content_type: "image/gif" | "video/mp4";
-  title?: string;
-  source_url?: string;
-  provider?: "klipy" | "tenor";
-  width?: number;
-  height?: number;
-}
-
-interface DemoChatMessage {
-  id: string;
-  participant_id: string;
-  author_name: string;
-  content: string;
-  gif?: DemoChatGifPayload;
-  created_at: number;
-  expires_at: number;
-}
-
 // WebSocket attachment for voice sessions
 interface VoiceAttachment {
   admission?: {
@@ -180,6 +165,7 @@ export class VoiceRoom extends DurableObject<Env> {
   public ctx: DurableObjectState;
   public env: Env;
   private sql: SqlStorage;
+  private demoChatStore: DemoChatStore;
   private roomSlug: string = "";
   private radioStationCache = new Map<
     string,
@@ -200,6 +186,7 @@ export class VoiceRoom extends DurableObject<Env> {
     this.ctx = ctx;
     this.env = env;
     this.sql = this.ctx.storage.sql;
+    this.demoChatStore = new DemoChatStore(this.sql, DEMO_CHAT_MAX_MESSAGES);
 
     // Removed setWebSocketAutoResponse.
     // Cloudflare's auto-response absorbs messages at the edge, preventing the DO
@@ -556,7 +543,7 @@ export class VoiceRoom extends DurableObject<Env> {
     const now = Date.now();
     const zombies: string[] = [];
 
-    this.pruneDemoChatMessages(now);
+    this.demoChatStore.pruneExpired(now);
 
     // Check active participants for zombie timeouts using SQLite
     const participants = this.sql.exec(
@@ -2991,19 +2978,7 @@ export class VoiceRoom extends DurableObject<Env> {
       expires_at: now + DEMO_CHAT_TTL_MS,
     };
 
-    this.pruneDemoChatMessages(now);
-    this.sql.exec(
-      `INSERT INTO demo_chat_messages (id, participant_id, author_name, content, gif_json, created_at, expires_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      message.id,
-      message.participant_id,
-      message.author_name,
-      message.content,
-      message.gif ? JSON.stringify(message.gif) : null,
-      message.created_at,
-      message.expires_at,
-    );
-    this.pruneDemoChatOverflow();
+    this.demoChatStore.append(message, now);
 
     this.broadcast({
       op: Op.VoiceAppEvent,
@@ -3017,41 +2992,7 @@ export class VoiceRoom extends DurableObject<Env> {
 
   private sendDemoChatHistory(ws: WebSocket) {
     const now = Date.now();
-    this.pruneDemoChatMessages(now);
-
-    const rows = [
-      ...this.sql.exec(
-        `SELECT id, participant_id, author_name, content, gif_json, created_at, expires_at
-       FROM demo_chat_messages
-       WHERE expires_at > ?
-       ORDER BY created_at ASC
-       LIMIT ?`,
-        now,
-        DEMO_CHAT_MAX_MESSAGES,
-      ),
-    ];
-
-    const messages: DemoChatMessage[] = rows.map((row) => {
-      const gifJson = row.gif_json as string | null;
-      let gif: DemoChatGifPayload | undefined;
-      if (gifJson) {
-        try {
-          gif = JSON.parse(gifJson) as DemoChatGifPayload;
-        } catch {
-          gif = undefined;
-        }
-      }
-
-      return {
-        id: row.id as string,
-        participant_id: row.participant_id as string,
-        author_name: row.author_name as string,
-        content: row.content as string,
-        ...(gif ? { gif } : {}),
-        created_at: row.created_at as number,
-        expires_at: row.expires_at as number,
-      };
-    });
+    const messages = this.demoChatStore.listLive(now);
 
     this.sendTo(ws, {
       op: Op.VoiceAppEvent,
@@ -3122,22 +3063,6 @@ export class VoiceRoom extends DurableObject<Env> {
       normalized === "messagecreate" ||
       normalized === "messagesend" ||
       normalized === "channelmessagecreate"
-    );
-  }
-
-  private pruneDemoChatMessages(now = Date.now()) {
-    this.sql.exec(`DELETE FROM demo_chat_messages WHERE expires_at <= ?`, now);
-  }
-
-  private pruneDemoChatOverflow() {
-    this.sql.exec(
-      `DELETE FROM demo_chat_messages
-       WHERE id NOT IN (
-         SELECT id FROM demo_chat_messages
-         ORDER BY created_at DESC
-         LIMIT ?
-       )`,
-      DEMO_CHAT_MAX_MESSAGES,
     );
   }
 
