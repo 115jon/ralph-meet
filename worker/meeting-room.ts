@@ -30,6 +30,7 @@ import {
 } from "../src/lib/voice-presence";
 import { filterVoiceChannelStatesPayload } from "../src/lib/voice-channel-state-filter";
 import { getRealtimeAdmissionFromHeaders } from "./realtime-admission";
+import { issueVoiceToken } from "./voice-token";
 
 const log = clog("ChatGW");
 const meetingLog = clog("MeetingRoom");
@@ -1563,22 +1564,12 @@ export class MeetingRoom extends DurableObject<Env> {
         meetingLog.warn("CALLS_APP_SECRET not set, skipping voice token");
         return "";
       }
-      const roomSlug = this.roomSlug ?? "unknown";
-      const payload = `${participantId}:${roomSlug}:${Date.now()}:${clerkUserId || "anonymous"}`;
-      const key = await crypto.subtle.importKey(
-        "raw",
-        new TextEncoder().encode(this.env.CALLS_APP_SECRET),
-        { name: "HMAC", hash: "SHA-256" },
-        false,
-        ["sign"],
-      );
-      const sigBuf = await crypto.subtle.sign(
-        "HMAC",
-        key,
-        new TextEncoder().encode(payload),
-      );
-      const sig = btoa(String.fromCharCode(...new Uint8Array(sigBuf)));
-      return `${payload}.${sig}`;
+      return await issueVoiceToken({
+        participantId,
+        roomSlug: this.roomSlug ?? "unknown",
+        subject: clerkUserId,
+        secret: this.env.CALLS_APP_SECRET,
+      });
     } catch (err) {
       meetingLog.error("Voice token generation failed:", err);
       return "";
@@ -2377,9 +2368,7 @@ export class MeetingRoom extends DurableObject<Env> {
 
   // ── Clerk profile verification ─────────────────────────────────────────
 
-  private async fetchClerkProfile(
-    clerkUserId: string,
-  ): Promise<{
+  private async fetchClerkProfile(clerkUserId: string): Promise<{
     name: string;
     username?: string;
     displayName?: string | null;

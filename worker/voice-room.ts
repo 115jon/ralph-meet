@@ -42,6 +42,7 @@ import {
 import { getNextVoicePresenceAlarmTime } from "../src/lib/voice-presence";
 import { toSafeSfuFailure } from "./sfu-diagnostics";
 import { getRealtimeAdmissionFromHeaders } from "./realtime-admission";
+import { verifyVoiceToken } from "./voice-token";
 
 const log = clog("VoiceGW");
 const roomLog = clog("VoiceRoom");
@@ -1691,45 +1692,16 @@ export class VoiceRoom extends DurableObject<Env> {
       return;
     }
 
-    // Validate HMAC-signed voice_token: "participant_id:room_slug:timestamp.signature"
-    const dotIdx = d.voice_token.lastIndexOf(".");
-    if (dotIdx === -1) {
-      this.sendTo(ws, {
-        op: Op.Error,
-        d: {
-          code: CloseCode.AuthenticationFailed,
-          message: "Invalid voice token format",
-        },
-      });
-      return;
-    }
-
-    const payload = d.voice_token.slice(0, dotIdx);
-    const sig = d.voice_token.slice(dotIdx + 1);
-    const parts = payload.split(":");
-
-    if (
-      parts.length < 3 ||
-      parts[0] !== d.participant_id ||
-      parts[1] !== this.roomSlug
-    ) {
-      this.sendTo(ws, {
-        op: Op.Error,
-        d: {
-          code: CloseCode.AuthenticationFailed,
-          message: "Invalid voice token",
-        },
-      });
-      return;
-    }
-
-    const tokenTimestamp = parseInt(parts[2], 10);
-    const TOKEN_VALIDITY_MS = 60 * 60 * 1000;
-    const tokenAge = Date.now() - tokenTimestamp;
-    const tokenSubject = parts.length >= 4 ? parts[3] : "";
     const admission = this.getVoiceAttachment(ws)?.admission;
+    const verification = await verifyVoiceToken({
+      token: d.voice_token,
+      participantId: d.participant_id,
+      roomSlug: this.roomSlug,
+      secret: this.env.CALLS_APP_SECRET,
+      expectedSubject: admission?.subject,
+    });
 
-    if (!admission || tokenSubject !== admission.subject) {
+    if (!admission || verification.reason === "subject") {
       this.sendTo(ws, {
         op: Op.Error,
         d: {
@@ -1742,10 +1714,30 @@ export class VoiceRoom extends DurableObject<Env> {
       } catch {}
       return;
     }
-    const clerkUserId =
-      admission.accessMode === "authenticated" ? admission.subject : undefined;
 
-    if (isNaN(tokenTimestamp) || tokenAge > TOKEN_VALIDITY_MS) {
+    if (verification.reason === "format") {
+      this.sendTo(ws, {
+        op: Op.Error,
+        d: {
+          code: CloseCode.AuthenticationFailed,
+          message: "Invalid voice token format",
+        },
+      });
+      return;
+    }
+
+    if (verification.reason === "identity") {
+      this.sendTo(ws, {
+        op: Op.Error,
+        d: {
+          code: CloseCode.AuthenticationFailed,
+          message: "Invalid voice token",
+        },
+      });
+      return;
+    }
+
+    if (verification.reason === "expired") {
       this.sendTo(ws, {
         op: Op.Error,
         d: {
@@ -1756,23 +1748,7 @@ export class VoiceRoom extends DurableObject<Env> {
       return;
     }
 
-    try {
-      const key = await crypto.subtle.importKey(
-        "raw",
-        new TextEncoder().encode(this.env.CALLS_APP_SECRET),
-        { name: "HMAC", hash: "SHA-256" },
-        false,
-        ["verify"],
-      );
-      const sigBytes = Uint8Array.from(atob(sig), (c) => c.charCodeAt(0));
-      const valid = await crypto.subtle.verify(
-        "HMAC",
-        key,
-        sigBytes,
-        new TextEncoder().encode(payload),
-      );
-      if (!valid) throw new Error("Invalid signature");
-    } catch {
+    if (verification.reason === "signature") {
       this.sendTo(ws, {
         op: Op.Error,
         d: {
@@ -1782,6 +1758,9 @@ export class VoiceRoom extends DurableObject<Env> {
       });
       return;
     }
+
+    const clerkUserId =
+      admission.accessMode === "authenticated" ? admission.subject : undefined;
 
     const connectionId = crypto.randomUUID();
     const attachment: VoiceAttachment = {
