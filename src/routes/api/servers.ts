@@ -9,7 +9,11 @@ import {
   executeBroadcast,
   executeInvalidation,
 } from "@/services/service-helpers";
-import { createServer, listUserServers } from "@/services/server.service";
+import {
+  createServer,
+  listUserServers,
+  normalizeServerRecord,
+} from "@/services/server.service";
 
 // GET /api/servers — list servers the current user is a member of
 const GET = async ({ request, params: _params }: any) => {
@@ -26,7 +30,7 @@ const GET = async ({ request, params: _params }: any) => {
     () => listUserServers(db, userId),
   );
 
-  return apiSuccess(results);
+  return apiSuccess(results.map(normalizeServerRecord));
 };
 
 // POST /api/servers — create a new server

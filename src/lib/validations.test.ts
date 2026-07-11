@@ -7,6 +7,7 @@ import {
   PinMessageSchema,
   SendMessageSchema,
   UpdateRoleSchema,
+  UpdateServerSchema,
 } from "./validations";
 
 describe("Zod Validation Schemas", () => {
@@ -60,6 +61,31 @@ describe("Zod Validation Schemas", () => {
         icon_url: "/api/server-icons/abc123.png",
       });
       expect(result.success).toBe(true);
+    });
+  });
+
+  // ── UpdateServerSchema ────────────────────────────────────────────
+  describe("UpdateServerSchema", () => {
+    it("accepts boolean server flags alongside a name update", () => {
+      const result = UpdateServerSchema.safeParse({
+        name: "Renamed",
+        allow_public_shares: true,
+        show_source_in_shares: false,
+        allow_share_indexing: false,
+      });
+
+      expect(result.success).toBe(true);
+    });
+
+    it("rejects database integer flags at the API boundary", () => {
+      const result = UpdateServerSchema.safeParse({
+        name: "Renamed",
+        allow_public_shares: 1,
+        show_source_in_shares: 0,
+        allow_share_indexing: 0,
+      });
+
+      expect(result.success).toBe(false);
     });
   });
 

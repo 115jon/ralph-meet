@@ -1179,6 +1179,7 @@ export function useChatArea({
     canDeleteMessages,
     canBan,
     channelData,
+    dispatch,
     restoreInProgress,
     unreadSeparatorId,
     unreadCount,

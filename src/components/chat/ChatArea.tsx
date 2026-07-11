@@ -105,6 +105,7 @@ export default function ChatArea({
     canDeleteMessages,
     canBan,
     channelData,
+    dispatch,
     unreadSeparatorId,
     unreadCount,
     unreadSince,
@@ -432,6 +433,12 @@ export default function ChatArea({
           <ChannelSettingsModal
             serverId={(serverId ?? state.activeServerId)!}
             channel={channelData as Channel}
+            onUpdated={(updates) =>
+              dispatch({
+                type: "UPSERT_CHANNEL",
+                channel: { ...(channelData as Channel), ...updates },
+              })
+            }
             onClose={() => setLocalState({ showChannelSettings: false })}
           />
         )}
