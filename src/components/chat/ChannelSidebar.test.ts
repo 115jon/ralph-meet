@@ -1,11 +1,15 @@
+// @vitest-environment jsdom
+
 import { initialState } from "@/lib/chat-reducer";
 import type { DisplayNameStyle } from "@/lib/profile-customization";
 import { useChatStore } from "@/stores/chat-store";
 import { useVoiceActivityStore } from "@/stores/useVoiceActivityStore";
 import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
+import { useListenTogetherStore } from "@/stores/useListenTogetherStore";
+import { cleanup, render } from "@testing-library/react";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import ChannelSidebar from "./ChannelSidebar";
 
@@ -25,6 +29,90 @@ describe("ChannelSidebar voice member identities", () => {
       userSettings: {},
       _cache: {},
     });
+    useListenTogetherStore.setState({ rooms: {} });
+  });
+
+  afterEach(() => cleanup());
+
+  it("renders the current track beneath the connected voice channel", () => {
+    useChatStore.setState({ user: { id: "me", username: "me" } });
+    useListenTogetherStore.setState({
+      rooms: {
+        "room-1": {
+          localVolume: 1,
+          error: null,
+          snapshot: {
+            roomSlug: "room-1",
+            revision: 1,
+            paused: false,
+            currentEntryId: "entry-1",
+            anchorPositionMs: 0,
+            anchorUpdatedAt: 1_000,
+            lastUpdatedAt: 1_000,
+            positionMs: 5_000,
+            durationMs: 180_000,
+            currentEntry: {
+              entryId: "entry-1",
+              requestedAt: 1_000,
+              requester: {
+                userId: "u1",
+                displayName: "Alice",
+                avatarUrl: null,
+                avatarDisplay: null,
+              },
+              track: {
+                kind: "music",
+                id: "track-1",
+                provider: "youtube",
+                videoId: "video-1",
+                title: "Track One",
+                artist: "Artist",
+                album: null,
+                durationMs: 180_000,
+                artworkUrl: "https://img.example/track-1.jpg",
+                canonicalUrl: "https://www.youtube.com/watch?v=video-1",
+                sourceUrl: null,
+                sourceLabel: "YouTube",
+              },
+              importBatchId: null,
+              importBatchLabel: null,
+            },
+            queue: [],
+          },
+        },
+      },
+    });
+    expect(
+      useListenTogetherStore.getState().rooms["room-1"]?.snapshot?.currentEntry
+        ?.track.title,
+    ).toBe("Track One");
+
+    const { container } = render(
+      React.createElement(ChannelSidebar, {
+        channels: [
+          {
+            id: "vc-1",
+            server_id: "srv-1",
+            name: "Standup",
+            channel_type: "voice",
+            position: 0,
+            created_at: "2026-01-01T00:00:00Z",
+          },
+        ],
+        categories: [],
+        activeChannelId: "vc-1",
+        serverId: "srv-1",
+        serverName: "Server",
+        onSelect: () => {},
+        localVoiceChannelId: "vc-1",
+        localVoiceRoomSlug: "room-1",
+      }),
+    );
+    const markup = container.innerHTML;
+
+    expect(markup).toContain("Track One");
+    expect(markup).toContain("music");
+    expect(markup).toContain("0:05");
   });
 
   it("renders the latest display name for voice channel members", () => {
