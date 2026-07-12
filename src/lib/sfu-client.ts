@@ -358,6 +358,7 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
 
       // Reset circuit breakers on successful reconnect
       this.rtcSessionManager.resetCircuitBreakers();
+      this.emit("voice-ready", {});
 
       // Cleanup orphaned tracks from server state sync and enqueue existing tracks.
       // VoiceReady can be empty during reconnect races, so only a non-empty

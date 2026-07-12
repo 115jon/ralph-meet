@@ -94,6 +94,7 @@ export function VoiceListenTogetherManager({
   const snapshotRef = useRef<ListenTogetherStateSnapshot | null>(null);
   const roomSlugRef = useRef<string | null>(roomSlug ?? null);
   const [sourceAttempt, setSourceAttempt] = useState(0);
+  const [audioContextRevision, setAudioContextRevision] = useState(0);
   const [desktopAuthToken, setDesktopAuthToken] = useState<string | null>(() =>
     getDesktopAuthHandoffToken(),
   );
@@ -319,14 +320,20 @@ export function VoiceListenTogetherManager({
       !audio ||
       !sfu ||
       !loudnessEnabled ||
-      snapshot?.currentEntry?.track.kind !== "music" ||
-      audioProcessorConnectedRef.current
+      snapshot?.currentEntry?.track.kind !== "music"
     )
       return;
     if (typeof AudioContext === "undefined") return;
     const audioProcessor = audioProcessorRef.current;
     const context = sfu.audio?.getAudioContext?.();
     if (!context) return;
+    if (
+      audioProcessorConnectedRef.current &&
+      !audioProcessor.isConnectedTo(context)
+    ) {
+      audioProcessor.close();
+      audioProcessorConnectedRef.current = false;
+    }
     sfu.resumeAudioContext?.();
     if (!audioProcessor.connect(audio, context)) return;
     audioProcessorConnectedRef.current = true;
@@ -342,6 +349,7 @@ export function VoiceListenTogetherManager({
     loudnessPreset,
     sfu,
     snapshot?.currentEntry?.track.kind,
+    audioContextRevision,
   ]);
 
   useEffect(() => {
@@ -367,6 +375,22 @@ export function VoiceListenTogetherManager({
         event.snapshot
       ) {
         const nextSnapshot = event.snapshot as ListenTogetherStateSnapshot;
+        const previousSnapshot = snapshotRef.current;
+        if (
+          !previousSnapshot ||
+          previousSnapshot.paused !== nextSnapshot.paused ||
+          previousSnapshot.currentEntryId !== nextSnapshot.currentEntryId
+        ) {
+          log.info("Applying authoritative listen together state", {
+            roomSlug,
+            eventType: event.type,
+            revision: nextSnapshot.revision,
+            currentEntryId: nextSnapshot.currentEntryId,
+            paused: nextSnapshot.paused,
+            previousPaused: previousSnapshot?.paused ?? null,
+            previousEntryId: previousSnapshot?.currentEntryId ?? null,
+          });
+        }
         log.debug("Received listen together snapshot event", {
           roomSlug,
           eventType: event.type,
@@ -405,6 +429,7 @@ export function VoiceListenTogetherManager({
 
   useEffect(() => {
     if (!sfu || !roomSlug || !voiceSessionId) return;
+    if (sfu.voiceGW.isReady === false) return;
     log.info("Requesting listen together room state", {
       roomSlug,
       voiceSessionId,
@@ -413,6 +438,31 @@ export function VoiceListenTogetherManager({
       type: "listen_together.state.request",
       room_slug: roomSlug,
     });
+  }, [roomSlug, sfu, voiceSessionId]);
+
+  useEffect(() => {
+    if (!sfu || !roomSlug || !voiceSessionId) return;
+
+    const unsubscribe = sfu.on("voice-ready", () => {
+      sfu.resumeAudioContext?.();
+      setAudioContextRevision((revision) => revision + 1);
+      log.info("Voice gateway ready; requesting listen together room state", {
+        roomSlug,
+        voiceSessionId,
+      });
+      sfu.voiceGW.sendAppEvent({
+        type: "listen_together.state.request",
+        room_slug: roomSlug,
+      });
+    });
+    const unsubscribeAudioResumed = sfu.on("audio-resumed", () => {
+      setAudioContextRevision((revision) => revision + 1);
+    });
+
+    return () => {
+      unsubscribe();
+      unsubscribeAudioResumed();
+    };
   }, [roomSlug, sfu, voiceSessionId]);
 
   useEffect(() => {
@@ -502,6 +552,15 @@ export function VoiceListenTogetherManager({
 
     if (plan.shouldPlay) {
       sfu?.resumeAudioContext?.();
+      log.info("Starting listen together audio", {
+        roomSlug,
+        trackId: currentEntry ? getTrackIdentifier(currentEntry.track) : null,
+        snapshotPaused: snapshot?.paused ?? null,
+        audioPaused: audio.paused,
+        audioMuted: audio.muted,
+        audioVolume: audio.volume,
+        audioContextState: sfu?.audio?.getAudioContext?.()?.state ?? null,
+      });
       void audio.play().catch((error) => {
         log.warn("Listen together playback start was blocked", {
           roomSlug,

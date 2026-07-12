@@ -205,4 +205,12 @@ describe("VoiceGrid focused stage", () => {
     expect(markup).not.toContain("left:-50%");
     expect(markup).not.toContain("width:200%");
   });
+
+  it("keeps the focused avatar visual layer from intercepting clear-focus clicks", () => {
+    const markup = render([makeFocusedAvatarItem()], "avatar-user-2");
+
+    expect(markup).toMatch(
+      /data-focused-visual="true"[^>]*class="[^"]*pointer-events-none/,
+    );
+  });
 });

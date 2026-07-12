@@ -1,5 +1,6 @@
 import { AvatarImage } from "@/components/chat/AvatarImage";
 import { apiGet, apiPost } from "@/lib/api-client";
+import { clog } from "@/lib/console-logger";
 import {
   convertSearchTrackToMusicTrack,
   getListenTogetherInputMode,
@@ -10,8 +11,8 @@ import {
   type ListenTogetherSearchResult,
   type ListenTogetherTrack,
 } from "@/lib/listen-together";
-import { getAuthAssetUrl } from "@/lib/platform";
 import type { SFUClient } from "@/lib/sfu-client";
+import { getAuthAssetUrl } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 import { useChatStore } from "@/stores/chat-store";
 import { ListenTogetherNowPlayingCard } from "./ListenTogetherNowPlayingCard";
@@ -19,7 +20,15 @@ import {
   formatListenTogetherDuration,
   useListenTogetherPlaybackState,
 } from "./listen-together-playback";
-import { Headphones, Link2, Loader2, Play, Search, Trash2 } from "lucide-react";
+import {
+  Headphones,
+  Link2,
+  ListMusic,
+  Loader2,
+  Play,
+  Search,
+  Trash2,
+} from "lucide-react";
 import {
   useCallback,
   useDeferredValue,
@@ -28,6 +37,8 @@ import {
   useRef,
   useState,
 } from "react";
+
+const listenTogetherLog = clog("ListenTogether");
 
 interface ListenTogetherPanelProps {
   sfu: SFUClient | null;
@@ -186,6 +197,14 @@ export function ListenTogetherPanel({
 
   const sendCommand = (payload: Record<string, unknown>) => {
     if (!sfu || !roomSlug) return;
+    listenTogetherLog.info("Sending listen together control", {
+      source: "listen-together-panel",
+      type: payload.type,
+      roomSlug,
+      paused: payload.paused ?? null,
+      entryId: payload.entryId ?? null,
+    });
+    sfu.resumeAudioContext?.();
     sfu.voiceGW.sendAppEvent(payload);
   };
 
@@ -265,7 +284,7 @@ export function ListenTogetherPanel({
   const isResolveMode = inputMode === "resolve";
 
   return (
-    <div className="grid h-full min-h-0 overflow-hidden gap-4 p-4 lg:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)]">
+    <div className="grid h-full min-h-0 gap-4 overflow-hidden p-4 lg:grid-cols-[minmax(300px,0.82fr)_minmax(0,1.18fr)]">
       <section className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-[24px] border border-rm-border bg-rm-bg-surface/40">
         <div className="border-b border-rm-border px-4 py-4">
           <div className="flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.18em] text-rm-text-muted">
@@ -464,162 +483,150 @@ export function ListenTogetherPanel({
         </div>
       </section>
 
-      <section className="flex min-h-0 min-w-0 flex-col gap-4 overflow-hidden">
-        <div className="min-w-0 rounded-[24px] border border-rm-border bg-rm-bg-surface/40">
-          <div className="border-b border-rm-border px-4 py-3 text-[11px] font-black uppercase tracking-[0.18em] text-rm-text-muted">
+      <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden border-t border-rm-border pt-4 lg:border-l lg:border-t-0 lg:pl-5 lg:pt-0">
+        <div className="shrink-0 border-b border-rm-border pb-4">
+          <div className="mb-3 flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.18em] text-rm-text-muted">
+            <Headphones className="h-4 w-4 text-primary" />
             Now Playing
           </div>
-          <div className="p-4">
-            <ListenTogetherNowPlayingCard
-              playback={playback}
-              sfu={sfu}
-              roomSlug={roomSlug}
-              variant="panel"
-            />
-          </div>
+          <ListenTogetherNowPlayingCard
+            playback={playback}
+            sfu={sfu}
+            roomSlug={roomSlug}
+            variant="panel"
+          />
         </div>
 
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col rounded-[24px] border border-rm-border bg-rm-bg-surface/40">
-          <div className="border-b border-rm-border px-4 py-3 text-[11px] font-black uppercase tracking-[0.18em] text-rm-text-muted">
-            Room Queue
+        <div className="flex min-h-[320px] min-w-0 flex-1 flex-col pt-4">
+          <div className="flex shrink-0 items-center justify-between gap-3 pb-3">
+            <div className="flex min-w-0 items-center gap-2 text-[11px] font-black uppercase tracking-[0.18em] text-rm-text-muted">
+              <ListMusic className="h-4 w-4 text-primary" />
+              <span>Room Queue</span>
+            </div>
+            <span className="shrink-0 text-xs tabular-nums text-rm-text-muted">
+              {snapshot?.queue?.length ?? 0} tracks
+            </span>
           </div>
-          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+          <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto pr-1">
             {snapshot?.queue?.length ? (
-              <div className="space-y-3">
+              <div className="divide-y divide-rm-border/70">
                 {snapshot.queue.map((entry, index) => {
                   const isCurrent = entry.entryId === snapshot.currentEntryId;
                   return (
                     <div
                       key={entry.entryId}
                       className={cn(
-                        "rounded-[22px] border p-3 transition-colors",
+                        "grid grid-cols-[auto_auto_minmax(0,1fr)_auto] items-center gap-3 px-2 py-3 transition-colors",
                         isCurrent
-                          ? "border-primary/30 bg-primary/10"
-                          : "border-rm-border bg-rm-bg-hover/40",
+                          ? "rounded-xl bg-primary/10"
+                          : "hover:bg-rm-bg-hover/45",
                       )}
                     >
-                      <div className="flex items-start gap-3">
-                        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-rm-bg-elevated/70 text-xs font-black text-rm-text-muted">
-                          {index + 1}
+                      <div className="flex h-8 w-8 shrink-0 items-center justify-center text-xs font-black tabular-nums text-rm-text-muted">
+                        {isCurrent ? (
+                          <span className="h-2 w-2 rounded-full bg-primary" />
+                        ) : (
+                          index + 1
+                        )}
+                      </div>
+                      <div className="h-12 w-12 shrink-0 overflow-hidden rounded-lg bg-rm-bg-elevated/60">
+                        {entry.track.artworkUrl ? (
+                          <img
+                            src={entry.track.artworkUrl}
+                            alt=""
+                            className="h-full w-full object-cover"
+                          />
+                        ) : (
+                          <div className="flex h-full w-full items-center justify-center text-rm-text-muted">
+                            <Headphones className="h-4 w-4" />
+                          </div>
+                        )}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="truncate text-sm font-bold text-rm-text">
+                          {entry.track.title}
                         </div>
-                        <div className="h-12 w-12 shrink-0 overflow-hidden rounded-[16px] bg-rm-bg-elevated/60">
-                          {entry.track.artworkUrl ? (
-                            <img
-                              src={entry.track.artworkUrl}
-                              alt=""
-                              className="h-full w-full object-cover"
-                            />
-                          ) : (
-                            <div className="flex h-full w-full items-center justify-center text-rm-text-muted">
-                              <Headphones className="h-4 w-4" />
-                            </div>
-                          )}
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <div className="truncate text-sm font-bold text-rm-text">
-                            {entry.track.title}
-                          </div>
-                          <div className="hidden">
-                            {[entry.track.artist, entry.requester.displayName]
-                              .filter(Boolean)
-                              .join(" • ")}
-                          </div>
-                          <div className="mt-1 truncate text-xs text-rm-text-muted">
-                            {[
-                              entry.track.artist,
-                              entry.track.kind === "music"
-                                ? formatListenTogetherDuration(
-                                    entry.track.durationMs,
-                                  )
-                                : null,
-                            ]
-                              .filter(Boolean)
-                              .join(" • ") || entry.track.sourceLabel}
-                          </div>
-                          <div className="hidden">
-                            <span className="rounded-full border border-rm-border bg-rm-bg-elevated/40 px-2 py-1">
-                              {entry.track.sourceLabel}
-                            </span>
-                            {entry.track.kind === "music" && (
-                              <span className="rounded-full border border-rm-border bg-rm-bg-elevated/40 px-2 py-1">
+                        <div className="mt-1 flex min-w-0 items-center gap-2 truncate text-xs text-rm-text-muted">
+                          <span className="truncate">
+                            {entry.track.artist || entry.track.sourceLabel}
+                          </span>
+                          <span aria-hidden="true">•</span>
+                          <span className="shrink-0">
+                            {entry.track.sourceLabel}
+                          </span>
+                          {entry.track.kind === "music" && (
+                            <>
+                              <span aria-hidden="true">•</span>
+                              <span className="shrink-0 tabular-nums">
                                 {formatListenTogetherDuration(
                                   entry.track.durationMs,
                                 )}
                               </span>
-                            )}
-                            {entry.importBatchLabel && (
-                              <span className="rounded-full border border-rm-border bg-rm-bg-elevated/40 px-2 py-1">
-                                {entry.importBatchLabel}
-                              </span>
-                            )}
-                          </div>
-                          <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] font-semibold text-rm-text-muted">
-                            <div className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-rm-border bg-rm-bg-elevated/40 px-1.5 py-1">
-                              <div className="h-4 w-4 overflow-hidden rounded-full bg-rm-bg-hover">
-                                {entry.requester.avatarUrl ? (
-                                  <AvatarImage
-                                    src={getAuthAssetUrl(
-                                      entry.requester.avatarUrl,
-                                    )}
-                                    alt={`${entry.requester.displayName} avatar`}
-                                    display={entry.requester.avatarDisplay}
-                                  />
-                                ) : (
-                                  <div className="flex h-full w-full items-center justify-center text-[9px] font-black text-rm-text-muted">
-                                    {entry.requester.displayName
-                                      .charAt(0)
-                                      .toUpperCase()}
-                                  </div>
-                                )}
-                              </div>
-                              <span className="max-w-[140px] truncate">
-                                {entry.requester.displayName}
-                              </span>
-                            </div>
-                            <span className="rounded-full border border-rm-border bg-rm-bg-elevated/40 px-2 py-1">
-                              {entry.track.sourceLabel}
-                            </span>
-                            {entry.importBatchLabel && (
-                              <span className="rounded-full border border-rm-border bg-rm-bg-elevated/40 px-2 py-1">
-                                {entry.importBatchLabel}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                        <div className="flex shrink-0 gap-2">
-                          {!isCurrent && (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                if (!roomSlug) return;
-                                sendCommand({
-                                  type: "listen_together.play",
-                                  room_slug: roomSlug,
-                                  entryId: entry.entryId,
-                                });
-                              }}
-                              className="rounded-full border border-rm-border bg-rm-bg-elevated/60 p-2 text-rm-text-muted transition hover:text-rm-text"
-                              aria-label={`Play ${entry.track.title}`}
-                            >
-                              <Play className="h-3.5 w-3.5" />
-                            </button>
+                            </>
                           )}
+                        </div>
+                        <div className="mt-1 flex min-w-0 items-center gap-1.5 text-[11px] text-rm-text-muted/75">
+                          <div className="h-4 w-4 shrink-0 overflow-hidden rounded-full bg-rm-bg-hover">
+                            {entry.requester.avatarUrl ? (
+                              <AvatarImage
+                                src={getAuthAssetUrl(entry.requester.avatarUrl)}
+                                alt={`${entry.requester.displayName} avatar`}
+                                display={entry.requester.avatarDisplay}
+                              />
+                            ) : (
+                              <div className="flex h-full w-full items-center justify-center text-[8px] font-black text-rm-text-muted">
+                                {entry.requester.displayName
+                                  .charAt(0)
+                                  .toUpperCase()}
+                              </div>
+                            )}
+                          </div>
+                          <span className="truncate">
+                            {entry.requester.displayName}
+                          </span>
+                          {entry.importBatchLabel && (
+                            <>
+                              <span aria-hidden="true">•</span>
+                              <span className="truncate">
+                                {entry.importBatchLabel}
+                              </span>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex shrink-0 gap-1">
+                        {!isCurrent && (
                           <button
                             type="button"
                             onClick={() => {
                               if (!roomSlug) return;
                               sendCommand({
-                                type: "listen_together.remove",
+                                type: "listen_together.play",
                                 room_slug: roomSlug,
                                 entryId: entry.entryId,
                               });
                             }}
-                            className="rounded-full border border-red-500/20 bg-red-500/10 p-2 text-red-300 transition hover:bg-red-500/15"
-                            aria-label={`Remove ${entry.track.title}`}
+                            className="rounded-lg p-2 text-rm-text-muted transition hover:bg-rm-bg-active hover:text-rm-text"
+                            aria-label={`Play ${entry.track.title}`}
                           >
-                            <Trash2 className="h-3.5 w-3.5" />
+                            <Play className="h-3.5 w-3.5" />
                           </button>
-                        </div>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (!roomSlug) return;
+                            sendCommand({
+                              type: "listen_together.remove",
+                              room_slug: roomSlug,
+                              entryId: entry.entryId,
+                            });
+                          }}
+                          className="rounded-lg p-2 text-rm-text-muted transition hover:bg-red-500/10 hover:text-red-300"
+                          aria-label={`Remove ${entry.track.title}`}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
                       </div>
                     </div>
                   );

@@ -77,7 +77,12 @@ export class ListenTogetherAudioProcessor {
   private volumeGain: GainNode | null = null;
 
   connect(audio: HTMLAudioElement, context: AudioContext): boolean {
-    if (this.source) return true;
+    if (this.source && this.context === context && context.state !== "closed") {
+      return true;
+    }
+    if (this.source) this.close();
+    if (context.state === "closed") return false;
+
     try {
       const source = context.createMediaElementSource(audio);
       const compressor = context.createDynamicsCompressor();
@@ -108,6 +113,10 @@ export class ListenTogetherAudioProcessor {
     } catch {
       return false;
     }
+  }
+
+  isConnectedTo(context: AudioContext): boolean {
+    return this.source !== null && this.context === context;
   }
 
   applySettings(settings: ListenTogetherAudioSettings) {

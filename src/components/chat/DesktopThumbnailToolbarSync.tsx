@@ -1,4 +1,5 @@
 import { CameraSettingsModal } from "@/components/CameraSettingsModal";
+import { clog } from "@/lib/console-logger";
 import {
   clearDesktopThumbnailToolbar,
   HIDDEN_DESKTOP_THUMBNAIL_TOOLBAR_STATE,
@@ -40,12 +41,22 @@ interface ToolbarVoiceSession {
   disconnect: () => void;
 }
 
+const listenTogetherLog = clog("ListenTogether");
+
 function sendListenTogetherCommand(
   sfu: SFUClient | null,
   roomSlug: string | null,
   payload: Record<string, unknown>,
 ) {
   if (!sfu || !roomSlug) return;
+  listenTogetherLog.info("Sending listen together control", {
+    source: "desktop-thumbnail-toolbar",
+    type: payload.type,
+    roomSlug,
+    paused: payload.paused ?? null,
+    entryId: payload.entryId ?? null,
+  });
+  sfu.resumeAudioContext?.();
   sfu.voiceGW.sendAppEvent(payload);
 }
 

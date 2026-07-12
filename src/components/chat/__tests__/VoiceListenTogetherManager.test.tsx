@@ -392,4 +392,41 @@ describe("VoiceListenTogetherManager", () => {
       );
     });
   });
+
+  it("requests authoritative playback state when voice reconnects", async () => {
+    const listeners = new Map<string, (event: unknown) => void>();
+    const sendAppEvent = vi.fn();
+    const sfu = {
+      on: vi.fn((event: string, listener: (event: unknown) => void) => {
+        listeners.set(event, listener);
+        return () => listeners.delete(event);
+      }),
+      voiceGW: { sendAppEvent },
+    };
+
+    render(
+      <VoiceListenTogetherManager
+        sfu={sfu as never}
+        roomSlug="room-1"
+        voiceSessionId="voice-session-1"
+      />,
+    );
+
+    await waitFor(() => {
+      expect(sendAppEvent).toHaveBeenCalledWith({
+        type: "listen_together.state.request",
+        room_slug: "room-1",
+      });
+    });
+    sendAppEvent.mockClear();
+
+    act(() => {
+      listeners.get("voice-ready")?.({});
+    });
+
+    expect(sendAppEvent).toHaveBeenCalledWith({
+      type: "listen_together.state.request",
+      room_slug: "room-1",
+    });
+  });
 });

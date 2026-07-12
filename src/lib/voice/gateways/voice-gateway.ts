@@ -249,6 +249,32 @@ export class VoiceGateway extends BaseGateway<VoiceGatewayEvents> {
   }
 
   public sendAppEvent(payload: Record<string, unknown>) {
+    const eventType = payload.type;
+    if (
+      typeof eventType === "string" &&
+      eventType.startsWith("listen_together.") &&
+      eventType !== "listen_together.state.request"
+    ) {
+      this.log.info("Sending listen-together command", {
+        type: eventType,
+        roomSlug: payload.room_slug ?? null,
+        paused: payload.paused ?? null,
+        entryId: payload.entryId ?? null,
+        ready: this.isReady,
+      });
+    }
+    if (
+      typeof eventType === "string" &&
+      eventType.startsWith("listen_together.") &&
+      eventType !== "listen_together.state.request" &&
+      !this.isReady
+    ) {
+      this.log.warn(
+        `Dropping listen-together command while voice gateway is not ready: ${eventType}`,
+      );
+      return;
+    }
+
     this.send({ op: VoiceOpcode.VoiceAppEvent, d: payload } as any);
   }
 }

@@ -1,4 +1,5 @@
 import { AvatarImage } from "@/components/chat/AvatarImage";
+import { clog } from "@/lib/console-logger";
 import {
   Tooltip,
   TooltipContent,
@@ -20,6 +21,8 @@ import {
   Trash2,
 } from "lucide-react";
 import { LISTEN_TOGETHER_LOUDNESS_PRESET_OPTIONS } from "@/lib/voice/listen-together-audio";
+
+const listenTogetherLog = clog("ListenTogether");
 
 interface ListenTogetherNowPlayingCardProps {
   playback: ListenTogetherPlaybackState;
@@ -56,6 +59,14 @@ export function ListenTogetherNowPlayingCard({
 
   const sendCommand = (payload: Record<string, unknown>) => {
     if (!sfu || !roomSlug) return;
+    listenTogetherLog.info("Sending listen together control", {
+      source: "now-playing-card",
+      type: payload.type,
+      roomSlug,
+      paused: payload.paused ?? null,
+      entryId: payload.entryId ?? null,
+    });
+    sfu.resumeAudioContext?.();
     sfu.voiceGW.sendAppEvent(payload);
   };
 
