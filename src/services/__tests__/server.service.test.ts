@@ -25,6 +25,10 @@ function serverRow(overrides: Record<string, unknown> = {}) {
     name: "My Server",
     owner_id: USER_ID,
     icon_url: null,
+    invites_paused: 0,
+    allow_public_shares: 1,
+    show_source_in_shares: 0,
+    allow_share_indexing: 0,
     created_at: NOW,
     ...overrides,
   };
@@ -68,6 +72,9 @@ describe("listUserServers", () => {
     expect(result).toHaveLength(2);
     expect(result[0].id).toBe(SERVER_ID);
     expect(result[1].name).toBe("Second");
+    expect(result[0].allow_public_shares).toBe(true);
+    expect(result[0].show_source_in_shares).toBe(false);
+    expect(result[0].allow_share_indexing).toBe(false);
     db.assertCalledWith(/SELECT s\.\* FROM servers/, [USER_ID]);
   });
 
@@ -178,6 +185,13 @@ describe("updateServer", () => {
 
     db.assertCalled(/UPDATE servers SET/);
     expect(result.data).toBeDefined();
+    expect(result.data.server?.allow_public_shares).toBe(true);
+    expect(result.data.server?.show_source_in_shares).toBe(false);
+    expect(result.broadcast?.data).toMatchObject({
+      allow_public_shares: true,
+      show_source_in_shares: false,
+      allow_share_indexing: false,
+    });
   });
 
   it("updates server icon_url", async () => {

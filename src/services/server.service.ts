@@ -45,6 +45,29 @@ export interface ServiceResult<T> {
   auditLog?: AuditLogDescriptor;
 }
 
+const SERVER_BOOLEAN_FIELDS = [
+  "invites_paused",
+  "allow_public_shares",
+  "show_source_in_shares",
+  "allow_share_indexing",
+] as const;
+
+/** Convert SQLite integer flags to the booleans exposed by the API contract. */
+export function normalizeServerRecord(
+  record: Record<string, unknown>,
+): Record<string, unknown> {
+  const normalized = { ...record };
+
+  for (const field of SERVER_BOOLEAN_FIELDS) {
+    const value = normalized[field];
+    if (value !== undefined && value !== null) {
+      normalized[field] = value === true || value === 1 || value === "1";
+    }
+  }
+
+  return normalized;
+}
+
 // ─── ID generator (injectable for testing) ───────────────────────────────────
 
 let _genId = (): string => crypto.randomUUID();
@@ -73,7 +96,7 @@ export async function listUserServers(
     )
     .bind(userId)
     .all();
-  return results ?? [];
+  return (results ?? []).map(normalizeServerRecord);
 }
 
 // ─── createServer ────────────────────────────────────────────────────────────
@@ -251,10 +274,13 @@ export async function updateServer(
     .bind(...values)
     .run();
 
-  const server = await db
+  const serverRow = await db
     .prepare(`SELECT * FROM servers WHERE id = ?`)
     .bind(serverId)
     .first();
+  const server = serverRow
+    ? normalizeServerRecord(serverRow as Record<string, unknown>)
+    : null;
 
   // Fetch member IDs for cache invalidation
   const { results: memberRows } = await db

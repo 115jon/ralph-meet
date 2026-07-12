@@ -1135,6 +1135,12 @@ export default function ChannelSidebar({
           <ChannelSettingsModal
             serverId={serverId}
             channel={renderedChannelSettings}
+            onUpdated={(updates) =>
+              dispatch({
+                type: "UPSERT_CHANNEL",
+                channel: { ...renderedChannelSettings, ...updates },
+              })
+            }
             onClose={() =>
               uiDispatch({ type: "SET_CHANNEL_SETTINGS", value: null })
             }

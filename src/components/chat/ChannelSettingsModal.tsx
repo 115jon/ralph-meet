@@ -13,7 +13,11 @@ interface ChannelSettingsModalProps {
   channel: Channel;
   userPermissions?: number | null;
   onClose: () => void;
-  onUpdated?: (updates: { name?: string; description?: string | null }) => void;
+  onUpdated?: (updates: {
+    name?: string;
+    description?: string | null;
+    allow_public_shares?: boolean | null;
+  }) => void;
   isClosing?: boolean;
 }
 
@@ -87,15 +91,22 @@ export default function ChannelSettingsModal({
         updates.allow_public_shares = shareOverride;
       }
 
-      await apiPatch(`/api/channels/${channel.id}`, updates);
+      const updatedChannel = await apiPatch<Channel>(
+        `/api/channels/${channel.id}`,
+        updates,
+      );
 
       // Flash success
       setSuccessFlash(true);
       setTimeout(() => setSuccessFlash(false), 2000);
 
-      onUpdated?.(updates);
-    } catch (err: any) {
-      setError(err.message || "Failed to save changes");
+      onUpdated?.({
+        name: updatedChannel.name,
+        description: updatedChannel.description,
+        allow_public_shares: updatedChannel.allow_public_shares,
+      });
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to save changes");
     } finally {
       setSaving(false);
     }
