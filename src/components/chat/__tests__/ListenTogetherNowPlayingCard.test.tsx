@@ -41,11 +41,13 @@ function makePlaybackState(
     durationMs: currentEntry.track.durationMs,
     effectiveSeekValue: 5_000,
     error: null,
+    isPaused: false,
     localVolume: 1,
     loudnessEnabled: true,
     loudnessPreset: "balanced",
     progressMax: currentEntry.track.durationMs,
     setLocalVolume: vi.fn(),
+    setLocalPlayback: vi.fn(),
     updateLoudnessSettings: vi.fn(),
     snapshot: {
       roomSlug: "room-1",

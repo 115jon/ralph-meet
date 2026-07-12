@@ -60,6 +60,7 @@ export function getListenTogetherPlaybackPlan(args: {
   snapshot: ListenTogetherStateSnapshot | null;
   playback: ListenTogetherPlaybackState;
   streamUrl: string | null;
+  nativePaused?: boolean;
   driftToleranceMs?: number;
 }): ListenTogetherPlaybackPlan {
   const tolerance = args.driftToleranceMs ?? LISTEN_TOGETHER_DRIFT_TOLERANCE_MS;
@@ -86,7 +87,7 @@ export function getListenTogetherPlaybackPlan(args: {
   return {
     nextSrc: args.streamUrl,
     shouldLoad,
-    shouldPlay: !args.snapshot.paused,
+    shouldPlay: !args.snapshot.paused && args.nativePaused !== true,
     shouldPause: args.snapshot.paused,
     seekToMs: shouldSeek ? args.snapshot.positionMs : null,
   };

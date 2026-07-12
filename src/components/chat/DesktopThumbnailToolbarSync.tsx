@@ -160,12 +160,20 @@ export function DesktopThumbnailToolbarSync({
     () =>
       activeSession?.sfu && activeSession.roomSlug && playback.currentEntry
         ? {
-            paused: !!playback.snapshot?.paused,
+            paused: playback.isPaused,
+            positionMs: playback.effectiveSeekValue,
             roomSlug: activeSession.roomSlug,
+            setLocalPlayback: playback.setLocalPlayback,
             sfu: activeSession.sfu,
           }
         : null,
-    [activeSession, playback.currentEntry, playback.snapshot?.paused],
+    [
+      activeSession,
+      playback.currentEntry,
+      playback.effectiveSeekValue,
+      playback.isPaused,
+      playback.setLocalPlayback,
+    ],
   );
 
   const activeSessionRef = useRef<ToolbarVoiceSession | null>(activeSession);
@@ -234,6 +242,10 @@ export function DesktopThumbnailToolbarSync({
             type: "listen_together.pause",
             room_slug: media.roomSlug,
             paused: !media.paused,
+          });
+          media.setLocalPlayback(media.roomSlug, {
+            paused: !media.paused,
+            positionMs: media.positionMs,
           });
           return;
         case "skip-media":

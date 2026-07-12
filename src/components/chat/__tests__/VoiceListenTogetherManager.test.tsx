@@ -429,4 +429,76 @@ describe("VoiceListenTogetherManager", () => {
       room_slug: "room-1",
     });
   });
+
+  it("sends native pause events to shared playback and does not resume on refresh", async () => {
+    const listeners = new Map<string, (event: unknown) => void>();
+    const sendAppEvent = vi.fn();
+    const sfu = {
+      on: vi.fn((event: string, listener: (event: unknown) => void) => {
+        listeners.set(event, listener);
+        return () => listeners.delete(event);
+      }),
+      voiceGW: { sendAppEvent },
+    };
+
+    render(
+      <VoiceListenTogetherManager
+        sfu={sfu as never}
+        roomSlug="room-1"
+        voiceSessionId="voice-session-1"
+      />,
+    );
+
+    const musicAudio = await waitFor(() => {
+      const audio = MockAudio.instances[0];
+      expect(audio).toBeDefined();
+      return audio;
+    });
+    musicAudio.paused = true;
+    sendAppEvent.mockClear();
+    musicAudio.dispatchEvent(new Event("pause"));
+
+    expect(sendAppEvent).toHaveBeenCalledWith({
+      type: "listen_together.pause",
+      room_slug: "room-1",
+      paused: true,
+    });
+
+    musicAudio.play.mockClear();
+    act(() => {
+      listeners.get("voice-ready")?.({});
+    });
+
+    await waitFor(() => expect(musicAudio.play).not.toHaveBeenCalled());
+
+    const pausedSnapshot = { ...makeSnapshot(), paused: true };
+    act(() => {
+      useListenTogetherStore.setState({
+        rooms: {
+          "room-1": {
+            snapshot: pausedSnapshot,
+            localVolume: 1,
+            error: null,
+          },
+        },
+      });
+    });
+    await waitFor(() =>
+      expect(
+        useListenTogetherStore.getState().rooms["room-1"]?.snapshot?.paused,
+      ).toBe(true),
+    );
+
+    act(() => {
+      musicAudio.paused = false;
+      sendAppEvent.mockClear();
+      musicAudio.dispatchEvent(new Event("play"));
+    });
+
+    expect(sendAppEvent).toHaveBeenCalledWith({
+      type: "listen_together.pause",
+      room_slug: "room-1",
+      paused: false,
+    });
+  });
 });
