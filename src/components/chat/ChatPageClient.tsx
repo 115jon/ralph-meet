@@ -1181,6 +1181,7 @@ export default function ChatPage() {
                 localVoiceSessionId={
                   localStreamState?.sfu?.getParticipantId?.() ?? null
                 }
+                localVoiceRoomSlug={localStreamState?.roomSlug ?? null}
                 channelMentionCounts={channelMentionCounts}
                 streamPreviewChannelId={localStreamState?.channelId ?? null}
                 streamThumbnails={localStreamState?.streamThumbnails ?? {}}

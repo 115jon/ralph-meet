@@ -141,12 +141,12 @@ export function ListenTogetherNowPlayingCard({
       <TooltipProvider delayDuration={100}>
         <div
           className={cn(
-            "rounded-[20px] border border-white/6 bg-rm-bg-elevated/70 px-3 py-3 shadow-[0_18px_40px_rgba(0,0,0,0.22),inset_0_1px_0_rgba(255,255,255,0.04)] backdrop-blur-sm",
+            "rounded-[20px] border border-white/6 bg-rm-bg-elevated/70 px-3 py-3 shadow-[0_18px_40px_rgba(0,0,0,0.22),inset_0_1px_0_rgba(255,255,255,0.04)] backdrop-blur-sm max-md:rounded-[16px] max-md:bg-rm-bg-elevated max-md:px-2.5 max-md:py-2.5 max-md:shadow-[0_8px_20px_rgba(0,0,0,0.18)] max-md:backdrop-blur-none",
             className,
           )}
         >
-          <div className="flex items-start gap-3">
-            <div className="h-12 w-12 shrink-0 overflow-hidden rounded-[16px] bg-rm-bg-hover/70 ring-1 ring-white/5">
+          <div className="flex items-start gap-3 max-md:items-center max-md:gap-2.5">
+            <div className="h-12 w-12 shrink-0 overflow-hidden rounded-[16px] bg-rm-bg-hover/70 ring-1 ring-white/5 max-md:h-10 max-md:w-10 max-md:rounded-[12px]">
               {artwork}
             </div>
             <div className="min-w-0 flex-1">
@@ -181,12 +181,13 @@ export function ListenTogetherNowPlayingCard({
                   className={cn(
                     "inline-flex shrink-0 rounded-full border px-2 py-0.5 text-[9px] font-black uppercase tracking-[0.18em]",
                     syncBadge.className,
+                    "max-md:hidden",
                   )}
                 >
                   {syncBadge.label}
                 </div>
               </div>
-              <div className="mt-2 flex items-center gap-2 text-[11px] text-rm-text-muted">
+              <div className="mt-2 flex items-center gap-2 text-[11px] text-rm-text-muted max-md:hidden">
                 <div className="h-5 w-5 shrink-0 overflow-hidden rounded-full bg-rm-bg-hover">
                   {requesterAvatar}
                 </div>
@@ -194,7 +195,7 @@ export function ListenTogetherNowPlayingCard({
               </div>
             </div>
           </div>
-          <div className="mt-3">
+          <div className="mt-3 max-md:mt-2">
             <div className="flex items-center gap-2">
               <span className="min-w-[34px] text-[10px] text-rm-text-muted/75 tabular-nums">
                 {formatListenTogetherDuration(effectiveSeekValue)}
@@ -225,18 +226,20 @@ export function ListenTogetherNowPlayingCard({
               <button
                 type="button"
                 onClick={onOpenQueue}
-                className="inline-flex items-center gap-2 rounded-full border border-white/6 bg-rm-bg-hover/75 px-3 py-1.5 text-[11px] font-semibold text-rm-text-muted transition-colors hover:bg-rm-bg-active hover:text-rm-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                className="inline-flex items-center gap-2 rounded-full border border-white/6 bg-rm-bg-hover/75 px-3 py-1.5 text-[11px] font-semibold text-rm-text-muted transition-colors hover:bg-rm-bg-active hover:text-rm-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 max-md:h-8 max-md:w-8 max-md:justify-center max-md:gap-0 max-md:px-0"
                 aria-label="Open listen together queue"
               >
                 <ListMusic className="h-3.5 w-3.5" />
-                {queueCount > 0 ? `Queue ${queueCount}` : "Open queue"}
+                <span className="max-md:hidden">
+                  {queueCount > 0 ? `Queue ${queueCount}` : "Open queue"}
+                </span>
               </button>
             ) : (
               <div className="text-[11px] text-rm-text-muted">
                 {currentEntry.track.sourceLabel}
               </div>
             )}
-            <div className="flex shrink-0 items-center gap-1">
+            <div className="flex shrink-0 items-center gap-1 max-md:gap-1.5">
               <button
                 type="button"
                 onClick={() => {
