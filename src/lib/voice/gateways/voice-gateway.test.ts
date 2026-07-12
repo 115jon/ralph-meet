@@ -101,4 +101,52 @@ describe("VoiceGateway", () => {
       d: { type: "listen_together.state.request" },
     });
   });
+
+  it("does not replay stale listen-together controls after reconnect", async () => {
+    mocks.fetchSocketProtocols.mockResolvedValue([
+      "ralph.realtime.v1",
+      "ralph.ticket.test",
+    ]);
+    const gateway = new VoiceGateway();
+
+    gateway.connectVoice(
+      "participant-1",
+      "voice-token",
+      "voice-server-channel",
+      (path) => `ws://meet.test${path}`,
+      { channelId: "channel", serverId: "server" },
+    );
+    gateway.sendAppEvent({
+      type: "listen_together.pause",
+      room_slug: "room-1",
+      paused: false,
+    });
+    gateway.sendAppEvent({
+      type: "listen_together.skip",
+      room_slug: "room-1",
+    });
+    gateway.sendAppEvent({
+      type: "listen_together.play",
+      room_slug: "room-1",
+      entryId: "entry-1",
+    });
+    gateway.sendAppEvent({
+      type: "listen_together.state.request",
+      room_slug: "room-1",
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const socket = TestWebSocket.instances[0]!;
+    socket.readyState = TestWebSocket.OPEN;
+    socket.onmessage?.({
+      data: JSON.stringify({ op: VoiceOpcode.VoiceReady, d: {} }),
+    } as MessageEvent);
+
+    expect(socket.sent.map((message) => JSON.parse(message))).toEqual([
+      {
+        op: VoiceOpcode.VoiceAppEvent,
+        d: { type: "listen_together.state.request", room_slug: "room-1" },
+      },
+    ]);
+  });
 });

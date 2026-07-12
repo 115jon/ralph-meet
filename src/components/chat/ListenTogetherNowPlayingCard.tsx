@@ -1,4 +1,5 @@
 import { AvatarImage } from "@/components/chat/AvatarImage";
+import { clog } from "@/lib/console-logger";
 import {
   Tooltip,
   TooltipContent,
@@ -20,6 +21,8 @@ import {
   Trash2,
 } from "lucide-react";
 import { LISTEN_TOGETHER_LOUDNESS_PRESET_OPTIONS } from "@/lib/voice/listen-together-audio";
+
+const listenTogetherLog = clog("ListenTogether");
 
 interface ListenTogetherNowPlayingCardProps {
   playback: ListenTogetherPlaybackState;
@@ -48,14 +51,34 @@ export function ListenTogetherNowPlayingCard({
     loudnessPreset,
     progressMax,
     setLocalVolume,
+    setLocalPlayback,
     updateLoudnessSettings,
     snapshot,
+    isPaused,
   } = playback;
 
   const canControl = !!roomSlug && !!sfu;
 
   const sendCommand = (payload: Record<string, unknown>) => {
     if (!sfu || !roomSlug) return;
+    listenTogetherLog.info("Sending listen together control", {
+      source: "now-playing-card",
+      type: payload.type,
+      roomSlug,
+      paused: payload.paused ?? null,
+      entryId: payload.entryId ?? null,
+    });
+    sfu.resumeAudioContext?.();
+    if (
+      payload.type === "listen_together.pause" &&
+      roomSlug &&
+      typeof payload.paused === "boolean"
+    ) {
+      setLocalPlayback(roomSlug, {
+        paused: payload.paused,
+        positionMs: effectiveSeekValue,
+      });
+    }
     sfu.voiceGW.sendAppEvent(payload);
   };
 
@@ -92,7 +115,7 @@ export function ListenTogetherNowPlayingCard({
         label: "Issue",
         className: "border-destructive/20 bg-destructive/10 text-destructive",
       }
-    : snapshot?.paused
+    : isPaused
       ? {
           label: "Paused",
           className: "border-border bg-muted text-muted-foreground",
@@ -246,18 +269,16 @@ export function ListenTogetherNowPlayingCard({
                   sendCommand({
                     type: "listen_together.pause",
                     room_slug: roomSlug,
-                    paused: !snapshot?.paused,
+                    paused: !isPaused,
                   });
                 }}
                 disabled={!canControl}
                 className={iconButtonClass}
                 aria-label={
-                  snapshot?.paused
-                    ? "Resume shared playback"
-                    : "Pause shared playback"
+                  isPaused ? "Resume shared playback" : "Pause shared playback"
                 }
               >
-                {snapshot?.paused ? (
+                {isPaused ? (
                   <Play className="h-3.5 w-3.5" />
                 ) : (
                   <Pause className="h-3.5 w-3.5" />
@@ -370,7 +391,7 @@ export function ListenTogetherNowPlayingCard({
               sendCommand({
                 type: "listen_together.pause",
                 room_slug: roomSlug,
-                paused: !snapshot?.paused,
+                paused: !isPaused,
               });
             }}
             disabled={!canControl}
@@ -378,12 +399,12 @@ export function ListenTogetherNowPlayingCard({
               "inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/15 px-3 py-2 text-xs font-bold text-primary transition hover:bg-primary/20 disabled:cursor-not-allowed disabled:opacity-50",
             )}
           >
-            {snapshot?.paused ? (
+            {isPaused ? (
               <Play className="h-3.5 w-3.5" />
             ) : (
               <Pause className="h-3.5 w-3.5" />
             )}
-            {snapshot?.paused ? "Resume" : "Pause"}
+            {isPaused ? "Resume" : "Pause"}
           </button>
           <button
             type="button"

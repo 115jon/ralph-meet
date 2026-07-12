@@ -4,6 +4,10 @@ import { create } from "zustand";
 export interface ListenTogetherRoomState {
   snapshot: ListenTogetherStateSnapshot | null;
   localVolume: number;
+  localPlayback?: {
+    paused: boolean;
+    positionMs: number;
+  } | null;
   error: {
     code: string;
     message: string;
@@ -17,6 +21,10 @@ interface ListenTogetherStoreState {
     roomSlug: string,
     snapshot: ListenTogetherStateSnapshot,
   ) => void;
+  setLocalPlayback: (
+    roomSlug: string,
+    playback: ListenTogetherRoomState["localPlayback"],
+  ) => void;
   setLocalVolume: (roomSlug: string, volume: number) => void;
   setError: (roomSlug: string, error: ListenTogetherRoomState["error"]) => void;
   clearRoom: (roomSlug: string) => void;
@@ -25,6 +33,7 @@ interface ListenTogetherStoreState {
 const DEFAULT_ROOM_STATE: ListenTogetherRoomState = {
   snapshot: null,
   localVolume: 1,
+  localPlayback: null,
   error: null,
 };
 
@@ -67,13 +76,31 @@ export const useListenTogetherStore = create<ListenTogetherStoreState>()(
         };
       }),
     setSnapshot: (roomSlug, snapshot) =>
+      set((state) => {
+        const currentRoom = state.rooms[roomSlug] ?? DEFAULT_ROOM_STATE;
+        const localPlayback = currentRoom.localPlayback;
+        return {
+          rooms: {
+            ...state.rooms,
+            [roomSlug]: {
+              ...currentRoom,
+              snapshot,
+              localPlayback:
+                localPlayback && localPlayback.paused !== snapshot.paused
+                  ? localPlayback
+                  : null,
+              error: null,
+            },
+          },
+        };
+      }),
+    setLocalPlayback: (roomSlug, playback) =>
       set((state) => ({
         rooms: {
           ...state.rooms,
           [roomSlug]: {
             ...(state.rooms[roomSlug] ?? DEFAULT_ROOM_STATE),
-            snapshot,
-            error: null,
+            localPlayback: playback,
           },
         },
       })),

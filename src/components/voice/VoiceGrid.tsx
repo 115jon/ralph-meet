@@ -163,7 +163,10 @@ export const VoiceGrid = React.memo(
               className="w-full h-full object-contain relative z-10 pointer-events-none"
             />
           ) : focusedThumbnailPoster ? (
-            <div className="relative z-10 h-full w-full overflow-hidden">
+            <div
+              data-focused-visual="true"
+              className="relative z-10 h-full w-full overflow-hidden pointer-events-none"
+            >
               <img
                 src={focusedThumbnailPoster}
                 alt={`${focusedItem.name} stream thumbnail`}
@@ -172,7 +175,10 @@ export const VoiceGrid = React.memo(
               <div className="absolute inset-0 bg-linear-to-t from-black/35 via-black/10 to-transparent" />
             </div>
           ) : isPreviewHidden ? (
-            <div className="relative z-10 flex h-full w-full items-center justify-center bg-black/75">
+            <div
+              data-focused-visual="true"
+              className="relative z-10 flex h-full w-full items-center justify-center bg-black/75 pointer-events-none"
+            >
               <div className="flex flex-col items-center gap-3 text-center">
                 <EyeOff size={28} className="text-white/60" />
                 <span className="text-xs font-bold uppercase tracking-[0.24em] text-white/45">
@@ -181,7 +187,10 @@ export const VoiceGrid = React.memo(
               </div>
             </div>
           ) : (
-            <div className="w-full h-full flex items-center justify-center relative overflow-hidden z-10">
+            <div
+              data-focused-visual="true"
+              className="w-full h-full flex items-center justify-center relative overflow-hidden z-10 pointer-events-none"
+            >
               <div className="flex flex-col items-center justify-center animate-in fade-in zoom-in-95 duration-700 relative z-10 w-full h-full p-8 md:p-16">
                 <div className="relative aspect-video w-full max-w-[600px] md:max-w-[800px] lg:max-w-[1000px] flex items-center justify-center">
                   <div className="w-full h-full shadow-[0_30px_100px_rgba(0,0,0,0.6)] rounded-3xl md:rounded-[2.5rem] flex items-center justify-center overflow-hidden bg-black/20 backdrop-blur-3xl transition-all duration-500">

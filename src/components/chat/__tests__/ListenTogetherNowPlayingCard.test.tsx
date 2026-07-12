@@ -41,11 +41,13 @@ function makePlaybackState(
     durationMs: currentEntry.track.durationMs,
     effectiveSeekValue: 5_000,
     error: null,
+    isPaused: false,
     localVolume: 1,
     loudnessEnabled: true,
     loudnessPreset: "balanced",
     progressMax: currentEntry.track.durationMs,
     setLocalVolume: vi.fn(),
+    setLocalPlayback: vi.fn(),
     updateLoudnessSettings: vi.fn(),
     snapshot: {
       roomSlug: "room-1",
@@ -120,12 +122,13 @@ describe("ListenTogetherNowPlayingCard", () => {
   });
   it("renders a compact mini player and forwards control actions", () => {
     const sendAppEvent = vi.fn();
+    const resumeAudioContext = vi.fn();
     const onOpenQueue = vi.fn();
 
     render(
       <ListenTogetherNowPlayingCard
         playback={makePlaybackState()}
-        sfu={{ voiceGW: { sendAppEvent } } as any}
+        sfu={{ resumeAudioContext, voiceGW: { sendAppEvent } } as any}
         roomSlug="room-1"
         variant="mini"
         onOpenQueue={onOpenQueue}
@@ -143,6 +146,7 @@ describe("ListenTogetherNowPlayingCard", () => {
     fireEvent.click(
       screen.getByRole("button", { name: "Pause shared playback" }),
     );
+    expect(resumeAudioContext).toHaveBeenCalledTimes(1);
     expect(sendAppEvent).toHaveBeenCalledWith({
       type: "listen_together.pause",
       room_slug: "room-1",

@@ -17,11 +17,16 @@ export interface ListenTogetherPlaybackState {
   durationMs: number;
   effectiveSeekValue: number;
   error: ListenTogetherRoomState["error"];
+  isPaused: boolean;
   localVolume: number;
   loudnessEnabled: boolean;
   loudnessPreset: ListenTogetherLoudnessPreset;
   progressMax: number;
   setLocalVolume: (roomSlug: string, volume: number) => void;
+  setLocalPlayback: (
+    roomSlug: string,
+    playback: ListenTogetherRoomState["localPlayback"],
+  ) => void;
   updateLoudnessSettings: (updates: {
     enabled?: boolean;
     preset?: ListenTogetherLoudnessPreset;
@@ -54,8 +59,14 @@ export function useListenTogetherPlaybackState(
   const error = useListenTogetherStore((state) =>
     roomSlug ? (state.rooms[roomSlug]?.error ?? null) : null,
   );
+  const localPlayback = useListenTogetherStore((state) =>
+    roomSlug ? (state.rooms[roomSlug]?.localPlayback ?? null) : null,
+  );
   const setLocalVolume = useListenTogetherStore(
     (state) => state.setLocalVolume,
+  );
+  const setLocalPlayback = useListenTogetherStore(
+    (state) => state.setLocalPlayback,
   );
   const loudnessEnabled = useListenTogetherAudioSettingsStore(
     (state) => state.enabled,
@@ -66,10 +77,11 @@ export function useListenTogetherPlaybackState(
   const updateLoudnessSettings = useListenTogetherAudioSettingsStore(
     (state) => state.updateSettings,
   );
+  const isPaused = localPlayback?.paused ?? snapshot?.paused ?? true;
   const [playbackNowMs, setPlaybackNowMs] = useState(0);
 
   useEffect(() => {
-    if (!snapshot?.currentEntry || snapshot.paused) return;
+    if (!snapshot?.currentEntry || isPaused) return;
 
     const interval = window.setInterval(() => {
       setPlaybackNowMs(Date.now());
@@ -78,34 +90,38 @@ export function useListenTogetherPlaybackState(
     return () => {
       window.clearInterval(interval);
     };
-  }, [snapshot?.currentEntry, snapshot?.paused]);
+  }, [isPaused, snapshot?.currentEntry]);
 
   const currentEntry = snapshot?.currentEntry ?? null;
   const durationMs = snapshot?.durationMs ?? 0;
-  const effectiveSeekValue = snapshot
-    ? clampListenTogetherPosition(
-        Math.max(
-          snapshot.positionMs,
-          getListenTogetherPositionMs(
-            snapshot,
-            durationMs,
-            playbackNowMs || snapshot.anchorUpdatedAt || 0,
+  const effectiveSeekValue = localPlayback?.paused
+    ? clampListenTogetherPosition(localPlayback.positionMs, durationMs)
+    : snapshot
+      ? clampListenTogetherPosition(
+          Math.max(
+            snapshot.positionMs,
+            getListenTogetherPositionMs(
+              snapshot,
+              durationMs,
+              playbackNowMs || snapshot.anchorUpdatedAt || 0,
+            ),
           ),
-        ),
-        durationMs,
-      )
-    : 0;
+          durationMs,
+        )
+      : 0;
 
   return {
     currentEntry,
     durationMs,
     effectiveSeekValue,
     error,
+    isPaused,
     localVolume,
     loudnessEnabled,
     loudnessPreset,
     progressMax: Math.max(1, durationMs),
     setLocalVolume,
+    setLocalPlayback,
     updateLoudnessSettings,
     snapshot,
   };

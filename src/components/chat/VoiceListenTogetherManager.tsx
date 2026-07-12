@@ -72,6 +72,9 @@ export function VoiceListenTogetherManager({
   const localVolume = useListenTogetherStore((state) =>
     roomSlug ? (state.rooms[roomSlug]?.localVolume ?? 1) : 1,
   );
+  const localPlayback = useListenTogetherStore((state) =>
+    roomSlug ? (state.rooms[roomSlug]?.localPlayback ?? null) : null,
+  );
   const loudnessEnabled = useListenTogetherAudioSettingsStore(
     (state) => state.enabled,
   );
@@ -80,6 +83,9 @@ export function VoiceListenTogetherManager({
   );
   const ensureRoom = useListenTogetherStore((state) => state.ensureRoom);
   const setSnapshot = useListenTogetherStore((state) => state.setSnapshot);
+  const setLocalPlayback = useListenTogetherStore(
+    (state) => state.setLocalPlayback,
+  );
   const setError = useListenTogetherStore((state) => state.setError);
   const clearRoom = useListenTogetherStore((state) => state.clearRoom);
 
@@ -91,9 +97,13 @@ export function VoiceListenTogetherManager({
   const radioSrcRef = useRef<string | null>(null);
   const preferredFormatRef = useRef(detectPreferredListenTogetherAudioFormat());
   const playbackRetryKeyRef = useRef<string | null>(null);
+  const suppressedNativeEventsRef = useRef(
+    new WeakMap<HTMLAudioElement, Set<"play" | "pause">>(),
+  );
   const snapshotRef = useRef<ListenTogetherStateSnapshot | null>(null);
   const roomSlugRef = useRef<string | null>(roomSlug ?? null);
   const [sourceAttempt, setSourceAttempt] = useState(0);
+  const [audioContextRevision, setAudioContextRevision] = useState(0);
   const [desktopAuthToken, setDesktopAuthToken] = useState<string | null>(() =>
     getDesktopAuthHandoffToken(),
   );
@@ -158,6 +168,64 @@ export function VoiceListenTogetherManager({
     const radioAudio = radioAudioRef.current;
     if (!musicAudio || !radioAudio) return;
 
+    const markProgrammaticMediaEvent = (
+      audio: HTMLAudioElement,
+      eventType: "play" | "pause",
+    ) => {
+      const events =
+        suppressedNativeEventsRef.current.get(audio) ??
+        new Set<"play" | "pause">();
+      events.add(eventType);
+      suppressedNativeEventsRef.current.set(audio, events);
+    };
+
+    const consumeProgrammaticMediaEvent = (
+      audio: HTMLAudioElement,
+      eventType: "play" | "pause",
+    ) => {
+      const events = suppressedNativeEventsRef.current.get(audio);
+      if (!events?.has(eventType)) return false;
+      events.delete(eventType);
+      if (events.size === 0) suppressedNativeEventsRef.current.delete(audio);
+      return true;
+    };
+
+    const getActiveAudio = () =>
+      snapshotRef.current?.currentEntry?.track.kind === "radio"
+        ? radioAudio
+        : musicAudio;
+
+    const handleNativePlaybackEvent = (
+      audio: HTMLAudioElement,
+      eventType: "play" | "pause",
+    ) => {
+      if (consumeProgrammaticMediaEvent(audio, eventType)) return;
+      if (getActiveAudio() !== audio) return;
+
+      const activeRoomSlug = roomSlugRef.current;
+      const activeSnapshot = snapshotRef.current;
+      if (!activeRoomSlug || !activeSnapshot?.currentEntry) return;
+
+      const paused = eventType === "pause";
+      if (activeSnapshot.paused === paused) return;
+
+      const positionMs = Math.max(0, Math.round(audio.currentTime * 1000));
+      log.info("Native listen together playback changed", {
+        roomSlug: activeRoomSlug,
+        eventType,
+        paused,
+        positionMs,
+        trackId: getTrackIdentifier(activeSnapshot.currentEntry.track),
+      });
+      setLocalPlayback(activeRoomSlug, { paused, positionMs });
+      if (!sfu) return;
+      sfu.voiceGW.sendAppEvent({
+        type: "listen_together.pause",
+        room_slug: activeRoomSlug,
+        paused,
+      });
+    };
+
     const addAudioListeners = (
       audio: HTMLAudioElement,
       currentSrcRef: React.MutableRefObject<string | null>,
@@ -199,6 +267,7 @@ export function VoiceListenTogetherManager({
           preferredFormatRef.current =
             preferredFormatRef.current === "mp4" ? "webm" : "mp4";
           currentSrcRef.current = null;
+          if (!audio.paused) markProgrammaticMediaEvent(audio, "pause");
           audio.pause();
           audio.removeAttribute("src");
           audio.load();
@@ -267,6 +336,10 @@ export function VoiceListenTogetherManager({
       audio.addEventListener("loadstart", handleLoadStart);
       audio.addEventListener("waiting", handleWaiting);
       audio.addEventListener("stalled", handleStalled);
+      const handlePlay = () => handleNativePlaybackEvent(audio, "play");
+      const handlePause = () => handleNativePlaybackEvent(audio, "pause");
+      audio.addEventListener("play", handlePlay);
+      audio.addEventListener("pause", handlePause);
 
       return () => {
         audio.removeEventListener("canplay", handleCanPlay);
@@ -274,16 +347,49 @@ export function VoiceListenTogetherManager({
         audio.removeEventListener("loadstart", handleLoadStart);
         audio.removeEventListener("waiting", handleWaiting);
         audio.removeEventListener("stalled", handleStalled);
+        audio.removeEventListener("play", handlePlay);
+        audio.removeEventListener("pause", handlePause);
       };
     };
 
     const removeMusicListeners = addAudioListeners(musicAudio, musicSrcRef);
     const removeRadioListeners = addAudioListeners(radioAudio, radioSrcRef);
+
+    const mediaSession =
+      typeof navigator !== "undefined" ? navigator.mediaSession : undefined;
+    const mediaSessionActions: MediaSessionAction[] = ["play", "pause"];
+    if (mediaSession) {
+      for (const action of mediaSessionActions) {
+        try {
+          mediaSession.setActionHandler(action, () => {
+            const activeAudio = getActiveAudio();
+            if (!snapshotRef.current?.currentEntry) return;
+            if (action === "pause") {
+              activeAudio.pause();
+              return;
+            }
+            void activeAudio.play().catch(() => {});
+          });
+        } catch {
+          // Some browsers expose MediaSession but do not support every action.
+        }
+      }
+    }
+
     return () => {
       removeMusicListeners();
       removeRadioListeners();
+      if (mediaSession) {
+        for (const action of mediaSessionActions) {
+          try {
+            mediaSession.setActionHandler(action, null);
+          } catch {
+            // Ignore unsupported MediaSession actions during cleanup.
+          }
+        }
+      }
     };
-  }, [setError]);
+  }, [roomSlug, setError, setLocalPlayback, sfu]);
 
   useEffect(() => {
     if (!roomSlug) return;
@@ -319,14 +425,20 @@ export function VoiceListenTogetherManager({
       !audio ||
       !sfu ||
       !loudnessEnabled ||
-      snapshot?.currentEntry?.track.kind !== "music" ||
-      audioProcessorConnectedRef.current
+      snapshot?.currentEntry?.track.kind !== "music"
     )
       return;
     if (typeof AudioContext === "undefined") return;
     const audioProcessor = audioProcessorRef.current;
     const context = sfu.audio?.getAudioContext?.();
     if (!context) return;
+    if (
+      audioProcessorConnectedRef.current &&
+      !audioProcessor.isConnectedTo(context)
+    ) {
+      audioProcessor.close();
+      audioProcessorConnectedRef.current = false;
+    }
     sfu.resumeAudioContext?.();
     if (!audioProcessor.connect(audio, context)) return;
     audioProcessorConnectedRef.current = true;
@@ -342,6 +454,7 @@ export function VoiceListenTogetherManager({
     loudnessPreset,
     sfu,
     snapshot?.currentEntry?.track.kind,
+    audioContextRevision,
   ]);
 
   useEffect(() => {
@@ -367,6 +480,22 @@ export function VoiceListenTogetherManager({
         event.snapshot
       ) {
         const nextSnapshot = event.snapshot as ListenTogetherStateSnapshot;
+        const previousSnapshot = snapshotRef.current;
+        if (
+          !previousSnapshot ||
+          previousSnapshot.paused !== nextSnapshot.paused ||
+          previousSnapshot.currentEntryId !== nextSnapshot.currentEntryId
+        ) {
+          log.info("Applying authoritative listen together state", {
+            roomSlug,
+            eventType: event.type,
+            revision: nextSnapshot.revision,
+            currentEntryId: nextSnapshot.currentEntryId,
+            paused: nextSnapshot.paused,
+            previousPaused: previousSnapshot?.paused ?? null,
+            previousEntryId: previousSnapshot?.currentEntryId ?? null,
+          });
+        }
         log.debug("Received listen together snapshot event", {
           roomSlug,
           eventType: event.type,
@@ -405,6 +534,7 @@ export function VoiceListenTogetherManager({
 
   useEffect(() => {
     if (!sfu || !roomSlug || !voiceSessionId) return;
+    if (sfu.voiceGW.isReady === false) return;
     log.info("Requesting listen together room state", {
       roomSlug,
       voiceSessionId,
@@ -413,6 +543,31 @@ export function VoiceListenTogetherManager({
       type: "listen_together.state.request",
       room_slug: roomSlug,
     });
+  }, [roomSlug, sfu, voiceSessionId]);
+
+  useEffect(() => {
+    if (!sfu || !roomSlug || !voiceSessionId) return;
+
+    const unsubscribe = sfu.on("voice-ready", () => {
+      sfu.resumeAudioContext?.();
+      setAudioContextRevision((revision) => revision + 1);
+      log.info("Voice gateway ready; requesting listen together room state", {
+        roomSlug,
+        voiceSessionId,
+      });
+      sfu.voiceGW.sendAppEvent({
+        type: "listen_together.state.request",
+        room_slug: roomSlug,
+      });
+    });
+    const unsubscribeAudioResumed = sfu.on("audio-resumed", () => {
+      setAudioContextRevision((revision) => revision + 1);
+    });
+
+    return () => {
+      unsubscribe();
+      unsubscribeAudioResumed();
+    };
   }, [roomSlug, sfu, voiceSessionId]);
 
   useEffect(() => {
@@ -461,11 +616,15 @@ export function VoiceListenTogetherManager({
         currentTimeMs: Math.max(0, audio.currentTime * 1000),
         paused: audio.paused,
       },
+      nativePaused: localPlayback?.paused,
       streamUrl,
     });
 
     if (plan.nextSrc === null) {
       if (currentSrcRef.current || !audio.paused) {
+        if (!audio.paused) {
+          suppressedNativeEventsRef.current.set(audio, new Set(["pause"]));
+        }
         audio.pause();
         audio.removeAttribute("src");
         audio.load();
@@ -475,6 +634,9 @@ export function VoiceListenTogetherManager({
     }
 
     if (plan.shouldLoad && plan.nextSrc) {
+      if (!audio.paused) {
+        suppressedNativeEventsRef.current.set(audio, new Set(["pause"]));
+      }
       currentSrcRef.current = plan.nextSrc;
       audio.src = plan.nextSrc;
       audio.load();
@@ -500,8 +662,17 @@ export function VoiceListenTogetherManager({
       return;
     }
 
-    if (plan.shouldPlay) {
+    if (plan.shouldPlay && audio.paused && localPlayback?.paused !== true) {
       sfu?.resumeAudioContext?.();
+      log.info("Starting listen together audio", {
+        roomSlug,
+        trackId: currentEntry ? getTrackIdentifier(currentEntry.track) : null,
+        snapshotPaused: snapshot?.paused ?? null,
+        audioPaused: audio.paused,
+        audioMuted: audio.muted,
+        audioVolume: audio.volume,
+        audioContextState: sfu?.audio?.getAudioContext?.()?.state ?? null,
+      });
       void audio.play().catch((error) => {
         log.warn("Listen together playback start was blocked", {
           roomSlug,
@@ -529,6 +700,7 @@ export function VoiceListenTogetherManager({
     snapshot,
     sourceAttempt,
     voiceSessionId,
+    localPlayback?.paused,
   ]);
 
   return null;
