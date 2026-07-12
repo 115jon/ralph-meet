@@ -27,7 +27,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { useDelayUnmount } from "@/hooks/useDelayUnmount";
-import { ListenTogetherNowPlayingCard } from "./ListenTogetherNowPlayingCard";
+import { FloatingListenTogetherPlayer } from "./FloatingListenTogetherPlayer";
 import { useListenTogetherPlaybackState } from "./listen-together-playback";
 import { ActiveSoundboardEffectList } from "./ActiveSoundboardEffectList";
 import { getSoundboardServerKey } from "@/lib/voice/soundboard";
@@ -322,13 +322,11 @@ export function VoiceDashboard({
   return (
     <TooltipProvider delayDuration={0}>
       <div className="animate-in slide-in-from-bottom-5 duration-300">
-        <ListenTogetherNowPlayingCard
+        <FloatingListenTogetherPlayer
           playback={listenTogetherPlayback}
           sfu={sfu}
           roomSlug={roomSlug}
-          variant="mini"
           onOpenQueue={openListenTogetherPicker}
-          className="mx-2 mt-2 mb-1"
         />
 
         <ActiveSoundboardEffectList
