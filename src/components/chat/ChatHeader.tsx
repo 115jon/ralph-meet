@@ -72,7 +72,7 @@ export function ChatHeader({
 
   return (
     <header
-      className="flex shrink-0 items-center justify-between border-b border-rm-border bg-rm-bg-primary/60 backdrop-blur-md px-4 z-20 relative"
+      className="relative z-20 flex shrink-0 items-center justify-between border-b border-rm-border bg-rm-bg-primary/60 px-2.5 backdrop-blur-md md:px-4"
       style={{
         height: "calc(48px + var(--safe-area-top, 0px))",
         paddingTop: "var(--safe-area-top, 0px)",
@@ -83,13 +83,13 @@ export function ChatHeader({
           icon={ArrowLeft}
           variant="muted"
           size="sm"
-          className="md:hidden"
+          className="h-10 w-10 md:hidden"
           onClick={onMenuClick}
           title="Servers"
         />
 
         <button
-          className="md:hidden flex items-center gap-1.5 group/mobiletext text-left max-w-[180px] hover:opacity-80 transition-opacity"
+          className="group/mobiletext flex min-w-0 max-w-[min(45vw,180px)] items-center gap-1.5 text-left transition-opacity hover:opacity-80 md:hidden"
           onClick={onMembersClick}
         >
           {isDM ? (
@@ -164,7 +164,7 @@ export function ChatHeader({
         </button>
       </div>
 
-      <div className="flex items-center gap-2 md:gap-4 text-rm-text-muted">
+      <div className="flex items-center gap-1.5 text-rm-text-muted md:gap-4">
         <div className="hidden md:flex items-center gap-2 md:gap-4 border-r border-rm-border pr-2 md:pr-4">
           {isDM && onCall && !hideCallButton && (
             <Tooltip>
@@ -233,7 +233,7 @@ export function ChatHeader({
             icon={Search}
             variant="muted"
             size="sm"
-            className="md:hidden"
+            className="h-10 w-10 md:hidden"
             onClick={onOpenSearch}
           />
         </div>

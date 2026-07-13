@@ -542,7 +542,10 @@ export default function MemberList({
           />
         )}
 
-        <div className="flex-1 flex flex-col px-4 pt-2 lg:pt-4 lg:px-2 overflow-y-auto custom-scrollbar relative pb-10">
+        <div
+          className="relative flex min-h-0 flex-1 flex-col overflow-y-auto px-4 pb-10 pt-2 custom-scrollbar lg:px-2 lg:pt-4"
+          style={{ paddingBottom: "max(40px, var(--safe-area-bottom, 0px))" }}
+        >
           <MemberListTabs
             channelName={channelName}
             activeTab={state.activeTab}

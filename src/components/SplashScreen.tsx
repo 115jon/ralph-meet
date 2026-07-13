@@ -59,18 +59,10 @@ export function SplashScreen() {
 
       {/* Logo with breathing animation */}
       <div className="w-24 h-24 z-10 flex items-center justify-center animate-splash-breathe">
-        <div
-          className="w-full h-full bg-rm-text"
-          style={{
-            WebkitMaskImage: `url(${splashLogo})`,
-            WebkitMaskSize: "contain",
-            WebkitMaskRepeat: "no-repeat",
-            WebkitMaskPosition: "center",
-            maskImage: `url(${splashLogo})`,
-            maskSize: "contain",
-            maskRepeat: "no-repeat",
-            maskPosition: "center",
-          }}
+        <img
+          src={splashLogo}
+          alt="Ralph Meet"
+          className="h-full w-full object-contain"
         />
       </div>
 

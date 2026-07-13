@@ -1,6 +1,15 @@
 import { useUserResolution } from "@/hooks/useUserResolution";
+import { registerBackHandler } from "@/hooks/useBackButton";
 import { apiGet } from "@/lib/api-client";
 import { useCallback, useEffect, useId, useReducer, useRef } from "react";
+import {
+  Sheet,
+  SheetClose,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import { Hash, Loader2, Search, X } from "./Icons";
 
 interface SearchResult {
@@ -88,7 +97,6 @@ export default function SearchPanel({
 
   const inputRef = useRef<HTMLInputElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(null);
-  const dialogTitleId = useId();
   const searchInputId = useId();
 
   useEffect(() => {
@@ -96,12 +104,10 @@ export default function SearchPanel({
   }, []);
 
   useEffect(() => {
-    const handleKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    document.addEventListener("keydown", handleKey, { capture: true });
-    return () =>
-      document.removeEventListener("keydown", handleKey, { capture: true });
+    return registerBackHandler(() => {
+      onClose();
+      return true;
+    });
   }, [onClose]);
 
   const doSearch = useCallback(
@@ -169,22 +175,18 @@ export default function SearchPanel({
   };
 
   return (
-    <div className="fixed inset-0 z-200 flex items-start justify-center pt-[20%]">
-      <button
-        type="button"
-        className="absolute inset-0 bg-black/60 backdrop-blur-[2px]"
-        onClick={onClose}
-        aria-label="Close search panel"
-      />
-      <section
-        className="relative flex w-full max-w-[540px] mx-4 animate-in fade-in zoom-in-95 flex-col overflow-hidden rounded-lg border border-rm-border bg-rm-bg-surface shadow-2xl duration-200"
-        aria-labelledby={dialogTitleId}
+    <Sheet open onOpenChange={(nextOpen) => !nextOpen && onClose()}>
+      <SheetContent
+        side="right"
+        showCloseButton={false}
+        className="flex h-[100dvh] w-full max-w-[540px] flex-col gap-0 border-rm-border bg-rm-bg-surface p-0 max-md:max-w-none"
       >
-        <h2 id={dialogTitleId} className="sr-only">
-          Search messages
-        </h2>
-        {/* Search input */}
-        <div className="flex items-center gap-2 border-b border-rm-border px-4 py-3 bg-transparent">
+        <SheetHeader className="sr-only">
+          <SheetTitle>Search messages</SheetTitle>
+          <SheetDescription>Search messages in this server.</SheetDescription>
+        </SheetHeader>
+
+        <div className="flex shrink-0 items-center gap-2 border-b border-rm-border bg-transparent px-4 py-3 max-md:pt-[max(12px,var(--safe-area-top,0px))]">
           <label htmlFor={searchInputId} className="sr-only">
             Search messages
           </label>
@@ -193,24 +195,24 @@ export default function SearchPanel({
             ref={inputRef}
             id={searchInputId}
             type="text"
-            className="flex-1 bg-transparent text-[15px] font-medium text-rm-text outline-none placeholder:text-rm-text-muted"
+            className="flex-1 bg-transparent text-[15px] font-medium text-rm-text outline-none placeholder:text-rm-text-muted max-md:text-[16px]"
             placeholder="Search messages…"
             value={query}
             onChange={handleInput}
             onKeyDown={handleKeyDown}
           />
-          <button
-            type="button"
-            className="cursor-pointer rounded-lg p-1 text-rm-text-muted transition-colors hover:text-rm-text outline-none"
-            onClick={onClose}
-            aria-label="Close search panel"
-          >
-            <X className="h-4 w-4" />
-          </button>
+          <SheetClose asChild>
+            <button
+              type="button"
+              className="flex size-10 shrink-0 items-center justify-center rounded-lg text-rm-text-muted transition-colors outline-none hover:text-rm-text focus-visible:ring-2 focus-visible:ring-primary/60"
+              aria-label="Close search panel"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </SheetClose>
         </div>
 
-        {/* Results */}
-        <div className="max-h-96 overflow-y-auto custom-scrollbar">
+        <div className="min-h-0 flex-1 overflow-y-auto pb-[max(16px,var(--safe-area-bottom,0px))] custom-scrollbar">
           <div className="p-3">
             {loading && (
               <div className="flex items-center justify-center gap-2 py-6 text-primary/60">
@@ -262,8 +264,8 @@ export default function SearchPanel({
             )}
           </div>
         </div>
-      </section>
-    </div>
+      </SheetContent>
+    </Sheet>
   );
 }
 

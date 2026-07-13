@@ -151,7 +151,7 @@ export default function MessageInput({
                 <MessageInputPlaceholder
                   channelName={channelName}
                   replyDisplayName={replyDisplayName}
-                  className="py-1 text-[15px] font-medium leading-normal text-rm-text-muted/60"
+                  className="py-1 text-[15px] font-medium leading-normal text-rm-text-muted/60 max-md:text-[16px]"
                 />
               </div>
             )}
@@ -159,7 +159,7 @@ export default function MessageInput({
             <div
               ref={twinRef}
               aria-hidden="true"
-              className="absolute inset-0 z-0 whitespace-pre-wrap wrap-break-word py-1 text-[15px] font-medium leading-normal text-rm-text overflow-y-hidden pointer-events-none custom-scrollbar"
+              className="absolute inset-0 z-0 whitespace-pre-wrap wrap-break-word py-1 text-[15px] font-medium leading-normal text-rm-text overflow-y-hidden pointer-events-none custom-scrollbar max-md:text-[16px]"
             >
               <InputMentionOverlay
                 text={value}
@@ -191,7 +191,7 @@ export default function MessageInput({
               onClick={enforceAtomicMentions}
               placeholder=""
               className={cn(
-                "custom-scrollbar relative z-10 w-full resize-none overflow-y-auto bg-transparent py-1 text-[15px] font-medium leading-normal text-transparent outline-none placeholder:text-rm-text-muted/60 selection:bg-primary/30 selection:text-transparent",
+                "custom-scrollbar relative z-10 w-full resize-none overflow-y-auto bg-transparent py-1 text-[15px] font-medium leading-normal text-transparent outline-none placeholder:text-rm-text-muted/60 selection:bg-primary/30 selection:text-transparent max-md:text-[16px]",
               )}
               style={{
                 caretColor: "rgba(226, 232, 240, 0.9)",

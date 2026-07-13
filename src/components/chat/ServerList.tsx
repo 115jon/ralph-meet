@@ -360,15 +360,17 @@ export default function ServerList({
                     aria-label={buttonLabel}
                     data-server-tooltip={voiceSummary ? "voice" : "label"}
                   >
-                    {server.icon_url ? (
-                      <img
-                        src={getAuthAssetUrl(server.icon_url)}
-                        alt={server.name}
-                        className="h-full w-full rounded-[inherit] object-cover"
-                      />
-                    ) : (
-                      server.name.charAt(0).toUpperCase()
-                    )}
+                    <span className="flex h-full w-full shrink-0 items-center justify-center rounded-[inherit] font-bold">
+                      {server.icon_url ? (
+                        <img
+                          src={getAuthAssetUrl(server.icon_url)}
+                          alt={server.name}
+                          className="h-full w-full rounded-[inherit] object-cover"
+                        />
+                      ) : (
+                        server.name.charAt(0).toUpperCase()
+                      )}
+                    </span>
 
                     {voiceSummary && (
                       <div

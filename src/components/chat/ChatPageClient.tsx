@@ -4,6 +4,7 @@ import { DesktopThumbnailToolbarSync } from "@/components/chat/DesktopThumbnailT
 import DMSidebar from "@/components/chat/DMSidebar";
 import FloatingStreamPreview from "@/components/chat/FloatingStreamPreview";
 import FriendsView from "@/components/chat/FriendsView";
+import { MobileNavigationSheet } from "@/components/chat/MobileNavigationSheet";
 import ShopView from "@/components/chat/ShopView";
 import ServerList from "@/components/chat/ServerList";
 import UserPanel from "@/components/chat/UserPanel";
@@ -979,6 +980,80 @@ export default function ChatPage() {
       notifications,
     ],
   );
+
+  const renderNavigationContent = () => {
+    if (isDmMode) {
+      return (
+        <DMSidebar
+          activeChannelId={activeChannelId}
+          activeView={dmHomeView}
+          onSelectDm={onSelectDm}
+          onShowFriends={() => {
+            setDmHomeView("friends");
+            uiDispatch({ type: "SET_SIDEBAR", open: false });
+            dispatch({ type: "SET_ACTIVE_SERVER", serverId: "@me" });
+            dispatch({ type: "SET_ACTIVE_CHANNEL", channelId: null });
+          }}
+          onShowShop={() => {
+            setDmHomeView("shop");
+            uiDispatch({ type: "SET_SIDEBAR", open: false });
+            dispatch({ type: "SET_ACTIVE_SERVER", serverId: "@me" });
+            dispatch({ type: "SET_ACTIVE_CHANNEL", channelId: null });
+          }}
+        />
+      );
+    }
+
+    if (!activeServerId) {
+      return (
+        <div className="flex h-full flex-col border-r border-rm-border bg-rm-sidebar">
+          <div className="p-4 text-[13px] text-white/40">
+            Select a server to get started
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <ChannelSidebar
+        channels={channels}
+        categories={categories}
+        activeChannelId={activeChannelId}
+        serverId={activeServerId}
+        serverName={activeServer?.name ?? "Server"}
+        currentUserId={user?.id ?? null}
+        onSelect={guardedSelectChannel}
+        onInviteClick={() =>
+          uiDispatch({ type: "OPEN_MODAL", modal: "invite" })
+        }
+        onSettingsClick={() =>
+          uiDispatch({ type: "OPEN_MODAL", modal: "settings" })
+        }
+        readStates={readStates}
+        lastMessageAt={lastMessageAt}
+        voiceChannelStates={voiceChannelStates}
+        localVoiceChannelId={voiceState.channelId}
+        localVoiceConnected={voiceState.joined}
+        localVoiceSessionId={
+          localStreamState?.sfu?.getParticipantId?.() ?? null
+        }
+        localVoiceRoomSlug={localStreamState?.roomSlug ?? null}
+        channelMentionCounts={channelMentionCounts}
+        streamPreviewChannelId={localStreamState?.channelId ?? null}
+        streamThumbnails={localStreamState?.streamThumbnails ?? {}}
+        onWatchStream={handleWatchLiveStream}
+        canReorder={
+          hasPermission(currentUserPermissions, PERMISSIONS.MANAGE_CHANNELS) ||
+          hasPermission(currentUserPermissions, PERMISSIONS.ADMINISTRATOR)
+        }
+        canManageChannels={
+          hasPermission(currentUserPermissions, PERMISSIONS.MANAGE_CHANNELS) ||
+          hasPermission(currentUserPermissions, PERMISSIONS.ADMINISTRATOR)
+        }
+      />
+    );
+  };
+
   useBackButton(
     useCallback(() => {
       // Hardware back button behavior for the base layer (behind all modals/panels).
@@ -1050,10 +1125,8 @@ export default function ChatPage() {
         className="flex flex-1 overflow-hidden relative"
         style={channelSidebarStyle}
       >
-        {/* Server icon strip */}
-        <div
-          className={`z-50 flex w-[calc(var(--spacing)*18)] shrink-0 flex-col items-center overflow-y-auto bg-rm-bg-floating scrollbar-none max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:z-[110] max-md:transition-transform max-md:duration-300 ${sidebarOpen ? "max-md:translate-x-0" : "max-md:-translate-x-full"}`}
-        >
+        {/* Desktop server icon strip */}
+        <div className="z-50 hidden w-[calc(var(--spacing)*18)] shrink-0 flex-col items-center overflow-y-auto bg-rm-bg-floating scrollbar-none md:flex">
           <ServerList
             servers={servers}
             activeServerId={activeServerId}
@@ -1111,109 +1184,14 @@ export default function ChatPage() {
           />
         </div>
 
-        {/* Mobile overlay */}
-        <div
-          className={`fixed inset-0 z-[104] bg-black/50 transition-opacity duration-300 ${
-            sidebarOpen
-              ? "pointer-events-auto opacity-100"
-              : "pointer-events-none opacity-0"
-          } md:hidden`}
-          onClick={() => uiDispatch({ type: "SET_SIDEBAR", open: false })}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" || e.key === " " || e.key === "Escape")
-              uiDispatch({ type: "SET_SIDEBAR", open: false });
-          }}
-          role="presentation"
-          aria-hidden="true"
-        />
-
-        {/* Channel sidebar */}
+        {/* Desktop channel sidebar */}
         <div
           className={cn(
-            "relative flex h-full shrink-0 flex-col overflow-hidden bg-rm-sidebar font-sans md:w-[var(--channel-sidebar-width)] md:min-w-[calc(var(--spacing)*52)] md:max-w-[calc(var(--spacing)*92)] max-md:fixed max-md:inset-y-0 max-md:left-[calc(var(--spacing)*18)] max-md:z-[105] max-md:w-[calc(100vw-(var(--spacing)*18))] max-md:max-w-72 max-md:shadow-2xl max-md:transition-transform max-md:duration-300",
-            sidebarOpen
-              ? "max-md:translate-x-0"
-              : "max-md:-translate-x-[calc(100%+(var(--spacing)*18))]",
+            "relative hidden h-full shrink-0 flex-col overflow-hidden bg-rm-sidebar font-sans md:flex md:w-[var(--channel-sidebar-width)] md:min-w-[calc(var(--spacing)*52)] md:max-w-[calc(var(--spacing)*92)]",
           )}
         >
           <div className="min-h-0 flex-1 overflow-hidden">
-            {isDmMode ? (
-              <DMSidebar
-                activeChannelId={activeChannelId}
-                activeView={dmHomeView}
-                onSelectDm={(channelId) => {
-                  dispatch({ type: "SET_ACTIVE_CHANNEL", channelId });
-                  uiDispatch({ type: "SET_SIDEBAR", open: false });
-                }}
-                onShowFriends={() => {
-                  setDmHomeView("friends");
-                  uiDispatch({ type: "SET_SIDEBAR", open: false });
-                  dispatch({ type: "SET_ACTIVE_SERVER", serverId: "@me" });
-                  dispatch({ type: "SET_ACTIVE_CHANNEL", channelId: null });
-                }}
-                onShowShop={() => {
-                  setDmHomeView("shop");
-                  uiDispatch({ type: "SET_SIDEBAR", open: false });
-                  dispatch({ type: "SET_ACTIVE_SERVER", serverId: "@me" });
-                  dispatch({ type: "SET_ACTIVE_CHANNEL", channelId: null });
-                }}
-              />
-            ) : activeServerId ? (
-              <ChannelSidebar
-                channels={channels}
-                categories={categories}
-                activeChannelId={activeChannelId}
-                serverId={activeServerId}
-                serverName={activeServer?.name ?? "Server"}
-                currentUserId={user?.id ?? null}
-                onSelect={guardedSelectChannel}
-                onInviteClick={() =>
-                  uiDispatch({ type: "OPEN_MODAL", modal: "invite" })
-                }
-                onSettingsClick={() =>
-                  uiDispatch({ type: "OPEN_MODAL", modal: "settings" })
-                }
-                readStates={readStates}
-                lastMessageAt={lastMessageAt}
-                voiceChannelStates={voiceChannelStates}
-                localVoiceChannelId={voiceState.channelId}
-                localVoiceConnected={voiceState.joined}
-                localVoiceSessionId={
-                  localStreamState?.sfu?.getParticipantId?.() ?? null
-                }
-                localVoiceRoomSlug={localStreamState?.roomSlug ?? null}
-                channelMentionCounts={channelMentionCounts}
-                streamPreviewChannelId={localStreamState?.channelId ?? null}
-                streamThumbnails={localStreamState?.streamThumbnails ?? {}}
-                onWatchStream={handleWatchLiveStream}
-                canReorder={
-                  hasPermission(
-                    currentUserPermissions,
-                    PERMISSIONS.MANAGE_CHANNELS,
-                  ) ||
-                  hasPermission(
-                    currentUserPermissions,
-                    PERMISSIONS.ADMINISTRATOR,
-                  )
-                }
-                canManageChannels={
-                  hasPermission(
-                    currentUserPermissions,
-                    PERMISSIONS.MANAGE_CHANNELS,
-                  ) ||
-                  hasPermission(
-                    currentUserPermissions,
-                    PERMISSIONS.ADMINISTRATOR,
-                  )
-                }
-              />
-            ) : (
-              <div className="flex h-full flex-col border-r border-rm-border bg-rm-sidebar">
-                <div className="p-4 text-[13px] text-white/40">
-                  Select a server to get started
-                </div>
-              </div>
-            )}
+            {renderNavigationContent()}
           </div>
 
           <button
@@ -1241,6 +1219,50 @@ export default function ChatPage() {
             />
           </button>
         </div>
+
+        <MobileNavigationSheet
+          open={sidebarOpen}
+          onClose={() => uiDispatch({ type: "SET_SIDEBAR", open: false })}
+          serverList={
+            <ServerList
+              servers={servers}
+              activeServerId={activeServerId}
+              activeChannelId={activeChannelId}
+              onSelect={(serverId) => {
+                handleSelectServer(serverId);
+              }}
+              channels={railChannels}
+              channelsByServerId={channelsByServerId}
+              readStates={readStates}
+              lastMessageAt={lastMessageAt}
+              voiceChannelStates={voiceChannelStates}
+              localVoiceServerId={
+                voiceState.joined ? voiceState.serverId : null
+              }
+              serverMentionCounts={serverMentionCounts}
+              homeBadgeCount={homeBadgeCount}
+              unreadDms={unreadDms}
+              onSelectDm={onSelectDm}
+              onMarkServerRead={(serverId) => {
+                const serverChannels = channels.filter(
+                  (channel) => channel.server_id === serverId,
+                );
+                for (const channel of serverChannels) {
+                  const lastMessage = lastMessageAt[channel.id];
+                  const lastRead = readStates[channel.id];
+                  if (lastMessage && (!lastRead || lastMessage > lastRead)) {
+                    markChannelRead(channel.id);
+                  }
+                }
+              }}
+            />
+          }
+          current={
+            <div className="h-full min-h-0 overflow-hidden bg-rm-bg-secondary">
+              {renderNavigationContent()}
+            </div>
+          }
+        />
 
         {/* Main content */}
         <div className="flex-1 flex flex-col min-w-0 bg-rm-bg-primary overflow-hidden relative chat-main-content">
@@ -1513,9 +1535,7 @@ export default function ChatPage() {
         />
 
         {/* Floating UI anchored over the left nav without changing its location */}
-        <div
-          className={`absolute bottom-0 left-0 z-[120] w-[var(--left-nav-width)] pointer-events-none p-0 flex justify-start items-end max-md:fixed max-md:w-[min(calc(100vw),360px)] max-md:transition-transform max-md:duration-300 ${sidebarOpen ? "max-md:translate-x-0" : "max-md:-translate-x-full"}`}
-        >
+        <div className="absolute bottom-0 left-0 z-[120] flex w-[var(--left-nav-width)] pointer-events-none items-end justify-start p-0 max-md:hidden">
           <div className="pointer-events-auto w-full">
             <UserPanel
               user={user}
