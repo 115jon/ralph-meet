@@ -3,6 +3,27 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
 import ServerList from "./ServerList";
+import { HomeDarkSvg } from "./home-svgs";
+
+describe("HomeDarkSvg", () => {
+  it("uses unique mask ids so repeated home icons do not render as filled squares", () => {
+    const markup = renderToStaticMarkup(
+      <>
+        <HomeDarkSvg />
+        <HomeDarkSvg />
+      </>,
+    );
+    const maskIds = Array.from(markup.matchAll(/<mask id="([^"]+)"/g)).map(
+      ([, id]) => id,
+    );
+
+    expect(maskIds).toHaveLength(2);
+    expect(new Set(maskIds).size).toBe(2);
+    for (const maskId of maskIds) {
+      expect(markup).toContain(`mask="url(#${maskId})"`);
+    }
+  });
+});
 
 describe("ServerList voice activity", () => {
   it("renders the voice indicator and detailed hover card for visible voice channels", () => {
