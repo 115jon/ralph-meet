@@ -18,7 +18,7 @@ minimumReleaseAgeExclude:
   - wrangler@4.110.0
 
 onlyBuiltDependencies:
-  - "@kova/react"
+  - "@kova/react@0.1.0"
   - esbuild
   - msw
   - sharp
