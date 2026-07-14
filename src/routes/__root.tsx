@@ -132,7 +132,7 @@ function RootComponent() {
       afterSignInUrl="/chat"
       afterSignOutUrl="/sign-in"
       initialSessionToken={sessionToken}
-      onSessionTokenChange={(token) => {
+      onSessionTokenChange={(token: string | null) => {
         setSessionToken(token ?? undefined);
         if (!isTauri()) return;
 
