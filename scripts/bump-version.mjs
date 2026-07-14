@@ -30,11 +30,6 @@ const FILES_TO_UPDATE = [
     regex: /<Version>([^<]+)<\/Version>/,
   },
   {
-    path: "packages/kova-react/package.json",
-    type: "json",
-    keyPath: ["version"],
-  },
-  {
     path: "mobile/package.json",
     type: "json",
     keyPath: ["version"],

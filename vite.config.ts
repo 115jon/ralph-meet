@@ -116,10 +116,6 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": path.resolve(import.meta.dirname, "src"),
-      "@kova/react": path.resolve(
-        import.meta.dirname,
-        "packages/kova-react/dist/index.js",
-      ),
       "use-sync-external-store/shim/with-selector": path.resolve(
         shimDir,
         "use-sync-external-store-with-selector.ts",
