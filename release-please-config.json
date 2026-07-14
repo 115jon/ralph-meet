@@ -7,7 +7,6 @@
       "include-component-in-tag": false,
       "extra-files": [
         "desktop/package.json",
-        "packages/kova-react/package.json",
         "mobile/package.json",
         {
           "type": "json",

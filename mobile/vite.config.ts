@@ -22,13 +22,16 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": path.resolve(rootDir, "src"),
-      "@kova/react": path.resolve(rootDir, "packages/kova-react/dist/index.js"),
 
       // ── Tauri plugin resolution ────────────────────────────────────
       // Map to this project's node_modules (not root)
       "@tauri-apps/plugin-shell": path.resolve(
         import.meta.dirname,
         "node_modules/@tauri-apps/plugin-shell",
+      ),
+      "@tauri-apps/plugin-notification": path.resolve(
+        import.meta.dirname,
+        "node_modules/@tauri-apps/plugin-notification",
       ),
       "tauri-plugin-status-bar-color-api": path.resolve(
         import.meta.dirname,

@@ -2,7 +2,6 @@
   "$schema": "https://react.doctor/schema/config.json",
   "ignore": {
     "files": [
-      "packages/kova-react/dist/**",
       "desktop/src-tauri/tauri-fork/**",
       "desktop/src-tauri/vendor/**",
       "mobile/src-tauri/vendored_crates/**"
