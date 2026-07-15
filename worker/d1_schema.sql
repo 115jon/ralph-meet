@@ -20,6 +20,7 @@ CREATE TABLE IF NOT EXISTS users (
     theme_preference TEXT,
     theme_sync_enabled INTEGER NOT NULL DEFAULT 0,
     media_content_filter TEXT NOT NULL DEFAULT 'high',
+    sound_settings TEXT,
     bio TEXT,
     pronouns TEXT,
     status TEXT DEFAULT 'online',      -- online | idle | dnd | offline

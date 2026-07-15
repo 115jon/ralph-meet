@@ -38,6 +38,9 @@ import { createPortal } from "react-dom";
 import type { SFUClient } from "@/lib/sfu-client";
 
 import { useChatStore } from "@/stores/chat-store";
+import { useSoundSettingsStore } from "@/stores/useSoundSettingsStore";
+import { getAuthAssetUrl } from "@/lib/platform";
+import type { Server } from "@/lib/types";
 import {
   DEFAULT_SOUNDBOARD_SOUNDS,
   MAX_SOUNDBOARD_UPLOAD_BYTES,
@@ -47,11 +50,15 @@ import {
   getSoundboardMasterVolume,
   playSoundboardPlayback,
 } from "@/lib/voice/soundboard";
+import {
+  toSoundboardCatalogSound,
+  type SoundboardCatalogSound,
+} from "@/lib/voice/soundboard-catalog";
 import EmojiToken from "./EmojiToken";
+import { HomeIcon } from "./HomeIcon";
 import { UploadSoundModal, type UploadSoundData } from "./UploadSoundModal";
 import { useDelayUnmount } from "@/hooks/useDelayUnmount";
 import { ListenTogetherPanel } from "./ListenTogetherPanel";
-import { ActiveSoundboardEffectList } from "./ActiveSoundboardEffectList";
 
 interface Props {
   isClosing?: boolean;
@@ -65,6 +72,10 @@ interface Props {
   roomSlug?: string | null;
   voiceSessionId?: string | null;
   localUserId?: string | null;
+  selectionMode?: boolean;
+  compact?: boolean;
+  onSelect?: (sound: SoundboardCatalogSound) => void;
+  serverIds?: string[];
 }
 
 type SoundboardView = "soundboard" | "myinstants" | "radio" | "listenTogether";
@@ -78,13 +89,41 @@ interface RadioStation {
   clickcount: number;
 }
 
-interface CustomSound {
-  id: string;
-  name: string;
-  dataUrl?: string;
-  mediaUrl?: string;
-  emoji?: string;
-  volume?: number;
+type CustomSound = SoundboardCatalogSound;
+
+type PickerServer = Pick<Server, "id" | "name" | "icon_url">;
+
+function PickerServerIcon({
+  server,
+  large = false,
+}: {
+  server: PickerServer;
+  large?: boolean;
+}) {
+  const iconClassName = large ? "h-10 w-10" : "h-6 w-6";
+  if (server.icon_url) {
+    return (
+      <img
+        src={getAuthAssetUrl(server.icon_url)}
+        alt=""
+        className={cn(
+          iconClassName,
+          "rounded-full object-cover outline outline-1 outline-black/10 dark:outline-white/10",
+        )}
+      />
+    );
+  }
+
+  return (
+    <span
+      className={cn(
+        iconClassName,
+        "flex items-center justify-center rounded-full bg-rm-bg-hover text-[10px] font-black text-rm-text-muted",
+      )}
+    >
+      {server.name.slice(0, 1).toUpperCase()}
+    </span>
+  );
 }
 
 interface ServerSoundboardItem {
@@ -93,6 +132,7 @@ interface ServerSoundboardItem {
   file_url: string;
   emoji?: string;
   volume?: number;
+  server_id?: string;
 }
 
 interface MyInstantsSound {
@@ -156,48 +196,34 @@ function writeStoredSounds(key: string, sounds: CustomSound[]) {
 function SectionHeader({
   icon,
   title,
-  count,
   isCollapsed,
   onToggle,
-  accentClassName,
 }: {
   icon: React.ReactNode;
   title: string;
-  count: number;
   isCollapsed: boolean;
   onToggle: () => void;
-  accentClassName?: string;
 }) {
   return (
     <button
       type="button"
       onClick={onToggle}
-      className="mb-3 flex w-full items-center justify-between gap-3 rounded-xl border border-rm-border/30 bg-rm-bg-surface/30 px-3 py-2 text-left transition-colors hover:bg-rm-bg-hover"
+      className="mb-2 flex w-full items-center justify-start gap-2 rounded-lg px-1 py-1.5 text-left transition-colors hover:bg-rm-bg-hover"
     >
-      <div className="flex min-w-0 items-center gap-2.5">
-        <div
-          className={cn(
-            "flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-rm-border bg-rm-bg-hover shadow-sm dark:shadow-none",
-            accentClassName,
-          )}
-        >
-          {icon}
-        </div>
-        <div className="min-w-0">
-          <div className="truncate text-[12px] font-black uppercase tracking-[0.12em] text-rm-text">
-            {title}
-          </div>
-          <div className="text-[11px] text-rm-text-muted">
-            {count} {count === 1 ? "sound" : "sounds"}
-          </div>
-        </div>
-      </div>
       <ChevronDown
         className={cn(
-          "h-4 w-4 shrink-0 text-rm-text-muted transition-transform",
+          "h-3.5 w-3.5 shrink-0 text-rm-text-muted transition-transform",
           isCollapsed && "-rotate-90",
         )}
       />
+      <div className="flex min-w-0 items-center gap-2">
+        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-rm-bg-hover text-rm-text-muted">
+          {icon}
+        </div>
+        <div className="truncate text-[11px] font-bold text-rm-text">
+          {title}
+        </div>
+      </div>
     </button>
   );
 }
@@ -213,8 +239,14 @@ export default function SoundboardPicker({
   roomSlug,
   voiceSessionId,
   localUserId,
+  selectionMode = false,
+  compact = false,
+  onSelect,
+  serverIds = [],
 }: Props) {
-  const [activeView, setActiveView] = useState<SoundboardView>(initialView);
+  const [activeView, setActiveView] = useState<SoundboardView>(
+    selectionMode ? "soundboard" : initialView,
+  );
   const [dynamicStyle, setDynamicStyle] = useState<React.CSSProperties>({
     opacity: 0,
   });
@@ -232,8 +264,49 @@ export default function SoundboardPicker({
   const [editingSound, setEditingSound] = useState<CustomSound | null>(null);
   const [soundToDelete, setSoundToDelete] = useState<CustomSound | null>(null);
   const [sendVolume, setSendVolume] = useState(0.8);
+  const storedSoundboardVolume = useSoundSettingsStore((state) =>
+    localUserId ? state.getSettings(localUserId).soundboardVolume : null,
+  );
+  const updateSoundSettings = useSoundSettingsStore(
+    (state) => state.updateSettings,
+  );
+  const volumePersistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
+  const pendingVolumeRef = useRef<number | null>(null);
+  const scheduleVolumePersistence = useCallback(
+    (volume: number) => {
+      pendingVolumeRef.current = Math.round(volume * 100);
+      if (volumePersistTimerRef.current) {
+        clearTimeout(volumePersistTimerRef.current);
+      }
+      volumePersistTimerRef.current = setTimeout(() => {
+        volumePersistTimerRef.current = null;
+        const pendingVolume = pendingVolumeRef.current;
+        pendingVolumeRef.current = null;
+        if (localUserId && pendingVolume !== null) {
+          updateSoundSettings({ soundboardVolume: pendingVolume }, localUserId);
+        }
+      }, 250);
+    },
+    [localUserId, updateSoundSettings],
+  );
+  useEffect(
+    () => () => {
+      if (volumePersistTimerRef.current) {
+        clearTimeout(volumePersistTimerRef.current);
+      }
+      const pendingVolume = pendingVolumeRef.current;
+      if (localUserId && pendingVolume !== null) {
+        updateSoundSettings({ soundboardVolume: pendingVolume }, localUserId);
+      }
+    },
+    [localUserId, updateSoundSettings],
+  );
   const [playbackVolume, setPlaybackVolume] = useState(() =>
-    getSoundboardMasterVolume(),
+    storedSoundboardVolume === null
+      ? getSoundboardMasterVolume()
+      : storedSoundboardVolume / 100,
   );
 
   const [collapsedCategories, setCollapsedCategories] = useState<
@@ -243,13 +316,14 @@ export default function SoundboardPicker({
     [CUSTOM_SECTION_ID]: false,
     [DEFAULT_SECTION_ID]: false,
   });
-  const [activeCategory, setActiveCategory] =
-    useState<string>(FAVORITES_SECTION_ID);
+  const [activeCategory, setActiveCategory] = useState<string>(
+    selectionMode ? CUSTOM_SECTION_ID : FAVORITES_SECTION_ID,
+  );
   const pendingJumpIdRef = useRef<string | null>(null);
 
   useEffect(() => {
-    setActiveView(initialView);
-  }, [initialView]);
+    setActiveView(selectionMode ? "soundboard" : initialView);
+  }, [initialView, selectionMode]);
 
   const [myInstantsQuery, setMyInstantsQuery] = useState("");
   const [myInstantsResults, setMyInstantsResults] = useState<MyInstantsSound[]>(
@@ -266,17 +340,47 @@ export default function SoundboardPicker({
   const [isSearchingRadio, setIsSearchingRadio] = useState(false);
 
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const pickerRef = useRef<HTMLDialogElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const sectionRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const memberServers = useChatStore((state) => state.servers);
   const isServerSoundboard = !!serverId && serverId !== "@me";
+  const catalogServerIds = selectionMode
+    ? serverIds
+    : Array.from(
+        new Set([
+          ...(serverId && serverId !== "@me" ? [serverId] : []),
+          ...memberServers.map((server) => server.id),
+        ]),
+      );
+  const pickerServers: PickerServer[] = catalogServerIds.map((id) => {
+    const server = memberServers.find((entry) => entry.id === id);
+    return server
+      ? {
+          id: server.id,
+          name: server.name,
+          icon_url: server.icon_url,
+        }
+      : { id, name: id, icon_url: null };
+  });
+  const serverSectionIds = pickerServers.map((server) => `server:${server.id}`);
+  const catalogServerKey = catalogServerIds.join(",");
 
   useEffect(() => {
     setSoundboardMasterVolume(playbackVolume);
   }, [playbackVolume]);
 
   useEffect(() => {
+    if (storedSoundboardVolume === null) return;
+    const nextVolume = storedSoundboardVolume / 100;
+    setPlaybackVolume(nextVolume);
+    setSoundboardMasterVolume(nextVolume);
+  }, [storedSoundboardVolume]);
+
+  useEffect(() => {
+    if (selectionMode) return;
     if (hasFetchedFavoritesRef.current) return;
     hasFetchedFavoritesRef.current = true;
     apiGet<{ favorites: MyInstantsSound[] }>("/api/myinstants/favorites")
@@ -291,7 +395,7 @@ export default function SoundboardPicker({
       .catch((err) =>
         console.error("Failed to load MyInstants favorites", err),
       );
-  }, []);
+  }, [selectionMode]);
 
   const toggleFavorite = async (
     sound: {
@@ -360,33 +464,45 @@ export default function SoundboardPicker({
   }, [isServerSoundboard, storageKey]);
 
   useEffect(() => {
-    if (!isServerSoundboard || !serverId) {
+    if (!catalogServerKey) {
       setServerSounds([]);
       return;
     }
     const controller = new AbortController();
-    void apiGet<ServerSoundboardItem[]>(`/api/servers/${serverId}/soundboard`, {
-      signal: controller.signal,
-    })
-      .then((sounds) => {
-        setServerSounds(
-          sounds.map((sound) => ({
-            id: sound.id,
-            name: sound.name,
-            mediaUrl: sound.file_url,
-            emoji: sound.emoji,
-            volume: sound.volume,
-          })),
-        );
-      })
-      .catch((error) => {
-        if (!controller.signal.aborted) {
-          console.error("Failed to load soundboard:", error);
-          setServerSounds([]);
+    void Promise.allSettled(
+      catalogServerKey.split(",").map((catalogId) =>
+        apiGet<ServerSoundboardItem[]>(`/api/servers/${catalogId}/soundboard`, {
+          signal: controller.signal,
+        }).then((sounds) =>
+          sounds.map((sound) =>
+            toSoundboardCatalogSound(
+              {
+                id: sound.id,
+                name: sound.name,
+                mediaUrl: sound.file_url,
+                emoji: sound.emoji,
+                volume: sound.volume,
+                serverId: sound.server_id ?? catalogId,
+              },
+              "server",
+            ),
+          ),
+        ),
+      ),
+    ).then((results) => {
+      if (controller.signal.aborted) return;
+      const sounds = results.flatMap((result) =>
+        result.status === "fulfilled" ? result.value : [],
+      );
+      setServerSounds(sounds.flat());
+      for (const result of results) {
+        if (result.status === "rejected") {
+          console.error("Failed to load a server soundboard:", result.reason);
         }
-      });
+      }
+    });
     return () => controller.abort();
-  }, [isServerSoundboard, serverId]);
+  }, [catalogServerKey, isServerSoundboard, serverId]);
 
   // `sfu.on(...)` returns the unsubscribe function from EventEmitter.on.
   // react-doctor-disable-next-line react-doctor/effect-needs-cleanup
@@ -431,7 +547,7 @@ export default function SoundboardPicker({
   }, [isServerSoundboard, sfu, serverKey]);
 
   useEffect(() => {
-    if (activeView !== "myinstants") return;
+    if (selectionMode || activeView !== "myinstants") return;
     const fetchMyInstants = () => {
       const controller = new AbortController();
       setIsSearchingMyInstants(true);
@@ -463,10 +579,10 @@ export default function SoundboardPicker({
       const controller = fetchMyInstants();
       return () => controller.abort();
     }
-  }, [activeView, myInstantsQuery]);
+  }, [activeView, myInstantsQuery, selectionMode]);
 
   useEffect(() => {
-    if (activeView !== "radio") return;
+    if (selectionMode || activeView !== "radio") return;
     const fetchRadio = () => {
       const controller = new AbortController();
       setIsSearchingRadio(true);
@@ -504,7 +620,7 @@ export default function SoundboardPicker({
       const controller = fetchRadio();
       return () => controller.abort();
     }
-  }, [activeView, radioQuery]);
+  }, [activeView, radioQuery, selectionMode]);
 
   useEffect(() => {
     searchInputRef.current?.focus();
@@ -518,6 +634,19 @@ export default function SoundboardPicker({
     return () =>
       window.removeEventListener("keydown", handleEscape, { capture: true });
   }, [onClose]);
+
+  useEffect(() => {
+    if (!compact) return;
+    const closeOnOutsidePointer = (event: PointerEvent) => {
+      const target = event.target as Node;
+      if (pickerRef.current?.contains(target)) return;
+      if (markerRef?.current?.contains(target)) return;
+      onClose();
+    };
+    document.addEventListener("pointerdown", closeOnOutsidePointer, true);
+    return () =>
+      document.removeEventListener("pointerdown", closeOnOutsidePointer, true);
+  }, [compact, markerRef, onClose]);
 
   useEffect(() => {
     const pendingJumpId = pendingJumpIdRef.current;
@@ -569,6 +698,7 @@ export default function SoundboardPicker({
     const scrollTop = container.scrollTop;
     const sections = [
       FAVORITES_SECTION_ID,
+      ...serverSectionIds,
       CUSTOM_SECTION_ID,
       DEFAULT_SECTION_ID,
     ];
@@ -582,7 +712,7 @@ export default function SoundboardPicker({
     if (nextActive !== activeCategory) {
       setActiveCategory(nextActive);
     }
-  }, [activeCategory, deferredSearch]);
+  }, [activeCategory, deferredSearch, serverSectionIds]);
 
   const persistLocalSounds = (next: CustomSound[]) => {
     setCustomSounds(next);
@@ -597,27 +727,57 @@ export default function SoundboardPicker({
       }
 
       if (window.innerWidth < 640) {
-        setDynamicStyle({ opacity: 1 });
+        if (!compact) {
+          setDynamicStyle({ opacity: 1 });
+          return;
+        }
+        const compactHeight = Math.min(560, window.innerHeight - 24);
+        setDynamicStyle({
+          opacity: 1,
+          width: Math.min(440, window.innerWidth - 24),
+          height: compactHeight,
+          maxHeight: compactHeight,
+          left: 12,
+          top: Math.max(12, window.innerHeight - compactHeight - 12),
+        });
         return;
       }
 
       const rect = markerRef.current.getBoundingClientRect();
       const pickerWidth = Math.min(
         window.innerWidth - 24,
-        activeView === "listenTogether" ? 980 : 440,
+        compact ? 440 : activeView === "listenTogether" ? 980 : 440,
       );
 
-      const MAX_HEIGHT = Math.min(820, window.innerHeight - 20);
+      const MAX_HEIGHT = Math.min(
+        compact ? 560 : 820,
+        window.innerHeight - (compact ? 24 : 20),
+      );
 
       const style: React.CSSProperties = {
         opacity: 1,
         width: pickerWidth,
         maxHeight: MAX_HEIGHT,
-        height:
-          activeView === "listenTogether"
+        height: compact
+          ? MAX_HEIGHT
+          : activeView === "listenTogether"
             ? "min(820px, 82vh)"
             : "min(760px, 75vh)",
       };
+
+      if (compact) {
+        let left = rect.left - pickerWidth - 10;
+        if (left < 12) left = rect.right + 10;
+        if (left + pickerWidth > window.innerWidth - 12) {
+          left = Math.max(12, window.innerWidth - pickerWidth - 12);
+        }
+        const top = Math.min(
+          Math.max(12, rect.top),
+          Math.max(12, window.innerHeight - MAX_HEIGHT - 12),
+        );
+        setDynamicStyle({ ...style, left, top });
+        return;
+      }
 
       let left = rect.left;
       if (left + pickerWidth > window.innerWidth - 10) {
@@ -646,7 +806,7 @@ export default function SoundboardPicker({
       window.removeEventListener("resize", updatePosition);
       window.cancelAnimationFrame(frameId);
     };
-  }, [activeView, markerRef, placement]);
+  }, [activeView, compact, markerRef, placement]);
 
   const broadcastSound = (sound: {
     id: string;
@@ -657,7 +817,35 @@ export default function SoundboardPicker({
     emoji?: string;
     soundType?: "myinstants" | "custom" | "default" | "radio";
     artworkUrl?: string;
+    serverId?: string;
   }) => {
+    if (selectionMode) {
+      const source =
+        sound.soundType === "default"
+          ? "default"
+          : isServerSoundboard || sound.serverId
+            ? "server"
+            : "custom";
+      if (source === "custom") return;
+      onSelect?.(
+        toSoundboardCatalogSound(
+          {
+            id: sound.id,
+            name: sound.name,
+            dataUrl: sound.dataUrl,
+            mediaUrl: sound.mediaUrl,
+            emoji: sound.emoji,
+            volume: sound.volume,
+            serverId:
+              source === "server"
+                ? (sound.serverId ?? serverId ?? undefined)
+                : undefined,
+          },
+          source,
+        ),
+      );
+      return;
+    }
     // Radio stations are enqueued to Listen Together instead of soundboard.play
     if (sound.soundType === "radio" && roomSlug && sfu) {
       const currentUser = useChatStore.getState().user;
@@ -900,17 +1088,34 @@ export default function SoundboardPicker({
     setIsUploadModalOpen(true);
   };
 
-  const visibleSounds = isServerSoundboard ? serverSounds : customSounds;
   const filteredFavorites = deferredSearch
     ? myInstantsFavorites.filter((s) =>
         s.title.toLowerCase().includes(deferredSearch.toLowerCase()),
       )
     : myInstantsFavorites;
   const filteredCustom = deferredSearch
-    ? visibleSounds.filter((s) =>
+    ? customSounds.filter((s) =>
         s.name.toLowerCase().includes(deferredSearch.toLowerCase()),
       )
-    : visibleSounds;
+    : customSounds;
+  const filteredServerSounds = deferredSearch
+    ? serverSounds.filter((s) =>
+        s.name.toLowerCase().includes(deferredSearch.toLowerCase()),
+      )
+    : serverSounds;
+  const serverSoundSections = pickerServers.map((server) => ({
+    id: `server:${server.id}`,
+    server,
+    sounds: filteredServerSounds.filter(
+      (sound) => sound.serverId === server.id,
+    ),
+  }));
+  const soundSections = [
+    ...serverSoundSections,
+    ...(!isServerSoundboard && !selectionMode
+      ? [{ id: CUSTOM_SECTION_ID, server: null, sounds: filteredCustom }]
+      : []),
+  ];
   const filteredDefault = deferredSearch
     ? DEFAULT_SOUNDBOARD_SOUNDS.filter((s) =>
         s.name.toLowerCase().includes(deferredSearch.toLowerCase()),
@@ -924,28 +1129,51 @@ export default function SoundboardPicker({
       "bottom-start": "top-[calc(100%+10px)] -left-2 origin-top-left",
       "bottom-end": "top-[calc(100%+10px)] right-0 origin-top-right",
     }[placement] || "bottom-[calc(100%+10px)] right-0 origin-bottom-right";
+  const pickerOverlayZIndex = selectionMode ? 1090 : 259;
+  const pickerPanelZIndex = selectionMode ? 1100 : 260;
+  const pickerPositionClasses = compact
+    ? ""
+    : selectionMode
+      ? "inset-0 m-auto h-[min(760px,90dvh)] max-sm:inset-x-0 max-sm:bottom-0 max-sm:top-auto max-sm:m-0 max-sm:h-[85dvh]"
+      : !markerRef
+        ? placementClasses
+        : "";
 
   return createPortal(
     <>
-      <div
-        className="fixed inset-0 z-[259]"
-        onMouseDown={(event) => {
-          event.preventDefault();
-          onClose();
-        }}
-        aria-hidden="true"
-      />
+      {!compact && (
+        <div
+          className="fixed inset-0"
+          style={{ zIndex: pickerOverlayZIndex }}
+          onMouseDown={(event) => {
+            event.preventDefault();
+            onClose();
+          }}
+          aria-hidden="true"
+        />
+      )}
       <TooltipProvider delayDuration={100}>
         <dialog
           open
+          ref={pickerRef}
           className={cn(
-            "picker-panel fixed z-[260] m-0 flex w-full flex-col overflow-hidden border p-0 shadow-2xl outline-none animate-in fade-in zoom-in-95 duration-150 sm:rounded-[26px] max-sm:inset-x-0 max-sm:bottom-0 max-sm:top-auto max-sm:h-[85dvh] max-sm:w-full max-sm:rounded-t-[26px] max-sm:rounded-b-none max-sm:border-x-0 max-sm:border-b-0 max-sm:translate-y-0 max-sm:slide-in-from-bottom max-sm:zoom-in-100",
+            "picker-panel fixed m-0 flex w-full flex-col overflow-hidden border p-0 shadow-2xl outline-none animate-in fade-in zoom-in-95 duration-150 sm:rounded-[26px]",
+            compact
+              ? "max-sm:w-[calc(100vw-24px)] max-sm:rounded-2xl"
+              : "max-sm:inset-x-0 max-sm:bottom-0 max-sm:top-auto max-sm:h-[85dvh] max-sm:w-full max-sm:rounded-t-[26px] max-sm:rounded-b-none max-sm:border-x-0 max-sm:border-b-0 max-sm:translate-y-0 max-sm:slide-in-from-bottom max-sm:zoom-in-100",
             activeView === "listenTogether"
               ? "sm:w-[min(980px,calc(100vw-24px))]"
-              : "sm:w-[min(440px,calc(100vw-24px))]",
-            !markerRef && placementClasses,
+              : compact
+                ? "sm:w-[min(440px,calc(100vw-24px))]"
+                : selectionMode
+                  ? "sm:w-[min(560px,calc(100vw-24px))]"
+                  : "sm:w-[min(440px,calc(100vw-24px))]",
+            pickerPositionClasses,
           )}
-          style={markerRef ? dynamicStyle : undefined}
+          style={{
+            ...(markerRef ? dynamicStyle : {}),
+            zIndex: pickerPanelZIndex,
+          }}
           aria-label="Soundboard picker"
         >
           <div className="picker-header border-b px-4 pb-3 pt-4">
@@ -966,53 +1194,57 @@ export default function SoundboardPicker({
                   </div>
 
                   <div className="flex shrink-0 items-center gap-2">
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <button
-                          type="button"
-                          onClick={() => setActiveView("listenTogether")}
-                          className="inline-flex h-11 items-center gap-2 rounded-2xl border border-rm-border bg-gradient-to-br from-sky-500/20 via-blue-500/20 to-cyan-500/20 px-3 text-sm font-black text-rm-text shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] transition-transform hover:scale-[1.01] active:scale-[0.99]"
-                        >
-                          <Headphones className="h-4 w-4 text-sky-300" />
-                          <span className="hidden sm:inline">Listen</span>
-                        </button>
-                      </TooltipTrigger>
-                      <TooltipContent side="bottom" sideOffset={8}>
-                        Listen Together
-                      </TooltipContent>
-                    </Tooltip>
+                    {!selectionMode && (
+                      <>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <button
+                              type="button"
+                              onClick={() => setActiveView("listenTogether")}
+                              className="inline-flex h-11 items-center gap-2 rounded-2xl border border-rm-border bg-gradient-to-br from-sky-500/20 via-blue-500/20 to-cyan-500/20 px-3 text-sm font-black text-rm-text shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] transition-transform hover:scale-[1.01] active:scale-[0.99]"
+                            >
+                              <Headphones className="h-4 w-4 text-sky-300" />
+                              <span className="hidden sm:inline">Listen</span>
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent side="bottom" sideOffset={8}>
+                            Listen Together
+                          </TooltipContent>
+                        </Tooltip>
 
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <button
-                          type="button"
-                          onClick={() => setActiveView("radio")}
-                          className="inline-flex h-11 items-center gap-2 rounded-2xl border border-rm-border bg-gradient-to-br from-green-500/20 via-teal-500/20 to-emerald-500/20 px-3 text-sm font-black text-rm-text shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] transition-transform hover:scale-[1.01] active:scale-[0.99]"
-                        >
-                          <Radio className="h-4 w-4 text-green-500" />
-                          <span className="hidden sm:inline">Radio</span>
-                        </button>
-                      </TooltipTrigger>
-                      <TooltipContent side="bottom" sideOffset={8}>
-                        Search Radio
-                      </TooltipContent>
-                    </Tooltip>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <button
+                              type="button"
+                              onClick={() => setActiveView("radio")}
+                              className="inline-flex h-11 items-center gap-2 rounded-2xl border border-rm-border bg-gradient-to-br from-green-500/20 via-teal-500/20 to-emerald-500/20 px-3 text-sm font-black text-rm-text shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] transition-transform hover:scale-[1.01] active:scale-[0.99]"
+                            >
+                              <Radio className="h-4 w-4 text-green-500" />
+                              <span className="hidden sm:inline">Radio</span>
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent side="bottom" sideOffset={8}>
+                            Search Radio
+                          </TooltipContent>
+                        </Tooltip>
 
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <button
-                          type="button"
-                          onClick={() => setActiveView("myinstants")}
-                          className="inline-flex h-11 items-center gap-2 rounded-2xl border border-rm-border bg-gradient-to-br from-yellow-500/20 via-rose-500/20 to-blue-500/20 px-3 text-sm font-black text-rm-text shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] transition-transform hover:scale-[1.01] active:scale-[0.99]"
-                        >
-                          <Zap className="h-4 w-4 text-primary" />
-                          <span className="hidden sm:inline">Discover</span>
-                        </button>
-                      </TooltipTrigger>
-                      <TooltipContent side="bottom" sideOffset={8}>
-                        Search MyInstants
-                      </TooltipContent>
-                    </Tooltip>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <button
+                              type="button"
+                              onClick={() => setActiveView("myinstants")}
+                              className="inline-flex h-11 items-center gap-2 rounded-2xl border border-rm-border bg-gradient-to-br from-yellow-500/20 via-rose-500/20 to-blue-500/20 px-3 text-sm font-black text-rm-text shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] transition-transform hover:scale-[1.01] active:scale-[0.99]"
+                            >
+                              <Zap className="h-4 w-4 text-primary" />
+                              <span className="hidden sm:inline">Discover</span>
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent side="bottom" sideOffset={8}>
+                            Search MyInstants
+                          </TooltipContent>
+                        </Tooltip>
+                      </>
+                    )}
                   </div>
                 </div>
               </>
@@ -1091,52 +1323,95 @@ export default function SoundboardPicker({
               <div className="flex h-full">
                 <aside className="flex w-[68px] shrink-0 flex-col border-r border-rm-border bg-rm-bg-surface/30 px-2 py-3">
                   <div className="no-scrollbar flex min-h-0 flex-col gap-2 overflow-y-auto overflow-x-hidden pr-1">
+                    {!selectionMode && (
+                      <>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                jumpToSection(FAVORITES_SECTION_ID)
+                              }
+                              className={cn(
+                                "flex h-11 w-11 items-center justify-center self-center rounded-2xl border transition-all",
+                                activeCategory === FAVORITES_SECTION_ID
+                                  ? "border-amber-500/30 dark:border-yellow-500/30 bg-amber-500/10 dark:bg-yellow-500/20 text-amber-600 dark:text-yellow-400"
+                                  : "border-transparent bg-transparent text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover",
+                              )}
+                            >
+                              <Star className="h-5 w-5" />
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent side="right" sideOffset={10}>
+                            Favorites
+                          </TooltipContent>
+                        </Tooltip>
+
+                        <div className="mx-auto my-1 h-px w-8 bg-rm-border" />
+                      </>
+                    )}
+
+                    {pickerServers.length > 0 && (
+                      <>
+                        {pickerServers.map((server) => {
+                          const sectionId = `server:${server.id}`;
+                          return (
+                            <Tooltip key={server.id}>
+                              <TooltipTrigger asChild>
+                                <button
+                                  type="button"
+                                  aria-label={`Jump to ${server.name} server sounds`}
+                                  aria-pressed={activeCategory === sectionId}
+                                  onClick={() => jumpToSection(sectionId)}
+                                  className={cn(
+                                    "flex h-12 w-12 items-center justify-center self-center rounded-full border transition-[border-radius,background-color,border-color,transform] hover:rounded-2xl active:scale-[0.96]",
+                                    activeCategory === sectionId
+                                      ? "border-primary/50 bg-primary/20"
+                                      : "border-transparent bg-transparent hover:bg-rm-bg-hover",
+                                  )}
+                                >
+                                  <PickerServerIcon server={server} large />
+                                </button>
+                              </TooltipTrigger>
+                              <TooltipContent side="right" sideOffset={10}>
+                                {server.name}
+                              </TooltipContent>
+                            </Tooltip>
+                          );
+                        })}
+                      </>
+                    )}
+
+                    {!selectionMode && !isServerSoundboard && (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <button
+                            type="button"
+                            aria-label="Custom Sounds"
+                            onClick={() => jumpToSection(CUSTOM_SECTION_ID)}
+                            className={cn(
+                              "flex h-11 w-11 items-center justify-center self-center rounded-2xl border transition-all",
+                              activeCategory === CUSTOM_SECTION_ID
+                                ? "border-primary/30 bg-primary/20 text-primary"
+                                : "border-transparent bg-transparent text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover",
+                            )}
+                          >
+                            <Volume2 className="h-5 w-5" />
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent side="right" sideOffset={10}>
+                          {isServerSoundboard
+                            ? "Server Sounds"
+                            : "Custom Sounds"}
+                        </TooltipContent>
+                      </Tooltip>
+                    )}
+
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <button
                           type="button"
-                          onClick={() => jumpToSection(FAVORITES_SECTION_ID)}
-                          className={cn(
-                            "flex h-11 w-11 items-center justify-center self-center rounded-2xl border transition-all",
-                            activeCategory === FAVORITES_SECTION_ID
-                              ? "border-amber-500/30 dark:border-yellow-500/30 bg-amber-500/10 dark:bg-yellow-500/20 text-amber-600 dark:text-yellow-400"
-                              : "border-transparent bg-transparent text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover",
-                          )}
-                        >
-                          <Star className="h-5 w-5" />
-                        </button>
-                      </TooltipTrigger>
-                      <TooltipContent side="right" sideOffset={10}>
-                        Favorites
-                      </TooltipContent>
-                    </Tooltip>
-
-                    <div className="mx-auto my-1 h-px w-8 bg-rm-border" />
-
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <button
-                          type="button"
-                          onClick={() => jumpToSection(CUSTOM_SECTION_ID)}
-                          className={cn(
-                            "flex h-11 w-11 items-center justify-center self-center rounded-2xl border transition-all",
-                            activeCategory === CUSTOM_SECTION_ID
-                              ? "border-primary/30 bg-primary/20 text-primary"
-                              : "border-transparent bg-transparent text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover",
-                          )}
-                        >
-                          <Volume2 className="h-5 w-5" />
-                        </button>
-                      </TooltipTrigger>
-                      <TooltipContent side="right" sideOffset={10}>
-                        {isServerSoundboard ? "Server Sounds" : "Custom Sounds"}
-                      </TooltipContent>
-                    </Tooltip>
-
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <button
-                          type="button"
+                          aria-label="Ralph Sounds"
                           onClick={() => jumpToSection(DEFAULT_SECTION_ID)}
                           className={cn(
                             "flex h-11 w-11 items-center justify-center self-center rounded-2xl border transition-all",
@@ -1145,11 +1420,13 @@ export default function SoundboardPicker({
                               : "border-transparent bg-transparent text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover",
                           )}
                         >
-                          <Radio className="h-5 w-5" />
+                          <span className="scale-[1.3]">
+                            <HomeIcon className="h-5 w-5" />
+                          </span>
                         </button>
                       </TooltipTrigger>
                       <TooltipContent side="right" sideOffset={10}>
-                        Default Sounds
+                        Ralph Sounds
                       </TooltipContent>
                     </Tooltip>
                   </div>
@@ -1161,34 +1438,215 @@ export default function SoundboardPicker({
                   className="no-scrollbar relative min-w-0 flex-1 overflow-y-auto overflow-x-hidden p-3 pt-1"
                 >
                   {/* Favorites Section */}
-                  {(!deferredSearch || filteredFavorites.length > 0) && (
-                    <div
-                      ref={setSectionRef(FAVORITES_SECTION_ID)}
-                      className="mb-6 mt-2 relative"
-                    >
-                      <SectionHeader
-                        icon={
-                          <Star className="h-4 w-4 text-amber-500 dark:text-yellow-400" />
-                        }
-                        title="Favorites"
-                        count={filteredFavorites.length}
-                        isCollapsed={collapsedCategories[FAVORITES_SECTION_ID]}
-                        onToggle={() => toggleSection(FAVORITES_SECTION_ID)}
-                      />
-                      {!collapsedCategories[FAVORITES_SECTION_ID] && (
-                        <div className="grid grid-cols-4 gap-2">
-                          {filteredFavorites.length === 0 ? (
-                            <div className="col-span-4 text-center py-4 text-xs text-rm-text-muted">
-                              No favorites yet. Search MyInstants to add some!
-                            </div>
-                          ) : (
-                            filteredFavorites.map((sound) => {
-                              if (sound.soundType === "myinstants") {
+                  {!selectionMode &&
+                    (!deferredSearch || filteredFavorites.length > 0) && (
+                      <div
+                        ref={setSectionRef(FAVORITES_SECTION_ID)}
+                        className="mb-6 mt-2 relative"
+                      >
+                        <SectionHeader
+                          icon={
+                            <Star className="h-4 w-4 text-amber-500 dark:text-yellow-400" />
+                          }
+                          title="Favorites"
+                          isCollapsed={
+                            collapsedCategories[FAVORITES_SECTION_ID]
+                          }
+                          onToggle={() => toggleSection(FAVORITES_SECTION_ID)}
+                        />
+                        {!collapsedCategories[FAVORITES_SECTION_ID] && (
+                          <div className="grid grid-cols-4 gap-2">
+                            {filteredFavorites.length === 0 ? (
+                              <div className="col-span-4 text-center py-4 text-xs text-rm-text-muted">
+                                No favorites yet. Search MyInstants to add some!
+                              </div>
+                            ) : (
+                              filteredFavorites.map((sound) => {
+                                if (sound.soundType === "myinstants") {
+                                  return (
+                                    <div
+                                      key={`fav-${sound.id}`}
+                                      style={{ backgroundColor: sound.color }}
+                                      className="group relative flex aspect-square flex-col items-center justify-center rounded-xl shadow-[0_4px_0_rgba(0,0,0,0.3)] hover:translate-y-[2px] hover:shadow-[0_2px_0_rgba(0,0,0,0.3)] active:shadow-none active:translate-y-[4px] transition-all p-1 overflow-hidden"
+                                    >
+                                      <button
+                                        type="button"
+                                        className="absolute inset-0 w-full h-full cursor-pointer z-0 outline-none"
+                                        aria-label={`Play ${sound.title}`}
+                                        onClick={() =>
+                                          broadcastSound({
+                                            id: sound.id,
+                                            name: sound.title,
+                                            mediaUrl: sound.url,
+                                          })
+                                        }
+                                      />
+                                      <div className="absolute inset-1 rounded-full border-2 border-white/20 shadow-inner mix-blend-overlay pointer-events-none z-10" />
+
+                                      <div className="absolute top-1 right-1 z-20 flex flex-col gap-1">
+                                        <Tooltip>
+                                          <TooltipTrigger asChild>
+                                            <button
+                                              type="button"
+                                              aria-label="Remove from favorites"
+                                              className="hover:scale-110 active:scale-95 transition-all cursor-pointer opacity-100"
+                                              onClick={(e) =>
+                                                toggleFavorite(sound, e)
+                                              }
+                                            >
+                                              <Star
+                                                size={12}
+                                                className="fill-amber-500 text-amber-500 dark:fill-yellow-400 dark:text-yellow-400 drop-shadow-md"
+                                              />
+                                            </button>
+                                          </TooltipTrigger>
+                                          <TooltipContent side="left">
+                                            Unfavorite
+                                          </TooltipContent>
+                                        </Tooltip>
+                                      </div>
+
+                                      <div className="absolute top-1 left-1 z-20 flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <Tooltip>
+                                          <TooltipTrigger asChild>
+                                            <button
+                                              type="button"
+                                              className="flex items-center justify-center p-1 rounded-full bg-black/40 backdrop-blur-sm hover:bg-black/60 text-white shadow-sm cursor-pointer"
+                                              onClick={(e) =>
+                                                previewSound(
+                                                  {
+                                                    id: sound.id,
+                                                    name: sound.title,
+                                                    mediaUrl: sound.url,
+                                                  },
+                                                  e,
+                                                )
+                                              }
+                                            >
+                                              <Play size={10} />
+                                            </button>
+                                          </TooltipTrigger>
+                                          <TooltipContent side="right">
+                                            Preview
+                                          </TooltipContent>
+                                        </Tooltip>
+                                      </div>
+
+                                      <span className="z-10 mt-auto bg-black/60 px-1 py-0.5 text-[9px] leading-tight font-bold text-white rounded text-center w-full shadow-sm pointer-events-none">
+                                        <span className="line-clamp-2">
+                                          {sound.title}
+                                        </span>
+                                      </span>
+                                    </div>
+                                  );
+                                }
+
+                                if (sound.soundType === "radio") {
+                                  return (
+                                    <div
+                                      key={`fav-${sound.id}`}
+                                      className="group relative flex aspect-square flex-col items-center justify-center rounded-xl bg-rm-bg-surface border border-rm-border hover:border-green-500/50 shadow-md transition-all p-1 overflow-hidden"
+                                    >
+                                      <button
+                                        type="button"
+                                        className="absolute inset-0 w-full h-full cursor-pointer z-10 outline-none"
+                                        aria-label={`Play ${sound.title}`}
+                                        onClick={() =>
+                                          broadcastSound({
+                                            id: sound.id,
+                                            name: sound.title,
+                                            mediaUrl: sound.url,
+                                            soundType: "radio",
+                                            artworkUrl: sound.emoji,
+                                          })
+                                        }
+                                      />
+
+                                      <Radio
+                                        className={`absolute text-rm-text-muted/40 w-12 h-12 opacity-30 group-hover:opacity-40 transition-opacity pointer-events-none ${sound.emoji ? "hidden radio-fallback" : ""}`}
+                                      />
+
+                                      {sound.emoji && (
+                                        <img
+                                          src={sound.emoji}
+                                          onError={(e) => {
+                                            e.currentTarget.style.display =
+                                              "none";
+                                            const fallback =
+                                              e.currentTarget.parentElement?.querySelector(
+                                                ".radio-fallback",
+                                              );
+                                            if (fallback)
+                                              fallback.classList.remove(
+                                                "hidden",
+                                              );
+                                          }}
+                                          className="absolute inset-0 w-full h-full object-cover opacity-30 group-hover:opacity-40 transition-opacity pointer-events-none"
+                                          alt=""
+                                        />
+                                      )}
+
+                                      <div className="absolute top-1 right-1 z-20 flex flex-col gap-1">
+                                        <Tooltip>
+                                          <TooltipTrigger asChild>
+                                            <button
+                                              type="button"
+                                              aria-label="Remove from favorites"
+                                              className="hover:scale-110 active:scale-95 transition-all cursor-pointer opacity-100"
+                                              onClick={(e) =>
+                                                toggleFavorite(sound, e)
+                                              }
+                                            >
+                                              <Star
+                                                size={12}
+                                                className="fill-amber-500 text-amber-500 dark:fill-yellow-400 dark:text-yellow-400 drop-shadow-md"
+                                              />
+                                            </button>
+                                          </TooltipTrigger>
+                                          <TooltipContent side="left">
+                                            Unfavorite
+                                          </TooltipContent>
+                                        </Tooltip>
+                                      </div>
+                                      <div className="absolute top-1 left-1 z-20 flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <Tooltip>
+                                          <TooltipTrigger asChild>
+                                            <button
+                                              type="button"
+                                              className="flex items-center justify-center p-1 rounded-full bg-black/40 backdrop-blur-sm hover:bg-black/60 text-white shadow-sm cursor-pointer"
+                                              onClick={(e) =>
+                                                previewSound(
+                                                  {
+                                                    id: sound.id,
+                                                    name: sound.title,
+                                                    mediaUrl: sound.url,
+                                                  },
+                                                  e,
+                                                )
+                                              }
+                                            >
+                                              <Play size={10} />
+                                            </button>
+                                          </TooltipTrigger>
+                                          <TooltipContent side="right">
+                                            Preview Station
+                                          </TooltipContent>
+                                        </Tooltip>
+                                      </div>
+
+                                      <span className="z-10 mt-auto bg-rm-bg-floating/90 backdrop-blur-md px-1 py-0.5 text-[9px] leading-tight font-bold text-rm-text rounded text-center w-full shadow-sm pointer-events-none border border-rm-border">
+                                        <span className="line-clamp-2">
+                                          {sound.title}
+                                        </span>
+                                      </span>
+                                    </div>
+                                  );
+                                }
+
                                 return (
                                   <div
                                     key={`fav-${sound.id}`}
-                                    style={{ backgroundColor: sound.color }}
-                                    className="group relative flex aspect-square flex-col items-center justify-center rounded-xl shadow-[0_4px_0_rgba(0,0,0,0.3)] hover:translate-y-[2px] hover:shadow-[0_2px_0_rgba(0,0,0,0.3)] active:shadow-none active:translate-y-[4px] transition-all p-1 overflow-hidden"
+                                    className="group relative flex aspect-square flex-col items-center justify-center rounded-xl bg-rm-bg-surface border border-rm-border hover:border-yellow-500/50 shadow-sm dark:shadow-none hover:shadow-md hover:bg-rm-bg-hover active:scale-95 transition-all p-1.5 overflow-hidden"
                                   >
                                     <button
                                       type="button"
@@ -1202,7 +1660,19 @@ export default function SoundboardPicker({
                                         })
                                       }
                                     />
-                                    <div className="absolute inset-1 rounded-full border-2 border-white/20 shadow-inner mix-blend-overlay pointer-events-none z-10" />
+                                    <div className="pointer-events-none z-10 mb-1 flex items-center justify-center w-6 h-6">
+                                      {sound.soundType === "default" ? (
+                                        <Radio className="h-5 w-5 text-green-500 opacity-50 group-hover:opacity-100 transition-opacity" />
+                                      ) : sound.emoji ? (
+                                        <EmojiToken
+                                          value={sound.emoji}
+                                          className="h-6 w-6 object-contain block"
+                                          fallbackClassName="text-xl leading-none block"
+                                        />
+                                      ) : (
+                                        <Volume2 className="h-5 w-5 text-primary opacity-50 group-hover:opacity-100 transition-opacity" />
+                                      )}
+                                    </div>
 
                                     <div className="absolute top-1 right-1 z-20 flex flex-col gap-1">
                                       <Tooltip>
@@ -1210,14 +1680,14 @@ export default function SoundboardPicker({
                                           <button
                                             type="button"
                                             aria-label="Remove from favorites"
-                                            className="hover:scale-110 active:scale-95 transition-all cursor-pointer opacity-100"
+                                            className="transition-all flex items-center justify-center p-1.5 rounded-full bg-black/70 backdrop-blur-sm hover:bg-black text-white shadow-md cursor-pointer opacity-100"
                                             onClick={(e) =>
                                               toggleFavorite(sound, e)
                                             }
                                           >
                                             <Star
-                                              size={12}
-                                              className="fill-amber-500 text-amber-500 dark:fill-yellow-400 dark:text-yellow-400 drop-shadow-md"
+                                              size={10}
+                                              className="fill-yellow-400 text-yellow-400"
                                             />
                                           </button>
                                         </TooltipTrigger>
@@ -1226,13 +1696,12 @@ export default function SoundboardPicker({
                                         </TooltipContent>
                                       </Tooltip>
                                     </div>
-
                                     <div className="absolute top-1 left-1 z-20 flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                                       <Tooltip>
                                         <TooltipTrigger asChild>
                                           <button
                                             type="button"
-                                            className="flex items-center justify-center p-1 rounded-full bg-black/40 backdrop-blur-sm hover:bg-black/60 text-white shadow-sm cursor-pointer"
+                                            className="flex items-center justify-center p-1.5 rounded-full bg-black/70 backdrop-blur-sm hover:bg-black text-white shadow-md cursor-pointer"
                                             onClick={(e) =>
                                               previewSound(
                                                 {
@@ -1253,242 +1722,59 @@ export default function SoundboardPicker({
                                       </Tooltip>
                                     </div>
 
-                                    <span className="z-10 mt-auto bg-black/60 px-1 py-0.5 text-[9px] leading-tight font-bold text-white rounded text-center w-full shadow-sm pointer-events-none">
+                                    <span className="text-[9px] leading-tight font-bold text-center w-full z-10 pointer-events-none">
                                       <span className="line-clamp-2">
                                         {sound.title}
                                       </span>
                                     </span>
                                   </div>
                                 );
-                              }
+                              })
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
 
-                              if (sound.soundType === "radio") {
-                                return (
-                                  <div
-                                    key={`fav-${sound.id}`}
-                                    className="group relative flex aspect-square flex-col items-center justify-center rounded-xl bg-rm-bg-surface border border-rm-border hover:border-green-500/50 shadow-md transition-all p-1 overflow-hidden"
-                                  >
-                                    <button
-                                      type="button"
-                                      className="absolute inset-0 w-full h-full cursor-pointer z-10 outline-none"
-                                      aria-label={`Play ${sound.title}`}
-                                      onClick={() =>
-                                        broadcastSound({
-                                          id: sound.id,
-                                          name: sound.title,
-                                          mediaUrl: sound.url,
-                                          soundType: "radio",
-                                          artworkUrl: sound.emoji,
-                                        })
-                                      }
-                                    />
-
-                                    <Radio
-                                      className={`absolute text-rm-text-muted/40 w-12 h-12 opacity-30 group-hover:opacity-40 transition-opacity pointer-events-none ${sound.emoji ? "hidden radio-fallback" : ""}`}
-                                    />
-
-                                    {sound.emoji && (
-                                      <img
-                                        src={sound.emoji}
-                                        onError={(e) => {
-                                          e.currentTarget.style.display =
-                                            "none";
-                                          const fallback =
-                                            e.currentTarget.parentElement?.querySelector(
-                                              ".radio-fallback",
-                                            );
-                                          if (fallback)
-                                            fallback.classList.remove("hidden");
-                                        }}
-                                        className="absolute inset-0 w-full h-full object-cover opacity-30 group-hover:opacity-40 transition-opacity pointer-events-none"
-                                        alt=""
-                                      />
-                                    )}
-
-                                    <div className="absolute top-1 right-1 z-20 flex flex-col gap-1">
-                                      <Tooltip>
-                                        <TooltipTrigger asChild>
-                                          <button
-                                            type="button"
-                                            aria-label="Remove from favorites"
-                                            className="hover:scale-110 active:scale-95 transition-all cursor-pointer opacity-100"
-                                            onClick={(e) =>
-                                              toggleFavorite(sound, e)
-                                            }
-                                          >
-                                            <Star
-                                              size={12}
-                                              className="fill-amber-500 text-amber-500 dark:fill-yellow-400 dark:text-yellow-400 drop-shadow-md"
-                                            />
-                                          </button>
-                                        </TooltipTrigger>
-                                        <TooltipContent side="left">
-                                          Unfavorite
-                                        </TooltipContent>
-                                      </Tooltip>
-                                    </div>
-                                    <div className="absolute top-1 left-1 z-20 flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                      <Tooltip>
-                                        <TooltipTrigger asChild>
-                                          <button
-                                            type="button"
-                                            className="flex items-center justify-center p-1 rounded-full bg-black/40 backdrop-blur-sm hover:bg-black/60 text-white shadow-sm cursor-pointer"
-                                            onClick={(e) =>
-                                              previewSound(
-                                                {
-                                                  id: sound.id,
-                                                  name: sound.title,
-                                                  mediaUrl: sound.url,
-                                                },
-                                                e,
-                                              )
-                                            }
-                                          >
-                                            <Play size={10} />
-                                          </button>
-                                        </TooltipTrigger>
-                                        <TooltipContent side="right">
-                                          Preview Station
-                                        </TooltipContent>
-                                      </Tooltip>
-                                    </div>
-
-                                    <span className="z-10 mt-auto bg-rm-bg-floating/90 backdrop-blur-md px-1 py-0.5 text-[9px] leading-tight font-bold text-rm-text rounded text-center w-full shadow-sm pointer-events-none border border-rm-border">
-                                      <span className="line-clamp-2">
-                                        {sound.title}
-                                      </span>
-                                    </span>
-                                  </div>
-                                );
-                              }
-
-                              return (
-                                <div
-                                  key={`fav-${sound.id}`}
-                                  className="group relative flex aspect-square flex-col items-center justify-center rounded-xl bg-rm-bg-surface border border-rm-border hover:border-yellow-500/50 shadow-sm dark:shadow-none hover:shadow-md hover:bg-rm-bg-hover active:scale-95 transition-all p-1.5 overflow-hidden"
-                                >
-                                  <button
-                                    type="button"
-                                    className="absolute inset-0 w-full h-full cursor-pointer z-0 outline-none"
-                                    aria-label={`Play ${sound.title}`}
-                                    onClick={() =>
-                                      broadcastSound({
-                                        id: sound.id,
-                                        name: sound.title,
-                                        mediaUrl: sound.url,
-                                      })
-                                    }
-                                  />
-                                  <div className="pointer-events-none z-10 mb-1 flex items-center justify-center w-6 h-6">
-                                    {sound.soundType === "default" ? (
-                                      <Radio className="h-5 w-5 text-green-500 opacity-50 group-hover:opacity-100 transition-opacity" />
-                                    ) : sound.emoji ? (
-                                      <EmojiToken
-                                        value={sound.emoji}
-                                        className="h-6 w-6 object-contain block"
-                                        fallbackClassName="text-xl leading-none block"
-                                      />
-                                    ) : (
-                                      <Volume2 className="h-5 w-5 text-primary opacity-50 group-hover:opacity-100 transition-opacity" />
-                                    )}
-                                  </div>
-
-                                  <div className="absolute top-1 right-1 z-20 flex flex-col gap-1">
-                                    <Tooltip>
-                                      <TooltipTrigger asChild>
-                                        <button
-                                          type="button"
-                                          aria-label="Remove from favorites"
-                                          className="transition-all flex items-center justify-center p-1.5 rounded-full bg-black/70 backdrop-blur-sm hover:bg-black text-white shadow-md cursor-pointer opacity-100"
-                                          onClick={(e) =>
-                                            toggleFavorite(sound, e)
-                                          }
-                                        >
-                                          <Star
-                                            size={10}
-                                            className="fill-yellow-400 text-yellow-400"
-                                          />
-                                        </button>
-                                      </TooltipTrigger>
-                                      <TooltipContent side="left">
-                                        Unfavorite
-                                      </TooltipContent>
-                                    </Tooltip>
-                                  </div>
-                                  <div className="absolute top-1 left-1 z-20 flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                    <Tooltip>
-                                      <TooltipTrigger asChild>
-                                        <button
-                                          type="button"
-                                          className="flex items-center justify-center p-1.5 rounded-full bg-black/70 backdrop-blur-sm hover:bg-black text-white shadow-md cursor-pointer"
-                                          onClick={(e) =>
-                                            previewSound(
-                                              {
-                                                id: sound.id,
-                                                name: sound.title,
-                                                mediaUrl: sound.url,
-                                              },
-                                              e,
-                                            )
-                                          }
-                                        >
-                                          <Play size={10} />
-                                        </button>
-                                      </TooltipTrigger>
-                                      <TooltipContent side="right">
-                                        Preview
-                                      </TooltipContent>
-                                    </Tooltip>
-                                  </div>
-
-                                  <span className="text-[9px] leading-tight font-bold text-center w-full z-10 pointer-events-none">
-                                    <span className="line-clamp-2">
-                                      {sound.title}
-                                    </span>
-                                  </span>
-                                </div>
-                              );
-                            })
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Custom Sounds Section */}
-                  {(!deferredSearch ||
-                    filteredCustom.length > 0 ||
-                    !deferredSearch) && (
+                  {/* Server and custom sound sections */}
+                  {soundSections.map((section) => (
                     <div
-                      ref={setSectionRef(CUSTOM_SECTION_ID)}
+                      key={section.id}
+                      ref={setSectionRef(section.id)}
                       className="mb-6 relative"
                     >
                       <SectionHeader
-                        icon={<Volume2 className="h-4 w-4 text-primary" />}
-                        title={
-                          isServerSoundboard ? "Server Sounds" : "Custom Sounds"
+                        icon={
+                          section.server ? (
+                            <PickerServerIcon server={section.server} />
+                          ) : (
+                            <Volume2 className="h-4 w-4 text-primary" />
+                          )
                         }
-                        count={filteredCustom.length}
-                        isCollapsed={collapsedCategories[CUSTOM_SECTION_ID]}
-                        onToggle={() => toggleSection(CUSTOM_SECTION_ID)}
+                        title={section.server?.name ?? "Custom Sounds"}
+                        isCollapsed={collapsedCategories[section.id]}
+                        onToggle={() => toggleSection(section.id)}
                       />
-                      {!collapsedCategories[CUSTOM_SECTION_ID] && (
+                      {!collapsedCategories[section.id] && (
                         <div className="grid grid-cols-4 gap-2">
-                          {!deferredSearch && (
-                            <button
-                              type="button"
-                              onClick={() => setIsUploadModalOpen(true)}
-                              className="group relative flex aspect-square flex-col items-center justify-center rounded-xl bg-rm-bg-surface/30 border-2 border-dashed border-rm-border hover:border-primary/50 hover:bg-rm-bg-hover active:scale-95 transition-all p-1.5 overflow-hidden text-rm-text-muted hover:text-rm-text"
-                            >
-                              <div className="h-8 w-8 rounded-full bg-rm-bg-surface flex items-center justify-center mb-1 group-hover:bg-primary/20 transition-colors shadow-sm dark:shadow-none">
-                                <Upload className="h-4 w-4 text-primary opacity-70 group-hover:opacity-100 transition-opacity" />
-                              </div>
-                              <span className="text-[10px] leading-tight font-bold text-center w-full uppercase tracking-wider">
-                                Add Sound
-                              </span>
-                            </button>
-                          )}
-                          {filteredCustom.map((sound) => {
+                          {!deferredSearch &&
+                            !selectionMode &&
+                            (!section.server ||
+                              section.server.id === serverId) && (
+                              <button
+                                type="button"
+                                onClick={() => setIsUploadModalOpen(true)}
+                                className="group relative flex aspect-square flex-col items-center justify-center rounded-xl bg-rm-bg-surface/30 border-2 border-dashed border-rm-border hover:border-primary/50 hover:bg-rm-bg-hover active:scale-95 transition-all p-1.5 overflow-hidden text-rm-text-muted hover:text-rm-text"
+                              >
+                                <div className="h-8 w-8 rounded-full bg-rm-bg-surface flex items-center justify-center mb-1 group-hover:bg-primary/20 transition-colors shadow-sm dark:shadow-none">
+                                  <Upload className="h-4 w-4 text-primary opacity-70 group-hover:opacity-100 transition-opacity" />
+                                </div>
+                                <span className="text-[10px] leading-tight font-bold text-center w-full uppercase tracking-wider">
+                                  Add Sound
+                                </span>
+                              </button>
+                            )}
+                          {section.sounds.map((sound) => {
                             const isFav = myInstantsFavorites.some(
                               (f) => f.id === sound.id,
                             );
@@ -1508,6 +1794,7 @@ export default function SoundboardPicker({
                                       dataUrl: sound.dataUrl,
                                       mediaUrl: sound.mediaUrl,
                                       volume: sound.volume,
+                                      serverId: sound.serverId,
                                     })
                                   }
                                 />
@@ -1533,6 +1820,7 @@ export default function SoundboardPicker({
                                     <TooltipTrigger asChild>
                                       <button
                                         type="button"
+                                        aria-label={`Preview ${sound.name}`}
                                         className="flex items-center justify-center p-1.5 rounded-full bg-black/70 backdrop-blur-sm hover:bg-black text-white shadow-md"
                                         onClick={(e) => previewSound(sound, e)}
                                       >
@@ -1558,37 +1846,45 @@ export default function SoundboardPicker({
                                       </span>
                                     </TooltipContent>
                                   </Tooltip>
-                                  <Tooltip>
-                                    <TooltipTrigger asChild>
-                                      <button
-                                        type="button"
-                                        className="flex items-center justify-center p-1.5 rounded-full bg-black/70 backdrop-blur-sm hover:bg-black text-white shadow-md"
-                                        onClick={(e) => openEditModal(sound, e)}
-                                      >
-                                        <Edit2 size={10} />
-                                      </button>
-                                    </TooltipTrigger>
-                                    <TooltipContent side="right">
-                                      Edit
-                                    </TooltipContent>
-                                  </Tooltip>
-                                  <Tooltip>
-                                    <TooltipTrigger asChild>
-                                      <button
-                                        type="button"
-                                        className="flex items-center justify-center p-1.5 rounded-full bg-black/70 backdrop-blur-sm hover:bg-red-500/90 text-white shadow-md"
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          setSoundToDelete(sound);
-                                        }}
-                                      >
-                                        <Trash2 size={10} />
-                                      </button>
-                                    </TooltipTrigger>
-                                    <TooltipContent side="right">
-                                      Delete
-                                    </TooltipContent>
-                                  </Tooltip>
+                                  {!selectionMode &&
+                                    (!sound.serverId ||
+                                      sound.serverId === serverId) && (
+                                      <>
+                                        <Tooltip>
+                                          <TooltipTrigger asChild>
+                                            <button
+                                              type="button"
+                                              className="flex items-center justify-center p-1.5 rounded-full bg-black/70 backdrop-blur-sm hover:bg-black text-white shadow-md"
+                                              onClick={(e) =>
+                                                openEditModal(sound, e)
+                                              }
+                                            >
+                                              <Edit2 size={10} />
+                                            </button>
+                                          </TooltipTrigger>
+                                          <TooltipContent side="right">
+                                            Edit
+                                          </TooltipContent>
+                                        </Tooltip>
+                                        <Tooltip>
+                                          <TooltipTrigger asChild>
+                                            <button
+                                              type="button"
+                                              className="flex items-center justify-center p-1.5 rounded-full bg-black/70 backdrop-blur-sm hover:bg-red-500/90 text-white shadow-md"
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                setSoundToDelete(sound);
+                                              }}
+                                            >
+                                              <Trash2 size={10} />
+                                            </button>
+                                          </TooltipTrigger>
+                                          <TooltipContent side="right">
+                                            Delete
+                                          </TooltipContent>
+                                        </Tooltip>
+                                      </>
+                                    )}
                                 </div>
 
                                 <div className="absolute top-1 right-1 z-20 flex flex-col gap-1">
@@ -1626,13 +1922,13 @@ export default function SoundboardPicker({
                           })}
                         </div>
                       )}
-                      {uploadError && (
+                      {!section.server && uploadError && (
                         <div className="mt-3 rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-[11px] font-medium text-red-800 dark:text-red-300">
                           {uploadError}
                         </div>
                       )}
                     </div>
-                  )}
+                  ))}
 
                   {/* Default Sounds Section */}
                   {(!deferredSearch || filteredDefault.length > 0) && (
@@ -1641,9 +1937,8 @@ export default function SoundboardPicker({
                       className="mb-6 relative"
                     >
                       <SectionHeader
-                        icon={<Radio className="h-4 w-4 text-green-500" />}
-                        title="Default Sounds"
-                        count={filteredDefault.length}
+                        icon={<HomeIcon className="h-4 w-4" />}
+                        title="Ralph Sounds"
                         isCollapsed={collapsedCategories[DEFAULT_SECTION_ID]}
                         onToggle={() => toggleSection(DEFAULT_SECTION_ID)}
                       />
@@ -1662,7 +1957,12 @@ export default function SoundboardPicker({
                                   type="button"
                                   className="absolute inset-0 w-full h-full cursor-pointer z-0 outline-none"
                                   aria-label={`Play ${sound.name}`}
-                                  onClick={() => broadcastSound(sound)}
+                                  onClick={() =>
+                                    broadcastSound({
+                                      ...sound,
+                                      soundType: "default",
+                                    })
+                                  }
                                 />
                                 <Radio className="h-5 w-5 mb-1 text-green-500 opacity-50 group-hover:opacity-100 transition-opacity pointer-events-none z-10" />
                                 <span className="text-[9px] leading-tight font-bold text-center w-full z-10 pointer-events-none">
@@ -1984,22 +2284,9 @@ export default function SoundboardPicker({
             )}
           </div>
 
-          {/* Bottom Volume Controls & Now Playing */}
-          {activeView === "soundboard" && (
+          {/* Bottom volume controls */}
+          {!compact && activeView === "soundboard" && (
             <div className="shrink-0 border-t border-rm-border bg-rm-bg-floating backdrop-blur-xl p-3">
-              <div className="mb-3 h-[105px] flex flex-col">
-                <div className="mb-1 shrink-0 text-[10px] font-black uppercase tracking-widest text-rm-text-muted flex items-center justify-between">
-                  <span>Now Playing</span>
-                </div>
-                <div className="space-y-1.5 flex-1 overflow-y-auto no-scrollbar relative">
-                  <ActiveSoundboardEffectList
-                    serverId={serverId}
-                    localUserId={localUserId}
-                    sfu={sfu}
-                    variant="compact"
-                  />
-                </div>
-              </div>
               <div className="flex gap-2 sm:gap-3 items-center w-full">
                 <label className="flex w-0 flex-1 items-center gap-2 rounded-xl bg-rm-bg-surface/50 border border-rm-border px-2 py-2 text-[10px] font-bold text-rm-text-muted shadow-inner shadow-black/5 dark:shadow-none overflow-hidden">
                   <Tooltip>
@@ -2021,6 +2308,7 @@ export default function SoundboardPicker({
                   </span>
                   <input
                     type="range"
+                    aria-label="Soundboard Volume"
                     min={0}
                     max={100}
                     value={Math.round(sendVolume * 100)}
@@ -2038,23 +2326,29 @@ export default function SoundboardPicker({
                       </div>
                     </TooltipTrigger>
                     <TooltipContent side="top" className="max-w-[200px]">
-                      <p className="font-bold">Receive Volume</p>
+                      <p className="font-bold">Soundboard Volume</p>
                       <p className="opacity-80 mt-1">
-                        Adjusts how loud the soundboard plays locally for you.
+                        Adjusts how loud soundboard playback is locally for you.
                       </p>
                     </TooltipContent>
                   </Tooltip>
                   <span className="whitespace-nowrap hidden sm:inline">
-                    Receive
+                    Soundboard
                   </span>
                   <input
                     type="range"
                     min={0}
                     max={100}
                     value={Math.round(playbackVolume * 100)}
-                    onChange={(event) =>
-                      setPlaybackVolume(Number(event.currentTarget.value) / 100)
-                    }
+                    onChange={(event) => {
+                      const nextVolume =
+                        Number(event.currentTarget.value) / 100;
+                      setPlaybackVolume(nextVolume);
+                      setSoundboardMasterVolume(nextVolume);
+                      if (localUserId) {
+                        scheduleVolumePersistence(nextVolume);
+                      }
+                    }}
                     className="h-1 w-full min-w-0 cursor-pointer accent-foreground"
                   />
                 </label>

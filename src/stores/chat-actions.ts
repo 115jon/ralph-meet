@@ -14,6 +14,7 @@ import type {
   User,
 } from "@/lib/types";
 import { useMediaSafetySettingsStore } from "./useMediaSafetySettingsStore";
+import { useSoundSettingsStore } from "./useSoundSettingsStore";
 
 export interface ChatRestActions {
   sendMessage: (
@@ -572,8 +573,16 @@ export function createChatActions(
         pronouns?: string | null;
         status?: string;
         custom_status?: string;
+        sound_settings?: {
+          voiceJoinSoundboard?: unknown;
+          voiceLeaveSoundboard?: unknown;
+          soundboardVolume?: unknown;
+        };
       }>("/api/users/me");
       const current = get().user;
+      useSoundSettingsStore
+        .getState()
+        .hydrateFromBackend(profile.sound_settings, profile.id);
       // SET_USER fully replaces state.user — merge D1 profile with existing state
       dispatch({
         type: "SET_USER",

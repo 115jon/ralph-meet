@@ -1,10 +1,12 @@
 import { cn } from "@/lib/utils";
 import { Check, ChevronDown } from "lucide-react";
+import type { ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
 
 export interface SelectOption {
   value: string;
   label: string;
+  icon?: ReactNode;
 }
 
 interface CustomSelectProps {
@@ -61,7 +63,12 @@ export function CustomSelect({
           triggerClassName,
         )}
       >
-        <span className="truncate">{selectedOption?.label || placeholder}</span>
+        <span className="flex min-w-0 items-center gap-2 truncate">
+          {selectedOption?.icon}
+          <span className="truncate">
+            {selectedOption?.label || placeholder}
+          </span>
+        </span>
         <ChevronDown
           size={16}
           className={cn(
@@ -99,6 +106,7 @@ export function CustomSelect({
                     : "text-rm-text-secondary hover:bg-rm-bg-elevated hover:text-rm-text",
                 )}
               >
+                {opt.icon}
                 <span className="truncate flex-1 font-medium">{opt.label}</span>
                 {opt.value === value && (
                   <Check size={14} className="shrink-0" />

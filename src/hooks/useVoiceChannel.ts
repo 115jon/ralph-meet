@@ -46,6 +46,13 @@ import {
   type SharedSpatialAudioState,
 } from "@/lib/voice/spatial-audio";
 import {
+  cancelAutomaticSoundboardCleanup,
+  getAutomaticSoundboardSessionId,
+  playAutomaticSoundboardTrigger,
+  resetAutomaticSoundboardSession,
+  scheduleAutomaticSoundboardCleanup,
+} from "@/lib/voice/auto-soundboard";
+import {
   playConnected,
   playDeafen,
   playDisconnect,
@@ -565,6 +572,10 @@ export function useVoiceChannel({
   const resolvedRoomSlug =
     roomSlugOverride ||
     (serverId && channelId ? `voice-${serverId}-${channelId}` : "");
+  const automaticSoundboardSessionId = getAutomaticSoundboardSessionId(
+    isCall ? "call" : mode,
+    resolvedRoomSlug || channelId || "voice",
+  );
 
   const [voiceState, voiceDispatch] = useReducer(
     (state: any, action: any) => {
@@ -1303,6 +1314,8 @@ export function useVoiceChannel({
       );
       return;
     }
+    cancelAutomaticSoundboardCleanup(automaticSoundboardSessionId);
+    resetAutomaticSoundboardSession(automaticSoundboardSessionId);
 
     vcLog.info("handleJoin invoked", {
       channelId,
@@ -1426,6 +1439,11 @@ export function useVoiceChannel({
         ) {
           playConnected();
         }
+        void playAutomaticSoundboardTrigger(
+          "join",
+          automaticSoundboardSessionId,
+          serverId,
+        );
 
         if (mode !== "room" && channelId) {
           sendVoiceChannelJoin(
@@ -1865,6 +1883,7 @@ export function useVoiceChannel({
     sfu.resumeAudioContext();
     localStreamRef.current = new MediaStream();
   }, [
+    automaticSoundboardSessionId,
     user,
     serverId,
     channelId,
@@ -2409,6 +2428,13 @@ export function useVoiceChannel({
         autoJoinTargetRef.current = null;
       }
 
+      if (joinedRef.current) {
+        scheduleAutomaticSoundboardCleanup(
+          automaticSoundboardSessionId,
+          serverId,
+        );
+      }
+
       if (joinedRef.current && mode !== "room" && channelId) {
         sendVoiceChannelLeave(channelId); // Leave gateway presence if we were in
       }
@@ -2419,6 +2445,7 @@ export function useVoiceChannel({
     mode,
     serverId,
     stopCameraBackgroundEffect,
+    automaticSoundboardSessionId,
   ]);
 
   // Listen for forced disconnects (e.g. user was banned/kicked from the server)
@@ -2439,6 +2466,14 @@ export function useVoiceChannel({
         ) {
           playDisconnect();
         }
+        cancelAutomaticSoundboardCleanup(automaticSoundboardSessionId);
+        void playAutomaticSoundboardTrigger(
+          "leave",
+          automaticSoundboardSessionId,
+          serverId,
+        ).finally(() =>
+          resetAutomaticSoundboardSession(automaticSoundboardSessionId),
+        );
         sfuRef.current.disconnect("forced-disconnect");
         sfuRef.current = null;
         stopCameraBackgroundEffect(true);
@@ -2475,9 +2510,11 @@ export function useVoiceChannel({
     mode,
     serverId,
     stopCameraBackgroundEffect,
+    automaticSoundboardSessionId,
   ]);
 
   const handleLeave = useCallback(() => {
+    cancelAutomaticSoundboardCleanup(automaticSoundboardSessionId);
     vcLog.info("Voice lifecycle teardown", {
       reason: "user-leave",
       channelId,
@@ -2492,6 +2529,13 @@ export function useVoiceChannel({
     ) {
       playDisconnect();
     }
+    void playAutomaticSoundboardTrigger(
+      "leave",
+      automaticSoundboardSessionId,
+      serverId,
+    ).finally(() =>
+      resetAutomaticSoundboardSession(automaticSoundboardSessionId),
+    );
     sfuRef.current?.disconnect("user-leave");
     sfuRef.current = null;
     setSfuInstance(null);
@@ -2530,6 +2574,7 @@ export function useVoiceChannel({
     mode,
     serverId,
     stopCameraBackgroundEffect,
+    automaticSoundboardSessionId,
   ]);
 
   const toggleMic = useCallback(() => {
