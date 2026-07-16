@@ -9,31 +9,16 @@ import {
   handleCorsPreflightIfNeeded,
   requireAuth,
 } from "@/lib/api-helpers";
+import { validateBody } from "@/lib/validate-body";
+import { z } from "zod";
 
-type VoiceDisconnectBody = {
-  server_id?: string | null;
-  gateway_session_id?: string | null;
-  voice_session_id?: string | null;
-};
-
-async function readVoiceDisconnectBody(
-  request: Request,
-): Promise<VoiceDisconnectBody> {
-  const contentType = request.headers.get("content-type") ?? "";
-
-  if (contentType.includes("application/json")) {
-    return (await request.json()) as VoiceDisconnectBody;
-  }
-
-  const raw = await request.text();
-  if (!raw) return {};
-
-  try {
-    return JSON.parse(raw) as VoiceDisconnectBody;
-  } catch {
-    return {};
-  }
-}
+export const voiceDisconnectBodySchema = z
+  .object({
+    server_id: z.string().nullable().optional(),
+    gateway_session_id: z.string().nullable().optional(),
+    voice_session_id: z.string().nullable().optional(),
+  })
+  .passthrough();
 
 const OPTIONS = async ({ request }: any) => {
   return (
@@ -51,7 +36,13 @@ const POST = async ({ request, params }: any) => {
 
   const { userId } = authResult;
   const { id: channelId } = params;
-  const body = await readVoiceDisconnectBody(request);
+  const bodyResult = await validateBody(
+    request,
+    voiceDisconnectBodySchema,
+    request,
+  );
+  if (bodyResult instanceof Response) return bodyResult;
+  const body = bodyResult;
 
   const gatewaySessionId =
     request.headers.get("X-Gateway-Session-Id")?.trim() ||

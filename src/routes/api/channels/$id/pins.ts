@@ -5,6 +5,7 @@ import { PERMISSIONS } from "@/lib/permissions";
 import { requireChannelAccess } from "@/lib/require-channel-access";
 import { requirePermission } from "@/lib/require-permission";
 import { ServiceError } from "@/lib/service-error";
+import { validateBody } from "@/lib/validate-body";
 import {
   batchFetchAttachments,
   batchFetchReactions,
@@ -13,6 +14,14 @@ import {
   unpinMessage,
 } from "@/services/message.service";
 import { executeBroadcast } from "@/services/service-helpers";
+import { z } from "zod";
+
+export const pinsBodySchema = z
+  .object({
+    message_id: z.string().default(""),
+    pinned: z.boolean().default(false),
+  })
+  .passthrough();
 
 // GET /api/channels/:id/pins — get all pinned messages in the channel
 const GET = async ({ request: _request, params }: any) => {
@@ -62,10 +71,9 @@ const PUT = async ({ request, params }: any) => {
   const { userId } = authResult;
 
   const { id: channelId } = params;
-  const body = (await request.json()) as {
-    message_id: string;
-    pinned: boolean;
-  };
+  const bodyResult = await validateBody(request, pinsBodySchema, request);
+  if (bodyResult instanceof Response) return bodyResult;
+  const body = bodyResult;
 
   if (!body.message_id) {
     return apiError("message_id required", 400);
