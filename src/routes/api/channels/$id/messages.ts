@@ -16,6 +16,8 @@ import { requireChannelAccess } from "@/lib/require-channel-access";
 import { getUserChannelPermissions } from "@/lib/require-permission";
 import { ServiceError } from "@/lib/service-error";
 import { clog } from "@/lib/console-logger";
+import { validateBody } from "@/lib/validate-body";
+import { z } from "zod";
 import {
   createMessage,
   deleteMessage,
@@ -78,6 +80,17 @@ const GET = async ({ request, params }: any) => {
   }
 };
 
+// Permissive schema: validates structure only (types + shape), not business
+// rules. The content-or-attachments requirement is enforced separately below,
+// exactly as before, so existing clients are unaffected.
+const messageCreateSchema = z.object({
+  content: z.string().default(""),
+  reply_to_id: z.string().optional(),
+  nonce: z.string().optional(),
+  attachment_ids: z.array(z.string()).optional(),
+  nsfw_attachment_ids: z.array(z.string()).optional(),
+});
+
 // POST /api/channels/:id/messages — send a message
 const POST = async ({ request, params }: any) => {
   const authResult = await requireAuth();
@@ -105,13 +118,9 @@ const POST = async ({ request, params }: any) => {
   const rl = checkRateLimit(userId, "message-send", RATE_LIMITS.MESSAGE_SEND);
   if (rl) return rl;
 
-  const body = (await request.json()) as {
-    content: string;
-    reply_to_id?: string;
-    nonce?: string;
-    attachment_ids?: string[];
-    nsfw_attachment_ids?: string[];
-  };
+  const bodyResult = await validateBody(request, messageCreateSchema, request);
+  if (bodyResult instanceof Response) return bodyResult;
+  const body = bodyResult;
 
   const hasContent = body.content?.trim();
   const hasAttachments = body.attachment_ids && body.attachment_ids.length > 0;
