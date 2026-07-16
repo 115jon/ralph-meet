@@ -73,7 +73,7 @@ function clientEnvironmentShims(): Plugin {
         if (environment.consumer !== "server") continue;
         environment.optimizeDeps.exclude = [
           ...new Set([
-            ...environment.optimizeDeps.exclude,
+            ...(environment.optimizeDeps.exclude ?? []),
             ...tanstackServerDependencies,
           ]),
         ];
