@@ -16,11 +16,14 @@ const ALLOWED_HOSTS = new Set([
   "video.twimg.com",
   "pbs.twimg.com",
   "vxtwitter.com",
-  "static.klipy.com",
   "tenor.com",
-  "media.tenor.com",
   "lh3.googleusercontent.com",
 ]);
+
+const KLIPY_STATIC_HOST_PATTERN = /^static\d*\.klipy\.com$/;
+const TENOR_MEDIA_HOST_PATTERN = /^media\d*\.tenor\.com$/;
+const INSTAGRAM_CDN_HOST_PATTERN =
+  /^scontent-[a-z0-9]+(?:-[a-z0-9]+)*\.cdninstagram\.com$/;
 
 const X_SOURCE_HOSTS = new Set([
   "x.com",
@@ -68,10 +71,9 @@ export function isAllowedMediaUrl(url: URL): boolean {
   }
 
   return (
-    hostname.endsWith(".klipy.com") ||
-    hostname.endsWith(".tenor.com") ||
-    hostname.endsWith(".googleusercontent.com") ||
-    hostname.endsWith(".cdninstagram.com") ||
+    KLIPY_STATIC_HOST_PATTERN.test(hostname) ||
+    TENOR_MEDIA_HOST_PATTERN.test(hostname) ||
+    INSTAGRAM_CDN_HOST_PATTERN.test(hostname) ||
     isTikTokMediaHostname(hostname) ||
     hostname === "tiktok.com" ||
     hostname.endsWith(".tiktok.com")

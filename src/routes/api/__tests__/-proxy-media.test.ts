@@ -116,14 +116,25 @@ describe("proxy media helpers", () => {
           new URL("https://scontent-ord5-1.cdninstagram.com/path/thumb.jpg"),
         ),
       ).toBe(true);
+      expect(
+        isAllowedMediaUrl(
+          new URL("https://scontent-ord5-2.cdninstagram.com/path/thumb.jpg"),
+        ),
+      ).toBe(true);
     });
 
-    it("allows klipy domains", () => {
+    it("allows Klipy static hosts", () => {
       expect(isAllowedMediaUrl(new URL("https://static.klipy.com/path"))).toBe(
         true,
       );
-      expect(isAllowedMediaUrl(new URL("https://media.klipy.com/path"))).toBe(
+      expect(isAllowedMediaUrl(new URL("https://static1.klipy.com/path"))).toBe(
         true,
+      );
+      expect(isAllowedMediaUrl(new URL("https://static2.klipy.com/path"))).toBe(
+        true,
+      );
+      expect(isAllowedMediaUrl(new URL("https://media.klipy.com/path"))).toBe(
+        false,
       );
     });
 
@@ -147,6 +158,24 @@ describe("proxy media helpers", () => {
 
     it("denies unallowed domains", () => {
       expect(isAllowedMediaUrl(new URL("https://evil.com/path"))).toBe(false);
+      for (const hostname of [
+        "evil-googleusercontent.com",
+        "evil.googleusercontent.com",
+        "googleusercontent.com.attacker.net",
+        "evil-klipy.com",
+        "evil.klipy.com",
+        "klipy.com.attacker.net",
+        "evil-tenor.com",
+        "evil.tenor.com",
+        "tenor.com.attacker.net",
+        "evil-cdninstagram.com",
+        "evil.cdninstagram.com",
+        "cdninstagram.com.attacker.net",
+      ]) {
+        expect(isAllowedMediaUrl(new URL(`https://${hostname}/path`))).toBe(
+          false,
+        );
+      }
       expect(isAllowedMediaUrl(new URL("https://notklipy.com/path"))).toBe(
         false,
       );
