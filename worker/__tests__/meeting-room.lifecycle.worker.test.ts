@@ -730,6 +730,57 @@ describe("MeetingRoom lifecycle", () => {
     socketB.close();
   });
 
+  it("delivers a server dispatch only to members when several sessions share one server subscription", async () => {
+    await env.DB.prepare(
+      "CREATE TABLE IF NOT EXISTS server_members (server_id TEXT NOT NULL, user_id TEXT NOT NULL)",
+    ).run();
+
+    const roomName = crypto.randomUUID();
+    const serverId = `server-${crypto.randomUUID()}`;
+    // Only the member is inserted; the other subscriber must be filtered out by
+    // the batched membership resolution and pruned from the subscription set.
+    await env.DB.prepare(
+      "INSERT INTO server_members (server_id, user_id) VALUES (?, ?)",
+    )
+      .bind(serverId, "user-member")
+      .run();
+
+    const memberSocket = await openMeetingSocket(roomName, "user-member");
+    await identifyMeetingSocket(memberSocket);
+    const outsiderSocket = await openMeetingSocket(roomName, "user-outsider");
+    await identifyMeetingSocket(outsiderSocket);
+
+    memberSocket.send(JSON.stringify({ op: 35, d: { server_id: serverId } }));
+    outsiderSocket.send(JSON.stringify({ op: 35, d: { server_id: serverId } }));
+    await new Promise((resolve) => setTimeout(resolve, 25));
+
+    const memberDispatch = nextMessageWithOpcodeWithin(memberSocket, 19);
+    const outsiderDispatch = hasMessageWithOpcode(outsiderSocket, 19, 150);
+    await env.MEETING_ROOM.get(env.MEETING_ROOM.idFromName(roomName)).fetch(
+      "https://internal/broadcast",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          server_id: serverId,
+          event: "GUILD_UPDATE",
+          data: { id: serverId, name: "members-only" },
+        }),
+      },
+    );
+
+    await expect(memberDispatch).resolves.toMatchObject({
+      d: {
+        event: "GUILD_UPDATE",
+        data: { id: serverId, name: "members-only" },
+      },
+    });
+    await expect(outsiderDispatch).resolves.toBe(false);
+
+    memberSocket.close();
+    outsiderSocket.close();
+  });
+
   it("rejects calls unless the channel is an exact two-recipient DM", async () => {
     await env.DB.prepare(
       "CREATE TABLE IF NOT EXISTS channels (id TEXT PRIMARY KEY, server_id TEXT, channel_type TEXT NOT NULL)",

@@ -2661,7 +2661,11 @@ export class MeetingRoom extends DurableObject<Env> {
     const subscribers = this.serverSubscriptions.get(serverId);
     if (!subscribers) return;
 
-    const json = JSON.stringify(msg);
+    // Gather candidate sessions first, pruning any socket without an
+    // authenticated user. Then resolve membership for all of them in a single
+    // batched query rather than one query per subscriber (previously O(n) DB
+    // round-trips per broadcast).
+    const candidates: Array<{ ws: WebSocket; session: WsAttachment }> = [];
     for (const ws of [...subscribers]) {
       if (ws === excludeWs) continue;
       const session = this.getSession(ws);
@@ -2669,14 +2673,22 @@ export class MeetingRoom extends DurableObject<Env> {
         subscribers.delete(ws);
         continue;
       }
+      candidates.push({ ws, session });
+    }
 
-      const member = await this.env.DB.prepare(
-        "SELECT 1 FROM server_members WHERE server_id = ? AND user_id = ? LIMIT 1",
-      )
-        .bind(serverId, session.clerk_user_id)
-        .first()
-        .catch(() => null);
-      if (!member) {
+    if (candidates.length === 0) {
+      if (subscribers.size === 0) this.serverSubscriptions.delete(serverId);
+      return;
+    }
+
+    const uniqueUserIds = [
+      ...new Set(candidates.map((c) => c.session.clerk_user_id as string)),
+    ];
+    const members = await this.resolveServerMembership(serverId, uniqueUserIds);
+
+    const json = JSON.stringify(msg);
+    for (const { ws, session } of candidates) {
+      if (!members.has(session.clerk_user_id as string)) {
         subscribers.delete(ws);
         session.subscribed_servers = session.subscribed_servers.filter(
           (id) => id !== serverId,
@@ -2697,6 +2709,35 @@ export class MeetingRoom extends DurableObject<Env> {
       }
     }
     if (subscribers.size === 0) this.serverSubscriptions.delete(serverId);
+  }
+
+  /**
+   * Resolve which of `userIds` are members of `serverId` in a single batched
+   * query (chunked to stay within D1's 100 bound-parameter limit). Returns the
+   * set of member user IDs. On query failure the affected chunk is treated as
+   * non-members, matching the previous per-user fail-safe behaviour.
+   */
+  private async resolveServerMembership(
+    serverId: string,
+    userIds: string[],
+  ): Promise<Set<string>> {
+    const members = new Set<string>();
+    // 1 param for serverId leaves 99 for user IDs; chunk conservatively at 90.
+    const CHUNK = 90;
+    for (let i = 0; i < userIds.length; i += CHUNK) {
+      const chunk = userIds.slice(i, i + CHUNK);
+      const placeholders = chunk.map(() => "?").join(", ");
+      const { results } = await this.env.DB.prepare(
+        `SELECT user_id FROM server_members WHERE server_id = ? AND user_id IN (${placeholders})`,
+      )
+        .bind(serverId, ...chunk)
+        .all<{ user_id: string }>()
+        .catch(() => ({ results: [] as { user_id: string }[] }));
+      for (const row of results ?? []) {
+        if (typeof row.user_id === "string") members.add(row.user_id);
+      }
+    }
+    return members;
   }
 
   private async broadcastToUserServers(userId: string, msg: ServerMsg) {
