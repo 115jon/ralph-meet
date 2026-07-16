@@ -9,7 +9,10 @@ import {
 import { useUserResolution } from "@/hooks/useUserResolution";
 import { getAuthAssetUrl } from "@/lib/platform";
 import { resumeSoundContext } from "@/lib/sounds";
-import { prewarmAudioContext } from "@/lib/voice/audio-pipeline";
+import {
+  disposePrewarmedAudioContext,
+  prewarmAudioContext,
+} from "@/lib/voice/audio-pipeline";
 import { useChatStore } from "@/stores/chat-store";
 import { useCallStore } from "@/stores/useCallStore";
 import { Phone, X } from "lucide-react";
@@ -82,6 +85,7 @@ export function IncomingCallModal() {
   };
 
   const handleDecline = () => {
+    disposePrewarmedAudioContext();
     gateway?.sendCallDecline(callId);
   };
 

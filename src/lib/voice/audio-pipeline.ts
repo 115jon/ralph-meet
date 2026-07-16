@@ -15,6 +15,36 @@ import { resumeSoundContext } from "@/lib/sounds";
 // any gesture). prewarmAudioContext() should be called from the Accept/Call
 // button click handler so the context is created in "running" state.
 let _prewarmedContext: AudioContext | null = null;
+let _prewarmedContextCleanupTimer: ReturnType<typeof setTimeout> | null = null;
+const PREWARMED_CONTEXT_LIFETIME_MS = 10_000;
+
+function clearPrewarmedContextCleanupTimer(): void {
+  if (_prewarmedContextCleanupTimer !== null) {
+    clearTimeout(_prewarmedContextCleanupTimer);
+    _prewarmedContextCleanupTimer = null;
+  }
+}
+
+/** Dispose a prewarmed context that was not consumed by a voice session. */
+export function disposePrewarmedAudioContext(): void {
+  clearPrewarmedContextCleanupTimer();
+  const context = _prewarmedContext;
+  _prewarmedContext = null;
+  if (context && context.state !== "closed") {
+    context.close().catch(() => {});
+  }
+}
+
+function takePrewarmedAudioContext(): AudioContext | null {
+  const context = _prewarmedContext;
+  if (!context || context.state === "closed") {
+    disposePrewarmedAudioContext();
+    return null;
+  }
+  clearPrewarmedContextCleanupTimer();
+  _prewarmedContext = null;
+  return context;
+}
 
 /**
  * Create and resume an AudioContext during a user gesture (click/tap).
@@ -27,8 +57,14 @@ let _prewarmedContext: AudioContext | null = null;
 export function prewarmAudioContext(): void {
   try {
     if (!_prewarmedContext || _prewarmedContext.state === "closed") {
+      disposePrewarmedAudioContext();
       _prewarmedContext = new AudioContext();
     }
+    clearPrewarmedContextCleanupTimer();
+    _prewarmedContextCleanupTimer = setTimeout(
+      disposePrewarmedAudioContext,
+      PREWARMED_CONTEXT_LIFETIME_MS,
+    );
     _prewarmedContext.resume().catch(() => {});
     // Unify: also resume the sound effects context during this gesture
     resumeSoundContext().catch(() => {});
@@ -55,6 +91,13 @@ export class AudioPipeline {
   /** Muted <audio> elements that activate Chrome's remote track media pipeline */
   private activatorElements: Map<string, Map<string, HTMLAudioElement>> =
     new Map();
+  private stereoPipelines = new Map<
+    MediaStream,
+    {
+      source: MediaStreamAudioSourceNode;
+      destination: MediaStreamAudioDestinationNode;
+    }
+  >();
   /**
    * Tracks that were connected while the AudioContext was suspended.
    * Firefox silently drops audio from createMediaStreamSource() on a suspended
@@ -81,12 +124,7 @@ export class AudioPipeline {
   async resumeAudioContext(): Promise<void> {
     if (!this.volumeContext) {
       // Reuse a prewarmed context from a user gesture (call accept/initiate)
-      if (_prewarmedContext && _prewarmedContext.state !== "closed") {
-        this.volumeContext = _prewarmedContext;
-        _prewarmedContext = null;
-      } else {
-        this.volumeContext = new AudioContext();
-      }
+      this.volumeContext = takePrewarmedAudioContext() ?? new AudioContext();
     }
     if (this.volumeContext.state === "suspended") {
       try {
@@ -155,12 +193,7 @@ export class AudioPipeline {
    */
   getAudioContext(): AudioContext {
     if (!this.volumeContext || this.volumeContext.state === "closed") {
-      if (_prewarmedContext && _prewarmedContext.state !== "closed") {
-        this.volumeContext = _prewarmedContext;
-        _prewarmedContext = null;
-      } else {
-        this.volumeContext = new AudioContext();
-      }
+      this.volumeContext = takePrewarmedAudioContext() ?? new AudioContext();
     }
     return this.volumeContext;
   }
@@ -210,12 +243,7 @@ export class AudioPipeline {
 
     if (!this.volumeContext) {
       // Reuse prewarmed context if available
-      if (_prewarmedContext && _prewarmedContext.state !== "closed") {
-        this.volumeContext = _prewarmedContext;
-        _prewarmedContext = null;
-      } else {
-        this.volumeContext = new AudioContext();
-      }
+      this.volumeContext = takePrewarmedAudioContext() ?? new AudioContext();
     }
 
     const ctx = this.volumeContext;
@@ -370,6 +398,7 @@ export class AudioPipeline {
         const audioTrack = stream.getAudioTracks()[0];
         if (!audioTrack || audioTrack.readyState !== "live") {
           audioLog.info(`Skipping dead deferred track: ${trackName}`);
+          this.removeTrackVolume(participantId, trackName);
           continue;
         }
 
@@ -419,6 +448,9 @@ export class AudioPipeline {
 
   /** Clean up volume processing nodes for a participant. */
   removeParticipantVolume(participantId: string): void {
+    for (const key of this.pendingTracks.keys()) {
+      if (key.startsWith(`${participantId}::`)) this.pendingTracks.delete(key);
+    }
     const sources = this.volumeSources.get(participantId);
     if (sources) {
       sources.forEach((s) => s.disconnect());
@@ -445,6 +477,7 @@ export class AudioPipeline {
 
   /** Clean up volume processing nodes for a single track of a participant. */
   removeTrackVolume(participantId: string, trackName: string): void {
+    this.pendingTracks.delete(`${participantId}::${trackName}`);
     const sources = this.volumeSources.get(participantId);
     if (sources) {
       const source = sources.get(trackName);
@@ -452,6 +485,7 @@ export class AudioPipeline {
         source.disconnect();
         sources.delete(trackName);
       }
+      if (sources.size === 0) this.volumeSources.delete(participantId);
     }
     const gains = this.volumeGains.get(participantId);
     if (gains) {
@@ -460,6 +494,7 @@ export class AudioPipeline {
         gain.disconnect();
         gains.delete(trackName);
       }
+      if (gains.size === 0) this.volumeGains.delete(participantId);
     }
     const panners = this.spatialPanners.get(participantId);
     if (panners) {
@@ -468,6 +503,7 @@ export class AudioPipeline {
         panner.disconnect();
         panners.delete(trackName);
       }
+      if (panners.size === 0) this.spatialPanners.delete(participantId);
     }
     const activators = this.activatorElements.get(participantId);
     if (activators) {
@@ -476,6 +512,7 @@ export class AudioPipeline {
         activator.srcObject = null;
         activators.delete(trackName);
       }
+      if (activators.size === 0) this.activatorElements.delete(participantId);
     }
   }
 
@@ -486,12 +523,7 @@ export class AudioPipeline {
   setMasterVolume(level: number): void {
     const clamped = Math.max(0, Math.min(level, 2.0));
     if (!this.volumeContext) {
-      if (_prewarmedContext && _prewarmedContext.state !== "closed") {
-        this.volumeContext = _prewarmedContext;
-        _prewarmedContext = null;
-      } else {
-        this.volumeContext = new AudioContext();
-      }
+      this.volumeContext = takePrewarmedAudioContext() ?? new AudioContext();
     }
     const ctx = this.volumeContext;
     if (!this.masterGainNode) {
@@ -517,12 +549,7 @@ export class AudioPipeline {
   async setOutputDevice(deviceId: string): Promise<void> {
     if (!this.volumeContext) {
       // Reuse prewarmed context (created during Accept/Call user gesture)
-      if (_prewarmedContext && _prewarmedContext.state !== "closed") {
-        this.volumeContext = _prewarmedContext;
-        _prewarmedContext = null;
-      } else {
-        this.volumeContext = new AudioContext();
-      }
+      this.volumeContext = takePrewarmedAudioContext() ?? new AudioContext();
     }
 
     // Ensure context is running (may still be suspended if created outside
@@ -557,12 +584,7 @@ export class AudioPipeline {
     }
 
     if (!this.volumeContext) {
-      if (_prewarmedContext && _prewarmedContext.state !== "closed") {
-        this.volumeContext = _prewarmedContext;
-        _prewarmedContext = null;
-      } else {
-        this.volumeContext = new AudioContext();
-      }
+      this.volumeContext = takePrewarmedAudioContext() ?? new AudioContext();
     }
     const ctx = this.volumeContext;
     ctx.resume().catch(() => {});
@@ -574,11 +596,26 @@ export class AudioPipeline {
     // Connect directly to the destination node (which produces a MediaStream, NOT the speakers)
     source.connect(destination);
 
+    this.stereoPipelines.set(destination.stream, { source, destination });
     return destination.stream;
+  }
+
+  /** Dispose one stream created by createTrueStereoStream. */
+  disposeTrueStereoStream(stream: MediaStream): void {
+    const pipeline = this.stereoPipelines.get(stream);
+    if (!pipeline) return;
+    pipeline.source.disconnect();
+    pipeline.destination.disconnect();
+    this.stereoPipelines.delete(stream);
   }
 
   /** Dispose all audio resources. */
   dispose(): void {
+    this.stereoPipelines.forEach(({ source, destination }) => {
+      source.disconnect();
+      destination.disconnect();
+    });
+    this.stereoPipelines.clear();
     this.volumeGains.forEach((gains) => gains.forEach((g) => g.disconnect()));
     this.volumeGains.clear();
     this.spatialPanners.forEach((panners) =>

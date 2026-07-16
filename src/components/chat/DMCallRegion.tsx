@@ -12,7 +12,10 @@ import { playCallEnd, playRingStop, resumeSoundContext } from "@/lib/sounds";
 import { cn } from "@/lib/utils";
 import type { AvatarDisplay } from "@/lib/avatar-display";
 import { isVoiceMemberReconnecting } from "@/lib/voice-presence";
-import { prewarmAudioContext } from "@/lib/voice/audio-pipeline";
+import {
+  disposePrewarmedAudioContext,
+  prewarmAudioContext,
+} from "@/lib/voice/audio-pipeline";
 import { getAvailableStreamQualities } from "@/lib/voice/utils";
 import { useChatStore } from "@/stores/chat-store";
 import { useCallStore } from "@/stores/useCallStore";
@@ -232,6 +235,7 @@ export function DMCallRegion({ channelId }: { channelId: string }) {
   };
 
   const handleDecline = () => {
+    disposePrewarmedAudioContext();
     playRingStop();
     if (callId) gateway?.sendCallDecline(callId);
     useCallStore.getState().endCall("declined");
@@ -247,6 +251,7 @@ export function DMCallRegion({ channelId }: { channelId: string }) {
   };
 
   const handleCancelCall = () => {
+    disposePrewarmedAudioContext();
     playRingStop();
     if (callId) gateway?.sendCallEnd(callId);
     // Let the server's CALL_CANCELLED callback handle state updates for the caller

@@ -1005,6 +1005,7 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
     this.negotiator.pullPC = null;
 
     this.vad.stop();
+    this.audio.dispose();
     this.audioSentinel.stop();
     this.stats.stopStatsMonitoring();
     this.stats.stopConnectionStatsMonitoring();

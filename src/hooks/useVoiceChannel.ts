@@ -18,7 +18,7 @@ import {
 } from "@/lib/platform";
 import { areReconnectSoundsSuppressed } from "@/lib/reconnect-sound-guard";
 import type { ScreenShareOptions } from "@/lib/screen-share-types";
-import { SFUClient } from "@/lib/sfu-client";
+import { SFUClient, type SFUEventMap } from "@/lib/sfu-client";
 import { sendVoiceDisconnectBeacon } from "@/lib/voice-disconnect-beacon";
 import {
   applyStreamWatcherSnapshot,
@@ -907,6 +907,12 @@ export function useVoiceChannel({
   }, [setSpeakingUsers]);
 
   const sfuRef = useRef<SFUClient | null>(null);
+  const sfuHandlerCleanupRef = useRef<(() => void) | null>(null);
+  const cleanupSfuHandlers = useCallback(() => {
+    const cleanup = sfuHandlerCleanupRef.current;
+    sfuHandlerCleanupRef.current = null;
+    cleanup?.();
+  }, []);
   // Tracks whether auto-join has already fired for the current autoJoin=true
   // activation. Prevents re-joining immediately after an explicit handleLeave()
   // while the URL (and therefore autoJoin prop) still points at a voice channel.
@@ -1193,18 +1199,17 @@ export function useVoiceChannel({
     window.addEventListener("click", resume, { once: true });
     window.addEventListener("keydown", resume, { once: true });
 
-    const sfu = sfuRef.current;
-    if (sfu) {
-      sfu.on("audio-resumed", () =>
-        voiceDispatch({ type: "SET_AUDIO_BLOCKED", payload: false }),
-      );
-    }
+    const sfu = sfuInstance;
+    const unsubscribeAudioResumed = sfu?.on("audio-resumed", () =>
+      voiceDispatch({ type: "SET_AUDIO_BLOCKED", payload: false }),
+    );
 
     return () => {
       window.removeEventListener("click", resume);
       window.removeEventListener("keydown", resume);
+      unsubscribeAudioResumed?.();
     };
-  }, []);
+  }, [sfuInstance]);
 
   useEffect(() => {
     if (!joined || !sfuRef.current) {
@@ -1397,7 +1402,19 @@ export function useVoiceChannel({
       stereo: true,
     });
 
-    sfu.on(
+    const sfuUnsubscribers: Array<() => void> = [];
+    const onSfu = <K extends keyof SFUEventMap>(
+      event: K,
+      handler: (data: SFUEventMap[K]) => void,
+    ) => {
+      sfuUnsubscribers.push(sfu.on(event, handler));
+    };
+    sfuHandlerCleanupRef.current = () => {
+      for (const unsubscribe of sfuUnsubscribers) unsubscribe();
+      sfuUnsubscribers.length = 0;
+    };
+
+    onSfu(
       "joined",
       ({
         participantId,
@@ -1455,7 +1472,7 @@ export function useVoiceChannel({
       },
     );
 
-    sfu.on("participant-joined", ({ participant }) => {
+    onSfu("participant-joined", ({ participant }) => {
       upsertParticipant(participant);
 
       if (
@@ -1467,7 +1484,7 @@ export function useVoiceChannel({
       }
     });
 
-    sfu.on(
+    onSfu(
       "voice-state-update",
       ({ participant, spatialAudioState: nextSpatialAudioState }: any) => {
         upsertParticipant(participant);
@@ -1480,7 +1497,7 @@ export function useVoiceChannel({
       },
     );
 
-    sfu.on(
+    onSfu(
       "participants-sync",
       ({ participants, spatialAudioState: nextSpatialAudioState }: any) => {
         syncParticipants(participants);
@@ -1493,11 +1510,11 @@ export function useVoiceChannel({
       },
     );
 
-    sfu.on("audio-stalled", (isStalled: boolean) => {
+    onSfu("audio-stalled", (isStalled: boolean) => {
       voiceDispatch({ type: "SET_AUDIO_STALLED", payload: isStalled });
     });
 
-    sfu.on("app-event", (event) => {
+    onSfu("app-event", (event) => {
       if (!isStreamWatcherSnapshotPayload(event)) return;
 
       const previousWatcherIds = streamWatcherIdsRef.current;
@@ -1546,7 +1563,7 @@ export function useVoiceChannel({
       }
     });
 
-    sfu.on(
+    onSfu(
       "profile-update",
       ({
         participantId,
@@ -1583,7 +1600,7 @@ export function useVoiceChannel({
       },
     );
 
-    sfu.on("participant-left", ({ participantId }) => {
+    onSfu("participant-left", ({ participantId }) => {
       const clerkId =
         uuidToClerkRef.current.get(participantId) || participantId;
       participantsRef.current.delete(participantId);
@@ -1614,7 +1631,7 @@ export function useVoiceChannel({
       voiceDispatch({ type: "BUMP_PARTICIPANTS" });
     });
 
-    sfu.on("remote-track", ({ participantId, track, trackInfo, action }) => {
+    onSfu("remote-track", ({ participantId, track, trackInfo, action }) => {
       // Use clerk ID if mapped, otherwise fall back to raw participant UUID.
       // For calls, both users join simultaneously so the mapping may not be
       // populated before the first remote-track fires.
@@ -1805,7 +1822,7 @@ export function useVoiceChannel({
       }
     });
 
-    sfu.on("speaking", ({ participantId, speaking }) => {
+    onSfu("speaking", ({ participantId, speaking }) => {
       const clerkId =
         uuidToClerkRef.current.get(participantId) || participantId;
       voiceDispatch({
@@ -1814,7 +1831,7 @@ export function useVoiceChannel({
       });
     });
 
-    sfu.on("vad-speaking", ({ participantId, isSpeaking }) => {
+    onSfu("vad-speaking", ({ participantId, isSpeaking }) => {
       const clerkId =
         uuidToClerkRef.current.get(participantId) || participantId;
       voiceDispatch({
@@ -1823,11 +1840,11 @@ export function useVoiceChannel({
       });
     });
 
-    sfu.on("connection-state", ({ state }) =>
+    onSfu("connection-state", ({ state }) =>
       voiceDispatch({ type: "SET_CONNECTION", payload: state }),
     );
 
-    sfu.on("voice-reconnected", () => {
+    onSfu("voice-reconnected", () => {
       vcLog.info("Voice reconnected — re-publishing local tracks");
       const stream = localStreamRef.current;
       if (!stream) return;
@@ -1855,7 +1872,7 @@ export function useVoiceChannel({
       }
     });
 
-    sfu.on("voice-token-expired", () => {
+    onSfu("voice-token-expired", () => {
       vcLog.warn("Voice token expired, requesting fresh authentication...");
       sfu.refreshVoiceCredentials();
     });
@@ -2392,6 +2409,7 @@ export function useVoiceChannel({
           mode,
           joined: joinedRef.current,
         });
+        cleanupSfuHandlers();
         sfuRef.current.disconnect("component-unmount");
         sfuRef.current = null;
         setSfuInstance(null);
@@ -2446,6 +2464,7 @@ export function useVoiceChannel({
     serverId,
     stopCameraBackgroundEffect,
     automaticSoundboardSessionId,
+    cleanupSfuHandlers,
   ]);
 
   // Listen for forced disconnects (e.g. user was banned/kicked from the server)
@@ -2474,6 +2493,7 @@ export function useVoiceChannel({
         ).finally(() =>
           resetAutomaticSoundboardSession(automaticSoundboardSessionId),
         );
+        cleanupSfuHandlers();
         sfuRef.current.disconnect("forced-disconnect");
         sfuRef.current = null;
         stopCameraBackgroundEffect(true);
@@ -2511,6 +2531,7 @@ export function useVoiceChannel({
     serverId,
     stopCameraBackgroundEffect,
     automaticSoundboardSessionId,
+    cleanupSfuHandlers,
   ]);
 
   const handleLeave = useCallback(() => {
@@ -2536,6 +2557,7 @@ export function useVoiceChannel({
     ).finally(() =>
       resetAutomaticSoundboardSession(automaticSoundboardSessionId),
     );
+    cleanupSfuHandlers();
     sfuRef.current?.disconnect("user-leave");
     sfuRef.current = null;
     setSfuInstance(null);
@@ -2575,6 +2597,7 @@ export function useVoiceChannel({
     serverId,
     stopCameraBackgroundEffect,
     automaticSoundboardSessionId,
+    cleanupSfuHandlers,
   ]);
 
   const toggleMic = useCallback(() => {
