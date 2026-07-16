@@ -1,9 +1,19 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { z } from "zod";
 
 import { apiSuccess, getDB, requireAuth } from "@/lib/api-helpers";
 import { ServiceError } from "@/lib/service-error";
+import { validateBody } from "@/lib/validate-body";
 import { createRole, listServerRoles } from "@/services/role.service";
 import { executeAuditLog } from "@/services/service-helpers";
+
+export const roleCreateBodySchema = z
+  .object({
+    name: z.string().default(""),
+    color: z.string().optional(),
+    permissions: z.number().optional(),
+  })
+  .passthrough();
 
 // GET /api/servers/:id/roles — list all roles for a server
 const GET = async ({ request: _request, params }: any) => {
@@ -36,11 +46,9 @@ const POST = async ({ request, params }: any) => {
   const { id: serverId } = params;
 
   const db = getDB();
-  const body = (await request.json()) as {
-    name: string;
-    color?: string;
-    permissions?: number;
-  };
+  const bodyResult = await validateBody(request, roleCreateBodySchema, request);
+  if (bodyResult instanceof Response) return bodyResult;
+  const body = bodyResult;
 
   try {
     const result = await createRole(db, serverId, userId, {
