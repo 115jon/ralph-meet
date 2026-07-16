@@ -1,6 +1,7 @@
 import type { MessageShare } from "@/services/message-share.service";
 import type { EmbedAudio, EmbedMedia } from "@/lib/types";
 import { clog } from "@/lib/console-logger";
+import { safeFetch, readJsonCapped } from "@/lib/safe-fetch";
 
 const log = clog("share-preview-proxy");
 
@@ -392,7 +393,7 @@ async function resolveTikTokLookupUrl(rawUrl: string): Promise<string> {
   if (!isTikTokShortLookupUrl(rawUrl)) return rawUrl;
 
   try {
-    const response = await fetch(rawUrl, {
+    const response = await safeFetch(rawUrl, {
       method: "HEAD",
       redirect: "follow",
       headers: TIKTOK_PAGE_RESOLVE_HEADERS,
@@ -592,7 +593,7 @@ async function fetchTikTokPlayerApiMetadata(
   const apiUrl = `https://www.tiktok.com/player/api/v1/items?item_ids=${encodeURIComponent(itemId)}`;
 
   try {
-    const response = await fetch(apiUrl, {
+    const response = await safeFetch(apiUrl, {
       headers: {
         ...TIKTOK_PLAYER_REQUEST_HEADERS,
         Referer: `https://www.tiktok.com/player/v1/${itemId}?description=1&music_info=1`,
@@ -611,7 +612,7 @@ async function fetchTikTokPlayerApiMetadata(
       return null;
     }
 
-    const payload = (await response.json()) as any;
+    const payload = (await readJsonCapped(response)) as any;
     const item = Array.isArray(payload?.items) ? payload.items[0] : null;
     return mapTikTokPlayerApiMetadata(item);
   } catch (error) {
@@ -688,7 +689,7 @@ async function fetchTikTokTikwmMetadata(
     const apiUrl = `${baseUrl}?url=${encodeURIComponent(url)}`;
 
     try {
-      const response = await fetch(apiUrl, {
+      const response = await safeFetch(apiUrl, {
         headers: TIKTOK_PROXY_REQUEST_HEADERS,
       });
 
@@ -704,7 +705,7 @@ async function fetchTikTokTikwmMetadata(
         continue;
       }
 
-      const payload = (await response.json()) as any;
+      const payload = (await readJsonCapped(response)) as any;
       if (payload?.code !== 0 || !payload.data) {
         log.warn("TikTok proxy metadata payload missing data", {
           apiUrl: baseUrl,
@@ -806,7 +807,7 @@ export async function fetchInstagramOEmbedMetadata(
 ): Promise<InstagramOEmbedMetadata | null> {
   const canonicalUrl = canonicalizeInstagramUrl(url);
   const apiUrl = `https://www.instagram.com/api/v1/oembed/?url=${encodeURIComponent(canonicalUrl)}&omitscript=true`;
-  const response = await fetch(apiUrl, {
+  const response = await safeFetch(apiUrl, {
     headers: {
       "User-Agent":
         "Mozilla/5.0 (compatible; RalphMeetBot/1.0; +https://meet.115jon.site)",
@@ -818,7 +819,7 @@ export async function fetchInstagramOEmbedMetadata(
     return null;
   }
 
-  const payload = (await response.json()) as any;
+  const payload = (await readJsonCapped(response)) as any;
   if (!payload || typeof payload !== "object") return null;
 
   return {
@@ -839,7 +840,7 @@ export async function fetchInstagramVideoMetadata(
   url: string,
 ): Promise<InstagramVideoMetadata | null> {
   const canonicalUrl = canonicalizeInstagramUrl(url);
-  const response = await fetch(
+  const response = await safeFetch(
     `https://meet.115jon.site/api/instagram-video?videoUrl=${encodeURIComponent(canonicalUrl)}`,
     {
       headers: {
@@ -854,7 +855,7 @@ export async function fetchInstagramVideoMetadata(
     return null;
   }
 
-  const payload = (await response.json()) as any;
+  const payload = (await readJsonCapped(response)) as any;
   if (!payload || typeof payload !== "object") return null;
 
   return {
@@ -954,7 +955,7 @@ export async function proxyImage(url: string): Promise<Response | null> {
 
   if (parsed.protocol !== "https:") return null;
 
-  const upstream = await fetch(parsed.toString(), {
+  const upstream = await safeFetch(parsed.toString(), {
     redirect: "follow",
     headers: {
       "User-Agent":

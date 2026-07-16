@@ -3,6 +3,7 @@ import { env } from "cloudflare:workers";
 import { cacheGet, cacheSet } from "@/lib/cache";
 import { fetchInstagramOEmbedMetadata } from "@/lib/share-preview-proxy";
 import type { EmbedAudio, EmbedMedia } from "@/lib/types";
+import { safeFetch, readTextCapped, readJsonCapped } from "@/lib/safe-fetch";
 
 const INSTAGRAM_VIDEO_TTL = 50 * 60;
 const INSTAGRAM_VIDEO_CACHE_SAFETY_WINDOW = 5 * 60;
@@ -726,13 +727,13 @@ async function fetchInstagramMediaInfoPayload(
 
   for (const candidateUrl of candidateUrls) {
     try {
-      const response = await fetch(candidateUrl, {
+      const response = await safeFetch(candidateUrl, {
         headers: buildInstagramIPhoneHeaders(canonicalUrl, secrets),
         redirect: "manual",
       });
 
       if (!response.ok) {
-        const text = await response.text().catch(() => "");
+        const text = await readTextCapped(response).catch(() => "");
         lastError = new Error(
           `Instagram media info failed with ${response.status}: ${text.slice(0, 200)}`,
         );
@@ -741,14 +742,14 @@ async function fetchInstagramMediaInfoPayload(
 
       const contentType = response.headers.get("content-type") || "";
       if (!contentType.includes("json")) {
-        const text = await response.text().catch(() => "");
+        const text = await readTextCapped(response).catch(() => "");
         lastError = new Error(
           `Instagram media info returned non-JSON content: ${text.slice(0, 200)}`,
         );
         continue;
       }
 
-      return (await response.json()) as any;
+      return (await readJsonCapped(response)) as any;
     } catch (error) {
       lastError = error instanceof Error ? error : new Error(String(error));
     }
@@ -816,7 +817,7 @@ function buildInstagramResultFromMediaItem(
 async function fetchInstagramPublicPageSharedEntityId(
   canonicalUrl: string,
 ): Promise<string | null> {
-  const response = await fetch(canonicalUrl, {
+  const response = await safeFetch(canonicalUrl, {
     headers: {
       Accept: "text/html,application/xhtml+xml",
       "Accept-Language": "en-US,en;q=0.8",
@@ -829,7 +830,7 @@ async function fetchInstagramPublicPageSharedEntityId(
     return null;
   }
 
-  return extractInstagramSharedEntityId(await response.text());
+  return extractInstagramSharedEntityId(await readTextCapped(response));
 }
 
 async function fetchInstagramSharedEntityMetadata(
@@ -869,7 +870,7 @@ async function fetchInstagramPublicPageMetadata(
     title?: string | null;
   },
 ): Promise<InstagramVideoResult | null> {
-  const response = await fetch(canonicalUrl, {
+  const response = await safeFetch(canonicalUrl, {
     headers: {
       Accept: "text/html,application/xhtml+xml",
       "Accept-Language": "en-US,en;q=0.8",
@@ -882,7 +883,7 @@ async function fetchInstagramPublicPageMetadata(
     return null;
   }
 
-  const html = await response.text();
+  const html = await readTextCapped(response);
   const ogTitle = readInstagramMetaContent(html, "og:title");
   const ogDescription = firstNonEmptyString(
     readInstagramMetaContent(html, "og:description"),

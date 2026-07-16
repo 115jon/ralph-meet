@@ -1,4 +1,5 @@
 import type { EmbedInfo } from "@/lib/types";
+import { safeFetch, readTextCapped, readJsonCapped } from "@/lib/safe-fetch";
 import { resolveInstagramVideoMetadata } from "@/lib/instagram-video-resolver";
 import {
   fetchInstagramOEmbedMetadata,
@@ -133,10 +134,10 @@ function extractTweetScreenName(parsed: URL): string {
 
 async function fetchYouTubeData(url: string): Promise<EmbedInfo | null> {
   const oembedUrl = `https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`;
-  const res = await fetch(oembedUrl);
+  const res = await safeFetch(oembedUrl);
   if (!res.ok) return null;
 
-  const data = (await res.json()) as any;
+  const data = (await readJsonCapped(res)) as any;
   const videoIdMatch =
     url.match(/[?&]v=([^&]+)/) ||
     url.match(/youtu\.be\/([^?]+)/) ||
@@ -192,7 +193,7 @@ async function fetchYouTubeVideoDimensions(
     }
 
     const watchUrl = buildYouTubeWatchUrl(videoId, sourceUrl);
-    const res = await fetch(`${watchUrl}&pbj=1`, {
+    const res = await safeFetch(`${watchUrl}&pbj=1`, {
       headers: {
         "User-Agent":
           "Mozilla/5.0 (compatible; RalphMeet/1.0; +https://ralph.dev)",
@@ -201,12 +202,14 @@ async function fetchYouTubeVideoDimensions(
       },
     });
     if (res.ok) {
-      const playerResponse = extractYouTubePbjPlayerResponse(await res.text());
+      const playerResponse = extractYouTubePbjPlayerResponse(
+        await readTextCapped(res),
+      );
       const dimensions = extractLargestYouTubeFormatDimensions(playerResponse);
       if (dimensions) return dimensions;
     }
 
-    const htmlRes = await fetch(watchUrl, {
+    const htmlRes = await safeFetch(watchUrl, {
       headers: {
         "User-Agent":
           "Mozilla/5.0 (compatible; RalphMeet/1.0; +https://ralph.dev)",
@@ -214,7 +217,9 @@ async function fetchYouTubeVideoDimensions(
     });
     if (!htmlRes.ok) return null;
 
-    const playerResponse = extractYouTubePlayerResponse(await htmlRes.text());
+    const playerResponse = extractYouTubePlayerResponse(
+      await readTextCapped(htmlRes),
+    );
     return extractLargestYouTubeFormatDimensions(playerResponse);
   } catch {
     return null;
@@ -241,7 +246,7 @@ async function fetchYouTubeInnertubeDimensions(
 
   for (const client of clients) {
     try {
-      const res = await fetch(
+      const res = await safeFetch(
         "https://www.youtube.com/youtubei/v1/player?key=AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8",
         {
           method: "POST",
@@ -268,7 +273,7 @@ async function fetchYouTubeInnertubeDimensions(
         continue;
       }
 
-      const playerResponse = (await res.json()) as any;
+      const playerResponse = (await readJsonCapped(res)) as any;
       const dimensions = extractLargestYouTubeFormatDimensions(playerResponse);
       if (dimensions) {
         return dimensions;
@@ -373,7 +378,7 @@ async function fetchTwitterData(url: string): Promise<EmbedInfo | null> {
   for (const apiUrl of apis) {
     try {
       twitterLog.info(`Trying API: ${apiUrl}`);
-      const res = await fetch(apiUrl, {
+      const res = await safeFetch(apiUrl, {
         headers: { "User-Agent": "RalphMeet/1.0 (+https://ralph.dev)" },
       });
       twitterLog.info(
@@ -381,7 +386,7 @@ async function fetchTwitterData(url: string): Promise<EmbedInfo | null> {
       );
 
       if (!res.ok) {
-        const errBody = await res.text().catch(() => "");
+        const errBody = await readTextCapped(res).catch(() => "");
         twitterLog.info(
           `API ${res.status} body (first 200): ${errBody.substring(0, 200)}`,
         );
@@ -394,7 +399,7 @@ async function fetchTwitterData(url: string): Promise<EmbedInfo | null> {
         continue;
       }
 
-      const data = (await res.json()) as any;
+      const data = (await readJsonCapped(res)) as any;
       // v2 returns { status }, legacy fxtwitter returns { tweet }, vxtwitter returns a bare object.
       const tweet = data.status || data.tweet || data;
 
@@ -418,7 +423,7 @@ async function fetchTwitterData(url: string): Promise<EmbedInfo | null> {
   try {
     const vxUrl = `https://vxtwitter.com${normalizeTwitterStatusPath(parsed.pathname)}`;
     twitterLog.info(`Fallback: scraping vxtwitter OG: ${vxUrl}`);
-    const res = await fetch(vxUrl, {
+    const res = await safeFetch(vxUrl, {
       headers: {
         "User-Agent":
           "Mozilla/5.0 (compatible; Discordbot/2.0; +https://discordapp.com)",
@@ -426,7 +431,7 @@ async function fetchTwitterData(url: string): Promise<EmbedInfo | null> {
     });
 
     if (res.ok) {
-      const html = await res.text();
+      const html = await readTextCapped(res);
       twitterLog.info(`OG fallback HTML length: ${html.length}`);
 
       const titleMatch = html.match(
@@ -1377,7 +1382,7 @@ async function fetchTikTokDataRefreshed(
 ): Promise<EmbedInfo | null> {
   const oembedUrl = `https://www.tiktok.com/oembed?url=${encodeURIComponent(url)}`;
   const [oembedResult, proxyResult] = await Promise.allSettled([
-    fetch(oembedUrl),
+    safeFetch(oembedUrl),
     fetchTikTokProxyMetadata(url),
   ]);
 
@@ -1386,7 +1391,7 @@ async function fetchTikTokDataRefreshed(
     proxyResult.status === "fulfilled" ? proxyResult.value : null;
   if (!res?.ok && !proxyData) return null;
 
-  const data = res?.ok ? ((await res.json()) as any) : {};
+  const data = res?.ok ? ((await readJsonCapped(res)) as any) : {};
   const videoIdMatch =
     data.html?.match(/data-video-id="([^"]+)"/) ||
     url.match(/(?:video|photo|player\/v1)\/(\d+)/) ||
@@ -1477,10 +1482,10 @@ async function fetchTikTokDataRefreshed(
 
 async function _fetchTikTokDataLegacy(url: string): Promise<EmbedInfo | null> {
   const oembedUrl = `https://www.tiktok.com/oembed?url=${encodeURIComponent(url)}`;
-  const res = await fetch(oembedUrl);
+  const res = await safeFetch(oembedUrl);
   if (!res.ok) return null;
 
-  const data = (await res.json()) as any;
+  const data = (await readJsonCapped(res)) as any;
 
   // Extract video ID from the oEmbed HTML or URL
   const videoIdMatch =
@@ -1526,7 +1531,7 @@ async function _fetchTikTokDataLegacy(url: string): Promise<EmbedInfo | null> {
 
 async function fetchOpenGraphData(url: string): Promise<EmbedInfo | null> {
   try {
-    const res = await fetch(url, {
+    const res = await safeFetch(url, {
       headers: {
         "User-Agent":
           "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
@@ -1537,7 +1542,7 @@ async function fetchOpenGraphData(url: string): Promise<EmbedInfo | null> {
       return null;
     }
 
-    const html = await res.text();
+    const html = await readTextCapped(res);
 
     const titleMatch =
       html.match(/<meta property="og:title" content="([^"]+)"/i) ||
@@ -1586,10 +1591,10 @@ async function fetchOpenGraphData(url: string): Promise<EmbedInfo | null> {
 async function fetchSpotifyData(url: string): Promise<EmbedInfo | null> {
   try {
     const oembedUrl = `https://open.spotify.com/oembed?url=${encodeURIComponent(url)}`;
-    const res = await fetch(oembedUrl);
+    const res = await safeFetch(oembedUrl);
     if (!res.ok) return await fetchOpenGraphData(url);
 
-    const data = (await res.json()) as any;
+    const data = (await readJsonCapped(res)) as any;
 
     return {
       id: nextEmbedId(),
