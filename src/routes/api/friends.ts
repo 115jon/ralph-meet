@@ -1,7 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { z } from "zod";
 
 import { apiError, apiSuccess, getDB, requireAuth } from "@/lib/api-helpers";
 import { ServiceError } from "@/lib/service-error";
+import { validateBody } from "@/lib/validate-body";
 import { executeBroadcast } from "@/services/service-helpers";
 import {
   acceptFriendRequest,
@@ -10,6 +12,25 @@ import {
   removeRelationship,
   sendFriendRequest,
 } from "@/services/social.service";
+
+const friendRequestSchema = z
+  .object({
+    username: z.string().default(""),
+  })
+  .passthrough();
+
+const friendRelationshipSchema = z
+  .object({
+    target_user_id: z.string().default(""),
+    action: z.string().default(""),
+  })
+  .passthrough();
+
+const removeFriendSchema = z
+  .object({
+    target_user_id: z.string().default(""),
+  })
+  .passthrough();
 
 // GET /api/friends — list all relationships for the authenticated user
 const GET = async ({ request: _request, params: _params }: any) => {
@@ -23,12 +44,14 @@ const GET = async ({ request: _request, params: _params }: any) => {
 };
 
 // POST /api/friends — send a friend request
-const POST = async ({ request, params: _params }: any) => {
+export const POST = async ({ request, params: _params }: any) => {
   const authResult = await requireAuth();
   if (authResult instanceof Response) return authResult;
   const { userId } = authResult;
 
-  const body = (await request.json()) as { username: string };
+  const bodyResult = await validateBody(request, friendRequestSchema, request);
+  if (bodyResult instanceof Response) return bodyResult;
+  const body = bodyResult;
   if (!body.username?.trim()) {
     return apiError("Username is required", 400);
   }
@@ -58,15 +81,18 @@ const POST = async ({ request, params: _params }: any) => {
 };
 
 // PUT /api/friends — accept or block a relationship
-const PUT = async ({ request, params: _params }: any) => {
+export const PUT = async ({ request, params: _params }: any) => {
   const authResult = await requireAuth();
   if (authResult instanceof Response) return authResult;
   const { userId } = authResult;
 
-  const body = (await request.json()) as {
-    target_user_id: string;
-    action: "accept" | "block";
-  };
+  const bodyResult = await validateBody(
+    request,
+    friendRelationshipSchema,
+    request,
+  );
+  if (bodyResult instanceof Response) return bodyResult;
+  const body = bodyResult;
   if (!body.target_user_id || !body.action) {
     return apiError("target_user_id and action are required", 400);
   }
@@ -103,12 +129,14 @@ const PUT = async ({ request, params: _params }: any) => {
 };
 
 // DELETE /api/friends — remove a friend or cancel/reject a request
-const DELETE = async ({ request, params: _params }: any) => {
+export const DELETE = async ({ request, params: _params }: any) => {
   const authResult = await requireAuth();
   if (authResult instanceof Response) return authResult;
   const { userId } = authResult;
 
-  const body = (await request.json()) as { target_user_id: string };
+  const bodyResult = await validateBody(request, removeFriendSchema, request);
+  if (bodyResult instanceof Response) return bodyResult;
+  const body = bodyResult;
   if (!body.target_user_id) {
     return apiError("target_user_id is required", 400);
   }

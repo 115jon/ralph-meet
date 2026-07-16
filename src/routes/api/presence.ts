@@ -1,9 +1,18 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { z } from "zod";
 
 import { apiSuccess, getDB, requireAuth } from "@/lib/api-helpers";
 import { ServiceError } from "@/lib/service-error";
+import { validateBody } from "@/lib/validate-body";
 import { getPresence, updatePresence } from "@/services/presence.service";
 import { executeBroadcast } from "@/services/service-helpers";
+
+const presenceUpdateSchema = z
+  .object({
+    status: z.string().default(""),
+    custom_status: z.string().nullable().optional(),
+  })
+  .passthrough();
 
 // GET /api/presence — fetch current user's presence
 const GET = async ({ request, params: _params }: any) => {
@@ -18,15 +27,14 @@ const GET = async ({ request, params: _params }: any) => {
 };
 
 // POST /api/presence — update user's presence status
-const POST = async ({ request, params: _params }: any) => {
+export const POST = async ({ request, params: _params }: any) => {
   const authResult = await requireAuth(request);
   if (authResult instanceof Response) return authResult;
   const { userId } = authResult;
 
-  const body = (await request.json()) as {
-    status: "online" | "idle" | "dnd" | "offline";
-    custom_status?: string | null;
-  };
+  const bodyResult = await validateBody(request, presenceUpdateSchema, request);
+  if (bodyResult instanceof Response) return bodyResult;
+  const body = bodyResult;
 
   const db = getDB();
 

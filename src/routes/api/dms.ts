@@ -1,9 +1,17 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { z } from "zod";
 
 import { apiError, apiSuccess, getDB, requireAuth } from "@/lib/api-helpers";
 import { ServiceError } from "@/lib/service-error";
+import { validateBody } from "@/lib/validate-body";
 import { executeBroadcast } from "@/services/service-helpers";
 import { getOrCreateDM, listDMs } from "@/services/social.service";
+
+const dmCreateSchema = z
+  .object({
+    target_user_id: z.string().default(""),
+  })
+  .passthrough();
 
 // GET /api/dms — list all DM channels for the authenticated user
 const GET = async ({ request: _request, params: _params }: any) => {
@@ -17,12 +25,14 @@ const GET = async ({ request: _request, params: _params }: any) => {
 };
 
 // POST /api/dms — open or create a DM with a user
-const POST = async ({ request, params: _params }: any) => {
+export const POST = async ({ request, params: _params }: any) => {
   const authResult = await requireAuth();
   if (authResult instanceof Response) return authResult;
   const { userId } = authResult;
 
-  const body = (await request.json()) as { target_user_id: string };
+  const bodyResult = await validateBody(request, dmCreateSchema, request);
+  if (bodyResult instanceof Response) return bodyResult;
+  const body = bodyResult;
   if (!body.target_user_id) {
     return apiError("target_user_id is required", 400);
   }
