@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { z } from "zod";
 
 import {
   apiError,
@@ -34,6 +35,7 @@ import {
   DEFAULT_MEDIA_CONTENT_FILTER,
   parseMediaContentFilter,
 } from "@/lib/media-content-filter";
+import { validateBody } from "@/lib/validate-body";
 
 const KLIPY_API_URL = "https://api.klipy.com/v2";
 const TENOR_BOOTSTRAP_URL = "https://tenor.com/search/cat-gifs";
@@ -92,12 +94,14 @@ type StoredGifFavoriteRow = {
   duration?: number | null;
 };
 
-type FavoriteWriteBody = {
-  favorite?: any;
-  favorites?: any[];
-  provider?: string;
-  gif_id?: string;
-};
+export const gifFavoriteBodySchema = z
+  .object({
+    favorite: z.unknown().optional(),
+    favorites: z.array(z.unknown()).optional(),
+    provider: z.string().optional(),
+    gif_id: z.string().optional(),
+  })
+  .passthrough();
 
 interface KvCacheEntry<T> {
   cachedAt: number;
@@ -1053,7 +1057,13 @@ const POST = async ({ request }: any) => {
   const mode = url.searchParams.get("mode") || "favorite";
 
   try {
-    const body = (await request.json()) as FavoriteWriteBody;
+    const bodyResult = await validateBody(
+      request,
+      gifFavoriteBodySchema,
+      request,
+    );
+    if (bodyResult instanceof Response) return bodyResult;
+    const body = bodyResult;
 
     if (mode === "favorites/import") {
       const favorites = Array.isArray(body.favorites)
@@ -1097,7 +1107,13 @@ const DELETE = async ({ request }: any) => {
   const { userId } = authResult;
 
   try {
-    const body = (await request.json().catch(() => ({}))) as FavoriteWriteBody;
+    const bodyResult = await validateBody(
+      request,
+      gifFavoriteBodySchema,
+      request,
+    );
+    if (bodyResult instanceof Response) return bodyResult;
+    const body = bodyResult;
     const provider = normalizeFavoriteProvider(body.provider);
     const gifId = clampString(body.gif_id, "", 512);
     if (!gifId)

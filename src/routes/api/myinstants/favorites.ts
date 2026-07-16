@@ -1,5 +1,24 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { z } from "zod";
 import { apiError, apiSuccess, getDB, requireAuth } from "@/lib/api-helpers";
+import { validateBody } from "@/lib/validate-body";
+
+export const myInstantsFavoriteBodySchema = z
+  .object({
+    action: z.string().optional(),
+    sound: z
+      .object({
+        id: z.string().optional(),
+        title: z.string().optional(),
+        url: z.string().optional(),
+        color: z.string().optional(),
+        soundType: z.string().optional(),
+        emoji: z.string().optional(),
+      })
+      .passthrough()
+      .optional(),
+  })
+  .passthrough();
 
 const GET = async ({ request }: { request: Request }) => {
   const authResult = await requireAuth(request);
@@ -30,8 +49,13 @@ const POST = async ({ request }: { request: Request }) => {
   const db = getDB();
 
   try {
-    const body = (await request.json()) as any;
-    const { action, sound } = body;
+    const bodyResult = await validateBody(
+      request,
+      myInstantsFavoriteBodySchema,
+      request,
+    );
+    if (bodyResult instanceof Response) return bodyResult;
+    const { action, sound } = bodyResult;
 
     if (!action || !sound || !sound.id) {
       return apiError("Invalid payload", 400);

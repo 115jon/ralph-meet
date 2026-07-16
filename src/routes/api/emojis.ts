@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { z } from "zod";
 
 import {
   apiError,
@@ -23,6 +24,7 @@ import {
   markGeneratedEmojiFailed,
   markGeneratedEmojiReady,
 } from "@/services/emoji.service";
+import { validateBody } from "@/lib/validate-body";
 
 import { normalizeKlipyGeneratedStatusResponse } from "./-emojis.shared";
 
@@ -35,10 +37,12 @@ class KlipyRequestError extends Error {
   }
 }
 
-type GenerateEmojiBody = {
-  prompt?: unknown;
-  shortcode?: unknown;
-};
+export const generateEmojiBodySchema = z
+  .object({
+    prompt: z.unknown().optional(),
+    shortcode: z.unknown().optional(),
+  })
+  .passthrough();
 
 type KlipyGenerateResponse = {
   data?: {
@@ -221,7 +225,13 @@ const POST = async ({ request }: any) => {
   if (rateLimitResponse) return rateLimitResponse;
 
   try {
-    const body = (await request.json()) as GenerateEmojiBody;
+    const bodyResult = await validateBody(
+      request,
+      generateEmojiBodySchema,
+      request,
+    );
+    if (bodyResult instanceof Response) return bodyResult;
+    const body = bodyResult;
     const prompt = normalizePrompt(body.prompt);
     if (!prompt) {
       return apiError(

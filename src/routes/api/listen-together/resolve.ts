@@ -1,9 +1,20 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { z } from "zod";
 import { requireActiveVoiceRoomSession, requireAuth } from "@/lib/api-helpers";
 import { clog } from "@/lib/console-logger";
+import { validateBody } from "@/lib/validate-body";
 import { resolveListenTogetherUrl } from "@/services/listen-together.service";
 
 const resolveLog = clog("listen-together:resolve");
+
+export const listenTogetherResolveBodySchema = z
+  .object({
+    roomSlug: z.string().optional(),
+    serverId: z.string().nullable().optional(),
+    channelId: z.string().nullable().optional(),
+    url: z.string().optional(),
+  })
+  .passthrough();
 
 function getListenTogetherSourceHost(rawUrl: string) {
   try {
@@ -18,12 +29,13 @@ const POST = async ({ request }: any) => {
   const auth = await requireAuth(request);
   if (auth instanceof Response) return auth;
 
-  const body = (await request.json()) as {
-    roomSlug?: string;
-    serverId?: string | null;
-    channelId?: string | null;
-    url?: string;
-  };
+  const bodyResult = await validateBody(
+    request,
+    listenTogetherResolveBodySchema,
+    request,
+  );
+  if (bodyResult instanceof Response) return bodyResult;
+  const body = bodyResult;
 
   const roomSlug = body.roomSlug?.trim();
   const sourceUrl = body.url?.trim();

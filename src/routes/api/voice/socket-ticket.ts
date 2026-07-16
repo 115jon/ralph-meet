@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { z } from "zod";
 
 import {
   apiError,
@@ -15,6 +16,7 @@ import { PERMISSIONS, hasPermission } from "@/lib/permissions";
 import { checkRateLimitDOFailClosed } from "@/lib/rate-limit";
 import { getOrCreateDemoSession } from "@/lib/voice/demo-session";
 import { isPublicDemoRoomSlug } from "@/lib/voice/realtime-policy";
+import { validateBody } from "@/lib/validate-body";
 import {
   issueSocketTicket,
   type SocketTicketAudience,
@@ -28,12 +30,16 @@ const OPTIONS = async ({ request }: { request: Request }) =>
   handleCorsPreflightIfNeeded(request) ??
   new Response(null, { status: 204, headers: getCorsHeaders(request) });
 
-type SocketTicketRequestBody = {
-  audience?: unknown;
-  channelId?: unknown;
-  roomSlug?: unknown;
-  serverId?: unknown;
-};
+export const socketTicketRequestBodySchema = z
+  .object({
+    audience: z.unknown().optional(),
+    channelId: z.unknown().optional(),
+    roomSlug: z.unknown().optional(),
+    serverId: z.unknown().optional(),
+  })
+  .passthrough();
+
+type SocketTicketRequestBody = z.infer<typeof socketTicketRequestBodySchema>;
 
 type SocketTicketEnv = CloudflareEnv & {
   REALTIME_TICKET_SECRET?: string;
@@ -60,12 +66,13 @@ const POST = async ({ request }: { request: Request }) => {
     );
   }
 
-  let body: SocketTicketRequestBody;
-  try {
-    body = (await request.json()) as SocketTicketRequestBody;
-  } catch {
-    return noStore(apiError("Invalid JSON", 400, "INVALID_JSON", request));
-  }
+  const bodyResult = await validateBody(
+    request,
+    socketTicketRequestBodySchema,
+    request,
+  );
+  if (bodyResult instanceof Response) return noStore(bodyResult);
+  const body = bodyResult;
 
   const audience = parseAudience(body.audience);
   if (!audience) {
