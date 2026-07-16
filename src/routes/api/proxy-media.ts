@@ -119,13 +119,58 @@ async function makeSyntheticRangeResponse(
   }
 
   end = Math.min(end, contentLength - 1);
-  const bytes = new Uint8Array(await upstream.arrayBuffer());
-  const sliced = bytes.slice(start, end + 1);
+  const rangeLength = end - start + 1;
+
   const headers = buildProxyHeaders(upstream.headers, upstream.url);
   headers.set("Accept-Ranges", "bytes");
   headers.set("Content-Range", `bytes ${start}-${end}/${contentLength}`);
-  headers.set("Content-Length", sliced.byteLength.toString());
+  headers.set("Content-Length", rangeLength.toString());
   headers.set("Cache-Control", "no-store");
+
+  const body = upstream.body;
+  if (!body) return null;
+
+  // Stream the upstream body and emit only the requested byte window, rather
+  // than buffering the entire response into memory. Bytes before `start` are
+  // discarded, bytes after `end` are never read (we cancel the source).
+  const sliced = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      const reader = body.getReader();
+      let position = 0; // absolute offset of the next incoming byte
+      let emitted = 0;
+      try {
+        while (emitted < rangeLength) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          if (!value || value.byteLength === 0) continue;
+
+          const chunkStart = position;
+          const chunkEnd = position + value.byteLength - 1;
+          position += value.byteLength;
+
+          // Skip chunks entirely before the requested window.
+          if (chunkEnd < start) continue;
+
+          // Intersect [chunkStart, chunkEnd] with [start, end].
+          const sliceFrom = Math.max(0, start - chunkStart);
+          const sliceTo = Math.min(
+            value.byteLength,
+            sliceFrom + (rangeLength - emitted),
+          );
+          const piece = value.subarray(sliceFrom, sliceTo);
+          controller.enqueue(piece);
+          emitted += piece.byteLength;
+        }
+        controller.close();
+      } catch (err) {
+        controller.error(err);
+      } finally {
+        // Stop pulling more bytes from the upstream once we have our window.
+        await reader.cancel().catch(() => {});
+        reader.releaseLock();
+      }
+    },
+  });
 
   return new Response(sliced, {
     status: 206,

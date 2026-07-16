@@ -750,4 +750,80 @@ describe("proxy media helpers", () => {
       expect(upstreamMethods).toContain("GET");
     });
   });
+
+  describe("synthetic range streaming", () => {
+    // Upstream that ignores Range and returns a full 200. The proxy must
+    // synthesize a 206 by streaming and slicing, not by buffering the whole
+    // body into memory.
+    function fullBodyUpstream(total: number, chunkSize: number) {
+      const payload = new Uint8Array(total);
+      for (let i = 0; i < total; i += 1) payload[i] = i % 251;
+      return vi.fn(async () => {
+        const stream = new ReadableStream<Uint8Array>({
+          start(controller) {
+            for (let i = 0; i < total; i += chunkSize) {
+              controller.enqueue(payload.slice(i, i + chunkSize));
+            }
+            controller.close();
+          },
+        });
+        return new Response(stream, {
+          status: 200,
+          headers: {
+            "Content-Type": "video/mp4",
+            "Content-Length": String(total),
+          },
+        });
+      });
+    }
+
+    it("returns a 206 with the exact requested byte window across chunk boundaries", async () => {
+      const total = 1000;
+      const fetchMock = fullBodyUpstream(total, 64);
+      vi.stubGlobal("fetch", fetchMock as unknown as typeof fetch);
+
+      const response = await proxyMedia(
+        new Request(
+          "https://meet.test/api/proxy-media?url=https%3A%2F%2Fvideo.twimg.com%2Fpath",
+          { headers: { Range: "bytes=100-299" } },
+        ),
+        true,
+      );
+
+      expect(response.status).toBe(206);
+      expect(response.headers.get("Content-Range")).toBe(
+        `bytes 100-299/${total}`,
+      );
+      expect(response.headers.get("Content-Length")).toBe("200");
+
+      const body = new Uint8Array(await response.arrayBuffer());
+      expect(body.byteLength).toBe(200);
+      // Bytes must match the original payload window [100, 299].
+      for (let i = 0; i < body.byteLength; i += 1) {
+        expect(body[i]).toBe((100 + i) % 251);
+      }
+    });
+
+    it("clamps an open-ended range to the end of the content", async () => {
+      const total = 500;
+      const fetchMock = fullBodyUpstream(total, 128);
+      vi.stubGlobal("fetch", fetchMock as unknown as typeof fetch);
+
+      const response = await proxyMedia(
+        new Request(
+          "https://meet.test/api/proxy-media?url=https%3A%2F%2Fvideo.twimg.com%2Fpath",
+          { headers: { Range: "bytes=450-" } },
+        ),
+        true,
+      );
+
+      expect(response.status).toBe(206);
+      expect(response.headers.get("Content-Range")).toBe(
+        `bytes 450-499/${total}`,
+      );
+      const body = new Uint8Array(await response.arrayBuffer());
+      expect(body.byteLength).toBe(50);
+      expect(body[0]).toBe(450 % 251);
+    });
+  });
 });
