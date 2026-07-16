@@ -339,7 +339,7 @@ export default {
     } catch (err: any) {
       console.error("Error in handler:", err?.message || err);
       response = new Response(
-        JSON.stringify({ error: err?.message || "Internal Server Error" }),
+        JSON.stringify({ error: "Internal Server Error" }),
         {
           status: 500,
           headers: { "Content-Type": "application/json" },
