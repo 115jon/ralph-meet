@@ -11,7 +11,6 @@ import {
   showNativeDesktopToast,
   syncDesktopNotificationState,
 } from "@/lib/desktop-native-sync";
-import { apiPut } from "@/lib/api-client";
 import {
   getCurrentPresencePlatform,
   isTauri as _isTauri,
@@ -106,6 +105,18 @@ export function createChatGateway(
   let pendingQueue: object[] = [];
   let clerkUserId: string | null | undefined = null;
   let gatewaySessionId: string | null = null;
+  const subscribedServerIds = new Set<string>();
+  let subscribedChannelId: string | null = null;
+
+  const resetSubscriptions = () => {
+    subscribedServerIds.clear();
+    subscribedChannelId = null;
+    pendingQueue = pendingQueue.filter((message) => {
+      if (!message || typeof message !== "object") return true;
+      const op = (message as { op?: unknown }).op;
+      return op !== 27 && op !== 28 && op !== 35;
+    });
+  };
 
   const sendGateway = (msg: object) => {
     if (ws?.readyState === WebSocket.OPEN) {
@@ -195,14 +206,7 @@ export function createChatGateway(
         }
 
         if (msg.channel_id === state.activeChannelId) {
-          dispatch({
-            type: "UPDATE_READ_STATE",
-            channelId: msg.channel_id,
-            timestamp: msg.created_at,
-          });
-          void apiPut(`/api/channels/${msg.channel_id}/read-state`, {}).catch(
-            () => {},
-          );
+          actions.markChannelRead(msg.channel_id, msg.created_at);
         }
 
         const isDmChannel = state.dmChannels.some(
@@ -395,7 +399,7 @@ export function createChatGateway(
         if (removedUserId === state.user?.id) {
           const activeChannel = state.activeChannelId;
           if (activeChannel) {
-            sendGateway({ op: 28, d: { channel_id: activeChannel } });
+            unsubscribeChannel(activeChannel);
           }
           sendGateway({ op: 34, d: {} });
           window.dispatchEvent(new CustomEvent("force-voice-disconnect"));
@@ -857,10 +861,16 @@ export function createChatGateway(
         }
         pendingQueue = [];
 
-        // Subscribe to all servers for message delivery (Op 35)
+        // Subscribe to all servers for message delivery (Op 35). The helper
+        // avoids duplicating subscriptions already queued before READY.
         const servers = get().servers;
         for (const server of servers) {
-          sendGateway({ op: 35, d: { server_id: server.id } });
+          subscribeServer(server.id);
+        }
+
+        const activeChannel = get().activeChannelId;
+        if (activeChannel) {
+          subscribeChannel(activeChannel);
         }
 
         // On reconnect, reload all core data so the UI is repopulated
@@ -869,12 +879,6 @@ export function createChatGateway(
           releaseReconnectSoundSuppression?.();
           const release = beginReconnectSoundSuppression();
           releaseReconnectSoundSuppression = release;
-
-          // Re-subscribe to the active channel for typing/presence
-          const activeChannel = get().activeChannelId;
-          if (activeChannel) {
-            sendGateway({ op: 27, d: { channel_id: activeChannel } });
-          }
 
           void Promise.allSettled([
             actions.bootstrapChat(),
@@ -952,10 +956,13 @@ export function createChatGateway(
       ws.close();
       ws = null;
     }
+    resetSubscriptions();
+    pendingQueue = [];
     hb.stop();
     gatewayReady = false;
     identified = false;
     gatewaySessionId = null;
+    dispatch({ type: "SET_CONNECTED", connected: false });
     reconnectAttempt = 0;
     dispatch({ type: "SET_RECONNECT_ATTEMPT", attempt: 0 });
   };
@@ -987,16 +994,19 @@ export function createChatGateway(
         return;
 
       const url = wsUrl("/api/gateway");
-      ws = new WebSocket(url, protocols);
+      const socket = new WebSocket(url, protocols);
+      ws = socket;
 
-      ws.onopen = () => {
+      socket.onopen = () => {
+        if (ws !== socket) return;
         chatLog.info("Connected");
         reconnectAttempt = 0;
         dispatch({ type: "SET_CONNECTED", connected: true });
         dispatch({ type: "SET_RECONNECT_ATTEMPT", attempt: 0 });
       };
 
-      ws.onmessage = (event) => {
+      socket.onmessage = (event) => {
+        if (ws !== socket) return;
         try {
           const msg = JSON.parse(event.data);
           handleGatewayMessage(msg);
@@ -1005,7 +1015,8 @@ export function createChatGateway(
         }
       };
 
-      ws.onclose = (event) => {
+      socket.onclose = (event) => {
+        if (ws !== socket) return;
         chatLog.info("Disconnected");
         dispatch({ type: "SET_CONNECTED", connected: false });
 
@@ -1013,6 +1024,7 @@ export function createChatGateway(
         ws = null;
         gatewayReady = false;
         identified = false;
+        resetSubscriptions();
 
         if (event.code === 4008) {
           intentionalDisconnect = true;
@@ -1059,17 +1071,35 @@ export function createChatGateway(
     }
   };
 
+  const subscribeChannel = (channelId: string) => {
+    if (subscribedChannelId === channelId) return;
+    if (subscribedChannelId) {
+      sendWhenReady({ op: 28, d: { channel_id: subscribedChannelId } });
+    }
+    subscribedChannelId = channelId;
+    sendWhenReady({ op: 27, d: { channel_id: channelId } });
+  };
+
+  const unsubscribeChannel = (channelId: string) => {
+    if (subscribedChannelId !== channelId) return;
+    subscribedChannelId = null;
+    sendWhenReady({ op: 28, d: { channel_id: channelId } });
+  };
+
+  const subscribeServer = (serverId: string) => {
+    if (subscribedServerIds.has(serverId)) return;
+    subscribedServerIds.add(serverId);
+    sendWhenReady({ op: 35, d: { server_id: serverId } });
+  };
+
   return {
     initGateway,
     disconnectGateway,
     setClerkUserId,
     getSessionId: () => gatewaySessionId,
-    subscribeChannel: (channelId: string) =>
-      sendWhenReady({ op: 27, d: { channel_id: channelId } }),
-    unsubscribeChannel: (channelId: string) =>
-      sendWhenReady({ op: 28, d: { channel_id: channelId } }),
-    subscribeServer: (serverId: string) =>
-      sendWhenReady({ op: 35, d: { server_id: serverId } }),
+    subscribeChannel,
+    unsubscribeChannel,
+    subscribeServer,
     sendVoiceChannelJoin: (
       channelId: string,
       selfMute?: boolean,

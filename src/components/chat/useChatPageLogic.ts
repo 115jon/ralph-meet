@@ -133,6 +133,7 @@ export function useChatPageLogic() {
     subscribeChannel,
     unsubscribeChannel,
     subscribeServer,
+    resetReadStateTracking,
     setProfileUser,
     dispatch,
   } = useChatActions();
@@ -243,12 +244,13 @@ export function useChatPageLogic() {
 
   useEffect(() => {
     if (!desktopReady) return;
-    bootstrapChat().then(() => {
+    bootstrapChat({ expectedUserId: user?.id }).then(() => {
       setDmChannelsLoaded(true);
     });
-  }, [desktopReady, bootstrapChat]);
+  }, [desktopReady, bootstrapChat, user?.id]);
 
   useEffect(() => {
+    resetReadStateTracking(user?.id ?? null);
     if (!user) return;
     const existingAvatar = chatUser?.avatar_url;
     const isR2Avatar = existingAvatar?.startsWith("/api/avatars/");
@@ -282,7 +284,7 @@ export function useChatPageLogic() {
     if (JSON.stringify(chatUser) !== JSON.stringify(newUserState)) {
       dispatch({ type: "SET_USER", user: newUserState });
     }
-  }, [user, chatUser, dispatch]);
+  }, [user, chatUser, dispatch, resetReadStateTracking]);
 
   useEffect(() => {
     if (initializedRef.current) return;
