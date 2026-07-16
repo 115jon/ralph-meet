@@ -6,6 +6,7 @@ import {
 } from "@/lib/desktop-auth";
 import { apiUrl, getPublicWebUrl, isMobile } from "@/lib/platform";
 import { buildDesktopSignInUrl } from "@/lib/auth-route-urls";
+import { isSupportedNativeAuthUrl } from "@/lib/native-auth-handoff";
 import {
   getKovaAuthUrl,
   KOVA_AUTH_PUBLISHABLE_KEY,
@@ -151,12 +152,6 @@ export default function DesktopLogin() {
           const authCode = extractAuthCode(payload);
           if (authCode) {
             await activateCode(authCode);
-            return;
-          }
-
-          const sessionToken = extractSessionToken(payload);
-          if (sessionToken) {
-            await completeDesktopLogin(sessionToken);
             return;
           }
 
@@ -350,6 +345,7 @@ export default function DesktopLogin() {
 function extractAuthCode(payload: unknown): string | null {
   const url = extractDeepLinkUrl(payload);
   if (!url) return null;
+  if (!isSupportedNativeAuthUrl(url)) return null;
 
   try {
     const parsed = new URL(url);
@@ -358,18 +354,6 @@ function extractAuthCode(payload: unknown): string | null {
       parsed.searchParams.get("ralph_auth_code") ??
       parsed.searchParams.get("code")
     );
-  } catch {
-    return null;
-  }
-}
-
-function extractSessionToken(payload: unknown): string | null {
-  const url = extractDeepLinkUrl(payload);
-  if (!url) return null;
-
-  try {
-    const parsed = new URL(url);
-    return parsed.searchParams.get("session_token");
   } catch {
     return null;
   }

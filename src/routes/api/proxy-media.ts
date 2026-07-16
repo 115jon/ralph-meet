@@ -56,6 +56,7 @@ interface ResolveRefreshedMediaOptions {
 }
 
 const TIKTOK_PROXY_RESPONSE_TTL = 5 * 60;
+const MAX_UPSTREAM_REDIRECTS = 3;
 
 export function isAllowedMediaUrl(url: URL): boolean {
   if (url.protocol !== "https:") return false;
@@ -72,7 +73,8 @@ export function isAllowedMediaUrl(url: URL): boolean {
     hostname.endsWith(".googleusercontent.com") ||
     hostname.endsWith(".cdninstagram.com") ||
     isTikTokMediaHostname(hostname) ||
-    hostname.includes("tiktok.com")
+    hostname === "tiktok.com" ||
+    hostname.endsWith(".tiktok.com")
   );
 }
 
@@ -829,12 +831,45 @@ export async function proxyMedia(
     upstreamHeaders.set("Range", range);
   }
 
-  const fetchUpstream = (targetUrl: string) =>
-    fetch(targetUrl, {
-      method: includeBody || shouldStreamTikTokMedia ? "GET" : "HEAD",
-      headers: upstreamHeaders,
-      redirect: "follow",
-    });
+  const fetchUpstream = async (targetUrl: string): Promise<Response> => {
+    let currentUrl = targetUrl;
+
+    for (let hop = 0; hop <= MAX_UPSTREAM_REDIRECTS; hop += 1) {
+      let parsedUrl: URL;
+      try {
+        parsedUrl = new URL(currentUrl);
+      } catch {
+        return new Response("Invalid upstream redirect", { status: 502 });
+      }
+
+      if (!isAllowedMediaUrl(parsedUrl)) {
+        return new Response("Unsupported upstream redirect", { status: 502 });
+      }
+
+      const response = await fetch(currentUrl, {
+        method: includeBody || shouldStreamTikTokMedia ? "GET" : "HEAD",
+        headers: upstreamHeaders,
+        redirect: "manual",
+      });
+      if (![301, 302, 303, 307, 308].includes(response.status)) {
+        return response;
+      }
+
+      const location = response.headers.get("Location");
+      if (!location) return response;
+      if (hop === MAX_UPSTREAM_REDIRECTS) {
+        return new Response("Too many upstream redirects", { status: 508 });
+      }
+
+      try {
+        currentUrl = new URL(location, parsedUrl).toString();
+      } catch {
+        return new Response("Invalid upstream redirect", { status: 502 });
+      }
+    }
+
+    return new Response("Too many upstream redirects", { status: 508 });
+  };
 
   let refreshedTikTokUrls: string[] = [];
   const attemptedTikTokUrls = new Set<string>();
@@ -850,6 +885,16 @@ export async function proxyMedia(
       },
     );
     const resolvedUrl = refreshedTikTokUrls[0] ?? mediaUrl.toString();
+    let resolvedMediaUrl: URL;
+    try {
+      resolvedMediaUrl = new URL(resolvedUrl);
+    } catch {
+      return new Response("Unsupported refreshed media URL", { status: 502 });
+    }
+    if (!isAllowedMediaUrl(resolvedMediaUrl)) {
+      return new Response("Unsupported refreshed media URL", { status: 502 });
+    }
+
     const resolvedContentType = inferMediaContentType(null, resolvedUrl);
     shouldStreamTikTokMedia =
       requestedContentType.startsWith("image/") ||
@@ -866,7 +911,7 @@ export async function proxyMedia(
       return Response.redirect(resolvedUrl, 307);
     }
 
-    mediaUrl = new URL(resolvedUrl);
+    mediaUrl = resolvedMediaUrl;
     hostname = mediaUrl.hostname.toLowerCase();
   }
 

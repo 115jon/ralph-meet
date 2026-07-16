@@ -14,11 +14,18 @@ let globalInvoke: typeof import("@tauri-apps/api/core").invoke | null = null;
 // For web history programmatic popping
 let statesToPop = 0;
 let popTimeout: ReturnType<typeof setTimeout> | null = null;
+let programmaticPopPending = false;
 
 function popHistory() {
   if (statesToPop > 0) {
-    window.history.go(-statesToPop);
+    const count = statesToPop;
     statesToPop = 0;
+    programmaticPopPending = true;
+    try {
+      window.history.go(-count);
+    } catch {
+      programmaticPopPending = false;
+    }
   }
 }
 
@@ -29,6 +36,10 @@ function initGlobalBackListener() {
 
   // Web Browser Listener (handles browser back button or Android back button in PWA)
   window.addEventListener("popstate", () => {
+    if (programmaticPopPending) {
+      programmaticPopPending = false;
+      return;
+    }
     executeBackHandlers();
   });
 

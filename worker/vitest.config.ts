@@ -13,7 +13,7 @@ export default defineConfig({
   ],
   test: {
     include: ["worker/__tests__/**/*.worker.test.ts"],
-    setupFiles: process.env.CI === "true" ? ["./worker/test-setup.ts"] : [],
+    setupFiles: ["./worker/test-setup.ts"],
   },
   resolve: {
     alias: {

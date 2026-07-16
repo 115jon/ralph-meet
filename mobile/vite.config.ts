@@ -22,13 +22,16 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": path.resolve(rootDir, "src"),
-      "@kova/react": path.resolve(rootDir, "packages/kova-react/dist/index.js"),
 
       // ── Tauri plugin resolution ────────────────────────────────────
       // Map to this project's node_modules (not root)
       "@tauri-apps/plugin-shell": path.resolve(
         import.meta.dirname,
         "node_modules/@tauri-apps/plugin-shell",
+      ),
+      "@tauri-apps/plugin-notification": path.resolve(
+        import.meta.dirname,
+        "node_modules/@tauri-apps/plugin-notification",
       ),
       "tauri-plugin-status-bar-color-api": path.resolve(
         import.meta.dirname,
@@ -111,7 +114,7 @@ export default defineConfig({
       // On Android, `tauri android dev` sets __TAURI_DEV_HOST__ to the host
       // machine's LAN IP. Using "localhost" here would resolve to the Android
       // device's own loopback, breaking HMR. Fall back to localhost for
-      // non-Android dev (e.g., `npm run dev:vite` for browser testing).
+      // non-Android dev (e.g., `pnpm run dev:vite` for browser testing).
       host: process.env.__TAURI_DEV_HOST__ || "localhost",
       port: 1420,
     },

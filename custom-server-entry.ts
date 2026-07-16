@@ -125,17 +125,37 @@ async function requireAuthenticatedWebSocket(
 ): Promise<VerifiedWebSocketRequest | Response> {
   const upgradeError = requireWebSocket(request);
   if (upgradeError) return upgradeError;
-  if (!isAllowedRealtimeOrigin(request, env))
+  if (!isAllowedRealtimeOrigin(request, env)) {
+    logger.warn("Realtime WebSocket origin rejected", {
+      audience,
+      roomSlug,
+      origin: request.headers.get("Origin"),
+    });
     return new Response("Realtime origin is not allowed", { status: 403 });
+  }
 
   const config = getRealtimeAdmissionConfig(env);
-  if (!config.ok)
+  if (!config.ok) {
+    logger.error("Realtime WebSocket configuration is incomplete", {
+      audience,
+      roomSlug,
+      reason: config.reason,
+    });
     return unauthorizedWebSocket("Realtime admission is not configured");
+  }
 
   const protocol = parseSocketTicketProtocols(
     request.headers.get("Sec-WebSocket-Protocol"),
   );
-  if (!protocol.ok) return unauthorizedWebSocket("Missing realtime capability");
+  if (!protocol.ok) {
+    logger.warn("Realtime WebSocket protocol rejected", {
+      audience,
+      roomSlug,
+      reason: protocol.reason,
+      hasProtocolHeader: !!request.headers.get("Sec-WebSocket-Protocol"),
+    });
+    return unauthorizedWebSocket("Missing realtime capability");
+  }
 
   const verification = await verifySocketTicket(
     protocol.value.ticket,
@@ -146,8 +166,14 @@ async function requireAuthenticatedWebSocket(
       roomSlug,
     },
   );
-  if (!verification.ok)
+  if (!verification.ok) {
+    logger.warn("Realtime WebSocket ticket rejected", {
+      audience,
+      roomSlug,
+      reason: verification.reason,
+    });
     return unauthorizedWebSocket("Invalid realtime capability");
+  }
 
   const context = await createRealtimeAdmissionContext(verification.claims);
   const headers = appendRealtimeAdmissionHeaders(
@@ -170,8 +196,16 @@ async function requireAuthenticatedWebSocket(
       headers: consumeHeaders,
     },
   );
-  if (!consumeResponse.ok)
+  if (!consumeResponse.ok) {
+    const consumeBody = (await consumeResponse.text()).slice(0, 200);
+    logger.warn("Realtime WebSocket admission consumption rejected", {
+      audience,
+      roomSlug,
+      status: consumeResponse.status,
+      body: consumeBody,
+    });
     return unauthorizedWebSocket("Realtime capability already used");
+  }
 
   return {
     request: new Request(request, { headers }),

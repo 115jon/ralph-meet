@@ -3,7 +3,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import {
   apiError,
   apiSuccess,
-  broadcastToAll,
+  broadcastToUserServers,
   getDB,
   requireAuth,
 } from "@/lib/api-helpers";
@@ -210,7 +210,7 @@ const PATCH = async ({ request }: any) => {
       updated_at: string | null;
     }>();
 
-  await broadcastToAll("USER_PROFILE_UPDATE", {
+  await broadcastToUserServers(userId, "USER_PROFILE_UPDATE", {
     user_id: userId,
     username: updatedUser?.username ?? currentUser.username,
     avatar_display: updatedUser?.avatar_display ?? null,

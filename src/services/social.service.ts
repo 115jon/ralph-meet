@@ -708,7 +708,8 @@ export async function joinServer(
         },
       },
       {
-        type: "all",
+        type: "server",
+        target: invite.server_id,
         event: "GUILD_MEMBER_ADD",
         data: {
           server_id: invite.server_id,
@@ -728,7 +729,8 @@ export async function joinServer(
         },
       },
       {
-        type: "all",
+        type: "server",
+        target: invite.server_id,
         event: "INVITE_UPDATED",
         data: {
           server_id: invite.server_id,

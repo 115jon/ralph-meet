@@ -47,7 +47,7 @@ export async function updatePresence(
 ): Promise<{
   status: string;
   custom_status: string | null;
-  broadcast: BroadcastDescriptor;
+  broadcasts: BroadcastDescriptor[];
 }> {
   if (!VALID_STATUSES.has(input.status)) {
     throw ServiceError.badRequest("Invalid status");
@@ -67,17 +67,25 @@ export async function updatePresence(
     log.error("Failed to update presence in DB:", error);
   }
 
+  const { results: memberships } = await db
+    .prepare("SELECT server_id FROM server_members WHERE user_id = ?")
+    .bind(userId)
+    .all();
+
   return {
     status: input.status,
     custom_status: customStatus,
-    broadcast: {
-      type: "all",
-      event: "PRESENCE_UPDATE",
-      data: {
-        user_id: userId,
-        status: input.status,
-        custom_status: customStatus,
-      },
-    },
+    broadcasts: (memberships ?? []).map(
+      (membership: Record<string, unknown>) => ({
+        type: "server",
+        target: membership.server_id as string,
+        event: "PRESENCE_UPDATE",
+        data: {
+          user_id: userId,
+          status: input.status,
+          custom_status: customStatus,
+        },
+      }),
+    ),
   };
 }

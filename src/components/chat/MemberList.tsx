@@ -42,7 +42,7 @@ import {
   UserPlus,
   WifiOff,
 } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import ContextMenu from "./ContextMenu";
 import {
   AlertTriangle,
@@ -57,6 +57,7 @@ import {
 import InlineEmojiText from "./InlineEmojiText";
 import { MarkdownRenderer } from "./MarkdownRenderer";
 import MobileProfileSheet from "./MobileProfileSheet";
+import { NAMEPLATE_MASK_SCALE_CSS_VAR } from "./ProfileAssetLayer";
 import { UserDisplayName } from "./UserDisplayName";
 import { UserNameplateLayer } from "./UserNameplateLayer";
 import { UserPlatformIndicators } from "./UserPlatformIndicators";
@@ -242,6 +243,7 @@ export default function MemberList({
 }: MemberListProps) {
   const { menu, openMenu, closeMenu, isClosing } = useContextMenu();
   const { openDm, dispatch, setProfileUser } = useChatActions();
+  const memberTabIdPrefix = useId().replace(/:/g, "");
   const presencePlatformsByUserId = useChatStore(
     (state) => state.presencePlatformsByUserId,
   );
@@ -282,7 +284,17 @@ export default function MemberList({
 
   // Load tab data when switching tabs
   useEffect(() => {
-    if (!channelId) return;
+    if (
+      !channelId ||
+      state.activeTab === "members" ||
+      state.activeTab === "pins"
+    ) {
+      return;
+    }
+
+    const controller = new AbortController();
+    let isActive = true;
+    const activeTab = state.activeTab;
 
     const loadTabData = async () => {
       setState((prev) => ({ ...prev, tabLoading: true, tabError: null }));
@@ -290,10 +302,11 @@ export default function MemberList({
       const partialState: Partial<typeof state> = { tabLoading: false };
 
       try {
-        switch (state.activeTab) {
+        switch (activeTab) {
           case "media": {
             const data = await apiGet<{ items: MediaItem[] }>(
               `/api/channels/${channelId}/media?type=images`,
+              { signal: controller.signal },
             );
             partialState.mediaItems = data.items ?? [];
             break;
@@ -301,6 +314,7 @@ export default function MemberList({
           case "links": {
             const data = await apiGet<{ items: LinkItem[] }>(
               `/api/channels/${channelId}/media?type=links`,
+              { signal: controller.signal },
             );
             partialState.linkItems = data.items ?? [];
             break;
@@ -308,6 +322,7 @@ export default function MemberList({
           case "files": {
             const data = await apiGet<{ items: MediaItem[] }>(
               `/api/channels/${channelId}/media?type=files`,
+              { signal: controller.signal },
             );
             partialState.fileItems = data.items ?? [];
             break;
@@ -315,13 +330,15 @@ export default function MemberList({
           case "threads": {
             const data = await apiGet<{ threads: ThreadItem[] }>(
               `/api/channels/${channelId}/threads`,
+              { signal: controller.signal },
             );
             partialState.threads = data.threads ?? [];
             break;
           }
         }
       } catch (err: unknown) {
-        let errMsg = `Failed to load ${state.activeTab}`;
+        if (!isActive || controller.signal.aborted) return;
+        let errMsg = `Failed to load ${activeTab}`;
         if (err instanceof Error) {
           errMsg = err.message;
         } else if (typeof err === "string") {
@@ -329,16 +346,20 @@ export default function MemberList({
         } else if (err && typeof err === "object" && "message" in err) {
           errMsg = String(err.message);
         }
-        log.error(`Failed to load ${state.activeTab} tab:`, err);
+        log.error(`Failed to load ${activeTab} tab:`, err);
         partialState.tabError = errMsg;
       }
 
+      if (!isActive || controller.signal.aborted) return;
       setState((prev) => ({ ...prev, ...partialState }));
     };
 
-    if (state.activeTab !== "members" && state.activeTab !== "pins") {
-      loadTabData();
-    }
+    void loadTabData();
+
+    return () => {
+      isActive = false;
+      controller.abort();
+    };
   }, [state.activeTab, channelId]);
 
   // Retry handler for error states
@@ -552,6 +573,7 @@ export default function MemberList({
             onTabChange={(tabId) =>
               setState((prev) => ({ ...prev, activeTab: tabId }))
             }
+            idPrefix={memberTabIdPrefix}
             showDetails={showDetails}
             isDM={isDM}
           />
@@ -565,83 +587,89 @@ export default function MemberList({
           )}
 
           {/* Tab Content */}
-          {(() => {
-            switch (state.activeTab) {
-              case "members":
-                return (
-                  <MembersTabContent
-                    groups={groups}
-                    sortedOffline={sortedOffline}
-                    sortedOnline={sortedOnline}
-                    typingUsers={typingUsers}
-                    currentUserId={currentUserId}
-                    onMemberClick={handleMemberClick}
-                    onMemberContext={handleMemberContext}
-                    presencePlatformsByUserId={presencePlatformsByUserId}
-                  />
-                );
-              case "media":
-                return (
-                  <MediaTabContent
-                    loading={state.tabLoading}
-                    error={state.tabError}
-                    items={state.mediaItems}
-                    openImageViewer={openImageViewer}
-                    onRetry={handleRetry}
-                    onJumpToMessage={onJumpToMessage}
-                    onClose={onClose}
-                  />
-                );
-              case "pins":
-                return (
-                  <PinsTabContent
-                    loading={loadingPins}
-                    messages={pinnedMessages}
-                    onJumpToMessage={(id: string) => {
-                      onJumpToMessage?.(id);
-                      onClose?.();
-                    }}
-                  />
-                );
-              case "threads":
-                return (
-                  <ThreadsTabContent
-                    loading={state.tabLoading}
-                    error={state.tabError}
-                    threads={state.threads}
-                    onOpenThread={(id: string) => {
-                      onOpenThread?.(id);
-                      onClose?.();
-                    }}
-                    onRetry={handleRetry}
-                  />
-                );
-              case "links":
-                return (
-                  <LinksTabContent
-                    loading={state.tabLoading}
-                    error={state.tabError}
-                    items={state.linkItems}
-                    channelName={channelName}
-                    onRetry={handleRetry}
-                  />
-                );
-              case "files":
-                return (
-                  <FilesTabContent
-                    loading={state.tabLoading}
-                    error={state.tabError}
-                    items={state.fileItems}
-                    channelName={channelName}
-                    onRetry={handleRetry}
-                    onJumpToMessage={onJumpToMessage}
-                    onClose={onClose}
-                  />
-                );
-              default:
-                return null;
-            }
-          })()}
+          <div
+            role="tabpanel"
+            id="member-details-panel"
+            aria-labelledby={`${memberTabIdPrefix}-${showDetails ? "desktop" : "mobile"}-tab-${state.activeTab}`}
+          >
+            {(() => {
+              switch (state.activeTab) {
+                case "members":
+                  return (
+                    <MembersTabContent
+                      groups={groups}
+                      sortedOffline={sortedOffline}
+                      sortedOnline={sortedOnline}
+                      typingUsers={typingUsers}
+                      currentUserId={currentUserId}
+                      onMemberClick={handleMemberClick}
+                      onMemberContext={handleMemberContext}
+                      presencePlatformsByUserId={presencePlatformsByUserId}
+                    />
+                  );
+                case "media":
+                  return (
+                    <MediaTabContent
+                      loading={state.tabLoading}
+                      error={state.tabError}
+                      items={state.mediaItems}
+                      openImageViewer={openImageViewer}
+                      onRetry={handleRetry}
+                      onJumpToMessage={onJumpToMessage}
+                      onClose={onClose}
+                    />
+                  );
+                case "pins":
+                  return (
+                    <PinsTabContent
+                      loading={loadingPins}
+                      messages={pinnedMessages}
+                      onJumpToMessage={(id: string) => {
+                        onJumpToMessage?.(id);
+                        onClose?.();
+                      }}
+                    />
+                  );
+                case "threads":
+                  return (
+                    <ThreadsTabContent
+                      loading={state.tabLoading}
+                      error={state.tabError}
+                      threads={state.threads}
+                      onOpenThread={(id: string) => {
+                        onOpenThread?.(id);
+                        onClose?.();
+                      }}
+                      onRetry={handleRetry}
+                    />
+                  );
+                case "links":
+                  return (
+                    <LinksTabContent
+                      loading={state.tabLoading}
+                      error={state.tabError}
+                      items={state.linkItems}
+                      channelName={channelName}
+                      onRetry={handleRetry}
+                    />
+                  );
+                case "files":
+                  return (
+                    <FilesTabContent
+                      loading={state.tabLoading}
+                      error={state.tabError}
+                      items={state.fileItems}
+                      channelName={channelName}
+                      onRetry={handleRetry}
+                      onJumpToMessage={onJumpToMessage}
+                      onClose={onClose}
+                    />
+                  );
+                default:
+                  return null;
+              }
+            })()}
+          </div>
         </div>
 
         {menu.isOpen && (
@@ -786,15 +814,31 @@ function MemberListTabs({
   channelName,
   activeTab,
   onTabChange,
+  idPrefix,
   showDetails,
   isDM,
 }: {
   channelName?: string;
   activeTab: TabId;
   onTabChange: (id: TabId) => void;
+  idPrefix: string;
   showDetails?: boolean;
   isDM?: boolean;
 }) {
+  const renderTabs = (className: string, variant: "mobile" | "desktop") => (
+    <div role="tablist" aria-label="Member details" className={className}>
+      {TABS.map((tab) => (
+        <MemberTabButton
+          key={tab.id}
+          tab={tab}
+          activeTab={activeTab}
+          onTabChange={onTabChange}
+          idPrefix={`${idPrefix}-${variant}`}
+        />
+      ))}
+    </div>
+  );
+
   return (
     <>
       <div className="lg:hidden mb-6 shrink-0">
@@ -814,69 +858,93 @@ function MemberListTabs({
           {isDM ? "Direct Message" : "Text Channel"}
         </p>
 
-        <div className="flex gap-6 overflow-x-auto custom-scrollbar no-scrollbar text-[15px] font-semibold text-rm-text-muted border-b border-rm-border pb-2.5">
-          {TABS.map((tab) => (
-            <div
-              key={tab.id}
-              role="tab"
-              tabIndex={0}
-              aria-selected={activeTab === tab.id}
-              className={cn(
-                "shrink-0 cursor-pointer transition-colors relative outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-2 focus-visible:ring-offset-rm-bg-primary rounded-sm",
-                activeTab === tab.id
-                  ? "text-rm-text-primary"
-                  : "hover:text-rm-text",
-              )}
-              onClick={() => onTabChange(tab.id as TabId)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault();
-                  onTabChange(tab.id as TabId);
-                }
-              }}
-            >
-              {tab.label}
-              {activeTab === tab.id && (
-                <div className="absolute -bottom-[11px] left-0 right-0 h-0.5 bg-primary rounded-t-full" />
-              )}
-            </div>
-          ))}
-        </div>
+        {renderTabs(
+          "flex gap-6 overflow-x-auto custom-scrollbar no-scrollbar text-[15px] font-semibold text-rm-text-muted border-b border-rm-border pb-2.5",
+          "mobile",
+        )}
       </div>
 
       {showDetails && (
         <div className="hidden lg:block mb-4 shrink-0 px-2">
-          <div className="flex gap-4 overflow-x-auto custom-scrollbar no-scrollbar text-[13px] font-semibold text-rm-text-muted border-b border-rm-border pb-2">
-            {TABS.map((tab) => (
-              <div
-                key={tab.id}
-                role="tab"
-                tabIndex={0}
-                aria-selected={activeTab === tab.id}
-                className={cn(
-                  "shrink-0 cursor-pointer transition-colors relative py-1 outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-2 focus-visible:ring-offset-rm-bg-primary rounded-sm",
-                  activeTab === tab.id
-                    ? "text-rm-text-primary"
-                    : "hover:text-rm-text",
-                )}
-                onClick={() => onTabChange(tab.id as TabId)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    onTabChange(tab.id as TabId);
-                  }
-                }}
-              >
-                {tab.label}
-                {activeTab === tab.id && (
-                  <div className="absolute -bottom-[9px] left-0 right-0 h-0.5 bg-primary rounded-t-full" />
-                )}
-              </div>
-            ))}
-          </div>
+          {renderTabs(
+            "flex gap-4 overflow-x-auto custom-scrollbar no-scrollbar text-[13px] font-semibold text-rm-text-muted border-b border-rm-border pb-2",
+            "desktop",
+          )}
         </div>
       )}
     </>
+  );
+}
+
+function MemberTabButton({
+  tab,
+  activeTab,
+  onTabChange,
+  idPrefix,
+}: {
+  tab: { id: TabId; label: string };
+  activeTab: TabId;
+  onTabChange: (id: TabId) => void;
+  idPrefix: string;
+}) {
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>) => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      onTabChange(tab.id);
+      return;
+    }
+    if (
+      ![
+        "ArrowRight",
+        "ArrowDown",
+        "ArrowLeft",
+        "ArrowUp",
+        "Home",
+        "End",
+      ].includes(event.key)
+    ) {
+      return;
+    }
+    event.preventDefault();
+    const currentIndex = TABS.findIndex((item) => item.id === tab.id);
+    const nextIndex =
+      event.key === "Home"
+        ? 0
+        : event.key === "End"
+          ? TABS.length - 1
+          : (currentIndex +
+              (event.key === "ArrowRight" || event.key === "ArrowDown"
+                ? 1
+                : -1) +
+              TABS.length) %
+            TABS.length;
+    const tablist = event.currentTarget.parentElement;
+    tablist
+      ?.querySelectorAll<HTMLButtonElement>('[role="tab"]')
+      .item(nextIndex)
+      ?.focus();
+  };
+
+  return (
+    <button
+      type="button"
+      role="tab"
+      id={`${idPrefix}-tab-${tab.id}`}
+      aria-controls="member-details-panel"
+      aria-selected={activeTab === tab.id}
+      tabIndex={activeTab === tab.id ? 0 : -1}
+      className={cn(
+        "shrink-0 cursor-pointer transition-colors relative outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-2 focus-visible:ring-offset-rm-bg-primary rounded-sm",
+        activeTab === tab.id ? "text-rm-text-primary" : "hover:text-rm-text",
+      )}
+      onClick={() => onTabChange(tab.id)}
+      onKeyDown={handleKeyDown}
+    >
+      {tab.label}
+      {activeTab === tab.id && (
+        <span className="absolute -bottom-[11px] left-0 right-0 h-0.5 bg-primary rounded-t-full" />
+      )}
+    </button>
   );
 }
 
@@ -1741,16 +1809,17 @@ function MemberItem({
     hasNameplate && (Boolean(platforms?.length) || isAdmin);
   const buttonRef = useRef<HTMLButtonElement | null>(null);
   const trailingIconsRef = useRef<HTMLDivElement | null>(null);
-  const [nameplateMaskFullOpacityStart, setNameplateMaskFullOpacityStart] =
-    useState<number | undefined>(undefined);
 
   useEffect(() => {
+    const rootNode = buttonRef.current;
+    if (!rootNode) return;
+
     if (!shouldExtendNameplateMask) {
+      rootNode.style.removeProperty(NAMEPLATE_MASK_SCALE_CSS_VAR);
       return;
     }
 
     const measure = () => {
-      const rootNode = buttonRef.current;
       const trailingIconsNode = trailingIconsRef.current;
       if (!rootNode || !trailingIconsNode) return;
 
@@ -1766,15 +1835,20 @@ function MemberItem({
             100,
         ),
       );
-      setNameplateMaskFullOpacityStart((current) => {
-        if (
-          current != null &&
-          Math.abs(current - nextFullOpacityStart) < 0.25
-        ) {
-          return current;
-        }
-        return nextFullOpacityStart;
-      });
+      const nextMaskScale = nextFullOpacityStart / 92.86;
+      const currentMaskScale = Number.parseFloat(
+        rootNode.style.getPropertyValue(NAMEPLATE_MASK_SCALE_CSS_VAR),
+      );
+      if (
+        Number.isFinite(currentMaskScale) &&
+        Math.abs(currentMaskScale * 92.86 - nextFullOpacityStart) < 0.25
+      ) {
+        return;
+      }
+      rootNode.style.setProperty(
+        NAMEPLATE_MASK_SCALE_CSS_VAR,
+        nextMaskScale.toString(),
+      );
     };
 
     measure();
@@ -1824,11 +1898,7 @@ function MemberItem({
             user={member.user}
             alt={`${displayName} nameplate`}
             className="pointer-events-none z-0 opacity-[0.98]"
-            maskFullOpacityStartPercent={
-              shouldExtendNameplateMask
-                ? nameplateMaskFullOpacityStart
-                : undefined
-            }
+            useMeasuredMask={shouldExtendNameplateMask}
           />
         </>
       )}

@@ -86,6 +86,7 @@ interface Props {
   canDeleteMessages?: boolean;
   hideReplyConnector?: boolean;
   onMediaPlay?: () => void;
+  onMediaStop?: () => void;
   onManageShares?: () => void;
   onVisible?: () => void;
   onHeightChange?: () => void;
@@ -228,6 +229,7 @@ const MessageItem = memo(
     canDeleteMessages = false,
     hideReplyConnector = false,
     onMediaPlay,
+    onMediaStop,
     onManageShares,
     onVisible,
     onHeightChange,
@@ -488,6 +490,7 @@ const MessageItem = memo(
             <button
               key={`${item.type}:${item.id}`}
               type="button"
+              role="menuitem"
               onClick={(event) => {
                 event.preventDefault();
                 event.stopPropagation();
@@ -507,6 +510,7 @@ const MessageItem = memo(
           <div className="my-1.5 h-px w-full bg-rm-border" />
           <button
             type="button"
+            role="menuitem"
             onClick={openReactionPickerFromMenu}
             className="group flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-[13px] font-semibold text-rm-text-secondary transition-all hover:bg-primary hover:text-white"
           >
@@ -935,6 +939,7 @@ const MessageItem = memo(
                         : undefined
                     }
                     onMediaPlay={onMediaPlay}
+                    onMediaStop={onMediaStop}
                   />
                 </div>
               ))}
@@ -1004,6 +1009,8 @@ const MessageItem = memo(
                           src={getMediaUrl(sourceUrl)}
                           filename={att.filename}
                           brandingKey={att.file_key || att.url}
+                          onPlay={onMediaPlay}
+                          onStop={onMediaStop}
                         />
                         {favorite && <GifFavoriteButton gif={favorite} />}
                       </SensitiveMediaFrame>

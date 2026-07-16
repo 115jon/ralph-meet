@@ -1,7 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { env } from "cloudflare:workers";
 
-import { apiError, apiSuccess, broadcastToAll, getDB } from "@/lib/api-helpers";
+import {
+  apiError,
+  apiSuccess,
+  broadcastToUserServers,
+  getDB,
+} from "@/lib/api-helpers";
 import { cacheDel, CacheKey } from "@/lib/cache";
 import { logger } from "@/lib/logger";
 import { applyProfileThemeDefaults } from "@/lib/profile-customization";
@@ -69,7 +74,7 @@ async function syncCachesAndBroadcast(
 
   logger.info("User synced from Ralph Auth webhook", { userId, event });
 
-  await broadcastToAll("USER_PROFILE_UPDATE", {
+  await broadcastToUserServers(userId, "USER_PROFILE_UPDATE", {
     user_id: userId,
     username,
     avatar_url: userRow?.avatar_url ?? null,

@@ -6,11 +6,25 @@ export function ChatTypingIndicator({
   if (typingUsers.length === 0) return null;
 
   return (
-    <div className="pointer-events-none absolute bottom-full mb-2 left-6 z-20 flex items-center gap-2.5 px-3 py-1.5 rounded-xl bg-rm-bg-elevated/90 backdrop-blur-md border border-rm-border shadow-[0_8px_32px_rgba(0,0,0,0.4)] animate-in fade-in slide-in-from-bottom-1 duration-300">
-      <div className="flex gap-1 pb-0.5">
-        <span className="h-1 w-1 rounded-full bg-rm-accent animate-[pulse_900ms_cubic-bezier(0.16,1,0.3,1)_infinite] [animation-delay:-300ms]" />
-        <span className="h-1 w-1 rounded-full bg-rm-accent animate-[pulse_900ms_cubic-bezier(0.16,1,0.3,1)_infinite] [animation-delay:-150ms]" />
-        <span className="h-1 w-1 rounded-full bg-rm-accent animate-[pulse_900ms_cubic-bezier(0.16,1,0.3,1)_infinite]" />
+    <div
+      role="status"
+      aria-live="polite"
+      aria-atomic="true"
+      className="pointer-events-none absolute bottom-full mb-2 left-6 z-20 flex items-center gap-2.5 px-3 py-1.5 rounded-xl bg-rm-bg-elevated/90 backdrop-blur-md border border-rm-border shadow-[0_8px_32px_rgba(0,0,0,0.4)] animate-in fade-in slide-in-from-bottom-1 duration-300"
+    >
+      <div role="presentation" className="flex gap-1 pb-0.5">
+        <span
+          aria-hidden="true"
+          className="h-1 w-1 rounded-full bg-rm-accent animate-[pulse_900ms_cubic-bezier(0.16,1,0.3,1)_infinite] [animation-delay:-300ms]"
+        />
+        <span
+          aria-hidden="true"
+          className="h-1 w-1 rounded-full bg-rm-accent animate-[pulse_900ms_cubic-bezier(0.16,1,0.3,1)_infinite] [animation-delay:-150ms]"
+        />
+        <span
+          aria-hidden="true"
+          className="h-1 w-1 rounded-full bg-rm-accent animate-[pulse_900ms_cubic-bezier(0.16,1,0.3,1)_infinite]"
+        />
       </div>
       <p className="text-[11px] font-bold tracking-tight text-rm-text-muted leading-none">
         <span className="text-rm-accent">

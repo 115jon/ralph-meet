@@ -3,8 +3,10 @@ import { createFileRoute } from "@tanstack/react-router";
 import {
   apiError,
   buildVoiceChannelRoomSlug,
+  getCorsHeaders,
   getDB,
   getEnv,
+  handleCorsPreflightIfNeeded,
   requireAuth,
 } from "@/lib/api-helpers";
 import { requireChannelAccess } from "@/lib/require-channel-access";
@@ -21,6 +23,10 @@ import {
 const SOCKET_TICKET_TTL_MS = 60_000;
 const DEMO_TICKET_RATE_LIMIT = { limit: 12, windowMs: 60 * 60 * 1000 };
 const DEMO_SESSION_TICKET_RATE_LIMIT = { limit: 30, windowMs: 60 * 60 * 1000 };
+
+const OPTIONS = async ({ request }: { request: Request }) =>
+  handleCorsPreflightIfNeeded(request) ??
+  new Response(null, { status: 204, headers: getCorsHeaders(request) });
 
 type SocketTicketRequestBody = {
   audience?: unknown;
@@ -104,8 +110,6 @@ const POST = async ({ request }: { request: Request }) => {
   if (admission.cookie) response.headers.append("Set-Cookie", admission.cookie);
   return noStore(response);
 };
-
-export { POST as socketTicketPost };
 
 async function authorizeAuthenticatedTicket(
   request: Request,
@@ -314,7 +318,10 @@ function noStore(response: Response): Response {
 export const Route = createFileRoute("/api/voice/socket-ticket" as never)({
   server: {
     handlers: {
+      OPTIONS,
       POST,
     },
   },
 });
+
+export { POST as socketTicketPost, OPTIONS as socketTicketOptions };

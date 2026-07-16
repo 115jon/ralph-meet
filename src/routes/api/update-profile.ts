@@ -3,7 +3,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import {
   apiError,
   apiSuccess,
-  broadcastToAll,
+  broadcastToUserServers,
   broadcastToUser,
   getDB,
   requireAuth,
@@ -322,8 +322,8 @@ const PATCH = async ({ request: req }: any) => {
       );
     }
 
-    // Broadcast profile change to all connected clients
-    await broadcastToAll("USER_PROFILE_UPDATE", {
+    // Broadcast profile change only to members of the user's servers
+    await broadcastToUserServers(userId, "USER_PROFILE_UPDATE", {
       user_id: userId,
       username: updatedUser?.username,
       display_name: updatedUser?.display_name ?? null,

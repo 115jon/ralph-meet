@@ -60,9 +60,11 @@ describe("voice context menu wiring", () => {
       />,
     );
 
-    fireEvent.mouseEnter(screen.getByRole("button", { name: "More Options" }));
+    fireEvent.mouseEnter(
+      screen.getByRole("menuitem", { name: "More Options" }),
+    );
 
-    const messageButton = await screen.findByRole("button", {
+    const messageButton = await screen.findByRole("menuitem", {
       name: "Message",
     });
     fireEvent.click(messageButton);
@@ -83,10 +85,10 @@ describe("voice context menu wiring", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Mute" }));
-    fireEvent.click(screen.getByRole("button", { name: "Mute Soundboard" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Mute" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Mute Soundboard" }));
     fireEvent.click(
-      screen.getByRole("button", { name: "Always Hear Stream Audio" }),
+      screen.getByRole("menuitem", { name: "Always Hear Stream Audio" }),
     );
 
     await waitFor(() => {
@@ -97,6 +99,29 @@ describe("voice context menu wiring", () => {
       expect(peerSettings?.soundboardMuted).toBe(true);
       expect(peerSettings?.alwaysHear).toBe(true);
     });
+  });
+
+  it("moves focus into stream submenus and restores it to the parent item", async () => {
+    const onClose = vi.fn();
+    render(
+      <StreamContextMenu
+        userId="target-user"
+        x={40}
+        y={40}
+        isStreaming
+        watchedStreams={{ "target-user": true }}
+        onClose={onClose}
+      />,
+    );
+
+    const parent = screen.getByRole("menuitem", { name: "More Options" });
+    fireEvent.keyDown(parent, { key: "ArrowRight" });
+
+    const profile = await screen.findByRole("menuitem", { name: "Profile" });
+    await waitFor(() => expect(profile).toHaveFocus());
+    fireEvent.keyDown(profile, { key: "Escape" });
+    expect(onClose).not.toHaveBeenCalled();
+    expect(parent).toHaveFocus();
   });
 
   it("forwards profile actions from the focused voice grid context menu", async () => {
@@ -133,7 +158,7 @@ describe("voice context menu wiring", () => {
       screen.getByRole("button", { name: "Clear focused participant" }),
     );
 
-    const profileButton = await screen.findByRole("button", {
+    const profileButton = await screen.findByRole("menuitem", {
       name: "Profile",
     });
     fireEvent.click(profileButton);

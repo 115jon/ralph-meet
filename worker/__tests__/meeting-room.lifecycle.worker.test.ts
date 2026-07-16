@@ -8,10 +8,12 @@ import {
   appendRealtimeAdmissionHeaders,
   createRealtimeAdmissionContext,
 } from "../realtime-admission";
+import { PERMISSIONS } from "../../src/lib/permissions";
 
 async function createAdmissionHeaders(
   roomName: string,
   audience: "global" | "room",
+  subject = "user-test",
 ) {
   const roomSlug = audience === "global" ? "global-gateway" : roomName;
   const ticket = await issueSocketTicket(
@@ -21,7 +23,7 @@ async function createAdmissionHeaders(
       expiresAt: Date.now() + 60_000,
       nonce: crypto.randomUUID(),
       roomSlug,
-      subject: "user-test",
+      subject,
     },
     env.CALLS_APP_SECRET,
   );
@@ -68,13 +70,14 @@ async function createVoiceAdmissionHeaders(roomName: string) {
 
 async function openMeetingSocket(
   roomName = crypto.randomUUID(),
+  subject = "user-test",
 ): Promise<WebSocket> {
   const roomId = env.MEETING_ROOM.idFromName(roomName);
   const room = env.MEETING_ROOM.get(roomId);
   const response = await room.fetch(
     `https://internal/api/channels/${roomName}/ws?v=1`,
     {
-      headers: await createAdmissionHeaders(roomName, "room"),
+      headers: await createAdmissionHeaders(roomName, "room", subject),
     },
   );
 
@@ -229,6 +232,65 @@ describe("MeetingRoom lifecycle", () => {
     socket.close();
   });
 
+  it.each([null, [], "not an object"])(
+    "rejects a valid JSON root that is not an object: %j",
+    async (payload) => {
+      const socket = await openMeetingSocket();
+      const response = nextJsonMessage(socket);
+
+      socket.send(JSON.stringify(payload));
+
+      expect(await response).toMatchObject({
+        op: 18,
+        d: { code: 4001, message: "Missing opcode" },
+      });
+      socket.close();
+    },
+  );
+
+  it.each([
+    [7, null, "Invalid resume payload"],
+    [36, null, "Invalid call payload"],
+  ] as const)(
+    "rejects opcode %s with a non-object payload",
+    async (opcode, payload, message) => {
+      const socket = await openMeetingSocket();
+      await identifyMeetingSocket(socket);
+      const response = nextJsonMessage(socket);
+
+      socket.send(JSON.stringify({ op: opcode, d: payload }));
+
+      expect(await response).toMatchObject({
+        op: 18,
+        d: { code: 4000, message },
+      });
+      socket.close();
+    },
+  );
+
+  it("rate-limits expensive message operations without affecting heartbeats", async () => {
+    const socket = await openMeetingSocket("global-gateway");
+    await identifyMeetingSocket(socket);
+
+    const responses = [];
+    for (let index = 0; index < 31; index += 1) {
+      const response = nextMessageWithOpcode(socket, 18);
+      socket.send(JSON.stringify({ op: 20, d: null }));
+      responses.push(await response);
+    }
+    expect(
+      responses.some(
+        (message) =>
+          message.op === 18 && (message.d as { code?: number }).code === 4290,
+      ),
+    ).toBe(true);
+
+    const heartbeat = nextJsonMessage(socket);
+    socket.send(JSON.stringify({ op: 3, d: { seq_ack: 0 } }));
+    await expect(heartbeat).resolves.toMatchObject({ op: 6 });
+    socket.close();
+  });
+
   it("acks an unidentified heartbeat without creating a session", async () => {
     const socket = await openMeetingSocket();
     const response = nextJsonMessage(socket);
@@ -281,6 +343,53 @@ describe("MeetingRoom lifecycle", () => {
     await expect(admitted.json()).resolves.toMatchObject({ allowed: true });
     await expect(forged.json()).resolves.toMatchObject({ allowed: false });
 
+    socket.close();
+  });
+
+  it("rejects subscriptions to unknown channels", async () => {
+    const roomName = crypto.randomUUID();
+    const socket = await openMeetingSocket(roomName);
+    await identifyMeetingSocket(socket);
+    const response = nextJsonMessage(socket);
+
+    socket.send(
+      JSON.stringify({
+        op: 27,
+        d: { channel_id: `unknown-${crypto.randomUUID()}` },
+      }),
+    );
+
+    expect(await response).toMatchObject({
+      op: 18,
+      d: { code: 4003, message: "Channel not found or access denied" },
+    });
+    socket.close();
+  });
+
+  it("rejects subscriptions to a private server channel", async () => {
+    await env.DB.prepare(
+      "CREATE TABLE IF NOT EXISTS channels (id TEXT PRIMARY KEY, server_id TEXT, channel_type TEXT NOT NULL)",
+    ).run();
+    await env.DB.prepare(
+      "CREATE TABLE IF NOT EXISTS server_members (server_id TEXT NOT NULL, user_id TEXT NOT NULL)",
+    ).run();
+
+    const channelId = `private-${crypto.randomUUID()}`;
+    await env.DB.prepare(
+      "INSERT INTO channels (id, server_id, channel_type) VALUES (?, ?, 'text')",
+    )
+      .bind(channelId, `server-${crypto.randomUUID()}`)
+      .run();
+
+    const socket = await openMeetingSocket(crypto.randomUUID());
+    await identifyMeetingSocket(socket);
+    const response = nextJsonMessage(socket);
+    socket.send(JSON.stringify({ op: 27, d: { channel_id: channelId } }));
+
+    expect(await response).toMatchObject({
+      op: 18,
+      d: { code: 4003, message: "Channel not found or access denied" },
+    });
     socket.close();
   });
 
@@ -435,6 +544,250 @@ describe("MeetingRoom lifecycle", () => {
     recipient.close();
   });
 
+  it("does not deliver a channel dispatch after VIEW_CHANNELS is revoked", async () => {
+    await env.DB.prepare(
+      "CREATE TABLE IF NOT EXISTS channels (id TEXT PRIMARY KEY, server_id TEXT, channel_type TEXT NOT NULL)",
+    ).run();
+    await env.DB.prepare(
+      "CREATE TABLE IF NOT EXISTS server_members (server_id TEXT NOT NULL, user_id TEXT NOT NULL)",
+    ).run();
+    await env.DB.prepare(
+      "CREATE TABLE IF NOT EXISTS roles (id TEXT PRIMARY KEY, permissions INTEGER NOT NULL, position INTEGER NOT NULL, is_default INTEGER NOT NULL)",
+    ).run();
+    await env.DB.prepare(
+      "CREATE TABLE IF NOT EXISTS member_roles (server_id TEXT NOT NULL, user_id TEXT NOT NULL, role_id TEXT NOT NULL)",
+    ).run();
+    await env.DB.prepare(
+      "CREATE TABLE IF NOT EXISTS channel_permission_overrides (channel_id TEXT NOT NULL, target_id TEXT NOT NULL, target_type TEXT NOT NULL, allow INTEGER NOT NULL, deny INTEGER NOT NULL)",
+    ).run();
+
+    const serverId = `server-${crypto.randomUUID()}`;
+    const channelId = `channel-${crypto.randomUUID()}`;
+    const roleId = `role-${crypto.randomUUID()}`;
+    await env.DB.prepare(
+      "INSERT INTO channels (id, server_id, channel_type) VALUES (?, ?, 'text')",
+    )
+      .bind(channelId, serverId)
+      .run();
+    await env.DB.prepare(
+      "INSERT INTO roles (id, permissions, position, is_default) VALUES (?, ?, 0, 1)",
+    )
+      .bind(
+        roleId,
+        PERMISSIONS.VIEW_CHANNELS |
+          PERMISSIONS.SEND_MESSAGES |
+          PERMISSIONS.ADD_REACTIONS,
+      )
+      .run();
+    for (const userId of ["user-test", "user-recipient"]) {
+      await env.DB.prepare(
+        "INSERT INTO server_members (server_id, user_id) VALUES (?, ?)",
+      )
+        .bind(serverId, userId)
+        .run();
+      await env.DB.prepare(
+        "INSERT INTO member_roles (server_id, user_id, role_id) VALUES (?, ?, ?)",
+      )
+        .bind(serverId, userId, roleId)
+        .run();
+    }
+
+    const sharedRoomName = crypto.randomUUID();
+    const sender = await openMeetingSocket(sharedRoomName, "user-test");
+    await identifyMeetingSocket(sender);
+    const recipient = await openMeetingSocket(sharedRoomName, "user-recipient");
+    await identifyMeetingSocket(recipient);
+
+    const subscribeSender = nextJsonMessage(sender);
+    sender.send(JSON.stringify({ op: 27, d: { channel_id: channelId } }));
+    await subscribeSender;
+    const subscribeRecipient = nextJsonMessage(recipient);
+    recipient.send(JSON.stringify({ op: 27, d: { channel_id: channelId } }));
+    await subscribeRecipient;
+
+    const firstDispatch = nextMessageWithOpcodeWithin(recipient, 19);
+    await env.MEETING_ROOM.get(
+      env.MEETING_ROOM.idFromName(sharedRoomName),
+    ).fetch("https://internal/broadcast", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        server_id: serverId,
+        event: "MESSAGE_CREATE",
+        data: { channel_id: channelId, id: "before-revoke" },
+      }),
+    });
+    await expect(firstDispatch).resolves.toMatchObject({
+      d: { event: "MESSAGE_CREATE", data: { id: "before-revoke" } },
+    });
+
+    await env.DB.prepare(
+      "INSERT INTO channel_permission_overrides (channel_id, target_id, target_type, allow, deny) VALUES (?, ?, 'user', 0, ?)",
+    )
+      .bind(channelId, "user-recipient", PERMISSIONS.VIEW_CHANNELS)
+      .run();
+
+    await env.MEETING_ROOM.get(
+      env.MEETING_ROOM.idFromName("global-gateway"),
+    ).fetch("https://internal/broadcast", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        server_id: serverId,
+        event: "MESSAGE_CREATE",
+        data: { channel_id: channelId, id: "after-revoke" },
+      }),
+    });
+    await expect(hasMessageWithOpcode(recipient, 19, 150)).resolves.toBe(false);
+
+    sender.close();
+    recipient.close();
+  });
+
+  it("isolates server dispatches and removes revoked server subscriptions", async () => {
+    await env.DB.prepare(
+      "CREATE TABLE IF NOT EXISTS server_members (server_id TEXT NOT NULL, user_id TEXT NOT NULL)",
+    ).run();
+
+    const roomName = crypto.randomUUID();
+    const serverA = `server-a-${crypto.randomUUID()}`;
+    const serverB = `server-b-${crypto.randomUUID()}`;
+    await env.DB.prepare(
+      "INSERT INTO server_members (server_id, user_id) VALUES (?, ?), (?, ?)",
+    )
+      .bind(serverA, "user-a", serverB, "user-b")
+      .run();
+
+    const socketA = await openMeetingSocket(roomName, "user-a");
+    await identifyMeetingSocket(socketA);
+    const socketB = await openMeetingSocket(roomName, "user-b");
+    await identifyMeetingSocket(socketB);
+
+    socketA.send(JSON.stringify({ op: 35, d: { server_id: serverA } }));
+    socketB.send(JSON.stringify({ op: 35, d: { server_id: serverB } }));
+    await new Promise((resolve) => setTimeout(resolve, 25));
+
+    const isolatedA = nextMessageWithOpcodeWithin(socketA, 19);
+    await env.MEETING_ROOM.get(env.MEETING_ROOM.idFromName(roomName)).fetch(
+      "https://internal/broadcast",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          server_id: serverA,
+          event: "GUILD_UPDATE",
+          data: { id: serverA },
+        }),
+      },
+    );
+    await expect(isolatedA).resolves.toMatchObject({
+      d: { event: "GUILD_UPDATE", data: { id: serverA } },
+    });
+    await expect(hasMessageWithOpcode(socketB, 19, 150)).resolves.toBe(false);
+
+    await env.DB.prepare(
+      "DELETE FROM server_members WHERE server_id = ? AND user_id = ?",
+    )
+      .bind(serverA, "user-a")
+      .run();
+
+    const revokedDispatch = hasMessageWithOpcode(socketA, 19, 150);
+    await env.MEETING_ROOM.get(env.MEETING_ROOM.idFromName(roomName)).fetch(
+      "https://internal/broadcast",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          server_id: serverA,
+          event: "GUILD_UPDATE",
+          data: { id: serverA, name: "revoked" },
+        }),
+      },
+    );
+    await expect(revokedDispatch).resolves.toBe(false);
+
+    await env.DB.prepare(
+      "INSERT INTO server_members (server_id, user_id) VALUES (?, ?)",
+    )
+      .bind(serverA, "user-a")
+      .run();
+    const removedSubscription = hasMessageWithOpcode(socketA, 19, 150);
+    await env.MEETING_ROOM.get(env.MEETING_ROOM.idFromName(roomName)).fetch(
+      "https://internal/broadcast",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          server_id: serverA,
+          event: "GUILD_UPDATE",
+          data: { id: serverA, name: "must-resubscribe" },
+        }),
+      },
+    );
+    await expect(removedSubscription).resolves.toBe(false);
+
+    socketA.close();
+    socketB.close();
+  });
+
+  it("rejects calls unless the channel is an exact two-recipient DM", async () => {
+    await env.DB.prepare(
+      "CREATE TABLE IF NOT EXISTS channels (id TEXT PRIMARY KEY, server_id TEXT, channel_type TEXT NOT NULL)",
+    ).run();
+    await env.DB.prepare(
+      "CREATE TABLE IF NOT EXISTS dm_recipients (channel_id TEXT NOT NULL, user_id TEXT NOT NULL)",
+    ).run();
+    await env.DB.prepare(
+      "CREATE TABLE IF NOT EXISTS relationships (user_id TEXT NOT NULL, target_user_id TEXT NOT NULL, type INTEGER NOT NULL)",
+    ).run();
+
+    const roomName = crypto.randomUUID();
+    const serverChannel = `server-channel-${crypto.randomUUID()}`;
+    const dmChannel = `dm-channel-${crypto.randomUUID()}`;
+    const groupDm = `group-dm-${crypto.randomUUID()}`;
+    const serverId = `server-${crypto.randomUUID()}`;
+    await env.DB.prepare(
+      "INSERT INTO channels (id, server_id, channel_type) VALUES (?, ?, 'text'), (?, NULL, 'dm'), (?, NULL, 'dm')",
+    )
+      .bind(serverChannel, serverId, dmChannel, groupDm)
+      .run();
+    for (const channelId of [dmChannel, groupDm]) {
+      await env.DB.prepare(
+        "INSERT INTO dm_recipients (channel_id, user_id) VALUES (?, ?), (?, ?)",
+      )
+        .bind(channelId, "user-test", channelId, "user-callee")
+        .run();
+    }
+    await env.DB.prepare(
+      "INSERT INTO dm_recipients (channel_id, user_id) VALUES (?, ?)",
+    )
+      .bind(groupDm, "user-third")
+      .run();
+
+    const caller = await openMeetingSocket(roomName, "user-test");
+    await identifyMeetingSocket(caller);
+    const callee = await openMeetingSocket(roomName, "user-callee");
+    await identifyMeetingSocket(callee);
+    await hasMessageWithOpcode(caller, 19, 150);
+
+    for (const channelId of [serverChannel, groupDm]) {
+      const response = nextMessageWithOpcode(caller, 19);
+      caller.send(
+        JSON.stringify({
+          op: 36,
+          d: { channel_id: channelId, target_user_id: "user-callee" },
+        }),
+      );
+      await expect(response).resolves.toMatchObject({
+        op: 19,
+        d: { event: "CALL_RING_STOP", data: { reason: "unavailable" } },
+      });
+    }
+
+    caller.close();
+    callee.close();
+  });
+
   it("replays retained dispatches before Resumed after a valid Resume", async () => {
     const roomName = crypto.randomUUID();
     const original = await openMeetingSocket(roomName);
@@ -482,8 +835,22 @@ describe("MeetingRoom lifecycle", () => {
     });
     expect(await nextJsonMessage(resumedSocket)).toMatchObject({ op: 9 });
 
+    const duplicateSocket = await openMeetingSocket(roomName);
+    const duplicateError = nextJsonMessage(duplicateSocket);
+    duplicateSocket.send(
+      JSON.stringify({
+        op: 7,
+        d: { session_id: originalReady.participant_id, seq_ack: 0 },
+      }),
+    );
+    await expect(duplicateError).resolves.toMatchObject({
+      op: 18,
+      d: { code: 4006, message: "Session not found for resume" },
+    });
+
     other.close();
     resumedSocket.close();
+    duplicateSocket.close();
   });
 
   it("leaves immediately when intentional and defers leave on abrupt close", async () => {

@@ -36,7 +36,9 @@ const POST = async ({ request, params: _params }: any) => {
       custom_status: body.custom_status,
     });
 
-    await executeBroadcast(result.broadcast);
+    for (const broadcast of result.broadcasts) {
+      await executeBroadcast(broadcast);
+    }
 
     return apiSuccess({
       status: result.status,

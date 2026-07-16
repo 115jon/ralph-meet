@@ -127,9 +127,6 @@ export default tseslint.config(
   // Moving them would change established import contracts without improving HMR.
   {
     files: [
-      "packages/kova-react/src/components/icons.tsx",
-      "packages/kova-react/src/components/social-buttons.tsx",
-      "packages/kova-react/src/context.tsx",
       "src/components/DesktopScreenPickerUI.tsx",
       "src/components/StandaloneUpdater.tsx",
       "src/components/chat/ImageViewerToolbar.tsx",

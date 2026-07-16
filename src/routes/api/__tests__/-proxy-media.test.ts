@@ -153,10 +153,62 @@ describe("proxy media helpers", () => {
       expect(isAllowedMediaUrl(new URL("https://nottenor.com/path"))).toBe(
         false,
       );
+      expect(
+        isAllowedMediaUrl(new URL("https://evil-tiktok.com/video.mp4")),
+      ).toBe(false);
       expect(isAllowedMediaUrl(new URL("http://static.klipy.com/path"))).toBe(
         false,
       ); // must be https
       expect(isAllowedMediaUrl(new URL("http://tenor.com/path"))).toBe(false); // must be https
+    });
+
+    it("rejects redirects to hosts outside the media allowlist", async () => {
+      const fetchMock = vi.fn(
+        async () =>
+          new Response(null, {
+            status: 302,
+            headers: { Location: "https://evil.example/secret" },
+          }),
+      );
+      vi.stubGlobal("fetch", fetchMock as unknown as typeof fetch);
+
+      const response = await proxyMedia(
+        new Request(
+          "https://meet.test/api/proxy-media?url=https%3A%2F%2Fvideo.twimg.com%2Fpath",
+        ),
+        true,
+      );
+
+      expect(response.status).toBe(502);
+      expect(fetchMock).toHaveBeenCalledWith(
+        "https://video.twimg.com/path",
+        expect.objectContaining({ redirect: "manual" }),
+      );
+    });
+
+    it("caps redirects even when every destination is allowlisted", async () => {
+      const fetchMock = vi.fn(async (input: string | URL | Request) => {
+        const url = new URL(input.toString());
+        return new Response(null, {
+          status: 302,
+          headers: {
+            Location: `https://video.twimg.com/path?hop=${
+              Number(url.searchParams.get("hop") ?? "0") + 1
+            }`,
+          },
+        });
+      });
+      vi.stubGlobal("fetch", fetchMock as unknown as typeof fetch);
+
+      const response = await proxyMedia(
+        new Request(
+          "https://meet.test/api/proxy-media?url=https%3A%2F%2Fvideo.twimg.com%2Fpath",
+        ),
+        true,
+      );
+
+      expect(response.status).toBe(508);
+      expect(fetchMock).toHaveBeenCalledTimes(4);
     });
   });
 

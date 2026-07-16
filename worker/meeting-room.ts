@@ -29,6 +29,11 @@ import {
   refreshVoiceMemberIdentity,
 } from "../src/lib/voice-presence";
 import { filterVoiceChannelStatesPayload } from "../src/lib/voice-channel-state-filter";
+import {
+  hasChannelPermission,
+  resolveChannelAccess,
+} from "../src/lib/channel-access";
+import { PERMISSIONS } from "../src/lib/permissions";
 import { getRealtimeAdmissionFromHeaders } from "./realtime-admission";
 import { resolveMeetingProfile } from "./meeting-room/profile-resolver";
 import { generateTurnCredentials as resolveTurnCredentials } from "./meeting-room/turn-credentials";
@@ -239,6 +244,19 @@ const ZOMBIE_TIMEOUT_MS = HEARTBEAT_INTERVAL_MS * 3; // 45s — 3 missed heartbe
 const PRUNE_ALARM_INTERVAL_MS = 300_000; // 5 min safety-net — client zombie detection fires first
 const CALL_RING_TIMEOUT_MS = 30_000; // auto-cancel after 30s
 const RESUME_GRACE_PERIOD_MS = 120_000; // 2 min — keep session resumable after disconnect
+const MAX_GATEWAY_FRAME_BYTES = 1_000_000;
+const WS_RATE_LIMIT_WINDOW_MS = 60_000;
+const WS_RATE_LIMITS: Record<number, number> = {
+  [Op.MessageCreate]: 30,
+  [Op.MessageUpdate]: 30,
+  [Op.MessageDelete]: 30,
+  [Op.ReactionAdd]: 60,
+  [Op.ReactionRemove]: 60,
+  [Op.CallInitiate]: 6,
+  [Op.CallAccept]: 12,
+  [Op.CallDecline]: 12,
+  [Op.CallEnd]: 12,
+};
 
 // ── MeetingRoom Durable Object ──────────────────────────────────────────────
 
@@ -304,6 +322,13 @@ export class MeetingRoom extends DurableObject<Env> {
     this.ctx.storage.sql.exec(
       "CREATE INDEX IF NOT EXISTS idx_realtime_ticket_nonces_expires ON realtime_ticket_nonces(expires_at)",
     );
+    this.ctx.storage.sql.exec(`
+      CREATE TABLE IF NOT EXISTS ws_rate_limits (
+        rate_key TEXT PRIMARY KEY,
+        window_start INTEGER NOT NULL,
+        count INTEGER NOT NULL
+      );
+    `);
 
     // Cloudflare's auto-response absorbs messages at the edge, preventing the DO
     // from updating the `last_heartbeat` timestamp, which causes the zombie
@@ -425,6 +450,10 @@ export class MeetingRoom extends DurableObject<Env> {
       }
 
       // Sync voice_channel_id on sessions from the stored voice members
+      for (const [ws, session] of this.sessions) {
+        await this.restoreSessionSubscriptions(ws, session);
+      }
+
       for (const [, session] of this.sessions) {
         if (session.clerk_user_id) {
           for (const [channelId, members] of this.voiceChannelMembers) {
@@ -520,6 +549,7 @@ export class MeetingRoom extends DurableObject<Env> {
         const body = (await request.json()) as {
           channel_id?: string;
           server_id?: string;
+          member_user_id?: string;
           target_user_id?: string;
           event: string;
           data: unknown;
@@ -534,13 +564,20 @@ export class MeetingRoom extends DurableObject<Env> {
         );
 
         if (body.broadcast_all) {
-          this.broadcast(dispatchMsg);
+          const channelId = this.getDispatchChannelId(dispatchMsg);
+          if (channelId) {
+            await this.broadcastToChannel(channelId, dispatchMsg);
+          } else {
+            this.broadcast(dispatchMsg);
+          }
         } else if (body.target_user_id) {
           this.broadcastToUser(body.target_user_id, dispatchMsg);
         } else if (body.server_id) {
-          this.broadcastToServerMembers(body.server_id, dispatchMsg);
+          await this.broadcastToServerMembers(body.server_id, dispatchMsg);
+        } else if (body.member_user_id) {
+          await this.broadcastToUserServers(body.member_user_id, dispatchMsg);
         } else if (body.channel_id) {
-          this.broadcastToChannel(body.channel_id, dispatchMsg);
+          await this.broadcastToChannel(body.channel_id, dispatchMsg);
         }
         return new Response("OK", { status: 200 });
       } catch (e) {
@@ -709,13 +746,34 @@ export class MeetingRoom extends DurableObject<Env> {
   }
 
   async webSocketMessage(ws: WebSocket, rawMsg: string | ArrayBuffer) {
-    if (typeof rawMsg !== "string") return;
+    if (typeof rawMsg !== "string") {
+      this.sendTo(ws, {
+        op: Op.Error,
+        d: { code: 4000, message: "Text websocket frames are required" },
+      });
+      return;
+    }
+    if (rawMsg.length > MAX_GATEWAY_FRAME_BYTES) {
+      this.sendTo(ws, {
+        op: Op.Error,
+        d: { code: 4000, message: "Websocket frame is too large" },
+      });
+      return;
+    }
     if (this.env.DEBUG)
       log.info(`webSocketMessage received: ${rawMsg.substring(0, 100)}`);
 
     let msg: GatewayMessage;
     try {
-      msg = JSON.parse(rawMsg);
+      const parsed: unknown = JSON.parse(rawMsg);
+      if (!this.isPlainObject(parsed)) {
+        this.sendTo(ws, {
+          op: Op.Error,
+          d: { code: CloseCode.UnknownOpcode, message: "Missing opcode" },
+        });
+        return;
+      }
+      msg = parsed as unknown as GatewayMessage;
     } catch {
       this.sendTo(ws, {
         op: Op.Error,
@@ -746,6 +804,37 @@ export class MeetingRoom extends DurableObject<Env> {
       return;
     }
 
+    if (this.isRateLimited(ws, msg.op)) {
+      this.sendTo(ws, {
+        op: Op.Error,
+        d: { code: 4290, message: "Operation rate limit exceeded" },
+      });
+      return;
+    }
+
+    const invalidPayloadMessage: Record<number, string> = {
+      [Op.Identify]: "Invalid identify payload",
+      [Op.VoiceStateUpdate]: "Invalid voice state payload",
+      [Op.MessageCreate]: "Invalid message payload",
+      [Op.MessageUpdate]: "Invalid message payload",
+      [Op.MessageDelete]: "Invalid message payload",
+      [Op.TypingStart]: "Invalid typing payload",
+      [Op.ReactionAdd]: "Invalid reaction payload",
+      [Op.ReactionRemove]: "Invalid reaction payload",
+      [Op.ChannelSubscribe]: "Invalid channel payload",
+      [Op.ChannelUnsubscribe]: "Invalid channel payload",
+      [Op.PresenceUpdate]: "Invalid presence payload",
+      [Op.VoiceChannelJoin]: "Invalid voice channel payload",
+      [Op.ServerSubscribe]: "Invalid server payload",
+    };
+    if (invalidPayloadMessage[msg.op] && !this.isPlainObject(msg.d)) {
+      this.sendTo(ws, {
+        op: Op.Error,
+        d: { code: 4000, message: invalidPayloadMessage[msg.op] },
+      });
+      return;
+    }
+
     switch (msg.op) {
       case Op.Identify:
         await this.handleIdentify(ws, msg.d);
@@ -756,7 +845,18 @@ export class MeetingRoom extends DurableObject<Env> {
         break;
 
       case Op.Resume:
-        this.handleResume(ws, msg.d);
+        if (
+          !this.isPlainObject(msg.d) ||
+          typeof msg.d.session_id !== "string" ||
+          typeof msg.d.seq_ack !== "number"
+        ) {
+          this.sendTo(ws, {
+            op: Op.Error,
+            d: { code: 4000, message: "Invalid resume payload" },
+          });
+          break;
+        }
+        await this.handleResume(ws, msg.d);
         break;
 
       case Op.RefreshVoiceCredentials:
@@ -790,7 +890,7 @@ export class MeetingRoom extends DurableObject<Env> {
         break;
 
       case Op.TypingStart:
-        this.handleTypingStart(ws, msg.d);
+        await this.handleTypingStart(ws, msg.d);
         break;
 
       case Op.ReactionAdd:
@@ -802,7 +902,7 @@ export class MeetingRoom extends DurableObject<Env> {
         break;
 
       case Op.ChannelSubscribe:
-        this.handleChannelSubscribe(ws, msg.d);
+        await this.handleChannelSubscribe(ws, msg.d);
         break;
 
       case Op.ChannelUnsubscribe:
@@ -814,7 +914,7 @@ export class MeetingRoom extends DurableObject<Env> {
         break;
 
       case Op.VoiceChannelJoin:
-        this.handleVoiceChannelJoin(ws, msg.d);
+        await this.handleVoiceChannelJoin(ws, msg.d);
         break;
 
       case Op.VoiceChannelLeave:
@@ -826,18 +926,50 @@ export class MeetingRoom extends DurableObject<Env> {
         break;
 
       case Op.CallInitiate:
+        if (
+          !this.isPlainObject(msg.d) ||
+          typeof msg.d.target_user_id !== "string" ||
+          typeof msg.d.channel_id !== "string"
+        ) {
+          this.sendTo(ws, {
+            op: Op.Error,
+            d: { code: 4000, message: "Invalid call payload" },
+          });
+          break;
+        }
         await this.handleCallInitiate(ws, msg.d);
         break;
 
       case Op.CallAccept:
+        if (!this.isPlainObject(msg.d)) {
+          this.sendTo(ws, {
+            op: Op.Error,
+            d: { code: 4000, message: "Invalid call payload" },
+          });
+          break;
+        }
         this.handleCallAccept(ws, msg.d);
         break;
 
       case Op.CallDecline:
+        if (!this.isPlainObject(msg.d)) {
+          this.sendTo(ws, {
+            op: Op.Error,
+            d: { code: 4000, message: "Invalid call payload" },
+          });
+          break;
+        }
         this.handleCallDecline(ws, msg.d);
         break;
 
       case Op.CallEnd:
+        if (!this.isPlainObject(msg.d)) {
+          this.sendTo(ws, {
+            op: Op.Error,
+            d: { code: 4000, message: "Invalid call payload" },
+          });
+          break;
+        }
         this.handleCallEnd(ws, msg.d);
         break;
 
@@ -1031,6 +1163,63 @@ export class MeetingRoom extends DurableObject<Env> {
       op === Op.VoiceStateUpdate ||
       op === Op.ClientDisconnect
     );
+  }
+
+  private isPlainObject(value: unknown): value is Record<string, unknown> {
+    if (!value || typeof value !== "object" || Array.isArray(value))
+      return false;
+    const prototype = Object.getPrototypeOf(value);
+    return prototype === Object.prototype || prototype === null;
+  }
+
+  private isRateLimited(ws: WebSocket, op: number): boolean {
+    const limit = WS_RATE_LIMITS[op];
+    if (!limit) return false;
+
+    const session = this.getSession(ws);
+    const subject =
+      session?.clerk_user_id ?? this.getSessionAdmission(ws)?.subject;
+    const keys = [
+      `session:${session?.id ?? "unidentified"}:${op}`,
+      ...(subject ? [`subject:${subject}:${op}`] : []),
+    ];
+    const now = Date.now();
+    let limited = false;
+
+    for (const key of keys) {
+      const rows = [
+        ...this.ctx.storage.sql.exec(
+          "SELECT window_start, count FROM ws_rate_limits WHERE rate_key = ?",
+          key,
+        ),
+      ];
+      const existing = rows[0];
+      if (
+        !existing ||
+        now - Number(existing.window_start) >= WS_RATE_LIMIT_WINDOW_MS
+      ) {
+        this.ctx.storage.sql.exec(
+          `INSERT INTO ws_rate_limits (rate_key, window_start, count)
+           VALUES (?, ?, 1)
+           ON CONFLICT(rate_key) DO UPDATE SET window_start = excluded.window_start, count = 1`,
+          key,
+          now,
+        );
+        continue;
+      }
+      const count = Number(existing.count) + 1;
+      this.ctx.storage.sql.exec(
+        "UPDATE ws_rate_limits SET count = ? WHERE rate_key = ?",
+        count,
+        key,
+      );
+      if (count > limit) limited = true;
+    }
+    this.ctx.storage.sql.exec(
+      "DELETE FROM ws_rate_limits WHERE window_start < ?",
+      now - WS_RATE_LIMIT_WINDOW_MS,
+    );
+    return limited;
   }
 
   private getPresencePlatformsForUser(
@@ -1911,45 +2100,32 @@ export class MeetingRoom extends DurableObject<Env> {
       return;
     }
 
-    // Clear the expiry — session is alive again
+    // Consume the resumable generation before any await. A second socket must
+    // never be able to replay or take over the same disconnected session.
+    this.resumableSessions.delete(d.session_id);
     this.resumableSessionExpiry.delete(d.session_id);
+    this.persistResumableSessions();
     this.persistResumableSessionExpiry();
 
-    oldAttachment.last_heartbeat = Date.now();
-    this.persist(ws, oldAttachment);
+    const resumedAttachment: WsAttachment = {
+      ...oldAttachment,
+      admission,
+      last_heartbeat: Date.now(),
+    };
+    this.persist(ws, resumedAttachment);
 
-    // Rebuild channel subscriptions from the restored session
-    if (oldAttachment.subscribed_channels) {
-      for (const chId of oldAttachment.subscribed_channels) {
-        let subs = this.channelSubscriptions.get(chId);
-        if (!subs) {
-          subs = new Set();
-          this.channelSubscriptions.set(chId, subs);
-        }
-        subs.add(ws);
-      }
-    }
-    if (oldAttachment.subscribed_servers) {
-      for (const sId of oldAttachment.subscribed_servers) {
-        let subs = this.serverSubscriptions.get(sId);
-        if (!subs) {
-          subs = new Set();
-          this.serverSubscriptions.set(sId, subs);
-        }
-        subs.add(ws);
-      }
-    }
+    await this.restoreSessionSubscriptions(ws, resumedAttachment);
 
     // Re-add to voice channel members if the session was in a VC.
     // During handleLeave, we now defer voice channel cleanup for resumable
     // sessions — but if reconcileVoiceMembers() ran during the disconnect
     // window (or a future code path removed them), re-ensure membership.
-    if (oldAttachment.voice_channel_id && oldAttachment.clerk_user_id) {
+    if (resumedAttachment.voice_channel_id && resumedAttachment.clerk_user_id) {
       this.markVoiceMemberConnected(
-        oldAttachment.voice_channel_id,
-        oldAttachment,
+        resumedAttachment.voice_channel_id,
+        resumedAttachment,
       );
-      await this.broadcastVoiceChannelState(oldAttachment.voice_channel_id);
+      await this.broadcastVoiceChannelState(resumedAttachment.voice_channel_id);
     }
 
     // Replay buffered messages the client missed
@@ -1968,8 +2144,8 @@ export class MeetingRoom extends DurableObject<Env> {
     // from the initial Identify, which will eventually expire (1h TTL).
     const [freshVoiceToken, freshIceServers] = await Promise.all([
       this.generateVoiceToken(
-        oldAttachment.id,
-        oldAttachment.admission?.subject,
+        resumedAttachment.id,
+        resumedAttachment.admission?.subject,
       ),
       this.generateTurnCredentials(),
     ]);
@@ -1986,7 +2162,7 @@ export class MeetingRoom extends DurableObject<Env> {
         ice_servers: freshIceServers,
         participants,
         spatial_audio_state: this.spatialAudioStates.get(
-          oldAttachment.voice_channel_id || this.roomSlug,
+          resumedAttachment.voice_channel_id || this.roomSlug,
         ),
       },
     });
@@ -1995,6 +2171,7 @@ export class MeetingRoom extends DurableObject<Env> {
     // sidebar. During the disconnect window, the client may have missed
     // VOICE_CHANNEL_STATE_UPDATE events — this full sync corrects that.
     await this.sendVoiceChannelStates(ws);
+    this.replayBuffers.delete(d.session_id);
   }
 
   private async handleRefreshVoiceCredentials(ws: WebSocket) {
@@ -2434,7 +2611,7 @@ export class MeetingRoom extends DurableObject<Env> {
   }
 
   /** Send a message to all clients subscribed to a specific channel */
-  private broadcastToChannel(
+  private async broadcastToChannel(
     channelId: string,
     msg: ServerMsg,
     excludeWs?: WebSocket,
@@ -2443,10 +2620,24 @@ export class MeetingRoom extends DurableObject<Env> {
     if (!subscribers) return;
 
     const json = JSON.stringify(msg);
-    for (const ws of subscribers) {
+    for (const ws of [...subscribers]) {
       if (ws === excludeWs) continue;
       const session = this.getSession(ws);
-      if (session) this.pushReplayBuffer(session.id, session.seq, msg);
+      if (!session?.clerk_user_id) continue;
+      const access = await resolveChannelAccess(
+        this.env.DB,
+        session.clerk_user_id,
+        channelId,
+      );
+      if (!access || !hasChannelPermission(access, PERMISSIONS.VIEW_CHANNELS)) {
+        subscribers.delete(ws);
+        session.subscribed_channels = session.subscribed_channels.filter(
+          (id) => id !== channelId,
+        );
+        this.persist(ws, session);
+        continue;
+      }
+      this.pushReplayBuffer(session.id, session.seq, msg);
       try {
         ws.send(json);
       } catch {
@@ -2456,25 +2647,78 @@ export class MeetingRoom extends DurableObject<Env> {
   }
 
   /** Send a message to all sessions that are members of a server */
-  private broadcastToServerMembers(
+  private async broadcastToServerMembers(
     serverId: string,
     msg: ServerMsg,
     excludeWs?: WebSocket,
   ) {
+    const channelId = this.getDispatchChannelId(msg);
+    if (channelId) {
+      await this.broadcastToChannel(channelId, msg, excludeWs);
+      return;
+    }
+
     const subscribers = this.serverSubscriptions.get(serverId);
     if (!subscribers) return;
 
     const json = JSON.stringify(msg);
-    for (const ws of subscribers) {
+    for (const ws of [...subscribers]) {
       if (ws === excludeWs) continue;
       const session = this.getSession(ws);
-      if (session) this.pushReplayBuffer(session.id, session.seq, msg);
+      if (!session?.clerk_user_id) {
+        subscribers.delete(ws);
+        continue;
+      }
+
+      const member = await this.env.DB.prepare(
+        "SELECT 1 FROM server_members WHERE server_id = ? AND user_id = ? LIMIT 1",
+      )
+        .bind(serverId, session.clerk_user_id)
+        .first()
+        .catch(() => null);
+      if (!member) {
+        subscribers.delete(ws);
+        session.subscribed_servers = session.subscribed_servers.filter(
+          (id) => id !== serverId,
+        );
+        this.persist(ws, session);
+        continue;
+      }
+
+      this.pushReplayBuffer(session.id, session.seq, msg);
       try {
         ws.send(json);
       } catch {
-        /* skip dead */
+        subscribers.delete(ws);
+        session.subscribed_servers = session.subscribed_servers.filter(
+          (id) => id !== serverId,
+        );
+        this.persist(ws, session);
       }
     }
+    if (subscribers.size === 0) this.serverSubscriptions.delete(serverId);
+  }
+
+  private async broadcastToUserServers(userId: string, msg: ServerMsg) {
+    const { results } = await this.env.DB.prepare(
+      "SELECT server_id FROM server_members WHERE user_id = ?",
+    )
+      .bind(userId)
+      .all()
+      .catch(() => ({ results: [] }));
+
+    for (const row of results ?? []) {
+      if (typeof row.server_id !== "string") continue;
+      await this.broadcastToServerMembers(row.server_id, msg);
+    }
+  }
+
+  private getDispatchChannelId(msg: ServerMsg): string | null {
+    if (!this.isPlainObject(msg.d)) return null;
+    const data = msg.d.data;
+    if (!this.isPlainObject(data) || typeof data.channel_id !== "string")
+      return null;
+    return data.channel_id;
   }
 
   /** Send a message to all sessions of a specific user */
@@ -2497,9 +2741,32 @@ export class MeetingRoom extends DurableObject<Env> {
 
   // ── Op 27: ChannelSubscribe ───────────────────────────────────────────
 
-  private handleChannelSubscribe(ws: WebSocket, d: { channel_id: string }) {
+  private async handleChannelSubscribe(
+    ws: WebSocket,
+    d: { channel_id: string },
+  ) {
     const session = this.requireSession(ws);
-    if (!session || !d.channel_id) return;
+    if (
+      !session ||
+      !d ||
+      typeof d.channel_id !== "string" ||
+      !d.channel_id ||
+      !session.clerk_user_id
+    )
+      return;
+
+    const access = await resolveChannelAccess(
+      this.env.DB,
+      session.clerk_user_id,
+      d.channel_id,
+    );
+    if (!access || !hasChannelPermission(access, PERMISSIONS.VIEW_CHANNELS)) {
+      this.sendTo(ws, {
+        op: Op.Error,
+        d: { code: 4003, message: "Channel not found or access denied" },
+      });
+      return;
+    }
 
     // Add to channel subscription map
     let subs = this.channelSubscriptions.get(d.channel_id);
@@ -2534,7 +2801,8 @@ export class MeetingRoom extends DurableObject<Env> {
 
   private handleChannelUnsubscribe(ws: WebSocket, d: { channel_id: string }) {
     const session = this.requireSession(ws);
-    if (!session || !d.channel_id) return;
+    if (!session || !d || typeof d.channel_id !== "string" || !d.channel_id)
+      return;
 
     const subs = this.channelSubscriptions.get(d.channel_id);
     if (subs) {
@@ -2545,6 +2813,58 @@ export class MeetingRoom extends DurableObject<Env> {
     session.subscribed_channels = session.subscribed_channels.filter(
       (id) => id !== d.channel_id,
     );
+    this.persist(ws, session);
+  }
+
+  private async restoreSessionSubscriptions(
+    ws: WebSocket,
+    session: WsAttachment,
+  ) {
+    this.cleanupChannelSubscriptions(ws);
+    this.cleanupServerSubscriptions(ws);
+
+    const validChannels: string[] = [];
+    if (session.clerk_user_id) {
+      for (const channelId of session.subscribed_channels ?? []) {
+        const access = await resolveChannelAccess(
+          this.env.DB,
+          session.clerk_user_id,
+          channelId,
+        );
+        if (!access || !hasChannelPermission(access, PERMISSIONS.VIEW_CHANNELS))
+          continue;
+        validChannels.push(channelId);
+        let subscribers = this.channelSubscriptions.get(channelId);
+        if (!subscribers) {
+          subscribers = new Set();
+          this.channelSubscriptions.set(channelId, subscribers);
+        }
+        subscribers.add(ws);
+      }
+    }
+
+    const validServers: string[] = [];
+    if (session.clerk_user_id) {
+      for (const serverId of session.subscribed_servers ?? []) {
+        const member = await this.env.DB.prepare(
+          "SELECT 1 FROM server_members WHERE server_id = ? AND user_id = ? LIMIT 1",
+        )
+          .bind(serverId, session.clerk_user_id)
+          .first()
+          .catch(() => null);
+        if (!member) continue;
+        validServers.push(serverId);
+        let subscribers = this.serverSubscriptions.get(serverId);
+        if (!subscribers) {
+          subscribers = new Set();
+          this.serverSubscriptions.set(serverId, subscribers);
+        }
+        subscribers.add(ws);
+      }
+    }
+
+    session.subscribed_channels = validChannels;
+    session.subscribed_servers = validServers;
     this.persist(ws, session);
   }
 
@@ -2562,12 +2882,32 @@ export class MeetingRoom extends DurableObject<Env> {
     return startedAt;
   }
 
-  private handleVoiceChannelJoin(
+  private async handleVoiceChannelJoin(
     ws: WebSocket,
     d: { channel_id: string; self_mute?: boolean; started_at?: number },
   ) {
     const session = this.requireSession(ws);
-    if (!session || !d.channel_id || !session.clerk_user_id) return;
+    if (
+      !session ||
+      !d ||
+      typeof d.channel_id !== "string" ||
+      !d.channel_id ||
+      !session.clerk_user_id
+    )
+      return;
+
+    const access = await resolveChannelAccess(
+      this.env.DB,
+      session.clerk_user_id,
+      d.channel_id,
+    );
+    if (!access || !hasChannelPermission(access, PERMISSIONS.CONNECT)) {
+      this.sendTo(ws, {
+        op: Op.Error,
+        d: { code: 4003, message: "Channel not found or access denied" },
+      });
+      return;
+    }
 
     // Leave previous voice channel if switching to a different one.
     // If already in the same channel (e.g. server added us during handleCallInitiate
@@ -2778,7 +3118,24 @@ export class MeetingRoom extends DurableObject<Env> {
     },
   ) {
     const session = this.requireSession(ws);
-    if (!session || !d.channel_id || !d.content) return;
+    if (
+      !session?.clerk_user_id ||
+      !d ||
+      typeof d.channel_id !== "string" ||
+      typeof d.content !== "string" ||
+      !d.channel_id ||
+      !d.content.trim() ||
+      d.content.length > 4000 ||
+      (d.reply_to_id !== undefined && typeof d.reply_to_id !== "string") ||
+      (d.nonce !== undefined &&
+        (typeof d.nonce !== "string" || d.nonce.length > 100))
+    ) {
+      this.sendTo(ws, {
+        op: Op.Error,
+        d: { code: 4000, message: "Invalid message payload" },
+      });
+      return;
+    }
 
     if (this.roomSlug !== "global-gateway") {
       this.sendTo(ws, {
@@ -2789,6 +3146,38 @@ export class MeetingRoom extends DurableObject<Env> {
         },
       });
       return;
+    }
+
+    const access = await resolveChannelAccess(
+      this.env.DB,
+      session.clerk_user_id,
+      d.channel_id,
+    );
+    if (!access || !hasChannelPermission(access, PERMISSIONS.SEND_MESSAGES)) {
+      this.sendTo(ws, {
+        op: Op.Error,
+        d: { code: 4003, message: "Channel not found or access denied" },
+      });
+      return;
+    }
+
+    if (d.reply_to_id) {
+      const reply = await this.env.DB.prepare(
+        "SELECT 1 FROM messages WHERE id = ? AND channel_id = ? LIMIT 1",
+      )
+        .bind(d.reply_to_id, d.channel_id)
+        .first()
+        .catch(() => null);
+      if (!reply) {
+        this.sendTo(ws, {
+          op: Op.Error,
+          d: {
+            code: 4004,
+            message: "Reply message does not belong to channel",
+          },
+        });
+        return;
+      }
     }
 
     const messageId = crypto.randomUUID();
@@ -2803,8 +3192,8 @@ export class MeetingRoom extends DurableObject<Env> {
         .bind(
           messageId,
           d.channel_id,
-          session.clerk_user_id ?? session.id,
-          d.content,
+          session.clerk_user_id,
+          d.content.trim(),
           d.reply_to_id ?? null,
           now,
         )
@@ -2822,15 +3211,15 @@ export class MeetingRoom extends DurableObject<Env> {
     const message = {
       id: messageId,
       channel_id: d.channel_id,
-      author_id: session.clerk_user_id ?? session.id,
+      author_id: session.clerk_user_id,
       author: {
-        id: session.clerk_user_id ?? session.id,
+        id: session.clerk_user_id,
         username: session.username ?? session.name,
         display_name: session.display_name ?? session.name,
         avatar_url: session.avatar_url,
         avatar_display: session.avatar_display,
       },
-      content: d.content,
+      content: d.content.trim(),
       reply_to_id: d.reply_to_id,
       is_pinned: false,
       created_at: now,
@@ -2840,7 +3229,7 @@ export class MeetingRoom extends DurableObject<Env> {
     };
 
     // Dispatch to all subscribers of this channel (including sender for confirmation)
-    this.broadcastToChannel(d.channel_id, {
+    await this.broadcastToChannel(d.channel_id, {
       op: Op.Dispatch,
       d: { event: "MESSAGE_CREATE", data: message },
     });
@@ -2848,7 +3237,7 @@ export class MeetingRoom extends DurableObject<Env> {
     // Asynchronously fetch embeds without blocking the initial send
     this.ctx.waitUntil(
       (async () => {
-        const embeds = await extractAndProcessEmbeds(d.content);
+        const embeds = await extractAndProcessEmbeds(d.content.trim());
         if (embeds.length > 0) {
           try {
             // Store embeds in the database
@@ -2859,7 +3248,7 @@ export class MeetingRoom extends DurableObject<Env> {
               .run();
 
             // Dispatch update event to clients
-            this.broadcastToChannel(d.channel_id, {
+            await this.broadcastToChannel(d.channel_id, {
               op: Op.Dispatch,
               d: {
                 event: "MESSAGE_UPDATE",
@@ -2885,18 +3274,70 @@ export class MeetingRoom extends DurableObject<Env> {
     d: { message_id: string; content: string },
   ) {
     const session = this.requireSession(ws);
-    if (!session || !d.message_id || !d.content) return;
+    if (
+      !session?.clerk_user_id ||
+      !d ||
+      typeof d.message_id !== "string" ||
+      typeof d.content !== "string" ||
+      !d.message_id ||
+      !d.content.trim() ||
+      d.content.length > 4000
+    ) {
+      this.sendTo(ws, {
+        op: Op.Error,
+        d: { code: 4000, message: "Invalid message payload" },
+      });
+      return;
+    }
 
     const now = new Date().toISOString();
-    const authorId = session.clerk_user_id ?? session.id;
+    const messageRow = await this.env.DB.prepare(
+      "SELECT channel_id, author_id FROM messages WHERE id = ? LIMIT 1",
+    )
+      .bind(d.message_id)
+      .first<{ channel_id: string; author_id: string }>()
+      .catch(() => null);
+    if (!messageRow) {
+      this.sendTo(ws, {
+        op: Op.Error,
+        d: { code: 4004, message: "Message not found" },
+      });
+      return;
+    }
 
-    // Only allow editing own messages
+    const access = await resolveChannelAccess(
+      this.env.DB,
+      session.clerk_user_id,
+      messageRow.channel_id,
+    );
+    const canManage =
+      !!access &&
+      access.serverId !== null &&
+      hasChannelPermission(access, PERMISSIONS.MANAGE_MESSAGES);
+    if (
+      !access ||
+      (messageRow.author_id !== session.clerk_user_id && !canManage)
+    ) {
+      this.sendTo(ws, {
+        op: Op.Error,
+        d: { code: 4004, message: "Message not found or not owner" },
+      });
+      return;
+    }
+
     try {
       const result = await this.env.DB.prepare(
         `UPDATE messages SET content = ?, updated_at = ?
-         WHERE id = ? AND author_id = ?`,
+         WHERE id = ? AND channel_id = ? AND (author_id = ? OR ? = 1)`,
       )
-        .bind(d.content, now, d.message_id, authorId)
+        .bind(
+          d.content.trim(),
+          now,
+          d.message_id,
+          messageRow.channel_id,
+          session.clerk_user_id,
+          canManage ? 1 : 0,
+        )
         .run();
 
       if (!result.meta.changes || result.meta.changes === 0) {
@@ -2911,22 +3352,15 @@ export class MeetingRoom extends DurableObject<Env> {
       return;
     }
 
-    // Look up channel_id for the message to dispatch
-    const row = await this.env.DB.prepare(
-      `SELECT channel_id FROM messages WHERE id = ?`,
-    )
-      .bind(d.message_id)
-      .first<{ channel_id: string }>();
-
-    if (row) {
-      this.broadcastToChannel(row.channel_id, {
+    {
+      await this.broadcastToChannel(messageRow.channel_id, {
         op: Op.Dispatch,
         d: {
           event: "MESSAGE_UPDATE",
           data: {
             id: d.message_id,
-            channel_id: row.channel_id,
-            content: d.content,
+            channel_id: messageRow.channel_id,
+            content: d.content.trim(),
             updated_at: now,
           },
         },
@@ -2935,7 +3369,7 @@ export class MeetingRoom extends DurableObject<Env> {
       // Asynchronously fetch new embeds if content changed
       this.ctx.waitUntil(
         (async () => {
-          const embeds = await extractAndProcessEmbeds(d.content);
+          const embeds = await extractAndProcessEmbeds(d.content.trim());
           if (embeds.length > 0) {
             try {
               await this.env.DB.prepare(
@@ -2944,13 +3378,13 @@ export class MeetingRoom extends DurableObject<Env> {
                 .bind(JSON.stringify(embeds), d.message_id)
                 .run();
 
-              this.broadcastToChannel(row.channel_id, {
+              await this.broadcastToChannel(messageRow.channel_id, {
                 op: Op.Dispatch,
                 d: {
                   event: "MESSAGE_UPDATE",
                   data: {
                     id: d.message_id,
-                    channel_id: row.channel_id,
+                    channel_id: messageRow.channel_id,
                     embeds: embeds,
                   },
                 },
@@ -2971,16 +3405,66 @@ export class MeetingRoom extends DurableObject<Env> {
     d: { message_id: string; channel_id: string },
   ) {
     const session = this.requireSession(ws);
-    if (!session || !d.message_id || !d.channel_id) return;
+    if (
+      !session?.clerk_user_id ||
+      !d ||
+      typeof d.message_id !== "string" ||
+      typeof d.channel_id !== "string" ||
+      !d.message_id ||
+      !d.channel_id
+    ) {
+      this.sendTo(ws, {
+        op: Op.Error,
+        d: { code: 4000, message: "Invalid message payload" },
+      });
+      return;
+    }
 
-    const authorId = session.clerk_user_id ?? session.id;
+    const messageRow = await this.env.DB.prepare(
+      "SELECT channel_id, author_id FROM messages WHERE id = ? LIMIT 1",
+    )
+      .bind(d.message_id)
+      .first<{ channel_id: string; author_id: string }>()
+      .catch(() => null);
+    if (!messageRow || messageRow.channel_id !== d.channel_id) {
+      this.sendTo(ws, {
+        op: Op.Error,
+        d: { code: 4004, message: "Message does not belong to channel" },
+      });
+      return;
+    }
+
+    const access = await resolveChannelAccess(
+      this.env.DB,
+      session.clerk_user_id,
+      messageRow.channel_id,
+    );
+    const canManage =
+      !!access &&
+      access.serverId !== null &&
+      hasChannelPermission(access, PERMISSIONS.MANAGE_MESSAGES);
+    if (
+      !access ||
+      (messageRow.author_id !== session.clerk_user_id && !canManage)
+    ) {
+      this.sendTo(ws, {
+        op: Op.Error,
+        d: { code: 4004, message: "Message not found or not owner" },
+      });
+      return;
+    }
 
     try {
-      // Delete only if author (or could add server admin check later)
       const result = await this.env.DB.prepare(
-        `DELETE FROM messages WHERE id = ? AND author_id = ?`,
+        `DELETE FROM messages
+         WHERE id = ? AND channel_id = ? AND (author_id = ? OR ? = 1)`,
       )
-        .bind(d.message_id, authorId)
+        .bind(
+          d.message_id,
+          messageRow.channel_id,
+          session.clerk_user_id,
+          canManage ? 1 : 0,
+        )
         .run();
 
       if (!result.meta.changes || result.meta.changes === 0) {
@@ -2995,22 +3479,36 @@ export class MeetingRoom extends DurableObject<Env> {
       return;
     }
 
-    this.broadcastToChannel(d.channel_id, {
+    await this.broadcastToChannel(messageRow.channel_id, {
       op: Op.Dispatch,
       d: {
         event: "MESSAGE_DELETE",
-        data: { id: d.message_id, channel_id: d.channel_id },
+        data: { id: d.message_id, channel_id: messageRow.channel_id },
       },
     });
   }
 
   // ── Op 23: TypingStart ────────────────────────────────────────────────
 
-  private handleTypingStart(ws: WebSocket, d: { channel_id: string }) {
+  private async handleTypingStart(ws: WebSocket, d: { channel_id: string }) {
     const session = this.requireSession(ws);
-    if (!session || !d.channel_id) return;
+    if (!session?.clerk_user_id || !d || typeof d.channel_id !== "string")
+      return;
 
-    this.broadcastToChannel(
+    const access = await resolveChannelAccess(
+      this.env.DB,
+      session.clerk_user_id,
+      d.channel_id,
+    );
+    if (!access || !hasChannelPermission(access, PERMISSIONS.VIEW_CHANNELS)) {
+      this.sendTo(ws, {
+        op: Op.Error,
+        d: { code: 4003, message: "Channel not found or access denied" },
+      });
+      return;
+    }
+
+    await this.broadcastToChannel(
       d.channel_id,
       {
         op: Op.Dispatch,
@@ -3018,7 +3516,7 @@ export class MeetingRoom extends DurableObject<Env> {
           event: "TYPING_START",
           data: {
             channel_id: d.channel_id,
-            user_id: session.clerk_user_id ?? session.id,
+            user_id: session.clerk_user_id,
             username: session.username ?? session.name,
             display_name: session.display_name ?? session.name,
             timestamp: Date.now(),
@@ -3036,9 +3534,51 @@ export class MeetingRoom extends DurableObject<Env> {
     d: { channel_id: string; message_id: string; emoji: string },
   ) {
     const session = this.requireSession(ws);
-    if (!session || !d.channel_id || !d.message_id || !d.emoji) return;
+    if (
+      !session?.clerk_user_id ||
+      !d ||
+      typeof d.channel_id !== "string" ||
+      typeof d.message_id !== "string" ||
+      typeof d.emoji !== "string" ||
+      !d.channel_id ||
+      !d.message_id ||
+      !d.emoji ||
+      d.emoji.length > 128
+    ) {
+      this.sendTo(ws, {
+        op: Op.Error,
+        d: { code: 4000, message: "Invalid reaction payload" },
+      });
+      return;
+    }
 
-    const userId = session.clerk_user_id ?? session.id;
+    const message = await this.env.DB.prepare(
+      "SELECT channel_id FROM messages WHERE id = ? LIMIT 1",
+    )
+      .bind(d.message_id)
+      .first<{ channel_id: string }>()
+      .catch(() => null);
+    const access = message
+      ? await resolveChannelAccess(
+          this.env.DB,
+          session.clerk_user_id,
+          message.channel_id,
+        )
+      : null;
+    if (
+      !message ||
+      message.channel_id !== d.channel_id ||
+      !access ||
+      !hasChannelPermission(access, PERMISSIONS.ADD_REACTIONS)
+    ) {
+      this.sendTo(ws, {
+        op: Op.Error,
+        d: { code: 4003, message: "Channel not found or access denied" },
+      });
+      return;
+    }
+
+    const userId = session.clerk_user_id;
     const now = new Date().toISOString();
 
     try {
@@ -3053,7 +3593,7 @@ export class MeetingRoom extends DurableObject<Env> {
       return;
     }
 
-    this.broadcastToChannel(d.channel_id, {
+    await this.broadcastToChannel(d.channel_id, {
       op: Op.Dispatch,
       d: {
         event: "REACTION_ADD",
@@ -3074,9 +3614,51 @@ export class MeetingRoom extends DurableObject<Env> {
     d: { channel_id: string; message_id: string; emoji: string },
   ) {
     const session = this.requireSession(ws);
-    if (!session || !d.channel_id || !d.message_id || !d.emoji) return;
+    if (
+      !session?.clerk_user_id ||
+      !d ||
+      typeof d.channel_id !== "string" ||
+      typeof d.message_id !== "string" ||
+      typeof d.emoji !== "string" ||
+      !d.channel_id ||
+      !d.message_id ||
+      !d.emoji ||
+      d.emoji.length > 128
+    ) {
+      this.sendTo(ws, {
+        op: Op.Error,
+        d: { code: 4000, message: "Invalid reaction payload" },
+      });
+      return;
+    }
 
-    const userId = session.clerk_user_id ?? session.id;
+    const message = await this.env.DB.prepare(
+      "SELECT channel_id FROM messages WHERE id = ? LIMIT 1",
+    )
+      .bind(d.message_id)
+      .first<{ channel_id: string }>()
+      .catch(() => null);
+    const access = message
+      ? await resolveChannelAccess(
+          this.env.DB,
+          session.clerk_user_id,
+          message.channel_id,
+        )
+      : null;
+    if (
+      !message ||
+      message.channel_id !== d.channel_id ||
+      !access ||
+      !hasChannelPermission(access, PERMISSIONS.ADD_REACTIONS)
+    ) {
+      this.sendTo(ws, {
+        op: Op.Error,
+        d: { code: 4003, message: "Channel not found or access denied" },
+      });
+      return;
+    }
+
+    const userId = session.clerk_user_id;
 
     try {
       await this.env.DB.prepare(
@@ -3089,7 +3671,7 @@ export class MeetingRoom extends DurableObject<Env> {
       return;
     }
 
-    this.broadcastToChannel(d.channel_id, {
+    await this.broadcastToChannel(d.channel_id, {
       op: Op.Dispatch,
       d: {
         event: "REACTION_REMOVE",
@@ -3137,7 +3719,14 @@ export class MeetingRoom extends DurableObject<Env> {
 
   private async handleServerSubscribe(ws: WebSocket, d: { server_id: string }) {
     const session = this.requireSession(ws);
-    if (!session || !d.server_id || !session.clerk_user_id) return;
+    if (
+      !session ||
+      !d ||
+      typeof d.server_id !== "string" ||
+      !d.server_id ||
+      !session.clerk_user_id
+    )
+      return;
 
     // Already subscribed?
     if (session.subscribed_servers?.includes(d.server_id)) return;
@@ -3179,6 +3768,30 @@ export class MeetingRoom extends DurableObject<Env> {
 
   // ── Op 36: CallInitiate ──────────────────────────────────────────────
 
+  private async getExactDmRecipients(
+    channelId: string,
+  ): Promise<Set<string> | null> {
+    const channel = await this.env.DB.prepare(
+      "SELECT server_id, channel_type FROM channels WHERE id = ? LIMIT 1",
+    )
+      .bind(channelId)
+      .first<{ server_id: string | null; channel_type: string }>()
+      .catch(() => null);
+    if (!channel || channel.server_id !== null) return null;
+
+    const recipients = await this.env.DB.prepare(
+      "SELECT user_id FROM dm_recipients WHERE channel_id = ?",
+    )
+      .bind(channelId)
+      .all<{ user_id: string }>()
+      .catch(() => null);
+    if (!recipients?.results || recipients.results.length !== 2) return null;
+
+    const ids = recipients.results.map((row) => row.user_id);
+    if (new Set(ids).size !== 2) return null;
+    return new Set(ids);
+  }
+
   private async handleCallInitiate(
     ws: WebSocket,
     d: { target_user_id: string; channel_id: string },
@@ -3194,6 +3807,21 @@ export class MeetingRoom extends DurableObject<Env> {
 
     const callerId = session.clerk_user_id;
     const calleeId = d.target_user_id;
+
+    const unavailable = () =>
+      this.sendTo(ws, {
+        op: Op.Dispatch,
+        d: {
+          event: "CALL_RING_STOP",
+          data: { call_id: null, reason: "unavailable" },
+        },
+      });
+
+    const recipients = await this.getExactDmRecipients(d.channel_id);
+    if (!recipients || !recipients.has(callerId) || !recipients.has(calleeId)) {
+      unavailable();
+      return;
+    }
 
     // Self-call prevention
     if (callerId === calleeId) {
@@ -3245,6 +3873,8 @@ export class MeetingRoom extends DurableObject<Env> {
       }
     } catch (e) {
       log.error("Call relationship check failed:", e);
+      unavailable();
+      return;
     }
 
     // Check callee is online — at least one session exists

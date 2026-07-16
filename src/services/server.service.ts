@@ -23,7 +23,7 @@ import type { D1Database } from "@cloudflare/workers-types";
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 export interface BroadcastDescriptor {
-  type: "channel" | "server" | "user" | "all";
+  type: "channel" | "server" | "user";
   target?: string;
   event: string;
   data: unknown;
@@ -299,7 +299,8 @@ export async function updateServer(
     data: { server },
     cacheKeysToInvalidate,
     broadcast: {
-      type: "all",
+      type: "server",
+      target: serverId,
       event: "GUILD_UPDATE",
       data: server,
     },
@@ -326,7 +327,7 @@ export async function deleteServer(
   actorId: string,
 ): Promise<{
   cacheKeysToInvalidate: string[];
-  broadcast: BroadcastDescriptor;
+  broadcasts: BroadcastDescriptor[];
 }> {
   const server = (await db
     .prepare(`SELECT owner_id FROM servers WHERE id = ?`)
@@ -354,11 +355,12 @@ export async function deleteServer(
         CacheKey.userServers(r.user_id as string),
       ),
     ],
-    broadcast: {
-      type: "all",
+    broadcasts: (memberRows ?? []).map((row: Record<string, unknown>) => ({
+      type: "user",
+      target: row.user_id as string,
       event: "GUILD_DELETE",
       data: { id: serverId },
-    },
+    })),
   };
 }
 
@@ -570,7 +572,7 @@ export async function kickMember(
 ): Promise<{
   kicked: boolean;
   cacheKeysToInvalidate: string[];
-  broadcast: BroadcastDescriptor;
+  broadcasts: BroadcastDescriptor[];
   auditLog: AuditLogDescriptor;
 }> {
   // Get actor's permissions + role hierarchy
@@ -654,14 +656,26 @@ export async function kickMember(
       CacheKey.serverMembers(serverId),
       CacheKey.userServers(targetUserId),
     ],
-    broadcast: {
-      type: "all",
-      event: "GUILD_MEMBER_REMOVE",
-      data: {
-        server_id: serverId,
-        user_id: targetUserId,
+    broadcasts: [
+      {
+        type: "server",
+        target: serverId,
+        event: "GUILD_MEMBER_REMOVE",
+        data: {
+          server_id: serverId,
+          user_id: targetUserId,
+        },
       },
-    },
+      {
+        type: "user",
+        target: targetUserId,
+        event: "GUILD_MEMBER_REMOVE",
+        data: {
+          server_id: serverId,
+          user_id: targetUserId,
+        },
+      },
+    ],
     auditLog: {
       serverId,
       actorId,

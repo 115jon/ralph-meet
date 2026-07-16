@@ -10,8 +10,22 @@ vi.mock("@/lib/api-helpers", () => ({
     Response.json({ error, code }, { status }),
   buildVoiceChannelRoomSlug: (serverId: string, channelId: string) =>
     `voice-${serverId}-${channelId}`,
+  getCorsHeaders: (request?: Request) => ({
+    "Access-Control-Allow-Credentials": "true",
+    "Access-Control-Allow-Origin": request?.headers.get("origin") ?? "",
+  }),
   getDB: vi.fn(),
   getEnv: () => mocks.env,
+  handleCorsPreflightIfNeeded: (request: Request) =>
+    request.method === "OPTIONS"
+      ? new Response(null, {
+          status: 204,
+          headers: {
+            "Access-Control-Allow-Credentials": "true",
+            "Access-Control-Allow-Origin": request.headers.get("origin") ?? "",
+          },
+        })
+      : null,
   requireAuth: mocks.requireAuth,
 }));
 
@@ -26,7 +40,7 @@ vi.mock("@/lib/rate-limit", () => ({
 }));
 
 import { verifySocketTicket } from "@/lib/voice/socket-ticket";
-import { socketTicketPost } from "../voice/socket-ticket";
+import { socketTicketOptions, socketTicketPost } from "../voice/socket-ticket";
 
 const ticketSecret = "test-realtime-ticket-secret";
 
@@ -37,6 +51,28 @@ describe("socket ticket route", () => {
     };
     mocks.requireAuth.mockReset();
     mocks.requireAuth.mockResolvedValue({ userId: "user-123" });
+  });
+
+  it("allows credentialed Tauri preflight requests", async () => {
+    const response = await socketTicketOptions({
+      request: new Request("http://localhost:5173/api/voice/socket-ticket", {
+        method: "OPTIONS",
+        headers: {
+          origin: "http://tauri.localhost",
+          "access-control-request-headers":
+            "authorization,content-type,x-publishable-key",
+          "access-control-request-method": "POST",
+        },
+      }),
+    });
+
+    expect(response.status).toBe(204);
+    expect(response.headers.get("Access-Control-Allow-Origin")).toBe(
+      "http://tauri.localhost",
+    );
+    expect(response.headers.get("Access-Control-Allow-Credentials")).toBe(
+      "true",
+    );
   });
 
   it("issues a no-store, audience-bound ticket for an authenticated global gateway", async () => {

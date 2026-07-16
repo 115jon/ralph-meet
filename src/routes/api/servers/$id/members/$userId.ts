@@ -32,7 +32,9 @@ const DELETE = async ({ request: _request, params }: any) => {
 
     // Execute side effects
     await executeInvalidation(result.cacheKeysToInvalidate);
-    await executeBroadcast(result.broadcast);
+    for (const broadcast of result.broadcasts) {
+      await executeBroadcast(broadcast);
+    }
     await executeAuditLog(db, result.auditLog);
 
     return apiSuccess({ kicked: true });

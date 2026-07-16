@@ -502,7 +502,7 @@ export default function MobileProfileSheet({
   };
 
   return (
-    <BaseModal onClose={onClose}>
+    <BaseModal onClose={onClose} aria-label="User profile">
       <div
         className={cn(
           "fixed inset-0 z-300 flex flex-col bg-rm-bg-primary animate-in slide-in-from-bottom duration-300",

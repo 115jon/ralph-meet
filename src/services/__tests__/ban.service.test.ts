@@ -104,7 +104,18 @@ describe("banUser", () => {
     db.assertCalled(/INSERT OR REPLACE INTO server_bans/);
     db.assertCalled(/DELETE FROM server_members/);
     expect(result.cacheKeysToInvalidate.length).toBeGreaterThan(0);
-    expect(result.broadcast.event).toBe("GUILD_MEMBER_REMOVE");
+    expect(result.broadcasts).toEqual([
+      expect.objectContaining({
+        type: "server",
+        target: SERVER_ID,
+        event: "GUILD_MEMBER_REMOVE",
+      }),
+      expect.objectContaining({
+        type: "user",
+        target: TARGET_ID,
+        event: "GUILD_MEMBER_REMOVE",
+      }),
+    ]);
     expect(result.auditLog.actionType).toBe("MEMBER_BAN");
   });
 

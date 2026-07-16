@@ -155,6 +155,20 @@ const RADIO_STATION_UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const MAX_RADIO_STATION_LOOKUPS_PER_ENQUEUE = 5;
 const MAX_SOUNDBOARD_DATA_URL_BYTES = 512 * 1024;
+const MAX_NEGOTIATION_TRACKS = 32;
+const MAX_SDP_LENGTH = 1_000_000;
+const MAX_VOICE_FRAME_BYTES = 1_000_000;
+const VOICE_WS_RATE_LIMIT_WINDOW_MS = 60_000;
+const VOICE_WS_RATE_LIMITS: Record<number, number> = {
+  [Op.SelectProtocol]: 20,
+  [Op.Video]: 20,
+  [Op.Answer]: 20,
+  [Op.StopTracks]: 40,
+  [Op.TrackUpdate]: 60,
+  [Op.IceRestart]: 10,
+  [Op.TracksReady]: 60,
+  [Op.VoiceAppEvent]: 60,
+};
 
 // ── VoiceRoom Durable Object ────────────────────────────────────────────────
 
@@ -169,6 +183,7 @@ export class VoiceRoom extends DurableObject<Env> {
   private sfuClient: SfuClient;
   private roomSlug: string = "";
   private listenTogetherCommandQueue: Promise<void> = Promise.resolve();
+  private selectProtocolQueue: Promise<void> = Promise.resolve();
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -219,6 +234,13 @@ export class VoiceRoom extends DurableObject<Env> {
         last_heartbeat INTEGER DEFAULT 0,
         speaking INTEGER DEFAULT 0,
         connection_id TEXT
+      );
+    `);
+    this.sql.exec(`
+      CREATE TABLE IF NOT EXISTS ws_rate_limits (
+        rate_key TEXT PRIMARY KEY,
+        window_start INTEGER NOT NULL,
+        count INTEGER NOT NULL
       );
     `);
     try {
@@ -410,11 +432,32 @@ export class VoiceRoom extends DurableObject<Env> {
   }
 
   async webSocketMessage(ws: WebSocket, rawMsg: string | ArrayBuffer) {
-    if (typeof rawMsg !== "string") return;
+    if (typeof rawMsg !== "string") {
+      this.sendTo(ws, {
+        op: Op.Error,
+        d: { code: 4000, message: "Text websocket frames are required" },
+      });
+      return;
+    }
+    if (rawMsg.length > MAX_VOICE_FRAME_BYTES) {
+      this.sendTo(ws, {
+        op: Op.Error,
+        d: { code: 4000, message: "Websocket frame is too large" },
+      });
+      return;
+    }
 
     let msg: GatewayMessage;
     try {
-      msg = JSON.parse(rawMsg);
+      const parsed: unknown = JSON.parse(rawMsg);
+      if (!this.isPlainObject(parsed)) {
+        this.sendTo(ws, {
+          op: Op.Error,
+          d: { code: CloseCode.UnknownOpcode, message: "Missing opcode" },
+        });
+        return;
+      }
+      msg = parsed as unknown as GatewayMessage;
     } catch {
       this.sendTo(ws, {
         op: Op.Error,
@@ -445,8 +488,34 @@ export class VoiceRoom extends DurableObject<Env> {
       return;
     }
 
+    if (
+      this.isAuthenticatedMutatingOpcode(msg.op) &&
+      !this.isCurrentAuthenticatedVoiceSocket(ws)
+    ) {
+      return;
+    }
+
+    if (this.isRateLimited(ws, msg.op)) {
+      this.sendTo(ws, {
+        op: Op.Error,
+        d: { code: 4290, message: "Operation rate limit exceeded" },
+      });
+      return;
+    }
+
     switch (msg.op) {
       case Op.VoiceIdentify:
+        if (
+          !this.isPlainObject(msg.d) ||
+          typeof msg.d.participant_id !== "string" ||
+          typeof msg.d.voice_token !== "string"
+        ) {
+          this.sendTo(ws, {
+            op: Op.Error,
+            d: { code: 4000, message: "Invalid voice identify payload" },
+          });
+          break;
+        }
         await this.handleVoiceIdentify(ws, msg.d);
         break;
 
@@ -455,26 +524,89 @@ export class VoiceRoom extends DurableObject<Env> {
         break;
 
       case Op.SelectProtocol:
+        if (!this.isSelectProtocolPayload(msg.d)) {
+          this.sendTo(ws, {
+            op: Op.Error,
+            d: { code: 4000, message: "Invalid select protocol payload" },
+          });
+          break;
+        }
         await this.handleSelectProtocol(ws, msg.d);
         break;
 
       case Op.Video:
+        if (
+          !this.isPlainObject(msg.d) ||
+          !Array.isArray(msg.d.tracks) ||
+          !this.isTrackInfoArray(msg.d.tracks)
+        ) {
+          this.sendTo(ws, {
+            op: Op.Error,
+            d: { code: 4000, message: "Invalid video payload" },
+          });
+          break;
+        }
         await this.handleVideo(ws, msg.d);
         break;
 
       case Op.StopTracks:
+        if (
+          !this.isPlainObject(msg.d) ||
+          !Array.isArray(msg.d.track_names) ||
+          !msg.d.track_names.every(
+            (name: unknown) => typeof name === "string" && name.length > 0,
+          )
+        ) {
+          this.sendTo(ws, {
+            op: Op.Error,
+            d: { code: 4000, message: "Invalid stop tracks payload" },
+          });
+          break;
+        }
         await this.handleStopTracks(ws, msg.d);
         break;
 
       case Op.Answer:
+        if (
+          !this.isPlainObject(msg.d) ||
+          typeof msg.d.sdp !== "string" ||
+          msg.d.sdp.length > MAX_SDP_LENGTH
+        ) {
+          this.sendTo(ws, {
+            op: Op.Error,
+            d: { code: 4000, message: "Invalid answer payload" },
+          });
+          break;
+        }
         await this.handleAnswer(ws, msg.d);
         break;
 
       case Op.TracksReady:
+        if (
+          !this.isPlainObject(msg.d) ||
+          !this.isTrackNameArray(msg.d.track_names)
+        ) {
+          this.sendTo(ws, {
+            op: Op.Error,
+            d: { code: 4000, message: "Invalid tracks ready payload" },
+          });
+          break;
+        }
         this.handleTracksReady(ws, msg.d);
         break;
 
       case Op.Speaking:
+        if (
+          !this.isPlainObject(msg.d) ||
+          typeof msg.d.speaking !== "number" ||
+          !Number.isFinite(msg.d.speaking)
+        ) {
+          this.sendTo(ws, {
+            op: Op.Error,
+            d: { code: 4000, message: "Invalid speaking payload" },
+          });
+          break;
+        }
         this.handleSpeaking(ws, msg.d);
         break;
 
@@ -483,10 +615,41 @@ export class VoiceRoom extends DurableObject<Env> {
         break;
 
       case Op.TrackUpdate:
+        if (
+          !this.isPlainObject(msg.d) ||
+          !Array.isArray(msg.d.tracks) ||
+          !msg.d.tracks.every(
+            (track: unknown) =>
+              this.isPlainObject(track) &&
+              typeof track.track_name === "string" &&
+              typeof track.session_id === "string" &&
+              typeof track.mid === "string" &&
+              typeof track.rid === "string",
+          )
+        ) {
+          this.sendTo(ws, {
+            op: Op.Error,
+            d: { code: 4000, message: "Invalid track update payload" },
+          });
+          break;
+        }
         await this.handleTrackUpdate(ws, msg.d);
         break;
 
       case Op.IceRestart:
+        if (
+          !this.isPlainObject(msg.d) ||
+          typeof msg.d.sdp !== "string" ||
+          (msg.d.session_type !== "push_cam" &&
+            msg.d.session_type !== "push_screen" &&
+            msg.d.session_type !== "pull")
+        ) {
+          this.sendTo(ws, {
+            op: Op.Error,
+            d: { code: 4000, message: "Invalid ICE restart payload" },
+          });
+          break;
+        }
         await this.handleIceRestart(ws, msg.d);
         break;
 
@@ -1045,6 +1208,117 @@ export class VoiceRoom extends DurableObject<Env> {
     return prototype === Object.prototype || prototype === null;
   }
 
+  private isRateLimited(ws: WebSocket, op: number): boolean {
+    const limit = VOICE_WS_RATE_LIMITS[op];
+    if (!limit) return false;
+
+    const attachment = this.getVoiceAttachment(ws);
+    const subject = attachment?.admission?.subject;
+    const keys = [
+      `session:${attachment?.participant_id ?? "unidentified"}:${op}`,
+      ...(subject ? [`subject:${subject}:${op}`] : []),
+    ];
+    const now = Date.now();
+    let limited = false;
+
+    for (const key of keys) {
+      const rows = [
+        ...this.sql.exec(
+          "SELECT window_start, count FROM ws_rate_limits WHERE rate_key = ?",
+          key,
+        ),
+      ];
+      const existing = rows[0];
+      if (
+        !existing ||
+        now - Number(existing.window_start) >= VOICE_WS_RATE_LIMIT_WINDOW_MS
+      ) {
+        this.sql.exec(
+          `INSERT INTO ws_rate_limits (rate_key, window_start, count)
+           VALUES (?, ?, 1)
+           ON CONFLICT(rate_key) DO UPDATE SET window_start = excluded.window_start, count = 1`,
+          key,
+          now,
+        );
+        continue;
+      }
+      const count = Number(existing.count) + 1;
+      this.sql.exec(
+        "UPDATE ws_rate_limits SET count = ? WHERE rate_key = ?",
+        count,
+        key,
+      );
+      if (count > limit) limited = true;
+    }
+    this.sql.exec(
+      "DELETE FROM ws_rate_limits WHERE window_start < ?",
+      now - VOICE_WS_RATE_LIMIT_WINDOW_MS,
+    );
+    return limited;
+  }
+
+  private isTrackInfoArray(value: unknown): value is TrackInfo[] {
+    if (!Array.isArray(value) || value.length > MAX_NEGOTIATION_TRACKS)
+      return false;
+    return value.every((item) => {
+      if (!this.isPlainObject(item)) return false;
+      return (
+        typeof item.participant_id === "string" &&
+        item.participant_id.length > 0 &&
+        item.participant_id.length <= 200 &&
+        typeof item.track_name === "string" &&
+        item.track_name.length > 0 &&
+        item.track_name.length <= 200 &&
+        typeof item.session_id === "string" &&
+        item.session_id.length > 0 &&
+        item.session_id.length <= 200 &&
+        (item.mid === undefined ||
+          (typeof item.mid === "string" && item.mid.length <= 64)) &&
+        (item.kind === "audio" || item.kind === "video") &&
+        (item.rid === undefined ||
+          (typeof item.rid === "string" && item.rid.length <= 32))
+      );
+    });
+  }
+
+  private isSelectProtocolPayload(value: unknown): value is {
+    sdp: string;
+    push_tracks: PushTrackDescriptor[];
+    pull_tracks: TrackInfo[];
+    push_prefix?: string;
+    request_id?: string;
+  } {
+    if (!this.isPlainObject(value)) return false;
+    if (
+      typeof value.sdp !== "string" ||
+      value.sdp.length > MAX_SDP_LENGTH ||
+      !Array.isArray(value.push_tracks) ||
+      value.push_tracks.length > MAX_NEGOTIATION_TRACKS ||
+      !value.push_tracks.every((item) => {
+        if (!this.isPlainObject(item)) return false;
+        return (
+          typeof item.track_name === "string" &&
+          item.track_name.length > 0 &&
+          item.track_name.length <= 200 &&
+          (item.mid === undefined ||
+            (typeof item.mid === "string" && item.mid.length <= 64)) &&
+          (item.kind === "audio" || item.kind === "video")
+        );
+      }) ||
+      !this.isTrackInfoArray(value.pull_tracks)
+    ) {
+      return false;
+    }
+    return (
+      (value.push_prefix === undefined ||
+        value.push_prefix === "cam" ||
+        value.push_prefix === "screen") &&
+      (value.request_id === undefined ||
+        (typeof value.request_id === "string" &&
+          value.request_id.length <= 200))
+    );
+  }
+
   private handleListenTogetherCommand(
     ws: WebSocket,
     d: ListenTogetherCommand,
@@ -1062,6 +1336,8 @@ export class VoiceRoom extends DurableObject<Env> {
     d: ListenTogetherCommand,
     callerUserId: string | null,
   ) {
+    if (!this.isCurrentAuthenticatedVoiceSocket(ws)) return;
+
     const roomSlug =
       typeof d.room_slug === "string" && d.room_slug.trim()
         ? d.room_slug.trim()
@@ -1087,6 +1363,7 @@ export class VoiceRoom extends DurableObject<Env> {
         d.entries,
         callerUserId,
       );
+      if (!this.isCurrentAuthenticatedVoiceSocket(ws)) return;
       const state = this.loadListenTogetherState();
       const queue = this.loadListenTogetherQueue();
       const effectiveRoomSlug = this.roomSlug || roomSlug || state.roomSlug;
@@ -1208,6 +1485,8 @@ export class VoiceRoom extends DurableObject<Env> {
 
     if (!result) return;
 
+    if (!this.isCurrentAuthenticatedVoiceSocket(ws)) return;
+
     this.persistListenTogetherState(result.state, result.queue);
     const snapshot = buildListenTogetherSnapshot(
       result.state,
@@ -1300,6 +1579,70 @@ export class VoiceRoom extends DurableObject<Env> {
   private getParticipantId(ws: WebSocket): string | undefined {
     const attachment = this.getVoiceAttachment(ws);
     return attachment?.participant_id;
+  }
+
+  private isCurrentVoiceConnection(
+    ws: WebSocket,
+    participantId: string,
+    connectionId: string | undefined,
+  ): boolean {
+    if (this.getParticipantId(ws) !== participantId) return false;
+    if (!connectionId) return true;
+    const rows = [
+      ...this.sql.exec(
+        "SELECT connection_id FROM participants WHERE id = ?",
+        participantId,
+      ),
+    ];
+    return rows.length > 0 && rows[0].connection_id === connectionId;
+  }
+
+  private isAuthenticatedMutatingOpcode(op: number): boolean {
+    return (
+      op === Op.Heartbeat ||
+      op === Op.SelectProtocol ||
+      op === Op.Video ||
+      op === Op.StopTracks ||
+      op === Op.Answer ||
+      op === Op.TracksReady ||
+      op === Op.Speaking ||
+      op === Op.ClientDisconnect ||
+      op === Op.TrackUpdate ||
+      op === Op.IceRestart ||
+      op === Op.ResetPullSession ||
+      op === Op.VoiceAppEvent
+    );
+  }
+
+  private isCurrentAuthenticatedVoiceSocket(ws: WebSocket): boolean {
+    const participantId = this.getParticipantId(ws);
+    if (!participantId) return true;
+    return this.isCurrentVoiceConnection(
+      ws,
+      participantId,
+      this.getVoiceAttachment(ws)?.connection_id,
+    );
+  }
+
+  private isTrackNameArray(value: unknown): value is string[] {
+    return (
+      Array.isArray(value) &&
+      value.length <= MAX_NEGOTIATION_TRACKS &&
+      value.every(
+        (name) =>
+          typeof name === "string" && name.length > 0 && name.length <= 200,
+      )
+    );
+  }
+
+  private hasTrackNameConflict(trackName: string, participantId: string) {
+    const rows = [
+      ...this.sql.exec(
+        "SELECT participant_id FROM tracks WHERE track_name = ? LIMIT 1",
+        trackName,
+      ),
+    ];
+    return rows.length > 0 && rows[0].participant_id !== participantId;
   }
 
   private requireParticipantId(ws: WebSocket): string | null {
@@ -1669,38 +2012,9 @@ export class VoiceRoom extends DurableObject<Env> {
 
     this.scheduleAlarm();
 
-    // ── Pre-create SFU sessions in the BACKGROUND ──────────────────────
-    const pRows = [
-      ...this.sql.exec(
-        "SELECT pull_session_id FROM participants WHERE id = ?",
-        d.participant_id,
-      ),
-    ];
-    if (pRows.length > 0) {
-      const row = pRows[0];
-      const needPull = !row.pull_session_id;
-
-      if (needPull) {
-        this.ctx.waitUntil(
-          (async () => {
-            try {
-              const result = await this.sfuFetch("POST", "sessions/new");
-              const sid = result.sessionId as string;
-              this.sql.exec(
-                "UPDATE participants SET pull_session_id = ? WHERE id = ? AND pull_session_id IS NULL",
-                sid,
-                d.participant_id,
-              );
-            } catch (err) {
-              sfuLog.warn(
-                "Background pre-creation failed (non-fatal, will retry lazily):",
-                err,
-              );
-            }
-          })(),
-        );
-      }
-    }
+    // Pull sessions are created lazily by the current negotiation. Creating
+    // them in the background can race a reconnect and strand an unused SFU
+    // session behind the newer participant generation.
   }
 
   // ── Op 3: Heartbeat ────────────────────────────────────────────────────
@@ -1725,6 +2039,10 @@ export class VoiceRoom extends DurableObject<Env> {
   private handleSpeaking(ws: WebSocket, d: { speaking: number }) {
     const pid = this.requireParticipantId(ws);
     if (!pid) return;
+    const connectionId = this.getVoiceAttachment(ws)?.connection_id;
+    const isCurrent = () =>
+      this.isCurrentVoiceConnection(ws, pid, connectionId);
+    if (!isCurrent()) return;
 
     this.sql.exec(
       "UPDATE participants SET speaking = ? WHERE id = ?",
@@ -1743,7 +2061,24 @@ export class VoiceRoom extends DurableObject<Env> {
 
   // ── Op 1: SelectProtocol (push/pull tracks) ────────────────────────────
 
-  private async handleSelectProtocol(
+  private handleSelectProtocol(
+    ws: WebSocket,
+    d: {
+      sdp: string;
+      push_tracks: PushTrackDescriptor[];
+      pull_tracks: TrackInfo[];
+      push_prefix?: string;
+      request_id?: string;
+    },
+  ) {
+    const operation = this.selectProtocolQueue.then(() =>
+      this.handleSelectProtocolInOrder(ws, d),
+    );
+    this.selectProtocolQueue = operation.catch(() => {});
+    return operation;
+  }
+
+  private async handleSelectProtocolInOrder(
     ws: WebSocket,
     d: {
       sdp: string;
@@ -1755,6 +2090,10 @@ export class VoiceRoom extends DurableObject<Env> {
   ) {
     const pid = this.requireParticipantId(ws);
     if (!pid) return;
+    const connectionId = this.getVoiceAttachment(ws)?.connection_id;
+    const isCurrent = () =>
+      this.isCurrentVoiceConnection(ws, pid, connectionId);
+    if (!isCurrent()) return;
 
     let activeOperation: "push" | "pull" | null = null;
     let activePushPrefix: "cam" | "screen" | null = null;
@@ -1779,27 +2118,27 @@ export class VoiceRoom extends DurableObject<Env> {
         activeOperation = "push";
         activePushPrefix = prefix;
 
+        if (
+          new Set(d.push_tracks.map((track) => track.track_name)).size !==
+            d.push_tracks.length ||
+          d.push_tracks.some((track) =>
+            this.hasTrackNameConflict(track.track_name, pid),
+          )
+        ) {
+          this.sendTo(ws, {
+            op: Op.Error,
+            d: { code: 4000, message: "Track name is already in use" },
+          });
+          return;
+        }
+
         let pushSessionId = isScreen ? push_session_screen : push_session_cam;
 
         if (!pushSessionId) {
+          if (!isCurrent()) return;
           const sessionResp = await this.sfuFetch("POST", "sessions/new");
+          if (!isCurrent()) return;
           pushSessionId = sessionResp.sessionId as string;
-
-          if (isScreen) {
-            push_session_screen = pushSessionId;
-            this.sql.exec(
-              "UPDATE participants SET push_session_screen = ? WHERE id = ?",
-              pushSessionId,
-              pid,
-            );
-          } else {
-            push_session_cam = pushSessionId;
-            this.sql.exec(
-              "UPDATE participants SET push_session_cam = ? WHERE id = ?",
-              pushSessionId,
-              pid,
-            );
-          }
           sfuLog.info(`Created push session (${prefix}):`, pushSessionId);
         }
 
@@ -1814,6 +2153,7 @@ export class VoiceRoom extends DurableObject<Env> {
           if (!pushSessionId) {
             throw new Error("push_session_missing");
           }
+          if (!isCurrent()) return;
           pushResp = await this.sfuPost(
             `sessions/${pushSessionId}/tracks/new`,
             {
@@ -1828,26 +2168,13 @@ export class VoiceRoom extends DurableObject<Env> {
             sfuLog.warn(
               `Push session ${prefix} stale (${pushSessionId.slice(0, 8)}...), creating fresh session and retrying`,
             );
+            if (!isCurrent()) return;
             const freshResp = await this.sfuFetch("POST", "sessions/new");
+            if (!isCurrent()) return;
             pushSessionId = freshResp.sessionId as string;
 
-            if (isScreen) {
-              push_session_screen = pushSessionId;
-              this.sql.exec(
-                "UPDATE participants SET push_session_screen = ? WHERE id = ?",
-                pushSessionId,
-                pid,
-              );
-            } else {
-              push_session_cam = pushSessionId;
-              this.sql.exec(
-                "UPDATE participants SET push_session_cam = ? WHERE id = ?",
-                pushSessionId,
-                pid,
-              );
-            }
-
             sfuLog.info(`Fresh push session (${prefix}):`, pushSessionId);
+            if (!isCurrent()) return;
             pushResp = await this.sfuPost(
               `sessions/${pushSessionId}/tracks/new`,
               {
@@ -1860,6 +2187,22 @@ export class VoiceRoom extends DurableObject<Env> {
           }
         }
 
+        if (!isCurrent()) return;
+        if (isScreen) {
+          push_session_screen = pushSessionId;
+          this.sql.exec(
+            "UPDATE participants SET push_session_screen = ? WHERE id = ?",
+            pushSessionId,
+            pid,
+          );
+        } else {
+          push_session_cam = pushSessionId;
+          this.sql.exec(
+            "UPDATE participants SET push_session_cam = ? WHERE id = ?",
+            pushSessionId,
+            pid,
+          );
+        }
         sfuLog.info(
           "Push tracks/new response tracks:",
           JSON.stringify(pushResp.tracks),
@@ -1902,18 +2245,42 @@ export class VoiceRoom extends DurableObject<Env> {
           }
         }
 
+        if (
+          !isCurrent() ||
+          negotiatedTracks.some((track) =>
+            this.hasTrackNameConflict(track.track_name, pid),
+          )
+        ) {
+          if (isCurrent()) {
+            this.sendTo(ws, {
+              op: Op.Error,
+              d: { code: 4000, message: "Track name is already in use" },
+            });
+          }
+          return;
+        }
+
         // Insert tracks into SQLite as PENDING (is_pending = 1)
-        for (const t of negotiatedTracks) {
-          this.sql.exec(
-            `INSERT INTO tracks (track_name, participant_id, session_id, mid, kind, is_pending)
-             VALUES (?, ?, ?, ?, ?, 1)
-             ON CONFLICT(track_name) DO UPDATE SET session_id=excluded.session_id, mid=excluded.mid, is_pending=1`,
-            t.track_name,
-            pid,
-            t.session_id,
-            t.mid ?? null,
-            t.kind,
-          );
+        try {
+          for (const t of negotiatedTracks) {
+            this.sql.exec(
+              `INSERT INTO tracks (track_name, participant_id, session_id, mid, kind, is_pending)
+               VALUES (?, ?, ?, ?, ?, 1)
+               ON CONFLICT(track_name) DO UPDATE SET session_id=excluded.session_id, mid=excluded.mid, is_pending=1
+               WHERE tracks.participant_id = excluded.participant_id`,
+              t.track_name,
+              pid,
+              t.session_id,
+              t.mid ?? null,
+              t.kind,
+            );
+          }
+        } catch {
+          this.sendTo(ws, {
+            op: Op.Error,
+            d: { code: 4000, message: "Track name is already in use" },
+          });
+          return;
         }
 
         this.sendTo(ws, {
@@ -1932,11 +2299,67 @@ export class VoiceRoom extends DurableObject<Env> {
 
       // ── Handle pull (remote) tracks ─────────────────────────────────
       if (d.pull_tracks.length > 0) {
+        if (!isCurrent()) return;
         activeOperation = "pull";
         activePushPrefix = null;
 
+        const requestedNames = d.pull_tracks.map((track) => track.track_name);
+        if (
+          requestedNames.some(
+            (name) => typeof name !== "string" || !name.trim(),
+          ) ||
+          new Set(requestedNames).size !== requestedNames.length
+        ) {
+          this.sendTo(ws, {
+            op: Op.Error,
+            d: { code: 4000, message: "Invalid pull track list" },
+          });
+          return;
+        }
+
+        const placeholders = requestedNames.map(() => "?").join(",");
+        const persistedTracks = new Map<string, TrackInfo>();
+        for (const row of this.sql.exec(
+          `SELECT track_name, participant_id, session_id, mid, kind
+           FROM tracks
+           WHERE track_name IN (${placeholders}) AND is_pending = 0`,
+          ...requestedNames,
+        )) {
+          persistedTracks.set(row.track_name as string, {
+            track_name: row.track_name as string,
+            participant_id: row.participant_id as string,
+            session_id: row.session_id as string,
+            mid: (row.mid as string) || undefined,
+            kind: row.kind as "audio" | "video",
+          });
+        }
+
+        const canonicalPullTracks = d.pull_tracks.map((requested) => {
+          const persisted = persistedTracks.get(requested.track_name);
+          if (
+            !persisted ||
+            requested.participant_id !== persisted.participant_id ||
+            requested.session_id !== persisted.session_id
+          )
+            return null;
+          return { requested, persisted };
+        });
+        if (canonicalPullTracks.some((track) => track === null)) {
+          this.sendTo(ws, {
+            op: Op.Error,
+            d: { code: 4000, message: "Requested track is not available" },
+          });
+          return;
+        }
+        const validCanonicalPullTracks = canonicalPullTracks.filter(
+          (track): track is { requested: TrackInfo; persisted: TrackInfo } =>
+            track !== null,
+        );
+
         if (!pull_session_id) {
+          if (!isCurrent()) return;
           const sessionResp = await this.sfuFetch("POST", "sessions/new");
+          if (!isCurrent()) return;
           pull_session_id = sessionResp.sessionId as string;
           this.sql.exec(
             "UPDATE participants SET pull_session_id = ? WHERE id = ?",
@@ -1946,25 +2369,28 @@ export class VoiceRoom extends DurableObject<Env> {
           sfuLog.info("Created pull session:", pull_session_id);
         }
 
-        const remoteTracks = d.pull_tracks.map((info) => {
-          const base: Record<string, unknown> = {
-            location: "remote",
-            trackName: info.track_name,
-            sessionId: info.session_id,
-          };
-          if (info.kind === "video" && info.rid) {
-            const isScreen = info.track_name.startsWith("screen-");
-            base.simulcast = {
-              preferredRid: info.rid,
-              priorityOrdering: isScreen ? "none" : "asciibetical",
-              ridNotAvailable: "asciibetical",
+        const remoteTracks = validCanonicalPullTracks.map(
+          ({ requested, persisted }) => {
+            const base: Record<string, unknown> = {
+              location: "remote",
+              trackName: persisted.track_name,
+              sessionId: persisted.session_id,
             };
-          }
-          return base;
-        });
+            if (persisted.kind === "video" && requested.rid) {
+              const isScreen = persisted.track_name.startsWith("screen-");
+              base.simulcast = {
+                preferredRid: requested.rid,
+                priorityOrdering: isScreen ? "none" : "asciibetical",
+                ridNotAvailable: "asciibetical",
+              };
+            }
+            return base;
+          },
+        );
 
         let pullResp: Record<string, unknown>;
         try {
+          if (!isCurrent()) return;
           pullResp = await this.sfuPost(
             `sessions/${pull_session_id}/tracks/new`,
             {
@@ -1978,7 +2404,9 @@ export class VoiceRoom extends DurableObject<Env> {
             sfuLog.warn(
               `Pull session stale (${pull_session_id.slice(0, 8)}...), creating fresh session and retrying`,
             );
+            if (!isCurrent()) return;
             const freshResp = await this.sfuFetch("POST", "sessions/new");
+            if (!isCurrent()) return;
             pull_session_id = freshResp.sessionId as string;
             this.sql.exec(
               "UPDATE participants SET pull_session_id = ? WHERE id = ?",
@@ -1987,6 +2415,7 @@ export class VoiceRoom extends DurableObject<Env> {
             );
             sfuLog.info("Fresh pull session:", pull_session_id);
 
+            if (!isCurrent()) return;
             pullResp = await this.sfuPost(
               `sessions/${pull_session_id}/tracks/new`,
               {
@@ -1998,14 +2427,75 @@ export class VoiceRoom extends DurableObject<Env> {
           }
         }
 
+        if (!isCurrent()) return;
         sfuLog.info("Pull response keys:", Object.keys(pullResp).join(", "));
         const pullSdp =
           (pullResp.sessionDescription as { sdp: string })?.sdp ?? "";
         const pullSdpType = ((pullResp.sessionDescription as { type: string })
           ?.type ?? "offer") as "answer" | "offer";
 
-        const respTracks =
-          (pullResp.tracks as Array<Record<string, unknown>>) ?? [];
+        const rawResponseTracks = pullResp.tracks;
+        const respTracks = Array.isArray(rawResponseTracks)
+          ? rawResponseTracks.filter(
+              (track): track is Record<string, unknown> =>
+                this.isPlainObject(track),
+            )
+          : [];
+        const hasInvalidTrackShape =
+          !Array.isArray(rawResponseTracks) ||
+          respTracks.length !== rawResponseTracks.length;
+        const matchedTrackNames = new Set<string>();
+        const hasInvalidTrackResponse =
+          hasInvalidTrackShape ||
+          respTracks.length !== validCanonicalPullTracks.length ||
+          respTracks.some((rt) => {
+            const trackName = rt.trackName;
+            const publisherSessionId = rt.sessionId;
+            const canonicalTrack =
+              typeof trackName === "string"
+                ? persistedTracks.get(trackName)
+                : undefined;
+
+            if (
+              rt.location !== "remote" ||
+              typeof trackName !== "string" ||
+              typeof publisherSessionId !== "string" ||
+              !canonicalTrack ||
+              canonicalTrack.session_id !== publisherSessionId ||
+              matchedTrackNames.has(trackName)
+            ) {
+              return true;
+            }
+
+            matchedTrackNames.add(trackName);
+            return false;
+          }) ||
+          matchedTrackNames.size !== validCanonicalPullTracks.length;
+
+        if (hasInvalidTrackResponse) {
+          const activePullSessionId = pull_session_id;
+          if (!activePullSessionId) {
+            throw new Error("pull_session_missing");
+          }
+
+          await this.resetAndClosePullSession(
+            pid,
+            activePullSessionId,
+            respTracks,
+          );
+          if (!isCurrent()) return;
+          this.sendTo(ws, {
+            op: Op.Error,
+            d: {
+              code: 0,
+              message: "session-dead-reconnect",
+              request_id: d.request_id,
+              operation: "pull",
+            },
+          });
+          return;
+        }
+
         const failedTracks = respTracks.filter((rt) => rt.errorCode);
         const successTracks = respTracks.filter((rt) => !rt.errorCode);
 
@@ -2023,6 +2513,7 @@ export class VoiceRoom extends DurableObject<Env> {
             "UPDATE participants SET pull_session_id = NULL WHERE id = ?",
             pid,
           );
+          if (!isCurrent()) return;
           this.sendTo(ws, {
             op: Op.Error,
             d: {
@@ -2053,11 +2544,9 @@ export class VoiceRoom extends DurableObject<Env> {
         }
 
         const pullNegotiated: TrackInfo[] = successTracks.map((rt) => {
-          const originalTrack = d.pull_tracks.find(
-            (pt) => pt.track_name === (rt.trackName as string),
-          );
+          const canonicalTrack = persistedTracks.get(rt.trackName as string);
           return {
-            participant_id: originalTrack?.participant_id ?? "unknown",
+            participant_id: canonicalTrack?.participant_id ?? "unknown",
             track_name: rt.trackName as string,
             session_id: (rt.sessionId as string) ?? pull_session_id,
             mid: rt.mid as string | undefined,
@@ -2081,6 +2570,7 @@ export class VoiceRoom extends DurableObject<Env> {
       }
 
       if (d.push_tracks.length > 0 && d.sdp) {
+        if (!isCurrent()) return;
         const prefix = d.push_prefix === "screen" ? "screen" : "cam";
         const sessionId =
           prefix === "screen" ? push_session_screen : push_session_cam;
@@ -2164,6 +2654,8 @@ export class VoiceRoom extends DurableObject<Env> {
   ) {
     const pid = this.requireParticipantId(ws);
     if (!pid) return;
+    const connectionId = this.getVoiceAttachment(ws)?.connection_id;
+    if (!this.isCurrentVoiceConnection(ws, pid, connectionId)) return;
 
     const pRows = [
       ...this.sql.exec(
@@ -2183,9 +2675,11 @@ export class VoiceRoom extends DurableObject<Env> {
     }
 
     try {
+      if (!this.isCurrentVoiceConnection(ws, pid, connectionId)) return;
       await this.sfuPut(`sessions/${pullId}/renegotiate`, {
         sessionDescription: { type: "answer", sdp: d.sdp },
       });
+      if (!this.isCurrentVoiceConnection(ws, pid, connectionId)) return;
       this.sendTo(ws, {
         op: Op.NegotiationDone,
         d: { session_id: pullId, request_id: d.request_id, operation: "pull" },
@@ -2209,6 +2703,8 @@ export class VoiceRoom extends DurableObject<Env> {
   private async handleStopTracks(ws: WebSocket, d: { track_names: string[] }) {
     const pid = this.requireParticipantId(ws);
     if (!pid) return;
+    const connectionId = this.getVoiceAttachment(ws)?.connection_id;
+    if (!this.isCurrentVoiceConnection(ws, pid, connectionId)) return;
 
     const pRows = [
       ...this.sql.exec(
@@ -2291,10 +2787,12 @@ export class VoiceRoom extends DurableObject<Env> {
 
     if (oldPushSessionId && tracksToClose.length > 0) {
       try {
+        if (!this.isCurrentVoiceConnection(ws, pid, connectionId)) return;
         await this.sfuPut(`sessions/${oldPushSessionId}/tracks/close`, {
           tracks: tracksToClose,
           force: true,
         });
+        if (!this.isCurrentVoiceConnection(ws, pid, connectionId)) return;
       } catch {
         sfuLog.warn("tracks/close failed (non-fatal)");
       }
@@ -2361,6 +2859,8 @@ export class VoiceRoom extends DurableObject<Env> {
   ) {
     const pid = this.requireParticipantId(ws);
     if (!pid) return;
+    const connectionId = this.getVoiceAttachment(ws)?.connection_id;
+    if (!this.isCurrentVoiceConnection(ws, pid, connectionId)) return;
 
     const pRows = [
       ...this.sql.exec(
@@ -2374,6 +2874,7 @@ export class VoiceRoom extends DurableObject<Env> {
     if (!pullId) return;
 
     try {
+      if (!this.isCurrentVoiceConnection(ws, pid, connectionId)) return;
       const updates = d.tracks.map((t) => ({
         trackName: t.track_name,
         sessionId: t.session_id,
@@ -2390,6 +2891,7 @@ export class VoiceRoom extends DurableObject<Env> {
       await this.sfuPut(`sessions/${pullId}/tracks/update`, {
         tracks: updates,
       });
+      if (!this.isCurrentVoiceConnection(ws, pid, connectionId)) return;
 
       sfuLog.info(`Updated simulcast for ${d.tracks.length} tracks`);
     } catch (err: unknown) {
@@ -2421,7 +2923,39 @@ export class VoiceRoom extends DurableObject<Env> {
     );
   }
 
+  private async resetAndClosePullSession(
+    participantId: string,
+    pullSessionId: string,
+    responseTracks: Array<Record<string, unknown>>,
+  ) {
+    this.sql.exec(
+      "UPDATE participants SET pull_session_id = NULL WHERE id = ? AND pull_session_id = ?",
+      participantId,
+      pullSessionId,
+    );
+
+    const mids = Array.from(
+      new Set(
+        responseTracks.flatMap((track) =>
+          typeof track.mid === "string" && track.mid ? [track.mid] : [],
+        ),
+      ),
+    );
+    if (mids.length === 0) return;
+
+    try {
+      await this.sfuPut(`sessions/${pullSessionId}/tracks/close`, {
+        tracks: mids.map((mid) => ({ mid })),
+        force: true,
+      });
+    } catch {
+      sfuLog.warn("Invalid pull response cleanup failed (non-fatal)");
+    }
+  }
+
   private async handleVoiceAppEvent(ws: WebSocket, d: Record<string, unknown>) {
+    if (!this.isCurrentAuthenticatedVoiceSocket(ws)) return;
+
     const pid = this.requireParticipantId(ws);
     if (!pid) return;
 
@@ -2639,13 +3173,9 @@ export class VoiceRoom extends DurableObject<Env> {
       return;
     }
 
-    this.broadcast({
-      op: Op.VoiceAppEvent,
-      d: {
-        ...d,
-        participant_id: pid,
-        sent_at: Date.now(),
-      },
+    this.sendTo(ws, {
+      op: Op.Error,
+      d: { code: 4000, message: "Unknown voice app event" },
     });
   }
 

@@ -512,6 +512,7 @@ const DirectVideoEmbed = memo(
     durationBadgeSeconds,
     embeddedChrome = true,
     onPlay,
+    onStop,
     playbackMode = "default",
   }: {
     src: string;
@@ -529,6 +530,7 @@ const DirectVideoEmbed = memo(
     durationBadgeSeconds?: number;
     embeddedChrome?: boolean;
     onPlay?: React.ReactEventHandler<HTMLVideoElement>;
+    onStop?: () => void;
     playbackMode?: "default" | "animated";
   }) => (
     <VideoAttachment
@@ -548,6 +550,7 @@ const DirectVideoEmbed = memo(
       durationBadgeSeconds={durationBadgeSeconds}
       embeddedChrome={embeddedChrome}
       onPlay={onPlay}
+      onStop={onStop}
       playbackMode={playbackMode}
     />
   ),
@@ -556,13 +559,28 @@ const DirectVideoEmbed = memo(
 // ─── Platform-specific Renderers ──────────────────────────────────────────
 
 const YouTubeEmbed = memo(
-  ({ embed, onMediaPlay }: { embed: EmbedInfo; onMediaPlay?: () => void }) => {
+  ({
+    embed,
+    onMediaPlay,
+    onMediaStop,
+  }: {
+    embed: EmbedInfo;
+    onMediaPlay?: () => void;
+    onMediaStop?: () => void;
+  }) => {
     const [playing, setPlaying] = useState(false);
 
     const handlePlay = useCallback(() => {
       setPlaying(true);
       onMediaPlay?.();
     }, [onMediaPlay]);
+
+    useEffect(
+      () => () => {
+        if (playing) onMediaStop?.();
+      },
+      [onMediaStop, playing],
+    );
 
     const w = embed.video?.width ?? 1280;
     const h = embed.video?.height ?? 720;
@@ -909,11 +927,13 @@ const TikTokEmbed = memo(
   ({
     embed,
     onMediaPlay,
+    onMediaStop,
     messageId,
     onJumpToMessage,
   }: {
     embed: EmbedInfo;
     onMediaPlay?: () => void;
+    onMediaStop?: () => void;
     messageId?: string;
     onJumpToMessage?: (messageId: string) => void;
   }) => {
@@ -932,6 +952,7 @@ const TikTokEmbed = memo(
     const containerRef = useRef<HTMLDivElement>(null);
     const trackRef = useRef<HTMLDivElement>(null);
     const audioRef = useRef<HTMLAudioElement>(null);
+    const audioActiveRef = useRef(false);
     const fetchedRef = useRef(false);
     const suppressViewerClickRef = useRef(false);
     const handledPointerOpenRef = useRef(false);
@@ -1316,6 +1337,7 @@ const TikTokEmbed = memo(
         try {
           await audioElement.play();
           setIsAudioPlaying(true);
+          audioActiveRef.current = true;
           onMediaPlay?.();
         } catch {
           setIsAudioPlaying(false);
@@ -1325,7 +1347,22 @@ const TikTokEmbed = memo(
 
       audioElement.pause();
       setIsAudioPlaying(false);
-    }, [onMediaPlay]);
+      if (audioActiveRef.current) {
+        audioActiveRef.current = false;
+        onMediaStop?.();
+      }
+    }, [onMediaPlay, onMediaStop]);
+
+    useEffect(
+      () => () => {
+        audioRef.current?.pause();
+        if (audioActiveRef.current) {
+          audioActiveRef.current = false;
+          onMediaStop?.();
+        }
+      },
+      [onMediaStop],
+    );
 
     const handleMediaImageLoad = useCallback(
       (mediaKey: string, event: React.SyntheticEvent<HTMLImageElement>) => {
@@ -1511,6 +1548,7 @@ const TikTokEmbed = memo(
                                 durationBadgeSeconds={item.durationSeconds}
                                 embeddedChrome={false}
                                 onPlay={onMediaPlay}
+                                onStop={onMediaStop}
                               />
                             </div>
                           ) : (
@@ -1706,8 +1744,20 @@ const TikTokEmbed = memo(
                         src={audioPlaybackUrl}
                         preload="none"
                         onPlay={() => setIsAudioPlaying(true)}
-                        onPause={() => setIsAudioPlaying(false)}
-                        onEnded={() => setIsAudioPlaying(false)}
+                        onPause={() => {
+                          setIsAudioPlaying(false);
+                          if (audioActiveRef.current) {
+                            audioActiveRef.current = false;
+                            onMediaStop?.();
+                          }
+                        }}
+                        onEnded={() => {
+                          setIsAudioPlaying(false);
+                          if (audioActiveRef.current) {
+                            audioActiveRef.current = false;
+                            onMediaStop?.();
+                          }
+                        }}
                       />
                     )}
                   </div>
@@ -2139,10 +2189,14 @@ const XEmbed = memo(
     embed,
     messageId,
     onJumpToMessage,
+    onMediaPlay,
+    onMediaStop,
   }: {
     embed: EmbedInfo;
     messageId?: string;
     onJumpToMessage?: (messageId: string) => void;
+    onMediaPlay?: () => void;
+    onMediaStop?: () => void;
   }) => {
     const headerTimestampText = formatXHeaderTimestamp(embed.timestamp);
     const footerTimestampText = formatXFooterTimestamp(embed.timestamp);
@@ -2264,6 +2318,8 @@ const XEmbed = memo(
               singleOverlay={singleMediaOverlay}
               messageId={messageId}
               onJumpToMessage={onJumpToMessage}
+              onMediaPlay={onMediaPlay}
+              onMediaStop={onMediaStop}
             />
           )}
 
@@ -2283,6 +2339,8 @@ const XEmbed = memo(
             <XReferencedTweetCard
               tweet={embed.referencedTweet}
               compactMedia={hasMainMedia}
+              onMediaPlay={onMediaPlay}
+              onMediaStop={onMediaStop}
             />
           )}
 
@@ -2303,9 +2361,13 @@ const XReferencedTweetCard = memo(
   ({
     tweet,
     compactMedia = true,
+    onMediaPlay,
+    onMediaStop,
   }: {
     tweet: NonNullable<EmbedInfo["referencedTweet"]>;
     compactMedia?: boolean;
+    onMediaPlay?: () => void;
+    onMediaStop?: () => void;
   }) => {
     const timestampText = formatXHeaderTimestamp(tweet.timestamp);
     const media = tweet.media ?? [];
@@ -2381,6 +2443,8 @@ const XReferencedTweetCard = memo(
               compact={compactMedia}
               singleMediaAlign="center"
               singleMediaChrome="plain"
+              onMediaPlay={onMediaPlay}
+              onMediaStop={onMediaStop}
             />
           )}
         </div>
@@ -2588,6 +2652,8 @@ const XMediaGrid = memo(
     singleOverlay,
     messageId,
     onJumpToMessage,
+    onMediaPlay,
+    onMediaStop,
   }: {
     media: EmbedMedia[];
     url?: string;
@@ -2599,6 +2665,8 @@ const XMediaGrid = memo(
     singleOverlay?: React.ReactNode;
     messageId?: string;
     onJumpToMessage?: (messageId: string) => void;
+    onMediaPlay?: () => void;
+    onMediaStop?: () => void;
   }) => {
     const attachments = mediaToAttachments(media, url, messageId);
     const visibleAttachments = attachments.slice(0, 4);
@@ -2640,6 +2708,8 @@ const XMediaGrid = memo(
           singleMediaAlign={singleMediaAlign}
           singleMediaChrome={singleMediaChrome}
           overlay={singleOverlay}
+          onMediaPlay={onMediaPlay}
+          onMediaStop={onMediaStop}
         />
       );
     }
@@ -2674,6 +2744,8 @@ const XMediaGrid = memo(
             compact={compact}
             singleMediaAlign={singleMediaAlign}
             singleMediaChrome={singleMediaChrome}
+            onMediaPlay={onMediaPlay}
+            onMediaStop={onMediaStop}
           />
         ))}
       </div>
@@ -2695,6 +2767,8 @@ const XMediaTile = memo(
     singleMediaAlign = "center",
     singleMediaChrome = "plain",
     overlay,
+    onMediaPlay,
+    onMediaStop,
   }: {
     attachment: XMediaAttachment;
     index: number;
@@ -2708,6 +2782,8 @@ const XMediaTile = memo(
     singleMediaAlign?: "start" | "center";
     singleMediaChrome?: "framed" | "plain";
     overlay?: React.ReactNode;
+    onMediaPlay?: () => void;
+    onMediaStop?: () => void;
   }) => {
     const mediaUrl = getXAttachmentUrl(attachment);
     const isVideo = attachment.content_type?.startsWith("video/");
@@ -2772,6 +2848,8 @@ const XMediaTile = memo(
             showDurationBadge
             durationBadgeSeconds={attachment.durationSeconds}
             embeddedChrome={usesFramedSingleChrome}
+            onPlay={onMediaPlay}
+            onStop={onMediaStop}
           />
         </div>
       )
@@ -3144,13 +3222,28 @@ const VideoEmbed = memo(({ embed }: { embed: EmbedInfo }) => {
 });
 
 const RichEmbed = memo(
-  ({ embed, onMediaPlay }: { embed: EmbedInfo; onMediaPlay?: () => void }) => {
+  ({
+    embed,
+    onMediaPlay,
+    onMediaStop,
+  }: {
+    embed: EmbedInfo;
+    onMediaPlay?: () => void;
+    onMediaStop?: () => void;
+  }) => {
     const [playing, setPlaying] = useState(false);
 
     const handlePlay = useCallback(() => {
       setPlaying(true);
       onMediaPlay?.();
     }, [onMediaPlay]);
+
+    useEffect(
+      () => () => {
+        if (playing) onMediaStop?.();
+      },
+      [onMediaStop, playing],
+    );
 
     return (
       <BaseEmbed embed={embed} width={432}>
@@ -3579,11 +3672,13 @@ const InstagramEmbed = memo(
   ({
     embed,
     onMediaPlay,
+    onMediaStop,
     messageId,
     onJumpToMessage,
   }: {
     embed: EmbedInfo;
     onMediaPlay?: () => void;
+    onMediaStop?: () => void;
     messageId?: string;
     onJumpToMessage?: (messageId: string) => void;
   }) => {
@@ -3595,6 +3690,7 @@ const InstagramEmbed = memo(
     const [isAudioPlaying, setIsAudioPlaying] = useState(false);
     const trackRef = useRef<HTMLDivElement>(null);
     const audioRef = useRef<HTMLAudioElement>(null);
+    const audioActiveRef = useRef(false);
     const fetchedRef = useRef(false);
     const suppressViewerClickRef = useRef(false);
     const handledPointerOpenRef = useRef(false);
@@ -3908,6 +4004,7 @@ const InstagramEmbed = memo(
         try {
           await audioElement.play();
           setIsAudioPlaying(true);
+          audioActiveRef.current = true;
           onMediaPlay?.();
         } catch {
           setIsAudioPlaying(false);
@@ -3917,7 +4014,11 @@ const InstagramEmbed = memo(
 
       audioElement.pause();
       setIsAudioPlaying(false);
-    }, [onMediaPlay]);
+      if (audioActiveRef.current) {
+        audioActiveRef.current = false;
+        onMediaStop?.();
+      }
+    }, [onMediaPlay, onMediaStop]);
 
     useEffect(() => {
       const audioElement = audioRef.current;
@@ -3929,8 +4030,12 @@ const InstagramEmbed = memo(
     useEffect(
       () => () => {
         audioRef.current?.pause();
+        if (audioActiveRef.current) {
+          audioActiveRef.current = false;
+          onMediaStop?.();
+        }
       },
-      [],
+      [onMediaStop],
     );
 
     return (
@@ -4079,6 +4184,7 @@ const InstagramEmbed = memo(
                             durationBadgeSeconds={item.durationSeconds}
                             embeddedChrome={false}
                             onPlay={onMediaPlay}
+                            onStop={onMediaStop}
                             playbackMode={playbackMode}
                           />
                         </div>
@@ -4285,8 +4391,20 @@ const InstagramEmbed = memo(
                     src={audioPlaybackUrl}
                     preload="none"
                     onPlay={() => setIsAudioPlaying(true)}
-                    onPause={() => setIsAudioPlaying(false)}
-                    onEnded={() => setIsAudioPlaying(false)}
+                    onPause={() => {
+                      setIsAudioPlaying(false);
+                      if (audioActiveRef.current) {
+                        audioActiveRef.current = false;
+                        onMediaStop?.();
+                      }
+                    }}
+                    onEnded={() => {
+                      setIsAudioPlaying(false);
+                      if (audioActiveRef.current) {
+                        audioActiveRef.current = false;
+                        onMediaStop?.();
+                      }
+                    }}
                   />
                 )}
               </div>
@@ -4365,12 +4483,14 @@ export const LinkEmbed = memo(
     onJumpToMessage,
     onRemoveEmbeds,
     onMediaPlay,
+    onMediaStop,
   }: {
     embed: EmbedInfo;
     messageId?: string;
     onJumpToMessage?: (messageId: string) => void;
     onRemoveEmbeds?: () => void;
     onMediaPlay?: () => void;
+    onMediaStop?: () => void;
   }) => {
     const [showModal, setShowModal] = useState(false);
     const providerName = embed.provider?.name?.toLowerCase();
@@ -4408,13 +4528,20 @@ export const LinkEmbed = memo(
 
     // Provider-specific routing
     if (providerName === "youtube" && embed.video?.url) {
-      embedContent = <YouTubeEmbed embed={embed} onMediaPlay={onMediaPlay} />;
+      embedContent = (
+        <YouTubeEmbed
+          embed={embed}
+          onMediaPlay={onMediaPlay}
+          onMediaStop={onMediaStop}
+        />
+      );
     } else if (providerName === "tiktok") {
       embedContent = (
         <TikTokEmbed
           key={getTikTokHydrationSignature(embed)}
           embed={embed}
           onMediaPlay={onMediaPlay}
+          onMediaStop={onMediaStop}
           messageId={messageId}
           onJumpToMessage={onJumpToMessage}
         />
@@ -4426,6 +4553,7 @@ export const LinkEmbed = memo(
         <InstagramEmbed
           embed={embed}
           onMediaPlay={onMediaPlay}
+          onMediaStop={onMediaStop}
           messageId={messageId}
           onJumpToMessage={onJumpToMessage}
         />
@@ -4436,6 +4564,8 @@ export const LinkEmbed = memo(
           embed={embed}
           messageId={messageId}
           onJumpToMessage={onJumpToMessage}
+          onMediaPlay={onMediaPlay}
+          onMediaStop={onMediaStop}
         />
       );
     } else {
@@ -4445,7 +4575,13 @@ export const LinkEmbed = memo(
           embedContent = <VideoEmbed embed={embed} />;
           break;
         case "rich":
-          embedContent = <RichEmbed embed={embed} onMediaPlay={onMediaPlay} />;
+          embedContent = (
+            <RichEmbed
+              embed={embed}
+              onMediaPlay={onMediaPlay}
+              onMediaStop={onMediaStop}
+            />
+          );
           break;
         case "link":
         case "image":

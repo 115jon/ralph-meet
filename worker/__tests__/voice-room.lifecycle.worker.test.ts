@@ -123,6 +123,27 @@ async function nextMessageWithOpcode(
   }
 }
 
+async function nextMessageWithOpcodeOrNull(
+  socket: WebSocket,
+  opcode: number,
+  timeoutMs = 250,
+): Promise<{ op: number; d: unknown } | null> {
+  return new Promise((resolve) => {
+    const onMessage = (event: MessageEvent<string>) => {
+      const message = JSON.parse(event.data) as { op: number; d: unknown };
+      if (message.op !== opcode) return;
+      clearTimeout(timer);
+      socket.removeEventListener("message", onMessage);
+      resolve(message);
+    };
+    const timer = setTimeout(() => {
+      socket.removeEventListener("message", onMessage);
+      resolve(null);
+    }, timeoutMs);
+    socket.addEventListener("message", onMessage);
+  });
+}
+
 async function nextMessageWithOpcodeAndType(
   socket: WebSocket,
   opcode: number,
@@ -143,7 +164,7 @@ async function mockCallsApi(
 ) {
   const room = env.VOICE_ROOM.get(env.VOICE_ROOM.idFromName(roomName));
   await runInDurableObject(room, () => {
-    globalThis.fetch = async (input) => handler(new Request(input));
+    globalThis.fetch = async (input, init) => handler(new Request(input, init));
   });
 }
 
@@ -256,6 +277,77 @@ describe("VoiceRoom lifecycle", () => {
   });
 
   it.each([null, [], "not an object"])(
+    "rejects a valid JSON root that is not an object: %j",
+    async (payload) => {
+      const socket = await openVoiceSocket();
+      const response = nextJsonMessage(socket);
+
+      socket.send(JSON.stringify(payload));
+
+      expect(await response).toMatchObject({
+        op: 18,
+        d: { code: 4001, message: "Missing opcode" },
+      });
+      socket.close();
+    },
+  );
+
+  it("rejects a null StopTracks payload without throwing", async () => {
+    const roomName = crypto.randomUUID();
+    const socket = await openVoiceSocket(roomName);
+    await identifyVoiceSocket(socket, crypto.randomUUID(), roomName);
+    const response = nextMessageWithOpcode(socket, 18);
+
+    socket.send(JSON.stringify({ op: 13, d: null }));
+
+    await expect(response).resolves.toMatchObject({
+      op: 18,
+      d: { code: 4000, message: "Invalid stop tracks payload" },
+    });
+    socket.close();
+  });
+
+  it.each([
+    [
+      "too many track names",
+      Array.from({ length: 33 }, (_, index) => `track-${index}`),
+    ],
+    ["an oversized track name", ["x".repeat(201)]],
+  ] as const)("rejects TracksReady with %s", async (_kind, trackNames) => {
+    const roomName = crypto.randomUUID();
+    const socket = await openVoiceSocket(roomName);
+    await identifyVoiceSocket(socket, crypto.randomUUID(), roomName);
+    const response = nextMessageWithOpcode(socket, 18);
+
+    socket.send(JSON.stringify({ op: 102, d: { track_names: trackNames } }));
+
+    await expect(response).resolves.toMatchObject({
+      op: 18,
+      d: { code: 4000, message: "Invalid tracks ready payload" },
+    });
+    socket.close();
+  });
+
+  it("rate-limits repeated TracksReady operations before track lookup", async () => {
+    const roomName = crypto.randomUUID();
+    const socket = await openVoiceSocket(roomName);
+    await identifyVoiceSocket(socket, crypto.randomUUID(), roomName);
+    const rateLimitError = nextMessageWithOpcode(socket, 18);
+
+    for (let index = 0; index < 61; index += 1) {
+      socket.send(
+        JSON.stringify({ op: 102, d: { track_names: [`track-${index}`] } }),
+      );
+    }
+
+    await expect(rateLimitError).resolves.toMatchObject({
+      op: 18,
+      d: { code: 4290, message: "Operation rate limit exceeded" },
+    });
+    socket.close();
+  });
+
+  it.each([null, [], "not an object"])(
     "rejects a non-object voice app event payload: %j",
     async (payload) => {
       const roomName = crypto.randomUUID();
@@ -275,6 +367,41 @@ describe("VoiceRoom lifecycle", () => {
       socket.close();
     },
   );
+
+  it("rejects unknown authenticated voice app events", async () => {
+    const roomName = crypto.randomUUID();
+    const socket = await openVoiceSocket(roomName);
+    await identifyVoiceSocket(socket, crypto.randomUUID(), roomName);
+    const response = nextMessageWithOpcode(socket, 18);
+
+    socket.send(
+      JSON.stringify({
+        op: 106,
+        d: { type: "arbitrary.event", secret: "must-not-broadcast" },
+      }),
+    );
+
+    expect(await response).toMatchObject({
+      op: 18,
+      d: { code: 4000, message: "Unknown voice app event" },
+    });
+    socket.close();
+  });
+
+  it("rejects malformed select protocol payloads", async () => {
+    const roomName = crypto.randomUUID();
+    const socket = await openVoiceSocket(roomName);
+    await identifyVoiceSocket(socket, crypto.randomUUID(), roomName);
+    const response = nextMessageWithOpcode(socket, 18);
+
+    socket.send(JSON.stringify({ op: 1, d: {} }));
+
+    expect(await response).toMatchObject({
+      op: 18,
+      d: { code: 4000, message: "Invalid select protocol payload" },
+    });
+    socket.close();
+  });
 
   it("acks an unidentified heartbeat without creating a participant", async () => {
     const socket = await openVoiceSocket();
@@ -398,6 +525,427 @@ describe("VoiceRoom lifecycle", () => {
     observer.close();
   });
 
+  it("rejects a publisher track name already owned by another participant", async () => {
+    const roomName = crypto.randomUUID();
+    await mockCallsApi(roomName, async (request) => {
+      const url = new URL(request.url);
+      if (url.pathname.endsWith("/sessions/new")) {
+        return Response.json({ sessionId: crypto.randomUUID() });
+      }
+      if (url.pathname.endsWith("/tracks/new")) {
+        return Response.json({
+          sessionDescription: { type: "answer", sdp: "answer-sdp" },
+          tracks: [{ location: "local", trackName: "cam-audio", mid: "0" }],
+        });
+      }
+      throw new Error(
+        `Unexpected Calls request: ${request.method} ${request.url}`,
+      );
+    });
+
+    const first = await openVoiceSocket(roomName);
+    await identifyVoiceSocket(first, crypto.randomUUID(), roomName);
+    const firstDescription = nextMessageWithOpcode(first, 4);
+    first.send(
+      JSON.stringify({
+        op: 1,
+        d: {
+          sdp: "offer-sdp",
+          push_prefix: "cam",
+          push_tracks: [{ track_name: "cam-audio", kind: "audio", mid: "0" }],
+          pull_tracks: [],
+        },
+      }),
+    );
+    await firstDescription;
+    first.send(JSON.stringify({ op: 102, d: { track_names: ["cam-audio"] } }));
+    await nextMessageWithOpcode(first, 10);
+
+    const second = await openVoiceSocket(roomName, "second-user");
+    await identifyVoiceSocket(
+      second,
+      crypto.randomUUID(),
+      roomName,
+      "second-user",
+    );
+    const conflict = nextMessageWithOpcode(second, 18);
+    second.send(
+      JSON.stringify({
+        op: 1,
+        d: {
+          sdp: "offer-sdp",
+          push_prefix: "cam",
+          push_tracks: [{ track_name: "cam-audio", kind: "audio", mid: "0" }],
+          pull_tracks: [],
+        },
+      }),
+    );
+
+    await expect(conflict).resolves.toMatchObject({
+      op: 18,
+      d: { code: 4000, message: "Track name is already in use" },
+    });
+
+    first.close();
+    second.close();
+  });
+
+  it("drops an SFU negotiation that resumes on a superseded socket", async () => {
+    const roomName = crypto.randomUUID();
+    let releaseTracks: (() => void) | undefined;
+    let tracksStarted: (() => void) | undefined;
+    const tracksGate = new Promise<void>((resolve) => {
+      releaseTracks = resolve;
+    });
+    const started = new Promise<void>((resolve) => {
+      tracksStarted = resolve;
+    });
+    await mockCallsApi(roomName, async (request) => {
+      const url = new URL(request.url);
+      if (url.pathname.endsWith("/sessions/new")) {
+        return Response.json({ sessionId: "delayed-session" });
+      }
+      if (url.pathname.endsWith("/tracks/new")) {
+        tracksStarted?.();
+        await tracksGate;
+        return Response.json({
+          sessionDescription: { type: "answer", sdp: "answer-sdp" },
+          tracks: [{ location: "local", trackName: "cam-audio", mid: "0" }],
+        });
+      }
+      throw new Error(
+        `Unexpected Calls request: ${request.method} ${request.url}`,
+      );
+    });
+
+    const participantId = crypto.randomUUID();
+    const oldSocket = await openVoiceSocket(roomName);
+    await identifyVoiceSocket(oldSocket, participantId, roomName);
+    oldSocket.send(
+      JSON.stringify({
+        op: 1,
+        d: {
+          sdp: "offer-sdp",
+          push_prefix: "cam",
+          push_tracks: [{ track_name: "cam-audio", kind: "audio", mid: "0" }],
+          pull_tracks: [],
+        },
+      }),
+    );
+    await started;
+
+    const currentSocket = await openVoiceSocket(roomName);
+    await identifyVoiceSocket(currentSocket, participantId, roomName);
+    releaseTracks?.();
+
+    expect(await hasMessageWithOpcode(oldSocket, 4, 150)).toBe(false);
+    const room = env.VOICE_ROOM.get(env.VOICE_ROOM.idFromName(roomName));
+    await runInDurableObject(room, async (_instance, state) => {
+      const rows = [
+        ...state.storage.sql.exec(
+          "SELECT push_session_cam FROM participants WHERE id = ?",
+          participantId,
+        ),
+      ];
+      expect(rows[0]?.push_session_cam).toBeNull();
+    });
+  });
+
+  it("rate-limits voice app events while preserving heartbeat acknowledgements", async () => {
+    const roomName = crypto.randomUUID();
+    const socket = await openVoiceSocket(roomName);
+    await identifyVoiceSocket(socket, crypto.randomUUID(), roomName);
+
+    const responses = [];
+    for (let index = 0; index < 61; index += 1) {
+      const response = nextMessageWithOpcode(socket, 18);
+      socket.send(
+        JSON.stringify({
+          op: 106,
+          d: { type: "unknown.rate-test-event" },
+        }),
+      );
+      responses.push(await response);
+    }
+    expect(
+      responses.some(
+        (message) =>
+          message.op === 18 && (message.d as { code?: number }).code === 4290,
+      ),
+    ).toBe(true);
+
+    const heartbeat = nextJsonMessage(socket);
+    socket.send(JSON.stringify({ op: 3, d: {} }));
+    await expect(heartbeat).resolves.toMatchObject({ op: 6 });
+    socket.close();
+  });
+
+  it("rejects pull tracks with cross-session identifiers", async () => {
+    const roomName = crypto.randomUUID();
+    let sessionNumber = 0;
+    await mockCallsApi(roomName, async (request) => {
+      const url = new URL(request.url);
+      if (url.pathname.endsWith("/sessions/new")) {
+        sessionNumber += 1;
+        return Response.json({ sessionId: `session-${sessionNumber}` });
+      }
+      if (url.pathname.endsWith("/tracks/new")) {
+        const body = (await request.json()) as {
+          tracks?: unknown;
+          sessionDescription?: { type?: string };
+        };
+        if (body.tracks && Array.isArray(body.tracks)) {
+          const first = body.tracks[0] as Record<string, unknown> | undefined;
+          if (first?.location === "remote") {
+            return Response.json({
+              sessionDescription: { type: "offer", sdp: "pull-offer" },
+              tracks: [
+                {
+                  location: "remote",
+                  trackName: "cam-audio",
+                  sessionId: "session-2",
+                  mid: "0",
+                },
+              ],
+            });
+          }
+        }
+        return Response.json({
+          sessionDescription: { type: "answer", sdp: "push-answer" },
+          tracks: [{ location: "local", trackName: "cam-audio", mid: "0" }],
+        });
+      }
+      throw new Error(
+        `Unexpected Calls request: ${request.method} ${request.url}`,
+      );
+    });
+
+    const publisher = await openVoiceSocket(roomName);
+    const publisherId = crypto.randomUUID();
+    await identifyVoiceSocket(publisher, publisherId, roomName);
+    const pushDescription = nextMessageWithOpcode(publisher, 4);
+    publisher.send(
+      JSON.stringify({
+        op: 1,
+        d: {
+          sdp: "push-offer",
+          push_prefix: "cam",
+          push_tracks: [{ track_name: "cam-audio", kind: "audio", mid: "0" }],
+          pull_tracks: [],
+        },
+      }),
+    );
+    await pushDescription;
+    publisher.send(
+      JSON.stringify({ op: 102, d: { track_names: ["cam-audio"] } }),
+    );
+
+    const viewer = await openVoiceSocket(roomName, "viewer-user");
+    await identifyVoiceSocket(
+      viewer,
+      crypto.randomUUID(),
+      roomName,
+      "viewer-user",
+    );
+    const pullError = nextMessageWithOpcode(viewer, 18);
+    viewer.send(
+      JSON.stringify({
+        op: 1,
+        d: {
+          sdp: "",
+          push_tracks: [],
+          pull_tracks: [
+            {
+              participant_id: "forged-participant",
+              track_name: "cam-audio",
+              session_id: "forged-session",
+              kind: "audio",
+            },
+          ],
+          request_id: "pull-1",
+        },
+      }),
+    );
+
+    expect(await pullError).toMatchObject({
+      op: 18,
+      d: { code: 4000, message: "Requested track is not available" },
+    });
+
+    publisher.close();
+    viewer.close();
+  });
+
+  it.each([
+    [
+      "an unexpected track name",
+      [
+        {
+          location: "remote",
+          trackName: "unexpected",
+          sessionId: "push-session",
+          mid: "0",
+        },
+      ],
+    ],
+    [
+      "a duplicate track",
+      [
+        {
+          location: "remote",
+          trackName: "cam-audio",
+          sessionId: "push-session",
+          mid: "0",
+        },
+        {
+          location: "remote",
+          trackName: "cam-audio",
+          sessionId: "push-session",
+          mid: "1",
+        },
+      ],
+    ],
+    [
+      "a mismatched publisher session",
+      [
+        {
+          location: "remote",
+          trackName: "cam-audio",
+          sessionId: "other-publisher-session",
+          mid: "0",
+        },
+      ],
+    ],
+    [
+      "a non-remote track",
+      [
+        {
+          location: "local",
+          trackName: "cam-audio",
+          sessionId: "push-session",
+          mid: "0",
+        },
+      ],
+    ],
+  ] as const)(
+    "resets and closes pull sessions for %s",
+    async (_kind, responseTracks) => {
+      const roomName = crypto.randomUUID();
+      const publisherId = crypto.randomUUID();
+      const viewerId = crypto.randomUUID();
+      const closeRequests: Array<{ body: unknown; url: string }> = [];
+      let sessionNumber = 0;
+
+      await mockCallsApi(roomName, async (request) => {
+        const url = new URL(request.url);
+        if (url.pathname.endsWith("/sessions/new")) {
+          sessionNumber += 1;
+          const sessionId =
+            sessionNumber === 1 ? "push-session" : "pull-session";
+          return Response.json({ sessionId });
+        }
+        if (url.pathname.endsWith("/tracks/close")) {
+          closeRequests.push({ body: await request.json(), url: request.url });
+          return Response.json({});
+        }
+        if (url.pathname.endsWith("/tracks/new")) {
+          const body = (await request.json()) as {
+            tracks?: Array<Record<string, unknown>>;
+          };
+          if (body.tracks?.[0]?.location === "remote") {
+            return Response.json({
+              sessionDescription: { type: "offer", sdp: "pull-offer" },
+              tracks: responseTracks,
+            });
+          }
+          return Response.json({
+            sessionDescription: { type: "answer", sdp: "push-answer" },
+            tracks: [{ location: "local", trackName: "cam-audio", mid: "0" }],
+          });
+        }
+        throw new Error(
+          `Unexpected Calls request: ${request.method} ${request.url}`,
+        );
+      });
+
+      const publisher = await openVoiceSocket(roomName);
+      await identifyVoiceSocket(publisher, publisherId, roomName);
+      const pushDescription = nextMessageWithOpcode(publisher, 4);
+      publisher.send(
+        JSON.stringify({
+          op: 1,
+          d: {
+            sdp: "push-offer",
+            push_prefix: "cam",
+            push_tracks: [{ track_name: "cam-audio", kind: "audio", mid: "0" }],
+            pull_tracks: [],
+          },
+        }),
+      );
+      await pushDescription;
+      publisher.send(
+        JSON.stringify({ op: 102, d: { track_names: ["cam-audio"] } }),
+      );
+      await nextMessageWithOpcode(publisher, 10);
+
+      const viewer = await openVoiceSocket(roomName, "viewer-user");
+      await identifyVoiceSocket(viewer, viewerId, roomName, "viewer-user");
+      const pullResponse = nextMessageWithOpcodeOrNull(viewer, 18);
+      viewer.send(
+        JSON.stringify({
+          op: 1,
+          d: {
+            sdp: "",
+            push_tracks: [],
+            pull_tracks: [
+              {
+                participant_id: publisherId,
+                track_name: "cam-audio",
+                session_id: "push-session",
+                kind: "audio",
+              },
+            ],
+            request_id: "pull-invalid-response",
+          },
+        }),
+      );
+
+      await expect(pullResponse).resolves.toMatchObject({
+        op: 18,
+        d: {
+          code: 0,
+          message: "session-dead-reconnect",
+          operation: "pull",
+          request_id: "pull-invalid-response",
+        },
+      });
+      expect(closeRequests).toHaveLength(1);
+      expect(closeRequests[0]).toMatchObject({
+        url: expect.stringContaining("/sessions/pull-session/tracks/close"),
+        body: {
+          tracks: Array.from(
+            new Set(responseTracks.map((track) => track.mid)),
+          ).map((mid) => ({ mid })),
+          force: true,
+        },
+      });
+
+      const room = env.VOICE_ROOM.get(env.VOICE_ROOM.idFromName(roomName));
+      await runInDurableObject(room, (_instance, state) => {
+        const row = [
+          ...state.storage.sql.exec(
+            "SELECT pull_session_id FROM participants WHERE id = ?",
+            viewerId,
+          ),
+        ][0];
+        expect(row?.pull_session_id).toBeNull();
+      });
+
+      publisher.close();
+      viewer.close();
+    },
+  );
+
   it("limits public-demo sockets to temporary demo chat events", async () => {
     const roomName = crypto.randomUUID();
     const subject = "demo-test-subject";
@@ -447,6 +995,81 @@ describe("VoiceRoom lifecycle", () => {
     await expect(disconnectResponse.json()).resolves.toEqual({
       disconnected: true,
     });
+  });
+
+  it("ignores stale authenticated state and broadcast opcodes after reconnect", async () => {
+    const roomName = crypto.randomUUID();
+    const participantId = crypto.randomUUID();
+    const oldSocket = await openVoiceSocket(roomName);
+    await identifyVoiceSocket(oldSocket, participantId, roomName);
+    const currentSocket = await openVoiceSocket(roomName);
+    await identifyVoiceSocket(currentSocket, participantId, roomName);
+    const observer = await openVoiceSocket(roomName, "observer-user");
+    await identifyVoiceSocket(
+      observer,
+      crypto.randomUUID(),
+      roomName,
+      "observer-user",
+    );
+
+    const room = env.VOICE_ROOM.get(env.VOICE_ROOM.idFromName(roomName));
+    await runInDurableObject(room, (_instance, state) => {
+      state.storage.sql.exec(
+        "UPDATE participants SET pull_session_id = ? WHERE id = ?",
+        "current-pull",
+        participantId,
+      );
+      state.storage.sql.exec(
+        "INSERT INTO tracks (track_name, participant_id, session_id, mid, kind, is_pending) VALUES (?, ?, ?, ?, ?, 1)",
+        "stale-track",
+        participantId,
+        "current-push",
+        "0",
+        "audio",
+      );
+    });
+
+    const staleHeartbeat = hasMessageWithOpcode(oldSocket, 6, 150);
+    oldSocket.send(JSON.stringify({ op: 3, d: {} }));
+    await expect(staleHeartbeat).resolves.toBe(false);
+
+    oldSocket.send(JSON.stringify({ op: 105, d: {} }));
+    oldSocket.send(
+      JSON.stringify({ op: 102, d: { track_names: ["stale-track"] } }),
+    );
+    oldSocket.send(
+      JSON.stringify({
+        op: 106,
+        d: {
+          type: "reaction.sticker",
+          url: "https://media.tenor.com/stale.gif",
+          contentType: "image/gif",
+          displayMode: "single",
+        },
+      }),
+    );
+
+    await expect(hasMessageWithOpcode(observer, 106, 150)).resolves.toBe(false);
+    await runInDurableObject(room, (_instance, state) => {
+      const participant = [
+        ...state.storage.sql.exec(
+          "SELECT pull_session_id FROM participants WHERE id = ?",
+          participantId,
+        ),
+      ][0];
+      const track = [
+        ...state.storage.sql.exec(
+          "SELECT is_pending FROM tracks WHERE track_name = ?",
+          "stale-track",
+        ),
+      ][0];
+      expect(participant?.pull_session_id).toBe("current-pull");
+      expect(track?.is_pending).toBe(1);
+    });
+
+    oldSocket.close();
+    currentSocket.close();
+    observer.close();
   });
 
   it("resolves a radio station UUID and ignores a forged client stream URL", async () => {

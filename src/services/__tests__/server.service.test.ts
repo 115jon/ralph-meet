@@ -235,7 +235,11 @@ describe("updateServer", () => {
     });
 
     expect(result.broadcast).toBeDefined();
-    expect(result.broadcast!.event).toBe("GUILD_UPDATE");
+    expect(result.broadcast).toMatchObject({
+      type: "server",
+      target: SERVER_ID,
+      event: "GUILD_UPDATE",
+    });
   });
 
   it("returns audit log entry", async () => {
@@ -267,8 +271,18 @@ describe("deleteServer", () => {
 
     db.assertCalled(/DELETE FROM servers WHERE id/);
     expect(result.cacheKeysToInvalidate.length).toBeGreaterThan(0);
-    expect(result.broadcast).toBeDefined();
-    expect(result.broadcast!.event).toBe("GUILD_DELETE");
+    expect(result.broadcasts).toEqual([
+      expect.objectContaining({
+        type: "user",
+        target: USER_ID,
+        event: "GUILD_DELETE",
+      }),
+      expect.objectContaining({
+        type: "user",
+        target: "u2",
+        event: "GUILD_DELETE",
+      }),
+    ]);
   });
 
   it("throws 403 when non-owner tries to delete", async () => {
@@ -452,8 +466,18 @@ describe("kickMember", () => {
 
     expect(result.kicked).toBe(true);
     expect(result.cacheKeysToInvalidate.length).toBeGreaterThan(0);
-    expect(result.broadcast).toBeDefined();
-    expect(result.broadcast!.event).toBe("GUILD_MEMBER_REMOVE");
+    expect(result.broadcasts).toEqual([
+      expect.objectContaining({
+        type: "server",
+        target: SERVER_ID,
+        event: "GUILD_MEMBER_REMOVE",
+      }),
+      expect.objectContaining({
+        type: "user",
+        target: "target_user",
+        event: "GUILD_MEMBER_REMOVE",
+      }),
+    ]);
     expect(result.auditLog).toBeDefined();
     db.assertCalled(/DELETE FROM server_members/);
     db.assertCalled(/DELETE FROM member_roles/);

@@ -1,17 +1,17 @@
 import { apiUrl, getAuthAssetUrl } from "@/lib/platform";
+import { BaseModal } from "@/components/ui/BaseModal";
 import type { SFUClient } from "@/lib/sfu-client";
 import { cn } from "@/lib/utils";
 import { getNewYorkDateKey } from "@/lib/wordle";
 import {
-  BarChart3,
-  CircleHelp,
-  Delete,
-  Lightbulb,
-  Settings,
-  Share2,
-  UserPlus,
-  X,
-} from "lucide-react";
+  evaluateWordleGuess,
+  getCompletionStatus,
+  getHardModeViolation,
+  getHintDetails,
+  getRevealDuration,
+  shouldShowCompletionResult,
+} from "@/lib/wordle-game";
+import { BarChart3, Delete, Lightbulb, Settings, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 interface WordleActivityStageProps {
@@ -79,15 +79,45 @@ const SETTING_ROWS: Array<[keyof WordleSettings, string, string]> = [
   ],
 ];
 
-function todayKey() {
-  return getNewYorkDateKey();
+function todayKey(date = new Date()) {
+  return getNewYorkDateKey(date);
+}
+
+function getMillisecondsUntilReset(now = Date.now()) {
+  const currentDateKey = todayKey(new Date(now));
+  let low = now;
+  let high = now + 36 * 60 * 60 * 1000;
+
+  while (todayKey(new Date(high)) === currentDateKey) {
+    high += 24 * 60 * 60 * 1000;
+  }
+
+  for (let attempt = 0; attempt < 42; attempt++) {
+    const middle = Math.floor((low + high) / 2);
+    if (todayKey(new Date(middle)) === currentDateKey) low = middle;
+    else high = middle;
+  }
+
+  return Math.max(0, high - now);
+}
+
+function formatCountdown(milliseconds: number) {
+  const totalSeconds = Math.max(0, Math.floor(milliseconds / 1000));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  return [hours, minutes, seconds]
+    .map((value) => String(value).padStart(2, "0"))
+    .join(":");
 }
 
 function readStoredProgress(key: string): {
   guesses: string[];
   progress: Record<string, Progress>;
+  hints: number[];
 } {
-  if (typeof window === "undefined") return { guesses: [], progress: {} };
+  if (typeof window === "undefined")
+    return { guesses: [], progress: {}, hints: [] };
   try {
     const parsed = JSON.parse(
       localStorage.getItem(key) || '{"guesses":[],"progress":{}}',
@@ -95,15 +125,20 @@ function readStoredProgress(key: string): {
     return {
       guesses: normalizeGuesses(parsed.guesses),
       progress: normalizeProgress(parsed.progress),
+      hints: normalizeHints(parsed.hints),
     };
   } catch {
-    return { guesses: [], progress: {} };
+    return { guesses: [], progress: {}, hints: [] };
   }
 }
 
 function writeStoredProgress(
   key: string,
-  value: { guesses: string[]; progress: Record<string, Progress> },
+  value: {
+    guesses: string[];
+    progress: Record<string, Progress>;
+    hints: number[];
+  },
 ) {
   if (typeof window === "undefined") return;
   try {
@@ -159,6 +194,18 @@ function normalizeGuesses(value: unknown): string[] {
     : [];
 }
 
+function normalizeHints(value: unknown): number[] {
+  if (!Array.isArray(value)) return [];
+  return Array.from(
+    new Set(
+      value.filter(
+        (hint): hint is number =>
+          typeof hint === "number" && hint >= 1 && hint <= 3,
+      ),
+    ),
+  ).sort((left, right) => left - right);
+}
+
 function normalizeProgress(value: unknown): Record<string, Progress> {
   if (!value || typeof value !== "object") return {};
   const normalized: Record<string, Progress> = {};
@@ -182,49 +229,10 @@ function normalizeProgress(value: unknown): Record<string, Progress> {
   return normalized;
 }
 
-function evaluateGuess(guess: string, answer: string) {
-  const result = Array(5).fill("absent") as Array<
-    "correct" | "present" | "absent"
-  >;
-  const remainingCounts = new Map<string, number>();
-  for (let i = 0; i < 5; i++) {
-    if (guess[i] === answer[i]) {
-      result[i] = "correct";
-    } else {
-      const currentCount = remainingCounts.get(answer[i]) ?? 0;
-      remainingCounts.set(answer[i], currentCount + 1);
-    }
-  }
-  for (let i = 0; i < 5; i++) {
-    if (result[i] === "correct") continue;
-    const remainingCount = remainingCounts.get(guess[i]) ?? 0;
-    if (remainingCount > 0) {
-      result[i] = "present";
-      remainingCounts.set(guess[i], remainingCount - 1);
-    }
-  }
-  return result;
-}
-
-function getHardModeViolation(
-  guess: string,
-  guesses: string[],
-  answer: string,
-) {
-  const guessLetters = new Set(guess);
-  for (const previousGuess of guesses) {
-    const marks = evaluateGuess(previousGuess, answer);
-    for (let index = 0; index < marks.length; index++) {
-      const letter = previousGuess[index];
-      if (marks[index] === "correct" && guess[index] !== letter) {
-        return `${letter.toUpperCase()} must stay in position ${index + 1}.`;
-      }
-      if (marks[index] === "present" && !guessLetters.has(letter)) {
-        return `${letter.toUpperCase()} must be used.`;
-      }
-    }
-  }
-  return null;
+function getMarkLabel(mark: "correct" | "present" | "absent") {
+  if (mark === "correct") return "correct position";
+  if (mark === "present") return "present elsewhere";
+  return "not in the word";
 }
 
 function MiniBoard({
@@ -242,10 +250,13 @@ function MiniBoard({
         const row = Math.floor(index / 5);
         const col = index % 5;
         const guess = guesses[row] ?? "";
-        const mark = guess ? evaluateGuess(guess, answer)[col] : null;
+        const mark = guess ? evaluateWordleGuess(guess, answer)[col] : null;
         return (
           <div
             key={index}
+            role="img"
+            aria-label={`Row ${row + 1}, column ${col + 1}: ${mark ? getMarkLabel(mark) : "empty"}`}
+            title={mark ? getMarkLabel(mark) : "Empty"}
             style={
               mark
                 ? { borderColor: colors[mark], backgroundColor: colors[mark] }
@@ -268,7 +279,19 @@ export function WordleActivityStage({
   localUserId,
   participants,
 }: WordleActivityStageProps) {
-  const storageKey = `voice-wordle:${channelId}:${todayKey()}`;
+  const [dateKey, setDateKey] = useState(todayKey);
+
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      const nextDateKey = todayKey();
+      setDateKey((currentDateKey) =>
+        currentDateKey === nextDateKey ? currentDateKey : nextDateKey,
+      );
+    }, 30_000);
+    return () => window.clearInterval(interval);
+  }, []);
+
+  const storageKey = `voice-wordle:${channelId}:${dateKey}`;
   return (
     <WordleActivityStageContent
       key={storageKey}
@@ -288,6 +311,7 @@ function WordleActivityStageContent({
   participants,
   storageKey,
 }: WordleActivityStageProps & { storageKey: string }) {
+  const puzzleDate = storageKey.slice(storageKey.lastIndexOf(":") + 1);
   const [puzzle, setPuzzle] = useState<Puzzle | null>(null);
   const [puzzleError, setPuzzleError] = useState<string | null>(null);
   const initialStored = useMemo(
@@ -299,10 +323,21 @@ function WordleActivityStageContent({
   const [progress, setProgress] = useState<Record<string, Progress>>(
     () => initialStored.progress,
   );
+  const [hintLevels, setHintLevels] = useState<number[]>(
+    () => initialStored.hints,
+  );
   const [view, setView] = useState<"puzzle" | "done" | "stats">("puzzle");
+  const [completedBoardOpen, setCompletedBoardOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [hintsOpen, setHintsOpen] = useState(false);
+  const [answerRevealPending, setAnswerRevealPending] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [revealingRow, setRevealingRow] = useState<number | null>(null);
+  const [completionReveal, setCompletionReveal] = useState<{
+    status: "solved" | "missed";
+    guessIndex: number;
+  } | null>(null);
+  const [nextPuzzleIn, setNextPuzzleIn] = useState(getMillisecondsUntilReset());
   const [settings, setSettings] = useState<WordleSettings>(() =>
     readStoredSettings(),
   );
@@ -313,8 +348,17 @@ function WordleActivityStageContent({
   }, [settings]);
 
   useEffect(() => {
+    const interval = window.setInterval(() => {
+      setNextPuzzleIn(getMillisecondsUntilReset());
+    }, 1000);
+    return () => window.clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
     const controller = new AbortController();
-    fetch(apiUrl("/api/wordle/today"), { signal: controller.signal })
+    fetch(apiUrl(`/api/wordle/today?date=${puzzleDate}`), {
+      signal: controller.signal,
+    })
       .then((res) => {
         if (!res.headers.get("Content-Type")?.toLowerCase().includes("json")) {
           throw new Error(
@@ -328,6 +372,7 @@ function WordleActivityStageContent({
         if (
           typeof data?.solution === "string" &&
           data.solution.length === 5 &&
+          data.print_date === puzzleDate &&
           data.source === "nyt"
         ) {
           setPuzzle(data as Puzzle);
@@ -344,22 +389,60 @@ function WordleActivityStageContent({
           );
       });
     return () => controller.abort();
-  }, []);
+  }, [puzzleDate]);
 
   // `sfu.on(...)` returns the unsubscribe function from EventEmitter.on.
   // react-doctor-disable-next-line react-doctor/effect-needs-cleanup
   useEffect(() => {
     if (!sfu) return;
     return sfu.on("app-event", (event) => {
-      if (event.type !== "wordle.progress" || event.channel_id !== channelId)
+      if (
+        event.type !== "wordle.progress" ||
+        event.channel_id !== channelId ||
+        event.puzzle_date !== puzzleDate
+      )
         return;
       setProgress(normalizeProgress(event.progress));
     });
-  }, [sfu, channelId]);
+  }, [sfu, channelId, puzzleDate]);
 
   const answer = puzzle?.solution.toLowerCase() ?? "";
+  const completionStatus = getCompletionStatus(guesses, answer);
+  const persistedLocalMiss =
+    !!localUserId &&
+    initialStored.progress[localUserId]?.finished === true &&
+    initialStored.progress[localUserId]?.missed === true;
   const localFinished =
-    !!answer && (guesses.includes(answer) || guesses.length >= 6);
+    !!answer &&
+    (completionStatus.status !== "playing" ||
+      completionReveal !== null ||
+      persistedLocalMiss);
+  const shouldShowDone =
+    shouldShowCompletionResult({
+      status: completionStatus.status,
+      revealing: revealingRow !== null,
+    }) ||
+    (revealingRow === null &&
+      (completionReveal !== null || persistedLocalMiss));
+  const activeView =
+    answer && shouldShowDone && view === "puzzle" && !completedBoardOpen
+      ? "done"
+      : view;
+
+  useEffect(() => {
+    if (revealingRow === null) return;
+    const reducedMotion = window.matchMedia?.(
+      "(prefers-reduced-motion: reduce)",
+    ).matches;
+    const timer = window.setTimeout(
+      () => {
+        setRevealingRow(null);
+        if (completionReveal?.guessIndex === revealingRow) setView("done");
+      },
+      reducedMotion ? 0 : getRevealDuration(),
+    );
+    return () => window.clearTimeout(timer);
+  }, [completionReveal, revealingRow]);
   const rowProgress = useMemo(() => {
     const nextRowProgress: Progress[] = [];
     for (const participant of participants) {
@@ -383,7 +466,7 @@ function WordleActivityStageContent({
     const marks: Record<string, "correct" | "present" | "absent"> = {};
     const rank = { absent: 0, present: 1, correct: 2 };
     for (const guess of guesses) {
-      evaluateGuess(guess, answer).forEach((mark, index) => {
+      evaluateWordleGuess(guess, answer).forEach((mark, index) => {
         const letter = guess[index];
         if (!marks[letter] || rank[mark] > rank[marks[letter]])
           marks[letter] = mark;
@@ -393,7 +476,20 @@ function WordleActivityStageContent({
   }, [guesses, answer]);
 
   const commitProgress = (nextGuesses: string[]) => {
-    if (!localUserId || !answer) return;
+    if (!answer) return;
+    const completion = getCompletionStatus(nextGuesses, answer);
+    if (!localUserId) {
+      if (
+        completion.status !== "playing" &&
+        completion.finalGuessIndex !== null
+      ) {
+        setCompletionReveal({
+          status: completion.status,
+          guessIndex: completion.finalGuessIndex,
+        });
+      }
+      return;
+    }
     const solved = nextGuesses.includes(answer);
     const missed = !solved && nextGuesses.length >= 6;
     const current = progress[localUserId];
@@ -421,17 +517,33 @@ function WordleActivityStageContent({
     writeStoredProgress(storageKey, {
       guesses: nextGuesses,
       progress: nextProgress,
+      hints: hintLevels,
     });
     sfu?.voiceGW.sendAppEvent({
       type: "wordle.progress",
       channel_id: channelId,
+      puzzle_date: puzzleDate,
       progress: nextProgress,
     });
-    if (solved || missed) setView("done");
+    if (
+      completion.status !== "playing" &&
+      completion.finalGuessIndex !== null
+    ) {
+      setCompletionReveal({
+        status: completion.status,
+        guessIndex: completion.finalGuessIndex,
+      });
+    }
   };
 
   const submitGuess = () => {
-    if (!answer || guesses.length >= 6 || localFinished) return;
+    if (
+      !answer ||
+      guesses.length >= 6 ||
+      localFinished ||
+      revealingRow !== null
+    )
+      return;
     if (guess.length !== 5) {
       setNotice("Not enough letters.");
       return;
@@ -445,55 +557,107 @@ function WordleActivityStageContent({
     }
     const nextGuesses = [...guesses, guess];
     setGuesses(nextGuesses);
+    setRevealingRow(nextGuesses.length - 1);
     setDraft("");
     setNotice(null);
     commitProgress(nextGuesses);
   };
 
   const addLetter = (letter: string) => {
-    if (!answer || localFinished) return;
+    if (!answer || localFinished || revealingRow !== null) return;
     setNotice(null);
     setDraft((value) => `${value}${letter}`.slice(0, 5));
   };
 
   const deleteLetter = () => {
+    if (!answer || localFinished || revealingRow !== null) return;
     setNotice(null);
     setDraft((value) => value.slice(0, -1));
   };
 
+  const unlockNextHint = () => {
+    const nextLevel = hintLevels.length + 1;
+    if (!answer || nextLevel > 3 || hintLevels.includes(nextLevel)) return;
+    const nextHintLevels = [...hintLevels, nextLevel];
+    setHintLevels(nextHintLevels);
+    writeStoredProgress(storageKey, {
+      guesses,
+      progress,
+      hints: nextHintLevels,
+    });
+  };
+
+  const revealAnswer = () => {
+    if (!answer || localFinished) return;
+    const local = participants.find((p) => p.userId === localUserId);
+    const nextProgress = {
+      ...progress,
+      ...(localUserId
+        ? {
+            [localUserId]: {
+              userId: localUserId,
+              name: local?.name ?? "You",
+              avatar: local?.avatar,
+              guesses,
+              streak: 0,
+              finished: true,
+              missed: true,
+            },
+          }
+        : {}),
+    };
+    setProgress(nextProgress);
+    writeStoredProgress(storageKey, {
+      guesses,
+      progress: nextProgress,
+      hints: hintLevels,
+    });
+    if (localUserId) {
+      sfu?.voiceGW.sendAppEvent({
+        type: "wordle.progress",
+        channel_id: channelId,
+        puzzle_date: puzzleDate,
+        progress: nextProgress,
+      });
+    }
+    setAnswerRevealPending(false);
+    setHintsOpen(false);
+    setCompletionReveal({
+      status: "missed",
+      guessIndex: Math.max(0, guesses.length - 1),
+    });
+    setRevealingRow(Math.max(0, guesses.length - 1));
+  };
+
   useEffect(() => {
-    if (settings.keyboardOnly) return;
     const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        if (hintsOpen) setHintsOpen(false);
+        else if (settingsOpen) setSettingsOpen(false);
+        return;
+      }
+      if (
+        settings.keyboardOnly ||
+        hintsOpen ||
+        settingsOpen ||
+        activeView !== "puzzle"
+      )
+        return;
       const target = event.target as HTMLElement | null;
       if (target?.closest("input, textarea, [contenteditable='true']")) return;
       if (/^[a-z]$/i.test(event.key)) {
         event.preventDefault();
-        if (!answer || localFinished) return;
+        if (!answer || localFinished || revealingRow !== null) return;
         setNotice(null);
         setDraft((value) => `${value}${event.key.toLowerCase()}`.slice(0, 5));
       } else if (event.key === "Backspace") {
         event.preventDefault();
+        if (!answer || localFinished || revealingRow !== null) return;
         setNotice(null);
         setDraft((value) => value.slice(0, -1));
       } else if (event.key === "Enter") {
         event.preventDefault();
-        if (!answer || guesses.length >= 6 || localFinished) return;
-        if (guess.length !== 5) {
-          setNotice("Not enough letters.");
-          return;
-        }
-        const hardModeViolation = settings.hardMode
-          ? getHardModeViolation(guess, guesses, answer)
-          : null;
-        if (hardModeViolation) {
-          setNotice(hardModeViolation);
-          return;
-        }
-        const nextGuesses = [...guesses, guess];
-        setGuesses(nextGuesses);
-        setDraft("");
-        setNotice(null);
-        commitProgress(nextGuesses);
+        submitGuess();
       }
     };
     window.addEventListener("keydown", handleKeyDown);
@@ -507,20 +671,16 @@ function WordleActivityStageContent({
     ? Math.round((solvedCount / rowProgress.length) * 100)
     : 0;
   const currentStreak = progress[localUserId || ""]?.streak ?? 0;
-  const firstLetterHint = answer[0]?.toUpperCase() ?? "";
-  const vowelCount = answer
-    .split("")
-    .filter((letter) => "aeiou".includes(letter)).length;
   const colors = settings.highContrast
     ? {
-        correct: "#f5793a",
-        present: "#85c0f9",
-        absent: "#787c7e",
+        correct: "#b45309",
+        present: "#1d4ed8",
+        absent: "#4b5563",
       }
     : {
-        correct: "#6aaa64",
-        present: "#c9b458",
-        absent: "#787c7e",
+        correct: "#2f6f35",
+        present: "#7a5f00",
+        absent: "#4b5563",
       };
   const theme = {
     page: "bg-rm-bg-primary text-rm-text",
@@ -558,25 +718,48 @@ function WordleActivityStageContent({
     );
   }
 
-  if (view === "done") {
+  if (activeView === "done") {
+    const finishedStatus =
+      completionReveal?.status ??
+      (completionStatus.status === "missed" || persistedLocalMiss
+        ? "missed"
+        : "solved");
+    const completedGuessCount =
+      (completionReveal?.guessIndex ?? completionStatus.finalGuessIndex ?? 0) +
+      1;
     return (
       <div
         className={cn(
-          "flex h-full w-full flex-col items-center justify-center px-4",
+          "flex h-full w-full flex-col items-center justify-center overflow-y-auto px-4 py-8",
           theme.page,
         )}
         style={{ fontFamily: "Georgia, serif" }}
       >
         <MiniBoard guesses={guesses} answer={answer} colors={colors} />
         <div className="mt-2 text-sm font-bold">Wordle</div>
-        <h2 className="mt-4 text-4xl font-black">Hi Wordler</h2>
-        <p className="mt-4 max-w-sm text-center text-3xl leading-tight">
-          Great job on today's puzzle! Check out your channel's progress.
+        <h2 className="mt-4 text-center text-3xl font-black sm:text-4xl">
+          {finishedStatus === "solved"
+            ? `Solved in ${completedGuessCount}`
+            : "Round complete"}
+        </h2>
+        <p className="mt-3 max-w-sm text-center text-base leading-relaxed sm:text-lg">
+          {finishedStatus === "solved"
+            ? "Nice work. Your channel can see how everyone did."
+            : `The answer was ${answer.toUpperCase()}. A new Wordle is on the way.`}
         </p>
+        <div className="mt-5 rounded-xl border border-current/15 px-5 py-3 text-center font-sans shadow-sm">
+          <div className="text-xs font-bold uppercase tracking-[0.12em] opacity-65">
+            Next Wordle in
+          </div>
+          <div className="mt-1 font-mono text-2xl font-bold tabular-nums">
+            {formatCountdown(nextPuzzleIn)}
+          </div>
+          <div className="mt-1 text-xs opacity-65">midnight Eastern time</div>
+        </div>
         <button
           type="button"
           onClick={() => setView("stats")}
-          className="mt-8 rounded-full bg-black px-16 py-4 text-base font-bold text-white"
+          className="mt-6 rounded-full bg-black px-10 py-3 text-base font-bold text-white transition-transform active:scale-[0.96]"
         >
           Channel Stats
         </button>
@@ -599,7 +782,7 @@ function WordleActivityStageContent({
     );
   }
 
-  if (view === "stats") {
+  if (activeView === "stats") {
     const local = progress[localUserId || ""];
     return (
       <div
@@ -610,7 +793,10 @@ function WordleActivityStageContent({
       >
         <button
           type="button"
-          onClick={() => setView("puzzle")}
+          onClick={() => {
+            setCompletedBoardOpen(true);
+            setView("puzzle");
+          }}
           className="absolute right-5 top-5 flex items-center gap-2 text-base"
         >
           Back to puzzle <X size={18} />
@@ -631,13 +817,6 @@ function WordleActivityStageContent({
             <div className="mt-2">
               <MiniBoard guesses={guesses} answer={answer} colors={colors} />
             </div>
-            <button
-              type="button"
-              style={{ backgroundColor: colors.correct }}
-              className="mt-2 flex items-center gap-1 rounded-full px-5 py-1 text-sm font-bold text-white"
-            >
-              Share <Share2 size={13} />
-            </button>
           </div>
           <h2 className="mt-8 text-base uppercase">General Statistics</h2>
           <div className="mt-3 flex justify-center divide-x divide-[#d3d6da]">
@@ -680,6 +859,7 @@ function WordleActivityStageContent({
       <style>{`
         @keyframes rm-wordle-pop { 0% { transform: scale(.86); } 55% { transform: scale(1.08); } 100% { transform: scale(1); } }
         @keyframes rm-wordle-flip { 0% { transform: rotateX(0); } 45% { transform: rotateX(90deg); } 55% { transform: rotateX(90deg); } 100% { transform: rotateX(0); } }
+        @media (prefers-reduced-motion: reduce) { .rm-wordle-tile { animation: none !important; } }
       `}</style>
       <div
         className={cn(
@@ -717,14 +897,6 @@ function WordleActivityStageContent({
           </button>
           <button
             type="button"
-            onClick={() => setHintsOpen(true)}
-            aria-label="Show answer details"
-            title="Answer"
-          >
-            <CircleHelp size={28} />
-          </button>
-          <button
-            type="button"
             onClick={() => setSettingsOpen(true)}
             aria-label="Open Wordle settings"
             title="Settings"
@@ -736,23 +908,6 @@ function WordleActivityStageContent({
 
       <div className="grid min-h-0 flex-1 grid-cols-1 overflow-y-auto px-3 py-3 md:grid-cols-[170px_minmax(0,1fr)] md:overflow-hidden md:px-4">
         <aside className="order-2 mt-3 flex max-h-28 gap-3 overflow-x-auto md:order-1 md:mt-0 md:max-h-none md:flex-col md:overflow-y-auto md:overflow-x-hidden">
-          <button
-            type="button"
-            className={cn(
-              "flex shrink-0 items-center gap-3 rounded-md border px-2 py-2 text-xs font-bold",
-              theme.border,
-            )}
-          >
-            <span
-              style={{ backgroundColor: colors.correct }}
-              className="flex h-14 w-14 items-center justify-center rounded-full text-white"
-            >
-              <UserPlus size={28} />
-            </span>
-            INVITE
-            <br />
-            FRIENDS
-          </button>
           <div className="flex gap-3 md:mt-4 md:flex-col">
             {rowProgress.map((row) => (
               <div
@@ -792,14 +947,19 @@ function WordleActivityStageContent({
                 guesses[row] ?? (row === guesses.length ? draft : "");
               const letter = guess[col] ?? "";
               const mark = guesses[row]
-                ? evaluateGuess(guesses[row], answer)[col]
+                ? evaluateWordleGuess(guesses[row], answer)[col]
                 : null;
               return (
                 <div
                   key={index}
+                  role="img"
+                  aria-label={`Row ${row + 1}, column ${col + 1}: ${letter || "empty"}${mark ? `, ${getMarkLabel(mark)}` : ""}`}
+                  title={mark ? getMarkLabel(mark) : undefined}
                   style={{
                     animation: guesses[row]
-                      ? `rm-wordle-flip 520ms ease both ${col * 120}ms`
+                      ? revealingRow === row
+                        ? `rm-wordle-flip 520ms ease both ${col * 120}ms`
+                        : undefined
                       : letter
                         ? "rm-wordle-pop 110ms ease-out"
                         : undefined,
@@ -811,7 +971,7 @@ function WordleActivityStageContent({
                       : {}),
                   }}
                   className={cn(
-                    "flex aspect-square w-full items-center justify-center border-2 text-3xl font-black uppercase [backface-visibility:hidden]",
+                    "rm-wordle-tile flex aspect-square w-full items-center justify-center border-2 text-3xl font-black uppercase [backface-visibility:hidden]",
                     !mark && theme.emptyTile,
                     mark && "text-white",
                   )}
@@ -823,8 +983,24 @@ function WordleActivityStageContent({
           </div>
 
           {notice && (
-            <div className="text-center text-sm font-bold uppercase tracking-wide text-[#cf2e2e]">
+            <div
+              role="status"
+              aria-live="polite"
+              className="text-center text-sm font-bold uppercase tracking-wide text-[#cf2e2e]"
+            >
               {notice}
+            </div>
+          )}
+
+          {completionReveal && revealingRow !== null && (
+            <div
+              className="text-center text-sm font-bold"
+              role="status"
+              aria-live="polite"
+            >
+              {completionReveal.status === "solved"
+                ? "Revealing your solve..."
+                : "Revealing the final row..."}
             </div>
           )}
 
@@ -835,6 +1011,7 @@ function WordleActivityStageContent({
                   <button
                     type="button"
                     onClick={submitGuess}
+                    disabled={!answer || localFinished || revealingRow !== null}
                     className={cn(
                       "h-12 rounded px-3 text-xs font-bold sm:h-[52px]",
                       theme.key,
@@ -850,6 +1027,9 @@ function WordleActivityStageContent({
                       key={letter}
                       type="button"
                       onClick={() => addLetter(letter)}
+                      disabled={
+                        !answer || localFinished || revealingRow !== null
+                      }
                       style={
                         mark ? { backgroundColor: colors[mark] } : undefined
                       }
@@ -867,6 +1047,7 @@ function WordleActivityStageContent({
                   <button
                     type="button"
                     onClick={deleteLetter}
+                    disabled={!answer || localFinished || revealingRow !== null}
                     aria-label="Delete letter"
                     className={cn(
                       "flex h-12 items-center rounded px-3 text-xs font-bold sm:h-[52px]",
@@ -883,122 +1064,209 @@ function WordleActivityStageContent({
       </div>
 
       {hintsOpen && (
-        <div
-          className={cn(
-            "absolute inset-0 z-10 flex items-center justify-center p-4",
-            theme.overlay,
-          )}
+        <BaseModal
+          onClose={() => {
+            setHintsOpen(false);
+            setAnswerRevealPending(false);
+          }}
+          aria-labelledby="wordle-hints-title"
         >
           <div
             className={cn(
-              "w-full max-w-md rounded-2xl p-5 shadow-2xl",
-              theme.modal,
+              "fixed inset-0 z-10 flex items-center justify-center p-4",
+              theme.overlay,
             )}
           >
-            <div className="mb-4 flex items-center justify-between">
-              <h2 className="text-base font-black uppercase">
-                Today&apos;s Puzzle
-              </h2>
-              <button
-                type="button"
-                onClick={() => setHintsOpen(false)}
-                aria-label="Close hints"
-              >
-                <X size={26} />
-              </button>
-            </div>
-            <div className="space-y-3 text-sm">
-              <div className={cn("rounded-md border p-3", theme.border)}>
-                No. {puzzle.id ?? "----"} for {puzzle.print_date}
+            <div
+              className={cn(
+                "w-full max-w-md rounded-2xl p-5 shadow-2xl",
+                theme.modal,
+              )}
+            >
+              <div className="mb-4 flex items-center justify-between">
+                <h2
+                  id="wordle-hints-title"
+                  className="text-base font-black uppercase"
+                >
+                  Hints
+                </h2>
+                <button
+                  type="button"
+                  onClick={() => setHintsOpen(false)}
+                  aria-label="Close hints"
+                >
+                  <X size={26} />
+                </button>
               </div>
-              <div className={cn("rounded-md border p-3", theme.border)}>
-                First letter:{" "}
-                <span className="font-black">{firstLetterHint}</span>
-              </div>
-              <div className={cn("rounded-md border p-3", theme.border)}>
-                Vowels: <span className="font-black">{vowelCount}</span>
-              </div>
-              <details className={cn("rounded-md border p-3", theme.border)}>
-                <summary className="cursor-pointer font-bold">
-                  Reveal answer
-                </summary>
-                <div className="mt-3 text-3xl font-black uppercase tracking-[0.2em]">
-                  {answer}
+              <div className="space-y-3 text-sm">
+                <p className="text-xs opacity-70">
+                  Optional clues. They never use a guess.
+                </p>
+                {[1, 2, 3].map((level) => {
+                  const hint = getHintDetails(answer, level);
+                  const isUnlocked = hintLevels.includes(level);
+                  const isNext = level === hintLevels.length + 1;
+                  return (
+                    <div
+                      key={level}
+                      className={cn("rounded-md border p-3", theme.border)}
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <div className="font-bold">Clue {level}</div>
+                          {isUnlocked && hint ? (
+                            <div className="mt-1">
+                              {hint.kind === "position"
+                                ? `${hint.value} is in position ${hint.position}.`
+                                : `${hint.title}: ${hint.value}.`}
+                            </div>
+                          ) : (
+                            <div className="mt-1 opacity-60">
+                              {isNext
+                                ? "Ready to reveal"
+                                : "Unlock the previous clue first"}
+                            </div>
+                          )}
+                        </div>
+                        {!isUnlocked && (
+                          <button
+                            type="button"
+                            disabled={!isNext}
+                            onClick={unlockNextHint}
+                            className={cn(
+                              "shrink-0 rounded-full px-3 py-2 text-xs font-bold transition-transform active:scale-[0.96]",
+                              isNext
+                                ? "bg-black text-white"
+                                : "bg-slate-200 text-slate-500 dark:bg-slate-800",
+                            )}
+                          >
+                            Unlock
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+                <div className={cn("rounded-md border p-3", theme.border)}>
+                  {answerRevealPending ? (
+                    <div>
+                      <div className="font-bold">Give up this round?</div>
+                      <p className="mt-1 text-xs opacity-70">
+                        The answer will be shown and this round will count as
+                        missed.
+                      </p>
+                      <div className="mt-3 flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setAnswerRevealPending(false)}
+                          className="rounded-full border px-3 py-2 text-xs font-bold"
+                        >
+                          Keep playing
+                        </button>
+                        <button
+                          type="button"
+                          onClick={revealAnswer}
+                          className="rounded-full bg-black px-3 py-2 text-xs font-bold text-white"
+                        >
+                          Reveal answer
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setAnswerRevealPending(true)}
+                      className="font-bold"
+                    >
+                      I&apos;m stuck - reveal the answer
+                    </button>
+                  )}
                 </div>
-              </details>
+                <div className="text-xs opacity-60">
+                  Puzzle {puzzle.id ?? "----"} - {puzzle.print_date}
+                </div>
+              </div>
             </div>
           </div>
-        </div>
+        </BaseModal>
       )}
 
       {settingsOpen && (
-        <div
-          className={cn(
-            "absolute inset-0 z-10 flex items-center justify-center p-4",
-            theme.overlay,
-          )}
+        <BaseModal
+          onClose={() => setSettingsOpen(false)}
+          aria-labelledby="wordle-settings-title"
         >
           <div
             className={cn(
-              "w-full max-w-[500px] rounded-2xl p-4 shadow-2xl",
-              theme.modal,
+              "fixed inset-0 z-10 flex items-center justify-center p-4",
+              theme.overlay,
             )}
           >
-            <div className="mb-5 flex items-center justify-between">
-              <h2 className="flex-1 text-center text-base font-black uppercase">
-                Settings
-              </h2>
-              <button
-                type="button"
-                onClick={() => setSettingsOpen(false)}
-                aria-label="Close settings"
-              >
-                <X size={28} />
-              </button>
-            </div>
-            {SETTING_ROWS.map(([key, label, description]) => (
-              <div
-                key={key}
-                className={cn(
-                  "flex items-center justify-between border-b py-4",
-                  theme.border,
-                )}
-              >
-                <div>
-                  <div className="text-lg">{label}</div>
-                  {description && (
-                    <div className="text-xs opacity-75">{description}</div>
-                  )}
-                </div>
+            <div
+              className={cn(
+                "w-full max-w-[500px] rounded-2xl p-4 shadow-2xl",
+                theme.modal,
+              )}
+            >
+              <div className="mb-5 flex items-center justify-between">
+                <h2
+                  id="wordle-settings-title"
+                  className="flex-1 text-center text-base font-black uppercase"
+                >
+                  Settings
+                </h2>
                 <button
                   type="button"
-                  aria-label={`${label}: ${settings[key] ? "On" : "Off"}`}
-                  aria-pressed={settings[key]}
-                  onClick={() =>
-                    setSettings((current) => ({
-                      ...current,
-                      [key]: !current[key],
-                    }))
-                  }
-                  className={cn(
-                    "h-5 w-9 rounded-full bg-[#878a8c] p-0.5",
-                    settings[key] && "bg-[#6aaa64]",
-                  )}
+                  onClick={() => setSettingsOpen(false)}
+                  aria-label="Close settings"
                 >
-                  <span
-                    className={cn(
-                      "block h-4 w-4 rounded-full bg-white transition-transform",
-                      settings[key] && "translate-x-4",
-                    )}
-                  />
+                  <X size={28} />
                 </button>
               </div>
-            ))}
-            <div className="pt-4 text-right text-sm">
-              #{puzzle.id ?? "----"}
+              {SETTING_ROWS.map(([key, label, description]) => (
+                <div
+                  key={key}
+                  className={cn(
+                    "flex items-center justify-between border-b py-4",
+                    theme.border,
+                  )}
+                >
+                  <div>
+                    <div className="text-lg">{label}</div>
+                    {description && (
+                      <div className="text-xs opacity-75">{description}</div>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    aria-label={`${label}: ${settings[key] ? "On" : "Off"}`}
+                    aria-pressed={settings[key]}
+                    onClick={() =>
+                      setSettings((current) => ({
+                        ...current,
+                        [key]: !current[key],
+                      }))
+                    }
+                    className={cn(
+                      "h-5 w-9 rounded-full bg-[#878a8c] p-0.5",
+                      settings[key] && "bg-[#6aaa64]",
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        "block h-4 w-4 rounded-full bg-white transition-transform",
+                        settings[key] && "translate-x-4",
+                      )}
+                    />
+                  </button>
+                </div>
+              ))}
+              <div className="pt-4 text-right text-sm">
+                #{puzzle.id ?? "----"}
+              </div>
             </div>
           </div>
-        </div>
+        </BaseModal>
       )}
     </div>
   );

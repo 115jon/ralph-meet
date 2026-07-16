@@ -58,7 +58,9 @@ const POST = async ({ request, params }: any) => {
     });
 
     await executeInvalidation(result.cacheKeysToInvalidate);
-    await executeBroadcast(result.broadcast);
+    for (const broadcast of result.broadcasts) {
+      await executeBroadcast(broadcast);
+    }
     await executeAuditLog(db, result.auditLog);
 
     return apiSuccess({ banned: true, user_id: body.user_id }, 201);

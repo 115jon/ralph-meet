@@ -427,6 +427,42 @@ describe("LinkEmbed DOM rendering", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("threads X direct-video playback callbacks through the media grid", () => {
+    const onMediaPlay = vi.fn();
+    const onMediaStop = vi.fn();
+    const embed: EmbedInfo = {
+      id: "x-direct-video",
+      url: "https://x.com/example/status/123",
+      type: "rich",
+      provider: { name: "X", url: "https://x.com" },
+      media: [
+        {
+          type: "video",
+          url: "https://video.example/x.mp4",
+          contentType: "video/mp4",
+          width: 1280,
+          height: 720,
+        },
+      ],
+      fields: [],
+    };
+
+    const { container } = render(
+      <LinkEmbed
+        embed={embed}
+        onMediaPlay={onMediaPlay}
+        onMediaStop={onMediaStop}
+      />,
+    );
+
+    const video = container.querySelector("video.rm-custom-video");
+    expect(video).not.toBeNull();
+    fireEvent.play(video as HTMLVideoElement);
+    fireEvent.pause(video as HTMLVideoElement);
+    expect(onMediaPlay).toHaveBeenCalledTimes(1);
+    expect(onMediaStop).toHaveBeenCalledTimes(1);
+  });
+
   it("renders Instagram animated carousel media with the shared video attachment", () => {
     const { container } = render(
       <LinkEmbed

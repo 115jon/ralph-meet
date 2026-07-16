@@ -155,7 +155,7 @@ export default function CreateServerModal({ onClose, isClosing }: Props) {
   ]);
 
   return (
-    <BaseModal onClose={onClose}>
+    <BaseModal onClose={onClose} aria-label="Create server">
       <div
         className={cn(
           "fixed inset-0 z-[200] flex items-end sm:items-center justify-center pointer-events-none",
@@ -165,6 +165,7 @@ export default function CreateServerModal({ onClose, isClosing }: Props) {
         {/* Backdrop */}
         <button
           type="button"
+          data-base-modal-backdrop
           className="absolute inset-0 border-0 bg-black/60 p-0 backdrop-blur-sm pointer-events-auto"
           onClick={onClose}
           aria-label="Close create server modal"

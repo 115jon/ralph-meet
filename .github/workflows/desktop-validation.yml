@@ -5,7 +5,6 @@ on:
     paths:
       - ".github/workflows/desktop-validation.yml"
       - "desktop/**"
-      - "packages/kova-react/**"
       - "src/**"
       - "package.json"
       - "pnpm-lock.yaml"
@@ -47,10 +46,7 @@ jobs:
           cache-dependency-path: pnpm-lock.yaml
 
       - name: Install desktop dependencies
-        run: pnpm install --filter ralph-meet-desktop... --frozen-lockfile
-
-      - name: Build shared package
-        run: pnpm --filter @kova/react build
+        run: pnpm install --filter ralph-meet... --filter ralph-meet-desktop... --frozen-lockfile
 
       - name: Build desktop frontend
         run: pnpm --dir desktop run build:vite

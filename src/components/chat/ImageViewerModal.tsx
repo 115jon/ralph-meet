@@ -415,7 +415,7 @@ export const ImageViewerModal: React.FC = () => {
   if (!currentImage) return null;
 
   return (
-    <BaseModal onClose={close} portal={false}>
+    <BaseModal onClose={close} portal={false} aria-label="Image viewer">
       <div
         className={cn(
           "fixed inset-0 z-200 flex flex-col items-center justify-center bg-rm-bg-primary/95 backdrop-blur-md duration-200",

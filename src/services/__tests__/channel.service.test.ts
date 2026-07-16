@@ -48,8 +48,11 @@ describe("deleteChannel", () => {
     db.assertCalled(/DELETE FROM channels WHERE id/);
     expect(result.serverId).toBe(SERVER_ID);
     expect(result.cacheKeysToInvalidate.length).toBeGreaterThan(0);
-    expect(result.broadcast).toBeDefined();
-    expect(result.broadcast!.event).toBe("CHANNEL_DELETE");
+    expect(result.broadcast).toMatchObject({
+      type: "server",
+      target: SERVER_ID,
+      event: "CHANNEL_DELETE",
+    });
     expect(result.auditLog).toBeDefined();
     expect(result.auditLog!.actionType).toBe("CHANNEL_DELETE");
   });

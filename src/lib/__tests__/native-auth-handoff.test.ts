@@ -2,10 +2,24 @@ import { describe, expect, it } from "vitest";
 
 import {
   getSignInRenderState,
+  isSupportedNativeAuthUrl,
   shouldCompletePostSignInRedirect,
 } from "@/lib/native-auth-handoff";
 
 describe("native auth handoff decisions", () => {
+  it("accepts only native auth callbacks carrying a short-lived code", () => {
+    expect(isSupportedNativeAuthUrl("ralphmeet://auth")).toBe(true);
+    expect(isSupportedNativeAuthUrl("ralphmeet://auth/?kova_auth_code=x")).toBe(
+      true,
+    );
+    expect(isSupportedNativeAuthUrl("ralphmeet://auth/?session_token=x")).toBe(
+      false,
+    );
+    expect(isSupportedNativeAuthUrl("ralphmeet://invite/room")).toBe(false);
+    expect(isSupportedNativeAuthUrl("ralphmeet://evil-auth")).toBe(false);
+    expect(isSupportedNativeAuthUrl("https://meet.test/auth")).toBe(false);
+  });
+
   it("renders the sign-in form after native cookie handoff fails while the browser is signed out", () => {
     expect(
       shouldCompletePostSignInRedirect({

@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useLayoutEffect } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({ apiGet: vi.fn() }));
@@ -38,6 +39,7 @@ describe("SoundboardPicker selection mode", () => {
       ],
     });
     mocks.apiGet.mockReset();
+    localStorage.clear();
     mocks.apiGet.mockImplementation((url: string) => {
       if (url.includes("server-1")) {
         return Promise.resolve([
@@ -52,6 +54,45 @@ describe("SoundboardPicker selection mode", () => {
       if (url.includes("server-2")) return Promise.reject(new Error("stale"));
       return Promise.reject(new Error("unsupported request"));
     });
+  });
+
+  it("renders stored local sounds before passive effects run", async () => {
+    useChatStore.setState({ servers: [] });
+    mocks.apiGet.mockResolvedValue({ favorites: [] });
+    localStorage.setItem(
+      "voice-soundboard:dm-call",
+      JSON.stringify([
+        {
+          id: "local-clip",
+          name: "Local clip",
+          dataUrl: "data:audio/mpeg;base64,AA==",
+        },
+      ]),
+    );
+    const observedDuringLayout: boolean[] = [];
+
+    function LayoutProbe() {
+      useLayoutEffect(() => {
+        observedDuringLayout.push(
+          screen.queryByRole("button", { name: "Play Local clip" }) !== null,
+        );
+      }, []);
+      return null;
+    }
+
+    render(
+      <>
+        <LayoutProbe />
+        <SoundboardPicker onClose={vi.fn()} sfu={null} />
+      </>,
+    );
+
+    expect(observedDuringLayout).toEqual([true]);
+    await waitFor(() =>
+      expect(
+        screen.getByRole("dialog", { name: "Soundboard picker" }),
+      ).toBeVisible(),
+    );
   });
 
   it("keeps selection mode on default/server sounds and hides unsupported paths", async () => {
@@ -111,6 +152,67 @@ describe("SoundboardPicker selection mode", () => {
     ).toBeInTheDocument();
     expect(screen.queryByText("Now Playing")).toBeNull();
     expect(screen.queryByRole("button", { name: "Server Sounds" })).toBeNull();
+  });
+
+  it("uses a standalone dialog for destructive sound confirmation", async () => {
+    render(
+      <SoundboardPicker
+        onClose={() => {}}
+        sfu={null}
+        serverId="server-1"
+        channelId="channel-1"
+      />,
+    );
+
+    const playButton = await screen.findByRole("button", {
+      name: "Play Server clip",
+    });
+    const deleteButton =
+      playButton.parentElement?.querySelector(
+        "svg.lucide-trash-2",
+      )?.parentElement;
+    expect(deleteButton).not.toBeNull();
+    fireEvent.click(deleteButton as HTMLElement);
+
+    const dialog = screen.getByRole("dialog", { name: "Delete Sound" });
+    expect(dialog.querySelector("button button")).toBeNull();
+    expect(screen.getByRole("button", { name: "Cancel" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Delete" })).toBeInTheDocument();
+  });
+
+  it("closes the child confirmation on Escape without closing the picker", async () => {
+    const onClose = vi.fn();
+    render(
+      <SoundboardPicker
+        onClose={onClose}
+        sfu={null}
+        serverId="server-1"
+        channelId="channel-1"
+      />,
+    );
+
+    const playButton = await screen.findByRole("button", {
+      name: "Play Server clip",
+    });
+    const deleteButton = playButton.parentElement?.querySelector(
+      "svg.lucide-trash-2",
+    )?.parentElement as HTMLButtonElement | null;
+    expect(deleteButton).not.toBeNull();
+    deleteButton?.focus();
+    fireEvent.click(deleteButton as HTMLButtonElement);
+
+    const cancelButton = screen.getByRole("button", { name: "Cancel" });
+    expect(cancelButton).toHaveFocus();
+    fireEvent.keyDown(cancelButton, { key: "Escape" });
+
+    expect(
+      screen.queryByRole("dialog", { name: "Delete Sound" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("dialog", { name: "Soundboard picker" }),
+    ).toBeInTheDocument();
+    expect(onClose).not.toHaveBeenCalled();
+    expect(deleteButton).toHaveFocus();
   });
 
   it("shows member servers in the live picker rail and selects a server section", async () => {

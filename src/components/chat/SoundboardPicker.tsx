@@ -12,6 +12,7 @@ import {
   apiPatch,
 } from "@/lib/api-client";
 import { cn } from "@/lib/utils";
+import { BaseModal } from "@/components/ui/BaseModal";
 import {
   ChevronLeft,
   Loader2,
@@ -244,19 +245,47 @@ export default function SoundboardPicker({
   onSelect,
   serverIds = [],
 }: Props) {
+  const serverKey = getSoundboardServerKey(serverId);
+  const storageKey = `voice-soundboard:${serverKey}`;
+  const isServerSoundboard = !!serverId && serverId !== "@me";
+
   const [activeView, setActiveView] = useState<SoundboardView>(
     selectionMode ? "soundboard" : initialView,
   );
+  const previousInitialViewRef = useRef(initialView);
+  const previousSelectionModeRef = useRef(selectionMode);
+  if (
+    previousInitialViewRef.current !== initialView ||
+    previousSelectionModeRef.current !== selectionMode
+  ) {
+    previousInitialViewRef.current = initialView;
+    previousSelectionModeRef.current = selectionMode;
+    setActiveView(selectionMode ? "soundboard" : initialView);
+  }
   const [dynamicStyle, setDynamicStyle] = useState<React.CSSProperties>({
     opacity: 0,
   });
   const [search, setSearch] = useState("");
   const deferredSearch = useDeferredValue(search.trim());
 
-  const serverKey = getSoundboardServerKey(serverId);
-  const storageKey = `voice-soundboard:${serverKey}`;
-  const [customSounds, setCustomSounds] = useState<CustomSound[]>([]);
-  const [serverSounds, setServerSounds] = useState<CustomSound[]>([]);
+  const [customSounds, setCustomSounds] = useState<CustomSound[]>(() =>
+    isServerSoundboard ? [] : readStoredSounds(storageKey),
+  );
+  const previousCustomSoundsContextRef = useRef({
+    isServerSoundboard,
+    storageKey,
+  });
+  if (
+    previousCustomSoundsContextRef.current.isServerSoundboard !==
+      isServerSoundboard ||
+    previousCustomSoundsContextRef.current.storageKey !== storageKey
+  ) {
+    previousCustomSoundsContextRef.current = {
+      isServerSoundboard,
+      storageKey,
+    };
+    setCustomSounds(isServerSoundboard ? [] : readStoredSounds(storageKey));
+  }
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
@@ -321,10 +350,6 @@ export default function SoundboardPicker({
   );
   const pendingJumpIdRef = useRef<string | null>(null);
 
-  useEffect(() => {
-    setActiveView(selectionMode ? "soundboard" : initialView);
-  }, [initialView, selectionMode]);
-
   const [myInstantsQuery, setMyInstantsQuery] = useState("");
   const [myInstantsResults, setMyInstantsResults] = useState<MyInstantsSound[]>(
     [],
@@ -346,7 +371,6 @@ export default function SoundboardPicker({
   const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const memberServers = useChatStore((state) => state.servers);
-  const isServerSoundboard = !!serverId && serverId !== "@me";
   const catalogServerIds = selectionMode
     ? serverIds
     : Array.from(
@@ -367,6 +391,12 @@ export default function SoundboardPicker({
   });
   const serverSectionIds = pickerServers.map((server) => `server:${server.id}`);
   const catalogServerKey = catalogServerIds.join(",");
+  const [serverSounds, setServerSounds] = useState<CustomSound[]>([]);
+  const previousCatalogServerKeyRef = useRef(catalogServerKey);
+  if (previousCatalogServerKeyRef.current !== catalogServerKey) {
+    previousCatalogServerKeyRef.current = catalogServerKey;
+    setServerSounds([]);
+  }
 
   useEffect(() => {
     setSoundboardMasterVolume(playbackVolume);
@@ -456,16 +486,7 @@ export default function SoundboardPicker({
   };
 
   useEffect(() => {
-    if (isServerSoundboard) {
-      setCustomSounds([]);
-      return;
-    }
-    setCustomSounds(readStoredSounds(storageKey));
-  }, [isServerSoundboard, storageKey]);
-
-  useEffect(() => {
     if (!catalogServerKey) {
-      setServerSounds([]);
       return;
     }
     const controller = new AbortController();
@@ -566,19 +587,17 @@ export default function SoundboardPicker({
       return controller;
     };
     if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
-    if (myInstantsQuery.trim()) {
-      let controller: AbortController;
-      searchTimeoutRef.current = setTimeout(() => {
+    let controller: AbortController | undefined;
+    searchTimeoutRef.current = setTimeout(
+      () => {
         controller = fetchMyInstants();
-      }, 400);
-      return () => {
-        if (controller) controller.abort();
-        if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
-      };
-    } else {
-      const controller = fetchMyInstants();
-      return () => controller.abort();
-    }
+      },
+      myInstantsQuery.trim() ? 400 : 0,
+    );
+    return () => {
+      controller?.abort();
+      if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+    };
   }, [activeView, myInstantsQuery, selectionMode]);
 
   useEffect(() => {
@@ -607,19 +626,17 @@ export default function SoundboardPicker({
     };
 
     if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
-    if (radioQuery.trim()) {
-      let controller: AbortController;
-      searchTimeoutRef.current = setTimeout(() => {
+    let controller: AbortController | undefined;
+    searchTimeoutRef.current = setTimeout(
+      () => {
         controller = fetchRadio();
-      }, 400);
-      return () => {
-        if (controller) controller.abort();
-        if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
-      };
-    } else {
-      const controller = fetchRadio();
-      return () => controller.abort();
-    }
+      },
+      radioQuery.trim() ? 400 : 0,
+    );
+    return () => {
+      controller?.abort();
+      if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+    };
   }, [activeView, radioQuery, selectionMode]);
 
   useEffect(() => {
@@ -628,12 +645,14 @@ export default function SoundboardPicker({
 
   useEffect(() => {
     const handleEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
+      if (event.key !== "Escape") return;
+      if (isUploadModalOpen || soundToDelete) return;
+      onClose();
     };
     window.addEventListener("keydown", handleEscape, { capture: true });
     return () =>
       window.removeEventListener("keydown", handleEscape, { capture: true });
-  }, [onClose]);
+  }, [isUploadModalOpen, onClose, soundToDelete]);
 
   useEffect(() => {
     if (!compact) return;
@@ -2381,56 +2400,68 @@ export default function SoundboardPicker({
       )}
 
       {soundToDelete && (
-        <button
-          type="button"
-          className="fixed inset-0 z-[270] flex items-center justify-center border-0 bg-black/50 p-0 text-left dark:bg-black/80 backdrop-blur-sm animate-in fade-in duration-150"
-          aria-label="Close delete sound confirmation"
-          onMouseDown={(e) => {
-            e.stopPropagation();
-            setSoundToDelete(null);
-          }}
+        <BaseModal
+          onClose={() => setSoundToDelete(null)}
+          aria-labelledby="delete-sound-title"
+          aria-describedby="delete-sound-description"
         >
           <div
-            className="flex w-[320px] flex-col overflow-hidden rounded-2xl border border-rm-border bg-rm-bg-surface shadow-[0_22px_80px_rgba(0,0,0,0.8)] animate-in zoom-in-95 duration-150"
-            onMouseDown={(e) => e.stopPropagation()}
+            role="presentation"
+            className="fixed inset-0 z-[270] flex items-center justify-center border-0 bg-black/50 p-0 text-left dark:bg-black/80 backdrop-blur-sm animate-in fade-in duration-150"
+            onMouseDown={(event) => {
+              if (event.target === event.currentTarget) setSoundToDelete(null);
+            }}
           >
-            <div className="p-4">
-              <h2 className="text-lg font-black text-rm-text">Delete Sound</h2>
-              <div className="mt-2 text-sm text-rm-text-muted flex flex-col gap-2">
-                Are you sure you want to delete this sound?
-                <div className="flex items-center justify-center p-3 mt-1 bg-rm-bg-hover rounded-lg border border-rm-border gap-2 font-bold text-rm-text">
-                  {soundToDelete.emoji && (
-                    <EmojiToken
-                      value={soundToDelete.emoji}
-                      className="h-5 w-5"
-                      fallbackClassName="text-base"
-                    />
-                  )}
-                  <span>{soundToDelete.name}</span>
+            <div
+              className="flex w-[320px] flex-col overflow-hidden rounded-2xl border border-rm-border bg-rm-bg-surface shadow-[0_22px_80px_rgba(0,0,0,0.8)] animate-in zoom-in-95 duration-150"
+              onMouseDown={(event) => event.stopPropagation()}
+            >
+              <div className="p-4">
+                <h2
+                  id="delete-sound-title"
+                  className="text-lg font-black text-rm-text"
+                >
+                  Delete Sound
+                </h2>
+                <div
+                  id="delete-sound-description"
+                  className="mt-2 text-sm text-rm-text-muted flex flex-col gap-2"
+                >
+                  Are you sure you want to delete this sound?
+                  <div className="flex items-center justify-center p-3 mt-1 bg-rm-bg-hover rounded-lg border border-rm-border gap-2 font-bold text-rm-text">
+                    {soundToDelete.emoji && (
+                      <EmojiToken
+                        value={soundToDelete.emoji}
+                        className="h-5 w-5"
+                        fallbackClassName="text-base"
+                      />
+                    )}
+                    <span>{soundToDelete.name}</span>
+                  </div>
                 </div>
               </div>
-            </div>
-            <div className="flex gap-2 bg-rm-bg-floating p-4 border-t border-rm-border">
-              <button
-                type="button"
-                className="flex-1 rounded-xl bg-rm-bg-hover hover:bg-rm-bg-active py-2 text-sm font-bold text-rm-text transition-colors"
-                onClick={() => setSoundToDelete(null)}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="flex-1 rounded-xl bg-red-500 py-2 text-sm font-bold text-white shadow-lg transition-colors hover:bg-red-600"
-                onClick={async (e) => {
-                  await handleDeleteSound(soundToDelete.id, e);
-                  setSoundToDelete(null);
-                }}
-              >
-                Delete
-              </button>
+              <div className="flex gap-2 bg-rm-bg-floating p-4 border-t border-rm-border">
+                <button
+                  type="button"
+                  className="flex-1 rounded-xl bg-rm-bg-hover hover:bg-rm-bg-active py-2 text-sm font-bold text-rm-text transition-colors"
+                  onClick={() => setSoundToDelete(null)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="flex-1 rounded-xl bg-red-500 py-2 text-sm font-bold text-white shadow-lg transition-colors hover:bg-red-600"
+                  onClick={async (event) => {
+                    await handleDeleteSound(soundToDelete.id, event);
+                    setSoundToDelete(null);
+                  }}
+                >
+                  Delete
+                </button>
+              </div>
             </div>
           </div>
-        </button>
+        </BaseModal>
       )}
     </>,
     document.body,

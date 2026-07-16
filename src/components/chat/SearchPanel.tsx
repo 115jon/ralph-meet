@@ -55,9 +55,22 @@ type SearchAction =
 function searchReducer(state: SearchState, action: SearchAction): SearchState {
   switch (action.type) {
     case "SET_QUERY":
-      return { ...state, query: action.payload };
+      return {
+        ...state,
+        query: action.payload,
+        results: [],
+        total: 0,
+        loading: false,
+        searched: false,
+      };
     case "START_SEARCH":
-      return { ...state, loading: true, searched: true };
+      return {
+        ...state,
+        results: [],
+        total: 0,
+        loading: true,
+        searched: true,
+      };
     case "SEARCH_SUCCESS":
       return {
         ...state,
@@ -66,7 +79,13 @@ function searchReducer(state: SearchState, action: SearchAction): SearchState {
         total: action.payload.total,
       };
     case "SEARCH_ERROR":
-      return { ...state, loading: false };
+      return {
+        ...state,
+        results: [],
+        total: 0,
+        loading: false,
+        searched: true,
+      };
     case "CLEAR_RESULTS":
       return {
         ...state,
@@ -97,6 +116,8 @@ export default function SearchPanel({
 
   const inputRef = useRef<HTMLInputElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(null);
+  const requestIdRef = useRef(0);
+  const controllerRef = useRef<AbortController | null>(null);
   const searchInputId = useId();
 
   useEffect(() => {
@@ -110,22 +131,51 @@ export default function SearchPanel({
     });
   }, [onClose]);
 
+  useEffect(() => {
+    requestIdRef.current += 1;
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = null;
+    controllerRef.current?.abort();
+    controllerRef.current = null;
+    dispatch({ type: "CLEAR_RESULTS" });
+  }, [serverId]);
+
+  useEffect(() => {
+    return () => {
+      requestIdRef.current += 1;
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+      controllerRef.current?.abort();
+    };
+  }, []);
+
   const doSearch = useCallback(
-    async (q: string) => {
+    async (q: string, requestId: number) => {
       if (q.length < 2) {
-        dispatch({ type: "CLEAR_RESULTS" });
+        if (requestId === requestIdRef.current) {
+          dispatch({ type: "CLEAR_RESULTS" });
+        }
         return;
       }
+      controllerRef.current?.abort();
+      const controller = new AbortController();
+      controllerRef.current = controller;
       dispatch({ type: "START_SEARCH" });
       try {
         const data = await apiGet<{ messages: SearchResult[]; total: number }>(
           `/api/servers/${serverId}/search?q=${encodeURIComponent(q)}&limit=25`,
+          { signal: controller.signal },
         );
+        if (controller.signal.aborted || requestId !== requestIdRef.current) {
+          return;
+        }
         dispatch({
           type: "SEARCH_SUCCESS",
           payload: { results: data.messages, total: data.total },
         });
       } catch {
+        if (controller.signal.aborted || requestId !== requestIdRef.current) {
+          return;
+        }
         dispatch({ type: "SEARCH_ERROR" });
       }
     },
@@ -135,9 +185,15 @@ export default function SearchPanel({
   const handleInput = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
       const val = e.target.value;
+      requestIdRef.current += 1;
+      controllerRef.current?.abort();
       dispatch({ type: "SET_QUERY", payload: val });
       if (debounceRef.current) clearTimeout(debounceRef.current);
-      debounceRef.current = setTimeout(() => doSearch(val.trim()), 300);
+      const requestId = requestIdRef.current;
+      debounceRef.current = setTimeout(() => {
+        debounceRef.current = null;
+        void doSearch(val.trim(), requestId);
+      }, 300);
     },
     [doSearch],
   );
@@ -146,7 +202,8 @@ export default function SearchPanel({
     (e: React.KeyboardEvent) => {
       if (e.key === "Enter") {
         if (debounceRef.current) clearTimeout(debounceRef.current);
-        doSearch(query.trim());
+        debounceRef.current = null;
+        void doSearch(query.trim(), requestIdRef.current);
       }
     },
     [query, doSearch],

@@ -108,7 +108,7 @@ export async function banUser(
   input: BanUserInput,
 ): Promise<{
   cacheKeysToInvalidate: string[];
-  broadcast: BroadcastDescriptor;
+  broadcasts: BroadcastDescriptor[];
   auditLog: AuditLogDescriptor;
 }> {
   const targetUserId = input.user_id;
@@ -175,15 +175,28 @@ export async function banUser(
       CacheKey.serverMembers(serverId),
       CacheKey.userServers(targetUserId),
     ],
-    broadcast: {
-      type: "all",
-      event: "GUILD_MEMBER_REMOVE",
-      data: {
-        server_id: serverId,
-        user_id: targetUserId,
-        banned: true,
+    broadcasts: [
+      {
+        type: "server",
+        target: serverId,
+        event: "GUILD_MEMBER_REMOVE",
+        data: {
+          server_id: serverId,
+          user_id: targetUserId,
+          banned: true,
+        },
       },
-    },
+      {
+        type: "user",
+        target: targetUserId,
+        event: "GUILD_MEMBER_REMOVE",
+        data: {
+          server_id: serverId,
+          user_id: targetUserId,
+          banned: true,
+        },
+      },
+    ],
     auditLog: {
       serverId,
       actorId,
