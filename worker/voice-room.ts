@@ -1283,7 +1283,7 @@ export class VoiceRoom extends DurableObject<Env> {
   }
 
   private isSelectProtocolPayload(value: unknown): value is {
-    sdp: string;
+    sdp?: string;
     push_tracks: PushTrackDescriptor[];
     pull_tracks: TrackInfo[];
     push_prefix?: string;
@@ -1291,8 +1291,8 @@ export class VoiceRoom extends DurableObject<Env> {
   } {
     if (!this.isPlainObject(value)) return false;
     if (
-      typeof value.sdp !== "string" ||
-      value.sdp.length > MAX_SDP_LENGTH ||
+      (value.sdp !== undefined &&
+        (typeof value.sdp !== "string" || value.sdp.length > MAX_SDP_LENGTH)) ||
       !Array.isArray(value.push_tracks) ||
       value.push_tracks.length > MAX_NEGOTIATION_TRACKS ||
       !value.push_tracks.every((item) => {
@@ -1310,6 +1310,7 @@ export class VoiceRoom extends DurableObject<Env> {
     ) {
       return false;
     }
+    if (value.push_tracks.length > 0 && !value.sdp?.trim()) return false;
     return (
       (value.push_prefix === undefined ||
         value.push_prefix === "cam" ||
@@ -2065,7 +2066,7 @@ export class VoiceRoom extends DurableObject<Env> {
   private handleSelectProtocol(
     ws: WebSocket,
     d: {
-      sdp: string;
+      sdp?: string;
       push_tracks: PushTrackDescriptor[];
       pull_tracks: TrackInfo[];
       push_prefix?: string;
@@ -2082,7 +2083,7 @@ export class VoiceRoom extends DurableObject<Env> {
   private async handleSelectProtocolInOrder(
     ws: WebSocket,
     d: {
-      sdp: string;
+      sdp?: string;
       push_tracks: PushTrackDescriptor[];
       pull_tracks: TrackInfo[];
       push_prefix?: string;
@@ -2458,7 +2459,7 @@ export class VoiceRoom extends DurableObject<Env> {
                 : undefined;
 
             if (
-              rt.location !== "remote" ||
+              (rt.location !== undefined && rt.location !== "remote") ||
               typeof trackName !== "string" ||
               typeof publisherSessionId !== "string" ||
               !canonicalTrack ||

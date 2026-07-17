@@ -562,6 +562,53 @@ describe("VoiceRoom lifecycle", () => {
     socket.close();
   });
 
+  it("rejects push select protocol payloads without an SDP", async () => {
+    const roomName = crypto.randomUUID();
+    const socket = await openVoiceSocket(roomName);
+    await identifyVoiceSocket(socket, crypto.randomUUID(), roomName);
+    const response = nextMessageWithOpcode(socket, 18);
+
+    socket.send(
+      JSON.stringify({
+        op: 1,
+        d: {
+          push_tracks: [{ track_name: "cam-audio", kind: "audio", mid: "0" }],
+          pull_tracks: [],
+        },
+      }),
+    );
+
+    expect(await response).toMatchObject({
+      op: 18,
+      d: { code: 4000, message: "Invalid select protocol payload" },
+    });
+    socket.close();
+  });
+
+  it("rejects push select protocol payloads with a blank SDP", async () => {
+    const roomName = crypto.randomUUID();
+    const socket = await openVoiceSocket(roomName);
+    await identifyVoiceSocket(socket, crypto.randomUUID(), roomName);
+    const response = nextMessageWithOpcode(socket, 18);
+
+    socket.send(
+      JSON.stringify({
+        op: 1,
+        d: {
+          sdp: " ",
+          push_tracks: [{ track_name: "cam-audio", kind: "audio", mid: "0" }],
+          pull_tracks: [],
+        },
+      }),
+    );
+
+    expect(await response).toMatchObject({
+      op: 18,
+      d: { code: 4000, message: "Invalid select protocol payload" },
+    });
+    socket.close();
+  });
+
   it("acks an unidentified heartbeat without creating a participant", async () => {
     const socket = await openVoiceSocket();
     const response = nextJsonMessage(socket);
@@ -911,7 +958,6 @@ describe("VoiceRoom lifecycle", () => {
       JSON.stringify({
         op: 1,
         d: {
-          sdp: "",
           push_tracks: [],
           pull_tracks: [
             {
@@ -930,6 +976,146 @@ describe("VoiceRoom lifecycle", () => {
       op: 18,
       d: { code: 4000, message: "Requested track is not available" },
     });
+
+    publisher.close();
+    viewer.close();
+  });
+
+  it("completes pull negotiation when Cloudflare omits response location", async () => {
+    const roomName = crypto.randomUUID();
+    const publisherId = crypto.randomUUID();
+    let sessionNumber = 0;
+    let renegotiated = false;
+
+    await mockCallsApi(roomName, async (request) => {
+      const url = new URL(request.url);
+      if (url.pathname.endsWith("/sessions/new")) {
+        sessionNumber += 1;
+        return Response.json({
+          sessionId: sessionNumber === 1 ? "publisher-session" : "pull-session",
+        });
+      }
+      if (url.pathname.endsWith("/renegotiate")) {
+        const body = (await request.json()) as {
+          sessionDescription?: { sdp?: string; type?: string };
+        };
+        expect(request.method).toBe("PUT");
+        expect(body.sessionDescription).toEqual({
+          sdp: "pull-answer",
+          type: "answer",
+        });
+        renegotiated = true;
+        return Response.json({});
+      }
+      if (url.pathname.endsWith("/tracks/new")) {
+        const body = (await request.json()) as {
+          tracks?: Array<Record<string, unknown>>;
+        };
+        if (body.tracks?.[0]?.location === "remote") {
+          return Response.json({
+            requiresImmediateRenegotiation: true,
+            sessionDescription: { type: "offer", sdp: "pull-offer" },
+            tracks: [
+              {
+                trackName: "cam-audio",
+                sessionId: "publisher-session",
+                mid: "1",
+              },
+            ],
+          });
+        }
+        return Response.json({
+          requiresImmediateRenegotiation: false,
+          sessionDescription: { type: "answer", sdp: "push-answer" },
+          tracks: [{ location: "local", trackName: "cam-audio", mid: "0" }],
+        });
+      }
+      throw new Error(
+        `Unexpected Calls request: ${request.method} ${request.url}`,
+      );
+    });
+
+    const publisher = await openVoiceSocket(roomName);
+    await identifyVoiceSocket(publisher, publisherId, roomName);
+    const pushDescription = nextMessageWithOpcode(publisher, 4);
+    publisher.send(
+      JSON.stringify({
+        op: 1,
+        d: {
+          sdp: "push-offer",
+          push_prefix: "cam",
+          push_tracks: [{ track_name: "cam-audio", kind: "audio", mid: "0" }],
+          pull_tracks: [],
+        },
+      }),
+    );
+    await pushDescription;
+    publisher.send(
+      JSON.stringify({ op: 102, d: { track_names: ["cam-audio"] } }),
+    );
+
+    const viewer = await openVoiceSocket(roomName, "viewer-user");
+    await identifyVoiceSocket(
+      viewer,
+      crypto.randomUUID(),
+      roomName,
+      "viewer-user",
+    );
+    const pullDescription = nextMessageWithOpcode(viewer, 4);
+    viewer.send(
+      JSON.stringify({
+        op: 1,
+        d: {
+          push_tracks: [],
+          pull_tracks: [
+            {
+              participant_id: publisherId,
+              track_name: "cam-audio",
+              session_id: "publisher-session",
+              kind: "audio",
+            },
+          ],
+          request_id: "pull-valid",
+        },
+      }),
+    );
+
+    await expect(pullDescription).resolves.toMatchObject({
+      op: 4,
+      d: {
+        sdp: "pull-offer",
+        sdp_type: "offer",
+        session_id: "pull-session",
+        request_id: "pull-valid",
+        operation: "pull",
+        tracks: [
+          {
+            participant_id: publisherId,
+            track_name: "cam-audio",
+            session_id: "publisher-session",
+            mid: "1",
+            kind: "audio",
+          },
+        ],
+      },
+    });
+
+    const negotiationDone = nextMessageWithOpcode(viewer, 10);
+    viewer.send(
+      JSON.stringify({
+        op: 14,
+        d: { sdp: "pull-answer", request_id: "pull-valid" },
+      }),
+    );
+    await expect(negotiationDone).resolves.toMatchObject({
+      op: 10,
+      d: {
+        session_id: "pull-session",
+        request_id: "pull-valid",
+        operation: "pull",
+      },
+    });
+    expect(renegotiated).toBe(true);
 
     publisher.close();
     viewer.close();
