@@ -731,6 +731,7 @@ async function fetchWebInnertubeConfig(
 async function postWebInnertubeRequest(
   endpoint: "search" | "browse",
   body: Record<string, unknown>,
+  options?: { maxAttempts?: number },
 ): Promise<Record<string, unknown>> {
   const attempts: InnertubeRequestAttempt[] = [];
   const liveConfig = await fetchWebInnertubeConfig().catch(() => null);
@@ -753,7 +754,12 @@ async function postWebInnertubeRequest(
 
   let lastError: unknown = null;
 
-  for (const attempt of attempts) {
+  const attemptsToUse =
+    options?.maxAttempts !== undefined
+      ? attempts.slice(0, options.maxAttempts)
+      : attempts;
+
+  for (const attempt of attemptsToUse) {
     try {
       const headers = new Headers({
         "Content-Type": "application/json",
@@ -1052,10 +1058,14 @@ export async function searchYouTubeCatalog(
   const trimmed = query.trim();
   if (!trimmed) return [];
 
-  const payload = await postWebInnertubeRequest("search", {
-    query: trimmed,
-    params: YOUTUBE_SEARCH_FILTER_PARAMS[filter],
-  });
+  const payload = await postWebInnertubeRequest(
+    "search",
+    {
+      query: trimmed,
+      params: YOUTUBE_SEARCH_FILTER_PARAMS[filter],
+    },
+    { maxAttempts: 2 },
+  );
 
   const nodes =
     filter === "video"

@@ -1,8 +1,9 @@
-import { cacheGet, cacheSet } from "@/lib/cache";
+import { cacheGet, cacheGetMany, cacheSet } from "@/lib/cache";
 import { clog } from "@/lib/console-logger";
 import {
   convertSearchTrackToMusicTrack,
   LISTEN_TOGETHER_IMPORT_LIMIT,
+  LISTEN_TOGETHER_RESOLVE_BATCH_SIZE,
   LISTEN_TOGETHER_RESOLVE_TTL_SECONDS,
   LISTEN_TOGETHER_SEARCH_TTL_SECONDS,
   type ListenTogetherMusicProvider,
@@ -13,6 +14,7 @@ import {
   type ListenTogetherSearchResult,
   type ListenTogetherSearchTrackResult,
   type ListenTogetherSkippedItem,
+  type ListenTogetherMusicTrack,
   type ListenTogetherTrack,
 } from "@/lib/listen-together";
 import {
@@ -26,6 +28,8 @@ const log = clog("listen-together");
 let spotifyClientPromise: Promise<SpotifyClient> | null = null;
 
 const LISTEN_TOGETHER_STREAM_CACHE_TTL_SECONDS = 120;
+const LISTEN_TOGETHER_TRACK_CACHE_TTL_SECONDS = 86_400;
+const SPOTIFY_TRACK_RESOLVE_CONCURRENCY = 5;
 
 interface SpotifyTrackLike {
   name: string;
@@ -51,6 +55,10 @@ interface SpotifyDetails {
 
 interface SpotifyClient {
   getDetails: (url: string, opts?: RequestInit) => Promise<SpotifyDetails>;
+}
+
+interface SpotifyTrackCacheEntry {
+  track: ListenTogetherMusicTrack | null;
 }
 
 interface ExtractedYouTubeUrl {
@@ -85,7 +93,33 @@ function getSearchCacheKey(query: string, filter: ListenTogetherSearchFilter) {
 }
 
 function getResolveCacheKey(rawUrl: string) {
-  return `v1:listen-together:resolve:${rawUrl.trim()}`;
+  return `v2:listen-together:resolve:${rawUrl.trim()}`;
+}
+
+function getResolveBatchCacheKey(rawUrl: string, offset: number) {
+  return `${getResolveCacheKey(rawUrl)}:${offset}`;
+}
+
+function getSpotifyDetailsCacheKey(rawUrl: string) {
+  return `v1:listen-together:spotify-details:${rawUrl.trim()}`;
+}
+
+export function getListenTogetherResolveBatch(
+  offset: number,
+  totalCount: number,
+  batchSize = LISTEN_TOGETHER_RESOLVE_BATCH_SIZE,
+) {
+  const normalizedOffset = Math.max(0, Math.floor(offset));
+  const end = Math.min(
+    Math.max(normalizedOffset, totalCount),
+    normalizedOffset + Math.max(1, Math.floor(batchSize)),
+  );
+
+  return {
+    offset: normalizedOffset,
+    end,
+    nextOffset: end < totalCount ? end : null,
+  };
 }
 
 function getAudioStreamCacheKey(
@@ -541,6 +575,33 @@ function buildSpotifySearchQuery(track: SpotifyTrackLike) {
   return [track.artist, track.name].filter(Boolean).join(" ").trim();
 }
 
+function getSpotifyTrackCacheKey(track: SpotifyTrackLike) {
+  const durationMs = normalizeSpotifyDurationMs(track.duration) ?? 0;
+  return `v1:listen-together:spotify-track:${normalizeText(track.artist)}:${normalizeText(track.name)}:${durationMs}`;
+}
+
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  concurrency: number,
+  mapper: (item: T) => Promise<R>,
+): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let nextIndex = 0;
+  const workerCount = Math.min(Math.max(1, concurrency), items.length);
+
+  await Promise.all(
+    Array.from({ length: workerCount }, async () => {
+      while (nextIndex < items.length) {
+        const index = nextIndex;
+        nextIndex += 1;
+        results[index] = await mapper(items[index]!);
+      }
+    }),
+  );
+
+  return results;
+}
+
 function normalizeSpotifyDurationMs(
   duration: number | null | undefined,
 ): number | null {
@@ -604,7 +665,7 @@ async function searchYoutubeTracks(query: string, limit = 10) {
 async function resolveSpotifyTrackToYoutube(
   track: SpotifyTrackLike,
   sourceUrl: string,
-): Promise<ListenTogetherTrack | null> {
+): Promise<ListenTogetherMusicTrack | null> {
   const query = buildSpotifySearchQuery(track);
   if (!query) return null;
   const candidates = await searchYoutubeTracks(query, 5);
@@ -735,37 +796,129 @@ async function resolveYoutubePlaylist(
   };
 }
 
-async function resolveSpotifyUrl(
-  rawUrl: string,
-): Promise<ListenTogetherResolveResponse> {
+async function getSpotifyDetails(rawUrl: string): Promise<SpotifyDetails> {
+  const cacheKey = getSpotifyDetailsCacheKey(rawUrl);
+  const cached = await cacheGet<SpotifyDetails>(cacheKey);
+  if (cached) return cached;
+
   const spotify = await getSpotifyClient();
   const details = await spotify.getDetails(rawUrl);
+  const boundedDetails = {
+    ...details,
+    tracks: details.tracks.slice(0, LISTEN_TOGETHER_IMPORT_LIMIT),
+  };
+  await cacheSet(cacheKey, boundedDetails, LISTEN_TOGETHER_RESOLVE_TTL_SECONDS);
+  return boundedDetails;
+}
+
+async function resolveSpotifyUrl(
+  rawUrl: string,
+  offset = 0,
+): Promise<ListenTogetherResolveResponse> {
+  const details = await getSpotifyDetails(rawUrl);
   const sourceType = details.preview.type;
   const sourceTracks = details.tracks.slice(0, LISTEN_TOGETHER_IMPORT_LIMIT);
+  const batch = getListenTogetherResolveBatch(offset, sourceTracks.length);
+  const batchTracks = sourceTracks.slice(batch.offset, batch.end);
   const skippedItems: ListenTogetherSkippedItem[] = [];
   const resolvedTracks: ListenTogetherTrack[] = [];
 
-  for (const track of sourceTracks) {
-    try {
-      const resolved = await resolveSpotifyTrackToYoutube(
-        { name: track.name, artist: track.artist, duration: track.duration },
-        rawUrl,
-      );
-      if (resolved) {
-        resolvedTracks.push(resolved);
-      } else {
-        skippedItems.push({
-          title: track.name,
-          artist: track.artist,
-          reason: "No close YouTube match found",
-        });
+  const uniqueTracks = new Map<
+    string,
+    { track: SpotifyTrackLike; cacheKey: string }
+  >();
+  for (const track of batchTracks) {
+    const spotifyTrack = {
+      name: track.name,
+      artist: track.artist,
+      duration: track.duration,
+    };
+    const key = getSpotifyTrackCacheKey(spotifyTrack);
+    if (!uniqueTracks.has(key)) {
+      uniqueTracks.set(key, {
+        track: spotifyTrack,
+        cacheKey: key,
+      });
+    }
+  }
+
+  const cachedEntries = await cacheGetMany<SpotifyTrackCacheEntry>(
+    [...uniqueTracks.values()].map(({ cacheKey }) => cacheKey),
+  );
+  const resolutions = new Map<
+    string,
+    { track: ListenTogetherMusicTrack | null; reason: string }
+  >();
+  const uncachedTracks: Array<{
+    key: string;
+    track: SpotifyTrackLike;
+    cacheKey: string;
+  }> = [];
+
+  for (const [key, value] of uniqueTracks) {
+    const cached = cachedEntries.get(value.cacheKey);
+    if (cached) {
+      resolutions.set(key, {
+        track: cached.track,
+        reason: cached.track ? "" : "No close YouTube match found",
+      });
+    } else {
+      uncachedTracks.push({ key, ...value });
+    }
+  }
+
+  const freshResolutions = await mapWithConcurrency(
+    uncachedTracks,
+    SPOTIFY_TRACK_RESOLVE_CONCURRENCY,
+    async ({ track }) => {
+      try {
+        const resolved = await resolveSpotifyTrackToYoutube(track, rawUrl);
+        return {
+          track: resolved,
+          reason: resolved ? "" : "No close YouTube match found",
+          cacheable: true,
+        };
+      } catch (error) {
+        log.warn("spotify track resolution failed", error);
+        return {
+          track: null,
+          reason: "Track resolution failed",
+          cacheable: false,
+        };
       }
-    } catch (error) {
-      log.warn("spotify track resolution failed", error);
+    },
+  );
+
+  const cacheWrites: Promise<void>[] = [];
+  uncachedTracks.forEach(({ key, cacheKey }, index) => {
+    const resolution = freshResolutions[index]!;
+    resolutions.set(key, resolution);
+    if (resolution.cacheable) {
+      cacheWrites.push(
+        cacheSet(
+          cacheKey,
+          { track: resolution.track } satisfies SpotifyTrackCacheEntry,
+          LISTEN_TOGETHER_TRACK_CACHE_TTL_SECONDS,
+        ),
+      );
+    }
+  });
+  await Promise.all(cacheWrites);
+
+  for (const track of batchTracks) {
+    const spotifyTrack = {
+      name: track.name,
+      artist: track.artist,
+      duration: track.duration,
+    };
+    const resolution = resolutions.get(getSpotifyTrackCacheKey(spotifyTrack));
+    if (resolution?.track) {
+      resolvedTracks.push({ ...resolution.track, sourceUrl: rawUrl });
+    } else {
       skippedItems.push({
         title: track.name,
         artist: track.artist,
-        reason: "Track resolution failed",
+        reason: resolution?.reason ?? "Track resolution failed",
       });
     }
   }
@@ -778,6 +931,8 @@ async function resolveSpotifyUrl(
       resolvedCount: resolvedTracks.length,
       skippedCount: skippedItems.length,
       skippedItems,
+      nextOffset: null,
+      totalCount: sourceTracks.length,
     };
   }
 
@@ -796,6 +951,8 @@ async function resolveSpotifyUrl(
     resolvedCount: resolvedTracks.length,
     skippedCount: skippedItems.length,
     skippedItems,
+    nextOffset: batch.nextOffset,
+    totalCount: sourceTracks.length,
   };
 }
 
@@ -852,9 +1009,11 @@ export async function searchListenTogether(
 
 export async function resolveListenTogetherUrl(
   rawUrl: string,
+  options?: { offset?: number },
 ): Promise<ListenTogetherResolveResponse> {
   const trimmed = rawUrl.trim();
-  const cacheKey = getResolveCacheKey(trimmed);
+  const offset = Math.max(0, Math.floor(options?.offset ?? 0));
+  const cacheKey = getResolveBatchCacheKey(trimmed, offset);
   const cached = await cacheGet<ListenTogetherResolveResponse>(cacheKey);
   if (cached) return cached;
 
@@ -879,7 +1038,7 @@ export async function resolveListenTogetherUrl(
   } else if (youtubeUrl?.playlistId) {
     response = await resolveYoutubePlaylist(youtubeUrl.playlistId);
   } else if (isSpotifyUrl(trimmed)) {
-    response = await resolveSpotifyUrl(trimmed);
+    response = await resolveSpotifyUrl(trimmed, offset);
   } else {
     throw new Error("Only YouTube and Spotify URLs are supported");
   }

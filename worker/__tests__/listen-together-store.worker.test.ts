@@ -76,4 +76,28 @@ describe("ListenTogetherStore", () => {
       20,
     ]);
   });
+
+  it("does not rewrite unchanged queue rows", () => {
+    const sql = new RecordingSql();
+    sql.rows.push({
+      entry_id: "entry-1",
+      sort_order: 0,
+      entry_json: JSON.stringify({ entryId: "entry-1", requestedAt: 10 }),
+      requested_at: 10,
+    });
+    const store = new ListenTogetherStore(sql, () => "room-1");
+
+    store.saveQueue([{ entryId: "entry-1", requestedAt: 10 } as never]);
+
+    expect(
+      sql.calls.filter(({ query }) =>
+        query.includes("INSERT INTO listen_together_queue"),
+      ),
+    ).toHaveLength(0);
+    expect(
+      sql.calls.filter(({ query }) =>
+        query.startsWith("DELETE FROM listen_together_queue WHERE"),
+      ),
+    ).toHaveLength(0);
+  });
 });

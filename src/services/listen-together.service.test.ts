@@ -1,5 +1,6 @@
 import {
   extractYouTubeUrl,
+  getListenTogetherResolveBatch,
   mapYoutubeVideoNode,
   parseDurationSeconds,
   scoreYoutubeCandidate,
@@ -7,6 +8,19 @@ import {
 import { describe, expect, it } from "vitest";
 
 describe("listen together provider helpers", () => {
+  it("keeps Spotify collection batches below the free-plan search budget", () => {
+    expect(getListenTogetherResolveBatch(0, 100)).toEqual({
+      offset: 0,
+      end: 20,
+      nextOffset: 20,
+    });
+    expect(getListenTogetherResolveBatch(80, 100)).toEqual({
+      offset: 80,
+      end: 100,
+      nextOffset: null,
+    });
+  });
+
   it("extracts YouTube watch and playlist identifiers from supported URLs", () => {
     expect(extractYouTubeUrl("https://youtu.be/abc123XYZ90")).toEqual({
       provider: "youtube",

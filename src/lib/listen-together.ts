@@ -1,4 +1,5 @@
 export const LISTEN_TOGETHER_IMPORT_LIMIT = 100;
+export const LISTEN_TOGETHER_RESOLVE_BATCH_SIZE = 20;
 export const LISTEN_TOGETHER_DRIFT_TOLERANCE_MS = 750;
 export const LISTEN_TOGETHER_SEARCH_TTL_SECONDS = 180;
 export const LISTEN_TOGETHER_RESOLVE_TTL_SECONDS = 600;
@@ -108,6 +109,8 @@ export interface ListenTogetherResolveResponse {
   resolvedCount: number;
   skippedCount: number;
   skippedItems: ListenTogetherSkippedItem[];
+  nextOffset?: number | null;
+  totalCount?: number;
 }
 
 export interface ListenTogetherQueueEntrySeed {

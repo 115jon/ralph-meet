@@ -98,6 +98,32 @@ export async function cacheGet<T>(key: string): Promise<T | null> {
 }
 
 /**
+ * Read up to 100 JSON values in one KV operation.
+ * Missing keys are omitted from the returned map.
+ */
+export async function cacheGetMany<T>(keys: string[]): Promise<Map<string, T>> {
+  if (keys.length === 0) return new Map();
+
+  try {
+    const kv = getKV();
+    if (!kv) return new Map();
+
+    const values = await kv.get(keys, { type: "json" });
+    const result = new Map<string, T>();
+    for (const key of keys) {
+      const value = values.get(key);
+      if (value !== null && value !== undefined) {
+        result.set(key, value as T);
+      }
+    }
+    return result;
+  } catch (e) {
+    log.warn(`BULK GET error for ${keys.length} keys:`, e);
+    return new Map();
+  }
+}
+
+/**
  * Write to KV cache with a TTL.
  * Uses `expirationTtl` (seconds) for automatic expiry.
  * Non-blocking — cache write failures never break the app.

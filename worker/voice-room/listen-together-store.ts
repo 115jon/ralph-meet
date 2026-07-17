@@ -104,14 +104,54 @@ export class ListenTogetherStore {
   }
 
   saveQueue(queue: ListenTogetherQueueEntry[]) {
-    this.sql.exec("DELETE FROM listen_together_queue");
+    const existing = new Map<
+      string,
+      { sortOrder: number; entryJson: string; requestedAt: number }
+    >();
+    for (const row of this.sql.exec(
+      `SELECT entry_id, sort_order, entry_json, requested_at
+       FROM listen_together_queue`,
+    )) {
+      if (typeof row.entry_id !== "string") continue;
+      existing.set(row.entry_id, {
+        sortOrder: Number(row.sort_order),
+        entryJson: String(row.entry_json),
+        requestedAt: Number(row.requested_at),
+      });
+    }
+
+    const nextIds = new Set(queue.map((entry) => entry.entryId));
+    for (const entryId of existing.keys()) {
+      if (!nextIds.has(entryId)) {
+        this.sql.exec(
+          "DELETE FROM listen_together_queue WHERE entry_id = ?",
+          entryId,
+        );
+      }
+    }
+
     queue.forEach((entry, index) => {
+      const entryJson = JSON.stringify(entry);
+      const previous = existing.get(entry.entryId);
+      if (
+        previous &&
+        previous.sortOrder === index &&
+        previous.entryJson === entryJson &&
+        previous.requestedAt === entry.requestedAt
+      ) {
+        return;
+      }
+
       this.sql.exec(
         `INSERT INTO listen_together_queue (entry_id, sort_order, entry_json, requested_at)
-         VALUES (?, ?, ?, ?)`,
+         VALUES (?, ?, ?, ?)
+         ON CONFLICT(entry_id) DO UPDATE SET
+           sort_order = excluded.sort_order,
+           entry_json = excluded.entry_json,
+           requested_at = excluded.requested_at`,
         entry.entryId,
         index,
-        JSON.stringify(entry),
+        entryJson,
         entry.requestedAt,
       );
     });

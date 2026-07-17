@@ -13,6 +13,7 @@ export const listenTogetherResolveBodySchema = z
     serverId: z.string().nullable().optional(),
     channelId: z.string().nullable().optional(),
     url: z.string().optional(),
+    offset: z.number().int().min(0).optional(),
   })
   .passthrough();
 
@@ -82,7 +83,9 @@ const POST = async ({ request }: any) => {
   if (sessionCheck instanceof Response) return sessionCheck;
 
   try {
-    const resolved = await resolveListenTogetherUrl(sourceUrl);
+    const resolved = await resolveListenTogetherUrl(sourceUrl, {
+      offset: body.offset,
+    });
     resolveLog.info("Listen together resolve completed", {
       userId: auth.userId,
       roomSlug,

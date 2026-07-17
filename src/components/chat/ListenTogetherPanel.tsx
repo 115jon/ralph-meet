@@ -49,12 +49,12 @@ interface ListenTogetherPanelProps {
   localUserId?: string | null;
 }
 
-function buildResolveFeedback(response: ListenTogetherResolveResponse) {
-  const resolvedLabel = response.resolvedCount === 1 ? "track" : "tracks";
-  if (response.skippedCount <= 0) {
-    return `Queued ${response.resolvedCount} ${resolvedLabel}.`;
+function buildResolveFeedback(resolvedCount: number, skippedCount: number) {
+  const resolvedLabel = resolvedCount === 1 ? "track" : "tracks";
+  if (skippedCount <= 0) {
+    return `Queued ${resolvedCount} ${resolvedLabel}.`;
   }
-  return `Queued ${response.resolvedCount} ${resolvedLabel}, skipped ${response.skippedCount}.`;
+  return `Queued ${resolvedCount} ${resolvedLabel}, skipped ${skippedCount}.`;
 }
 
 export function ListenTogetherPanel({
@@ -236,39 +236,67 @@ export function ListenTogetherPanel({
     setResolveFeedback(null);
 
     try {
-      const response = await apiPost<
-        ListenTogetherResolveResponse,
-        {
-          roomSlug: string;
-          serverId?: string | null;
-          channelId?: string | null;
-          url: string;
-        }
-      >(
-        "/api/listen-together/resolve",
-        {
-          roomSlug,
-          serverId,
-          channelId,
-          url: sourceUrl,
-        },
-        {
-          headers: voiceSessionHeaders,
-        },
-      );
+      let offset = 0;
+      let resolvedCount = 0;
+      let skippedCount = 0;
+      let importBatchId: string | null = null;
+      let importBatchLabel: string | null = null;
+      let queuedAnyTrack = false;
 
-      if (response.tracks.length === 0) {
+      while (true) {
+        const response = await apiPost<
+          ListenTogetherResolveResponse,
+          {
+            roomSlug: string;
+            serverId?: string | null;
+            channelId?: string | null;
+            url: string;
+            offset: number;
+          }
+        >(
+          "/api/listen-together/resolve",
+          {
+            roomSlug,
+            serverId,
+            channelId,
+            url: sourceUrl,
+            offset,
+          },
+          {
+            headers: voiceSessionHeaders,
+          },
+        );
+
+        if (response.kind === "collection" && !importBatchId) {
+          importBatchId = crypto.randomUUID();
+          importBatchLabel = response.collection?.title ?? null;
+        }
+
+        if (response.tracks.length > 0) {
+          enqueueTracks(response.tracks, "append", {
+            importBatchId,
+            importBatchLabel,
+          });
+          queuedAnyTrack = true;
+        }
+
+        resolvedCount += response.resolvedCount;
+        skippedCount += response.skippedCount;
+
+        const nextOffset = response.nextOffset ?? null;
+        if (response.kind !== "collection" || nextOffset === null) break;
+        if (nextOffset <= offset) {
+          throw new Error("Resolver returned an invalid collection cursor.");
+        }
+        offset = nextOffset;
+      }
+
+      if (!queuedAnyTrack) {
         setResolveFeedback("No playable tracks were resolved from that link.");
         return;
       }
 
-      const importBatchId =
-        response.kind === "collection" ? crypto.randomUUID() : null;
-      enqueueTracks(response.tracks, "append", {
-        importBatchId,
-        importBatchLabel: response.collection?.title ?? null,
-      });
-      setResolveFeedback(buildResolveFeedback(response));
+      setResolveFeedback(buildResolveFeedback(resolvedCount, skippedCount));
       setInputValue("");
     } catch (resolveError) {
       setResolveFeedback(
