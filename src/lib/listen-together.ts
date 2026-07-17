@@ -343,6 +343,14 @@ export function isListenTogetherResolvableUrl(input: string): boolean {
   try {
     const parsed = new URL(input.trim());
     const hostname = parsed.hostname.toLowerCase();
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      return false;
+    }
+
+    if (!parsed.pathname || parsed.pathname === "/") {
+      return false;
+    }
+
     return (
       hostname === "youtube.com" ||
       hostname === "www.youtube.com" ||
