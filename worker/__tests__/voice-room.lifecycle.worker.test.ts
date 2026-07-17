@@ -388,6 +388,165 @@ describe("VoiceRoom lifecycle", () => {
     socket.close();
   });
 
+  it("rebroadcasts sanitized activity starts with the authenticated sender", async () => {
+    const roomName = crypto.randomUUID();
+    const socket = await openVoiceSocket(roomName, "authenticated-user");
+    const participantId = crypto.randomUUID();
+    await identifyVoiceSocket(
+      socket,
+      participantId,
+      roomName,
+      "authenticated-user",
+    );
+    const event = nextMessageWithOpcodeAndType(socket, 106, "activity.start");
+
+    socket.send(
+      JSON.stringify({
+        op: 106,
+        d: {
+          type: "activity.start",
+          userId: "spoofed-user",
+          channelId: "channel-1",
+          activity: "wordle",
+          startedAt: Date.now(),
+          secret: "must-not-broadcast",
+        },
+      }),
+    );
+
+    await expect(event).resolves.toMatchObject({
+      op: 106,
+      d: {
+        type: "activity.start",
+        userId: "authenticated-user",
+        participant_id: participantId,
+        channelId: "channel-1",
+        activity: "wordle",
+      },
+    });
+    socket.close();
+  });
+
+  it("rebroadcasts sanitized activity leaves with the authenticated sender", async () => {
+    const roomName = crypto.randomUUID();
+    const socket = await openVoiceSocket(roomName, "authenticated-user");
+    const participantId = crypto.randomUUID();
+    await identifyVoiceSocket(
+      socket,
+      participantId,
+      roomName,
+      "authenticated-user",
+    );
+    const event = nextMessageWithOpcodeAndType(socket, 106, "activity.leave");
+
+    socket.send(
+      JSON.stringify({
+        op: 106,
+        d: {
+          type: "activity.leave",
+          userId: "spoofed-user",
+          channelId: " channel-1 ",
+          secret: "must-not-broadcast",
+        },
+      }),
+    );
+
+    await expect(event).resolves.toMatchObject({
+      op: 106,
+      d: {
+        type: "activity.leave",
+        userId: "authenticated-user",
+        participant_id: participantId,
+        channelId: "channel-1",
+      },
+    });
+    socket.close();
+  });
+
+  it.each([
+    { guesses: Array.from({ length: 7 }, () => "crane") },
+    { guesses: ["too-short"] },
+  ])("rejects malformed Wordle progress: %j", async (progress) => {
+    const roomName = crypto.randomUUID();
+    const socket = await openVoiceSocket(roomName);
+    await identifyVoiceSocket(socket, crypto.randomUUID(), roomName);
+    const response = nextMessageWithOpcode(socket, 18);
+
+    socket.send(
+      JSON.stringify({
+        op: 106,
+        d: {
+          type: "wordle.progress",
+          channel_id: "channel-1",
+          puzzle_date: "2026-06-09",
+          progress: {
+            name: "Ada",
+            avatar: null,
+            streak: 1,
+            finished: false,
+            missed: false,
+            ...progress,
+          },
+        },
+      }),
+    );
+
+    await expect(response).resolves.toMatchObject({
+      op: 18,
+      d: { code: 4000, message: "Invalid wordle.progress payload" },
+    });
+    socket.close();
+  });
+
+  it("rebroadcasts valid Wordle progress without accepting a spoofed user", async () => {
+    const roomName = crypto.randomUUID();
+    const participantId = crypto.randomUUID();
+    const socket = await openVoiceSocket(roomName, "authenticated-user");
+    await identifyVoiceSocket(
+      socket,
+      participantId,
+      roomName,
+      "authenticated-user",
+    );
+    const event = nextMessageWithOpcodeAndType(socket, 106, "wordle.progress");
+
+    socket.send(
+      JSON.stringify({
+        op: 106,
+        d: {
+          type: "wordle.progress",
+          channel_id: "channel-1",
+          puzzle_date: "2026-06-09",
+          progress: {
+            userId: "spoofed-user",
+            name: "Ada",
+            avatar: null,
+            guesses: ["CRANE"],
+            streak: 2,
+            finished: false,
+            missed: false,
+            secret: "must-not-broadcast",
+          },
+        },
+      }),
+    );
+
+    await expect(event).resolves.toMatchObject({
+      op: 106,
+      d: {
+        type: "wordle.progress",
+        channel_id: "channel-1",
+        puzzle_date: "2026-06-09",
+        progress: {
+          userId: "authenticated-user",
+          participant_id: participantId,
+          guesses: ["crane"],
+        },
+      },
+    });
+    socket.close();
+  });
+
   it("rejects malformed select protocol payloads", async () => {
     const roomName = crypto.randomUUID();
     const socket = await openVoiceSocket(roomName);

@@ -1,3 +1,5 @@
+import { WORDLE_ALLOWED_WORDS } from "./wordle-allowed-words";
+
 export type WordleCompletionStatus = "playing" | "solved" | "missed";
 
 export interface WordleCompletion {
@@ -18,6 +20,11 @@ const WORD_LENGTH = 5;
 const FLIP_DURATION_MS = 520;
 const TILE_STAGGER_MS = 120;
 const COMPLETION_PAUSE_MS = 120;
+
+export function isValidWordleGuess(guess: string, answer?: string): boolean {
+  if (!/^[a-z]{5}$/.test(guess)) return false;
+  return guess === answer || WORDLE_ALLOWED_WORDS.has(guess);
+}
 
 export function evaluateWordleGuess(
   guess: string,
@@ -59,6 +66,7 @@ export function getHardModeViolation(
   answer: string,
 ): string | null {
   const requiredCounts = new Map<string, number>();
+  const forbiddenPositions = new Map<string, Set<number>>();
 
   for (const previousGuess of guesses) {
     const marks = evaluateWordleGuess(previousGuess, answer);
@@ -75,6 +83,9 @@ export function getHardModeViolation(
         revealedCounts.set(letter, (revealedCounts.get(letter) ?? 0) + 1);
       } else if (marks[index] === "present") {
         revealedCounts.set(letter, (revealedCounts.get(letter) ?? 0) + 1);
+        const positions = forbiddenPositions.get(letter) ?? new Set<number>();
+        positions.add(index);
+        forbiddenPositions.set(letter, positions);
       }
     }
 
@@ -97,6 +108,14 @@ export function getHardModeViolation(
       return requiredCount === 1
         ? `${letter.toUpperCase()} must be used.`
         : `${letter.toUpperCase()} must be used ${requiredCount} times.`;
+    }
+  }
+
+  for (const [letter, positions] of forbiddenPositions) {
+    for (const position of positions) {
+      if (guess[position]?.toLowerCase() === letter) {
+        return `${letter.toUpperCase()} cannot be used in position ${position + 1}.`;
+      }
     }
   }
 

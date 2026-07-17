@@ -4,10 +4,22 @@ import {
   getCompletionStatus,
   getHintDetails,
   getRevealDuration,
+  isValidWordleGuess,
   shouldShowCompletionResult,
 } from "./wordle-game";
 
 describe("Wordle game behavior", () => {
+  it("accepts representative standard Wordle guesses and the fetched answer only", () => {
+    expect(isValidWordleGuess("crane")).toBe(true);
+    for (const guess of ["adieu", "begat", "beget", "savoy", "sperm"]) {
+      expect(isValidWordleGuess(guess)).toBe(true);
+    }
+    expect(isValidWordleGuess("Crane")).toBe(false);
+    expect(isValidWordleGuess("cr4ne")).toBe(false);
+    expect(isValidWordleGuess("zzzzz")).toBe(false);
+    expect(isValidWordleGuess("zzzzz", "zzzzz")).toBe(true);
+  });
+
   it("keeps a solved whole-word guess in the reveal phase before completion", () => {
     expect(getCompletionStatus(["crane"], "crane")).toEqual({
       status: "solved",
@@ -54,6 +66,12 @@ describe("Wordle game behavior", () => {
   it("requires the full revealed count for repeated hard-mode letters", () => {
     expect(getHardModeViolation("abcde", ["iaixx"], "civic")).toBe(
       "I must be used 2 times.",
+    );
+  });
+
+  it("does not reuse a yellow letter in its revealed position", () => {
+    expect(getHardModeViolation("charm", ["crane"], "cigar")).toBe(
+      "A cannot be used in position 3.",
     );
   });
 });

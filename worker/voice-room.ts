@@ -50,6 +50,7 @@ import { StreamWatcherStore } from "./voice-room/stream-watcher-store";
 import { ListenTogetherStore } from "./voice-room/listen-together-store";
 import { RadioStationResolver } from "./voice-room/radio-station-resolver";
 import { SfuClient } from "./voice-room/sfu-client";
+import { sanitizeVoiceAppEvent } from "./voice-room-events";
 
 const log = clog("VoiceGW");
 const roomLog = clog("VoiceRoom");
@@ -2976,6 +2977,26 @@ export class VoiceRoom extends DurableObject<Env> {
           },
         });
       }
+      return;
+    }
+
+    const wordleActivityEvent = sanitizeVoiceAppEvent(
+      d,
+      callerUserId ?? pid,
+      pid,
+    );
+    if (wordleActivityEvent) {
+      if (wordleActivityEvent.kind === "invalid") {
+        this.sendTo(ws, {
+          op: Op.Error,
+          d: { code: 4000, message: wordleActivityEvent.message },
+        });
+        return;
+      }
+      this.broadcast({
+        op: Op.VoiceAppEvent,
+        d: { ...wordleActivityEvent.event, sent_at: Date.now() },
+      });
       return;
     }
 

@@ -9,6 +9,7 @@ import {
   getHardModeViolation,
   getHintDetails,
   getRevealDuration,
+  isValidWordleGuess,
   shouldShowCompletionResult,
 } from "@/lib/wordle-game";
 import { BarChart3, Delete, Lightbulb, Settings, X } from "lucide-react";
@@ -113,22 +114,27 @@ function formatCountdown(milliseconds: number) {
 
 function readStoredProgress(key: string): {
   guesses: string[];
-  progress: Record<string, Progress>;
+  localProgress: Progress | null;
   hints: number[];
 } {
   if (typeof window === "undefined")
-    return { guesses: [], progress: {}, hints: [] };
+    return { guesses: [], localProgress: null, hints: [] };
   try {
-    const parsed = JSON.parse(
-      localStorage.getItem(key) || '{"guesses":[],"progress":{}}',
+    const parsed: unknown = JSON.parse(
+      localStorage.getItem(key) ||
+        '{"guesses":[],"localProgress":null,"hints":[]}',
     );
+    const record =
+      parsed && typeof parsed === "object"
+        ? (parsed as Record<string, unknown>)
+        : {};
     return {
-      guesses: normalizeGuesses(parsed.guesses),
-      progress: normalizeProgress(parsed.progress),
-      hints: normalizeHints(parsed.hints),
+      guesses: normalizeGuesses(record.guesses),
+      localProgress: normalizeLocalProgress(record.localProgress),
+      hints: normalizeHints(record.hints),
     };
   } catch {
-    return { guesses: [], progress: {}, hints: [] };
+    return { guesses: [], localProgress: null, hints: [] };
   }
 }
 
@@ -136,7 +142,7 @@ function writeStoredProgress(
   key: string,
   value: {
     guesses: string[];
-    progress: Record<string, Progress>;
+    localProgress: Progress | null;
     hints: number[];
   },
 ) {
@@ -190,8 +196,17 @@ function writeStoredSettings(settings: WordleSettings) {
 
 function normalizeGuesses(value: unknown): string[] {
   return Array.isArray(value)
-    ? value.filter((guess): guess is string => typeof guess === "string")
+    ? value.filter(
+        (guess): guess is string =>
+          typeof guess === "string" && /^[a-z]{5}$/.test(guess),
+      )
     : [];
+}
+
+function normalizeHydratedGuesses(value: unknown, answer: string): string[] {
+  return normalizeGuesses(value)
+    .filter((guess) => isValidWordleGuess(guess, answer))
+    .slice(0, 6);
 }
 
 function normalizeHints(value: unknown): number[] {
@@ -206,27 +221,86 @@ function normalizeHints(value: unknown): number[] {
   ).sort((left, right) => left - right);
 }
 
-function normalizeProgress(value: unknown): Record<string, Progress> {
+function normalizeProgress(
+  value: unknown,
+  capGuesses = true,
+): Record<string, Progress> {
   if (!value || typeof value !== "object") return {};
+  if ("userId" in value && typeof value.userId === "string") {
+    const userId = value.userId;
+    const record = value as Record<string, unknown>;
+    return {
+      [userId]: {
+        userId,
+        name: typeof record.name === "string" ? record.name : "Player",
+        avatar: typeof record.avatar === "string" ? record.avatar : null,
+        guesses: capGuesses
+          ? normalizeGuesses(record.guesses).slice(0, 6)
+          : normalizeGuesses(record.guesses),
+        streak: typeof record.streak === "number" ? record.streak : 0,
+        finished:
+          typeof record.finished === "boolean"
+            ? record.finished
+            : record.status === "solved" || record.status === "missed",
+        missed:
+          typeof record.missed === "boolean"
+            ? record.missed
+            : record.status === "missed",
+      },
+    };
+  }
   const normalized: Record<string, Progress> = {};
-  for (const [userId, raw] of Object.entries(value as Record<string, any>)) {
+  for (const [userId, raw] of Object.entries(
+    value as Record<string, unknown>,
+  )) {
+    const record =
+      raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
     normalized[userId] = {
       userId,
-      name: typeof raw?.name === "string" ? raw.name : "Player",
-      avatar: typeof raw?.avatar === "string" ? raw.avatar : null,
-      guesses: normalizeGuesses(raw?.guesses),
-      streak: typeof raw?.streak === "number" ? raw.streak : 0,
+      name: typeof record.name === "string" ? record.name : "Player",
+      avatar: typeof record.avatar === "string" ? record.avatar : null,
+      guesses: capGuesses
+        ? normalizeGuesses(record.guesses).slice(0, 6)
+        : normalizeGuesses(record.guesses),
+      streak: typeof record.streak === "number" ? record.streak : 0,
       finished:
-        typeof raw?.finished === "boolean"
-          ? raw.finished
-          : raw?.status === "solved" || raw?.status === "missed",
+        typeof record.finished === "boolean"
+          ? record.finished
+          : record.status === "solved" || record.status === "missed",
       missed:
-        typeof raw?.missed === "boolean"
-          ? raw.missed
-          : raw?.status === "missed",
+        typeof record.missed === "boolean"
+          ? record.missed
+          : record.status === "missed",
     };
   }
   return normalized;
+}
+
+function normalizeLocalProgress(value: unknown): Progress | null {
+  return Object.values(normalizeProgress(value, false))[0] ?? null;
+}
+
+function hydrateLocalProgress(
+  value: Progress | null,
+  userId: string,
+  answer: string,
+): Progress | null {
+  if (!value) return null;
+  const rawGuesses = normalizeGuesses(value.guesses);
+  const guesses = normalizeHydratedGuesses(rawGuesses, answer);
+  const completion = getCompletionStatus(guesses, answer);
+  const preservedReveal =
+    rawGuesses.length === guesses.length &&
+    value.finished &&
+    value.missed &&
+    completion.status === "playing";
+  return {
+    ...value,
+    userId,
+    guesses,
+    finished: completion.status !== "playing" || preservedReveal,
+    missed: completion.status === "missed" || preservedReveal,
+  };
 }
 
 function getMarkLabel(mark: "correct" | "present" | "absent") {
@@ -291,7 +365,8 @@ export function WordleActivityStage({
     return () => window.clearInterval(interval);
   }, []);
 
-  const storageKey = `voice-wordle:${channelId}:${dateKey}`;
+  const storageUserKey = localUserId?.trim() || "anonymous";
+  const storageKey = `voice-wordle:${channelId}:${storageUserKey}:${dateKey}`;
   return (
     <WordleActivityStageContent
       key={storageKey}
@@ -320,9 +395,7 @@ function WordleActivityStageContent({
   );
   const [guesses, setGuesses] = useState<string[]>(() => initialStored.guesses);
   const [draft, setDraft] = useState("");
-  const [progress, setProgress] = useState<Record<string, Progress>>(
-    () => initialStored.progress,
-  );
+  const [progress, setProgress] = useState<Record<string, Progress>>({});
   const [hintLevels, setHintLevels] = useState<number[]>(
     () => initialStored.hints,
   );
@@ -371,7 +444,7 @@ function WordleActivityStageContent({
       .then((data) => {
         if (
           typeof data?.solution === "string" &&
-          data.solution.length === 5 &&
+          /^[a-zA-Z]{5}$/.test(data.solution) &&
           data.print_date === puzzleDate &&
           data.source === "nyt"
         ) {
@@ -402,16 +475,62 @@ function WordleActivityStageContent({
         event.puzzle_date !== puzzleDate
       )
         return;
-      setProgress(normalizeProgress(event.progress));
+      const incoming = normalizeProgress(event.progress);
+      setProgress((current) => {
+        const merged = { ...current };
+        for (const [userId, record] of Object.entries(incoming)) {
+          const participant = participants.find(
+            (item) => item.userId === userId,
+          );
+          merged[userId] = {
+            ...record,
+            name: participant?.name ?? record.name,
+            avatar: participant?.avatar ?? null,
+          };
+        }
+        return merged;
+      });
     });
-  }, [sfu, channelId, puzzleDate]);
+  }, [sfu, channelId, participants, puzzleDate]);
 
   const answer = puzzle?.solution.toLowerCase() ?? "";
-  const completionStatus = getCompletionStatus(guesses, answer);
+  const activeGuesses = answer
+    ? normalizeHydratedGuesses(guesses, answer)
+    : guesses;
+
+  useEffect(() => {
+    if (!answer) return;
+    const hydratedGuesses = normalizeHydratedGuesses(
+      initialStored.guesses,
+      answer,
+    );
+    const hydratedLocalProgress = localUserId
+      ? hydrateLocalProgress(initialStored.localProgress, localUserId, answer)
+      : null;
+    if (
+      initialStored.guesses.length > 0 ||
+      initialStored.localProgress !== null ||
+      initialStored.hints.length > 0
+    ) {
+      writeStoredProgress(storageKey, {
+        guesses: hydratedGuesses,
+        localProgress: hydratedLocalProgress,
+        hints: initialStored.hints,
+      });
+    }
+  }, [answer, initialStored, localUserId, storageKey]);
+
+  const completionStatus = getCompletionStatus(activeGuesses, answer);
+  const hydratedLocalProgress = localUserId
+    ? hydrateLocalProgress(initialStored.localProgress, localUserId, answer)
+    : null;
+  const localStoredProgress = localUserId
+    ? (progress[localUserId] ?? hydratedLocalProgress)
+    : undefined;
   const persistedLocalMiss =
     !!localUserId &&
-    initialStored.progress[localUserId]?.finished === true &&
-    initialStored.progress[localUserId]?.missed === true;
+    localStoredProgress?.finished === true &&
+    localStoredProgress.missed === true;
   const localFinished =
     !!answer &&
     (completionStatus.status !== "playing" ||
@@ -465,7 +584,7 @@ function WordleActivityStageContent({
   const keyMarks = useMemo(() => {
     const marks: Record<string, "correct" | "present" | "absent"> = {};
     const rank = { absent: 0, present: 1, correct: 2 };
-    for (const guess of guesses) {
+    for (const guess of activeGuesses) {
       evaluateWordleGuess(guess, answer).forEach((mark, index) => {
         const letter = guess[index];
         if (!marks[letter] || rank[mark] > rank[marks[letter]])
@@ -473,12 +592,17 @@ function WordleActivityStageContent({
       });
     }
     return marks;
-  }, [guesses, answer]);
+  }, [activeGuesses, answer]);
 
   const commitProgress = (nextGuesses: string[]) => {
     if (!answer) return;
     const completion = getCompletionStatus(nextGuesses, answer);
     if (!localUserId) {
+      writeStoredProgress(storageKey, {
+        guesses: nextGuesses,
+        localProgress: null,
+        hints: hintLevels,
+      });
       if (
         completion.status !== "playing" &&
         completion.finalGuessIndex !== null
@@ -492,38 +616,38 @@ function WordleActivityStageContent({
     }
     const solved = nextGuesses.includes(answer);
     const missed = !solved && nextGuesses.length >= 6;
-    const current = progress[localUserId];
+    const current = localStoredProgress;
     const local = participants.find((p) => p.userId === localUserId);
-    const nextProgress = {
-      ...progress,
-      [localUserId]: {
-        userId: localUserId,
-        name: local?.name ?? "You",
-        avatar: local?.avatar,
-        guesses: nextGuesses,
-        streak: solved
-          ? Math.max(
-              1,
-              current?.finished ? current.streak : (current?.streak ?? 0) + 1,
-            )
-          : missed
-            ? 0
-            : (current?.streak ?? 0),
-        finished: solved || missed,
-        missed,
-      },
+    const localProgress = {
+      userId: localUserId,
+      name: local?.name ?? "You",
+      avatar: local?.avatar,
+      guesses: nextGuesses,
+      streak: solved
+        ? Math.max(
+            1,
+            current?.finished ? current.streak : (current?.streak ?? 0) + 1,
+          )
+        : missed
+          ? 0
+          : (current?.streak ?? 0),
+      finished: solved || missed,
+      missed,
     };
-    setProgress(nextProgress);
+    setProgress((currentProgress) => ({
+      ...currentProgress,
+      [localUserId]: localProgress,
+    }));
     writeStoredProgress(storageKey, {
       guesses: nextGuesses,
-      progress: nextProgress,
+      localProgress,
       hints: hintLevels,
     });
     sfu?.voiceGW.sendAppEvent({
       type: "wordle.progress",
       channel_id: channelId,
       puzzle_date: puzzleDate,
-      progress: nextProgress,
+      progress: localProgress,
     });
     if (
       completion.status !== "playing" &&
@@ -539,7 +663,7 @@ function WordleActivityStageContent({
   const submitGuess = () => {
     if (
       !answer ||
-      guesses.length >= 6 ||
+      activeGuesses.length >= 6 ||
       localFinished ||
       revealingRow !== null
     )
@@ -548,14 +672,18 @@ function WordleActivityStageContent({
       setNotice("Not enough letters.");
       return;
     }
+    if (!isValidWordleGuess(guess, answer)) {
+      setNotice("Not in word list.");
+      return;
+    }
     const hardModeViolation = settings.hardMode
-      ? getHardModeViolation(guess, guesses, answer)
+      ? getHardModeViolation(guess, activeGuesses, answer)
       : null;
     if (hardModeViolation) {
       setNotice(hardModeViolation);
       return;
     }
-    const nextGuesses = [...guesses, guess];
+    const nextGuesses = [...activeGuesses, guess];
     setGuesses(nextGuesses);
     setRevealingRow(nextGuesses.length - 1);
     setDraft("");
@@ -581,8 +709,8 @@ function WordleActivityStageContent({
     const nextHintLevels = [...hintLevels, nextLevel];
     setHintLevels(nextHintLevels);
     writeStoredProgress(storageKey, {
-      guesses,
-      progress,
+      guesses: activeGuesses,
+      localProgress: localUserId ? (localStoredProgress ?? null) : null,
       hints: nextHintLevels,
     });
   };
@@ -590,43 +718,43 @@ function WordleActivityStageContent({
   const revealAnswer = () => {
     if (!answer || localFinished) return;
     const local = participants.find((p) => p.userId === localUserId);
-    const nextProgress = {
-      ...progress,
-      ...(localUserId
-        ? {
-            [localUserId]: {
-              userId: localUserId,
-              name: local?.name ?? "You",
-              avatar: local?.avatar,
-              guesses,
-              streak: 0,
-              finished: true,
-              missed: true,
-            },
-          }
-        : {}),
-    };
-    setProgress(nextProgress);
+    const localProgress = localUserId
+      ? {
+          userId: localUserId,
+          name: local?.name ?? "You",
+          avatar: local?.avatar,
+          guesses: activeGuesses,
+          streak: 0,
+          finished: true,
+          missed: true,
+        }
+      : null;
+    if (localUserId && localProgress) {
+      setProgress((currentProgress) => ({
+        ...currentProgress,
+        [localUserId]: localProgress,
+      }));
+    }
     writeStoredProgress(storageKey, {
-      guesses,
-      progress: nextProgress,
+      guesses: activeGuesses,
+      localProgress,
       hints: hintLevels,
     });
-    if (localUserId) {
+    if (localUserId && localProgress) {
       sfu?.voiceGW.sendAppEvent({
         type: "wordle.progress",
         channel_id: channelId,
         puzzle_date: puzzleDate,
-        progress: nextProgress,
+        progress: localProgress,
       });
     }
     setAnswerRevealPending(false);
     setHintsOpen(false);
     setCompletionReveal({
       status: "missed",
-      guessIndex: Math.max(0, guesses.length - 1),
+      guessIndex: Math.max(0, activeGuesses.length - 1),
     });
-    setRevealingRow(Math.max(0, guesses.length - 1));
+    setRevealingRow(Math.max(0, activeGuesses.length - 1));
   };
 
   useEffect(() => {
@@ -670,7 +798,7 @@ function WordleActivityStageContent({
   const winRate = rowProgress.length
     ? Math.round((solvedCount / rowProgress.length) * 100)
     : 0;
-  const currentStreak = progress[localUserId || ""]?.streak ?? 0;
+  const currentStreak = localStoredProgress?.streak ?? 0;
   const colors = settings.highContrast
     ? {
         correct: "#b45309",
@@ -735,7 +863,7 @@ function WordleActivityStageContent({
         )}
         style={{ fontFamily: "Georgia, serif" }}
       >
-        <MiniBoard guesses={guesses} answer={answer} colors={colors} />
+        <MiniBoard guesses={activeGuesses} answer={answer} colors={colors} />
         <div className="mt-2 text-sm font-bold">Wordle</div>
         <h2 className="mt-4 text-center text-3xl font-black sm:text-4xl">
           {finishedStatus === "solved"
@@ -815,7 +943,11 @@ function WordleActivityStageContent({
               )}
             </div>
             <div className="mt-2">
-              <MiniBoard guesses={guesses} answer={answer} colors={colors} />
+              <MiniBoard
+                guesses={activeGuesses}
+                answer={answer}
+                colors={colors}
+              />
             </div>
           </div>
           <h2 className="mt-8 text-base uppercase">General Statistics</h2>
@@ -944,10 +1076,11 @@ function WordleActivityStageContent({
               const row = Math.floor(index / 5);
               const col = index % 5;
               const guess =
-                guesses[row] ?? (row === guesses.length ? draft : "");
+                activeGuesses[row] ??
+                (row === activeGuesses.length ? draft : "");
               const letter = guess[col] ?? "";
-              const mark = guesses[row]
-                ? evaluateWordleGuess(guesses[row], answer)[col]
+              const mark = activeGuesses[row]
+                ? evaluateWordleGuess(activeGuesses[row], answer)[col]
                 : null;
               return (
                 <div
@@ -956,7 +1089,7 @@ function WordleActivityStageContent({
                   aria-label={`Row ${row + 1}, column ${col + 1}: ${letter || "empty"}${mark ? `, ${getMarkLabel(mark)}` : ""}`}
                   title={mark ? getMarkLabel(mark) : undefined}
                   style={{
-                    animation: guesses[row]
+                    animation: activeGuesses[row]
                       ? revealingRow === row
                         ? `rm-wordle-flip 520ms ease both ${col * 120}ms`
                         : undefined
