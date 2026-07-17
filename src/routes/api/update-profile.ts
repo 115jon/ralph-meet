@@ -23,6 +23,7 @@ import {
   normalizeAvatarDisplay,
   serializeAvatarDisplay,
 } from "@/lib/avatar-display";
+import { findUserAvatarUploadByUrl } from "@/services/user-avatar.service";
 
 const log = clog("update-profile");
 
@@ -38,6 +39,7 @@ const PATCH = async ({ request: req }: any) => {
     themeSyncEnabled?: boolean;
     mediaContentFilter?: string;
     avatarDisplay?: unknown;
+    avatarUrl?: string | null;
     removeAvatar?: boolean;
     profileAccentColor?: string | null;
     profileBackgroundColor?: string | null;
@@ -60,6 +62,7 @@ const PATCH = async ({ request: req }: any) => {
     themeSyncEnabled,
     mediaContentFilter,
     avatarDisplay,
+    avatarUrl,
     removeAvatar,
     profileAccentColor,
     profileBackgroundColor,
@@ -71,6 +74,14 @@ const PATCH = async ({ request: req }: any) => {
 
   if (removeAvatar !== undefined && typeof removeAvatar !== "boolean") {
     return apiError("Invalid avatar removal flag", 400);
+  }
+
+  if (
+    avatarUrl !== undefined &&
+    avatarUrl !== null &&
+    (typeof avatarUrl !== "string" || !avatarUrl.trim())
+  ) {
+    return apiError("Invalid avatar URL", 400);
   }
 
   if (
@@ -184,6 +195,17 @@ const PATCH = async ({ request: req }: any) => {
     const db = getDB();
     await ensureUserProfileSchema(db);
 
+    if (!removeAvatar && avatarUrl !== undefined && avatarUrl !== null) {
+      const ownedUpload = await findUserAvatarUploadByUrl(
+        db,
+        userId,
+        avatarUrl,
+      );
+      if (!ownedUpload) {
+        return apiError("Avatar upload not found", 404);
+      }
+    }
+
     // Update D1 (source of truth for profile data)
     const updates: string[] = [];
     const binds: unknown[] = [];
@@ -257,14 +279,34 @@ const PATCH = async ({ request: req }: any) => {
       binds.push(serializeAvatarDisplay(normalizedAvatarDisplay));
     }
 
+    if (!removeAvatar && avatarUrl !== undefined) {
+      updates.push("avatar_url = ?");
+      binds.push(avatarUrl);
+    }
+
     if (updates.length > 0) {
       updates.push("updated_at = ?");
       binds.push(new Date().toISOString());
-      binds.push(userId);
-      await db
-        .prepare(`UPDATE users SET ${updates.join(", ")} WHERE id = ?`)
-        .bind(...binds)
+      const isAvatarSelection =
+        !removeAvatar && avatarUrl !== undefined && avatarUrl !== null;
+      const updateBinds = [...binds, userId];
+      const whereClause = isAvatarSelection
+        ? ` WHERE id = ? AND EXISTS (
+             SELECT 1 FROM user_avatar_uploads
+             WHERE user_id = ? AND avatar_url = ? AND pending_delete = 0
+           )`
+        : " WHERE id = ?";
+      if (isAvatarSelection) {
+        updateBinds.push(userId, avatarUrl);
+      }
+
+      const updateResult = await db
+        .prepare(`UPDATE users SET ${updates.join(", ")}${whereClause}`)
+        .bind(...updateBinds)
         .run();
+      if (isAvatarSelection && updateResult.meta.changes === 0) {
+        return apiError("Avatar upload is no longer available", 409);
+      }
     }
 
     // Read back the updated profile

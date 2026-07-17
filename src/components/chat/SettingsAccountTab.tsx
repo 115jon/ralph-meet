@@ -1,4 +1,8 @@
 import { AvatarFrameEditor } from "@/components/chat/AvatarFrameEditor";
+import {
+  AvatarPickerModal,
+  type AvatarUploadItem,
+} from "@/components/chat/AvatarPickerModal";
 import { ProfileDisplayName } from "@/components/chat/ProfileDisplayName";
 import {
   PROFILE_SURFACE_ASPECT_RATIO,
@@ -327,6 +331,59 @@ function ProfileRailCard({
         </div>
       ) : null}
       {children}
+    </div>
+  );
+}
+
+function AvatarActionMenu({
+  canRemoveAvatar,
+  canRemoveDecoration,
+  onChangeAvatar,
+  onChangeDecoration,
+  onRemoveAvatar,
+  onRemoveDecoration,
+}: {
+  canRemoveAvatar: boolean;
+  canRemoveDecoration: boolean;
+  onChangeAvatar: () => void;
+  onChangeDecoration: () => void;
+  onRemoveAvatar: () => void;
+  onRemoveDecoration: () => void;
+}) {
+  return (
+    <div className="absolute left-[calc(100%+8px)] top-1 z-[180] min-w-[198px] rounded-[12px] border border-rm-border bg-rm-bg-floating p-1.5 shadow-[0_18px_44px_rgba(0,0,0,0.42)] animate-in fade-in zoom-in-95 duration-150 max-md:left-1/2 max-md:top-[calc(100%+8px)] max-md:-translate-x-1/2">
+      <button
+        type="button"
+        onClick={onChangeAvatar}
+        className="flex w-full items-center rounded-lg px-3 py-2 text-left text-[13px] font-semibold text-rm-text transition-colors hover:bg-rm-bg-hover"
+      >
+        Change Avatar
+      </button>
+      <button
+        type="button"
+        onClick={onChangeDecoration}
+        className="flex w-full items-center rounded-lg px-3 py-2 text-left text-[13px] font-semibold text-rm-text transition-colors hover:bg-rm-bg-hover"
+      >
+        Change Avatar Decoration
+      </button>
+      {canRemoveAvatar ? (
+        <button
+          type="button"
+          onClick={onRemoveAvatar}
+          className="flex w-full items-center rounded-lg px-3 py-2 text-left text-[13px] font-semibold text-rose-300 transition-colors hover:bg-rose-500/12 hover:text-rose-200"
+        >
+          Remove Avatar
+        </button>
+      ) : null}
+      {canRemoveDecoration ? (
+        <button
+          type="button"
+          onClick={onRemoveDecoration}
+          className="flex w-full items-center rounded-lg px-3 py-2 text-left text-[13px] font-semibold text-rose-300 transition-colors hover:bg-rose-500/12 hover:text-rose-200"
+        >
+          Remove Avatar Decoration
+        </button>
+      ) : null}
     </div>
   );
 }
@@ -1835,6 +1892,9 @@ function useAccountState(user: any, chatUser: any) {
   const [error, setError] = useState<string | null>(null);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
+  const [selectedAvatarUrl, setSelectedAvatarUrl] = useState<string | null>(
+    null,
+  );
   const [bannerPreview, setBannerPreview] = useState<AssetPreview | null>(null);
   const [bannerFile, setBannerFile] = useState<File | null>(null);
   const [nameplatePreview, setNameplatePreview] = useState<AssetPreview | null>(
@@ -1844,7 +1904,6 @@ function useAccountState(user: any, chatUser: any) {
   const [removeAvatar, setRemoveAvatar] = useState(false);
   const [removeBanner, setRemoveBanner] = useState(false);
   const [removeNameplate, setRemoveNameplate] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const bannerInputRef = useRef<HTMLInputElement>(null);
   const nameplateInputRef = useRef<HTMLInputElement>(null);
 
@@ -1864,6 +1923,7 @@ function useAccountState(user: any, chatUser: any) {
     setSaved(false);
     setAvatarPreview(null);
     setAvatarFile(null);
+    setSelectedAvatarUrl(null);
     setBannerPreview(null);
     setBannerFile(null);
     setNameplatePreview(null);
@@ -1893,6 +1953,8 @@ function useAccountState(user: any, chatUser: any) {
     setAvatarPreview,
     avatarFile,
     setAvatarFile,
+    selectedAvatarUrl,
+    setSelectedAvatarUrl,
     bannerPreview,
     setBannerPreview,
     bannerFile,
@@ -1907,7 +1969,6 @@ function useAccountState(user: any, chatUser: any) {
     setRemoveBanner,
     removeNameplate,
     setRemoveNameplate,
-    fileInputRef,
     bannerInputRef,
     nameplateInputRef,
   };
@@ -1952,6 +2013,8 @@ export default function SettingsAccountTab({
     setAvatarPreview,
     avatarFile,
     setAvatarFile,
+    selectedAvatarUrl,
+    setSelectedAvatarUrl,
     bannerPreview,
     setBannerPreview,
     bannerFile,
@@ -1966,7 +2029,6 @@ export default function SettingsAccountTab({
     setRemoveBanner,
     removeNameplate,
     setRemoveNameplate,
-    fileInputRef,
     bannerInputRef,
     nameplateInputRef,
   } = useAccountState(user, chatUser);
@@ -1983,6 +2045,13 @@ export default function SettingsAccountTab({
     AvatarDisplay | string | null
   >(() => chatUser?.avatar_display ?? null);
   const [avatarDisplayChanged, setAvatarDisplayChanged] = useState(false);
+  const [avatarPickerOpen, setAvatarPickerOpen] = useState(false);
+  const [avatarMenuAnchor, setAvatarMenuAnchor] = useState<
+    "rail" | "preview" | null
+  >(null);
+  const avatarMenuOpen = avatarMenuAnchor !== null;
+  const avatarMenuRef = useRef<HTMLDivElement | null>(null);
+  const avatarPreviewMenuRef = useRef<HTMLDivElement | null>(null);
   const [avatarEditor, setAvatarEditor] = useState<{
     src: string;
     file?: File;
@@ -2044,6 +2113,30 @@ export default function SettingsAccountTab({
       setCustomStatusDraft(chatUser?.custom_status ?? "");
     }
   }, [chatUser?.custom_status, isCustomStatusEditing]);
+
+  useEffect(() => {
+    if (!avatarMenuOpen) return;
+
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target as Node;
+      if (
+        !avatarMenuRef.current?.contains(target) &&
+        !avatarPreviewMenuRef.current?.contains(target)
+      ) {
+        setAvatarMenuAnchor(null);
+      }
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setAvatarMenuAnchor(null);
+    };
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [avatarMenuOpen]);
 
   useEffect(() => {
     if (activePreviewField === "pronouns") {
@@ -2116,6 +2209,7 @@ export default function SettingsAccountTab({
     pronouns !== (chatUser?.pronouns || "") ||
     bio !== (chatUser?.bio || "") ||
     avatarFile !== null ||
+    selectedAvatarUrl !== null ||
     removeAvatar ||
     avatarDisplayChanged ||
     bannerFile !== null ||
@@ -2308,6 +2402,7 @@ export default function SettingsAccountTab({
     setBio(chatUser?.bio || "");
     setAvatarFile(null);
     setAvatarPreview(null);
+    setSelectedAvatarUrl(null);
     setAvatarDisplay(chatUser?.avatar_display ?? null);
     setAvatarDisplayChanged(false);
     setRemoveAvatar(false);
@@ -2350,6 +2445,7 @@ export default function SettingsAccountTab({
     setRemoveAvatar,
     setRemoveBanner,
     setRemoveNameplate,
+    setSelectedAvatarUrl,
     setSaved,
     setUsername,
     user?.unsafeMetadata?.displayName,
@@ -2380,16 +2476,27 @@ export default function SettingsAccountTab({
     ],
   );
 
-  const handleAvatarSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+  const handleAvatarFile = (file: File) => {
     if (!file) return;
     if (!file.type.startsWith("image/")) {
       setError("Please choose an image file for your avatar.");
       return;
     }
+    setSelectedAvatarUrl(null);
+    setRemoveAvatar(false);
     const src = URL.createObjectURL(file);
     setAvatarEditor({ src, file });
-    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const handleRecentAvatarSelect = (item: AvatarUploadItem) => {
+    setError(null);
+    setAvatarFile(null);
+    setRemoveAvatar(false);
+    setSelectedAvatarUrl(item.avatar_url);
+    setAvatarPreview(getAuthAssetUrl(item.avatar_url));
+    setAvatarDisplay(avatarDisplayWithoutCrop);
+    setAvatarDisplayChanged(true);
+    setAvatarPickerOpen(false);
   };
 
   const handleEditAvatarFrame = () => {
@@ -2409,6 +2516,7 @@ export default function SettingsAccountTab({
     if (avatarEditor.file) {
       setAvatarFile(avatarEditor.file);
       setAvatarPreview(avatarEditor.src);
+      setSelectedAvatarUrl(null);
     }
     setRemoveAvatar(false);
     setAvatarDisplay(display);
@@ -2421,15 +2529,15 @@ export default function SettingsAccountTab({
     setError(null);
     setAvatarFile(null);
     setAvatarPreview(null);
+    setSelectedAvatarUrl(null);
     setRemoveAvatar(true);
     setAvatarDisplayChanged(false);
-    if (fileInputRef.current) fileInputRef.current.value = "";
   }, [
-    fileInputRef,
     hasRemovableAvatar,
     setAvatarDisplayChanged,
     setAvatarFile,
     setAvatarPreview,
+    setSelectedAvatarUrl,
     setError,
     setRemoveAvatar,
   ]);
@@ -2552,6 +2660,9 @@ export default function SettingsAccountTab({
         profileBannerColor,
         displayNameStyle,
         ...(removeAvatar ? { removeAvatar: true } : {}),
+        ...(!removeAvatar && !avatarFile && selectedAvatarUrl
+          ? { avatarUrl: selectedAvatarUrl }
+          : {}),
         ...(removeAvatar && currentAvatarDisplay
           ? { avatarDisplay: currentAvatarDisplay }
           : avatarDisplayChanged && !avatarFile
@@ -2562,6 +2673,7 @@ export default function SettingsAccountTab({
       if (removeAvatar) {
         setAvatarFile(null);
         setAvatarPreview(null);
+        setSelectedAvatarUrl(null);
         setRemoveAvatar(false);
         setAvatarDisplay(currentAvatarDisplay);
         setAvatarDisplayChanged(false);
@@ -2577,7 +2689,10 @@ export default function SettingsAccountTab({
         }>("/api/avatar-upload", formData);
         setAvatarFile(null);
         setAvatarPreview(null);
+        setSelectedAvatarUrl(null);
         setAvatarDisplay(uploaded.avatar_display);
+        setAvatarDisplayChanged(false);
+      } else if (selectedAvatarUrl) {
         setAvatarDisplayChanged(false);
       } else if (avatarDisplayChanged) {
         setAvatarDisplayChanged(false);
@@ -2643,6 +2758,10 @@ export default function SettingsAccountTab({
         await user.reload();
       }
       await loadCurrentUser();
+      if (selectedAvatarUrl) {
+        setAvatarPreview(null);
+        setSelectedAvatarUrl(null);
+      }
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
     } catch (err) {
@@ -2662,6 +2781,7 @@ export default function SettingsAccountTab({
     pronouns,
     bio,
     avatarFile,
+    selectedAvatarUrl,
     avatarDisplay,
     avatarDisplayChanged,
     bannerFile,
@@ -2683,6 +2803,7 @@ export default function SettingsAccountTab({
     setError,
     setAvatarPreview,
     setAvatarFile,
+    setSelectedAvatarUrl,
     setBannerPreview,
     setBannerFile,
     setNameplatePreview,
@@ -2778,14 +2899,6 @@ export default function SettingsAccountTab({
         </div>
       )}
 
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept="image/*"
-        onChange={handleAvatarSelect}
-        className="hidden"
-        aria-label="Upload profile picture"
-      />
       <input
         ref={bannerInputRef}
         type="file"
@@ -3004,10 +3117,10 @@ export default function SettingsAccountTab({
 
                   <ProfileRailSection title="Avatar & Decoration">
                     <div className="grid grid-cols-2 gap-2.5">
-                      <ProfileRailCard
-                        className="flex h-[88px] items-center justify-center p-2.5"
-                        actions={
-                          <>
+                      <div ref={avatarMenuRef} className="relative">
+                        <ProfileRailCard
+                          className="flex h-[88px] overflow-visible items-center justify-center p-2.5"
+                          actions={
                             <AccountActionIconButton
                               label="Crop avatar"
                               onClick={handleEditAvatarFrame}
@@ -3015,40 +3128,65 @@ export default function SettingsAccountTab({
                             >
                               <Crop size={12} />
                             </AccountActionIconButton>
-                            <AccountActionIconButton
-                              label="Remove avatar"
-                              onClick={handleRemoveAvatar}
-                              disabled={!hasRemovableAvatar}
-                              className="text-rose-300 hover:bg-rose-500/12 hover:text-rose-100"
-                            >
-                              <Trash2 size={12} />
-                            </AccountActionIconButton>
-                          </>
-                        }
-                      >
-                        <button
-                          type="button"
-                          onClick={() => fileInputRef.current?.click()}
-                          className="group/avatar relative flex h-[64px] w-[64px] items-center justify-center rounded-[16px] border border-rm-border bg-rm-bg-surface/70 outline-none transition-transform hover:scale-[1.03]"
-                          aria-label="Change profile picture"
+                          }
                         >
-                          <div className="relative h-[50px] w-[50px] overflow-hidden rounded-full border border-rm-border/80 bg-rm-bg-elevated shadow-[0_12px_24px_rgba(0,0,0,0.22)]">
-                            {currentAvatarSrc ? (
-                              <AvatarImage
-                                src={currentAvatarSrc}
-                                alt={currentDisplayName}
-                                display={currentAvatarDisplayWithoutDecoration}
-                              />
-                            ) : (
-                              <div className="flex h-full w-full items-center justify-center bg-rm-bg-elevated text-xl font-bold text-rm-text">
-                                {getDisplayInitial({
-                                  name: currentDisplayName,
-                                })}
-                              </div>
-                            )}
-                          </div>
-                        </button>
-                      </ProfileRailCard>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setAvatarMenuAnchor((anchor) =>
+                                anchor === "rail" ? null : "rail",
+                              )
+                            }
+                            className="group/avatar relative flex h-[64px] w-[64px] items-center justify-center rounded-[16px] border border-rm-border bg-rm-bg-surface/70 outline-none transition-[transform,box-shadow] hover:scale-[1.03] hover:shadow-[0_12px_26px_rgba(0,0,0,0.25)] focus-visible:ring-2 focus-visible:ring-primary"
+                            aria-label="Open avatar actions"
+                            aria-haspopup="true"
+                            aria-expanded={avatarMenuOpen}
+                          >
+                            <div className="relative h-[50px] w-[50px] overflow-hidden rounded-full border border-rm-border/80 bg-rm-bg-elevated shadow-[0_12px_24px_rgba(0,0,0,0.22)]">
+                              {currentAvatarSrc ? (
+                                <AvatarImage
+                                  src={currentAvatarSrc}
+                                  alt={currentDisplayName}
+                                  display={
+                                    currentAvatarDisplayWithoutDecoration
+                                  }
+                                />
+                              ) : (
+                                <div className="flex h-full w-full items-center justify-center bg-rm-bg-elevated text-xl font-bold text-rm-text">
+                                  {getDisplayInitial({
+                                    name: currentDisplayName,
+                                  })}
+                                </div>
+                              )}
+                            </div>
+                          </button>
+
+                          {avatarMenuAnchor === "rail" ? (
+                            <AvatarActionMenu
+                              canRemoveAvatar={hasRemovableAvatar}
+                              canRemoveDecoration={Boolean(
+                                currentAvatarDecoration,
+                              )}
+                              onChangeAvatar={() => {
+                                setAvatarMenuAnchor(null);
+                                setAvatarPickerOpen(true);
+                              }}
+                              onChangeDecoration={() => {
+                                setAvatarMenuAnchor(null);
+                                handleOpenCollectibles("avatar_decoration");
+                              }}
+                              onRemoveAvatar={() => {
+                                setAvatarMenuAnchor(null);
+                                handleRemoveAvatar();
+                              }}
+                              onRemoveDecoration={() => {
+                                setAvatarMenuAnchor(null);
+                                handleRemoveCollectible("avatar_decoration");
+                              }}
+                            />
+                          ) : null}
+                        </ProfileRailCard>
+                      </div>
 
                       <ProfileRailCard
                         className="flex h-[88px] items-center justify-center p-2.5"
@@ -3530,30 +3668,65 @@ export default function SettingsAccountTab({
                 <div className="relative z-20 px-6 pb-7">
                   <div className="-mt-9">
                     <div className="flex items-start justify-between gap-4">
-                      <button
-                        type="button"
-                        onClick={() => fileInputRef.current?.click()}
-                        className="group/preview-avatar relative h-28 w-28 shrink-0 rounded-full border-[6px] border-rm-bg-elevated bg-[var(--rm-profile-custom-card-bg-strong)] shadow-[0_18px_46px_rgba(0,0,0,0.42)]"
-                        aria-label="Change profile picture"
+                      <div
+                        ref={avatarPreviewMenuRef}
+                        className="relative shrink-0"
                       >
-                        {currentAvatarSrc ? (
-                          <AvatarImage
-                            src={currentAvatarSrc}
-                            alt={currentDisplayName}
-                            display={currentAvatarDisplay}
-                          />
-                        ) : (
-                          <div className="flex h-full w-full items-center justify-center rounded-full text-3xl font-bold text-[color:var(--rm-profile-custom-text)]">
-                            {getDisplayInitial({ name: currentDisplayName })}
-                          </div>
-                        )}
-                        <span className="absolute inset-0 rounded-full bg-black/0 transition group-hover/preview-avatar:bg-black/36" />
-                        <span className="absolute inset-0 z-10 flex items-center justify-center opacity-0 transition group-hover/preview-avatar:opacity-100">
-                          <span className="flex h-10 w-10 items-center justify-center rounded-full border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] text-[color:var(--rm-profile-custom-text)] shadow-[0_14px_28px_rgba(0,0,0,0.24)] backdrop-blur-sm">
-                            <Pencil size={16} />
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setAvatarMenuAnchor((anchor) =>
+                              anchor === "preview" ? null : "preview",
+                            )
+                          }
+                          className="group/preview-avatar relative h-28 w-28 rounded-full border-[6px] border-rm-bg-elevated bg-[var(--rm-profile-custom-card-bg-strong)] shadow-[0_18px_46px_rgba(0,0,0,0.42)] transition-[transform,box-shadow] hover:scale-[1.02] hover:shadow-[0_20px_52px_rgba(0,0,0,0.48)] focus-visible:ring-2 focus-visible:ring-primary"
+                          aria-label="Open avatar actions"
+                          aria-haspopup="true"
+                          aria-expanded={avatarMenuOpen}
+                        >
+                          {currentAvatarSrc ? (
+                            <AvatarImage
+                              src={currentAvatarSrc}
+                              alt={currentDisplayName}
+                              display={currentAvatarDisplay}
+                            />
+                          ) : (
+                            <div className="flex h-full w-full items-center justify-center rounded-full text-3xl font-bold text-[color:var(--rm-profile-custom-text)]">
+                              {getDisplayInitial({ name: currentDisplayName })}
+                            </div>
+                          )}
+                          <span className="absolute inset-0 rounded-full bg-black/0 transition group-hover/preview-avatar:bg-black/36" />
+                          <span className="absolute inset-0 z-10 flex items-center justify-center opacity-0 transition group-hover/preview-avatar:opacity-100">
+                            <span className="flex h-10 w-10 items-center justify-center rounded-full border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] text-[color:var(--rm-profile-custom-text)] shadow-[0_14px_28px_rgba(0,0,0,0.24)] backdrop-blur-sm">
+                              <Pencil size={16} />
+                            </span>
                           </span>
-                        </span>
-                      </button>
+                        </button>
+                        {avatarMenuAnchor === "preview" ? (
+                          <AvatarActionMenu
+                            canRemoveAvatar={hasRemovableAvatar}
+                            canRemoveDecoration={Boolean(
+                              currentAvatarDecoration,
+                            )}
+                            onChangeAvatar={() => {
+                              setAvatarMenuAnchor(null);
+                              setAvatarPickerOpen(true);
+                            }}
+                            onChangeDecoration={() => {
+                              setAvatarMenuAnchor(null);
+                              handleOpenCollectibles("avatar_decoration");
+                            }}
+                            onRemoveAvatar={() => {
+                              setAvatarMenuAnchor(null);
+                              handleRemoveAvatar();
+                            }}
+                            onRemoveDecoration={() => {
+                              setAvatarMenuAnchor(null);
+                              handleRemoveCollectible("avatar_decoration");
+                            }}
+                          />
+                        ) : null}
+                      </div>
 
                       <div className="relative ml-auto flex w-full min-w-0 max-w-[220px] justify-end pt-10">
                         {isCustomStatusEditing ? (
@@ -4168,6 +4341,17 @@ export default function SettingsAccountTab({
         </div>
       ) : null}
 
+      {avatarPickerOpen ? (
+        <AvatarPickerModal
+          displayName={currentDisplayName}
+          currentAvatarUrl={
+            removeAvatar ? null : (selectedAvatarUrl ?? chatUser?.avatar_url)
+          }
+          onClose={() => setAvatarPickerOpen(false)}
+          onUpload={handleAvatarFile}
+          onSelectRecent={handleRecentAvatarSelect}
+        />
+      ) : null}
       {avatarEditor && (
         <AvatarFrameEditor
           image={avatarEditor}
