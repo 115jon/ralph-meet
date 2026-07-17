@@ -1639,6 +1639,100 @@ describe("VoiceRoom lifecycle", () => {
     socket.close();
   });
 
+  it("persists recently played across clear and reconnect snapshots", async () => {
+    const roomName = crypto.randomUUID();
+    const socket = await openVoiceSocket(roomName);
+    await identifyVoiceSocket(socket, crypto.randomUUID(), roomName);
+
+    socket.send(
+      JSON.stringify({
+        op: 106,
+        d: {
+          type: "listen_together.enqueue",
+          room_slug: roomName,
+          mode: "append",
+          entries: [listenTogetherMusicEntry()],
+        },
+      }),
+    );
+    await nextMessageWithOpcodeAndType(socket, 106, "listen_together.snapshot");
+
+    socket.send(
+      JSON.stringify({
+        op: 106,
+        d: {
+          type: "listen_together.enqueue",
+          room_slug: roomName,
+          mode: "play-now",
+          entries: [
+            {
+              track: {
+                ...listenTogetherMusicEntry().track,
+                id: "music-2",
+                videoId: "dQw4w9WgXcQ-2",
+                title: "Played Next",
+              },
+            },
+          ],
+        },
+      }),
+    );
+    const playedSnapshot = await nextMessageWithOpcodeAndType(
+      socket,
+      106,
+      "listen_together.snapshot",
+    );
+    expect(playedSnapshot.d).toMatchObject({
+      snapshot: {
+        currentEntry: { track: { title: "Played Next" } },
+        recentlyPlayed: [
+          { entry: { track: { title: "Played Next" } } },
+          { entry: { track: { title: "Never Gonna Give You Up" } } },
+        ],
+      },
+    });
+
+    socket.send(
+      JSON.stringify({
+        op: 106,
+        d: { type: "listen_together.clear", room_slug: roomName },
+      }),
+    );
+    const clearedSnapshot = await nextMessageWithOpcodeAndType(
+      socket,
+      106,
+      "listen_together.snapshot",
+    );
+    expect(clearedSnapshot.d).toMatchObject({
+      snapshot: { queue: [], recentlyPlayed: expect.any(Array) },
+    });
+    socket.close();
+
+    const reconnected = await openVoiceSocket(roomName);
+    await identifyVoiceSocket(reconnected, crypto.randomUUID(), roomName);
+    reconnected.send(
+      JSON.stringify({
+        op: 106,
+        d: { type: "listen_together.state.request", room_slug: roomName },
+      }),
+    );
+    const reconnectedSnapshot = await nextMessageWithOpcodeAndType(
+      reconnected,
+      106,
+      "listen_together.snapshot",
+    );
+    expect(reconnectedSnapshot.d).toMatchObject({
+      snapshot: {
+        queue: [],
+        recentlyPlayed: [
+          { entry: { track: { title: "Played Next" } } },
+          { entry: { track: { title: "Never Gonna Give You Up" } } },
+        ],
+      },
+    });
+    reconnected.close();
+  });
+
   it("limits each user to ten radio station resolutions per minute", async () => {
     const roomName = crypto.randomUUID();
     const room = env.VOICE_ROOM.get(env.VOICE_ROOM.idFromName(roomName));

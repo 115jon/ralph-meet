@@ -580,6 +580,17 @@ function getSpotifyTrackCacheKey(track: SpotifyTrackLike) {
   return `v1:listen-together:spotify-track:${normalizeText(track.artist)}:${normalizeText(track.name)}:${durationMs}`;
 }
 
+export function dedupeListenTogetherTracks(
+  tracks: ListenTogetherTrack[],
+): ListenTogetherTrack[] {
+  const seen = new Set<string>();
+  return tracks.filter((track) => {
+    if (seen.has(track.id)) return false;
+    seen.add(track.id);
+    return true;
+  });
+}
+
 async function mapWithConcurrency<T, R>(
   items: T[],
   concurrency: number,
@@ -779,7 +790,9 @@ async function resolveYoutubePlaylist(
     .map((item) => mapYoutubeVideoNode(item, "youtube", "YouTube"))
     .filter((item): item is ListenTogetherSearchTrackResult => !!item)
     .slice(0, LISTEN_TOGETHER_IMPORT_LIMIT);
-  const tracks = searchResults.map(convertSearchTrackToMusicTrack);
+  const tracks = dedupeListenTogetherTracks(
+    searchResults.map(convertSearchTrackToMusicTrack),
+  );
   const collection = mapYoutubePlaylistHeaderToCollection(
     playlistId,
     playlist.header,
@@ -923,12 +936,14 @@ async function resolveSpotifyUrl(
     }
   }
 
+  const uniqueResolvedTracks = dedupeListenTogetherTracks(resolvedTracks);
+
   if (sourceType === "track") {
     return {
       kind: "track",
-      tracks: resolvedTracks.slice(0, 1),
+      tracks: uniqueResolvedTracks.slice(0, 1),
       collection: null,
-      resolvedCount: resolvedTracks.length,
+      resolvedCount: uniqueResolvedTracks.length,
       skippedCount: skippedItems.length,
       skippedItems,
       nextOffset: null,
@@ -938,7 +953,7 @@ async function resolveSpotifyUrl(
 
   return {
     kind: "collection",
-    tracks: resolvedTracks,
+    tracks: uniqueResolvedTracks,
     collection: {
       id: `${sourceType}:${normalizeText(details.preview.title)}`,
       provider: "spotify",
@@ -948,7 +963,7 @@ async function resolveSpotifyUrl(
       artworkUrl: details.preview.image ?? null,
       sourceUrl: rawUrl,
     },
-    resolvedCount: resolvedTracks.length,
+    resolvedCount: uniqueResolvedTracks.length,
     skippedCount: skippedItems.length,
     skippedItems,
     nextOffset: batch.nextOffset,

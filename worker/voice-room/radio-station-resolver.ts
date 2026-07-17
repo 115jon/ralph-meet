@@ -109,6 +109,7 @@ export class RadioStationResolver {
         kind: "radio",
         id: stationUuid,
         provider: "radio",
+        station_uuid: stationUuid,
         title,
         artworkUrl: this.sanitizePublicHttpsUrl(station.favicon)?.href,
         canonicalUrl:

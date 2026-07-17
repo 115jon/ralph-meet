@@ -36,6 +36,7 @@ import {
   removeListenTogetherEntry,
   seekListenTogether,
   skipListenTogether,
+  type ListenTogetherMutationResult,
 } from "../src/lib/voice/listen-together-state";
 import { getNextVoicePresenceAlarmTime } from "../src/lib/voice-presence";
 import { toSafeSfuFailure } from "./sfu-diagnostics";
@@ -301,9 +302,17 @@ export class VoiceRoom extends DurableObject<Env> {
         current_entry_id TEXT,
         anchor_position_ms INTEGER NOT NULL DEFAULT 0,
         anchor_updated_at INTEGER,
-        last_updated_at INTEGER NOT NULL DEFAULT 0
+        last_updated_at INTEGER NOT NULL DEFAULT 0,
+        recently_played_json TEXT
       );
     `);
+    try {
+      this.sql.exec(
+        `ALTER TABLE listen_together_state ADD COLUMN recently_played_json TEXT;`,
+      );
+    } catch {
+      // Existing SQLite-backed Durable Objects already have the column.
+    }
 
     this.sql.exec(`
       CREATE TABLE IF NOT EXISTS listen_together_queue (
@@ -957,6 +966,19 @@ export class VoiceRoom extends DurableObject<Env> {
     }
   }
 
+  private commitListenTogetherMutation(
+    result: ListenTogetherMutationResult,
+    now = Date.now(),
+  ) {
+    this.persistListenTogetherState(result.state, result.queue);
+    this.broadcastListenTogetherUpdates(
+      buildListenTogetherSnapshot(result.state, result.queue, now),
+      result.queueChanged,
+      result.playbackChanged,
+    );
+    this.scheduleAlarm();
+  }
+
   private getListenTogetherTrackDeadline(now = Date.now()) {
     if (this.getActiveParticipantCount() <= 0) return null;
     const snapshot = this.getListenTogetherSnapshot(now);
@@ -1007,11 +1029,12 @@ export class VoiceRoom extends DurableObject<Env> {
       state,
       now,
     );
-    this.persistListenTogetherState(result.state, result.queue);
-    this.broadcastListenTogetherUpdates(
-      buildListenTogetherSnapshot(result.state, result.queue, now),
-      result.queueChanged,
-      true,
+    this.commitListenTogetherMutation(
+      {
+        ...result,
+        playbackChanged: true,
+      },
+      now,
     );
   }
 
@@ -1383,16 +1406,10 @@ export class VoiceRoom extends DurableObject<Env> {
         queue,
         state,
         entries,
-        d.mode === "play-next" ? "play-next" : "append",
+        d.mode === "play-next" || d.mode === "play-now" ? d.mode : "append",
         Date.now(),
       );
-      this.persistListenTogetherState(result.state, result.queue);
-      this.broadcastListenTogetherUpdates(
-        buildListenTogetherSnapshot(result.state, result.queue),
-        result.queueChanged,
-        result.playbackChanged,
-      );
-      this.scheduleAlarm();
+      this.commitListenTogetherMutation(result);
       return;
     }
 
@@ -1489,18 +1506,7 @@ export class VoiceRoom extends DurableObject<Env> {
 
     if (!this.isCurrentAuthenticatedVoiceSocket(ws)) return;
 
-    this.persistListenTogetherState(result.state, result.queue);
-    const snapshot = buildListenTogetherSnapshot(
-      result.state,
-      result.queue,
-      now,
-    );
-    this.broadcastListenTogetherUpdates(
-      snapshot,
-      result.queueChanged,
-      result.playbackChanged,
-    );
-    this.scheduleAlarm();
+    this.commitListenTogetherMutation(result, now);
   }
 
   private getWsByParticipant(participantId: string): WebSocket | undefined {

@@ -48,7 +48,7 @@ function sendListenTogetherCommand(
   roomSlug: string | null,
   payload: Record<string, unknown>,
 ) {
-  if (!sfu || !roomSlug) return;
+  if (!sfu || !roomSlug || sfu.voiceGW.isReady === false) return false;
   listenTogetherLog.info("Sending listen together control", {
     source: "desktop-thumbnail-toolbar",
     type: payload.type,
@@ -58,6 +58,7 @@ function sendListenTogetherCommand(
   });
   sfu.resumeAudioContext?.();
   sfu.voiceGW.sendAppEvent(payload);
+  return true;
 }
 
 async function focusCurrentDesktopWindow() {
@@ -236,18 +237,21 @@ export function DesktopThumbnailToolbarSync({
         case "disconnect":
           session?.disconnect();
           return;
-        case "toggle-media-playback":
+        case "toggle-media-playback": {
           if (!media) return;
-          sendListenTogetherCommand(media.sfu, media.roomSlug, {
+          const sent = sendListenTogetherCommand(media.sfu, media.roomSlug, {
             type: "listen_together.pause",
             room_slug: media.roomSlug,
             paused: !media.paused,
           });
-          media.setLocalPlayback(media.roomSlug, {
-            paused: !media.paused,
-            positionMs: media.positionMs,
-          });
+          if (sent) {
+            media.setLocalPlayback(media.roomSlug, {
+              paused: !media.paused,
+              positionMs: media.positionMs,
+            });
+          }
           return;
+        }
         case "skip-media":
           if (!media) return;
           sendListenTogetherCommand(media.sfu, media.roomSlug, {

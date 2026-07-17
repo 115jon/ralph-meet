@@ -3,6 +3,7 @@ export const LISTEN_TOGETHER_RESOLVE_BATCH_SIZE = 20;
 export const LISTEN_TOGETHER_DRIFT_TOLERANCE_MS = 750;
 export const LISTEN_TOGETHER_SEARCH_TTL_SECONDS = 180;
 export const LISTEN_TOGETHER_RESOLVE_TTL_SECONDS = 600;
+export const LISTEN_TOGETHER_RECENTLY_PLAYED_LIMIT = 50;
 
 export type ListenTogetherMusicProvider =
   | "youtube"
@@ -10,7 +11,7 @@ export type ListenTogetherMusicProvider =
   | "spotify";
 export type ListenTogetherProvider = ListenTogetherMusicProvider | "radio";
 export type ListenTogetherSearchFilter = "track" | "collection";
-export type ListenTogetherEnqueueMode = "append" | "play-next";
+export type ListenTogetherEnqueueMode = "append" | "play-next" | "play-now";
 
 export interface ListenTogetherRequester {
   userId: string;
@@ -38,6 +39,7 @@ export interface ListenTogetherRadioTrack {
   kind: "radio";
   id: string;
   provider: "radio";
+  station_uuid?: string;
   title: string;
   artist?: string | null;
   artworkUrl?: string | null;
@@ -125,6 +127,12 @@ export interface ListenTogetherQueueEntry extends ListenTogetherQueueEntrySeed {
   requestedAt: number;
 }
 
+export interface ListenTogetherRecentlyPlayedEntry {
+  historyId: string;
+  playedAt: number;
+  entry: ListenTogetherQueueEntry;
+}
+
 export interface ListenTogetherPersistentState {
   roomSlug: string;
   revision: number;
@@ -133,6 +141,7 @@ export interface ListenTogetherPersistentState {
   anchorPositionMs: number;
   anchorUpdatedAt: number | null;
   lastUpdatedAt: number;
+  recentlyPlayed?: ListenTogetherRecentlyPlayedEntry[];
 }
 
 export interface ListenTogetherStateSnapshot extends ListenTogetherPersistentState {
@@ -323,6 +332,7 @@ export function buildListenTogetherSnapshot(
     currentEntry,
     durationMs,
     positionMs: getListenTogetherPositionMs(state, durationMs, now),
+    recentlyPlayed: state.recentlyPlayed,
   };
 }
 

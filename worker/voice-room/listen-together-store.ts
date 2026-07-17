@@ -1,8 +1,10 @@
 import {
   createListenTogetherState,
+  LISTEN_TOGETHER_RECENTLY_PLAYED_LIMIT,
   type ListenTogetherMusicTrack,
   type ListenTogetherPersistentState,
   type ListenTogetherQueueEntry,
+  type ListenTogetherRecentlyPlayedEntry,
 } from "../../src/lib/listen-together";
 
 export interface ListenTogetherSql {
@@ -21,7 +23,7 @@ export class ListenTogetherStore {
   loadState(): ListenTogetherPersistentState {
     const row = [
       ...this.sql.exec(
-        `SELECT room_slug, revision, paused, current_entry_id, anchor_position_ms, anchor_updated_at, last_updated_at
+        `SELECT room_slug, revision, paused, current_entry_id, anchor_position_ms, anchor_updated_at, last_updated_at, recently_played_json
          FROM listen_together_state
          WHERE id = 1`,
       ),
@@ -46,7 +48,67 @@ export class ListenTogetherStore {
           ? Number(row.anchor_updated_at)
           : null,
       lastUpdatedAt: Number(row.last_updated_at ?? 0),
+      recentlyPlayed: this.parseRecentlyPlayed(row.recently_played_json),
     };
+  }
+
+  private parseRecentlyPlayed(
+    value: unknown,
+  ): ListenTogetherRecentlyPlayedEntry[] {
+    if (typeof value !== "string") return [];
+    try {
+      const parsed: unknown = JSON.parse(value);
+      if (!Array.isArray(parsed)) return [];
+      return parsed
+        .filter(this.isRecentlyPlayedEntry)
+        .slice(0, LISTEN_TOGETHER_RECENTLY_PLAYED_LIMIT);
+    } catch {
+      return [];
+    }
+  }
+
+  private isRecentlyPlayedEntry(
+    item: unknown,
+  ): item is ListenTogetherRecentlyPlayedEntry {
+    if (!item || typeof item !== "object") return false;
+    const candidate = item as Record<string, unknown>;
+    const entry = candidate.entry;
+    if (
+      typeof candidate.historyId !== "string" ||
+      typeof candidate.playedAt !== "number" ||
+      !Number.isFinite(candidate.playedAt) ||
+      !entry ||
+      typeof entry !== "object"
+    ) {
+      return false;
+    }
+
+    const queueEntry = entry as Record<string, unknown>;
+    const requester = queueEntry.requester;
+    const track = queueEntry.track;
+    if (
+      typeof queueEntry.entryId !== "string" ||
+      typeof queueEntry.requestedAt !== "number" ||
+      !Number.isFinite(queueEntry.requestedAt) ||
+      !requester ||
+      typeof requester !== "object" ||
+      !track ||
+      typeof track !== "object"
+    ) {
+      return false;
+    }
+
+    const requesterRecord = requester as Record<string, unknown>;
+    const trackRecord = track as Record<string, unknown>;
+    return (
+      typeof requesterRecord.userId === "string" &&
+      typeof requesterRecord.displayName === "string" &&
+      (trackRecord.kind === "music" || trackRecord.kind === "radio") &&
+      typeof trackRecord.id === "string" &&
+      typeof trackRecord.provider === "string" &&
+      typeof trackRecord.title === "string" &&
+      typeof trackRecord.sourceLabel === "string"
+    );
   }
 
   saveState(state: ListenTogetherPersistentState) {
@@ -59,17 +121,19 @@ export class ListenTogetherStore {
          current_entry_id,
          anchor_position_ms,
          anchor_updated_at,
-         last_updated_at
+         last_updated_at,
+         recently_played_json
        )
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(id) DO UPDATE SET
          room_slug = excluded.room_slug,
          revision = excluded.revision,
          paused = excluded.paused,
          current_entry_id = excluded.current_entry_id,
-         anchor_position_ms = excluded.anchor_position_ms,
-         anchor_updated_at = excluded.anchor_updated_at,
-         last_updated_at = excluded.last_updated_at`,
+          anchor_position_ms = excluded.anchor_position_ms,
+          anchor_updated_at = excluded.anchor_updated_at,
+          last_updated_at = excluded.last_updated_at,
+          recently_played_json = excluded.recently_played_json`,
       1,
       state.roomSlug,
       state.revision,
@@ -78,6 +142,7 @@ export class ListenTogetherStore {
       state.anchorPositionMs,
       state.anchorUpdatedAt,
       state.lastUpdatedAt,
+      JSON.stringify(state.recentlyPlayed ?? []),
     );
   }
 
