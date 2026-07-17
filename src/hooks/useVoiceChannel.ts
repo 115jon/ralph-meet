@@ -248,6 +248,10 @@ export function resolveScreenVideoSubscription(
   return true;
 }
 
+export function resolveCameraVideoSubscriptionRid(): "h" {
+  return "h";
+}
+
 export type RemoteStreamsByUser = Record<string, Record<string, MediaStream>>;
 
 export function upsertRemoteTrackStream(
@@ -1245,14 +1249,6 @@ export function useVoiceChannel({
     const sfu = sfuRef.current;
 
     const vcMembers = channelId ? (voiceChannelStates[channelId] ?? []) : [];
-    const mappedParticipantIds = Array.from(uuidToClerkRef.current.keys());
-    const remoteMemberCount = Math.max(
-      0,
-      mode === "room"
-        ? mappedParticipantIds.filter((id) => id !== myIdRef.current).length
-        : (isCall ? mappedParticipantIds.length : vcMembers.length) - 1,
-    );
-    const isOnlyRemote = remoteMemberCount === 1;
     const localClerkId = user?.id;
 
     let hasRemoteSubs = false;
@@ -1268,7 +1264,7 @@ export function useVoiceChannel({
       const isFocused =
         focusedId === `remote-screen-${clerkId}` ||
         focusedId === `remote-camera-${clerkId}`;
-      const camRid = isFocused || isOnlyRemote ? "h" : "l";
+      const camRid = resolveCameraVideoSubscriptionRid();
 
       // Verify the user is still in the channel (voice channel or call/room)
       // For calls and rooms, we rely on SFU participants entirely rather than gateway presence
