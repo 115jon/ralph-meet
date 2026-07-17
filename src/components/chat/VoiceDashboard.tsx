@@ -28,7 +28,6 @@ import {
 import { createPortal } from "react-dom";
 import { useDelayUnmount } from "@/hooks/useDelayUnmount";
 import { FloatingListenTogetherPlayer } from "./FloatingListenTogetherPlayer";
-import { useListenTogetherPlaybackState } from "./listen-together-playback";
 import { ActiveSoundboardEffectList } from "./ActiveSoundboardEffectList";
 import { getSoundboardServerKey } from "@/lib/voice/soundboard";
 import { AppWindow, AudioWaveform } from "lucide-react";
@@ -186,7 +185,6 @@ export function VoiceDashboard({
     s.getSettings(voiceSettingsUserId),
   );
   const updateUserSettings = useVoiceSettingsStore((s) => s.updateUserSettings);
-  const listenTogetherPlayback = useListenTogetherPlaybackState(roomSlug);
   const localStreamWatchers = localUserId
     ? (watchersByStreamer[localUserId] ?? [])
     : [];
@@ -323,7 +321,6 @@ export function VoiceDashboard({
     <TooltipProvider delayDuration={0}>
       <div className="animate-in slide-in-from-bottom-5 duration-300">
         <FloatingListenTogetherPlayer
-          playback={listenTogetherPlayback}
           sfu={sfu}
           roomSlug={roomSlug}
           onOpenQueue={openListenTogetherPicker}
