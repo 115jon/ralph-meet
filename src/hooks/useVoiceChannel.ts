@@ -48,6 +48,7 @@ import {
   remoteSpatialParticipants,
   type SharedSpatialAudioState,
 } from "@/lib/voice/spatial-audio";
+import { getVoiceActivityThreshold } from "@/lib/voice/vad";
 import {
   cancelAutomaticSoundboardCleanup,
   getAutomaticSoundboardSessionId,
@@ -95,6 +96,7 @@ const STREAM_PREVIEW_CAPTURE_WIDTH = 224;
 const STREAM_PREVIEW_CAPTURE_QUALITY = 0.4;
 const STREAM_PREVIEW_CAPTURE_INTERVAL_MS = 8000;
 const STREAM_PREVIEW_CAPTURE_INITIAL_DELAY_MS = 750;
+let speakingSourceSequence = 0;
 
 const SCREEN_QUALITY_MAP: Record<
   string,
@@ -572,7 +574,12 @@ export function useVoiceChannel({
     sendVoiceChannelLeave,
     sendVoiceStateUpdate,
     setSpeakingUsers,
+    clearSpeakingUsers,
   } = useChatActions();
+  const speakingSourceIdRef = useRef<string | null>(null);
+  if (!speakingSourceIdRef.current) {
+    speakingSourceIdRef.current = `voice-session-${++speakingSourceSequence}`;
+  }
   const currentVoiceChannelStartedAt = channelId
     ? (voiceChannelStartedAt[channelId] ?? null)
     : null;
@@ -748,7 +755,7 @@ export function useVoiceChannel({
   // Sync local speaking state to the global chat context
   useEffect(() => {
     // console.log("[useVoiceChannel] Syncing speakingUsers to global context:", speakingUsers);
-    setSpeakingUsers(speakingUsers);
+    setSpeakingUsers(speakingUsers, speakingSourceIdRef.current!);
   }, [speakingUsers, setSpeakingUsers]);
 
   // Keep the synchronous source ref in lockstep with the reactive state so
@@ -916,8 +923,8 @@ export function useVoiceChannel({
 
   // Clean up global speaking state on unmount
   useEffect(() => {
-    return () => setSpeakingUsers({});
-  }, [setSpeakingUsers]);
+    return () => clearSpeakingUsers(speakingSourceIdRef.current!);
+  }, [clearSpeakingUsers]);
 
   const sfuRef = useRef<SFUClient | null>(null);
   const sfuHandlerCleanupRef = useRef<(() => void) | null>(null);
@@ -1843,6 +1850,17 @@ export function useVoiceChannel({
       });
     });
 
+    onSfu("voice-ready", ({ speaking }) => {
+      const nextSpeakingUsers: Record<string, boolean> = {};
+      for (const [participantId, flags] of Object.entries(speaking ?? {})) {
+        if (flags <= 0) continue;
+        const clerkId =
+          uuidToClerkRef.current.get(participantId) || participantId;
+        nextSpeakingUsers[clerkId] = true;
+      }
+      voiceDispatch({ type: "SET_SPEAKING", payload: nextSpeakingUsers });
+    });
+
     onSfu("vad-speaking", ({ participantId, isSpeaking }) => {
       const clerkId =
         uuidToClerkRef.current.get(participantId) || participantId;
@@ -1857,31 +1875,53 @@ export function useVoiceChannel({
     );
 
     onSfu("voice-reconnected", () => {
-      vcLog.info("Voice reconnected — re-publishing local tracks");
-      const stream = localStreamRef.current;
-      if (!stream) return;
-      const publishedAudioStream =
-        publishedAudioProcessorRef.current?.processedStream;
-      const audioTracks = stream.getAudioTracks();
-      const videoTracks = stream.getVideoTracks();
-      if ((publishedAudioStream?.getAudioTracks().length ?? 0) > 0) {
-        sfu.publishTracks(publishedAudioStream!, "cam");
-      } else if (audioTracks.length > 0) {
-        sfu.publishTracks(new MediaStream(audioTracks), "cam");
-      }
-      if (videoTracks.length > 0) {
-        sfu.publishTracks(new MediaStream(videoTracks), "cam");
-      }
+      void (async () => {
+        vcLog.info("Voice reconnected — re-publishing local tracks");
+        const stream = localStreamRef.current;
+        if (!stream) return;
+        const publishedAudioStream =
+          publishedAudioProcessorRef.current?.processedStream;
+        const audioTracks = stream.getAudioTracks();
+        const videoTracks = stream.getVideoTracks();
+        const audioStream =
+          (publishedAudioStream?.getAudioTracks().length ?? 0) > 0
+            ? publishedAudioStream
+            : audioTracks.length > 0
+              ? new MediaStream(audioTracks)
+              : null;
+        if (audioStream) {
+          await sfu.publishTracks(audioStream, "cam");
+          const audioTrack = audioStream.getAudioTracks()[0];
+          if (
+            audioTrack &&
+            audioTrack.readyState !== "ended" &&
+            audioTrack.enabled
+          ) {
+            sfu.vad.stop();
+            sfu.vad.start(audioStream);
+          } else {
+            sfu.vad.stop();
+          }
+        }
+        if (videoTracks.length > 0) {
+          await sfu.publishTracks(new MediaStream(videoTracks), "cam");
+        }
 
-      const activeScreenTracks = !sfu.isNativeScreenShareActive
-        ? (screenStreamRef.current
-            ?.getTracks()
-            .filter((track) => track.readyState === "live") ?? [])
-        : [];
-      if (activeScreenTracks.length > 0) {
-        vcLog.info("Voice reconnected — re-publishing active screen tracks");
-        sfu.publishTracks(new MediaStream(activeScreenTracks), "screen");
-      }
+        const activeScreenTracks = !sfu.isNativeScreenShareActive
+          ? (screenStreamRef.current
+              ?.getTracks()
+              .filter((track) => track.readyState === "live") ?? [])
+          : [];
+        if (activeScreenTracks.length > 0) {
+          vcLog.info("Voice reconnected — re-publishing active screen tracks");
+          await sfu.publishTracks(
+            new MediaStream(activeScreenTracks),
+            "screen",
+          );
+        }
+      })().catch((error) => {
+        vcLog.warn("Voice reconnect publication failed", error);
+      });
     });
 
     onSfu("voice-token-expired", () => {
@@ -2009,6 +2049,7 @@ export function useVoiceChannel({
 
     const swapDevices = async () => {
       const sfu = session;
+      let nextAudioProcessor: LocalAudioProcessorHandle | null = null;
       const oldStream = localStreamRef.current;
       const requestedCameraBackgroundKey = getCameraBackgroundEffectKey(
         cameraBackground,
@@ -2113,7 +2154,6 @@ export function useVoiceChannel({
           return;
         }
 
-        let nextAudioProcessor: LocalAudioProcessorHandle | null = null;
         let streamToPublish = newStream;
         if (newStream.getAudioTracks().length > 0) {
           try {
@@ -2139,37 +2179,37 @@ export function useVoiceChannel({
         }
 
         const displayStream = new MediaStream(newStream.getAudioTracks());
+        const previousAudioProcessor = publishedAudioProcessorRef.current;
 
         const oldAudio = oldStream?.getAudioTracks()[0];
         const newAudio = streamToPublish.getAudioTracks()[0];
-        if (newAudio && (!oldAudio || newAudio.id !== oldAudio.id)) {
+        const previousPublishedAudio =
+          previousAudioProcessor?.processedStream.getAudioTracks()[0] ??
+          oldAudio;
+        const audioNeedsUpdate =
+          !!newAudio &&
+          (!previousPublishedAudio ||
+            previousPublishedAudio.id !== newAudio.id);
+        if (audioNeedsUpdate && newAudio) {
           if (!isCurrent()) {
             disposeStaleResources(nextAudioProcessor);
             return;
           }
-          if (oldAudio) oldAudio.stop();
           newAudio.enabled = isMicOn;
           if (oldAudio) {
             if (!isCurrent()) {
               disposeStaleResources(nextAudioProcessor);
               return;
             }
-            sfu.replaceTrack(`cam-audio-${myIdRef.current}`, newAudio);
+            await sfu.replaceTrack(`cam-audio-${myIdRef.current}`, newAudio);
           } else {
             if (!isCurrent()) {
               disposeStaleResources(nextAudioProcessor);
               return;
             }
-            sfu.publishTracks(new MediaStream([newAudio]), "cam");
+            await sfu.publishTracks(new MediaStream([newAudio]), "cam");
           }
-          if (isMicOn) {
-            if (!isCurrent()) {
-              disposeStaleResources(nextAudioProcessor);
-              return;
-            }
-            sfu.vad.stop();
-            sfu.vad.start(newStream); // VAD still uses raw stream
-          }
+          if (oldAudio && oldAudio !== newAudio) oldAudio.stop();
         }
 
         const oldVideo = oldStream?.getVideoTracks()[0];
@@ -2260,7 +2300,7 @@ export function useVoiceChannel({
               disposeStaleResources(nextAudioProcessor);
               return;
             }
-            sfu.publishTracks(new MediaStream([newVideo]), "cam");
+            await sfu.publishTracks(new MediaStream([newVideo]), "cam");
           }
         } else if (
           previousRawVideo &&
@@ -2279,7 +2319,6 @@ export function useVoiceChannel({
           return;
         }
         localStreamRef.current = displayStream;
-        const previousAudioProcessor = publishedAudioProcessorRef.current;
         publishedAudioProcessorRef.current = nextAudioProcessor;
         if (
           previousAudioProcessor &&
@@ -2287,6 +2326,11 @@ export function useVoiceChannel({
         ) {
           if (!isCurrent()) return;
           previousAudioProcessor.destroy();
+        }
+
+        if (audioNeedsUpdate && isMicOn) {
+          sfu.vad.stop();
+          sfu.vad.start(streamToPublish);
         }
 
         if (!isCurrent()) return;
@@ -2322,6 +2366,7 @@ export function useVoiceChannel({
           }
         }
       } catch (err) {
+        nextAudioProcessor?.destroy();
         devicesLog.error("Failed to swap devices:", err);
       }
     };
@@ -2363,20 +2408,10 @@ export function useVoiceChannel({
   useEffect(() => {
     if (!sfuRef.current) return;
 
-    let threshold = 3.0; // default auto threshold
-    if (!autoSensitivity) {
-      // sensitivity slider is -100dB (left) to 0dB (right).
-      // dB is logarithmic: convert to linear amplitude, then scale to RMS 0-100.
-      // -100 dB → ~0.001 (gate wide open, any sound triggers)
-      //  -50 dB → ~0.32  (normal speech triggers easily)
-      //  -20 dB → ~10    (need moderately loud input)
-      //    0 dB → 100    (requires full-scale signal)
-      threshold = Math.pow(10, sensitivity / 20) * 100;
-      threshold = Math.max(0.1, Math.min(50, threshold));
-    }
-
-    sfuRef.current.vad.setThreshold(threshold);
-  }, [autoSensitivity, sensitivity]);
+    sfuRef.current.vad.setThreshold(
+      getVoiceActivityThreshold(autoSensitivity, sensitivity),
+    );
+  }, [autoSensitivity, sensitivity, sfuInstance]);
 
   const setMasterVolume = useCallback((outputVolume: number) => {
     if (!sfuRef.current) return;
@@ -2416,7 +2451,9 @@ export function useVoiceChannel({
     }
 
     if (isMicOn) {
-      sfuRef.current?.vad.start(stream);
+      const publishedAudioStream =
+        publishedAudioProcessorRef.current?.processedStream;
+      sfuRef.current?.vad.start(publishedAudioStream ?? stream);
     } else {
       sfuRef.current?.vad.stop();
     }

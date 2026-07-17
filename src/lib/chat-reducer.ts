@@ -90,8 +90,10 @@ export interface ChatState {
   relationships: Relationship[];
   /** User currently being viewed in a profile modal */
   profileUser: User | null;
-  /** Global map of which users are currently speaking in a voice channel: userId -> boolean */
+  /** Aggregated map of users speaking across active voice sessions: userId -> boolean */
   speakingUsers: Record<string, boolean>;
+  /** Per-session speaking maps used to prevent one voice session clearing another. */
+  speakingUsersBySource: Record<string, Record<string, boolean>>;
   /** User notifications (mentions, replies, DMs) */
   notifications: Notification[];
   /** Unread notification count (for badge) */
@@ -169,6 +171,7 @@ export const initialState: ChatState = {
   relationships: [],
   profileUser: null,
   speakingUsers: {},
+  speakingUsersBySource: {},
   notifications: [],
   unreadNotificationCount: 0,
   serverMentionCounts: {},
@@ -388,7 +391,12 @@ export type ChatAction =
   | { type: "ADD_RELATIONSHIP"; relationship: Relationship }
   | { type: "REMOVE_RELATIONSHIP"; userId: string }
   | { type: "SET_PROFILE_USER"; user: User | null }
-  | { type: "SET_SPEAKING_USERS"; speakingUsers: Record<string, boolean> }
+  | {
+      type: "SET_SPEAKING_USERS";
+      sourceId: string;
+      speakingUsers: Record<string, boolean>;
+    }
+  | { type: "CLEAR_SPEAKING_USERS"; sourceId: string }
   | {
       type: "SET_NOTIFICATIONS";
       notifications: Notification[];
@@ -428,6 +436,18 @@ function computeMentionCounts(notifications: Notification[]): {
   }
 
   return { serverMentionCounts, channelMentionCounts };
+}
+
+function aggregateSpeakingUsers(
+  speakingUsersBySource: Record<string, Record<string, boolean>>,
+): Record<string, boolean> {
+  const speakingUsers: Record<string, boolean> = {};
+  for (const sourceUsers of Object.values(speakingUsersBySource)) {
+    for (const [userId, isSpeaking] of Object.entries(sourceUsers)) {
+      if (isSpeaking) speakingUsers[userId] = true;
+    }
+  }
+  return speakingUsers;
 }
 
 /**
@@ -2160,17 +2180,31 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
     case "SET_PROFILE_USER":
       return { ...state, profileUser: action.user };
     case "SET_SPEAKING_USERS": {
+      const speakingUsersBySource = {
+        ...state.speakingUsersBySource,
+        [action.sourceId]: action.speakingUsers,
+      };
       const prev = state.speakingUsers;
-      const next = action.speakingUsers;
+      const next = aggregateSpeakingUsers(speakingUsersBySource);
       const prevKeys = Object.keys(prev);
       const nextKeys = Object.keys(next);
       if (
         prevKeys.length === nextKeys.length &&
         prevKeys.every((k) => prev[k] === next[k])
       ) {
-        return state;
+        return { ...state, speakingUsersBySource };
       }
-      return { ...state, speakingUsers: next };
+      return { ...state, speakingUsers: next, speakingUsersBySource };
+    }
+    case "CLEAR_SPEAKING_USERS": {
+      if (!(action.sourceId in state.speakingUsersBySource)) return state;
+      const speakingUsersBySource = { ...state.speakingUsersBySource };
+      delete speakingUsersBySource[action.sourceId];
+      return {
+        ...state,
+        speakingUsers: aggregateSpeakingUsers(speakingUsersBySource),
+        speakingUsersBySource,
+      };
     }
     case "SET_NOTIFICATIONS": {
       const counts = computeMentionCounts(action.notifications);

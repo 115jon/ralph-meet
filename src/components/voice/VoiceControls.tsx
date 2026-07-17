@@ -2,7 +2,7 @@ import { cn } from "@/lib/utils";
 import { lazy, Suspense, useCallback, useMemo, useRef, useState } from "react";
 import type { SFUClient } from "@/lib/sfu-client";
 import { handleVoiceCameraToggle } from "@/lib/voice/camera-toggle";
-import type { VoiceActivityType } from "@/stores/useVoiceActivityStore";
+import type { ActivityType } from "@/stores/useActivityStore";
 import { CameraSettingsModal } from "../CameraSettingsModal";
 import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
 import {
@@ -39,7 +39,7 @@ interface VoiceControlsProps {
   focusedItem: any;
   setFocusedId: (id: string | null) => void;
   handleLeave: () => void;
-  activeActivity?: VoiceActivityType | null;
+  activeActivity?: ActivityType | null;
   leaveActivity?: () => void;
   isFullscreen: boolean;
   toggleFs: () => void;

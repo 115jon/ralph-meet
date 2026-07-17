@@ -102,6 +102,18 @@ describe("SFUClient Baseline Tests", () => {
   });
 
   describe("publishTracks", () => {
+    it("does not start microphone VAD for a video-only publication", async () => {
+      const videoTrack = new MockMediaStreamTrack("video");
+      const startVad = vi.spyOn(client.vad, "start");
+
+      await client.publishTracks(
+        new MockMediaStream([videoTrack]) as any,
+        "cam",
+      );
+
+      expect(startVad).not.toHaveBeenCalled();
+    });
+
     it("should add transceivers and create an offer for audio and video", async () => {
       const audioTrack = new MockMediaStreamTrack("audio");
       const videoTrack = new MockMediaStreamTrack("video");

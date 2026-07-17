@@ -66,3 +66,25 @@ describe("chatReducer message snapshots", () => {
     expect(next.messages[0]?.content).toBe("edited");
   });
 });
+
+describe("chatReducer speaking sources", () => {
+  it("aggregates speaking users without allowing one session to clear another", () => {
+    const first = chatReducer(initialState, {
+      type: "SET_SPEAKING_USERS",
+      sourceId: "voice-session-a",
+      speakingUsers: { alice: true },
+    });
+    const both = chatReducer(first, {
+      type: "SET_SPEAKING_USERS",
+      sourceId: "voice-session-b",
+      speakingUsers: { bob: true },
+    });
+
+    const cleared = chatReducer(both, {
+      type: "CLEAR_SPEAKING_USERS",
+      sourceId: "voice-session-a",
+    });
+
+    expect(cleared.speakingUsers).toEqual({ bob: true });
+  });
+});

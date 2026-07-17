@@ -17,7 +17,7 @@ import type {
 import { cn } from "@/lib/utils";
 import type { VoiceChannelMember } from "@/stores/chat-store";
 import { useChatActions, useChatStore } from "@/stores/chat-store";
-import { useVoiceActivityStore } from "@/stores/useVoiceActivityStore";
+import { useActivityStore } from "@/stores/useActivityStore";
 import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
 import {
   Tooltip,
@@ -1590,9 +1590,10 @@ function VoiceChannelMemberRow({
   onPopoverUser,
   onWatchStream,
 }: VoiceChannelMemberRowProps) {
-  const activity = useVoiceActivityStore(
-    (state) => state.activeByUser[member.clerk_user_id],
-  );
+  const activity = useActivityStore((state) => {
+    const presence = state.activeByUser[member.clerk_user_id];
+    return presence?.channelId === channelId ? presence : undefined;
+  });
   const isReconnecting =
     isVoiceMemberReconnecting(member) ||
     (isCurrentUser && !isCurrentClientVoiceConnected);

@@ -29,7 +29,11 @@ const { chatState, chatActions, settingsState, sfuInstances, FakeSFUClient } =
         setMasterVolume: vi.fn(),
         setOutputDevice: vi.fn(),
       };
-      readonly vad = { start: vi.fn(), stop: vi.fn() };
+      readonly vad = {
+        setThreshold: vi.fn(),
+        start: vi.fn(),
+        stop: vi.fn(),
+      };
       readonly roomGW = { sendVoiceState: vi.fn(), send: vi.fn() };
       readonly voiceGW = { send: vi.fn() };
       readonly connect = vi.fn();
@@ -117,6 +121,7 @@ const { chatState, chatActions, settingsState, sfuInstances, FakeSFUClient } =
       sendVoiceChannelLeave: vi.fn(),
       sendVoiceStateUpdate: vi.fn(),
       setSpeakingUsers: vi.fn(),
+      clearSpeakingUsers: vi.fn(),
     };
 
     return {

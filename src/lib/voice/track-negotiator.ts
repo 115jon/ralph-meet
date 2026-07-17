@@ -266,7 +266,8 @@ export class TrackNegotiator {
           .join(",")}, pc=${!!ctx.pc}`,
       );
 
-    ctx.queue = ctx.queue
+    const operation = ctx.queue
+      .catch(() => {})
       .then(async () => {
         if (DEBUG) pushCam.info(`publishTracks queue executing`);
 
@@ -292,8 +293,7 @@ export class TrackNegotiator {
 
         const pushPC = ctx.pc;
         if (!pushPC) {
-          pushCam.error(`PC still null after creation!`);
-          return;
+          throw new Error(`Push PC unavailable for ${prefix} publication`);
         }
 
         const pushTracks: PushTrackDescriptor[] = [];
@@ -327,9 +327,16 @@ export class TrackNegotiator {
               pushCam.info(
                 `Reusing transceiver for ${trackName}, replacing track`,
               );
-            transceiver.sender.replaceTrack(track).catch((err) => {
-              pushCam.warn(`replaceTrack failed for ${trackName}:`, err);
-            });
+            const previousTrack = transceiver.sender.track;
+            try {
+              await transceiver.sender.replaceTrack(track);
+              if (previousTrack && previousTrack !== track) {
+                previousTrack.stop();
+              }
+            } catch (err) {
+              track.stop();
+              throw err;
+            }
           } else {
             if (DEBUG) pushCam.info(`Adding new transceiver for ${trackName}`);
             const encodings: RTCRtpEncodingParameters[] = [];
@@ -550,10 +557,12 @@ export class TrackNegotiator {
             });
           }
         }
-      })
-      .catch((err) => {
-        pushCam.error(`publishTracks error:`, err);
       });
+
+    ctx.queue = operation.catch((err) => {
+      pushCam.error(`publishTracks error:`, err);
+      throw err;
+    });
 
     return ctx.queue;
   }

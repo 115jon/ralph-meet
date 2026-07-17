@@ -6,10 +6,7 @@ import type {
 import type { StreamWatchersByStreamer } from "@/lib/stream-watchers";
 import { cn } from "@/lib/utils";
 import { getAvailableStreamQualities } from "@/lib/voice/utils";
-import {
-  isVoiceActivityType,
-  useVoiceActivityStore,
-} from "@/stores/useVoiceActivityStore";
+import { isActivityType, useActivityStore } from "@/stores/useActivityStore";
 
 import {
   lazy,
@@ -174,13 +171,11 @@ export default function VoiceChannelView({
       gridItems.find((item) => item.isLocal)?.userId ?? settingsUserId ?? null,
     [gridItems, settingsUserId],
   );
-  const activeActivity = useVoiceActivityStore((state) =>
+  const activeActivity = useActivityStore((state) =>
     state.getUserActivity(localUserId, channelId),
   );
-  const setUserActivity = useVoiceActivityStore(
-    (state) => state.setUserActivity,
-  );
-  const clearUserActivity = useVoiceActivityStore(
+  const setUserActivity = useActivityStore((state) => state.setUserActivity);
+  const clearUserActivity = useActivityStore(
     (state) => state.clearUserActivity,
   );
 
@@ -239,7 +234,7 @@ export default function VoiceChannelView({
         event.type === "activity.start" &&
         event.channelId === channelId &&
         typeof event.userId === "string" &&
-        isVoiceActivityType(event.activity)
+        isActivityType(event.activity)
       ) {
         setUserActivity({
           userId: event.userId,

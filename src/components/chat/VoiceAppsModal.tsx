@@ -1,9 +1,6 @@
 import type { SFUClient } from "@/lib/sfu-client";
 import { cn } from "@/lib/utils";
-import {
-  type VoiceActivityType,
-  useVoiceActivityStore,
-} from "@/stores/useVoiceActivityStore";
+import { type ActivityType, useActivityStore } from "@/stores/useActivityStore";
 import { ChevronLeft, Gamepad2, X } from "lucide-react";
 import { useMemo, useState } from "react";
 
@@ -64,7 +61,7 @@ export function VoiceAppsModal({
   gridItems,
 }: VoiceAppsModalProps) {
   const [tab, setTab] = useState<Tab>(initialTab);
-  const setUserActivity = useVoiceActivityStore((s) => s.setUserActivity);
+  const setUserActivity = useActivityStore((s) => s.setUserActivity);
 
   const participants = useMemo(() => {
     const byId = new Map<string, { userId: string; name: string }>();
@@ -80,7 +77,7 @@ export function VoiceAppsModal({
     onClose();
   };
 
-  const startActivity = (activity: VoiceActivityType) => {
+  const startActivity = (activity: ActivityType) => {
     if (!localUserId || !channelId) return;
     const presence = {
       userId: localUserId,

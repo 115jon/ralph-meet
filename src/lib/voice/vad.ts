@@ -9,6 +9,16 @@ import { SpeakingFlags } from "../types";
 
 const DEBUG = typeof import.meta !== "undefined" && import.meta.env?.DEV;
 
+export function getVoiceActivityThreshold(
+  autoSensitivity: boolean,
+  sensitivity: number,
+): number {
+  if (autoSensitivity) return 3;
+
+  const threshold = Math.pow(10, sensitivity / 20) * 100;
+  return Math.max(0.1, Math.min(50, threshold));
+}
+
 /** Callbacks from the VAD to the owning SFUClient */
 export interface VADCallbacks {
   /** Emit speaking / vad-speaking events */
@@ -30,7 +40,7 @@ export class VoiceActivityDetector {
   private timer: ReturnType<typeof setInterval> | null = null;
   private isSpeaking: boolean = false;
   private silenceStart: number = 0;
-  private threshold: number = 3; // RMS threshold (roughly 0-100 scale)
+  private threshold = getVoiceActivityThreshold(true, -50);
   private silenceDelay: number = 300; // ms of silence before "stopped speaking"
   private gateEnabled: boolean = false;
   private isGated: boolean = false; // tracks whether gate is currently applied

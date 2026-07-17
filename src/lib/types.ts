@@ -965,7 +965,7 @@ export interface SFUEventMap {
     avatarDisplay?: AvatarDisplay | string | null;
   };
   "connection-state": { state: string };
-  "voice-ready": {};
+  "voice-ready": { speaking?: Record<string, number> };
   disconnected: never;
   kicked: never;
   error: { message: string };

@@ -1,13 +1,13 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { useVoiceActivityStore } from "./useVoiceActivityStore";
+import { useActivityStore } from "./useActivityStore";
 
-describe("useVoiceActivityStore", () => {
+describe("useActivityStore", () => {
   beforeEach(() => {
-    useVoiceActivityStore.setState({ activeByUser: {} });
+    useActivityStore.setState({ activeByUser: {} });
   });
 
   it("separates channel activity discovery from a user's own activity", () => {
-    const store = useVoiceActivityStore.getState();
+    const store = useActivityStore.getState();
 
     store.setUserActivity({
       userId: "host",
@@ -21,7 +21,7 @@ describe("useVoiceActivityStore", () => {
   });
 
   it("clears only the leaving user's activity", () => {
-    const store = useVoiceActivityStore.getState();
+    const store = useActivityStore.getState();
 
     store.setUserActivity({
       userId: "host",
@@ -43,7 +43,7 @@ describe("useVoiceActivityStore", () => {
   });
 
   it("stores additional activity types without affecting lookup behavior", () => {
-    const store = useVoiceActivityStore.getState();
+    const store = useActivityStore.getState();
 
     store.setUserActivity({
       userId: "pilot",
