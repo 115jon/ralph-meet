@@ -12,14 +12,17 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { EmbedInfo } from "@/lib/types";
 
-const { openImageViewerMock, videoAttachmentMock } = vi.hoisted(() => ({
-  openImageViewerMock: vi.fn(),
-  videoAttachmentMock: vi.fn(),
-}));
+const { openImageViewerMock, updateImageMock, videoAttachmentMock } =
+  vi.hoisted(() => ({
+    openImageViewerMock: vi.fn(),
+    updateImageMock: vi.fn(),
+    videoAttachmentMock: vi.fn(),
+  }));
 
 vi.mock("@/stores/useImageViewerStore", () => ({
   useImageViewerActions: () => ({
     open: openImageViewerMock,
+    updateImage: updateImageMock,
   }),
 }));
 
@@ -175,6 +178,7 @@ function makeTikTokVideoEmbed(overrides: Partial<EmbedInfo> = {}): EmbedInfo {
 describe("LinkEmbed DOM rendering", () => {
   afterEach(() => {
     openImageViewerMock.mockReset();
+    updateImageMock.mockReset();
     videoAttachmentMock.mockReset();
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
@@ -461,6 +465,81 @@ describe("LinkEmbed DOM rendering", () => {
     fireEvent.pause(video as HTMLVideoElement);
     expect(onMediaPlay).toHaveBeenCalledTimes(1);
     expect(onMediaStop).toHaveBeenCalledTimes(1);
+  });
+
+  it("pauses and resumes decoded X WebP GIF frames", async () => {
+    const frame = {
+      displayWidth: 720,
+      displayHeight: 720,
+      duration: 100_000,
+      close: vi.fn(),
+    };
+    const decodeMock = vi.fn(async () => ({ image: frame }));
+    const drawImageMock = vi.fn();
+
+    class MockImageDecoder {
+      tracks = {
+        ready: Promise.resolve(),
+        selectedIndex: 0,
+        0: { animated: true, frameCount: 2 },
+      };
+      decode = decodeMock;
+      close = vi.fn();
+    }
+
+    vi.stubGlobal("ImageDecoder", MockImageDecoder);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(new Uint8Array([1, 2, 3]))),
+    );
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockImplementation(
+      () =>
+        ({ drawImage: drawImageMock }) as unknown as CanvasRenderingContext2D,
+    );
+
+    const { container } = render(
+      <LinkEmbed
+        embed={{
+          id: "x-webp-gif-dom",
+          url: "https://x.com/GiFShitpost/status/2074671492458266675?s=20",
+          type: "rich",
+          provider: { name: "X", url: "https://x.com" },
+          footer: { text: "X" },
+          media: [
+            {
+              type: "video",
+              url: "https://video.twimg.com/tweet_video/HMqJQoAbMAASH3N.mp4",
+              width: 720,
+              height: 720,
+              contentType: "video/mp4",
+              isGif: true,
+            },
+          ],
+          fields: [],
+        }}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(decodeMock).toHaveBeenCalledTimes(1);
+      expect(drawImageMock).toHaveBeenCalledTimes(1);
+      expect(container.querySelector("[data-media-filename]")).toHaveAttribute(
+        "data-media-filename",
+        "x-video-1.webp",
+      );
+      expect(updateImageMock).toHaveBeenCalledTimes(1);
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Pause GIF" }));
+    const pausedDecodeCount = decodeMock.mock.calls.length;
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    expect(decodeMock).toHaveBeenCalledTimes(pausedDecodeCount);
+
+    fireEvent.click(screen.getByRole("button", { name: "Play GIF" }));
+    await waitFor(() => {
+      expect(decodeMock.mock.calls.length).toBeGreaterThan(pausedDecodeCount);
+    });
+    expect(updateImageMock).toHaveBeenCalledTimes(1);
   });
 
   it("renders Instagram animated carousel media with the shared video attachment", () => {

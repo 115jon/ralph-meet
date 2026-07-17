@@ -78,13 +78,23 @@ describe("proxy media helpers", () => {
   });
 
   describe("isAllowedMediaUrl", () => {
-    it("allows twimg and vxtwitter domains", () => {
+    it("allows X media domains", () => {
       expect(isAllowedMediaUrl(new URL("https://video.twimg.com/path"))).toBe(
         true,
       );
       expect(isAllowedMediaUrl(new URL("https://pbs.twimg.com/path"))).toBe(
         true,
       );
+      expect(
+        isAllowedMediaUrl(
+          new URL("https://gif.fxtwitter.com/tweet_video/example.webp"),
+        ),
+      ).toBe(true);
+      expect(
+        isAllowedMediaUrl(
+          new URL("https://gif.fxtwitter.com/other/example.webp"),
+        ),
+      ).toBe(false);
       expect(isAllowedMediaUrl(new URL("https://vxtwitter.com/tvid/123"))).toBe(
         true,
       );

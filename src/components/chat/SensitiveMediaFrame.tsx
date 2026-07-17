@@ -7,6 +7,7 @@ interface SensitiveMediaFrameProps {
   className?: string;
   mediaClassName?: string;
   overlayClassName?: string;
+  dataMediaProps?: Record<string, string>;
   children:
     | React.ReactNode
     | ((state: { revealed: boolean }) => React.ReactNode);
@@ -24,6 +25,7 @@ function SensitiveMediaFrameContent({
   className,
   mediaClassName,
   overlayClassName,
+  dataMediaProps,
   children,
 }: Omit<SensitiveMediaFrameProps, "attachmentId">) {
   const [revealed, setRevealed] = useState(false);
@@ -32,12 +34,17 @@ function SensitiveMediaFrameContent({
     typeof children === "function" ? children({ revealed }) : children;
 
   if (!blur || revealed) {
-    return <div className={className}>{resolvedChildren}</div>;
+    return (
+      <div {...dataMediaProps} className={className}>
+        {resolvedChildren}
+      </div>
+    );
   }
 
   return (
     <div className={cn("relative overflow-hidden", className)}>
       <div
+        {...dataMediaProps}
         aria-hidden="true"
         className={cn(
           "pointer-events-none select-none blur-2xl saturate-50 scale-[1.02]",

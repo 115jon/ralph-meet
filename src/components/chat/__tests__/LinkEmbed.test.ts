@@ -245,7 +245,7 @@ describe("LinkEmbed - X mixed media", () => {
     expect(markup).toContain(">1.6K<");
   });
 
-  it("renders gif tiles with autoplay and an inline pause button", () => {
+  it("renders gif tiles with the animated FxTwitter WebP asset", () => {
     const markup = render({
       id: "embed_3",
       url: "https://x.com/example/status/3",
@@ -274,12 +274,49 @@ describe("LinkEmbed - X mixed media", () => {
     });
 
     expect(markup).toContain('data-x-gif="true"');
-    expect(markup).toContain("loop");
-    expect(markup).toContain("muted");
+    expect(markup).toContain("gif.fxtwitter.com%2Ftweet_video%2Fexample.webp");
+    expect(markup).toContain(
+      'data-media-url="https://video.twimg.com/tweet_video/example.mp4"',
+    );
+    expect(markup).toContain(
+      'data-media-download-url="/api/proxy-media?url=https%3A%2F%2Fvideo.twimg.com%2Ftweet_video%2Fexample.mp4',
+    );
+    expect(markup).toContain('data-media-filename="x-video-2.mp4"');
+    expect(markup).toContain("<canvas");
     expect(markup).toContain("Pause GIF");
     expect(markup).toContain(">GIF<");
     expect(markup).toContain(">ALT<");
     expect(markup).toContain("Yes Thanos GIF");
+  });
+
+  it("uses the FxTwitter WebP asset for GIF-tagged X media", () => {
+    const markup = render({
+      id: "embed_x_supplied_gif",
+      url: "https://x.com/GiFShitpost/status/2074671492458266675?s=20",
+      type: "rich",
+      provider: { name: "X", url: "https://x.com" },
+      footer: { text: "X" },
+      media: [
+        {
+          type: "video",
+          url: "https://video.twimg.com/tweet_video/HMqJQoAbMAASH3N.mp4",
+          width: 720,
+          height: 720,
+          thumbnailUrl:
+            "https://pbs.twimg.com/tweet_video_thumb/HMqJQoAbMAASH3N.jpg",
+          contentType: "video/mp4",
+          isGif: true,
+        },
+      ],
+      fields: [],
+    });
+
+    expect(markup).toContain(
+      "gif.fxtwitter.com%2Ftweet_video%2FHMqJQoAbMAASH3N.webp",
+    );
+    expect(markup).not.toContain(
+      'src="/api/proxy-media?url=https%3A%2F%2Fvideo.twimg.com%2Ftweet_video%2FHMqJQoAbMAASH3N.mp4',
+    );
   });
 
   it("hides the gif alt button when no alt text exists", () => {

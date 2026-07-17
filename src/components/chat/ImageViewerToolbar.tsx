@@ -97,7 +97,7 @@ export function ImageViewerToolbar({
 
   const handleCopyLink = () => {
     if (currentImage) {
-      const url = getUrl(currentImage);
+      const url = currentImage.downloadUrl || getUrl(currentImage);
       const shareableUrl = /^https?:\/\//i.test(url)
         ? url
         : `${getWebOrigin()}${url}`;
@@ -116,7 +116,9 @@ export function ImageViewerToolbar({
   const handleCopyImage = async () => {
     if (!currentImage) return;
     try {
-      const response = await fetch(getUrl(currentImage));
+      const response = await fetch(
+        currentImage.downloadUrl || getUrl(currentImage),
+      );
       const blob = await response.blob();
       await navigator.clipboard.write([
         new ClipboardItem({ [blob.type]: blob }),
@@ -211,7 +213,7 @@ export function ImageViewerToolbar({
             )}
 
           <a
-            href={getUrl(currentImage)}
+            href={currentImage.downloadUrl || getUrl(currentImage)}
             download={currentImage.filename}
             target="_blank"
             rel="noopener noreferrer"

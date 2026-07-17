@@ -25,16 +25,17 @@ import { cn } from "@/lib/utils";
 import { useChatActions, useChatStore } from "@/stores/chat-store";
 import { useMediaSafetySettingsStore } from "@/stores/useMediaSafetySettingsStore";
 import { useDelayUnmount } from "@/hooks/useDelayUnmount";
+import { useExternalLinkConfirmation } from "@/hooks/useExternalLinkConfirmation";
+import {
+  copyMediaLink,
+  getPublicMediaUrl,
+  saveMedia,
+} from "@/lib/media-actions";
 
 import { getFileIcon } from "@/lib/file-icons";
 import { createAttachmentGifFavorite } from "@/lib/gif-favorite-item";
 import { isAnimatedMedia, isPlayableVideo } from "@/lib/media";
-import {
-  getAuthAssetUrl,
-  getDownloadUrl,
-  getMediaUrl,
-  isDesktop,
-} from "@/lib/platform";
+import { getAuthAssetUrl, getDownloadUrl, getMediaUrl } from "@/lib/platform";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ContextMenuItem } from "./ContextMenu";
 import ContextMenu from "./ContextMenu";
@@ -150,15 +151,6 @@ function getAttachmentSourceUrl(att: { url?: string; file_key: string }) {
   return att.url || getAttachmentUrl(att.file_key);
 }
 
-async function openExternalLink(url: string) {
-  if (isDesktop()) {
-    const { openUrl } = await import("@tauri-apps/plugin-opener");
-    await openUrl(url);
-    return;
-  }
-  window.open(url, "_blank", "noopener,noreferrer");
-}
-
 function buildMessageLink(
   serverId: string | null,
   channelId: string,
@@ -266,6 +258,8 @@ const MessageItem = memo(
     const contextEmojiPickerAnchorRef = useRef<HTMLSpanElement>(null);
     const { menu, openMenu, closeMenu, shouldRender, isClosing } =
       useContextMenu();
+    const { requestOpen: requestOpenExternalLink, confirmation } =
+      useExternalLinkConfirmation();
     const [contextEmojiPickerAnchor, setContextEmojiPickerAnchor] = useState<{
       x: number;
       y: number;
@@ -472,8 +466,15 @@ const MessageItem = memo(
       const hoveredEmbed = target?.closest?.(
         "[data-embed-url]",
       ) as HTMLElement | null;
+      const hoveredMedia = target?.closest?.(
+        "[data-media-element='true']",
+      ) as HTMLElement | null;
       const hoveredUrl =
         hoveredAnchor?.href || hoveredEmbed?.dataset.embedUrl || null;
+      const mediaUrl = hoveredMedia?.dataset.mediaUrl || null;
+      const publicMediaUrl = mediaUrl ? getPublicMediaUrl(mediaUrl) : null;
+      const mediaDownloadUrl = hoveredMedia?.dataset.mediaDownloadUrl || null;
+      const mediaFilename = hoveredMedia?.dataset.mediaFilename || undefined;
       const quickReactions = getQuickReactionItems(RECENT_REACTION_MENU_LIMIT);
       const quickReactionButtons = quickReactions.slice(
         0,
@@ -582,7 +583,7 @@ const MessageItem = memo(
                 label: "Open Link",
                 rightIcon: <Share2 className="h-4 w-4" />,
                 onClick: () => {
-                  void openExternalLink(hoveredUrl);
+                  requestOpenExternalLink(hoveredUrl);
                 },
               },
             ]
@@ -630,6 +631,42 @@ const MessageItem = memo(
           onClick: () => onBan(message.author_id, authorInfo.username),
           variant: "danger",
         });
+      }
+
+      if (publicMediaUrl) {
+        if (items.length > 0) {
+          items[items.length - 1] = {
+            ...items[items.length - 1],
+            divider: true,
+          };
+        }
+
+        items.push(
+          {
+            label: "Save Image",
+            rightIcon: <Download className="h-4 w-4" />,
+            onClick: () => {
+              void saveMedia({
+                url: publicMediaUrl,
+                downloadUrl: mediaDownloadUrl || undefined,
+                filename: mediaFilename,
+              });
+            },
+            divider: true,
+          },
+          {
+            label: "Copy Media Link",
+            rightIcon: <Copy className="h-4 w-4" />,
+            onClick: () => {
+              void copyMediaLink(publicMediaUrl);
+            },
+          },
+          {
+            label: "Open Media Link",
+            rightIcon: <Share2 className="h-4 w-4" />,
+            onClick: () => requestOpenExternalLink(publicMediaUrl),
+          },
+        );
       }
 
       openMenu(e, items, {
@@ -1004,6 +1041,12 @@ const MessageItem = memo(
                         attachmentId={att.id}
                         blur={shouldBlurSensitiveAttachment(att, contentFilter)}
                         className="relative w-fit max-w-full"
+                        dataMediaProps={{
+                          "data-media-element": "true",
+                          "data-media-url": sourceUrl,
+                          "data-media-download-url": getMediaUrl(sourceUrl),
+                          "data-media-filename": att.filename,
+                        }}
                       >
                         <VideoAttachment
                           src={getMediaUrl(sourceUrl)}
@@ -1301,6 +1344,8 @@ const MessageItem = memo(
             isClosing={isClosing}
           />
         )}
+
+        {!previewOnly && confirmation}
 
         {!previewOnly && contextEmojiPickerAnchor ? (
           <>

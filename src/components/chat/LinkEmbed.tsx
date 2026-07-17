@@ -592,6 +592,13 @@ const YouTubeEmbed = memo(
       <BaseEmbed embed={embed} width={embedWidth}>
         <div
           className="relative rounded-md overflow-hidden bg-black w-full"
+          {...(embed.thumbnail?.url
+            ? {
+                "data-media-element": "true",
+                "data-media-url": embed.thumbnail.url,
+                "data-media-download-url": getAuthAssetUrl(embed.thumbnail.url),
+              }
+            : {})}
           style={{ aspectRatio: `${w}/${h}` }}
         >
           {playing ? (
@@ -610,6 +617,9 @@ const YouTubeEmbed = memo(
                   src={embed.thumbnail.url}
                   alt={embed.rawTitle || "YouTube video"}
                   className="absolute inset-0 w-full h-full object-cover"
+                  data-media-element="true"
+                  data-media-url={embed.thumbnail.url}
+                  data-media-download-url={getAuthAssetUrl(embed.thumbnail.url)}
                 />
               )}
               {/* Overlay buttons */}
@@ -1517,10 +1527,14 @@ const TikTokEmbed = memo(
                               ),
                             )
                           : undefined;
-
                       return (
                         <div
                           key={`${item.type}-${item.url}-${index}`}
+                          data-media-element="true"
+                          data-media-url={item.url}
+                          data-media-download-url={
+                            item.type === "video" ? videoSrc : imageSrc
+                          }
                           className="relative h-full shrink-0 bg-black"
                           style={{ width: `${slideWidthPercent}%` }}
                         >
@@ -2619,6 +2633,12 @@ type XMediaAttachment = Attachment & {
   durationSeconds?: number;
 };
 
+type XGifWebpState = "pending" | "ready" | "failed";
+
+function getXGifStateKey(attachment: XMediaAttachment): string {
+  return attachment.id || attachment.url || attachment.file_key;
+}
+
 function usePrefersReducedMotion(): boolean {
   const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
 
@@ -2668,15 +2688,73 @@ const XMediaGrid = memo(
     onMediaPlay?: () => void;
     onMediaStop?: () => void;
   }) => {
-    const attachments = mediaToAttachments(media, url, messageId);
+    const attachments = useMemo(
+      () => mediaToAttachments(media, url, messageId),
+      [media, messageId, url],
+    );
     const visibleAttachments = attachments.slice(0, 4);
     const extraCount = Math.max(
       0,
       attachments.length - visibleAttachments.length,
     );
     const count = visibleAttachments.length;
-    const { open } = useImageViewerActions();
-    if (count === 0) return null;
+    const { open, updateImage } = useImageViewerActions();
+    const [gifStates, setGifStates] = useState<Record<string, XGifWebpState>>(
+      {},
+    );
+    const gifStatesRef = useRef(gifStates);
+    useEffect(() => {
+      gifStatesRef.current = gifStates;
+    }, [gifStates]);
+
+    const getViewerAttachment = useCallback(
+      (
+        attachment: XMediaAttachment,
+        stateOverride?: XGifWebpState,
+      ): XMediaAttachment => {
+        const state =
+          stateOverride ?? gifStatesRef.current[getXGifStateKey(attachment)];
+        if (!attachment.isGif || state !== "ready") {
+          return {
+            ...attachment,
+            filename: attachment.filename.replace(/\.webp$/i, ".mp4"),
+            downloadUrl: undefined,
+          };
+        }
+
+        const rawMediaUrl = unwrapProxyMediaUrl(
+          attachment.url || attachment.file_key,
+        );
+        const webpUrl = getFxTwitterGifWebpUrl(rawMediaUrl);
+        return {
+          ...attachment,
+          filename: attachment.filename.replace(/\.mp4$/i, ".webp"),
+          downloadUrl: webpUrl
+            ? getAuthAssetUrl(
+                buildProxyMediaPath(webpUrl, attachment.sourceUrl),
+              )
+            : undefined,
+        };
+      },
+      [],
+    );
+
+    const handleGifStateChange = useCallback(
+      (key: string, state: XGifWebpState) => {
+        setGifStates((current) =>
+          current[key] === state ? current : { ...current, [key]: state },
+        );
+        const attachmentIndex = attachments.findIndex(
+          (attachment) => getXGifStateKey(attachment) === key,
+        );
+        const attachment =
+          attachmentIndex >= 0 ? attachments[attachmentIndex] : undefined;
+        if (attachment) {
+          updateImage?.(attachment.id, getViewerAttachment(attachment, state));
+        }
+      },
+      [attachments, getViewerAttachment, updateImage],
+    );
 
     const openViewer = (index: number) => {
       const context: ViewerContext = {
@@ -2685,7 +2763,10 @@ const XMediaGrid = memo(
         created_at: createdAt,
         onJumpToMessage,
       };
-      open(attachments, index, context);
+      const viewerAttachments = attachments.map((attachment) =>
+        getViewerAttachment(attachment),
+      );
+      open(viewerAttachments, index, context);
     };
 
     const handleKeyDown = (event: React.KeyboardEvent, index: number) => {
@@ -2694,6 +2775,8 @@ const XMediaGrid = memo(
       event.preventDefault();
       openViewer(index);
     };
+
+    if (count === 0) return null;
 
     if (count === 1) {
       return (
@@ -2710,6 +2793,11 @@ const XMediaGrid = memo(
           overlay={singleOverlay}
           onMediaPlay={onMediaPlay}
           onMediaStop={onMediaStop}
+          gifStateKey={getXGifStateKey(visibleAttachments[0])}
+          gifWebpState={
+            gifStates[getXGifStateKey(visibleAttachments[0])] ?? "pending"
+          }
+          onGifStateChange={handleGifStateChange}
         />
       );
     }
@@ -2746,6 +2834,9 @@ const XMediaGrid = memo(
             singleMediaChrome={singleMediaChrome}
             onMediaPlay={onMediaPlay}
             onMediaStop={onMediaStop}
+            gifStateKey={getXGifStateKey(attachment)}
+            gifWebpState={gifStates[getXGifStateKey(attachment)] ?? "pending"}
+            onGifStateChange={handleGifStateChange}
           />
         ))}
       </div>
@@ -2769,6 +2860,9 @@ const XMediaTile = memo(
     overlay,
     onMediaPlay,
     onMediaStop,
+    gifStateKey,
+    gifWebpState = "pending",
+    onGifStateChange,
   }: {
     attachment: XMediaAttachment;
     index: number;
@@ -2784,10 +2878,47 @@ const XMediaTile = memo(
     overlay?: React.ReactNode;
     onMediaPlay?: () => void;
     onMediaStop?: () => void;
+    gifStateKey: string;
+    gifWebpState?: XGifWebpState;
+    onGifStateChange?: (key: string, state: XGifWebpState) => void;
   }) => {
     const mediaUrl = getXAttachmentUrl(attachment);
     const isVideo = attachment.content_type?.startsWith("video/");
     const isGif = attachment.isGif === true;
+    const gifWebpReady = isGif && gifWebpState === "ready";
+    const rawMediaUrl = unwrapProxyMediaUrl(mediaUrl);
+    const gifMediaUrl = isGif ? getFxTwitterGifWebpUrl(rawMediaUrl) : null;
+    const activeMediaUrl =
+      gifMediaUrl && gifWebpReady ? gifMediaUrl : rawMediaUrl;
+    const activeDownloadUrl =
+      gifMediaUrl && gifWebpReady
+        ? getAuthAssetUrl(
+            buildProxyMediaPath(gifMediaUrl, attachment.sourceUrl),
+          )
+        : getAuthAssetUrl(mediaUrl);
+    const handleWebpReady = useCallback(
+      () => onGifStateChange?.(gifStateKey, "ready"),
+      [gifStateKey, onGifStateChange],
+    );
+    const handleWebpError = useCallback(
+      () => onGifStateChange?.(gifStateKey, "failed"),
+      [gifStateKey, onGifStateChange],
+    );
+    const mediaContextProps = {
+      "data-media-element": "true",
+      "data-media-url": activeMediaUrl,
+      "data-media-download-url": gifMediaUrl
+        ? activeDownloadUrl
+        : !isVideo && attachment.sourceUrl && /^https?:\/\//i.test(rawMediaUrl)
+          ? getAuthAssetUrl(
+              buildProxyMediaPath(rawMediaUrl, attachment.sourceUrl),
+            )
+          : getAuthAssetUrl(mediaUrl),
+      "data-media-filename":
+        gifMediaUrl && gifWebpReady
+          ? attachment.filename.replace(/\.mp4$/i, ".webp")
+          : attachment.filename.replace(/\.webp$/i, ".mp4"),
+    };
     const singleObjectPositionClass =
       singleMediaAlign === "start" ? "object-left" : "object-center";
     const usesFramedSingleChrome = singleMediaChrome === "framed";
@@ -2808,6 +2939,9 @@ const XMediaTile = memo(
           single={single}
           compact={compact}
           onOpenViewer={() => onOpen(index)}
+          webpReady={gifWebpReady}
+          onWebpReady={handleWebpReady}
+          onWebpError={handleWebpError}
         />
       ) : (
         <div
@@ -2895,8 +3029,9 @@ const XMediaTile = memo(
       return (
         <button
           type="button"
+          {...mediaContextProps}
           className={cn(wrapperClassName, "appearance-none p-0 text-left")}
-          onClick={() => openViewerSafely(onOpen, index)}
+          onClick={() => onOpen(index)}
           onKeyDown={(event) => onKeyDown(event, index)}
           aria-label={isGif ? "Open GIF viewer" : "Open media viewer"}
           title={
@@ -2919,11 +3054,12 @@ const XMediaTile = memo(
         <div
           role="button"
           tabIndex={0}
+          {...mediaContextProps}
           className={cn(
             wrapperClassName,
             "text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80 focus-visible:ring-offset-0",
           )}
-          onClick={() => openViewerSafely(onOpen, index)}
+          onClick={() => onOpen(index)}
           onKeyDown={(event) => onKeyDown(event, index)}
           aria-label="Open GIF viewer"
           title={url ? "Open GIF viewer" : undefined}
@@ -2940,7 +3076,7 @@ const XMediaTile = memo(
     }
 
     return (
-      <div className={wrapperClassName}>
+      <div {...mediaContextProps} className={wrapperClassName}>
         {content}
         {overlay}
         {extraCount > 0 && (
@@ -2953,12 +3089,170 @@ const XMediaTile = memo(
   },
 );
 
-function openViewerSafely(
-  openViewer: (index: number) => void,
-  index: number,
-): void {
-  openViewer(index);
-}
+const AnimatedWebpCanvas = memo(
+  ({
+    src,
+    alt,
+    className,
+    paused,
+    onError,
+    onReady,
+  }: {
+    src: string;
+    alt: string;
+    className: string;
+    paused: boolean;
+    onError: () => void;
+    onReady?: () => void;
+  }) => {
+    const canvasRef = useRef<HTMLCanvasElement>(null);
+    const pausedRef = useRef(paused);
+    const timerRef = useRef<number | null>(null);
+    const decoderRef = useRef<ImageDecoder | null>(null);
+    const drawNextFrameRef = useRef<(() => Promise<void>) | null>(null);
+    const readyNotifiedRef = useRef(false);
+
+    useEffect(() => {
+      pausedRef.current = paused;
+      if (paused) {
+        if (timerRef.current !== null) {
+          window.clearTimeout(timerRef.current);
+          timerRef.current = null;
+        }
+        return;
+      }
+
+      void drawNextFrameRef.current?.();
+    }, [paused]);
+
+    useEffect(() => {
+      let cancelled = false;
+      let decoding = false;
+      const abortController = new AbortController();
+      readyNotifiedRef.current = false;
+
+      const clearTimer = () => {
+        if (timerRef.current !== null) {
+          window.clearTimeout(timerRef.current);
+          timerRef.current = null;
+        }
+      };
+
+      const start = async () => {
+        if (typeof ImageDecoder === "undefined") {
+          onError();
+          return;
+        }
+
+        const response = await fetch(src, { signal: abortController.signal });
+        if (!response.ok)
+          throw new Error(`WebP request failed: ${response.status}`);
+
+        const data = await response.arrayBuffer();
+        if (cancelled) return;
+
+        const decoder = new ImageDecoder({
+          data,
+          type: "image/webp",
+          preferAnimation: true,
+        });
+        if (cancelled) {
+          decoder.close();
+          return;
+        }
+        decoderRef.current = decoder;
+        await decoder.tracks.ready;
+        if (cancelled) return;
+
+        const track =
+          decoder.tracks.selectedIndex >= 0
+            ? decoder.tracks[decoder.tracks.selectedIndex]
+            : undefined;
+        if (!track?.animated || track.frameCount < 1) {
+          throw new Error("WebP does not contain an animation track");
+        }
+
+        let frameIndex = 0;
+        const drawNextFrame = async (allowWhilePaused = false) => {
+          if (cancelled || decoding || (pausedRef.current && !allowWhilePaused))
+            return;
+          decoding = true;
+          let image: VideoFrame | null = null;
+
+          try {
+            const result = await decoder.decode({
+              frameIndex,
+              completeFramesOnly: true,
+            });
+            image = result.image;
+            if (cancelled || (pausedRef.current && !allowWhilePaused)) return;
+
+            const canvas = canvasRef.current;
+            const context = canvas?.getContext("2d");
+            if (!canvas || !context) {
+              throw new Error("Canvas is unavailable");
+            }
+
+            canvas.width = image.displayWidth;
+            canvas.height = image.displayHeight;
+            context.drawImage(
+              image,
+              0,
+              0,
+              image.displayWidth,
+              image.displayHeight,
+            );
+            if (!readyNotifiedRef.current) {
+              readyNotifiedRef.current = true;
+              onReady?.();
+            }
+
+            const durationMs = Math.max(16, (image.duration ?? 100_000) / 1000);
+            frameIndex = (frameIndex + 1) % track.frameCount;
+
+            if (!cancelled && !pausedRef.current) {
+              timerRef.current = window.setTimeout(
+                () => void drawNextFrame(),
+                durationMs,
+              );
+            }
+          } catch {
+            if (!cancelled) onError();
+          } finally {
+            image?.close();
+            decoding = false;
+          }
+        };
+
+        drawNextFrameRef.current = drawNextFrame;
+        await drawNextFrame(true);
+      };
+
+      void start().catch(() => {
+        if (!cancelled && !abortController.signal.aborted) onError();
+      });
+
+      return () => {
+        cancelled = true;
+        abortController.abort();
+        clearTimer();
+        drawNextFrameRef.current = null;
+        decoderRef.current?.close();
+        decoderRef.current = null;
+      };
+    }, [onError, onReady, src]);
+
+    return (
+      <canvas
+        ref={canvasRef}
+        className={className}
+        data-src={src}
+        role="img"
+        aria-label={alt}
+      />
+    );
+  },
+);
 
 const XGifTile = memo(
   ({
@@ -2967,16 +3261,24 @@ const XGifTile = memo(
     single = false,
     compact = false,
     onOpenViewer,
+    webpReady = false,
+    onWebpReady,
+    onWebpError,
   }: {
     attachment: XMediaAttachment;
     src: string;
     single?: boolean;
     compact?: boolean;
     onOpenViewer: () => void;
+    webpReady?: boolean;
+    onWebpReady?: () => void;
+    onWebpError?: () => void;
   }) => {
     const [paused, setPaused] = useState(false);
     const [altPinned, setAltPinned] = useState(false);
-    const [loadError, setLoadError] = useState(false);
+    const [webpLoadError, setWebpLoadError] = useState(false);
+    const [videoLoadError, setVideoLoadError] = useState(false);
+    const [posterLoadError, setPosterLoadError] = useState(false);
     const videoRef = useRef<HTMLVideoElement>(null);
     const altControlRef = useRef<HTMLDivElement>(null);
     const prefersReducedMotion = usePrefersReducedMotion();
@@ -2986,6 +3288,13 @@ const XGifTile = memo(
     const hasAltText = altText.length > 0;
     const sourceUrl = unwrapProxyMediaUrl(src);
     const favoriteWebpUrl = getFxTwitterGifWebpUrl(sourceUrl);
+    const webpSrc = favoriteWebpUrl
+      ? getAuthAssetUrl(
+          buildProxyMediaPath(favoriteWebpUrl, attachment.sourceUrl),
+        )
+      : null;
+    const useWebp = Boolean(webpSrc) && !webpLoadError;
+    const playbackPaused = paused || prefersReducedMotion;
     const posterUrl = attachment.thumbnailUrl
       ? getAuthAssetUrl(
           buildProxyMediaPath(attachment.thumbnailUrl, attachment.sourceUrl),
@@ -2996,20 +3305,25 @@ const XGifTile = memo(
       title: attachment.filename || "X GIF",
       altText,
       sourceUrl,
-      previewUrl: favoriteWebpUrl || src,
-      sendUrl: favoriteWebpUrl || src,
+      previewUrl: webpReady && favoriteWebpUrl ? favoriteWebpUrl : src,
+      sendUrl: webpReady && favoriteWebpUrl ? favoriteWebpUrl : src,
       width: attachment.width,
       height: attachment.height,
       sizeBytes: attachment.size_bytes,
-      contentType: favoriteWebpUrl ? "image/webp" : attachment.content_type,
+      contentType:
+        webpReady && favoriteWebpUrl ? "image/webp" : attachment.content_type,
     });
     const singleMediaClass = compact
       ? "h-full w-full object-contain object-left"
       : "h-auto max-h-[420px] w-full object-contain object-left";
+    const displayAltText = altText || attachment.filename;
+    const mediaUnavailable = videoLoadError && (!posterUrl || posterLoadError);
 
     useEffect(() => {
       const video = videoRef.current;
       if (!video) return;
+
+      if (useWebp) return;
 
       if (prefersReducedMotion || paused) {
         video.pause();
@@ -3019,7 +3333,7 @@ const XGifTile = memo(
       void video.play().catch(() => {
         // Browser/autoplay support decides whether inline GIF playback starts.
       });
-    }, [paused, prefersReducedMotion]);
+    }, [paused, prefersReducedMotion, useWebp]);
 
     useEffect(() => {
       if (!altPinned) return;
@@ -3051,6 +3365,14 @@ const XGifTile = memo(
       setAltPinned((current) => !current);
     };
 
+    const handleWebpError = useCallback(() => {
+      setWebpLoadError(true);
+      onWebpError?.();
+    }, [onWebpError]);
+    const handleWebpReady = useCallback(() => {
+      onWebpReady?.();
+    }, [onWebpReady]);
+
     return (
       <div
         className={cn(
@@ -3059,15 +3381,38 @@ const XGifTile = memo(
         )}
         data-x-gif="true"
       >
-        {loadError ? (
+        {useWebp ? (
+          <AnimatedWebpCanvas
+            src={webpSrc || ""}
+            alt={displayAltText}
+            className={cn(
+              single ? singleMediaClass : "h-full w-full object-contain",
+            )}
+            paused={playbackPaused}
+            onError={handleWebpError}
+            onReady={handleWebpReady}
+          />
+        ) : videoLoadError && posterUrl && !posterLoadError ? (
           <img
-            src={favoriteWebpUrl || posterUrl}
-            alt={attachment.filename}
+            src={posterUrl}
+            alt={displayAltText}
             className={cn(
               single ? singleMediaClass : "h-full w-full object-contain",
             )}
             loading="lazy"
+            onError={() => setPosterLoadError(true)}
           />
+        ) : mediaUnavailable ? (
+          <div
+            role="img"
+            aria-label={`${displayAltText} unavailable`}
+            className={cn(
+              single ? singleMediaClass : "h-full w-full",
+              "flex items-center justify-center bg-rm-bg-surface px-4 text-center text-xs font-semibold text-rm-text-muted",
+            )}
+          >
+            GIF unavailable
+          </div>
         ) : (
           <video
             ref={videoRef}
@@ -3081,69 +3426,78 @@ const XGifTile = memo(
             muted
             playsInline
             preload="metadata"
-            aria-labelledby={titleId}
-            onError={() => setLoadError(true)}
+            aria-label={displayAltText}
+            onError={() => setVideoLoadError(true)}
           >
             <track kind="captions" />
           </video>
         )}
-        <GifFavoriteButton gif={favorite} />
-        <div className="absolute inset-x-0 bottom-0 z-10 bg-linear-to-t from-black/70 via-black/20 to-transparent px-2 pb-2 pt-8">
-          <div className="flex items-center gap-2 text-white">
-            <button
-              type="button"
-              onClick={handleTogglePaused}
-              className="flex h-7 w-7 items-center justify-center rounded-full bg-black/45 transition-colors hover:bg-black/65"
-              aria-label={paused ? "Play GIF" : "Pause GIF"}
-              title={paused ? "Play GIF" : "Pause GIF"}
-            >
-              {paused ? (
-                <PlayIcon className="h-3.5 w-3.5" />
-              ) : (
-                <PauseIcon className="h-3.5 w-3.5" />
-              )}
-              <span className="sr-only" id={titleId}>
-                {paused ? "Play GIF" : "Pause GIF"}
-              </span>
-            </button>
+        {!mediaUnavailable && <GifFavoriteButton gif={favorite} />}
+        {!mediaUnavailable && (
+          <div className="absolute inset-x-0 bottom-0 z-10 bg-linear-to-t from-black/70 via-black/20 to-transparent px-2 pb-2 pt-8">
+            <div className="flex items-center gap-2 text-white">
+              <button
+                type="button"
+                onClick={handleTogglePaused}
+                disabled={prefersReducedMotion}
+                className="flex h-7 w-7 items-center justify-center rounded-full bg-black/45 transition-colors hover:bg-black/65"
+                aria-label={playbackPaused ? "Play GIF" : "Pause GIF"}
+                title={
+                  prefersReducedMotion
+                    ? "Animation disabled by reduced motion"
+                    : playbackPaused
+                      ? "Play GIF"
+                      : "Pause GIF"
+                }
+              >
+                {playbackPaused ? (
+                  <PlayIcon className="h-3.5 w-3.5" />
+                ) : (
+                  <PauseIcon className="h-3.5 w-3.5" />
+                )}
+                <span className="sr-only" id={titleId}>
+                  {playbackPaused ? "Play GIF" : "Pause GIF"}
+                </span>
+              </button>
 
-            <button
-              type="button"
-              onClick={handleOpenViewer}
-              className="rounded-md bg-black/45 px-2 py-1 text-[12px] font-bold tracking-[0.12em] transition-colors hover:bg-black/65"
-              aria-label="Open GIF viewer"
-              title="Open GIF viewer"
-            >
-              GIF
-            </button>
+              <button
+                type="button"
+                onClick={handleOpenViewer}
+                className="rounded-md bg-black/45 px-2 py-1 text-[12px] font-bold tracking-[0.12em] transition-colors hover:bg-black/65"
+                aria-label="Open GIF viewer"
+                title="Open GIF viewer"
+              >
+                GIF
+              </button>
 
-            {hasAltText && (
-              <div className="group/x-gif-alt relative" ref={altControlRef}>
-                <button
-                  type="button"
-                  onClick={handleToggleAlt}
-                  className="rounded-md bg-black/45 px-2 py-1 text-[12px] font-bold transition-colors hover:bg-black/65"
-                  aria-label="Show GIF alt text"
-                  aria-controls={altTextId}
-                  aria-expanded={altPinned}
-                  title="Show GIF alt text"
-                >
-                  ALT
-                </button>
-                <div
-                  id={altTextId}
-                  className={cn(
-                    "pointer-events-none absolute bottom-full left-0 mb-2 w-[min(18rem,calc(100vw-3rem))] rounded-lg border border-white/10 bg-black/90 px-3 py-2 text-[12px] leading-relaxed text-white shadow-xl transition-opacity duration-150 group-hover/x-gif-alt:opacity-100",
-                    altPinned ? "opacity-100" : "opacity-0",
-                  )}
-                  role="tooltip"
-                >
-                  {altText}
+              {hasAltText && (
+                <div className="group/x-gif-alt relative" ref={altControlRef}>
+                  <button
+                    type="button"
+                    onClick={handleToggleAlt}
+                    className="rounded-md bg-black/45 px-2 py-1 text-[12px] font-bold transition-colors hover:bg-black/65"
+                    aria-label="Show GIF alt text"
+                    aria-controls={altTextId}
+                    aria-expanded={altPinned}
+                    title="Show GIF alt text"
+                  >
+                    ALT
+                  </button>
+                  <div
+                    id={altTextId}
+                    className={cn(
+                      "pointer-events-none absolute bottom-full left-0 mb-2 w-[min(18rem,calc(100vw-3rem))] rounded-lg border border-white/10 bg-black/90 px-3 py-2 text-[12px] leading-relaxed text-white shadow-xl transition-opacity duration-150 group-hover/x-gif-alt:opacity-100",
+                      altPinned ? "opacity-100" : "opacity-0",
+                    )}
+                    role="tooltip"
+                  >
+                    {altText}
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
+            </div>
           </div>
-        </div>
+        )}
       </div>
     );
   },
@@ -3161,7 +3515,7 @@ function mediaToAttachments(
   const filenamePrefix = options?.filenamePrefix ?? "x";
 
   return media.map((item, index) => ({
-    id: `${filenamePrefix}-media-${index}-${item.url}`,
+    id: `${filenamePrefix}-media-${messageId ?? "embed"}-${index}-${item.url}`,
     message_id: messageId,
     filename:
       item.type === "video"
@@ -3202,12 +3556,20 @@ const VideoEmbed = memo(({ embed }: { embed: EmbedInfo }) => {
   return (
     <BaseEmbed embed={embed} width={432}>
       {embed.thumbnail?.url && (
-        <div className="relative rounded-md overflow-hidden">
+        <div
+          className="relative rounded-md overflow-hidden"
+          data-media-element="true"
+          data-media-url={embed.thumbnail.url}
+          data-media-download-url={getAuthAssetUrl(embed.thumbnail.url)}
+        >
           <a href={embed.url} target="_blank" rel="noopener noreferrer">
             <img
               src={embed.thumbnail.url}
               alt="Video thumbnail"
               className="w-full h-auto object-cover max-h-[400px]"
+              data-media-element="true"
+              data-media-url={embed.thumbnail.url}
+              data-media-download-url={getAuthAssetUrl(embed.thumbnail.url)}
             />
           </a>
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
@@ -3265,7 +3627,12 @@ const RichEmbed = memo(
           )}
 
           {embed.thumbnail?.url && (
-            <div className="relative rounded-md overflow-hidden border border-rm-border/30">
+            <div
+              className="relative rounded-md overflow-hidden border border-rm-border/30"
+              data-media-element="true"
+              data-media-url={embed.thumbnail.url}
+              data-media-download-url={getAuthAssetUrl(embed.thumbnail.url)}
+            >
               {playing && embed.video?.url ? (
                 <iframe
                   src={embed.video.url}
@@ -3284,6 +3651,11 @@ const RichEmbed = memo(
                     src={embed.thumbnail.url}
                     alt="Media"
                     className="w-full h-auto object-cover max-h-[300px]"
+                    data-media-element="true"
+                    data-media-url={embed.thumbnail.url}
+                    data-media-download-url={getAuthAssetUrl(
+                      embed.thumbnail.url,
+                    )}
                   />
                   {embed.video && (
                     <div className="absolute inset-0 flex items-center justify-center gap-3">
@@ -4154,6 +4526,11 @@ const InstagramEmbed = memo(
                   return (
                     <div
                       key={`${item.type}-${item.url}-${index}`}
+                      data-media-element="true"
+                      data-media-url={item.url}
+                      data-media-download-url={
+                        rendersAsVideo ? videoSrc : imageSrc
+                      }
                       className="relative h-full shrink-0 bg-black"
                       style={{ width: `${slideWidthPercent}%` }}
                     >
@@ -4467,6 +4844,9 @@ const LinkEmbed_ = memo(({ embed }: { embed: EmbedInfo }) => {
             alt="Thumbnail"
             className="w-full h-auto rounded-md object-cover max-h-[300px]"
             referrerPolicy="no-referrer"
+            data-media-element="true"
+            data-media-url={embed.thumbnail?.url || embed.url}
+            data-media-download-url={thumbnailSrc}
           />
         </a>
       )}

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import React from "react";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 Object.defineProperty(globalThis, "localStorage", {
@@ -128,6 +128,61 @@ describe("ImageViewerModal drag navigation", () => {
     expect(screen.getByTestId("image-viewer-image")).toHaveAttribute(
       "src",
       "https://cdn.example.com/two.jpg",
+    );
+  });
+
+  it("opens the media context menu for the current remote image", () => {
+    render(<ImageViewerModal />);
+
+    fireEvent.contextMenu(screen.getByTestId("image-viewer-image"), {
+      clientX: 120,
+      clientY: 80,
+    });
+
+    expect(screen.getByRole("menuitem", { name: "Save Image" })).toBeVisible();
+    expect(
+      screen.getByRole("menuitem", { name: "Copy Media Link" }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("menuitem", { name: "Open Media Link" }),
+    ).toBeVisible();
+  });
+
+  it("normalizes internal attachment keys for media links", () => {
+    const writeText = vi.fn(() => Promise.resolve());
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    });
+    useImageViewerStore.setState({
+      isOpen: true,
+      initialIndex: 0,
+      images: [
+        {
+          id: "internal-image",
+          filename: "internal.jpg",
+          file_key: "attachments/internal.jpg",
+          content_type: "image/jpeg",
+          size_bytes: 100,
+        },
+      ],
+      context: undefined,
+      actions,
+    });
+
+    render(<ImageViewerModal />);
+    fireEvent.contextMenu(screen.getByTestId("image-viewer-image"), {
+      clientX: 120,
+      clientY: 80,
+    });
+    act(() => {
+      fireEvent.click(
+        screen.getByRole("menuitem", { name: "Copy Media Link" }),
+      );
+    });
+
+    expect(writeText).toHaveBeenCalledWith(
+      expect.stringContaining("/api/attachments/internal.jpg"),
     );
   });
 });

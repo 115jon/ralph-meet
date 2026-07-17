@@ -64,6 +64,12 @@ const MAX_UPSTREAM_REDIRECTS = 3;
 export function isAllowedMediaUrl(url: URL): boolean {
   if (url.protocol !== "https:") return false;
   const hostname = url.hostname.toLowerCase();
+  if (hostname === "gif.fxtwitter.com") {
+    return (
+      url.pathname.startsWith("/tweet_video/") &&
+      url.pathname.toLowerCase().endsWith(".webp")
+    );
+  }
   if (ALLOWED_HOSTS.has(hostname)) return true;
 
   if (hostname === "vxtwitter.com") {
