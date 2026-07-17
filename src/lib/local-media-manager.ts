@@ -53,6 +53,9 @@ let activeStream: MediaStream | null = null;
 /** In-flight getUserMedia promise — shared by callers during join */
 let streamPromise: Promise<MediaStream | null> | null = null;
 
+/** Invalidates captures that resolve after their owning voice session ended. */
+let acquisitionGeneration = 0;
+
 /** Last requested camera profile for the active stream. */
 let activeVideoRequestKey: string | null = null;
 
@@ -118,6 +121,17 @@ function videoConstraintsMatch(
 function videoRequestKey(c: LocalVideoConstraints | null): string | null {
   if (!c) return null;
   return `${c.deviceId || "default"}:${c.qualityId || "default"}`;
+}
+
+function stopStreamTracks(stream: MediaStream) {
+  stream.getTracks().forEach((track) => track.stop());
+}
+
+function throwIfAcquisitionStale(generation: number) {
+  if (generation === acquisitionGeneration) return;
+  const error = new Error("Local media acquisition was cancelled");
+  error.name = "AbortError";
+  throw error;
 }
 
 function mediaConstraints(
@@ -214,6 +228,7 @@ export async function acquireLocalStream(
   logPrefix = "LocalMedia",
 ): Promise<MediaStream> {
   const log = clog(logPrefix);
+  const generation = acquisitionGeneration;
 
   // If we have an active stream that matches, return it immediately
   if (activeStream) {
@@ -233,6 +248,7 @@ export async function acquireLocalStream(
   if (streamPromise) {
     log.debug("Awaiting in-flight getUserMedia promise...");
     const existing = await streamPromise;
+    throwIfAcquisitionStale(generation);
     if (existing) {
       activeStream = existing;
       return existing;
@@ -246,6 +262,7 @@ export async function acquireLocalStream(
     audio.groupId,
     log,
   );
+  throwIfAcquisitionStale(generation);
   const resolvedVideoId = videoConstraint
     ? await resolveStoredDeviceId(
         "videoinput",
@@ -255,6 +272,7 @@ export async function acquireLocalStream(
         log,
       )
     : undefined;
+  throwIfAcquisitionStale(generation);
   const resolvedAudio = { ...audio, deviceId: resolvedAudioId };
   const resolvedVideo = videoConstraint
     ? { ...videoConstraint, deviceId: resolvedVideoId }
@@ -275,8 +293,13 @@ export async function acquireLocalStream(
   let stream: MediaStream;
   try {
     stream = await doGetUserMedia(useResolvedExactAudio, useResolvedExactVideo);
+    if (generation !== acquisitionGeneration) {
+      stopStreamTracks(stream);
+      throwIfAcquisitionStale(generation);
+    }
   } catch (err: any) {
     if (err.name === "OverconstrainedError" || err.name === "NotFoundError") {
+      throwIfAcquisitionStale(generation);
       log.warn(
         `Exact device unavailable (${err.constraint ?? "unknown"}), retrying with system default`,
       );
@@ -288,6 +311,10 @@ export async function acquireLocalStream(
           false,
         ),
       );
+      if (generation !== acquisitionGeneration) {
+        stopStreamTracks(stream);
+        throwIfAcquisitionStale(generation);
+      }
     } else if (err.name === "NotAllowedError") {
       // Permission denied — surface, don't swallow
       log.warn("Permission denied for getUserMedia");
@@ -325,29 +352,36 @@ export function startEarlyMic(
   if (streamPromise) return streamPromise; // already in-flight
 
   lmLog.debug("Starting early mic acquisition...");
-  const _useExact = !!(audio.deviceId && audio.deviceId !== "default");
-  streamPromise = resolveStoredDeviceId(
+  const generation = acquisitionGeneration;
+  const promise = resolveStoredDeviceId(
     "audioinput",
     audio.deviceId,
     audio.deviceLabel,
     audio.groupId,
     lmLog,
   )
-    .then((resolvedId) =>
-      navigator.mediaDevices.getUserMedia(
+    .then((resolvedId) => {
+      if (generation !== acquisitionGeneration) return null;
+      return navigator.mediaDevices.getUserMedia(
         mediaConstraints(
           { ...audio, deviceId: resolvedId },
           null,
           !!(resolvedId && resolvedId !== "default"),
           false,
         ),
-      ),
-    )
+      );
+    })
     .then((stream) => {
+      if (!stream) return null;
+      if (generation !== acquisitionGeneration) {
+        stopStreamTracks(stream);
+        return null;
+      }
+
       lmLog.info(`Early mic acquired: ${stream.getAudioTracks()[0]?.label}`);
       activeStream = stream;
       activeVideoRequestKey = null;
-      streamPromise = null;
+      if (streamPromise === promise) streamPromise = null;
       // Refresh labels now that the device lock is released
       refreshDeviceLabels();
       return stream;
@@ -357,11 +391,12 @@ export function startEarlyMic(
         "Early mic acquisition failed — will retry in swapDevices:",
         err.name,
       );
-      streamPromise = null;
+      if (streamPromise === promise) streamPromise = null;
       return null;
     });
 
-  return streamPromise!;
+  streamPromise = promise;
+  return promise;
 }
 
 /**
@@ -369,6 +404,7 @@ export function startEarlyMic(
  * is responsible for that (tracks may still be in a PeerConnection sender).
  */
 export function releaseLocalStream(): void {
+  acquisitionGeneration += 1;
   activeStream = null;
   activeVideoRequestKey = null;
   streamPromise = null;

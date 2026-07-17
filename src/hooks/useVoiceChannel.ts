@@ -2444,6 +2444,9 @@ export function useVoiceChannel({
         // explicit leaves go through handleLeave (which sets the guard).
         hasAutoJoined.current = false;
         autoJoinTargetRef.current = null;
+
+        // Invalidate an early capture that may still be pending after teardown.
+        releaseLocalStream();
       }
 
       if (joinedRef.current) {
@@ -2509,6 +2512,7 @@ export function useVoiceChannel({
           t.stop();
         });
         screenStreamRef.current = null;
+        releaseLocalStream();
         voiceDispatch({ type: "LEFT" });
         onLeft?.();
         if (mode !== "room" && channelId) {
