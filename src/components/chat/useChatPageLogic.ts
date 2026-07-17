@@ -244,10 +244,13 @@ export function useChatPageLogic() {
 
   useEffect(() => {
     if (!desktopReady) return;
-    bootstrapChat({ expectedUserId: user?.id }).then(() => {
+    bootstrapChat({
+      expectedUserId: user?.id,
+      deferNonCritical: slug[0] !== "@me",
+    }).then(() => {
       setDmChannelsLoaded(true);
     });
-  }, [desktopReady, bootstrapChat, user?.id]);
+  }, [desktopReady, bootstrapChat, slug, user?.id]);
 
   useEffect(() => {
     resetReadStateTracking(user?.id ?? null);
@@ -360,19 +363,6 @@ export function useChatPageLogic() {
     loadChannels(activeServerId);
     loadMembers(activeServerId);
   }, [activeServerId, loadChannels, loadMembers]);
-
-  const prefetchedServerChannelsRef = useRef<Set<string>>(new Set());
-  useEffect(() => {
-    if (servers.length === 0) return;
-
-    for (const server of servers) {
-      if (server.id === activeServerId) continue;
-      if (prefetchedServerChannelsRef.current.has(server.id)) continue;
-
-      prefetchedServerChannelsRef.current.add(server.id);
-      void loadChannels(server.id);
-    }
-  }, [servers, activeServerId, loadChannels]);
 
   const channelsLoadedForServer = useRef<string | null>(null);
   useEffect(() => {

@@ -246,6 +246,7 @@ export type ChatAction =
       channelId?: string;
       hasMoreBefore?: boolean;
       hasMoreAfter?: boolean;
+      preserveMessagesFrom?: Message[];
     }
   | {
       type: "REPLACE_MESSAGES";
@@ -795,12 +796,37 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       const channelId = action.channelId ?? state.activeChannelId;
       if (!channelId) return { ...state, messages: action.messages };
       const isActive = state.activeChannelId === channelId;
+      const currentMessages = state.messagesByChannelId[channelId] ?? [];
+      const incomingIds = new Set(action.messages.map((message) => message.id));
+      const snapshotById = new Map(
+        (action.preserveMessagesFrom ?? []).map((message) => [
+          message.id,
+          message,
+        ]),
+      );
+      const changedMessages = currentMessages.filter((message) => {
+        const snapshot = snapshotById.get(message.id);
+        return message.pending || !snapshot || snapshot !== message;
+      });
+      const changedById = new Map(
+        changedMessages.map((message) => [message.id, message]),
+      );
+      const messages = [
+        ...action.messages.map(
+          (message) => changedById.get(message.id) ?? message,
+        ),
+        ...changedMessages.filter((message) => !incomingIds.has(message.id)),
+      ].sort(
+        (left, right) =>
+          new Date(left.created_at).getTime() -
+          new Date(right.created_at).getTime(),
+      );
       return {
         ...state,
-        messages: isActive ? action.messages : state.messages,
+        messages: isActive ? messages : state.messages,
         messagesByChannelId: {
           ...state.messagesByChannelId,
-          [channelId]: action.messages,
+          [channelId]: messages,
         },
         messagesLoadedByChannelId: {
           ...state.messagesLoadedByChannelId,

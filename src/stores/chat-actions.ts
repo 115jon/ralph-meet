@@ -47,19 +47,27 @@ export interface ChatRestActions {
   loadMessages: (
     channelId: string,
     before?: string,
+    options?: { signal?: AbortSignal },
   ) => Promise<{
     messages: Message[];
     hasMoreBefore: boolean;
     hasMoreAfter: boolean;
+    stale?: boolean;
   }>;
   loadMessagesAround: (
     channelId: string,
     messageId: string,
-  ) => Promise<{ hasMoreBefore: boolean; hasMoreAfter: boolean }>;
+    options?: { signal?: AbortSignal },
+  ) => Promise<{
+    hasMoreBefore: boolean;
+    hasMoreAfter: boolean;
+    stale?: boolean;
+  }>;
   loadMessagesAfter: (
     channelId: string,
     after: string,
-  ) => Promise<{ hasMoreAfter: boolean }>;
+    options?: { signal?: AbortSignal },
+  ) => Promise<{ hasMoreAfter: boolean; stale?: boolean }>;
   loadServers: () => Promise<void>;
   loadChannels: (
     serverId: string,
@@ -96,6 +104,10 @@ export interface ChatRestActions {
   pinMessage: (channelId: string, messageId: string) => Promise<void>;
   unpinMessage: (channelId: string, messageId: string) => Promise<void>;
   loadPins: (channelId: string, force?: boolean) => Promise<void>;
+  refreshMessageEmbeds: (
+    channelId: string,
+    messageIds: string[],
+  ) => Promise<void>;
   loadDmChannels: () => Promise<void>;
   loadRelationships: () => Promise<void>;
   openDm: (targetUserId: string) => Promise<string | null>;
@@ -103,6 +115,7 @@ export interface ChatRestActions {
   bootstrapChat: (options?: {
     includeNotifications?: boolean;
     expectedUserId?: string;
+    deferNonCritical?: boolean;
   }) => Promise<void>;
   markNotificationsRead: (ids?: string[]) => Promise<void>;
   clearNotifications: () => Promise<void>;
@@ -121,6 +134,7 @@ type MessagePage = {
   messages: Message[];
   hasMoreBefore: boolean;
   hasMoreAfter: boolean;
+  stale?: boolean;
 };
 
 function normalizeMessagePage(
@@ -180,6 +194,7 @@ export function createChatActions(
   const unreadBarriers = new Set<string>();
   let readStateOwnerId: string | null = null;
   let readStateGeneration = 0;
+  const messageRequestGenerations = new Map<string, number>();
 
   const resetReadStateTracking = (userId: string | null) => {
     if (readStateOwnerId === userId) return;
@@ -343,17 +358,26 @@ export function createChatActions(
   const loadMessages = async (
     channelId: string,
     before?: string,
+    options?: { signal?: AbortSignal },
   ): Promise<MessagePage> => {
+    const requestGeneration =
+      (messageRequestGenerations.get(channelId) ?? 0) + 1;
+    messageRequestGenerations.set(channelId, requestGeneration);
+    const messagesAtRequestStart = get().messagesByChannelId[channelId] ?? [];
     const params = new URLSearchParams({ limit: "50" });
     if (before) params.set("before", before);
     try {
       const data = await apiGet<MessagePage | Message[]>(
         `/api/channels/${channelId}/messages?${params}`,
+        options,
       );
       const normalized = normalizeMessagePage(data);
       const messages = normalized.messages;
-      if (get().activeChannelId !== channelId) {
-        return normalized;
+      if (
+        get().activeChannelId !== channelId ||
+        messageRequestGenerations.get(channelId) !== requestGeneration
+      ) {
+        return { ...normalized, stale: true };
       }
       if (!before) {
         dispatch({
@@ -362,6 +386,7 @@ export function createChatActions(
           channelId,
           hasMoreBefore: normalized.hasMoreBefore,
           hasMoreAfter: normalized.hasMoreAfter,
+          preserveMessagesFrom: messagesAtRequestStart,
         });
       } else {
         dispatch({
@@ -380,13 +405,25 @@ export function createChatActions(
   const loadMessagesAround = async (
     channelId: string,
     messageId: string,
-  ): Promise<{ hasMoreBefore: boolean; hasMoreAfter: boolean }> => {
+    options?: { signal?: AbortSignal },
+  ): Promise<{
+    hasMoreBefore: boolean;
+    hasMoreAfter: boolean;
+    stale?: boolean;
+  }> => {
+    const requestGeneration =
+      (messageRequestGenerations.get(channelId) ?? 0) + 1;
+    messageRequestGenerations.set(channelId, requestGeneration);
     try {
       const data = await apiGet<MessagePage | Message[]>(
         `/api/channels/${channelId}/messages?around=${encodeURIComponent(messageId)}`,
+        options,
       );
       const normalized = normalizeMessagePage(data);
-      if (get().activeChannelId === channelId) {
+      if (
+        get().activeChannelId === channelId &&
+        messageRequestGenerations.get(channelId) === requestGeneration
+      ) {
         dispatch({
           type: "REPLACE_MESSAGES",
           messages: normalized.messages,
@@ -394,6 +431,12 @@ export function createChatActions(
           hasMoreBefore: normalized.hasMoreBefore,
           hasMoreAfter: normalized.hasMoreAfter,
         });
+      } else {
+        return {
+          hasMoreBefore: normalized.hasMoreBefore,
+          hasMoreAfter: normalized.hasMoreAfter,
+          stale: true,
+        };
       }
       return {
         hasMoreBefore: normalized.hasMoreBefore,
@@ -407,19 +450,29 @@ export function createChatActions(
   const loadMessagesAfter = async (
     channelId: string,
     after: string,
-  ): Promise<{ hasMoreAfter: boolean }> => {
+    options?: { signal?: AbortSignal },
+  ): Promise<{ hasMoreAfter: boolean; stale?: boolean }> => {
+    const requestGeneration =
+      (messageRequestGenerations.get(channelId) ?? 0) + 1;
+    messageRequestGenerations.set(channelId, requestGeneration);
     try {
       const data = await apiGet<MessagePage | Message[]>(
         `/api/channels/${channelId}/messages?after=${encodeURIComponent(after)}&limit=50`,
+        options,
       );
       const normalized = normalizeMessagePage(data);
-      if (get().activeChannelId === channelId) {
+      if (
+        get().activeChannelId === channelId &&
+        messageRequestGenerations.get(channelId) === requestGeneration
+      ) {
         dispatch({
           type: "APPEND_MESSAGES_AFTER",
           messages: normalized.messages,
           channelId,
           hasMoreAfter: normalized.hasMoreAfter,
         });
+      } else {
+        return { hasMoreAfter: normalized.hasMoreAfter, stale: true };
       }
       return { hasMoreAfter: normalized.hasMoreAfter };
     } catch {
@@ -986,6 +1039,18 @@ export function createChatActions(
     }
   };
 
+  const refreshMessageEmbeds = async (
+    channelId: string,
+    messageIds: string[],
+  ) => {
+    const ids = [...new Set(messageIds)].slice(0, 50);
+    if (ids.length === 0) return;
+    await apiPatch(`/api/channels/${channelId}/messages`, {
+      refresh_embeds: true,
+      message_ids: ids,
+    }).catch(() => undefined);
+  };
+
   const loadDmChannels = async (generation = readStateGeneration) => {
     try {
       const data =
@@ -1057,6 +1122,7 @@ export function createChatActions(
   const bootstrapChat = async (options?: {
     includeNotifications?: boolean;
     expectedUserId?: string;
+    deferNonCritical?: boolean;
   }): Promise<void> => {
     const expectedUserId = options?.expectedUserId ?? get().user?.id ?? null;
     resetReadStateTracking(expectedUserId);
@@ -1080,20 +1146,30 @@ export function createChatActions(
     }
 
     const includeNotifications = options?.includeNotifications ?? true;
+    const deferNonCritical = options?.deferNonCritical ?? false;
     const bootstrapGeneration = readStateGeneration;
+    const runNonCritical = () => [
+      loadProfile(bootstrapGeneration),
+      loadDmChannels(bootstrapGeneration),
+      loadRelationships(bootstrapGeneration),
+      includeNotifications
+        ? loadNotifications(bootstrapGeneration)
+        : Promise.resolve(),
+    ];
     const bootstrapPromise = (async () => {
       await loadCurrentUser(options?.expectedUserId);
-
-      await Promise.all([
-        loadProfile(bootstrapGeneration),
-        loadServers(bootstrapGeneration),
-        loadReadStates(),
-        loadDmChannels(bootstrapGeneration),
-        loadRelationships(bootstrapGeneration),
-        includeNotifications
-          ? loadNotifications(bootstrapGeneration)
-          : Promise.resolve(),
-      ]);
+      if (deferNonCritical) {
+        await Promise.all([loadServers(bootstrapGeneration), loadReadStates()]);
+        setTimeout(() => {
+          void Promise.allSettled(runNonCritical());
+        }, 0);
+      } else {
+        await Promise.all([
+          loadServers(bootstrapGeneration),
+          loadReadStates(),
+          ...runNonCritical(),
+        ]);
+      }
     })();
     inFlightBootstrap = { userId: expectedUserId, promise: bootstrapPromise };
     bootstrapPromise.then(
@@ -1179,6 +1255,7 @@ export function createChatActions(
     pinMessage,
     unpinMessage,
     loadPins,
+    refreshMessageEmbeds,
     loadDmChannels,
     loadRelationships,
     openDm,

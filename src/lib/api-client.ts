@@ -106,6 +106,7 @@ export async function apiFetch<T>(
   input: RequestInfo | URL,
   init?: ApiFetchInit,
 ): Promise<T> {
+  const requestStartedAt = Date.now();
   const { skipAuth = false, ...fetchInit } = init ?? {};
   // Prefix relative paths with the platform-appropriate base URL
   const resolved =
@@ -161,6 +162,7 @@ export async function apiFetch<T>(
     status: res.status,
     ok: res.ok,
     contentType: res.headers.get("content-type"),
+    durationMs: Date.now() - requestStartedAt,
   });
 
   // 401 recovery: refresh the kova-auth token and retry once.
@@ -189,6 +191,7 @@ export async function apiFetch<T>(
         status: res.status,
         ok: res.ok,
         contentType: res.headers.get("content-type"),
+        durationMs: Date.now() - requestStartedAt,
       });
     } else {
       clearDesktopAuthSession();

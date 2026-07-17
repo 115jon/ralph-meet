@@ -8,15 +8,15 @@
 
 import { ServiceError } from "@/lib/service-error";
 import { getAttachmentUrl } from "@/lib/attachment-url";
-import { clog } from "@/lib/console-logger";
-import { hydrateSocialEmbeds } from "@/lib/share-embed-refresh";
 import type { AvatarDisplay } from "@/lib/avatar-display";
+import { hydrateSocialEmbeds } from "@/lib/share-embed-refresh";
 import type { EmbedInfo } from "@/lib/types";
 import type { D1Database } from "@cloudflare/workers-types";
 import { markSharesDeletedForMessage } from "./message-share.service";
 import type { BroadcastDescriptor } from "./server.service";
+import { clog } from "@/lib/console-logger";
 
-const embedHydrationLog = clog("message-embed-hydration");
+const messageHistoryLog = clog("message-history");
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -539,6 +539,33 @@ export interface ListMessagesOpts {
   around?: string | null;
 }
 
+export function normalizeMessageLimit(
+  value: number | string | null | undefined,
+): number {
+  if (value === null || value === undefined) return 50;
+
+  const normalized = typeof value === "string" ? value.trim() : value;
+  if (normalized === "") return 50;
+
+  const numeric =
+    typeof normalized === "number" ? normalized : Number(normalized);
+  if (!Number.isFinite(numeric) || !Number.isInteger(numeric)) return 50;
+
+  return Math.min(Math.max(numeric, 1), 100);
+}
+
+function parseMessageCursor(cursor: string | null | undefined): {
+  createdAt: string;
+  id: string | null;
+} | null {
+  if (!cursor) return null;
+  const separator = cursor.indexOf("|");
+  if (separator === -1) return { createdAt: cursor, id: null };
+  const createdAt = cursor.slice(0, separator);
+  const id = cursor.slice(separator + 1);
+  return createdAt && id ? { createdAt, id } : { createdAt: cursor, id: null };
+}
+
 export interface ListMessagesResult {
   rows: Record<string, unknown>[];
   hasMoreBefore: boolean;
@@ -551,7 +578,7 @@ export async function fetchMessageRows(
   channelId: string,
   opts: ListMessagesOpts = {},
 ): Promise<ListMessagesResult> {
-  const limit = Math.min(opts.limit ?? 50, 100);
+  const limit = normalizeMessageLimit(opts.limit);
   let rows: Record<string, unknown>[];
   let hasMoreBefore = false;
   let hasMoreAfter = false;
@@ -562,30 +589,31 @@ export async function fetchMessageRows(
 
     const anchor = (await db
       .prepare(
-        `SELECT created_at FROM messages WHERE id = ? AND channel_id = ?`,
+        `SELECT id, created_at FROM messages WHERE id = ? AND channel_id = ?`,
       )
       .bind(opts.around, channelId)
-      .first()) as { created_at: string } | null;
+      .first()) as { id: string; created_at: string } | null;
 
     if (!anchor) {
       throw ServiceError.notFound("Message not found");
     }
 
     const anchorTime = anchor.created_at;
+    const anchorId = anchor.id;
 
     const [{ results: beforeRows }, { results: afterRows }] = await Promise.all(
       [
         db
           .prepare(
-            `${MESSAGE_SELECT} WHERE m.channel_id = ? AND m.created_at <= ? ORDER BY m.created_at DESC LIMIT ?`,
+            `${MESSAGE_SELECT} WHERE m.channel_id = ? AND (m.created_at < ? OR (m.created_at = ? AND m.id <= ?)) ORDER BY m.created_at DESC, m.id DESC LIMIT ?`,
           )
-          .bind(channelId, anchorTime, halfBefore + 1)
+          .bind(channelId, anchorTime, anchorTime, anchorId, halfBefore + 1)
           .all(),
         db
           .prepare(
-            `${MESSAGE_SELECT} WHERE m.channel_id = ? AND m.created_at > ? ORDER BY m.created_at ASC LIMIT ?`,
+            `${MESSAGE_SELECT} WHERE m.channel_id = ? AND (m.created_at > ? OR (m.created_at = ? AND m.id > ?)) ORDER BY m.created_at ASC, m.id ASC LIMIT ?`,
           )
-          .bind(channelId, anchorTime, halfAfter + 1)
+          .bind(channelId, anchorTime, anchorTime, anchorId, halfAfter + 1)
           .all(),
       ],
     );
@@ -601,23 +629,52 @@ export async function fetchMessageRows(
   }
 
   if (opts.before) {
-    const { results } = await db
-      .prepare(
-        `${MESSAGE_SELECT} WHERE m.channel_id = ? AND m.created_at < ? ORDER BY m.created_at DESC LIMIT ?`,
-      )
-      .bind(channelId, opts.before, limit)
-      .all();
-    rows = (results ?? []).reverse();
-    return { rows, hasMoreBefore: false, hasMoreAfter: false, mode: "before" };
+    const cursor = parseMessageCursor(opts.before);
+    const { results } = cursor?.id
+      ? await db
+          .prepare(
+            `${MESSAGE_SELECT} WHERE m.channel_id = ? AND (m.created_at < ? OR (m.created_at = ? AND m.id < ?)) ORDER BY m.created_at DESC, m.id DESC LIMIT ?`,
+          )
+          .bind(
+            channelId,
+            cursor.createdAt,
+            cursor.createdAt,
+            cursor.id,
+            limit + 1,
+          )
+          .all()
+      : await db
+          .prepare(
+            `${MESSAGE_SELECT} WHERE m.channel_id = ? AND m.created_at < ? ORDER BY m.created_at DESC, m.id DESC LIMIT ?`,
+          )
+          .bind(channelId, cursor?.createdAt ?? opts.before, limit + 1)
+          .all();
+    hasMoreBefore = (results?.length ?? 0) > limit;
+    rows = (results ?? []).slice(0, limit).reverse();
+    return { rows, hasMoreBefore, hasMoreAfter: false, mode: "before" };
   }
 
   if (opts.after) {
-    const { results } = await db
-      .prepare(
-        `${MESSAGE_SELECT} WHERE m.channel_id = ? AND m.created_at > ? ORDER BY m.created_at ASC LIMIT ?`,
-      )
-      .bind(channelId, opts.after, limit + 1)
-      .all();
+    const cursor = parseMessageCursor(opts.after);
+    const { results } = cursor?.id
+      ? await db
+          .prepare(
+            `${MESSAGE_SELECT} WHERE m.channel_id = ? AND (m.created_at > ? OR (m.created_at = ? AND m.id > ?)) ORDER BY m.created_at ASC, m.id ASC LIMIT ?`,
+          )
+          .bind(
+            channelId,
+            cursor.createdAt,
+            cursor.createdAt,
+            cursor.id,
+            limit + 1,
+          )
+          .all()
+      : await db
+          .prepare(
+            `${MESSAGE_SELECT} WHERE m.channel_id = ? AND m.created_at > ? ORDER BY m.created_at ASC, m.id ASC LIMIT ?`,
+          )
+          .bind(channelId, cursor?.createdAt ?? opts.after, limit + 1)
+          .all();
     hasMoreAfter = (results?.length ?? 0) > limit;
     rows = (results ?? []).slice(0, limit);
     return { rows, hasMoreBefore: false, hasMoreAfter, mode: "after" };
@@ -626,15 +683,16 @@ export async function fetchMessageRows(
   // Default: latest N messages
   const { results } = await db
     .prepare(
-      `${MESSAGE_SELECT} WHERE m.channel_id = ? ORDER BY m.created_at DESC LIMIT ?`,
+      `${MESSAGE_SELECT} WHERE m.channel_id = ? ORDER BY m.created_at DESC, m.id DESC LIMIT ?`,
     )
-    .bind(channelId, limit)
+    .bind(channelId, limit + 1)
     .all();
-  rows = (results ?? []).reverse();
-  return { rows, hasMoreBefore: false, hasMoreAfter: false, mode: "latest" };
+  hasMoreBefore = (results?.length ?? 0) > limit;
+  rows = (results ?? []).slice(0, limit).reverse();
+  return { rows, hasMoreBefore, hasMoreAfter: false, mode: "latest" };
 }
 
-// ─── listMessages (full pipeline: fetch + hydrate + format) ──────────────────
+// ─── listMessages (full pipeline: fetch + format) ────────────────────────────
 
 export async function listMessages(
   db: D1Database,
@@ -647,6 +705,7 @@ export async function listMessages(
   hasMoreAfter: boolean;
   mode: string;
 }> {
+  const startedAt = Date.now();
   const { rows, hasMoreBefore, hasMoreAfter, mode } = await fetchMessageRows(
     db,
     channelId,
@@ -675,49 +734,78 @@ export async function listMessages(
     ),
   );
 
-  const hydratedMessages = await Promise.all(
-    messages.map(async (message) => {
-      const embeds = Array.isArray(message.embeds)
-        ? (message.embeds as EmbedInfo[])
-        : [];
-      if (embeds.length === 0) {
-        return message;
-      }
+  messageHistoryLog.info("History page loaded", {
+    channelId,
+    mode,
+    rowCount: rows.length,
+    embedCount: messages.reduce(
+      (count, message) =>
+        count + (Array.isArray(message.embeds) ? message.embeds.length : 0),
+      0,
+    ),
+    durationMs: Date.now() - startedAt,
+  });
 
-      const hydratedEmbeds = await hydrateSocialEmbeds(embeds).catch(
-        (error) => {
-          embedHydrationLog.warn(
-            `Failed to refresh embeds for message ${String(message.id)}`,
-            error,
-          );
-          return embeds;
-        },
-      );
+  return { messages, hasMoreBefore, hasMoreAfter, mode };
+}
 
-      if (hydratedEmbeds === embeds) {
-        return message;
-      }
+export interface MessageEmbedUpdate {
+  id: string;
+  channel_id: string;
+  embeds: EmbedInfo[];
+}
 
-      try {
-        await db
-          .prepare(`UPDATE messages SET embeds = ? WHERE id = ?`)
-          .bind(JSON.stringify(hydratedEmbeds), String(message.id))
-          .run();
-      } catch (error) {
-        embedHydrationLog.warn(
-          `Failed to persist refreshed embeds for message ${String(message.id)}`,
-          error,
-        );
-      }
+function parseStoredEmbeds(value: unknown): EmbedInfo[] {
+  if (Array.isArray(value)) return value as EmbedInfo[];
+  if (typeof value !== "string") return [];
+  try {
+    const parsed: unknown = JSON.parse(value);
+    return Array.isArray(parsed) ? (parsed as EmbedInfo[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+export async function refreshMessageEmbeds(
+  db: D1Database,
+  channelId: string,
+  messageIds: string[],
+): Promise<MessageEmbedUpdate[]> {
+  const ids = [...new Set(messageIds)].slice(0, 50);
+  if (ids.length === 0) return [];
+
+  const placeholders = ids.map(() => "?").join(", ");
+  const { results } = await db
+    .prepare(
+      `SELECT id, embeds FROM messages WHERE channel_id = ? AND id IN (${placeholders})`,
+    )
+    .bind(channelId, ...ids)
+    .all();
+
+  const updates = await Promise.all(
+    (results ?? []).map(async (row: Record<string, unknown>) => {
+      const embeds = parseStoredEmbeds(row.embeds);
+      if (embeds.length === 0) return null;
+
+      const refreshedEmbeds = await hydrateSocialEmbeds(embeds);
+      if (refreshedEmbeds === embeds) return null;
+
+      await db
+        .prepare(`UPDATE messages SET embeds = ? WHERE id = ?`)
+        .bind(JSON.stringify(refreshedEmbeds), row.id)
+        .run();
 
       return {
-        ...message,
-        embeds: hydratedEmbeds,
-      };
+        id: String(row.id),
+        channel_id: channelId,
+        embeds: refreshedEmbeds,
+      } satisfies MessageEmbedUpdate;
     }),
   );
 
-  return { messages: hydratedMessages, hasMoreBefore, hasMoreAfter, mode };
+  return updates.filter(
+    (update): update is MessageEmbedUpdate => update !== null,
+  );
 }
 
 // ─── createMessage ───────────────────────────────────────────────────────────

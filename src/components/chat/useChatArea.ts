@@ -16,6 +16,10 @@ import { useCallback, useEffect, useMemo, useReducer, useRef } from "react";
 import { useShallow } from "zustand/shallow";
 import type { VirtualMessageListHandle } from "./VirtualMessageList";
 
+function messageHistoryCursor(message: Pick<Message, "created_at" | "id">) {
+  return `${message.created_at}|${message.id}`;
+}
+
 export function useChatArea({
   channelId,
   jumpToMessageId,
@@ -56,6 +60,7 @@ export function useChatArea({
     unpinMessage,
     pinMessage,
     loadPins,
+    refreshMessageEmbeds,
     markChannelRead,
     markNotificationsRead,
     dispatch,
@@ -123,6 +128,7 @@ export function useChatArea({
   const internalPendingJumpRef = useRef<string | null>(null);
   const pendingInitialJumpRef = useRef<string | null>(null);
   const onJumpedRef = useRef(onJumped);
+  const channelRequestControllerRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     onJumpedRef.current = onJumped;
@@ -327,6 +333,7 @@ export function useChatArea({
   useEffect(() => {
     return () => {
       isUnmountingRef.current = true;
+      channelRequestControllerRef.current?.abort();
     };
   }, []);
 
@@ -422,7 +429,16 @@ export function useChatArea({
     const oldest = state.messages[0];
     if (!oldest) return;
     setLocalState({ loading: true });
-    const older = await loadMessages(channelId, oldest.created_at);
+    const requestController = channelRequestControllerRef.current;
+    const older = await loadMessages(channelId, messageHistoryCursor(oldest), {
+      signal: requestController?.signal,
+    });
+    if (
+      requestController?.signal.aborted ||
+      older.stale ||
+      useChatStore.getState().activeChannelId !== channelId
+    )
+      return;
     setLocalState({ hasMore: older.hasMoreBefore });
     setLocalState({ loading: false });
   }, [channelId, hasMore, loading, state.messages, loadMessages]);
@@ -433,7 +449,16 @@ export function useChatArea({
     setLocalState({ anchorScrollId: null });
     setLocalState({ isDetached: false });
     setLocalState({ hasMoreAfterAnchor: false });
-    const result = await loadMessages(channelId);
+    const requestController = channelRequestControllerRef.current;
+    const result = await loadMessages(channelId, undefined, {
+      signal: requestController?.signal,
+    });
+    if (
+      requestController?.signal.aborted ||
+      result.stale ||
+      useChatStore.getState().activeChannelId !== channelId
+    )
+      return;
     const msgs = result.messages;
     setLocalState({ hasMore: result.hasMoreBefore });
     setLocalState({ loading: false });
@@ -471,10 +496,19 @@ export function useChatArea({
     if (!channelId || !isDetached) return;
     const newest = state.messages[state.messages.length - 1];
     if (!newest) return;
-    const { hasMoreAfter } = await loadMessagesAfter(
+    const requestController = channelRequestControllerRef.current;
+    const afterResult = await loadMessagesAfter(
       channelId,
-      newest.created_at,
+      messageHistoryCursor(newest),
+      { signal: requestController?.signal },
     );
+    if (
+      requestController?.signal.aborted ||
+      afterResult.stale ||
+      useChatStore.getState().activeChannelId !== channelId
+    )
+      return;
+    const { hasMoreAfter } = afterResult;
     setLocalState({ hasMoreAfterAnchor: hasMoreAfter });
     if (!hasMoreAfter) {
       // User has reached the present — exit detached mode.
@@ -637,6 +671,7 @@ export function useChatArea({
       if (!channelId) return;
       setLocalState({ loading: true });
       pendingScrollId.current = messageId;
+      const requestController = channelRequestControllerRef.current;
 
       // Set align to center so the jumped message is centered visually,
       // matching the reload restore behavior.
@@ -649,7 +684,13 @@ export function useChatArea({
       const { hasMoreBefore, hasMoreAfter } = await loadMessagesAround(
         channelId,
         messageId,
+        { signal: requestController?.signal },
       );
+      if (
+        requestController?.signal.aborted ||
+        useChatStore.getState().activeChannelId !== channelId
+      )
+        return;
       debugChatScroll("jump loaded around target", {
         channelId,
         messageId,
@@ -677,6 +718,9 @@ export function useChatArea({
 
   const initChannel = useCallback(() => {
     if (!channelId) return;
+    channelRequestControllerRef.current?.abort();
+    const requestController = new AbortController();
+    channelRequestControllerRef.current = requestController;
     const liveStateAtStart = useChatStore.getState();
     const hasCachedMessages =
       !!liveStateAtStart.messagesLoadedByChannelId[channelId];
@@ -684,8 +728,6 @@ export function useChatArea({
       liveStateAtStart.messagesByChannelId[channelId] ?? [];
     const cachedHasMoreBefore =
       liveStateAtStart.messageHasMoreBeforeByChannelId[channelId] ?? true;
-    const hasCachedPins = !!liveStateAtStart.pinsLoadedByChannelId[channelId];
-
     setLocalState({
       hasMore: hasCachedMessages ? cachedHasMoreBefore : true,
       loading: !hasCachedMessages,
@@ -709,7 +751,12 @@ export function useChatArea({
     const applyLoadedMessages = (
       result: Awaited<ReturnType<typeof loadMessages>>,
     ) => {
-      if (isUnmountingRef.current) return;
+      if (
+        isUnmountingRef.current ||
+        requestController.signal.aborted ||
+        useChatStore.getState().activeChannelId !== channelId
+      )
+        return;
       const msgs = result.messages;
       const liveState = useChatStore.getState();
 
@@ -729,52 +776,53 @@ export function useChatArea({
         pendingInitialJumpRef.current = msgId;
 
         if (!msgs.some((m) => m.id === msgId)) {
-          loadMessagesAround(channelId, msgId).then(
-            ({ hasMoreBefore, hasMoreAfter }) => {
-              if (isUnmountingRef.current) return;
-              const loadedTarget = useChatStore
-                .getState()
-                .messages.some((m) => m.id === msgId);
+          loadMessagesAround(channelId, msgId, {
+            signal: requestController.signal,
+          }).then(({ hasMoreBefore, hasMoreAfter }) => {
+            if (isUnmountingRef.current || requestController.signal.aborted)
+              return;
+            const loadedTarget = useChatStore
+              .getState()
+              .messages.some((m) => m.id === msgId);
 
-              if (!loadedTarget) {
-                pendingInitialJumpRef.current = null;
-                internalPendingJumpRef.current = null;
-                onJumpedRef.current?.();
-                setLocalState({
-                  hasMore: result.hasMoreBefore,
-                  loading: false,
-                  anchorScrollId: "BOTTOM",
-                  initialScrollAlign: "end",
-                  initialScrollBehavior: "auto",
-                  restoreInProgress: true,
-                });
-                return;
-              }
-
+            if (!loadedTarget) {
+              pendingInitialJumpRef.current = null;
+              internalPendingJumpRef.current = null;
+              onJumpedRef.current?.();
               setLocalState({
-                hasMore: hasMoreBefore,
-                hasMoreAfterAnchor: hasMoreAfter,
+                hasMore: result.hasMoreBefore,
                 loading: false,
-                anchorScrollId: msgId,
-                initialScrollAlign: "center",
+                anchorScrollId: "BOTTOM",
+                initialScrollAlign: "end",
                 initialScrollBehavior: "auto",
-                isDetached: true,
-                highlightAnchor: true,
                 restoreInProgress: true,
               });
-              markNotificationsForMessage(msgId);
-              dispatch({
-                type: "SET_SCROLL_POSITION",
-                channelId,
-                messageId: msgId,
-              });
-              dispatch({
-                type: "SET_JUMP_ANCHOR",
-                channelId,
-                messageId: msgId,
-              });
-            },
-          );
+              return;
+            }
+
+            setLocalState({
+              hasMore: hasMoreBefore,
+              hasMoreAfterAnchor: hasMoreAfter,
+              loading: false,
+              anchorScrollId: msgId,
+              initialScrollAlign: "center",
+              initialScrollBehavior: "auto",
+              isDetached: true,
+              highlightAnchor: true,
+              restoreInProgress: true,
+            });
+            markNotificationsForMessage(msgId);
+            dispatch({
+              type: "SET_SCROLL_POSITION",
+              channelId,
+              messageId: msgId,
+            });
+            dispatch({
+              type: "SET_JUMP_ANCHOR",
+              channelId,
+              messageId: msgId,
+            });
+          });
           return;
         }
 
@@ -814,33 +862,34 @@ export function useChatArea({
           } else {
             // Saved position is not in the initial messages (historical context).
             // Load messages around that position.
-            loadMessagesAround(channelId, lastScrollId).then(
-              ({ hasMoreBefore, hasMoreAfter }) => {
-                if (isUnmountingRef.current) return;
-                const restoredState = useChatStore.getState();
-                // Highlight only if this position was from a manual jump
-                const wasJump =
-                  restoredState.jumpAnchors[channelId] === lastScrollId;
-                debugChatScroll("restore saved id via around load", {
-                  channelId,
-                  lastScrollId,
-                  hasMoreBefore,
-                  hasMoreAfter,
-                  wasJump,
-                });
-                setLocalState({
-                  hasMore: hasMoreBefore,
-                  hasMoreAfterAnchor: hasMoreAfter,
-                  loading: false,
-                  anchorScrollId: lastScrollId,
-                  initialScrollAlign: "center",
-                  initialScrollBehavior: "auto",
-                  isDetached: true,
-                  highlightAnchor: wasJump,
-                  restoreInProgress: true,
-                });
-              },
-            );
+            loadMessagesAround(channelId, lastScrollId, {
+              signal: requestController.signal,
+            }).then(({ hasMoreBefore, hasMoreAfter }) => {
+              if (isUnmountingRef.current || requestController.signal.aborted)
+                return;
+              const restoredState = useChatStore.getState();
+              // Highlight only if this position was from a manual jump
+              const wasJump =
+                restoredState.jumpAnchors[channelId] === lastScrollId;
+              debugChatScroll("restore saved id via around load", {
+                channelId,
+                lastScrollId,
+                hasMoreBefore,
+                hasMoreAfter,
+                wasJump,
+              });
+              setLocalState({
+                hasMore: hasMoreBefore,
+                hasMoreAfterAnchor: hasMoreAfter,
+                loading: false,
+                anchorScrollId: lastScrollId,
+                initialScrollAlign: "center",
+                initialScrollBehavior: "auto",
+                isDetached: true,
+                highlightAnchor: wasJump,
+                restoreInProgress: true,
+              });
+            });
             return; // Don't fall through
           }
         } else if (lastScrollId === "BOTTOM") {
@@ -926,21 +975,28 @@ export function useChatArea({
           liveStateAtStart.messageHasMoreAfterByChannelId[channelId] ?? false,
       });
     } else {
-      loadMessages(channelId).then((result) => {
+      loadMessages(channelId, undefined, {
+        signal: requestController.signal,
+      }).then((result) => {
+        if (requestController.signal.aborted) return;
         applyLoadedMessages(result);
+        if (result.messages.some((message) => message.embeds?.length)) {
+          void refreshMessageEmbeds(
+            channelId,
+            result.messages.map((message) => message.id),
+          );
+        }
       });
     }
-
-    if (!hasCachedPins) loadPins(channelId);
     prevChannelRef.current = channelId;
   }, [
     channelId,
     dispatch,
     loadMessages,
     loadMessagesAround,
-    loadPins,
     markChannelRead,
     markNotificationsForMessage,
+    refreshMessageEmbeds,
   ]);
 
   useEffect(() => {

@@ -304,7 +304,9 @@ CREATE TABLE IF NOT EXISTS notifications (
 
 CREATE INDEX IF NOT EXISTS idx_messages_channel_id ON messages(channel_id);
 CREATE INDEX IF NOT EXISTS idx_messages_author_id ON messages(author_id);
+CREATE INDEX IF NOT EXISTS idx_messages_reply_to_id ON messages(reply_to_id);
 CREATE INDEX IF NOT EXISTS idx_messages_created_at ON messages(channel_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_messages_history_cursor ON messages(channel_id, created_at DESC, id DESC);
 CREATE INDEX IF NOT EXISTS idx_channels_server_id ON channels(server_id);
 CREATE INDEX IF NOT EXISTS idx_channels_category_id ON channels(category_id);
 CREATE INDEX IF NOT EXISTS idx_server_members_user_id ON server_members(user_id);

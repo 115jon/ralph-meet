@@ -24,7 +24,7 @@ export const pinsBodySchema = z
   .passthrough();
 
 // GET /api/channels/:id/pins — get all pinned messages in the channel
-const GET = async ({ request: _request, params }: any) => {
+export const GET = async ({ request: _request, params }: any) => {
   const authResult = await requireAuth();
   if (authResult instanceof Response) return authResult;
   const { userId } = authResult;
@@ -41,8 +41,8 @@ const GET = async ({ request: _request, params }: any) => {
       `SELECT m.*, u.username as author_username, u.display_name as author_display_name, u.avatar_url as author_avatar_url, u.avatar_display as author_avatar_display
      FROM messages m
      LEFT JOIN users u ON u.id = m.author_id
-     WHERE m.channel_id = ? AND m.is_pinned = 1
-     ORDER BY m.created_at DESC`,
+       WHERE m.channel_id = ? AND m.is_pinned = 1
+       ORDER BY m.created_at DESC`,
     )
     .bind(channelId)
     .all();

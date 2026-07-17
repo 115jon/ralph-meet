@@ -881,7 +881,7 @@ export function createChatGateway(
           releaseReconnectSoundSuppression = release;
 
           void Promise.allSettled([
-            actions.bootstrapChat(),
+            actions.bootstrapChat({ deferNonCritical: true }),
             activeChannel
               ? actions.loadMessages(activeChannel)
               : Promise.resolve(),
