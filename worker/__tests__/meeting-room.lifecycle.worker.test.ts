@@ -644,6 +644,105 @@ describe("MeetingRoom lifecycle", () => {
     recipient.close();
   });
 
+  it("delivers duplicate sessions for one user and prunes both after revocation", async () => {
+    await env.DB.prepare(
+      "CREATE TABLE IF NOT EXISTS channels (id TEXT PRIMARY KEY, server_id TEXT, channel_type TEXT NOT NULL)",
+    ).run();
+    await env.DB.prepare(
+      "CREATE TABLE IF NOT EXISTS server_members (server_id TEXT NOT NULL, user_id TEXT NOT NULL)",
+    ).run();
+    await env.DB.prepare(
+      "CREATE TABLE IF NOT EXISTS roles (id TEXT PRIMARY KEY, permissions INTEGER NOT NULL, position INTEGER NOT NULL, is_default INTEGER NOT NULL)",
+    ).run();
+    await env.DB.prepare(
+      "CREATE TABLE IF NOT EXISTS member_roles (server_id TEXT NOT NULL, user_id TEXT NOT NULL, role_id TEXT NOT NULL)",
+    ).run();
+    await env.DB.prepare(
+      "CREATE TABLE IF NOT EXISTS channel_permission_overrides (channel_id TEXT NOT NULL, target_id TEXT NOT NULL, target_type TEXT NOT NULL, allow INTEGER NOT NULL, deny INTEGER NOT NULL)",
+    ).run();
+
+    const roomName = crypto.randomUUID();
+    const serverId = `server-${crypto.randomUUID()}`;
+    const channelId = `channel-${crypto.randomUUID()}`;
+    const roleId = `role-${crypto.randomUUID()}`;
+    await env.DB.prepare(
+      "INSERT INTO channels (id, server_id, channel_type) VALUES (?, ?, 'text')",
+    )
+      .bind(channelId, serverId)
+      .run();
+    await env.DB.prepare(
+      "INSERT INTO roles (id, permissions, position, is_default) VALUES (?, ?, 0, 1)",
+    )
+      .bind(roleId, PERMISSIONS.VIEW_CHANNELS)
+      .run();
+    await env.DB.prepare(
+      "INSERT INTO server_members (server_id, user_id) VALUES (?, ?)",
+    )
+      .bind(serverId, "user-duplicate")
+      .run();
+    await env.DB.prepare(
+      "INSERT INTO member_roles (server_id, user_id, role_id) VALUES (?, ?, ?)",
+    )
+      .bind(serverId, "user-duplicate", roleId)
+      .run();
+
+    const first = await openMeetingSocket(roomName, "user-duplicate");
+    await identifyMeetingSocket(first);
+    const second = await openMeetingSocket(roomName, "user-duplicate");
+    await identifyMeetingSocket(second);
+
+    const firstSubscription = nextJsonMessage(first);
+    first.send(JSON.stringify({ op: 27, d: { channel_id: channelId } }));
+    await firstSubscription;
+    const secondSubscription = nextJsonMessage(second);
+    second.send(JSON.stringify({ op: 27, d: { channel_id: channelId } }));
+    await secondSubscription;
+
+    const firstDispatch = nextMessageWithOpcodeWithin(first, 19);
+    const secondDispatch = nextMessageWithOpcodeWithin(second, 19);
+    const room = env.MEETING_ROOM.get(env.MEETING_ROOM.idFromName(roomName));
+    await room.fetch("https://internal/broadcast", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        channel_id: channelId,
+        event: "MESSAGE_CREATE",
+        data: { channel_id: channelId, id: "duplicate-session" },
+      }),
+    });
+
+    await expect(firstDispatch).resolves.toMatchObject({
+      d: { event: "MESSAGE_CREATE", data: { id: "duplicate-session" } },
+    });
+    await expect(secondDispatch).resolves.toMatchObject({
+      d: { event: "MESSAGE_CREATE", data: { id: "duplicate-session" } },
+    });
+
+    await env.DB.prepare(
+      "INSERT INTO channel_permission_overrides (channel_id, target_id, target_type, allow, deny) VALUES (?, ?, 'user', 0, ?)",
+    )
+      .bind(channelId, "user-duplicate", PERMISSIONS.VIEW_CHANNELS)
+      .run();
+
+    const firstRevoked = hasMessageWithOpcode(first, 19, 150);
+    const secondRevoked = hasMessageWithOpcode(second, 19, 150);
+    await room.fetch("https://internal/broadcast", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        channel_id: channelId,
+        event: "MESSAGE_CREATE",
+        data: { channel_id: channelId, id: "duplicate-session-revoked" },
+      }),
+    });
+
+    await expect(firstRevoked).resolves.toBe(false);
+    await expect(secondRevoked).resolves.toBe(false);
+
+    first.close();
+    second.close();
+  });
+
   it("isolates server dispatches and removes revoked server subscriptions", async () => {
     await env.DB.prepare(
       "CREATE TABLE IF NOT EXISTS server_members (server_id TEXT NOT NULL, user_id TEXT NOT NULL)",

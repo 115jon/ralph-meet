@@ -32,6 +32,7 @@ import { filterVoiceChannelStatesPayload } from "../src/lib/voice-channel-state-
 import {
   hasChannelPermission,
   resolveChannelAccess,
+  resolveChannelAccessForUsers,
 } from "../src/lib/channel-access";
 import { PERMISSIONS } from "../src/lib/permissions";
 import { getRealtimeAdmissionFromHeaders } from "./realtime-admission";
@@ -2620,16 +2621,34 @@ export class MeetingRoom extends DurableObject<Env> {
     if (!subscribers) return;
 
     const json = JSON.stringify(msg);
+    const candidates: Array<{
+      ws: WebSocket;
+      session: WsAttachment;
+      userId: string;
+    }> = [];
+
     for (const ws of [...subscribers]) {
       if (ws === excludeWs) continue;
       const session = this.getSession(ws);
-      if (!session?.clerk_user_id) continue;
-      const access = await resolveChannelAccess(
-        this.env.DB,
-        session.clerk_user_id,
-        channelId,
-      );
-      if (!access || !hasChannelPermission(access, PERMISSIONS.VIEW_CHANNELS)) {
+      const userId = session?.clerk_user_id;
+      if (!session || !userId) continue;
+      candidates.push({ ws, session, userId });
+    }
+
+    if (candidates.length === 0) return;
+
+    const uniqueUserIds = [
+      ...new Set(candidates.map((candidate) => candidate.userId)),
+    ];
+    const decisions = await resolveChannelAccessForUsers(
+      this.env.DB,
+      channelId,
+      uniqueUserIds,
+    );
+
+    for (const { ws, session, userId } of candidates) {
+      const access = decisions.get(userId);
+      if (!access || access.kind !== "allowed") {
         subscribers.delete(ws);
         session.subscribed_channels = session.subscribed_channels.filter(
           (id) => id !== channelId,
