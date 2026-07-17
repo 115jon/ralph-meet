@@ -56,6 +56,17 @@ export function detectPreferredListenTogetherAudioFormat(): ListenTogetherPrefer
   return "mp4";
 }
 
+export function isExpectedListenTogetherPlayCancellation(
+  error: unknown,
+  authoritativePaused: boolean,
+): boolean {
+  if (!authoritativePaused || typeof error !== "object" || error === null) {
+    return false;
+  }
+
+  return "name" in error && error.name === "AbortError";
+}
+
 export function getListenTogetherPlaybackPlan(args: {
   snapshot: ListenTogetherStateSnapshot | null;
   playback: ListenTogetherPlaybackState;
