@@ -37,6 +37,7 @@ export class VoiceActivityDetector {
   private audioContext: AudioContext | null = null;
   private analyser: AnalyserNode | null = null;
   private source: MediaStreamAudioSourceNode | null = null;
+  private silentOutput: GainNode | null = null;
   private timer: ReturnType<typeof setInterval> | null = null;
   private isSpeaking: boolean = false;
   private silenceStart: number = 0;
@@ -82,6 +83,14 @@ export class VoiceActivityDetector {
 
       this.source = this.audioContext.createMediaStreamSource(vadStream);
       this.source.connect(this.analyser);
+
+      // Keep the Web Audio graph rendering without routing microphone audio
+      // back to the user. AnalyserNode data can remain stale when its output
+      // is disconnected from the destination.
+      this.silentOutput = this.audioContext.createGain();
+      this.silentOutput.gain.value = 0;
+      this.analyser.connect(this.silentOutput);
+      this.silentOutput.connect(this.audioContext.destination);
 
       // Explicitly resume in case it's suspended
       this.contextResumed = false;
@@ -222,6 +231,13 @@ export class VoiceActivityDetector {
     if (this.source) {
       this.source.disconnect();
       this.source = null;
+    }
+    if (this.silentOutput) {
+      this.silentOutput.disconnect();
+      this.silentOutput = null;
+    }
+    if (this.analyser) {
+      this.analyser.disconnect();
     }
     if (this.vadTrack) {
       this.vadTrack.stop();

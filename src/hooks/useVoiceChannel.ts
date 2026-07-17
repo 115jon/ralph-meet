@@ -98,6 +98,13 @@ const STREAM_PREVIEW_CAPTURE_INTERVAL_MS = 8000;
 const STREAM_PREVIEW_CAPTURE_INITIAL_DELAY_MS = 750;
 let speakingSourceSequence = 0;
 
+function createMicrophoneStream(stream: MediaStream): MediaStream | null {
+  const audioTrack = stream.getAudioTracks()[0];
+  return audioTrack && audioTrack.readyState !== "ended"
+    ? new MediaStream([audioTrack])
+    : null;
+}
+
 const SCREEN_QUALITY_MAP: Record<
   string,
   { width: number; height: number; bitrate: number }
@@ -1133,6 +1140,8 @@ export function useVoiceChannel({
   }, [joined]);
 
   const isMicOn = !settingsMuted && hasMicrophone;
+  const isMicOnRef = useRef(isMicOn);
+  isMicOnRef.current = isMicOn;
   const isDeafened = settingsDeafened;
   const isCameraOn = isCameraActive && hasCamera;
 
@@ -1879,30 +1888,55 @@ export function useVoiceChannel({
         vcLog.info("Voice reconnected — re-publishing local tracks");
         const stream = localStreamRef.current;
         if (!stream) return;
-        const publishedAudioStream =
-          publishedAudioProcessorRef.current?.processedStream;
-        const audioTracks = stream.getAudioTracks();
-        const videoTracks = stream.getVideoTracks();
-        const audioStream =
-          (publishedAudioStream?.getAudioTracks().length ?? 0) > 0
-            ? publishedAudioStream
-            : audioTracks.length > 0
-              ? new MediaStream(audioTracks)
-              : null;
+        const getPublishedAudioStream = (
+          source: MediaStream,
+        ): MediaStream | null => {
+          const processedStream =
+            publishedAudioProcessorRef.current?.processedStream;
+          if (processedStream && processedStream.getAudioTracks().length > 0) {
+            return processedStream;
+          }
+          const audioTracks = source.getAudioTracks();
+          return audioTracks.length > 0 ? new MediaStream(audioTracks) : null;
+        };
+        const audioStream = getPublishedAudioStream(stream);
+        const mediaGeneration = localMediaGenerationRef.current;
         if (audioStream) {
           await sfu.publishTracks(audioStream, "cam");
-          const audioTrack = audioStream.getAudioTracks()[0];
-          if (
-            audioTrack &&
-            audioTrack.readyState !== "ended" &&
-            audioTrack.enabled
-          ) {
-            sfu.vad.stop();
-            sfu.vad.start(audioStream);
-          } else {
+          if (sfuRef.current !== sfu) return;
+          sfu.setPublishedTrackEnabled(
+            `cam-audio-${myIdRef.current}`,
+            isMicOnRef.current,
+          );
+          const isCurrentMedia =
+            localMediaGenerationRef.current === mediaGeneration &&
+            localStreamRef.current === stream &&
+            sfuRef.current === sfu;
+          if (isCurrentMedia) {
+            const audioTrack = stream.getAudioTracks()[0];
+            const microphoneStream = createMicrophoneStream(stream);
+            if (
+              isMicOnRef.current &&
+              audioTrack &&
+              audioTrack.readyState !== "ended" &&
+              audioTrack.enabled &&
+              microphoneStream
+            ) {
+              sfu.vad.stop();
+              sfu.vad.start(microphoneStream);
+            } else {
+              sfu.vad.stop();
+            }
+          } else if (!isMicOnRef.current) {
             sfu.vad.stop();
           }
         }
+        if (!isMicOnRef.current && sfuRef.current === sfu) {
+          sfu.vad.stop();
+        }
+        const currentStream = localStreamRef.current;
+        if (!currentStream || sfuRef.current !== sfu) return;
+        const videoTracks = currentStream.getVideoTracks();
         if (videoTracks.length > 0) {
           await sfu.publishTracks(new MediaStream(videoTracks), "cam");
         }
@@ -2179,6 +2213,8 @@ export function useVoiceChannel({
         }
 
         const displayStream = new MediaStream(newStream.getAudioTracks());
+        const rawAudioTrack = newStream.getAudioTracks()[0];
+        if (rawAudioTrack) rawAudioTrack.enabled = isMicOn;
         const previousAudioProcessor = publishedAudioProcessorRef.current;
 
         const oldAudio = oldStream?.getAudioTracks()[0];
@@ -2329,8 +2365,13 @@ export function useVoiceChannel({
         }
 
         if (audioNeedsUpdate && isMicOn) {
+          const rawMicrophoneStream = rawAudioTrack
+            ? new MediaStream([rawAudioTrack])
+            : null;
           sfu.vad.stop();
-          sfu.vad.start(streamToPublish);
+          if (rawMicrophoneStream) {
+            sfu.vad.start(rawMicrophoneStream);
+          }
         }
 
         if (!isCurrent()) return;
@@ -2451,9 +2492,12 @@ export function useVoiceChannel({
     }
 
     if (isMicOn) {
-      const publishedAudioStream =
-        publishedAudioProcessorRef.current?.processedStream;
-      sfuRef.current?.vad.start(publishedAudioStream ?? stream);
+      const microphoneStream = createMicrophoneStream(stream);
+      if (microphoneStream) {
+        sfuRef.current?.vad.start(microphoneStream);
+      } else {
+        sfuRef.current?.vad.stop();
+      }
     } else {
       sfuRef.current?.vad.stop();
     }
