@@ -50,6 +50,8 @@ interface WordleSettings {
 
 const KEY_ROWS = ["qwertyuiop", "asdfghjkl", "zxcvbnm"];
 const SETTINGS_KEY = "voice-wordle:settings";
+const HOW_TO_PLAY_SEEN_KEY = "voice-wordle:how-to-play-seen";
+const HINT_NOTICE_SEEN_KEY = "voice-wordle:hint-notice-seen";
 const DEFAULT_SETTINGS: WordleSettings = {
   hardMode: false,
   darkTheme: false,
@@ -79,6 +81,38 @@ const SETTING_ROWS: Array<[keyof WordleSettings, string, string]> = [
     "Don't send a notification when new puzzles are available.",
   ],
 ];
+
+const WORDLE_THEME = {
+  page: "bg-rm-bg-primary text-rm-text",
+  border: "border-rm-border",
+  icon: "text-rm-text-secondary",
+  key: "bg-rm-bg-elevated text-rm-text",
+  emptyTile: "border-rm-border",
+  modal: "bg-rm-bg-surface text-rm-text border-rm-border backdrop-blur-2xl",
+  overlay: "bg-black/50 backdrop-blur-sm",
+  exampleTile: "border-rm-text-secondary/70",
+  link: "text-rm-accent underline underline-offset-2",
+} as const;
+
+type WordleTheme = typeof WORDLE_THEME;
+
+function readStoredFlag(key: string) {
+  if (typeof window === "undefined") return false;
+  try {
+    return window.localStorage.getItem(key) === "true";
+  } catch {
+    return false;
+  }
+}
+
+function writeStoredFlag(key: string) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(key, "true");
+  } catch {
+    // First-run notices are best-effort when storage is unavailable.
+  }
+}
 
 function todayKey(date = new Date()) {
   return getNewYorkDateKey(date);
@@ -347,6 +381,150 @@ function MiniBoard({
   );
 }
 
+function ExampleRow({
+  letters,
+  highlightedIndex,
+  mark,
+  colors,
+  theme,
+}: {
+  letters: string;
+  highlightedIndex: number;
+  mark: "correct" | "present" | "absent";
+  colors: Record<"correct" | "present" | "absent", string>;
+  theme: WordleTheme;
+}) {
+  return (
+    <div className="mt-2 flex gap-1">
+      {letters.split("").map((letter, index) => {
+        const highlighted = index === highlightedIndex;
+        return (
+          <div
+            key={`${letters}-${index}`}
+            className={cn(
+              "flex h-8 w-8 items-center justify-center border-2 text-xl font-black uppercase sm:h-9 sm:w-9",
+              theme.exampleTile,
+              highlighted && "text-white",
+            )}
+            style={
+              highlighted
+                ? {
+                    borderColor: colors[mark],
+                    backgroundColor: colors[mark],
+                  }
+                : undefined
+            }
+          >
+            {letter}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function HowToPlayModal({
+  onClose,
+  colors,
+}: {
+  onClose: () => void;
+  colors: Record<"correct" | "present" | "absent", string>;
+}) {
+  return (
+    <BaseModal onClose={onClose} aria-labelledby="wordle-how-to-play-title">
+      <div
+        className={cn(
+          "fixed inset-0 z-30 flex items-center justify-center p-4",
+          WORDLE_THEME.overlay,
+        )}
+      >
+        <section
+          className={cn(
+            "relative max-h-[min(640px,calc(100vh-32px))] w-full max-w-[500px] overflow-y-auto rounded-lg border p-6 shadow-2xl sm:p-8",
+            WORDLE_THEME.modal,
+          )}
+        >
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close how to play"
+            className="absolute right-3 top-3 flex h-10 w-10 items-center justify-center rounded-full text-rm-text-secondary transition-colors hover:bg-rm-bg-hover hover:text-rm-text"
+          >
+            <X size={28} strokeWidth={2} />
+          </button>
+          <h2
+            id="wordle-how-to-play-title"
+            className="pr-10 text-2xl font-black leading-tight"
+            style={{ fontFamily: "Georgia, serif" }}
+          >
+            How To Play
+          </h2>
+          <p className="mt-1 text-lg leading-snug">
+            Guess the Wordle in 6 tries.
+          </p>
+          <ul className="mt-4 list-disc space-y-1.5 pl-5 text-sm leading-snug sm:text-base">
+            <li>Each guess must be a valid 5-letter word.</li>
+            <li>
+              The color of the tiles will change to show how close your guess
+              was to the word.
+            </li>
+          </ul>
+
+          <h3 className="mt-5 text-sm font-black">Examples</h3>
+          <ExampleRow
+            letters="wordy"
+            highlightedIndex={0}
+            mark="correct"
+            colors={colors}
+            theme={WORDLE_THEME}
+          />
+          <p className="mt-1 text-sm">
+            <strong style={{ color: colors.correct }}>W</strong> is in the word
+            and in the correct spot.
+          </p>
+          <ExampleRow
+            letters="light"
+            highlightedIndex={1}
+            mark="present"
+            colors={colors}
+            theme={WORDLE_THEME}
+          />
+          <p className="mt-1 text-sm">
+            <strong style={{ color: colors.present }}>I</strong> is in the word
+            but in the wrong spot.
+          </p>
+          <ExampleRow
+            letters="rogue"
+            highlightedIndex={3}
+            mark="absent"
+            colors={colors}
+            theme={WORDLE_THEME}
+          />
+          <p className="mt-1 text-sm">
+            <strong style={{ color: colors.absent }}>U</strong> is not in the
+            word in any spot.
+          </p>
+
+          <div className={cn("my-5 border-t", WORDLE_THEME.border)} />
+          <p className="text-sm leading-snug sm:text-base">
+            A new puzzle is released daily at midnight. If you haven&apos;t
+            already, you can{" "}
+            <a
+              className={WORDLE_THEME.link}
+              href="https://www.nytimes.com/games/wordle/index.html"
+              target="_blank"
+              rel="noreferrer"
+            >
+              play Wordle
+            </a>{" "}
+            for a daily puzzle.
+          </p>
+        </section>
+      </div>
+    </BaseModal>
+  );
+}
+
 export function WordleActivityStage({
   sfu,
   channelId,
@@ -403,8 +581,18 @@ function WordleActivityStageContent({
   const [completedBoardOpen, setCompletedBoardOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [hintsOpen, setHintsOpen] = useState(false);
+  const [howToPlayOpen, setHowToPlayOpen] = useState(
+    () => !readStoredFlag(HOW_TO_PLAY_SEEN_KEY),
+  );
+  const [hintNoticeOpen, setHintNoticeOpen] = useState(
+    () => !readStoredFlag(HINT_NOTICE_SEEN_KEY),
+  );
   const [answerRevealPending, setAnswerRevealPending] = useState(false);
-  const [notice, setNotice] = useState<string | null>(null);
+  const [notice, setNotice] = useState<{
+    message: string;
+    kind: "invalid-word" | "other";
+  } | null>(null);
+  const [invalidGuessAttempt, setInvalidGuessAttempt] = useState(0);
   const [revealingRow, setRevealingRow] = useState<number | null>(null);
   const [completionReveal, setCompletionReveal] = useState<{
     status: "solved" | "missed";
@@ -669,18 +857,19 @@ function WordleActivityStageContent({
     )
       return;
     if (guess.length !== 5) {
-      setNotice("Not enough letters.");
+      setNotice({ message: "Not enough letters.", kind: "other" });
       return;
     }
     if (!isValidWordleGuess(guess, answer)) {
-      setNotice("Not in word list.");
+      setNotice({ message: "Not in word list.", kind: "invalid-word" });
+      setInvalidGuessAttempt((attempt) => attempt + 1);
       return;
     }
     const hardModeViolation = settings.hardMode
       ? getHardModeViolation(guess, activeGuesses, answer)
       : null;
     if (hardModeViolation) {
-      setNotice(hardModeViolation);
+      setNotice({ message: hardModeViolation, kind: "other" });
       return;
     }
     const nextGuesses = [...activeGuesses, guess];
@@ -757,6 +946,16 @@ function WordleActivityStageContent({
     setRevealingRow(Math.max(0, activeGuesses.length - 1));
   };
 
+  const dismissHowToPlay = () => {
+    setHowToPlayOpen(false);
+    writeStoredFlag(HOW_TO_PLAY_SEEN_KEY);
+  };
+
+  const dismissHintNotice = () => {
+    setHintNoticeOpen(false);
+    writeStoredFlag(HINT_NOTICE_SEEN_KEY);
+  };
+
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
@@ -811,14 +1010,7 @@ function WordleActivityStageContent({
         absent: "#4b5563",
       };
   const theme = {
-    page: "bg-rm-bg-primary text-rm-text",
-    border: "border-rm-border",
-    icon: "text-rm-text-secondary",
-    key: "bg-slate-200 dark:bg-slate-800 text-slate-900 dark:text-white",
-    emptyTile: "border-slate-300 dark:border-slate-700",
-    modal:
-      "bg-slate-50/95 dark:bg-rm-bg-surface text-slate-900 dark:text-white backdrop-blur-2xl border border-slate-200 dark:border-white/10",
-    overlay: "bg-slate-900/40 backdrop-blur-sm",
+    ...WORDLE_THEME,
   };
 
   if (!puzzle) {
@@ -991,7 +1183,8 @@ function WordleActivityStageContent({
       <style>{`
         @keyframes rm-wordle-pop { 0% { transform: scale(.86); } 55% { transform: scale(1.08); } 100% { transform: scale(1); } }
         @keyframes rm-wordle-flip { 0% { transform: rotateX(0); } 45% { transform: rotateX(90deg); } 55% { transform: rotateX(90deg); } 100% { transform: rotateX(0); } }
-        @media (prefers-reduced-motion: reduce) { .rm-wordle-tile { animation: none !important; } }
+        @keyframes rm-wordle-shake { 0%, 100% { transform: translateX(0); } 20% { transform: translateX(-6px); } 40% { transform: translateX(6px); } 60% { transform: translateX(-4px); } 80% { transform: translateX(4px); } }
+        @media (prefers-reduced-motion: reduce) { .rm-wordle-tile, .rm-wordle-invalid-letter { animation: none !important; } }
       `}</style>
       <div
         className={cn(
@@ -1013,9 +1206,13 @@ function WordleActivityStageContent({
         >
           <button
             type="button"
-            onClick={() => setHintsOpen(true)}
+            onClick={() => {
+              dismissHintNotice();
+              setHintsOpen(true);
+            }}
             aria-label="Open hints"
             title="Hints"
+            className="flex h-10 w-10 items-center justify-center rounded-full transition-colors hover:bg-rm-bg-hover"
           >
             <Lightbulb size={26} />
           </button>
@@ -1024,6 +1221,7 @@ function WordleActivityStageContent({
             onClick={() => setView("stats")}
             aria-label="Open channel stats"
             title="Stats"
+            className="flex h-10 w-10 items-center justify-center rounded-full transition-colors hover:bg-rm-bg-hover"
           >
             <BarChart3 size={28} />
           </button>
@@ -1032,6 +1230,7 @@ function WordleActivityStageContent({
             onClick={() => setSettingsOpen(true)}
             aria-label="Open Wordle settings"
             title="Settings"
+            className="flex h-10 w-10 items-center justify-center rounded-full transition-colors hover:bg-rm-bg-hover"
           >
             <Settings size={30} />
           </button>
@@ -1071,59 +1270,68 @@ function WordleActivityStageContent({
         </aside>
 
         <main className="order-1 flex min-h-[500px] min-w-0 flex-col items-center justify-center gap-4 md:order-2 md:min-h-0 md:gap-5">
-          <div className="grid w-[min(300px,calc(100vw-32px))] grid-cols-5 gap-[5px]">
-            {Array.from({ length: 30 }).map((_, index) => {
-              const row = Math.floor(index / 5);
-              const col = index % 5;
-              const guess =
-                activeGuesses[row] ??
-                (row === activeGuesses.length ? draft : "");
-              const letter = guess[col] ?? "";
-              const mark = activeGuesses[row]
-                ? evaluateWordleGuess(activeGuesses[row], answer)[col]
-                : null;
-              return (
-                <div
-                  key={index}
-                  role="img"
-                  aria-label={`Row ${row + 1}, column ${col + 1}: ${letter || "empty"}${mark ? `, ${getMarkLabel(mark)}` : ""}`}
-                  title={mark ? getMarkLabel(mark) : undefined}
-                  style={{
-                    animation: activeGuesses[row]
-                      ? revealingRow === row
-                        ? `rm-wordle-flip 520ms ease both ${col * 120}ms`
-                        : undefined
-                      : letter
-                        ? "rm-wordle-pop 110ms ease-out"
-                        : undefined,
-                    ...(mark
-                      ? {
-                          borderColor: colors[mark],
-                          backgroundColor: colors[mark],
-                        }
-                      : {}),
-                  }}
-                  className={cn(
-                    "rm-wordle-tile flex aspect-square w-full items-center justify-center border-2 text-3xl font-black uppercase [backface-visibility:hidden]",
-                    !mark && theme.emptyTile,
-                    mark && "text-white",
-                  )}
-                >
-                  {letter}
-                </div>
-              );
-            })}
-          </div>
-
-          {notice && (
-            <div
-              role="status"
-              aria-live="polite"
-              className="text-center text-sm font-bold uppercase tracking-wide text-[#cf2e2e]"
-            >
-              {notice}
+          <div className="relative w-[min(300px,calc(100vw-32px))]">
+            <div className="grid grid-cols-5 gap-[5px]">
+              {Array.from({ length: 30 }).map((_, index) => {
+                const row = Math.floor(index / 5);
+                const col = index % 5;
+                const guess =
+                  activeGuesses[row] ??
+                  (row === activeGuesses.length ? draft : "");
+                const letter = guess[col] ?? "";
+                const mark = activeGuesses[row]
+                  ? evaluateWordleGuess(activeGuesses[row], answer)[col]
+                  : null;
+                const invalidWordRow =
+                  notice?.kind === "invalid-word" &&
+                  row === activeGuesses.length &&
+                  draft.length === 5;
+                return (
+                  <div
+                    key={`${index}-${invalidGuessAttempt}`}
+                    role="img"
+                    aria-label={`Row ${row + 1}, column ${col + 1}: ${letter || "empty"}${mark ? `, ${getMarkLabel(mark)}` : ""}`}
+                    title={mark ? getMarkLabel(mark) : undefined}
+                    style={{
+                      animation: invalidWordRow
+                        ? `rm-wordle-shake 420ms ease-in-out both ${col * 30}ms`
+                        : activeGuesses[row]
+                          ? revealingRow === row
+                            ? `rm-wordle-flip 520ms ease both ${col * 120}ms`
+                            : undefined
+                          : letter
+                            ? "rm-wordle-pop 110ms ease-out"
+                            : undefined,
+                      ...(mark
+                        ? {
+                            borderColor: colors[mark],
+                            backgroundColor: colors[mark],
+                          }
+                        : {}),
+                    }}
+                    className={cn(
+                      "rm-wordle-tile flex aspect-square w-full items-center justify-center border-2 text-3xl font-black uppercase [backface-visibility:hidden]",
+                      !mark && theme.emptyTile,
+                      mark && "text-white",
+                      invalidWordRow && "rm-wordle-invalid-letter",
+                    )}
+                  >
+                    {letter}
+                  </div>
+                );
+              })}
             </div>
-          )}
+
+            {notice && (
+              <div
+                role="status"
+                aria-live="polite"
+                className="pointer-events-none absolute left-1/2 top-2 z-10 -translate-x-1/2 whitespace-nowrap rounded bg-rm-bg-floating px-3 py-2 text-center text-xs font-bold shadow-xl"
+              >
+                {notice.message}
+              </div>
+            )}
+          </div>
 
           {completionReveal && revealingRow !== null && (
             <div
@@ -1196,6 +1404,38 @@ function WordleActivityStageContent({
         </main>
       </div>
 
+      {hintNoticeOpen && !howToPlayOpen && !hintsOpen && (
+        <aside
+          className="absolute right-4 top-[60px] z-20 w-[min(323px,calc(100vw-32px))] rounded bg-rm-bg-elevated p-4 text-rm-text shadow-2xl"
+          aria-label="Hint notice"
+        >
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <div className="inline-flex items-center rounded-full bg-rm-accent px-2.5 py-1 text-[11px] font-black uppercase tracking-wide text-white">
+                ★ New
+              </div>
+              <h2 className="mt-2 text-sm font-black">Want a hint?</h2>
+              <p className="mt-1 text-sm leading-snug text-rm-text-secondary">
+                Click the lightbulb to reveal optional clues if you&apos;re
+                stuck on this puzzle.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={dismissHintNotice}
+              aria-label="Dismiss hint notice"
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-rm-text-secondary transition-colors hover:bg-rm-bg-hover hover:text-rm-text"
+            >
+              <X size={18} />
+            </button>
+          </div>
+        </aside>
+      )}
+
+      {howToPlayOpen && (
+        <HowToPlayModal onClose={dismissHowToPlay} colors={colors} />
+      )}
+
       {hintsOpen && (
         <BaseModal
           onClose={() => {
@@ -1227,6 +1467,7 @@ function WordleActivityStageContent({
                   type="button"
                   onClick={() => setHintsOpen(false)}
                   aria-label="Close hints"
+                  className="flex h-10 w-10 items-center justify-center rounded-full transition-colors hover:bg-rm-bg-hover"
                 >
                   <X size={26} />
                 </button>

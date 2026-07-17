@@ -20,6 +20,8 @@ function wordleStorageKey(userId: string) {
 describe("WordleActivityStage reveal lifecycle", () => {
   beforeEach(() => {
     localStorage.clear();
+    localStorage.setItem("voice-wordle:how-to-play-seen", "true");
+    localStorage.setItem("voice-wordle:hint-notice-seen", "true");
     vi.stubGlobal(
       "fetch",
       vi.fn(() =>
@@ -37,6 +39,63 @@ describe("WordleActivityStage reveal lifecycle", () => {
         ),
       ),
     );
+  });
+
+  it("shows the how-to-play modal once and persists its dismissal", async () => {
+    localStorage.clear();
+
+    const { unmount } = render(
+      <WordleActivityStage
+        sfu={null}
+        channelId="channel-1"
+        localUserId="user-1"
+        participants={[{ userId: "user-1", name: "Ada" }]}
+      />,
+    );
+
+    const dialog = await screen.findByRole("dialog", {
+      name: "How To Play",
+    });
+    expect(dialog).toHaveTextContent("Guess the Wordle in 6 tries.");
+    fireEvent.click(screen.getByRole("button", { name: "Close how to play" }));
+    expect(localStorage.getItem("voice-wordle:how-to-play-seen")).toBe("true");
+
+    unmount();
+    render(
+      <WordleActivityStage
+        sfu={null}
+        channelId="channel-1"
+        localUserId="user-1"
+        participants={[{ userId: "user-1", name: "Ada" }]}
+      />,
+    );
+    expect(
+      screen.queryByRole("dialog", { name: "How To Play" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows a one-time hint notice with copy for optional in-game clues", async () => {
+    localStorage.clear();
+    localStorage.setItem("voice-wordle:how-to-play-seen", "true");
+
+    render(
+      <WordleActivityStage
+        sfu={null}
+        channelId="channel-1"
+        localUserId="user-1"
+        participants={[{ userId: "user-1", name: "Ada" }]}
+      />,
+    );
+
+    await screen.findByRole("button", { name: "Open hints" });
+    expect(screen.getByText("Want a hint?")).toBeInTheDocument();
+    expect(
+      screen.getByText(/Click the lightbulb to reveal optional clues/),
+    ).toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Dismiss hint notice" }),
+    );
+    expect(localStorage.getItem("voice-wordle:hint-notice-seen")).toBe("true");
   });
 
   it("keeps the final row visible and disables input until the reveal ends", async () => {
@@ -102,12 +161,16 @@ describe("WordleActivityStage reveal lifecycle", () => {
     fireEvent.click(screen.getByRole("button", { name: "ENTER" }));
 
     expect(screen.getByText("Not in word list.")).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveClass("absolute");
     expect(
       screen.queryByText("Revealing your solve..."),
     ).not.toBeInTheDocument();
     expect(
       screen.getByRole("img", { name: /Row 1, column 1: z/i }),
     ).toBeInTheDocument();
+    expect(
+      screen.getByRole("img", { name: /Row 1, column 1: z/i }),
+    ).toHaveClass("rm-wordle-invalid-letter");
     expect(sendAppEvent).not.toHaveBeenCalled();
     expect(localStorage.getItem(wordleStorageKey("user-1"))).toBeNull();
   });
