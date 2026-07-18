@@ -1451,7 +1451,7 @@ packages:
     resolution: {integrity: sha512-3Belt6tdc8bPgAtbcmdtNJlirVoTmEb5e2gC94PnkwEW9jI6CAHUeoG85tjWP5WquqfavoMtMwiG4P926ZKKuQ==}
 
   '@kova/react@https://codeload.github.com/115jon/kova/tar.gz/6bb0fe18fa99223e1277352ec60a7a1203d9cbc5#path:/packages/kova-react':
-    resolution: {integrity: sha512-tBG/4ddrMCHXs0TD8sWqr+qPFMJLKi+dZm8RpG4LXX2ZAHMqeLXZ9ZjWIzqeFU2mwRtwvXJ4Y8uIZEry7x/zXA==, tarball: https://codeload.github.com/115jon/kova/tar.gz/6bb0fe18fa99223e1277352ec60a7a1203d9cbc5#path:/packages/kova-react}
+    resolution: {integrity: sha512-tBG/4ddrMCHXs0TD8sWqr+qPFMJLKi+dZm8RpG4LXX2ZAHMqeLXZ9ZjWIzqeFU2mwRtwvXJ4Y8uIZEryx7/zXA==, tarball: https://codeload.github.com/115jon/kova/tar.gz/6bb0fe18fa99223e1277352ec60a7a1203d9cbc5#path:/packages/kova-react}
     version: 0.1.0
     peerDependencies:
       react: '>=18.0.0'
