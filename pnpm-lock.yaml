@@ -59,6 +59,9 @@ importers:
       '@tanstack/react-start':
         specifier: ^1.164.0
         version: 1.166.2(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(vite@7.3.1(@types/node@20.19.37)(jiti@2.7.0)(lightningcss@1.31.1)(terser@5.46.0)(tsx@4.21.0)(yaml@2.9.0))
+      '@tauri-apps/plugin-deep-link':
+        specifier: ^2.4.9
+        version: 2.4.9
       '@tauri-apps/plugin-opener':
         specifier: ^2.5.3
         version: 2.5.3
@@ -122,7 +125,7 @@ importers:
     devDependencies:
       '@cloudflare/vite-plugin':
         specifier: ^1.40.2
-        version: 1.40.2(bufferutil@4.1.0)(utf-8-validate@6.0.6)(vite@7.3.1(@types/node@20.19.37)(jiti@2.7.0)(lightningcss@1.31.1)(terser@5.46.0)(tsx@4.21.0)(yaml@2.9.0))(workerd@1.20260611.1)(wrangler@4.100.0(@cloudflare/workers-types@4.20260612.1)(bufferutil@4.1.0)(utf-8-validate@6.0.6))
+        version: 1.40.2(bufferutil@4.1.0)(utf-8-validate@6.0.6)(vite@7.3.1(@types/node@20.19.37)(jiti@2.7.0)(lightningcss@1.31.1)(terser@5.46.0)(tsx@4.21.0)(yaml@2.9.0))(workerd@1.20260708.1)(wrangler@4.110.0(@cloudflare/workers-types@4.20260612.1)(bufferutil@4.1.0)(utf-8-validate@6.0.6))
       '@cloudflare/vitest-pool-workers':
         specifier: 0.18.4
         version: 0.18.4(@cloudflare/workers-types@4.20260612.1)(@vitest/runner@4.1.9)(@vitest/snapshot@4.1.9)(bufferutil@4.1.0)(utf-8-validate@6.0.6)(vitest@4.1.9(@opentelemetry/api@1.9.1)(@types/node@20.19.37)(jsdom@29.1.1(@noble/hashes@2.2.0))(msw@2.12.10(@types/node@20.19.37)(typescript@5.9.3))(vite@7.3.1(@types/node@20.19.37)(jiti@2.7.0)(lightningcss@1.31.1)(terser@5.46.0)(tsx@4.21.0)(yaml@2.9.0)))
@@ -223,8 +226,8 @@ importers:
         specifier: ^4.1.9
         version: 4.1.9(@opentelemetry/api@1.9.1)(@types/node@20.19.37)(jsdom@29.1.1(@noble/hashes@2.2.0))(msw@2.12.10(@types/node@20.19.37)(typescript@5.9.3))(vite@7.3.1(@types/node@20.19.37)(jiti@2.7.0)(lightningcss@1.31.1)(terser@5.46.0)(tsx@4.21.0)(yaml@2.9.0))
       wrangler:
-        specifier: ^4.100.0
-        version: 4.100.0(@cloudflare/workers-types@4.20260612.1)(bufferutil@4.1.0)(utf-8-validate@6.0.6)
+        specifier: ^4.110.0
+        version: 4.110.0(@cloudflare/workers-types@4.20260612.1)(bufferutil@4.1.0)(utf-8-validate@6.0.6)
 
   desktop:
     dependencies:
@@ -237,6 +240,9 @@ importers:
       '@tauri-apps/plugin-autostart':
         specifier: ^2.5.1
         version: 2.5.1
+      '@tauri-apps/plugin-deep-link':
+        specifier: ^2.4.9
+        version: 2.4.9
       '@tauri-apps/plugin-notification':
         specifier: ^2.3.3
         version: 2.3.3
@@ -271,6 +277,9 @@ importers:
       '@tauri-apps/api':
         specifier: ^2.10.1
         version: 2.10.1
+      '@tauri-apps/plugin-deep-link':
+        specifier: ^2.4.9
+        version: 2.4.9
       '@tauri-apps/plugin-notification':
         specifier: ^2.3.3
         version: 2.3.3
@@ -1442,7 +1451,7 @@ packages:
     resolution: {integrity: sha512-3Belt6tdc8bPgAtbcmdtNJlirVoTmEb5e2gC94PnkwEW9jI6CAHUeoG85tjWP5WquqfavoMtMwiG4P926ZKKuQ==}
 
   '@kova/react@https://codeload.github.com/115jon/kova/tar.gz/6bb0fe18fa99223e1277352ec60a7a1203d9cbc5#path:/packages/kova-react':
-    resolution: {path: /packages/kova-react, tarball: https://codeload.github.com/115jon/kova/tar.gz/6bb0fe18fa99223e1277352ec60a7a1203d9cbc5}
+    resolution: {integrity: sha512-3c5h1UWgqrTm4TaEpT0hvoLf7Gb5Wi8zKd3HCsQKyEkYhGKbuIa6Prca8fXneIga6BCHua918e+P3hkcavkBHQ==, tarball: https://codeload.github.com/115jon/kova/tar.gz/6bb0fe18fa99223e1277352ec60a7a1203d9cbc5#path:/packages/kova-react}
     version: 0.1.0
     peerDependencies:
       react: '>=18.0.0'
@@ -3503,6 +3512,9 @@ packages:
   '@tauri-apps/api@2.10.1':
     resolution: {integrity: sha512-hKL/jWf293UDSUN09rR69hrToyIXBb8CjGaWC7gfinvnQrBVvnLr08FeFi38gxtugAVyVcTa5/FD/Xnkb1siBw==}
 
+  '@tauri-apps/api@2.11.1':
+    resolution: {integrity: sha512-M2FPuYND2m+wh5hfW9ZpSdxMPdEJovPBWwoHJmwUpysTYNHaOkVFN419m/K0LIgjb/7KU2vBgsUepJWugQCvAA==}
+
   '@tauri-apps/cli-darwin-arm64@2.10.1':
     resolution: {integrity: sha512-Z2OjCXiZ+fbYZy7PmP3WRnOpM9+Fy+oonKDEmUE6MwN4IGaYqgceTjwHucc/kEEYZos5GICve35f7ZiizgqEnQ==}
     engines: {node: '>= 10'}
@@ -3581,6 +3593,9 @@ packages:
 
   '@tauri-apps/plugin-autostart@2.5.1':
     resolution: {integrity: sha512-zS/xx7yzveCcotkA+8TqkI2lysmG2wvQXv2HGAVExITmnFfHAdj1arGsbbfs3o6EktRHf6l34pJxc3YGG2mg7w==}
+
+  '@tauri-apps/plugin-deep-link@2.4.9':
+    resolution: {integrity: sha512-u0SKOUHnJ1wqeqXsDFq2+kASCBj9xxbG0g9XZWPy9SOmU4wXtp6b/wiYpm6oH6/5fBTQsLqnLhIvqLBRpgHJlA==}
 
   '@tauri-apps/plugin-notification@2.3.3':
     resolution: {integrity: sha512-Zw+ZH18RJb41G4NrfHgIuofJiymusqN+q8fGUIIV7vyCH+5sSn5coqRv/MWB9qETsUs97vmU045q7OyseCV3Qg==}
@@ -6601,16 +6616,6 @@ packages:
     engines: {node: '>=16'}
     hasBin: true
 
-  wrangler@4.100.0:
-    resolution: {integrity: sha512-dSQO7DO+mD6XDzkVWIWBoGLO3yw+lacWSc/KhFvd7pgfpth+kX98qb5SGRHZN8ACCDhhfwzDLXwB6qHsIHhfBg==}
-    engines: {node: '>=22.0.0'}
-    hasBin: true
-    peerDependencies:
-      '@cloudflare/workers-types': ^4.20260611.1
-    peerDependenciesMeta:
-      '@cloudflare/workers-types':
-        optional: true
-
   wrangler@4.110.0:
     resolution: {integrity: sha512-xZeXKYi7hxQRF5anL+v77RkufJNpF9f3Eqeyqq2QBsETpLZgh0Agj0jJ6JPtkbgn6ukZdh8OK5egsGPWIditgg==}
     engines: {node: '>=22.0.0'}
@@ -7036,13 +7041,6 @@ snapshots:
       better-auth: 1.6.9(@cloudflare/workers-types@4.20260612.1)(@opentelemetry/api@1.9.1)(@tanstack/react-start@1.166.2(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(vite@7.3.1(@types/node@20.19.37)(jiti@2.7.0)(lightningcss@1.31.1)(terser@5.46.0)(tsx@4.21.0)(yaml@2.9.0)))(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(vitest@4.1.9(@opentelemetry/api@1.9.1)(@types/node@20.19.37)(jsdom@29.1.1(@noble/hashes@2.2.0))(msw@2.12.10(@types/node@20.19.37)(typescript@5.9.3))(vite@7.3.1(@types/node@20.19.37)(jiti@2.7.0)(lightningcss@1.31.1)(terser@5.46.0)(tsx@4.21.0)(yaml@2.9.0)))
       zod: 4.3.6
 
-  '@better-auth/api-key@1.6.9(@better-auth/core@1.6.9(@better-auth/utils@0.4.0)(@better-fetch/fetch@1.1.21)(@cloudflare/workers-types@4.20260612.1)(@opentelemetry/api@1.9.1)(better-call@1.3.5(zod@4.3.6))(jose@6.2.0)(kysely@0.28.17)(nanostores@1.3.0))(@better-auth/utils@0.4.0)(better-auth@1.6.9(@cloudflare/workers-types@4.20260612.1)(@opentelemetry/api@1.9.1)(@tanstack/react-start@1.166.2(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(vite@7.3.1(@types/node@20.19.37)(jiti@2.7.0)(lightningcss@1.31.1)(terser@5.46.0)(tsx@4.21.0)(yaml@2.9.0)))(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(vitest@4.1.9(@opentelemetry/api@1.9.1)(@types/node@20.19.37)(jsdom@29.1.1(@noble/hashes@2.2.0))(msw@2.12.10(@types/node@20.19.37)(typescript@6.0.3))(vite@7.3.1(@types/node@20.19.37)(jiti@2.7.0)(lightningcss@1.31.1)(terser@5.46.0)(tsx@4.21.0)(yaml@2.9.0))))':
-    dependencies:
-      '@better-auth/core': 1.6.9(@better-auth/utils@0.4.0)(@better-fetch/fetch@1.1.21)(@cloudflare/workers-types@4.20260612.1)(@opentelemetry/api@1.9.1)(better-call@1.3.5(zod@4.3.6))(jose@6.2.0)(kysely@0.28.17)(nanostores@1.3.0)
-      '@better-auth/utils': 0.4.0
-      better-auth: 1.6.9(@cloudflare/workers-types@4.20260612.1)(@opentelemetry/api@1.9.1)(@tanstack/react-start@1.166.2(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(vite@7.3.1(@types/node@20.19.37)(jiti@2.7.0)(lightningcss@1.31.1)(terser@5.46.0)(tsx@4.21.0)(yaml@2.9.0)))(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(vitest@4.1.9(@opentelemetry/api@1.9.1)(@types/node@20.19.37)(jsdom@29.1.1(@noble/hashes@2.2.0))(msw@2.12.10(@types/node@20.19.37)(typescript@6.0.3))(vite@7.3.1(@types/node@20.19.37)(jiti@2.7.0)(lightningcss@1.31.1)(terser@5.46.0)(tsx@4.21.0)(yaml@2.9.0)))
-      zod: 4.3.6
-
   '@better-auth/core@1.6.9(@better-auth/utils@0.4.0)(@better-fetch/fetch@1.1.21)(@cloudflare/workers-types@4.20260612.1)(@opentelemetry/api@1.9.1)(better-call@1.3.5(zod@4.3.6))(jose@6.2.0)(kysely@0.28.17)(nanostores@1.3.0)':
     dependencies:
       '@better-auth/utils': 0.4.0
@@ -7092,18 +7090,6 @@ snapshots:
       nanostores: 1.3.0
       zod: 4.3.6
 
-  '@better-auth/passkey@1.6.9(@better-auth/core@1.6.9(@better-auth/utils@0.4.0)(@better-fetch/fetch@1.1.21)(@cloudflare/workers-types@4.20260612.1)(@opentelemetry/api@1.9.1)(better-call@1.3.5(zod@4.3.6))(jose@6.2.0)(kysely@0.28.17)(nanostores@1.3.0))(@better-auth/utils@0.4.0)(@better-fetch/fetch@1.1.21)(better-auth@1.6.9(@cloudflare/workers-types@4.20260612.1)(@opentelemetry/api@1.9.1)(@tanstack/react-start@1.166.2(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(vite@7.3.1(@types/node@20.19.37)(jiti@2.7.0)(lightningcss@1.31.1)(terser@5.46.0)(tsx@4.21.0)(yaml@2.9.0)))(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(vitest@4.1.9(@opentelemetry/api@1.9.1)(@types/node@20.19.37)(jsdom@29.1.1(@noble/hashes@2.2.0))(msw@2.12.10(@types/node@20.19.37)(typescript@6.0.3))(vite@7.3.1(@types/node@20.19.37)(jiti@2.7.0)(lightningcss@1.31.1)(terser@5.46.0)(tsx@4.21.0)(yaml@2.9.0))))(better-call@1.3.5(zod@4.3.6))(nanostores@1.3.0)':
-    dependencies:
-      '@better-auth/core': 1.6.9(@better-auth/utils@0.4.0)(@better-fetch/fetch@1.1.21)(@cloudflare/workers-types@4.20260612.1)(@opentelemetry/api@1.9.1)(better-call@1.3.5(zod@4.3.6))(jose@6.2.0)(kysely@0.28.17)(nanostores@1.3.0)
-      '@better-auth/utils': 0.4.0
-      '@better-fetch/fetch': 1.1.21
-      '@simplewebauthn/browser': 13.3.0
-      '@simplewebauthn/server': 13.3.0
-      better-auth: 1.6.9(@cloudflare/workers-types@4.20260612.1)(@opentelemetry/api@1.9.1)(@tanstack/react-start@1.166.2(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(vite@7.3.1(@types/node@20.19.37)(jiti@2.7.0)(lightningcss@1.31.1)(terser@5.46.0)(tsx@4.21.0)(yaml@2.9.0)))(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(vitest@4.1.9(@opentelemetry/api@1.9.1)(@types/node@20.19.37)(jsdom@29.1.1(@noble/hashes@2.2.0))(msw@2.12.10(@types/node@20.19.37)(typescript@6.0.3))(vite@7.3.1(@types/node@20.19.37)(jiti@2.7.0)(lightningcss@1.31.1)(terser@5.46.0)(tsx@4.21.0)(yaml@2.9.0)))
-      better-call: 1.3.5(zod@4.3.6)
-      nanostores: 1.3.0
-      zod: 4.3.6
-
   '@better-auth/prisma-adapter@1.6.9(@better-auth/core@1.6.9(@better-auth/utils@0.4.0)(@better-fetch/fetch@1.1.21)(@cloudflare/workers-types@4.20260612.1)(@opentelemetry/api@1.9.1)(better-call@1.3.5(zod@4.3.6))(jose@6.2.0)(kysely@0.28.17)(nanostores@1.3.0))(@better-auth/utils@0.4.0)':
     dependencies:
       '@better-auth/core': 1.6.9(@better-auth/utils@0.4.0)(@better-fetch/fetch@1.1.21)(@cloudflare/workers-types@4.20260612.1)(@opentelemetry/api@1.9.1)(better-call@1.3.5(zod@4.3.6))(jose@6.2.0)(kysely@0.28.17)(nanostores@1.3.0)
@@ -7127,25 +7113,19 @@ snapshots:
 
   '@cloudflare/kv-asset-handler@0.5.0': {}
 
-  '@cloudflare/unenv-preset@2.16.1(unenv@2.0.0-rc.24)(workerd@1.20260611.1)':
-    dependencies:
-      unenv: 2.0.0-rc.24
-    optionalDependencies:
-      workerd: 1.20260611.1
-
   '@cloudflare/unenv-preset@2.16.1(unenv@2.0.0-rc.24)(workerd@1.20260708.1)':
     dependencies:
       unenv: 2.0.0-rc.24
     optionalDependencies:
       workerd: 1.20260708.1
 
-  '@cloudflare/vite-plugin@1.40.2(bufferutil@4.1.0)(utf-8-validate@6.0.6)(vite@7.3.1(@types/node@20.19.37)(jiti@2.7.0)(lightningcss@1.31.1)(terser@5.46.0)(tsx@4.21.0)(yaml@2.9.0))(workerd@1.20260611.1)(wrangler@4.100.0(@cloudflare/workers-types@4.20260612.1)(bufferutil@4.1.0)(utf-8-validate@6.0.6))':
+  '@cloudflare/vite-plugin@1.40.2(bufferutil@4.1.0)(utf-8-validate@6.0.6)(vite@7.3.1(@types/node@20.19.37)(jiti@2.7.0)(lightningcss@1.31.1)(terser@5.46.0)(tsx@4.21.0)(yaml@2.9.0))(workerd@1.20260708.1)(wrangler@4.110.0(@cloudflare/workers-types@4.20260612.1)(bufferutil@4.1.0)(utf-8-validate@6.0.6))':
     dependencies:
-      '@cloudflare/unenv-preset': 2.16.1(unenv@2.0.0-rc.24)(workerd@1.20260611.1)
+      '@cloudflare/unenv-preset': 2.16.1(unenv@2.0.0-rc.24)(workerd@1.20260708.1)
       miniflare: 4.20260611.0(bufferutil@4.1.0)(utf-8-validate@6.0.6)
       unenv: 2.0.0-rc.24
       vite: 7.3.1(@types/node@20.19.37)(jiti@2.7.0)(lightningcss@1.31.1)(terser@5.46.0)(tsx@4.21.0)(yaml@2.9.0)
-      wrangler: 4.100.0(@cloudflare/workers-types@4.20260612.1)(bufferutil@4.1.0)(utf-8-validate@6.0.6)
+      wrangler: 4.110.0(@cloudflare/workers-types@4.20260612.1)(bufferutil@4.1.0)(utf-8-validate@6.0.6)
       ws: 8.20.1(bufferutil@4.1.0)(utf-8-validate@6.0.6)
     transitivePeerDependencies:
       - bufferutil
@@ -7778,8 +7758,8 @@ snapshots:
 
   '@kova/react@https://codeload.github.com/115jon/kova/tar.gz/6bb0fe18fa99223e1277352ec60a7a1203d9cbc5#path:/packages/kova-react(@better-auth/core@1.6.9(@better-auth/utils@0.4.0)(@better-fetch/fetch@1.1.21)(@cloudflare/workers-types@4.20260612.1)(@opentelemetry/api@1.9.1)(better-call@1.3.5(zod@4.3.6))(jose@6.2.0)(kysely@0.28.17)(nanostores@1.3.0))(@better-auth/utils@0.4.0)(@better-fetch/fetch@1.1.21)(@cloudflare/workers-types@4.20260612.1)(@opentelemetry/api@1.9.1)(@tanstack/react-start@1.166.2(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(vite@7.3.1(@types/node@20.19.37)(jiti@2.7.0)(lightningcss@1.31.1)(terser@5.46.0)(tsx@4.21.0)(yaml@2.9.0)))(better-call@1.3.5(zod@4.3.6))(nanostores@1.3.0)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(vitest@4.1.9(@opentelemetry/api@1.9.1)(@types/node@20.19.37)(jsdom@29.1.1(@noble/hashes@2.2.0))(msw@2.12.10(@types/node@20.19.37)(typescript@6.0.3))(vite@7.3.1(@types/node@20.19.37)(jiti@2.7.0)(lightningcss@1.31.1)(terser@5.46.0)(tsx@4.21.0)(yaml@2.9.0)))':
     dependencies:
-      '@better-auth/api-key': 1.6.9(@better-auth/core@1.6.9(@better-auth/utils@0.4.0)(@better-fetch/fetch@1.1.21)(@cloudflare/workers-types@4.20260612.1)(@opentelemetry/api@1.9.1)(better-call@1.3.5(zod@4.3.6))(jose@6.2.0)(kysely@0.28.17)(nanostores@1.3.0))(@better-auth/utils@0.4.0)(better-auth@1.6.9(@cloudflare/workers-types@4.20260612.1)(@opentelemetry/api@1.9.1)(@tanstack/react-start@1.166.2(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(vite@7.3.1(@types/node@20.19.37)(jiti@2.7.0)(lightningcss@1.31.1)(terser@5.46.0)(tsx@4.21.0)(yaml@2.9.0)))(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(vitest@4.1.9(@opentelemetry/api@1.9.1)(@types/node@20.19.37)(jsdom@29.1.1(@noble/hashes@2.2.0))(msw@2.12.10(@types/node@20.19.37)(typescript@6.0.3))(vite@7.3.1(@types/node@20.19.37)(jiti@2.7.0)(lightningcss@1.31.1)(terser@5.46.0)(tsx@4.21.0)(yaml@2.9.0))))
-      '@better-auth/passkey': 1.6.9(@better-auth/core@1.6.9(@better-auth/utils@0.4.0)(@better-fetch/fetch@1.1.21)(@cloudflare/workers-types@4.20260612.1)(@opentelemetry/api@1.9.1)(better-call@1.3.5(zod@4.3.6))(jose@6.2.0)(kysely@0.28.17)(nanostores@1.3.0))(@better-auth/utils@0.4.0)(@better-fetch/fetch@1.1.21)(better-auth@1.6.9(@cloudflare/workers-types@4.20260612.1)(@opentelemetry/api@1.9.1)(@tanstack/react-start@1.166.2(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(vite@7.3.1(@types/node@20.19.37)(jiti@2.7.0)(lightningcss@1.31.1)(terser@5.46.0)(tsx@4.21.0)(yaml@2.9.0)))(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(vitest@4.1.9(@opentelemetry/api@1.9.1)(@types/node@20.19.37)(jsdom@29.1.1(@noble/hashes@2.2.0))(msw@2.12.10(@types/node@20.19.37)(typescript@6.0.3))(vite@7.3.1(@types/node@20.19.37)(jiti@2.7.0)(lightningcss@1.31.1)(terser@5.46.0)(tsx@4.21.0)(yaml@2.9.0))))(better-call@1.3.5(zod@4.3.6))(nanostores@1.3.0)
+      '@better-auth/api-key': 1.6.9(@better-auth/core@1.6.9(@better-auth/utils@0.4.0)(@better-fetch/fetch@1.1.21)(@cloudflare/workers-types@4.20260612.1)(@opentelemetry/api@1.9.1)(better-call@1.3.5(zod@4.3.6))(jose@6.2.0)(kysely@0.28.17)(nanostores@1.3.0))(@better-auth/utils@0.4.0)(better-auth@1.6.9(@cloudflare/workers-types@4.20260612.1)(@opentelemetry/api@1.9.1)(@tanstack/react-start@1.166.2(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(vite@7.3.1(@types/node@20.19.37)(jiti@2.7.0)(lightningcss@1.31.1)(terser@5.46.0)(tsx@4.21.0)(yaml@2.9.0)))(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(vitest@4.1.9(@opentelemetry/api@1.9.1)(@types/node@20.19.37)(jsdom@29.1.1(@noble/hashes@2.2.0))(msw@2.12.10(@types/node@20.19.37)(typescript@5.9.3))(vite@7.3.1(@types/node@20.19.37)(jiti@2.7.0)(lightningcss@1.31.1)(terser@5.46.0)(tsx@4.21.0)(yaml@2.9.0))))
+      '@better-auth/passkey': 1.6.9(@better-auth/core@1.6.9(@better-auth/utils@0.4.0)(@better-fetch/fetch@1.1.21)(@cloudflare/workers-types@4.20260612.1)(@opentelemetry/api@1.9.1)(better-call@1.3.5(zod@4.3.6))(jose@6.2.0)(kysely@0.28.17)(nanostores@1.3.0))(@better-auth/utils@0.4.0)(@better-fetch/fetch@1.1.21)(better-auth@1.6.9(@cloudflare/workers-types@4.20260612.1)(@opentelemetry/api@1.9.1)(@tanstack/react-start@1.166.2(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(vite@7.3.1(@types/node@20.19.37)(jiti@2.7.0)(lightningcss@1.31.1)(terser@5.46.0)(tsx@4.21.0)(yaml@2.9.0)))(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(vitest@4.1.9(@opentelemetry/api@1.9.1)(@types/node@20.19.37)(jsdom@29.1.1(@noble/hashes@2.2.0))(msw@2.12.10(@types/node@20.19.37)(typescript@5.9.3))(vite@7.3.1(@types/node@20.19.37)(jiti@2.7.0)(lightningcss@1.31.1)(terser@5.46.0)(tsx@4.21.0)(yaml@2.9.0))))(better-call@1.3.5(zod@4.3.6))(nanostores@1.3.0)
       better-auth: 1.6.9(@cloudflare/workers-types@4.20260612.1)(@opentelemetry/api@1.9.1)(@tanstack/react-start@1.166.2(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(vite@7.3.1(@types/node@20.19.37)(jiti@2.7.0)(lightningcss@1.31.1)(terser@5.46.0)(tsx@4.21.0)(yaml@2.9.0)))(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(vitest@4.1.9(@opentelemetry/api@1.9.1)(@types/node@20.19.37)(jsdom@29.1.1(@noble/hashes@2.2.0))(msw@2.12.10(@types/node@20.19.37)(typescript@6.0.3))(vite@7.3.1(@types/node@20.19.37)(jiti@2.7.0)(lightningcss@1.31.1)(terser@5.46.0)(tsx@4.21.0)(yaml@2.9.0)))
       react: 19.2.3
       react-dom: 19.2.3(react@19.2.3)
@@ -9667,6 +9647,8 @@ snapshots:
 
   '@tauri-apps/api@2.10.1': {}
 
+  '@tauri-apps/api@2.11.1': {}
+
   '@tauri-apps/cli-darwin-arm64@2.10.1':
     optional: true
 
@@ -9717,6 +9699,10 @@ snapshots:
   '@tauri-apps/plugin-autostart@2.5.1':
     dependencies:
       '@tauri-apps/api': 2.10.1
+
+  '@tauri-apps/plugin-deep-link@2.4.9':
+    dependencies:
+      '@tauri-apps/api': 2.11.1
 
   '@tauri-apps/plugin-notification@2.3.3':
     dependencies:
@@ -13095,23 +13081,6 @@ snapshots:
       '@cloudflare/workerd-linux-64': 1.20260708.1
       '@cloudflare/workerd-linux-arm64': 1.20260708.1
       '@cloudflare/workerd-windows-64': 1.20260708.1
-
-  wrangler@4.100.0(@cloudflare/workers-types@4.20260612.1)(bufferutil@4.1.0)(utf-8-validate@6.0.6):
-    dependencies:
-      '@cloudflare/kv-asset-handler': 0.5.0
-      '@cloudflare/unenv-preset': 2.16.1(unenv@2.0.0-rc.24)(workerd@1.20260611.1)
-      blake3-wasm: 2.1.5
-      esbuild: 0.27.3
-      miniflare: 4.20260611.0(bufferutil@4.1.0)(utf-8-validate@6.0.6)
-      path-to-regexp: 6.3.0
-      unenv: 2.0.0-rc.24
-      workerd: 1.20260611.1
-    optionalDependencies:
-      '@cloudflare/workers-types': 4.20260612.1
-      fsevents: 2.3.3
-    transitivePeerDependencies:
-      - bufferutil
-      - utf-8-validate
 
   wrangler@4.110.0(@cloudflare/workers-types@4.20260612.1)(bufferutil@4.1.0)(utf-8-validate@6.0.6):
     dependencies:
