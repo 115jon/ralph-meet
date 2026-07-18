@@ -122,14 +122,16 @@ export function BaseModal({
     modalStack.push(root);
     const restoreBackground = isolateBackground(root);
     const focusable = getFocusableElements(root);
-    (focusable[0] ?? root).focus();
+    (focusable[0] ?? root).focus({ preventScroll: true });
 
     return () => {
       const index = modalStack.indexOf(root);
       if (index >= 0) modalStack.splice(index, 1);
       restoreBackground();
       const previousFocus = previousFocusRef.current;
-      if (previousFocus?.isConnected) previousFocus.focus();
+      if (previousFocus?.isConnected) {
+        previousFocus.focus({ preventScroll: true });
+      }
     };
   }, []);
 
