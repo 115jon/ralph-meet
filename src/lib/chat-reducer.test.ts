@@ -65,6 +65,23 @@ describe("chatReducer message snapshots", () => {
 
     expect(next.messages[0]?.content).toBe("edited");
   });
+
+  it("marks cached channels stale without removing live messages", () => {
+    const cached = message("cached", "2026-07-16T00:00:01.000Z");
+    const state = {
+      ...initialState,
+      messagesByChannelId: { "channel-1": [cached], "channel-2": [] },
+      messagesLoadedByChannelId: { "channel-1": true, "channel-2": true },
+    };
+
+    const next = chatReducer(state, { type: "MARK_MESSAGE_CACHES_STALE" });
+
+    expect(next.messagesByChannelId["channel-1"]).toEqual([cached]);
+    expect(next.messagesLoadedByChannelId).toEqual({
+      "channel-1": false,
+      "channel-2": false,
+    });
+  });
 });
 
 describe("chatReducer speaking sources", () => {

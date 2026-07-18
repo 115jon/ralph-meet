@@ -162,6 +162,33 @@ async function nextMessageWithOpcodeWithin(
   ]);
 }
 
+async function nextDispatchEvent(socket: WebSocket, eventName: string) {
+  while (true) {
+    const message = await nextJsonMessage(socket);
+    if (
+      message.op === 19 &&
+      (message.d as { event?: unknown } | null)?.event === eventName
+    )
+      return message;
+  }
+}
+
+async function nextDispatchEventWithin(
+  socket: WebSocket,
+  eventName: string,
+  timeoutMs = 2_000,
+) {
+  return Promise.race([
+    nextDispatchEvent(socket, eventName),
+    new Promise<never>((_, reject) => {
+      setTimeout(
+        () => reject(new Error(`Timed out waiting for event ${eventName}`)),
+        timeoutMs,
+      );
+    }),
+  ]);
+}
+
 async function hasMessageWithOpcode(
   socket: WebSocket,
   opcode: number,
@@ -373,7 +400,6 @@ describe("MeetingRoom lifecycle", () => {
     await env.DB.prepare(
       "CREATE TABLE IF NOT EXISTS server_members (server_id TEXT NOT NULL, user_id TEXT NOT NULL)",
     ).run();
-
     const channelId = `private-${crypto.randomUUID()}`;
     await env.DB.prepare(
       "INSERT INTO channels (id, server_id, channel_type) VALUES (?, ?, 'text')",
@@ -938,69 +964,315 @@ describe("MeetingRoom lifecycle", () => {
     callee.close();
   });
 
-  it("replays retained dispatches before Resumed after a valid Resume", async () => {
+  it("replays a message created during the disconnect grace period before Resumed", async () => {
+    await env.DB.prepare(
+      "CREATE TABLE IF NOT EXISTS channels (id TEXT PRIMARY KEY, server_id TEXT, channel_type TEXT NOT NULL)",
+    ).run();
+    await env.DB.prepare(
+      "CREATE TABLE IF NOT EXISTS server_members (server_id TEXT NOT NULL, user_id TEXT NOT NULL)",
+    ).run();
+    await env.DB.prepare(
+      "CREATE TABLE IF NOT EXISTS roles (id TEXT PRIMARY KEY, permissions INTEGER NOT NULL, position INTEGER NOT NULL, is_default INTEGER NOT NULL)",
+    ).run();
+    await env.DB.prepare(
+      "CREATE TABLE IF NOT EXISTS member_roles (server_id TEXT NOT NULL, user_id TEXT NOT NULL, role_id TEXT NOT NULL)",
+    ).run();
+    await env.DB.prepare(
+      "CREATE TABLE IF NOT EXISTS channel_permission_overrides (channel_id TEXT NOT NULL, target_id TEXT NOT NULL, target_type TEXT NOT NULL, allow INTEGER NOT NULL, deny INTEGER NOT NULL)",
+    ).run();
     const roomName = crypto.randomUUID();
-    const original = await openMeetingSocket(roomName);
-    const originalReady = await identifyMeetingSocket(original);
-    const other = await openMeetingSocket(roomName);
-    await identifyMeetingSocket(other);
+    const serverId = `server-${crypto.randomUUID()}`;
+    const channelId = `channel-${crypto.randomUUID()}`;
+    const roleId = `role-${crypto.randomUUID()}`;
+    await env.DB.prepare(
+      "INSERT INTO channels (id, server_id, channel_type) VALUES (?, ?, 'text')",
+    )
+      .bind(channelId, serverId)
+      .run();
+    await env.DB.prepare(
+      "INSERT INTO server_members (server_id, user_id) VALUES (?, ?)",
+    )
+      .bind(serverId, "user-test")
+      .run();
+    await env.DB.prepare(
+      "INSERT INTO roles (id, permissions, position, is_default) VALUES (?, ?, 0, 1)",
+    )
+      .bind(roleId, PERMISSIONS.VIEW_CHANNELS)
+      .run();
+    await env.DB.prepare(
+      "INSERT INTO member_roles (server_id, user_id, role_id) VALUES (?, ?, ?)",
+    )
+      .bind(serverId, "user-test", roleId)
+      .run();
 
-    original.send(JSON.stringify({ op: 3, d: { seq_ack: 0 } }));
-    await expect(nextMessageWithOpcode(original, 6)).resolves.toMatchObject({
-      op: 6,
-      d: { seq: 1 },
-    });
+    const original = await openMeetingSocket(roomName);
+    const ready = await identifyMeetingSocket(original);
+    original.send(JSON.stringify({ op: 35, d: { server_id: serverId } }));
+    await new Promise((resolve) => setTimeout(resolve, 25));
+
+    original.close();
+    await new Promise((resolve) => setTimeout(resolve, 20));
 
     const room = env.MEETING_ROOM.get(env.MEETING_ROOM.idFromName(roomName));
-    const dispatch = nextMessageWithOpcodeWithin(original, 19);
+    await room.fetch("https://internal/broadcast", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        server_id: serverId,
+        event: "MESSAGE_CREATE",
+        data: { id: "during-disconnect", channel_id: channelId },
+      }),
+    });
+
+    const resumedSocket = await openMeetingSocket(roomName);
+    const orderedMessages: Array<{ op: number; d: unknown }> = [];
+    const ordered = new Promise<Array<{ op: number; d: unknown }>>(
+      (resolve) => {
+        const onMessage = (event: MessageEvent<string>) => {
+          const message = JSON.parse(event.data) as { op: number; d: unknown };
+          if (
+            message.op === 9 ||
+            (message.op === 19 &&
+              (message.d as { event?: unknown } | null)?.event ===
+                "MESSAGE_CREATE")
+          ) {
+            orderedMessages.push(message);
+          }
+          if (orderedMessages.length === 2) {
+            resumedSocket.removeEventListener("message", onMessage);
+            resolve(orderedMessages);
+          }
+        };
+        resumedSocket.addEventListener("message", onMessage);
+      },
+    );
+    resumedSocket.send(
+      JSON.stringify({
+        op: 7,
+        d: { session_id: ready.participant_id, seq_ack: 0 },
+      }),
+    );
+
+    const messages = await ordered;
+    expect(messages[0]).toMatchObject({
+      op: 19,
+      d: { event: "MESSAGE_CREATE", data: { id: "during-disconnect" } },
+    });
+    expect(messages[1]).toMatchObject({ op: 9 });
+
+    resumedSocket.close();
+  });
+
+  it("assigns distinct monotonic sequences to replayable dispatches", async () => {
+    const roomName = crypto.randomUUID();
+    const socket = await openMeetingSocket(roomName);
+    await identifyMeetingSocket(socket);
+    const room = env.MEETING_ROOM.get(env.MEETING_ROOM.idFromName(roomName));
+
+    const first = nextMessageWithOpcode(socket, 19);
     await room.fetch("https://internal/broadcast", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         broadcast_all: true,
-        event: "REPLAY_ME",
+        event: "SEQUENCE_ONE",
         data: {},
       }),
     });
-    await expect(dispatch).resolves.toMatchObject({
-      op: 19,
-      d: { event: "REPLAY_ME" },
+    const firstMessage = await first;
+
+    const second = nextMessageWithOpcode(socket, 19);
+    await room.fetch("https://internal/broadcast", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        broadcast_all: true,
+        event: "SEQUENCE_TWO",
+        data: {},
+      }),
     });
 
+    const secondMessage = await second;
+    const firstSeq = (firstMessage.d as { seq: number }).seq;
+    const secondSeq = (secondMessage.d as { seq: number }).seq;
+    expect(firstSeq).toBeTypeOf("number");
+    expect(secondSeq).toBe(firstSeq + 1);
+    socket.close();
+  });
+
+  it("rejects Resume when the requested cursor is outside the replay window", async () => {
+    const roomName = crypto.randomUUID();
+    const original = await openMeetingSocket(roomName);
+    const ready = await identifyMeetingSocket(original);
+    const room = env.MEETING_ROOM.get(env.MEETING_ROOM.idFromName(roomName));
+
+    for (let index = 0; index < 105; index += 1) {
+      await room.fetch("https://internal/broadcast", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          broadcast_all: true,
+          event: `WINDOW_${index}`,
+          data: {},
+        }),
+      });
+    }
     original.close();
-    await new Promise((resolve) => setTimeout(resolve, 20));
 
     const resumedSocket = await openMeetingSocket(roomName);
-    const replay = nextJsonMessage(resumedSocket);
+    const error = nextJsonMessage(resumedSocket);
     resumedSocket.send(
       JSON.stringify({
         op: 7,
-        d: { session_id: originalReady.participant_id, seq_ack: 0 },
+        d: { session_id: ready.participant_id, seq_ack: 0 },
       }),
     );
-
-    await expect(replay).resolves.toMatchObject({
-      op: 19,
-      d: { event: "REPLAY_ME" },
+    await expect(error).resolves.toMatchObject({
+      op: 18,
+      d: { code: 4006 },
     });
-    expect(await nextJsonMessage(resumedSocket)).toMatchObject({ op: 9 });
+    resumedSocket.close();
+  });
 
-    const duplicateSocket = await openMeetingSocket(roomName);
-    const duplicateError = nextJsonMessage(duplicateSocket);
-    duplicateSocket.send(
+  it("invalidates continuity after the disconnected replay write budget is spent", async () => {
+    const roomName = crypto.randomUUID();
+    const original = await openMeetingSocket(roomName);
+    const ready = await identifyMeetingSocket(original);
+    original.close();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    const room = env.MEETING_ROOM.get(env.MEETING_ROOM.idFromName(roomName));
+    for (let index = 0; index < 33; index += 1) {
+      await room.fetch("https://internal/broadcast", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          broadcast_all: true,
+          event: `OFFLINE_${index}`,
+          data: {},
+        }),
+      });
+    }
+
+    const resumedSocket = await openMeetingSocket(roomName);
+    const error = nextJsonMessage(resumedSocket);
+    resumedSocket.send(
       JSON.stringify({
         op: 7,
-        d: { session_id: originalReady.participant_id, seq_ack: 0 },
+        d: { session_id: ready.participant_id, seq_ack: 0 },
       }),
     );
-    await expect(duplicateError).resolves.toMatchObject({
+
+    await expect(error).resolves.toMatchObject({
       op: 18,
-      d: { code: 4006, message: "Session not found for resume" },
+      d: { code: 4006 },
+    });
+    resumedSocket.close();
+  });
+
+  it("rejects Resume for an active session that has not disconnected", async () => {
+    const roomName = crypto.randomUUID();
+    const original = await openMeetingSocket(roomName);
+    const ready = await identifyMeetingSocket(original);
+    const takeover = await openMeetingSocket(roomName);
+    const error = nextJsonMessage(takeover);
+
+    takeover.send(
+      JSON.stringify({
+        op: 7,
+        d: { session_id: ready.participant_id, seq_ack: 0 },
+      }),
+    );
+
+    await expect(error).resolves.toMatchObject({
+      op: 18,
+      d: { code: 4006 },
     });
 
-    other.close();
-    resumedSocket.close();
-    duplicateSocket.close();
+    original.close();
+    takeover.close();
+  });
+
+  it("delivers an inactive server-channel message once and filters hidden channels", async () => {
+    await env.DB.prepare(
+      "CREATE TABLE IF NOT EXISTS channels (id TEXT PRIMARY KEY, server_id TEXT, channel_type TEXT NOT NULL)",
+    ).run();
+    await env.DB.prepare(
+      "CREATE TABLE IF NOT EXISTS server_members (server_id TEXT NOT NULL, user_id TEXT NOT NULL)",
+    ).run();
+    await env.DB.prepare(
+      "CREATE TABLE IF NOT EXISTS roles (id TEXT PRIMARY KEY, permissions INTEGER NOT NULL, position INTEGER NOT NULL, is_default INTEGER NOT NULL)",
+    ).run();
+    await env.DB.prepare(
+      "CREATE TABLE IF NOT EXISTS member_roles (server_id TEXT NOT NULL, user_id TEXT NOT NULL, role_id TEXT NOT NULL)",
+    ).run();
+    await env.DB.prepare(
+      "CREATE TABLE IF NOT EXISTS channel_permission_overrides (channel_id TEXT NOT NULL, target_id TEXT NOT NULL, target_type TEXT NOT NULL, allow INTEGER NOT NULL, deny INTEGER NOT NULL)",
+    ).run();
+    const roomName = crypto.randomUUID();
+    const serverId = `server-${crypto.randomUUID()}`;
+    const visibleChannelId = `visible-${crypto.randomUUID()}`;
+    const hiddenChannelId = `hidden-${crypto.randomUUID()}`;
+    const roleId = `role-${crypto.randomUUID()}`;
+    await env.DB.prepare(
+      "INSERT INTO channels (id, server_id, channel_type) VALUES (?, ?, 'text'), (?, ?, 'text')",
+    )
+      .bind(visibleChannelId, serverId, hiddenChannelId, serverId)
+      .run();
+    await env.DB.prepare(
+      "INSERT INTO server_members (server_id, user_id) VALUES (?, ?)",
+    )
+      .bind(serverId, "user-test")
+      .run();
+    await env.DB.prepare(
+      "INSERT INTO roles (id, permissions, position, is_default) VALUES (?, ?, 0, 1)",
+    )
+      .bind(roleId, PERMISSIONS.VIEW_CHANNELS)
+      .run();
+    await env.DB.prepare(
+      "INSERT INTO member_roles (server_id, user_id, role_id) VALUES (?, ?, ?)",
+    )
+      .bind(serverId, "user-test", roleId)
+      .run();
+    await env.DB.prepare(
+      "INSERT INTO channel_permission_overrides (channel_id, target_id, target_type, allow, deny) VALUES (?, ?, 'user', 0, ?)",
+    )
+      .bind(hiddenChannelId, "user-test", PERMISSIONS.VIEW_CHANNELS)
+      .run();
+
+    const socket = await openMeetingSocket(roomName);
+    await identifyMeetingSocket(socket);
+    socket.send(JSON.stringify({ op: 35, d: { server_id: serverId } }));
+    await new Promise((resolve) => setTimeout(resolve, 25));
+
+    const room = env.MEETING_ROOM.get(env.MEETING_ROOM.idFromName(roomName));
+    const visible = nextMessageWithOpcodeWithin(socket, 19);
+    await room.fetch("https://internal/broadcast", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        server_id: serverId,
+        event: "MESSAGE_CREATE",
+        data: { id: "inactive-visible", channel_id: visibleChannelId },
+      }),
+    });
+    await expect(visible).resolves.toMatchObject({
+      d: { data: { id: "inactive-visible" } },
+    });
+    await expect(hasMessageWithOpcode(socket, 19, 100)).resolves.toBe(false);
+
+    const hidden = hasMessageWithOpcode(socket, 19, 150);
+    await room.fetch("https://internal/broadcast", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        server_id: serverId,
+        event: "MESSAGE_CREATE",
+        data: { id: "inactive-hidden", channel_id: hiddenChannelId },
+      }),
+    });
+    await expect(hidden).resolves.toBe(false);
+    socket.close();
   });
 
   it("leaves immediately when intentional and defers leave on abrupt close", async () => {

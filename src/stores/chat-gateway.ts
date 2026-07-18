@@ -105,6 +105,8 @@ export function createChatGateway(
   let pendingQueue: object[] = [];
   let clerkUserId: string | null | undefined = null;
   let gatewaySessionId: string | null = null;
+  let lastReceivedSeq = 0;
+  let resumeInFlight = false;
   const subscribedServerIds = new Set<string>();
   let subscribedChannelId: string | null = null;
 
@@ -175,7 +177,7 @@ export function createChatGateway(
     return false;
   };
 
-  const handleDispatch = (d: { event: string; data: any }) => {
+  const handleDispatch = (d: { event: string; data: any; seq?: number }) => {
     if (import.meta.env.DEV) chatLog.info(`Event: ${d.event}`, d.data);
     if (typeof window !== "undefined") {
       window.dispatchEvent(
@@ -828,71 +830,96 @@ export function createChatGateway(
   let hasConnectedBefore = false;
   let releaseReconnectSoundSuppression: (() => void) | null = null;
 
+  const sendIdentify = () => {
+    if (!clerkUserId) return;
+    sendGateway({
+      op: 0,
+      d: {
+        name: "ChatClient",
+        clerk_user_id: clerkUserId,
+        platform: getCurrentPresencePlatform(),
+      },
+    });
+    identified = true;
+  };
+
+  const handleGatewayReady = (sessionId?: string) => {
+    if (sessionId) {
+      gatewaySessionId = sessionId;
+      lastReceivedSeq = 0;
+    }
+    resumeInFlight = false;
+    identified = true;
+    gatewayReady = true;
+    const currentStatus = get().user?.status;
+    if (currentStatus && currentStatus !== "online") {
+      sendGateway({ op: 26, d: { status: currentStatus } });
+    }
+    for (const queued of pendingQueue) {
+      sendGateway(queued);
+    }
+    pendingQueue = [];
+
+    const servers = get().servers;
+    for (const server of servers) {
+      subscribeServer(server.id);
+    }
+
+    const activeChannel = get().activeChannelId;
+    if (activeChannel) {
+      subscribeChannel(activeChannel);
+    }
+
+    if (hasConnectedBefore) {
+      chatLog.info("Reconnected — reloading data");
+      dispatch({ type: "MARK_MESSAGE_CACHES_STALE" });
+      releaseReconnectSoundSuppression?.();
+      const release = beginReconnectSoundSuppression();
+      releaseReconnectSoundSuppression = release;
+
+      void Promise.allSettled([
+        actions.bootstrapChat({ deferNonCritical: true }),
+        activeChannel ? actions.loadMessages(activeChannel) : Promise.resolve(),
+      ]).finally(() => {
+        release();
+        if (releaseReconnectSoundSuppression === release) {
+          releaseReconnectSoundSuppression = null;
+        }
+      });
+    }
+    hasConnectedBefore = true;
+  };
+
   const handleGatewayMessage = (msg: { op: number; d: any }) => {
+    if (
+      msg.op !== 6 &&
+      typeof msg.d?.seq === "number" &&
+      Number.isFinite(msg.d.seq)
+    ) {
+      lastReceivedSeq = Math.max(lastReceivedSeq, msg.d.seq);
+    }
+
     switch (msg.op) {
       case 8: {
         const interval = msg.d?.heartbeat_interval ?? 45000;
-        if (clerkUserId) {
+        if (gatewaySessionId && hasConnectedBefore) {
+          resumeInFlight = true;
           sendGateway({
-            op: 0,
-            d: {
-              name: "ChatClient",
-              clerk_user_id: clerkUserId,
-              platform: getCurrentPresencePlatform(),
-            },
+            op: 7,
+            d: { session_id: gatewaySessionId, seq_ack: lastReceivedSeq },
           });
-          identified = true;
+        } else {
+          sendIdentify();
         }
         hb.start(interval);
         break;
       }
       case 2: {
-        gatewaySessionId =
+        handleGatewayReady(
           typeof msg.d?.participant_id === "string"
             ? msg.d.participant_id
-            : gatewaySessionId;
-        gatewayReady = true;
-        const currentStatus = get().user?.status;
-        if (currentStatus && currentStatus !== "online") {
-          sendGateway({ op: 26, d: { status: currentStatus } });
-        }
-        for (const queued of pendingQueue) {
-          sendGateway(queued);
-        }
-        pendingQueue = [];
-
-        // Subscribe to all servers for message delivery (Op 35). The helper
-        // avoids duplicating subscriptions already queued before READY.
-        const servers = get().servers;
-        for (const server of servers) {
-          subscribeServer(server.id);
-        }
-
-        const activeChannel = get().activeChannelId;
-        if (activeChannel) {
-          subscribeChannel(activeChannel);
-        }
-
-        // On reconnect, reload all core data so the UI is repopulated
-        if (hasConnectedBefore) {
-          chatLog.info("Reconnected — reloading data");
-          releaseReconnectSoundSuppression?.();
-          const release = beginReconnectSoundSuppression();
-          releaseReconnectSoundSuppression = release;
-
-          void Promise.allSettled([
-            actions.bootstrapChat({ deferNonCritical: true }),
-            activeChannel
-              ? actions.loadMessages(activeChannel)
-              : Promise.resolve(),
-          ]).finally(() => {
-            release();
-            if (releaseReconnectSoundSuppression === release) {
-              releaseReconnectSoundSuppression = null;
-            }
-          });
-        }
-        hasConnectedBefore = true;
+            : undefined,
+        );
         break;
       }
       case 6: {
@@ -902,6 +929,28 @@ export function createChatGateway(
       }
       case 19: {
         handleDispatch(msg.d);
+        break;
+      }
+      case 9:
+        handleGatewayReady();
+        break;
+      case 18: {
+        const code = msg.d?.code;
+        const message = typeof msg.d?.message === "string" ? msg.d.message : "";
+        if (
+          resumeInFlight &&
+          (code === 4006 || message.toLowerCase().includes("continuity"))
+        ) {
+          resumeInFlight = false;
+          gatewaySessionId = null;
+          lastReceivedSeq = 0;
+          identified = false;
+          sendIdentify();
+        } else if (resumeInFlight && code === 4008) {
+          resumeInFlight = false;
+          gatewaySessionId = null;
+          lastReceivedSeq = 0;
+        }
         break;
       }
     }
@@ -962,6 +1011,8 @@ export function createChatGateway(
     gatewayReady = false;
     identified = false;
     gatewaySessionId = null;
+    lastReceivedSeq = 0;
+    resumeInFlight = false;
     dispatch({ type: "SET_CONNECTED", connected: false });
     reconnectAttempt = 0;
     dispatch({ type: "SET_RECONNECT_ATTEMPT", attempt: 0 });
@@ -1024,6 +1075,7 @@ export function createChatGateway(
         ws = null;
         gatewayReady = false;
         identified = false;
+        resumeInFlight = false;
         resetSubscriptions();
 
         if (event.code === 4008) {
@@ -1044,6 +1096,19 @@ export function createChatGateway(
   };
 
   const setClerkUserId = (userId: string | null | undefined) => {
+    if (clerkUserId !== userId) {
+      if (ws || connecting) {
+        disconnectGateway();
+      } else if (reconnectTimeout) {
+        clearTimeout(reconnectTimeout);
+        reconnectTimeout = null;
+        intentionalDisconnect = true;
+      }
+      hasConnectedBefore = false;
+      gatewaySessionId = null;
+      lastReceivedSeq = 0;
+      resumeInFlight = false;
+    }
     clerkUserId = userId;
     if (userId && !identified && ws?.readyState === WebSocket.OPEN) {
       chatLog.info("Sending identify after clerk user became available", {

@@ -220,6 +220,7 @@ function reconcileChannelIdentity(
 export type ChatAction =
   | { type: "SET_CONNECTED"; connected: boolean }
   | { type: "SET_RECONNECT_ATTEMPT"; attempt: number }
+  | { type: "MARK_MESSAGE_CACHES_STALE" }
   | { type: "SET_USER"; user: User }
   | {
       type: "SET_STATUS";
@@ -545,6 +546,18 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       };
     case "SET_RECONNECT_ATTEMPT":
       return { ...state, reconnectAttempt: action.attempt };
+    case "MARK_MESSAGE_CACHES_STALE":
+      return {
+        ...state,
+        messagesLoadedByChannelId: Object.fromEntries(
+          [
+            ...new Set([
+              ...Object.keys(state.messagesByChannelId),
+              ...Object.keys(state.messagesLoadedByChannelId),
+            ]),
+          ].map((channelId) => [channelId, false]),
+        ),
+      };
     case "SET_USER": {
       const nextState = { ...state, user: action.user };
       return {

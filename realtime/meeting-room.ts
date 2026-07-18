@@ -179,11 +179,27 @@ interface WsAttachment {
   status?: "online" | "idle" | "dnd" | "offline";
   tracks: TrackInfo[];
   last_heartbeat?: number;
+  /** Heartbeat ACK counter. It is not the replay cursor. */
   seq: number;
+  /** Monotonic cursor for replayable outbound dispatches. */
+  outbound_seq?: number;
   subscribed_channels: string[];
   subscribed_servers: string[];
+  /** Legacy field accepted while reading pre-continuity snapshots. */
+  replay_buffer?: ReplayEntry[];
   /** Channel ID the user is currently in voice for (global gateway only) */
   voice_channel_id?: string;
+}
+
+interface ReplayEntry {
+  seq: number;
+  msg: ServerMsg;
+}
+
+interface ResumableSessionSnapshot {
+  attachment: WsAttachment;
+  replay: ReplayEntry[];
+  persist_writes?: number;
 }
 
 export interface VoiceChannelMember {
@@ -246,6 +262,8 @@ const PRUNE_ALARM_INTERVAL_MS = 300_000; // 5 min safety-net — client zombie d
 const CALL_RING_TIMEOUT_MS = 30_000; // auto-cancel after 30s
 const RESUME_GRACE_PERIOD_MS = 120_000; // 2 min — keep session resumable after disconnect
 const MAX_GATEWAY_FRAME_BYTES = 1_000_000;
+const MAX_REPLAY_BUFFER_BYTES = 256_000;
+const MAX_REPLAY_PERSIST_WRITES = 32;
 const WS_RATE_LIMIT_WINDOW_MS = 60_000;
 const WS_RATE_LIMITS: Record<number, number> = {
   [Op.MessageCreate]: 30,
@@ -266,10 +284,14 @@ export class MeetingRoom extends DurableObject<Env> {
   private _roomSlug: string = "unknown";
   private profileRefreshCooldowns: Map<string, number> = new Map();
   private resumableSessions: Map<string, WsAttachment> = new Map();
-  /** Per-participant replay buffer: participantId → [{seq, msg}] */
-  private replayBuffers: Map<string, Array<{ seq: number; msg: ServerMsg }>> =
-    new Map();
+  /** Per-participant replay buffer: participantId → bounded replay entries. */
+  private replayBuffers: Map<string, ReplayEntry[]> = new Map();
+  /** Limits storage writes while a disconnected session is being replayed. */
+  private replayPersistWrites: Map<string, number> = new Map();
   private static readonly MAX_REPLAY_BUFFER = 100;
+  /** Sockets whose subscriptions are being restored before Resumed is sent. */
+  private resumingSockets = new Set<WebSocket>();
+  private pendingResumeMessages = new Map<WebSocket, ServerMsg[]>();
   /** Channel → Set<WebSocket> — tracks which clients are subscribed to which channels (typing/presence only) */
   private channelSubscriptions: Map<string, Set<WebSocket>> = new Map();
   /** Server → Set<WebSocket> — tracks which clients are members of which servers (message delivery) */
@@ -340,7 +362,9 @@ export class MeetingRoom extends DurableObject<Env> {
       try {
         const attachment = ws.deserializeAttachment() as WsAttachment | null;
         if (attachment?.id) {
-          this.sessions.set(ws, attachment);
+          const { replay_buffer: _legacyReplay, ...liveAttachment } =
+            attachment;
+          this.sessions.set(ws, liveAttachment);
 
           // Rebuild channel subscriptions from session data
           if (attachment.subscribed_channels) {
@@ -381,10 +405,32 @@ export class MeetingRoom extends DurableObject<Env> {
       // Restore resumable sessions from storage
       const storedResumable = (await this.ctx.storage.get(
         "resumableSessions",
-      )) as Record<string, WsAttachment> | undefined;
+      )) as Record<string, unknown> | undefined;
       if (storedResumable) {
-        for (const [id, attachment] of Object.entries(storedResumable)) {
-          this.resumableSessions.set(id, attachment);
+        for (const [id, stored] of Object.entries(storedResumable)) {
+          if (this.isResumableSnapshot(stored)) {
+            const { replay_buffer: _legacyReplay, ...attachment } =
+              stored.attachment;
+            this.resumableSessions.set(id, attachment);
+            this.replayBuffers.set(id, this.trimReplayBuffer(stored.replay));
+            this.replayPersistWrites.set(
+              id,
+              this.normalizeReplayPersistWrites(stored.persist_writes),
+            );
+          } else if (
+            this.isPlainObject(stored) &&
+            typeof stored.id === "string"
+          ) {
+            const storedAttachment = stored as unknown as WsAttachment;
+            const { replay_buffer: _legacyReplay, ...attachment } =
+              storedAttachment;
+            this.resumableSessions.set(id, attachment);
+            this.replayBuffers.set(
+              id,
+              this.trimReplayBuffer(storedAttachment.replay_buffer ?? []),
+            );
+            this.replayPersistWrites.set(id, MAX_REPLAY_PERSIST_WRITES);
+          }
         }
       }
 
@@ -580,6 +626,7 @@ export class MeetingRoom extends DurableObject<Env> {
         } else if (body.channel_id) {
           await this.broadcastToChannel(body.channel_id, dispatchMsg);
         }
+        this.flushDirtyStorage();
         return new Response("OK", { status: 200 });
       } catch (e) {
         return new Response(`Broadcast error: ${e}`, { status: 500 });
@@ -1053,6 +1100,7 @@ export class MeetingRoom extends DurableObject<Env> {
           }
           this.resumableSessions.delete(id);
           this.replayBuffers.delete(id);
+          this.replayPersistWrites.delete(id);
           this.resumableSessionExpiry.delete(id);
           resumableChanged = true;
         }
@@ -1132,7 +1180,19 @@ export class MeetingRoom extends DurableObject<Env> {
     if (this.dirtyStorage.size === 0) return;
     const entries = Object.fromEntries(this.dirtyStorage);
     this.dirtyStorage.clear();
-    this.ctx.storage.put(entries).catch(() => {});
+    this.ctx.storage.put(entries).catch((error) => {
+      log.error("Failed to flush Durable Object storage", error);
+      if (!Object.prototype.hasOwnProperty.call(entries, "resumableSessions")) {
+        return;
+      }
+
+      // Never keep serving a warm snapshot whose replay write failed. The
+      // client will reconnect and reconcile message history from REST.
+      this.resumableSessions.clear();
+      this.replayBuffers.clear();
+      this.replayPersistWrites.clear();
+      this.resumableSessionExpiry.clear();
+    });
   }
 
   // ── Helpers ────────────────────────────────────────────────────────────
@@ -1142,8 +1202,9 @@ export class MeetingRoom extends DurableObject<Env> {
     const admission =
       data.admission ?? this.getSessionAdmission(ws) ?? undefined;
     const nextData = admission ? { ...data, admission } : data;
-    this.sessions.set(ws, nextData);
-    ws.serializeAttachment(nextData);
+    const { replay_buffer: _legacyReplay, ...serializedData } = nextData;
+    this.sessions.set(ws, serializedData);
+    ws.serializeAttachment(serializedData);
     if (wasEmpty) this.scheduleAlarm();
   }
 
@@ -1482,8 +1543,7 @@ export class MeetingRoom extends DurableObject<Env> {
       )
         continue;
 
-      this.pushReplayBuffer(session.id, session.seq, message);
-      this.sendTo(ws, message);
+      this.sendReplayable(ws, session, message);
     }
   }
 
@@ -1723,6 +1783,7 @@ export class MeetingRoom extends DurableObject<Env> {
     }
 
     this.resumableSessions.delete(sessionId);
+    this.replayBuffers.delete(sessionId);
     this.persistResumableSessions();
     this.resumableSessionExpiry.delete(sessionId);
     this.persistResumableSessionExpiry();
@@ -1771,11 +1832,43 @@ export class MeetingRoom extends DurableObject<Env> {
 
   /** Persist resumable sessions to storage for hibernation survival */
   private persistResumableSessions() {
-    const serialized: Record<string, WsAttachment> = {};
+    const serialized: Record<string, ResumableSessionSnapshot> = {};
+    const liveSessionIds = new Set(
+      [...this.sessions.values()].map((session) => session.id),
+    );
     for (const [id, attachment] of this.resumableSessions) {
-      serialized[id] = attachment;
+      if (liveSessionIds.has(id)) continue;
+      const { replay_buffer: _legacyReplay, ...snapshotAttachment } =
+        attachment;
+      serialized[id] = {
+        attachment: snapshotAttachment,
+        replay: this.replayBuffers.get(id) ?? [],
+        persist_writes: this.replayPersistWrites.get(id) ?? 0,
+      };
     }
     this.markDirty("resumableSessions", serialized);
+  }
+
+  private isResumableSnapshot(
+    value: unknown,
+  ): value is ResumableSessionSnapshot {
+    if (!this.isPlainObject(value)) return false;
+    const attachment = value.attachment;
+    const replay = value.replay;
+    return (
+      this.isPlainObject(attachment) &&
+      typeof attachment.id === "string" &&
+      Array.isArray(replay)
+    );
+  }
+
+  private normalizeReplayPersistWrites(value: unknown) {
+    return typeof value === "number" &&
+      Number.isInteger(value) &&
+      value >= 0 &&
+      value <= MAX_REPLAY_PERSIST_WRITES
+      ? value
+      : MAX_REPLAY_PERSIST_WRITES;
   }
 
   /** Persist resumable session expiry map to storage for hibernation survival */
@@ -1902,6 +1995,7 @@ export class MeetingRoom extends DurableObject<Env> {
         tracks: [],
         last_heartbeat: Date.now(),
         seq: 0,
+        outbound_seq: 0,
         subscribed_channels: [],
         subscribed_servers: [],
       };
@@ -1928,8 +2022,6 @@ export class MeetingRoom extends DurableObject<Env> {
       }
 
       this.persist(ws, attachment);
-      this.resumableSessions.set(participantId, attachment);
-      this.persistResumableSessions();
 
       // Op 2: Ready — includes voice_token for Voice Gateway connection
       this.sendTo(ws, {
@@ -2078,9 +2170,36 @@ export class MeetingRoom extends DurableObject<Env> {
       return;
     }
 
+    const buffer =
+      this.replayBuffers.get(d.session_id) ?? oldAttachment.replay_buffer ?? [];
+    const currentSeq = oldAttachment.outbound_seq ?? 0;
+    const firstRetainedSeq = buffer[0]?.seq;
+    const cursorIsValid =
+      typeof oldAttachment.outbound_seq === "number" &&
+      Number.isInteger(d.seq_ack) &&
+      d.seq_ack >= 0 &&
+      d.seq_ack <= currentSeq &&
+      (d.seq_ack === currentSeq ||
+        (firstRetainedSeq !== undefined && firstRetainedSeq <= d.seq_ack + 1));
+    if (!cursorIsValid) {
+      this.resumableSessions.delete(d.session_id);
+      this.replayBuffers.delete(d.session_id);
+      this.persistResumableSessions();
+      this.resumableSessionExpiry.delete(d.session_id);
+      this.persistResumableSessionExpiry();
+      this.sendTo(ws, {
+        op: Op.Error,
+        d: {
+          code: CloseCode.SessionInvalid,
+          message: "Gateway continuity lost; reconcile from REST",
+        },
+      });
+      return;
+    }
+
     const disconnectedAt = this.resumableSessionExpiry.get(d.session_id);
     if (
-      typeof disconnectedAt === "number" &&
+      typeof disconnectedAt !== "number" ||
       !isReconnectWithinGrace(
         disconnectedAt,
         Date.now(),
@@ -2088,6 +2207,7 @@ export class MeetingRoom extends DurableObject<Env> {
       )
     ) {
       this.resumableSessions.delete(d.session_id);
+      this.replayBuffers.delete(d.session_id);
       this.persistResumableSessions();
       this.resumableSessionExpiry.delete(d.session_id);
       this.persistResumableSessionExpiry();
@@ -2105,6 +2225,7 @@ export class MeetingRoom extends DurableObject<Env> {
     // never be able to replay or take over the same disconnected session.
     this.resumableSessions.delete(d.session_id);
     this.resumableSessionExpiry.delete(d.session_id);
+    this.replayPersistWrites.delete(d.session_id);
     this.persistResumableSessions();
     this.persistResumableSessionExpiry();
 
@@ -2113,6 +2234,8 @@ export class MeetingRoom extends DurableObject<Env> {
       admission,
       last_heartbeat: Date.now(),
     };
+    this.resumingSockets.add(ws);
+    this.pendingResumeMessages.set(ws, []);
     this.persist(ws, resumedAttachment);
 
     await this.restoreSessionSubscriptions(ws, resumedAttachment);
@@ -2129,15 +2252,19 @@ export class MeetingRoom extends DurableObject<Env> {
       await this.broadcastVoiceChannelState(resumedAttachment.voice_channel_id);
     }
 
-    // Replay buffered messages the client missed
-    const buffer = this.replayBuffers.get(d.session_id) ?? [];
-    const missed = buffer.filter((entry) => entry.seq > d.seq_ack);
+    // Replay retained messages after subscription restoration. Events arriving
+    // during restoration are queued and become part of this same ordered batch.
+    const replayedSeqs = new Set<number>();
+    const missed = (this.replayBuffers.get(d.session_id) ?? buffer).filter(
+      (entry) => entry.seq > d.seq_ack,
+    );
     log.info(
       `Resumed session: ${d.session_id}, replaying ${missed.length} messages (seq_ack=${d.seq_ack})`,
     );
 
     for (const entry of missed) {
       this.sendTo(ws, entry.msg);
+      replayedSeqs.add(entry.seq);
     }
 
     // Generate a fresh voice token so that the client can re-authenticate
@@ -2150,6 +2277,15 @@ export class MeetingRoom extends DurableObject<Env> {
       ),
       this.generateTurnCredentials(),
     ]);
+
+    for (const message of this.pendingResumeMessages.get(ws) ?? []) {
+      const sequence = this.isPlainObject(message.d)
+        ? message.d.seq
+        : undefined;
+      if (typeof sequence !== "number" || !replayedSeqs.has(sequence)) {
+        this.sendTo(ws, message);
+      }
+    }
 
     const participants: VoiceState[] = [];
     for (const [, data] of this.sessions) {
@@ -2168,11 +2304,13 @@ export class MeetingRoom extends DurableObject<Env> {
       },
     });
 
+    this.resumingSockets.delete(ws);
+    this.pendingResumeMessages.delete(ws);
+
     // Send current voice channel states so the client can reconcile their
     // sidebar. During the disconnect window, the client may have missed
     // VOICE_CHANNEL_STATE_UPDATE events — this full sync corrects that.
     await this.sendVoiceChannelStates(ws);
-    this.replayBuffers.delete(d.session_id);
   }
 
   private async handleRefreshVoiceCredentials(ws: WebSocket) {
@@ -2501,11 +2639,18 @@ export class MeetingRoom extends DurableObject<Env> {
       // Keep resumable session alive for RESUME_GRACE_PERIOD_MS so the client
       // can reconnect and resume without a full re-identify. Mark expiry.
       this.resumableSessionExpiry.set(participantId, now);
+      const resumableAttachment = { ...session };
+      delete resumableAttachment.replay_buffer;
+      this.resumableSessions.set(participantId, resumableAttachment);
+      this.replayPersistWrites.set(participantId, 0);
+      this.persistResumableSessions();
       this.persistResumableSessionExpiry();
       // Ensure the alarm keeps running to prune expired resumable sessions
       this.scheduleAlarm();
     } else {
       this.resumableSessions.delete(participantId);
+      this.replayBuffers.delete(participantId);
+      this.replayPersistWrites.delete(participantId);
       this.persistResumableSessions();
       this.resumableSessionExpiry.delete(participantId);
       this.persistResumableSessionExpiry();
@@ -2585,29 +2730,79 @@ export class MeetingRoom extends DurableObject<Env> {
     }
   }
 
-  /** Push a message into a participant's replay buffer */
-  private pushReplayBuffer(sessionId: string, seq: number, msg: ServerMsg) {
-    let buffer = this.replayBuffers.get(sessionId);
-    if (!buffer) {
-      buffer = [];
-      this.replayBuffers.set(sessionId, buffer);
+  private trimReplayBuffer(buffer: ReplayEntry[]): ReplayEntry[] {
+    const next = buffer.slice(-MeetingRoom.MAX_REPLAY_BUFFER);
+    let bytes = next.reduce(
+      (total, entry) =>
+        total + new TextEncoder().encode(JSON.stringify(entry)).byteLength,
+      0,
+    );
+    while (next.length > 0 && bytes > MAX_REPLAY_BUFFER_BYTES) {
+      const removed = next.shift();
+      if (removed) {
+        bytes -= new TextEncoder().encode(JSON.stringify(removed)).byteLength;
+      }
     }
-    buffer.push({ seq, msg });
-    if (buffer.length > MeetingRoom.MAX_REPLAY_BUFFER) {
-      buffer.shift();
+    return next;
+  }
+
+  private makeReplayEntry(session: WsAttachment, msg: ServerMsg): ReplayEntry {
+    const seq = (session.outbound_seq ?? 0) + 1;
+    session.outbound_seq = seq;
+    const data = this.isPlainObject(msg.d) ? msg.d : {};
+    return { seq, msg: { ...msg, d: { ...data, seq } } };
+  }
+
+  private appendReplayEntry(session: WsAttachment, entry: ReplayEntry) {
+    const buffer = this.trimReplayBuffer([
+      ...(this.replayBuffers.get(session.id) ?? []),
+      entry,
+    ]);
+    this.replayBuffers.set(session.id, buffer);
+    return buffer;
+  }
+
+  private sendReplayable(ws: WebSocket, session: WsAttachment, msg: ServerMsg) {
+    const entry = this.makeReplayEntry(session, msg);
+    this.appendReplayEntry(session, entry);
+    this.persist(ws, session);
+    if (this.resumingSockets.has(ws)) {
+      const pending = this.pendingResumeMessages.get(ws) ?? [];
+      pending.push(entry.msg);
+      this.pendingResumeMessages.set(ws, pending);
+      return;
     }
+    this.sendTo(ws, entry.msg);
+  }
+
+  private queueResumable(session: WsAttachment, msg: ServerMsg) {
+    const writes = (this.replayPersistWrites.get(session.id) ?? 0) + 1;
+    if (writes > MAX_REPLAY_PERSIST_WRITES) {
+      // A long offline burst is cheaper and safer to reconcile from REST than
+      // to keep rewriting a large snapshot on every event.
+      this.resumableSessions.delete(session.id);
+      this.replayBuffers.delete(session.id);
+      this.replayPersistWrites.delete(session.id);
+      this.persistResumableSessions();
+      return;
+    }
+
+    this.replayPersistWrites.set(session.id, writes);
+    const entry = this.makeReplayEntry(session, msg);
+    this.appendReplayEntry(session, entry);
+    this.persistResumableSessions();
   }
 
   private broadcast(msg: ServerMsg, excludeWs?: WebSocket) {
-    const json = JSON.stringify(msg);
+    const liveSessionIds = new Set(
+      [...this.sessions.values()].map((session) => session.id),
+    );
     for (const [ws, session] of this.sessions) {
       if (ws === excludeWs) continue;
-      this.pushReplayBuffer(session.id, session.seq, msg);
-      try {
-        ws.send(json);
-      } catch {
-        /* skip dead */
-      }
+      this.sendReplayable(ws, session, msg);
+    }
+    for (const [sessionId, session] of this.resumableSessions) {
+      if (!liveSessionIds.has(sessionId)) this.queueResumable(session, msg);
     }
   }
 
@@ -2617,22 +2812,40 @@ export class MeetingRoom extends DurableObject<Env> {
     msg: ServerMsg,
     excludeWs?: WebSocket,
   ) {
-    const subscribers = this.channelSubscriptions.get(channelId);
-    if (!subscribers) return;
-
-    const json = JSON.stringify(msg);
     const candidates: Array<{
-      ws: WebSocket;
+      ws?: WebSocket;
       session: WsAttachment;
       userId: string;
     }> = [];
+    const liveSockets = new Set(this.channelSubscriptions.get(channelId) ?? []);
 
-    for (const ws of [...subscribers]) {
-      if (ws === excludeWs) continue;
-      const session = this.getSession(ws);
-      const userId = session?.clerk_user_id;
-      if (!session || !userId) continue;
-      candidates.push({ ws, session, userId });
+    for (const [ws, session] of this.sessions) {
+      if (ws === excludeWs || !liveSockets.has(ws)) continue;
+      if (session.clerk_user_id) {
+        candidates.push({ ws, session, userId: session.clerk_user_id });
+      }
+    }
+    for (const [ws, session] of this.sessions) {
+      if (ws === excludeWs || !this.resumingSockets.has(ws)) continue;
+      if (
+        session.subscribed_channels.includes(channelId) &&
+        session.clerk_user_id &&
+        !candidates.some((candidate) => candidate.ws === ws)
+      ) {
+        candidates.push({ ws, session, userId: session.clerk_user_id });
+      }
+    }
+    const liveSessionIds = new Set(
+      candidates.map((candidate) => candidate.session.id),
+    );
+    for (const [sessionId, session] of this.resumableSessions) {
+      if (
+        liveSessionIds.has(sessionId) ||
+        !session.subscribed_channels.includes(channelId) ||
+        !session.clerk_user_id
+      )
+        continue;
+      candidates.push({ session, userId: session.clerk_user_id });
     }
 
     if (candidates.length === 0) return;
@@ -2646,23 +2859,23 @@ export class MeetingRoom extends DurableObject<Env> {
       uniqueUserIds,
     );
 
+    let resumableChanged = false;
     for (const { ws, session, userId } of candidates) {
       const access = decisions.get(userId);
       if (!access || access.kind !== "allowed") {
-        subscribers.delete(ws);
+        const subscribers = this.channelSubscriptions.get(channelId);
+        if (ws) subscribers?.delete(ws);
         session.subscribed_channels = session.subscribed_channels.filter(
           (id) => id !== channelId,
         );
-        this.persist(ws, session);
+        if (ws) this.persist(ws, session);
+        else resumableChanged = true;
         continue;
       }
-      this.pushReplayBuffer(session.id, session.seq, msg);
-      try {
-        ws.send(json);
-      } catch {
-        /* skip dead */
-      }
+      if (ws) this.sendReplayable(ws, session, msg);
+      else this.queueResumable(session, msg);
     }
+    if (resumableChanged) this.persistResumableSessions();
   }
 
   /** Send a message to all sessions that are members of a server */
@@ -2672,31 +2885,65 @@ export class MeetingRoom extends DurableObject<Env> {
     excludeWs?: WebSocket,
   ) {
     const channelId = this.getDispatchChannelId(msg);
-    if (channelId) {
-      await this.broadcastToChannel(channelId, msg, excludeWs);
-      return;
-    }
-
     const subscribers = this.serverSubscriptions.get(serverId);
-    if (!subscribers) return;
 
     // Gather candidate sessions first, pruning any socket without an
     // authenticated user. Then resolve membership for all of them in a single
     // batched query rather than one query per subscriber (previously O(n) DB
     // round-trips per broadcast).
-    const candidates: Array<{ ws: WebSocket; session: WsAttachment }> = [];
-    for (const ws of [...subscribers]) {
-      if (ws === excludeWs) continue;
-      const session = this.getSession(ws);
-      if (!session?.clerk_user_id) {
-        subscribers.delete(ws);
+    const candidates: Array<{ ws?: WebSocket; session: WsAttachment }> = [];
+    const liveSockets = new Set(subscribers ?? []);
+    for (const [ws, session] of this.sessions) {
+      if (!liveSockets.has(ws) || ws === excludeWs) continue;
+      if (!session.clerk_user_id) {
+        subscribers?.delete(ws);
         continue;
       }
       candidates.push({ ws, session });
     }
 
+    for (const [ws, session] of this.sessions) {
+      if (
+        ws === excludeWs ||
+        !this.resumingSockets.has(ws) ||
+        (!session.subscribed_servers.includes(serverId) &&
+          (!channelId || !session.subscribed_channels.includes(channelId))) ||
+        !session.clerk_user_id ||
+        candidates.some((candidate) => candidate.ws === ws)
+      )
+        continue;
+      candidates.push({ ws, session });
+    }
+
+    if (channelId) {
+      for (const ws of this.channelSubscriptions.get(channelId) ?? []) {
+        if (
+          ws === excludeWs ||
+          candidates.some((candidate) => candidate.ws === ws)
+        )
+          continue;
+        const session = this.getSession(ws);
+        if (session?.clerk_user_id) candidates.push({ ws, session });
+      }
+    }
+
+    const liveSessionIds = new Set(
+      candidates.map((candidate) => candidate.session.id),
+    );
+    for (const [sessionId, session] of this.resumableSessions) {
+      if (
+        liveSessionIds.has(sessionId) ||
+        (!session.subscribed_servers.includes(serverId) &&
+          (!channelId || !session.subscribed_channels.includes(channelId))) ||
+        !session.clerk_user_id
+      )
+        continue;
+      candidates.push({ session });
+    }
+
     if (candidates.length === 0) {
-      if (subscribers.size === 0) this.serverSubscriptions.delete(serverId);
+      if (subscribers && subscribers.size === 0)
+        this.serverSubscriptions.delete(serverId);
       return;
     }
 
@@ -2705,29 +2952,38 @@ export class MeetingRoom extends DurableObject<Env> {
     ];
     const members = await this.resolveServerMembership(serverId, uniqueUserIds);
 
-    const json = JSON.stringify(msg);
+    const channelDecisions = channelId
+      ? await resolveChannelAccessForUsers(
+          this.env.DB,
+          channelId,
+          uniqueUserIds,
+        )
+      : null;
+    let resumableChanged = false;
     for (const { ws, session } of candidates) {
       if (!members.has(session.clerk_user_id as string)) {
-        subscribers.delete(ws);
+        if (ws) subscribers?.delete(ws);
         session.subscribed_servers = session.subscribed_servers.filter(
           (id) => id !== serverId,
         );
-        this.persist(ws, session);
+        if (ws) this.persist(ws, session);
+        else resumableChanged = true;
         continue;
       }
-
-      this.pushReplayBuffer(session.id, session.seq, msg);
-      try {
-        ws.send(json);
-      } catch {
-        subscribers.delete(ws);
-        session.subscribed_servers = session.subscribed_servers.filter(
-          (id) => id !== serverId,
-        );
-        this.persist(ws, session);
+      if (
+        channelDecisions &&
+        (!channelDecisions.get(session.clerk_user_id as string) ||
+          channelDecisions.get(session.clerk_user_id as string)?.kind !==
+            "allowed")
+      ) {
+        continue;
       }
+      if (ws) this.sendReplayable(ws, session, msg);
+      else this.queueResumable(session, msg);
     }
-    if (subscribers.size === 0) this.serverSubscriptions.delete(serverId);
+    if (subscribers && subscribers.size === 0)
+      this.serverSubscriptions.delete(serverId);
+    if (resumableChanged) this.persistResumableSessions();
   }
 
   /**
@@ -2783,18 +3039,19 @@ export class MeetingRoom extends DurableObject<Env> {
 
   /** Send a message to all sessions of a specific user */
   private broadcastToUser(userId: string, msg: ServerMsg) {
-    const json = JSON.stringify(msg);
     let count = 0;
+    const liveSessionIds = new Set<string>();
     for (const [ws, session] of this.sessions) {
       if (session.clerk_user_id === userId) {
-        this.pushReplayBuffer(session.id, session.seq, msg);
-        try {
-          ws.send(json);
-          count++;
-        } catch {
-          /* skip dead */
-        }
+        liveSessionIds.add(session.id);
+        this.sendReplayable(ws, session, msg);
+        count++;
       }
+    }
+    for (const [sessionId, session] of this.resumableSessions) {
+      if (liveSessionIds.has(sessionId) || session.clerk_user_id !== userId)
+        continue;
+      this.queueResumable(session, msg);
     }
     log.info(`broadcastToUser ${userId}: sent to ${count} sessions`);
   }
@@ -3288,11 +3545,15 @@ export class MeetingRoom extends DurableObject<Env> {
       reactions: [],
     };
 
-    // Dispatch to all subscribers of this channel (including sender for confirmation)
-    await this.broadcastToChannel(d.channel_id, {
+    const messageDispatch = {
       op: Op.Dispatch,
       d: { event: "MESSAGE_CREATE", data: message },
-    });
+    };
+    if (access.serverId) {
+      await this.broadcastToServerMembers(access.serverId, messageDispatch);
+    } else {
+      await this.broadcastToChannel(d.channel_id, messageDispatch);
+    }
 
     // Asynchronously fetch embeds without blocking the initial send
     this.ctx.waitUntil(
@@ -3308,7 +3569,7 @@ export class MeetingRoom extends DurableObject<Env> {
               .run();
 
             // Dispatch update event to clients
-            await this.broadcastToChannel(d.channel_id, {
+            const embedDispatch = {
               op: Op.Dispatch,
               d: {
                 event: "MESSAGE_UPDATE",
@@ -3318,7 +3579,15 @@ export class MeetingRoom extends DurableObject<Env> {
                   embeds: embeds,
                 },
               },
-            });
+            };
+            if (access.serverId) {
+              await this.broadcastToServerMembers(
+                access.serverId,
+                embedDispatch,
+              );
+            } else {
+              await this.broadcastToChannel(d.channel_id, embedDispatch);
+            }
           } catch (e) {
             log.error("Failed to update message with embeds:", e);
           }
@@ -3413,7 +3682,7 @@ export class MeetingRoom extends DurableObject<Env> {
     }
 
     {
-      await this.broadcastToChannel(messageRow.channel_id, {
+      const updateDispatch = {
         op: Op.Dispatch,
         d: {
           event: "MESSAGE_UPDATE",
@@ -3424,7 +3693,12 @@ export class MeetingRoom extends DurableObject<Env> {
             updated_at: now,
           },
         },
-      });
+      };
+      if (access.serverId) {
+        await this.broadcastToServerMembers(access.serverId, updateDispatch);
+      } else {
+        await this.broadcastToChannel(messageRow.channel_id, updateDispatch);
+      }
 
       // Asynchronously fetch new embeds if content changed
       this.ctx.waitUntil(
@@ -3438,7 +3712,7 @@ export class MeetingRoom extends DurableObject<Env> {
                 .bind(JSON.stringify(embeds), d.message_id)
                 .run();
 
-              await this.broadcastToChannel(messageRow.channel_id, {
+              const embedDispatch = {
                 op: Op.Dispatch,
                 d: {
                   event: "MESSAGE_UPDATE",
@@ -3448,7 +3722,18 @@ export class MeetingRoom extends DurableObject<Env> {
                     embeds: embeds,
                   },
                 },
-              });
+              };
+              if (access.serverId) {
+                await this.broadcastToServerMembers(
+                  access.serverId,
+                  embedDispatch,
+                );
+              } else {
+                await this.broadcastToChannel(
+                  messageRow.channel_id,
+                  embedDispatch,
+                );
+              }
             } catch (e) {
               log.error("Failed to update message with new embeds:", e);
             }
@@ -3539,13 +3824,18 @@ export class MeetingRoom extends DurableObject<Env> {
       return;
     }
 
-    await this.broadcastToChannel(messageRow.channel_id, {
+    const deleteDispatch = {
       op: Op.Dispatch,
       d: {
         event: "MESSAGE_DELETE",
         data: { id: d.message_id, channel_id: messageRow.channel_id },
       },
-    });
+    };
+    if (access.serverId) {
+      await this.broadcastToServerMembers(access.serverId, deleteDispatch);
+    } else {
+      await this.broadcastToChannel(messageRow.channel_id, deleteDispatch);
+    }
   }
 
   // ── Op 23: TypingStart ────────────────────────────────────────────────
