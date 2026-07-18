@@ -1,0 +1,33 @@
+name = "ralph-meet-test"
+main = "realtime-test-entry.ts"
+compatibility_date = "2026-02-28"
+compatibility_flags = ["nodejs_compat"]
+
+[[durable_objects.bindings]]
+name = "MEETING_ROOM"
+class_name = "RootMeetingRoom"
+
+[[durable_objects.bindings]]
+name = "VOICE_ROOM"
+class_name = "RootVoiceRoom"
+
+[[durable_objects.bindings]]
+name = "RATE_LIMITER"
+class_name = "RootRateLimiterDO"
+
+[[migrations]]
+tag = "v1-test"
+new_sqlite_classes = ["RootMeetingRoom", "RootVoiceRoom", "RootRateLimiterDO"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "ralph-chat-db-test"
+database_id = "00000000-0000-0000-0000-000000000000"
+
+[[kv_namespaces]]
+binding = "CACHE"
+id = "00000000000000000000000000000000"
+
+[[r2_buckets]]
+binding = "BUCKET"
+bucket_name = "ralph-chat-attachments-test"

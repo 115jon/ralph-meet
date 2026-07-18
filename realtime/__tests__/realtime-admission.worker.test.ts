@@ -18,13 +18,16 @@ describe("realtime admission replay protection", () => {
       subject: "user-test",
     });
     const room = env.MEETING_ROOM.get(env.MEETING_ROOM.idFromName(roomSlug));
-    const createRequest = () => room.fetch("https://internal/consume-realtime-admission", {
-      method: "POST",
-      headers: appendRealtimeAdmissionHeaders(new Headers(), context),
-    });
+    const createRequest = () =>
+      room.fetch("https://internal/consume-realtime-admission", {
+        method: "POST",
+        headers: appendRealtimeAdmissionHeaders(new Headers(), context),
+      });
 
     const responses = await Promise.all([createRequest(), createRequest()]);
-    expect(responses.map((response) => response.status).sort()).toEqual([200, 401]);
+    expect(responses.map((response) => response.status).sort()).toEqual([
+      200, 401,
+    ]);
   });
 
   it("rejects an expired admission before consuming its nonce", async () => {
@@ -38,10 +41,13 @@ describe("realtime admission replay protection", () => {
       subject: "user-test",
     });
     const room = env.MEETING_ROOM.get(env.MEETING_ROOM.idFromName(roomSlug));
-    const response = await room.fetch("https://internal/consume-realtime-admission", {
-      method: "POST",
-      headers: appendRealtimeAdmissionHeaders(new Headers(), context),
-    });
+    const response = await room.fetch(
+      "https://internal/consume-realtime-admission",
+      {
+        method: "POST",
+        headers: appendRealtimeAdmissionHeaders(new Headers(), context),
+      },
+    );
 
     expect(response.status).toBe(401);
   });

@@ -26,23 +26,25 @@ import {
   verifySocketTicket,
   type SocketTicketAudience,
 } from "./src/lib/voice/socket-ticket";
-import { RateLimiter } from "./worker/rate-limiter";
+import { RateLimiter } from "./realtime/rate-limiter";
 import {
   appendRealtimeAdmissionHeaders,
   createRealtimeAdmissionContext,
   getRealtimeAdmissionConfig,
   stripRealtimeAdmissionHeaders,
-} from "./worker/realtime-admission";
+} from "./realtime/realtime-admission";
 
-// NOTE: DO classes (MeetingRoom, VoiceRoom, RateLimiterDO) are hosted in
-// a separate auxiliary worker (worker/do-entry.ts) to prevent module-level
-// I/O context conflicts between the main Worker and DOs in dev mode.
-// However, we re-export them here because Cloudflare's migration system
-// requires the main worker to still export any class it previously registered
-// via [[migrations]], even though script_name routes all traffic to ralph-meet-do.
-export { MeetingRoom } from "./worker/meeting-room";
-export { RateLimiterDO } from "./worker/rate-limiter-do";
-export { VoiceRoom } from "./worker/voice-room";
+// DO classes are exported from the root Worker so its bindings and migration
+// history own the Durable Object namespaces.
+export {
+  MeetingRoom,
+  MeetingRoom as RootMeetingRoom,
+} from "./realtime/meeting-room";
+export {
+  RateLimiterDO,
+  RateLimiterDO as RootRateLimiterDO,
+} from "./realtime/rate-limiter-do";
+export { VoiceRoom, VoiceRoom as RootVoiceRoom } from "./realtime/voice-room";
 
 // Module-level rate limiter — persists across requests in the same isolate
 const rateLimiter = new RateLimiter();

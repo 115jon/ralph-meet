@@ -1,5 +1,5 @@
 -- D1 Schema for Ralph Meet Chat
--- Run: wrangler d1 execute ralph-chat-db --local --file=worker/d1_schema.sql
+-- Run: wrangler d1 execute ralph-chat-db --local --file=d1_schema.sql
 
 -- ── Core ─────────────────────────────────────────────────────────────────
 

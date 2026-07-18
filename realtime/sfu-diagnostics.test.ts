@@ -22,9 +22,20 @@ describe("toSafeSfuFailure", () => {
   });
 
   it("classifies aborts and network failures without exposing error text", () => {
-    expect(toSafeSfuFailure({ attempt: 0, operation: "PUT sessions/id/tracks/close", status: null, timedOut: true }))
-      .toMatchObject({ category: "timeout", status: null });
-    expect(toSafeSfuFailure({ attempt: 0, operation: "PUT sessions/id/tracks/close", status: null }))
-      .toMatchObject({ category: "network", status: null });
+    expect(
+      toSafeSfuFailure({
+        attempt: 0,
+        operation: "PUT sessions/id/tracks/close",
+        status: null,
+        timedOut: true,
+      }),
+    ).toMatchObject({ category: "timeout", status: null });
+    expect(
+      toSafeSfuFailure({
+        attempt: 0,
+        operation: "PUT sessions/id/tracks/close",
+        status: null,
+      }),
+    ).toMatchObject({ category: "network", status: null });
   });
 });

@@ -128,7 +128,6 @@ export default defineConfig({
     }),
     cloudflare({
       viteEnvironment: { name: "ssr" },
-      auxiliaryWorkers: [{ configPath: "./worker/wrangler.toml" }],
     }),
     clientEnvironmentShims(),
     viteReact(),

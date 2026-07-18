@@ -24,17 +24,25 @@ const RATE_LIMITS: Record<string, RateLimitConfig> = {
   "POST:/api/channels/*/typing": { limit: 10, windowMs: 10_000 },
   "POST:/api/servers": { limit: 5, windowMs: 3_600_000 },
   "POST:/api/invites/*/join": { limit: 10, windowMs: 600_000 },
-  "DEFAULT": { limit: 60, windowMs: 60_000 },
+  DEFAULT: { limit: 60, windowMs: 60_000 },
 };
 
 // Pre-compile regex patterns at module load to avoid creating new RegExp per request
-const COMPILED_RATE_LIMITS: Array<{ method: string; regex: RegExp; config: RateLimitConfig }> = [];
+const COMPILED_RATE_LIMITS: Array<{
+  method: string;
+  regex: RegExp;
+  config: RateLimitConfig;
+}> = [];
 for (const [pattern, config] of Object.entries(RATE_LIMITS)) {
   if (pattern === "DEFAULT") continue;
   const [configMethod, ...pathParts] = pattern.split(":");
   const configPath = pathParts.join(":");
   const regexStr = "^" + configPath.replace(/\*/g, "[^/]+") + "$";
-  COMPILED_RATE_LIMITS.push({ method: configMethod, regex: new RegExp(regexStr), config });
+  COMPILED_RATE_LIMITS.push({
+    method: configMethod,
+    regex: new RegExp(regexStr),
+    config,
+  });
 }
 
 export class RateLimiter {
@@ -54,7 +62,11 @@ export class RateLimiter {
 
     if (!entry || now - entry.windowStart >= config.windowMs) {
       this.buckets.set(key, { count: 1, windowStart: now });
-      return { allowed: true, remaining: config.limit - 1, resetMs: config.windowMs };
+      return {
+        allowed: true,
+        remaining: config.limit - 1,
+        resetMs: config.windowMs,
+      };
     }
 
     entry.count++;
@@ -72,7 +84,11 @@ export class RateLimiter {
   }
 
   private matchConfig(method: string, pathname: string): RateLimitConfig {
-    for (const { method: configMethod, regex, config } of COMPILED_RATE_LIMITS) {
+    for (const {
+      method: configMethod,
+      regex,
+      config,
+    } of COMPILED_RATE_LIMITS) {
       if (configMethod !== method) continue;
       if (regex.test(pathname)) return config;
     }

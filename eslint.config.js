@@ -18,7 +18,7 @@ export default tseslint.config(
       "target-test/",
       "public/mediapipe/",
       "packages/*/dist/",
-      "worker/",
+      "realtime/",
       "desktop/",
       "mobile/",
       "src/routeTree.gen.ts",

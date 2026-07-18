@@ -1,4 +1,8 @@
-import type { RealtimeAccessMode, SocketTicketAudience, SocketTicketClaims } from "../src/lib/voice/socket-ticket";
+import type {
+  RealtimeAccessMode,
+  SocketTicketAudience,
+  SocketTicketClaims,
+} from "../src/lib/voice/socket-ticket";
 
 const ADMISSION_HEADER_PREFIX = "x-ralph-realtime-";
 const textEncoder = new TextEncoder();
@@ -51,16 +55,25 @@ export async function createRealtimeAdmissionContext(
 }
 
 export async function digestNonce(nonce: string): Promise<string> {
-  const digest = await crypto.subtle.digest("SHA-256", textEncoder.encode(nonce));
+  const digest = await crypto.subtle.digest(
+    "SHA-256",
+    textEncoder.encode(nonce),
+  );
   return base64UrlEncode(new Uint8Array(digest));
 }
 
-export function appendRealtimeAdmissionHeaders(headers: Headers, context: RealtimeAdmissionContext): Headers {
+export function appendRealtimeAdmissionHeaders(
+  headers: Headers,
+  context: RealtimeAdmissionContext,
+): Headers {
   const next = new Headers(headers);
   stripRealtimeAdmissionHeaders(next);
   next.set(`${ADMISSION_HEADER_PREFIX}access-mode`, context.accessMode);
   next.set(`${ADMISSION_HEADER_PREFIX}audience`, context.audience);
-  next.set(`${ADMISSION_HEADER_PREFIX}connection-generation`, context.connectionGeneration);
+  next.set(
+    `${ADMISSION_HEADER_PREFIX}connection-generation`,
+    context.connectionGeneration,
+  );
   next.set(`${ADMISSION_HEADER_PREFIX}expires-at`, String(context.expiresAt));
   next.set(`${ADMISSION_HEADER_PREFIX}nonce-digest`, context.nonceDigest);
   next.set(`${ADMISSION_HEADER_PREFIX}room-slug`, context.roomSlug);
@@ -77,19 +90,32 @@ export function stripRealtimeAdmissionHeaders(headers: Headers): Headers {
   return headers;
 }
 
-export function getRealtimeAdmissionFromHeaders(headers: Headers): RealtimeAdmissionContext | null {
+export function getRealtimeAdmissionFromHeaders(
+  headers: Headers,
+): RealtimeAdmissionContext | null {
   const accessMode = headers.get(`${ADMISSION_HEADER_PREFIX}access-mode`);
   const audience = headers.get(`${ADMISSION_HEADER_PREFIX}audience`);
-  const connectionGeneration = headers.get(`${ADMISSION_HEADER_PREFIX}connection-generation`);
+  const connectionGeneration = headers.get(
+    `${ADMISSION_HEADER_PREFIX}connection-generation`,
+  );
   const expiresAtRaw = headers.get(`${ADMISSION_HEADER_PREFIX}expires-at`);
   const nonceDigest = headers.get(`${ADMISSION_HEADER_PREFIX}nonce-digest`);
   const roomSlug = headers.get(`${ADMISSION_HEADER_PREFIX}room-slug`);
   const subject = headers.get(`${ADMISSION_HEADER_PREFIX}subject`);
   const expiresAt = Number(expiresAtRaw);
 
-  if (accessMode !== "authenticated" && accessMode !== "public-demo") return null;
-  if (audience !== "global" && audience !== "room" && audience !== "voice") return null;
-  if (!connectionGeneration || !nonceDigest || !roomSlug || !subject || !Number.isFinite(expiresAt)) return null;
+  if (accessMode !== "authenticated" && accessMode !== "public-demo")
+    return null;
+  if (audience !== "global" && audience !== "room" && audience !== "voice")
+    return null;
+  if (
+    !connectionGeneration ||
+    !nonceDigest ||
+    !roomSlug ||
+    !subject ||
+    !Number.isFinite(expiresAt)
+  )
+    return null;
 
   return {
     accessMode,

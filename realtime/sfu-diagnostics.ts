@@ -1,4 +1,8 @@
-export type SafeSfuFailureCategory = "client" | "network" | "server" | "timeout";
+export type SafeSfuFailureCategory =
+  | "client"
+  | "network"
+  | "server"
+  | "timeout";
 
 export interface SafeSfuFailureInput {
   attempt: number;
@@ -26,7 +30,10 @@ export function toSafeSfuFailure(input: SafeSfuFailureInput): SafeSfuFailure {
   };
 }
 
-function getFailureCategory(status: number | null, timedOut: boolean): SafeSfuFailureCategory {
+function getFailureCategory(
+  status: number | null,
+  timedOut: boolean,
+): SafeSfuFailureCategory {
   if (timedOut) return "timeout";
   if (status === null) return "network";
   if (status >= 500) return "server";

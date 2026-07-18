@@ -51,7 +51,11 @@ describe("RateLimiter", () => {
       limiter.check("1.2.3.4", "POST", "/api/channels/abc123/messages");
     }
     // Should be blocked even with a different channel ID (same normalized pattern)
-    const result = limiter.check("1.2.3.4", "POST", "/api/channels/xyz789/messages");
+    const result = limiter.check(
+      "1.2.3.4",
+      "POST",
+      "/api/channels/xyz789/messages",
+    );
     expect(result.allowed).toBe(false);
   });
 
@@ -68,7 +72,11 @@ describe("RateLimiter", () => {
     for (let i = 0; i < 10; i++) {
       limiter.check("1.2.3.4", "POST", "/api/channels/abc/messages/upload");
     }
-    const result = limiter.check("1.2.3.4", "POST", "/api/channels/abc/messages/upload");
+    const result = limiter.check(
+      "1.2.3.4",
+      "POST",
+      "/api/channels/abc/messages/upload",
+    );
     expect(result.allowed).toBe(false);
   });
 });

@@ -20,29 +20,39 @@ const claims: SocketTicketClaims = {
 
 describe("realtime admission", () => {
   it("fails closed when the ticket secret is missing", () => {
-    expect(getRealtimeAdmissionConfig({})).toEqual({ ok: false, reason: "missing_ticket_secret" });
+    expect(getRealtimeAdmissionConfig({})).toEqual({
+      ok: false,
+      reason: "missing_ticket_secret",
+    });
   });
 
   it("accepts a configured ticket secret", () => {
-    expect(getRealtimeAdmissionConfig({
-      REALTIME_TICKET_SECRET: "ticket-secret",
-    })).toEqual({ ok: true, config: { ticketSecret: "ticket-secret" } });
+    expect(
+      getRealtimeAdmissionConfig({
+        REALTIME_TICKET_SECRET: "ticket-secret",
+      }),
+    ).toEqual({ ok: true, config: { ticketSecret: "ticket-secret" } });
   });
 
   it("round-trips only verified admission context through internal headers", async () => {
     const context = await createRealtimeAdmissionContext(claims);
-    const headers = appendRealtimeAdmissionHeaders(new Headers({
-      "x-ralph-realtime-subject": "attacker",
-    }), context);
+    const headers = appendRealtimeAdmissionHeaders(
+      new Headers({
+        "x-ralph-realtime-subject": "attacker",
+      }),
+      context,
+    );
 
     expect(getRealtimeAdmissionFromHeaders(headers)).toEqual(context);
   });
 
   it("strips forged admission headers from incoming requests", () => {
-    const headers = stripRealtimeAdmissionHeaders(new Headers({
-      "x-ralph-realtime-subject": "attacker",
-      "x-other-header": "kept",
-    }));
+    const headers = stripRealtimeAdmissionHeaders(
+      new Headers({
+        "x-ralph-realtime-subject": "attacker",
+        "x-other-header": "kept",
+      }),
+    );
 
     expect(headers.get("x-ralph-realtime-subject")).toBeNull();
     expect(headers.get("x-other-header")).toBe("kept");
