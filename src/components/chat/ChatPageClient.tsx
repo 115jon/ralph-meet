@@ -40,6 +40,7 @@ import { prewarmAudioContext } from "@/lib/voice/audio-pipeline";
 import { useChatActions, useChatStore } from "@/stores/chat-store";
 import { useCallStore } from "@/stores/useCallStore";
 import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
+import { getPersistentVoiceViewIdentity } from "./voice-session-view";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import {
   lazy,
@@ -404,6 +405,13 @@ export default function ChatPage() {
     (!voiceState.joined || isViewingCurrentVoiceChannel);
   const shouldAutoJoinVoice =
     !!showVoiceAsMain && voiceJoinOnSelectChannelId === activeChannelId;
+  const persistentVoiceViewIdentity = getPersistentVoiceViewIdentity({
+    joined: voiceState.joined,
+    activeServerId,
+    activeChannelId,
+    voiceServerId: voiceState.serverId,
+    voiceChannelId: voiceState.channelId,
+  });
   const shouldRenderFloatingStreamPreview = !!(
     voiceState.joined &&
     localStreamState?.isScreenSharing &&
@@ -1346,16 +1354,12 @@ export default function ChatPage() {
             >
               <Suspense fallback={null}>
                 <VoiceChannelView
-                  key={`persistent-voice-session-${showVoiceAsMain ? activeServerId : voiceState.serverId}-${showVoiceAsMain ? activeChannelId : voiceState.channelId}`}
-                  channelId={
-                    (showVoiceAsMain ? activeChannelId : voiceState.channelId)!
-                  }
+                  key={persistentVoiceViewIdentity.key}
+                  channelId={persistentVoiceViewIdentity.channelId!}
                   channelName={
                     showVoiceAsMain ? channelDisplayName : voiceChannelName
                   }
-                  serverId={
-                    (showVoiceAsMain ? activeServerId : voiceState.serverId)!
-                  }
+                  serverId={persistentVoiceViewIdentity.serverId!}
                   onToggleTextChat={handleToggleVoiceTextChat}
                   showTextChat={showVoiceTextChat}
                   onOpenActivities={() => setVoiceAppsModal("activities")}
