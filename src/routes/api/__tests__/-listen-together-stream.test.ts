@@ -2,6 +2,7 @@ import {
   buildProxyHeaders,
   makeSyntheticRangeResponse,
   normalizeListenTogetherUpstreamRange,
+  refreshListenTogetherResolvedStream,
 } from "../listen-together/stream";
 import { describe, expect, it } from "vitest";
 
@@ -105,5 +106,25 @@ describe("listen together stream proxy helpers", () => {
         includeBody: false,
       }),
     ).toBe("bytes=2048-2049");
+  });
+
+  it("keeps the current direct stream when forced refresh is rate-limited", async () => {
+    const current = {
+      url: "https://r1---sn.example.googlevideo.com/videoplayback",
+      itag: 140,
+      mimeType: "audio/mp4",
+      contentLength: 1_024,
+      expiresAt: Date.now() + 60_000,
+    };
+    const refreshError = new Error("YouTube watch page request failed (429)");
+
+    await expect(
+      refreshListenTogetherResolvedStream(current, async () => {
+        throw refreshError;
+      }),
+    ).resolves.toEqual({
+      resolved: current,
+      refreshError,
+    });
   });
 });

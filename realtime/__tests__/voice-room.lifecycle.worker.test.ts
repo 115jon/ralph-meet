@@ -1,5 +1,5 @@
 import { env } from "cloudflare:workers";
-import { runInDurableObject } from "cloudflare:test";
+import { runDurableObjectAlarm, runInDurableObject } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
 import {
   issueSocketTicket,
@@ -1635,6 +1635,162 @@ describe("VoiceRoom lifecycle", () => {
       expect(await state.storage.getAlarm()).toBeLessThanOrEqual(
         Date.now() + 1_500,
       );
+    });
+    socket.close();
+  });
+
+  it("advances to the next queued track when the current track deadline passes", async () => {
+    const roomName = crypto.randomUUID();
+    const socket = await openVoiceSocket(roomName);
+    await identifyVoiceSocket(socket, crypto.randomUUID(), roomName);
+    socket.send(
+      JSON.stringify({
+        op: 106,
+        d: {
+          type: "listen_together.enqueue",
+          room_slug: roomName,
+          entries: [
+            listenTogetherMusicEntry(10_000),
+            {
+              ...listenTogetherMusicEntry(10_000),
+              track: {
+                ...listenTogetherMusicEntry(10_000).track,
+                id: "music-2",
+                videoId: "dQw4w9WgXcQ-2",
+                title: "Second Track",
+              },
+            },
+          ],
+        },
+      }),
+    );
+    await nextMessageWithOpcodeAndType(socket, 106, "listen_together.snapshot");
+
+    const room = env.VOICE_ROOM.get(env.VOICE_ROOM.idFromName(roomName));
+    await runInDurableObject(room, (_instance, state) => {
+      state.storage.sql.exec(
+        "UPDATE listen_together_state SET anchor_updated_at = ? WHERE id = 1",
+        Date.now() - 20_000,
+      );
+    });
+    const nextSnapshot = nextMessageWithOpcodeAndType(
+      socket,
+      106,
+      "listen_together.snapshot",
+    );
+    expect(await runDurableObjectAlarm(room)).toBe(true);
+
+    await expect(nextSnapshot).resolves.toMatchObject({
+      d: {
+        snapshot: {
+          paused: false,
+          currentEntry: { track: { title: "Second Track" } },
+        },
+      },
+    });
+    socket.close();
+  });
+
+  it("ignores playback commands scoped to an entry that already ended", async () => {
+    const roomName = crypto.randomUUID();
+    const socket = await openVoiceSocket(roomName);
+    await identifyVoiceSocket(socket, crypto.randomUUID(), roomName);
+    const first = listenTogetherMusicEntry(10_000);
+    const second = {
+      ...listenTogetherMusicEntry(10_000),
+      track: {
+        ...listenTogetherMusicEntry(10_000).track,
+        id: "music-2",
+        videoId: "dQw4w9WgXcQ-2",
+        title: "Second Track",
+      },
+    };
+    socket.send(
+      JSON.stringify({
+        op: 106,
+        d: {
+          type: "listen_together.enqueue",
+          room_slug: roomName,
+          entries: [first, second],
+        },
+      }),
+    );
+    const initial = await nextMessageWithOpcodeAndType(
+      socket,
+      106,
+      "listen_together.snapshot",
+    );
+    const firstEntryId = (initial.d as { snapshot: { currentEntryId: string } })
+      .snapshot.currentEntryId;
+
+    socket.send(
+      JSON.stringify({
+        op: 106,
+        d: {
+          type: "listen_together.skip",
+          room_slug: roomName,
+          entryId: firstEntryId,
+        },
+      }),
+    );
+    const advanced = await nextMessageWithOpcodeAndType(
+      socket,
+      106,
+      "listen_together.snapshot",
+    );
+    const secondEntryId = (
+      advanced.d as { snapshot: { currentEntryId: string } }
+    ).snapshot.currentEntryId;
+
+    socket.send(
+      JSON.stringify({
+        op: 106,
+        d: {
+          type: "listen_together.pause",
+          room_slug: roomName,
+          paused: true,
+          entryId: firstEntryId,
+        },
+      }),
+    );
+    socket.send(
+      JSON.stringify({
+        op: 106,
+        d: {
+          type: "listen_together.pause",
+          room_slug: roomName,
+          paused: true,
+        },
+      }),
+    );
+    socket.send(
+      JSON.stringify({
+        op: 106,
+        d: {
+          type: "listen_together.skip",
+          room_slug: roomName,
+          entryId: firstEntryId,
+        },
+      }),
+    );
+    socket.send(
+      JSON.stringify({
+        op: 106,
+        d: { type: "listen_together.state.request", room_slug: roomName },
+      }),
+    );
+    const finalSnapshot = await nextMessageWithOpcodeAndType(
+      socket,
+      106,
+      "listen_together.snapshot",
+    );
+
+    expect(finalSnapshot.d).toMatchObject({
+      snapshot: {
+        currentEntryId: secondEntryId,
+        paused: false,
+        queue: [{ entryId: secondEntryId }],
+      },
     });
     socket.close();
   });

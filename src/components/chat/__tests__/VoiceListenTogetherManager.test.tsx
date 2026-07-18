@@ -15,6 +15,7 @@ class MockAudio extends EventTarget {
   public volume = 1;
   public currentTime = 0;
   public paused = true;
+  public ended = false;
   public error: { code: number } | null = null;
 
   private currentSrc = "";
@@ -456,13 +457,16 @@ describe("VoiceListenTogetherManager", () => {
     });
     musicAudio.paused = true;
     sendAppEvent.mockClear();
-    musicAudio.dispatchEvent(new Event("pause"));
+    act(() => musicAudio.dispatchEvent(new Event("pause")));
 
-    expect(sendAppEvent).toHaveBeenCalledWith({
-      type: "listen_together.pause",
-      room_slug: "room-1",
-      paused: true,
-    });
+    await waitFor(() =>
+      expect(sendAppEvent).toHaveBeenCalledWith({
+        type: "listen_together.pause",
+        room_slug: "room-1",
+        paused: true,
+        entryId: "entry-1",
+      }),
+    );
 
     musicAudio.play.mockClear();
     act(() => {
@@ -499,6 +503,205 @@ describe("VoiceListenTogetherManager", () => {
       type: "listen_together.pause",
       room_slug: "room-1",
       paused: false,
+      entryId: "entry-1",
     });
+  });
+
+  it("does not broadcast a pause when the current track ends naturally", async () => {
+    const sendAppEvent = vi.fn();
+    const sfu = {
+      ...makeSfu(),
+      voiceGW: { sendAppEvent },
+    };
+
+    render(
+      <VoiceListenTogetherManager
+        sfu={sfu as never}
+        roomSlug="room-1"
+        voiceSessionId="voice-session-1"
+      />,
+    );
+
+    const musicAudio = await waitFor(() => {
+      const audio = MockAudio.instances[0];
+      expect(audio).toBeDefined();
+      return audio;
+    });
+    musicAudio.currentTime = 180;
+    musicAudio.paused = true;
+    musicAudio.ended = true;
+    sendAppEvent.mockClear();
+
+    act(() => musicAudio.dispatchEvent(new Event("pause")));
+
+    expect(sendAppEvent).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: "listen_together.pause" }),
+    );
+  });
+
+  it("suppresses a boundary pause when an ended event follows", async () => {
+    const sendAppEvent = vi.fn();
+    const sfu = {
+      ...makeSfu(),
+      voiceGW: { sendAppEvent },
+    };
+
+    render(
+      <VoiceListenTogetherManager
+        sfu={sfu as never}
+        roomSlug="room-1"
+        voiceSessionId="voice-session-1"
+      />,
+    );
+
+    const musicAudio = await waitFor(() => {
+      const audio = MockAudio.instances[0];
+      expect(audio).toBeDefined();
+      return audio;
+    });
+    musicAudio.currentTime = 180;
+    musicAudio.paused = true;
+    musicAudio.ended = false;
+    sendAppEvent.mockClear();
+
+    act(() => {
+      musicAudio.dispatchEvent(new Event("pause"));
+      musicAudio.ended = true;
+      musicAudio.dispatchEvent(new Event("ended"));
+    });
+    await new Promise((resolve) => setTimeout(resolve, 75));
+
+    expect(sendAppEvent).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: "listen_together.pause" }),
+    );
+  });
+
+  it("broadcasts an intentional pause near the end before ended is true", async () => {
+    const sendAppEvent = vi.fn();
+    const sfu = {
+      ...makeSfu(),
+      voiceGW: { sendAppEvent },
+    };
+
+    render(
+      <VoiceListenTogetherManager
+        sfu={sfu as never}
+        roomSlug="room-1"
+        voiceSessionId="voice-session-1"
+      />,
+    );
+
+    const musicAudio = await waitFor(() => {
+      const audio = MockAudio.instances[0];
+      expect(audio).toBeDefined();
+      return audio;
+    });
+    musicAudio.currentTime = 179.5;
+    musicAudio.paused = true;
+    musicAudio.ended = false;
+    sendAppEvent.mockClear();
+
+    act(() => musicAudio.dispatchEvent(new Event("pause")));
+    await new Promise((resolve) => setTimeout(resolve, 75));
+
+    expect(sendAppEvent).toHaveBeenCalledWith({
+      type: "listen_together.pause",
+      room_slug: "room-1",
+      paused: true,
+      entryId: "entry-1",
+    });
+  });
+
+  it("does not apply a deferred pause to a successor track", async () => {
+    const sendAppEvent = vi.fn();
+    const sfu = {
+      ...makeSfu(),
+      voiceGW: { sendAppEvent },
+    };
+
+    render(
+      <VoiceListenTogetherManager
+        sfu={sfu as never}
+        roomSlug="room-1"
+        voiceSessionId="voice-session-1"
+      />,
+    );
+
+    const musicAudio = await waitFor(() => {
+      const audio = MockAudio.instances[0];
+      expect(audio).toBeDefined();
+      return audio;
+    });
+    musicAudio.paused = true;
+    musicAudio.ended = false;
+    sendAppEvent.mockClear();
+
+    act(() => musicAudio.dispatchEvent(new Event("pause")));
+    const successorSnapshot = makeSnapshot();
+    const successorEntry = {
+      ...successorSnapshot.currentEntry!,
+      entryId: "entry-2",
+      track: {
+        ...successorSnapshot.currentEntry!.track,
+        id: "track-2",
+        videoId: "video-2",
+        title: "Track Two",
+      },
+    };
+    act(() => {
+      useListenTogetherStore.getState().setSnapshot("room-1", {
+        ...successorSnapshot,
+        revision: 2,
+        currentEntryId: successorEntry.entryId,
+        currentEntry: successorEntry,
+        queue: [successorEntry],
+      });
+    });
+    await new Promise((resolve) => setTimeout(resolve, 75));
+
+    expect(sendAppEvent).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: "listen_together.pause" }),
+    );
+  });
+
+  it("preserves an intentional pause across an unpaused snapshot refresh", async () => {
+    const sendAppEvent = vi.fn();
+    const sfu = {
+      ...makeSfu(),
+      voiceGW: { sendAppEvent },
+    };
+
+    render(
+      <VoiceListenTogetherManager
+        sfu={sfu as never}
+        roomSlug="room-1"
+        voiceSessionId="voice-session-1"
+      />,
+    );
+
+    const musicAudio = await waitFor(() => {
+      const audio = MockAudio.instances[0];
+      expect(audio).toBeDefined();
+      return audio;
+    });
+    musicAudio.paused = true;
+    musicAudio.ended = false;
+    sendAppEvent.mockClear();
+
+    act(() => musicAudio.dispatchEvent(new Event("pause")));
+    act(() => {
+      useListenTogetherStore
+        .getState()
+        .setSnapshot("room-1", { ...makeSnapshot(), revision: 2 });
+    });
+
+    await waitFor(() =>
+      expect(sendAppEvent).toHaveBeenCalledWith({
+        type: "listen_together.pause",
+        room_slug: "room-1",
+        paused: true,
+        entryId: "entry-1",
+      }),
+    );
   });
 });

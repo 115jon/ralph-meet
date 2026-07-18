@@ -154,6 +154,7 @@ describe("ListenTogetherNowPlayingCard", () => {
       type: "listen_together.pause",
       room_slug: "room-1",
       paused: true,
+      entryId: "entry-1",
     });
   });
 

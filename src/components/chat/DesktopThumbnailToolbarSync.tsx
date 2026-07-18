@@ -161,6 +161,7 @@ export function DesktopThumbnailToolbarSync({
     () =>
       activeSession?.sfu && activeSession.roomSlug && playback.currentEntry
         ? {
+            entryId: playback.currentEntry.entryId,
             paused: playback.isPaused,
             positionMs: playback.effectiveSeekValue,
             roomSlug: activeSession.roomSlug,
@@ -243,6 +244,7 @@ export function DesktopThumbnailToolbarSync({
             type: "listen_together.pause",
             room_slug: media.roomSlug,
             paused: !media.paused,
+            entryId: media.entryId,
           });
           if (sent) {
             media.setLocalPlayback(media.roomSlug, {
@@ -257,6 +259,7 @@ export function DesktopThumbnailToolbarSync({
           sendListenTogetherCommand(media.sfu, media.roomSlug, {
             type: "listen_together.skip",
             room_slug: media.roomSlug,
+            entryId: media.entryId,
           });
           return;
       }

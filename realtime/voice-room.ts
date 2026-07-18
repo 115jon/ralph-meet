@@ -1417,6 +1417,24 @@ export class VoiceRoom extends DurableObject<Env> {
     const queue = this.loadListenTogetherQueue();
     const effectiveRoomSlug = this.roomSlug || roomSlug || state.roomSlug;
     const now = Date.now();
+    const requiresCurrentEntry =
+      d.type === "listen_together.pause" ||
+      d.type === "listen_together.seek" ||
+      d.type === "listen_together.skip";
+    if (requiresCurrentEntry) {
+      const entryId =
+        "entryId" in d && typeof d.entryId === "string" ? d.entryId.trim() : "";
+      if (!entryId) {
+        this.sendListenTogetherError(
+          ws,
+          effectiveRoomSlug,
+          "INVALID_ENTRY",
+          "Playback command is missing its queue entry",
+        );
+        return;
+      }
+      if (entryId !== state.currentEntryId) return;
+    }
     let result:
       | ReturnType<typeof enqueueListenTogetherEntries>
       | ReturnType<typeof playListenTogether>

@@ -237,6 +237,7 @@ export function ListenTogetherNowPlayingCard({
                     type: "listen_together.seek",
                     room_slug: roomSlug,
                     positionMs: Number(event.currentTarget.value),
+                    entryId: currentEntry.entryId,
                   });
                 }}
                 className="h-1.5 min-w-0 flex-1 cursor-pointer accent-primary disabled:cursor-not-allowed"
@@ -272,6 +273,7 @@ export function ListenTogetherNowPlayingCard({
                     type: "listen_together.pause",
                     room_slug: roomSlug,
                     paused: !isPaused,
+                    entryId: currentEntry.entryId,
                   });
                 }}
                 disabled={!canControl}
@@ -292,6 +294,7 @@ export function ListenTogetherNowPlayingCard({
                   sendCommand({
                     type: "listen_together.skip",
                     room_slug: roomSlug,
+                    entryId: currentEntry.entryId,
                   });
                 }}
                 disabled={!canControl}
@@ -370,6 +373,7 @@ export function ListenTogetherNowPlayingCard({
                 type: "listen_together.seek",
                 room_slug: roomSlug,
                 positionMs: Number(event.currentTarget.value),
+                entryId: currentEntry.entryId,
               });
             }}
             className="h-8 w-full cursor-pointer accent-primary disabled:cursor-not-allowed"
@@ -394,6 +398,7 @@ export function ListenTogetherNowPlayingCard({
                 type: "listen_together.pause",
                 room_slug: roomSlug,
                 paused: !isPaused,
+                entryId: currentEntry.entryId,
               });
             }}
             disabled={!canControl}
@@ -416,6 +421,7 @@ export function ListenTogetherNowPlayingCard({
               sendCommand({
                 type: "listen_together.skip",
                 room_slug: roomSlug,
+                entryId: currentEntry.entryId,
               });
             }}
             disabled={!canControl}
