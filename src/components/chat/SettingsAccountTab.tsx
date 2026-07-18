@@ -12,6 +12,8 @@ import {
 import { AvatarImage } from "@/components/chat/AvatarImage";
 import { CollectiblesCatalogModal } from "@/components/chat/CollectiblesCatalogModal";
 import { ProfileCollectiblesLayer } from "@/components/chat/ProfileCollectiblesLayer";
+import { ProfileFrameLayer } from "@/components/chat/ProfileFrameLayer";
+import { ProfileSurfaceShell } from "@/components/chat/ProfileSurfaceShell";
 import { ProfileAssetLayer } from "@/components/chat/ProfileAssetLayer";
 import { UserNameplateLayer } from "@/components/chat/UserNameplateLayer";
 import { Button } from "@/components/ui/button";
@@ -32,6 +34,7 @@ import {
   getAvatarCollectibles,
   normalizeAvatarDisplay,
   serializeAvatarDisplay,
+  type AvatarCollectibles,
   type AvatarDisplay,
 } from "@/lib/avatar-display";
 import type { CollectibleKind } from "@/lib/collectibles-catalog";
@@ -89,11 +92,22 @@ import {
   type CSSProperties,
   type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
+  type RefObject,
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
 
 const log = clog("Profile");
+
+const COLLECTIBLE_DISPLAY_KEYS: Record<
+  CollectibleKind,
+  keyof AvatarCollectibles
+> = {
+  avatar_decoration: "avatarDecoration",
+  profile_effect: "profileEffect",
+  nameplate: "nameplate",
+  profile_frame: "profileFrame",
+};
 
 type JoinedMemberPreview = {
   user: User;
@@ -335,57 +349,123 @@ function ProfileRailCard({
   );
 }
 
-function AvatarActionMenu({
-  canRemoveAvatar,
-  canRemoveDecoration,
-  onChangeAvatar,
-  onChangeDecoration,
-  onRemoveAvatar,
-  onRemoveDecoration,
+function ProfileActionMenu({
+  actions,
+  anchorRef,
+  restoreFocusRef,
+  placement = "below",
+  portal = false,
+  onRequestClose,
 }: {
-  canRemoveAvatar: boolean;
-  canRemoveDecoration: boolean;
-  onChangeAvatar: () => void;
-  onChangeDecoration: () => void;
-  onRemoveAvatar: () => void;
-  onRemoveDecoration: () => void;
+  actions: Array<{
+    label: string;
+    onClick: () => void;
+    destructive?: boolean;
+  }>;
+  anchorRef?: RefObject<HTMLElement | null>;
+  restoreFocusRef?: RefObject<HTMLElement | null>;
+  placement?: "below" | "right";
+  portal?: boolean;
+  onRequestClose?: () => void;
 }) {
-  return (
-    <div className="absolute left-[calc(100%+8px)] top-1 z-[180] min-w-[198px] rounded-[12px] border border-rm-border bg-rm-bg-floating p-1.5 shadow-[0_18px_44px_rgba(0,0,0,0.42)] animate-in fade-in zoom-in-95 duration-150 max-md:left-1/2 max-md:top-[calc(100%+8px)] max-md:-translate-x-1/2">
-      <button
-        type="button"
-        onClick={onChangeAvatar}
-        className="flex w-full items-center rounded-lg px-3 py-2 text-left text-[13px] font-semibold text-rm-text transition-colors hover:bg-rm-bg-hover"
-      >
-        Change Avatar
-      </button>
-      <button
-        type="button"
-        onClick={onChangeDecoration}
-        className="flex w-full items-center rounded-lg px-3 py-2 text-left text-[13px] font-semibold text-rm-text transition-colors hover:bg-rm-bg-hover"
-      >
-        Change Avatar Decoration
-      </button>
-      {canRemoveAvatar ? (
+  const [position, setPosition] = useState({ left: 8, top: 8 });
+  const menuRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const trigger = restoreFocusRef?.current ?? anchorRef?.current;
+    const firstAction =
+      menuRef.current?.querySelector<HTMLButtonElement>('[role="menuitem"]');
+    firstAction?.focus();
+
+    return () => {
+      trigger?.focus();
+    };
+  }, [anchorRef, restoreFocusRef]);
+
+  useLayoutEffect(() => {
+    if (!portal || !anchorRef?.current) return;
+
+    const updatePosition = () => {
+      const rect = anchorRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      const left = placement === "right" ? rect.right + 8 : rect.left;
+      const top = placement === "right" ? rect.top : rect.bottom + 8;
+      setPosition({
+        left: Math.max(8, Math.min(left, window.innerWidth - 228)),
+        top: Math.max(8, Math.min(top, window.innerHeight - 220)),
+      });
+    };
+
+    updatePosition();
+    window.addEventListener("resize", updatePosition);
+    window.addEventListener("scroll", updatePosition, true);
+    return () => {
+      window.removeEventListener("resize", updatePosition);
+      window.removeEventListener("scroll", updatePosition, true);
+    };
+  }, [anchorRef, placement, portal]);
+
+  const handleMenuKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    const actions = Array.from(
+      event.currentTarget.querySelectorAll<HTMLButtonElement>(
+        '[role="menuitem"]',
+      ),
+    );
+    const activeIndex = actions.indexOf(
+      document.activeElement as HTMLButtonElement,
+    );
+
+    if (event.key === "Escape") {
+      event.preventDefault();
+      onRequestClose?.();
+      return;
+    }
+
+    if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+    event.preventDefault();
+    const direction = event.key === "ArrowDown" ? 1 : -1;
+    const nextIndex =
+      (activeIndex + direction + actions.length) % actions.length;
+    actions[nextIndex]?.focus();
+  };
+
+  const menu = (
+    <div
+      ref={menuRef}
+      onPointerDown={portal ? (event) => event.stopPropagation() : undefined}
+      onKeyDown={handleMenuKeyDown}
+      role="menu"
+      className={cn(
+        portal
+          ? "fixed z-[2000]"
+          : "absolute left-[calc(100%+8px)] top-1 z-[180] max-md:left-1/2 max-md:top-[calc(100%+8px)] max-md:-translate-x-1/2",
+        "min-w-[198px] rounded-[12px] border border-rm-border bg-rm-bg-floating p-1.5 shadow-[0_18px_44px_rgba(0,0,0,0.42)] animate-in fade-in zoom-in-95 duration-150",
+      )}
+      style={portal ? position : undefined}
+    >
+      {actions.map((action) => (
         <button
+          key={action.label}
           type="button"
-          onClick={onRemoveAvatar}
-          className="flex w-full items-center rounded-lg px-3 py-2 text-left text-[13px] font-semibold text-rose-300 transition-colors hover:bg-rose-500/12 hover:text-rose-200"
+          role="menuitem"
+          tabIndex={-1}
+          onClick={action.onClick}
+          className={cn(
+            "flex w-full items-center rounded-lg px-3 py-2 text-left text-[13px] font-semibold transition-colors",
+            action.destructive
+              ? "text-rose-300 hover:bg-rose-500/12 hover:text-rose-200"
+              : "text-rm-text hover:bg-rm-bg-hover",
+          )}
         >
-          Remove Avatar
+          {action.label}
         </button>
-      ) : null}
-      {canRemoveDecoration ? (
-        <button
-          type="button"
-          onClick={onRemoveDecoration}
-          className="flex w-full items-center rounded-lg px-3 py-2 text-left text-[13px] font-semibold text-rose-300 transition-colors hover:bg-rose-500/12 hover:text-rose-200"
-        >
-          Remove Avatar Decoration
-        </button>
-      ) : null}
+      ))}
     </div>
   );
+
+  return portal && typeof document !== "undefined"
+    ? createPortal(menu, document.body)
+    : menu;
 }
 
 function ColorField({
@@ -2046,12 +2126,22 @@ export default function SettingsAccountTab({
   >(() => chatUser?.avatar_display ?? null);
   const [avatarDisplayChanged, setAvatarDisplayChanged] = useState(false);
   const [avatarPickerOpen, setAvatarPickerOpen] = useState(false);
+  const [bannerPickerOpen, setBannerPickerOpen] = useState(false);
   const [avatarMenuAnchor, setAvatarMenuAnchor] = useState<
     "rail" | "preview" | null
   >(null);
   const avatarMenuOpen = avatarMenuAnchor !== null;
   const avatarMenuRef = useRef<HTMLDivElement | null>(null);
   const avatarPreviewMenuRef = useRef<HTMLDivElement | null>(null);
+  const avatarRailTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const avatarPreviewTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const [profileMenuAnchor, setProfileMenuAnchor] = useState<"preview" | null>(
+    null,
+  );
+  const profileMenuOpen = profileMenuAnchor !== null;
+  const profilePreviewMenuRef = useRef<HTMLDivElement | null>(null);
+  const profileBannerActionRef = useRef<HTMLSpanElement | null>(null);
+  const profileBannerTriggerRef = useRef<HTMLButtonElement | null>(null);
   const [avatarEditor, setAvatarEditor] = useState<{
     src: string;
     file?: File;
@@ -2080,6 +2170,8 @@ export default function SettingsAccountTab({
     isAvatarDecorationPreviewHovered,
     setIsAvatarDecorationPreviewHovered,
   ] = useState(false);
+  const [isProfileEffectPreviewHovered, setIsProfileEffectPreviewHovered] =
+    useState(false);
   const [activePreviewField, setActivePreviewField] = useState<
     "pronouns" | "bio" | null
   >(null);
@@ -2115,19 +2207,24 @@ export default function SettingsAccountTab({
   }, [chatUser?.custom_status, isCustomStatusEditing]);
 
   useEffect(() => {
-    if (!avatarMenuOpen) return;
+    if (!avatarMenuOpen && !profileMenuOpen) return;
 
     const handlePointerDown = (event: PointerEvent) => {
       const target = event.target as Node;
       if (
         !avatarMenuRef.current?.contains(target) &&
-        !avatarPreviewMenuRef.current?.contains(target)
+        !avatarPreviewMenuRef.current?.contains(target) &&
+        !profilePreviewMenuRef.current?.contains(target)
       ) {
         setAvatarMenuAnchor(null);
+        setProfileMenuAnchor(null);
       }
     };
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setAvatarMenuAnchor(null);
+      if (event.key === "Escape") {
+        setAvatarMenuAnchor(null);
+        setProfileMenuAnchor(null);
+      }
     };
 
     document.addEventListener("pointerdown", handlePointerDown);
@@ -2136,7 +2233,7 @@ export default function SettingsAccountTab({
       document.removeEventListener("pointerdown", handlePointerDown);
       document.removeEventListener("keydown", handleKeyDown);
     };
-  }, [avatarMenuOpen]);
+  }, [avatarMenuOpen, profileMenuOpen]);
 
   useEffect(() => {
     if (activePreviewField === "pronouns") {
@@ -2273,12 +2370,21 @@ export default function SettingsAccountTab({
   const currentCollectibles = getAvatarCollectibles(currentAvatarDisplay);
   const currentAvatarDecoration = currentCollectibles?.avatarDecoration;
   const currentProfileEffect = currentCollectibles?.profileEffect;
+  const currentProfileFrame = currentCollectibles?.profileFrame;
   const currentNameplateSelection = currentCollectibles?.nameplate;
   const currentProfileEffectDisplay = currentProfileEffect
     ? normalizeAvatarDisplay({
         version: 1,
         collectibles: {
           profileEffect: currentProfileEffect,
+        },
+      })
+    : null;
+  const currentProfileFrameDisplay = currentProfileFrame
+    ? normalizeAvatarDisplay({
+        version: 1,
+        collectibles: {
+          profileFrame: currentProfileFrame,
         },
       })
     : null;
@@ -2453,19 +2559,51 @@ export default function SettingsAccountTab({
   ]);
 
   const syncCollectibleState = useCallback(
-    async (updatedUser: CollectibleApplyUser) => {
-      setAvatarDisplay(updatedUser.avatar_display);
-      setRemoveNameplate(false);
-      setNameplateFile(null);
-      setNameplatePreview(null);
+    async (
+      updatedUser: CollectibleApplyUser,
+      appliedKinds: CollectibleKind[],
+    ) => {
+      const persistedDisplay = normalizeAvatarDisplay(
+        updatedUser.avatar_display,
+      );
+      const draftDisplay = normalizeAvatarDisplay(currentAvatarDisplay);
+      const mergedCollectibles: AvatarCollectibles = {
+        ...(draftDisplay?.collectibles ?? {}),
+      };
+      for (const kind of appliedKinds) {
+        const key = COLLECTIBLE_DISPLAY_KEYS[kind];
+        const nextValue = persistedDisplay?.collectibles?.[key];
+        if (nextValue) {
+          Object.assign(mergedCollectibles, { [key]: nextValue });
+        } else {
+          delete mergedCollectibles[key];
+        }
+      }
+      const mergedDisplay = normalizeAvatarDisplay({
+        version: 1,
+        ...(draftDisplay?.crop ? { crop: draftDisplay.crop } : {}),
+        ...(Object.keys(mergedCollectibles).length > 0
+          ? { collectibles: mergedCollectibles }
+          : {}),
+      });
+      setAvatarDisplay(mergedDisplay ?? persistedDisplay);
+      if (appliedKinds.includes("nameplate")) {
+        setRemoveNameplate(false);
+        setNameplateFile(null);
+        setNameplatePreview(null);
+      }
       if (typeof user?.reload === "function") {
         await user.reload();
       }
       await loadCurrentUser();
-      setAvatarDisplayChanged(Boolean(avatarFile));
+      setAvatarDisplayChanged(
+        Boolean(avatarFile) ||
+          JSON.stringify(mergedDisplay) !== JSON.stringify(persistedDisplay),
+      );
     },
     [
       avatarFile,
+      currentAvatarDisplay,
       loadCurrentUser,
       setAvatarDisplay,
       setAvatarDisplayChanged,
@@ -2542,12 +2680,22 @@ export default function SettingsAccountTab({
     setRemoveAvatar,
   ]);
 
-  const handleBannerSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+  const handleBannerFile = (file: File) => {
     if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      setError("Please choose an image file for your banner.");
+      return;
+    }
     setRemoveBanner(false);
     setBannerFile(file);
     setBannerPreview(createAssetPreview(file));
+  };
+
+  const handleBannerSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    handleBannerFile(file);
+    e.target.value = "";
   };
 
   const handleNameplateSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -2926,7 +3074,7 @@ export default function SettingsAccountTab({
         <div
           className={cn(
             asModal
-              ? "h-full pb-24 md:pb-28 lg:pb-8"
+              ? "h-full pb-24 md:pb-28 lg:pb-0"
               : "px-4 pb-6 pt-2 md:px-6 md:pb-8 md:pt-4",
           )}
         >
@@ -2940,18 +3088,12 @@ export default function SettingsAccountTab({
           <div
             className={cn(
               "grid gap-6 lg:grid-cols-[228px_minmax(0,1fr)]",
+              asModal && "min-h-full gap-0 lg:h-full lg:min-h-0 lg:items-start",
               asModal &&
-                "min-h-full gap-0 lg:h-full lg:min-h-0 lg:grid-cols-[228px_minmax(0,1fr)] lg:items-start",
+                (stylesCollapsed
+                  ? "lg:grid-cols-[0px_minmax(0,1fr)]"
+                  : "lg:grid-cols-[228px_minmax(0,1fr)]"),
             )}
-            style={
-              asModal
-                ? ({
-                    gridTemplateColumns: stylesCollapsed
-                      ? "0px minmax(0,1fr)"
-                      : "228px minmax(0,1fr)",
-                  } as CSSProperties)
-                : undefined
-            }
           >
             <aside
               className={cn(
@@ -3131,12 +3273,14 @@ export default function SettingsAccountTab({
                           }
                         >
                           <button
+                            ref={avatarRailTriggerRef}
                             type="button"
-                            onClick={() =>
+                            onClick={() => {
+                              setProfileMenuAnchor(null);
                               setAvatarMenuAnchor((anchor) =>
                                 anchor === "rail" ? null : "rail",
-                              )
-                            }
+                              );
+                            }}
                             className="group/avatar relative flex h-[64px] w-[64px] items-center justify-center rounded-[16px] border border-rm-border bg-rm-bg-surface/70 outline-none transition-[transform,box-shadow] hover:scale-[1.03] hover:shadow-[0_12px_26px_rgba(0,0,0,0.25)] focus-visible:ring-2 focus-visible:ring-primary"
                             aria-label="Open avatar actions"
                             aria-haspopup="true"
@@ -3162,27 +3306,51 @@ export default function SettingsAccountTab({
                           </button>
 
                           {avatarMenuAnchor === "rail" ? (
-                            <AvatarActionMenu
-                              canRemoveAvatar={hasRemovableAvatar}
-                              canRemoveDecoration={Boolean(
-                                currentAvatarDecoration,
-                              )}
-                              onChangeAvatar={() => {
-                                setAvatarMenuAnchor(null);
-                                setAvatarPickerOpen(true);
-                              }}
-                              onChangeDecoration={() => {
-                                setAvatarMenuAnchor(null);
-                                handleOpenCollectibles("avatar_decoration");
-                              }}
-                              onRemoveAvatar={() => {
-                                setAvatarMenuAnchor(null);
-                                handleRemoveAvatar();
-                              }}
-                              onRemoveDecoration={() => {
-                                setAvatarMenuAnchor(null);
-                                handleRemoveCollectible("avatar_decoration");
-                              }}
+                            <ProfileActionMenu
+                              restoreFocusRef={avatarRailTriggerRef}
+                              onRequestClose={() => setAvatarMenuAnchor(null)}
+                              actions={[
+                                {
+                                  label: "Change Avatar",
+                                  onClick: () => {
+                                    setAvatarMenuAnchor(null);
+                                    setAvatarPickerOpen(true);
+                                  },
+                                },
+                                {
+                                  label: "Change Avatar Decoration",
+                                  onClick: () => {
+                                    setAvatarMenuAnchor(null);
+                                    handleOpenCollectibles("avatar_decoration");
+                                  },
+                                },
+                                ...(hasRemovableAvatar
+                                  ? [
+                                      {
+                                        label: "Remove Avatar",
+                                        destructive: true,
+                                        onClick: () => {
+                                          setAvatarMenuAnchor(null);
+                                          handleRemoveAvatar();
+                                        },
+                                      },
+                                    ]
+                                  : []),
+                                ...(currentAvatarDecoration
+                                  ? [
+                                      {
+                                        label: "Remove Avatar Decoration",
+                                        destructive: true,
+                                        onClick: () => {
+                                          setAvatarMenuAnchor(null);
+                                          handleRemoveCollectible(
+                                            "avatar_decoration",
+                                          );
+                                        },
+                                      },
+                                    ]
+                                  : []),
+                              ]}
                             />
                           ) : null}
                         </ProfileRailCard>
@@ -3503,68 +3671,138 @@ export default function SettingsAccountTab({
                     </ProfileRailCard>
                   </ProfileRailSection>
 
-                  <ProfileRailSection title="Profile Effect">
-                    <ProfileRailCard
-                      className="p-2.5"
-                      actions={
-                        <AccountActionIconButton
-                          label="Remove profile effect"
-                          onClick={() =>
-                            handleRemoveCollectible("profile_effect")
+                  <ProfileRailSection title="Profile Effect & Frame">
+                    <div className="grid grid-cols-2 gap-2.5">
+                      <div className="relative">
+                        <ProfileRailCard
+                          className="p-2.5"
+                          onHoverChange={setIsProfileEffectPreviewHovered}
+                          actions={
+                            <AccountActionIconButton
+                              label="Remove profile effect"
+                              onClick={() =>
+                                handleRemoveCollectible("profile_effect")
+                              }
+                              disabled={!currentProfileEffect}
+                              className="text-rose-300 hover:bg-rose-500/12 hover:text-rose-100"
+                            >
+                              <Trash2 size={12} />
+                            </AccountActionIconButton>
                           }
-                          disabled={!currentProfileEffect}
-                          className="text-rose-300 hover:bg-rose-500/12 hover:text-rose-100"
                         >
-                          <Trash2 size={12} />
-                        </AccountActionIconButton>
-                      }
-                    >
-                      <button
-                        type="button"
-                        onClick={() => handleOpenCollectibles("profile_effect")}
-                        className="group/profile-effect relative block h-[88px] w-full cursor-pointer overflow-hidden rounded-[12px] border border-rm-border/70 bg-rm-bg-surface text-left outline-none transition duration-200 hover:border-rm-border hover:shadow-[0_18px_32px_rgba(0,0,0,0.24)] focus-visible:border-primary/60 focus-visible:shadow-[0_0_0_1px_rgba(88,101,242,0.4),0_18px_32px_rgba(0,0,0,0.24)]"
-                        aria-label="Browse profile effects"
-                      >
-                        <div className="absolute inset-0 flex items-center justify-center px-3">
-                          <div
-                            className="relative h-[74px] overflow-hidden rounded-[12px] border border-rm-border/70 bg-rm-bg-elevated shadow-[0_18px_34px_rgba(0,0,0,0.3)] transition-transform duration-200 group-hover/profile-effect:scale-[1.03]"
-                            style={{ aspectRatio: "450 / 880" }}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setAvatarMenuAnchor(null);
+                              setProfileMenuAnchor(null);
+                              handleOpenCollectibles("profile_effect");
+                            }}
+                            className="group/profile-effect relative block h-[88px] w-full cursor-pointer overflow-hidden rounded-[12px] border border-rm-border/70 bg-rm-bg-surface text-left outline-none transition-[border-color,box-shadow] hover:border-rm-border hover:shadow-[0_18px_32px_rgba(0,0,0,0.24)] focus-visible:border-primary/60 focus-visible:shadow-[0_0_0_1px_rgba(88,101,242,0.4),0_18px_32px_rgba(0,0,0,0.24)]"
+                            aria-label="Browse profile effects"
                           >
-                            <div
-                              className="absolute inset-0"
-                              style={{
-                                ...previewThemeStyle,
-                                backgroundColor:
-                                  previewTheme.backgroundColor ?? undefined,
-                                backgroundImage:
-                                  "var(--rm-profile-custom-surface)",
-                              }}
-                            />
-                            {currentProfileEffectDisplay ? (
-                              <ProfileCollectiblesLayer
-                                display={currentProfileEffectDisplay}
-                                effectOpacity={1}
-                                fit="contain"
-                                className="z-10 opacity-100"
-                                playAnimation={false}
-                              />
-                            ) : (
-                              <div className="absolute inset-0 z-10 flex items-center justify-center px-2 text-center text-[11px] font-semibold text-rm-text-muted">
-                                None
+                            <div className="absolute inset-0 flex items-center justify-center px-3">
+                              <div
+                                className="relative h-[74px] overflow-hidden rounded-[12px] border border-rm-border/70 bg-rm-bg-elevated shadow-[0_18px_34px_rgba(0,0,0,0.3)] transition-transform duration-200 group-hover/profile-effect:scale-[1.03]"
+                                style={{ aspectRatio: "450 / 880" }}
+                              >
+                                <div
+                                  className="absolute inset-0"
+                                  style={{
+                                    ...previewThemeStyle,
+                                    backgroundColor:
+                                      previewTheme.backgroundColor ?? undefined,
+                                    backgroundImage:
+                                      "var(--rm-profile-custom-surface)",
+                                  }}
+                                />
+                                {currentProfileEffectDisplay ? (
+                                  <ProfileCollectiblesLayer
+                                    display={currentProfileEffectDisplay}
+                                    effectOpacity={1}
+                                    fit="contain"
+                                    className="z-10 opacity-100"
+                                    playAnimation={
+                                      isProfileEffectPreviewHovered
+                                    }
+                                  />
+                                ) : (
+                                  <div className="absolute inset-0 z-10 flex items-center justify-center text-rm-text-muted">
+                                    <Plus size={22} strokeWidth={2.5} />
+                                  </div>
+                                )}
+                                <div className="absolute inset-0 bg-[linear-gradient(180deg,_rgba(255,255,255,0.12)_0%,_rgba(255,255,255,0.04)_42%,_rgba(0,0,0,0.16)_100%)]" />
                               </div>
-                            )}
-                            <div className="absolute inset-0 bg-[linear-gradient(180deg,_rgba(255,255,255,0.12)_0%,_rgba(255,255,255,0.04)_42%,_rgba(0,0,0,0.16)_100%)]" />
-                          </div>
-                        </div>
-                        <div
-                          className="pointer-events-none absolute inset-0 opacity-0 transition duration-200 group-hover/profile-effect:opacity-100"
-                          style={{
-                            background:
-                              "var(--rm-profile-custom-surface-overlay-strong)",
-                          }}
-                        />
-                      </button>
-                    </ProfileRailCard>
+                            </div>
+                          </button>
+                        </ProfileRailCard>
+                      </div>
+
+                      <div className="relative">
+                        <ProfileRailCard
+                          className="overflow-visible p-2.5"
+                          actions={
+                            <AccountActionIconButton
+                              label="Remove profile frame"
+                              onClick={() =>
+                                handleRemoveCollectible("profile_frame")
+                              }
+                              disabled={!currentProfileFrame}
+                              className="text-rose-300 hover:bg-rose-500/12 hover:text-rose-100"
+                            >
+                              <Trash2 size={12} />
+                            </AccountActionIconButton>
+                          }
+                        >
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setAvatarMenuAnchor(null);
+                              setProfileMenuAnchor(null);
+                              handleOpenCollectibles("profile_frame");
+                            }}
+                            className="group/profile-frame relative block h-[88px] w-full cursor-pointer overflow-visible rounded-[12px] border border-rm-border/70 bg-rm-bg-surface text-left outline-none transition-[border-color,box-shadow] hover:border-rm-border hover:shadow-[0_18px_32px_rgba(0,0,0,0.24)] focus-visible:border-primary/60 focus-visible:shadow-[0_0_0_1px_rgba(88,101,242,0.4),0_18px_32px_rgba(0,0,0,0.24)]"
+                            aria-label="Browse profile frames"
+                          >
+                            <div className="absolute inset-0 flex items-center justify-center px-3 overflow-visible">
+                              <div
+                                className="relative h-[74px] overflow-visible rounded-[12px] border border-rm-border/70 bg-rm-bg-elevated shadow-[0_18px_34px_rgba(0,0,0,0.3)] transition-transform duration-200 group-hover/profile-frame:scale-[1.03]"
+                                style={{ aspectRatio: "450 / 880" }}
+                              >
+                                <div
+                                  className="absolute inset-0 overflow-hidden rounded-[12px]"
+                                  style={{
+                                    ...previewThemeStyle,
+                                    backgroundColor:
+                                      previewTheme.backgroundColor ?? undefined,
+                                    backgroundImage:
+                                      "var(--rm-profile-custom-surface)",
+                                  }}
+                                />
+                                {currentProfileFrameDisplay ? (
+                                  <>
+                                    <ProfileFrameLayer
+                                      display={currentProfileFrameDisplay}
+                                      order="back"
+                                      className="z-0"
+                                    />
+                                    <ProfileFrameLayer
+                                      display={currentProfileFrameDisplay}
+                                      order="front"
+                                      className="z-20"
+                                    />
+                                  </>
+                                ) : (
+                                  <div className="absolute inset-0 z-10 flex items-center justify-center text-rm-text-muted">
+                                    <Plus size={22} strokeWidth={2.5} />
+                                  </div>
+                                )}
+                                <div className="absolute inset-0 bg-[linear-gradient(180deg,_rgba(255,255,255,0.12)_0%,_rgba(255,255,255,0.04)_42%,_rgba(0,0,0,0.16)_100%)]" />
+                              </div>
+                            </div>
+                          </button>
+                        </ProfileRailCard>
+                      </div>
+                    </div>
                   </ProfileRailSection>
                 </div>
               </div>
@@ -3572,8 +3810,9 @@ export default function SettingsAccountTab({
 
             <div
               className={cn(
-                "relative z-0 min-w-0 overflow-hidden bg-rm-bg-elevated md:grid md:justify-center md:gap-6 md:px-5 md:py-5 lg:gap-8 lg:px-8 lg:py-8",
+                "relative z-0 min-w-0 overflow-visible bg-rm-bg-elevated md:grid md:justify-center md:gap-6 md:px-5 md:py-5 lg:gap-8 lg:px-8 lg:py-8",
                 "md:grid-cols-[minmax(0,388px)_minmax(0,520px)] lg:grid-cols-[minmax(0,400px)_minmax(0,540px)]",
+                "lg:h-full lg:min-h-0 lg:overflow-hidden",
                 !asModal &&
                   "border border-[color:var(--rm-profile-custom-card-border)] shadow-[0_26px_80px_rgba(0,0,0,0.34)]",
                 asModal && stylesCollapsed && "md:mx-auto md:max-w-[1080px]",
@@ -3597,6 +3836,7 @@ export default function SettingsAccountTab({
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <button
+                      ref={profileBannerTriggerRef}
                       type="button"
                       onClick={() => setStylesCollapsed(false)}
                       className="group absolute left-0 top-1/2 z-20 hidden -translate-x-[46%] -translate-y-1/2 rounded-r-2xl rounded-l-xl border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] px-3 py-3 text-[12px] font-semibold text-[color:var(--rm-profile-custom-text)] shadow-[0_18px_34px_rgba(0,0,0,0.28)] transition hover:-translate-x-[40%] lg:flex"
@@ -3618,469 +3858,559 @@ export default function SettingsAccountTab({
                 </Tooltip>
               ) : null}
 
-              <section
-                className="relative z-10 mx-auto w-full max-w-[400px] self-start overflow-hidden rounded-[28px] border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg)] shadow-[0_26px_64px_rgba(0,0,0,0.26)] backdrop-blur-[18px]"
-                style={{
-                  aspectRatio: PROFILE_SURFACE_ASPECT_RATIO,
-                }}
-              >
-                <div
-                  className="pointer-events-none absolute inset-0 z-[2]"
-                  style={{
-                    background: "var(--rm-profile-custom-surface-overlay)",
-                  }}
-                />
-                <div className="pointer-events-none absolute inset-0 z-30">
-                  <ProfileCollectiblesLayer
-                    display={currentAvatarDisplay}
-                    effectOpacity={1}
-                    fit="contain"
-                    className="z-10 opacity-100"
-                  />
-                </div>
-                <button
-                  type="button"
-                  onClick={() => bannerInputRef.current?.click()}
-                  className="group/preview-banner relative block h-[18%] min-h-[128px] w-full overflow-hidden text-left"
-                  style={{
-                    background: "var(--rm-profile-custom-banner-fallback)",
-                  }}
-                  aria-label="Change profile banner"
+              <div className="relative z-10 mx-auto mt-16 mb-14 w-full max-w-[400px] self-start overflow-visible lg:mt-10 lg:mb-0 lg:h-[min(782px,calc(100dvh-108px))]">
+                <ProfileSurfaceShell
+                  display={currentAvatarDisplay}
+                  className="relative h-auto w-full max-w-[400px] lg:h-full lg:aspect-[450/880] lg:w-[min(400px,calc(51.136dvh_-_55.2px))]"
+                  surfaceStyle={{ aspectRatio: PROFILE_SURFACE_ASPECT_RATIO }}
                 >
-                  <ProfileAssetLayer
-                    url={currentBannerUrl}
-                    contentType={currentBannerContentType}
-                    alt="Profile banner"
-                    className="opacity-94"
-                  />
                   <div
-                    className="absolute inset-0"
-                    style={{
-                      background: "var(--rm-profile-custom-banner-overlay)",
-                    }}
-                  />
-                  <div className="absolute inset-0 bg-black/0 transition group-hover/preview-banner:bg-black/28" />
-                  <span className="absolute right-4 top-4 z-20 flex h-9 w-9 items-center justify-center rounded-full border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] text-[color:var(--rm-profile-custom-text)] opacity-0 shadow-[0_14px_28px_rgba(0,0,0,0.24)] backdrop-blur-sm transition group-hover/preview-banner:opacity-100">
-                    <Pencil size={15} />
-                  </span>
-                </button>
-
-                <div className="relative z-20 px-6 pb-7">
-                  <div className="-mt-9">
-                    <div className="flex items-start justify-between gap-4">
+                    ref={profilePreviewMenuRef}
+                    className="relative h-[18%] min-h-[128px]"
+                  >
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAvatarMenuAnchor(null);
+                        setProfileMenuAnchor((anchor) =>
+                          anchor === "preview" ? null : "preview",
+                        );
+                      }}
+                      className="group/preview-banner relative block h-full min-h-[128px] w-full overflow-hidden text-left"
+                      style={{
+                        background: "var(--rm-profile-custom-banner-fallback)",
+                      }}
+                      aria-label="Open profile effect and frame actions"
+                      aria-haspopup="true"
+                      aria-expanded={profileMenuAnchor === "preview"}
+                    >
+                      <ProfileAssetLayer
+                        url={currentBannerUrl}
+                        contentType={currentBannerContentType}
+                        alt="Profile banner"
+                        className="opacity-94"
+                      />
                       <div
-                        ref={avatarPreviewMenuRef}
-                        className="relative shrink-0"
+                        className="absolute inset-0"
+                        style={{
+                          background: "var(--rm-profile-custom-banner-overlay)",
+                        }}
+                      />
+                      <div className="absolute inset-0 bg-black/0 transition group-hover/preview-banner:bg-black/28" />
+                      <span
+                        ref={profileBannerActionRef}
+                        className="absolute right-4 top-4 z-20 flex h-9 w-9 items-center justify-center rounded-full border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] text-[color:var(--rm-profile-custom-text)] opacity-0 shadow-[0_14px_28px_rgba(0,0,0,0.24)] backdrop-blur-sm transition group-hover/preview-banner:opacity-100"
                       >
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setAvatarMenuAnchor((anchor) =>
-                              anchor === "preview" ? null : "preview",
-                            )
-                          }
-                          className="group/preview-avatar relative h-28 w-28 rounded-full border-[6px] border-rm-bg-elevated bg-[var(--rm-profile-custom-card-bg-strong)] shadow-[0_18px_46px_rgba(0,0,0,0.42)] transition-[transform,box-shadow] hover:scale-[1.02] hover:shadow-[0_20px_52px_rgba(0,0,0,0.48)] focus-visible:ring-2 focus-visible:ring-primary"
-                          aria-label="Open avatar actions"
-                          aria-haspopup="true"
-                          aria-expanded={avatarMenuOpen}
+                        <Pencil size={15} />
+                      </span>
+                    </button>
+                    {profileMenuAnchor === "preview" ? (
+                      <ProfileActionMenu
+                        anchorRef={profileBannerActionRef}
+                        restoreFocusRef={profileBannerTriggerRef}
+                        placement="right"
+                        portal
+                        onRequestClose={() => setProfileMenuAnchor(null)}
+                        actions={[
+                          {
+                            label: "Change Banner",
+                            onClick: () => {
+                              setProfileMenuAnchor(null);
+                              setBannerPickerOpen(true);
+                            },
+                          },
+                          {
+                            label: "Change Profile Effect",
+                            onClick: () => {
+                              setProfileMenuAnchor(null);
+                              handleOpenCollectibles("profile_effect");
+                            },
+                          },
+                          {
+                            label: "Change Profile Frame",
+                            onClick: () => {
+                              setProfileMenuAnchor(null);
+                              handleOpenCollectibles("profile_frame");
+                            },
+                          },
+                          ...(currentProfileEffect
+                            ? [
+                                {
+                                  label: "Remove Profile Effect",
+                                  destructive: true,
+                                  onClick: () => {
+                                    setProfileMenuAnchor(null);
+                                    handleRemoveCollectible("profile_effect");
+                                  },
+                                },
+                              ]
+                            : []),
+                          ...(currentProfileFrame
+                            ? [
+                                {
+                                  label: "Remove Profile Frame",
+                                  destructive: true,
+                                  onClick: () => {
+                                    setProfileMenuAnchor(null);
+                                    handleRemoveCollectible("profile_frame");
+                                  },
+                                },
+                              ]
+                            : []),
+                        ]}
+                      />
+                    ) : null}
+                  </div>
+
+                  <div className="relative z-20 px-6 pb-7">
+                    <div className="-mt-9">
+                      <div className="flex items-start justify-between gap-4">
+                        <div
+                          ref={avatarPreviewMenuRef}
+                          className="relative shrink-0"
                         >
-                          {currentAvatarSrc ? (
-                            <AvatarImage
-                              src={currentAvatarSrc}
-                              alt={currentDisplayName}
-                              display={currentAvatarDisplay}
-                            />
-                          ) : (
-                            <div className="flex h-full w-full items-center justify-center rounded-full text-3xl font-bold text-[color:var(--rm-profile-custom-text)]">
-                              {getDisplayInitial({ name: currentDisplayName })}
-                            </div>
-                          )}
-                          <span className="absolute inset-0 rounded-full bg-black/0 transition group-hover/preview-avatar:bg-black/36" />
-                          <span className="absolute inset-0 z-10 flex items-center justify-center opacity-0 transition group-hover/preview-avatar:opacity-100">
-                            <span className="flex h-10 w-10 items-center justify-center rounded-full border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] text-[color:var(--rm-profile-custom-text)] shadow-[0_14px_28px_rgba(0,0,0,0.24)] backdrop-blur-sm">
-                              <Pencil size={16} />
-                            </span>
-                          </span>
-                        </button>
-                        {avatarMenuAnchor === "preview" ? (
-                          <AvatarActionMenu
-                            canRemoveAvatar={hasRemovableAvatar}
-                            canRemoveDecoration={Boolean(
-                              currentAvatarDecoration,
+                          <button
+                            ref={avatarPreviewTriggerRef}
+                            type="button"
+                            onClick={() => {
+                              setProfileMenuAnchor(null);
+                              setAvatarMenuAnchor((anchor) =>
+                                anchor === "preview" ? null : "preview",
+                              );
+                            }}
+                            className="group/preview-avatar relative h-28 w-28 rounded-full border-[6px] border-rm-bg-elevated bg-[var(--rm-profile-custom-card-bg-strong)] shadow-[0_18px_46px_rgba(0,0,0,0.42)] transition-[transform,box-shadow] hover:scale-[1.02] hover:shadow-[0_20px_52px_rgba(0,0,0,0.48)] focus-visible:ring-2 focus-visible:ring-primary"
+                            aria-label="Open avatar actions"
+                            aria-haspopup="true"
+                            aria-expanded={avatarMenuOpen}
+                          >
+                            {currentAvatarSrc ? (
+                              <AvatarImage
+                                src={currentAvatarSrc}
+                                alt={currentDisplayName}
+                                display={currentAvatarDisplay}
+                              />
+                            ) : (
+                              <div className="flex h-full w-full items-center justify-center rounded-full text-3xl font-bold text-[color:var(--rm-profile-custom-text)]">
+                                {getDisplayInitial({
+                                  name: currentDisplayName,
+                                })}
+                              </div>
                             )}
-                            onChangeAvatar={() => {
-                              setAvatarMenuAnchor(null);
-                              setAvatarPickerOpen(true);
-                            }}
-                            onChangeDecoration={() => {
-                              setAvatarMenuAnchor(null);
-                              handleOpenCollectibles("avatar_decoration");
-                            }}
-                            onRemoveAvatar={() => {
-                              setAvatarMenuAnchor(null);
-                              handleRemoveAvatar();
-                            }}
-                            onRemoveDecoration={() => {
-                              setAvatarMenuAnchor(null);
-                              handleRemoveCollectible("avatar_decoration");
-                            }}
-                          />
-                        ) : null}
-                      </div>
-
-                      <div className="relative ml-auto flex w-full min-w-0 max-w-[220px] justify-end pt-10">
-                        {isCustomStatusEditing ? (
-                          <div className="relative z-50 flex h-[42px] w-full min-w-0 items-center rounded-full border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] p-1 shadow-[0_18px_40px_rgba(0,0,0,0.28)] backdrop-blur-xl animate-in fade-in zoom-in-95">
-                            <input
-                              ref={previewCustomStatusInputRef}
-                              type="text"
-                              value={customStatusDraft}
-                              onChange={(event) =>
-                                setCustomStatusDraft(
-                                  event.target.value.slice(0, 128),
-                                )
-                              }
-                              onClick={(event) => event.stopPropagation()}
-                              onBlur={handleSaveCustomStatus}
-                              onKeyDown={(event) => {
-                                if (event.key === "Enter") {
-                                  event.preventDefault();
-                                  handleSaveCustomStatus();
-                                }
-
-                                if (event.key === "Escape") {
-                                  event.preventDefault();
-                                  setCustomStatusDraft(
-                                    chatUser?.custom_status ?? "",
-                                  );
-                                  setIsCustomStatusEditing(false);
-                                }
-                              }}
-                              className="min-w-0 flex-1 rounded-full bg-white/10 px-3 py-2 text-[13px] text-[color:var(--rm-profile-custom-text)] outline-none placeholder:text-[color:var(--rm-profile-custom-muted)]"
-                              aria-label="Custom status"
-                              placeholder="Support custom status!"
-                              maxLength={128}
-                            />
-                          </div>
-                        ) : hasCustomStatus ? (
-                          <div className="group/preview-status inline-flex max-w-full min-w-0 items-center gap-2 rounded-full border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] pl-3 pr-2 py-1.5 text-left shadow-[0_12px_28px_rgba(0,0,0,0.22)] backdrop-blur-md transition-colors hover:bg-[var(--rm-profile-custom-card-bg)]">
-                            <button
-                              type="button"
-                              className="min-w-0 flex-1 rounded-full text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35"
-                              aria-label="Edit custom status"
-                              onClick={handleOpenCustomStatusEditor}
-                            >
-                              <span className="block min-w-0 truncate text-[13px] italic font-medium text-[color:var(--rm-profile-custom-text)]">
-                                {visibleCustomStatus}
+                            <span className="absolute inset-0 rounded-full bg-black/0 transition group-hover/preview-avatar:bg-black/36" />
+                            <span className="absolute inset-0 z-10 flex items-center justify-center opacity-0 transition group-hover/preview-avatar:opacity-100">
+                              <span className="flex h-10 w-10 items-center justify-center rounded-full border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] text-[color:var(--rm-profile-custom-text)] shadow-[0_14px_28px_rgba(0,0,0,0.24)] backdrop-blur-sm">
+                                <Pencil size={16} />
                               </span>
-                            </button>
-                            <span className="flex shrink-0 items-center gap-1 pl-1">
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <button
-                                    type="button"
-                                    onClick={(event) => {
-                                      event.stopPropagation();
-                                      handleOpenCustomStatusEditor();
-                                    }}
-                                    className="pointer-events-none flex h-7 w-7 items-center justify-center rounded-full border border-transparent text-[color:var(--rm-profile-custom-muted)] opacity-0 transition hover:border-[color:var(--rm-profile-custom-card-border)] hover:bg-[var(--rm-profile-custom-card-bg-strong)] hover:text-[color:var(--rm-profile-custom-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35 group-hover/preview-status:pointer-events-auto group-hover/preview-status:opacity-100 group-focus-within/preview-status:pointer-events-auto group-focus-within/preview-status:opacity-100"
-                                    aria-label="Edit custom status"
-                                  >
-                                    <Pencil size={14} />
-                                  </button>
-                                </TooltipTrigger>
-                                <TooltipContent
-                                  side="top"
-                                  sideOffset={8}
-                                  className={SETTINGS_TOOLTIP_CONTENT_CLASS}
-                                >
-                                  Edit custom status
-                                </TooltipContent>
-                              </Tooltip>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <button
-                                    type="button"
-                                    onClick={(event) => {
-                                      event.stopPropagation();
-                                      handleClearCustomStatus();
-                                    }}
-                                    className="pointer-events-none flex h-7 w-7 items-center justify-center rounded-full border border-transparent text-[color:var(--rm-profile-custom-muted)] opacity-0 transition hover:border-[color:var(--rm-profile-custom-card-border)] hover:bg-[var(--rm-profile-custom-card-bg-strong)] hover:text-[color:var(--rm-profile-custom-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35 group-hover/preview-status:pointer-events-auto group-hover/preview-status:opacity-100 group-focus-within/preview-status:pointer-events-auto group-focus-within/preview-status:opacity-100"
-                                    aria-label="Clear custom status"
-                                  >
-                                    <Trash2 size={14} />
-                                  </button>
-                                </TooltipTrigger>
-                                <TooltipContent
-                                  side="top"
-                                  sideOffset={8}
-                                  className={SETTINGS_TOOLTIP_CONTENT_CLASS}
-                                >
-                                  Clear custom status
-                                </TooltipContent>
-                              </Tooltip>
                             </span>
-                          </div>
-                        ) : (
-                          <Tooltip>
-                            <TooltipTrigger asChild>
+                          </button>
+                          {avatarMenuAnchor === "preview" ? (
+                            <ProfileActionMenu
+                              restoreFocusRef={avatarPreviewTriggerRef}
+                              onRequestClose={() => setAvatarMenuAnchor(null)}
+                              actions={[
+                                {
+                                  label: "Change Avatar",
+                                  onClick: () => {
+                                    setAvatarMenuAnchor(null);
+                                    setAvatarPickerOpen(true);
+                                  },
+                                },
+                                {
+                                  label: "Change Avatar Decoration",
+                                  onClick: () => {
+                                    setAvatarMenuAnchor(null);
+                                    handleOpenCollectibles("avatar_decoration");
+                                  },
+                                },
+                                ...(hasRemovableAvatar
+                                  ? [
+                                      {
+                                        label: "Remove Avatar",
+                                        destructive: true,
+                                        onClick: () => {
+                                          setAvatarMenuAnchor(null);
+                                          handleRemoveAvatar();
+                                        },
+                                      },
+                                    ]
+                                  : []),
+                                ...(currentAvatarDecoration
+                                  ? [
+                                      {
+                                        label: "Remove Avatar Decoration",
+                                        destructive: true,
+                                        onClick: () => {
+                                          setAvatarMenuAnchor(null);
+                                          handleRemoveCollectible(
+                                            "avatar_decoration",
+                                          );
+                                        },
+                                      },
+                                    ]
+                                  : []),
+                              ]}
+                            />
+                          ) : null}
+                        </div>
+
+                        <div className="relative ml-auto flex w-full min-w-0 max-w-[220px] justify-end pt-10">
+                          {isCustomStatusEditing ? (
+                            <div className="relative z-50 flex h-[42px] w-full min-w-0 items-center rounded-full border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] p-1 shadow-[0_18px_40px_rgba(0,0,0,0.28)] backdrop-blur-xl animate-in fade-in zoom-in-95">
+                              <input
+                                ref={previewCustomStatusInputRef}
+                                type="text"
+                                value={customStatusDraft}
+                                onChange={(event) =>
+                                  setCustomStatusDraft(
+                                    event.target.value.slice(0, 128),
+                                  )
+                                }
+                                onClick={(event) => event.stopPropagation()}
+                                onBlur={handleSaveCustomStatus}
+                                onKeyDown={(event) => {
+                                  if (event.key === "Enter") {
+                                    event.preventDefault();
+                                    handleSaveCustomStatus();
+                                  }
+
+                                  if (event.key === "Escape") {
+                                    event.preventDefault();
+                                    setCustomStatusDraft(
+                                      chatUser?.custom_status ?? "",
+                                    );
+                                    setIsCustomStatusEditing(false);
+                                  }
+                                }}
+                                className="min-w-0 flex-1 rounded-full bg-white/10 px-3 py-2 text-[13px] text-[color:var(--rm-profile-custom-text)] outline-none placeholder:text-[color:var(--rm-profile-custom-muted)]"
+                                aria-label="Custom status"
+                                placeholder="Support custom status!"
+                                maxLength={128}
+                              />
+                            </div>
+                          ) : hasCustomStatus ? (
+                            <div className="group/preview-status inline-flex max-w-full min-w-0 items-center gap-2 rounded-full border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] pl-3 pr-2 py-1.5 text-left shadow-[0_12px_28px_rgba(0,0,0,0.22)] backdrop-blur-md transition-colors hover:bg-[var(--rm-profile-custom-card-bg)]">
                               <button
                                 type="button"
-                                className="inline-flex max-w-full min-w-0 items-center gap-1.5 rounded-full border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] px-3 py-1.5 text-left shadow-[0_12px_28px_rgba(0,0,0,0.22)] backdrop-blur-md transition-colors hover:bg-[var(--rm-profile-custom-card-bg)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35"
-                                aria-label="Add custom status"
+                                className="min-w-0 flex-1 rounded-full text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35"
+                                aria-label="Edit custom status"
                                 onClick={handleOpenCustomStatusEditor}
                               >
-                                <Plus
-                                  size={14}
-                                  className="shrink-0 text-[color:var(--rm-profile-custom-muted)]"
-                                />
-                                <span className="min-w-0 truncate text-[13px] italic font-medium text-[color:var(--rm-profile-custom-text)]">
-                                  Today I learned...
+                                <span className="block min-w-0 truncate text-[13px] italic font-medium text-[color:var(--rm-profile-custom-text)]">
+                                  {visibleCustomStatus}
                                 </span>
                               </button>
-                            </TooltipTrigger>
-                            <TooltipContent
-                              side="top"
-                              sideOffset={8}
-                              className={SETTINGS_TOOLTIP_CONTENT_CLASS}
-                            >
-                              Add custom status
-                            </TooltipContent>
-                          </Tooltip>
-                        )}
-
-                        {SHOW_LEGACY_PREVIEW_IDENTITY ? (
-                          <>
-                            {chatUser?.custom_status ? (
-                              <div className="mb-3 inline-flex max-w-[180px] items-center rounded-full border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] px-3.5 py-2 text-[12px] font-medium text-[color:var(--rm-profile-custom-text)] shadow-[0_14px_28px_rgba(0,0,0,0.22)] backdrop-blur-sm">
-                                <span className="truncate">
-                                  {chatUser.custom_status}
-                                </span>
-                              </div>
-                            ) : null}
-                            <ProfileDisplayName
-                              text={currentDisplayName}
-                              displayNameStyle={displayNameStyle}
-                              className="truncate text-[20px] font-semibold tracking-[-0.03em] text-[color:var(--rm-profile-custom-text)]"
-                              backgroundColor={previewTheme.backgroundColor}
-                              readableFallbackColor={previewTheme.textColor}
-                            />
-                            <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-[color:var(--rm-profile-custom-muted)]">
-                              <span>@{currentUsername}</span>
-                              <span
-                                aria-hidden="true"
-                                className="text-[color:var(--rm-profile-custom-muted)]/60"
-                              >
-                                •
+                              <span className="flex shrink-0 items-center gap-1 pl-1">
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <button
+                                      type="button"
+                                      onClick={(event) => {
+                                        event.stopPropagation();
+                                        handleOpenCustomStatusEditor();
+                                      }}
+                                      className="pointer-events-none flex h-7 w-7 items-center justify-center rounded-full border border-transparent text-[color:var(--rm-profile-custom-muted)] opacity-0 transition hover:border-[color:var(--rm-profile-custom-card-border)] hover:bg-[var(--rm-profile-custom-card-bg-strong)] hover:text-[color:var(--rm-profile-custom-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35 group-hover/preview-status:pointer-events-auto group-hover/preview-status:opacity-100 group-focus-within/preview-status:pointer-events-auto group-focus-within/preview-status:opacity-100"
+                                      aria-label="Edit custom status"
+                                    >
+                                      <Pencil size={14} />
+                                    </button>
+                                  </TooltipTrigger>
+                                  <TooltipContent
+                                    side="top"
+                                    sideOffset={8}
+                                    className={SETTINGS_TOOLTIP_CONTENT_CLASS}
+                                  >
+                                    Edit custom status
+                                  </TooltipContent>
+                                </Tooltip>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <button
+                                      type="button"
+                                      onClick={(event) => {
+                                        event.stopPropagation();
+                                        handleClearCustomStatus();
+                                      }}
+                                      className="pointer-events-none flex h-7 w-7 items-center justify-center rounded-full border border-transparent text-[color:var(--rm-profile-custom-muted)] opacity-0 transition hover:border-[color:var(--rm-profile-custom-card-border)] hover:bg-[var(--rm-profile-custom-card-bg-strong)] hover:text-[color:var(--rm-profile-custom-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35 group-hover/preview-status:pointer-events-auto group-hover/preview-status:opacity-100 group-focus-within/preview-status:pointer-events-auto group-focus-within/preview-status:opacity-100"
+                                      aria-label="Clear custom status"
+                                    >
+                                      <Trash2 size={14} />
+                                    </button>
+                                  </TooltipTrigger>
+                                  <TooltipContent
+                                    side="top"
+                                    sideOffset={8}
+                                    className={SETTINGS_TOOLTIP_CONTENT_CLASS}
+                                  >
+                                    Clear custom status
+                                  </TooltipContent>
+                                </Tooltip>
                               </span>
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  setActivePreviewField("pronouns")
-                                }
-                                className="group/preview-pronouns rounded-md px-1.5 py-0.5 -mx-1.5 text-left transition hover:bg-[var(--rm-profile-custom-card-bg-strong)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35"
-                              >
-                                {activePreviewField === "pronouns" ? (
-                                  <input
-                                    ref={previewPronounsInputRef}
-                                    value={pronouns}
-                                    onChange={(event) =>
-                                      setPronouns(
-                                        event.target.value.slice(0, 40),
-                                      )
-                                    }
-                                    onBlur={() =>
-                                      setActivePreviewField((current) =>
-                                        current === "pronouns" ? null : current,
-                                      )
-                                    }
-                                    onKeyDown={(event) => {
-                                      if (
-                                        event.key === "Enter" ||
-                                        event.key === "Escape"
-                                      ) {
-                                        event.preventDefault();
-                                        event.currentTarget.blur();
-                                      }
-                                    }}
-                                    className="min-w-[88px] bg-transparent text-[13px] font-medium text-[color:var(--rm-profile-custom-text)] outline-none placeholder:text-[color:var(--rm-profile-custom-muted)]"
-                                    placeholder="Add pronouns"
-                                  />
-                                ) : (
-                                  <span className="rounded-md border border-transparent px-1 py-0.5 text-[13px] font-medium text-[color:var(--rm-profile-custom-text)] transition group-hover/preview-pronouns:border-[color:var(--rm-profile-custom-card-border)] group-hover/preview-pronouns:bg-[var(--rm-profile-custom-card-bg-strong)]">
-                                    {currentPronouns || "Add pronouns"}
-                                  </span>
-                                )}
-                              </button>
                             </div>
-                          </>
-                        ) : null}
+                          ) : (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <button
+                                  type="button"
+                                  className="inline-flex max-w-full min-w-0 items-center gap-1.5 rounded-full border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] px-3 py-1.5 text-left shadow-[0_12px_28px_rgba(0,0,0,0.22)] backdrop-blur-md transition-colors hover:bg-[var(--rm-profile-custom-card-bg)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35"
+                                  aria-label="Add custom status"
+                                  onClick={handleOpenCustomStatusEditor}
+                                >
+                                  <Plus
+                                    size={14}
+                                    className="shrink-0 text-[color:var(--rm-profile-custom-muted)]"
+                                  />
+                                  <span className="min-w-0 truncate text-[13px] italic font-medium text-[color:var(--rm-profile-custom-text)]">
+                                    Today I learned...
+                                  </span>
+                                </button>
+                              </TooltipTrigger>
+                              <TooltipContent
+                                side="top"
+                                sideOffset={8}
+                                className={SETTINGS_TOOLTIP_CONTENT_CLASS}
+                              >
+                                Add custom status
+                              </TooltipContent>
+                            </Tooltip>
+                          )}
+
+                          {SHOW_LEGACY_PREVIEW_IDENTITY ? (
+                            <>
+                              {chatUser?.custom_status ? (
+                                <div className="mb-3 inline-flex max-w-[180px] items-center rounded-full border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] px-3.5 py-2 text-[12px] font-medium text-[color:var(--rm-profile-custom-text)] shadow-[0_14px_28px_rgba(0,0,0,0.22)] backdrop-blur-sm">
+                                  <span className="truncate">
+                                    {chatUser.custom_status}
+                                  </span>
+                                </div>
+                              ) : null}
+                              <ProfileDisplayName
+                                text={currentDisplayName}
+                                displayNameStyle={displayNameStyle}
+                                className="truncate text-[20px] font-semibold tracking-[-0.03em] text-[color:var(--rm-profile-custom-text)]"
+                                backgroundColor={previewTheme.backgroundColor}
+                                readableFallbackColor={previewTheme.textColor}
+                              />
+                              <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-[color:var(--rm-profile-custom-muted)]">
+                                <span>@{currentUsername}</span>
+                                <span
+                                  aria-hidden="true"
+                                  className="text-[color:var(--rm-profile-custom-muted)]/60"
+                                >
+                                  •
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setActivePreviewField("pronouns")
+                                  }
+                                  className="group/preview-pronouns rounded-md px-1.5 py-0.5 -mx-1.5 text-left transition hover:bg-[var(--rm-profile-custom-card-bg-strong)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35"
+                                >
+                                  {activePreviewField === "pronouns" ? (
+                                    <input
+                                      ref={previewPronounsInputRef}
+                                      value={pronouns}
+                                      onChange={(event) =>
+                                        setPronouns(
+                                          event.target.value.slice(0, 40),
+                                        )
+                                      }
+                                      onBlur={() =>
+                                        setActivePreviewField((current) =>
+                                          current === "pronouns"
+                                            ? null
+                                            : current,
+                                        )
+                                      }
+                                      onKeyDown={(event) => {
+                                        if (
+                                          event.key === "Enter" ||
+                                          event.key === "Escape"
+                                        ) {
+                                          event.preventDefault();
+                                          event.currentTarget.blur();
+                                        }
+                                      }}
+                                      className="min-w-[88px] bg-transparent text-[13px] font-medium text-[color:var(--rm-profile-custom-text)] outline-none placeholder:text-[color:var(--rm-profile-custom-muted)]"
+                                      placeholder="Add pronouns"
+                                    />
+                                  ) : (
+                                    <span className="rounded-md border border-transparent px-1 py-0.5 text-[13px] font-medium text-[color:var(--rm-profile-custom-text)] transition group-hover/preview-pronouns:border-[color:var(--rm-profile-custom-card-border)] group-hover/preview-pronouns:bg-[var(--rm-profile-custom-card-bg-strong)]">
+                                      {currentPronouns || "Add pronouns"}
+                                    </span>
+                                  )}
+                                </button>
+                              </div>
+                            </>
+                          ) : null}
+                        </div>
+                      </div>
+
+                      <div className="mt-4">
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <button
+                              type="button"
+                              className="group/preview-display-name relative -mx-3 inline-flex max-w-full items-center rounded-[18px] border border-transparent px-3 py-2 pr-12 text-left transition hover:border-[color:var(--rm-profile-custom-card-border)] hover:bg-[var(--rm-profile-custom-card-bg-strong)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35"
+                              aria-label={
+                                hasDisplayNameStyle
+                                  ? "Edit display name style"
+                                  : "Add display name style"
+                              }
+                              onClick={() =>
+                                setDisplayNameStyleEditorOpen(true)
+                              }
+                            >
+                              <span className="pointer-events-none absolute right-3 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] text-[color:var(--rm-profile-custom-text)] opacity-0 shadow-[0_12px_24px_rgba(0,0,0,0.2)] transition group-hover/preview-display-name:opacity-100 group-focus-within/preview-display-name:opacity-100">
+                                <Paintbrush size={14} />
+                              </span>
+                              <ProfileDisplayName
+                                text={currentDisplayName}
+                                displayNameStyle={displayNameStyle}
+                                className="truncate text-[20px] font-semibold tracking-[-0.03em] text-[color:var(--rm-profile-custom-text)]"
+                                backgroundColor={previewTheme.backgroundColor}
+                                readableFallbackColor={previewTheme.textColor}
+                              />
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent
+                            side="top"
+                            sideOffset={8}
+                            className={SETTINGS_TOOLTIP_CONTENT_CLASS}
+                          >
+                            {hasDisplayNameStyle
+                              ? "Edit display name style"
+                              : "Add display name style"}
+                          </TooltipContent>
+                        </Tooltip>
+                        <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-[color:var(--rm-profile-custom-muted)]">
+                          <span>@{currentUsername}</span>
+                          <span
+                            aria-hidden="true"
+                            className="text-[color:var(--rm-profile-custom-muted)]/60"
+                          >
+                            •
+                          </span>
+                          <button
+                            type="button"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              setActivePreviewField("pronouns");
+                            }}
+                            className="group/preview-pronouns -mx-1.5 rounded-md px-1.5 py-0.5 text-left transition hover:bg-[var(--rm-profile-custom-card-bg)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35"
+                          >
+                            {activePreviewField === "pronouns" ? (
+                              <input
+                                ref={previewPronounsInputRef}
+                                value={pronouns}
+                                onClick={(event) => event.stopPropagation()}
+                                onChange={(event) =>
+                                  setPronouns(event.target.value.slice(0, 40))
+                                }
+                                onBlur={() =>
+                                  setActivePreviewField((current) =>
+                                    current === "pronouns" ? null : current,
+                                  )
+                                }
+                                onKeyDown={(event) => {
+                                  if (
+                                    event.key === "Enter" ||
+                                    event.key === "Escape"
+                                  ) {
+                                    event.preventDefault();
+                                    event.currentTarget.blur();
+                                  }
+                                }}
+                                className="min-w-[88px] bg-transparent text-[13px] font-medium text-[color:var(--rm-profile-custom-text)] outline-none placeholder:text-[color:var(--rm-profile-custom-muted)]"
+                                placeholder="Add pronouns"
+                              />
+                            ) : (
+                              <span className="rounded-md border border-transparent px-1 py-0.5 text-[13px] font-medium text-[color:var(--rm-profile-custom-text)] transition group-hover/preview-pronouns:border-[color:var(--rm-profile-custom-card-border)] group-hover/preview-pronouns:bg-[var(--rm-profile-custom-card-bg)]">
+                                {currentPronouns || "Add pronouns"}
+                              </span>
+                            )}
+                          </button>
+                        </div>
                       </div>
                     </div>
 
-                    <div className="mt-4">
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <button
-                            type="button"
-                            className="group/preview-display-name relative -mx-3 inline-flex max-w-full items-center rounded-[18px] border border-transparent px-3 py-2 pr-12 text-left transition hover:border-[color:var(--rm-profile-custom-card-border)] hover:bg-[var(--rm-profile-custom-card-bg-strong)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35"
-                            aria-label={
-                              hasDisplayNameStyle
-                                ? "Edit display name style"
-                                : "Add display name style"
-                            }
-                            onClick={() => setDisplayNameStyleEditorOpen(true)}
-                          >
-                            <span className="pointer-events-none absolute right-3 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] text-[color:var(--rm-profile-custom-text)] opacity-0 shadow-[0_12px_24px_rgba(0,0,0,0.2)] transition group-hover/preview-display-name:opacity-100 group-focus-within/preview-display-name:opacity-100">
-                              <Paintbrush size={14} />
-                            </span>
-                            <ProfileDisplayName
-                              text={currentDisplayName}
-                              displayNameStyle={displayNameStyle}
-                              className="truncate text-[20px] font-semibold tracking-[-0.03em] text-[color:var(--rm-profile-custom-text)]"
-                              backgroundColor={previewTheme.backgroundColor}
-                              readableFallbackColor={previewTheme.textColor}
-                            />
-                          </button>
-                        </TooltipTrigger>
-                        <TooltipContent
-                          side="top"
-                          sideOffset={8}
-                          className={SETTINGS_TOOLTIP_CONTENT_CLASS}
-                        >
-                          {hasDisplayNameStyle
-                            ? "Edit display name style"
-                            : "Add display name style"}
-                        </TooltipContent>
-                      </Tooltip>
-                      <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-[color:var(--rm-profile-custom-muted)]">
-                        <span>@{currentUsername}</span>
-                        <span
-                          aria-hidden="true"
-                          className="text-[color:var(--rm-profile-custom-muted)]/60"
-                        >
-                          •
-                        </span>
-                        <button
-                          type="button"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            setActivePreviewField("pronouns");
-                          }}
-                          className="group/preview-pronouns -mx-1.5 rounded-md px-1.5 py-0.5 text-left transition hover:bg-[var(--rm-profile-custom-card-bg)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35"
-                        >
-                          {activePreviewField === "pronouns" ? (
-                            <input
-                              ref={previewPronounsInputRef}
-                              value={pronouns}
-                              onClick={(event) => event.stopPropagation()}
+                    <div className="mt-5 flex items-center gap-2">
+                      <Button
+                        type="button"
+                        className="h-10 rounded-xl bg-[var(--rm-profile-custom-button-bg)] px-4 text-[color:var(--rm-profile-custom-button-text)] shadow-[0_14px_28px_var(--rm-profile-custom-button-shadow)] hover:opacity-95"
+                      >
+                        Message
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="icon"
+                        className="h-9 w-9 rounded-xl border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] text-[color:var(--rm-profile-custom-muted)] shadow-[0_12px_24px_rgba(0,0,0,0.22)] hover:bg-[var(--rm-profile-custom-card-bg)] hover:text-[color:var(--rm-profile-custom-text)]"
+                        aria-label="Open profile shop"
+                      >
+                        <ShoppingBag size={16} />
+                      </Button>
+                    </div>
+
+                    <div className="mt-2 space-y-4">
+                      <button
+                        type="button"
+                        onClick={() => setActivePreviewField("bio")}
+                        className="group/preview-bio block w-full rounded-[18px] border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] px-4 py-3 text-left transition hover:border-[color:var(--rm-profile-custom-text)]/22 hover:bg-[var(--rm-profile-custom-card-bg)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35"
+                      >
+                        {activePreviewField === "bio" ? (
+                          <div>
+                            <textarea
+                              ref={previewBioInputRef}
+                              value={bio}
                               onChange={(event) =>
-                                setPronouns(event.target.value.slice(0, 40))
+                                setBio(event.target.value.slice(0, 190))
                               }
                               onBlur={() =>
                                 setActivePreviewField((current) =>
-                                  current === "pronouns" ? null : current,
+                                  current === "bio" ? null : current,
                                 )
                               }
                               onKeyDown={(event) => {
-                                if (
-                                  event.key === "Enter" ||
-                                  event.key === "Escape"
-                                ) {
+                                if (event.key === "Escape") {
                                   event.preventDefault();
                                   event.currentTarget.blur();
                                 }
                               }}
-                              className="min-w-[88px] bg-transparent text-[13px] font-medium text-[color:var(--rm-profile-custom-text)] outline-none placeholder:text-[color:var(--rm-profile-custom-muted)]"
-                              placeholder="Add pronouns"
+                              className="min-h-[74px] w-full resize-none bg-transparent text-[14px] leading-6 text-[color:var(--rm-profile-custom-text)] outline-none placeholder:text-[color:var(--rm-profile-custom-muted)]"
+                              placeholder="Add a bio here"
                             />
-                          ) : (
-                            <span className="rounded-md border border-transparent px-1 py-0.5 text-[13px] font-medium text-[color:var(--rm-profile-custom-text)] transition group-hover/preview-pronouns:border-[color:var(--rm-profile-custom-card-border)] group-hover/preview-pronouns:bg-[var(--rm-profile-custom-card-bg)]">
-                              {currentPronouns || "Add pronouns"}
-                            </span>
-                          )}
-                        </button>
+                            <div className="mt-2 text-right text-[11px] text-[color:var(--rm-profile-custom-muted)]">
+                              {bio.trim().length}/190
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="space-y-1">
+                            <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[color:var(--rm-profile-custom-muted)]">
+                              Bio
+                            </div>
+                            <div className="rounded-[14px] border border-transparent px-0 py-0.5 text-[14px] leading-6 text-[color:var(--rm-profile-custom-text)] transition group-hover/preview-bio:border-[color:var(--rm-profile-custom-card-border)]">
+                              {currentBio || (
+                                <span className="text-[color:var(--rm-profile-custom-muted)]">
+                                  Add a bio here
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </button>
+
+                      <div>
+                        <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[color:var(--rm-profile-custom-muted)]">
+                          {previewReferenceDate.label}
+                        </div>
+                        <div className="mt-2 text-[14px] text-[color:var(--rm-profile-custom-text)]">
+                          {previewReferenceDate.value}
+                        </div>
                       </div>
                     </div>
                   </div>
-
-                  <div className="mt-5 flex items-center gap-2">
-                    <Button
-                      type="button"
-                      className="h-10 rounded-xl bg-[var(--rm-profile-custom-button-bg)] px-4 text-[color:var(--rm-profile-custom-button-text)] shadow-[0_14px_28px_var(--rm-profile-custom-button-shadow)] hover:opacity-95"
-                    >
-                      Message
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      size="icon"
-                      className="h-9 w-9 rounded-xl border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] text-[color:var(--rm-profile-custom-muted)] shadow-[0_12px_24px_rgba(0,0,0,0.22)] hover:bg-[var(--rm-profile-custom-card-bg)] hover:text-[color:var(--rm-profile-custom-text)]"
-                      aria-label="Open profile shop"
-                    >
-                      <ShoppingBag size={16} />
-                    </Button>
-                  </div>
-
-                  <div className="mt-5 space-y-5">
-                    <button
-                      type="button"
-                      onClick={() => setActivePreviewField("bio")}
-                      className="group/preview-bio block w-full rounded-[18px] border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] px-4 py-3 text-left transition hover:border-[color:var(--rm-profile-custom-text)]/22 hover:bg-[var(--rm-profile-custom-card-bg)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35"
-                    >
-                      {activePreviewField === "bio" ? (
-                        <div>
-                          <textarea
-                            ref={previewBioInputRef}
-                            value={bio}
-                            onChange={(event) =>
-                              setBio(event.target.value.slice(0, 190))
-                            }
-                            onBlur={() =>
-                              setActivePreviewField((current) =>
-                                current === "bio" ? null : current,
-                              )
-                            }
-                            onKeyDown={(event) => {
-                              if (event.key === "Escape") {
-                                event.preventDefault();
-                                event.currentTarget.blur();
-                              }
-                            }}
-                            className="min-h-[74px] w-full resize-none bg-transparent text-[14px] leading-6 text-[color:var(--rm-profile-custom-text)] outline-none placeholder:text-[color:var(--rm-profile-custom-muted)]"
-                            placeholder="Add a bio here"
-                          />
-                          <div className="mt-2 text-right text-[11px] text-[color:var(--rm-profile-custom-muted)]">
-                            {bio.trim().length}/190
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="space-y-1">
-                          <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[color:var(--rm-profile-custom-muted)]">
-                            Bio
-                          </div>
-                          <div className="rounded-[14px] border border-transparent px-0 py-0.5 text-[14px] leading-6 text-[color:var(--rm-profile-custom-text)] transition group-hover/preview-bio:border-[color:var(--rm-profile-custom-card-border)]">
-                            {currentBio || (
-                              <span className="text-[color:var(--rm-profile-custom-muted)]">
-                                Add a bio here
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      )}
-                    </button>
-
-                    <div>
-                      <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[color:var(--rm-profile-custom-muted)]">
-                        {previewReferenceDate.label}
-                      </div>
-                      <div className="mt-2 text-[14px] text-[color:var(--rm-profile-custom-text)]">
-                        {previewReferenceDate.value}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </section>
+                </ProfileSurfaceShell>
+              </div>
 
               <aside
                 className={cn(
@@ -4352,6 +4682,17 @@ export default function SettingsAccountTab({
           onSelectRecent={handleRecentAvatarSelect}
         />
       ) : null}
+      {bannerPickerOpen ? (
+        <AvatarPickerModal
+          displayName={currentDisplayName}
+          onClose={() => setBannerPickerOpen(false)}
+          onUpload={handleBannerFile}
+          showRecent={false}
+          title="Select a Banner"
+          description="Choose a new banner image or GIF for your profile."
+          closeLabel="Close banner picker"
+        />
+      ) : null}
       {avatarEditor && (
         <AvatarFrameEditor
           image={avatarEditor}
@@ -4395,8 +4736,8 @@ export default function SettingsAccountTab({
           avatarSrc={currentAvatarSrc}
           displayName={currentDisplayName}
           onClose={() => setCollectiblesKind(null)}
-          onApplied={async (updatedUser) => {
-            await syncCollectibleState(updatedUser);
+          onApplied={async (updatedUser, appliedKinds) => {
+            await syncCollectibleState(updatedUser, appliedKinds);
           }}
         />
       )}

@@ -1,4 +1,5 @@
 import type { ProfileEffectSelection } from "@/lib/avatar-display";
+import { getProfileEffectLayers } from "@/lib/avatar-display";
 import {
   getProfileEffectFallbackAsset,
   getProfileEffectPlaybackSnapshot,
@@ -7,6 +8,27 @@ import {
 import { describe, expect, it } from "vitest";
 
 describe("profile effect playback", () => {
+  it("keeps legacy effects replayable when timing metadata is absent", () => {
+    const layers = getProfileEffectLayers({
+      version: 1,
+      collectibles: {
+        profileEffect: {
+          skuId: "legacy-effect",
+          name: "Legacy Effect",
+          effectUrls: ["https://cdn.discordapp.com/assets/content/layer"],
+        },
+      },
+    });
+
+    expect(layers).toEqual([
+      {
+        src: "https://cdn.discordapp.com/assets/content/layer",
+        loop: true,
+        zIndex: 0,
+      },
+    ]);
+  });
+
   it("chooses reduced-motion and static fallbacks before animated media", () => {
     const effect: ProfileEffectSelection = {
       skuId: "1516560602187825362",

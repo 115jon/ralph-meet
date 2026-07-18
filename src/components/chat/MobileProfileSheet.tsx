@@ -1,6 +1,7 @@
 import { ProfileAssetLayer } from "@/components/chat/ProfileAssetLayer";
 import { AvatarImage } from "@/components/chat/AvatarImage";
 import { ProfileDisplayName } from "@/components/chat/ProfileDisplayName";
+import { ProfileSurfaceShell } from "@/components/chat/ProfileSurfaceShell";
 import { BaseModal } from "@/components/ui/BaseModal";
 import { ButtonBase } from "@/components/ui/button-base";
 import { UserPlatformIndicators } from "@/components/chat/UserPlatformIndicators";
@@ -103,20 +104,27 @@ function ProfileBanner({
         className="absolute inset-0"
         style={{ background: "var(--rm-profile-custom-banner-overlay)" }}
       />
-      <div className="absolute top-0 inset-x-0 flex items-center justify-between p-3 z-10">
+      <div className="absolute inset-x-0 top-0 z-50 flex items-center justify-between p-3">
         <ButtonBase
           onClick={onClose}
+          aria-label="Close profile"
           className="p-1.5 bg-black/30 hover:bg-black/50 rounded-full text-white backdrop-blur-sm transition-colors"
         >
           <ArrowLeft size={20} />
         </ButtonBase>
         <div className="flex items-center gap-2">
           {!isMe && (
-            <ButtonBase className="p-1.5 bg-black/30 hover:bg-black/50 rounded-full text-white backdrop-blur-sm transition-colors">
+            <ButtonBase
+              aria-label="Add friend"
+              className="p-1.5 bg-black/30 hover:bg-black/50 rounded-full text-white backdrop-blur-sm transition-colors"
+            >
               <UserPlus size={18} />
             </ButtonBase>
           )}
-          <ButtonBase className="p-1.5 bg-black/30 hover:bg-black/50 rounded-full text-white backdrop-blur-sm transition-colors">
+          <ButtonBase
+            aria-label="Profile settings"
+            className="p-1.5 bg-black/30 hover:bg-black/50 rounded-full text-white backdrop-blur-sm transition-colors"
+          >
             <Settings size={18} />
           </ButtonBase>
         </div>
@@ -503,18 +511,16 @@ export default function MobileProfileSheet({
 
   return (
     <BaseModal onClose={onClose} aria-label="User profile">
-      <div
+      <ProfileSurfaceShell
+        display={resolvedUser.avatar_display}
+        variant="sheet"
         className={cn(
-          "fixed inset-0 z-300 flex flex-col bg-rm-bg-primary animate-in slide-in-from-bottom duration-300",
+          "fixed inset-0 z-300 flex flex-col animate-in slide-in-from-bottom duration-300",
           isClosing && "animate-out slide-out-to-bottom fade-out",
         )}
-        style={{
-          ...profileThemeStyle,
-          backgroundImage: "var(--rm-profile-custom-surface)",
-        }}
+        style={profileThemeStyle}
       >
         <div className="absolute top-2 left-1/2 -translate-x-1/2 w-10 h-1 rounded-full bg-rm-text-muted/30 z-20" />
-
         <ProfileBanner
           bannerUrl={resolvedUser.banner_url}
           bannerContentType={resolvedUser.banner_content_type}
@@ -550,7 +556,7 @@ export default function MobileProfileSheet({
             onClose={onClose}
           />
         </div>
-      </div>
+      </ProfileSurfaceShell>
     </BaseModal>
   );
 }

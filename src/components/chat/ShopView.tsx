@@ -2,6 +2,7 @@ import { AvatarImage } from "@/components/chat/AvatarImage";
 import { HomeIcon } from "@/components/chat/HomeIcon";
 import { Menu } from "@/components/chat/Icons";
 import { ProfileCollectiblesLayer } from "@/components/chat/ProfileCollectiblesLayer";
+import { ProfileFrameLayer } from "@/components/chat/ProfileFrameLayer";
 import { BaseModal } from "@/components/ui/BaseModal";
 import { Button } from "@/components/ui/button";
 import { CustomSelect, type SelectOption } from "@/components/ui/CustomSelect";
@@ -342,16 +343,6 @@ function mergeCollectiblePreview(
     Object.assign(collectibles, collectibleItemToSelection(item));
   }
 
-  // Do not render avatar decoration or other profile items for profile effects/frames previews
-  if (kind === "profile_effect" || kind === "profile_frame") {
-    delete collectibles.avatarDecoration;
-    if (kind === "profile_effect") {
-      delete collectibles.profileFrame;
-    } else {
-      delete collectibles.profileEffect;
-    }
-  }
-
   return normalizeAvatarDisplay({
     ...nextDisplay,
     collectibles,
@@ -600,8 +591,11 @@ function ShopPreview({
       : null;
 
     return (
-      <div className="relative flex h-full items-center justify-center overflow-hidden rounded-[22px] bg-rm-bg-floating p-3 select-none">
+      <div className="relative flex h-full items-center justify-center overflow-visible rounded-[22px] bg-rm-bg-floating p-3 select-none">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.03),_transparent_55%)]" />
+        <div className="pointer-events-none absolute right-[-8px] top-4 z-0 h-[190px] w-[114px] origin-top-right rotate-[4deg]">
+          <ProfileFrameLayer display={frameDisplay} order="back" />
+        </div>
 
         {/* 1. Profile Card (angled/skewed on the right) */}
         {effectItem && (
@@ -662,17 +656,13 @@ function ShopPreview({
                 className="pointer-events-none absolute left-1/2 top-1/2 z-10 h-[124%] w-[124%] max-w-none -translate-x-1/2 -translate-y-1/2 object-contain"
               />
             )}
-            {frameDisplay && (
-              <ProfileCollectiblesLayer
-                display={frameDisplay}
-                className="absolute inset-0 z-20 scale-[1.1]"
-                playAnimation={false}
-              />
-            )}
           </div>
         </div>
 
         {/* 3. Nameplate Bar (bottom-left floating bar) */}
+        <div className="pointer-events-none absolute right-[-8px] top-4 z-20 h-[190px] w-[114px] origin-top-right rotate-[4deg]">
+          <ProfileFrameLayer display={frameDisplay} order="front" />
+        </div>
         {nameplateUrl && (
           <div
             className={cn(
@@ -824,60 +814,73 @@ function ShopPreview({
 
   if (item.kind === "profile_effect" || item.kind === "profile_frame") {
     return (
-      <div className="relative flex h-full items-center justify-center overflow-hidden rounded-[22px] bg-rm-bg-primary p-3">
+      <div className="relative flex h-full items-center justify-center overflow-visible rounded-[22px] bg-rm-bg-primary p-3">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.06),_transparent_45%)]" />
-        <div
-          className="relative h-full w-[114px] overflow-hidden rounded-[14px] border border-rm-border bg-rm-bg-surface shadow-[0_12px_36px_rgba(0,0,0,0.35)]"
-          style={{ aspectRatio: "450 / 880" }}
-        >
-          {/* Mock profile background banner / skeleton */}
-          <div className="absolute left-0 right-0 top-0 h-10 border-b border-rm-border bg-rm-bg-hover" />
-          <div className="absolute inset-0 bg-[linear-gradient(180deg,_transparent,_rgba(17,20,27,0.96)_34%,_rgba(11,13,18,0.98))]" />
+        <div className="relative h-full w-[114px]">
+          <div
+            className="relative z-10 h-full w-full overflow-hidden rounded-[14px] border border-rm-border bg-rm-bg-surface shadow-[0_12px_36px_rgba(0,0,0,0.35)]"
+            style={{ aspectRatio: "450 / 880" }}
+          >
+            {/* Mock profile background banner / skeleton */}
+            <div className="absolute left-0 right-0 top-0 h-10 border-b border-rm-border bg-rm-bg-hover" />
+            <div className="absolute inset-0 bg-[linear-gradient(180deg,_transparent,_rgba(17,20,27,0.96)_34%,_rgba(11,13,18,0.98))]" />
 
-          {/* Mock small avatar placeholder with logo (no user avatar) */}
-          <div className="absolute left-2 top-6 z-10 flex h-7 w-7 items-center justify-center overflow-hidden rounded-full border border-rm-border bg-rm-bg-hover shadow-[0_6px_12px_rgba(0,0,0,0.3)]">
-            <HomeIcon className="h-4.5 w-4.5 text-rm-text-secondary" />
+            {/* Mock small avatar placeholder with logo (no user avatar) */}
+            <div className="absolute left-2 top-6 z-10 flex h-7 w-7 items-center justify-center overflow-hidden rounded-full border border-rm-border bg-rm-bg-hover shadow-[0_6px_12px_rgba(0,0,0,0.3)]">
+              <HomeIcon className="h-4.5 w-4.5 text-rm-text-secondary" />
+            </div>
+
+            {/* User display name */}
+            <div className="absolute left-2.5 top-[58px] h-2 w-12 rounded-full bg-white/20" />
+            {/* Username */}
+            <div className="absolute left-2.5 top-[66px] h-1.5 w-16 rounded-full bg-white/10" />
+
+            {/* Divider */}
+            <div className="absolute left-2.5 right-2.5 top-[76px] h-[1px] bg-white/8" />
+
+            {/* About Me header */}
+            <div className="absolute left-2.5 top-[84px] h-1.5 w-10 rounded-full bg-white/18" />
+            {/* About Me body lines */}
+            <div className="absolute left-2.5 top-[92px] h-1 w-20 rounded-full bg-white/10" />
+            <div className="absolute left-2.5 top-[99px] h-1 w-16 rounded-full bg-white/10" />
+
+            {/* Divider 2 */}
+            <div className="absolute left-2.5 right-2.5 top-[110px] h-[1px] bg-white/8" />
+
+            {/* Member since header */}
+            <div className="absolute left-2.5 top-[118px] h-1.5 w-12 rounded-full bg-white/18" />
+            {/* Member since value */}
+            <div className="absolute left-2.5 top-[126px] h-1 w-14 rounded-full bg-white/10" />
+
+            {/* Mock details block / activity at bottom */}
+            <div className="absolute inset-x-2 bottom-2 rounded-lg border border-rm-border bg-rm-bg-floating/80 p-1.5">
+              <div className="h-1.5 w-10 rounded-full bg-white/18 animate-pulse" />
+              <div className="mt-1 h-1 w-14 rounded-full bg-white/10 animate-pulse" />
+            </div>
+
+            {/* Profile effect overlay layer */}
+            <ProfileCollectiblesLayer
+              display={previewDisplay}
+              effectOpacity={1}
+              fit="cover"
+              className="opacity-100"
+              playAnimation={playAnimation}
+              renderFrame={false}
+            />
+
+            {/* Subtle surface highlights */}
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.05),_transparent_42%),linear-gradient(180deg,_rgba(6,7,10,0.04),_rgba(6,7,10,0.18))]" />
           </div>
-
-          {/* User display name */}
-          <div className="absolute left-2.5 top-[58px] h-2 w-12 rounded-full bg-white/20" />
-          {/* Username */}
-          <div className="absolute left-2.5 top-[66px] h-1.5 w-16 rounded-full bg-white/10" />
-
-          {/* Divider */}
-          <div className="absolute left-2.5 right-2.5 top-[76px] h-[1px] bg-white/8" />
-
-          {/* About Me header */}
-          <div className="absolute left-2.5 top-[84px] h-1.5 w-10 rounded-full bg-white/18" />
-          {/* About Me body lines */}
-          <div className="absolute left-2.5 top-[92px] h-1 w-20 rounded-full bg-white/10" />
-          <div className="absolute left-2.5 top-[99px] h-1 w-16 rounded-full bg-white/10" />
-
-          {/* Divider 2 */}
-          <div className="absolute left-2.5 right-2.5 top-[110px] h-[1px] bg-white/8" />
-
-          {/* Member since header */}
-          <div className="absolute left-2.5 top-[118px] h-1.5 w-12 rounded-full bg-white/18" />
-          {/* Member since value */}
-          <div className="absolute left-2.5 top-[126px] h-1 w-14 rounded-full bg-white/10" />
-
-          {/* Mock details block / activity at bottom */}
-          <div className="absolute inset-x-2 bottom-2 rounded-lg border border-rm-border bg-rm-bg-floating/80 p-1.5">
-            <div className="h-1.5 w-10 rounded-full bg-white/18 animate-pulse" />
-            <div className="mt-1 h-1 w-14 rounded-full bg-white/10 animate-pulse" />
-          </div>
-
-          {/* Profile effect overlay layer */}
-          <ProfileCollectiblesLayer
+          <ProfileFrameLayer
             display={previewDisplay}
-            effectOpacity={1}
-            fit="cover"
-            className="opacity-100"
-            playAnimation={playAnimation}
+            order="back"
+            className="z-0"
           />
-
-          {/* Subtle surface highlights */}
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.05),_transparent_42%),linear-gradient(180deg,_rgba(6,7,10,0.04),_rgba(6,7,10,0.18))]" />
+          <ProfileFrameLayer
+            display={previewDisplay}
+            order="front"
+            className="z-20"
+          />
         </div>
       </div>
     );
@@ -966,6 +969,7 @@ function CollectibleDetailModal({
   displayName,
   isEquipped,
   isApplying,
+  isApplyingAny,
   onClose,
   onRedeem,
   onEquip,
@@ -982,6 +986,7 @@ function CollectibleDetailModal({
   displayName: string;
   isEquipped: boolean;
   isApplying: boolean;
+  isApplyingAny: boolean;
   onClose: () => void;
   onRedeem: () => void;
   onEquip: () => void;
@@ -1181,7 +1186,7 @@ function CollectibleDetailModal({
                 <Button
                   type="button"
                   onClick={onRedeem}
-                  disabled={isApplying}
+                  disabled={isApplying || isApplyingAny}
                   className="h-11 rounded-2xl bg-primary text-primary-foreground shadow-[0_16px_40px_var(--rm-glow)] transition-transform duration-200 hover:-translate-y-0.5 hover:bg-primary/90"
                 >
                   {isApplying ? (
@@ -1195,7 +1200,7 @@ function CollectibleDetailModal({
                   type="button"
                   variant="outline"
                   onClick={onEquip}
-                  disabled={isApplying || isEquipped}
+                  disabled={isApplying || isApplyingAny || isEquipped}
                   className={cn(
                     "h-11 rounded-2xl border-rm-border bg-rm-bg-hover/70 text-rm-text transition-all duration-200 hover:bg-rm-bg-hover",
                     isEquipped &&
@@ -1303,6 +1308,7 @@ function ShopCard({
   displayName,
   isEquipped,
   isApplying,
+  isApplyingAny,
   onEquip,
   onOpenDetail,
   onSelectVariant,
@@ -1315,6 +1321,7 @@ function ShopCard({
   displayName: string;
   isEquipped: boolean;
   isApplying: boolean;
+  isApplyingAny: boolean;
   onEquip: () => void;
   onOpenDetail: () => void;
   onSelectVariant: (itemId: string) => void;
@@ -1427,7 +1434,7 @@ function ShopCard({
           <Button
             type="button"
             onClick={onEquip}
-            disabled={isApplying || isEquipped}
+            disabled={isApplying || isApplyingAny || isEquipped}
             className={cn(
               "h-10 w-full rounded-full px-4 text-sm font-semibold transition-all duration-200 sm:w-auto",
               isEquipped
@@ -1682,7 +1689,7 @@ export default function ShopView({ onMenuClick }: ShopViewProps) {
   );
 
   const applyCollectible = async (item: CollectibleCatalogItem) => {
-    if (!chatUser) return;
+    if (!chatUser || applyingId) return;
     setApplyingId(item.id);
     setError(null);
 
@@ -1766,6 +1773,7 @@ export default function ShopView({ onMenuClick }: ShopViewProps) {
         displayName={currentDisplayName}
         isEquipped={isEquipped}
         isApplying={applyingId === activeItem.id}
+        isApplyingAny={Boolean(applyingId)}
         onEquip={() => applyCollectible(activeItem)}
         onOpenDetail={() => {
           setDetailGroupKey(group.key);
@@ -2164,6 +2172,7 @@ export default function ShopView({ onMenuClick }: ShopViewProps) {
             detailItem,
           )}
           isApplying={applyingId === detailItem.id}
+          isApplyingAny={Boolean(applyingId)}
           onClose={() => {
             setDetailGroupKey(null);
             setDetailPreviewItemId(null);

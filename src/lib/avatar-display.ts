@@ -439,7 +439,7 @@ function normalizeProfileFrame(
   return {
     skuId,
     name,
-    innerWidth: normalizePositiveNumber(input.innerWidth, 1200),
+    innerWidth: normalizePositiveNumber(input.innerWidth, 1200, 1),
     overflowTop: normalizePositiveNumber(input.overflowTop, 300),
     overflowBottom: normalizePositiveNumber(input.overflowBottom, 200),
     overflowHorizontal: normalizePositiveNumber(input.overflowHorizontal, 50),
@@ -447,8 +447,13 @@ function normalizeProfileFrame(
   };
 }
 
-function normalizePositiveNumber(value: unknown, fallback: number) {
-  if (!isFiniteNumber(value) || value < 0 || value > 5000) return fallback;
+function normalizePositiveNumber(
+  value: unknown,
+  fallback: number,
+  minimum = 0,
+) {
+  if (!isFiniteNumber(value) || value < minimum || value > 5000)
+    return fallback;
   return Math.round(value);
 }
 
@@ -476,7 +481,11 @@ export function getProfileEffectLayers(value: unknown): ProfileEffectLayer[] {
 
   const layers = effect.effects?.length
     ? effect.effects
-    : effect.effectUrls.map((src, index) => ({ src, zIndex: index }));
+    : effect.effectUrls.map((src, index) => ({
+        src,
+        loop: true,
+        zIndex: index,
+      }));
 
   return [...layers].sort(
     (left, right) => (left.zIndex ?? 0) - (right.zIndex ?? 0),

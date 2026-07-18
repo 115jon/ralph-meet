@@ -139,6 +139,9 @@ export function BaseModal({
       if (!root || !isTopmost(root)) return;
 
       if (e.key === "Escape") {
+        if (e.target instanceof Element && e.target.closest('[role="menu"]')) {
+          return;
+        }
         e.preventDefault();
         e.stopPropagation();
         onClose();

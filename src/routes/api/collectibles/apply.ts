@@ -150,18 +150,23 @@ const PATCH = async ({ request }: any) => {
   }
 
   const currentUser = await db
-    .prepare(`SELECT username, avatar_display FROM users WHERE id = ?`)
+    .prepare(
+      `SELECT username, avatar_display, updated_at FROM users WHERE id = ?`,
+    )
     .bind(userId)
-    .first<{ username: string | null; avatar_display: string | null }>();
+    .first<{
+      username: string | null;
+      avatar_display: string | null;
+      updated_at: string | null;
+    }>();
 
   if (!currentUser) {
     return apiError("User not found", 404, "USER_NOT_FOUND", request);
   }
 
-  const baseDisplay =
-    body.avatarDisplay !== undefined
-      ? normalizeAvatarDisplay(body.avatarDisplay)
-      : normalizeAvatarDisplay(currentUser.avatar_display);
+  // Collectible changes must never persist unrelated editor drafts from a
+  // stale client. Crop/avatar edits continue through the profile save path.
+  const baseDisplay = normalizeAvatarDisplay(currentUser.avatar_display);
 
   const nextDisplay = parsedSelections.reduce<AvatarDisplay | null>(
     (currentDisplay, selection) =>
@@ -179,11 +184,11 @@ const PATCH = async ({ request }: any) => {
       : "image/png"
     : null;
 
-  await db
+  const updateResult = await db
     .prepare(
       `UPDATE users
      SET avatar_display = ?, nameplate_url = ?, nameplate_content_type = ?, updated_at = ?
-     WHERE id = ?`,
+      WHERE id = ? AND updated_at IS ?`,
     )
     .bind(
       serializedDisplay,
@@ -191,8 +196,17 @@ const PATCH = async ({ request }: any) => {
       nameplateContentType,
       updatedAt,
       userId,
+      currentUser.updated_at,
     )
     .run();
+  if (updateResult.meta.changes === 0) {
+    return apiError(
+      "Profile changed while applying that collectible. Please try again.",
+      409,
+      "COLLECTIBLE_CONFLICT",
+      request,
+    );
+  }
 
   await invalidateProfileCaches(db, userId);
 

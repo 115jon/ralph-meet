@@ -1,9 +1,7 @@
 import { ProfileAssetLayer } from "@/components/chat/ProfileAssetLayer";
-import {
-  getProfileEffectStageHeight,
-  ProfileCollectiblesLayer,
-} from "@/components/chat/ProfileCollectiblesLayer";
+import { getProfileEffectStageHeight } from "@/components/chat/ProfileCollectiblesLayer";
 import { ProfileDisplayName } from "@/components/chat/ProfileDisplayName";
+import { ProfileSurfaceShell } from "@/components/chat/ProfileSurfaceShell";
 import { UserPlatformIndicators } from "@/components/chat/UserPlatformIndicators";
 import { AvatarImage } from "@/components/chat/AvatarImage";
 import { ButtonBase } from "@/components/ui/button-base";
@@ -519,6 +517,14 @@ export default function UserProfilePopover({
   );
 
   const isMe = userId === state.user?.id;
+  const isCurrentUserTarget = Boolean(
+    state.user &&
+    (isMe ||
+      username === state.user.username ||
+      seedUser?.username === state.user.username ||
+      displayName === state.user.username ||
+      displayName === state.user.display_name),
+  );
   const member = state.members.find(
     (currentMember) => currentMember.user.id === userId,
   );
@@ -538,8 +544,9 @@ export default function UserProfilePopover({
       : (seedUser?.status ?? "offline"),
   } as User;
 
-  const seededUser =
-    member?.user ?? seedUser ?? (isMe ? state.user : null) ?? fallbackUser;
+  const seededUser = isCurrentUserTarget
+    ? (state.user ?? member?.user ?? seedUser ?? fallbackUser)
+    : (member?.user ?? seedUser ?? fallbackUser);
   const liveProfileUser =
     localState.profileUser?.id === userId ? localState.profileUser : null;
   const resolvedUser = liveProfileUser ?? seededUser;
@@ -859,36 +866,21 @@ export default function UserProfilePopover({
           aria-hidden="true"
         />
 
-        <section
+        <ProfileSurfaceShell
           ref={popoverRef}
-          className="fixed z-[1000] animate-in fade-in zoom-in-95 overflow-hidden rounded-[26px] border border-[color:var(--rm-profile-custom-card-border)] bg-rm-bg-elevated shadow-[0_24px_72px_rgba(0,0,0,0.58)] duration-200 outline-none"
+          variant="popover"
+          display={resolvedAvatarDisplay}
+          className="fixed z-[1000] animate-in fade-in zoom-in-95 duration-200 outline-none"
           style={{
             ...surfaceStyle,
             ...profileThemeStyle,
-            backgroundImage: "var(--rm-profile-custom-surface)",
           }}
+          effectStageClassName="left-0 top-0 w-full"
+          effectStageStyle={{ height: profileEffectStageHeight }}
           aria-label={`User profile for ${resolvedUsername}`}
           tabIndex={-1}
         >
-          <div
-            className="pointer-events-none absolute inset-0 z-[5]"
-            style={{
-              background: "var(--rm-profile-custom-surface-overlay-strong)",
-            }}
-          />
-          <div
-            className="pointer-events-none absolute left-0 top-0 z-[30] w-full"
-            style={{ height: profileEffectStageHeight }}
-          >
-            <ProfileCollectiblesLayer
-              display={resolvedAvatarDisplay}
-              effectOpacity={1}
-              fit="contain"
-              className="z-[10] opacity-[0.98]"
-            />
-          </div>
-
-          <div className="relative z-20 h-full overflow-y-auto custom-scrollbar">
+          <div className="relative h-full overflow-y-auto custom-scrollbar">
             <div ref={contentRef} className="relative">
               <PopoverBanner
                 bannerUrl={resolvedUser.banner_url}
@@ -1036,7 +1028,7 @@ export default function UserProfilePopover({
               )}
             </div>
           </div>
-        </section>
+        </ProfileSurfaceShell>
       </div>
     </TooltipProvider>,
     document.body,

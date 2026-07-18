@@ -1,6 +1,7 @@
 import { AvatarImage } from "@/components/chat/AvatarImage";
 import { HomeIcon } from "@/components/chat/HomeIcon";
 import { ProfileCollectiblesLayer } from "@/components/chat/ProfileCollectiblesLayer";
+import { ProfileFrameLayer } from "@/components/chat/ProfileFrameLayer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { apiPatch } from "@/lib/api-client";
@@ -40,12 +41,15 @@ type CollectiblesCatalogModalProps = {
   displayName: string;
   initialKind?: CollectibleKind;
   onClose: () => void;
-  onApplied: (user: {
-    avatar_display: AvatarDisplay | null;
-    nameplate_url: string | null;
-    nameplate_content_type: string | null;
-    updated_at: string | null;
-  }) => void | Promise<void>;
+  onApplied: (
+    user: {
+      avatar_display: AvatarDisplay | null;
+      nameplate_url: string | null;
+      nameplate_content_type: string | null;
+      updated_at: string | null;
+    },
+    appliedKinds: CollectibleKind[],
+  ) => void | Promise<void>;
 };
 
 const KIND_LABELS: Record<CollectibleKind, string> = {
@@ -93,15 +97,6 @@ function mergeCollectiblePreview(
     if (kind === "profile_frame") delete collectibles.profileFrame;
   } else {
     Object.assign(collectibles, collectibleItemToSelection(item));
-  }
-
-  if (kind === "profile_effect" || kind === "profile_frame") {
-    delete collectibles.avatarDecoration;
-    if (kind === "profile_effect") {
-      delete collectibles.profileFrame;
-    } else {
-      delete collectibles.profileEffect;
-    }
   }
 
   return normalizeAvatarDisplay({
@@ -195,8 +190,11 @@ function CatalogPreview({
       : null;
 
     return (
-      <div className="relative flex h-full items-center justify-center overflow-hidden bg-rm-bg-primary p-2 select-none">
+      <div className="relative flex h-full items-center justify-center overflow-visible bg-rm-bg-primary p-2 select-none">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.03),_transparent_55%)]" />
+        <div className="pointer-events-none absolute top-2.5 right-[-4px] z-0 h-[100px] w-[62px] origin-top-right rotate-[4deg]">
+          <ProfileFrameLayer display={frameDisplay} order="back" />
+        </div>
 
         {/* 1. Profile Card (angled/skewed on the right) */}
         {effectItem && (
@@ -252,17 +250,13 @@ function CatalogPreview({
                 className="pointer-events-none absolute left-1/2 top-1/2 z-10 h-[124%] w-[124%] max-w-none -translate-x-1/2 -translate-y-1/2 object-contain"
               />
             )}
-            {frameDisplay && (
-              <ProfileCollectiblesLayer
-                display={frameDisplay}
-                className="absolute inset-0 z-20 scale-[1.1]"
-                playAnimation={false}
-              />
-            )}
           </div>
         </div>
 
         {/* 3. Nameplate (bottom-left floating bar) */}
+        <div className="pointer-events-none absolute top-2.5 right-[-4px] z-20 h-[100px] w-[62px] origin-top-right rotate-[4deg]">
+          <ProfileFrameLayer display={frameDisplay} order="front" />
+        </div>
         {nameplateUrl && (
           <div
             className={cn(
@@ -399,51 +393,64 @@ function CatalogPreview({
 
   if (item.kind === "profile_effect" || item.kind === "profile_frame") {
     return (
-      <div className="relative flex h-full items-center justify-center overflow-hidden bg-rm-bg-primary p-2">
-        <div
-          className="relative h-full overflow-hidden rounded-lg border border-white/8 bg-[#10131a] shadow-[0_8px_24px_rgba(0,0,0,0.35)] w-[62px]"
-          style={{ aspectRatio: "450 / 880" }}
-        >
-          {/* Mock profile background banner */}
-          <div className="absolute left-0 right-0 top-0 h-5 bg-white/5 border-b border-white/8" />
-          <div className="absolute inset-0 bg-[linear-gradient(180deg,_transparent,_rgba(17,20,27,0.96)_34%,_rgba(11,13,18,0.98))]" />
+      <div className="relative flex h-full items-center justify-center overflow-visible bg-rm-bg-primary p-2">
+        <div className="relative h-full w-[62px]">
+          <div
+            className="relative z-10 h-full w-full overflow-hidden rounded-lg border border-white/8 bg-[#10131a] shadow-[0_8px_24px_rgba(0,0,0,0.35)]"
+            style={{ aspectRatio: "450 / 880" }}
+          >
+            {/* Mock profile background banner */}
+            <div className="absolute left-0 right-0 top-0 h-5 bg-white/5 border-b border-white/8" />
+            <div className="absolute inset-0 bg-[linear-gradient(180deg,_transparent,_rgba(17,20,27,0.96)_34%,_rgba(11,13,18,0.98))]" />
 
-          {/* Mock small avatar placeholder with logo (no user avatar) */}
-          <div className="absolute left-1.5 top-3 h-4.5 w-4.5 overflow-hidden rounded-full border border-white/10 bg-white/5 flex items-center justify-center shadow-[0_4px_8px_rgba(0,0,0,0.3)] z-10">
-            <HomeIcon className="h-3 w-3 text-white/70" />
+            {/* Mock small avatar placeholder with logo (no user avatar) */}
+            <div className="absolute left-1.5 top-3 h-4.5 w-4.5 overflow-hidden rounded-full border border-white/10 bg-white/5 flex items-center justify-center shadow-[0_4px_8px_rgba(0,0,0,0.3)] z-10">
+              <HomeIcon className="h-3 w-3 text-white/70" />
+            </div>
+
+            {/* User display name */}
+            <div className="absolute left-1.5 top-[32px] h-1 w-6 rounded-full bg-white/20" />
+            {/* Username */}
+            <div className="absolute left-1.5 top-[38px] h-0.5 w-8 rounded-full bg-white/10" />
+
+            {/* Divider */}
+            <div className="absolute left-1.5 right-1.5 top-[44px] h-[1px] bg-white/8" />
+
+            {/* About Me header */}
+            <div className="absolute left-1.5 top-[48px] h-0.5 w-5 rounded-full bg-white/18" />
+            {/* About Me body lines */}
+            <div className="absolute left-1.5 top-[52px] h-0.5 w-9 rounded-full bg-white/10" />
+            <div className="absolute left-1.5 top-[56px] h-0.5 w-7 rounded-full bg-white/10" />
+
+            {/* Mock details block / activity at bottom */}
+            <div className="absolute inset-x-1 bottom-1 rounded border border-white/8 bg-black/20 p-0.5">
+              <div className="h-0.5 w-5 rounded-full bg-white/18" />
+              <div className="mt-0.5 h-0.5 w-7 rounded-full bg-white/10" />
+            </div>
+
+            {/* Profile effect overlay layer */}
+            <ProfileCollectiblesLayer
+              display={previewDisplay}
+              effectOpacity={1}
+              fit="cover"
+              className="opacity-100"
+              playAnimation={playAnimation}
+              renderFrame={false}
+            />
+
+            {/* Subtle surface highlights */}
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.05),_transparent_42%),linear-gradient(180deg,_rgba(6,7,10,0.04),_rgba(6,7,10,0.18))]" />
           </div>
-
-          {/* User display name */}
-          <div className="absolute left-1.5 top-[32px] h-1 w-6 rounded-full bg-white/20" />
-          {/* Username */}
-          <div className="absolute left-1.5 top-[38px] h-0.5 w-8 rounded-full bg-white/10" />
-
-          {/* Divider */}
-          <div className="absolute left-1.5 right-1.5 top-[44px] h-[1px] bg-white/8" />
-
-          {/* About Me header */}
-          <div className="absolute left-1.5 top-[48px] h-0.5 w-5 rounded-full bg-white/18" />
-          {/* About Me body lines */}
-          <div className="absolute left-1.5 top-[52px] h-0.5 w-9 rounded-full bg-white/10" />
-          <div className="absolute left-1.5 top-[56px] h-0.5 w-7 rounded-full bg-white/10" />
-
-          {/* Mock details block / activity at bottom */}
-          <div className="absolute inset-x-1 bottom-1 rounded border border-white/8 bg-black/20 p-0.5">
-            <div className="h-0.5 w-5 rounded-full bg-white/18" />
-            <div className="mt-0.5 h-0.5 w-7 rounded-full bg-white/10" />
-          </div>
-
-          {/* Profile effect overlay layer */}
-          <ProfileCollectiblesLayer
+          <ProfileFrameLayer
             display={previewDisplay}
-            effectOpacity={1}
-            fit="cover"
-            className="opacity-100"
-            playAnimation={playAnimation}
+            order="back"
+            className="z-0"
           />
-
-          {/* Subtle surface highlights */}
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.05),_transparent_42%),linear-gradient(180deg,_rgba(6,7,10,0.04),_rgba(6,7,10,0.18))]" />
+          <ProfileFrameLayer
+            display={previewDisplay}
+            order="front"
+            className="z-20"
+          />
         </div>
       </div>
     );
@@ -662,7 +669,10 @@ export function CollectiblesCatalogModal({
             }),
         avatarDisplay: currentDisplay ?? null,
       });
-      await onApplied(data.user);
+      const appliedKinds = bundleSelections.length
+        ? bundleSelections.map((selection) => selection.kind)
+        : [item?.kind ?? activeKind];
+      await onApplied(data.user, appliedKinds);
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Unable to apply collectible.",
