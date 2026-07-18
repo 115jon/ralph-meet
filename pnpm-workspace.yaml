@@ -18,7 +18,7 @@ minimumReleaseAgeExclude:
   - wrangler@4.110.0
 
 onlyBuiltDependencies:
-  - "@kova/react"
+  - "@kova/react@https://codeload.github.com/115jon/kova/tar.gz/6bb0fe18fa99223e1277352ec60a7a1203d9cbc5#path:/packages/kova-react"
   - esbuild
   - msw
   - sharp
