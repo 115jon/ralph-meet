@@ -9,6 +9,16 @@ import { SpeakingFlags } from "../types";
 
 const DEBUG = typeof import.meta !== "undefined" && import.meta.env?.DEV;
 
+export function getVoiceActivityThreshold(
+  autoSensitivity: boolean,
+  sensitivity: number,
+): number {
+  if (autoSensitivity) return 3;
+
+  const threshold = Math.pow(10, sensitivity / 20) * 100;
+  return Math.max(0.1, Math.min(50, threshold));
+}
+
 /** Callbacks from the VAD to the owning SFUClient */
 export interface VADCallbacks {
   /** Emit speaking / vad-speaking events */
@@ -27,10 +37,11 @@ export class VoiceActivityDetector {
   private audioContext: AudioContext | null = null;
   private analyser: AnalyserNode | null = null;
   private source: MediaStreamAudioSourceNode | null = null;
+  private silentOutput: GainNode | null = null;
   private timer: ReturnType<typeof setInterval> | null = null;
   private isSpeaking: boolean = false;
   private silenceStart: number = 0;
-  private threshold: number = 3; // RMS threshold (roughly 0-100 scale)
+  private threshold = getVoiceActivityThreshold(true, -50);
   private silenceDelay: number = 300; // ms of silence before "stopped speaking"
   private gateEnabled: boolean = false;
   private isGated: boolean = false; // tracks whether gate is currently applied
@@ -72,6 +83,14 @@ export class VoiceActivityDetector {
 
       this.source = this.audioContext.createMediaStreamSource(vadStream);
       this.source.connect(this.analyser);
+
+      // Keep the Web Audio graph rendering without routing microphone audio
+      // back to the user. AnalyserNode data can remain stale when its output
+      // is disconnected from the destination.
+      this.silentOutput = this.audioContext.createGain();
+      this.silentOutput.gain.value = 0;
+      this.analyser.connect(this.silentOutput);
+      this.silentOutput.connect(this.audioContext.destination);
 
       // Explicitly resume in case it's suspended
       this.contextResumed = false;
@@ -212,6 +231,13 @@ export class VoiceActivityDetector {
     if (this.source) {
       this.source.disconnect();
       this.source = null;
+    }
+    if (this.silentOutput) {
+      this.silentOutput.disconnect();
+      this.silentOutput = null;
+    }
+    if (this.analyser) {
+      this.analyser.disconnect();
     }
     if (this.vadTrack) {
       this.vadTrack.stop();

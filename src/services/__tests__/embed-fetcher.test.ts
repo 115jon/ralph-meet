@@ -480,6 +480,68 @@ describe("extractAndProcessEmbeds", () => {
     expect(embeds[0].rawDescription).toBe("is this shit from fortnite bro");
   });
 
+  it("normalizes the supplied X GIF post as GIF media", async () => {
+    const sourceUrl =
+      "https://x.com/GiFShitpost/status/2074671492458266675?s=20";
+    const gifUrl = "https://video.twimg.com/tweet_video/HMqJQoAbMAASH3N.mp4";
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        if (String(input).startsWith("https://api.fxtwitter.com")) {
+          return Response.json({
+            status: {
+              type: "status",
+              url: sourceUrl,
+              id: "2074671492458266675",
+              text: "",
+              author: {
+                screen_name: "GiFShitpost",
+                name: "GIFs Shitpost",
+              },
+              media: {
+                all: [
+                  {
+                    id: "2074621497067646976",
+                    url: gifUrl,
+                    thumbnail_url:
+                      "https://pbs.twimg.com/tweet_video_thumb/HMqJQoAbMAASH3N.jpg",
+                    duration: 0,
+                    width: 720,
+                    height: 720,
+                    format: "video/mp4",
+                    type: "gif",
+                  },
+                ],
+              },
+            },
+          });
+        }
+
+        return new Response("not found", { status: 404 });
+      }) as unknown as typeof fetch,
+    );
+
+    const embeds = await extractAndProcessEmbeds(sourceUrl);
+
+    expect(embeds[0]).toMatchObject({
+      url: sourceUrl,
+      media: [
+        expect.objectContaining({
+          type: "video",
+          url: gifUrl,
+          isGif: true,
+          contentType: "video/mp4",
+        }),
+      ],
+      video: {
+        url: gifUrl,
+        kind: "direct",
+        contentType: "video/mp4",
+      },
+    });
+  });
+
   it("uses FxTwitter v2 media for fxtwitter replacement GIF links", async () => {
     const statusId = "2065601187911553195";
     const gifUrl = "https://video.twimg.com/tweet_video/HKohayFWcAA3VCp.mp4";

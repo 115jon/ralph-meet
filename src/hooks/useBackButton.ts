@@ -11,16 +11,9 @@ const backHandlers: BackHandler[] = [];
 let hasRegisteredGlobalListener = false;
 let globalInvoke: typeof import("@tauri-apps/api/core").invoke | null = null;
 
-// For web history programmatic popping
-let statesToPop = 0;
-let popTimeout: ReturnType<typeof setTimeout> | null = null;
-
-function popHistory() {
-  if (statesToPop > 0) {
-    window.history.go(-statesToPop);
-    statesToPop = 0;
-  }
-}
+// For web history programmatic popping. A count is needed when multiple
+// instances clean up in the same task before their popstate events arrive.
+let programmaticPopPending = 0;
 
 function initGlobalBackListener() {
   if (typeof window === "undefined" || hasRegisteredGlobalListener) return;
@@ -29,6 +22,10 @@ function initGlobalBackListener() {
 
   // Web Browser Listener (handles browser back button or Android back button in PWA)
   window.addEventListener("popstate", () => {
+    if (programmaticPopPending > 0) {
+      programmaticPopPending--;
+      return;
+    }
     executeBackHandlers();
   });
 
@@ -89,6 +86,8 @@ export function executeBackHandlers(): boolean {
 export function useBackButton(handler: BackHandler, active: boolean = true) {
   const handlerRef = useRef(handler);
   const isPushedRef = useRef(false);
+  const statesToPopRef = useRef(0);
+  const popTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     handlerRef.current = handler;
@@ -97,8 +96,21 @@ export function useBackButton(handler: BackHandler, active: boolean = true) {
   useEffect(() => {
     if (!active) return;
 
+    // Reuse an entry whose manual cleanup has not run yet. This avoids a
+    // stale timer popping the newly pushed entry after a rapid toggle.
+    const hasPendingCleanup =
+      statesToPopRef.current > 0 || popTimeoutRef.current !== null;
+    if (popTimeoutRef.current !== null) {
+      clearTimeout(popTimeoutRef.current);
+      popTimeoutRef.current = null;
+    }
+    if (hasPendingCleanup) {
+      statesToPopRef.current = 0;
+      isPushedRef.current = true;
+    }
+
     // Web: push state to intercept browser back
-    if (typeof window !== "undefined" && !isTauri()) {
+    if (!hasPendingCleanup && typeof window !== "undefined" && !isTauri()) {
       window.history.pushState({ backHandlerOpen: true }, "");
       isPushedRef.current = true;
     }
@@ -118,10 +130,24 @@ export function useBackButton(handler: BackHandler, active: boolean = true) {
       // If closed manually (not via back button), we must pop history to keep it clean
       if (isPushedRef.current && typeof window !== "undefined" && !isTauri()) {
         isPushedRef.current = false;
-        statesToPop++;
+        statesToPopRef.current++;
 
-        if (popTimeout) clearTimeout(popTimeout);
-        popTimeout = setTimeout(popHistory, 10);
+        if (popTimeoutRef.current !== null) {
+          clearTimeout(popTimeoutRef.current);
+        }
+        popTimeoutRef.current = setTimeout(() => {
+          popTimeoutRef.current = null;
+          if (statesToPopRef.current <= 0) return;
+
+          const count = statesToPopRef.current;
+          statesToPopRef.current = 0;
+          programmaticPopPending += 1;
+          try {
+            window.history.go(-count);
+          } catch {
+            programmaticPopPending = Math.max(0, programmaticPopPending - 1);
+          }
+        }, 10);
       }
     };
   }, [active]);

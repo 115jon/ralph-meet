@@ -149,13 +149,11 @@ export default function SettingsModal({
   const [activeTab, setActiveTab] = useState<Tab>(() =>
     normalizeTab(initialTab),
   );
+  const [isMobileViewport, setIsMobileViewport] = useState(
+    () => typeof window !== "undefined" && window.innerWidth < 768,
+  );
   const [showMobileMenu, setShowMobileMenu] = useState(
-    () =>
-      !(
-        typeof window !== "undefined" &&
-        window.innerWidth < 768 &&
-        initialProfileEditorOpen
-      ),
+    () => !(isMobileViewport && initialProfileEditorOpen),
   );
   const [previewOpen, setPreviewOpen] = useState(false);
   const [profileEditorOpen, setProfileEditorOpen] = useState(
@@ -302,17 +300,31 @@ export default function SettingsModal({
     }
   }, [desktopSettings]);
 
+  useEffect(() => {
+    const handleViewportChange = () => {
+      setIsMobileViewport(window.innerWidth < 768);
+    };
+    window.addEventListener("resize", handleViewportChange);
+    return () => window.removeEventListener("resize", handleViewportChange);
+  }, []);
+
   const handleModalCloseOrBack = useCallback(() => {
     if (profileEditorOpen) {
       setProfileEditorOpen(false);
     } else if (previewOpen) {
       setPreviewOpen(false);
-    } else if (!showMobileMenu && window.innerWidth < 768) {
+    } else if (!showMobileMenu && isMobileViewport) {
       setShowMobileMenu(true);
     } else {
       onClose();
     }
-  }, [previewOpen, profileEditorOpen, showMobileMenu, onClose]);
+  }, [
+    isMobileViewport,
+    previewOpen,
+    profileEditorOpen,
+    showMobileMenu,
+    onClose,
+  ]);
 
   if (!mounted) {
     return (
@@ -359,6 +371,12 @@ export default function SettingsModal({
             <>
               {/* Sidebar */}
               <div
+                role="navigation"
+                aria-label="Settings navigation"
+                aria-hidden={
+                  isMobileViewport && !showMobileMenu ? "true" : undefined
+                }
+                inert={isMobileViewport && !showMobileMenu ? true : undefined}
                 className={cn(
                   "w-full md:w-[248px] flex-col shrink-0 bg-rm-bg-sidebar pt-0 md:pt-4 pb-5 md:pl-4 pr-0 md:pr-2 overflow-y-auto overflow-x-hidden custom-scrollbar",
                   "max-md:absolute max-md:inset-0 max-md:z-10 max-md:transition-transform max-md:duration-300 max-md:ease-out flex",
@@ -470,6 +488,12 @@ export default function SettingsModal({
 
               {/* Main Content */}
               <div
+                role="region"
+                aria-label="Settings content"
+                aria-hidden={
+                  isMobileViewport && showMobileMenu ? "true" : undefined
+                }
+                inert={isMobileViewport && showMobileMenu ? true : undefined}
                 className={cn(
                   "flex-1 flex-col relative overflow-hidden bg-rm-bg-primary",
                   "max-md:absolute max-md:inset-0 max-md:z-20 max-md:transition-transform max-md:duration-300 max-md:ease-out flex",

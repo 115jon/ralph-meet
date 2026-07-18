@@ -133,6 +133,7 @@ export function useChatPageLogic() {
     subscribeChannel,
     unsubscribeChannel,
     subscribeServer,
+    resetReadStateTracking,
     setProfileUser,
     dispatch,
   } = useChatActions();
@@ -243,12 +244,16 @@ export function useChatPageLogic() {
 
   useEffect(() => {
     if (!desktopReady) return;
-    bootstrapChat().then(() => {
+    bootstrapChat({
+      expectedUserId: user?.id,
+      deferNonCritical: slug[0] !== "@me",
+    }).then(() => {
       setDmChannelsLoaded(true);
     });
-  }, [desktopReady, bootstrapChat]);
+  }, [desktopReady, bootstrapChat, slug, user?.id]);
 
   useEffect(() => {
+    resetReadStateTracking(user?.id ?? null);
     if (!user) return;
     const existingAvatar = chatUser?.avatar_url;
     const isR2Avatar = existingAvatar?.startsWith("/api/avatars/");
@@ -282,7 +287,7 @@ export function useChatPageLogic() {
     if (JSON.stringify(chatUser) !== JSON.stringify(newUserState)) {
       dispatch({ type: "SET_USER", user: newUserState });
     }
-  }, [user, chatUser, dispatch]);
+  }, [user, chatUser, dispatch, resetReadStateTracking]);
 
   useEffect(() => {
     if (initializedRef.current) return;
@@ -358,19 +363,6 @@ export function useChatPageLogic() {
     loadChannels(activeServerId);
     loadMembers(activeServerId);
   }, [activeServerId, loadChannels, loadMembers]);
-
-  const prefetchedServerChannelsRef = useRef<Set<string>>(new Set());
-  useEffect(() => {
-    if (servers.length === 0) return;
-
-    for (const server of servers) {
-      if (server.id === activeServerId) continue;
-      if (prefetchedServerChannelsRef.current.has(server.id)) continue;
-
-      prefetchedServerChannelsRef.current.add(server.id);
-      void loadChannels(server.id);
-    }
-  }, [servers, activeServerId, loadChannels]);
 
   const channelsLoadedForServer = useRef<string | null>(null);
   useEffect(() => {

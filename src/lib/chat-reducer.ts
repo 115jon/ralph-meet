@@ -90,8 +90,10 @@ export interface ChatState {
   relationships: Relationship[];
   /** User currently being viewed in a profile modal */
   profileUser: User | null;
-  /** Global map of which users are currently speaking in a voice channel: userId -> boolean */
+  /** Aggregated map of users speaking across active voice sessions: userId -> boolean */
   speakingUsers: Record<string, boolean>;
+  /** Per-session speaking maps used to prevent one voice session clearing another. */
+  speakingUsersBySource: Record<string, Record<string, boolean>>;
   /** User notifications (mentions, replies, DMs) */
   notifications: Notification[];
   /** Unread notification count (for badge) */
@@ -169,6 +171,7 @@ export const initialState: ChatState = {
   relationships: [],
   profileUser: null,
   speakingUsers: {},
+  speakingUsersBySource: {},
   notifications: [],
   unreadNotificationCount: 0,
   serverMentionCounts: {},
@@ -246,6 +249,7 @@ export type ChatAction =
       channelId?: string;
       hasMoreBefore?: boolean;
       hasMoreAfter?: boolean;
+      preserveMessagesFrom?: Message[];
     }
   | {
       type: "REPLACE_MESSAGES";
@@ -387,7 +391,12 @@ export type ChatAction =
   | { type: "ADD_RELATIONSHIP"; relationship: Relationship }
   | { type: "REMOVE_RELATIONSHIP"; userId: string }
   | { type: "SET_PROFILE_USER"; user: User | null }
-  | { type: "SET_SPEAKING_USERS"; speakingUsers: Record<string, boolean> }
+  | {
+      type: "SET_SPEAKING_USERS";
+      sourceId: string;
+      speakingUsers: Record<string, boolean>;
+    }
+  | { type: "CLEAR_SPEAKING_USERS"; sourceId: string }
   | {
       type: "SET_NOTIFICATIONS";
       notifications: Notification[];
@@ -427,6 +436,18 @@ function computeMentionCounts(notifications: Notification[]): {
   }
 
   return { serverMentionCounts, channelMentionCounts };
+}
+
+function aggregateSpeakingUsers(
+  speakingUsersBySource: Record<string, Record<string, boolean>>,
+): Record<string, boolean> {
+  const speakingUsers: Record<string, boolean> = {};
+  for (const sourceUsers of Object.values(speakingUsersBySource)) {
+    for (const [userId, isSpeaking] of Object.entries(sourceUsers)) {
+      if (isSpeaking) speakingUsers[userId] = true;
+    }
+  }
+  return speakingUsers;
 }
 
 /**
@@ -795,12 +816,37 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       const channelId = action.channelId ?? state.activeChannelId;
       if (!channelId) return { ...state, messages: action.messages };
       const isActive = state.activeChannelId === channelId;
+      const currentMessages = state.messagesByChannelId[channelId] ?? [];
+      const incomingIds = new Set(action.messages.map((message) => message.id));
+      const snapshotById = new Map(
+        (action.preserveMessagesFrom ?? []).map((message) => [
+          message.id,
+          message,
+        ]),
+      );
+      const changedMessages = currentMessages.filter((message) => {
+        const snapshot = snapshotById.get(message.id);
+        return message.pending || !snapshot || snapshot !== message;
+      });
+      const changedById = new Map(
+        changedMessages.map((message) => [message.id, message]),
+      );
+      const messages = [
+        ...action.messages.map(
+          (message) => changedById.get(message.id) ?? message,
+        ),
+        ...changedMessages.filter((message) => !incomingIds.has(message.id)),
+      ].sort(
+        (left, right) =>
+          new Date(left.created_at).getTime() -
+          new Date(right.created_at).getTime(),
+      );
       return {
         ...state,
-        messages: isActive ? action.messages : state.messages,
+        messages: isActive ? messages : state.messages,
         messagesByChannelId: {
           ...state.messagesByChannelId,
-          [channelId]: action.messages,
+          [channelId]: messages,
         },
         messagesLoadedByChannelId: {
           ...state.messagesLoadedByChannelId,
@@ -2134,17 +2180,31 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
     case "SET_PROFILE_USER":
       return { ...state, profileUser: action.user };
     case "SET_SPEAKING_USERS": {
+      const speakingUsersBySource = {
+        ...state.speakingUsersBySource,
+        [action.sourceId]: action.speakingUsers,
+      };
       const prev = state.speakingUsers;
-      const next = action.speakingUsers;
+      const next = aggregateSpeakingUsers(speakingUsersBySource);
       const prevKeys = Object.keys(prev);
       const nextKeys = Object.keys(next);
       if (
         prevKeys.length === nextKeys.length &&
         prevKeys.every((k) => prev[k] === next[k])
       ) {
-        return state;
+        return { ...state, speakingUsersBySource };
       }
-      return { ...state, speakingUsers: next };
+      return { ...state, speakingUsers: next, speakingUsersBySource };
+    }
+    case "CLEAR_SPEAKING_USERS": {
+      if (!(action.sourceId in state.speakingUsersBySource)) return state;
+      const speakingUsersBySource = { ...state.speakingUsersBySource };
+      delete speakingUsersBySource[action.sourceId];
+      return {
+        ...state,
+        speakingUsers: aggregateSpeakingUsers(speakingUsersBySource),
+        speakingUsersBySource,
+      };
     }
     case "SET_NOTIFICATIONS": {
       const counts = computeMentionCounts(action.notifications);

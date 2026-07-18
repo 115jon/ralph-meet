@@ -352,6 +352,54 @@ describe("camera background effects", () => {
     expect(closeResult).toHaveBeenCalledTimes(1);
   });
 
+  it("continues processing when the document is hidden without requestAnimationFrame", async () => {
+    vi.useFakeTimers();
+    try {
+      vi.stubGlobal("MediaStream", MockMediaStream);
+      const outputTrack = new MockMediaStreamTrack("video") as any;
+      const { contexts, document } = mockCanvasEnvironment(
+        outputTrack as MediaStreamTrack,
+      );
+      Object.defineProperty(document, "hidden", {
+        configurable: true,
+        value: true,
+      });
+      const createSegmenter = vi.fn().mockResolvedValue({
+        segmentForVideo: vi.fn(() => ({})),
+      });
+      const requestAnimationFrame = vi.fn();
+
+      const effect = await createCameraBackgroundEffect(
+        mockTrack(),
+        { type: "blur", strength: "light" },
+        [],
+        {
+          createSegmenter,
+          document,
+          requestAnimationFrame,
+          now: () => 0,
+        },
+      );
+
+      const drawCallsBefore = contexts.reduce(
+        (total, context) => total + context.drawImage.mock.calls.length,
+        0,
+      );
+      expect(requestAnimationFrame).not.toHaveBeenCalled();
+
+      await vi.advanceTimersByTimeAsync(100);
+
+      const drawCallsAfter = contexts.reduce(
+        (total, context) => total + context.drawImage.mock.calls.length,
+        0,
+      );
+      expect(drawCallsAfter).toBeGreaterThan(drawCallsBefore);
+      effect?.stop();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("treats selfie segmenter category 0 as the foreground subject", async () => {
     vi.stubGlobal("MediaStream", MockMediaStream);
     const outputTrack = new MockMediaStreamTrack("video") as any;

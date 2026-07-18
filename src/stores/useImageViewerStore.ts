@@ -23,6 +23,7 @@ interface ImageViewerState {
       initialIndex?: number,
       context?: ViewerContext,
     ) => void;
+    updateImage: (id: string, image: Attachment) => void;
     close: () => void;
   };
 }
@@ -35,6 +36,12 @@ export const useImageViewerStore = create<ImageViewerState>((set) => ({
   actions: {
     open: (images, initialIndex = 0, context) =>
       set({ isOpen: true, images, initialIndex, context }),
+    updateImage: (id, image) =>
+      set((state) => ({
+        images: state.images.map((current) =>
+          current.id === id ? image : current,
+        ),
+      })),
     close: () =>
       set({ isOpen: false, images: [], initialIndex: 0, context: undefined }),
   },

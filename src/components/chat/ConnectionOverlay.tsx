@@ -2,6 +2,14 @@ import splashLogo from "@/assets/splash-logo.svg";
 import { useChatStore } from "@/stores/chat-store";
 import { useCallback, useEffect, useReducer } from "react";
 
+interface ConnectionOverlayState {
+  visible: boolean;
+  fadeOut: boolean;
+  hasConnected: boolean;
+  tipIndex: number;
+  tipVisible: boolean;
+}
+
 const LOADING_TIPS = [
   "Warming up the servers...",
   "Connecting you to the conversation...",
@@ -39,7 +47,10 @@ export function ConnectionOverlay() {
 
   // Overlay and Tip state combined into one object to fix `react-doctor` cascading state limits
   const [state, dispatch] = useReducer(
-    (prev: any, next: any) => ({ ...prev, ...next }),
+    (
+      prev: ConnectionOverlayState,
+      next: Partial<ConnectionOverlayState>,
+    ): ConnectionOverlayState => ({ ...prev, ...next }),
     {
       visible: true,
       fadeOut: false,
@@ -88,16 +99,20 @@ export function ConnectionOverlay() {
   // Rotate tips
   useEffect(() => {
     if (!state.visible || state.fadeOut) return;
+    let tipTimeout: ReturnType<typeof setTimeout> | null = null;
     const interval = setInterval(() => {
       dispatch({ tipVisible: false });
-      setTimeout(() => {
+      tipTimeout = setTimeout(() => {
         dispatch({
           tipIndex: (state.tipIndex + 1) % tips.length,
           tipVisible: true,
         });
       }, 400);
     }, 3500);
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(interval);
+      if (tipTimeout) clearTimeout(tipTimeout);
+    };
   }, [state.visible, state.fadeOut, state.tipIndex, tips.length]);
 
   if (!state.visible) return null;
@@ -136,19 +151,7 @@ export function ConnectionOverlay() {
 
       {/* Logo with breathing animation */}
       <div className="w-24 h-24 z-10 flex items-center justify-center animate-[conn-breathe_2.8s_ease-in-out_infinite]">
-        <div
-          className="w-full h-full bg-rm-text"
-          style={{
-            WebkitMaskImage: `url(${splashLogo})`,
-            WebkitMaskSize: "contain",
-            WebkitMaskRepeat: "no-repeat",
-            WebkitMaskPosition: "center",
-            maskImage: `url(${splashLogo})`,
-            maskSize: "contain",
-            maskRepeat: "no-repeat",
-            maskPosition: "center",
-          }}
-        />
+        <img src={splashLogo} alt="" className="h-full w-full object-contain" />
       </div>
 
       {/* Loading bar */}
@@ -157,13 +160,19 @@ export function ConnectionOverlay() {
       </div>
 
       {/* Status text */}
-      <p className="mt-5 text-sm font-semibold tracking-[0.01em] z-10 text-rm-text-secondary">
+      <p
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+        className="mt-5 text-sm font-semibold tracking-[0.01em] z-10 text-rm-text-secondary"
+      >
         {getStatusText()}
       </p>
 
       {/* Rotating tip */}
       {!state.fadeOut && (
         <p
+          aria-hidden="true"
           className={`mt-2 text-[13px] font-normal tracking-[0.01em] z-10 text-rm-text-muted transition-opacity duration-400 ${
             state.tipVisible ? "opacity-100" : "opacity-0"
           }`}

@@ -12,6 +12,13 @@ import { ServiceError } from "@/lib/service-error";
 import { getMe } from "@/services/user.service";
 import { clog } from "@/lib/console-logger";
 import type { AvatarDisplay } from "@/lib/avatar-display";
+import {
+  ALL_SERVERS_SOUND_SCOPE,
+  normalizeSoundboardTriggerMap,
+  normalizeSoundboardTriggerConfig,
+  validatePersistedSoundboardTriggerMap,
+  type SoundboardTriggerMap,
+} from "@/lib/voice/soundboard-trigger";
 
 const log = clog("users/me");
 
@@ -70,7 +77,14 @@ const GET = async ({ request }: any) => {
   try {
     const user = await getMe(db, userId);
     await backfillMissingAvatar(db, user, request.headers);
-    return apiSuccess(user);
+    const settingsRow = await db
+      .prepare("SELECT sound_settings FROM users WHERE id = ?")
+      .bind(userId)
+      .first<{ sound_settings: string | null }>();
+    return apiSuccess({
+      ...user,
+      sound_settings: parseStoredSoundSettings(settingsRow?.sound_settings),
+    });
   } catch (e) {
     if (e instanceof ServiceError && e.status === 404) {
       try {
@@ -87,6 +101,189 @@ const GET = async ({ request }: any) => {
     throw e;
   }
 };
+
+export const PATCH = async ({ request }: { request: Request }) => {
+  const authResult = await requireAuth(request);
+  if (authResult instanceof Response) return authResult;
+  const { userId } = authResult;
+  const body = await request.json().catch(() => null);
+  const incoming =
+    body && typeof body === "object" && "sound_settings" in body
+      ? (body as { sound_settings?: unknown }).sound_settings
+      : null;
+  if (!incoming || typeof incoming !== "object") {
+    return apiError("Invalid sound settings", 400, "INVALID_SOUND_SETTINGS");
+  }
+
+  const db = getDB();
+  await ensureUserProfileSchema(db);
+  const currentRow = await db
+    .prepare("SELECT sound_settings FROM users WHERE id = ?")
+    .bind(userId)
+    .first<{ sound_settings: string | null }>();
+  const current = parseStoredSoundSettingsRecord(currentRow?.sound_settings);
+  const raw = incoming as Record<string, unknown>;
+  const requestedFields = [
+    "voiceJoinSoundboard",
+    "voiceLeaveSoundboard",
+    "soundboardVolume",
+  ] as const;
+  const changedFields = requestedFields.filter((field) => field in raw);
+  if (changedFields.length === 0) {
+    return apiError(
+      "No trigger settings supplied",
+      400,
+      "INVALID_SOUND_SETTINGS",
+    );
+  }
+
+  const resolveServerSound = async (serverId: string, soundId: string) => {
+    const row = await db
+      .prepare(
+        `SELECT a.id, a.soundboard_server_id AS server_id,
+                a.sound_name, a.sound_emoji,
+                COALESCE(a.sound_volume, 1.0) AS sound_volume
+         FROM attachments a
+         JOIN server_members sm
+           ON sm.server_id = a.soundboard_server_id AND sm.user_id = ?
+         WHERE a.soundboard_server_id = ? AND a.id = ?
+         LIMIT 1`,
+      )
+      .bind(userId, serverId, soundId)
+      .first<{
+        id: string;
+        server_id: string;
+        sound_name: string | null;
+        sound_emoji: string | null;
+        sound_volume: number;
+      }>();
+    if (!row) return null;
+    return {
+      id: row.id,
+      serverId: row.server_id,
+      name: row.sound_name || "Sound",
+      ...(row.sound_emoji ? { emoji: row.sound_emoji } : {}),
+      volume: Number(row.sound_volume),
+    };
+  };
+
+  const validated: Partial<
+    Record<(typeof requestedFields)[number], SoundboardTriggerMap | number>
+  > = {};
+  for (const field of changedFields) {
+    if (field === "soundboardVolume") {
+      const volume = raw[field];
+      if (
+        typeof volume !== "number" ||
+        !Number.isFinite(volume) ||
+        volume < 0 ||
+        volume > 100
+      ) {
+        return apiError(
+          "Soundboard volume is invalid",
+          400,
+          "INVALID_SOUND_SETTINGS",
+        );
+      }
+      validated[field] = volume;
+      continue;
+    }
+    const value = await validatePersistedSoundboardTriggerMap(
+      raw[field],
+      resolveServerSound,
+    );
+    if (!value) {
+      return apiError(
+        "Soundboard trigger selection is invalid or unavailable",
+        400,
+        "INVALID_SOUND_SELECTION",
+      );
+    }
+    validated[field] = value;
+  }
+
+  const soundSettings = JSON.stringify({ ...current, ...validated });
+  await db
+    .prepare("UPDATE users SET sound_settings = ?, updated_at = ? WHERE id = ?")
+    .bind(soundSettings, new Date().toISOString(), userId)
+    .run();
+
+  return apiSuccess({ sound_settings: validated });
+};
+
+function parseStoredSoundSettingsRecord(
+  value: string | null | undefined,
+): Record<string, unknown> {
+  if (!value) return {};
+  try {
+    const parsed = JSON.parse(value);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return {};
+    }
+    const record = parsed as Record<string, unknown>;
+    const sanitized = { ...record };
+    for (const field of ["voiceJoinSoundboard", "voiceLeaveSoundboard"]) {
+      if (field in record) {
+        sanitized[field] = parseStoredTriggerMap(record[field]);
+      }
+    }
+    return sanitized;
+  } catch {
+    return {};
+  }
+}
+
+function parseStoredSoundSettings(value: string | null | undefined): {
+  voiceJoinSoundboard: SoundboardTriggerMap;
+  voiceLeaveSoundboard: SoundboardTriggerMap;
+  soundboardVolume: number;
+} {
+  if (!value) {
+    return {
+      voiceJoinSoundboard: {
+        [ALL_SERVERS_SOUND_SCOPE]: { enabled: false, sound: null },
+      },
+      voiceLeaveSoundboard: {
+        [ALL_SERVERS_SOUND_SCOPE]: { enabled: false, sound: null },
+      },
+      soundboardVolume: 100,
+    };
+  }
+  try {
+    const parsed = JSON.parse(value) as Record<string, unknown>;
+    return {
+      voiceJoinSoundboard: parseStoredTriggerMap(parsed.voiceJoinSoundboard),
+      voiceLeaveSoundboard: parseStoredTriggerMap(parsed.voiceLeaveSoundboard),
+      soundboardVolume:
+        typeof parsed.soundboardVolume === "number" &&
+        Number.isFinite(parsed.soundboardVolume)
+          ? Math.max(0, Math.min(100, parsed.soundboardVolume))
+          : 100,
+    };
+  } catch {
+    return {
+      voiceJoinSoundboard: {
+        [ALL_SERVERS_SOUND_SCOPE]: { enabled: false, sound: null },
+      },
+      voiceLeaveSoundboard: {
+        [ALL_SERVERS_SOUND_SCOPE]: { enabled: false, sound: null },
+      },
+      soundboardVolume: 100,
+    };
+  }
+}
+
+function parseStoredTriggerMap(value: unknown): SoundboardTriggerMap {
+  const normalized = normalizeSoundboardTriggerMap(value);
+  return Object.fromEntries(
+    Object.entries(normalized).map(([scope, config]) => {
+      const normalizedConfig = normalizeSoundboardTriggerConfig(config);
+      if (!normalizedConfig.sound) return [scope, normalizedConfig];
+      const { mediaUrl: _mediaUrl, ...sound } = normalizedConfig.sound;
+      return [scope, { enabled: normalizedConfig.enabled, sound }];
+    }),
+  );
+}
 
 async function backfillMissingAvatar(
   db: any,
@@ -381,6 +578,7 @@ export const Route = createFileRoute("/api/users/me")({
   server: {
     handlers: {
       GET,
+      PATCH,
     },
   },
 });

@@ -164,9 +164,15 @@ export default function ThreadSidebar({
   );
 
   return (
-    <div className="flex h-full w-[380px] flex-col border-l border-rm-border bg-rm-bg-primary">
+    <div className="flex h-full w-[380px] flex-col border-l border-rm-border bg-rm-bg-primary max-md:fixed max-md:inset-0 max-md:z-[120] max-md:w-full max-md:border-l-0 max-md:shadow-2xl">
       {/* Header */}
-      <div className="flex h-12 items-center justify-between border-b border-rm-border px-4">
+      <div
+        className="flex min-h-12 items-center justify-between border-b border-rm-border px-4"
+        style={{
+          paddingTop: "var(--safe-area-top, 0px)",
+          minHeight: "calc(48px + var(--safe-area-top, 0px))",
+        }}
+      >
         <div className="flex items-center gap-2">
           <h2 className="text-sm font-bold text-rm-text">Thread</h2>
           <span className="text-xs text-rm-text-muted">
@@ -286,7 +292,10 @@ function ThreadReplyInput({
   };
 
   return (
-    <div className="border-t border-rm-border px-3 py-2.5">
+    <div
+      className="border-t border-rm-border px-3 pt-2.5"
+      style={{ paddingBottom: "max(10px, var(--safe-area-bottom, 0px))" }}
+    >
       <div className="flex items-center gap-2 rounded-xl border border-rm-border bg-rm-bg-surface px-3 py-2 focus-within:border-primary/30 focus-within:ring-2 focus-within:ring-primary/20 transition-all">
         <input
           value={value}

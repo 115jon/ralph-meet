@@ -69,7 +69,8 @@ export async function createCategory(
     },
     cacheKeysToInvalidate: [CacheKey.serverChannels(serverId)],
     broadcast: {
-      type: "all",
+      type: "server",
+      target: serverId,
       event: "CHANNEL_UPDATE",
       data: { server_id: serverId },
     },
@@ -101,7 +102,8 @@ export async function deleteCategory(
   return {
     cacheKeysToInvalidate: [CacheKey.serverChannels(serverId)],
     broadcast: {
-      type: "all",
+      type: "server",
+      target: serverId,
       event: "CHANNEL_UPDATE",
       data: { server_id: serverId },
     },

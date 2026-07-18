@@ -29,6 +29,17 @@ describe("listen together helpers", () => {
     expect(isListenTogetherResolvableUrl("not a url")).toBe(false);
   });
 
+  it("requires an http or https URL before entering resolver mode", () => {
+    expect(
+      isListenTogetherResolvableUrl(
+        "ftp://open.spotify.com/track/3rdhviQpre30wOnZuE3oWu",
+      ),
+    ).toBe(false);
+    expect(isListenTogetherResolvableUrl("https://open.spotify.com")).toBe(
+      false,
+    );
+  });
+
   it("classifies shared input mode for empty, search, and resolver values", () => {
     expect(getListenTogetherInputMode("")).toBe("empty");
     expect(getListenTogetherInputMode("oui")).toBe("search");

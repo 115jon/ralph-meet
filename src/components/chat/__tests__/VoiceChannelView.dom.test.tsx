@@ -10,9 +10,9 @@ vi.mock("@/hooks/useVoiceChannel", () => ({
   useVoiceChannel: vi.fn(),
 }));
 
-vi.mock("@/stores/useVoiceActivityStore", () => ({
-  isVoiceActivityType: () => false,
-  useVoiceActivityStore: (
+vi.mock("@/stores/useActivityStore", () => ({
+  isActivityType: () => false,
+  useActivityStore: (
     selector: (state: {
       getUserActivity: () => null;
       setUserActivity: () => void;

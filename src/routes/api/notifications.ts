@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { z } from "zod";
 
 import {
   apiSuccess,
@@ -7,11 +8,19 @@ import {
   requireAuth,
 } from "@/lib/api-helpers";
 import { ServiceError } from "@/lib/service-error";
+import { validateBody } from "@/lib/validate-body";
 import {
   clearNotifications,
   listNotifications,
   markNotificationsRead,
 } from "@/services/notification.service";
+
+const markNotificationsReadSchema = z
+  .object({
+    ids: z.array(z.string()).optional(),
+    all: z.boolean().optional(),
+  })
+  .passthrough();
 
 // GET /api/notifications — fetch user's notifications (most recent first)
 const GET = async ({ request, params: _params }: any) => {
@@ -40,12 +49,18 @@ const GET = async ({ request, params: _params }: any) => {
 };
 
 // PATCH /api/notifications — mark notifications as read
-const PATCH = async ({ request, params: _params }: any) => {
+export const PATCH = async ({ request, params: _params }: any) => {
   const authResult = await requireAuth();
   if (authResult instanceof Response) return authResult;
   const { userId } = authResult;
 
-  const body = (await request.json()) as { ids?: string[]; all?: boolean };
+  const bodyResult = await validateBody(
+    request,
+    markNotificationsReadSchema,
+    request,
+  );
+  if (bodyResult instanceof Response) return bodyResult;
+  const body = bodyResult;
   const db = getDB();
 
   try {

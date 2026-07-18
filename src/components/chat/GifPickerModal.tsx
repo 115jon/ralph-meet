@@ -1299,11 +1299,12 @@ export default function GifPickerModal({
       : "bottom-[calc(88px+var(--safe-area-bottom,0px))] right-4 h-[min(68vh,620px)] w-[min(420px,calc(100vw-2rem))] max-sm:inset-x-2 max-sm:bottom-[calc(76px+var(--safe-area-bottom,0px))] max-sm:h-[min(72vh,560px)] max-sm:w-auto";
 
   return (
-    <BaseModal onClose={onClose}>
+    <BaseModal onClose={onClose} aria-label="GIF picker">
       <TooltipProvider>
         <div className={cn("fixed inset-0", overlayZIndexClassName)}>
           <button
             type="button"
+            data-base-modal-backdrop
             className={cn(
               "absolute inset-0 border-0 p-0",
               expanded ? "bg-black/55 backdrop-blur-sm" : "bg-transparent",

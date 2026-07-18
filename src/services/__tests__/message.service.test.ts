@@ -4,7 +4,11 @@ import {
   addReaction,
   batchFetchAttachments,
   batchFetchReactions,
+  batchFetchReplyPreviews,
+  fetchChannelThreads,
+  fetchMessageRows,
   formatMessageRow,
+  normalizeMessageLimit,
   markChannelAsRead,
   pinMessage,
   removeReaction,
@@ -219,6 +223,146 @@ describe("formatMessageRow", () => {
       {},
     );
     expect(unpinned.is_pinned).toBe(false);
+  });
+});
+
+describe("normalizeMessageLimit", () => {
+  it.each([
+    [undefined, 50],
+    [null, 50],
+    ["not-a-number", 50],
+    ["10.5", 50],
+    ["-5", 1],
+    ["0", 1],
+    ["1", 1],
+    ["100", 100],
+    ["101", 100],
+  ])("normalizes %s to %s", (value, expected) => {
+    expect(normalizeMessageLimit(value)).toBe(expected);
+  });
+});
+
+describe("fetchMessageRows pagination", () => {
+  let db: ReturnType<typeof createMockD1>;
+
+  beforeEach(() => {
+    db = createMockD1();
+  });
+
+  it("uses limit plus one for latest messages and reports more messages before", async () => {
+    const rows = Array.from({ length: 51 }, (_, index) => ({
+      id: `message_${index}`,
+      created_at: `2026-02-28T00:00:${String(index).padStart(2, "0")}.000Z`,
+    }));
+    db.mockQuery("ORDER BY m.created_at DESC, m.id DESC LIMIT ?", {
+      results: rows,
+    });
+
+    const result = await fetchMessageRows(db as any, CHANNEL_ID, { limit: 50 });
+
+    expect(result.rows).toHaveLength(50);
+    expect(result.hasMoreBefore).toBe(true);
+    expect(result.hasMoreAfter).toBe(false);
+    expect(
+      db.getCalls("ORDER BY m.created_at DESC, m.id DESC LIMIT ?")[0]?.bindings,
+    ).toEqual([CHANNEL_ID, 51]);
+  });
+
+  it("uses limit plus one before a cursor and reports more messages before", async () => {
+    const rows = Array.from({ length: 51 }, (_, index) => ({
+      id: `message_${index}`,
+      created_at: `2026-02-28T00:00:${String(index).padStart(2, "0")}.000Z`,
+    }));
+    db.mockQuery(
+      "m.created_at < ? ORDER BY m.created_at DESC, m.id DESC LIMIT ?",
+      {
+        results: rows,
+      },
+    );
+
+    const result = await fetchMessageRows(db as any, CHANNEL_ID, {
+      limit: 50,
+      before: "2026-02-28T01:00:00.000Z",
+    });
+
+    expect(result.rows).toHaveLength(50);
+    expect(result.hasMoreBefore).toBe(true);
+    expect(result.hasMoreAfter).toBe(false);
+    expect(
+      db.getCalls(
+        "m.created_at < ? ORDER BY m.created_at DESC, m.id DESC LIMIT ?",
+      )[0]?.bindings,
+    ).toEqual([CHANNEL_ID, "2026-02-28T01:00:00.000Z", 51]);
+  });
+
+  it("uses the message ID to disambiguate equal timestamp cursors", async () => {
+    db.mockQuery("m.created_at = ? AND m.id < ?", { results: [] });
+
+    await fetchMessageRows(db as any, CHANNEL_ID, {
+      limit: 50,
+      before: `${NOW}|msg_2`,
+    });
+
+    expect(db.getCalls("m.created_at = ? AND m.id < ?")[0]?.bindings).toEqual([
+      CHANNEL_ID,
+      NOW,
+      NOW,
+      "msg_2",
+      51,
+    ]);
+  });
+});
+
+describe("reply mapping", () => {
+  it("loads reply previews for messages with reply_to_id", async () => {
+    const db = createMockD1();
+    db.mockQuery("WHERE m.id IN", {
+      results: [
+        {
+          id: "parent_1",
+          content: "Original message",
+          author_id: "user_parent",
+          author_username: "parent",
+          author_display_name: null,
+          author_avatar_url: null,
+          author_avatar_display: null,
+        },
+      ],
+    });
+    db.mockQuery("FROM attachments", { results: [] });
+
+    const previews = await batchFetchReplyPreviews(db as any, ["parent_1"]);
+
+    expect(previews.parent_1).toMatchObject({
+      id: "parent_1",
+      content: "Original message",
+      author_id: "user_parent",
+    });
+    db.assertCalled(/WHERE m.id IN/);
+  });
+
+  it("uses the reply_to_id relationship for grouped thread counts", async () => {
+    const db = createMockD1();
+    db.mockQuery("INNER JOIN messages r ON r.reply_to_id = m.id", {
+      results: [
+        {
+          id: "parent_1",
+          content: "Original message",
+          author_id: "user_parent",
+          author_username: "parent",
+          author_display_name: null,
+          author_avatar_url: null,
+          reply_count: 2,
+          last_reply_at: "2026-02-28T00:02:00.000Z",
+          created_at: "2026-02-28T00:00:00.000Z",
+        },
+      ],
+    });
+
+    const threads = await fetchChannelThreads(db as any, CHANNEL_ID);
+
+    expect(threads[0]).toMatchObject({ id: "parent_1", reply_count: 2 });
+    db.assertCalled(/INNER JOIN messages r ON r.reply_to_id = m.id/);
   });
 });
 

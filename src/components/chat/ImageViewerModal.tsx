@@ -1,4 +1,13 @@
 import { BaseModal } from "@/components/ui/BaseModal";
+import { useContextMenu } from "@/hooks/useContextMenu";
+import { useExternalLinkConfirmation } from "@/hooks/useExternalLinkConfirmation";
+import {
+  copyMediaLink,
+  getPublicMediaUrl,
+  saveMedia,
+} from "@/lib/media-actions";
+import { getFxTwitterGifWebpUrl } from "@/lib/gif-favorite-item";
+import { unwrapProxyMediaUrl } from "@/lib/proxy-media-url";
 import { shouldBlurSensitiveAttachment } from "@/lib/media-safety";
 import { isAnimatedMedia, isVideo } from "@/lib/media";
 import { getAuthAssetUrl, getMediaUrl } from "@/lib/platform";
@@ -10,19 +19,30 @@ import {
   useImageViewerStore,
 } from "@/stores/useImageViewerStore";
 import { useMediaSafetySettingsStore } from "@/stores/useMediaSafetySettingsStore";
-import { X } from "lucide-react";
-import React, { useCallback, useEffect, useRef } from "react";
+import { Copy, Download, ExternalLink, X } from "lucide-react";
+import React, { useCallback, useEffect, useMemo, useRef } from "react";
 import { useDelayUnmount } from "@/hooks/useDelayUnmount";
 import { ImageViewerContent } from "./ImageViewerContent";
 import { ImageViewerNavigation } from "./ImageViewerNavigation";
 import { ImageViewerThumbnails } from "./ImageViewerThumbnails";
 import { ImageViewerToolbar } from "./ImageViewerToolbar";
+import ContextMenu from "./ContextMenu";
+import type { ContextMenuItem } from "./ContextMenu";
 import { useImageViewerState } from "./useImageViewerState";
 
 export const ImageViewerModal: React.FC = () => {
   const { isOpen, images, initialIndex, context } = useImageViewerStore();
   const shouldRender = useDelayUnmount(isOpen, 200);
   const { close } = useImageViewerActions();
+  const {
+    menu,
+    openMenu,
+    closeMenu,
+    shouldRender: shouldRenderContextMenu,
+    isClosing,
+  } = useContextMenu();
+  const { requestOpen: requestOpenExternalLink, confirmation } =
+    useExternalLinkConfirmation();
   const [swipeOffset, setSwipeOffset] = React.useState(0);
   const [isSwipeDragging, setIsSwipeDragging] = React.useState(false);
   const [localState, setLocalState] = React.useReducer(
@@ -110,14 +130,23 @@ export const ImageViewerModal: React.FC = () => {
   useEffect(() => {
     if (!isOpen) return;
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (menu.isOpen) return;
+      if (confirmation) return;
       if (e.key === "Escape") close();
       if (e.key === "ArrowLeft") handlePrev();
       if (e.key === "ArrowRight") handleNext();
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, images.length]);
+  }, [
+    close,
+    confirmation,
+    handleNext,
+    handlePrev,
+    images.length,
+    isOpen,
+    menu.isOpen,
+  ]);
 
   // Reset zoom & pan on image change
   useEffect(() => {
@@ -162,6 +191,20 @@ export const ImageViewerModal: React.FC = () => {
   );
 
   const currentImage = images[currentIndex];
+
+  useEffect(() => {
+    if (menu.isOpen) closeMenu();
+    // The menu should close only when the active media changes, not when it opens.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    closeMenu,
+    currentImage?.downloadUrl,
+    currentImage?.file_key,
+    currentImage?.filename,
+    currentImage?.url,
+    currentIndex,
+  ]);
+
   const contentFilter = useMediaSafetySettingsStore(
     (state) => state.getSettings(state.currentUser).contentFilter,
   );
@@ -178,6 +221,71 @@ export const ImageViewerModal: React.FC = () => {
   const blurSensitiveMedia = currentImage
     ? shouldBlurSensitiveAttachment(currentImage, contentFilter)
     : false;
+
+  const mediaContextItems = useMemo<ContextMenuItem[] | null>(() => {
+    if (!currentImage) return null;
+
+    const storedMediaUrl =
+      currentImage.url ||
+      (currentImage.file_key.startsWith("/")
+        ? currentImage.file_key
+        : `/api/${currentImage.file_key}`);
+    const rawMediaUrl = unwrapProxyMediaUrl(storedMediaUrl);
+    const gifMediaUrl =
+      currentImage.isGif &&
+      currentImage.filename.toLowerCase().endsWith(".webp")
+        ? getFxTwitterGifWebpUrl(rawMediaUrl)
+        : null;
+    const resolvedMediaUrl = gifMediaUrl ?? rawMediaUrl;
+    const mediaUrl = resolvedMediaUrl;
+    const downloadUrl = currentImage.isGif
+      ? gifMediaUrl
+        ? getAuthAssetUrl(
+            buildProxyMediaPath(gifMediaUrl, currentImage.sourceUrl),
+          )
+        : getUrl(currentImage)
+      : getUrl(currentImage);
+    const filename = gifMediaUrl
+      ? currentImage.filename.replace(/\.mp4$/i, ".webp")
+      : currentImage.filename;
+
+    return [
+      {
+        label: "Save Image",
+        rightIcon: <Download className="h-4 w-4" />,
+        onClick: () => {
+          void saveMedia({
+            url: getPublicMediaUrl(mediaUrl),
+            downloadUrl,
+            filename,
+          });
+        },
+        divider: true,
+      },
+      {
+        label: "Copy Media Link",
+        rightIcon: <Copy className="h-4 w-4" />,
+        onClick: () => {
+          void copyMediaLink(getPublicMediaUrl(mediaUrl));
+        },
+      },
+      {
+        label: "Open Media Link",
+        rightIcon: <ExternalLink className="h-4 w-4" />,
+        onClick: () => requestOpenExternalLink(getPublicMediaUrl(mediaUrl)),
+      },
+    ];
+  }, [currentImage, getUrl, requestOpenExternalLink]);
+
+  const handleMediaContextMenu = useCallback(
+    (event: React.MouseEvent<HTMLDivElement>) => {
+      const target = event.target instanceof HTMLElement ? event.target : null;
+      if (!target?.closest("img,video,canvas")) return;
+      if (!mediaContextItems) return;
+      openMenu(event, mediaContextItems);
+    },
+    [mediaContextItems, openMenu],
+  );
 
   useEffect(() => {
     if (!isOpen || images.length === 0) return;
@@ -415,7 +523,7 @@ export const ImageViewerModal: React.FC = () => {
   if (!currentImage) return null;
 
   return (
-    <BaseModal onClose={close} portal={false}>
+    <BaseModal onClose={close} portal={false} aria-label="Image viewer">
       <div
         className={cn(
           "fixed inset-0 z-200 flex flex-col items-center justify-center bg-rm-bg-primary/95 backdrop-blur-md duration-200",
@@ -471,6 +579,7 @@ export const ImageViewerModal: React.FC = () => {
           onTouchMove={handleStageTouchMove}
           onTouchEnd={handleStageTouchEnd}
           onTouchCancel={handleStageTouchCancel}
+          onContextMenu={handleMediaContextMenu}
           onClick={(e) => {
             if (e.target === e.currentTarget) close();
           }}
@@ -500,6 +609,18 @@ export const ImageViewerModal: React.FC = () => {
             <ImageViewerNavigation onPrev={handlePrev} onNext={handleNext} />
           )}
         </div>
+
+        {shouldRenderContextMenu && menu.isOpen && (
+          <ContextMenu
+            x={menu.x}
+            y={menu.y}
+            items={menu.items}
+            onClose={closeMenu}
+            isClosing={isClosing}
+          />
+        )}
+
+        {confirmation}
 
         {/* Bottom Thumbnail Strip */}
         {!hideUi && images.length > 1 && (

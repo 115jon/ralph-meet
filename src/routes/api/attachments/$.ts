@@ -1,4 +1,5 @@
-import { apiError, getBucket, requireAuth } from "@/lib/api-helpers";
+import { apiError, getBucket, getDB, requireAuth } from "@/lib/api-helpers";
+import { requireChannelAccess } from "@/lib/require-channel-access";
 import { createFileRoute } from "@tanstack/react-router";
 
 // Content types that should NEVER be served as their declared type.
@@ -16,13 +17,46 @@ const DANGEROUS_CONTENT_TYPES = new Set([
 
 // GET /api/attachments/{channelId}/{attachmentId}/{filename}
 // R2 key = attachments/{channelId}/{attachmentId}/{filename}
-const GET = async ({ request, params }: any) => {
+export const GET = async ({ request, params }: any) => {
   const authResult = await requireAuth(request);
   if (authResult instanceof Response) return authResult;
 
   const { _splat } = params as { _splat?: string };
   const splatPath = _splat || "";
-  const key = `attachments/${splatPath}`;
+  const pathParts = splatPath.split("/");
+  if (pathParts.length !== 3 || pathParts.some((part: string) => !part)) {
+    return apiError("File not found", 404);
+  }
+
+  const [channelId, attachmentId, requestedFilename] = pathParts;
+  const accessResult = await requireChannelAccess(authResult.userId, channelId);
+  if (accessResult instanceof Response) return accessResult;
+
+  const attachment = await getDB()
+    .prepare(
+      `SELECT a.file_key, a.filename, m.channel_id
+       FROM attachments a
+       JOIN messages m ON m.id = a.message_id
+       WHERE a.id = ? AND m.channel_id = ?
+       LIMIT 1`,
+    )
+    .bind(attachmentId, channelId)
+    .first<{
+      file_key: string;
+      filename: string;
+      channel_id: string;
+    }>();
+
+  const requestedKey = `attachments/${channelId}/${attachmentId}/${requestedFilename}`;
+  if (
+    !attachment ||
+    attachment.channel_id !== channelId ||
+    attachment.file_key !== requestedKey
+  ) {
+    return apiError("File not found", 404);
+  }
+
+  const key = attachment.file_key;
   const bucket = getBucket();
 
   // ── Range request support ──────────────────────────────────────────
@@ -62,8 +96,19 @@ const GET = async ({ request, params }: any) => {
 
   let contentType =
     object.httpMetadata?.contentType || "application/octet-stream";
-  const pathParts = splatPath.split("/");
-  const filename = pathParts[pathParts.length - 1] || "download";
+  const filename =
+    attachment.filename
+      .split("")
+      .map((character: string) => {
+        const code = character.charCodeAt(0);
+        return code < 32 ||
+          code === 127 ||
+          character === '"' ||
+          character === "\\"
+          ? "_"
+          : character;
+      })
+      .join("") || "download";
 
   // ── Security: neutralize dangerous content types ──────────────────
   if (DANGEROUS_CONTENT_TYPES.has(contentType)) {

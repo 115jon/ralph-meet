@@ -5,8 +5,11 @@ import type {
 } from "@/lib/listen-together";
 import { createListenTogetherState } from "@/lib/listen-together";
 import {
+  clearListenTogether,
   enqueueListenTogetherEntries,
   freezeListenTogetherPlayback,
+  pauseListenTogether,
+  playListenTogether,
   skipListenTogether,
 } from "@/lib/voice/listen-together-state";
 import { describe, expect, it } from "vitest";
@@ -112,6 +115,121 @@ describe("listen together room state helpers", () => {
       "Later",
     ]);
     expect(playNext.state.currentEntryId).toBe(initial.state.currentEntryId);
+  });
+
+  it("starts a play-now enqueue atomically and records the new playback", () => {
+    const initial = enqueueListenTogetherEntries(
+      "room-1",
+      [],
+      createListenTogetherState("room-1", 1_000),
+      [makeSeed(makeTrack("track-1", "Current"))],
+      "append",
+      1_000,
+    );
+
+    const playNow = enqueueListenTogetherEntries(
+      "room-1",
+      initial.queue,
+      initial.state,
+      [makeSeed(makeTrack("track-2", "Play Now"))],
+      "play-now",
+      2_000,
+    );
+
+    expect(playNow.state.currentEntryId).toBe(playNow.queue[0].entryId);
+    expect(playNow.queue.map((entry) => entry.track.title)).toEqual([
+      "Play Now",
+    ]);
+    expect(playNow.state.recentlyPlayed?.[0]).toMatchObject({
+      playedAt: 2_000,
+      entry: { entryId: playNow.queue[0].entryId },
+    });
+  });
+
+  it("records starts newest-first, but not pause, resume, seek, or duplicate play", () => {
+    const started = enqueueListenTogetherEntries(
+      "room-1",
+      [],
+      createListenTogetherState("room-1", 1_000),
+      [
+        makeSeed(makeTrack("track-1", "First")),
+        makeSeed(makeTrack("track-2", "Second")),
+      ],
+      "append",
+      1_000,
+    );
+    const paused = pauseListenTogether(
+      "room-1",
+      started.queue,
+      started.state,
+      true,
+      2_000,
+    );
+    const resumed = pauseListenTogether(
+      "room-1",
+      paused.queue,
+      paused.state,
+      false,
+      3_000,
+    );
+    const duplicatePlay = playListenTogether(
+      "room-1",
+      resumed.queue,
+      resumed.state,
+      resumed.state.currentEntryId,
+      4_000,
+    );
+    const switched = playListenTogether(
+      "room-1",
+      duplicatePlay.queue,
+      duplicatePlay.state,
+      duplicatePlay.queue[1].entryId,
+      5_000,
+    );
+
+    expect(
+      switched.state.recentlyPlayed?.map((item) => item.entry.track.title),
+    ).toEqual(["Second", "First"]);
+    expect(switched.state.recentlyPlayed).toHaveLength(2);
+  });
+
+  it("ignores stale play commands instead of selecting a missing entry", () => {
+    const initial = enqueueListenTogetherEntries(
+      "room-1",
+      [],
+      createListenTogetherState("room-1", 1_000),
+      [makeSeed(makeTrack("track-1", "Current"))],
+      "append",
+      1_000,
+    );
+
+    const stale = playListenTogether(
+      "room-1",
+      initial.queue,
+      initial.state,
+      "removed-entry",
+      2_000,
+    );
+
+    expect(stale.state).toEqual(initial.state);
+    expect(stale.queue).toEqual(initial.queue);
+    expect(stale.playbackChanged).toBe(false);
+  });
+
+  it("keeps recently played when clearing the queue", () => {
+    const started = enqueueListenTogetherEntries(
+      "room-1",
+      [],
+      createListenTogetherState("room-1", 1_000),
+      [makeSeed(makeTrack("track-1", "First"))],
+      "append",
+      1_000,
+    );
+
+    const cleared = clearListenTogether("room-1", started.state, 2_000);
+
+    expect(cleared.queue).toEqual([]);
+    expect(cleared.state.recentlyPlayed).toHaveLength(1);
   });
 
   it("preserves provider order and batch metadata for collection imports", () => {

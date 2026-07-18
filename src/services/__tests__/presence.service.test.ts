@@ -56,6 +56,9 @@ describe("updatePresence", () => {
 
   beforeEach(() => {
     db = createMockD1();
+    db.mockQuery(/SELECT server_id FROM server_members/, {
+      results: [{ server_id: "server_123" }],
+    });
   });
 
   it("updates presence and returns broadcast descriptor", async () => {
@@ -67,8 +70,13 @@ describe("updatePresence", () => {
     db.assertCalled(/UPDATE users SET status/);
     expect(result.status).toBe("idle");
     expect(result.custom_status).toBe("Afk");
-    expect(result.broadcast.event).toBe("PRESENCE_UPDATE");
-    expect(result.broadcast.data).toMatchObject({
+    expect(result.broadcasts).toHaveLength(1);
+    expect(result.broadcasts[0]).toMatchObject({
+      type: "server",
+      target: "server_123",
+      event: "PRESENCE_UPDATE",
+    });
+    expect(result.broadcasts[0].data).toMatchObject({
       user_id: USER_ID,
       status: "idle",
       custom_status: "Afk",
@@ -99,11 +107,11 @@ describe("updatePresence", () => {
     db.assertCalled(/UPDATE users SET status/);
   });
 
-  it("returns broadcast type 'all'", async () => {
+  it("returns server-scoped broadcasts", async () => {
     const result = await updatePresence(db as any, USER_ID, {
       status: "online",
     });
 
-    expect(result.broadcast.type).toBe("all");
+    expect(result.broadcasts[0].type).toBe("server");
   });
 });

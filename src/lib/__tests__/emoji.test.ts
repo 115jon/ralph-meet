@@ -116,4 +116,8 @@ describe("emoji helpers", () => {
     expect(recents[0].id).toBe(joy.id);
     expect(recents[1].id).toBe(pizza.id);
   });
+
+  it("returns a stable snapshot when emoji recents have not changed", () => {
+    expect(loadEmojiRecents()).toBe(loadEmojiRecents());
+  });
 });

@@ -1,12 +1,23 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { z } from "zod";
 
 import { apiSuccess, getDB, requireAuth } from "@/lib/api-helpers";
 import { ServiceError } from "@/lib/service-error";
+import { validateBody } from "@/lib/validate-body";
 import { deleteRole, updateRole } from "@/services/role.service";
 import {
   executeAuditLog,
   executeInvalidation,
 } from "@/services/service-helpers";
+
+export const roleUpdateBodySchema = z
+  .object({
+    name: z.string().optional(),
+    color: z.string().nullable().optional(),
+    permissions: z.number().optional(),
+    position: z.number().optional(),
+  })
+  .passthrough();
 
 // PATCH /api/servers/:id/roles/:roleId — update a role
 const PATCH = async ({ request, params }: any) => {
@@ -16,12 +27,9 @@ const PATCH = async ({ request, params }: any) => {
   const { id: serverId, roleId } = params;
 
   const db = getDB();
-  const updates = (await request.json()) as {
-    name?: string;
-    color?: string | null;
-    permissions?: number;
-    position?: number;
-  };
+  const bodyResult = await validateBody(request, roleUpdateBodySchema, request);
+  if (bodyResult instanceof Response) return bodyResult;
+  const updates = bodyResult;
 
   try {
     const result = await updateRole(db, serverId, roleId, userId, updates);

@@ -11,9 +11,11 @@ interface ProfileAssetLayerProps {
   playVideo?: boolean;
   maskPreset?: "nameplateIdentity";
   maskFullOpacityStartPercent?: number;
+  useMeasuredMask?: boolean;
 }
 
 const DEFAULT_NAMEPLATE_MASK_FULL_OPACITY_START = 92.86;
+export const NAMEPLATE_MASK_SCALE_CSS_VAR = "--nameplate-mask-scale";
 const NAMEPLATE_IDENTITY_ALPHA_STOPS: Array<{
   percent: number;
   alpha: number;
@@ -38,20 +40,30 @@ function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
 }
 
-function buildNameplateIdentityMask(fullOpacityStartPercent?: number) {
+function buildNameplateIdentityMask(
+  fullOpacityStartPercent?: number,
+  useMeasuredMask = false,
+) {
   const targetFullOpacityStart = clamp(
     fullOpacityStartPercent ?? DEFAULT_NAMEPLATE_MASK_FULL_OPACITY_START,
     DEFAULT_NAMEPLATE_MASK_FULL_OPACITY_START,
     99,
   );
+  const measuredMaskScale = `var(${NAMEPLATE_MASK_SCALE_CSS_VAR}, 1)`;
 
   return `linear-gradient(90deg, ${NAMEPLATE_IDENTITY_ALPHA_STOPS.map(
     ({ percent, alpha }) => {
+      if (percent === 100) {
+        return `rgba(0, 0, 0, ${alpha}) 100%`;
+      }
+
+      if (useMeasuredMask) {
+        return `rgba(0, 0, 0, ${alpha}) calc(${percent}% * ${measuredMaskScale})`;
+      }
+
       const scaledPercent =
-        percent === 100
-          ? 100
-          : (percent / DEFAULT_NAMEPLATE_MASK_FULL_OPACITY_START) *
-            targetFullOpacityStart;
+        (percent / DEFAULT_NAMEPLATE_MASK_FULL_OPACITY_START) *
+        targetFullOpacityStart;
       return `rgba(0, 0, 0, ${alpha}) ${Math.min(100, scaledPercent).toFixed(2)}%`;
     },
   ).join(", ")})`;
@@ -69,6 +81,7 @@ export function ProfileAssetLayer({
   playVideo = true,
   maskPreset,
   maskFullOpacityStartPercent,
+  useMeasuredMask = false,
 }: ProfileAssetLayerProps) {
   if (!url) return null;
 
@@ -77,9 +90,13 @@ export function ProfileAssetLayer({
   const maskStyle =
     maskPreset === "nameplateIdentity"
       ? ({
-          maskImage: buildNameplateIdentityMask(maskFullOpacityStartPercent),
+          maskImage: buildNameplateIdentityMask(
+            maskFullOpacityStartPercent,
+            useMeasuredMask,
+          ),
           WebkitMaskImage: buildNameplateIdentityMask(
             maskFullOpacityStartPercent,
+            useMeasuredMask,
           ),
         } satisfies CSSProperties)
       : undefined;

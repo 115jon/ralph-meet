@@ -18,6 +18,20 @@ export function getNewYorkDateKey(date = new Date()) {
   return `${part("year")}-${part("month")}-${part("day")}`;
 }
 
+export function parseNewYorkDateKey(value: string): Date | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) return null;
+
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const date = new Date(0);
+  date.setUTCHours(12, 0, 0, 0);
+  date.setUTCFullYear(year, month - 1, day);
+
+  return getNewYorkDateKey(date) === value ? date : null;
+}
+
 export function getNytWordleUrl(date = new Date()) {
   return `https://www.nytimes.com/svc/wordle/v2/${getNewYorkDateKey(date)}.json`;
 }
@@ -51,6 +65,9 @@ export async function fetchNytWordlePuzzle(
     !/^[a-zA-Z]{5}$/.test(data.solution)
   ) {
     throw new Error("NYT Wordle payload missing valid solution");
+  }
+  if (data.print_date !== undefined && data.print_date !== key) {
+    throw new Error("NYT Wordle payload date mismatch");
   }
 
   return {

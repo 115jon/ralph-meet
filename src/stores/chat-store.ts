@@ -73,8 +73,12 @@ export function useChatActions() {
       ...gateway,
       setProfileUser: (user: User | null) =>
         dispatch({ type: "SET_PROFILE_USER", user }),
-      setSpeakingUsers: (speakingUsers: Record<string, boolean>) =>
-        dispatch({ type: "SET_SPEAKING_USERS", speakingUsers }),
+      setSpeakingUsers: (
+        speakingUsers: Record<string, boolean>,
+        sourceId: string,
+      ) => dispatch({ type: "SET_SPEAKING_USERS", sourceId, speakingUsers }),
+      clearSpeakingUsers: (sourceId: string) =>
+        dispatch({ type: "CLEAR_SPEAKING_USERS", sourceId }),
     }),
     [dispatch, actions, gateway],
   );

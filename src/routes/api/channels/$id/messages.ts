@@ -16,6 +16,8 @@ import { requireChannelAccess } from "@/lib/require-channel-access";
 import { getUserChannelPermissions } from "@/lib/require-permission";
 import { ServiceError } from "@/lib/service-error";
 import { clog } from "@/lib/console-logger";
+import { validateBody } from "@/lib/validate-body";
+import { z } from "zod";
 import {
   createMessage,
   deleteMessage,
@@ -23,13 +25,15 @@ import {
   generateMessageNotifications,
   getDMRecipients,
   listMessages,
+  normalizeMessageLimit,
+  refreshMessageEmbeds,
 } from "@/services/message.service";
 
 const embedLog = clog("embed");
 const notifLog = clog("notifications");
 
 // GET /api/channels/:id/messages — get message history (paginated)
-const GET = async ({ request, params }: any) => {
+export const GET = async ({ request, params }: any) => {
   const authResult = await requireAuth();
   if (authResult instanceof Response) return authResult;
   const { userId } = authResult;
@@ -40,7 +44,7 @@ const GET = async ({ request, params }: any) => {
   if (accessResult instanceof Response) return accessResult;
 
   const url = new URL(request.url);
-  const limit = Math.min(parseInt(url.searchParams.get("limit") ?? "50"), 100);
+  const limit = normalizeMessageLimit(url.searchParams.get("limit"));
 
   const db = getDB();
 
@@ -78,6 +82,17 @@ const GET = async ({ request, params }: any) => {
   }
 };
 
+// Permissive schema: validates structure only (types + shape), not business
+// rules. The content-or-attachments requirement is enforced separately below,
+// exactly as before, so existing clients are unaffected.
+const messageCreateSchema = z.object({
+  content: z.string().default(""),
+  reply_to_id: z.string().optional(),
+  nonce: z.string().optional(),
+  attachment_ids: z.array(z.string()).optional(),
+  nsfw_attachment_ids: z.array(z.string()).optional(),
+});
+
 // POST /api/channels/:id/messages — send a message
 const POST = async ({ request, params }: any) => {
   const authResult = await requireAuth();
@@ -105,13 +120,9 @@ const POST = async ({ request, params }: any) => {
   const rl = checkRateLimit(userId, "message-send", RATE_LIMITS.MESSAGE_SEND);
   if (rl) return rl;
 
-  const body = (await request.json()) as {
-    content: string;
-    reply_to_id?: string;
-    nonce?: string;
-    attachment_ids?: string[];
-    nsfw_attachment_ids?: string[];
-  };
+  const bodyResult = await validateBody(request, messageCreateSchema, request);
+  if (bodyResult instanceof Response) return bodyResult;
+  const body = bodyResult;
 
   const hasContent = body.content?.trim();
   const hasAttachments = body.attachment_ids && body.attachment_ids.length > 0;
@@ -204,7 +215,7 @@ const POST = async ({ request, params }: any) => {
 };
 
 // PATCH /api/channels/:id/messages — edit a message
-const PATCH = async ({ request, params }: any) => {
+export const PATCH = async ({ request, params }: any) => {
   const authResult = await requireAuth();
   if (authResult instanceof Response) return authResult;
   const { userId } = authResult;
@@ -215,10 +226,38 @@ const PATCH = async ({ request, params }: any) => {
   if (accessResult instanceof Response) return accessResult;
 
   const body = (await request.json()) as {
-    message_id: string;
+    message_id?: string;
+    message_ids?: string[];
+    refresh_embeds?: boolean;
     content?: string;
-    embeds?: any[];
+    embeds?: unknown[];
   };
+  const db = getDB();
+
+  if (body.refresh_embeds) {
+    const messageIds =
+      body.message_ids ?? (body.message_id ? [body.message_id] : []);
+    if (messageIds.length === 0) {
+      return apiError("message_ids required", 400);
+    }
+
+    const updates = await refreshMessageEmbeds(db, channelId, messageIds);
+    const { serverId: refreshServerId } = accessResult as {
+      serverId: string | null;
+    };
+    for (const update of updates) {
+      if (refreshServerId) {
+        await broadcastToServerMembers(
+          refreshServerId,
+          "MESSAGE_UPDATE",
+          update,
+        );
+      } else {
+        await broadcastToChannel(channelId, "MESSAGE_UPDATE", update);
+      }
+    }
+    return apiSuccess({ updated: updates.length });
+  }
 
   if (!body.message_id) {
     return apiError("message_id required", 400);
@@ -228,8 +267,6 @@ const PATCH = async ({ request, params }: any) => {
   if (!body.content?.trim() && !Array.isArray(body.embeds)) {
     return apiError("content or embeds required", 400);
   }
-
-  const db = getDB();
 
   try {
     // If clearing embeds (no content change)

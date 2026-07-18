@@ -46,7 +46,7 @@ jobs:
           cache-dependency-path: pnpm-lock.yaml
 
       - name: Install desktop dependencies
-        run: pnpm install --filter ralph-meet-desktop... --frozen-lockfile
+        run: pnpm install --filter ralph-meet... --filter ralph-meet-desktop... --frozen-lockfile
 
       - name: Build desktop frontend
         run: pnpm --dir desktop run build:vite

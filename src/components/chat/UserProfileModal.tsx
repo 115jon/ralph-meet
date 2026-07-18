@@ -1,6 +1,6 @@
 import { AvatarImage } from "@/components/chat/AvatarImage";
 import { ProfileAssetLayer } from "@/components/chat/ProfileAssetLayer";
-import { ProfileCollectiblesLayer } from "@/components/chat/ProfileCollectiblesLayer";
+import { ProfileSurfaceShell } from "@/components/chat/ProfileSurfaceShell";
 import {
   PROFILE_SURFACE_ASPECT_RATIO,
   ProfilePreviewWidgetCard,
@@ -258,7 +258,7 @@ export default function UserProfileModal({ user, onClose, isClosing }: Props) {
                   </div>
                 ) : null}
 
-                <div className="relative z-0 min-w-0 overflow-hidden bg-rm-bg-elevated md:grid md:grid-cols-[minmax(0,388px)_minmax(0,520px)] md:justify-center md:gap-6 md:px-5 md:py-5 lg:grid-cols-[minmax(0,400px)_minmax(0,540px)] lg:gap-8 lg:px-8 lg:py-8">
+                <div className="relative z-0 min-w-0 overflow-visible bg-rm-bg-elevated md:grid md:grid-cols-[minmax(0,388px)_minmax(0,520px)] md:justify-center md:gap-6 md:px-5 md:py-5 lg:grid-cols-[minmax(0,400px)_minmax(0,540px)] lg:gap-8 lg:px-8 lg:py-8">
                   <div
                     className="pointer-events-none absolute inset-0 z-0"
                     style={{
@@ -278,28 +278,12 @@ export default function UserProfileModal({ user, onClose, isClosing }: Props) {
                     }}
                   />
 
-                  <section
-                    className="relative z-10 mx-auto w-full max-w-[400px] self-start overflow-hidden rounded-[28px] border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg)] shadow-[0_26px_64px_rgba(0,0,0,0.26)] backdrop-blur-[18px]"
-                    style={{
-                      ...profileThemeStyle,
-                      aspectRatio: PROFILE_SURFACE_ASPECT_RATIO,
-                    }}
+                  <ProfileSurfaceShell
+                    display={resolvedUser.avatar_display}
+                    className="relative z-10 mx-auto mt-16 mb-14 w-full max-w-[400px] self-start"
+                    style={profileThemeStyle}
+                    surfaceStyle={{ aspectRatio: PROFILE_SURFACE_ASPECT_RATIO }}
                   >
-                    <div
-                      className="pointer-events-none absolute inset-0 z-[2]"
-                      style={{
-                        background: "var(--rm-profile-custom-surface-overlay)",
-                      }}
-                    />
-                    <div className="pointer-events-none absolute inset-0 z-30">
-                      <ProfileCollectiblesLayer
-                        display={resolvedUser.avatar_display}
-                        effectOpacity={1}
-                        fit="contain"
-                        className="z-10 opacity-100"
-                      />
-                    </div>
-
                     <div
                       className="relative h-[18%] min-h-[128px] w-full overflow-hidden"
                       style={{
@@ -434,7 +418,7 @@ export default function UserProfileModal({ user, onClose, isClosing }: Props) {
                         </div>
                       </div>
                     </div>
-                  </section>
+                  </ProfileSurfaceShell>
 
                   <aside className="relative z-10 mt-6 w-full max-w-[540px] self-start justify-self-center md:mt-0 md:flex md:h-full md:min-h-0 md:flex-col">
                     <div

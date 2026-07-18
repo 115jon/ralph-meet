@@ -90,6 +90,7 @@ export const LocalMenu: React.FC<LocalMenuProps> = ({
           label="Stream Quality"
           active={activeSubmenu === "Stream Quality"}
           onMouseEnter={() => handleMouseEnterRoot("Stream Quality")}
+          onArrowLeft={clearSubmenu}
           submenu={availableQualities.map((q) => (
             <MenuItem
               key={q}
@@ -179,6 +180,7 @@ export const LocalMenu: React.FC<LocalMenuProps> = ({
         label="Apps"
         active={activeSubmenu === "Apps"}
         onMouseEnter={() => handleMouseEnterRoot("Apps")}
+        onArrowLeft={clearSubmenu}
         submenu={<MenuItem label="No Apps Installed" disabled />}
       />
 
@@ -190,6 +192,7 @@ export const LocalMenu: React.FC<LocalMenuProps> = ({
             label="Move to"
             active={activeSubmenu === "Move to"}
             onMouseEnter={() => handleMouseEnterRoot("Move to")}
+            onArrowLeft={clearSubmenu}
             submenu={voiceChannels.map((ch) => (
               <MenuItem
                 key={ch.id}

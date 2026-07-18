@@ -1,10 +1,17 @@
 // @vitest-environment jsdom
 
 import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { ListenTogetherPlaybackState } from "./listen-together-playback";
 import { FloatingListenTogetherPlayer } from "./FloatingListenTogetherPlayer";
+
+const mockedPlayback = vi.hoisted(() => ({
+  currentEntry: { entryId: "entry-1" },
+}));
+
+vi.mock("./listen-together-playback", () => ({
+  useListenTogetherPlaybackState: () => mockedPlayback,
+}));
 
 vi.mock("./ListenTogetherNowPlayingCard", () => ({
   ListenTogetherNowPlayingCard: () => (
@@ -13,11 +20,23 @@ vi.mock("./ListenTogetherNowPlayingCard", () => ({
 }));
 
 describe("FloatingListenTogetherPlayer", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("does not force a layout measurement when it mounts", () => {
+    const getBoundingClientRect = vi.spyOn(
+      HTMLElement.prototype,
+      "getBoundingClientRect",
+    );
+
+    render(<FloatingListenTogetherPlayer sfu={null} roomSlug="voice-room-1" />);
+
+    expect(getBoundingClientRect).not.toHaveBeenCalled();
+  });
+
   it("moves with pointer drag while leaving interactive controls available", () => {
-    const playback = {
-      currentEntry: { entryId: "entry-1" },
-    } as ListenTogetherPlaybackState;
-    render(<FloatingListenTogetherPlayer playback={playback} sfu={null} />);
+    render(<FloatingListenTogetherPlayer sfu={null} roomSlug="voice-room-1" />);
 
     const player = screen.getByTestId("floating-listen-together-player");
     const setPointerCapture = vi.fn();

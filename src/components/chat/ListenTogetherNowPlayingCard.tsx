@@ -19,6 +19,7 @@ import {
   ShieldCheck,
   SkipForward,
   Trash2,
+  Volume2,
 } from "lucide-react";
 import { LISTEN_TOGETHER_LOUDNESS_PRESET_OPTIONS } from "@/lib/voice/listen-together-audio";
 
@@ -57,10 +58,10 @@ export function ListenTogetherNowPlayingCard({
     isPaused,
   } = playback;
 
-  const canControl = !!roomSlug && !!sfu;
+  const canControl = !!roomSlug && !!sfu && sfu.voiceGW.isReady !== false;
 
   const sendCommand = (payload: Record<string, unknown>) => {
-    if (!sfu || !roomSlug) return;
+    if (!sfu || !roomSlug || sfu.voiceGW.isReady === false) return false;
     listenTogetherLog.info("Sending listen together control", {
       source: "now-playing-card",
       type: payload.type,
@@ -80,6 +81,7 @@ export function ListenTogetherNowPlayingCard({
       });
     }
     sfu.voiceGW.sendAppEvent(payload);
+    return true;
   };
 
   if (!currentEntry) {
@@ -308,12 +310,12 @@ export function ListenTogetherNowPlayingCard({
   return (
     <TooltipProvider delayDuration={100}>
       <div className={cn("space-y-4", className)}>
-        <div className="flex gap-3">
-          <div className="h-16 w-16 shrink-0 overflow-hidden rounded-[20px] bg-rm-bg-elevated/60">
+        <div className="flex gap-4 sm:gap-5">
+          <div className="h-20 w-20 shrink-0 overflow-hidden rounded-[22px] bg-rm-bg-elevated/60 shadow-[0_14px_32px_rgba(0,0,0,0.2)] ring-1 ring-white/10 sm:h-24 sm:w-24 sm:rounded-[26px]">
             {artwork}
           </div>
-          <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-start justify-between gap-2">
+          <div className="min-w-0 flex-1 py-0.5">
+            <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -336,18 +338,18 @@ export function ListenTogetherNowPlayingCard({
                     </p>
                   </TooltipContent>
                 </Tooltip>
-                <div className="mt-1 truncate text-sm text-rm-text-muted">
+                <div className="mt-1 truncate text-xs text-rm-text-muted sm:text-sm">
                   {subtitle}
                 </div>
               </div>
               {queueCount > 0 && (
-                <span className="rounded-full border border-rm-border bg-rm-bg-hover/70 px-2 py-1 text-[10px] font-black uppercase tracking-[0.14em] text-rm-text-muted">
-                  Queue {queueCount}
+                <span className="shrink-0 rounded-full bg-primary/10 px-2 py-1 text-[10px] font-bold tabular-nums text-primary">
+                  {queueCount} queued
                 </span>
               )}
             </div>
-            <div className="mt-3 flex items-center gap-2 text-xs text-rm-text-muted">
-              <div className="h-6 w-6 overflow-hidden rounded-full bg-rm-bg-hover">
+            <div className="mt-3 flex min-w-0 items-center gap-2 text-xs text-rm-text-muted">
+              <div className="h-5 w-5 shrink-0 overflow-hidden rounded-full bg-rm-bg-hover">
                 {requesterAvatar}
               </div>
               <span className="truncate">{requesterLine}</span>
@@ -355,11 +357,7 @@ export function ListenTogetherNowPlayingCard({
           </div>
         </div>
 
-        <div>
-          <div className="mb-2 flex items-center justify-between text-xs text-rm-text-muted">
-            <span>{formatListenTogetherDuration(effectiveSeekValue)}</span>
-            <span>{formatListenTogetherDuration(durationMs)}</span>
-          </div>
+        <div className="space-y-1">
           <input
             type="range"
             min={0}
@@ -374,8 +372,12 @@ export function ListenTogetherNowPlayingCard({
                 positionMs: Number(event.currentTarget.value),
               });
             }}
-            className="h-1.5 w-full cursor-pointer accent-primary disabled:cursor-not-allowed"
+            className="h-8 w-full cursor-pointer accent-primary disabled:cursor-not-allowed"
           />
+          <div className="flex items-center justify-between text-[11px] tabular-nums text-rm-text-muted">
+            <span>{formatListenTogetherDuration(effectiveSeekValue)}</span>
+            <span>{formatListenTogetherDuration(durationMs)}</span>
+          </div>
         </div>
 
         {error && (
@@ -384,7 +386,7 @@ export function ListenTogetherNowPlayingCard({
           </div>
         )}
 
-        <div className="flex flex-wrap gap-2">
+        <div className="flex items-center justify-center gap-2 sm:justify-start">
           <button
             type="button"
             onClick={() => {
@@ -396,15 +398,17 @@ export function ListenTogetherNowPlayingCard({
             }}
             disabled={!canControl}
             className={cn(
-              "inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/15 px-3 py-2 text-xs font-bold text-primary transition hover:bg-primary/20 disabled:cursor-not-allowed disabled:opacity-50",
+              "inline-flex h-11 w-11 items-center justify-center rounded-full border border-primary/30 bg-primary text-primary-foreground shadow-[0_8px_18px_color-mix(in_srgb,var(--primary)_25%,transparent)] transition-transform hover:bg-primary/90 active:scale-[0.96] disabled:cursor-not-allowed disabled:opacity-50",
             )}
+            aria-label={
+              isPaused ? "Resume shared playback" : "Pause shared playback"
+            }
           >
             {isPaused ? (
-              <Play className="h-3.5 w-3.5" />
+              <Play className="h-4 w-4" />
             ) : (
-              <Pause className="h-3.5 w-3.5" />
+              <Pause className="h-4 w-4" />
             )}
-            {isPaused ? "Resume" : "Pause"}
           </button>
           <button
             type="button"
@@ -415,7 +419,7 @@ export function ListenTogetherNowPlayingCard({
               });
             }}
             disabled={!canControl}
-            className="inline-flex items-center gap-2 rounded-full border border-rm-border bg-rm-bg-elevated/60 px-3 py-2 text-xs font-bold text-rm-text transition hover:bg-rm-bg-active disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex h-11 items-center gap-2 rounded-full border border-rm-border bg-rm-bg-elevated/60 px-4 text-xs font-bold text-rm-text transition-transform hover:bg-rm-bg-active active:scale-[0.96] disabled:cursor-not-allowed disabled:opacity-50"
           >
             <SkipForward className="h-3.5 w-3.5" />
             Skip
@@ -430,11 +434,103 @@ export function ListenTogetherNowPlayingCard({
               });
             }}
             disabled={!canControl}
-            className="inline-flex items-center gap-2 rounded-full border border-destructive/20 bg-destructive/10 px-3 py-2 text-xs font-bold text-destructive transition hover:bg-destructive/15 disabled:cursor-not-allowed disabled:opacity-50"
+            className="ml-auto inline-flex h-11 w-11 items-center justify-center rounded-full border border-destructive/20 bg-destructive/10 text-destructive transition-transform hover:bg-destructive/15 active:scale-[0.96] disabled:cursor-not-allowed disabled:opacity-50 sm:ml-2"
+            aria-label="Remove current track"
           >
             <Trash2 className="h-3.5 w-3.5" />
-            Remove
           </button>
+        </div>
+
+        <div className="flex min-h-11 items-center gap-3 border-t border-rm-border pt-3">
+          <Volume2 className="h-4 w-4 shrink-0 text-rm-text-muted" />
+          <label className="sr-only" htmlFor="listen-together-volume">
+            Your volume
+          </label>
+          <input
+            id="listen-together-volume"
+            type="range"
+            min={0}
+            max={100}
+            value={Math.round(localVolume * 100)}
+            disabled={!roomSlug}
+            aria-valuetext={`${Math.round(localVolume * 100)} percent local volume`}
+            onChange={(event) => {
+              if (!roomSlug) return;
+              setLocalVolume(roomSlug, Number(event.currentTarget.value) / 100);
+            }}
+            className="h-8 min-w-0 flex-1 cursor-pointer accent-primary disabled:cursor-not-allowed"
+          />
+          <span className="min-w-9 text-right text-xs tabular-nums text-rm-text-muted">
+            {Math.round(localVolume * 100)}%
+          </span>
+          <details className="relative shrink-0">
+            <summary className="flex h-10 w-10 cursor-pointer list-none items-center justify-center rounded-full text-rm-text-muted outline-none transition-colors hover:bg-rm-bg-hover hover:text-rm-text focus-visible:ring-2 focus-visible:ring-primary/30 [&::-webkit-details-marker]:hidden">
+              <ShieldCheck className="h-4 w-4" />
+              <span className="sr-only">Audio options</span>
+            </summary>
+            <div className="absolute bottom-12 right-0 z-20 w-56 rounded-2xl border border-rm-border bg-rm-bg-floating p-3 shadow-[0_18px_40px_rgba(0,0,0,0.35)]">
+              <div className="mb-2 flex items-center justify-between gap-3">
+                <div>
+                  <div className="text-xs font-bold text-rm-text">Loudness</div>
+                  <div className="text-[11px] text-rm-text-muted">
+                    Smooth out big volume changes.
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={loudnessEnabled}
+                  aria-label={
+                    loudnessEnabled
+                      ? "Turn off loudness control"
+                      : "Turn on loudness control"
+                  }
+                  onClick={() =>
+                    updateLoudnessSettings({ enabled: !loudnessEnabled })
+                  }
+                  className={cn(
+                    "relative h-5 w-9 shrink-0 rounded-full border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30",
+                    loudnessEnabled
+                      ? "border-primary/50 bg-primary"
+                      : "border-rm-border bg-rm-bg-hover",
+                  )}
+                >
+                  <span
+                    className={cn(
+                      "absolute left-0.5 top-0.5 h-3.5 w-3.5 rounded-full bg-white shadow-sm transition-transform",
+                      loudnessEnabled ? "translate-x-4.5" : "translate-x-0",
+                    )}
+                  />
+                </button>
+              </div>
+              <div className="flex items-center gap-1 rounded-lg bg-rm-bg-elevated/60 p-1">
+                {LISTEN_TOGETHER_LOUDNESS_PRESET_OPTIONS.map(
+                  ([preset, { label }]) => (
+                    <button
+                      key={preset}
+                      type="button"
+                      disabled={!loudnessEnabled}
+                      aria-label={`Use ${label.toLowerCase()} loudness control`}
+                      aria-pressed={loudnessPreset === preset}
+                      onClick={() => updateLoudnessSettings({ preset })}
+                      className={cn(
+                        "min-w-0 flex-1 rounded-md px-2 py-1.5 text-[10px] font-bold transition-colors disabled:cursor-not-allowed disabled:opacity-45",
+                        loudnessPreset === preset
+                          ? "bg-rm-bg-active text-rm-text shadow-sm"
+                          : "text-rm-text-muted hover:text-rm-text",
+                      )}
+                    >
+                      {label}
+                    </button>
+                  ),
+                )}
+              </div>
+            </div>
+          </details>
+        </div>
+
+        <div className="flex items-center justify-between gap-3 text-[11px] text-rm-text-muted">
+          <span className="truncate">{currentEntry.track.sourceLabel}</span>
           <button
             type="button"
             onClick={() => {
@@ -444,89 +540,10 @@ export function ListenTogetherNowPlayingCard({
               });
             }}
             disabled={!canControl}
-            className="inline-flex items-center gap-2 rounded-full border border-rm-border bg-rm-bg-hover px-3 py-2 text-xs font-bold text-rm-text-muted transition hover:text-rm-text disabled:cursor-not-allowed disabled:opacity-50"
+            className="shrink-0 rounded-full px-2 py-1 font-semibold transition-colors hover:bg-rm-bg-hover hover:text-rm-text disabled:cursor-not-allowed disabled:opacity-50"
           >
-            Clear Queue
+            Clear queue
           </button>
-        </div>
-
-        <label className="block rounded-[20px] border border-rm-border bg-rm-bg-hover/40 px-3 py-3">
-          <div className="mb-2 flex items-center justify-between text-[11px] font-black uppercase tracking-[0.16em] text-rm-text-muted">
-            <span>Your Volume</span>
-            <span>{Math.round(localVolume * 100)}%</span>
-          </div>
-          <div className="mb-2 text-[11px] text-rm-text-muted/80">
-            Local only. This changes how you hear the shared player.
-          </div>
-          <input
-            type="range"
-            min={0}
-            max={100}
-            value={Math.round(localVolume * 100)}
-            disabled={!roomSlug}
-            onChange={(event) => {
-              if (!roomSlug) return;
-              setLocalVolume(roomSlug, Number(event.currentTarget.value) / 100);
-            }}
-            className="h-1.5 w-full cursor-pointer accent-primary disabled:cursor-not-allowed"
-          />
-        </label>
-
-        <div className="border-t border-rm-border pt-3">
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex min-w-0 items-center gap-2 text-[11px] font-black uppercase tracking-[0.16em] text-rm-text-muted">
-              <ShieldCheck className="h-3.5 w-3.5 shrink-0 text-primary" />
-              <span className="truncate">Loudness Control</span>
-            </div>
-            <button
-              type="button"
-              role="switch"
-              aria-checked={loudnessEnabled}
-              aria-label={
-                loudnessEnabled
-                  ? "Turn off loudness control"
-                  : "Turn on loudness control"
-              }
-              onClick={() =>
-                updateLoudnessSettings({ enabled: !loudnessEnabled })
-              }
-              className={cn(
-                "relative h-5 w-9 shrink-0 rounded-full border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30",
-                loudnessEnabled
-                  ? "border-primary/50 bg-primary"
-                  : "border-rm-border bg-rm-bg-hover",
-              )}
-            >
-              <span
-                className={cn(
-                  "absolute left-0.5 top-0.5 h-3.5 w-3.5 rounded-full bg-white shadow-sm transition-transform",
-                  loudnessEnabled ? "translate-x-4.5" : "translate-x-0",
-                )}
-              />
-            </button>
-          </div>
-          <div className="mt-2 flex items-center gap-1 rounded-md bg-rm-bg-elevated/60 p-1">
-            {LISTEN_TOGETHER_LOUDNESS_PRESET_OPTIONS.map(
-              ([preset, { label }]) => (
-                <button
-                  key={preset}
-                  type="button"
-                  disabled={!loudnessEnabled}
-                  aria-label={`Use ${label.toLowerCase()} loudness control`}
-                  aria-pressed={loudnessPreset === preset}
-                  onClick={() => updateLoudnessSettings({ preset })}
-                  className={cn(
-                    "min-w-0 flex-1 rounded px-2 py-1.5 text-[10px] font-bold transition-colors disabled:cursor-not-allowed disabled:opacity-45",
-                    loudnessPreset === preset
-                      ? "bg-rm-bg-active text-rm-text shadow-sm"
-                      : "text-rm-text-muted hover:text-rm-text",
-                  )}
-                >
-                  {label}
-                </button>
-              ),
-            )}
-          </div>
         </div>
       </div>
     </TooltipProvider>

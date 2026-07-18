@@ -4,6 +4,7 @@ import { useUserResolution } from "@/hooks/useUserResolution";
 import { getAuthAssetUrl } from "@/lib/platform";
 import { useChatStore } from "@/stores/chat-store";
 import { useCallStore } from "@/stores/useCallStore";
+import { disposePrewarmedAudioContext } from "@/lib/voice/audio-pipeline";
 import { PhoneOff } from "lucide-react";
 import { useDelayUnmount } from "@/hooks/useDelayUnmount";
 import { AvatarImage } from "./AvatarImage";
@@ -31,6 +32,7 @@ export function OutgoingCallModal() {
   if (!shouldRender || !remoteUser || !callId) return null;
 
   const handleCancel = () => {
+    disposePrewarmedAudioContext();
     gateway?.sendCallEnd(callId);
   };
 

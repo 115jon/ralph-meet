@@ -1,7 +1,7 @@
 import { clog } from "@/lib/console-logger";
 import { cn } from "@/lib/utils";
 import { AlertCircle } from "lucide-react";
-import { memo, useCallback, useState } from "react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { GifProviderBranding } from "./GifProviderBranding";
 import { useVideoPlayer } from "./useVideoPlayer";
 import {
@@ -38,6 +38,7 @@ interface VideoAttachmentProps {
   durationBadgeSeconds?: number;
   embeddedChrome?: boolean;
   onPlay?: React.ReactEventHandler<HTMLVideoElement>;
+  onStop?: () => void;
 }
 
 function isProxyMediaSource(src: string): boolean {
@@ -88,6 +89,8 @@ interface VideoAttachmentSurfaceProps {
   onVideoError: () => void;
   onVideoCanPlay: () => void;
   onPlay?: React.ReactEventHandler<HTMLVideoElement>;
+  onPause?: () => void;
+  onEnded?: () => void;
 }
 
 const VideoAttachmentSurface = memo(function VideoAttachmentSurface({
@@ -121,6 +124,8 @@ const VideoAttachmentSurface = memo(function VideoAttachmentSurface({
   onVideoError,
   onVideoCanPlay,
   onPlay,
+  onPause,
+  onEnded,
 }: VideoAttachmentSurfaceProps) {
   const mediaStyle =
     isViewer || isFullscreen
@@ -149,6 +154,8 @@ const VideoAttachmentSurface = memo(function VideoAttachmentSurface({
       onError={onVideoError}
       onCanPlay={onVideoCanPlay}
       onPlay={onPlay}
+      onPause={onPause}
+      onEnded={onEnded}
       {...(referrerPolicy ? { referrerPolicy } : {})}
       autoPlay={isAnimated && isViewer}
       loop={isAnimated}
@@ -311,10 +318,14 @@ const VideoAttachment = memo(function VideoAttachment({
   durationBadgeSeconds,
   embeddedChrome = true,
   onPlay,
+  onStop,
 }: VideoAttachmentProps) {
   const isViewer = variant === "viewer";
   const isAnimated = playbackMode === "animated";
   const [mediaError, setMediaError] = useState(false);
+  const activePlaybackRef = useRef(false);
+  const onPlayRef = useRef(onPlay);
+  const onStopRef = useRef(onStop);
 
   const {
     videoRef,
@@ -333,6 +344,26 @@ const VideoAttachment = memo(function VideoAttachment({
     handleDragStart,
     scheduleHide,
   } = useVideoPlayer(isViewer);
+
+  useEffect(() => {
+    onPlayRef.current = onPlay;
+    onStopRef.current = onStop;
+  }, [onPlay, onStop]);
+
+  const handleVideoPlay = useCallback(
+    (event: React.SyntheticEvent<HTMLVideoElement>) => {
+      activePlaybackRef.current = true;
+      onPlayRef.current?.(event);
+    },
+    [],
+  );
+  const releasePlayback = useCallback(() => {
+    if (!activePlaybackRef.current) return;
+    activePlaybackRef.current = false;
+    onStopRef.current?.();
+  }, []);
+
+  useEffect(() => releasePlayback, [releasePlayback]);
 
   const {
     playing,
@@ -492,7 +523,9 @@ const VideoAttachment = memo(function VideoAttachment({
         onSurfaceClick={handleSurfaceClick}
         onVideoError={handleVideoError}
         onVideoCanPlay={handleVideoCanPlay}
-        onPlay={onPlay}
+        onPlay={handleVideoPlay}
+        onPause={releasePlayback}
+        onEnded={releasePlayback}
       />
 
       {/* Controls overlay - hidden until first play in embedded mode */}

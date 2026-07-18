@@ -1,6 +1,6 @@
 import { cn } from "@/lib/utils";
 import { Check, ChevronRight } from "lucide-react";
-import React, { memo, useCallback } from "react";
+import React, { memo, useCallback, useEffect, useRef } from "react";
 
 export const Divider = memo(() => (
   <div className="mx-1 my-1 h-px shrink-0 bg-rm-border" />
@@ -13,6 +13,7 @@ export interface MenuItemProps {
   icon?: any;
   onClick?: () => void;
   onMouseEnter?: () => void;
+  onArrowLeft?: () => void;
   danger?: boolean;
   checked?: boolean;
   checkVariant?: "default" | "danger";
@@ -24,6 +25,14 @@ export interface MenuItemProps {
   rightElement?: React.ReactNode;
   active?: boolean;
   disabled?: boolean;
+}
+
+function getSiblingMenuItems(element: HTMLElement): HTMLElement[] {
+  const menu = element.closest<HTMLElement>('[role="menu"]');
+  if (!menu) return [];
+  return Array.from(
+    menu.querySelectorAll<HTMLElement>("[data-menu-item]:not([disabled])"),
+  ).filter((item) => item.closest('[role="menu"]') === menu);
 }
 
 export const MenuItem = memo(
@@ -42,71 +51,106 @@ export const MenuItem = memo(
     rightElement,
     active,
     disabled,
-  }: MenuItemProps) => (
-    <button
-      type="button"
-      onMouseEnter={disabled ? undefined : onMouseEnter}
-      onClick={(e) => {
-        e.stopPropagation();
-        if (!disabled) onClick?.();
-      }}
-      disabled={disabled}
-      className={cn(
-        "group flex w-full shrink-0 items-center justify-between rounded-sm px-2 py-1.5 text-left transition-colors font-medium",
-        danger
-          ? "text-destructive hover:bg-destructive hover:text-destructive-foreground"
-          : "text-rm-text-secondary hover:bg-primary hover:text-primary-foreground",
-        active &&
-          (danger
-            ? "bg-destructive text-destructive-foreground"
-            : "bg-primary text-primary-foreground"),
-        disabled &&
-          "pointer-events-none cursor-not-allowed grayscale opacity-30",
-      )}
-    >
-      <div className="flex items-center gap-2 overflow-hidden">
-        {Icon && (
-          <Icon
-            size={14}
-            className="shrink-0 opacity-60 group-hover:opacity-100"
-          />
+  }: MenuItemProps) => {
+    const handleKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>) => {
+      if (disabled) return;
+      const siblings = getSiblingMenuItems(event.currentTarget);
+      const currentIndex = siblings.indexOf(event.currentTarget);
+      if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+        event.preventDefault();
+        const direction = event.key === "ArrowDown" ? 1 : -1;
+        siblings[
+          (currentIndex + direction + siblings.length) % siblings.length
+        ]?.focus();
+      } else if (event.key === "Home" || event.key === "End") {
+        event.preventDefault();
+        siblings[event.key === "Home" ? 0 : siblings.length - 1]?.focus();
+      } else if (event.key === "ArrowRight" && hasSubmenu) {
+        event.preventDefault();
+        const parent = event.currentTarget.parentElement;
+        onMouseEnter?.();
+        window.requestAnimationFrame(() => {
+          parent
+            ?.querySelector<HTMLElement>(
+              '[role="menu"] [data-menu-item]:not([disabled])',
+            )
+            ?.focus();
+        });
+      }
+    };
+
+    return (
+      <button
+        type="button"
+        role="menuitem"
+        data-menu-item="true"
+        aria-disabled={disabled || undefined}
+        aria-haspopup={hasSubmenu ? "menu" : undefined}
+        aria-expanded={hasSubmenu ? active : undefined}
+        onMouseEnter={disabled ? undefined : onMouseEnter}
+        onKeyDown={handleKeyDown}
+        onClick={(e) => {
+          e.stopPropagation();
+          if (!disabled) onClick?.();
+        }}
+        disabled={disabled}
+        className={cn(
+          "group flex w-full shrink-0 items-center justify-between rounded-sm px-2 py-1.5 text-left transition-colors font-medium",
+          danger
+            ? "text-destructive hover:bg-destructive hover:text-destructive-foreground"
+            : "text-rm-text-secondary hover:bg-primary hover:text-primary-foreground",
+          active &&
+            (danger
+              ? "bg-destructive text-destructive-foreground"
+              : "bg-primary text-primary-foreground"),
+          disabled &&
+            "pointer-events-none cursor-not-allowed grayscale opacity-30",
         )}
-        <div className="flex flex-col overflow-hidden">
-          <span
-            className={cn(
-              "truncate text-sm",
-              boldLabel ? "font-bold" : "font-medium",
-            )}
-          >
-            {label}
-          </span>
-          {description && (
-            <span className="truncate text-[10px] leading-tight text-rm-text-muted group-hover:primary-foreground/60">
-              {description}
-            </span>
+      >
+        <div className="flex items-center gap-2 overflow-hidden">
+          {Icon && (
+            <Icon
+              size={14}
+              className="shrink-0 opacity-60 group-hover:opacity-100"
+            />
           )}
-        </div>
-      </div>
-      <div className="flex shrink-0 items-center gap-2">
-        {rightElement}
-        {checked !== undefined && (
-          <div
-            className={cn(
-              "flex h-4 w-4 items-center justify-center rounded border transition-colors",
-              checked
-                ? checkVariant === "danger"
-                  ? "border-destructive bg-destructive"
-                  : "border-primary bg-primary"
-                : "border-rm-border group-hover:border-rm-text-muted/40",
+          <div className="flex flex-col overflow-hidden">
+            <span
+              className={cn(
+                "truncate text-sm",
+                boldLabel ? "font-bold" : "font-medium",
+              )}
+            >
+              {label}
+            </span>
+            {description && (
+              <span className="truncate text-[10px] leading-tight text-rm-text-muted group-hover:primary-foreground/60">
+                {description}
+              </span>
             )}
-          >
-            {checked && <CheckIcon size={12} className="text-white" />}
           </div>
-        )}
-        {hasSubmenu && <ChevronRight size={14} className="opacity-40" />}
-      </div>
-    </button>
-  ),
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          {rightElement}
+          {checked !== undefined && (
+            <div
+              className={cn(
+                "flex h-4 w-4 items-center justify-center rounded border transition-colors",
+                checked
+                  ? checkVariant === "danger"
+                    ? "border-destructive bg-destructive"
+                    : "border-primary bg-primary"
+                  : "border-rm-border group-hover:border-rm-text-muted/40",
+              )}
+            >
+              {checked && <CheckIcon size={12} className="text-white" />}
+            </div>
+          )}
+          {hasSubmenu && <ChevronRight size={14} className="opacity-40" />}
+        </div>
+      </button>
+    );
+  },
 );
 MenuItem.displayName = "MenuItem";
 
@@ -166,15 +210,43 @@ interface SubMenuProps {
   children: React.ReactNode;
   active: boolean;
   onMouseEnter: () => void;
+  onEscape?: () => void;
 }
 
 export const SubMenu = memo(
-  ({ children, active, onMouseEnter }: SubMenuProps) => {
+  ({ children, active, onMouseEnter, onEscape }: SubMenuProps) => {
+    const submenuRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+      if (!active) return;
+      const frameId = window.requestAnimationFrame(() => {
+        const firstEnabledItem = submenuRef.current?.querySelector<HTMLElement>(
+          '[role="menuitem"]:not([disabled])',
+        );
+        (firstEnabledItem ?? submenuRef.current)?.focus();
+      });
+      return () => window.cancelAnimationFrame(frameId);
+    }, [active]);
+
     if (!active) return null;
 
     return (
       <div
+        ref={submenuRef}
+        role="menu"
+        tabIndex={-1}
         onMouseEnter={onMouseEnter}
+        onKeyDown={(event) => {
+          if (event.key !== "Escape" && event.key !== "ArrowLeft") return;
+          event.preventDefault();
+          event.stopPropagation();
+          onEscape?.();
+          submenuRef.current?.parentElement
+            ?.querySelector<HTMLElement>(
+              '[data-menu-item][aria-haspopup="menu"]',
+            )
+            ?.focus();
+        }}
         className="absolute left-[calc(100%+4px)] top-0 z-[10001] flex max-h-[70vh] w-[200px] flex-col overflow-y-auto rounded-lg border border-rm-border bg-rm-bg-elevated p-1 shadow-2xl backdrop-blur-xl transition-all duration-200 animate-in fade-in slide-in-from-left-2 no-scrollbar"
       >
         <div className="absolute top-0 bottom-0 -left-4 w-4" />
@@ -192,7 +264,13 @@ interface SubMenuItemProps extends MenuItemProps {
 }
 
 export const SubMenuItem = memo(
-  ({ submenu, active, onMouseEnter, ...props }: SubMenuItemProps) => (
+  ({
+    submenu,
+    active,
+    onMouseEnter,
+    onArrowLeft,
+    ...props
+  }: SubMenuItemProps) => (
     <div className="relative flex flex-col">
       <MenuItem
         {...props}
@@ -200,7 +278,11 @@ export const SubMenuItem = memo(
         active={active}
         onMouseEnter={onMouseEnter}
       />
-      <SubMenu active={active} onMouseEnter={onMouseEnter}>
+      <SubMenu
+        active={active}
+        onMouseEnter={onMouseEnter}
+        onEscape={onArrowLeft}
+      >
         {submenu}
       </SubMenu>
     </div>

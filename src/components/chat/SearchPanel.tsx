@@ -1,6 +1,15 @@
 import { useUserResolution } from "@/hooks/useUserResolution";
+import { registerBackHandler } from "@/hooks/useBackButton";
 import { apiGet } from "@/lib/api-client";
 import { useCallback, useEffect, useId, useReducer, useRef } from "react";
+import {
+  Sheet,
+  SheetClose,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import { Hash, Loader2, Search, X } from "./Icons";
 
 interface SearchResult {
@@ -46,9 +55,22 @@ type SearchAction =
 function searchReducer(state: SearchState, action: SearchAction): SearchState {
   switch (action.type) {
     case "SET_QUERY":
-      return { ...state, query: action.payload };
+      return {
+        ...state,
+        query: action.payload,
+        results: [],
+        total: 0,
+        loading: false,
+        searched: false,
+      };
     case "START_SEARCH":
-      return { ...state, loading: true, searched: true };
+      return {
+        ...state,
+        results: [],
+        total: 0,
+        loading: true,
+        searched: true,
+      };
     case "SEARCH_SUCCESS":
       return {
         ...state,
@@ -57,7 +79,13 @@ function searchReducer(state: SearchState, action: SearchAction): SearchState {
         total: action.payload.total,
       };
     case "SEARCH_ERROR":
-      return { ...state, loading: false };
+      return {
+        ...state,
+        results: [],
+        total: 0,
+        loading: false,
+        searched: true,
+      };
     case "CLEAR_RESULTS":
       return {
         ...state,
@@ -88,7 +116,8 @@ export default function SearchPanel({
 
   const inputRef = useRef<HTMLInputElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(null);
-  const dialogTitleId = useId();
+  const requestIdRef = useRef(0);
+  const controllerRef = useRef<AbortController | null>(null);
   const searchInputId = useId();
 
   useEffect(() => {
@@ -96,30 +125,57 @@ export default function SearchPanel({
   }, []);
 
   useEffect(() => {
-    const handleKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    document.addEventListener("keydown", handleKey, { capture: true });
-    return () =>
-      document.removeEventListener("keydown", handleKey, { capture: true });
+    return registerBackHandler(() => {
+      onClose();
+      return true;
+    });
   }, [onClose]);
 
+  useEffect(() => {
+    requestIdRef.current += 1;
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = null;
+    controllerRef.current?.abort();
+    controllerRef.current = null;
+    dispatch({ type: "CLEAR_RESULTS" });
+  }, [serverId]);
+
+  useEffect(() => {
+    return () => {
+      requestIdRef.current += 1;
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+      controllerRef.current?.abort();
+    };
+  }, []);
+
   const doSearch = useCallback(
-    async (q: string) => {
+    async (q: string, requestId: number) => {
       if (q.length < 2) {
-        dispatch({ type: "CLEAR_RESULTS" });
+        if (requestId === requestIdRef.current) {
+          dispatch({ type: "CLEAR_RESULTS" });
+        }
         return;
       }
+      controllerRef.current?.abort();
+      const controller = new AbortController();
+      controllerRef.current = controller;
       dispatch({ type: "START_SEARCH" });
       try {
         const data = await apiGet<{ messages: SearchResult[]; total: number }>(
           `/api/servers/${serverId}/search?q=${encodeURIComponent(q)}&limit=25`,
+          { signal: controller.signal },
         );
+        if (controller.signal.aborted || requestId !== requestIdRef.current) {
+          return;
+        }
         dispatch({
           type: "SEARCH_SUCCESS",
           payload: { results: data.messages, total: data.total },
         });
       } catch {
+        if (controller.signal.aborted || requestId !== requestIdRef.current) {
+          return;
+        }
         dispatch({ type: "SEARCH_ERROR" });
       }
     },
@@ -129,9 +185,15 @@ export default function SearchPanel({
   const handleInput = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
       const val = e.target.value;
+      requestIdRef.current += 1;
+      controllerRef.current?.abort();
       dispatch({ type: "SET_QUERY", payload: val });
       if (debounceRef.current) clearTimeout(debounceRef.current);
-      debounceRef.current = setTimeout(() => doSearch(val.trim()), 300);
+      const requestId = requestIdRef.current;
+      debounceRef.current = setTimeout(() => {
+        debounceRef.current = null;
+        void doSearch(val.trim(), requestId);
+      }, 300);
     },
     [doSearch],
   );
@@ -140,7 +202,8 @@ export default function SearchPanel({
     (e: React.KeyboardEvent) => {
       if (e.key === "Enter") {
         if (debounceRef.current) clearTimeout(debounceRef.current);
-        doSearch(query.trim());
+        debounceRef.current = null;
+        void doSearch(query.trim(), requestIdRef.current);
       }
     },
     [query, doSearch],
@@ -169,22 +232,18 @@ export default function SearchPanel({
   };
 
   return (
-    <div className="fixed inset-0 z-200 flex items-start justify-center pt-[20%]">
-      <button
-        type="button"
-        className="absolute inset-0 bg-black/60 backdrop-blur-[2px]"
-        onClick={onClose}
-        aria-label="Close search panel"
-      />
-      <section
-        className="relative flex w-full max-w-[540px] mx-4 animate-in fade-in zoom-in-95 flex-col overflow-hidden rounded-lg border border-rm-border bg-rm-bg-surface shadow-2xl duration-200"
-        aria-labelledby={dialogTitleId}
+    <Sheet open onOpenChange={(nextOpen) => !nextOpen && onClose()}>
+      <SheetContent
+        side="right"
+        showCloseButton={false}
+        className="flex h-[100dvh] w-full max-w-[540px] flex-col gap-0 border-rm-border bg-rm-bg-surface p-0 max-md:max-w-none"
       >
-        <h2 id={dialogTitleId} className="sr-only">
-          Search messages
-        </h2>
-        {/* Search input */}
-        <div className="flex items-center gap-2 border-b border-rm-border px-4 py-3 bg-transparent">
+        <SheetHeader className="sr-only">
+          <SheetTitle>Search messages</SheetTitle>
+          <SheetDescription>Search messages in this server.</SheetDescription>
+        </SheetHeader>
+
+        <div className="flex shrink-0 items-center gap-2 border-b border-rm-border bg-transparent px-4 py-3 max-md:pt-[max(12px,var(--safe-area-top,0px))]">
           <label htmlFor={searchInputId} className="sr-only">
             Search messages
           </label>
@@ -193,24 +252,24 @@ export default function SearchPanel({
             ref={inputRef}
             id={searchInputId}
             type="text"
-            className="flex-1 bg-transparent text-[15px] font-medium text-rm-text outline-none placeholder:text-rm-text-muted"
+            className="flex-1 bg-transparent text-[15px] font-medium text-rm-text outline-none placeholder:text-rm-text-muted max-md:text-[16px]"
             placeholder="Search messages…"
             value={query}
             onChange={handleInput}
             onKeyDown={handleKeyDown}
           />
-          <button
-            type="button"
-            className="cursor-pointer rounded-lg p-1 text-rm-text-muted transition-colors hover:text-rm-text outline-none"
-            onClick={onClose}
-            aria-label="Close search panel"
-          >
-            <X className="h-4 w-4" />
-          </button>
+          <SheetClose asChild>
+            <button
+              type="button"
+              className="flex size-10 shrink-0 items-center justify-center rounded-lg text-rm-text-muted transition-colors outline-none hover:text-rm-text focus-visible:ring-2 focus-visible:ring-primary/60"
+              aria-label="Close search panel"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </SheetClose>
         </div>
 
-        {/* Results */}
-        <div className="max-h-96 overflow-y-auto custom-scrollbar">
+        <div className="min-h-0 flex-1 overflow-y-auto pb-[max(16px,var(--safe-area-bottom,0px))] custom-scrollbar">
           <div className="p-3">
             {loading && (
               <div className="flex items-center justify-center gap-2 py-6 text-primary/60">
@@ -262,8 +321,8 @@ export default function SearchPanel({
             )}
           </div>
         </div>
-      </section>
-    </div>
+      </SheetContent>
+    </Sheet>
   );
 }
 

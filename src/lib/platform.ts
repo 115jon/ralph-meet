@@ -76,7 +76,8 @@ export function isWgcCaptureAllowed(): boolean {
  * The API origin used by desktop/mobile clients.
  *
  * Web mode:   returns "" so relative URLs like `/api/servers` work as-is.
- * Tauri dev:  returns "" (Tauri loads the Vite dev server directly, same origin).
+ * Tauri dev:  desktop fetches through its Vite proxy; mobile fetches the public
+ *             backend because Android localhost points at the device itself.
  * Tauri prod: returns the deployed Cloudflare Workers origin.
  *
  * Override at build time with `VITE_API_BASE_URL`.
@@ -90,7 +91,7 @@ export function getApiBaseUrl(): string {
 
   if (isDev) {
     if (isMobile()) {
-      return "http://localhost:5173";
+      return getPublicApiUrl();
     }
     if (isDesktop()) {
       // In desktop dev, fetch through the desktop Vite server. Its proxy target
@@ -114,7 +115,7 @@ export function getApiBaseUrl(): string {
 
 /**
  * Returns a resolvable public origin for the API that can be accessed by the system OS (out of Tauri context).
- * - Local Dev: `http://localhost:5173`
+ * - Local Dev: `http://localhost:5173` on desktop/web, deployed backend on mobile unless overridden
  * - Production: Custom env URL or `https://meet.115jon.site`
  */
 export function getPublicApiUrl(): string {
@@ -130,6 +131,9 @@ export function getPublicApiUrl(): string {
     (import.meta as any).env?.DEV === true;
 
   if (isDev) {
+    if (isMobile()) {
+      return "https://meet.115jon.site";
+    }
     return "http://localhost:5173";
   }
 
@@ -177,7 +181,9 @@ export function getWsBaseUrl(): string {
       return url;
     }
     if (isMobile()) {
-      return "ws://localhost:5173";
+      return getPublicApiUrl()
+        .replace(/^https:/, "wss:")
+        .replace(/^http:/, "ws:");
     }
   }
 

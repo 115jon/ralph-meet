@@ -5,6 +5,7 @@ import {
   type LocalAudioProcessorHandle,
   type VoiceAudioProcessingSettings,
 } from "@/lib/voice/noise-reduction";
+import { getVoiceActivityThreshold } from "@/lib/voice/vad";
 import { Activity, Headphones, Mic2, Square } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -29,12 +30,6 @@ interface MicTestWidgetProps {
   inputDeviceId: string;
   outputDeviceId: string;
   processing: VoiceAudioProcessingSettings;
-}
-
-/** Convert the dB sensitivity slider value to the same RMS threshold the VAD uses. */
-function dbToThreshold(sensitivity: number): number {
-  const threshold = Math.pow(10, sensitivity / 20) * 100;
-  return Math.max(0.1, Math.min(50, threshold));
 }
 
 export function MicTestWidget({
@@ -63,7 +58,7 @@ export function MicTestWidget({
     lastSpeechAt: 0,
   });
 
-  const threshold = autoSensitivity ? 3.0 : dbToThreshold(sensitivity);
+  const threshold = getVoiceActivityThreshold(autoSensitivity, sensitivity);
   const barPercent = Math.min(100, (rms / 50) * 100);
   const thresholdPercent = Math.min(100, (threshold / 50) * 100);
 

@@ -4,11 +4,21 @@ import { apiError, apiSuccess, getDB, requireAuth } from "@/lib/api-helpers";
 import { PERMISSIONS } from "@/lib/permissions";
 import { requireChannelPermission } from "@/lib/require-permission";
 import { ServiceError } from "@/lib/service-error";
+import { validateBody } from "@/lib/validate-body";
 import {
   deletePermissionOverride,
   upsertPermissionOverride,
 } from "@/services/channel.service";
 import { executeBroadcast } from "@/services/service-helpers";
+import { z } from "zod";
+
+export const permissionOverrideBodySchema = z
+  .object({
+    target_type: z.enum(["role", "user"]),
+    allow: z.number(),
+    deny: z.number(),
+  })
+  .passthrough();
 
 // PUT /api/channels/:id/permissions/:targetId — create or update an override
 const PUT = async ({ request, params }: any) => {
@@ -18,11 +28,13 @@ const PUT = async ({ request, params }: any) => {
 
   const { id: channelId, targetId } = params;
 
-  const body = (await request.json()) as {
-    target_type: "role" | "user";
-    allow: number;
-    deny: number;
-  };
+  const bodyResult = await validateBody(
+    request,
+    permissionOverrideBodySchema,
+    request,
+  );
+  if (bodyResult instanceof Response) return bodyResult;
+  const body = bodyResult;
 
   if (
     !["role", "user"].includes(body.target_type) ||

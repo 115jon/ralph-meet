@@ -6,7 +6,6 @@
  */
 
 import {
-  broadcastToAll,
   broadcastToChannel,
   broadcastToServerMembers,
   broadcastToUser,
@@ -40,9 +39,6 @@ export async function executeBroadcast(
       break;
     case "user":
       await broadcastToUser(broadcast.target!, broadcast.event, broadcast.data);
-      break;
-    case "all":
-      await broadcastToAll(broadcast.event, broadcast.data);
       break;
   }
 }

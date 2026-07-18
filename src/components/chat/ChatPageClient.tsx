@@ -4,6 +4,7 @@ import { DesktopThumbnailToolbarSync } from "@/components/chat/DesktopThumbnailT
 import DMSidebar from "@/components/chat/DMSidebar";
 import FloatingStreamPreview from "@/components/chat/FloatingStreamPreview";
 import FriendsView from "@/components/chat/FriendsView";
+import { MobileNavigationSheet } from "@/components/chat/MobileNavigationSheet";
 import ShopView from "@/components/chat/ShopView";
 import ServerList from "@/components/chat/ServerList";
 import UserPanel from "@/components/chat/UserPanel";
@@ -979,6 +980,80 @@ export default function ChatPage() {
       notifications,
     ],
   );
+
+  const renderNavigationContent = () => {
+    if (isDmMode) {
+      return (
+        <DMSidebar
+          activeChannelId={activeChannelId}
+          activeView={dmHomeView}
+          onSelectDm={onSelectDm}
+          onShowFriends={() => {
+            setDmHomeView("friends");
+            uiDispatch({ type: "SET_SIDEBAR", open: false });
+            dispatch({ type: "SET_ACTIVE_SERVER", serverId: "@me" });
+            dispatch({ type: "SET_ACTIVE_CHANNEL", channelId: null });
+          }}
+          onShowShop={() => {
+            setDmHomeView("shop");
+            uiDispatch({ type: "SET_SIDEBAR", open: false });
+            dispatch({ type: "SET_ACTIVE_SERVER", serverId: "@me" });
+            dispatch({ type: "SET_ACTIVE_CHANNEL", channelId: null });
+          }}
+        />
+      );
+    }
+
+    if (!activeServerId) {
+      return (
+        <div className="flex h-full flex-col border-r border-rm-border bg-rm-sidebar">
+          <div className="p-4 text-[13px] text-white/40">
+            Select a server to get started
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <ChannelSidebar
+        channels={channels}
+        categories={categories}
+        activeChannelId={activeChannelId}
+        serverId={activeServerId}
+        serverName={activeServer?.name ?? "Server"}
+        currentUserId={user?.id ?? null}
+        onSelect={guardedSelectChannel}
+        onInviteClick={() =>
+          uiDispatch({ type: "OPEN_MODAL", modal: "invite" })
+        }
+        onSettingsClick={() =>
+          uiDispatch({ type: "OPEN_MODAL", modal: "settings" })
+        }
+        readStates={readStates}
+        lastMessageAt={lastMessageAt}
+        voiceChannelStates={voiceChannelStates}
+        localVoiceChannelId={voiceState.channelId}
+        localVoiceConnected={voiceState.joined}
+        localVoiceSessionId={
+          localStreamState?.sfu?.getParticipantId?.() ?? null
+        }
+        localVoiceRoomSlug={localStreamState?.roomSlug ?? null}
+        channelMentionCounts={channelMentionCounts}
+        streamPreviewChannelId={localStreamState?.channelId ?? null}
+        streamThumbnails={localStreamState?.streamThumbnails ?? {}}
+        onWatchStream={handleWatchLiveStream}
+        canReorder={
+          hasPermission(currentUserPermissions, PERMISSIONS.MANAGE_CHANNELS) ||
+          hasPermission(currentUserPermissions, PERMISSIONS.ADMINISTRATOR)
+        }
+        canManageChannels={
+          hasPermission(currentUserPermissions, PERMISSIONS.MANAGE_CHANNELS) ||
+          hasPermission(currentUserPermissions, PERMISSIONS.ADMINISTRATOR)
+        }
+      />
+    );
+  };
+
   useBackButton(
     useCallback(() => {
       // Hardware back button behavior for the base layer (behind all modals/panels).
@@ -1050,197 +1125,214 @@ export default function ChatPage() {
         className="flex flex-1 overflow-hidden relative"
         style={channelSidebarStyle}
       >
-        {/* Server icon strip */}
-        <div
-          className={`z-50 flex w-[calc(var(--spacing)*18)] shrink-0 flex-col items-center overflow-y-auto bg-rm-bg-floating scrollbar-none max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:z-[110] max-md:transition-transform max-md:duration-300 ${sidebarOpen ? "max-md:translate-x-0" : "max-md:-translate-x-full"}`}
-        >
-          <ServerList
-            servers={servers}
-            activeServerId={activeServerId}
-            activeChannelId={activeChannelId}
-            onSelect={handleSelectServer}
-            channels={railChannels}
-            channelsByServerId={channelsByServerId}
-            readStates={readStates}
-            lastMessageAt={lastMessageAt}
-            voiceChannelStates={voiceChannelStates}
-            localVoiceServerId={voiceState.joined ? voiceState.serverId : null}
-            serverMentionCounts={serverMentionCounts}
-            homeBadgeCount={homeBadgeCount}
-            unreadDms={unreadDms}
-            onSelectDm={onSelectDm}
-            onMarkServerRead={(serverId) => {
-              // Mark all channels in this server as read
-              const serverChannels = channels.filter(
-                (c) => c.server_id === serverId,
-              );
-              for (const ch of serverChannels) {
-                const lastMsg = lastMessageAt[ch.id];
-                const lastRead = readStates[ch.id];
-                if (lastMsg && (!lastRead || lastMsg > lastRead)) {
-                  markChannelRead(ch.id);
-                }
-              }
-              // Mark server notifications as read
-              const serverNotifIds = collectUnreadNotificationIds(
-                notifications,
-                (notification) => notification.server_id === serverId,
-              );
-              if (serverNotifIds.length > 0) {
-                markNotificationsRead(serverNotifIds);
-              }
-            }}
-            onMarkAllRead={() => {
-              markNotificationsRead();
-              // Mark all channels as read
-              for (const ch of channels) {
-                const lastMsg = lastMessageAt[ch.id];
-                const lastRead = readStates[ch.id];
-                if (lastMsg && (!lastRead || lastMsg > lastRead)) {
-                  markChannelRead(ch.id);
-                }
-              }
-              for (const dm of dmChannels) {
-                const lastMsg = lastMessageAt[dm.id];
-                const lastRead = readStates[dm.id];
-                if (lastMsg && (!lastRead || lastMsg > lastRead)) {
-                  markChannelRead(dm.id);
-                }
-              }
-            }}
-          />
-        </div>
-
-        {/* Mobile overlay */}
-        <div
-          className={`fixed inset-0 z-[104] bg-black/50 transition-opacity duration-300 ${
-            sidebarOpen
-              ? "pointer-events-auto opacity-100"
-              : "pointer-events-none opacity-0"
-          } md:hidden`}
-          onClick={() => uiDispatch({ type: "SET_SIDEBAR", open: false })}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" || e.key === " " || e.key === "Escape")
-              uiDispatch({ type: "SET_SIDEBAR", open: false });
-          }}
-          role="presentation"
-          aria-hidden="true"
-        />
-
-        {/* Channel sidebar */}
-        <div
-          className={cn(
-            "relative flex h-full shrink-0 flex-col overflow-hidden bg-rm-sidebar font-sans md:w-[var(--channel-sidebar-width)] md:min-w-[calc(var(--spacing)*52)] md:max-w-[calc(var(--spacing)*92)] max-md:fixed max-md:inset-y-0 max-md:left-[calc(var(--spacing)*18)] max-md:z-[105] max-md:w-[calc(100vw-(var(--spacing)*18))] max-md:max-w-72 max-md:shadow-2xl max-md:transition-transform max-md:duration-300",
-            sidebarOpen
-              ? "max-md:translate-x-0"
-              : "max-md:-translate-x-[calc(100%+(var(--spacing)*18))]",
-          )}
-        >
-          <div className="min-h-0 flex-1 overflow-hidden">
-            {isDmMode ? (
-              <DMSidebar
+        <div className="hidden h-full shrink-0 flex-col md:flex md:w-[var(--left-nav-width)]">
+          <div className="flex min-h-0 flex-1">
+            {/* Desktop server icon strip */}
+            <div className="z-50 hidden w-[calc(var(--spacing)*18)] shrink-0 flex-col items-center overflow-y-auto bg-rm-bg-floating scrollbar-none md:flex">
+              <ServerList
+                servers={servers}
+                activeServerId={activeServerId}
                 activeChannelId={activeChannelId}
-                activeView={dmHomeView}
-                onSelectDm={(channelId) => {
-                  dispatch({ type: "SET_ACTIVE_CHANNEL", channelId });
-                  uiDispatch({ type: "SET_SIDEBAR", open: false });
-                }}
-                onShowFriends={() => {
-                  setDmHomeView("friends");
-                  uiDispatch({ type: "SET_SIDEBAR", open: false });
-                  dispatch({ type: "SET_ACTIVE_SERVER", serverId: "@me" });
-                  dispatch({ type: "SET_ACTIVE_CHANNEL", channelId: null });
-                }}
-                onShowShop={() => {
-                  setDmHomeView("shop");
-                  uiDispatch({ type: "SET_SIDEBAR", open: false });
-                  dispatch({ type: "SET_ACTIVE_SERVER", serverId: "@me" });
-                  dispatch({ type: "SET_ACTIVE_CHANNEL", channelId: null });
-                }}
-              />
-            ) : activeServerId ? (
-              <ChannelSidebar
-                channels={channels}
-                categories={categories}
-                activeChannelId={activeChannelId}
-                serverId={activeServerId}
-                serverName={activeServer?.name ?? "Server"}
-                currentUserId={user?.id ?? null}
-                onSelect={guardedSelectChannel}
-                onInviteClick={() =>
-                  uiDispatch({ type: "OPEN_MODAL", modal: "invite" })
-                }
-                onSettingsClick={() =>
-                  uiDispatch({ type: "OPEN_MODAL", modal: "settings" })
-                }
+                onSelect={handleSelectServer}
+                channels={railChannels}
+                channelsByServerId={channelsByServerId}
                 readStates={readStates}
                 lastMessageAt={lastMessageAt}
                 voiceChannelStates={voiceChannelStates}
-                localVoiceChannelId={voiceState.channelId}
-                localVoiceConnected={voiceState.joined}
-                localVoiceSessionId={
-                  localStreamState?.sfu?.getParticipantId?.() ?? null
+                localVoiceServerId={
+                  voiceState.joined ? voiceState.serverId : null
                 }
-                localVoiceRoomSlug={localStreamState?.roomSlug ?? null}
-                channelMentionCounts={channelMentionCounts}
-                streamPreviewChannelId={localStreamState?.channelId ?? null}
-                streamThumbnails={localStreamState?.streamThumbnails ?? {}}
-                onWatchStream={handleWatchLiveStream}
-                canReorder={
-                  hasPermission(
-                    currentUserPermissions,
-                    PERMISSIONS.MANAGE_CHANNELS,
-                  ) ||
-                  hasPermission(
-                    currentUserPermissions,
-                    PERMISSIONS.ADMINISTRATOR,
-                  )
-                }
-                canManageChannels={
-                  hasPermission(
-                    currentUserPermissions,
-                    PERMISSIONS.MANAGE_CHANNELS,
-                  ) ||
-                  hasPermission(
-                    currentUserPermissions,
-                    PERMISSIONS.ADMINISTRATOR,
-                  )
-                }
+                serverMentionCounts={serverMentionCounts}
+                homeBadgeCount={homeBadgeCount}
+                unreadDms={unreadDms}
+                onSelectDm={onSelectDm}
+                onMarkServerRead={(serverId) => {
+                  // Mark all channels in this server as read
+                  const serverChannels = channels.filter(
+                    (c) => c.server_id === serverId,
+                  );
+                  for (const ch of serverChannels) {
+                    const lastMsg = lastMessageAt[ch.id];
+                    const lastRead = readStates[ch.id];
+                    if (lastMsg && (!lastRead || lastMsg > lastRead)) {
+                      markChannelRead(ch.id);
+                    }
+                  }
+                  // Mark server notifications as read
+                  const serverNotifIds = collectUnreadNotificationIds(
+                    notifications,
+                    (notification) => notification.server_id === serverId,
+                  );
+                  if (serverNotifIds.length > 0) {
+                    markNotificationsRead(serverNotifIds);
+                  }
+                }}
+                onMarkAllRead={() => {
+                  markNotificationsRead();
+                  // Mark all channels as read
+                  for (const ch of channels) {
+                    const lastMsg = lastMessageAt[ch.id];
+                    const lastRead = readStates[ch.id];
+                    if (lastMsg && (!lastRead || lastMsg > lastRead)) {
+                      markChannelRead(ch.id);
+                    }
+                  }
+                  for (const dm of dmChannels) {
+                    const lastMsg = lastMessageAt[dm.id];
+                    const lastRead = readStates[dm.id];
+                    if (lastMsg && (!lastRead || lastMsg > lastRead)) {
+                      markChannelRead(dm.id);
+                    }
+                  }
+                }}
               />
-            ) : (
-              <div className="flex h-full flex-col border-r border-rm-border bg-rm-sidebar">
-                <div className="p-4 text-[13px] text-white/40">
-                  Select a server to get started
-                </div>
+            </div>
+
+            {/* Desktop channel sidebar */}
+            <div
+              className={cn(
+                "relative hidden h-full min-w-0 shrink-0 flex-col overflow-hidden bg-rm-sidebar font-sans md:flex md:w-[var(--channel-sidebar-width)] md:min-w-[calc(var(--spacing)*52)] md:max-w-[calc(var(--spacing)*92)]",
+              )}
+            >
+              <div className="min-h-0 flex-1 overflow-hidden">
+                {renderNavigationContent()}
               </div>
-            )}
+
+              <button
+                type="button"
+                className={cn(
+                  "group absolute inset-y-0 right-0 z-[125] hidden w-3 translate-x-1/2 cursor-col-resize items-center justify-center border-0 bg-transparent p-0 outline-none md:flex",
+                  isChannelSidebarResizing && "translate-x-1/2",
+                )}
+                onPointerDown={handleChannelSidebarResizeStart}
+                onKeyDown={handleChannelSidebarResizeKeyDown}
+                role="separator"
+                aria-label="Resize sidebar"
+                aria-orientation="vertical"
+                aria-valuemin={CHANNEL_SIDEBAR_MIN_WIDTH_PX}
+                aria-valuemax={CHANNEL_SIDEBAR_MAX_WIDTH_PX}
+                aria-valuenow={channelSidebarWidth}
+              >
+                <span
+                  className={cn(
+                    "pointer-events-none h-20 w-px rounded-full transition-all duration-150",
+                    isChannelSidebarResizing
+                      ? "bg-primary shadow-[0_0_18px_rgba(255,255,255,0.12)]"
+                      : "bg-white/10 group-hover:h-28 group-hover:bg-white/25 group-focus-visible:h-28 group-focus-visible:bg-primary/70",
+                  )}
+                />
+              </button>
+            </div>
           </div>
 
-          <button
-            type="button"
-            className={cn(
-              "group absolute inset-y-0 right-0 z-[125] hidden w-3 translate-x-1/2 cursor-col-resize items-center justify-center border-0 bg-transparent p-0 outline-none md:flex",
-              isChannelSidebarResizing && "translate-x-1/2",
-            )}
-            onPointerDown={handleChannelSidebarResizeStart}
-            onKeyDown={handleChannelSidebarResizeKeyDown}
-            role="separator"
-            aria-label="Resize sidebar"
-            aria-orientation="vertical"
-            aria-valuemin={CHANNEL_SIDEBAR_MIN_WIDTH_PX}
-            aria-valuemax={CHANNEL_SIDEBAR_MAX_WIDTH_PX}
-            aria-valuenow={channelSidebarWidth}
-          >
-            <span
-              className={cn(
-                "pointer-events-none h-20 w-px rounded-full transition-all duration-150",
-                isChannelSidebarResizing
-                  ? "bg-primary shadow-[0_0_18px_rgba(255,255,255,0.12)]"
-                  : "bg-white/10 group-hover:h-28 group-hover:bg-white/25 group-focus-visible:h-28 group-focus-visible:bg-primary/70",
-              )}
+          <div className="shrink-0">
+            <UserPanel
+              user={user}
+              serverId={voiceState.serverId ?? activeServerId}
+              serverName={voiceServerName}
+              voiceConnected={voiceState.joined}
+              voiceChannelId={voiceState.channelId}
+              voiceChannelName={voiceChannelName}
+              onVoiceDisconnect={handleVoiceDisconnect}
+              onVoiceNavigate={handleVoiceNavigate}
+              isScreenSharing={localStreamState?.isScreenSharing}
+              isStreamingAudio={localStreamState?.isStreamingAudio}
+              screenQuality={localStreamState?.screenQuality}
+              currentScreenSource={localStreamState?.currentScreenSource}
+              availableQualities={localStreamState?.availableQualities}
+              onStopStreaming={() => localStreamState?.toggleScreenShare()}
+              onToggleStreamAudio={() => localStreamState?.toggleStreamAudio()}
+              onChangeStreamSource={() => {
+                localStreamState?.openScreenShareModal();
+              }}
+              onStartScreenShare={({
+                quality,
+                withAudio,
+                sourceId,
+                captureId,
+                sourceName,
+                sourceKind,
+                sourceAppName,
+                sourceIcon,
+              }) =>
+                localStreamState?.toggleScreenShare({
+                  quality,
+                  withAudio,
+                  sourceId,
+                  captureId,
+                  sourceName,
+                  sourceKind,
+                  sourceAppName,
+                  sourceIcon,
+                  changeSource: true,
+                })
+              }
+              onStreamQualityChange={(q: string) =>
+                localStreamState?.toggleScreenShare({ quality: q })
+              }
+              isCameraActive={localStreamState?.isCameraActive}
+              hasCamera={localStreamState?.hasCamera}
+              hasMicrophone={localStreamState?.hasMicrophone}
+              onToggleCamera={() => localStreamState?.toggleCamera()}
+              sfu={localStreamState?.sfu ?? null}
+              gridItems={localStreamState?.gridItems ?? []}
+              watchersByStreamer={localStreamState?.watchersByStreamer ?? {}}
+              spatialAudioState={localStreamState?.spatialAudioState}
+              onUpdateSpatialAudioState={
+                localStreamState?.updateSharedSpatialAudioState
+              }
+              voiceSettingsUserId={localStreamState?.settingsUserId}
+              roomSlug={localStreamState?.roomSlug}
+              voiceSessionId={localStreamState?.voiceSessionId}
+              onOpenActivities={() => setVoiceAppsModal("activities")}
+              sidebarWidthPx={channelSidebarWidth}
             />
-          </button>
+          </div>
         </div>
+
+        <MobileNavigationSheet
+          open={sidebarOpen}
+          onClose={() => uiDispatch({ type: "SET_SIDEBAR", open: false })}
+          serverList={
+            <ServerList
+              servers={servers}
+              activeServerId={activeServerId}
+              activeChannelId={activeChannelId}
+              onSelect={(serverId) => {
+                handleSelectServer(serverId);
+              }}
+              channels={railChannels}
+              channelsByServerId={channelsByServerId}
+              readStates={readStates}
+              lastMessageAt={lastMessageAt}
+              voiceChannelStates={voiceChannelStates}
+              localVoiceServerId={
+                voiceState.joined ? voiceState.serverId : null
+              }
+              serverMentionCounts={serverMentionCounts}
+              homeBadgeCount={homeBadgeCount}
+              unreadDms={unreadDms}
+              onSelectDm={onSelectDm}
+              onMarkServerRead={(serverId) => {
+                const serverChannels = channels.filter(
+                  (channel) => channel.server_id === serverId,
+                );
+                for (const channel of serverChannels) {
+                  const lastMessage = lastMessageAt[channel.id];
+                  const lastRead = readStates[channel.id];
+                  if (lastMessage && (!lastRead || lastMessage > lastRead)) {
+                    markChannelRead(channel.id);
+                  }
+                }
+              }}
+            />
+          }
+          current={
+            <div className="h-full min-h-0 overflow-hidden bg-rm-bg-secondary">
+              {renderNavigationContent()}
+            </div>
+          }
+        />
 
         {/* Main content */}
         <div className="flex-1 flex flex-col min-w-0 bg-rm-bg-primary overflow-hidden relative chat-main-content">
@@ -1511,75 +1603,6 @@ export default function ChatPage() {
           localStreamState={localStreamState}
           voiceJoined={voiceState.joined}
         />
-
-        {/* Floating UI anchored over the left nav without changing its location */}
-        <div
-          className={`absolute bottom-0 left-0 z-[120] w-[var(--left-nav-width)] pointer-events-none p-0 flex justify-start items-end max-md:fixed max-md:w-[min(calc(100vw),360px)] max-md:transition-transform max-md:duration-300 ${sidebarOpen ? "max-md:translate-x-0" : "max-md:-translate-x-full"}`}
-        >
-          <div className="pointer-events-auto w-full">
-            <UserPanel
-              user={user}
-              serverId={voiceState.serverId ?? activeServerId}
-              serverName={voiceServerName}
-              voiceConnected={voiceState.joined}
-              voiceChannelId={voiceState.channelId}
-              voiceChannelName={voiceChannelName}
-              onVoiceDisconnect={handleVoiceDisconnect}
-              onVoiceNavigate={handleVoiceNavigate}
-              isScreenSharing={localStreamState?.isScreenSharing}
-              isStreamingAudio={localStreamState?.isStreamingAudio}
-              screenQuality={localStreamState?.screenQuality}
-              currentScreenSource={localStreamState?.currentScreenSource}
-              availableQualities={localStreamState?.availableQualities}
-              onStopStreaming={() => localStreamState?.toggleScreenShare()}
-              onToggleStreamAudio={() => localStreamState?.toggleStreamAudio()}
-              onChangeStreamSource={() => {
-                localStreamState?.openScreenShareModal();
-              }}
-              onStartScreenShare={({
-                quality,
-                withAudio,
-                sourceId,
-                captureId,
-                sourceName,
-                sourceKind,
-                sourceAppName,
-                sourceIcon,
-              }) =>
-                localStreamState?.toggleScreenShare({
-                  quality,
-                  withAudio,
-                  sourceId,
-                  captureId,
-                  sourceName,
-                  sourceKind,
-                  sourceAppName,
-                  sourceIcon,
-                  changeSource: true,
-                })
-              }
-              onStreamQualityChange={(q: string) =>
-                localStreamState?.toggleScreenShare({ quality: q })
-              }
-              isCameraActive={localStreamState?.isCameraActive}
-              hasCamera={localStreamState?.hasCamera}
-              hasMicrophone={localStreamState?.hasMicrophone}
-              onToggleCamera={() => localStreamState?.toggleCamera()}
-              sfu={localStreamState?.sfu ?? null}
-              gridItems={localStreamState?.gridItems ?? []}
-              watchersByStreamer={localStreamState?.watchersByStreamer ?? {}}
-              spatialAudioState={localStreamState?.spatialAudioState}
-              onUpdateSpatialAudioState={
-                localStreamState?.updateSharedSpatialAudioState
-              }
-              voiceSettingsUserId={localStreamState?.settingsUserId}
-              roomSlug={localStreamState?.roomSlug}
-              voiceSessionId={localStreamState?.voiceSessionId}
-              onOpenActivities={() => setVoiceAppsModal("activities")}
-              sidebarWidthPx={channelSidebarWidth}
-            />
-          </div>
-        </div>
 
         {(localStreamState?.sfu ?? null) && (
           <Suspense fallback={null}>

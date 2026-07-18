@@ -7,6 +7,7 @@
 import { describe, expect, it } from "vitest";
 import fc from "fast-check";
 import {
+  resolveCameraVideoSubscriptionRid,
   resolvePreviewStartState,
   resolveScreenVideoSubscription,
   type ScreenSharePreviewKind,
@@ -75,5 +76,11 @@ describe("resolveScreenVideoSubscription", () => {
       }),
       { numRuns: 20 },
     );
+  });
+});
+
+describe("resolveCameraVideoSubscriptionRid", () => {
+  it("always selects the full-resolution camera layer", () => {
+    expect(resolveCameraVideoSubscriptionRid()).toBe("h");
   });
 });

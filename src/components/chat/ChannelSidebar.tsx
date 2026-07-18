@@ -17,13 +17,8 @@ import type {
 import { cn } from "@/lib/utils";
 import type { VoiceChannelMember } from "@/stores/chat-store";
 import { useChatActions, useChatStore } from "@/stores/chat-store";
-import { useVoiceActivityStore } from "@/stores/useVoiceActivityStore";
+import { useActivityStore } from "@/stores/useActivityStore";
 import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
-import { useListenTogetherStore } from "@/stores/useListenTogetherStore";
-import {
-  formatListenTogetherDuration,
-  useListenTogetherPlaybackState,
-} from "./listen-together-playback";
 import {
   Tooltip,
   TooltipContent,
@@ -75,7 +70,6 @@ import {
   UserPlus,
   Volume2,
   VolumeX,
-  Music2,
 } from "lucide-react";
 
 import {
@@ -102,6 +96,7 @@ import { VoiceStreamHoverCard } from "./VoiceStreamHoverCard";
 import VoiceChannelMediaStatusModal from "./VoiceChannelMediaStatusModal";
 import VoiceChannelTextStatusModal from "./VoiceChannelTextStatusModal";
 import InlineEmojiText from "./InlineEmojiText";
+import { ListenTogetherSidebarStatus } from "./ListenTogetherSidebarStatus";
 import {
   useDelayUnmount,
   useDelayedUnmountValue,
@@ -245,7 +240,7 @@ interface SortableChannelItemProps {
   localVoiceChannelId: string | null;
   localVoiceConnected: boolean;
   localVoiceSessionId: string | null;
-  listenTogetherTrack: ListenTogetherSidebarTrack | null;
+  listenTogetherRoomSlug: string | null;
   currentUserId: string | null;
   isDraggable: boolean;
   groupId: string | null;
@@ -280,12 +275,6 @@ interface SortableChannelItemProps {
     anchor: HTMLElement,
   ) => void;
   onWatchStream?: (channelId: string, userId: string) => void;
-}
-
-interface ListenTogetherSidebarTrack {
-  title: string;
-  artworkUrl: string | null;
-  elapsedMs: number;
 }
 
 function VoiceChannelMediaDisplay({
@@ -397,7 +386,7 @@ function SortableChannelItem({
   localVoiceChannelId,
   localVoiceConnected,
   localVoiceSessionId,
-  listenTogetherTrack,
+  listenTogetherRoomSlug,
   currentUserId,
   isDraggable,
   groupId: _groupId,
@@ -610,34 +599,8 @@ function SortableChannelItem({
         )}
       </div>
 
-      {isVoice && localVoiceChannelId === channel.id && listenTogetherTrack && (
-        <div className="mb-1 ml-7 mr-2 flex min-w-0 items-center gap-2 rounded-md px-1 py-1 text-rm-text-muted">
-          <div className="h-7 w-7 shrink-0 overflow-hidden rounded-md bg-rm-bg-elevated ring-1 ring-white/8">
-            {listenTogetherTrack.artworkUrl ? (
-              <img
-                src={listenTogetherTrack.artworkUrl}
-                alt=""
-                className="h-full w-full object-cover"
-                loading="lazy"
-              />
-            ) : (
-              <div className="flex h-full w-full items-center justify-center text-emerald-400">
-                <Music2 className="h-3.5 w-3.5" />
-              </div>
-            )}
-          </div>
-          <div className="min-w-0 flex-1">
-            <div className="flex min-w-0 items-center gap-1.5">
-              <Music2 className="h-3 w-3 shrink-0 text-emerald-400" />
-              <span className="truncate text-[12px] font-semibold text-rm-text-secondary">
-                {listenTogetherTrack.title}
-              </span>
-            </div>
-            <span className="mt-0.5 block text-[10px] tabular-nums text-emerald-400/80">
-              {formatListenTogetherDuration(listenTogetherTrack.elapsedMs)}
-            </span>
-          </div>
-        </div>
+      {isVoice && localVoiceChannelId === channel.id && (
+        <ListenTogetherSidebarStatus roomSlug={listenTogetherRoomSlug} />
       )}
 
       {shouldRenderVoiceStatus && (
@@ -962,23 +925,6 @@ export default function ChannelSidebar({
   const voiceSettings = useVoiceSettingsStore((s) => s.getSettings(user?.id));
   const setIsMuted = useVoiceSettingsStore((s) => s.setIsMuted);
   const setIsDeafened = useVoiceSettingsStore((s) => s.setIsDeafened);
-  const listenTogetherPlayback =
-    useListenTogetherPlaybackState(localVoiceRoomSlug);
-  const listenTogetherSnapshot = useListenTogetherStore((state) =>
-    localVoiceRoomSlug
-      ? (state.rooms[localVoiceRoomSlug]?.snapshot ?? null)
-      : null,
-  );
-  const listenTogetherEntry =
-    listenTogetherSnapshot?.currentEntry ?? listenTogetherPlayback.currentEntry;
-  const listenTogetherTrack: ListenTogetherSidebarTrack | null =
-    localVoiceChannelId && listenTogetherEntry
-      ? {
-          title: listenTogetherEntry.track.title,
-          artworkUrl: listenTogetherEntry.track.artworkUrl ?? null,
-          elapsedMs: listenTogetherPlayback.effectiveSeekValue,
-        }
-      : null;
   const [voiceMemberMenu, setVoiceMemberMenu] =
     useState<VoiceMemberContextMenuTarget | null>(null);
 
@@ -1154,7 +1100,7 @@ export default function ChannelSidebar({
                 localVoiceChannelId={localVoiceChannelId}
                 localVoiceConnected={localVoiceConnected}
                 localVoiceSessionId={localVoiceSessionId}
-                listenTogetherTrack={listenTogetherTrack}
+                listenTogetherRoomSlug={localVoiceRoomSlug}
                 channelMentionCounts={channelMentionCounts}
                 streamPreviewChannelId={streamPreviewChannelId}
                 streamThumbnails={streamThumbnails}
@@ -1644,9 +1590,10 @@ function VoiceChannelMemberRow({
   onPopoverUser,
   onWatchStream,
 }: VoiceChannelMemberRowProps) {
-  const activity = useVoiceActivityStore(
-    (state) => state.activeByUser[member.clerk_user_id],
-  );
+  const activity = useActivityStore((state) => {
+    const presence = state.activeByUser[member.clerk_user_id];
+    return presence?.channelId === channelId ? presence : undefined;
+  });
   const isReconnecting =
     isVoiceMemberReconnecting(member) ||
     (isCurrentUser && !isCurrentClientVoiceConnected);
@@ -1876,7 +1823,7 @@ interface ChannelCategoryGroupProps {
   localVoiceChannelId: string | null;
   localVoiceConnected: boolean;
   localVoiceSessionId: string | null;
-  listenTogetherTrack: ListenTogetherSidebarTrack | null;
+  listenTogetherRoomSlug: string | null;
   currentUserId: string | null;
   channelMentionCounts: Record<string, number>;
   streamPreviewChannelId: string | null;
@@ -1916,7 +1863,7 @@ function ChannelCategoryGroup({
   localVoiceChannelId,
   localVoiceConnected,
   localVoiceSessionId,
-  listenTogetherTrack,
+  listenTogetherRoomSlug,
   currentUserId,
   channelMentionCounts,
   streamPreviewChannelId,
@@ -2009,7 +1956,7 @@ function ChannelCategoryGroup({
               localVoiceChannelId={localVoiceChannelId}
               localVoiceConnected={localVoiceConnected}
               localVoiceSessionId={localVoiceSessionId}
-              listenTogetherTrack={listenTogetherTrack}
+              listenTogetherRoomSlug={listenTogetherRoomSlug}
               currentUserId={currentUserId}
               isDraggable={canReorder}
               groupId={group.id}

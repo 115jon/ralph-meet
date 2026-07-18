@@ -67,7 +67,7 @@ function makePlaybackState(
 }
 
 describe("ListenTogetherNowPlayingCard", () => {
-  it("anchors the loudness switch thumb inside its track", () => {
+  it("anchors the loudness switch thumb inside its compact audio menu", () => {
     render(
       <ListenTogetherNowPlayingCard
         playback={makePlaybackState()}
@@ -76,6 +76,8 @@ describe("ListenTogetherNowPlayingCard", () => {
         variant="panel"
       />,
     );
+
+    fireEvent.click(screen.getByText("Audio options"));
 
     const thumb = screen
       .getByRole("switch", { name: "Turn off loudness control" })
@@ -102,6 +104,7 @@ describe("ListenTogetherNowPlayingCard", () => {
       />,
     );
 
+    fireEvent.click(screen.getByText("Audio options"));
     await user.click(
       screen.getByRole("switch", { name: "Turn off loudness control" }),
     );

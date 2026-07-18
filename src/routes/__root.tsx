@@ -11,6 +11,7 @@ import {
 } from "@/lib/desktop-auth";
 import { getKovaAuthConfig } from "@/lib/kova-auth-config";
 import { isDesktop, isTauri } from "@/lib/platform";
+import { isSupportedNativeAuthUrl } from "@/lib/native-auth-handoff";
 import { KovaAuthProvider, useAuth } from "@kova/react";
 import {
   HeadContent,
@@ -168,79 +169,86 @@ function DesktopDeepLinkBridge() {
     let disposed = false;
     let cleanup: (() => void) | undefined;
 
+    const handleDeepLink = (payload: unknown) => {
+      if (disposed) return;
+      deepLinkLog.info("Event received", {
+        payloadKind: Array.isArray(payload) ? "array" : typeof payload,
+      });
+
+      const url = extractDeepLinkUrl(payload);
+      if (!url) {
+        deepLinkLog.warn("No ralphmeet URL found in event payload");
+        return;
+      }
+
+      deepLinkLog.info("Parsed deep link", {
+        protocol: safeProtocol(url),
+        hasAuthCode: !!extractAuthCode(url),
+      });
+
+      const authCode = extractAuthCode(url);
+      if (authCode) {
+        deepLinkLog.info("Deep link contained auth code fallback", {
+          codeLength: authCode.length,
+        });
+        void navigate({
+          to: "/chat",
+          search: { kova_auth_code: authCode },
+          replace: true,
+        } as any);
+        return;
+      }
+
+      const inviteCode = extractInviteCode(url);
+      if (inviteCode) {
+        deepLinkLog.info("Deep link contained invite code");
+        void navigate({
+          to: "/invite/$code",
+          params: { code: inviteCode },
+        } as any);
+        return;
+      }
+
+      deepLinkLog.warn("Deep link did not contain an auth code or invite");
+    };
+
     async function listenForDeepLinks() {
       try {
-        const { listen } = await import("@tauri-apps/api/event");
-
-        const handleDeepLink = (payload: unknown) => {
-          if (disposed) return;
-          deepLinkLog.info("Event received", {
-            payloadKind: Array.isArray(payload) ? "array" : typeof payload,
-          });
-
-          const url = extractDeepLinkUrl(payload);
-          if (!url) {
-            deepLinkLog.warn("No ralphmeet URL found in event payload");
-            return;
-          }
-
-          deepLinkLog.info("Parsed deep link", {
-            protocol: safeProtocol(url),
-            hasSessionToken: !!extractSearchParam(url, "session_token"),
-            hasAuthCode: !!extractAuthCode(url),
-          });
-
-          const authCode = extractAuthCode(url);
-          if (authCode) {
-            deepLinkLog.info("Deep link contained auth code fallback", {
-              codeLength: authCode.length,
-            });
-            void navigate({
-              to: "/chat",
-              search: { kova_auth_code: authCode },
-              replace: true,
-            } as any);
-            return;
-          }
-
-          const sessionToken = extractSearchParam(url, "session_token");
-          if (sessionToken) {
-            setDesktopAuthSession(sessionToken);
-            deepLinkLog.info(
-              "Raw session token handoff received and stored; login view will validate it",
-            );
-            void navigate({ to: "/", replace: true });
-            return;
-          }
-
-          const inviteCode = extractInviteCode(url);
-          if (inviteCode) {
-            deepLinkLog.info("Deep link contained invite code");
-            void navigate({
-              to: "/invite/$code",
-              params: { code: inviteCode },
-            } as any);
-            return;
-          }
-
-          deepLinkLog.warn(
-            "Deep link did not contain a session token, auth code, or invite",
-          );
-        };
+        const [{ listen }, { getCurrent }] = await Promise.all([
+          import("@tauri-apps/api/event"),
+          import("@tauri-apps/plugin-deep-link"),
+        ]);
+        if (disposed) return;
 
         const unlistenDeepLink = await listen("deep-link", (event) =>
           handleDeepLink(event.payload),
         );
+        if (disposed) {
+          unlistenDeepLink();
+          return;
+        }
         const unlistenNewUrl = await listen("deep-link://new-url", (event) =>
           handleDeepLink(event.payload),
         );
-
-        deepLinkLog.info("Listening for desktop deep links");
 
         cleanup = () => {
           unlistenDeepLink();
           unlistenNewUrl();
         };
+        if (disposed) {
+          cleanup();
+          cleanup = undefined;
+          return;
+        }
+
+        deepLinkLog.info("Listening for desktop deep links");
+
+        try {
+          const currentUrls = await getCurrent();
+          if (currentUrls?.length) handleDeepLink(currentUrls);
+        } catch (error) {
+          deepLinkLog.warn("Failed to read current deep link:", error);
+        }
       } catch (error) {
         deepLinkLog.error("Failed to listen for deep links:", error);
       }
@@ -299,6 +307,7 @@ function extractSearchParam(url: string, key: string): string | null {
 }
 
 function extractAuthCode(url: string): string | null {
+  if (!isSupportedNativeAuthUrl(url)) return null;
   return (
     extractSearchParam(url, "kova_auth_code") ??
     extractSearchParam(url, "ralph_auth_code") ??

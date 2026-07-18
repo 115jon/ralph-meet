@@ -103,7 +103,8 @@ export async function deleteChannel(
     serverId: channel.server_id,
     cacheKeysToInvalidate: [CacheKey.serverChannels(channel.server_id)],
     broadcast: {
-      type: "all",
+      type: "server",
+      target: channel.server_id,
       event: "CHANNEL_DELETE",
       data: { id: channelId, server_id: channel.server_id },
     },
@@ -197,7 +198,8 @@ export async function updateChannel(
       channel: currentChannel,
       cacheKeysToInvalidate: [],
       broadcast: {
-        type: "all",
+        type: "server",
+        target: existing.server_id,
         event: "CHANNEL_UPDATE",
         data: { server_id: existing.server_id, channel: currentChannel },
       },
@@ -229,7 +231,8 @@ export async function updateChannel(
     channel: updated,
     cacheKeysToInvalidate: [CacheKey.serverChannels(existing.server_id)],
     broadcast: {
-      type: "all",
+      type: "server",
+      target: existing.server_id,
       event: "CHANNEL_UPDATE",
       data: { server_id: existing.server_id, channel: updated },
     },
@@ -288,7 +291,8 @@ export async function updateVoiceChannelStatus(
       channel: currentChannel,
       cacheKeysToInvalidate: [],
       broadcast: {
-        type: "all",
+        type: "server",
+        target: existing.server_id,
         event: "CHANNEL_UPDATE",
         data: { server_id: existing.server_id, channel: currentChannel },
       },
@@ -319,7 +323,8 @@ export async function updateVoiceChannelStatus(
     channel: updated,
     cacheKeysToInvalidate: [CacheKey.serverChannels(existing.server_id)],
     broadcast: {
-      type: "all",
+      type: "server",
+      target: existing.server_id,
       event: "CHANNEL_UPDATE",
       data: { server_id: existing.server_id, channel: updated },
     },
@@ -414,7 +419,8 @@ export async function createChannel(
     channel,
     cacheKeysToInvalidate: [CacheKey.serverChannels(serverId)],
     broadcast: {
-      type: "all",
+      type: "server",
+      target: serverId,
       event: "CHANNEL_UPDATE",
       data: { server_id: serverId, channel },
     },
@@ -525,7 +531,8 @@ export async function upsertPermissionOverride(
   return {
     serverId: channel.server_id,
     broadcast: {
-      type: "all",
+      type: "server",
+      target: channel.server_id,
       event: "CHANNEL_UPDATE",
       data: { server_id: channel.server_id, id: channelId },
     },
@@ -558,7 +565,8 @@ export async function deletePermissionOverride(
   return {
     serverId: channel.server_id,
     broadcast: {
-      type: "all",
+      type: "server",
+      target: channel.server_id,
       event: "CHANNEL_UPDATE",
       data: { server_id: channel.server_id, id: channelId },
     },
@@ -617,7 +625,8 @@ export async function reorderChannels(
   return {
     cacheKeysToInvalidate: [CacheKey.serverChannels(serverId)],
     broadcast: {
-      type: "all",
+      type: "server",
+      target: serverId,
       event: "CHANNEL_UPDATE",
       data: { server_id: serverId },
     },

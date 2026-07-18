@@ -3,10 +3,9 @@ import { useEffect, useRef, useState } from "react";
 
 import type { SFUClient } from "@/lib/sfu-client";
 import { ListenTogetherNowPlayingCard } from "./ListenTogetherNowPlayingCard";
-import type { ListenTogetherPlaybackState } from "./listen-together-playback";
+import { useListenTogetherPlaybackState } from "./listen-together-playback";
 
 interface FloatingListenTogetherPlayerProps {
-  playback: ListenTogetherPlaybackState;
   sfu: SFUClient | null;
   roomSlug?: string | null;
   onOpenQueue?: () => void;
@@ -43,11 +42,11 @@ function clampPosition(
 }
 
 export function FloatingListenTogetherPlayer({
-  playback,
   sfu,
   roomSlug,
   onOpenQueue,
 }: FloatingListenTogetherPlayerProps) {
+  const playback = useListenTogetherPlaybackState(roomSlug);
   const containerRef = useRef<HTMLDivElement>(null);
   const dragStateRef = useRef<{
     pointerId: number;
@@ -68,7 +67,6 @@ export function FloatingListenTogetherPlayer({
       );
     };
 
-    clampToViewport();
     window.addEventListener("resize", clampToViewport);
     return () => window.removeEventListener("resize", clampToViewport);
   }, []);

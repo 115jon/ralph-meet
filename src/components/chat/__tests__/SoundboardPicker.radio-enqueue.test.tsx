@@ -16,19 +16,20 @@ vi.mock("@/lib/api-client", () => ({
   apiPatch: vi.fn(),
 }));
 
-vi.mock("@/stores/chat-store", () => ({
-  useChatStore: {
-    getState: () => ({
-      user: {
-        id: "user-1",
-        username: "testuser",
-        display_name: "Test User",
-        avatar_url: null,
-        avatar_display: null,
-      },
-    }),
-  },
-}));
+vi.mock("@/stores/chat-store", () => {
+  const useChatStore = (selector: (state: unknown) => unknown) =>
+    selector({ servers: [] });
+  useChatStore.getState = () => ({
+    user: {
+      id: "user-1",
+      username: "testuser",
+      display_name: "Test User",
+      avatar_url: null,
+      avatar_display: null,
+    },
+  });
+  return { useChatStore };
+});
 
 describe("SoundboardPicker - Radio Enqueue", () => {
   let mockSfu: SFUClient;

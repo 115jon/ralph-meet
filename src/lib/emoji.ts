@@ -14,6 +14,9 @@ export const NATIVE_EMOJI_SKIN_TONE_OPTIONS = [
   { tone: 5, label: "Dark" },
 ] as const;
 
+let cachedEmojiRecentsRaw: string | null | undefined;
+let cachedEmojiRecents: EmojiRecentItem[] = [];
+
 export type NativeEmojiSkinTone =
   (typeof NATIVE_EMOJI_SKIN_TONE_OPTIONS)[number]["tone"];
 
@@ -623,14 +626,29 @@ export function loadEmojiRecents(): EmojiRecentItem[] {
   )
     return [];
 
+  let raw: string | null;
   try {
-    const raw = window.localStorage.getItem(EMOJI_RECENTS_STORAGE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    return parsed.filter(isEmojiRecentItem).slice(0, MAX_EMOJI_RECENTS);
+    raw = window.localStorage.getItem(EMOJI_RECENTS_STORAGE_KEY);
   } catch {
-    return [];
+    return cachedEmojiRecents;
+  }
+
+  if (raw === cachedEmojiRecentsRaw) return cachedEmojiRecents;
+  cachedEmojiRecentsRaw = raw;
+
+  try {
+    if (!raw) {
+      cachedEmojiRecents = [];
+      return cachedEmojiRecents;
+    }
+    const parsed = JSON.parse(raw);
+    cachedEmojiRecents = Array.isArray(parsed)
+      ? parsed.filter(isEmojiRecentItem).slice(0, MAX_EMOJI_RECENTS)
+      : [];
+    return cachedEmojiRecents;
+  } catch {
+    cachedEmojiRecents = [];
+    return cachedEmojiRecents;
   }
 }
 
@@ -641,11 +659,13 @@ export function saveEmojiRecents(items: EmojiRecentItem[]): void {
   )
     return;
 
+  const next = items.slice(0, MAX_EMOJI_RECENTS);
+  const raw = JSON.stringify(next);
+  cachedEmojiRecentsRaw = raw;
+  cachedEmojiRecents = next;
+
   try {
-    window.localStorage.setItem(
-      EMOJI_RECENTS_STORAGE_KEY,
-      JSON.stringify(items.slice(0, MAX_EMOJI_RECENTS)),
-    );
+    window.localStorage.setItem(EMOJI_RECENTS_STORAGE_KEY, raw);
   } catch {
     // Non-critical persistence.
   }

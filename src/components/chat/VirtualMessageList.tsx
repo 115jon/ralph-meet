@@ -90,7 +90,6 @@ function buildIndexMap(messages: Message[]): Map<string, number> {
 
 interface MessageRow {
   message: Message;
-  arrayIndex: number;
   showHeader: boolean;
   showSeparator: boolean;
 }
@@ -118,7 +117,6 @@ function buildMessageRows(
 
     return {
       message,
-      arrayIndex: index,
       showHeader: showHeader || showSeparator,
       showSeparator,
     };
@@ -192,6 +190,83 @@ const ListHeader = memo(
   },
 );
 ListHeader.displayName = "ListHeader";
+
+interface VirtualMessageRowProps {
+  message: Message;
+  showHeader: boolean;
+  showSeparator: boolean;
+  currentUserId?: string;
+  canPin: boolean;
+  canDeleteMessages: boolean;
+  onReply: (message: Message) => void;
+  onPin: (message: Message) => void;
+  onUnpin: (messageId: string, skipConfirm?: boolean) => void;
+  onJump: (messageId: string) => void;
+  onBan?: (userId: string, username: string) => void;
+  onThread?: (messageId: string) => void;
+  onMediaPlay: (messageId: string) => void;
+  onMediaStop: (messageId: string) => void;
+  onMessageVisible?: (messageId: string) => void;
+  onHeightChange: () => void;
+}
+
+const VirtualMessageRow = memo(function VirtualMessageRow({
+  message,
+  showHeader,
+  showSeparator,
+  currentUserId,
+  canPin,
+  canDeleteMessages,
+  onReply,
+  onPin,
+  onUnpin,
+  onJump,
+  onBan,
+  onThread,
+  onMediaPlay,
+  onMediaStop,
+  onMessageVisible,
+  onHeightChange,
+}: VirtualMessageRowProps) {
+  const handleMediaPlay = useCallback(
+    () => onMediaPlay(message.id),
+    [message.id, onMediaPlay],
+  );
+  const handleMediaStop = useCallback(
+    () => onMediaStop(message.id),
+    [message.id, onMediaStop],
+  );
+  const handleVisible = useCallback(
+    () => onMessageVisible?.(message.id),
+    [message.id, onMessageVisible],
+  );
+
+  return (
+    <div>
+      {showSeparator && <NewMessageSeparator />}
+      <MessageItem
+        id={`message-${message.id}`}
+        message={message}
+        showHeader={showHeader}
+        currentUserId={currentUserId}
+        canPin={canPin}
+        canDeleteMessages={canDeleteMessages}
+        onReply={onReply}
+        onPin={onPin}
+        onUnpin={onUnpin}
+        onJump={onJump}
+        onBan={onBan}
+        onThread={onThread}
+        onMediaPlay={handleMediaPlay}
+        onMediaStop={handleMediaStop}
+        onVisible={onMessageVisible ? handleVisible : undefined}
+        onHeightChange={onHeightChange}
+      />
+    </div>
+  );
+});
+
+VirtualMessageRow.displayName = "VirtualMessageRow";
 
 // ── Main component ─────────────────────────────────────────────────────────
 
@@ -273,14 +348,47 @@ const VirtualMessageList = forwardRef<VirtualMessageListHandle, Props>(
     }, [onInitialScrollSettled]);
 
     // ── Track which indices should always stick around (e.g. playing media) ──
-    const [keepMounted, setKeepMounted] = useState<number[]>([]);
-    const handleMediaPlay = useCallback((index: number) => {
-      // +1 offset for ListHeader at index 0
-      const vIndex = index + 1;
-      setKeepMounted((prev) => {
-        if (!prev.includes(vIndex)) return [...prev, vIndex];
+    const [activeMediaMessageIds, setActiveMediaMessageIds] = useState<
+      string[]
+    >([]);
+    const activeMediaCountsRef = useRef(new Map<string, number>());
+    const mediaContextKey = `${isDetached ? "detached" : "attached"}:${initialScrollMessageId ?? ""}`;
+    const activeMediaContextRef = useRef(mediaContextKey);
+    if (activeMediaContextRef.current !== mediaContextKey) {
+      activeMediaContextRef.current = mediaContextKey;
+      activeMediaCountsRef.current.clear();
+      setActiveMediaMessageIds([]);
+    }
+    const keepMounted = useMemo(
+      () =>
+        activeMediaMessageIds.flatMap((messageId) => {
+          const index = messageIndexMap.get(messageId);
+          return index === undefined ? [] : [index + 1];
+        }),
+      [activeMediaMessageIds, messageIndexMap],
+    );
+    const handleMediaPlay = useCallback((messageId: string) => {
+      activeMediaCountsRef.current.set(
+        messageId,
+        (activeMediaCountsRef.current.get(messageId) ?? 0) + 1,
+      );
+      setActiveMediaMessageIds((prev) => {
+        if (!prev.includes(messageId)) return [...prev, messageId];
         return prev;
       });
+    }, []);
+    const handleMediaStop = useCallback((messageId: string) => {
+      const nextCount = Math.max(
+        0,
+        (activeMediaCountsRef.current.get(messageId) ?? 0) - 1,
+      );
+      if (nextCount === 0) activeMediaCountsRef.current.delete(messageId);
+      else activeMediaCountsRef.current.set(messageId, nextCount);
+      if (nextCount > 0) return;
+
+      setActiveMediaMessageIds((prev) =>
+        prev.filter((activeMessageId) => activeMessageId !== messageId),
+      );
     }, []);
 
     // ── Prepend tracking ─────────────────────────────────────────────────
@@ -331,54 +439,41 @@ const VirtualMessageList = forwardRef<VirtualMessageListHandle, Props>(
     const [mountKey, setMountKey] = useState(0);
     const prevDetachedRef = useRef(isDetached);
     const prevInitialScrollIdRef = useRef(initialScrollMessageId);
+    const previousDetached = prevDetachedRef.current;
+    const previousInitialScrollMessageId = prevInitialScrollIdRef.current;
+    const scrollIdChanged =
+      initialScrollMessageId !== previousInitialScrollMessageId;
+    const enteredDetached = isDetached && !previousDetached;
+    const leftViaJumpToPresent =
+      !isDetached && previousDetached && scrollIdChanged;
+    const hasNonBottomScrollTarget =
+      scrollIdChanged &&
+      initialScrollMessageId !== null &&
+      initialScrollMessageId !== "" &&
+      initialScrollMessageId !== "BOTTOM";
+    const shouldRemount =
+      enteredDetached || leftViaJumpToPresent || hasNonBottomScrollTarget;
+
+    // Apply restore-context changes before commit so the list never renders
+    // with media pins or scroll state from the previous message context.
+    if (shouldRemount) {
+      scrollRunIdRef.current += 1;
+      setMountKey((k) => k + 1);
+      initialScrollDoneRef.current = false;
+      restoreSettledRef.current = false;
+      canLoadMoreRef.current = false;
+      shouldStickToBottom.current =
+        !initialScrollMessageId || initialScrollMessageId === "BOTTOM";
+    }
+
+    prevDetachedRef.current = isDetached;
+    prevInitialScrollIdRef.current = initialScrollMessageId;
 
     useEffect(() => {
-      // Clear keepMounted if we are jumping far away
-      setKeepMounted([]);
-      const scrollIdChanged =
-        initialScrollMessageId !== prevInitialScrollIdRef.current;
-
-      // Only remount when ENTERING detached mode (new jump target), or
-      // when leaving it via "Jump to Present" (which reloads messages).
-      // Forward pagination (handleLoadAfter) only changes isDetached without
-      // changing scrollId, so it doesn't remount — keeps scroll position.
-      const enteredDetached = isDetached && !prevDetachedRef.current;
-      const leftViaJumpToPresent =
-        !isDetached && prevDetachedRef.current && scrollIdChanged;
-
-      debugChatScroll("restore context", {
-        isDetached,
-        previousDetached: prevDetachedRef.current,
-        initialScrollMessageId,
-        previousInitialScrollMessageId: prevInitialScrollIdRef.current,
-        scrollIdChanged,
-        enteredDetached,
-        leftViaJumpToPresent,
-      });
-
-      if (
-        enteredDetached ||
-        leftViaJumpToPresent ||
-        (scrollIdChanged &&
-          initialScrollMessageId &&
-          initialScrollMessageId !== "BOTTOM")
-      ) {
-        scrollRunIdRef.current += 1;
-        setMountKey((k) => k + 1);
-        initialScrollDoneRef.current = false;
-        restoreSettledRef.current = false;
-        canLoadMoreRef.current = false;
-        shouldStickToBottom.current =
-          !initialScrollMessageId || initialScrollMessageId === "BOTTOM";
-      }
-
-      prevDetachedRef.current = isDetached;
-      prevInitialScrollIdRef.current = initialScrollMessageId;
-    }, [isDetached, initialScrollMessageId]);
-
-    useEffect(() => {
+      const activeMediaCounts = activeMediaCountsRef.current;
       return () => {
         scrollRunIdRef.current += 1;
+        activeMediaCounts.clear();
       };
     }, []);
 
@@ -813,36 +908,27 @@ const VirtualMessageList = forwardRef<VirtualMessageListHandle, Props>(
             welcomeContent={welcomeContent}
           />
 
-          {messageRows.map(
-            ({ message: msg, arrayIndex, showHeader, showSeparator }) => {
-              return (
-                <div key={msg.id}>
-                  {showSeparator && <NewMessageSeparator />}
-                  <MessageItem
-                    id={`message-${msg.id}`}
-                    message={msg}
-                    showHeader={showHeader}
-                    currentUserId={currentUserId}
-                    canPin={canPin}
-                    canDeleteMessages={canDeleteMessages}
-                    onReply={onReply}
-                    onPin={onPin}
-                    onUnpin={onUnpin}
-                    onJump={onJump}
-                    onBan={onBan}
-                    onThread={onThread}
-                    onMediaPlay={() => handleMediaPlay(arrayIndex)}
-                    onVisible={
-                      onMessageVisible
-                        ? () => onMessageVisible(msg.id)
-                        : undefined
-                    }
-                    onHeightChange={handleHeightChange}
-                  />
-                </div>
-              );
-            },
-          )}
+          {messageRows.map(({ message: msg, showHeader, showSeparator }) => (
+            <VirtualMessageRow
+              key={msg.id}
+              message={msg}
+              showHeader={showHeader}
+              showSeparator={showSeparator}
+              currentUserId={currentUserId}
+              canPin={canPin}
+              canDeleteMessages={canDeleteMessages}
+              onReply={onReply}
+              onPin={onPin}
+              onUnpin={onUnpin}
+              onJump={onJump}
+              onBan={onBan}
+              onThread={onThread}
+              onMediaPlay={handleMediaPlay}
+              onMediaStop={handleMediaStop}
+              onMessageVisible={onMessageVisible}
+              onHeightChange={handleHeightChange}
+            />
+          ))}
         </Virtualizer>
       </div>
     );

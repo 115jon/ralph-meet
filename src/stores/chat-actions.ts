@@ -14,6 +14,7 @@ import type {
   User,
 } from "@/lib/types";
 import { useMediaSafetySettingsStore } from "./useMediaSafetySettingsStore";
+import { useSoundSettingsStore } from "./useSoundSettingsStore";
 
 export interface ChatRestActions {
   sendMessage: (
@@ -46,19 +47,27 @@ export interface ChatRestActions {
   loadMessages: (
     channelId: string,
     before?: string,
+    options?: { signal?: AbortSignal },
   ) => Promise<{
     messages: Message[];
     hasMoreBefore: boolean;
     hasMoreAfter: boolean;
+    stale?: boolean;
   }>;
   loadMessagesAround: (
     channelId: string,
     messageId: string,
-  ) => Promise<{ hasMoreBefore: boolean; hasMoreAfter: boolean }>;
+    options?: { signal?: AbortSignal },
+  ) => Promise<{
+    hasMoreBefore: boolean;
+    hasMoreAfter: boolean;
+    stale?: boolean;
+  }>;
   loadMessagesAfter: (
     channelId: string,
     after: string,
-  ) => Promise<{ hasMoreAfter: boolean }>;
+    options?: { signal?: AbortSignal },
+  ) => Promise<{ hasMoreAfter: boolean; stale?: boolean }>;
   loadServers: () => Promise<void>;
   loadChannels: (
     serverId: string,
@@ -83,9 +92,10 @@ export interface ChatRestActions {
     custom_status?: string | null,
   ) => void;
   loadProfile: () => Promise<void>;
-  loadCurrentUser: () => Promise<void>;
+  loadCurrentUser: (expectedUserId?: string) => Promise<void>;
   loadReadStates: () => Promise<void>;
-  markChannelRead: (channelId: string) => void;
+  markChannelRead: (channelId: string, messageTimestamp?: string) => void;
+  resetReadStateTracking: (userId: string | null) => void;
   markChannelUnread: (
     channelId: string,
     messageId: string,
@@ -94,12 +104,18 @@ export interface ChatRestActions {
   pinMessage: (channelId: string, messageId: string) => Promise<void>;
   unpinMessage: (channelId: string, messageId: string) => Promise<void>;
   loadPins: (channelId: string, force?: boolean) => Promise<void>;
+  refreshMessageEmbeds: (
+    channelId: string,
+    messageIds: string[],
+  ) => Promise<void>;
   loadDmChannels: () => Promise<void>;
   loadRelationships: () => Promise<void>;
   openDm: (targetUserId: string) => Promise<string | null>;
   loadNotifications: () => Promise<void>;
   bootstrapChat: (options?: {
     includeNotifications?: boolean;
+    expectedUserId?: string;
+    deferNonCritical?: boolean;
   }) => Promise<void>;
   markNotificationsRead: (ids?: string[]) => Promise<void>;
   clearNotifications: () => Promise<void>;
@@ -118,6 +134,7 @@ type MessagePage = {
   messages: Message[];
   hasMoreBefore: boolean;
   hasMoreAfter: boolean;
+  stale?: boolean;
 };
 
 function normalizeMessagePage(
@@ -144,11 +161,52 @@ function normalizeMessagePage(
   };
 }
 
+function compareTimestamps(left: string, right: string): number {
+  const leftMs = Date.parse(normalizeTimestamp(left));
+  const rightMs = Date.parse(normalizeTimestamp(right));
+  if (!Number.isNaN(leftMs) && !Number.isNaN(rightMs)) {
+    return leftMs - rightMs;
+  }
+  return left.localeCompare(right);
+}
+
+function normalizeTimestamp(value: string): string {
+  const trimmed = value.trim();
+  if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:\.\d+)?$/.test(trimmed)) {
+    return `${trimmed.replace(" ", "T")}Z`;
+  }
+  return trimmed;
+}
+
 export function createChatActions(
   get: () => ChatState,
   dispatch: (action: ChatAction) => void,
 ): ChatRestActions {
-  let inFlightBootstrap: Promise<void> | null = null;
+  let inFlightBootstrap: {
+    userId: string | null;
+    promise: Promise<void>;
+  } | null = null;
+  const lastMarkedReadAtByChannel = new Map<string, string>();
+  const readStateWrites = new Map<string, Promise<void>>();
+  const readStateMutations = new Map<string, Promise<void>>();
+  const pendingReadRequests = new Set<string>();
+  const pendingReadMessageAt = new Map<string, string>();
+  const unreadBarriers = new Set<string>();
+  let readStateOwnerId: string | null = null;
+  let readStateGeneration = 0;
+  const messageRequestGenerations = new Map<string, number>();
+
+  const resetReadStateTracking = (userId: string | null) => {
+    if (readStateOwnerId === userId) return;
+    readStateOwnerId = userId;
+    readStateGeneration++;
+    lastMarkedReadAtByChannel.clear();
+    readStateWrites.clear();
+    readStateMutations.clear();
+    pendingReadRequests.clear();
+    pendingReadMessageAt.clear();
+    unreadBarriers.clear();
+  };
 
   const syncDesktopNotifications = async () => {
     const state = get();
@@ -300,17 +358,26 @@ export function createChatActions(
   const loadMessages = async (
     channelId: string,
     before?: string,
+    options?: { signal?: AbortSignal },
   ): Promise<MessagePage> => {
+    const requestGeneration =
+      (messageRequestGenerations.get(channelId) ?? 0) + 1;
+    messageRequestGenerations.set(channelId, requestGeneration);
+    const messagesAtRequestStart = get().messagesByChannelId[channelId] ?? [];
     const params = new URLSearchParams({ limit: "50" });
     if (before) params.set("before", before);
     try {
       const data = await apiGet<MessagePage | Message[]>(
         `/api/channels/${channelId}/messages?${params}`,
+        options,
       );
       const normalized = normalizeMessagePage(data);
       const messages = normalized.messages;
-      if (get().activeChannelId !== channelId) {
-        return normalized;
+      if (
+        get().activeChannelId !== channelId ||
+        messageRequestGenerations.get(channelId) !== requestGeneration
+      ) {
+        return { ...normalized, stale: true };
       }
       if (!before) {
         dispatch({
@@ -319,6 +386,7 @@ export function createChatActions(
           channelId,
           hasMoreBefore: normalized.hasMoreBefore,
           hasMoreAfter: normalized.hasMoreAfter,
+          preserveMessagesFrom: messagesAtRequestStart,
         });
       } else {
         dispatch({
@@ -337,13 +405,25 @@ export function createChatActions(
   const loadMessagesAround = async (
     channelId: string,
     messageId: string,
-  ): Promise<{ hasMoreBefore: boolean; hasMoreAfter: boolean }> => {
+    options?: { signal?: AbortSignal },
+  ): Promise<{
+    hasMoreBefore: boolean;
+    hasMoreAfter: boolean;
+    stale?: boolean;
+  }> => {
+    const requestGeneration =
+      (messageRequestGenerations.get(channelId) ?? 0) + 1;
+    messageRequestGenerations.set(channelId, requestGeneration);
     try {
       const data = await apiGet<MessagePage | Message[]>(
         `/api/channels/${channelId}/messages?around=${encodeURIComponent(messageId)}`,
+        options,
       );
       const normalized = normalizeMessagePage(data);
-      if (get().activeChannelId === channelId) {
+      if (
+        get().activeChannelId === channelId &&
+        messageRequestGenerations.get(channelId) === requestGeneration
+      ) {
         dispatch({
           type: "REPLACE_MESSAGES",
           messages: normalized.messages,
@@ -351,6 +431,12 @@ export function createChatActions(
           hasMoreBefore: normalized.hasMoreBefore,
           hasMoreAfter: normalized.hasMoreAfter,
         });
+      } else {
+        return {
+          hasMoreBefore: normalized.hasMoreBefore,
+          hasMoreAfter: normalized.hasMoreAfter,
+          stale: true,
+        };
       }
       return {
         hasMoreBefore: normalized.hasMoreBefore,
@@ -364,19 +450,29 @@ export function createChatActions(
   const loadMessagesAfter = async (
     channelId: string,
     after: string,
-  ): Promise<{ hasMoreAfter: boolean }> => {
+    options?: { signal?: AbortSignal },
+  ): Promise<{ hasMoreAfter: boolean; stale?: boolean }> => {
+    const requestGeneration =
+      (messageRequestGenerations.get(channelId) ?? 0) + 1;
+    messageRequestGenerations.set(channelId, requestGeneration);
     try {
       const data = await apiGet<MessagePage | Message[]>(
         `/api/channels/${channelId}/messages?after=${encodeURIComponent(after)}&limit=50`,
+        options,
       );
       const normalized = normalizeMessagePage(data);
-      if (get().activeChannelId === channelId) {
+      if (
+        get().activeChannelId === channelId &&
+        messageRequestGenerations.get(channelId) === requestGeneration
+      ) {
         dispatch({
           type: "APPEND_MESSAGES_AFTER",
           messages: normalized.messages,
           channelId,
           hasMoreAfter: normalized.hasMoreAfter,
         });
+      } else {
+        return { hasMoreAfter: normalized.hasMoreAfter, stale: true };
       }
       return { hasMoreAfter: normalized.hasMoreAfter };
     } catch {
@@ -384,11 +480,11 @@ export function createChatActions(
     }
   };
 
-  const loadServers = async () => {
+  const loadServers = async (generation = readStateGeneration) => {
     try {
       const servers = await apiGet<Server[]>("/api/servers");
       // Guard: only dispatch if we got a valid array (API errors can return objects)
-      if (Array.isArray(servers)) {
+      if (generation === readStateGeneration && Array.isArray(servers)) {
         dispatch({ type: "SET_SERVERS", servers });
       }
     } catch {
@@ -526,11 +622,12 @@ export function createChatActions(
     apiPost("/api/presence", { status, custom_status }).catch(console.error);
   };
 
-  const loadProfile = async () => {
+  const loadProfile = async (generation = readStateGeneration) => {
     try {
       const data = await apiGet<{ status: string; custom_status?: string }>(
         "/api/presence",
       );
+      if (generation !== readStateGeneration) return;
       dispatch({
         type: "SET_STATUS",
         status: data.status as "online" | "idle" | "dnd" | "offline",
@@ -541,7 +638,9 @@ export function createChatActions(
     }
   };
 
-  const loadCurrentUser = async () => {
+  const loadCurrentUser = async (expectedUserId?: string) => {
+    const loadGeneration = readStateGeneration;
+    const userIdAtStart = expectedUserId ?? get().user?.id ?? null;
     try {
       const profile = await apiGet<{
         id: string;
@@ -572,8 +671,23 @@ export function createChatActions(
         pronouns?: string | null;
         status?: string;
         custom_status?: string;
+        sound_settings?: {
+          voiceJoinSoundboard?: unknown;
+          voiceLeaveSoundboard?: unknown;
+          soundboardVolume?: unknown;
+        };
       }>("/api/users/me");
+      if (
+        loadGeneration !== readStateGeneration ||
+        (userIdAtStart !== null && profile.id !== userIdAtStart)
+      ) {
+        return;
+      }
       const current = get().user;
+      resetReadStateTracking(profile.id);
+      useSoundSettingsStore
+        .getState()
+        .hydrateFromBackend(profile.sound_settings, profile.id);
       // SET_USER fully replaces state.user — merge D1 profile with existing state
       dispatch({
         type: "SET_USER",
@@ -646,6 +760,10 @@ export function createChatActions(
   };
 
   const loadReadStates = async () => {
+    const loadGeneration = readStateGeneration;
+    const readStatesAtStart = { ...get().readStates };
+    const lastMessagesAtStart = { ...get().lastMessageAt };
+    const mutationsAtStart = new Set(readStateMutations.keys());
     try {
       const data = await apiGet<{
         read_states: Array<{ channel_id: string; last_read_at: string }>;
@@ -653,24 +771,148 @@ export function createChatActions(
       }>("/api/read-states");
       const readStates: Record<string, string> = {};
       for (const rs of data.read_states) {
-        readStates[rs.channel_id] = rs.last_read_at;
+        readStates[rs.channel_id] = normalizeTimestamp(rs.last_read_at);
       }
       const lastMessageAt: Record<string, string> = {};
       for (const lm of data.last_messages) {
-        lastMessageAt[lm.channel_id] = lm.last_message_at;
+        lastMessageAt[lm.channel_id] = normalizeTimestamp(lm.last_message_at);
       }
-      dispatch({ type: "SET_READ_STATES", readStates, lastMessageAt });
+      if (loadGeneration !== readStateGeneration) return;
+      const currentState = get();
+      const mergedReadStates = { ...readStates };
+      const mergedLastMessageAt = { ...lastMessageAt };
+      let changedDuringLoad = false;
+
+      for (const [channelId, timestamp] of Object.entries(
+        currentState.readStates,
+      )) {
+        if (
+          mutationsAtStart.has(channelId) ||
+          readStatesAtStart[channelId] !== timestamp
+        ) {
+          mergedReadStates[channelId] = timestamp;
+          changedDuringLoad = true;
+        }
+      }
+      for (const [channelId, timestamp] of Object.entries(
+        currentState.lastMessageAt,
+      )) {
+        if (lastMessagesAtStart[channelId] !== timestamp) {
+          mergedLastMessageAt[channelId] = timestamp;
+          changedDuringLoad = true;
+        }
+      }
+
+      dispatch({
+        type: "SET_READ_STATES",
+        readStates: mergedReadStates,
+        lastMessageAt: mergedLastMessageAt,
+      });
+      if (!changedDuringLoad) {
+        lastMarkedReadAtByChannel.clear();
+        pendingReadRequests.clear();
+        pendingReadMessageAt.clear();
+      }
       await syncDesktopNotifications();
     } catch {
       /* ignore */
     }
   };
 
-  const markChannelRead = (channelId: string) => {
-    const now = new Date().toISOString();
-    dispatch({ type: "UPDATE_READ_STATE", channelId, timestamp: now });
+  const markChannelRead = (channelId: string, messageTimestamp?: string) => {
+    const state = get();
+    const currentReadAt = state.readStates[channelId];
+    const lastMessageAt = messageTimestamp ?? state.lastMessageAt[channelId];
+    let previousMarkedAt = lastMarkedReadAtByChannel.get(channelId);
+
+    if (
+      currentReadAt &&
+      previousMarkedAt &&
+      compareTimestamps(currentReadAt, previousMarkedAt) < 0
+    ) {
+      lastMarkedReadAtByChannel.delete(channelId);
+      previousMarkedAt = undefined;
+    }
+
+    if (
+      currentReadAt &&
+      lastMessageAt &&
+      compareTimestamps(currentReadAt, lastMessageAt) >= 0 &&
+      (!messageTimestamp ||
+        !previousMarkedAt ||
+        compareTimestamps(lastMessageAt, previousMarkedAt) <= 0)
+    ) {
+      lastMarkedReadAtByChannel.set(channelId, currentReadAt);
+      return;
+    }
+
+    if (
+      previousMarkedAt &&
+      (!lastMessageAt ||
+        compareTimestamps(lastMessageAt, previousMarkedAt) <= 0)
+    ) {
+      return;
+    }
+
+    if (readStateMutations.has(channelId)) {
+      pendingReadRequests.add(channelId);
+      if (messageTimestamp) {
+        const pendingTimestamp = pendingReadMessageAt.get(channelId);
+        if (
+          !pendingTimestamp ||
+          compareTimestamps(messageTimestamp, pendingTimestamp) > 0
+        ) {
+          pendingReadMessageAt.set(channelId, messageTimestamp);
+        }
+      }
+      return;
+    }
+
+    const optimisticTimestamp = lastMessageAt ?? new Date().toISOString();
+    const previousReadAt = currentReadAt;
+    const writeGeneration = readStateGeneration;
+    lastMarkedReadAtByChannel.set(channelId, optimisticTimestamp);
+    dispatch({
+      type: "UPDATE_READ_STATE",
+      channelId,
+      timestamp: optimisticTimestamp,
+    });
     void syncDesktopNotifications();
-    apiPut(`/api/channels/${channelId}/read-state`, {}).catch(() => {});
+
+    const writePromise = apiPut(`/api/channels/${channelId}/read-state`, {})
+      .then(() => undefined)
+      .catch(() => {
+        if (writeGeneration !== readStateGeneration) return;
+        if (lastMarkedReadAtByChannel.get(channelId) === optimisticTimestamp) {
+          lastMarkedReadAtByChannel.delete(channelId);
+          if (get().readStates[channelId] === optimisticTimestamp) {
+            dispatch({
+              type: "UPDATE_READ_STATE",
+              channelId,
+              timestamp: previousReadAt ?? new Date(0).toISOString(),
+            });
+          }
+        }
+      })
+      .finally(() => {
+        if (writeGeneration !== readStateGeneration) return;
+        if (readStateWrites.get(channelId) === writePromise) {
+          readStateWrites.delete(channelId);
+        }
+        if (readStateMutations.get(channelId) === writePromise) {
+          readStateMutations.delete(channelId);
+        }
+        if (
+          !unreadBarriers.has(channelId) &&
+          pendingReadRequests.delete(channelId)
+        ) {
+          const pendingTimestamp = pendingReadMessageAt.get(channelId);
+          pendingReadMessageAt.delete(channelId);
+          markChannelRead(channelId, pendingTimestamp);
+        }
+      });
+    readStateWrites.set(channelId, writePromise);
+    readStateMutations.set(channelId, writePromise);
   };
 
   const markChannelUnread = async (
@@ -678,8 +920,19 @@ export function createChatActions(
     messageId: string,
     messageCreatedAt: string,
   ) => {
+    pendingReadRequests.delete(channelId);
+    pendingReadMessageAt.delete(channelId);
+    unreadBarriers.add(channelId);
+    const unreadGeneration = readStateGeneration;
+    const inFlightReadStateMutation = readStateMutations.get(channelId);
+    if (inFlightReadStateMutation) await inFlightReadStateMutation;
+    if (unreadGeneration !== readStateGeneration) return;
+    const queuedReadStateMutation = readStateMutations.get(channelId);
+    if (queuedReadStateMutation) await queuedReadStateMutation;
+    if (unreadGeneration !== readStateGeneration) return;
+    lastMarkedReadAtByChannel.delete(channelId);
     const previous = get().readStates[channelId];
-    const createdAt = Date.parse(messageCreatedAt);
+    const createdAt = Date.parse(normalizeTimestamp(messageCreatedAt));
     const optimisticTimestamp = Number.isNaN(createdAt)
       ? new Date(0).toISOString()
       : new Date(Math.max(0, createdAt - 1)).toISOString();
@@ -691,23 +944,47 @@ export function createChatActions(
     });
     void syncDesktopNotifications();
 
-    try {
-      const result = await apiPatch<{
-        channel_id: string;
-        last_read_at: string;
-      }>(`/api/channels/${channelId}/read-state`, { message_id: messageId });
-      dispatch({
-        type: "UPDATE_READ_STATE",
-        channelId,
-        timestamp: result.last_read_at,
+    const patchGeneration = readStateGeneration;
+    const patchPromise = apiPatch<{
+      channel_id: string;
+      last_read_at: string;
+    }>(`/api/channels/${channelId}/read-state`, { message_id: messageId })
+      .then(async (result) => {
+        if (patchGeneration !== readStateGeneration) return;
+        if (get().readStates[channelId] !== optimisticTimestamp) return;
+        dispatch({
+          type: "UPDATE_READ_STATE",
+          channelId,
+          timestamp: result.last_read_at,
+        });
+        await syncDesktopNotifications();
+      })
+      .catch(() => {
+        if (patchGeneration !== readStateGeneration) return;
+        if (get().readStates[channelId] !== optimisticTimestamp) return;
+        if (previous) {
+          dispatch({
+            type: "UPDATE_READ_STATE",
+            channelId,
+            timestamp: previous,
+          });
+        }
+        void syncDesktopNotifications();
+      })
+      .finally(() => {
+        if (patchGeneration !== readStateGeneration) return;
+        if (readStateMutations.get(channelId) === patchPromise) {
+          readStateMutations.delete(channelId);
+        }
+        unreadBarriers.delete(channelId);
+        if (pendingReadRequests.delete(channelId)) {
+          const pendingTimestamp = pendingReadMessageAt.get(channelId);
+          pendingReadMessageAt.delete(channelId);
+          markChannelRead(channelId, pendingTimestamp);
+        }
       });
-      await syncDesktopNotifications();
-    } catch {
-      if (previous) {
-        dispatch({ type: "UPDATE_READ_STATE", channelId, timestamp: previous });
-      }
-      void syncDesktopNotifications();
-    }
+    readStateMutations.set(channelId, patchPromise);
+    await patchPromise;
   };
 
   const pinMessage = async (channelId: string, messageId: string) => {
@@ -762,13 +1039,25 @@ export function createChatActions(
     }
   };
 
-  const loadDmChannels = async () => {
+  const refreshMessageEmbeds = async (
+    channelId: string,
+    messageIds: string[],
+  ) => {
+    const ids = [...new Set(messageIds)].slice(0, 50);
+    if (ids.length === 0) return;
+    await apiPatch(`/api/channels/${channelId}/messages`, {
+      refresh_embeds: true,
+      message_ids: ids,
+    }).catch(() => undefined);
+  };
+
+  const loadDmChannels = async (generation = readStateGeneration) => {
     try {
       const data =
         await apiGet<Array<{ id: string; name: string; recipient: User }>>(
           "/api/dms",
         );
-      if (Array.isArray(data)) {
+      if (generation === readStateGeneration && Array.isArray(data)) {
         dispatch({ type: "SET_DM_CHANNELS", dmChannels: data });
         await syncDesktopNotifications();
       }
@@ -790,10 +1079,10 @@ export function createChatActions(
     }
   };
 
-  const loadRelationships = async () => {
+  const loadRelationships = async (generation = readStateGeneration) => {
     try {
       const relationships = await apiGet<Relationship[]>("/api/friends");
-      if (Array.isArray(relationships)) {
+      if (generation === readStateGeneration && Array.isArray(relationships)) {
         dispatch({ type: "SET_RELATIONSHIPS", relationships });
       }
     } catch {
@@ -801,12 +1090,13 @@ export function createChatActions(
     }
   };
 
-  const loadNotifications = async () => {
+  const loadNotifications = async (generation = readStateGeneration) => {
     try {
       const data = await apiGet<{
         notifications: AppNotification[];
         unread_count: number;
       }>("/api/notifications");
+      if (generation !== readStateGeneration) return;
       dispatch({
         type: "SET_NOTIFICATIONS",
         notifications: data.notifications,
@@ -831,26 +1121,71 @@ export function createChatActions(
 
   const bootstrapChat = async (options?: {
     includeNotifications?: boolean;
-  }) => {
-    if (inFlightBootstrap) return inFlightBootstrap;
+    expectedUserId?: string;
+    deferNonCritical?: boolean;
+  }): Promise<void> => {
+    const expectedUserId = options?.expectedUserId ?? get().user?.id ?? null;
+    resetReadStateTracking(expectedUserId);
+    const existingBootstrap = inFlightBootstrap;
+    if (existingBootstrap) {
+      if (existingBootstrap.userId === expectedUserId) {
+        return existingBootstrap.promise;
+      }
+
+      const startNextBootstrap = (): Promise<void> => {
+        if (inFlightBootstrap?.promise === existingBootstrap.promise) {
+          inFlightBootstrap = null;
+        }
+        return bootstrapChat(options);
+      };
+
+      return existingBootstrap.promise.then(
+        startNextBootstrap,
+        startNextBootstrap,
+      );
+    }
 
     const includeNotifications = options?.includeNotifications ?? true;
-    inFlightBootstrap = (async () => {
-      await loadCurrentUser();
+    const deferNonCritical = options?.deferNonCritical ?? false;
+    const bootstrapGeneration = readStateGeneration;
+    const runNonCritical = () => [
+      loadProfile(bootstrapGeneration),
+      loadDmChannels(bootstrapGeneration),
+      loadRelationships(bootstrapGeneration),
+      includeNotifications
+        ? loadNotifications(bootstrapGeneration)
+        : Promise.resolve(),
+    ];
+    const bootstrapPromise = (async () => {
+      await loadCurrentUser(options?.expectedUserId);
+      if (deferNonCritical) {
+        await Promise.all([loadServers(bootstrapGeneration), loadReadStates()]);
+        setTimeout(() => {
+          void Promise.allSettled(runNonCritical());
+        }, 0);
+      } else {
+        await Promise.all([
+          loadServers(bootstrapGeneration),
+          loadReadStates(),
+          ...runNonCritical(),
+        ]);
+      }
+    })();
+    inFlightBootstrap = { userId: expectedUserId, promise: bootstrapPromise };
+    bootstrapPromise.then(
+      () => {
+        if (inFlightBootstrap?.promise === bootstrapPromise) {
+          inFlightBootstrap = null;
+        }
+      },
+      () => {
+        if (inFlightBootstrap?.promise === bootstrapPromise) {
+          inFlightBootstrap = null;
+        }
+      },
+    );
 
-      await Promise.all([
-        loadProfile(),
-        loadServers(),
-        loadReadStates(),
-        loadDmChannels(),
-        loadRelationships(),
-        includeNotifications ? loadNotifications() : Promise.resolve(),
-      ]);
-    })().finally(() => {
-      inFlightBootstrap = null;
-    });
-
-    return inFlightBootstrap;
+    return bootstrapPromise;
   };
 
   const markNotificationsRead = async (ids?: string[]) => {
@@ -915,10 +1250,12 @@ export function createChatActions(
     loadCurrentUser,
     loadReadStates,
     markChannelRead,
+    resetReadStateTracking,
     markChannelUnread,
     pinMessage,
     unpinMessage,
     loadPins,
+    refreshMessageEmbeds,
     loadDmChannels,
     loadRelationships,
     openDm,

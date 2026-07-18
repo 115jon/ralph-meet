@@ -1,9 +1,10 @@
 import {
   getProfileEffect,
   getProfileEffectLayers,
-  getProfileFrame,
   type AvatarDisplay,
 } from "@/lib/avatar-display";
+import { ProfileFrameLayer } from "@/components/chat/ProfileFrameLayer";
+import { getProfileFrameLayers } from "@/lib/profile-frame";
 import {
   getProfileEffectFallbackAsset,
   getProfileEffectPlaybackSnapshot,
@@ -25,6 +26,7 @@ interface ProfileCollectiblesLayerProps {
   fit?: "contain" | "cover";
   blendMode?: "normal" | "screen";
   playAnimation?: boolean;
+  renderFrame?: boolean;
 }
 
 type MediaKind = "image" | "video";
@@ -151,6 +153,7 @@ function EffectVideo({
   activeOffsetMs = 0,
   loop = false,
   onFallbackToImage,
+  onEnded,
 }: {
   src: string;
   fit: "contain" | "cover";
@@ -159,6 +162,7 @@ function EffectVideo({
   activeOffsetMs?: number;
   loop?: boolean;
   onFallbackToImage: () => void;
+  onEnded: () => void;
 }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
@@ -224,6 +228,7 @@ function EffectVideo({
       playsInline
       preload="metadata"
       onError={onFallbackToImage}
+      onEnded={onEnded}
     />
   );
 }
@@ -251,6 +256,7 @@ function EffectMedia({
   );
   const [kind, setKind] = useState<MediaKind>(() => guessedKind);
   const [hasRetried, setHasRetried] = useState(false);
+  const [hasEnded, setHasEnded] = useState(false);
 
   const handleMediaError = () => {
     if (hasRetried) return;
@@ -263,11 +269,14 @@ function EffectMedia({
       <EffectVideo
         src={src}
         fit={fit}
-        style={style}
+        style={
+          hasEnded ? { ...style, opacity: 0, visibility: "hidden" } : style
+        }
         active={active}
         activeOffsetMs={activeOffsetMs}
         loop={loop}
         onFallbackToImage={handleMediaError}
+        onEnded={() => setHasEnded(true)}
       />
     );
   }
@@ -277,7 +286,7 @@ function EffectMedia({
       src={src}
       alt=""
       className={buildMediaClassName(fit)}
-      style={style}
+      style={hasEnded ? { ...style, opacity: 0, visibility: "hidden" } : style}
       loading="lazy"
       decoding="async"
       onError={handleMediaError}
@@ -315,6 +324,7 @@ export function ProfileCollectiblesLayer({
   fit = "contain",
   blendMode = "normal",
   playAnimation = true,
+  renderFrame = true,
 }: ProfileCollectiblesLayerProps) {
   const prefersReducedMotion = usePrefersReducedMotion();
   const effect = useMemo(() => getProfileEffect(display), [display]);
@@ -322,7 +332,6 @@ export function ProfileCollectiblesLayer({
     () => getProfileEffectLayers(display),
     [display],
   );
-  const frame = useMemo(() => getProfileFrame(display), [display]);
   const timelineKey = useMemo(() => buildTimelineKey(display), [display]);
   const timelineStartRef = useRef(0);
   const [elapsedMs, setElapsedMs] = useState(0);
@@ -410,7 +419,13 @@ export function ProfileCollectiblesLayer({
     };
   }, [shouldAnimateLayers]);
 
-  if (!fallbackAsset.src && !effectLayers.length && !frame) return null;
+  const hasFrame =
+    renderFrame &&
+    Boolean(
+      getProfileFrameLayers(display, "back").length ||
+      getProfileFrameLayers(display, "front").length,
+    );
+  if (!fallbackAsset.src && !effectLayers.length && !hasFrame) return null;
 
   return (
     <div
@@ -420,65 +435,60 @@ export function ProfileCollectiblesLayer({
       )}
       aria-hidden="true"
     >
-      {!shouldAnimateLayers && fallbackAsset.src ? (
-        <EffectMedia
-          key={`fallback:${fallbackAsset.kind}:${fallbackAsset.src}`}
-          src={fallbackAsset.src}
-          fit={fit}
-          active={playAnimation && !prefersReducedMotion}
-          preferredKind={fallbackAsset.kind}
-          loop={
-            playAnimation &&
-            !prefersReducedMotion &&
-            fallbackAsset.kind === "video"
-          }
-          style={buildLayerMediaStyle(fit, effectOpacity, blendMode)}
+      {renderFrame ? (
+        <ProfileFrameLayer
+          display={display}
+          order="back"
+          className="z-0 opacity-80"
         />
       ) : null}
+      <div className="pointer-events-none absolute inset-0 z-10">
+        {!shouldAnimateLayers && fallbackAsset.src ? (
+          <EffectMedia
+            key={`fallback:${fallbackAsset.kind}:${fallbackAsset.src}`}
+            src={fallbackAsset.src}
+            fit={fit}
+            active={playAnimation && !prefersReducedMotion}
+            preferredKind={fallbackAsset.kind}
+            loop={
+              playAnimation &&
+              !prefersReducedMotion &&
+              fallbackAsset.kind === "video"
+            }
+            style={buildLayerMediaStyle(fit, effectOpacity, blendMode)}
+          />
+        ) : null}
 
-      {shouldAnimateLayers
-        ? playbackSnapshot.renderedLayers.map((state) => (
-            <EffectMedia
-              key={state.renderKey}
-              src={state.resolvedSrc}
-              fit={fit}
-              active={state.active}
-              preferredKind="video"
-              activeOffsetMs={state.activeOffsetMs}
-              loop={
-                state.layer.loop === true &&
-                (state.layer.duration == null ||
-                  !Number.isFinite(state.layer.duration))
-              }
-              style={{
-                ...buildLayerMediaStyle(
-                  fit,
-                  state.active ? effectOpacity : 0,
-                  blendMode,
-                  state.zIndex,
-                  state.layer,
-                ),
-                visibility: state.active ? "visible" : "hidden",
-              }}
-            />
-          ))
-        : null}
-
-      {frame?.layers.map((layer) => (
-        <img
-          key={layer.id}
-          src={layer.src}
-          alt=""
-          className={cn(
-            "absolute left-1/2 z-20 max-w-none -translate-x-1/2 object-contain",
-            layer.anchor === "bottom" ? "bottom-[-8%]" : "top-[-10%]",
-            layer.type === "rail" ? "w-[112%]" : "w-[122%]",
-            layer.order === "back" && "z-0 opacity-80",
-          )}
-          loading="lazy"
-          decoding="async"
-        />
-      ))}
+        {shouldAnimateLayers
+          ? playbackSnapshot.renderedLayers.map((state) => (
+              <EffectMedia
+                key={`${state.renderKey}:${state.active ? "active" : "idle"}`}
+                src={state.resolvedSrc}
+                fit={fit}
+                active={state.active}
+                preferredKind="video"
+                activeOffsetMs={state.activeOffsetMs}
+                loop={
+                  state.layer.loop === true &&
+                  (state.layer.loopDelay ?? 0) === 0
+                }
+                style={{
+                  ...buildLayerMediaStyle(
+                    fit,
+                    state.active ? effectOpacity : 0,
+                    blendMode,
+                    state.zIndex,
+                    state.layer,
+                  ),
+                  visibility: state.active ? "visible" : "hidden",
+                }}
+              />
+            ))
+          : null}
+      </div>
+      {renderFrame ? (
+        <ProfileFrameLayer display={display} order="front" className="z-20" />
+      ) : null}
     </div>
   );
 }

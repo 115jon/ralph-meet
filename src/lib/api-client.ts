@@ -106,6 +106,7 @@ export async function apiFetch<T>(
   input: RequestInfo | URL,
   init?: ApiFetchInit,
 ): Promise<T> {
+  const requestStartedAt = Date.now();
   const { skipAuth = false, ...fetchInit } = init ?? {};
   // Prefix relative paths with the platform-appropriate base URL
   const resolved =
@@ -145,7 +146,24 @@ export async function apiFetch<T>(
     });
   };
 
-  let res = await doFetch(initialToken);
+  let res: Response;
+  try {
+    res = await doFetch(initialToken);
+  } catch (error) {
+    log.error("Network request failed", {
+      url: String(resolved),
+      method: fetchInit.method ?? "GET",
+      error,
+    });
+    throw error;
+  }
+  log.info("Response", {
+    url: String(resolved),
+    status: res.status,
+    ok: res.ok,
+    contentType: res.headers.get("content-type"),
+    durationMs: Date.now() - requestStartedAt,
+  });
 
   // 401 recovery: refresh the kova-auth token and retry once.
   if (!skipAuth && res.status === 401 && isTauri()) {
@@ -158,7 +176,23 @@ export async function apiFetch<T>(
       hasFreshToken: !!freshToken,
     });
     if (freshToken) {
-      res = await doFetch(freshToken);
+      try {
+        res = await doFetch(freshToken);
+      } catch (error) {
+        log.error("Retry network request failed", {
+          url: String(resolved),
+          method: fetchInit.method ?? "GET",
+          error,
+        });
+        throw error;
+      }
+      log.info("Retry response", {
+        url: String(resolved),
+        status: res.status,
+        ok: res.ok,
+        contentType: res.headers.get("content-type"),
+        durationMs: Date.now() - requestStartedAt,
+      });
     } else {
       clearDesktopAuthSession();
       throw createDesktopAuthRequiredError();
@@ -206,6 +240,16 @@ export async function apiFetch<T>(
     (error as any).status = res.status;
     throw error;
   }
+
+  log.info("Response body shape", {
+    url: String(resolved),
+    kind: Array.isArray(json) ? "array" : typeof json,
+    count: Array.isArray(json) ? json.length : undefined,
+    keys:
+      json && typeof json === "object" && !Array.isArray(json)
+        ? Object.keys(json).slice(0, 12)
+        : undefined,
+  });
 
   return json as T;
 }

@@ -158,6 +158,10 @@ export const ImageGrid: React.FC<ImageGridProps> = ({
                 options.interactiveClassName,
                 interactive && "cursor-zoom-in",
               )}
+              data-media-element="true"
+              data-media-url={getRawUrl(att)}
+              data-media-download-url={url}
+              data-media-filename={att.filename}
             >
               {renderViewerButton(att, idx, interactive)}
               <img
@@ -309,6 +313,10 @@ export const ImageGrid: React.FC<ImageGridProps> = ({
                     "relative h-full w-full",
                     interactive && "cursor-zoom-in",
                   )}
+                  data-media-element="true"
+                  data-media-url={getRawUrl(att)}
+                  data-media-download-url={getUrl(att)}
+                  data-media-filename={att.filename}
                 >
                   {renderViewerButton(att, idx, interactive)}
                   <img

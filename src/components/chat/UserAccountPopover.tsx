@@ -1,11 +1,12 @@
 import { AvatarImage } from "@/components/chat/AvatarImage";
 import { ProfileDisplayName } from "@/components/chat/ProfileDisplayName";
 import { ProfileAssetLayer } from "@/components/chat/ProfileAssetLayer";
-import { ProfileCollectiblesLayer } from "@/components/chat/ProfileCollectiblesLayer";
+import { ProfileSurfaceShell } from "@/components/chat/ProfileSurfaceShell";
 import { getAuthAssetUrl } from "@/lib/platform";
 import { resolveProfileTheme } from "@/lib/profile-customization";
 import type { User } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { useChatStore } from "@/stores/chat-store";
 import {
   ChevronLeft,
   ChevronRight,
@@ -138,6 +139,10 @@ export default function UserAccountPopover({
   anchorEl,
   isClosing,
 }: Props & { isClosing?: boolean }) {
+  const currentUser = useChatStore((state) =>
+    state.user?.id === user.id ? state.user : null,
+  );
+  const profileDisplay = currentUser?.avatar_display ?? user.avatar_display;
   const popoverRef = useRef<HTMLDivElement>(null);
   const [dynamicStyle, setDynamicStyle] = useState<CSSProperties>({
     opacity: 0,
@@ -282,33 +287,21 @@ export default function UserAccountPopover({
         role="presentation"
         aria-hidden="true"
       />
-      <section
+      <ProfileSurfaceShell
         ref={popoverRef}
+        variant="popover"
+        display={profileDisplay}
         className={cn(
-          "fixed z-[1000] animate-in fade-in zoom-in-95 overflow-hidden rounded-[26px] border border-[color:var(--rm-profile-custom-card-border)] bg-rm-bg-elevated shadow-[0_26px_72px_rgba(0,0,0,0.46)] duration-200 outline-none",
+          "fixed z-[1000] animate-in fade-in zoom-in-95 duration-200 outline-none",
           isClosing && "animate-out fade-out zoom-out-95",
         )}
         style={{
           ...dynamicStyle,
           ...profileThemeStyle,
-          backgroundImage: "var(--rm-profile-custom-surface)",
         }}
         aria-label="User Account Options"
         tabIndex={-1}
       >
-        <div
-          className="absolute inset-0 z-0"
-          style={{
-            background: "var(--rm-profile-custom-surface-overlay-strong)",
-          }}
-        />
-        <ProfileCollectiblesLayer
-          display={user.avatar_display}
-          effectOpacity={1}
-          fit="contain"
-          className="z-[60] opacity-[0.98]"
-        />
-
         <div className="relative flex h-full flex-col overflow-hidden">
           <div className="flex-1 overflow-y-auto custom-scrollbar">
             <div
@@ -337,7 +330,7 @@ export default function UserAccountPopover({
                       <AvatarImage
                         src={getAuthAssetUrl(user.avatar_url)}
                         alt={displayName}
-                        display={user.avatar_display}
+                        display={profileDisplay}
                       />
                     ) : (
                       displayName[0]?.toUpperCase()
@@ -499,7 +492,7 @@ export default function UserAccountPopover({
             </div>
           </div>
         </div>
-      </section>
+      </ProfileSurfaceShell>
     </>,
     document.body,
   );

@@ -113,6 +113,7 @@ jobs:
           dotnet-version: 8.0.x
 
       # ── Install dependencies ─────────────────────────────────────────
+      # We only need dependencies for the desktop app.
       # Filtering the installation avoids downloading huge unrelated packages like workerd / wrangler.
       - name: Configure pnpm network settings
         run: |
@@ -121,7 +122,7 @@ jobs:
           pnpm config set fetch-retry-maxtimeout 120000
 
       - name: Install desktop dependencies
-        run: pnpm install --filter ralph-meet-desktop... --frozen-lockfile
+        run: pnpm install --filter ralph-meet... --filter ralph-meet-desktop... --frozen-lockfile
 
       # ── Download Custom CEF ──────────────────────────────────────────
       - name: Download custom CEF

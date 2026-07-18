@@ -1,10 +1,21 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { z } from "zod";
 
 import { apiError, apiSuccess, getDB, requireAuth } from "@/lib/api-helpers";
 import { PERMISSIONS } from "@/lib/permissions";
 import { checkRateLimitDO, RATE_LIMITS } from "@/lib/rate-limit";
 import { requirePermission } from "@/lib/require-permission";
+import { validateBody } from "@/lib/validate-body";
 import { createInvite, listInvites } from "@/services/social.service";
+
+export const inviteCreateBodySchema = z
+  .object({
+    channel_id: z.string().optional(),
+    max_uses: z.number().optional(),
+    max_age: z.number().optional(),
+    temporary: z.boolean().optional(),
+  })
+  .passthrough();
 
 // POST /api/servers/:id/invites — create an invite link
 const POST = async ({ request, params }: any) => {
@@ -20,12 +31,13 @@ const POST = async ({ request, params }: any) => {
   );
   if (rl) return rl;
 
-  const body = (await request.json()) as {
-    channel_id?: string;
-    max_uses?: number;
-    max_age?: number;
-    temporary?: boolean;
-  };
+  const bodyResult = await validateBody(
+    request,
+    inviteCreateBodySchema,
+    request,
+  );
+  if (bodyResult instanceof Response) return bodyResult;
+  const body = bodyResult;
 
   const db = getDB();
 

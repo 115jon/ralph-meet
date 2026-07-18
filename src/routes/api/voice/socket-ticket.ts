@@ -1,10 +1,13 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { z } from "zod";
 
 import {
   apiError,
   buildVoiceChannelRoomSlug,
+  getCorsHeaders,
   getDB,
   getEnv,
+  handleCorsPreflightIfNeeded,
   requireAuth,
 } from "@/lib/api-helpers";
 import { requireChannelAccess } from "@/lib/require-channel-access";
@@ -13,6 +16,7 @@ import { PERMISSIONS, hasPermission } from "@/lib/permissions";
 import { checkRateLimitDOFailClosed } from "@/lib/rate-limit";
 import { getOrCreateDemoSession } from "@/lib/voice/demo-session";
 import { isPublicDemoRoomSlug } from "@/lib/voice/realtime-policy";
+import { validateBody } from "@/lib/validate-body";
 import {
   issueSocketTicket,
   type SocketTicketAudience,
@@ -22,12 +26,20 @@ const SOCKET_TICKET_TTL_MS = 60_000;
 const DEMO_TICKET_RATE_LIMIT = { limit: 12, windowMs: 60 * 60 * 1000 };
 const DEMO_SESSION_TICKET_RATE_LIMIT = { limit: 30, windowMs: 60 * 60 * 1000 };
 
-type SocketTicketRequestBody = {
-  audience?: unknown;
-  channelId?: unknown;
-  roomSlug?: unknown;
-  serverId?: unknown;
-};
+const OPTIONS = async ({ request }: { request: Request }) =>
+  handleCorsPreflightIfNeeded(request) ??
+  new Response(null, { status: 204, headers: getCorsHeaders(request) });
+
+export const socketTicketRequestBodySchema = z
+  .object({
+    audience: z.unknown().optional(),
+    channelId: z.unknown().optional(),
+    roomSlug: z.unknown().optional(),
+    serverId: z.unknown().optional(),
+  })
+  .passthrough();
+
+type SocketTicketRequestBody = z.infer<typeof socketTicketRequestBodySchema>;
 
 type SocketTicketEnv = CloudflareEnv & {
   REALTIME_TICKET_SECRET?: string;
@@ -54,12 +66,13 @@ const POST = async ({ request }: { request: Request }) => {
     );
   }
 
-  let body: SocketTicketRequestBody;
-  try {
-    body = (await request.json()) as SocketTicketRequestBody;
-  } catch {
-    return noStore(apiError("Invalid JSON", 400, "INVALID_JSON", request));
-  }
+  const bodyResult = await validateBody(
+    request,
+    socketTicketRequestBodySchema,
+    request,
+  );
+  if (bodyResult instanceof Response) return noStore(bodyResult);
+  const body = bodyResult;
 
   const audience = parseAudience(body.audience);
   if (!audience) {
@@ -104,8 +117,6 @@ const POST = async ({ request }: { request: Request }) => {
   if (admission.cookie) response.headers.append("Set-Cookie", admission.cookie);
   return noStore(response);
 };
-
-export { POST as socketTicketPost };
 
 async function authorizeAuthenticatedTicket(
   request: Request,
@@ -314,7 +325,10 @@ function noStore(response: Response): Response {
 export const Route = createFileRoute("/api/voice/socket-ticket" as never)({
   server: {
     handlers: {
+      OPTIONS,
       POST,
     },
   },
 });
+
+export { POST as socketTicketPost, OPTIONS as socketTicketOptions };

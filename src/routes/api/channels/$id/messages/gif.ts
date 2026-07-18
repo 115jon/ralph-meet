@@ -17,6 +17,8 @@ import { checkRateLimitDO, RATE_LIMITS } from "@/lib/rate-limit";
 import { requireChannelAccess } from "@/lib/require-channel-access";
 import { getUserPermissions } from "@/lib/require-permission";
 import { isTikTokMediaHostname } from "@/lib/tiktok-hosts";
+import { validateBody } from "@/lib/validate-body";
+import { z } from "zod";
 
 interface GifUploadBody {
   source_url: string;
@@ -25,6 +27,16 @@ interface GifUploadBody {
   provider?: GifProvider;
   size_bytes?: number;
 }
+
+export const gifUploadBodySchema = z
+  .object({
+    source_url: z.string().default(""),
+    filename: z.string().optional(),
+    content_type: z.string().optional(),
+    provider: z.enum(["klipy", "tenor", "external"]).optional(),
+    size_bytes: z.number().optional(),
+  })
+  .passthrough();
 
 type HostedGifProvider = Exclude<GifProvider, "external">;
 
@@ -125,7 +137,9 @@ const POST = async ({ params, request }: any) => {
     }
   }
 
-  const body = (await request.json()) as GifUploadBody;
+  const bodyResult = await validateBody(request, gifUploadBodySchema, request);
+  if (bodyResult instanceof Response) return bodyResult;
+  const body: GifUploadBody = bodyResult;
   if (!body.source_url) {
     return apiError("source_url required", 400);
   }

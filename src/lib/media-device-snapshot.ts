@@ -107,26 +107,6 @@ function hasCompleteDesktopDeviceList(
   return audioComplete && videoComplete;
 }
 
-async function primeAudioDeviceAccess() {
-  if (!navigator.mediaDevices?.getUserMedia) return;
-
-  const stream = await navigator.mediaDevices.getUserMedia({
-    audio: true,
-    video: false,
-  });
-  stream.getTracks().forEach((track) => track.stop());
-}
-
-async function primeVideoDeviceAccess() {
-  if (!navigator.mediaDevices?.getUserMedia) return;
-
-  const stream = await navigator.mediaDevices.getUserMedia({
-    audio: false,
-    video: true,
-  });
-  stream.getTracks().forEach((track) => track.stop());
-}
-
 export async function getDesktopNativeAudioDevices(): Promise<NativeDevice[]> {
   if (!isDesktop()) return [];
   try {
@@ -159,35 +139,9 @@ export async function enumerateMediaDevicesWithRetry() {
       ])
     : [[], []];
 
-  const hasNativeVideo = nativeVideoDevices.some(
-    (d) => d.kind === "videoinput",
-  );
-
   for (let attempt = 1; attempt <= attempts; attempt++) {
-    if (attempt === 1 || isDesktop()) {
-      try {
-        mediaLog.debug(
-          "Priming getUserMedia({ audio: true }) before device enumeration",
-          { attempt },
-        );
-        await primeAudioDeviceAccess();
-      } catch (primeErr) {
-        mediaLog.warn("getUserMedia audio prime failed:", primeErr);
-      }
-
-      if (isDesktop() && hasNativeVideo) {
-        try {
-          mediaLog.debug(
-            "Priming getUserMedia({ video: true }) before device enumeration",
-            { attempt },
-          );
-          await primeVideoDeviceAccess();
-        } catch (primeErr) {
-          mediaLog.warn("getUserMedia video prime failed:", primeErr);
-        }
-      }
-    }
-
+    // Device discovery must remain passive. Actual capture belongs to an
+    // explicit voice join, camera preview, or microphone test.
     lastDevices = await navigator.mediaDevices.enumerateDevices();
 
     if (
@@ -224,7 +178,9 @@ export async function enumerateMediaDevicesWithRetry() {
         label: d.label || "(empty)",
       })),
     });
-    await sleep(DEVICE_ENUMERATION_RETRY_MS);
+    if (attempt < attempts) {
+      await sleep(DEVICE_ENUMERATION_RETRY_MS);
+    }
   }
 
   return lastDevices;

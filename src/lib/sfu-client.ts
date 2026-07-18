@@ -358,7 +358,7 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
 
       // Reset circuit breakers on successful reconnect
       this.rtcSessionManager.resetCircuitBreakers();
-      this.emit("voice-ready", {});
+      this.emit("voice-ready", { speaking: e.speaking ?? {} });
 
       // Cleanup orphaned tracks from server state sync and enqueue existing tracks.
       // VoiceReady can be empty during reconnect races, so only a non-empty
@@ -1005,6 +1005,7 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
     this.negotiator.pullPC = null;
 
     this.vad.stop();
+    this.audio.dispose();
     this.audioSentinel.stop();
     this.stats.stopStatsMonitoring();
     this.stats.stopConnectionStatsMonitoring();
@@ -1146,7 +1147,6 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
     }
     await this.negotiator.publishTracks(stream, prefix);
     if (prefix === "cam") {
-      this.vad.start(stream);
       this.stats.startStatsMonitoring();
       this.stats.startConnectionStatsMonitoring();
     }
@@ -1423,7 +1423,13 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
 
     const transceiver = this.negotiator.getPushTransceiver(trackName);
     if (transceiver) {
-      await transceiver.sender.replaceTrack(newTrack);
+      const previousTrack = transceiver.sender.track;
+      const senderTrack =
+        newTrack && newTrack.kind === "audio" ? newTrack.clone() : newTrack;
+      await transceiver.sender.replaceTrack(senderTrack);
+      if (previousTrack && previousTrack !== senderTrack) {
+        previousTrack.stop();
+      }
     }
   }
 

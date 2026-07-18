@@ -159,6 +159,7 @@ export const RemoteMenu: React.FC<RemoteMenuProps> = ({
             activeSubmenu === "StreamingApps"
           }
           onMouseEnter={() => handleMouseEnterRoot("More Options")}
+          onArrowLeft={clearSubmenu}
           submenu={
             <>
               <MenuItem label="Profile" onClick={handleProfile} />
@@ -168,6 +169,7 @@ export const RemoteMenu: React.FC<RemoteMenuProps> = ({
                 label="Apps"
                 active={activeSubmenu === "StreamingApps"}
                 onMouseEnter={() => handleMouseEnterRoot("StreamingApps")}
+                onArrowLeft={() => handleMouseEnterRoot("More Options")}
                 submenu={<MenuItem label="No Apps" disabled />}
               />
               <Divider />
@@ -249,6 +251,7 @@ export const RemoteMenu: React.FC<RemoteMenuProps> = ({
         label="Apps"
         active={activeSubmenu === "Apps"}
         onMouseEnter={() => handleMouseEnterRoot("Apps")}
+        onArrowLeft={clearSubmenu}
         submenu={<MenuItem label="No Apps" disabled />}
       />
 
@@ -257,6 +260,7 @@ export const RemoteMenu: React.FC<RemoteMenuProps> = ({
           label="Move to"
           active={activeSubmenu === "Move to"}
           onMouseEnter={() => handleMouseEnterRoot("Move to")}
+          onArrowLeft={clearSubmenu}
           submenu={voiceChannels.map((ch) => (
             <MenuItem
               key={ch.id}

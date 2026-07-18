@@ -1,4 +1,9 @@
 import type { ListenTogetherStateSnapshot } from "@/lib/listen-together";
+import {
+  clampListenTogetherPaneRatio,
+  readListenTogetherPaneRatio,
+  writeListenTogetherPaneRatio,
+} from "@/lib/listen-together-local";
 import { create } from "zustand";
 
 export interface ListenTogetherRoomState {
@@ -16,6 +21,7 @@ export interface ListenTogetherRoomState {
 
 interface ListenTogetherStoreState {
   rooms: Record<string, ListenTogetherRoomState>;
+  workspacePaneRatio: number;
   ensureRoom: (roomSlug: string) => void;
   setSnapshot: (
     roomSlug: string,
@@ -26,6 +32,8 @@ interface ListenTogetherStoreState {
     playback: ListenTogetherRoomState["localPlayback"],
   ) => void;
   setLocalVolume: (roomSlug: string, volume: number) => void;
+  setWorkspacePaneRatio: (ratio: number) => void;
+  persistWorkspacePaneRatio: (ratio: number) => void;
   setError: (roomSlug: string, error: ListenTogetherRoomState["error"]) => void;
   clearRoom: (roomSlug: string) => void;
 }
@@ -62,6 +70,7 @@ function writeStoredListenTogetherVolume(roomSlug: string, volume: number) {
 export const useListenTogetherStore = create<ListenTogetherStoreState>()(
   (set) => ({
     rooms: {},
+    workspacePaneRatio: readListenTogetherPaneRatio(),
     ensureRoom: (roomSlug) =>
       set((state) => {
         if (!roomSlug || state.rooms[roomSlug]) return state;
@@ -118,6 +127,13 @@ export const useListenTogetherStore = create<ListenTogetherStoreState>()(
           },
         };
       }),
+    setWorkspacePaneRatio: (ratio) =>
+      set({ workspacePaneRatio: clampListenTogetherPaneRatio(ratio) }),
+    persistWorkspacePaneRatio: (ratio) => {
+      const nextRatio = clampListenTogetherPaneRatio(ratio);
+      writeListenTogetherPaneRatio(nextRatio);
+      set({ workspacePaneRatio: nextRatio });
+    },
     setError: (roomSlug, error) =>
       set((state) => ({
         rooms: {

@@ -1,5 +1,7 @@
 import {
   extractYouTubeUrl,
+  dedupeListenTogetherTracks,
+  getListenTogetherResolveBatch,
   mapYoutubeVideoNode,
   parseDurationSeconds,
   scoreYoutubeCandidate,
@@ -7,6 +9,19 @@ import {
 import { describe, expect, it } from "vitest";
 
 describe("listen together provider helpers", () => {
+  it("keeps Spotify collection batches below the free-plan search budget", () => {
+    expect(getListenTogetherResolveBatch(0, 100)).toEqual({
+      offset: 0,
+      end: 20,
+      nextOffset: 20,
+    });
+    expect(getListenTogetherResolveBatch(80, 100)).toEqual({
+      offset: 80,
+      end: 100,
+      nextOffset: null,
+    });
+  });
+
   it("extracts YouTube watch and playlist identifiers from supported URLs", () => {
     expect(extractYouTubeUrl("https://youtu.be/abc123XYZ90")).toEqual({
       provider: "youtube",
@@ -47,6 +62,25 @@ describe("listen together provider helpers", () => {
       artworkUrl: "https://img.example/2.jpg",
       sourceLabel: "YouTube",
     });
+  });
+
+  it("deduplicates resolved tracks by stable track id", () => {
+    const track = {
+      kind: "music" as const,
+      id: "spotify:duplicate",
+      provider: "spotify" as const,
+      videoId: "video-1",
+      title: "Track One",
+      artist: "Artist",
+      album: null,
+      durationMs: 180_000,
+      artworkUrl: "https://img.example/track.jpg",
+      canonicalUrl: "https://www.youtube.com/watch?v=video-1",
+      sourceUrl: "https://open.spotify.com/playlist/playlist-1",
+      sourceLabel: "Spotify",
+    };
+
+    expect(dedupeListenTogetherTracks([track, { ...track }])).toEqual([track]);
   });
 
   it("strips spoken duration suffixes from accessible YouTube titles", () => {

@@ -19,7 +19,7 @@ import {
   type NotificationActionEvent,
   type NotificationOptions,
 } from "@tauri-apps/plugin-notification";
-import { isTauri } from "@/lib/platform";
+import { isDesktop, isTauri } from "@/lib/platform";
 import { useDesktopSettingsStore } from "@/stores/useDesktopSettingsStore";
 import { clog } from "@/lib/console-logger";
 import type { Notification as AppNotification } from "@/lib/types";
@@ -38,8 +38,22 @@ interface NativeSyncInput {
   unreadServerChannelIds: Iterable<string>;
 }
 
+type NotificationExtra = Record<string, unknown> & {
+  channelId?: string;
+  messageId?: string;
+};
+
+type NotificationWithExtra = Omit<NotificationOptions, "extra"> & {
+  extra?: NotificationExtra;
+};
+
+type NotificationActionPayload = NotificationActionEvent &
+  Partial<NotificationWithExtra> & {
+    notification?: NotificationWithExtra | null;
+  };
+
 function isDesktopTauriRuntime() {
-  return isTauri() && typeof window !== "undefined";
+  return isDesktop() && isTauri() && typeof window !== "undefined";
 }
 
 async function setTaskbarNotificationAttention(active: boolean) {
@@ -93,10 +107,12 @@ async function ensureNotificationPluginReady() {
   try {
     notificationActionUnlisten = await onAction(
       (event: NotificationActionEvent) => {
-        desktopNotificationsLog.info("Notification action received", event);
-        const messageId = event.notification?.extra?.messageId;
-        const channelId = event.notification?.extra?.channelId;
-        if (event.actionId === "mark-read" && channelId) {
+        const payload = event as NotificationActionPayload;
+        desktopNotificationsLog.info("Notification action received", payload);
+        const notification = payload.notification ?? payload;
+        const messageId = notification.extra?.messageId;
+        const channelId = notification.extra?.channelId;
+        if (payload.actionId === "mark-read" && channelId) {
           window.dispatchEvent(
             new CustomEvent("notification-mark-read", {
               detail: { channelId, messageId },
@@ -104,16 +120,16 @@ async function ensureNotificationPluginReady() {
           );
         }
         if (
-          event.actionId === "reply" &&
+          payload.actionId === "reply" &&
           channelId &&
-          event.inputValue?.trim()
+          payload.inputValue?.trim()
         ) {
           window.dispatchEvent(
             new CustomEvent("notification-reply", {
               detail: {
                 channelId,
                 messageId,
-                content: event.inputValue.trim(),
+                content: payload.inputValue.trim(),
               },
             }),
           );

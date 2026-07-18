@@ -16,7 +16,13 @@ import { useVoiceChannel } from "@/hooks/useVoiceChannel";
 import { useChatStore } from "@/stores/chat-store";
 import { useCallStore } from "@/stores/useCallStore";
 import { useCallVoiceStore } from "@/stores/useCallVoiceStore";
-import { useEffect } from "react";
+import {
+  getAutomaticSoundboardSessionId,
+  hasAutomaticSoundboardLeaveStarted,
+  playAutomaticSoundboardTrigger,
+  resetAutomaticSoundboardSession,
+} from "@/lib/voice/auto-soundboard";
+import { useEffect, useRef } from "react";
 
 /**
  * Top-level component — mount once in ChatPageClient.
@@ -27,13 +33,31 @@ export function CallVoiceManager() {
   const voiceRoomId = useCallStore((s) => s.voiceRoomId);
   const channelId = useCallStore((s) => s.channelId);
   const hasJoinedSFU = useCallStore((s) => s.hasJoinedSFU);
+  const previousStatus = useRef(status);
+  const previousVoiceRoomId = useRef(voiceRoomId);
 
   // Reset store when call ends
   useEffect(() => {
+    const wasActive = previousStatus.current === "active";
+    const endedVoiceRoomId = voiceRoomId ?? previousVoiceRoomId.current;
+    if (wasActive && status !== "active" && endedVoiceRoomId) {
+      const sessionId = getAutomaticSoundboardSessionId(
+        "call",
+        endedVoiceRoomId,
+      );
+      const leaveAlreadyStarted = hasAutomaticSoundboardLeaveStarted(sessionId);
+      void playAutomaticSoundboardTrigger("leave", sessionId).finally(() => {
+        if (!leaveAlreadyStarted) {
+          resetAutomaticSoundboardSession(sessionId);
+        }
+      });
+    }
+    previousStatus.current = status;
+    previousVoiceRoomId.current = voiceRoomId;
     if (status !== "active") {
       useCallVoiceStore.getState().reset();
     }
-  }, [status]);
+  }, [status, voiceRoomId]);
 
   if (status !== "active" || !hasJoinedSFU || !voiceRoomId || !channelId)
     return null;

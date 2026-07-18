@@ -39,11 +39,12 @@ export default function CreateCategoryModal({
   }, [name, creating, createCategory, serverId, onClose]);
 
   return (
-    <BaseModal onClose={onClose}>
+    <BaseModal onClose={onClose} aria-label="Create category">
       <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
         {/* Backdrop */}
         <button
           type="button"
+          data-base-modal-backdrop
           className="absolute inset-0 border-0 bg-black/60 p-0 backdrop-blur-sm animate-in fade-in duration-300"
           onClick={onClose}
           aria-label="Close create category modal"

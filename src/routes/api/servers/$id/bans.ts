@@ -1,14 +1,29 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { z } from "zod";
 
 import { apiSuccess, getDB, requireAuth } from "@/lib/api-helpers";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 import { ServiceError } from "@/lib/service-error";
+import { validateBody } from "@/lib/validate-body";
 import { banUser, listBans, unbanUser } from "@/services/ban.service";
 import {
   executeAuditLog,
   executeBroadcast,
   executeInvalidation,
 } from "@/services/service-helpers";
+
+export const banCreateBodySchema = z
+  .object({
+    user_id: z.string().optional(),
+    reason: z.string().optional(),
+  })
+  .passthrough();
+
+export const banDeleteBodySchema = z
+  .object({
+    user_id: z.string().optional(),
+  })
+  .passthrough();
 
 // GET /api/servers/:id/bans — list banned users
 const GET = async ({ request: _request, params }: any) => {
@@ -43,7 +58,9 @@ const POST = async ({ request, params }: any) => {
   const rl = checkRateLimit(actorId, "ban", RATE_LIMITS.DEFAULT);
   if (rl) return rl;
 
-  const body = (await request.json()) as { user_id: string; reason?: string };
+  const bodyResult = await validateBody(request, banCreateBodySchema, request);
+  if (bodyResult instanceof Response) return bodyResult;
+  const body = bodyResult;
 
   if (!body.user_id) {
     return Response.json({ error: "user_id is required" }, { status: 400 });
@@ -58,7 +75,9 @@ const POST = async ({ request, params }: any) => {
     });
 
     await executeInvalidation(result.cacheKeysToInvalidate);
-    await executeBroadcast(result.broadcast);
+    for (const broadcast of result.broadcasts) {
+      await executeBroadcast(broadcast);
+    }
     await executeAuditLog(db, result.auditLog);
 
     return apiSuccess({ banned: true, user_id: body.user_id }, 201);
@@ -80,7 +99,9 @@ const DELETE = async ({ request, params }: any) => {
   const { userId: actorId } = authResult;
   const { id: serverId } = params;
 
-  const body = (await request.json()) as { user_id: string };
+  const bodyResult = await validateBody(request, banDeleteBodySchema, request);
+  if (bodyResult instanceof Response) return bodyResult;
+  const body = bodyResult;
 
   if (!body.user_id) {
     return Response.json({ error: "user_id is required" }, { status: 400 });

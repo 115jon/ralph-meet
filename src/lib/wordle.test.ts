@@ -50,6 +50,21 @@ describe("Wordle NYT source", () => {
     ).rejects.toThrow("NYT Wordle payload missing valid solution");
   });
 
+  it("rejects an upstream puzzle declared for a different date", async () => {
+    const fetcher = vi.fn().mockResolvedValue({
+      ok: true,
+      headers: new Headers({ "Content-Type": "application/json" }),
+      json: async () => ({
+        solution: "WHARF",
+        print_date: "2026-06-08",
+      }),
+    });
+
+    await expect(
+      fetchNytWordlePuzzle(new Date("2026-06-09T12:00:00.000Z"), fetcher),
+    ).rejects.toThrow("NYT Wordle payload date mismatch");
+  });
+
   it("rejects HTML upstream responses before parsing JSON", async () => {
     const fetcher = vi.fn().mockResolvedValue({
       ok: true,

@@ -5,8 +5,10 @@
   "type": "module",
   "scripts": {
     "tauri": "tauri",
-    "dev:android": "tauri android dev",
+    "dev:android": "powershell -ExecutionPolicy Bypass -File ./scripts/dev-android.ps1",
+    "dev:android:tauri": "tauri android dev",
     "build:android": "tauri android build",
+    "build:android:prod": "powershell -ExecutionPolicy Bypass -File ./scripts/build-android-prod.ps1",
     "dev:vite": "vite",
     "build:vite": "vite build",
     "postinstall": "patch-package"
@@ -21,6 +23,7 @@
   "dependencies": {
     "@kova/react": "github:115jon/kova.git#kova-react-v0.1.0&path:/packages/kova-react",
     "@tauri-apps/api": "^2.10.1",
+    "@tauri-apps/plugin-deep-link": "^2.4.9",
     "@tauri-apps/plugin-notification": "^2.3.3",
     "@tauri-apps/plugin-opener": "^2.5.3",
     "@tauri-apps/plugin-process": "^2.3.1",

@@ -22,30 +22,55 @@ VITE_KOVA_AUTH_URL = "https://auth.115jon.site"
 VITE_KOVA_AUTH_PUBLISHABLE_KEY = "pk_dev_fhygLR-eApZ4HvSfu-v-LEGFp7WAsgkLRhlveveNzhk"
 REALTIME_ALLOWED_ORIGINS = "https://meet.115jon.site,http://localhost:5173,http://localhost:1420,http://tauri.localhost,https://tauri.localhost"
 
-# ── Durable Objects (hosted in auxiliary worker) ────────────────────────
-# script_name tells the runtime these DO classes live in a separate worker,
-# preventing module-level I/O context conflicts in dev mode.
+# ── Durable Objects ──────────────────────────────────────────────────────
 
 # Main Gateway — room presence & state
 [[durable_objects.bindings]]
 name = "MEETING_ROOM"
-class_name = "MeetingRoom"
-script_name = "ralph-meet-do"
+class_name = "RootMeetingRoom"
 
 # Voice Gateway — media signaling
 [[durable_objects.bindings]]
 name = "VOICE_ROOM"
-class_name = "VoiceRoom"
-script_name = "ralph-meet-do"
+class_name = "RootVoiceRoom"
 
 # Rate Limiter — global token bucket
 [[durable_objects.bindings]]
 name = "RATE_LIMITER"
-class_name = "RateLimiterDO"
-script_name = "ralph-meet-do"
+class_name = "RootRateLimiterDO"
 
 # ── Migrations ───────────────────────────────────────────────────────────
-# Migrations are defined in worker/wrangler.toml (where the DO classes live)
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["MeetingRoom"]
+
+[[migrations]]
+tag = "v2"
+new_sqlite_classes = ["VoiceRoom"]
+
+[[migrations]]
+tag = "v3"
+new_sqlite_classes = ["RateLimiterDO"]
+
+# Move the live namespaces back from the temporary auxiliary Worker.
+[[migrations]]
+tag = "v4-transfer-from-ralph-meet-do"
+
+[[migrations.transferred_classes]]
+from = "MeetingRoom"
+from_script = "ralph-meet-do"
+to = "RootMeetingRoom"
+
+[[migrations.transferred_classes]]
+from = "VoiceRoom"
+from_script = "ralph-meet-do"
+to = "RootVoiceRoom"
+
+[[migrations.transferred_classes]]
+from = "RateLimiterDO"
+from_script = "ralph-meet-do"
+to = "RootRateLimiterDO"
 
 # ── D1 Database ──────────────────────────────────────────────────────────
 
@@ -53,7 +78,7 @@ script_name = "ralph-meet-do"
 binding = "DB"
 database_name = "ralph-chat-db"
 database_id = "0b10b6c3-b5c5-488d-a95d-f9a8e7433813"
-migrations_dir = "worker/migrations"
+migrations_dir = "migrations"
 
 # ── KV Cache ─────────────────────────────────────────────────────────
 
@@ -66,6 +91,46 @@ id = "0ee41653bb684978af83430e53623019"
 [[r2_buckets]]
 binding = "BUCKET"
 bucket_name = "ralph-chat-attachments"
+
+# The mobile-dev environment runs Worker code locally while using the deployed
+# data resources so an Android dev session starts with real server membership.
+[env.mobile-dev]
+
+[env.mobile-dev.vars]
+CALLS_APP_ID = "19e070aa92dd233340bfb829a1ffd742"
+TURN_TOKEN_ID = "7355d949dedf888e6d89a5298f3ffde7"
+KOVA_AUTH_URL = "https://auth.115jon.site"
+VITE_KOVA_AUTH_URL = "https://auth.115jon.site"
+VITE_KOVA_AUTH_PUBLISHABLE_KEY = "pk_dev_fhygLR-eApZ4HvSfu-v-LEGFp7WAsgkLRhlveveNzhk"
+REALTIME_ALLOWED_ORIGINS = "https://meet.115jon.site,http://localhost:5173,http://localhost:1420,http://tauri.localhost,https://tauri.localhost"
+
+[[env.mobile-dev.durable_objects.bindings]]
+name = "MEETING_ROOM"
+class_name = "RootMeetingRoom"
+
+[[env.mobile-dev.durable_objects.bindings]]
+name = "VOICE_ROOM"
+class_name = "RootVoiceRoom"
+
+[[env.mobile-dev.durable_objects.bindings]]
+name = "RATE_LIMITER"
+class_name = "RootRateLimiterDO"
+
+[[env.mobile-dev.d1_databases]]
+binding = "DB"
+database_name = "ralph-chat-db"
+database_id = "0b10b6c3-b5c5-488d-a95d-f9a8e7433813"
+remote = true
+
+[[env.mobile-dev.kv_namespaces]]
+binding = "CACHE"
+id = "0ee41653bb684978af83430e53623019"
+remote = true
+
+[[env.mobile-dev.r2_buckets]]
+binding = "BUCKET"
+bucket_name = "ralph-chat-attachments"
+remote = true
 
 # ── Local Development ──────────────────────────────────────────────────
 

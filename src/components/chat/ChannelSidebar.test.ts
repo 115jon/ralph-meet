@@ -3,7 +3,7 @@
 import { initialState } from "@/lib/chat-reducer";
 import type { DisplayNameStyle } from "@/lib/profile-customization";
 import { useChatStore } from "@/stores/chat-store";
-import { useVoiceActivityStore } from "@/stores/useVoiceActivityStore";
+import { useActivityStore } from "@/stores/useActivityStore";
 import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
 import { useListenTogetherStore } from "@/stores/useListenTogetherStore";
 import { cleanup, render } from "@testing-library/react";
@@ -23,7 +23,7 @@ describe("ChannelSidebar voice member identities", () => {
 
   beforeEach(() => {
     useChatStore.setState(initialState);
-    useVoiceActivityStore.setState({ activeByUser: {} });
+    useActivityStore.setState({ activeByUser: {} });
     useVoiceSettingsStore.setState({
       currentUser: null,
       userSettings: {},

@@ -7,6 +7,7 @@ import type {
 import {
   buildListenTogetherStreamUrl,
   getListenTogetherPlaybackPlan,
+  isExpectedListenTogetherPlayCancellation,
 } from "@/lib/voice/listen-together-player";
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -98,6 +99,21 @@ function makeRadioSnapshot(
 }
 
 describe("listen together playback plan", () => {
+  it("only treats an AbortError as expected when authoritative playback is paused", () => {
+    expect(
+      isExpectedListenTogetherPlayCancellation({ name: "AbortError" }, true),
+    ).toBe(true);
+    expect(
+      isExpectedListenTogetherPlayCancellation({ name: "AbortError" }, false),
+    ).toBe(false);
+    expect(
+      isExpectedListenTogetherPlayCancellation(
+        { name: "NotAllowedError" },
+        true,
+      ),
+    ).toBe(false);
+  });
+
   it("requests a seek when drift exceeds the tolerance", () => {
     const plan = getListenTogetherPlaybackPlan({
       snapshot: makeSnapshot({ positionMs: 12_500 }),

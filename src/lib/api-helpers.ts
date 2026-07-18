@@ -9,7 +9,6 @@ export { genId } from "@/lib/id";
 const authLog = clog("requireAuth");
 const voiceSessionLog = clog("voice-session");
 const broadcastLog = clog("broadcast");
-const broadcastAllLog = clog("broadcastAll");
 const broadcastServerLog = clog("broadcastToServerMembers");
 const broadcastUserLog = clog("broadcastToUser");
 
@@ -454,28 +453,6 @@ export async function broadcastToChannel(
 }
 
 /**
- * Broadcast a dispatch event to ALL connected WS clients.
- * Used for server-wide events (member add/remove, server update, presence).
- */
-export async function broadcastToAll(
-  event: string,
-
-  data: any,
-): Promise<void> {
-  try {
-    const doId = env.MEETING_ROOM.idFromName("global-gateway");
-    const stub = env.MEETING_ROOM.get(doId);
-    await stub.fetch("https://internal/broadcast", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ broadcast_all: true, event, data }),
-    });
-  } catch (e) {
-    broadcastAllLog.error("Failed to notify gateway:", e);
-  }
-}
-
-/**
  * Broadcast a dispatch event to all connected members of a server.
  * The DO routes this via in-memory server subscription maps (Op 35).
  */
@@ -496,6 +473,26 @@ export async function broadcastToServerMembers(
     broadcastServerLog.error("Failed to notify gateway:", e);
   }
 }
+
+/** Broadcast a user profile event only to members of servers containing the user. */
+export async function broadcastToUserServers(
+  userId: string,
+  event: string,
+  data: unknown,
+): Promise<void> {
+  try {
+    const doId = env.MEETING_ROOM.idFromName("global-gateway");
+    const stub = env.MEETING_ROOM.get(doId);
+    await stub.fetch("https://internal/broadcast", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ member_user_id: userId, event, data }),
+    });
+  } catch (e) {
+    broadcastServerLog.error("Failed to notify user server members:", e);
+  }
+}
+
 /**
  * Broadcast a dispatch event to a SPECIFIC user.
  * Used for private events like friend requests, DMs, etc.

@@ -114,10 +114,11 @@ export default function ChannelInviteModal({
     : "";
 
   return (
-    <BaseModal onClose={onClose}>
+    <BaseModal onClose={onClose} aria-label="Channel invite">
       <div className="fixed inset-0 z-[200] flex items-center justify-center">
         <button
           type="button"
+          data-base-modal-backdrop
           className={cn(
             "absolute inset-0 bg-black/60 backdrop-blur-sm",
             isClosing && "animate-out fade-out duration-200",

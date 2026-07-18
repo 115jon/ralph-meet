@@ -1,5 +1,5 @@
 import { cn } from "@/lib/utils";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 export interface ContextMenuItem {
@@ -25,6 +25,13 @@ interface ContextMenuProps {
   onClose: () => void;
 }
 
+function getDirectMenuItems(menu: HTMLElement | null): HTMLElement[] {
+  if (!menu) return [];
+  return Array.from(
+    menu.querySelectorAll<HTMLElement>('[role="menuitem"]:not([disabled])'),
+  ).filter((item) => item.closest('[role="menu"]') === menu);
+}
+
 export default function ContextMenu({
   x,
   y,
@@ -37,9 +44,25 @@ export default function ContextMenu({
   const panelRef = useRef<HTMLDivElement>(null);
   const submenuRef = useRef<HTMLDivElement>(null);
   const submenuAnchorRectRef = useRef<DOMRect | null>(null);
+  const submenuTriggerRef = useRef<HTMLElement | null>(null);
+  const previousFocusRef = useRef<HTMLElement | null>(null);
   const [coords, setCoords] = useState({ x, y });
   const [activeSubmenuKey, setActiveSubmenuKey] = useState<string | null>(null);
   const [submenuStyle, setSubmenuStyle] = useState<React.CSSProperties>({});
+  const menuContextInitializedRef = useRef(false);
+
+  useLayoutEffect(() => {
+    previousFocusRef.current =
+      document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
+
+    return () => {
+      if (previousFocusRef.current?.isConnected) {
+        previousFocusRef.current.focus();
+      }
+    };
+  }, []);
 
   useEffect(() => {
     // Close on click outside
@@ -92,8 +115,13 @@ export default function ContextMenu({
   }, [x, y, onClose]);
 
   useEffect(() => {
+    if (!menuContextInitializedRef.current) {
+      menuContextInitializedRef.current = true;
+      return;
+    }
     const frameId = window.requestAnimationFrame(() => {
       submenuAnchorRectRef.current = null;
+      submenuTriggerRef.current = null;
       setSubmenuStyle({});
       setActiveSubmenuKey(null);
     });
@@ -140,6 +168,79 @@ export default function ContextMenu({
     };
   }, [activeSubmenuKey, coords.x, coords.y]);
 
+  useEffect(() => {
+    getDirectMenuItems(menuRef.current)[0]?.focus();
+  }, []);
+
+  useEffect(() => {
+    if (!activeSubmenuKey) return;
+    const frameId = window.requestAnimationFrame(() => {
+      submenuRef.current
+        ?.querySelector<HTMLElement>('[role="menuitem"]:not([disabled])')
+        ?.focus();
+    });
+    return () => window.cancelAnimationFrame(frameId);
+  }, [activeSubmenuKey]);
+
+  const closeSubmenu = () => {
+    const parentItem = submenuTriggerRef.current;
+    setActiveSubmenuKey(null);
+    submenuAnchorRectRef.current = null;
+    submenuTriggerRef.current = null;
+    setSubmenuStyle({});
+    parentItem?.focus();
+  };
+
+  const handleMenuKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    const target = event.target instanceof HTMLElement ? event.target : null;
+    const currentMenu =
+      target?.closest<HTMLElement>('[role="menu"]') ?? menuRef.current;
+    const menuItems = getDirectMenuItems(currentMenu);
+    const eventTargetIndex = menuItems.indexOf(event.target as HTMLElement);
+    const currentIndex =
+      eventTargetIndex >= 0
+        ? eventTargetIndex
+        : menuItems.indexOf(
+            document.activeElement instanceof HTMLElement
+              ? document.activeElement
+              : menuItems[0],
+          );
+
+    if (
+      event.key === "Escape" &&
+      activeSubmenuKey &&
+      currentMenu !== menuRef.current
+    ) {
+      event.preventDefault();
+      event.stopPropagation();
+      closeSubmenu();
+      return;
+    }
+
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      const direction = event.key === "ArrowDown" ? 1 : -1;
+      const nextIndex =
+        (currentIndex + direction + menuItems.length) % menuItems.length;
+      menuItems[nextIndex]?.focus();
+    } else if (event.key === "Home" || event.key === "End") {
+      event.preventDefault();
+      menuItems[event.key === "Home" ? 0 : menuItems.length - 1]?.focus();
+    } else if (event.key === "ArrowRight" && currentMenu === menuRef.current) {
+      const currentItem = items[currentIndex];
+      if (currentItem?.submenu) {
+        event.preventDefault();
+        submenuAnchorRectRef.current =
+          menuItems[currentIndex]?.getBoundingClientRect() ?? null;
+        submenuTriggerRef.current = menuItems[currentIndex] ?? null;
+        setActiveSubmenuKey(currentItem.key ?? currentItem.label);
+      }
+    } else if (event.key === "ArrowLeft" && activeSubmenuKey) {
+      event.preventDefault();
+      closeSubmenu();
+    }
+  };
+
   const activeSubmenuItem = activeSubmenuKey
     ? items.find(
         (item) => (item.key ?? item.label) === activeSubmenuKey && item.submenu,
@@ -156,10 +257,14 @@ export default function ContextMenu({
           : "animate-in fade-in zoom-in-95 duration-150",
       )}
       style={{ top: coords.y, left: coords.x }}
+      role="menu"
+      tabIndex={-1}
+      onKeyDown={handleMenuKeyDown}
       onContextMenu={(e) => e.preventDefault()}
       onMouseLeave={() => {
         setActiveSubmenuKey(null);
         submenuAnchorRectRef.current = null;
+        submenuTriggerRef.current = null;
         setSubmenuStyle({});
       }}
     >
@@ -181,10 +286,16 @@ export default function ContextMenu({
             return (
               <React.Fragment key={itemKey}>
                 <button
+                  type="button"
+                  role="menuitem"
+                  disabled={item.disabled}
+                  aria-haspopup={item.submenu ? "menu" : undefined}
+                  aria-expanded={item.submenu ? isSubmenuOpen : undefined}
                   onMouseEnter={(event) => {
                     if (item.submenu) {
                       submenuAnchorRectRef.current =
                         event.currentTarget.getBoundingClientRect();
+                      submenuTriggerRef.current = event.currentTarget;
                       setActiveSubmenuKey(itemKey);
                       return;
                     }
@@ -202,6 +313,7 @@ export default function ContextMenu({
                     if (item.submenu) {
                       submenuAnchorRectRef.current =
                         event.currentTarget.getBoundingClientRect();
+                      submenuTriggerRef.current = event.currentTarget;
                       setActiveSubmenuKey((current) =>
                         current === itemKey ? null : itemKey,
                       );
@@ -281,6 +393,8 @@ export default function ContextMenu({
       {activeSubmenuItem?.submenu ? (
         <div
           ref={submenuRef}
+          role="menu"
+          aria-label={`${activeSubmenuItem.label} submenu`}
           className="absolute z-[1001] w-[210px] overflow-hidden rounded-2xl border border-rm-border bg-rm-bg-elevated p-1.5 shadow-2xl backdrop-blur-xl"
           style={submenuStyle}
         >

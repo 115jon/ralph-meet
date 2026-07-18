@@ -16,11 +16,14 @@ const ALLOWED_HOSTS = new Set([
   "video.twimg.com",
   "pbs.twimg.com",
   "vxtwitter.com",
-  "static.klipy.com",
   "tenor.com",
-  "media.tenor.com",
   "lh3.googleusercontent.com",
 ]);
+
+const KLIPY_STATIC_HOST_PATTERN = /^static\d*\.klipy\.com$/;
+const TENOR_MEDIA_HOST_PATTERN = /^media\d*\.tenor\.com$/;
+const INSTAGRAM_CDN_HOST_PATTERN =
+  /^scontent-[a-z0-9]+(?:-[a-z0-9]+)*\.cdninstagram\.com$/;
 
 const X_SOURCE_HOSTS = new Set([
   "x.com",
@@ -56,10 +59,17 @@ interface ResolveRefreshedMediaOptions {
 }
 
 const TIKTOK_PROXY_RESPONSE_TTL = 5 * 60;
+const MAX_UPSTREAM_REDIRECTS = 3;
 
 export function isAllowedMediaUrl(url: URL): boolean {
   if (url.protocol !== "https:") return false;
   const hostname = url.hostname.toLowerCase();
+  if (hostname === "gif.fxtwitter.com") {
+    return (
+      url.pathname.startsWith("/tweet_video/") &&
+      url.pathname.toLowerCase().endsWith(".webp")
+    );
+  }
   if (ALLOWED_HOSTS.has(hostname)) return true;
 
   if (hostname === "vxtwitter.com") {
@@ -67,12 +77,12 @@ export function isAllowedMediaUrl(url: URL): boolean {
   }
 
   return (
-    hostname.endsWith(".klipy.com") ||
-    hostname.endsWith(".tenor.com") ||
-    hostname.endsWith(".googleusercontent.com") ||
-    hostname.endsWith(".cdninstagram.com") ||
+    KLIPY_STATIC_HOST_PATTERN.test(hostname) ||
+    TENOR_MEDIA_HOST_PATTERN.test(hostname) ||
+    INSTAGRAM_CDN_HOST_PATTERN.test(hostname) ||
     isTikTokMediaHostname(hostname) ||
-    hostname.includes("tiktok.com")
+    hostname === "tiktok.com" ||
+    hostname.endsWith(".tiktok.com")
   );
 }
 
@@ -117,13 +127,58 @@ async function makeSyntheticRangeResponse(
   }
 
   end = Math.min(end, contentLength - 1);
-  const bytes = new Uint8Array(await upstream.arrayBuffer());
-  const sliced = bytes.slice(start, end + 1);
+  const rangeLength = end - start + 1;
+
   const headers = buildProxyHeaders(upstream.headers, upstream.url);
   headers.set("Accept-Ranges", "bytes");
   headers.set("Content-Range", `bytes ${start}-${end}/${contentLength}`);
-  headers.set("Content-Length", sliced.byteLength.toString());
+  headers.set("Content-Length", rangeLength.toString());
   headers.set("Cache-Control", "no-store");
+
+  const body = upstream.body;
+  if (!body) return null;
+
+  // Stream the upstream body and emit only the requested byte window, rather
+  // than buffering the entire response into memory. Bytes before `start` are
+  // discarded, bytes after `end` are never read (we cancel the source).
+  const sliced = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      const reader = body.getReader();
+      let position = 0; // absolute offset of the next incoming byte
+      let emitted = 0;
+      try {
+        while (emitted < rangeLength) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          if (!value || value.byteLength === 0) continue;
+
+          const chunkStart = position;
+          const chunkEnd = position + value.byteLength - 1;
+          position += value.byteLength;
+
+          // Skip chunks entirely before the requested window.
+          if (chunkEnd < start) continue;
+
+          // Intersect [chunkStart, chunkEnd] with [start, end].
+          const sliceFrom = Math.max(0, start - chunkStart);
+          const sliceTo = Math.min(
+            value.byteLength,
+            sliceFrom + (rangeLength - emitted),
+          );
+          const piece = value.subarray(sliceFrom, sliceTo);
+          controller.enqueue(piece);
+          emitted += piece.byteLength;
+        }
+        controller.close();
+      } catch (err) {
+        controller.error(err);
+      } finally {
+        // Stop pulling more bytes from the upstream once we have our window.
+        await reader.cancel().catch(() => {});
+        reader.releaseLock();
+      }
+    },
+  });
 
   return new Response(sliced, {
     status: 206,
@@ -829,12 +884,45 @@ export async function proxyMedia(
     upstreamHeaders.set("Range", range);
   }
 
-  const fetchUpstream = (targetUrl: string) =>
-    fetch(targetUrl, {
-      method: includeBody || shouldStreamTikTokMedia ? "GET" : "HEAD",
-      headers: upstreamHeaders,
-      redirect: "follow",
-    });
+  const fetchUpstream = async (targetUrl: string): Promise<Response> => {
+    let currentUrl = targetUrl;
+
+    for (let hop = 0; hop <= MAX_UPSTREAM_REDIRECTS; hop += 1) {
+      let parsedUrl: URL;
+      try {
+        parsedUrl = new URL(currentUrl);
+      } catch {
+        return new Response("Invalid upstream redirect", { status: 502 });
+      }
+
+      if (!isAllowedMediaUrl(parsedUrl)) {
+        return new Response("Unsupported upstream redirect", { status: 502 });
+      }
+
+      const response = await fetch(currentUrl, {
+        method: includeBody || shouldStreamTikTokMedia ? "GET" : "HEAD",
+        headers: upstreamHeaders,
+        redirect: "manual",
+      });
+      if (![301, 302, 303, 307, 308].includes(response.status)) {
+        return response;
+      }
+
+      const location = response.headers.get("Location");
+      if (!location) return response;
+      if (hop === MAX_UPSTREAM_REDIRECTS) {
+        return new Response("Too many upstream redirects", { status: 508 });
+      }
+
+      try {
+        currentUrl = new URL(location, parsedUrl).toString();
+      } catch {
+        return new Response("Invalid upstream redirect", { status: 502 });
+      }
+    }
+
+    return new Response("Too many upstream redirects", { status: 508 });
+  };
 
   let refreshedTikTokUrls: string[] = [];
   const attemptedTikTokUrls = new Set<string>();
@@ -850,6 +938,16 @@ export async function proxyMedia(
       },
     );
     const resolvedUrl = refreshedTikTokUrls[0] ?? mediaUrl.toString();
+    let resolvedMediaUrl: URL;
+    try {
+      resolvedMediaUrl = new URL(resolvedUrl);
+    } catch {
+      return new Response("Unsupported refreshed media URL", { status: 502 });
+    }
+    if (!isAllowedMediaUrl(resolvedMediaUrl)) {
+      return new Response("Unsupported refreshed media URL", { status: 502 });
+    }
+
     const resolvedContentType = inferMediaContentType(null, resolvedUrl);
     shouldStreamTikTokMedia =
       requestedContentType.startsWith("image/") ||
@@ -866,7 +964,7 @@ export async function proxyMedia(
       return Response.redirect(resolvedUrl, 307);
     }
 
-    mediaUrl = new URL(resolvedUrl);
+    mediaUrl = resolvedMediaUrl;
     hostname = mediaUrl.hostname.toLowerCase();
   }
 

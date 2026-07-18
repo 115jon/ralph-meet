@@ -9,8 +9,10 @@ import {
   hasPermission,
   PERMISSIONS,
 } from "@/lib/permissions";
+import type { D1Database } from "@cloudflare/workers-types";
 
 async function fetchServerMemberRoles(
+  db: D1Database,
   serverId: string,
   userId: string,
 ): Promise<
@@ -21,7 +23,6 @@ async function fetchServerMemberRoles(
     id: string;
   }>
 > {
-  const db = getDB();
   const { results } = await db
     .prepare(
       `SELECT r.id, r.permissions, r.position, r.is_default
@@ -55,7 +56,7 @@ export async function requirePermission(
   permission: number,
   errorMessage = "Insufficient permissions",
 ): Promise<{ permissions: number } | Response> {
-  const roles = await fetchServerMemberRoles(serverId, userId);
+  const roles = await fetchServerMemberRoles(getDB(), serverId, userId);
   const totalPerms =
     roles.length > 0
       ? calculatePermissions(roles.map((role) => role.permissions))
@@ -76,10 +77,92 @@ export async function getUserPermissions(
   serverId: string,
   userId: string,
 ): Promise<number | null> {
-  const roles = await fetchServerMemberRoles(serverId, userId);
+  const roles = await fetchServerMemberRoles(getDB(), serverId, userId);
   return roles.length > 0
     ? calculatePermissions(roles.map((role) => role.permissions))
     : null;
+}
+
+export async function getUserChannelPermissionsForDb(
+  db: D1Database,
+  serverId: string,
+  channelId: string,
+  userId: string,
+): Promise<number | null> {
+  const userRoles = await fetchServerMemberRoles(db, serverId, userId);
+
+  if (!userRoles || userRoles.length === 0) {
+    return null; // Not a member
+  }
+
+  let basePermissions = 0;
+  const roleIds: string[] = [];
+  let everyoneRoleId: string | null = null;
+
+  for (const role of userRoles) {
+    basePermissions |= role.permissions as number;
+    roleIds.push(role.id as string);
+    if (role.is_default === 1) {
+      everyoneRoleId = role.id as string;
+    }
+  }
+
+  if (hasPermission(basePermissions, PERMISSIONS.ADMINISTRATOR)) {
+    return basePermissions;
+  }
+
+  const placeholders = roleIds.map(() => "?").join(",");
+  const queryParams = [channelId, userId, ...roleIds];
+
+  const { results: overrides } = await db
+    .prepare(
+      `SELECT target_id, target_type, allow, deny
+       FROM channel_permission_overrides
+       WHERE channel_id = ?
+         AND (
+           (target_type = 'user' AND target_id = ?) OR
+           (target_type = 'role' AND target_id IN (${placeholders}))
+         )`,
+    )
+    .bind(...queryParams)
+    .all();
+
+  let finalPermissions = basePermissions;
+  const everyoneOverride = overrides?.find(
+    (override) =>
+      override.target_type === "role" && override.target_id === everyoneRoleId,
+  );
+  const roleOverrides = overrides?.filter(
+    (override) =>
+      override.target_type === "role" && override.target_id !== everyoneRoleId,
+  );
+  const userOverride = overrides?.find(
+    (override) =>
+      override.target_type === "user" && override.target_id === userId,
+  );
+
+  if (everyoneOverride) {
+    finalPermissions &= ~(everyoneOverride.deny as number);
+    finalPermissions |= everyoneOverride.allow as number;
+  }
+
+  if (roleOverrides && roleOverrides.length > 0) {
+    let roleDenies = 0;
+    let roleAllows = 0;
+    for (const roleOverride of roleOverrides) {
+      roleDenies |= roleOverride.deny as number;
+      roleAllows |= roleOverride.allow as number;
+    }
+    finalPermissions &= ~roleDenies;
+    finalPermissions |= roleAllows;
+  }
+
+  if (userOverride) {
+    finalPermissions &= ~(userOverride.deny as number);
+    finalPermissions |= userOverride.allow as number;
+  }
+
+  return finalPermissions;
 }
 
 /**
@@ -99,85 +182,7 @@ export async function getUserChannelPermissions(
   channelId: string,
   userId: string,
 ): Promise<number | null> {
-  const db = getDB();
-  const userRoles = await fetchServerMemberRoles(serverId, userId);
-
-  if (!userRoles || userRoles.length === 0) {
-    return null; // Not a member
-  }
-
-  let basePermissions = 0;
-  const roleIds: string[] = [];
-  let everyoneRoleId: string | null = null;
-
-  for (const role of userRoles) {
-    basePermissions |= role.permissions as number;
-    roleIds.push(role.id as string);
-    if (role.is_default === 1) {
-      everyoneRoleId = role.id as string;
-    }
-  }
-
-  // Administrators bypass all channel overrides
-  if (hasPermission(basePermissions, PERMISSIONS.ADMINISTRATOR)) {
-    return basePermissions;
-  }
-
-  // 2. Fetch all overrides for this channel that apply to the user
-  const placeholders = roleIds.map(() => "?").join(",");
-  const queryParams = [channelId, userId, ...roleIds];
-
-  const { results: overrides } = await db
-    .prepare(
-      `SELECT target_id, target_type, allow, deny
-     FROM channel_permission_overrides
-     WHERE channel_id = ?
-       AND (
-         (target_type = 'user' AND target_id = ?) OR
-         (target_type = 'role' AND target_id IN (${placeholders}))
-       )`,
-    )
-    .bind(...queryParams)
-    .all();
-
-  let finalPermissions = basePermissions;
-
-  // Find specific overrides
-  const everyoneOverride = overrides?.find(
-    (o: any) => o.target_type === "role" && o.target_id === everyoneRoleId,
-  );
-  const roleOverrides = overrides?.filter(
-    (o: any) => o.target_type === "role" && o.target_id !== everyoneRoleId,
-  );
-  const userOverride = overrides?.find(
-    (o: any) => o.target_type === "user" && o.target_id === userId,
-  );
-
-  // 3. Apply @everyone overrides
-  if (everyoneOverride) {
-    finalPermissions &= ~(everyoneOverride.deny as number);
-    finalPermissions |= everyoneOverride.allow as number;
-  }
-
-  // 4. Apply Role overrides (sum all denies, sum all allows)
-  if (roleOverrides && roleOverrides.length > 0) {
-    let roleDenies = 0;
-    let roleAllows = 0;
-    for (const ro of roleOverrides) {
-      roleDenies |= ro.deny as number;
-      roleAllows |= ro.allow as number;
-    }
-    finalPermissions &= ~roleDenies;
-    finalPermissions |= roleAllows;
-  }
-
-  // 5. Apply User override
-  if (userOverride) {
-    finalPermissions &= ~(userOverride.deny as number);
-    finalPermissions |= userOverride.allow as number;
-  }
-
-  return finalPermissions;
+  return getUserChannelPermissionsForDb(getDB(), serverId, channelId, userId);
 }
 
 /**
@@ -216,6 +221,7 @@ export async function getVisibleChannels<T extends { id: string }>(
   const db = getDB();
 
   const userRoles = (await fetchServerMemberRoles(
+    db,
     serverId,
     userId,
   )) as ChannelVisibilityRole[];

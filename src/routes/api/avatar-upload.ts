@@ -3,7 +3,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import {
   apiError,
   apiSuccess,
-  broadcastToAll,
+  broadcastToUserServers,
   getBucket,
   getDB,
   requireAuth,
@@ -13,6 +13,14 @@ import { MAX_IMAGE_SIZE, validateImageBuffer } from "@/lib/image-validation";
 import { logger } from "@/lib/logger";
 import { checkRateLimitDO, RATE_LIMITS } from "@/lib/rate-limit";
 import { updateAvatarUrl } from "@/services/user.service";
+import {
+  createUserAvatarUpload,
+  deleteUserAvatarUpload,
+  getAvatarUploadPruneList,
+  listUserAvatarUploads,
+  markUserAvatarUploadPendingDeletion,
+  type UserAvatarUpload,
+} from "@/services/user-avatar.service";
 import { normalizeAvatarDisplay } from "@/lib/avatar-display";
 
 // POST /api/avatar-upload — upload a user avatar to R2
@@ -63,18 +71,106 @@ const POST = async ({ request, params: _params }: any) => {
     return apiError(validation.error, 415);
   }
 
-  // R2 key: avatars/{userId}.{ext} — overwrites previous avatar
-  const key = `avatars/${userId}.${validation.ext}`;
-  const avatarUrl = `/api/avatars/${userId}.${validation.ext}`;
+  const previousUser = await getDB()
+    .prepare("SELECT avatar_url FROM users WHERE id = ?")
+    .bind(userId)
+    .first<{ avatar_url: string | null }>();
+  const uploadId = crypto.randomUUID();
+  const key = `avatars/${userId}/${uploadId}.${validation.ext}`;
+  const avatarUrl = `/api/avatars/${userId}/${uploadId}.${validation.ext}`;
 
   const bucket = getBucket();
   await bucket.put(key, buffer, {
     httpMetadata: { contentType: validation.mimeType },
   });
 
-  // ── Update D1 + invalidate caches ───────────────────────────────
+  const upload: UserAvatarUpload = {
+    id: uploadId,
+    user_id: userId,
+    file_key: key,
+    avatar_url: avatarUrl,
+    content_type: validation.mimeType,
+    created_at: new Date().toISOString(),
+  };
+
   const db = getDB();
-  const result = await updateAvatarUrl(db, userId, avatarUrl, avatarDisplay);
+  let result: Awaited<ReturnType<typeof updateAvatarUrl>>;
+  try {
+    await createUserAvatarUpload(db, upload);
+    result = await updateAvatarUrl(db, userId, avatarUrl, avatarDisplay);
+  } catch (error) {
+    try {
+      await db
+        .prepare("DELETE FROM user_avatar_uploads WHERE id = ? AND user_id = ?")
+        .bind(uploadId, userId)
+        .run();
+      await bucket.delete(key);
+    } catch (cleanupError) {
+      logger.error("avatar_upload_cleanup_failed", {
+        userId,
+        key,
+        error:
+          cleanupError instanceof Error
+            ? cleanupError.message
+            : String(cleanupError),
+      });
+    }
+    throw error;
+  }
+
+  try {
+    const allUploads = await listUserAvatarUploads(db, userId, 0, true);
+    const staleUploads = getAvatarUploadPruneList(
+      allUploads.filter((upload) => upload.pending_delete !== 1),
+    );
+    const pendingUploads = allUploads.filter(
+      (upload) => upload.pending_delete === 1,
+    );
+    const markedUploads: UserAvatarUpload[] = [];
+    for (const staleUpload of staleUploads) {
+      if (
+        await markUserAvatarUploadPendingDeletion(db, userId, staleUpload.id)
+      ) {
+        markedUploads.push({ ...staleUpload, pending_delete: 1 });
+      }
+    }
+    const uploadsToDelete = [...pendingUploads, ...markedUploads];
+    if (uploadsToDelete.length > 0) {
+      await bucket.delete(uploadsToDelete.map((upload) => upload.file_key));
+      for (const uploadToDelete of uploadsToDelete) {
+        await deleteUserAvatarUpload(db, userId, uploadToDelete.id);
+      }
+    }
+  } catch (cleanupError) {
+    logger.error("avatar_upload_retention_cleanup_failed", {
+      userId,
+      error:
+        cleanupError instanceof Error
+          ? cleanupError.message
+          : String(cleanupError),
+    });
+  }
+
+  const legacyAvatarPrefix = `/api/avatars/${userId}.`;
+  const previousAvatarKey = previousUser?.avatar_url?.startsWith(
+    legacyAvatarPrefix,
+  )
+    ? previousUser.avatar_url.replace(/^\/api\//, "")
+    : null;
+  if (previousAvatarKey && previousAvatarKey !== key) {
+    try {
+      await bucket.delete(previousAvatarKey);
+    } catch (cleanupError) {
+      logger.error("avatar_upload_legacy_cleanup_failed", {
+        userId,
+        key: previousAvatarKey,
+        error:
+          cleanupError instanceof Error
+            ? cleanupError.message
+            : String(cleanupError),
+      });
+    }
+  }
 
   // ── Cache invalidation ──────────────────────────────────────────
   await cacheDel(CacheKey.userProfile(userId));
@@ -85,7 +181,7 @@ const POST = async ({ request, params: _params }: any) => {
   }
 
   // ── Broadcast to all connected clients ──────────────────────────
-  await broadcastToAll("USER_PROFILE_UPDATE", {
+  await broadcastToUserServers(userId, "USER_PROFILE_UPDATE", {
     user_id: userId,
     username: result.username,
     avatar_url: result.avatarUrl,

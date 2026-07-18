@@ -5,6 +5,7 @@ import {
   getListenTogetherCurrentEntry,
   getListenTogetherPositionMs,
   getListenTogetherTrackDuration,
+  LISTEN_TOGETHER_RECENTLY_PLAYED_LIMIT,
   type ListenTogetherEnqueueMode,
   type ListenTogetherPersistentState,
   type ListenTogetherQueueEntry,
@@ -34,11 +35,23 @@ function touchState(
 
 function startEntry(
   state: ListenTogetherPersistentState,
+  queue: ListenTogetherQueueEntry[],
   entryId: string | null,
   now: number,
   positionMs = 0,
   paused = false,
 ): ListenTogetherPersistentState {
+  const entry = getListenTogetherCurrentEntry(queue, entryId);
+  const recentlyPlayed = entry
+    ? [
+        {
+          historyId: crypto.randomUUID(),
+          playedAt: now,
+          entry,
+        },
+        ...(state.recentlyPlayed ?? []),
+      ].slice(0, LISTEN_TOGETHER_RECENTLY_PLAYED_LIMIT)
+    : state.recentlyPlayed;
   return touchState(
     state,
     {
@@ -46,6 +59,7 @@ function startEntry(
       paused,
       anchorPositionMs: Math.max(0, Math.floor(positionMs)),
       anchorUpdatedAt: now,
+      recentlyPlayed,
     },
     now,
   );
@@ -69,7 +83,7 @@ function insertQueueEntries(
   mode: ListenTogetherEnqueueMode,
 ): ListenTogetherQueueEntry[] {
   if (additions.length === 0) return queue;
-  if (mode !== "play-next" || !currentEntryId) {
+  if (!currentEntryId || mode === "append") {
     return [...queue, ...additions];
   }
 
@@ -78,6 +92,14 @@ function insertQueueEntries(
   );
   if (currentIndex === -1) {
     return [...queue, ...additions];
+  }
+
+  if (mode === "play-now") {
+    return [
+      ...queue.slice(0, currentIndex),
+      ...additions,
+      ...queue.slice(currentIndex + 1),
+    ];
   }
 
   return [
@@ -99,7 +121,14 @@ export function ensureListenTogetherState(
   roomSlug: string,
   state?: ListenTogetherPersistentState | null,
 ): ListenTogetherPersistentState {
-  return state ?? createListenTogetherState(roomSlug);
+  if (!state) return createListenTogetherState(roomSlug);
+  return {
+    ...state,
+    recentlyPlayed: (state.recentlyPlayed ?? []).slice(
+      0,
+      LISTEN_TOGETHER_RECENTLY_PLAYED_LIMIT,
+    ),
+  };
 }
 
 export function buildListenTogetherRoomSnapshot(
@@ -140,9 +169,9 @@ export function enqueueListenTogetherEntries(
     };
   }
 
-  if (!nextState.currentEntryId) {
+  if (mode === "play-now" || !nextState.currentEntryId) {
     return {
-      state: startEntry(nextState, additions[0].entryId, now),
+      state: startEntry(nextState, nextQueue, additions[0].entryId, now),
       queue: nextQueue,
       queueChanged: true,
       playbackChanged: true,
@@ -176,14 +205,57 @@ export function playListenTogether(
     };
   }
 
+  const targetEntry = getListenTogetherCurrentEntry(queue, targetEntryId);
+  if (!targetEntry) {
+    return {
+      state: nextState,
+      queue,
+      queueChanged: false,
+      playbackChanged: false,
+    };
+  }
+
+  if (targetEntryId === nextState.currentEntryId && !nextState.paused) {
+    return {
+      state: nextState,
+      queue,
+      queueChanged: false,
+      playbackChanged: false,
+    };
+  }
+
   const currentDurationMs = getEntryDuration(queue, nextState.currentEntryId);
   const resumePosition =
     targetEntryId === nextState.currentEntryId
       ? getListenTogetherPositionMs(nextState, currentDurationMs, now)
       : 0;
 
+  if (targetEntryId === nextState.currentEntryId) {
+    return {
+      state: touchState(
+        nextState,
+        {
+          paused: false,
+          anchorPositionMs: resumePosition,
+          anchorUpdatedAt: now,
+        },
+        now,
+      ),
+      queue,
+      queueChanged: false,
+      playbackChanged: true,
+    };
+  }
+
   return {
-    state: startEntry(nextState, targetEntryId, now, resumePosition, false),
+    state: startEntry(
+      nextState,
+      queue,
+      targetEntryId,
+      now,
+      resumePosition,
+      false,
+    ),
     queue,
     queueChanged: false,
     playbackChanged: true,
@@ -309,7 +381,7 @@ export function skipListenTogether(
   }
 
   return {
-    state: startEntry(nextState, successor.entryId, now),
+    state: startEntry(nextState, nextQueue, successor.entryId, now),
     queue: nextQueue,
     queueChanged: true,
     playbackChanged: true,
@@ -365,7 +437,7 @@ export function removeListenTogetherEntry(
   }
 
   return {
-    state: startEntry(nextState, successor.entryId, now),
+    state: startEntry(nextState, nextQueue, successor.entryId, now),
     queue: nextQueue,
     queueChanged: true,
     playbackChanged: true,

@@ -26,23 +26,25 @@ import {
   verifySocketTicket,
   type SocketTicketAudience,
 } from "./src/lib/voice/socket-ticket";
-import { RateLimiter } from "./worker/rate-limiter";
+import { RateLimiter } from "./realtime/rate-limiter";
 import {
   appendRealtimeAdmissionHeaders,
   createRealtimeAdmissionContext,
   getRealtimeAdmissionConfig,
   stripRealtimeAdmissionHeaders,
-} from "./worker/realtime-admission";
+} from "./realtime/realtime-admission";
 
-// NOTE: DO classes (MeetingRoom, VoiceRoom, RateLimiterDO) are hosted in
-// a separate auxiliary worker (worker/do-entry.ts) to prevent module-level
-// I/O context conflicts between the main Worker and DOs in dev mode.
-// However, we re-export them here because Cloudflare's migration system
-// requires the main worker to still export any class it previously registered
-// via [[migrations]], even though script_name routes all traffic to ralph-meet-do.
-export { MeetingRoom } from "./worker/meeting-room";
-export { RateLimiterDO } from "./worker/rate-limiter-do";
-export { VoiceRoom } from "./worker/voice-room";
+// DO classes are exported from the root Worker so its bindings and migration
+// history own the Durable Object namespaces.
+export {
+  MeetingRoom,
+  MeetingRoom as RootMeetingRoom,
+} from "./realtime/meeting-room";
+export {
+  RateLimiterDO,
+  RateLimiterDO as RootRateLimiterDO,
+} from "./realtime/rate-limiter-do";
+export { VoiceRoom, VoiceRoom as RootVoiceRoom } from "./realtime/voice-room";
 
 // Module-level rate limiter — persists across requests in the same isolate
 const rateLimiter = new RateLimiter();
@@ -125,17 +127,37 @@ async function requireAuthenticatedWebSocket(
 ): Promise<VerifiedWebSocketRequest | Response> {
   const upgradeError = requireWebSocket(request);
   if (upgradeError) return upgradeError;
-  if (!isAllowedRealtimeOrigin(request, env))
+  if (!isAllowedRealtimeOrigin(request, env)) {
+    logger.warn("Realtime WebSocket origin rejected", {
+      audience,
+      roomSlug,
+      origin: request.headers.get("Origin"),
+    });
     return new Response("Realtime origin is not allowed", { status: 403 });
+  }
 
   const config = getRealtimeAdmissionConfig(env);
-  if (!config.ok)
+  if (!config.ok) {
+    logger.error("Realtime WebSocket configuration is incomplete", {
+      audience,
+      roomSlug,
+      reason: config.reason,
+    });
     return unauthorizedWebSocket("Realtime admission is not configured");
+  }
 
   const protocol = parseSocketTicketProtocols(
     request.headers.get("Sec-WebSocket-Protocol"),
   );
-  if (!protocol.ok) return unauthorizedWebSocket("Missing realtime capability");
+  if (!protocol.ok) {
+    logger.warn("Realtime WebSocket protocol rejected", {
+      audience,
+      roomSlug,
+      reason: protocol.reason,
+      hasProtocolHeader: !!request.headers.get("Sec-WebSocket-Protocol"),
+    });
+    return unauthorizedWebSocket("Missing realtime capability");
+  }
 
   const verification = await verifySocketTicket(
     protocol.value.ticket,
@@ -146,8 +168,14 @@ async function requireAuthenticatedWebSocket(
       roomSlug,
     },
   );
-  if (!verification.ok)
+  if (!verification.ok) {
+    logger.warn("Realtime WebSocket ticket rejected", {
+      audience,
+      roomSlug,
+      reason: verification.reason,
+    });
     return unauthorizedWebSocket("Invalid realtime capability");
+  }
 
   const context = await createRealtimeAdmissionContext(verification.claims);
   const headers = appendRealtimeAdmissionHeaders(
@@ -170,8 +198,16 @@ async function requireAuthenticatedWebSocket(
       headers: consumeHeaders,
     },
   );
-  if (!consumeResponse.ok)
+  if (!consumeResponse.ok) {
+    const consumeBody = (await consumeResponse.text()).slice(0, 200);
+    logger.warn("Realtime WebSocket admission consumption rejected", {
+      audience,
+      roomSlug,
+      status: consumeResponse.status,
+      body: consumeBody,
+    });
     return unauthorizedWebSocket("Realtime capability already used");
+  }
 
   return {
     request: new Request(request, { headers }),
@@ -305,7 +341,7 @@ export default {
     } catch (err: any) {
       console.error("Error in handler:", err?.message || err);
       response = new Response(
-        JSON.stringify({ error: err?.message || "Internal Server Error" }),
+        JSON.stringify({ error: "Internal Server Error" }),
         {
           status: 500,
           headers: { "Content-Type": "application/json" },

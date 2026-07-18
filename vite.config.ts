@@ -62,6 +62,23 @@ const tauriShims: Record<string, string> = {
 function clientEnvironmentShims(): Plugin {
   return {
     name: "client-environment-shims",
+    configResolved(config) {
+      const tanstackServerDependencies = [
+        "@tanstack/react-start/server",
+        "@tanstack/react-start-server",
+        "@tanstack/start-server-core",
+      ];
+
+      for (const environment of Object.values(config.environments)) {
+        if (environment.consumer !== "server") continue;
+        environment.optimizeDeps.exclude = [
+          ...new Set([
+            ...(environment.optimizeDeps.exclude ?? []),
+            ...tanstackServerDependencies,
+          ]),
+        ];
+      }
+    },
     resolveId(id) {
       // 1. Shim cloudflare:workers ONLY in the client environment
       if (this.environment?.name === "client" && id === "cloudflare:workers") {
@@ -82,6 +99,10 @@ export default defineConfig({
   server: {
     host: "0.0.0.0",
     strictPort: true,
+    cors: {
+      origin: ["http://tauri.localhost", "https://tauri.localhost"],
+      credentials: true,
+    },
     hmr: {
       protocol: "ws",
       host: "localhost",
@@ -98,11 +119,6 @@ export default defineConfig({
   },
   plugins: [
     killerInstincts({ autoKill: true }),
-    cloudflare({
-      viteEnvironment: { name: "ssr" },
-      auxiliaryWorkers: [{ configPath: "./worker/wrangler.toml" }],
-    }),
-    clientEnvironmentShims(),
     tanstackStart({
       srcDirectory: "src",
       router: {
@@ -110,6 +126,10 @@ export default defineConfig({
         generatedRouteTree: "routeTree.gen.ts",
       },
     }),
+    cloudflare({
+      viteEnvironment: { name: "ssr" },
+    }),
+    clientEnvironmentShims(),
     viteReact(),
     tailwindcss(),
   ],

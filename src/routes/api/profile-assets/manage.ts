@@ -10,7 +10,7 @@ import {
 import {
   apiError,
   apiSuccess,
-  broadcastToAll,
+  broadcastToUserServers,
   getBucket,
   getDB,
   requireAuth,
@@ -58,7 +58,7 @@ async function broadcastProfileUpdate(
     | Awaited<ReturnType<typeof updateProfileAsset>>
     | Awaited<ReturnType<typeof clearProfileAsset>>,
 ) {
-  await broadcastToAll("USER_PROFILE_UPDATE", {
+  await broadcastToUserServers(userId, "USER_PROFILE_UPDATE", {
     user_id: userId,
     username: result.username,
     banner_url: result.user.banner_url,

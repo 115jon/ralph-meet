@@ -12,10 +12,6 @@ import {
 } from "@/lib/native-auth-handoff";
 import { buildAuthRouteUrl } from "@/lib/auth-route-urls";
 import { isTauri } from "@/lib/platform";
-import {
-  getKovaAuthUrl,
-  KOVA_AUTH_PUBLISHABLE_KEY,
-} from "@/lib/kova-auth-config";
 import { SignIn, useAuth } from "@kova/react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { Radio } from "lucide-react";
@@ -86,11 +82,7 @@ function WebSignInPage() {
       ? null
       : getStoredKovaAuthSessionToken();
   const didRedirectRef = useRef(false);
-  const [nativeRedirectTarget, setNativeRedirectTarget] = useState<
-    string | null
-  >(null);
-  const [nativeCookieHandoffChecked, setNativeCookieHandoffChecked] =
-    useState(false);
+  const [nativeCookieHandoffChecked] = useState(isNativeHandoff);
 
   useEffect(() => {
     let cancelled = false;
@@ -128,36 +120,17 @@ function WebSignInPage() {
       }
 
       if (isNativeHandoff) {
-        log.info("Native redirect target detected before token lookup", {
-          hasSessionToken: hasSessionToken(afterSignInUrl),
-        });
+        // The auth provider owns native callbacks and appends a short-lived code.
+        return;
       }
 
-      const target = await withSessionToken(
-        afterSignInUrl,
-        getToken,
-        storedBrowserToken,
-        isNativeHandoff,
-      );
+      const target = afterSignInUrl;
       if (!cancelled) {
         if (didRedirectRef.current) return;
         didRedirectRef.current = true;
 
-        if (isNativeHandoff) {
-          log.info("Native redirect target ready", {
-            hasSessionToken: hasSessionToken(target),
-          });
-          setNativeRedirectTarget(target);
-          if (!markNativeRedirectAttempt(target)) {
-            log.info(
-              "Native redirect already attempted in this tab; showing fallback button",
-            );
-            return;
-          }
-        }
         log.info("Launching redirect", {
           protocol: safeProtocol(target),
-          hasSessionToken: hasSessionToken(target),
         });
         window.location.replace(target);
       }
@@ -186,46 +159,6 @@ function WebSignInPage() {
     navigate,
     storedBrowserToken,
   ]);
-
-  useEffect(() => {
-    if (
-      !isNativeHandoff ||
-      nativeCookieHandoffChecked ||
-      didRedirectRef.current
-    )
-      return;
-
-    let cancelled = false;
-
-    async function mintFromExistingBrowserSession() {
-      clearStoredKovaAuthSessionToken();
-      const token = await getAppScopedSessionToken(null);
-      if (cancelled || didRedirectRef.current) return;
-
-      if (token) {
-        setStoredKovaAuthSessionToken(token);
-        const target = attachSessionToken(afterSignInUrl, token);
-        didRedirectRef.current = true;
-        setNativeRedirectTarget(target);
-        if (markNativeRedirectAttempt(target)) {
-          window.location.replace(target);
-        }
-        return;
-      }
-
-      setNativeCookieHandoffChecked(true);
-    }
-
-    void mintFromExistingBrowserSession();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [afterSignInUrl, isNativeHandoff, nativeCookieHandoffChecked]);
-
-  if (nativeRedirectTarget) {
-    return <NativeRedirectFallback target={nativeRedirectTarget} />;
-  }
 
   const signInRenderState = getSignInRenderState({
     isNativeHandoff,
@@ -311,49 +244,6 @@ function NativeRedirectPreparing() {
   );
 }
 
-function NativeRedirectFallback({ target }: { target: string }) {
-  const hasToken = hasSessionToken(target);
-
-  return (
-    <div className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden bg-[var(--rm-bg-primary)] px-6 text-center">
-      <div className="pointer-events-none absolute inset-0 flex items-center justify-center overflow-hidden">
-        <div className="absolute h-[560px] w-[560px] rounded-full bg-rm-accent/10 blur-[120px]" />
-        <div className="absolute bottom-[-15%] right-[-10%] h-[520px] w-[520px] rounded-full bg-primary/5 blur-[120px]" />
-      </div>
-
-      <main className="relative z-10 flex w-full max-w-[420px] flex-col items-center gap-6 rounded-[2rem] border border-white/10 bg-white/[0.03] p-8 shadow-2xl shadow-black/30 backdrop-blur">
-        <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-rm-accent-dim ring-1 ring-rm-border">
-          <Radio className="h-7 w-7 text-rm-accent" />
-        </div>
-        <div className="space-y-2">
-          <h1 className="text-2xl font-extrabold tracking-tight text-white">
-            Return to Ralph Meet
-          </h1>
-          <p className="text-sm leading-6 text-[var(--rm-text-secondary)]">
-            {hasToken
-              ? "Your signed-in session is attached. Use the button below to open the desktop app."
-              : "The desktop app link is ready, but no session token was attached yet. The app may open without being signed in."}
-          </p>
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--rm-text-muted)]">
-            Auth token: {hasToken ? "attached" : "missing"}
-          </p>
-        </div>
-        <a
-          href={target}
-          onClick={() => {
-            log.info("Fallback Open Ralph Meet clicked", {
-              hasSessionToken: hasToken,
-            });
-          }}
-          className="inline-flex w-full items-center justify-center rounded-xl bg-rm-accent px-5 py-3 text-sm font-bold text-white shadow-lg shadow-rm-accent/20 transition hover:bg-rm-accent-hover"
-        >
-          Open Ralph Meet
-        </a>
-      </main>
-    </div>
-  );
-}
-
 function isRouterPath(value: string): value is `/${string}` {
   return value.startsWith("/") && !value.startsWith("//");
 }
@@ -367,14 +257,6 @@ function buildWebOauthCallbackUrl(afterSignInUrl: string): string {
 function isNativeDeepLink(value: string): boolean {
   try {
     return new URL(value).protocol === "ralphmeet:";
-  } catch {
-    return false;
-  }
-}
-
-function hasSessionToken(value: string): boolean {
-  try {
-    return !!new URL(value).searchParams.get("session_token");
   } catch {
     return false;
   }
@@ -398,125 +280,6 @@ function safeProtocol(value: string): string | null {
   } catch {
     return null;
   }
-}
-
-function markNativeRedirectAttempt(target: string): boolean {
-  if (typeof window === "undefined") return true;
-
-  const key = `ralphmeet:native-redirect:${target}`;
-  if (window.sessionStorage.getItem(key)) {
-    return false;
-  }
-
-  window.sessionStorage.setItem(key, String(Date.now()));
-  return true;
-}
-
-async function withSessionToken(
-  target: string,
-  getToken: () => Promise<string | null>,
-  storedBrowserToken: string | null,
-  isNativeHandoff: boolean,
-): Promise<string> {
-  log.info("Requesting Ralph Auth session token");
-  const providerToken = isNativeHandoff
-    ? null
-    : (storedBrowserToken ??
-      (await withTimeout(getToken(), 2500).catch(() => null)));
-  const token = await getAppScopedSessionToken(
-    providerToken,
-    !isNativeHandoff && !!storedBrowserToken,
-  );
-  log.info("Token lookup finished", {
-    hasToken: !!token,
-    tokenLength: token?.length ?? 0,
-    source: storedBrowserToken
-      ? "stored-browser"
-      : providerToken
-        ? "provider"
-        : "cookie",
-  });
-  if (!token) return target;
-
-  try {
-    const url = new URL(target);
-    if (url.protocol === "ralphmeet:") {
-      return attachSessionToken(url.toString(), token);
-    }
-  } catch {
-    // Keep the original target if it is not URL-parseable.
-  }
-
-  return target;
-}
-
-function attachSessionToken(target: string, token: string): string {
-  try {
-    const url = new URL(target);
-    if (url.protocol === "ralphmeet:") {
-      url.searchParams.set("session_token", token);
-      return url.toString();
-    }
-  } catch {
-    // Keep the original target if it is not URL-parseable.
-  }
-
-  return target;
-}
-
-async function getAppScopedSessionToken(
-  providerToken: string | null,
-  clearProviderOnFailure = false,
-): Promise<string | null> {
-  if (!KOVA_AUTH_PUBLISHABLE_KEY) return providerToken;
-
-  const requestSessionToken = async (token: string | null) => {
-    const headers: Record<string, string> = {
-      "Content-Type": "application/json",
-    };
-    if (token) {
-      headers.Authorization = `Bearer ${token}`;
-    }
-
-    const response = await fetch(
-      `${getKovaAuthUrl()}/api/pub/apps/${KOVA_AUTH_PUBLISHABLE_KEY}/session-token`,
-      {
-        method: "POST",
-        headers,
-        credentials: "include",
-      },
-    );
-
-    if (!response.ok) {
-      log.warn("Failed to mint app-scoped session token", {
-        status: response.status,
-      });
-      return null;
-    }
-
-    const payload = (await response.json()) as { sessionToken?: string };
-    return payload.sessionToken ?? null;
-  };
-
-  try {
-    const cookieToken = await requestSessionToken(null);
-    if (cookieToken) return cookieToken;
-
-    if (providerToken) {
-      const token = await requestSessionToken(providerToken);
-      if (token) return token;
-      if (clearProviderOnFailure) {
-        clearStoredKovaAuthSessionToken();
-      }
-    }
-  } catch (error) {
-    log.warn("App-scoped session token request failed", error);
-    if (clearProviderOnFailure) {
-      clearStoredKovaAuthSessionToken();
-    }
-  }
-
-  return null;
 }
 
 function withTimeout<T>(

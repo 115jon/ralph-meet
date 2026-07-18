@@ -74,7 +74,9 @@ const DELETE = async ({ request: _request, params }: any) => {
 
     // Execute side effects
     await executeInvalidation(result.cacheKeysToInvalidate);
-    await executeBroadcast(result.broadcast);
+    for (const broadcast of result.broadcasts) {
+      await executeBroadcast(broadcast);
+    }
 
     return apiSuccess({ deleted: true });
   } catch (e) {

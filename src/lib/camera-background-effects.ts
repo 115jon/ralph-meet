@@ -889,7 +889,8 @@ export async function createCameraBackgroundEffect(
     options.cancelAnimationFrame ??
     globalThis.cancelAnimationFrame?.bind(globalThis);
   const now = options.now ?? (() => performance.now());
-  let raf = 0;
+  let raf: number | null = null;
+  let timer: ReturnType<typeof setTimeout> | null = null;
   let stopped = false;
   let lastSegmentedAt = -Infinity;
   let hasMask = false;
@@ -980,8 +981,44 @@ export async function createCameraBackgroundEffect(
       }
     }
 
-    if (requestAnimationFrame) raf = requestAnimationFrame(drawFrame);
+    scheduleNextFrame();
   };
+
+  const isDocumentHidden = () =>
+    doc.hidden === true || doc.visibilityState === "hidden";
+  const scheduleNextFrame = () => {
+    if (stopped || raf !== null || timer !== null) return;
+
+    if (isDocumentHidden() || !requestAnimationFrame) {
+      // requestAnimationFrame is suspended in hidden tabs. A timer keeps the
+      // canvas capture alive; active WebRTC pages are exempt from the strictest
+      // background timer throttling in supported browsers.
+      timer = setTimeout(() => {
+        timer = null;
+        drawFrame(now());
+      }, 1000 / EFFECT_FPS);
+      return;
+    }
+
+    raf = requestAnimationFrame((timestamp) => {
+      raf = null;
+      drawFrame(timestamp);
+    });
+  };
+  const handleVisibilityChange = () => {
+    if (isDocumentHidden()) {
+      if (raf !== null) {
+        cancelAnimationFrame?.(raf);
+        raf = null;
+      }
+    } else if (timer !== null) {
+      clearTimeout(timer);
+      timer = null;
+    }
+    scheduleNextFrame();
+  };
+
+  doc.addEventListener?.("visibilitychange", handleVisibilityChange);
 
   drawFrame(now());
 
@@ -992,7 +1029,11 @@ export async function createCameraBackgroundEffect(
     stop: () => {
       if (stopped) return;
       stopped = true;
-      if (raf && cancelAnimationFrame) cancelAnimationFrame(raf);
+      doc.removeEventListener?.("visibilitychange", handleVisibilityChange);
+      if (raf !== null) cancelAnimationFrame?.(raf);
+      if (timer !== null) clearTimeout(timer);
+      raf = null;
+      timer = null;
       track.stop();
       video.pause?.();
       video.srcObject = null;

@@ -49,6 +49,34 @@ afterEach(() => {
 });
 
 describe("proxy media stale TikTok cache handling", () => {
+  it("rejects resolver-generated redirects outside the media allowlist", async () => {
+    const sourceUrl =
+      "https://www.tiktok.com/@example/photo/7644364274630020383";
+    const unsafeResolvedUrl = "https://evil.example/redirect-target";
+
+    hoisted.cacheGetMock.mockResolvedValue(null);
+    hoisted.cacheSetMock.mockResolvedValue(undefined);
+    hoisted.fetchTikTokProxyMetadataMock.mockResolvedValue({
+      media: [{ type: "video", url: unsafeResolvedUrl }],
+    });
+
+    const upstreamFetchMock = vi.fn(async () => {
+      throw new Error("The unsafe resolver result must not be fetched");
+    });
+    vi.stubGlobal("fetch", upstreamFetchMock as unknown as typeof fetch);
+
+    const response = await proxyMedia(
+      new Request(
+        `https://meet.test/api/proxy-media?url=${encodeURIComponent(sourceUrl)}`,
+      ),
+      true,
+    );
+
+    expect(response.status).toBe(502);
+    expect(response.headers.get("Location")).toBeNull();
+    expect(upstreamFetchMock).not.toHaveBeenCalled();
+  });
+
   it("does not reuse expired cached TikTok refresh candidates after a failed refresh", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-07-07T16:03:09.000Z"));

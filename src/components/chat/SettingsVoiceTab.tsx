@@ -4,6 +4,7 @@ import { Separator } from "@/components/ui/separator";
 import { SettingsToggleRow } from "@/components/ui/SettingsToggleRow";
 import { useMediaDevices } from "@/lib/useMediaDevices";
 import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
+import { useChatStore } from "@/stores/chat-store";
 import { useUser } from "@kova/react";
 import {
   Mic,
@@ -17,10 +18,12 @@ import {
 import { useEffect } from "react";
 import { useShallow } from "zustand/shallow";
 import { NoiseReductionPanel } from "./NoiseReductionPanel";
+import { SettingsSoundboardTriggers } from "./SettingsSoundboardTriggers";
 
 export default function SettingsVoiceTab() {
   const { user } = useUser();
   const settingsUserId = user?.id ?? null;
+  const servers = useChatStore((state) => state.servers);
   const { audioInputs, audioOutputs } = useMediaDevices();
   const vSettings = useVoiceSettingsStore(
     useShallow((s) => s.getSettings(settingsUserId)),
@@ -170,6 +173,10 @@ export default function SettingsVoiceTab() {
             </div>
           </div>
         </section>
+
+        <Separator className="bg-rm-border" />
+
+        <SettingsSoundboardTriggers userId={settingsUserId} servers={servers} />
 
         <Separator className="bg-rm-border" />
 

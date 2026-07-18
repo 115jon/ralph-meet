@@ -11,7 +11,13 @@ import {
 import { useChatStore } from "@/stores/chat-store";
 import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
 import { useUser } from "@kova/react";
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import { createPortal } from "react-dom";
 import { useShallow } from "zustand/shallow";
 import { clog } from "@/lib/console-logger";
@@ -90,6 +96,7 @@ export const StreamContextMenu: React.FC<StreamContextMenuProps> = ({
   onToggleAlwaysShowStreamPreview,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
+  const previousFocusRef = useRef<HTMLElement | null>(null);
   const settings = useVoiceSettingsStore(useShallow((s) => s.getSettings()));
 
   const setPeerVolume = useVoiceSettingsStore((s) => s.setPeerVolume);
@@ -129,6 +136,19 @@ export const StreamContextMenu: React.FC<StreamContextMenuProps> = ({
   const aimingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastMousePos = useRef({ x: 0, y: 0 });
   const currentMousePos = useRef({ x: 0, y: 0 });
+
+  useLayoutEffect(() => {
+    previousFocusRef.current =
+      document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
+
+    return () => {
+      if (previousFocusRef.current?.isConnected) {
+        previousFocusRef.current.focus();
+      }
+    };
+  }, []);
 
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
     lastMousePos.current = { ...currentMousePos.current };
@@ -190,6 +210,12 @@ export const StreamContextMenu: React.FC<StreamContextMenuProps> = ({
       document.removeEventListener("keydown", handleKeyDown);
     };
   }, [onClose]);
+
+  useEffect(() => {
+    containerRef.current
+      ?.querySelector<HTMLElement>("[data-menu-item]:not([disabled])")
+      ?.focus();
+  }, []);
 
   const [pos, setPos] = useState({ top: y, left: x });
 
@@ -290,6 +316,8 @@ export const StreamContextMenu: React.FC<StreamContextMenuProps> = ({
   return createPortal(
     <div
       ref={containerRef}
+      role="menu"
+      tabIndex={-1}
       style={{ top: pos.top, left: pos.left }}
       data-stream-preview-interactive="true"
       onPointerDown={(event) => event.stopPropagation()}

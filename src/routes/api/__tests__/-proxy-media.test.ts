@@ -78,13 +78,23 @@ describe("proxy media helpers", () => {
   });
 
   describe("isAllowedMediaUrl", () => {
-    it("allows twimg and vxtwitter domains", () => {
+    it("allows X media domains", () => {
       expect(isAllowedMediaUrl(new URL("https://video.twimg.com/path"))).toBe(
         true,
       );
       expect(isAllowedMediaUrl(new URL("https://pbs.twimg.com/path"))).toBe(
         true,
       );
+      expect(
+        isAllowedMediaUrl(
+          new URL("https://gif.fxtwitter.com/tweet_video/example.webp"),
+        ),
+      ).toBe(true);
+      expect(
+        isAllowedMediaUrl(
+          new URL("https://gif.fxtwitter.com/other/example.webp"),
+        ),
+      ).toBe(false);
       expect(isAllowedMediaUrl(new URL("https://vxtwitter.com/tvid/123"))).toBe(
         true,
       );
@@ -116,14 +126,25 @@ describe("proxy media helpers", () => {
           new URL("https://scontent-ord5-1.cdninstagram.com/path/thumb.jpg"),
         ),
       ).toBe(true);
+      expect(
+        isAllowedMediaUrl(
+          new URL("https://scontent-ord5-2.cdninstagram.com/path/thumb.jpg"),
+        ),
+      ).toBe(true);
     });
 
-    it("allows klipy domains", () => {
+    it("allows Klipy static hosts", () => {
       expect(isAllowedMediaUrl(new URL("https://static.klipy.com/path"))).toBe(
         true,
       );
-      expect(isAllowedMediaUrl(new URL("https://media.klipy.com/path"))).toBe(
+      expect(isAllowedMediaUrl(new URL("https://static1.klipy.com/path"))).toBe(
         true,
+      );
+      expect(isAllowedMediaUrl(new URL("https://static2.klipy.com/path"))).toBe(
+        true,
+      );
+      expect(isAllowedMediaUrl(new URL("https://media.klipy.com/path"))).toBe(
+        false,
       );
     });
 
@@ -147,16 +168,86 @@ describe("proxy media helpers", () => {
 
     it("denies unallowed domains", () => {
       expect(isAllowedMediaUrl(new URL("https://evil.com/path"))).toBe(false);
+      for (const hostname of [
+        "evil-googleusercontent.com",
+        "evil.googleusercontent.com",
+        "googleusercontent.com.attacker.net",
+        "evil-klipy.com",
+        "evil.klipy.com",
+        "klipy.com.attacker.net",
+        "evil-tenor.com",
+        "evil.tenor.com",
+        "tenor.com.attacker.net",
+        "evil-cdninstagram.com",
+        "evil.cdninstagram.com",
+        "cdninstagram.com.attacker.net",
+      ]) {
+        expect(isAllowedMediaUrl(new URL(`https://${hostname}/path`))).toBe(
+          false,
+        );
+      }
       expect(isAllowedMediaUrl(new URL("https://notklipy.com/path"))).toBe(
         false,
       );
       expect(isAllowedMediaUrl(new URL("https://nottenor.com/path"))).toBe(
         false,
       );
+      expect(
+        isAllowedMediaUrl(new URL("https://evil-tiktok.com/video.mp4")),
+      ).toBe(false);
       expect(isAllowedMediaUrl(new URL("http://static.klipy.com/path"))).toBe(
         false,
       ); // must be https
       expect(isAllowedMediaUrl(new URL("http://tenor.com/path"))).toBe(false); // must be https
+    });
+
+    it("rejects redirects to hosts outside the media allowlist", async () => {
+      const fetchMock = vi.fn(
+        async () =>
+          new Response(null, {
+            status: 302,
+            headers: { Location: "https://evil.example/secret" },
+          }),
+      );
+      vi.stubGlobal("fetch", fetchMock as unknown as typeof fetch);
+
+      const response = await proxyMedia(
+        new Request(
+          "https://meet.test/api/proxy-media?url=https%3A%2F%2Fvideo.twimg.com%2Fpath",
+        ),
+        true,
+      );
+
+      expect(response.status).toBe(502);
+      expect(fetchMock).toHaveBeenCalledWith(
+        "https://video.twimg.com/path",
+        expect.objectContaining({ redirect: "manual" }),
+      );
+    });
+
+    it("caps redirects even when every destination is allowlisted", async () => {
+      const fetchMock = vi.fn(async (input: string | URL | Request) => {
+        const url = new URL(input.toString());
+        return new Response(null, {
+          status: 302,
+          headers: {
+            Location: `https://video.twimg.com/path?hop=${
+              Number(url.searchParams.get("hop") ?? "0") + 1
+            }`,
+          },
+        });
+      });
+      vi.stubGlobal("fetch", fetchMock as unknown as typeof fetch);
+
+      const response = await proxyMedia(
+        new Request(
+          "https://meet.test/api/proxy-media?url=https%3A%2F%2Fvideo.twimg.com%2Fpath",
+        ),
+        true,
+      );
+
+      expect(response.status).toBe(508);
+      expect(fetchMock).toHaveBeenCalledTimes(4);
     });
   });
 
@@ -696,6 +787,82 @@ describe("proxy media helpers", () => {
       expect(response.headers.get("Content-Type")).toBe("video/mp4");
       expect(response.headers.get("Cache-Control")).toBe("no-store");
       expect(upstreamMethods).toContain("GET");
+    });
+  });
+
+  describe("synthetic range streaming", () => {
+    // Upstream that ignores Range and returns a full 200. The proxy must
+    // synthesize a 206 by streaming and slicing, not by buffering the whole
+    // body into memory.
+    function fullBodyUpstream(total: number, chunkSize: number) {
+      const payload = new Uint8Array(total);
+      for (let i = 0; i < total; i += 1) payload[i] = i % 251;
+      return vi.fn(async () => {
+        const stream = new ReadableStream<Uint8Array>({
+          start(controller) {
+            for (let i = 0; i < total; i += chunkSize) {
+              controller.enqueue(payload.slice(i, i + chunkSize));
+            }
+            controller.close();
+          },
+        });
+        return new Response(stream, {
+          status: 200,
+          headers: {
+            "Content-Type": "video/mp4",
+            "Content-Length": String(total),
+          },
+        });
+      });
+    }
+
+    it("returns a 206 with the exact requested byte window across chunk boundaries", async () => {
+      const total = 1000;
+      const fetchMock = fullBodyUpstream(total, 64);
+      vi.stubGlobal("fetch", fetchMock as unknown as typeof fetch);
+
+      const response = await proxyMedia(
+        new Request(
+          "https://meet.test/api/proxy-media?url=https%3A%2F%2Fvideo.twimg.com%2Fpath",
+          { headers: { Range: "bytes=100-299" } },
+        ),
+        true,
+      );
+
+      expect(response.status).toBe(206);
+      expect(response.headers.get("Content-Range")).toBe(
+        `bytes 100-299/${total}`,
+      );
+      expect(response.headers.get("Content-Length")).toBe("200");
+
+      const body = new Uint8Array(await response.arrayBuffer());
+      expect(body.byteLength).toBe(200);
+      // Bytes must match the original payload window [100, 299].
+      for (let i = 0; i < body.byteLength; i += 1) {
+        expect(body[i]).toBe((100 + i) % 251);
+      }
+    });
+
+    it("clamps an open-ended range to the end of the content", async () => {
+      const total = 500;
+      const fetchMock = fullBodyUpstream(total, 128);
+      vi.stubGlobal("fetch", fetchMock as unknown as typeof fetch);
+
+      const response = await proxyMedia(
+        new Request(
+          "https://meet.test/api/proxy-media?url=https%3A%2F%2Fvideo.twimg.com%2Fpath",
+          { headers: { Range: "bytes=450-" } },
+        ),
+        true,
+      );
+
+      expect(response.status).toBe(206);
+      expect(response.headers.get("Content-Range")).toBe(
+        `bytes 450-499/${total}`,
+      );
+      const body = new Uint8Array(await response.arrayBuffer());
+      expect(body.byteLength).toBe(50);
+      expect(body[0]).toBe(450 % 251);
     });
   });
 });

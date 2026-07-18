@@ -1,6 +1,7 @@
 import { useId, useState, useRef, Suspense, lazy } from "react";
 import { Upload, X, Smile, Loader2 } from "lucide-react";
 import { cn as _cn } from "@/lib/utils";
+import { BaseModal } from "@/components/ui/BaseModal";
 
 import EmojiToken from "./EmojiToken";
 
@@ -47,6 +48,7 @@ export function UploadSoundModal({
   const soundNameInputId = useId();
   const emojiButtonId = useId();
   const soundVolumeInputId = useId();
+  const titleId = useId();
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selected = e.target.files?.[0];
@@ -72,168 +74,170 @@ export function UploadSoundModal({
   const isEditMode = !!editSound;
 
   return (
-    <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="w-[480px] max-w-[90vw] rounded-2xl border border-rm-border bg-rm-bg-surface shadow-2xl p-6 relative">
-        <button
-          type="button"
-          onClick={onClose}
-          className="absolute top-5 right-5 text-rm-text-muted hover:text-rm-text transition-colors"
-          aria-label={
-            isEditMode ? "Close edit sound modal" : "Close upload sound modal"
-          }
-        >
-          <X size={20} />
-        </button>
-
-        <h2 className="text-xl font-bold text-rm-text mb-6">
-          {isEditMode ? "Edit Sound" : "Upload a Sound"}
-        </h2>
-
-        <div className="space-y-5">
-          {/* File Input */}
-          {!isEditMode && (
-            <div>
-              <label
-                htmlFor={fileInputId}
-                className="block text-[13px] font-bold text-rm-text mb-2"
-              >
-                File <span className="text-red-500 dark:text-red-400">*</span>
-              </label>
-              <label
-                htmlFor={fileInputId}
-                className="flex items-center justify-between border border-rm-border bg-rm-bg-hover rounded-xl p-1 pl-3 cursor-pointer hover:border-primary/50 transition-colors"
-              >
-                <div className="flex items-center gap-2 text-rm-text-muted truncate pr-2">
-                  <Upload size={16} />
-                  <span className="text-sm truncate">
-                    {file ? file.name : "Choose a file"}
-                  </span>
-                </div>
-                <span className="bg-rm-bg-active hover:bg-rm-bg-floating text-rm-text text-sm font-semibold px-4 py-2 rounded-lg transition-colors shrink-0 border border-rm-border">
-                  Browse
-                </span>
-              </label>
-              <input
-                id={fileInputId}
-                type="file"
-                accept="audio/*"
-                className="hidden"
-                ref={fileInputRef}
-                onChange={handleFileChange}
-              />
-            </div>
-          )}
-
-          <div className="flex gap-4">
-            {/* Sound Name */}
-            <div className="flex-1">
-              <label
-                htmlFor={soundNameInputId}
-                className="block text-[13px] font-bold text-rm-text mb-2"
-              >
-                Sound Name{" "}
-                <span className="text-red-500 dark:text-red-400">*</span>
-              </label>
-              <input
-                id={soundNameInputId}
-                type="text"
-                value={soundName}
-                onChange={(e) => setSoundName(e.target.value)}
-                placeholder="Sound Name"
-                className="w-full h-11 bg-rm-bg-hover border border-rm-border rounded-xl px-4 text-sm text-rm-text outline-none focus:border-primary/50 transition-colors"
-              />
-            </div>
-
-            {/* Related Emoji */}
-            <div className="w-[160px] relative">
-              <label
-                htmlFor={emojiButtonId}
-                className="block text-[13px] font-bold text-rm-text mb-2"
-              >
-                Related Emoji
-              </label>
-              <button
-                ref={emojiBtnRef}
-                id={emojiButtonId}
-                type="button"
-                onClick={() => setIsEmojiPickerOpen(true)}
-                className="w-full h-11 flex items-center justify-center gap-2 bg-rm-bg-hover border border-rm-border rounded-xl px-3 text-sm text-rm-text-muted hover:border-primary/50 transition-colors"
-                aria-haspopup="dialog"
-                aria-expanded={isEmojiPickerOpen}
-              >
-                {relatedEmoji ? (
-                  <EmojiToken
-                    value={relatedEmoji}
-                    className="h-6 w-6 object-contain block"
-                    fallbackClassName="text-xl leading-none block"
-                  />
-                ) : (
-                  <>
-                    <Smile size={18} />
-                    <span>Click to select</span>
-                  </>
-                )}
-              </button>
-
-              {isEmojiPickerOpen && (
-                <Suspense fallback={null}>
-                  <EmojiPicker
-                    placement="bottom-end"
-                    onClose={() => setIsEmojiPickerOpen(false)}
-                    onSelect={(emoji) => {
-                      setRelatedEmoji(emoji);
-                      setIsEmojiPickerOpen(false);
-                    }}
-                    markerRef={emojiBtnRef}
-                  />
-                </Suspense>
-              )}
-            </div>
-          </div>
-
-          {/* Sound Volume */}
-          <div>
-            <label
-              htmlFor={soundVolumeInputId}
-              className="block text-[13px] font-bold text-rm-text mb-2"
-            >
-              Sound Volume
-            </label>
-            <div className="flex items-center h-10">
-              <input
-                id={soundVolumeInputId}
-                type="range"
-                min="0"
-                max="100"
-                value={Math.round(soundVolume * 100)}
-                onChange={(e) => setSoundVolume(Number(e.target.value) / 100)}
-                className="w-full accent-primary h-1.5 bg-rm-border rounded-full appearance-none [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:bg-foreground [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:cursor-pointer"
-                aria-valuetext={`${Math.round(soundVolume * 100)}%`}
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* Footer actions */}
-        <div className="flex gap-3 mt-8">
+    <BaseModal onClose={onClose} aria-labelledby={titleId}>
+      <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
+        <div className="w-[480px] max-w-[90vw] rounded-2xl border border-rm-border bg-rm-bg-surface shadow-2xl p-6 relative">
           <button
             type="button"
             onClick={onClose}
-            className="flex-1 py-2.5 rounded-xl border border-rm-border bg-rm-bg-hover hover:bg-rm-bg-active text-rm-text font-bold text-sm transition-colors"
+            className="absolute top-5 right-5 text-rm-text-muted hover:text-rm-text transition-colors"
+            aria-label={
+              isEditMode ? "Close edit sound modal" : "Close upload sound modal"
+            }
           >
-            Never mind
+            <X size={20} />
           </button>
-          <button
-            type="button"
-            onClick={handleSubmit}
-            disabled={(!file && !isEditMode) || !soundName || isUploading}
-            className="flex-1 py-2.5 rounded-xl bg-primary hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed text-primary-foreground font-bold text-sm transition-all flex items-center justify-center gap-2"
-          >
-            {isUploading && <Loader2 size={16} className="animate-spin" />}
-            {isEditMode ? "Save" : "Upload"}
-          </button>
+
+          <h2 id={titleId} className="text-xl font-bold text-rm-text mb-6">
+            {isEditMode ? "Edit Sound" : "Upload a Sound"}
+          </h2>
+
+          <div className="space-y-5">
+            {/* File Input */}
+            {!isEditMode && (
+              <div>
+                <label
+                  htmlFor={fileInputId}
+                  className="block text-[13px] font-bold text-rm-text mb-2"
+                >
+                  File <span className="text-red-500 dark:text-red-400">*</span>
+                </label>
+                <label
+                  htmlFor={fileInputId}
+                  className="flex items-center justify-between border border-rm-border bg-rm-bg-hover rounded-xl p-1 pl-3 cursor-pointer hover:border-primary/50 transition-colors"
+                >
+                  <div className="flex items-center gap-2 text-rm-text-muted truncate pr-2">
+                    <Upload size={16} />
+                    <span className="text-sm truncate">
+                      {file ? file.name : "Choose a file"}
+                    </span>
+                  </div>
+                  <span className="bg-rm-bg-active hover:bg-rm-bg-floating text-rm-text text-sm font-semibold px-4 py-2 rounded-lg transition-colors shrink-0 border border-rm-border">
+                    Browse
+                  </span>
+                </label>
+                <input
+                  id={fileInputId}
+                  type="file"
+                  accept="audio/*"
+                  className="hidden"
+                  ref={fileInputRef}
+                  onChange={handleFileChange}
+                />
+              </div>
+            )}
+
+            <div className="flex gap-4">
+              {/* Sound Name */}
+              <div className="flex-1">
+                <label
+                  htmlFor={soundNameInputId}
+                  className="block text-[13px] font-bold text-rm-text mb-2"
+                >
+                  Sound Name{" "}
+                  <span className="text-red-500 dark:text-red-400">*</span>
+                </label>
+                <input
+                  id={soundNameInputId}
+                  type="text"
+                  value={soundName}
+                  onChange={(e) => setSoundName(e.target.value)}
+                  placeholder="Sound Name"
+                  className="w-full h-11 bg-rm-bg-hover border border-rm-border rounded-xl px-4 text-sm text-rm-text outline-none focus:border-primary/50 transition-colors"
+                />
+              </div>
+
+              {/* Related Emoji */}
+              <div className="w-[160px] relative">
+                <label
+                  htmlFor={emojiButtonId}
+                  className="block text-[13px] font-bold text-rm-text mb-2"
+                >
+                  Related Emoji
+                </label>
+                <button
+                  ref={emojiBtnRef}
+                  id={emojiButtonId}
+                  type="button"
+                  onClick={() => setIsEmojiPickerOpen(true)}
+                  className="w-full h-11 flex items-center justify-center gap-2 bg-rm-bg-hover border border-rm-border rounded-xl px-3 text-sm text-rm-text-muted hover:border-primary/50 transition-colors"
+                  aria-haspopup="dialog"
+                  aria-expanded={isEmojiPickerOpen}
+                >
+                  {relatedEmoji ? (
+                    <EmojiToken
+                      value={relatedEmoji}
+                      className="h-6 w-6 object-contain block"
+                      fallbackClassName="text-xl leading-none block"
+                    />
+                  ) : (
+                    <>
+                      <Smile size={18} />
+                      <span>Click to select</span>
+                    </>
+                  )}
+                </button>
+
+                {isEmojiPickerOpen && (
+                  <Suspense fallback={null}>
+                    <EmojiPicker
+                      placement="bottom-end"
+                      onClose={() => setIsEmojiPickerOpen(false)}
+                      onSelect={(emoji) => {
+                        setRelatedEmoji(emoji);
+                        setIsEmojiPickerOpen(false);
+                      }}
+                      markerRef={emojiBtnRef}
+                    />
+                  </Suspense>
+                )}
+              </div>
+            </div>
+
+            {/* Sound Volume */}
+            <div>
+              <label
+                htmlFor={soundVolumeInputId}
+                className="block text-[13px] font-bold text-rm-text mb-2"
+              >
+                Sound Volume
+              </label>
+              <div className="flex items-center h-10">
+                <input
+                  id={soundVolumeInputId}
+                  type="range"
+                  min="0"
+                  max="100"
+                  value={Math.round(soundVolume * 100)}
+                  onChange={(e) => setSoundVolume(Number(e.target.value) / 100)}
+                  className="w-full accent-primary h-1.5 bg-rm-border rounded-full appearance-none [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:bg-foreground [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:cursor-pointer"
+                  aria-valuetext={`${Math.round(soundVolume * 100)}%`}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Footer actions */}
+          <div className="flex gap-3 mt-8">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 py-2.5 rounded-xl border border-rm-border bg-rm-bg-hover hover:bg-rm-bg-active text-rm-text font-bold text-sm transition-colors"
+            >
+              Never mind
+            </button>
+            <button
+              type="button"
+              onClick={handleSubmit}
+              disabled={(!file && !isEditMode) || !soundName || isUploading}
+              className="flex-1 py-2.5 rounded-xl bg-primary hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed text-primary-foreground font-bold text-sm transition-all flex items-center justify-center gap-2"
+            >
+              {isUploading && <Loader2 size={16} className="animate-spin" />}
+              {isEditMode ? "Save" : "Upload"}
+            </button>
+          </div>
         </div>
       </div>
-    </div>
+    </BaseModal>
   );
 }

@@ -3,15 +3,17 @@ import { cn } from "@/lib/utils";
 export function SettingsSwitch({
   checked,
   onChange,
+  ariaLabel = "Toggle setting",
 }: {
   checked: boolean;
   onChange: () => void;
+  ariaLabel?: string;
 }) {
   return (
     <button
       type="button"
       onClick={onChange}
-      aria-label="Toggle setting"
+      aria-label={ariaLabel}
       aria-pressed={checked}
       className={cn(
         "shrink-0 w-[50px] h-[28px] rounded-[16px] relative transition-colors duration-200 ease-in-out focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/50",

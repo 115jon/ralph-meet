@@ -24,6 +24,7 @@ interface UserNameplateLayerProps {
   className?: string;
   playVideo?: boolean;
   maskFullOpacityStartPercent?: number;
+  useMeasuredMask?: boolean;
 }
 
 export function UserNameplateLayer({
@@ -36,6 +37,7 @@ export function UserNameplateLayer({
   className,
   playVideo = true,
   maskFullOpacityStartPercent,
+  useMeasuredMask,
 }: UserNameplateLayerProps) {
   const resolvedUrl = nameplateUrl ?? user?.nameplate_url ?? null;
   const resolvedContentType =
@@ -64,6 +66,7 @@ export function UserNameplateLayer({
       maskFullOpacityStartPercent={
         useNameplateIdentityFade ? maskFullOpacityStartPercent : undefined
       }
+      useMeasuredMask={useNameplateIdentityFade ? useMeasuredMask : undefined}
     />
   );
 }

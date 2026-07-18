@@ -9,6 +9,7 @@ import {
   buildListenTogetherStreamUrl,
   detectPreferredListenTogetherAudioFormat,
   getListenTogetherPlaybackPlan,
+  isExpectedListenTogetherPlayCancellation,
 } from "@/lib/voice/listen-together-player";
 import { ListenTogetherAudioProcessor } from "@/lib/voice/listen-together-audio";
 import { useListenTogetherAudioSettingsStore } from "@/stores/useListenTogetherAudioSettingsStore";
@@ -674,6 +675,18 @@ export function VoiceListenTogetherManager({
         audioContextState: sfu?.audio?.getAudioContext?.()?.state ?? null,
       });
       void audio.play().catch((error) => {
+        if (
+          isExpectedListenTogetherPlayCancellation(
+            error,
+            snapshotRef.current?.paused === true,
+          )
+        ) {
+          log.debug(
+            "Listen together playback start cancelled by authoritative pause",
+            { roomSlug },
+          );
+          return;
+        }
         log.warn("Listen together playback start was blocked", {
           roomSlug,
           message: error instanceof Error ? error.message : String(error),

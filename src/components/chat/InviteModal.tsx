@@ -56,7 +56,7 @@ export default function InviteModal({
     "w-full rounded-xl border border-rm-border bg-rm-bg-surface px-3 py-2.5 text-sm text-rm-text outline-none transition-all focus:border-primary/30 focus:ring-2 focus:ring-primary/20";
 
   return (
-    <BaseModal onClose={onClose}>
+    <BaseModal onClose={onClose} aria-label="Invite members">
       <div className="fixed inset-0 z-[200] flex items-center justify-center">
         <button
           type="button"
