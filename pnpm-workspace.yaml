@@ -5,6 +5,7 @@ packages:
   - "worker"
 
 allowBuilds:
+  "@kova/react@https://codeload.github.com/115jon/kova/tar.gz/6bb0fe18fa99223e1277352ec60a7a1203d9cbc5#path:/packages/kova-react": true
   bufferutil: true
   esbuild: true
   msw: true
@@ -16,9 +17,3 @@ minimumReleaseAgeExclude:
   - "@cloudflare/vitest-pool-workers@0.18.4"
   - miniflare@4.20260708.1
   - wrangler@4.110.0
-
-onlyBuiltDependencies:
-  - esbuild
-  - msw
-  - sharp
-  - workerd
