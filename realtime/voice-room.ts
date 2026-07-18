@@ -716,74 +716,88 @@ export class VoiceRoom extends DurableObject<Env> {
   // ── Alarm: voice zombie pruning ───────────────────────────────────────
 
   async alarm() {
-    const now = Date.now();
-    const zombies: string[] = [];
+    let processingFailed = false;
+    try {
+      const now = Date.now();
+      const zombies: string[] = [];
 
-    this.demoChatStore.pruneExpired(now);
+      this.demoChatStore.pruneExpired(now);
 
-    // Check active participants for zombie timeouts using SQLite
-    const participants = this.sql.exec(
-      `SELECT id, last_heartbeat FROM participants`,
-    );
+      // Check active participants for zombie timeouts using SQLite
+      const participants = this.sql.exec(
+        `SELECT id, last_heartbeat FROM participants`,
+      );
 
-    for (const row of participants) {
-      const pid = row.id as string;
-      const lastActivity = (row.last_heartbeat as number) || 0;
+      for (const row of participants) {
+        const pid = row.id as string;
+        const lastActivity = (row.last_heartbeat as number) || 0;
 
-      if (lastActivity && now - lastActivity >= VOICE_ZOMBIE_TIMEOUT_MS) {
-        log.info(
-          `Pruning zombie: ${pid}, last_activity=${Math.round((now - lastActivity) / 1000)}s ago`,
-        );
-        zombies.push(pid);
+        if (lastActivity && now - lastActivity >= VOICE_ZOMBIE_TIMEOUT_MS) {
+          log.info(
+            `Pruning zombie: ${pid}, last_activity=${Math.round((now - lastActivity) / 1000)}s ago`,
+          );
+          zombies.push(pid);
+        }
       }
-    }
 
-    for (const pid of zombies) {
-      const ws = this.getWsByParticipant(pid);
-      if (ws) {
-        await this.handleLeave(ws, false, true);
-      } else {
-        await this.disconnectParticipant(pid, false);
+      for (const pid of zombies) {
+        const ws = this.getWsByParticipant(pid);
+        if (ws) {
+          await this.handleLeave(ws, false, true);
+        } else {
+          await this.disconnectParticipant(pid, false);
+        }
       }
-    }
 
-    // Prune pending reconnects whose grace period expired
-    const pending = this.sql.exec(
-      `SELECT participant_id, disconnected_at FROM pending_reconnects`,
-    );
-    for (const row of pending) {
-      const pid = row.participant_id as string;
-      const disconnectedAt = row.disconnected_at as number;
+      // Prune pending reconnects whose grace period expired
+      const pending = this.sql.exec(
+        `SELECT participant_id, disconnected_at FROM pending_reconnects`,
+      );
+      for (const row of pending) {
+        const pid = row.participant_id as string;
+        const disconnectedAt = row.disconnected_at as number;
 
-      if (now - disconnectedAt >= SFU_SESSION_REUSE_GRACE_MS) {
-        roomLog.info(`Grace period expired for ${pid}, cleaning up SFU`);
-        await this.purgeParticipantState(pid);
+        if (now - disconnectedAt >= SFU_SESSION_REUSE_GRACE_MS) {
+          roomLog.info(`Grace period expired for ${pid}, cleaning up SFU`);
+          await this.purgeParticipantState(pid);
+        }
       }
-    }
 
-    // Garbage-collect pending tracks from participants that went zombie
-    // (is_pending = 1 means TracksReady was never received — publisher crashed)
-    this.sql.exec(
-      `DELETE FROM tracks WHERE is_pending = 1 AND participant_id NOT IN (SELECT id FROM participants)`,
-    );
-    const pendingZombie = this.sql.exec(
-      `DELETE FROM tracks WHERE is_pending = 1 AND participant_id IN (
+      // Garbage-collect pending tracks from participants that went zombie
+      // (is_pending = 1 means TracksReady was never received — publisher crashed)
+      this.sql.exec(
+        `DELETE FROM tracks WHERE is_pending = 1 AND participant_id NOT IN (SELECT id FROM participants)`,
+      );
+      const pendingZombie = this.sql.exec(
+        `DELETE FROM tracks WHERE is_pending = 1 AND participant_id IN (
         SELECT id FROM participants WHERE last_heartbeat > 0 AND last_heartbeat < ?
       ) RETURNING track_name, participant_id`,
-      now - VOICE_ZOMBIE_TIMEOUT_MS,
-    );
-    for (const row of pendingZombie) {
-      log.info(
-        `GC pending track: ${row.track_name} from ${row.participant_id}`,
+        now - VOICE_ZOMBIE_TIMEOUT_MS,
       );
+      for (const row of pendingZombie) {
+        log.info(
+          `GC pending track: ${row.track_name} from ${row.participant_id}`,
+        );
+      }
+
+      // SFU session health check — validate pull sessions are still alive
+      // Run every cycle to detect 410'd sessions quickly
+      this.ctx.waitUntil(this.validateSfuSessions());
+
+      this.advanceListenTogetherIfNeeded(now);
+    } catch (error) {
+      processingFailed = true;
+      roomLog.error(
+        "alarm(): uncaught exception; state may be inconsistent",
+        error,
+      );
+    } finally {
+      if (processingFailed) {
+        await this.ctx.storage.setAlarm(Date.now() + 60_000);
+      } else {
+        await this.scheduleAlarm(true);
+      }
     }
-
-    // SFU session health check — validate pull sessions are still alive
-    // Run every cycle to detect 410'd sessions quickly
-    this.ctx.waitUntil(this.validateSfuSessions());
-
-    this.advanceListenTogetherIfNeeded(now);
-    this.scheduleAlarm();
   }
 
   private getNextAlarmTime(now: number) {
@@ -819,44 +833,44 @@ export class VoiceRoom extends DurableObject<Env> {
     );
   }
 
-  private scheduleAlarm() {
+  private async scheduleAlarm(rethrow = false) {
     const now = Date.now();
+    try {
+      const currentAlarm = await this.ctx.storage.getAlarm();
+      const countRow = [
+        ...this.sql.exec(`SELECT COUNT(*) as c FROM participants`),
+      ][0];
+      const participantCount = Number(countRow?.c ?? 0);
+      const pendingCountRow = [
+        ...this.sql.exec(`SELECT COUNT(*) as c FROM pending_reconnects`),
+      ][0];
+      const pendingCount = Number(pendingCountRow?.c ?? 0);
+      const demoChatCountRow = [
+        ...this.sql.exec(`SELECT COUNT(*) as c FROM demo_chat_messages`),
+      ][0];
+      const demoChatCount = Number(demoChatCountRow?.c ?? 0);
+      const listenTogetherDeadline = this.getListenTogetherTrackDeadline(now);
+      const hasWork =
+        participantCount > 0 ||
+        pendingCount > 0 ||
+        demoChatCount > 0 ||
+        typeof listenTogetherDeadline === "number";
 
-    this.ctx.storage
-      .getAlarm()
-      .then((currentAlarm) => {
-        const countRow = [
-          ...this.sql.exec(`SELECT COUNT(*) as c FROM participants`),
-        ][0];
-        const participantCount = Number(countRow?.c ?? 0);
-        const pendingCountRow = [
-          ...this.sql.exec(`SELECT COUNT(*) as c FROM pending_reconnects`),
-        ][0];
-        const pendingCount = Number(pendingCountRow?.c ?? 0);
-        const demoChatCountRow = [
-          ...this.sql.exec(`SELECT COUNT(*) as c FROM demo_chat_messages`),
-        ][0];
-        const demoChatCount = Number(demoChatCountRow?.c ?? 0);
-        const listenTogetherDeadline = this.getListenTogetherTrackDeadline(now);
-        const hasWork =
-          participantCount > 0 ||
-          pendingCount > 0 ||
-          demoChatCount > 0 ||
-          typeof listenTogetherDeadline === "number";
-
-        if (!hasWork) {
-          if (currentAlarm !== null) {
-            return this.ctx.storage.deleteAlarm();
-          }
-          return;
+      if (!hasWork) {
+        if (currentAlarm !== null) {
+          return this.ctx.storage.deleteAlarm();
         }
+        return;
+      }
 
-        const nextAlarm = this.getNextAlarmTime(now);
-        if (currentAlarm === null || currentAlarm !== nextAlarm) {
-          return this.ctx.storage.setAlarm(nextAlarm);
-        }
-      })
-      .catch(() => {});
+      const nextAlarm = this.getNextAlarmTime(now);
+      if (currentAlarm === null || currentAlarm !== nextAlarm) {
+        await this.ctx.storage.setAlarm(nextAlarm);
+      }
+    } catch (error) {
+      if (rethrow) throw error;
+      roomLog.error("Failed to schedule voice-room alarm", error);
+    }
   }
 
   // ── Helpers ────────────────────────────────────────────────────────────
