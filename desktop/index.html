@@ -13,7 +13,17 @@
             "(prefers-color-scheme: dark)",
           ).matches;
 
-          if (
+          var customTheme =
+            theme === "miku-light" ||
+            theme === "miku-dark" ||
+            theme === "spiderman-light" ||
+            theme === "spiderman-dark"
+              ? theme
+              : null;
+
+          if (customTheme) {
+            document.documentElement.classList.add(customTheme);
+          } else if (
             theme === "dark" ||
             (theme === "system" && prefersDark) ||
             (!theme && prefersDark)

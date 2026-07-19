@@ -1,4 +1,4 @@
-import splashLogo from "@/assets/splash-logo.svg";
+import { ThemeAwareSplashLogo } from "@/components/ThemeAwareSplashLogo";
 import { restartDesktopApp } from "@/lib/desktop-restart";
 import { useEffect, useState } from "react";
 
@@ -144,8 +144,7 @@ export function StandaloneUpdater() {
 
       {/* Logo with breathing animation */}
       <div className="w-24 h-24 z-10 flex items-center justify-center animate-[conn-breathe_2.8s_ease-in-out_infinite]">
-        <img
-          src={splashLogo}
+        <ThemeAwareSplashLogo
           alt="Ralph Meet"
           className="h-full w-full object-contain"
         />

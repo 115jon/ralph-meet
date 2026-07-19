@@ -313,6 +313,10 @@
   --rm-text-ghost: #5c5e66;
 }
 
+:is(.light, .miku-light, .spiderman-light) .theme-aware-splash-logo {
+  filter: brightness(0);
+}
+
 .miku-light {
   --radius: 0.625rem;
 

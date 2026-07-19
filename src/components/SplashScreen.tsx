@@ -5,7 +5,7 @@
  * an indeterminate loading bar, and rotating fun tip messages.
  */
 
-import splashLogo from "@/assets/splash-logo.svg";
+import { ThemeAwareSplashLogo } from "@/components/ThemeAwareSplashLogo";
 import { useEffect, useReducer } from "react";
 
 const LOADING_TIPS = [
@@ -59,8 +59,7 @@ export function SplashScreen() {
 
       {/* Logo with breathing animation */}
       <div className="w-24 h-24 z-10 flex items-center justify-center animate-splash-breathe">
-        <img
-          src={splashLogo}
+        <ThemeAwareSplashLogo
           alt="Ralph Meet"
           className="h-full w-full object-contain"
         />
