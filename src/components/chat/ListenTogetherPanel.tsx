@@ -256,14 +256,6 @@ export function ListenTogetherPanel({
     writeListenTogetherQueryHistory(nextHistory);
   };
 
-  useEffect(() => {
-    if (!sfu || !roomSlug) return;
-    sfu.voiceGW.sendAppEvent({
-      type: "listen_together.state.request",
-      room_slug: roomSlug,
-    });
-  }, [roomSlug, sfu]);
-
   const runSearch = useCallback(
     async (query: string, signal?: AbortSignal) => {
       if (!roomSlug || !voiceSessionHeaders || !query) {

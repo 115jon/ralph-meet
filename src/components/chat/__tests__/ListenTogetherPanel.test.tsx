@@ -110,6 +110,24 @@ describe("ListenTogetherPanel", () => {
     ).toBeGreaterThanOrEqual(2);
   });
 
+  it("does not request room state when the queue panel opens", () => {
+    const sendAppEvent = vi.fn();
+
+    render(
+      <ListenTogetherPanel
+        sfu={{ voiceGW: { sendAppEvent } } as never}
+        roomSlug="room-1"
+        voiceSessionId="voice-1"
+        localUserId="user-1"
+      />,
+    );
+
+    expect(sendAppEvent).not.toHaveBeenCalledWith({
+      type: "listen_together.state.request",
+      room_slug: "room-1",
+    });
+  });
+
   it("advances the displayed progress locally while playback is active", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(6_000);
