@@ -2297,12 +2297,6 @@ export default function SettingsAccountTab({
   }, [nameplatePreview]);
 
   const hasChanges =
-    displayName !==
-      (chatUser?.display_name ||
-        (user?.unsafeMetadata?.displayName as string) ||
-        user?.username ||
-        "") ||
-    username !== (chatUser?.username || user?.username || "") ||
     pronouns !== (chatUser?.pronouns || "") ||
     bio !== (chatUser?.bio || "") ||
     avatarFile !== null ||
@@ -2792,15 +2786,11 @@ export default function SettingsAccountTab({
     setSaved(false);
     setError(null);
 
-    const trimmedName = displayName.trim();
-    const trimmedUsername = username.trim().toLowerCase();
     const trimmedPronouns = pronouns.trim();
     const trimmedBio = bio.trim();
 
     try {
       await apiPatch("/api/update-profile", {
-        displayName: trimmedName || trimmedUsername,
-        username: trimmedUsername,
         pronouns: trimmedPronouns || null,
         bio: trimmedBio || null,
         profileAccentColor,
@@ -2924,8 +2914,6 @@ export default function SettingsAccountTab({
     }
   }, [
     user,
-    displayName,
-    username,
     pronouns,
     bio,
     avatarFile,
@@ -3041,8 +3029,7 @@ export default function SettingsAccountTab({
         <div className="mb-6">
           <h1 className="text-2xl font-bold text-rm-text">Edit Profile</h1>
           <p className="mt-2 text-sm text-rm-text-muted">
-            Update your identity, collectibles, and profile surfaces in one
-            place.
+            Update your collectibles and profile surfaces in one place.
           </p>
         </div>
       )}

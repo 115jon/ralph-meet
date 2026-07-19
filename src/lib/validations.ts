@@ -1,5 +1,50 @@
 import { z } from "zod";
 
+export function normalizeUsername(value: string): string {
+  return value.trim().toLowerCase();
+}
+
+export function normalizeUsernameForStorage(
+  value: string,
+  fallback: string,
+): string {
+  const normalized = normalizeUsername(value)
+    .replace(/[^a-z0-9_.-]/g, "_")
+    .replace(/^[^a-z0-9]+/, "")
+    .slice(0, 32);
+  if (normalized.length >= 2) return normalized;
+
+  const normalizedFallback = normalizeUsername(fallback)
+    .replace(/[^a-z0-9_.-]/g, "_")
+    .replace(/^[^a-z0-9]+/, "")
+    .slice(0, 32);
+  return normalizedFallback.length >= 2 ? normalizedFallback : "user_account";
+}
+
+export const UsernameSchema = z
+  .string()
+  .trim()
+  .toLowerCase()
+  .min(2, "Username must be at least 2 characters")
+  .max(32, "Username must be at most 32 characters")
+  .regex(
+    /^[a-z0-9][a-z0-9_.-]*$/,
+    "Username may only contain letters, numbers, dots, hyphens, and underscores",
+  )
+  .transform(normalizeUsername);
+
+export const DisplayNameSchema = z
+  .string()
+  .trim()
+  .max(80, "Display name must be at most 80 characters");
+
+export const ProfileIdentityPatchSchema = z.object({
+  displayName: DisplayNameSchema.optional(),
+  username: UsernameSchema.optional(),
+});
+
+export type ProfileIdentityPatch = z.infer<typeof ProfileIdentityPatchSchema>;
+
 export const ChannelNameSchema = z
   .string()
   .min(1, "Name is required")

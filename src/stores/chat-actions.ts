@@ -92,7 +92,7 @@ export interface ChatRestActions {
     custom_status?: string | null,
   ) => void;
   loadProfile: () => Promise<void>;
-  loadCurrentUser: (expectedUserId?: string) => Promise<void>;
+  loadCurrentUser: (expectedUserId?: string) => Promise<boolean>;
   loadReadStates: () => Promise<void>;
   markChannelRead: (channelId: string, messageTimestamp?: string) => void;
   resetReadStateTracking: (userId: string | null) => void;
@@ -681,7 +681,7 @@ export function createChatActions(
         loadGeneration !== readStateGeneration ||
         (userIdAtStart !== null && profile.id !== userIdAtStart)
       ) {
-        return;
+        return false;
       }
       const current = get().user;
       resetReadStateTracking(profile.id);
@@ -694,8 +694,7 @@ export function createChatActions(
         user: {
           id: profile.id,
           username: profile.username || current?.username || "Guest",
-          display_name:
-            (profile.display_name || current?.display_name) ?? undefined,
+          display_name: profile.display_name ?? undefined,
           avatar_url: (profile.avatar_url || current?.avatar_url) ?? undefined,
           avatar_display: profile.avatar_display ?? current?.avatar_display,
           banner_url: profile.banner_url ?? undefined,
@@ -754,8 +753,9 @@ export function createChatActions(
         },
         profile.id,
       );
+      return true;
     } catch {
-      /* ignore */
+      return false;
     }
   };
 

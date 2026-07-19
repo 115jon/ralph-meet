@@ -24,6 +24,10 @@ import {
   serializeAvatarDisplay,
 } from "@/lib/avatar-display";
 import { findUserAvatarUploadByUrl } from "@/services/user-avatar.service";
+import {
+  ProfileIdentityPatchSchema,
+  type ProfileIdentityPatch,
+} from "@/lib/validations";
 
 const log = clog("update-profile");
 
@@ -32,9 +36,7 @@ const PATCH = async ({ request: req }: any) => {
   if (authResult instanceof Response) return authResult;
   const { userId } = authResult;
 
-  let body: {
-    displayName?: string;
-    username?: string;
+  let body: ProfileIdentityPatch & {
     themePreference?: string | null;
     themeSyncEnabled?: boolean;
     mediaContentFilter?: string;
@@ -71,6 +73,19 @@ const PATCH = async ({ request: req }: any) => {
     bio,
     pronouns,
   } = body;
+
+  const identity = ProfileIdentityPatchSchema.safeParse({
+    displayName,
+    username,
+  });
+  if (!identity.success) {
+    return apiError(
+      identity.error.issues[0]?.message ?? "Invalid profile identity",
+      400,
+    );
+  }
+  const normalizedDisplayName = identity.data.displayName;
+  const normalizedUsername = identity.data.username;
 
   if (removeAvatar !== undefined && typeof removeAvatar !== "boolean") {
     return apiError("Invalid avatar removal flag", 400);
@@ -210,15 +225,24 @@ const PATCH = async ({ request: req }: any) => {
     const updates: string[] = [];
     const binds: unknown[] = [];
 
-    if (displayName !== undefined) {
+    if (normalizedDisplayName !== undefined) {
       updates.push("display_name = ?");
-      binds.push(displayName || null);
+      binds.push(normalizedDisplayName || null);
     }
 
-    if (username !== undefined) {
-      const trimmed = username.trim().toLowerCase();
+    if (normalizedUsername !== undefined) {
+      const existingUsername = await db
+        .prepare(
+          "SELECT id FROM users WHERE lower(username) = ? AND id != ? LIMIT 1",
+        )
+        .bind(normalizedUsername, userId)
+        .first<{ id: string }>();
+      if (existingUsername) {
+        return apiError("That username is already taken", 409);
+      }
+
       updates.push("username = ?");
-      binds.push(trimmed);
+      binds.push(normalizedUsername);
     }
 
     if (themePreference !== undefined) {
@@ -419,6 +443,13 @@ const PATCH = async ({ request: req }: any) => {
     });
   } catch (err: unknown) {
     log.error("Error:", err);
+    if (
+      normalizedUsername !== undefined &&
+      err instanceof Error &&
+      /unique constraint/i.test(err.message)
+    ) {
+      return apiError("That username is already taken", 409);
+    }
     return apiError("Failed to update profile", 500);
   }
 };

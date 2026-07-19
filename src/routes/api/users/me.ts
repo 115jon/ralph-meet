@@ -8,6 +8,7 @@ import {
   applyProfileThemeDefaults,
   type DisplayNameStyle,
 } from "@/lib/profile-customization";
+import { normalizeUsernameForStorage } from "@/lib/validations";
 import { ServiceError } from "@/lib/service-error";
 import { getMe } from "@/services/user.service";
 import { clog } from "@/lib/console-logger";
@@ -319,10 +320,12 @@ async function syncUserFromRalphAuth(
 
   const email =
     authUser.email ?? authUser.primaryEmailAddress?.emailAddress ?? null;
-  const username =
+  const username = normalizeUsernameForStorage(
     authUser.username ??
-    (email ? email.split("@")[0] : null) ??
-    `user_${userId.slice(-6)}`;
+      (email ? email.split("@")[0] : null) ??
+      `user_${userId.slice(-6)}`,
+    `user_${userId.slice(-6)}`,
+  );
   const fullName = [authUser.firstName, authUser.lastName]
     .filter(Boolean)
     .join(" ");
@@ -469,36 +472,48 @@ async function claimLegacyIdentity(
 
   if (!existingNewUser) {
     const legacyProfileTheme = applyProfileThemeDefaults(legacy);
-    await db
-      .prepare(
-        `INSERT INTO users (id, username, display_name, avatar_url, avatar_display, banner_url, banner_content_type, nameplate_url, nameplate_content_type, profile_accent_color, profile_background_color, profile_banner_color, display_name_style, theme_preference, theme_sync_enabled, media_content_filter, bio, pronouns, status, custom_status, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      )
-      .bind(
-        input.authUserId,
-        legacy.username,
-        legacy.display_name,
-        legacy.avatar_url,
-        legacy.avatar_display ?? null,
-        legacy.banner_url,
-        legacy.banner_content_type,
-        legacy.nameplate_url,
-        legacy.nameplate_content_type,
-        legacyProfileTheme.profile_accent_color,
-        legacyProfileTheme.profile_background_color,
-        legacyProfileTheme.profile_banner_color,
-        legacy.display_name_style,
-        legacy.theme_preference,
-        legacy.theme_sync_enabled,
-        legacy.media_content_filter,
-        legacy.bio,
-        legacy.pronouns,
-        legacy.status,
-        legacy.custom_status,
-        legacy.created_at ?? input.now,
-        input.now,
-      )
-      .run();
+    const claimedUsername = normalizeUsernameForStorage(
+      legacy.username,
+      `user_${input.authUserId.slice(-6)}`,
+    );
+    const legacyHoldingUsername = normalizeUsernameForStorage(
+      `claimed_${legacy.id.slice(-24)}`,
+      `legacy_${legacy.id.slice(-8)}`,
+    );
+    await db.batch([
+      db
+        .prepare("UPDATE users SET username = ? WHERE id = ?")
+        .bind(legacyHoldingUsername, legacy.id),
+      db
+        .prepare(
+          `INSERT INTO users (id, username, display_name, avatar_url, avatar_display, banner_url, banner_content_type, nameplate_url, nameplate_content_type, profile_accent_color, profile_background_color, profile_banner_color, display_name_style, theme_preference, theme_sync_enabled, media_content_filter, bio, pronouns, status, custom_status, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        )
+        .bind(
+          input.authUserId,
+          claimedUsername,
+          legacy.display_name,
+          legacy.avatar_url,
+          legacy.avatar_display ?? null,
+          legacy.banner_url,
+          legacy.banner_content_type,
+          legacy.nameplate_url,
+          legacy.nameplate_content_type,
+          legacyProfileTheme.profile_accent_color,
+          legacyProfileTheme.profile_background_color,
+          legacyProfileTheme.profile_banner_color,
+          legacy.display_name_style,
+          legacy.theme_preference,
+          legacy.theme_sync_enabled,
+          legacy.media_content_filter,
+          legacy.bio,
+          legacy.pronouns,
+          legacy.status,
+          legacy.custom_status,
+          legacy.created_at ?? input.now,
+          input.now,
+        ),
+    ]);
   }
 
   const statements = USER_ID_REFERENCES.map(([table, column]) =>

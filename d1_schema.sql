@@ -29,6 +29,9 @@ CREATE TABLE IF NOT EXISTS users (
     updated_at TEXT
 );
 
+CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username_lower
+    ON users(lower(username));
+
 CREATE TABLE IF NOT EXISTS user_avatar_uploads (
     id TEXT PRIMARY KEY,
     user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
