@@ -16,7 +16,9 @@ vi.mock("@/lib/api-client", () => ({
 }));
 
 import SoundboardPicker from "@/components/chat/SoundboardPicker";
+import type { ListenTogetherStateSnapshot } from "@/lib/listen-together";
 import { useChatStore } from "@/stores/chat-store";
+import { useListenTogetherStore } from "@/stores/useListenTogetherStore";
 
 describe("SoundboardPicker selection mode", () => {
   beforeEach(() => {
@@ -54,6 +56,7 @@ describe("SoundboardPicker selection mode", () => {
       if (url.includes("server-2")) return Promise.reject(new Error("stale"));
       return Promise.reject(new Error("unsupported request"));
     });
+    useListenTogetherStore.setState({ rooms: {} });
   });
 
   it("renders stored local sounds before passive effects run", async () => {
@@ -152,6 +155,100 @@ describe("SoundboardPicker selection mode", () => {
     ).toBeInTheDocument();
     expect(screen.queryByText("Now Playing")).toBeNull();
     expect(screen.queryByRole("button", { name: "Server Sounds" })).toBeNull();
+  });
+
+  it("defers favorites and server soundboard fetches from the direct listen view", async () => {
+    mocks.apiGet.mockImplementation((url: string) => {
+      if (url === "/api/myinstants/favorites") {
+        return Promise.resolve({ favorites: [] });
+      }
+      if (url.includes("/soundboard")) return Promise.resolve([]);
+      return Promise.reject(new Error("unsupported request"));
+    });
+
+    render(
+      <SoundboardPicker
+        onClose={vi.fn()}
+        sfu={null}
+        serverId="server-1"
+        initialView="listenTogether"
+        roomSlug="room-1"
+        voiceSessionId="voice-1"
+      />,
+    );
+
+    await Promise.resolve();
+    expect(mocks.apiGet).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+
+    await waitFor(() => {
+      expect(mocks.apiGet).toHaveBeenCalledWith("/api/myinstants/favorites");
+      expect(mocks.apiGet).toHaveBeenCalledWith(
+        expect.stringContaining("/api/servers/server-1/soundboard"),
+        expect.anything(),
+      );
+    });
+  });
+
+  it("does not close on Escape from a listen-together seek range", () => {
+    const entry = {
+      entryId: "entry-1",
+      requestedAt: 1_000,
+      requester: {
+        userId: "user-1",
+        displayName: "Alice",
+        avatarUrl: null,
+        avatarDisplay: null,
+      },
+      track: {
+        kind: "music" as const,
+        id: "track-1",
+        provider: "youtube" as const,
+        videoId: "video-1",
+        title: "Track One",
+        artist: "Artist",
+        album: null,
+        durationMs: 180_000,
+        artworkUrl: null,
+        canonicalUrl: "https://www.youtube.com/watch?v=video-1",
+        sourceUrl: null,
+        sourceLabel: "YouTube",
+      },
+    };
+    const snapshot: ListenTogetherStateSnapshot = {
+      roomSlug: "room-1",
+      revision: 1,
+      paused: false,
+      currentEntryId: entry.entryId,
+      anchorPositionMs: 0,
+      anchorUpdatedAt: 1_000,
+      lastUpdatedAt: 1_000,
+      queue: [entry],
+      currentEntry: entry,
+      positionMs: 0,
+      durationMs: entry.track.durationMs,
+    };
+    const onClose = vi.fn();
+    useListenTogetherStore.setState({
+      rooms: { "room-1": { snapshot, localVolume: 1, error: null } },
+    });
+
+    render(
+      <SoundboardPicker
+        onClose={onClose}
+        sfu={null}
+        initialView="listenTogether"
+        roomSlug="room-1"
+        voiceSessionId="voice-1"
+      />,
+    );
+
+    fireEvent.keyDown(screen.getByRole("slider", { name: "Seek Track One" }), {
+      key: "Escape",
+    });
+
+    expect(onClose).not.toHaveBeenCalled();
   });
 
   it("uses a standalone dialog for destructive sound confirmation", async () => {

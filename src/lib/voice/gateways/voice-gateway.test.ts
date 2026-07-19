@@ -149,4 +149,48 @@ describe("VoiceGateway", () => {
       },
     ]);
   });
+
+  it("returns false when a listen-together command is dropped before sending", () => {
+    const gateway = new VoiceGateway();
+
+    expect(
+      gateway.sendAppEvent({
+        type: "listen_together.pause",
+        room_slug: "room-1",
+        paused: true,
+        entryId: "entry-1",
+      }),
+    ).toBe(false);
+  });
+
+  it("returns true when a listen-together command is accepted by the ready socket", async () => {
+    mocks.fetchSocketProtocols.mockResolvedValue([
+      "ralph.realtime.v1",
+      "ralph.ticket.test",
+    ]);
+    const gateway = new VoiceGateway();
+    gateway.connectVoice(
+      "participant-1",
+      "voice-token",
+      "voice-server-channel",
+      (path) => `ws://meet.test${path}`,
+      { channelId: "channel", serverId: "server" },
+    );
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const socket = TestWebSocket.instances[0]!;
+    socket.readyState = TestWebSocket.OPEN;
+    socket.onmessage?.({
+      data: JSON.stringify({ op: VoiceOpcode.VoiceReady, d: {} }),
+    } as MessageEvent);
+
+    expect(
+      gateway.sendAppEvent({
+        type: "listen_together.pause",
+        room_slug: "room-1",
+        paused: true,
+        entryId: "entry-1",
+      }),
+    ).toBe(true);
+  });
 });

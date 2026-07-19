@@ -39,6 +39,7 @@ import { createPortal } from "react-dom";
 import type { SFUClient } from "@/lib/sfu-client";
 
 import { useChatStore } from "@/stores/chat-store";
+import { useListenTogetherStore } from "@/stores/useListenTogetherStore";
 import { useSoundSettingsStore } from "@/stores/useSoundSettingsStore";
 import { getAuthAssetUrl } from "@/lib/platform";
 import type { Server } from "@/lib/types";
@@ -363,6 +364,12 @@ export default function SoundboardPicker({
   const [radioQuery, setRadioQuery] = useState("");
   const [radioResults, setRadioResults] = useState<RadioStation[]>([]);
   const [isSearchingRadio, setIsSearchingRadio] = useState(false);
+  const roomError = useListenTogetherStore((state) =>
+    roomSlug ? (state.rooms[roomSlug]?.roomError ?? null) : null,
+  );
+  const clearRoomError = useListenTogetherStore(
+    (state) => state.clearRoomError,
+  );
 
   const searchInputRef = useRef<HTMLInputElement>(null);
   const pickerRef = useRef<HTMLDialogElement>(null);
@@ -410,7 +417,11 @@ export default function SoundboardPicker({
   }, [storedSoundboardVolume]);
 
   useEffect(() => {
-    if (selectionMode) return;
+    if (
+      selectionMode ||
+      (activeView !== "soundboard" && activeView !== "myinstants")
+    )
+      return;
     if (hasFetchedFavoritesRef.current) return;
     hasFetchedFavoritesRef.current = true;
     apiGet<{ favorites: MyInstantsSound[] }>("/api/myinstants/favorites")
@@ -425,7 +436,7 @@ export default function SoundboardPicker({
       .catch((err) =>
         console.error("Failed to load MyInstants favorites", err),
       );
-  }, [selectionMode]);
+  }, [activeView, selectionMode]);
 
   const toggleFavorite = async (
     sound: {
@@ -486,7 +497,7 @@ export default function SoundboardPicker({
   };
 
   useEffect(() => {
-    if (!catalogServerKey) {
+    if (activeView !== "soundboard" || !catalogServerKey) {
       return;
     }
     const controller = new AbortController();
@@ -523,7 +534,7 @@ export default function SoundboardPicker({
       }
     });
     return () => controller.abort();
-  }, [catalogServerKey, isServerSoundboard, serverId]);
+  }, [activeView, catalogServerKey, isServerSoundboard, serverId]);
 
   // `sfu.on(...)` returns the unsubscribe function from EventEmitter.on.
   // react-doctor-disable-next-line react-doctor/effect-needs-cleanup
@@ -615,13 +626,22 @@ export default function SoundboardPicker({
         signal: controller.signal,
         headers: { "User-Agent": "RalphMeet/1.0" },
       })
-        .then((res) => res.json())
-        .then((data) => setRadioResults(data))
-        .catch((err) => {
-          if (!controller.signal.aborted)
-            console.error("Radio search error", err);
+        .then((res) => {
+          if (res.ok === false) {
+            throw new Error(`Radio browser request failed (${res.status}).`);
+          }
+          return res.json();
         })
-        .finally(() => setIsSearchingRadio(false));
+        .then((data) => setRadioResults(Array.isArray(data) ? data : []))
+        .catch((err) => {
+          if (!controller.signal.aborted) {
+            setRadioResults([]);
+            console.error("Radio search error", err);
+          }
+        })
+        .finally(() => {
+          if (!controller.signal.aborted) setIsSearchingRadio(false);
+        });
       return controller;
     };
 
@@ -647,12 +667,19 @@ export default function SoundboardPicker({
     const handleEscape = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
       if (isUploadModalOpen || soundToDelete) return;
+      if (
+        activeView === "listenTogether" &&
+        event.target instanceof HTMLInputElement &&
+        event.target.type === "range"
+      ) {
+        return;
+      }
       onClose();
     };
     window.addEventListener("keydown", handleEscape, { capture: true });
     return () =>
       window.removeEventListener("keydown", handleEscape, { capture: true });
-  }, [isUploadModalOpen, onClose, soundToDelete]);
+  }, [activeView, isUploadModalOpen, onClose, soundToDelete]);
 
   useEffect(() => {
     if (!compact) return;
@@ -866,7 +893,11 @@ export default function SoundboardPicker({
       return;
     }
     // Radio stations are enqueued to Listen Together instead of soundboard.play
-    if (sound.soundType === "radio" && roomSlug && sfu) {
+    if (sound.soundType === "radio") {
+      if (!roomSlug || !sfu) {
+        setUploadError("Connect to the voice room before playing radio.");
+        return;
+      }
       const currentUser = useChatStore.getState().user;
       const requester = {
         userId: localUserId || currentUser?.id || "guest",
@@ -876,7 +907,7 @@ export default function SoundboardPicker({
         avatarDisplay: currentUser?.avatar_display ?? null,
       };
 
-      sfu.voiceGW.sendAppEvent({
+      const accepted = sfu.voiceGW.sendAppEvent({
         type: "listen_together.enqueue",
         room_slug: roomSlug,
         mode: "append",
@@ -892,6 +923,12 @@ export default function SoundboardPicker({
           },
         ],
       });
+      if (accepted === false) {
+        setUploadError("Could not enqueue the radio station.");
+      } else {
+        setUploadError(null);
+        clearRoomError(roomSlug);
+      }
       return;
     }
 
@@ -1326,6 +1363,17 @@ export default function SoundboardPicker({
                 </div>
               </>
             )}
+            {(uploadError || (activeView === "radio" && roomError)) &&
+              activeView !== "soundboard" && (
+                <div
+                  role="alert"
+                  className="mt-3 rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs text-red-800 dark:text-red-300"
+                >
+                  {activeView === "radio" && roomError
+                    ? roomError.message
+                    : uploadError}
+                </div>
+              )}
           </div>
 
           <div className="min-h-0 flex-1 overflow-hidden">

@@ -11,7 +11,11 @@ import {
   screen,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ListenTogetherPanel } from "../ListenTogetherPanel";
+import {
+  ListenTogetherPanel,
+  ListenTogetherQueueRow,
+  listenTogetherQueueRowRenderer,
+} from "../ListenTogetherPanel";
 
 vi.mock("@/lib/api-client", () => ({
   apiGet: vi.fn(),
@@ -108,6 +112,94 @@ describe("ListenTogetherPanel", () => {
       container.querySelectorAll('img[src="https://img.example/avatar-1.png"]')
         .length,
     ).toBeGreaterThanOrEqual(2);
+  });
+
+  it("does not rerender an unchanged memoized queue row", () => {
+    const entry = makeSnapshot().queue[0]!;
+    const sfu = { voiceGW: { sendAppEvent: vi.fn() } } as never;
+    const renderSpy = vi.spyOn(listenTogetherQueueRowRenderer, "render");
+    const props = {
+      entry,
+      index: 0,
+      isCurrent: true,
+      roomSlug: "room-1",
+      sfu,
+    };
+    const { rerender } = render(<ListenTogetherQueueRow {...props} />);
+
+    rerender(<ListenTogetherQueueRow {...props} />);
+    expect(renderSpy).toHaveBeenCalledTimes(1);
+    renderSpy.mockRestore();
+  });
+
+  it("shows queue control feedback when the voice room is disconnected", () => {
+    render(
+      <ListenTogetherPanel
+        sfu={null}
+        roomSlug="room-1"
+        voiceSessionId="voice-1"
+        localUserId="user-1"
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Remove Track One" }));
+
+    expect(
+      screen.getByText("Connect to the voice room before changing the queue."),
+    ).toBeInTheDocument();
+  });
+
+  it("shows queue feedback when the gateway rejects a connected command", () => {
+    const sendAppEvent = vi.fn(() => false);
+    render(
+      <ListenTogetherPanel
+        sfu={{ voiceGW: { isReady: true, sendAppEvent } } as never}
+        roomSlug="room-1"
+        voiceSessionId="voice-1"
+        localUserId="user-1"
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Remove Track One" }));
+
+    expect(
+      screen.getByText("Could not update the listen together queue."),
+    ).toBeInTheDocument();
+
+    sendAppEvent.mockReturnValue(true);
+    fireEvent.click(screen.getByRole("button", { name: "Remove Track One" }));
+    expect(
+      screen.queryByText("Could not update the listen together queue."),
+    ).not.toBeInTheDocument();
+  });
+
+  it("keeps an unchanged queue row mounted when playback ticks rerender the panel", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(1_000);
+    render(
+      <ListenTogetherPanel
+        sfu={null}
+        roomSlug="room-1"
+        voiceSessionId="voice-1"
+        localUserId="user-1"
+      />,
+    );
+    const row = screen
+      .getAllByText("Track One")
+      .find((element) => element.classList.contains("text-[13px]"))
+      ?.closest("div.grid");
+    expect(row).not.toBeNull();
+
+    await act(async () => {
+      vi.advanceTimersByTime(250);
+    });
+
+    expect(
+      screen
+        .getAllByText("Track One")
+        .find((element) => element.classList.contains("text-[13px]"))
+        ?.closest("div.grid"),
+    ).toBe(row);
   });
 
   it("does not request room state when the queue panel opens", () => {

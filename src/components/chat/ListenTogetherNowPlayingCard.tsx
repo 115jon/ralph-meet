@@ -22,8 +22,20 @@ import {
   Volume2,
 } from "lucide-react";
 import { LISTEN_TOGETHER_LOUDNESS_PRESET_OPTIONS } from "@/lib/voice/listen-together-audio";
+import { useEffect, useRef } from "react";
 
 const listenTogetherLog = clog("ListenTogether");
+
+function isCurrentSeekPreview(
+  playback: ListenTogetherPlaybackState["localPlayback"],
+  pendingSeek: { entryId: string; positionMs: number },
+) {
+  return (
+    playback?.entryId === pendingSeek.entryId &&
+    playback.source === "seek" &&
+    playback.positionMs === pendingSeek.positionMs
+  );
+}
 
 interface ListenTogetherNowPlayingCardProps {
   playback: ListenTogetherPlaybackState;
@@ -56,33 +68,23 @@ export function ListenTogetherNowPlayingCard({
     updateLoudnessSettings,
     snapshot,
     isPaused,
+    localPlayback,
   } = playback;
 
   const canControl = !!roomSlug && !!sfu && sfu.voiceGW.isReady !== false;
+  const pendingSeekRef = useRef<{
+    entryId: string;
+    positionMs: number;
+    previousPlayback: typeof localPlayback;
+  } | null>(null);
+  const localPlaybackRef = useRef(localPlayback);
 
-  const sendCommand = (payload: Record<string, unknown>) => {
-    if (!sfu || !roomSlug || sfu.voiceGW.isReady === false) return false;
-    listenTogetherLog.info("Sending listen together control", {
-      source: "now-playing-card",
-      type: payload.type,
-      roomSlug,
-      paused: payload.paused ?? null,
-      entryId: payload.entryId ?? null,
-    });
-    sfu.resumeAudioContext?.();
-    if (
-      payload.type === "listen_together.pause" &&
-      roomSlug &&
-      typeof payload.paused === "boolean"
-    ) {
-      setLocalPlayback(roomSlug, {
-        paused: payload.paused,
-        positionMs: effectiveSeekValue,
-      });
-    }
-    sfu.voiceGW.sendAppEvent(payload);
-    return true;
-  };
+  useEffect(() => {
+    pendingSeekRef.current = null;
+  }, [currentEntry?.entryId, roomSlug]);
+  useEffect(() => {
+    localPlaybackRef.current = localPlayback;
+  }, [localPlayback]);
 
   if (!currentEntry) {
     if (variant === "mini") return null;
@@ -161,6 +163,147 @@ export function ListenTogetherNowPlayingCard({
       : "text-base font-black text-rm-text",
   );
 
+  const sendCommand = (payload: Record<string, unknown>) => {
+    if (!sfu || !roomSlug || sfu.voiceGW.isReady === false) return false;
+    listenTogetherLog.info("Sending listen together control", {
+      source: "now-playing-card",
+      type: payload.type,
+      roomSlug,
+      paused: payload.paused ?? null,
+      entryId: payload.entryId ?? null,
+    });
+    sfu.resumeAudioContext?.();
+    const accepted = sfu.voiceGW.sendAppEvent(payload);
+    if (
+      accepted &&
+      payload.type === "listen_together.pause" &&
+      typeof payload.paused === "boolean"
+    ) {
+      const previousCommandStates =
+        localPlayback?.source === "command"
+          ? (localPlayback.pendingStates ?? [])
+          : [];
+      const nextSequence = (previousCommandStates.at(-1)?.sequence ?? 0) + 1;
+      const nextSnapshotRevision =
+        (snapshot?.revision ?? 0) + previousCommandStates.length;
+      setLocalPlayback(roomSlug, {
+        paused: payload.paused,
+        positionMs: effectiveSeekValue,
+        entryId: currentEntry.entryId,
+        snapshotRevision: nextSnapshotRevision,
+        source: "command",
+        accepted: true,
+        pendingStates: [
+          ...previousCommandStates,
+          {
+            paused: payload.paused,
+            positionMs: effectiveSeekValue,
+            snapshotRevision: nextSnapshotRevision,
+            sequence: nextSequence,
+          },
+        ],
+      });
+    }
+    return accepted;
+  };
+
+  const updateSeekPreview = (positionMs: number) => {
+    pendingSeekRef.current ??= {
+      entryId: currentEntry.entryId,
+      positionMs,
+      previousPlayback: localPlayback,
+    };
+    pendingSeekRef.current.positionMs = positionMs;
+    if (!roomSlug) return;
+    const preview = {
+      paused: isPaused,
+      positionMs,
+      entryId: currentEntry.entryId,
+      snapshotRevision: snapshot?.revision ?? 0,
+      source: "seek",
+      accepted: false,
+    } as const;
+    localPlaybackRef.current = preview;
+    setLocalPlayback(roomSlug, preview);
+  };
+
+  const commitSeek = () => {
+    const pendingSeek = pendingSeekRef.current;
+    pendingSeekRef.current = null;
+    if (!pendingSeek || pendingSeek.entryId !== currentEntry.entryId) {
+      return;
+    }
+
+    const accepted = sendCommand({
+      type: "listen_together.seek",
+      room_slug: roomSlug,
+      positionMs: pendingSeek.positionMs,
+      entryId: pendingSeek.entryId,
+    });
+    if (roomSlug) {
+      const rollbackPlayback =
+        pendingSeek.previousPlayback &&
+        snapshot &&
+        pendingSeek.previousPlayback.snapshotRevision < snapshot.revision
+          ? null
+          : pendingSeek.previousPlayback;
+      if (accepted) {
+        setLocalPlayback(roomSlug, {
+          paused: isPaused,
+          positionMs: pendingSeek.positionMs,
+          entryId: pendingSeek.entryId,
+          snapshotRevision: snapshot?.revision ?? 0,
+          source: "seek",
+          accepted: true,
+        });
+      } else if (isCurrentSeekPreview(localPlaybackRef.current, pendingSeek)) {
+        localPlaybackRef.current = rollbackPlayback;
+        setLocalPlayback(roomSlug, rollbackPlayback);
+      }
+    }
+  };
+
+  const cancelSeek = () => {
+    const pendingSeek = pendingSeekRef.current;
+    pendingSeekRef.current = null;
+    if (
+      pendingSeek &&
+      roomSlug &&
+      isCurrentSeekPreview(localPlaybackRef.current, pendingSeek)
+    ) {
+      const rollbackPlayback =
+        pendingSeek.previousPlayback &&
+        snapshot &&
+        pendingSeek.previousPlayback.snapshotRevision < snapshot.revision
+          ? null
+          : pendingSeek.previousPlayback;
+      localPlaybackRef.current = rollbackPlayback;
+      setLocalPlayback(roomSlug, rollbackPlayback);
+    }
+  };
+
+  const handleSeekKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.key !== "Escape") return;
+    event.preventDefault();
+    cancelSeek();
+  };
+
+  const handleSeekKeyUp = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (
+      event.key === "ArrowLeft" ||
+      event.key === "ArrowRight" ||
+      event.key === "ArrowUp" ||
+      event.key === "ArrowDown" ||
+      event.key === "Home" ||
+      event.key === "End" ||
+      event.key === "PageUp" ||
+      event.key === "PageDown" ||
+      event.key === "Enter"
+    ) {
+      commitSeek();
+    }
+  };
+
   if (variant === "mini") {
     return (
       <TooltipProvider delayDuration={100}>
@@ -233,13 +376,13 @@ export function ListenTogetherNowPlayingCard({
                 disabled={!canControl}
                 aria-label={`Seek ${currentEntry.track.title}`}
                 onChange={(event) => {
-                  sendCommand({
-                    type: "listen_together.seek",
-                    room_slug: roomSlug,
-                    positionMs: Number(event.currentTarget.value),
-                    entryId: currentEntry.entryId,
-                  });
+                  updateSeekPreview(Number(event.currentTarget.value));
                 }}
+                onPointerUp={commitSeek}
+                onPointerCancel={cancelSeek}
+                onKeyDown={handleSeekKeyDown}
+                onKeyUp={handleSeekKeyUp}
+                onBlur={commitSeek}
                 className="h-1.5 min-w-0 flex-1 cursor-pointer accent-primary disabled:cursor-not-allowed"
               />
               <span className="min-w-[34px] text-right text-[10px] text-rm-text-muted/75 tabular-nums">
@@ -369,13 +512,13 @@ export function ListenTogetherNowPlayingCard({
             disabled={!canControl}
             aria-label={`Seek ${currentEntry.track.title}`}
             onChange={(event) => {
-              sendCommand({
-                type: "listen_together.seek",
-                room_slug: roomSlug,
-                positionMs: Number(event.currentTarget.value),
-                entryId: currentEntry.entryId,
-              });
+              updateSeekPreview(Number(event.currentTarget.value));
             }}
+            onPointerUp={commitSeek}
+            onPointerCancel={cancelSeek}
+            onKeyDown={handleSeekKeyDown}
+            onKeyUp={handleSeekKeyUp}
+            onBlur={commitSeek}
             className="h-8 w-full cursor-pointer accent-primary disabled:cursor-not-allowed"
           />
           <div className="flex items-center justify-between text-[11px] tabular-nums text-rm-text-muted">

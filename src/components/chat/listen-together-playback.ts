@@ -10,7 +10,59 @@ import {
 } from "@/stores/useListenTogetherStore";
 import type { ListenTogetherLoudnessPreset } from "@/lib/voice/listen-together-audio";
 import { useListenTogetherAudioSettingsStore } from "@/stores/useListenTogetherAudioSettingsStore";
-import { useEffect, useState } from "react";
+import { useCallback, useSyncExternalStore } from "react";
+
+interface ListenTogetherRoomClock {
+  nowMs: number;
+  listeners: Set<() => void>;
+  interval: number | null;
+}
+
+const roomClocks = new Map<string, ListenTogetherRoomClock>();
+
+function getRoomClock(roomSlug: string) {
+  let clock = roomClocks.get(roomSlug);
+  if (!clock) {
+    clock = { nowMs: Date.now(), listeners: new Set(), interval: null };
+    roomClocks.set(roomSlug, clock);
+  }
+  return clock;
+}
+
+function subscribeToRoomClock(roomSlug: string, listener: () => void) {
+  const clock = getRoomClock(roomSlug);
+  clock.listeners.add(listener);
+  if (clock.interval === null) {
+    clock.interval = window.setInterval(() => {
+      clock.nowMs = Date.now();
+      for (const subscriber of clock.listeners) subscriber();
+    }, 250);
+  }
+
+  return () => {
+    clock.listeners.delete(listener);
+    if (clock.listeners.size > 0) return;
+    if (clock.interval !== null) window.clearInterval(clock.interval);
+    clock.interval = null;
+    roomClocks.delete(roomSlug);
+  };
+}
+
+function useListenTogetherRoomClock(
+  roomSlug: string | null | undefined,
+  enabled: boolean,
+) {
+  const subscribe = useCallback(
+    (listener: () => void) =>
+      roomSlug && enabled ? subscribeToRoomClock(roomSlug, listener) : () => {},
+    [enabled, roomSlug],
+  );
+  const getSnapshot = useCallback(
+    () => (roomSlug && enabled ? getRoomClock(roomSlug).nowMs : 0),
+    [enabled, roomSlug],
+  );
+  return useSyncExternalStore(subscribe, getSnapshot, () => 0);
+}
 
 export interface ListenTogetherPlaybackState {
   currentEntry: ListenTogetherQueueEntry | null;
@@ -18,6 +70,7 @@ export interface ListenTogetherPlaybackState {
   effectiveSeekValue: number;
   error: ListenTogetherRoomState["error"];
   isPaused: boolean;
+  localPlayback: ListenTogetherRoomState["localPlayback"];
   localVolume: number;
   loudnessEnabled: boolean;
   loudnessPreset: ListenTogetherLoudnessPreset;
@@ -77,38 +130,34 @@ export function useListenTogetherPlaybackState(
   const updateLoudnessSettings = useListenTogetherAudioSettingsStore(
     (state) => state.updateSettings,
   );
-  const isPaused = localPlayback?.paused ?? snapshot?.paused ?? true;
-  const [playbackNowMs, setPlaybackNowMs] = useState(0);
-
-  useEffect(() => {
-    if (!snapshot?.currentEntry || isPaused) return;
-
-    const interval = window.setInterval(() => {
-      setPlaybackNowMs(Date.now());
-    }, 250);
-
-    return () => {
-      window.clearInterval(interval);
-    };
-  }, [isPaused, snapshot?.currentEntry]);
+  const isSeekOverride = localPlayback?.source === "seek";
+  const isPaused = isSeekOverride
+    ? (snapshot?.paused ?? true)
+    : (localPlayback?.paused ?? snapshot?.paused ?? true);
+  const playbackNowMs = useListenTogetherRoomClock(
+    roomSlug,
+    !!snapshot?.currentEntry && !isPaused,
+  );
 
   const currentEntry = snapshot?.currentEntry ?? null;
   const durationMs = snapshot?.durationMs ?? 0;
-  const effectiveSeekValue = localPlayback?.paused
+  const effectiveSeekValue = isSeekOverride
     ? clampListenTogetherPosition(localPlayback.positionMs, durationMs)
-    : snapshot
-      ? clampListenTogetherPosition(
-          Math.max(
-            snapshot.positionMs,
-            getListenTogetherPositionMs(
-              snapshot,
-              durationMs,
-              playbackNowMs || snapshot.anchorUpdatedAt || 0,
+    : localPlayback?.paused
+      ? clampListenTogetherPosition(localPlayback.positionMs, durationMs)
+      : snapshot
+        ? clampListenTogetherPosition(
+            Math.max(
+              snapshot.positionMs,
+              getListenTogetherPositionMs(
+                snapshot,
+                durationMs,
+                playbackNowMs || snapshot.anchorUpdatedAt || 0,
+              ),
             ),
-          ),
-          durationMs,
-        )
-      : 0;
+            durationMs,
+          )
+        : 0;
 
   return {
     currentEntry,
@@ -116,6 +165,7 @@ export function useListenTogetherPlaybackState(
     effectiveSeekValue,
     error,
     isPaused,
+    localPlayback,
     localVolume,
     loudnessEnabled,
     loudnessPreset,

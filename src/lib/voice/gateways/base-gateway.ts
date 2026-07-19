@@ -126,18 +126,20 @@ export abstract class BaseGateway<
   /**
    * Enqueues a message if not identified, or sends it immediately if ready.
    */
-  public send(msg: ClientMessage, forceSendBeforeIdentify = false) {
+  public send(msg: ClientMessage, forceSendBeforeIdentify = false): boolean {
     if (!this.isIdentified && !forceSendBeforeIdentify) {
       this.log.warn(
         `Not ready (identified=${this.isIdentified}), queueing message op=${msg.op}`,
       );
       this.msgQueue.push(msg);
-      return;
+      return true;
     }
     if (this.ws?.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify(msg));
+      return true;
     } else {
       this.log.error(`Cannot send message op=${msg.op}: socket is not OPEN`);
+      return false;
     }
   }
 
