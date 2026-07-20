@@ -185,7 +185,7 @@ export interface VoiceState {
   name: string;
   username?: string;
   display_name?: string | null;
-  avatar_url?: string;
+  avatar_url?: string | null;
   avatar_display?: AvatarDisplay | string | null;
   stream_preview_url?: string | null;
   self_mute: boolean;
@@ -202,6 +202,12 @@ export interface VoiceState {
   pull_session_id?: string;
   tracks: TrackInfo[];
 }
+
+/** High-frequency voice-state update without cached profile fields. */
+export type VoiceStateDelta = Omit<
+  VoiceState,
+  "name" | "username" | "display_name" | "avatar_url" | "avatar_display"
+>;
 
 export interface StreamWatchSnapshotPayload {
   type: "stream.watch.snapshot";
@@ -237,6 +243,7 @@ export interface IdentifyPayload {
   avatar_url?: string;
   avatar_display?: AvatarDisplay | string | null;
   clerk_user_id?: string;
+  supports_voice_state_deltas?: boolean;
 }
 
 export interface SelectProtocolPayload {
@@ -332,11 +339,17 @@ export interface SpeakingPayloadServer {
   ssrc?: number;
 }
 
-export interface VoiceStateUpdatePayload {
-  participant: VoiceState;
-  action: "join" | "leave" | "update";
-  spatial_audio_state?: import("@/lib/voice/spatial-audio").SharedSpatialAudioState;
-}
+export type VoiceStateUpdatePayload =
+  | {
+      participant: VoiceState;
+      action: "join" | "leave";
+      spatial_audio_state?: import("@/lib/voice/spatial-audio").SharedSpatialAudioState;
+    }
+  | {
+      participant: VoiceState | VoiceStateDelta;
+      action: "update";
+      spatial_audio_state?: import("@/lib/voice/spatial-audio").SharedSpatialAudioState;
+    };
 
 /** C→S: Client sends mute/camera state changes */
 export interface VoiceStateUpdateClientPayload {
@@ -367,7 +380,7 @@ export interface ProfileUpdatePayload {
   name: string;
   username?: string;
   display_name?: string | null;
-  avatar_url?: string;
+  avatar_url?: string | null;
   avatar_display?: AvatarDisplay | string | null;
 }
 
@@ -382,6 +395,7 @@ export interface ErrorPayload {
 export interface VoiceIdentifyPayload {
   participant_id: string;
   voice_token: string;
+  supports_listen_together_snapshot_events?: boolean;
 }
 
 /** S→C: Voice Gateway auth confirmed */
@@ -937,7 +951,7 @@ export interface SFUEventMap {
     spatialAudioState?: import("@/lib/voice/spatial-audio").SharedSpatialAudioState;
   };
   "voice-state-update": {
-    participant: VoiceState;
+    participant: VoiceState | VoiceStateDelta;
     action: "join" | "leave" | "update";
   };
   "participant-joined": { participant: VoiceState };
@@ -962,7 +976,7 @@ export interface SFUEventMap {
     name: string;
     username?: string;
     displayName?: string | null;
-    avatarUrl?: string;
+    avatarUrl?: string | null;
     avatarDisplay?: AvatarDisplay | string | null;
   };
   "connection-state": { state: string };

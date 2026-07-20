@@ -37,6 +37,10 @@ class FakeAudio {
     // No-op for tests.
   }
 
+  emitError() {
+    this.dispatch("error");
+  }
+
   async play() {
     this.paused = false;
     this.dispatch("play");
@@ -116,5 +120,236 @@ describe("soundboard playback runtime", () => {
     expect(
       useVoiceSoundboardStore.getState().activePlaybacks["pb-1"],
     ).toBeUndefined();
+  });
+
+  it("ignores an unknown source-less sound instead of using the first default", async () => {
+    const { playSoundboardPlayback } = await import("@/lib/voice/soundboard");
+
+    expect(() =>
+      playSoundboardPlayback({
+        playbackId: "unknown-sound",
+        ownerId: "user-1",
+        serverKey: "server-1",
+        name: "Unknown",
+        soundId: "not-a-default-sound",
+      }),
+    ).not.toThrow();
+    expect(FakeAudio.instances).toHaveLength(0);
+  });
+
+  it("falls back when a server soundboard timestamp is outside the bounded window", async () => {
+    const { getSoundboardEventReceivedAt } =
+      await import("@/lib/voice/soundboard");
+    const now = 1_000_000;
+
+    expect(getSoundboardEventReceivedAt(now - 1_000, now)).toBe(now - 1_000);
+    expect(getSoundboardEventReceivedAt(now - 60_000, now)).toBe(now);
+    expect(getSoundboardEventReceivedAt(now - 15 * 60 * 1000 - 1, now)).toBe(
+      now,
+    );
+    expect(getSoundboardEventReceivedAt(Infinity, now)).toBe(now);
+    expect(getSoundboardEventReceivedAt(now + 100, now)).toBe(now);
+    expect(getSoundboardEventReceivedAt(now + 5_001, now)).toBe(now);
+  });
+
+  it("does not skip a short clip when the client clock is ahead", async () => {
+    const {
+      getSoundboardEventReceivedAt,
+      playSoundboardPlayback,
+      stopSoundboardPlayback,
+    } = await import("@/lib/voice/soundboard");
+    const now = 1_000_000;
+    vi.setSystemTime(now);
+    vi.stubGlobal("HTMLMediaElement", { HAVE_METADATA: 1 });
+
+    playSoundboardPlayback({
+      playbackId: "ahead-clock",
+      ownerId: "user-1",
+      serverKey: "dm-call",
+      name: "Short clip",
+      mediaUrl: "/api/soundboard/uploads/short-clip",
+      receivedAt: getSoundboardEventReceivedAt(now - 60_000, now),
+      isLocal: false,
+    });
+
+    expect(FakeAudio.instances[0]?.paused).toBe(false);
+    stopSoundboardPlayback("ahead-clock");
+  });
+
+  it("renews an expired capability on owner resume instead of replaying stale media", async () => {
+    const {
+      playSoundboardPlayback,
+      resumeSoundboardPlayback,
+      stopSoundboardPlayback,
+    } = await import("@/lib/voice/soundboard");
+    const renewCapability = vi.fn(() => true);
+    vi.setSystemTime(10_000);
+
+    playSoundboardPlayback({
+      playbackId: "pb-expired",
+      ownerId: "user-1",
+      serverKey: "dm-call",
+      name: "Expired clip",
+      soundId: "sound-1",
+      mediaUrl: "/api/soundboard/uploads/sound-1?cap=expired",
+      mediaCapabilityExpiresAt: 5_000,
+      renewCapability,
+      isLocal: true,
+    });
+
+    const staleAudio = FakeAudio.instances[0];
+    staleAudio.pause();
+    resumeSoundboardPlayback("pb-expired");
+
+    expect(renewCapability).toHaveBeenCalledTimes(1);
+    expect(staleAudio.paused).toBe(true);
+    expect(FakeAudio.instances).toHaveLength(1);
+
+    playSoundboardPlayback({
+      playbackId: "pb-expired",
+      ownerId: "user-1",
+      serverKey: "dm-call",
+      name: "Expired clip",
+      soundId: "sound-1",
+      mediaUrl: "/api/soundboard/uploads/sound-1?cap=fresh",
+      mediaCapabilityExpiresAt: 20_000,
+      isLocal: true,
+    });
+
+    expect(FakeAudio.instances).toHaveLength(2);
+    stopSoundboardPlayback("pb-expired");
+  });
+
+  it.each([
+    ["behind", 1_000, 5_000],
+    ["ahead", 10_000, 5_000],
+  ] as const)(
+    "renews once after a capability media error with the client clock %s",
+    async (_skew, now, expiresAt) => {
+      const { playSoundboardPlayback, stopSoundboardPlayback } =
+        await import("@/lib/voice/soundboard");
+      const renewCapability = vi.fn(() => true);
+      vi.setSystemTime(now);
+
+      playSoundboardPlayback({
+        playbackId: `media-error-${_skew}`,
+        ownerId: "user-1",
+        serverKey: "dm-call",
+        name: "Expired clip",
+        mediaUrl: "/api/soundboard/uploads/sound-1?cap=stale",
+        mediaCapabilityExpiresAt: expiresAt,
+        renewCapability,
+        isLocal: true,
+      });
+
+      FakeAudio.instances[0]?.emitError();
+      FakeAudio.instances[0]?.emitError();
+
+      expect(renewCapability).toHaveBeenCalledTimes(1);
+      stopSoundboardPlayback(`media-error-${_skew}`);
+    },
+  );
+
+  it("preserves position and paused state across a capability renewal replay", async () => {
+    const {
+      pauseSoundboardPlayback,
+      playSoundboardPlayback,
+      stopSoundboardPlayback,
+    } = await import("@/lib/voice/soundboard");
+    const renewCapability = vi.fn(() => true);
+    vi.setSystemTime(10_000);
+
+    playSoundboardPlayback({
+      playbackId: "paused-renewal",
+      ownerId: "user-1",
+      serverKey: "dm-call",
+      name: "Paused clip",
+      mediaUrl: "/api/soundboard/uploads/sound-1?cap=stale",
+      mediaCapabilityExpiresAt: 5_000,
+      renewCapability,
+      isLocal: true,
+    });
+    const staleAudio = FakeAudio.instances[0];
+    staleAudio.currentTime = 12.5;
+    pauseSoundboardPlayback("paused-renewal");
+    staleAudio.emitError();
+
+    expect(renewCapability).toHaveBeenCalledWith({
+      currentTime: 12.5,
+      paused: true,
+    });
+
+    playSoundboardPlayback({
+      playbackId: "paused-renewal",
+      ownerId: "user-1",
+      serverKey: "dm-call",
+      name: "Paused clip",
+      mediaUrl: "/api/soundboard/uploads/sound-1?cap=fresh",
+      currentTime: 12.5,
+      paused: true,
+      isLocal: true,
+    });
+    const renewedAudio = FakeAudio.instances[1];
+    expect(renewedAudio.currentTime).toBe(12.5);
+    expect(renewedAudio.paused).toBe(true);
+    stopSoundboardPlayback("paused-renewal");
+  });
+
+  it("adds bounded delivery latency for unpaused renewal replay recipients", async () => {
+    const {
+      getSoundboardEventReceivedAt,
+      playSoundboardPlayback,
+      stopSoundboardPlayback,
+    } = await import("@/lib/voice/soundboard");
+    const now = 20_000;
+    vi.setSystemTime(now);
+    vi.stubGlobal("HTMLMediaElement", { HAVE_METADATA: 1 });
+
+    playSoundboardPlayback({
+      playbackId: "unpaused-renewal-latency",
+      ownerId: "user-1",
+      serverKey: "dm-call",
+      name: "Playing clip",
+      mediaUrl: "/api/soundboard/uploads/sound-1?cap=fresh",
+      currentTime: 12.5,
+      paused: false,
+      receivedAt: getSoundboardEventReceivedAt(now - 1_250, now),
+      isLocal: false,
+    });
+
+    expect(FakeAudio.instances[0]?.currentTime).toBeCloseTo(13.75, 5);
+    expect(FakeAudio.instances[0]?.paused).toBe(false);
+    stopSoundboardPlayback("unpaused-renewal-latency");
+
+    playSoundboardPlayback({
+      playbackId: "paused-renewal-latency",
+      ownerId: "user-1",
+      serverKey: "dm-call",
+      name: "Paused clip",
+      mediaUrl: "/api/soundboard/uploads/sound-1?cap=fresh",
+      currentTime: 12.5,
+      paused: true,
+      receivedAt: getSoundboardEventReceivedAt(now - 1_250, now),
+      isLocal: false,
+    });
+
+    expect(FakeAudio.instances[1]?.currentTime).toBe(12.5);
+    expect(FakeAudio.instances[1]?.paused).toBe(true);
+    stopSoundboardPlayback("paused-renewal-latency");
+
+    playSoundboardPlayback({
+      playbackId: "paused-renewal-no-position",
+      ownerId: "user-1",
+      serverKey: "dm-call",
+      name: "Paused clip without position",
+      mediaUrl: "/api/soundboard/uploads/sound-1?cap=fresh",
+      paused: true,
+      receivedAt: getSoundboardEventReceivedAt(now - 1_250, now),
+      isLocal: false,
+    });
+
+    expect(FakeAudio.instances[2]?.currentTime).toBe(0);
+    expect(FakeAudio.instances[2]?.paused).toBe(true);
+    stopSoundboardPlayback("paused-renewal-no-position");
   });
 });

@@ -18,9 +18,15 @@ interface BucketEntry {
   windowStart: number;
 }
 
+export const SOUNDBOARD_MEDIA_RATE_LIMIT: RateLimitConfig = {
+  limit: 120,
+  windowMs: 60_000,
+};
+
 const RATE_LIMITS: Record<string, RateLimitConfig> = {
   "POST:/api/channels/*/messages": { limit: 30, windowMs: 60_000 },
   "POST:/api/channels/*/messages/upload": { limit: 10, windowMs: 60_000 },
+  "GET:/api/soundboard/uploads/*": SOUNDBOARD_MEDIA_RATE_LIMIT,
   "POST:/api/channels/*/typing": { limit: 10, windowMs: 10_000 },
   "POST:/api/servers": { limit: 5, windowMs: 3_600_000 },
   "POST:/api/invites/*/join": { limit: 10, windowMs: 600_000 },
@@ -51,11 +57,16 @@ export class RateLimiter {
   private static readonly CLEANUP_INTERVAL_MS = 5 * 60_000;
   private static readonly MAX_ENTRIES = 10_000;
 
-  check(clientIP: string, method: string, pathname: string): RateLimitResult {
+  check(
+    clientIP: string,
+    method: string,
+    pathname: string,
+    keyIdentity = clientIP,
+  ): RateLimitResult {
     this.maybeCleanup();
 
     const config = this.matchConfig(method, pathname);
-    const key = `${clientIP}:${method}:${this.normalizePattern(pathname)}`;
+    const key = `${keyIdentity}:${method}:${this.normalizePattern(pathname)}`;
     const now = Date.now();
 
     const entry = this.buckets.get(key);
@@ -99,7 +110,11 @@ export class RateLimiter {
     return pathname
       .replace(/\/api\/channels\/[^/]+/g, "/api/channels/*")
       .replace(/\/api\/servers\/[^/]+/g, "/api/servers/*")
-      .replace(/\/api\/invites\/[^/]+/g, "/api/invites/*");
+      .replace(/\/api\/invites\/[^/]+/g, "/api/invites/*")
+      .replace(
+        /\/api\/soundboard\/uploads\/[^/]+$/,
+        "/api/soundboard/uploads/*",
+      );
   }
 
   private maybeCleanup() {

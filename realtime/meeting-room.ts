@@ -37,6 +37,7 @@ import {
 import { PERMISSIONS } from "../src/lib/permissions";
 import { getRealtimeAdmissionFromHeaders } from "./realtime-admission";
 import { resolveMeetingProfile } from "./meeting-room/profile-resolver";
+import { ProfileRequestCoordinator } from "./meeting-room/profile-request-coordinator";
 import { generateTurnCredentials as resolveTurnCredentials } from "./meeting-room/turn-credentials";
 import { issueVoiceToken } from "./voice-token";
 
@@ -127,7 +128,7 @@ interface VoiceState {
   name: string;
   username?: string;
   display_name?: string | null;
-  avatar_url?: string;
+  avatar_url?: string | null;
   avatar_display?: string | null;
   platform?: PresencePlatform;
   stream_preview_url?: string | null;
@@ -154,6 +155,11 @@ interface GatewayMessage {
 }
 
 type ServerMsg = GatewayMessage;
+
+type VoiceStateDelta = Omit<
+  VoiceState,
+  "name" | "username" | "display_name" | "avatar_url" | "avatar_display"
+>;
 
 // Data stored on each WebSocket via serializeAttachment/deserializeAttachment
 interface WsAttachment {
@@ -192,6 +198,8 @@ interface WsAttachment {
   replay_buffer?: ReplayEntry[];
   /** Channel ID the user is currently in voice for (global gateway only) */
   voice_channel_id?: string;
+  /** Client can merge profile-less VOICE_CHANNEL_STATE_UPDATE members. */
+  supports_voice_state_deltas?: boolean;
 }
 
 interface ReplayEntry {
@@ -229,6 +237,14 @@ export interface VoiceChannelMember {
   spatial_audio_enabled?: boolean;
   spatial_audio_high_fidelity?: boolean;
   joined_at?: number;
+}
+
+interface ProfileIdentity {
+  name: string;
+  username?: string;
+  display_name: string | null;
+  avatar_url: string | null;
+  avatar_display: string | null;
 }
 
 interface SpatialAudioState {
@@ -290,6 +306,8 @@ export class MeetingRoom extends DurableObject<Env> {
   private sessions: Map<WebSocket, WsAttachment> = new Map();
   private _roomSlug: string = "unknown";
   private profileRefreshCooldowns: Map<string, number> = new Map();
+  private profileRequestCoordinator = new ProfileRequestCoordinator();
+  private profileIdentities: Map<string, ProfileIdentity> = new Map();
   private resumableSessions: Map<string, WsAttachment> = new Map();
   /** Per-participant replay buffer: participantId → bounded replay entries. */
   private replayBuffers: Map<string, ReplayEntry[]> = new Map();
@@ -1441,7 +1459,10 @@ export class MeetingRoom extends DurableObject<Env> {
     };
   }
 
-  private buildVoiceChannelStateUpdateMessage(channelId: string): ServerMsg {
+  private buildVoiceChannelStateUpdateMessage(
+    channelId: string,
+    includeProfiles = false,
+  ): ServerMsg {
     const members = this.voiceChannelMembers.get(channelId);
     return {
       op: Op.Dispatch,
@@ -1449,7 +1470,20 @@ export class MeetingRoom extends DurableObject<Env> {
         event: "VOICE_CHANNEL_STATE_UPDATE",
         data: {
           channel_id: channelId,
-          members: members ? Array.from(members.values()) : [],
+          members: members
+            ? Array.from(members.values()).map((member) => {
+                if (includeProfiles) return member;
+                const {
+                  name: _name,
+                  username: _username,
+                  display_name: _displayName,
+                  avatar_url: _avatarUrl,
+                  avatar_display: _avatarDisplay,
+                  ...state
+                } = member;
+                return state;
+              })
+            : [],
           started_at: this.voiceChannelStartedAt.get(channelId) ?? null,
           spatial_audio_state: this.spatialAudioStates.get(channelId),
         },
@@ -1573,9 +1607,8 @@ export class MeetingRoom extends DurableObject<Env> {
   private async broadcastVoiceChannelState(
     channelId: string,
     excludeWs?: WebSocket,
+    includeProfiles = false,
   ) {
-    const message = this.buildVoiceChannelStateUpdateMessage(channelId);
-
     for (const [ws, session] of this.sessions) {
       if (ws === excludeWs || !session.clerk_user_id) continue;
       if (
@@ -1586,6 +1619,10 @@ export class MeetingRoom extends DurableObject<Env> {
       )
         continue;
 
+      const message = this.buildVoiceChannelStateUpdateMessage(
+        channelId,
+        includeProfiles || session.supports_voice_state_deltas !== true,
+      );
       this.sendReplayable(ws, session, message, {
         kind: "channel",
         channelId,
@@ -1616,6 +1653,17 @@ export class MeetingRoom extends DurableObject<Env> {
       joinedAt ?? Date.now(),
     );
     const existing = members.get(session.clerk_user_id);
+    const canonicalIdentity = existing
+      ? {
+          name: existing.name,
+          username: existing.username,
+          display_name: existing.display_name ?? null,
+          avatar_url: existing.avatar_url ?? null,
+          avatar_display: existing.avatar_display ?? null,
+        }
+      : this.getCanonicalProfileIdentity(session.clerk_user_id);
+    if (canonicalIdentity)
+      this.setSessionProfileIdentity(session, canonicalIdentity);
     members.set(session.clerk_user_id, {
       ...existing,
       clerk_user_id: session.clerk_user_id,
@@ -1654,14 +1702,27 @@ export class MeetingRoom extends DurableObject<Env> {
 
     const members = this.ensureVoiceChannelMembers(session.voice_channel_id);
     const existing = members.get(session.clerk_user_id);
+    const canonicalIdentity = existing
+      ? {
+          name: existing.name,
+          username: existing.username,
+          display_name: existing.display_name ?? null,
+          avatar_url: existing.avatar_url ?? null,
+          avatar_display: existing.avatar_display ?? null,
+        }
+      : this.getCanonicalProfileIdentity(session.clerk_user_id);
+    if (canonicalIdentity)
+      this.setSessionProfileIdentity(session, canonicalIdentity);
     members.set(session.clerk_user_id, {
       ...existing,
       clerk_user_id: session.clerk_user_id,
-      name: session.name,
-      username: session.username,
-      display_name: session.display_name,
-      avatar_url: session.avatar_url,
-      avatar_display: session.avatar_display,
+      name: existing ? existing.name : session.name,
+      username: existing ? existing.username : session.username,
+      display_name: existing ? existing.display_name : session.display_name,
+      avatar_url: existing ? existing.avatar_url : session.avatar_url,
+      avatar_display: existing
+        ? existing.avatar_display
+        : session.avatar_display,
       stream_preview_url: session.stream_preview_url,
       connected: false,
       connection_state: "reconnecting",
@@ -1784,6 +1845,78 @@ export class MeetingRoom extends DurableObject<Env> {
       status: data.status,
       tracks: [...data.tracks],
     };
+  }
+
+  private buildVoiceStateDelta(data: WsAttachment): VoiceStateDelta {
+    return {
+      id: data.id,
+      clerk_user_id: data.clerk_user_id,
+      platform: data.platform,
+      stream_preview_url: data.stream_preview_url,
+      self_mute: data.self_mute,
+      self_deaf: data.self_deaf,
+      self_stream: data.self_stream,
+      self_stream_audio: data.self_stream_audio,
+      self_video: data.self_video,
+      spatial_audio_enabled: data.spatial_audio_enabled,
+      spatial_audio_high_fidelity: data.spatial_audio_high_fidelity,
+      suppress: data.suppress,
+      status: data.status,
+      push_session_id: undefined,
+      pull_session_id: undefined,
+      tracks: [...data.tracks],
+    };
+  }
+
+  private buildVoiceStateUpdateMessage(
+    participant: WsAttachment,
+    recipient: WsAttachment,
+    spatialAudioState?: SpatialAudioState,
+  ): ServerMsg {
+    return {
+      op: Op.VoiceStateUpdate,
+      d: {
+        participant:
+          recipient.supports_voice_state_deltas === true
+            ? this.buildVoiceStateDelta(participant)
+            : this.buildVoiceState(participant),
+        action: "update",
+        spatial_audio_state: spatialAudioState,
+      },
+    };
+  }
+
+  private broadcastVoiceStateUpdate(
+    participantWs: WebSocket,
+    participant: WsAttachment,
+    spatialAudioState?: SpatialAudioState,
+  ) {
+    const liveSessionIds = new Set(
+      [...this.sessions.values()].map((session) => session.id),
+    );
+    for (const [ws, recipient] of this.sessions) {
+      if (ws === participantWs) continue;
+      this.sendReplayable(
+        ws,
+        recipient,
+        this.buildVoiceStateUpdateMessage(
+          participant,
+          recipient,
+          spatialAudioState,
+        ),
+      );
+    }
+    for (const [sessionId, recipient] of this.resumableSessions) {
+      if (liveSessionIds.has(sessionId)) continue;
+      this.queueResumable(
+        recipient,
+        this.buildVoiceStateUpdateMessage(
+          participant,
+          recipient,
+          spatialAudioState,
+        ),
+      );
+    }
   }
 
   private async disconnectSessionImmediately(
@@ -1926,6 +2059,105 @@ export class MeetingRoom extends DurableObject<Env> {
     this.markDirty("resumableSessionExpiry", serialized);
   }
 
+  private getCanonicalProfileIdentity(
+    userId: string,
+  ): ProfileIdentity | undefined {
+    const cached = this.profileIdentities.get(userId);
+    if (cached) return { ...cached };
+
+    for (const members of this.voiceChannelMembers.values()) {
+      const member = members.get(userId);
+      if (!member) continue;
+      return {
+        name: member.name,
+        username: member.username,
+        display_name: member.display_name ?? null,
+        avatar_url: member.avatar_url ?? null,
+        avatar_display: member.avatar_display ?? null,
+      };
+    }
+
+    for (const session of this.sessions.values()) {
+      if (session.clerk_user_id !== userId) continue;
+      return {
+        name: session.name,
+        username: session.username,
+        display_name: session.display_name ?? null,
+        avatar_url: session.avatar_url ?? null,
+        avatar_display: session.avatar_display ?? null,
+      };
+    }
+
+    for (const session of this.resumableSessions.values()) {
+      if (session.clerk_user_id !== userId) continue;
+      return {
+        name: session.name,
+        username: session.username,
+        display_name: session.display_name ?? null,
+        avatar_url: session.avatar_url ?? null,
+        avatar_display: session.avatar_display ?? null,
+      };
+    }
+
+    return undefined;
+  }
+
+  private setSessionProfileIdentity(
+    session: WsAttachment,
+    identity: ProfileIdentity,
+  ) {
+    session.name = identity.name;
+    session.username = identity.username;
+    session.display_name = identity.display_name;
+    session.avatar_url = identity.avatar_url;
+    session.avatar_display = identity.avatar_display;
+  }
+
+  private async updateProfileIdentity(
+    userId: string,
+    identity: ProfileIdentity,
+  ) {
+    this.profileIdentities.set(userId, { ...identity });
+
+    const liveSessions: WsAttachment[] = [];
+    for (const [sessionWs, session] of this.sessions) {
+      if (session.clerk_user_id !== userId) continue;
+      this.setSessionProfileIdentity(session, identity);
+      this.persist(sessionWs, session);
+      liveSessions.push(session);
+    }
+
+    let updatedResumableSession = false;
+    for (const session of this.resumableSessions.values()) {
+      if (session.clerk_user_id !== userId) continue;
+      this.setSessionProfileIdentity(session, identity);
+      updatedResumableSession = true;
+    }
+    if (updatedResumableSession) this.persistResumableSessions();
+
+    const updatedChannelIds: string[] = [];
+    for (const [channelId, members] of this.voiceChannelMembers) {
+      const member = members.get(userId);
+      if (!member) continue;
+      members.set(userId, refreshVoiceMemberIdentity(member, identity));
+      updatedChannelIds.push(channelId);
+    }
+    if (updatedChannelIds.length > 0) this.persistVoiceChannelMembers();
+
+    for (const session of liveSessions) {
+      this.broadcast({
+        op: Op.ProfileUpdate,
+        d: {
+          participant_id: session.id,
+          ...identity,
+        },
+      });
+    }
+    for (const channelId of updatedChannelIds) {
+      await this.broadcastVoiceChannelState(channelId, undefined, true);
+    }
+  }
+
   // ── Op 0: Identify ────────────────────────────────────────────────────
 
   private async handleIdentify(
@@ -1934,10 +2166,11 @@ export class MeetingRoom extends DurableObject<Env> {
       name: string;
       username?: string;
       display_name?: string | null;
-      avatar_url?: string;
+      avatar_url?: string | null;
       avatar_display?: string | null;
       clerk_user_id?: string;
       platform?: PresencePlatform;
+      supports_voice_state_deltas?: boolean;
     },
   ) {
     if (this.getSession(ws)) {
@@ -1969,6 +2202,9 @@ export class MeetingRoom extends DurableObject<Env> {
         admission.accessMode === "authenticated"
           ? admission.subject
           : undefined;
+      const profileRequest = admittedUserId
+        ? this.profileRequestCoordinator.begin(admittedUserId)
+        : null;
 
       // Run all async sub-tasks in parallel to reduce time-to-Ready.
       // Previously these ran sequentially, adding the SUM of their latencies.
@@ -1992,7 +2228,7 @@ export class MeetingRoom extends DurableObject<Env> {
       let resolvedName = d.name;
       let resolvedUsername = d.username ?? d.name;
       let resolvedDisplayName = d.display_name ?? null;
-      let resolvedAvatar = d.avatar_url;
+      let resolvedAvatar: string | null | undefined = d.avatar_url;
       let resolvedAvatarDisplay = d.avatar_display ?? null;
       let resolvedStatus: "online" | "idle" | "dnd" | "offline" = "online";
       const resolvedPlatform = normalizePresencePlatform(d.platform) ?? "web";
@@ -2001,7 +2237,7 @@ export class MeetingRoom extends DurableObject<Env> {
         resolvedName = profile.name;
         resolvedUsername = profile.username ?? resolvedUsername;
         resolvedDisplayName = profile.displayName ?? null;
-        resolvedAvatar = profile.avatarUrl;
+        resolvedAvatar = profile.avatarUrl ?? null;
         resolvedAvatarDisplay = profile.avatarDisplay ?? null;
       }
       if (userRow?.status) {
@@ -2012,6 +2248,32 @@ export class MeetingRoom extends DurableObject<Env> {
         `Identify: name=${resolvedName}, avatar=${resolvedAvatar}, subject=${admittedUserId ?? "anonymous"}`,
       );
 
+      const resolvedIdentity: ProfileIdentity = {
+        name: resolvedName,
+        username: resolvedUsername,
+        display_name: resolvedDisplayName,
+        avatar_url: resolvedAvatar ?? null,
+        avatar_display: resolvedAvatarDisplay,
+      };
+      const profileRequestIsCurrent =
+        profileRequest !== null &&
+        this.profileRequestCoordinator.isCurrent(profileRequest);
+      const profileIsCurrent =
+        profile !== null &&
+        profileRequest !== null &&
+        profileRequestIsCurrent &&
+        this.profileRequestCoordinator.acceptSuccess(profileRequest);
+      const canonicalIdentity = admittedUserId
+        ? this.getCanonicalProfileIdentity(admittedUserId)
+        : undefined;
+      const identity = profileIsCurrent
+        ? resolvedIdentity
+        : (canonicalIdentity ?? resolvedIdentity);
+
+      if (admittedUserId && profileRequestIsCurrent) {
+        await this.updateProfileIdentity(admittedUserId, identity);
+      }
+
       // Build roster
       const participants: VoiceState[] = [];
       for (const [, data] of this.sessions) {
@@ -2021,11 +2283,7 @@ export class MeetingRoom extends DurableObject<Env> {
       const attachment: WsAttachment = {
         admission,
         id: participantId,
-        name: resolvedName,
-        username: resolvedUsername,
-        display_name: resolvedDisplayName,
-        avatar_url: resolvedAvatar,
-        avatar_display: resolvedAvatarDisplay,
+        ...identity,
         platform: resolvedPlatform,
         clerk_user_id: admittedUserId,
         stream_preview_url: null,
@@ -2039,33 +2297,13 @@ export class MeetingRoom extends DurableObject<Env> {
         suppress: false,
         status: resolvedStatus,
         tracks: [],
+        supports_voice_state_deltas: d.supports_voice_state_deltas === true,
         last_heartbeat: Date.now(),
         seq: 0,
         outbound_seq: 0,
         subscribed_channels: [],
         subscribed_servers: [],
       };
-
-      if (attachment.clerk_user_id) {
-        for (const [channelId, members] of this.voiceChannelMembers) {
-          const existing = members.get(attachment.clerk_user_id);
-          if (!existing) continue;
-
-          members.set(
-            attachment.clerk_user_id,
-            refreshVoiceMemberIdentity(existing, {
-              name: attachment.name,
-              username: attachment.username,
-              display_name: attachment.display_name,
-              avatar_url: attachment.avatar_url,
-              avatar_display: attachment.avatar_display,
-            }),
-          );
-          this.persistVoiceChannelMembers();
-          this.ctx.waitUntil(this.broadcastVoiceChannelState(channelId, ws));
-          break;
-        }
-      }
 
       this.persist(ws, attachment);
 
@@ -2299,6 +2537,7 @@ export class MeetingRoom extends DurableObject<Env> {
           resumedAttachment.voice_channel_id,
           resumedAttachment,
         );
+        this.persist(ws, resumedAttachment);
         await this.broadcastVoiceChannelState(
           resumedAttachment.voice_channel_id,
         );
@@ -2494,23 +2733,19 @@ export class MeetingRoom extends DurableObject<Env> {
         updatedAt: Date.now(),
       });
     }
-    this.persist(ws, session);
-
-    this.broadcast(
-      {
-        op: Op.VoiceStateUpdate,
-        d: {
-          participant: this.buildVoiceState(session),
-          action: "update",
-          spatial_audio_state: this.spatialAudioStates.get(spatialRoomKey),
-        },
-      },
-      ws,
-    );
-
     // Also update the voice channel sidebar state if user is in a VC
     if (session.voice_channel_id && session.clerk_user_id) {
       this.markVoiceMemberConnected(session.voice_channel_id, session);
+    }
+    this.persist(ws, session);
+
+    this.broadcastVoiceStateUpdate(
+      ws,
+      session,
+      this.spatialAudioStates.get(spatialRoomKey),
+    );
+
+    if (session.voice_channel_id && session.clerk_user_id) {
       this.ctx.waitUntil(
         this.broadcastVoiceChannelState(session.voice_channel_id),
       );
@@ -2614,50 +2849,21 @@ export class MeetingRoom extends DurableObject<Env> {
     if (now - lastRefresh < PROFILE_REFRESH_COOLDOWN_MS) return;
     this.profileRefreshCooldowns.set(session.id, now);
 
+    const profileRequest = this.profileRequestCoordinator.begin(
+      session.clerk_user_id,
+    );
     const verified = await this.fetchClerkProfile(session.clerk_user_id);
-    if (verified) {
-      session.name = verified.name;
-      session.username = verified.username;
-      session.display_name = verified.displayName ?? null;
-      session.avatar_url = verified.avatarUrl;
-      session.avatar_display = verified.avatarDisplay ?? null;
-      this.persist(ws, session);
+    if (!verified || this.getSession(ws) !== session) return;
+    if (!this.profileRequestCoordinator.acceptSuccess(profileRequest)) return;
 
-      this.broadcast(
-        {
-          op: Op.ProfileUpdate,
-          d: {
-            participant_id: session.id,
-            name: verified.name,
-            username: verified.username,
-            display_name: verified.displayName ?? null,
-            avatar_url: verified.avatarUrl,
-            avatar_display: verified.avatarDisplay ?? null,
-          },
-        },
-        ws,
-      );
-
-      // Also update the voice channel sidebar state if user is in a VC
-      if (session.voice_channel_id && session.clerk_user_id) {
-        const members = this.voiceChannelMembers.get(session.voice_channel_id);
-        if (members?.has(session.clerk_user_id)) {
-          const member = members.get(session.clerk_user_id)!;
-          member.name = verified.name;
-          member.username = verified.username;
-          member.display_name = verified.displayName ?? null;
-          member.avatar_url = verified.avatarUrl;
-          member.avatar_display = verified.avatarDisplay ?? null;
-          member.connected = true;
-          member.connection_state = "connected";
-          member.disconnected_at = null;
-          member.reconnect_expires_at = null;
-          this.persistVoiceChannelMembers();
-
-          await this.broadcastVoiceChannelState(session.voice_channel_id);
-        }
-      }
-    }
+    const identity: ProfileIdentity = {
+      name: verified.name,
+      username: verified.username,
+      display_name: verified.displayName ?? null,
+      avatar_url: verified.avatarUrl ?? null,
+      avatar_display: verified.avatarDisplay ?? null,
+    };
+    await this.updateProfileIdentity(session.clerk_user_id, identity);
   }
 
   // ── Leave / Disconnect ─────────────────────────────────────────────────
@@ -3464,7 +3670,9 @@ export class MeetingRoom extends DurableObject<Env> {
     members.set(session.clerk_user_id, member);
 
     // Broadcast to all clients
-    this.ctx.waitUntil(this.broadcastVoiceChannelState(d.channel_id));
+    this.ctx.waitUntil(
+      this.broadcastVoiceChannelState(d.channel_id, undefined, true),
+    );
 
     // Persist to storage for hibernation resilience
     this.persistVoiceChannelMembers();
@@ -4734,6 +4942,7 @@ export class MeetingRoom extends DurableObject<Env> {
       this.persistVoiceChannelStartedAt();
     }
 
+    const inserted = !members.has(session.clerk_user_id);
     const member: VoiceChannelMember = {
       clerk_user_id: session.clerk_user_id,
       name: session.name,
@@ -4758,7 +4967,9 @@ export class MeetingRoom extends DurableObject<Env> {
     members.set(session.clerk_user_id, member);
 
     // Broadcast to all clients
-    this.ctx.waitUntil(this.broadcastVoiceChannelState(channelId));
+    this.ctx.waitUntil(
+      this.broadcastVoiceChannelState(channelId, undefined, inserted),
+    );
 
     this.persistVoiceChannelMembers();
   }

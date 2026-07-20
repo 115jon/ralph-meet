@@ -6,9 +6,14 @@ const mocks = vi.hoisted(() => ({
   ),
   apiSuccess: vi.fn((data: unknown) => Response.json(data)),
   broadcastToServerMembers: vi.fn(),
+  getBucket: vi.fn(),
   getDB: vi.fn(),
+  getUserChannelPermissions: vi.fn(),
+  hasPermission: vi.fn(),
   requireAuth: vi.fn(),
   requireChannelAccess: vi.fn(),
+  recordR2CleanupFailure: vi.fn(),
+  retryR2Cleanup: vi.fn(),
   listMessages: vi.fn(),
   refreshMessageEmbeds: vi.fn(),
 }));
@@ -20,12 +25,27 @@ vi.mock("@/lib/api-helpers", () => ({
   broadcastToServerMembers: mocks.broadcastToServerMembers,
   broadcastToUser: vi.fn(),
   genId: vi.fn(),
+  getBucket: mocks.getBucket,
   getDB: mocks.getDB,
   requireAuth: mocks.requireAuth,
 }));
 
 vi.mock("@/lib/require-channel-access", () => ({
   requireChannelAccess: mocks.requireChannelAccess,
+}));
+
+vi.mock("@/lib/require-permission", () => ({
+  getUserChannelPermissions: mocks.getUserChannelPermissions,
+}));
+
+vi.mock("@/lib/permissions", () => ({
+  PERMISSIONS: { MANAGE_MESSAGES: 1024 },
+  hasPermission: mocks.hasPermission,
+}));
+
+vi.mock("@/services/r2-cleanup.service", () => ({
+  recordR2CleanupFailure: mocks.recordR2CleanupFailure,
+  retryR2Cleanup: mocks.retryR2Cleanup,
 }));
 
 vi.mock("@/services/message.service", async (importOriginal) => {
@@ -43,21 +63,29 @@ vi.mock("@/services/message.service", async (importOriginal) => {
   };
 });
 
-import { GET, PATCH } from "../channels/$id/messages";
+import { DELETE, GET, PATCH } from "../channels/$id/messages";
 
 describe("message history GET limit", () => {
   beforeEach(() => {
     mocks.apiError.mockClear();
     mocks.apiSuccess.mockClear();
     mocks.broadcastToServerMembers.mockReset();
+    mocks.getBucket.mockReset();
     mocks.getDB.mockReset();
+    mocks.getUserChannelPermissions.mockReset();
+    mocks.hasPermission.mockReset();
     mocks.requireAuth.mockReset();
     mocks.requireChannelAccess.mockReset();
+    mocks.recordR2CleanupFailure.mockReset();
+    mocks.retryR2Cleanup.mockReset();
     mocks.listMessages.mockReset();
     mocks.refreshMessageEmbeds.mockReset();
     mocks.requireAuth.mockResolvedValue({ userId: "user-1" });
     mocks.requireChannelAccess.mockResolvedValue({ serverId: "server-1" });
     mocks.getDB.mockReturnValue({});
+    mocks.getUserChannelPermissions.mockResolvedValue(1024);
+    mocks.hasPermission.mockReturnValue(true);
+    mocks.retryR2Cleanup.mockResolvedValue(undefined);
     mocks.listMessages.mockResolvedValue({
       messages: [],
       hasMoreBefore: false,
@@ -115,6 +143,35 @@ describe("message history GET limit", () => {
       "server-1",
       "MESSAGE_UPDATE",
       { id: "message-1", channel_id: "channel-1", embeds },
+    );
+  });
+
+  it("captures message attachment keys when R2 deletion fails", async () => {
+    const fileKey = "attachments/channel-1/attachment-1/file.txt";
+    const { deleteMessage } = await import("@/services/message.service");
+    vi.mocked(deleteMessage).mockResolvedValue([fileKey]);
+    const bucket = {
+      delete: vi.fn().mockRejectedValue(new Error("R2 unavailable")),
+    };
+    mocks.getBucket.mockReturnValue(bucket);
+
+    const response = await DELETE({
+      request: new Request(
+        "https://meet.test/api/channels/channel-1/messages",
+        {
+          method: "DELETE",
+          body: JSON.stringify({ message_id: "message-1" }),
+        },
+      ),
+      params: { id: "channel-1" },
+    });
+
+    expect(response.status).toBe(200);
+    expect(bucket.delete).toHaveBeenCalledWith(fileKey);
+    expect(mocks.recordR2CleanupFailure).toHaveBeenCalledWith(
+      {},
+      fileKey,
+      expect.any(Error),
     );
   });
 });

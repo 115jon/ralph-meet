@@ -7,6 +7,7 @@ import {
   broadcastToServerMembers,
   broadcastToUser,
   genId,
+  getBucket,
   getDB,
   requireAuth,
 } from "@/lib/api-helpers";
@@ -15,6 +16,7 @@ import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 import { requireChannelAccess } from "@/lib/require-channel-access";
 import { getUserChannelPermissions } from "@/lib/require-permission";
 import { ServiceError } from "@/lib/service-error";
+import { logger } from "@/lib/logger";
 import { clog } from "@/lib/console-logger";
 import { validateBody } from "@/lib/validate-body";
 import { z } from "zod";
@@ -28,6 +30,10 @@ import {
   normalizeMessageLimit,
   refreshMessageEmbeds,
 } from "@/services/message.service";
+import {
+  recordR2CleanupFailure,
+  retryR2Cleanup,
+} from "@/services/r2-cleanup.service";
 
 const embedLog = clog("embed");
 const notifLog = clog("notifications");
@@ -328,7 +334,7 @@ export const PATCH = async ({ request, params }: any) => {
 };
 
 // DELETE /api/channels/:id/messages — delete a message
-const DELETE = async ({ request, params }: any) => {
+export const DELETE = async ({ request, params }: any) => {
   const authResult = await requireAuth();
   if (authResult instanceof Response) return authResult;
   const { userId } = authResult;
@@ -356,7 +362,44 @@ const DELETE = async ({ request, params }: any) => {
   }
 
   try {
-    await deleteMessage(db, channelId, body.message_id, userId, hasModPerm);
+    const bucket = getBucket();
+    await retryR2Cleanup(db, bucket);
+    const fileKeys = await deleteMessage(
+      db,
+      channelId,
+      body.message_id,
+      userId,
+      hasModPerm,
+    );
+
+    for (const fileKey of fileKeys) {
+      try {
+        await bucket.delete(fileKey);
+      } catch (cleanupError) {
+        logger.error("message_attachment_delete_cleanup_failed", {
+          channelId,
+          messageId: body.message_id,
+          fileKey,
+          error:
+            cleanupError instanceof Error
+              ? cleanupError.message
+              : String(cleanupError),
+        });
+        try {
+          await recordR2CleanupFailure(db, fileKey, cleanupError);
+        } catch (queueError) {
+          logger.error("message_attachment_delete_cleanup_record_failed", {
+            channelId,
+            messageId: body.message_id,
+            fileKey,
+            error:
+              queueError instanceof Error
+                ? queueError.message
+                : String(queueError),
+          });
+        }
+      }
+    }
 
     if (serverId) {
       await broadcastToServerMembers(serverId, "MESSAGE_DELETE", {

@@ -39,6 +39,10 @@ const { chatState, chatActions, settingsState, sfuInstances, FakeSFUClient } =
       readonly connect = vi.fn();
       readonly resumeAudioContext = vi.fn();
       readonly disconnect = vi.fn();
+      readonly setParticipantVolume = vi.fn();
+      readonly setTrackVolume = vi.fn();
+      readonly setTrackPan = vi.fn();
+      readonly setRemoteTrackSubscription = vi.fn();
       readonly setClerkMapping = vi.fn();
       readonly deleteClerkMapping = vi.fn();
       readonly publishTracks = vi.fn();
@@ -117,6 +121,7 @@ const { chatState, chatActions, settingsState, sfuInstances, FakeSFUClient } =
     };
 
     const chatActions = {
+      dispatch: vi.fn(),
       sendVoiceChannelJoin: vi.fn(),
       sendVoiceChannelLeave: vi.fn(),
       sendVoiceStateUpdate: vi.fn(),
@@ -175,7 +180,13 @@ vi.mock("@/lib/stream-watchers", () => ({
     pendingIntents: {},
   })),
 }));
-vi.mock("@/lib/voice-identity", () => ({ resolveVoiceIdentity: vi.fn() }));
+vi.mock("@/lib/voice-identity", () => ({
+  resolveVoiceIdentity: vi.fn((primary, fallback) => ({
+    name: primary?.display_name || primary?.name || fallback?.name || "Guest",
+    avatarUrl: primary?.avatar_url ?? fallback?.avatar_url ?? null,
+    avatarDisplay: primary?.avatar_display ?? fallback?.avatar_display ?? null,
+  })),
+}));
 vi.mock("@/lib/voice/noise-reduction", () => ({
   createLocalAudioProcessor: vi.fn(),
   resolveCaptureAudioProcessing: vi.fn(() => ({
@@ -231,7 +242,8 @@ vi.mock("@/stores/useSoundSettingsStore", () => ({
   },
 }));
 
-import { useVoiceChannel } from "@/hooks/useVoiceChannel";
+import { mergeVoiceState, useVoiceChannel } from "@/hooks/useVoiceChannel";
+import type { VoiceState, VoiceStateDelta } from "@/lib/types";
 
 class TestMediaStream {
   constructor(private readonly tracks: MediaStreamTrack[] = []) {}
@@ -326,6 +338,142 @@ describe("useVoiceChannel SFU lifecycle", () => {
     settingsState.getSettings().cameraQuality = "720p30";
     settingsState.getSettings().cameraBackground = "none";
     vi.stubGlobal("MediaStream", TestMediaStream);
+  });
+
+  it("merges legacy full updates over cached optional profile fields", () => {
+    const cached: VoiceState = {
+      id: "remote",
+      clerk_user_id: "user-remote",
+      name: "Cached Name",
+      username: "cached-user",
+      display_name: "Cached Display",
+      avatar_url: "https://example.com/cached.png",
+      avatar_display: "frame:cached",
+      self_mute: false,
+      self_deaf: false,
+      self_stream: false,
+      self_video: false,
+      suppress: false,
+      tracks: [],
+    };
+    const legacyUpdate: VoiceState = {
+      id: cached.id,
+      clerk_user_id: cached.clerk_user_id,
+      name: "Legacy Name",
+      self_mute: true,
+      self_deaf: false,
+      self_stream: false,
+      self_video: false,
+      suppress: false,
+      tracks: [],
+    };
+    const delta: VoiceStateDelta = {
+      id: cached.id,
+      clerk_user_id: cached.clerk_user_id,
+      self_mute: true,
+      self_deaf: false,
+      self_stream: false,
+      self_video: false,
+      suppress: false,
+      tracks: [],
+    };
+
+    expect(mergeVoiceState(cached, legacyUpdate)).toEqual({
+      ...cached,
+      ...legacyUpdate,
+    });
+    expect(mergeVoiceState(undefined, legacyUpdate)).toEqual(legacyUpdate);
+    expect(mergeVoiceState(undefined, delta)).toBeNull();
+  });
+
+  it("merges compact participant updates and forwards profile updates to the sidebar cache", async () => {
+    const hook = renderHook(() =>
+      useVoiceChannel({ channelId: "channel", serverId: "server" }),
+    );
+    await act(async () => {
+      await hook.result.current.handleJoin();
+    });
+    const sfu = sfuInstances[0];
+    if (!sfu) throw new Error("SFU was not created");
+
+    const participant = {
+      id: "remote",
+      clerk_user_id: "user-remote",
+      name: "Cached Name",
+      username: "cached-user",
+      display_name: "Cached Display",
+      avatar_url: "https://example.com/cached.png",
+      avatar_display: "frame:cached",
+      self_mute: false,
+      self_deaf: false,
+      self_stream: false,
+      self_video: false,
+      suppress: false,
+      tracks: [],
+    } as const;
+
+    await act(async () => {
+      sfu.emit("joined", {
+        participantId: "self",
+        participants: [participant],
+      });
+    });
+    await act(async () => {
+      sfu.emit("voice-state-update", {
+        participant: {
+          id: participant.id,
+          clerk_user_id: participant.clerk_user_id,
+          self_mute: true,
+          self_deaf: participant.self_deaf,
+          self_stream: participant.self_stream,
+          self_video: participant.self_video,
+          suppress: false,
+          tracks: [],
+        },
+        action: "update",
+      });
+    });
+
+    expect(hook.result.current.gridItems).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          userId: "user-remote",
+          name: "Cached Display",
+          isMuted: true,
+        }),
+      ]),
+    );
+
+    await act(async () => {
+      sfu.emit("profile-update", {
+        participantId: "remote",
+        name: "Updated Name",
+        username: "updated-user",
+        displayName: null,
+        avatarUrl: null,
+        avatarDisplay: null,
+      });
+    });
+
+    expect(chatActions.dispatch).toHaveBeenCalledWith({
+      type: "UPDATE_MEMBER_PROFILE",
+      userId: "user-remote",
+      name: "Updated Name",
+      username: "updated-user",
+      display_name: null,
+      avatar_url: null,
+      avatar_display: null,
+    });
+    expect(hook.result.current.gridItems).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          userId: "user-remote",
+          name: "Updated Name",
+          avatar: undefined,
+        }),
+      ]),
+    );
+    hook.unmount();
   });
 
   it("removes SFU handlers when a session is torn down and does not accumulate them on reconnect", async () => {

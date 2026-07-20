@@ -5,6 +5,7 @@ import {
   batchFetchAttachments,
   batchFetchReactions,
   batchFetchReplyPreviews,
+  createMessage,
   fetchChannelThreads,
   fetchMessageRows,
   formatMessageRow,
@@ -129,6 +130,64 @@ describe("batchFetchAttachments", () => {
 
     const map = await batchFetchAttachments(db as any, ["m1"]);
     expect(map["m1"][0].url).toBe("https://static.klipy.com/provider.gif");
+  });
+});
+
+describe("createMessage attachment linking", () => {
+  it("does not reassociate a soundboard attachment with a message", async () => {
+    const db = createMockD1();
+    db.mockQuery("FROM users WHERE id", {
+      username: "alice",
+      display_name: null,
+      avatar_url: null,
+      avatar_display: null,
+    });
+
+    await createMessage(db as never, CHANNEL_ID, USER_ID, "msg_1", {
+      content: "hello",
+      attachment_ids: ["sound-1"],
+    });
+
+    db.assertCalledWith("UPDATE attachments SET message_id", [
+      "msg_1",
+      "sound-1",
+      USER_ID,
+    ]);
+    expect(
+      db
+        .getCalls("UPDATE attachments SET message_id")
+        .some((call) => call.sql.includes("soundboard_server_id IS NULL")),
+    ).toBe(true);
+    expect(
+      db
+        .getCalls("SELECT id, filename, file_key")
+        .some((call) => call.sql.includes("message_id = ?")),
+    ).toBe(true);
+  });
+
+  it("does not claim an already-linked attachment from another channel", async () => {
+    const db = createMockD1();
+    db.mockQuery("FROM users WHERE id", {
+      username: "alice",
+      display_name: null,
+      avatar_url: null,
+      avatar_display: null,
+    });
+
+    await createMessage(db as never, CHANNEL_ID, USER_ID, "msg_2", {
+      content: "hello",
+      attachment_ids: ["already-linked"],
+    });
+
+    const update = db.getCalls("UPDATE attachments SET message_id")[0];
+    expect(update?.sql).toContain("message_id IS NULL");
+    expect(update?.sql).toContain("file_key LIKE ?");
+    expect(update?.bindings).toContain(`attachments/${CHANNEL_ID}/%`);
+    expect(
+      db
+        .getCalls("SELECT id, filename, file_key")
+        .some((call) => call.sql.includes("message_id = ?")),
+    ).toBe(true);
   });
 });
 
@@ -515,10 +574,16 @@ describe("deleteMessage", () => {
   it("marks public shares deleted before deleting the source message", async () => {
     const { deleteMessage } = await import("../message.service");
     db.mockQuery("SELECT author_id FROM messages", { author_id: USER_ID });
+    db.mockQuery("SELECT file_key FROM attachments WHERE message_id", {
+      results: [{ file_key: "attachments/channel-1/a-1/file.txt" }],
+    });
 
-    await deleteMessage(db as any, CHANNEL_ID, "msg_1", USER_ID, false);
+    await expect(
+      deleteMessage(db as any, CHANNEL_ID, "msg_1", USER_ID, false),
+    ).resolves.toEqual(["attachments/channel-1/a-1/file.txt"]);
 
     db.assertCalled(/UPDATE message_shares SET status = 'deleted'/);
+    db.assertCalled(/SELECT file_key FROM attachments WHERE message_id/);
     db.assertCalled(/DELETE FROM messages WHERE id = \?/);
   });
 });

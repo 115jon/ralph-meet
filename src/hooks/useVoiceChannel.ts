@@ -68,7 +68,7 @@ import {
   playUndeafen,
   playUnmute,
 } from "@/lib/sounds";
-import type { VoiceState } from "@/lib/types";
+import type { VoiceState, VoiceStateDelta } from "@/lib/types";
 import { useMediaDevices } from "@/lib/useMediaDevices";
 import { useChatActions, useChatStore } from "@/stores/chat-store";
 import { useSoundSettingsStore } from "@/stores/useSoundSettingsStore";
@@ -97,6 +97,14 @@ const STREAM_PREVIEW_CAPTURE_QUALITY = 0.4;
 const STREAM_PREVIEW_CAPTURE_INTERVAL_MS = 8000;
 const STREAM_PREVIEW_CAPTURE_INITIAL_DELAY_MS = 750;
 let speakingSourceSequence = 0;
+
+export function mergeVoiceState(
+  cached: VoiceState | undefined,
+  incoming: VoiceState | VoiceStateDelta,
+): VoiceState | null {
+  if (cached) return { ...cached, ...incoming };
+  return "name" in incoming ? incoming : null;
+}
 
 function createMicrophoneStream(stream: MediaStream): MediaStream | null {
   const audioTrack = stream.getAudioTracks()[0];
@@ -577,6 +585,7 @@ export function useVoiceChannel({
     })),
   );
   const {
+    dispatch,
     sendVoiceChannelJoin,
     sendVoiceChannelLeave,
     sendVoiceStateUpdate,
@@ -1514,8 +1523,19 @@ export function useVoiceChannel({
 
     onSfu(
       "voice-state-update",
-      ({ participant, spatialAudioState: nextSpatialAudioState }: any) => {
-        upsertParticipant(participant);
+      ({
+        participant,
+        spatialAudioState: nextSpatialAudioState,
+      }: {
+        participant: VoiceState | VoiceStateDelta;
+        spatialAudioState?: SharedSpatialAudioState;
+      }) => {
+        const mergedParticipant = mergeVoiceState(
+          participantsRef.current.get(participant.id),
+          participant,
+        );
+        if (!mergedParticipant) return;
+        upsertParticipant(mergedParticipant);
         if (nextSpatialAudioState) {
           voiceDispatch({
             type: "SET_SPATIAL_AUDIO_STATE",
@@ -1602,27 +1622,38 @@ export function useVoiceChannel({
         avatarDisplay,
       }) => {
         const p = participantsRef.current.get(participantId);
+        const clerkUserId =
+          p?.clerk_user_id ?? uuidToClerkRef.current.get(participantId);
         if (p) {
-          p.name = newName;
-          p.username = username;
-          p.display_name = displayName ?? null;
-          p.avatar_url = avatarUrl;
-          p.avatar_display = avatarDisplay;
+          const updated = {
+            ...p,
+            name: newName,
+            ...(username !== undefined ? { username } : {}),
+            ...(displayName !== undefined ? { display_name: displayName } : {}),
+            ...(avatarUrl !== undefined ? { avatar_url: avatarUrl } : {}),
+            ...(avatarDisplay !== undefined
+              ? { avatar_display: avatarDisplay }
+              : {}),
+          };
+          participantsRef.current.set(participantId, updated);
           voiceDispatch({
             type: "SET_PARTICIPANTS",
             payload: (prev: VoiceState[]) =>
-              prev.map((x) =>
-                x.id === participantId
-                  ? {
-                      ...x,
-                      name: newName,
-                      username,
-                      display_name: displayName ?? null,
-                      avatar_url: avatarUrl,
-                      avatar_display: avatarDisplay,
-                    }
-                  : x,
-              ),
+              prev.map((x) => (x.id === participantId ? updated : x)),
+          });
+          voiceDispatch({ type: "BUMP_PARTICIPANTS" });
+        }
+        if (clerkUserId) {
+          dispatch({
+            type: "UPDATE_MEMBER_PROFILE",
+            userId: clerkUserId,
+            name: newName,
+            ...(username !== undefined ? { username } : {}),
+            ...(displayName !== undefined ? { display_name: displayName } : {}),
+            ...(avatarUrl !== undefined ? { avatar_url: avatarUrl } : {}),
+            ...(avatarDisplay !== undefined
+              ? { avatar_display: avatarDisplay }
+              : {}),
           });
         }
       },
@@ -2001,6 +2032,7 @@ export function useVoiceChannel({
     chatUserAvatarDisplay,
     chatUserDisplayName,
     chatUsername,
+    dispatch,
     autoJoin,
     chatConnected,
     currentVoiceChannelStartedAt,

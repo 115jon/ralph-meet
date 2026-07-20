@@ -251,8 +251,16 @@ function withAuthTokenForProtectedAsset(fullUrl: string): string {
         ? window.location.origin
         : getPublicApiUrl(),
     );
+    if (urlObj.searchParams.has("cap")) {
+      if (!urlObj.searchParams.has("token")) return fullUrl;
+      urlObj.searchParams.delete("token");
+      return fullUrl.startsWith("/")
+        ? `${urlObj.pathname}${urlObj.search}`
+        : urlObj.toString();
+    }
     if (
       urlObj.pathname.startsWith("/api/attachments/") ||
+      urlObj.pathname.startsWith("/api/soundboard/uploads/") ||
       urlObj.pathname.startsWith("/api/camera-backgrounds/") ||
       urlObj.pathname.startsWith("/api/listen-together/stream") ||
       urlObj.pathname.startsWith("/api/voice-status-media/") ||

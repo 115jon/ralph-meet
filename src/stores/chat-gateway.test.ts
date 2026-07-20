@@ -162,7 +162,10 @@ describe("chat gateway continuity", () => {
     first.message({ op: 8, d: { heartbeat_interval: 45_000 } });
     expect(sentMessages(first)).toContainEqual({
       op: 0,
-      d: expect.objectContaining({ clerk_user_id: "user-1" }),
+      d: expect.objectContaining({
+        clerk_user_id: "user-1",
+        supports_voice_state_deltas: true,
+      }),
     });
     first.message({ op: 2, d: { participant_id: "session-1" } });
     first.message({
@@ -223,7 +226,10 @@ describe("chat gateway continuity", () => {
 
     expect(sentMessages(second)).toContainEqual({
       op: 0,
-      d: expect.objectContaining({ clerk_user_id: "user-1" }),
+      d: expect.objectContaining({
+        clerk_user_id: "user-1",
+        supports_voice_state_deltas: true,
+      }),
     });
     expect(gateway.getSessionId()).toBeNull();
 

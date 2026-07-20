@@ -18,6 +18,8 @@ export const DEFAULT_SOUNDBOARD_SOUNDS: DefaultSound[] = [
 export const MAX_SOUNDBOARD_UPLOAD_BYTES = 50 * 1024 * 1024;
 const PLAYBACK_UI_VISIBLE_AFTER_MS = 500;
 const DATA_URL_PATTERN = /^data:([^;,]+)?(;base64)?,(.*)$/;
+const MAX_SOUNDBOARD_EVENT_PAST_SKEW_MS = 5_000;
+const MAX_SOUNDBOARD_EVENT_FUTURE_SKEW_MS = 5_000;
 
 interface PlaybackController {
   ownerId: string;
@@ -43,6 +45,13 @@ export interface SoundboardPlayRequest {
   volume?: number;
   isLocal?: boolean;
   receivedAt?: number;
+  mediaCapabilityExpiresAt?: number;
+  currentTime?: number;
+  paused?: boolean;
+  renewCapability?: (state: {
+    currentTime: number;
+    paused: boolean;
+  }) => boolean;
 }
 
 const activeControllers = new Map<string, PlaybackController>();
@@ -53,6 +62,23 @@ function normalizeVolume(volume: number) {
 
 export function getSoundboardServerKey(serverId?: string | null) {
   return serverId || "dm-call";
+}
+
+export function getSoundboardEventReceivedAt(
+  sentAt: unknown,
+  now = Date.now(),
+): number {
+  if (
+    !Number.isSafeInteger(now) ||
+    typeof sentAt !== "number" ||
+    !Number.isSafeInteger(sentAt) ||
+    sentAt <= 0 ||
+    sentAt < now - MAX_SOUNDBOARD_EVENT_PAST_SKEW_MS ||
+    sentAt > now + MAX_SOUNDBOARD_EVENT_FUTURE_SKEW_MS
+  ) {
+    return now;
+  }
+  return Math.min(sentAt, now);
 }
 
 function cleanupPlayback(playbackId: string) {
@@ -115,7 +141,7 @@ function registerPlayback(
   controller: PlaybackController,
 ) {
   const startedAt = Date.now();
-  controller.paused = false;
+  controller.paused = controller.paused ?? false;
   controller.volume = volume;
   activeControllers.set(playbackId, controller);
   controller.showTimer = setTimeout(() => {
@@ -188,6 +214,10 @@ export function playSoundboardPlayback({
   volume = 0.8,
   isLocal = false,
   receivedAt,
+  mediaCapabilityExpiresAt,
+  currentTime,
+  paused = false,
+  renewCapability,
 }: SoundboardPlayRequest) {
   // If the same playbackId is received again (e.g. deterministic ID for spam clicks),
   // we let it proceed to stopSoundboardPlayback and restart the audio buffer.
@@ -206,7 +236,8 @@ export function playSoundboardPlayback({
   if (audioSource) {
     const audio = new Audio(audioSource);
     let finished = false;
-    let requestedPaused = false;
+    let requestedPaused = paused;
+    let renewalRequested = false;
     const syncPausedState = (paused: boolean) => {
       const controller = activeControllers.get(playbackId);
       if (controller) controller.paused = paused;
@@ -221,6 +252,47 @@ export function playSoundboardPlayback({
       cleanupPlayback(playbackId);
     };
 
+    const requestCapabilityRenewal = (
+      force = false,
+      pausedOverride?: boolean,
+    ) => {
+      if (
+        !renewCapability ||
+        renewalRequested ||
+        typeof mediaCapabilityExpiresAt !== "number" ||
+        !Number.isFinite(mediaCapabilityExpiresAt) ||
+        (!force && Date.now() < mediaCapabilityExpiresAt)
+      ) {
+        return false;
+      }
+
+      renewalRequested = true;
+      if (
+        !renewCapability({
+          currentTime:
+            Number.isFinite(audio.currentTime) && audio.currentTime >= 0
+              ? audio.currentTime
+              : 0,
+          paused: pausedOverride ?? requestedPaused,
+        })
+      ) {
+        renewalRequested = false;
+        return false;
+      }
+      syncPausedState(true);
+      return true;
+    };
+
+    const startAudio = () => {
+      if (finished || requestedPaused) return;
+      void audio.play().then(
+        () => syncPausedState(false),
+        () => {
+          if (!requestCapabilityRenewal()) finalize();
+        },
+      );
+    };
+
     registerPlayback(
       playbackId,
       ownerId,
@@ -232,6 +304,7 @@ export function playSoundboardPlayback({
         ownerId,
         serverKey,
         stop: finalize,
+        paused: requestedPaused,
         pause: () => {
           if (finished) return;
           requestedPaused = true;
@@ -241,12 +314,8 @@ export function playSoundboardPlayback({
         resume: () => {
           if (finished) return;
           requestedPaused = false;
-          void audio
-            .play()
-            .then(() => {
-              syncPausedState(false);
-            })
-            .catch(finalize);
+          if (requestCapabilityRenewal(false, false)) return;
+          startAudio();
         },
         setVolume: (nextVolume) => {
           audio.volume = nextVolume;
@@ -272,13 +341,26 @@ export function playSoundboardPlayback({
       syncPausedState(false);
     });
     audio.addEventListener("ended", finalize, { once: true });
-    audio.addEventListener("error", finalize, { once: true });
+    audio.addEventListener(
+      "error",
+      () => {
+        if (!requestCapabilityRenewal(true)) finalize();
+      },
+      { once: true },
+    );
 
     const play = () => {
       if (finished) return;
-      const elapsed = receivedAt
-        ? Math.max(0, (Date.now() - receivedAt) / 1000)
-        : 0;
+      const deliveryLatencySeconds =
+        receivedAt && !requestedPaused
+          ? Math.max(0, (Date.now() - receivedAt) / 1000)
+          : 0;
+      const elapsed =
+        typeof currentTime === "number" &&
+        Number.isFinite(currentTime) &&
+        currentTime >= 0
+          ? currentTime + deliveryLatencySeconds
+          : deliveryLatencySeconds;
       if (elapsed > 0) {
         if (Number.isFinite(audio.duration) && elapsed >= audio.duration) {
           finalize();
@@ -290,8 +372,11 @@ export function playSoundboardPlayback({
           // Some codecs report unknown duration until more bytes are buffered.
         }
       }
-      if (requestedPaused) return;
-      audio.play().catch(finalize);
+      if (requestedPaused) {
+        syncPausedState(true);
+        return;
+      }
+      startAudio();
     };
 
     if (receivedAt && audio.readyState < HTMLMediaElement.HAVE_METADATA) {
@@ -303,9 +388,8 @@ export function playSoundboardPlayback({
     return;
   }
 
-  const sound =
-    DEFAULT_SOUNDBOARD_SOUNDS.find((entry) => entry.id === soundId) ??
-    DEFAULT_SOUNDBOARD_SOUNDS[0];
+  const sound = DEFAULT_SOUNDBOARD_SOUNDS.find((entry) => entry.id === soundId);
+  if (!sound) return;
   const AudioContextCtor =
     window.AudioContext ||
     (window as Window & { webkitAudioContext?: typeof AudioContext })

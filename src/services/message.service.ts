@@ -846,11 +846,16 @@ export async function createMessage(
       ),
     );
     const placeholders = attIds.map(() => "?").join(",");
+    const attachmentKeyPrefix = `attachments/${channelId}/%`;
     await db
       .prepare(
-        `UPDATE attachments SET message_id = ?, is_nsfw = 0 WHERE id IN (${placeholders}) AND user_id = ?`,
+        `UPDATE attachments SET message_id = ?, is_nsfw = 0
+         WHERE id IN (${placeholders}) AND user_id = ?
+           AND soundboard_server_id IS NULL
+           AND message_id IS NULL
+           AND file_key LIKE ?`,
       )
-      .bind(messageId, ...attIds, userId)
+      .bind(messageId, ...attIds, userId, attachmentKeyPrefix)
       .run();
 
     if (sensitiveAttachmentIds.size > 0) {
@@ -858,17 +863,24 @@ export async function createMessage(
       const sensitivePlaceholders = sensitiveIds.map(() => "?").join(",");
       await db
         .prepare(
-          `UPDATE attachments SET is_nsfw = 1 WHERE message_id = ? AND user_id = ? AND id IN (${sensitivePlaceholders})`,
+          `UPDATE attachments SET is_nsfw = 1
+            WHERE message_id = ? AND user_id = ? AND id IN (${sensitivePlaceholders})
+              AND soundboard_server_id IS NULL
+              AND file_key LIKE ?`,
         )
-        .bind(messageId, userId, ...sensitiveIds)
+        .bind(messageId, userId, ...sensitiveIds, attachmentKeyPrefix)
         .run();
     }
 
     const { results: attRows } = await db
       .prepare(
-        `SELECT id, filename, file_key, content_type, size_bytes, is_nsfw FROM attachments WHERE id IN (${placeholders})`,
+        `SELECT id, filename, file_key, content_type, size_bytes, is_nsfw
+         FROM attachments
+         WHERE id IN (${placeholders}) AND message_id = ? AND user_id = ?
+           AND soundboard_server_id IS NULL
+           AND file_key LIKE ?`,
       )
-      .bind(...attIds)
+      .bind(...attIds, messageId, userId, attachmentKeyPrefix)
       .all();
 
     attachments = (attRows ?? []).map((r: Record<string, unknown>) => ({
@@ -972,7 +984,7 @@ export async function deleteMessage(
   messageId: string,
   userId: string,
   hasModeratorPermission: boolean,
-): Promise<void> {
+): Promise<string[]> {
   const msg = (await db
     .prepare(`SELECT author_id FROM messages WHERE id = ? AND channel_id = ?`)
     .bind(messageId, channelId)
@@ -983,8 +995,17 @@ export async function deleteMessage(
     throw ServiceError.forbidden("Not your message");
   }
 
+  const { results: attachmentRows } = await db
+    .prepare(`SELECT file_key FROM attachments WHERE message_id = ?`)
+    .bind(messageId)
+    .all<{ file_key: string }>();
+  const fileKeys = (attachmentRows ?? [])
+    .map((row) => row.file_key)
+    .filter((fileKey): fileKey is string => typeof fileKey === "string");
+
   await markSharesDeletedForMessage(db, messageId);
   await db.prepare(`DELETE FROM messages WHERE id = ?`).bind(messageId).run();
+  return fileKeys;
 }
 
 // ─── getDMRecipients ─────────────────────────────────────────────────────────

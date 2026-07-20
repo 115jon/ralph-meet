@@ -14,6 +14,7 @@ import { hasPermission, PERMISSIONS } from "@/lib/permissions";
 import { checkRateLimitDO, RATE_LIMITS } from "@/lib/rate-limit";
 import { requireChannelAccess } from "@/lib/require-channel-access";
 import { getUserPermissions } from "@/lib/require-permission";
+import { getSoundboardUploadUrl } from "@/lib/voice/soundboard-media";
 
 const DEFAULT_UPLOAD_LIMIT_BYTES = 25 * 1024 * 1024;
 const SOUNDBOARD_UPLOAD_LIMIT_BYTES = 50 * 1024 * 1024;
@@ -41,7 +42,7 @@ function inferSoundboardContentType(file: File) {
 }
 
 // POST /api/channels/:id/messages/upload — upload file attachment
-const POST = async ({ request, params }: any) => {
+export const POST = async ({ request, params }: any) => {
   const authResult = await requireAuth();
   if (authResult instanceof Response) return authResult;
   const { userId } = authResult;
@@ -61,9 +62,13 @@ const POST = async ({ request, params }: any) => {
 
   // Enforce ATTACH_FILES permission for server channels
   const { serverId } = accessResult as { serverId: string | null };
+  let serverPermissions: number | null = null;
   if (serverId) {
-    const perms = await getUserPermissions(serverId, userId);
-    if (perms === null || !hasPermission(perms, PERMISSIONS.ATTACH_FILES)) {
+    serverPermissions = await getUserPermissions(serverId, userId);
+    if (
+      serverPermissions === null ||
+      !hasPermission(serverPermissions, PERMISSIONS.ATTACH_FILES)
+    ) {
       return apiError("You do not have permission to upload files", 403);
     }
   }
@@ -98,7 +103,37 @@ const POST = async ({ request, params }: any) => {
     return apiError("Only audio files can be uploaded to the soundboard", 400);
   }
 
+  const normalizedMessageId = messageId?.trim() || null;
+  if (isSoundboardUpload && normalizedMessageId) {
+    return apiError(
+      "Soundboard uploads cannot be associated with messages",
+      400,
+    );
+  }
+
   const db = getDB();
+  if (normalizedMessageId) {
+    const message = await db
+      .prepare(
+        `SELECT id, author_id FROM messages WHERE id = ? AND channel_id = ? LIMIT 1`,
+      )
+      .bind(normalizedMessageId, channelId)
+      .first<{ id: string; author_id: string }>();
+    if (!message) {
+      return apiError("Message not found in this channel", 400);
+    }
+    if (
+      message.author_id !== userId &&
+      (serverPermissions === null ||
+        !hasPermission(serverPermissions, PERMISSIONS.MANAGE_MESSAGES))
+    ) {
+      return apiError(
+        "You do not have permission to attach files to this message",
+        403,
+      );
+    }
+  }
+
   const bucket = getBucket();
   const attachmentId = genId();
   const now = new Date().toISOString();
@@ -111,26 +146,49 @@ const POST = async ({ request, params }: any) => {
   });
 
   // Insert into the attachments table
-  await db
-    .prepare(
-      `INSERT INTO attachments (id, message_id, soundboard_server_id, filename, file_key, content_type, size_bytes, user_id, created_at, sound_name, sound_emoji, sound_volume)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    )
-    .bind(
+  try {
+    await db
+      .prepare(
+        `INSERT INTO attachments (id, message_id, soundboard_server_id, filename, file_key, content_type, size_bytes, user_id, created_at, sound_name, sound_emoji, sound_volume)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .bind(
+        attachmentId,
+        isSoundboardUpload ? null : normalizedMessageId,
+        isSoundboardUpload ? serverId : null,
+        file.name,
+        key,
+        contentType,
+        file.size,
+        userId,
+        now,
+        formData.get("sound_name") as string | null,
+        formData.get("sound_emoji") as string | null,
+        formData.has("sound_volume")
+          ? Number(formData.get("sound_volume"))
+          : 1.0,
+      )
+      .run();
+  } catch (error) {
+    logger.error("attachment_insert_failed", {
       attachmentId,
-      messageId,
-      isSoundboardUpload ? serverId : null,
-      file.name,
-      key,
-      contentType,
-      file.size,
-      userId,
-      now,
-      formData.get("sound_name") as string | null,
-      formData.get("sound_emoji") as string | null,
-      formData.has("sound_volume") ? Number(formData.get("sound_volume")) : 1.0,
-    )
-    .run();
+      channelId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    try {
+      await bucket.delete(key);
+    } catch (cleanupError) {
+      logger.error("attachment_upload_cleanup_failed", {
+        attachmentId,
+        channelId,
+        error:
+          cleanupError instanceof Error
+            ? cleanupError.message
+            : String(cleanupError),
+      });
+    }
+    return apiError("Failed to save uploaded file", 500);
+  }
 
   logger.info("file_uploaded", {
     userId,
@@ -148,7 +206,9 @@ const POST = async ({ request, params }: any) => {
   return apiSuccess(
     {
       id: attachmentId,
-      file_url: `/api/${key}`,
+      file_url: isSoundboardUpload
+        ? getSoundboardUploadUrl(attachmentId)
+        : `/api/${key}`,
       file_name: file.name,
       file_size: file.size,
       content_type: contentType,

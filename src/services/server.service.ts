@@ -328,6 +328,7 @@ export async function deleteServer(
 ): Promise<{
   cacheKeysToInvalidate: string[];
   broadcasts: BroadcastDescriptor[];
+  soundboardFileKeys: string[];
 }> {
   const server = (await db
     .prepare(`SELECT owner_id FROM servers WHERE id = ?`)
@@ -344,6 +345,20 @@ export async function deleteServer(
     .bind(serverId)
     .all();
 
+  const { results: soundboardRows } = await db
+    .prepare(
+      `SELECT file_key FROM attachments
+        WHERE soundboard_server_id = ?
+           OR message_id IN (
+             SELECT m.id
+               FROM messages m
+               JOIN channels c ON c.id = m.channel_id
+              WHERE c.server_id = ?
+           )`,
+    )
+    .bind(serverId, serverId)
+    .all();
+
   await db.prepare(`DELETE FROM servers WHERE id = ?`).bind(serverId).run();
 
   return {
@@ -351,6 +366,7 @@ export async function deleteServer(
       CacheKey.server(serverId),
       CacheKey.serverChannels(serverId),
       CacheKey.serverMembers(serverId),
+      CacheKey.serverSoundboard(serverId),
       ...(memberRows ?? []).map((r: Record<string, unknown>) =>
         CacheKey.userServers(r.user_id as string),
       ),
@@ -361,6 +377,9 @@ export async function deleteServer(
       event: "GUILD_DELETE",
       data: { id: serverId },
     })),
+    soundboardFileKeys: (soundboardRows ?? [])
+      .map((row: Record<string, unknown>) => row.file_key)
+      .filter((fileKey): fileKey is string => typeof fileKey === "string"),
   };
 }
 

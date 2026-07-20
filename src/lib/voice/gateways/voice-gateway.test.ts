@@ -73,6 +73,43 @@ describe("VoiceGateway", () => {
     });
   });
 
+  it("advertises Listen Together snapshot event support in Voice Identify", async () => {
+    mocks.fetchSocketProtocols.mockResolvedValue([
+      "ralph.realtime.v1",
+      "ralph.ticket.test",
+    ]);
+    const gateway = new VoiceGateway();
+
+    gateway.connectVoice(
+      "participant-1",
+      "voice-token",
+      "voice-server-channel",
+      (path) => `ws://meet.test${path}`,
+      { channelId: "channel", serverId: "server" },
+    );
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const socket = TestWebSocket.instances[0]!;
+    socket.readyState = TestWebSocket.OPEN;
+    socket.onmessage?.({
+      data: JSON.stringify({
+        op: VoiceOpcode.Hello,
+        d: { heartbeat_interval: 45_000 },
+      }),
+    } as MessageEvent);
+
+    expect(socket.sent.map((message) => JSON.parse(message))).toContainEqual({
+      op: VoiceOpcode.VoiceIdentify,
+      d: {
+        participant_id: "participant-1",
+        voice_token: "voice-token",
+        supports_listen_together_snapshot_events: true,
+      },
+    });
+
+    gateway.disconnect();
+  });
+
   it("flushes app events queued while the initial ticket is loading", async () => {
     mocks.fetchSocketProtocols.mockResolvedValue([
       "ralph.realtime.v1",

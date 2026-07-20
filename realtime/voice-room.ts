@@ -39,6 +39,24 @@ import {
   type ListenTogetherMutationResult,
 } from "../src/lib/voice/listen-together-state";
 import { getNextVoicePresenceAlarmTime } from "../src/lib/voice-presence";
+import {
+  calculatePermissions,
+  hasPermission,
+  PERMISSIONS,
+} from "../src/lib/permissions";
+import {
+  isLegacySoundboardPlaybackOwnedBy,
+  isSoundboardPlaybackOwnedBy,
+} from "../src/lib/voice/soundboard-playback-id";
+import {
+  getSoundboardUploadUrl,
+  normalizeSoundboardUploadUrl,
+  SOUNDBOARD_UPLOAD_PATH,
+} from "../src/lib/voice/soundboard-media";
+import {
+  getSoundboardMediaCapabilityUrl,
+  issueSoundboardMediaCapability,
+} from "../src/lib/voice/soundboard-media-capability";
 import { toSafeSfuFailure } from "./sfu-diagnostics";
 import { getRealtimeAdmissionFromHeaders } from "./realtime-admission";
 import { verifyVoiceToken } from "./voice-token";
@@ -62,6 +80,8 @@ interface Env {
   CALLS_APP_SECRET: string;
   TURN_TOKEN_ID: string;
   TURN_TOKEN_SECRET: string;
+  DB: D1Database;
+  REALTIME_TICKET_SECRET?: string;
 }
 
 // ── Opcodes (voice-specific subset) ─────────────────────────────────────────
@@ -105,6 +125,13 @@ const enum CloseCode {
 
 // ── Interfaces ──────────────────────────────────────────────────────────────
 
+interface VoiceSql {
+  exec<T extends Record<string, unknown>>(
+    query: string,
+    ...params: unknown[]
+  ): Iterable<T>;
+}
+
 interface TrackInfo {
   participant_id: string;
   track_name: string;
@@ -128,7 +155,7 @@ interface SfuTrackCloseRow {
 
 interface GatewayMessage {
   op: number;
-  d: any;
+  d: unknown;
 }
 
 type ServerMsg = GatewayMessage;
@@ -138,10 +165,12 @@ interface VoiceAttachment {
   admission?: {
     accessMode: "authenticated" | "public-demo";
     connectionGeneration: string;
+    serverId?: string;
     subject: string;
   };
   participant_id: string;
   connection_id?: string;
+  supports_listen_together_snapshot_events?: boolean;
 }
 
 // ── Constants ───────────────────────────────────────────────────────────────
@@ -156,7 +185,13 @@ const DEMO_CHAT_MAX_CONTENT_LENGTH = 1_000;
 const RADIO_STATION_UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const MAX_RADIO_STATION_LOOKUPS_PER_ENQUEUE = 5;
-const MAX_SOUNDBOARD_DATA_URL_BYTES = 512 * 1024;
+const MAX_SOUNDBOARD_DATA_URL_BYTES = 128 * 1024;
+const LEGACY_SOUNDBOARD_PLAYBACK_OWNER_TTL_MS = 10 * 60 * 1000;
+// Recheck membership on every media request, so this bounded lifetime gives
+// range/retry playback room without weakening revocation.
+const SOUNDBOARD_MEDIA_CAPABILITY_TTL_MS = 60 * 60 * 1000;
+const MAX_SOUNDBOARD_POSITION_SECONDS = 24 * 60 * 60;
+const DEFAULT_SOUNDBOARD_SOUND_IDS = new Set(["ping", "pop", "chime", "tada"]);
 const MAX_NEGOTIATION_TRACKS = 32;
 const MAX_SDP_LENGTH = 1_000_000;
 const MAX_VOICE_FRAME_BYTES = 1_000_000;
@@ -174,10 +209,8 @@ const VOICE_WS_RATE_LIMITS: Record<number, number> = {
 
 // ── VoiceRoom Durable Object ────────────────────────────────────────────────
 
-export class VoiceRoom extends DurableObject<Env> {
-  public ctx: DurableObjectState;
-  public env: Env;
-  private sql: SqlStorage;
+export class VoiceRoom extends DurableObject<Env, unknown> {
+  private sql: VoiceSql;
   private demoChatStore: DemoChatStore;
   private streamWatcherStore: StreamWatcherStore;
   private listenTogetherStore: ListenTogetherStore;
@@ -187,11 +220,9 @@ export class VoiceRoom extends DurableObject<Env> {
   private listenTogetherCommandQueue: Promise<void> = Promise.resolve();
   private selectProtocolQueue: Promise<void> = Promise.resolve();
 
-  constructor(ctx: DurableObjectState, env: Env) {
+  constructor(ctx: DurableObjectState<unknown>, env: Env) {
     super(ctx, env);
-    this.ctx = ctx;
-    this.env = env;
-    this.sql = this.ctx.storage.sql;
+    this.sql = this.ctx.storage.sql as unknown as VoiceSql;
     this.demoChatStore = new DemoChatStore(this.sql, DEMO_CHAT_MAX_MESSAGES);
     this.streamWatcherStore = new StreamWatcherStore(this.sql);
     this.listenTogetherStore = new ListenTogetherStore(
@@ -238,6 +269,20 @@ export class VoiceRoom extends DurableObject<Env> {
         connection_id TEXT
       );
     `);
+    this.sql.exec(`
+      CREATE TABLE IF NOT EXISTS soundboard_legacy_playback_owners (
+        playback_id TEXT PRIMARY KEY,
+        owner_id TEXT NOT NULL,
+        created_at INTEGER NOT NULL DEFAULT 0
+      );
+    `);
+    try {
+      this.sql.exec(
+        `ALTER TABLE soundboard_legacy_playback_owners ADD COLUMN created_at INTEGER NOT NULL DEFAULT 0;`,
+      );
+    } catch {
+      // Existing Durable Objects already have the timestamp column.
+    }
     this.sql.exec(`
       CREATE TABLE IF NOT EXISTS ws_rate_limits (
         rate_key TEXT PRIMARY KEY,
@@ -386,6 +431,7 @@ export class VoiceRoom extends DurableObject<Env> {
           accessMode: admission.accessMode,
           connectionGeneration: admission.connectionGeneration,
           subject: admission.subject,
+          ...(admission.serverId ? { serverId: admission.serverId } : {}),
         },
       });
 
@@ -403,7 +449,7 @@ export class VoiceRoom extends DurableObject<Env> {
         status: 101,
         headers: { "Sec-WebSocket-Protocol": "ralph.realtime.v1" },
         webSocket: client,
-      } as any);
+      });
     }
 
     if (
@@ -514,7 +560,7 @@ export class VoiceRoom extends DurableObject<Env> {
     }
 
     switch (msg.op) {
-      case Op.VoiceIdentify:
+      case Op.VoiceIdentify: {
         if (
           !this.isPlainObject(msg.d) ||
           typeof msg.d.participant_id !== "string" ||
@@ -526,11 +572,19 @@ export class VoiceRoom extends DurableObject<Env> {
           });
           break;
         }
-        await this.handleVoiceIdentify(ws, msg.d);
+        const identifyPayload = {
+          participant_id: msg.d.participant_id,
+          voice_token: msg.d.voice_token,
+          ...(msg.d.supports_listen_together_snapshot_events === true
+            ? { supports_listen_together_snapshot_events: true as const }
+            : {}),
+        };
+        await this.handleVoiceIdentify(ws, identifyPayload);
         break;
+      }
 
       case Op.Heartbeat:
-        this.handleHeartbeat(ws, msg.d);
+        this.handleHeartbeat(ws);
         break;
 
       case Op.SelectProtocol:
@@ -544,7 +598,7 @@ export class VoiceRoom extends DurableObject<Env> {
         await this.handleSelectProtocol(ws, msg.d);
         break;
 
-      case Op.Video:
+      case Op.Video: {
         if (
           !this.isPlainObject(msg.d) ||
           !Array.isArray(msg.d.tracks) ||
@@ -556,16 +610,15 @@ export class VoiceRoom extends DurableObject<Env> {
           });
           break;
         }
-        await this.handleVideo(ws, msg.d);
+        const videoPayload = { tracks: msg.d.tracks };
+        await this.handleVideo(ws, videoPayload);
         break;
+      }
 
-      case Op.StopTracks:
+      case Op.StopTracks: {
         if (
           !this.isPlainObject(msg.d) ||
-          !Array.isArray(msg.d.track_names) ||
-          !msg.d.track_names.every(
-            (name: unknown) => typeof name === "string" && name.length > 0,
-          )
+          !this.isTrackNameArray(msg.d.track_names)
         ) {
           this.sendTo(ws, {
             op: Op.Error,
@@ -573,10 +626,12 @@ export class VoiceRoom extends DurableObject<Env> {
           });
           break;
         }
-        await this.handleStopTracks(ws, msg.d);
+        const stopTracksPayload = { track_names: msg.d.track_names };
+        await this.handleStopTracks(ws, stopTracksPayload);
         break;
+      }
 
-      case Op.Answer:
+      case Op.Answer: {
         if (
           !this.isPlainObject(msg.d) ||
           typeof msg.d.sdp !== "string" ||
@@ -588,10 +643,17 @@ export class VoiceRoom extends DurableObject<Env> {
           });
           break;
         }
-        await this.handleAnswer(ws, msg.d);
+        const answerPayload = {
+          sdp: msg.d.sdp,
+          ...(typeof msg.d.request_id === "string"
+            ? { request_id: msg.d.request_id }
+            : {}),
+        };
+        await this.handleAnswer(ws, answerPayload);
         break;
+      }
 
-      case Op.TracksReady:
+      case Op.TracksReady: {
         if (
           !this.isPlainObject(msg.d) ||
           !this.isTrackNameArray(msg.d.track_names)
@@ -602,10 +664,12 @@ export class VoiceRoom extends DurableObject<Env> {
           });
           break;
         }
-        this.handleTracksReady(ws, msg.d);
+        const tracksReadyPayload = { track_names: msg.d.track_names };
+        this.handleTracksReady(ws, tracksReadyPayload);
         break;
+      }
 
-      case Op.Speaking:
+      case Op.Speaking: {
         if (
           !this.isPlainObject(msg.d) ||
           typeof msg.d.speaking !== "number" ||
@@ -617,14 +681,16 @@ export class VoiceRoom extends DurableObject<Env> {
           });
           break;
         }
-        this.handleSpeaking(ws, msg.d);
+        const speakingPayload = { speaking: msg.d.speaking };
+        this.handleSpeaking(ws, speakingPayload);
         break;
+      }
 
       case Op.ClientDisconnect:
         await this.handleLeave(ws, true);
         break;
 
-      case Op.TrackUpdate:
+      case Op.TrackUpdate: {
         if (
           !this.isPlainObject(msg.d) ||
           !Array.isArray(msg.d.tracks) ||
@@ -643,16 +709,34 @@ export class VoiceRoom extends DurableObject<Env> {
           });
           break;
         }
-        await this.handleTrackUpdate(ws, msg.d);
+        const trackUpdatePayload = {
+          tracks: msg.d.tracks.map((track) => {
+            const row = track as Record<string, unknown>;
+            return {
+              track_name: row.track_name as string,
+              session_id: row.session_id as string,
+              mid: row.mid as string,
+              rid: row.rid as string,
+            };
+          }),
+        };
+        await this.handleTrackUpdate(ws, trackUpdatePayload);
         break;
+      }
 
-      case Op.IceRestart:
+      case Op.IceRestart: {
+        if (!this.isPlainObject(msg.d) || typeof msg.d.sdp !== "string") {
+          this.sendTo(ws, {
+            op: Op.Error,
+            d: { code: 4000, message: "Invalid ICE restart payload" },
+          });
+          break;
+        }
+        const sessionType = msg.d.session_type;
         if (
-          !this.isPlainObject(msg.d) ||
-          typeof msg.d.sdp !== "string" ||
-          (msg.d.session_type !== "push_cam" &&
-            msg.d.session_type !== "push_screen" &&
-            msg.d.session_type !== "pull")
+          sessionType !== "push_cam" &&
+          sessionType !== "push_screen" &&
+          sessionType !== "pull"
         ) {
           this.sendTo(ws, {
             op: Op.Error,
@@ -660,8 +744,12 @@ export class VoiceRoom extends DurableObject<Env> {
           });
           break;
         }
-        await this.handleIceRestart(ws, msg.d);
+        await this.handleIceRestart(ws, {
+          sdp: msg.d.sdp,
+          session_type: sessionType,
+        });
         break;
+      }
 
       case Op.ResetPullSession:
         this.handleResetPullSession(ws);
@@ -722,6 +810,7 @@ export class VoiceRoom extends DurableObject<Env> {
       const zombies: string[] = [];
 
       this.demoChatStore.pruneExpired(now);
+      this.pruneLegacySoundboardPlaybackOwners(now);
 
       // Check active participants for zombie timeouts using SQLite
       const participants = this.sql.exec(
@@ -820,6 +909,15 @@ export class VoiceRoom extends DurableObject<Env> {
     )) {
       if (row.expires_at) deadlines.push(row.expires_at as number);
     }
+    for (const row of this.sql.exec(
+      `SELECT MIN(created_at) as created_at FROM soundboard_legacy_playback_owners`,
+    )) {
+      if (typeof row.created_at === "number") {
+        deadlines.push(
+          row.created_at + LEGACY_SOUNDBOARD_PLAYBACK_OWNER_TTL_MS,
+        );
+      }
+    }
 
     const listenTogetherDeadline = this.getListenTogetherTrackDeadline(now);
     if (listenTogetherDeadline) {
@@ -849,11 +947,20 @@ export class VoiceRoom extends DurableObject<Env> {
         ...this.sql.exec(`SELECT COUNT(*) as c FROM demo_chat_messages`),
       ][0];
       const demoChatCount = Number(demoChatCountRow?.c ?? 0);
+      const legacyPlaybackOwnerCountRow = [
+        ...this.sql.exec(
+          `SELECT COUNT(*) as c FROM soundboard_legacy_playback_owners`,
+        ),
+      ][0];
+      const legacyPlaybackOwnerCount = Number(
+        legacyPlaybackOwnerCountRow?.c ?? 0,
+      );
       const listenTogetherDeadline = this.getListenTogetherTrackDeadline(now);
       const hasWork =
         participantCount > 0 ||
         pendingCount > 0 ||
         demoChatCount > 0 ||
+        legacyPlaybackOwnerCount > 0 ||
         typeof listenTogetherDeadline === "number";
 
       if (!hasWork) {
@@ -948,35 +1055,40 @@ export class VoiceRoom extends DurableObject<Env> {
     queueChanged: boolean,
     playbackChanged: boolean,
   ) {
-    this.broadcast({
-      op: Op.VoiceAppEvent,
-      d: {
-        type: "listen_together.snapshot",
-        room_slug: snapshot.roomSlug,
-        snapshot,
-      } satisfies ListenTogetherEvent,
-    });
+    for (const ws of this.ctx.getWebSockets()) {
+      const attachment = this.getVoiceAttachment(ws);
+      if (attachment?.supports_listen_together_snapshot_events === true) {
+        this.sendTo(ws, {
+          op: Op.VoiceAppEvent,
+          d: {
+            type: "listen_together.snapshot",
+            room_slug: snapshot.roomSlug,
+            snapshot,
+          } satisfies ListenTogetherEvent,
+        });
+        continue;
+      }
 
-    if (queueChanged) {
-      this.broadcast({
-        op: Op.VoiceAppEvent,
-        d: {
-          type: "listen_together.queue.updated",
-          room_slug: snapshot.roomSlug,
-          snapshot,
-        } satisfies ListenTogetherEvent,
-      });
-    }
-
-    if (playbackChanged) {
-      this.broadcast({
-        op: Op.VoiceAppEvent,
-        d: {
-          type: "listen_together.playback.updated",
-          room_slug: snapshot.roomSlug,
-          snapshot,
-        } satisfies ListenTogetherEvent,
-      });
+      if (queueChanged) {
+        this.sendTo(ws, {
+          op: Op.VoiceAppEvent,
+          d: {
+            type: "listen_together.queue.updated",
+            room_slug: snapshot.roomSlug,
+            snapshot,
+          } satisfies ListenTogetherEvent,
+        });
+      }
+      if (playbackChanged) {
+        this.sendTo(ws, {
+          op: Op.VoiceAppEvent,
+          d: {
+            type: "listen_together.playback.updated",
+            room_slug: snapshot.roomSlug,
+            snapshot,
+          } satisfies ListenTogetherEvent,
+        });
+      }
     }
   }
 
@@ -984,6 +1096,8 @@ export class VoiceRoom extends DurableObject<Env> {
     result: ListenTogetherMutationResult,
     now = Date.now(),
   ) {
+    if (!result.queueChanged && !result.playbackChanged) return;
+
     this.persistListenTogetherState(result.state, result.queue);
     this.broadcastListenTogetherUpdates(
       buildListenTogetherSnapshot(result.state, result.queue, now),
@@ -1239,6 +1353,76 @@ export class VoiceRoom extends DurableObject<Env> {
     return this.radioStationResolver.resolve(stationUuid, callerUserId);
   }
 
+  private asListenTogetherCommand(
+    value: Record<string, unknown>,
+  ): ListenTogetherCommand | null {
+    const type = typeof value.type === "string" ? value.type : "";
+    const roomSlug =
+      typeof value.room_slug === "string" ? value.room_slug : this.roomSlug;
+    if (!type.startsWith("listen_together.") || !roomSlug) return null;
+
+    switch (type) {
+      case "listen_together.state.request":
+        return { type, room_slug: roomSlug };
+      case "listen_together.enqueue":
+        return {
+          type,
+          room_slug: roomSlug,
+          mode:
+            value.mode === "play-next" || value.mode === "play-now"
+              ? value.mode
+              : "append",
+          entries: Array.isArray(value.entries)
+            ? (value.entries as unknown as ListenTogetherEnqueueCommand["entries"])
+            : [],
+        };
+      case "listen_together.play":
+        return {
+          type,
+          room_slug: roomSlug,
+          entryId:
+            typeof value.entryId === "string" || value.entryId === null
+              ? (value.entryId as string | null)
+              : undefined,
+        };
+      case "listen_together.pause":
+        if (typeof value.paused !== "boolean") return null;
+        if (typeof value.entryId !== "string") return null;
+        return {
+          type,
+          room_slug: roomSlug,
+          paused: value.paused,
+          entryId: value.entryId,
+        };
+      case "listen_together.seek":
+        if (
+          typeof value.positionMs !== "number" ||
+          !Number.isFinite(value.positionMs)
+        ) {
+          return null;
+        }
+        if (typeof value.entryId !== "string") return null;
+        return {
+          type,
+          room_slug: roomSlug,
+          positionMs: value.positionMs,
+          entryId: value.entryId,
+        };
+      case "listen_together.skip":
+      case "listen_together.remove":
+        if (typeof value.entryId !== "string") return null;
+        return {
+          type,
+          room_slug: roomSlug,
+          entryId: value.entryId,
+        };
+      case "listen_together.clear":
+        return { type, room_slug: roomSlug };
+      default:
+        return null;
+    }
+  }
+
   private isPlainObject(value: unknown): value is Record<string, unknown> {
     if (!value || typeof value !== "object" || Array.isArray(value))
       return false;
@@ -1363,11 +1547,40 @@ export class VoiceRoom extends DurableObject<Env> {
     d: ListenTogetherCommand,
     callerUserId: string | null,
   ) {
+    if (d.type === "listen_together.state.request") {
+      this.handleListenTogetherStateRequest(ws, d);
+      return Promise.resolve();
+    }
+
     const command = this.listenTogetherCommandQueue.then(() =>
       this.handleListenTogetherCommandInOrder(ws, d, callerUserId),
     );
     this.listenTogetherCommandQueue = command.catch(() => {});
     return command;
+  }
+
+  private handleListenTogetherStateRequest(
+    ws: WebSocket,
+    d: ListenTogetherCommand,
+  ) {
+    if (!this.isCurrentAuthenticatedVoiceSocket(ws)) return;
+
+    const roomSlug =
+      typeof d.room_slug === "string" && d.room_slug.trim()
+        ? d.room_slug.trim()
+        : this.roomSlug;
+
+    if (!roomSlug || (this.roomSlug && roomSlug !== this.roomSlug)) {
+      this.sendListenTogetherError(
+        ws,
+        roomSlug || this.roomSlug,
+        "ROOM_MISMATCH",
+        "Voice room mismatch",
+      );
+      return;
+    }
+
+    this.sendListenTogetherSnapshot(ws);
   }
 
   private async handleListenTogetherCommandInOrder(
@@ -1389,11 +1602,6 @@ export class VoiceRoom extends DurableObject<Env> {
         "ROOM_MISMATCH",
         "Voice room mismatch",
       );
-      return;
-    }
-
-    if (d.type === "listen_together.state.request") {
-      this.sendListenTogetherSnapshot(ws);
       return;
     }
 
@@ -1530,7 +1738,7 @@ export class VoiceRoom extends DurableObject<Env> {
         );
         break;
       case "listen_together.clear":
-        result = clearListenTogether(effectiveRoomSlug, state, now);
+        result = clearListenTogether(effectiveRoomSlug, queue, state, now);
         break;
     }
 
@@ -1780,7 +1988,11 @@ export class VoiceRoom extends DurableObject<Env> {
 
   private async handleVoiceIdentify(
     ws: WebSocket,
-    d: { participant_id: string; voice_token: string },
+    d: {
+      participant_id: string;
+      voice_token: string;
+      supports_listen_together_snapshot_events?: boolean;
+    },
   ) {
     if (this.getParticipantId(ws)) {
       this.sendTo(ws, {
@@ -1802,7 +2014,7 @@ export class VoiceRoom extends DurableObject<Env> {
       expectedSubject: admission?.subject,
     });
 
-    if (!admission || verification.reason === "subject") {
+    if (!admission) {
       this.sendTo(ws, {
         op: Op.Error,
         d: {
@@ -1816,45 +2028,34 @@ export class VoiceRoom extends DurableObject<Env> {
       return;
     }
 
-    if (verification.reason === "format") {
-      this.sendTo(ws, {
-        op: Op.Error,
-        d: {
-          code: CloseCode.AuthenticationFailed,
-          message: "Invalid voice token format",
-        },
-      });
-      return;
-    }
+    if (!verification.ok) {
+      if (verification.reason === "subject") {
+        this.sendTo(ws, {
+          op: Op.Error,
+          d: {
+            code: CloseCode.AdmissionRejected,
+            message: "Voice token subject mismatch",
+          },
+        });
+        try {
+          ws.close(CloseCode.AdmissionRejected, "Voice token subject mismatch");
+        } catch {}
+        return;
+      }
 
-    if (verification.reason === "identity") {
+      const message =
+        verification.reason === "format"
+          ? "Invalid voice token format"
+          : verification.reason === "identity"
+            ? "Invalid voice token"
+            : verification.reason === "expired"
+              ? "Voice token expired"
+              : "Voice token verification failed";
       this.sendTo(ws, {
         op: Op.Error,
         d: {
           code: CloseCode.AuthenticationFailed,
-          message: "Invalid voice token",
-        },
-      });
-      return;
-    }
-
-    if (verification.reason === "expired") {
-      this.sendTo(ws, {
-        op: Op.Error,
-        d: {
-          code: CloseCode.AuthenticationFailed,
-          message: "Voice token expired",
-        },
-      });
-      return;
-    }
-
-    if (verification.reason === "signature") {
-      this.sendTo(ws, {
-        op: Op.Error,
-        d: {
-          code: CloseCode.AuthenticationFailed,
-          message: "Voice token verification failed",
+          message,
         },
       });
       return;
@@ -1868,6 +2069,8 @@ export class VoiceRoom extends DurableObject<Env> {
       admission,
       participant_id: d.participant_id,
       connection_id: connectionId,
+      supports_listen_together_snapshot_events:
+        d.supports_listen_together_snapshot_events === true,
     };
 
     let push_session_cam: string | null = null;
@@ -3040,19 +3243,45 @@ export class VoiceRoom extends DurableObject<Env> {
     }
 
     if (type.startsWith("listen_together.")) {
-      await this.handleListenTogetherCommand(
-        ws,
-        d as ListenTogetherCommand,
-        callerUserId,
-      );
+      const command = this.asListenTogetherCommand(d);
+      if (!command) {
+        this.sendListenTogetherError(
+          ws,
+          this.roomSlug,
+          "INVALID_COMMAND",
+          "Listen Together command is invalid",
+        );
+        return;
+      }
+      await this.handleListenTogetherCommand(ws, command, callerUserId);
       return;
     }
 
-    const soundboardEvent = this.sanitizeSoundboardEvent(
+    const admittedServerId =
+      this.getVoiceAttachment(ws)?.admission?.serverId ?? null;
+    if (
+      type.startsWith("soundboard.") &&
+      admittedServerId &&
+      (!callerUserId ||
+        !(await this.hasServerMembership(admittedServerId, callerUserId)))
+    ) {
+      this.sendTo(ws, {
+        op: Op.Error,
+        d: {
+          code: 4000,
+          message: "Server membership is required for soundboard actions",
+        },
+      });
+      await this.handleLeave(ws, true, true);
+      return;
+    }
+
+    const soundboardEvent = await this.sanitizeSoundboardEvent(
       type,
       d,
       pid,
       callerUserId,
+      admittedServerId,
     );
     if (soundboardEvent) {
       this.broadcast({
@@ -3654,12 +3883,13 @@ export class VoiceRoom extends DurableObject<Env> {
     }
   }
 
-  private sanitizeSoundboardEvent(
+  private async sanitizeSoundboardEvent(
     type: string,
     payload: Record<string, unknown>,
     participantId: string,
     callerUserId: string | null,
-  ): Record<string, unknown> | null {
+    authorizedServerKey: string | null,
+  ): Promise<Record<string, unknown> | null> {
     const stringField = (name: string, maxLength: number) => {
       const value = payload[name];
       return typeof value === "string" ? value.trim().slice(0, maxLength) : "";
@@ -3670,19 +3900,108 @@ export class VoiceRoom extends DurableObject<Env> {
       ...(callerUserId ? { user_id: callerUserId } : {}),
     };
     const serverKey = stringField("server_key", 160);
-    if (!serverKey) return null;
+    const isDmAdmission =
+      !authorizedServerKey && this.roomSlug.startsWith("dm-call-");
+    if (
+      !serverKey ||
+      (isDmAdmission
+        ? serverKey !== "dm-call"
+        : serverKey !== authorizedServerKey)
+    )
+      return null;
 
     if (type === "soundboard.play") {
       const playbackId = stringField("playback_id", 160);
       const soundId = stringField("sound_id", 160);
       const name = stringField("name", 160);
+      const sourceServerId = stringField("source_server_id", 160);
       const dataUrl = this.sanitizeSoundboardDataUrl(payload.data_url);
       const mediaUrl = this.sanitizeSoundboardMediaUrl(payload.media_url);
+      const currentTime =
+        typeof payload.current_time === "number" &&
+        Number.isFinite(payload.current_time) &&
+        payload.current_time >= 0 &&
+        payload.current_time <= MAX_SOUNDBOARD_POSITION_SECONDS
+          ? payload.current_time
+          : undefined;
+      const paused =
+        typeof payload.paused === "boolean" ? payload.paused : undefined;
+      const hasDataUrlInput = payload.data_url !== undefined;
       const hasValidDataUrl = !!dataUrl;
-      if (!callerUserId || !playbackId.startsWith(`s-${callerUserId}-`))
+      if (!callerUserId || !playbackId) return null;
+      if (
+        isDmAdmission &&
+        !(
+          !!soundId &&
+          !sourceServerId &&
+          !dataUrl &&
+          !mediaUrl &&
+          DEFAULT_SOUNDBOARD_SOUND_IDS.has(soundId)
+        ) &&
+        !(
+          !!soundId &&
+          !!sourceServerId &&
+          !dataUrl &&
+          !!mediaUrl &&
+          mediaUrl.startsWith(SOUNDBOARD_UPLOAD_PATH)
+        )
+      ) {
         return null;
-      if (!playbackId || !name || (!soundId && !hasValidDataUrl && !mediaUrl))
+      }
+      if (
+        !playbackId ||
+        !name ||
+        (hasDataUrlInput && !hasValidDataUrl && !mediaUrl) ||
+        (!soundId && !hasValidDataUrl && !mediaUrl) ||
+        (soundId &&
+          !hasValidDataUrl &&
+          !mediaUrl &&
+          !DEFAULT_SOUNDBOARD_SOUND_IDS.has(soundId))
+      )
         return null;
+      if (!this.ownsSoundboardPlayback(playbackId, callerUserId, soundId))
+        return null;
+      let outboundMediaUrl = mediaUrl;
+      if (mediaUrl?.startsWith(SOUNDBOARD_UPLOAD_PATH)) {
+        if (isDmAdmission) {
+          if (
+            !sourceServerId ||
+            !soundId ||
+            mediaUrl !== getSoundboardUploadUrl(soundId) ||
+            !(await this.hasAuthorizedDmSoundboardMedia(
+              sourceServerId,
+              soundId,
+              callerUserId,
+            )) ||
+            !this.env.REALTIME_TICKET_SECRET
+          ) {
+            return null;
+          }
+          const capability = await issueSoundboardMediaCapability(
+            {
+              soundId,
+              sourceServerId,
+              roomSlug: this.roomSlug,
+              playbackId,
+              issuerSubject: callerUserId,
+              expiresAt: Date.now() + SOUNDBOARD_MEDIA_CAPABILITY_TTL_MS,
+            },
+            this.env.REALTIME_TICKET_SECRET,
+          );
+          outboundMediaUrl = getSoundboardMediaCapabilityUrl(
+            soundId,
+            capability,
+            { roomSlug: this.roomSlug, playbackId },
+          );
+        } else if (
+          !authorizedServerKey ||
+          !soundId ||
+          mediaUrl !== getSoundboardUploadUrl(soundId) ||
+          !(await this.hasSoundboardCatalogEntry(authorizedServerKey, soundId))
+        ) {
+          return null;
+        }
+      }
       const volume =
         typeof payload.volume === "number" && Number.isFinite(payload.volume)
           ? Math.min(1, Math.max(0, payload.volume))
@@ -3692,55 +4011,61 @@ export class VoiceRoom extends DurableObject<Env> {
         server_key: serverKey,
         playback_id: playbackId,
         ...(soundId ? { sound_id: soundId } : {}),
+        ...(isDmAdmission && sourceServerId
+          ? { source_server_id: sourceServerId }
+          : {}),
         name,
-        ...(hasValidDataUrl ? { data_url: dataUrl } : {}),
-        ...(mediaUrl ? { media_url: mediaUrl } : {}),
+        ...(outboundMediaUrl
+          ? { media_url: outboundMediaUrl }
+          : hasValidDataUrl
+            ? { data_url: dataUrl }
+            : {}),
+        ...(currentTime !== undefined ? { current_time: currentTime } : {}),
+        ...(paused !== undefined ? { paused } : {}),
         volume,
       };
     }
 
     if (type === "soundboard.catalog-updated") {
+      if (isDmAdmission) return null;
       const sound = payload.sound;
       if (!sound || typeof sound !== "object" || Array.isArray(sound))
         return null;
       const metadata = sound as Record<string, unknown>;
       const id =
         typeof metadata.id === "string" ? metadata.id.trim().slice(0, 160) : "";
-      const name =
-        typeof metadata.name === "string"
-          ? metadata.name.trim().slice(0, 160)
-          : "";
-      if (!id || !name) return null;
-      const fileUrl = this.sanitizeSoundboardMediaUrl(metadata.file_url);
-      const emoji =
-        typeof metadata.emoji === "string"
-          ? metadata.emoji.trim().slice(0, 32)
-          : "";
-      const volume =
-        typeof metadata.volume === "number" && Number.isFinite(metadata.volume)
-          ? Math.min(1, Math.max(0, metadata.volume))
-          : 1;
+      if (!id || !authorizedServerKey || !callerUserId) return null;
+      const catalogEntry = await this.getAuthorizedSoundboardCatalogEntry(
+        authorizedServerKey,
+        id,
+        callerUserId,
+      );
+      if (!catalogEntry) return null;
       return {
         ...base,
         server_key: serverKey,
         sound: {
           id,
-          name,
-          ...(fileUrl ? { file_url: fileUrl } : {}),
-          ...(emoji ? { emoji } : {}),
-          volume,
+          name: catalogEntry.name,
+          file_url: getSoundboardUploadUrl(id),
+          ...(catalogEntry.emoji ? { emoji: catalogEntry.emoji } : {}),
+          volume: catalogEntry.volume,
         },
       };
     }
 
     const playbackId = stringField("playback_id", 160);
+    const ownsPlayback =
+      !!callerUserId && this.ownsSoundboardPlayback(playbackId, callerUserId);
+    if (isDmAdmission && type === "soundboard.volume-set") return null;
     if (type === "soundboard.stop") {
-      return playbackId
-        ? { ...base, server_key: serverKey, playback_id: playbackId }
-        : null;
+      if (!ownsPlayback || !playbackId) return null;
+      const event = { ...base, server_key: serverKey, playback_id: playbackId };
+      this.deleteLegacySoundboardPlayback(playbackId);
+      return event;
     }
     if (type === "soundboard.pause-set") {
-      return playbackId && typeof payload.paused === "boolean"
+      return ownsPlayback && playbackId && typeof payload.paused === "boolean"
         ? {
             ...base,
             server_key: serverKey,
@@ -3751,6 +4076,7 @@ export class VoiceRoom extends DurableObject<Env> {
     }
     if (type === "soundboard.volume-set") {
       if (
+        !ownsPlayback ||
         !playbackId ||
         typeof payload.volume !== "number" ||
         !Number.isFinite(payload.volume)
@@ -3766,17 +4092,256 @@ export class VoiceRoom extends DurableObject<Env> {
     return null;
   }
 
+  private async hasSoundboardCatalogEntry(
+    serverId: string,
+    soundId: string,
+  ): Promise<boolean> {
+    try {
+      const row = await this.env.DB.prepare(
+        `SELECT 1
+           FROM attachments
+           WHERE id = ? AND soundboard_server_id = ?
+           LIMIT 1`,
+      )
+        .bind(soundId, serverId)
+        .first();
+      return !!row;
+    } catch {
+      return false;
+    }
+  }
+
+  private async hasServerMembership(
+    serverId: string,
+    userId: string,
+  ): Promise<boolean> {
+    try {
+      const row = await this.env.DB.prepare(
+        `SELECT 1
+           FROM server_members
+          WHERE server_id = ? AND user_id = ?
+          LIMIT 1`,
+      )
+        .bind(serverId, userId)
+        .first();
+      return !!row;
+    } catch {
+      return false;
+    }
+  }
+
+  private async hasAuthorizedDmSoundboardMedia(
+    sourceServerId: string,
+    soundId: string,
+    callerUserId: string,
+  ): Promise<boolean> {
+    try {
+      const row = await this.env.DB.prepare(
+        `SELECT a.id, a.soundboard_server_id, a.content_type
+           FROM attachments a
+           JOIN server_members sm
+             ON sm.server_id = a.soundboard_server_id
+            AND sm.user_id = ?
+          WHERE a.id = ?
+            AND a.soundboard_server_id = ?
+            AND a.content_type LIKE 'audio/%'
+          LIMIT 1`,
+      )
+        .bind(callerUserId, soundId, sourceServerId)
+        .first<{
+          id: string;
+          soundboard_server_id: string;
+          content_type: string;
+        }>();
+
+      return (
+        !!row &&
+        row.id === soundId &&
+        row.soundboard_server_id === sourceServerId &&
+        row.content_type.startsWith("audio/")
+      );
+    } catch {
+      return false;
+    }
+  }
+
+  private async getAuthorizedSoundboardCatalogEntry(
+    serverId: string,
+    soundId: string,
+    callerUserId: string,
+  ): Promise<{ name: string; emoji: string | null; volume: number } | null> {
+    try {
+      const row = await this.env.DB.prepare(
+        `SELECT id, user_id, filename, sound_name, sound_emoji,
+                COALESCE(sound_volume, 1.0) AS sound_volume
+           FROM attachments
+          WHERE id = ? AND soundboard_server_id = ?
+          LIMIT 1`,
+      )
+        .bind(soundId, serverId)
+        .first<{
+          id: string;
+          user_id: string;
+          filename: string;
+          sound_name: string | null;
+          sound_emoji: string | null;
+          sound_volume: number | null;
+        }>();
+      if (!row) return null;
+
+      if (
+        row.user_id !== callerUserId &&
+        !(await this.hasManageServerPermission(serverId, callerUserId))
+      ) {
+        return null;
+      }
+
+      const fallbackName = String(row.filename ?? "Sound").replace(
+        /\.[^.]+$/,
+        "",
+      );
+      const rawVolume = Number(row.sound_volume ?? 1);
+      return {
+        name: row.sound_name?.trim() || fallbackName || "Sound",
+        emoji: row.sound_emoji?.trim() || null,
+        volume: Number.isFinite(rawVolume)
+          ? Math.min(1, Math.max(0, rawVolume))
+          : 1,
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  private async hasManageServerPermission(
+    serverId: string,
+    userId: string,
+  ): Promise<boolean> {
+    try {
+      const { results } = await this.env.DB.prepare(
+        `SELECT r.permissions
+           FROM member_roles mr
+           JOIN roles r ON r.id = mr.role_id AND r.server_id = mr.server_id
+          WHERE mr.server_id = ? AND mr.user_id = ?`,
+      )
+        .bind(serverId, userId)
+        .all<{ permissions: number }>();
+      const permissions = calculatePermissions(
+        (results ?? []).map((row) => Number(row.permissions ?? 0)),
+      );
+      return hasPermission(permissions, PERMISSIONS.MANAGE_SERVER);
+    } catch {
+      return false;
+    }
+  }
+
+  private ownsSoundboardPlayback(
+    playbackId: string,
+    callerUserId: string,
+    soundId?: string,
+  ): boolean {
+    if (isSoundboardPlaybackOwnedBy(playbackId, callerUserId)) return true;
+
+    const trackedOwner = this.getLegacySoundboardPlaybackOwner(playbackId);
+    if (trackedOwner) return trackedOwner === callerUserId;
+
+    if (
+      soundId &&
+      isLegacySoundboardPlaybackOwnedBy(playbackId, callerUserId, soundId)
+    ) {
+      const candidateOwners =
+        this.getLegacySoundboardPlaybackOwners(playbackId);
+      return (
+        candidateOwners.size === 1 &&
+        candidateOwners.has(callerUserId) &&
+        this.trackLegacySoundboardPlayback(playbackId, callerUserId)
+      );
+    }
+
+    const candidateOwners = this.getLegacySoundboardPlaybackOwners(playbackId);
+    if (candidateOwners.size !== 1 || !candidateOwners.has(callerUserId))
+      return false;
+    return this.trackLegacySoundboardPlayback(playbackId, callerUserId);
+  }
+
+  private getLegacySoundboardPlaybackOwners(playbackId: string): Set<string> {
+    const candidateOwners = new Set<string>();
+    for (const row of this.sql.exec(
+      "SELECT id, clerk_user_id FROM participants",
+    )) {
+      const participantId = row.id as string;
+      const ownerId = (row.clerk_user_id as string | null) || participantId;
+      const ownerPrefix = `s-${ownerId}-`;
+      if (playbackId.slice(0, ownerPrefix.length) === ownerPrefix)
+        candidateOwners.add(ownerId);
+    }
+    return candidateOwners;
+  }
+
+  private getLegacySoundboardPlaybackOwner(playbackId: string): string | null {
+    this.pruneLegacySoundboardPlaybackOwners(Date.now());
+    const rows = [
+      ...this.sql.exec(
+        "SELECT owner_id FROM soundboard_legacy_playback_owners WHERE playback_id = ?",
+        playbackId,
+      ),
+    ];
+    return rows.length > 0 ? (rows[0].owner_id as string) : null;
+  }
+
+  private trackLegacySoundboardPlayback(
+    playbackId: string,
+    ownerId: string,
+  ): boolean {
+    const existingOwner = this.getLegacySoundboardPlaybackOwner(playbackId);
+    if (existingOwner && existingOwner !== ownerId) return false;
+    this.sql.exec(
+      "INSERT OR IGNORE INTO soundboard_legacy_playback_owners (playback_id, owner_id, created_at) VALUES (?, ?, ?)",
+      playbackId,
+      ownerId,
+      Date.now(),
+    );
+    return true;
+  }
+
+  private pruneLegacySoundboardPlaybackOwners(now: number): void {
+    this.sql.exec(
+      "DELETE FROM soundboard_legacy_playback_owners WHERE created_at < ?",
+      now - LEGACY_SOUNDBOARD_PLAYBACK_OWNER_TTL_MS,
+    );
+  }
+
+  private deleteLegacySoundboardPlayback(playbackId: string): void {
+    this.sql.exec(
+      "DELETE FROM soundboard_legacy_playback_owners WHERE playback_id = ?",
+      playbackId,
+    );
+  }
+
   private sanitizeSoundboardDataUrl(value: unknown): string | null {
     if (typeof value !== "string" || !value.startsWith("data:audio/"))
       return null;
-    const match = /^data:audio\/[a-z0-9.+-]+;base64,([a-z0-9+/=]+)$/i.exec(
-      value,
-    );
-    if (!match?.[1]) return null;
-    const decodedBytes =
-      Math.floor((match[1].length * 3) / 4) -
-      (match[1].endsWith("==") ? 2 : match[1].endsWith("=") ? 1 : 0);
-    return decodedBytes <= MAX_SOUNDBOARD_DATA_URL_BYTES ? value : null;
+    const match =
+      /^data:audio\/[a-z0-9.+-]+;base64,([a-zA-Z0-9+/]+={0,2})$/.exec(value);
+    const encoded = match?.[1];
+    if (!encoded || encoded.length % 4 !== 0) return null;
+
+    const paddingIndex = encoded.indexOf("=");
+    const contentLength = paddingIndex === -1 ? encoded.length : paddingIndex;
+    const paddingLength = encoded.length - contentLength;
+    const expectedPadding = (4 - (contentLength % 4)) % 4;
+    if (contentLength % 4 === 1 || paddingLength !== expectedPadding)
+      return null;
+
+    try {
+      const decoded = atob(encoded);
+      return btoa(decoded) === encoded &&
+        decoded.length <= MAX_SOUNDBOARD_DATA_URL_BYTES
+        ? value
+        : null;
+    } catch {
+      return null;
+    }
   }
 
   private sanitizeSoundboardMediaUrl(value: unknown): string | null {
@@ -3784,10 +4349,10 @@ export class VoiceRoom extends DurableObject<Env> {
       return null;
     try {
       if (value.startsWith("/")) {
-        if (!value.startsWith("/api/") || value.startsWith("//")) return null;
-        const url = new URL(value, "https://voice-room.invalid");
-        decodeURIComponent(url.pathname);
-        return `${url.pathname}${url.search}${url.hash}`;
+        const normalized = normalizeSoundboardUploadUrl(value);
+        if (!normalized) return null;
+        const url = new URL(normalized, "https://voice-room.invalid");
+        return this.hasCredentialBearingUrlMetadata(url) ? null : normalized;
       }
       const url = new URL(value);
       if (
@@ -3799,10 +4364,23 @@ export class VoiceRoom extends DurableObject<Env> {
       ) {
         return null;
       }
+      if (url.search || url.hash) return null;
+      if (this.hasCredentialBearingUrlMetadata(url)) return null;
       return url.href;
     } catch {
       return null;
     }
+  }
+
+  private hasCredentialBearingUrlMetadata(url: URL): boolean {
+    const credentialKey =
+      /^(?:access[_-]?token|api[_-]?key|auth(?:orization)?|credential|password|secret|token|username)$/i;
+    for (const key of url.searchParams.keys()) {
+      if (credentialKey.test(key)) return true;
+    }
+    return /(?:^|[#&?])(?:access[_-]?token|api[_-]?key|auth(?:orization)?|credential|password|secret|token|username)=/i.test(
+      url.hash,
+    );
   }
 
   private async purgeParticipantState(participantId: string): Promise<void> {

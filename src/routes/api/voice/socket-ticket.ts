@@ -49,6 +49,7 @@ type TicketAdmission = {
   accessMode: "authenticated" | "public-demo";
   cookie?: string;
   roomSlug: string;
+  serverId?: string;
   subject: string;
 };
 
@@ -102,6 +103,7 @@ const POST = async ({ request }: { request: Request }) => {
       expiresAt,
       nonce: crypto.randomUUID(),
       roomSlug: admission.roomSlug,
+      ...(admission.serverId ? { serverId: admission.serverId } : {}),
       subject: admission.subject,
     },
     config.ticketSecret,
@@ -223,6 +225,7 @@ async function authorizeAuthenticatedTicket(
   return {
     accessMode: "authenticated",
     roomSlug: buildVoiceChannelRoomSlug(channelAccess.serverId, channelId),
+    serverId: channelAccess.serverId,
     subject: authResult.userId,
   };
 }

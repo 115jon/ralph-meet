@@ -22,6 +22,13 @@ import { buildHealthzPayload } from "./src/lib/healthz";
 import { handleYtDlpRequest } from "./src/lib/ytdlp/http";
 import { syncYtDlpUpstream } from "./src/lib/ytdlp/upstream";
 import {
+  getSoundboardMediaAggregateRateLimitKey,
+  getSoundboardMediaRateLimitKey,
+  getSoundboardMediaRequesterRateLimitKey,
+  isSoundboardMediaRead,
+  isStaticAssetRead,
+} from "./src/lib/api-rate-limit";
+import {
   parseSocketTicketProtocols,
   verifySocketTicket,
   type SocketTicketAudience,
@@ -233,22 +240,44 @@ export default {
     }
 
     // ── Rate limiting for API routes ─────────────────────────────────────
-    // Skip WebSocket upgrades and static asset reads. Attachment/background GETs are
-    // static file reads that Chromium's media player hits rapidly with Range
-    // headers during video playback — rate limiting them causes
-    // ERR_REQUEST_RANGE_NOT_SATISFIABLE retry storms.
+    // Skip WebSocket upgrades and attachment/background static asset reads.
+    // Soundboard media has an aggregate requester/route bucket first, followed
+    // by per-sound and per-capability buckets for legitimate range bursts.
     const isWebSocket = !!request.headers.get("Upgrade");
-    const isStaticAssetRead =
-      request.method === "GET" &&
-      (url.pathname.startsWith("/api/attachments/") ||
-        url.pathname.startsWith("/api/camera-backgrounds/"));
     if (
       url.pathname.startsWith("/api/") &&
       !isWebSocket &&
-      !isStaticAssetRead
+      !isStaticAssetRead(request.method, url.pathname)
     ) {
       const clientIP = request.headers.get("CF-Connecting-IP") ?? "unknown";
-      const result = rateLimiter.check(clientIP, request.method, url.pathname);
+      const isSoundboardMedia = isSoundboardMediaRead(
+        request.method,
+        url.pathname,
+      );
+      let result = isSoundboardMedia
+        ? rateLimiter.check(
+            clientIP,
+            request.method,
+            url.pathname,
+            getSoundboardMediaAggregateRateLimitKey(request, clientIP),
+          )
+        : rateLimiter.check(clientIP, request.method, url.pathname);
+      if (isSoundboardMedia && result.allowed) {
+        result = rateLimiter.check(
+          clientIP,
+          request.method,
+          url.pathname,
+          getSoundboardMediaRequesterRateLimitKey(request, clientIP),
+        );
+      }
+      if (isSoundboardMedia && result.allowed) {
+        result = rateLimiter.check(
+          clientIP,
+          request.method,
+          url.pathname,
+          getSoundboardMediaRateLimitKey(request, clientIP),
+        );
+      }
 
       if (!result.allowed) {
         logger.security("rate_limit_exceeded", {

@@ -1,0 +1,62 @@
+import { describe, expect, it, vi } from "vitest";
+
+vi.mock("@tanstack/react-start/server", () => ({
+  createStartHandler: vi.fn(() => vi.fn(async () => new Response("fallback"))),
+  defaultStreamHandler: vi.fn(),
+}));
+
+vi.mock("@/lib/ytdlp/http", () => ({
+  handleYtDlpRequest: vi.fn(async () => null),
+}));
+
+vi.mock("@/lib/ytdlp/upstream", () => ({
+  syncYtDlpUpstream: vi.fn(async () => undefined),
+}));
+
+vi.mock("../../../realtime/meeting-room", () => ({
+  MeetingRoom: class {},
+}));
+
+vi.mock("../../../realtime/rate-limiter-do", () => ({
+  RateLimiterDO: class {},
+}));
+
+vi.mock("../../../realtime/voice-room", () => ({
+  VoiceRoom: class {},
+}));
+
+import server from "../../../custom-server-entry";
+import { SOUNDBOARD_MEDIA_RATE_LIMIT } from "../../../realtime/rate-limiter";
+
+describe("custom server soundboard media rate limiting", () => {
+  it("returns 429 after the aggregate requester and route threshold", async () => {
+    const ctx = {
+      waitUntil: vi.fn(),
+    } as unknown as ExecutionContext;
+    const env = {} as Parameters<typeof server.fetch>[1];
+
+    for (let i = 0; i < SOUNDBOARD_MEDIA_RATE_LIMIT.limit; i += 1) {
+      const response = await server.fetch(
+        new Request(
+          `https://meet.test/api/soundboard/uploads/rotating-${i}?cap=cap-${i}`,
+          { headers: { "CF-Connecting-IP": "1.2.3.4" } },
+        ),
+        env,
+        ctx,
+      );
+      expect(response.status).toBe(200);
+    }
+
+    const response = await server.fetch(
+      new Request(
+        "https://meet.test/api/soundboard/uploads/rotating-next?cap=cap-next",
+        { headers: { "CF-Connecting-IP": "1.2.3.4" } },
+      ),
+      env,
+      ctx,
+    );
+
+    expect(response.status).toBe(429);
+    expect(response.headers.get("Retry-After")).toBeTruthy();
+  });
+});

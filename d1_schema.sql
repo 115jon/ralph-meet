@@ -222,6 +222,7 @@ CREATE TABLE IF NOT EXISTS myinstants_favorites (
     color TEXT NOT NULL,
     sound_type TEXT DEFAULT 'myinstants',
     emoji TEXT,
+    source_server_id TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     PRIMARY KEY (user_id, sound_id)
 );
@@ -345,6 +346,15 @@ CREATE INDEX IF NOT EXISTS idx_server_members_composite ON server_members(user_i
 
 -- Attachment lookup by uploader
 CREATE INDEX IF NOT EXISTS idx_attachments_user_id ON attachments(user_id);
+
+-- Durable references for R2 objects whose deletion needs a later retry.
+CREATE TABLE IF NOT EXISTS r2_cleanup_jobs (
+    file_key TEXT PRIMARY KEY,
+    attempts INTEGER NOT NULL DEFAULT 0,
+    last_error TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
 
 -- Read states per user
 CREATE INDEX IF NOT EXISTS idx_read_states_user_id ON read_states(user_id);

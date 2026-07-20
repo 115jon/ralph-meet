@@ -9,15 +9,28 @@ import {
   appendRealtimeAdmissionHeaders,
   createRealtimeAdmissionContext,
 } from "../realtime-admission";
+import { createSoundboardPlaybackId } from "../../src/lib/voice/soundboard-playback-id";
+import { verifySoundboardMediaCapability } from "../../src/lib/voice/soundboard-media-capability";
+import { GET as GET_SOUNDBOARD_UPLOAD } from "../../src/routes/api/soundboard/uploads/$id";
 
 const textEncoder = new TextEncoder();
 const TEST_SUBJECT = "user-test";
 const RADIO_STATION_UUID = "4f0b9a5c-1f0d-4d76-8d27-3b89b7cd1749";
+const MAX_SOUNDBOARD_DATA_URL_BYTES = 128 * 1024;
+
+function audioDataUrlForDecodedBytes(byteLength: number) {
+  const completeGroups = Math.floor(byteLength / 3);
+  const remainder = byteLength % 3;
+  const remainderBase64 =
+    remainder === 1 ? "AA==" : remainder === 2 ? "AAA=" : "";
+  return `data:audio/wav;base64,${"A".repeat(completeGroups * 4)}${remainderBase64}`;
+}
 
 async function createAdmissionHeaders(
   roomName: string,
   subject = TEST_SUBJECT,
   accessMode: "authenticated" | "public-demo" = "authenticated",
+  serverId?: string,
 ) {
   const ticket = await issueSocketTicket(
     {
@@ -26,6 +39,7 @@ async function createAdmissionHeaders(
       expiresAt: Date.now() + 60_000,
       nonce: crypto.randomUUID(),
       roomSlug: roomName,
+      ...(serverId ? { serverId } : {}),
       subject,
     },
     env.CALLS_APP_SECRET,
@@ -47,13 +61,22 @@ async function openVoiceSocket(
   roomName = crypto.randomUUID(),
   subject = TEST_SUBJECT,
   accessMode: "authenticated" | "public-demo" = "authenticated",
+  serverId = accessMode === "authenticated" ? "server-1" : undefined,
 ): Promise<WebSocket> {
+  if (accessMode === "authenticated" && serverId) {
+    await seedSoundboardMembership(serverId, subject);
+  }
   const roomId = env.VOICE_ROOM.idFromName(roomName);
   const room = env.VOICE_ROOM.get(roomId);
   const response = await room.fetch(
     `https://internal/api/channels/${roomName}/voice?v=1`,
     {
-      headers: await createAdmissionHeaders(roomName, subject, accessMode),
+      headers: await createAdmissionHeaders(
+        roomName,
+        subject,
+        accessMode,
+        serverId,
+      ),
     },
   );
 
@@ -158,6 +181,101 @@ async function nextMessageWithOpcodeAndType(
   }
 }
 
+async function nextMessageWithOpcodeAndTypeOrNull(
+  socket: WebSocket,
+  opcode: number,
+  eventType: string,
+  timeoutMs = 250,
+): Promise<{ op: number; d: unknown } | null> {
+  return new Promise((resolve) => {
+    const onMessage = (event: MessageEvent<string>) => {
+      const message = JSON.parse(event.data) as {
+        op: number;
+        d: unknown;
+      };
+      if (
+        message.op !== opcode ||
+        !message.d ||
+        typeof message.d !== "object" ||
+        (message.d as { type?: unknown }).type !== eventType
+      ) {
+        return;
+      }
+      clearTimeout(timer);
+      socket.removeEventListener("message", onMessage);
+      resolve(message);
+    };
+    const timer = setTimeout(() => {
+      socket.removeEventListener("message", onMessage);
+      resolve(null);
+    }, timeoutMs);
+    socket.addEventListener("message", onMessage);
+  });
+}
+
+type ListenTogetherTestEvent = {
+  type?: string;
+  snapshot?: {
+    revision?: number;
+    paused?: boolean;
+    positionMs?: number;
+    currentEntryId?: string | null;
+    queue?: Array<{ entryId: string }>;
+  };
+};
+
+async function collectListenTogetherEventsForSockets(
+  sockets: WebSocket[],
+  send: () => void,
+  timeoutMs = 100,
+): Promise<ListenTogetherTestEvent[][]> {
+  return new Promise((resolve) => {
+    const events = sockets.map(() => [] as ListenTogetherTestEvent[]);
+    let timer: ReturnType<typeof setTimeout>;
+    const listeners = sockets.map((socket, index) => {
+      const onMessage = (event: MessageEvent<string>) => {
+        const message = JSON.parse(event.data) as {
+          op: number;
+          d: ListenTogetherTestEvent;
+        };
+        if (
+          message.op !== 106 ||
+          !message.d.type?.startsWith("listen_together.")
+        ) {
+          return;
+        }
+        events[index]?.push(message.d);
+        clearTimeout(timer);
+        timer = setTimeout(finish, timeoutMs);
+      };
+      socket.addEventListener("message", onMessage);
+      return { socket, onMessage };
+    });
+    const finish = () => {
+      clearTimeout(timer);
+      for (const { socket, onMessage } of listeners) {
+        socket.removeEventListener("message", onMessage);
+      }
+      resolve(events);
+    };
+    timer = setTimeout(finish, timeoutMs);
+    send();
+  });
+}
+
+async function collectListenTogetherEvents(
+  socket: WebSocket,
+  send: () => void,
+  timeoutMs = 100,
+): Promise<ListenTogetherTestEvent[]> {
+  const [events] = await collectListenTogetherEventsForSockets(
+    [socket],
+    send,
+    timeoutMs,
+  );
+  return events ?? [];
+}
+
 async function mockCallsApi(
   roomName: string,
   handler: (request: Request) => Response | Promise<Response>,
@@ -166,6 +284,101 @@ async function mockCallsApi(
   await runInDurableObject(room, () => {
     globalThis.fetch = async (input, init) => handler(new Request(input, init));
   });
+}
+
+async function seedSoundboardCatalogEntry(
+  serverId: string,
+  soundId: string,
+  ownerId = TEST_SUBJECT,
+  metadata: {
+    name?: string;
+    emoji?: string | null;
+    volume?: number;
+  } = {},
+) {
+  await env.DB.prepare(
+    `CREATE TABLE IF NOT EXISTS attachments (
+       id TEXT PRIMARY KEY,
+       soundboard_server_id TEXT,
+       filename TEXT,
+       file_key TEXT,
+       content_type TEXT,
+       size_bytes INTEGER,
+       user_id TEXT,
+       sound_name TEXT,
+       sound_emoji TEXT,
+       sound_volume REAL
+      )`,
+  ).run();
+  await env.DB.prepare(
+    `INSERT OR REPLACE INTO attachments (
+       id, soundboard_server_id, filename, file_key, content_type, size_bytes,
+       user_id, sound_name, sound_emoji, sound_volume
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  )
+    .bind(
+      soundId,
+      serverId,
+      "airhorn.mp3",
+      `attachments/channel-1/${soundId}/airhorn.mp3`,
+      "audio/mpeg",
+      12,
+      ownerId,
+      metadata.name ?? "Canonical Airhorn",
+      metadata.emoji ?? "🎺",
+      metadata.volume ?? 0.4,
+    )
+    .run();
+}
+
+async function seedSoundboardMembership(serverId: string, userId: string) {
+  await env.DB.prepare(
+    `CREATE TABLE IF NOT EXISTS server_members (
+       server_id TEXT NOT NULL,
+       user_id TEXT NOT NULL,
+       PRIMARY KEY (server_id, user_id)
+     )`,
+  ).run();
+  await env.DB.prepare(
+    `INSERT OR REPLACE INTO server_members (server_id, user_id)
+     VALUES (?, ?)`,
+  )
+    .bind(serverId, userId)
+    .run();
+}
+
+async function seedManageServerPermission(serverId: string, userId: string) {
+  await env.DB.prepare(
+    `CREATE TABLE IF NOT EXISTS roles (
+       id TEXT PRIMARY KEY,
+       server_id TEXT NOT NULL,
+       name TEXT NOT NULL,
+       permissions INTEGER NOT NULL DEFAULT 0,
+       position INTEGER NOT NULL DEFAULT 0,
+       is_default INTEGER NOT NULL DEFAULT 0
+     )`,
+  ).run();
+  await env.DB.prepare(
+    `CREATE TABLE IF NOT EXISTS member_roles (
+       server_id TEXT NOT NULL,
+       user_id TEXT NOT NULL,
+       role_id TEXT NOT NULL,
+       PRIMARY KEY (server_id, user_id, role_id)
+     )`,
+  ).run();
+  await env.DB.prepare(
+    `INSERT OR REPLACE INTO roles
+       (id, server_id, name, permissions, position, is_default)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+  )
+    .bind(`role-${userId}`, serverId, "Soundboard Manager", 2, 1, 0)
+    .run();
+  await env.DB.prepare(
+    `INSERT OR REPLACE INTO member_roles (server_id, user_id, role_id)
+     VALUES (?, ?, ?)`,
+  )
+    .bind(serverId, userId, `role-${userId}`)
+    .run();
 }
 
 function listenTogetherMusicEntry(durationMs = 1_000) {
@@ -212,15 +425,20 @@ async function identifyVoiceSocket(
   participantId: string,
   roomName: string,
   subject = TEST_SUBJECT,
+  supportsSnapshotEvents = true,
 ) {
   const response = nextJsonMessage(socket);
+  const identifyPayload: Record<string, unknown> = {
+    participant_id: participantId,
+    voice_token: await issueVoiceToken(participantId, roomName, subject),
+  };
+  if (supportsSnapshotEvents) {
+    identifyPayload.supports_listen_together_snapshot_events = true;
+  }
   socket.send(
     JSON.stringify({
       op: 100,
-      d: {
-        participant_id: participantId,
-        voice_token: await issueVoiceToken(participantId, roomName, subject),
-      },
+      d: identifyPayload,
     }),
   );
 
@@ -303,6 +521,819 @@ describe("VoiceRoom lifecycle", () => {
     await expect(response).resolves.toMatchObject({
       op: 18,
       d: { code: 4000, message: "Invalid stop tracks payload" },
+    });
+    socket.close();
+  });
+
+  it("rejects an unknown source-less sound ID", async () => {
+    const roomName = crypto.randomUUID();
+    const socket = await openVoiceSocket(roomName);
+    await identifyVoiceSocket(socket, crypto.randomUUID(), roomName);
+    const response = nextMessageWithOpcodeOrNull(socket, 18);
+    const broadcast = nextMessageWithOpcodeAndTypeOrNull(
+      socket,
+      106,
+      "soundboard.play",
+    );
+
+    socket.send(
+      JSON.stringify({
+        op: 106,
+        d: {
+          type: "soundboard.play",
+          server_key: "server-1",
+          playback_id: `s-${TEST_SUBJECT}-unknown-source`,
+          sound_id: "not-a-default-sound",
+          name: "Unknown",
+        },
+      }),
+    );
+
+    expect(await response).toMatchObject({
+      op: 18,
+      d: { code: 4000, message: "Soundboard event was rejected" },
+    });
+    expect(await broadcast).toBeNull();
+    socket.close();
+  });
+
+  it("accepts a known source-less default sound ID", async () => {
+    const roomName = crypto.randomUUID();
+    const participantId = crypto.randomUUID();
+    const socket = await openVoiceSocket(roomName);
+    await identifyVoiceSocket(socket, participantId, roomName);
+    const listener = await openVoiceSocket(roomName);
+    await identifyVoiceSocket(listener, crypto.randomUUID(), roomName);
+
+    socket.send(
+      JSON.stringify({
+        op: 106,
+        d: {
+          type: "soundboard.play",
+          server_key: "server-1",
+          playback_id: `s-${TEST_SUBJECT}-known-default`,
+          sound_id: "ping",
+          name: "Ping",
+        },
+      }),
+    );
+
+    const response = await nextMessageWithOpcodeAndType(
+      listener,
+      106,
+      "soundboard.play",
+    );
+    expect(response.d).toMatchObject({
+      sound_id: "ping",
+      playback_id: `s-${TEST_SUBJECT}-known-default`,
+    });
+
+    socket.close();
+    listener.close();
+  });
+
+  it("allows default soundboard controls in an authenticated DM call without server media", async () => {
+    const roomName = `dm-call-${TEST_SUBJECT}-${crypto.randomUUID()}`;
+    const participantId = crypto.randomUUID();
+    const socket = await openVoiceSocket(
+      roomName,
+      TEST_SUBJECT,
+      "authenticated",
+      "",
+    );
+    await identifyVoiceSocket(socket, participantId, roomName);
+    const listener = await openVoiceSocket(
+      roomName,
+      "dm-peer",
+      "authenticated",
+      "",
+    );
+    await identifyVoiceSocket(
+      listener,
+      crypto.randomUUID(),
+      roomName,
+      "dm-peer",
+    );
+
+    const playbackId = createSoundboardPlaybackId(TEST_SUBJECT, "ping");
+    socket.send(
+      JSON.stringify({
+        op: 106,
+        d: {
+          type: "soundboard.play",
+          server_key: "dm-call",
+          playback_id: playbackId,
+          sound_id: "ping",
+          name: "Ping",
+        },
+      }),
+    );
+    await expect(
+      nextMessageWithOpcodeAndType(listener, 106, "soundboard.play"),
+    ).resolves.toMatchObject({
+      d: {
+        server_key: "dm-call",
+        playback_id: playbackId,
+        sound_id: "ping",
+      },
+    });
+
+    for (const event of [
+      { type: "soundboard.pause-set", paused: true },
+      { type: "soundboard.stop" },
+    ]) {
+      const broadcast = nextMessageWithOpcodeAndType(listener, 106, event.type);
+      socket.send(
+        JSON.stringify({
+          op: 106,
+          d: {
+            server_key: "dm-call",
+            playback_id: playbackId,
+            ...event,
+          },
+        }),
+      );
+      await expect(broadcast).resolves.toMatchObject({
+        d: {
+          server_key: "dm-call",
+          playback_id: playbackId,
+          type: event.type,
+        },
+      });
+    }
+
+    const mediaRejected = nextMessageWithOpcode(socket, 18);
+    socket.send(
+      JSON.stringify({
+        op: 106,
+        d: {
+          type: "soundboard.play",
+          server_key: "dm-call",
+          playback_id: createSoundboardPlaybackId(TEST_SUBJECT, "upload-1"),
+          sound_id: "upload-1",
+          name: "Uploaded",
+          media_url: "/api/soundboard/uploads/upload-1",
+        },
+      }),
+    );
+    await expect(mediaRejected).resolves.toMatchObject({
+      d: { message: "Soundboard event was rejected" },
+    });
+
+    const catalogRejected = nextMessageWithOpcode(socket, 18);
+    socket.send(
+      JSON.stringify({
+        op: 106,
+        d: {
+          type: "soundboard.catalog-updated",
+          server_key: "dm-call",
+          sound: { id: "upload-1", name: "Uploaded" },
+        },
+      }),
+    );
+    await expect(catalogRejected).resolves.toMatchObject({
+      d: { message: "Soundboard event was rejected" },
+    });
+
+    socket.close();
+    listener.close();
+  });
+
+  it("authorizes a member's uploaded server sound in a DM with a media capability", async () => {
+    const roomName = `dm-call-${TEST_SUBJECT}-${crypto.randomUUID()}`;
+    const participantId = crypto.randomUUID();
+    await seedSoundboardCatalogEntry("dm-source-server-1", "dm-sound-1");
+    await seedSoundboardMembership("dm-source-server-1", TEST_SUBJECT);
+    const socket = await openVoiceSocket(
+      roomName,
+      TEST_SUBJECT,
+      "authenticated",
+      "",
+    );
+    await identifyVoiceSocket(socket, participantId, roomName);
+    const listener = await openVoiceSocket(
+      roomName,
+      "dm-peer",
+      "authenticated",
+      "",
+    );
+    await identifyVoiceSocket(
+      listener,
+      crypto.randomUUID(),
+      roomName,
+      "dm-peer",
+    );
+
+    const playbackId = createSoundboardPlaybackId(TEST_SUBJECT, "dm-sound-1");
+    socket.send(
+      JSON.stringify({
+        op: 106,
+        d: {
+          type: "soundboard.play",
+          server_key: "dm-call",
+          source_server_id: "dm-source-server-1",
+          playback_id: playbackId,
+          sound_id: "dm-sound-1",
+          name: "Forged name",
+          media_url: "/api/soundboard/uploads/dm-sound-1",
+        },
+      }),
+    );
+
+    const response = await nextMessageWithOpcodeAndType(
+      listener,
+      106,
+      "soundboard.play",
+    );
+    const event = response.d as Record<string, unknown>;
+    const mediaUrl = event.media_url;
+    expect(event).toMatchObject({
+      server_key: "dm-call",
+      source_server_id: "dm-source-server-1",
+      sound_id: "dm-sound-1",
+      playback_id: playbackId,
+    });
+    expect(mediaUrl).toEqual(
+      expect.stringContaining("/api/soundboard/uploads/dm-sound-1?cap=sbm1."),
+    );
+
+    const parsedUrl = new URL(String(mediaUrl), "https://voice-room.invalid");
+    expect(parsedUrl.searchParams.get("room_slug")).toBe(roomName);
+    expect(parsedUrl.searchParams.get("playback_id")).toBe(playbackId);
+    const capabilityVerification = await verifySoundboardMediaCapability(
+      parsedUrl.searchParams.get("cap") ?? "",
+      env.REALTIME_TICKET_SECRET,
+      {
+        now: Date.now(),
+        soundId: "dm-sound-1",
+        sourceServerId: "dm-source-server-1",
+        roomSlug: roomName,
+        playbackId,
+      },
+    );
+    expect(capabilityVerification).toMatchObject({
+      ok: true,
+      claims: { issuerSubject: TEST_SUBJECT },
+    });
+    if (!capabilityVerification.ok)
+      throw new Error("Expected valid capability");
+    const remainingLifetime =
+      capabilityVerification.claims.expiresAt - Date.now();
+    expect(remainingLifetime).toBeGreaterThan(59 * 60 * 1000);
+    expect(remainingLifetime).toBeLessThanOrEqual(60 * 60 * 1000);
+
+    socket.close();
+    listener.close();
+  });
+
+  it("renews a DM capability through an owner replay and rejects peer renewal", async () => {
+    const roomName = `dm-call-${TEST_SUBJECT}-${crypto.randomUUID()}`;
+    const soundId = "dm-renew-sound";
+    const serverId = "dm-renew-server";
+    await seedSoundboardCatalogEntry(serverId, soundId);
+    await seedSoundboardMembership(serverId, TEST_SUBJECT);
+    await seedSoundboardMembership(serverId, "dm-peer");
+
+    const owner = await openVoiceSocket(
+      roomName,
+      TEST_SUBJECT,
+      "authenticated",
+      "",
+    );
+    const peer = await openVoiceSocket(
+      roomName,
+      "dm-peer",
+      "authenticated",
+      "",
+    );
+    await identifyVoiceSocket(owner, crypto.randomUUID(), roomName);
+    await identifyVoiceSocket(peer, crypto.randomUUID(), roomName, "dm-peer");
+
+    const playbackId = createSoundboardPlaybackId(TEST_SUBJECT, soundId);
+    const play = (state?: { current_time: number; paused: boolean }) =>
+      owner.send(
+        JSON.stringify({
+          op: 106,
+          d: {
+            type: "soundboard.play",
+            server_key: "dm-call",
+            source_server_id: serverId,
+            playback_id: playbackId,
+            sound_id: soundId,
+            name: "Renewable clip",
+            media_url: `/api/soundboard/uploads/${soundId}`,
+            ...state,
+          },
+        }),
+      );
+
+    play();
+    const firstEvent = await nextMessageWithOpcodeAndType(
+      peer,
+      106,
+      "soundboard.play",
+    );
+    const firstUrl = String(
+      (firstEvent.d as Record<string, unknown>).media_url,
+    );
+
+    await new Promise((resolve) => setTimeout(resolve, 2));
+    play({ current_time: 12.5, paused: true });
+    const renewedEvent = await nextMessageWithOpcodeAndType(
+      peer,
+      106,
+      "soundboard.play",
+    );
+    const renewedUrl = String(
+      (renewedEvent.d as Record<string, unknown>).media_url,
+    );
+    expect(renewedUrl).not.toBe(firstUrl);
+    expect(renewedUrl).toContain("cap=sbm1.");
+    expect(renewedEvent.d).toMatchObject({
+      current_time: 12.5,
+      paused: true,
+    });
+
+    const renewedCapability = new URL(
+      renewedUrl,
+      "https://voice-room.invalid",
+    ).searchParams.get("cap");
+    await expect(
+      verifySoundboardMediaCapability(
+        renewedCapability ?? "",
+        env.REALTIME_TICKET_SECRET,
+        {
+          now: Date.now(),
+          soundId,
+          sourceServerId: serverId,
+          roomSlug: roomName,
+          playbackId,
+        },
+      ),
+    ).resolves.toMatchObject({
+      ok: true,
+      claims: { issuerSubject: TEST_SUBJECT },
+    });
+
+    const peerRejected = nextMessageWithOpcode(peer, 18);
+    peer.send(
+      JSON.stringify({
+        op: 106,
+        d: {
+          type: "soundboard.play",
+          server_key: "dm-call",
+          source_server_id: serverId,
+          playback_id: playbackId,
+          sound_id: soundId,
+          name: "Peer renewal",
+          media_url: `/api/soundboard/uploads/${soundId}`,
+        },
+      }),
+    );
+    await expect(peerRejected).resolves.toMatchObject({
+      d: { message: "Soundboard event was rejected" },
+    });
+
+    owner.close();
+    peer.close();
+  });
+
+  it("authorizes a DM server sound uploaded by another user for a current member", async () => {
+    const roomName = `dm-call-${TEST_SUBJECT}-${crypto.randomUUID()}`;
+    const uploaderId = "uploader-1";
+    await seedSoundboardCatalogEntry(
+      "dm-other-uploader-server",
+      "dm-other-uploader-sound",
+      uploaderId,
+    );
+    await seedSoundboardMembership("dm-other-uploader-server", TEST_SUBJECT);
+    const socket = await openVoiceSocket(
+      roomName,
+      TEST_SUBJECT,
+      "authenticated",
+      "",
+    );
+    const listener = await openVoiceSocket(
+      roomName,
+      "dm-peer",
+      "authenticated",
+      "",
+    );
+    await identifyVoiceSocket(socket, crypto.randomUUID(), roomName);
+    await identifyVoiceSocket(
+      listener,
+      crypto.randomUUID(),
+      roomName,
+      "dm-peer",
+    );
+
+    const playbackId = createSoundboardPlaybackId(
+      TEST_SUBJECT,
+      "dm-other-uploader-sound",
+    );
+    socket.send(
+      JSON.stringify({
+        op: 106,
+        d: {
+          type: "soundboard.play",
+          server_key: "dm-call",
+          source_server_id: "dm-other-uploader-server",
+          playback_id: playbackId,
+          sound_id: "dm-other-uploader-sound",
+          name: "Uploaded by another user",
+          media_url: "/api/soundboard/uploads/dm-other-uploader-sound",
+        },
+      }),
+    );
+
+    const response = await nextMessageWithOpcodeAndType(
+      listener,
+      106,
+      "soundboard.play",
+    );
+    expect(response.d).toMatchObject({
+      source_server_id: "dm-other-uploader-server",
+      sound_id: "dm-other-uploader-sound",
+      playback_id: playbackId,
+      media_url: expect.stringContaining(
+        "/api/soundboard/uploads/dm-other-uploader-sound?cap=sbm1.",
+      ),
+    });
+
+    socket.close();
+    listener.close();
+  });
+
+  it("serves the exact emitted DM media URL to a non-member peer", async () => {
+    const roomName = `dm-call-${TEST_SUBJECT}-${crypto.randomUUID()}`;
+    const soundId = "dm-e2e-sound";
+    const serverId = "dm-e2e-server";
+    const fileKey = `attachments/channel-1/${soundId}/airhorn.mp3`;
+    await seedSoundboardCatalogEntry(serverId, soundId, "uploader-2");
+    await seedSoundboardMembership(serverId, TEST_SUBJECT);
+    await env.BUCKET.put(fileKey, new Uint8Array([1, 2, 3]), {
+      httpMetadata: { contentType: "audio/mpeg" },
+    });
+
+    const socket = await openVoiceSocket(
+      roomName,
+      TEST_SUBJECT,
+      "authenticated",
+      "",
+    );
+    const peer = await openVoiceSocket(
+      roomName,
+      "non-member-peer",
+      "authenticated",
+      "",
+    );
+    await identifyVoiceSocket(socket, crypto.randomUUID(), roomName);
+    await identifyVoiceSocket(
+      peer,
+      crypto.randomUUID(),
+      roomName,
+      "non-member-peer",
+    );
+
+    const playbackId = createSoundboardPlaybackId(TEST_SUBJECT, soundId);
+    socket.send(
+      JSON.stringify({
+        op: 106,
+        d: {
+          type: "soundboard.play",
+          server_key: "dm-call",
+          source_server_id: serverId,
+          playback_id: playbackId,
+          sound_id: soundId,
+          name: "End to end sound",
+          media_url: `/api/soundboard/uploads/${soundId}`,
+        },
+      }),
+    );
+
+    const event = await nextMessageWithOpcodeAndType(
+      peer,
+      106,
+      "soundboard.play",
+    );
+    const mediaUrl = (event.d as Record<string, unknown>).media_url;
+    expect(typeof mediaUrl).toBe("string");
+
+    const response = await GET_SOUNDBOARD_UPLOAD({
+      request: new Request(`https://meet.test${String(mediaUrl)}`),
+      params: { id: soundId },
+    });
+    expect(response.status).toBe(200);
+    expect(new Uint8Array(await response.arrayBuffer())).toEqual(
+      new Uint8Array([1, 2, 3]),
+    );
+
+    await env.BUCKET.delete(fileKey);
+    socket.close();
+    peer.close();
+  });
+
+  it("revokes an emitted DM capability after membership removal without reading R2", async () => {
+    const roomName = `dm-call-${TEST_SUBJECT}-${crypto.randomUUID()}`;
+    const soundId = "dm-revoked-capability-sound";
+    const serverId = "dm-revoked-capability-server";
+    const fileKey = `attachments/channel-1/${soundId}/airhorn.mp3`;
+    await seedSoundboardCatalogEntry(serverId, soundId, TEST_SUBJECT);
+    await seedSoundboardMembership(serverId, TEST_SUBJECT);
+    await env.BUCKET.put(fileKey, new Uint8Array([4, 5, 6]), {
+      httpMetadata: { contentType: "audio/mpeg" },
+    });
+
+    const socket = await openVoiceSocket(
+      roomName,
+      TEST_SUBJECT,
+      "authenticated",
+      "",
+    );
+    const peer = await openVoiceSocket(
+      roomName,
+      "revocation-peer",
+      "authenticated",
+      "",
+    );
+    await identifyVoiceSocket(socket, crypto.randomUUID(), roomName);
+    await identifyVoiceSocket(
+      peer,
+      crypto.randomUUID(),
+      roomName,
+      "revocation-peer",
+    );
+
+    const playbackId = createSoundboardPlaybackId(TEST_SUBJECT, soundId);
+    socket.send(
+      JSON.stringify({
+        op: 106,
+        d: {
+          type: "soundboard.play",
+          server_key: "dm-call",
+          source_server_id: serverId,
+          playback_id: playbackId,
+          sound_id: soundId,
+          name: "Revoked sound",
+          media_url: `/api/soundboard/uploads/${soundId}`,
+        },
+      }),
+    );
+    const event = await nextMessageWithOpcodeAndType(
+      peer,
+      106,
+      "soundboard.play",
+    );
+    const mediaUrl = String((event.d as Record<string, unknown>).media_url);
+
+    await env.DB.prepare(
+      "DELETE FROM server_members WHERE server_id = ? AND user_id = ?",
+    )
+      .bind(serverId, TEST_SUBJECT)
+      .run();
+    const attachment = await env.DB.prepare(
+      "SELECT id FROM attachments WHERE id = ? AND soundboard_server_id = ?",
+    )
+      .bind(soundId, serverId)
+      .first();
+    expect(attachment).not.toBeNull();
+
+    const response = await GET_SOUNDBOARD_UPLOAD({
+      request: new Request(`https://meet.test${mediaUrl}`),
+      params: { id: soundId },
+    });
+    expect(response.status).toBe(404);
+
+    await env.BUCKET.delete(fileKey);
+    socket.close();
+    peer.close();
+  });
+
+  it("supports legacy DM server media playback, capability, and owner controls", async () => {
+    const roomName = `dm-call-${TEST_SUBJECT}-${crypto.randomUUID()}`;
+    const soundId = "legacy-dm-sound";
+    const serverId = "legacy-dm-server";
+    await seedSoundboardCatalogEntry(serverId, soundId, "legacy-uploader");
+    await seedSoundboardMembership(serverId, TEST_SUBJECT);
+    const socket = await openVoiceSocket(
+      roomName,
+      TEST_SUBJECT,
+      "authenticated",
+      "",
+    );
+    const listener = await openVoiceSocket(
+      roomName,
+      "legacy-peer",
+      "authenticated",
+      "",
+    );
+    await identifyVoiceSocket(socket, crypto.randomUUID(), roomName);
+    await identifyVoiceSocket(
+      listener,
+      crypto.randomUUID(),
+      roomName,
+      "legacy-peer",
+    );
+
+    const playbackId = `s-${TEST_SUBJECT}-${soundId}`;
+    socket.send(
+      JSON.stringify({
+        op: 106,
+        d: {
+          type: "soundboard.play",
+          server_key: "dm-call",
+          source_server_id: serverId,
+          playback_id: playbackId,
+          sound_id: soundId,
+          name: "Legacy DM sound",
+          media_url: `/api/soundboard/uploads/${soundId}`,
+        },
+      }),
+    );
+    const playEvent = await nextMessageWithOpcodeAndType(
+      listener,
+      106,
+      "soundboard.play",
+    );
+    const emittedUrl = String(
+      (playEvent.d as Record<string, unknown>).media_url,
+    );
+    expect(emittedUrl).toContain("cap=sbm1.");
+    const parsedUrl = new URL(emittedUrl, "https://meet.test");
+    await expect(
+      verifySoundboardMediaCapability(
+        parsedUrl.searchParams.get("cap") ?? "",
+        env.REALTIME_TICKET_SECRET,
+        {
+          now: Date.now(),
+          soundId,
+          sourceServerId: serverId,
+          roomSlug: roomName,
+          playbackId,
+        },
+      ),
+    ).resolves.toMatchObject({
+      ok: true,
+      claims: { issuerSubject: TEST_SUBJECT, playbackId },
+    });
+
+    for (const event of [
+      { type: "soundboard.pause-set", paused: true },
+      { type: "soundboard.stop" },
+    ]) {
+      const broadcast = nextMessageWithOpcodeAndType(listener, 106, event.type);
+      socket.send(
+        JSON.stringify({
+          op: 106,
+          d: {
+            server_key: "dm-call",
+            playback_id: playbackId,
+            ...event,
+          },
+        }),
+      );
+      await expect(broadcast).resolves.toMatchObject({
+        d: { server_key: "dm-call", playback_id: playbackId },
+      });
+    }
+
+    socket.close();
+    listener.close();
+  });
+
+  it("rejects a DM uploaded server sound when the sender is not a member", async () => {
+    const roomName = `dm-call-${TEST_SUBJECT}-${crypto.randomUUID()}`;
+    const socket = await openVoiceSocket(
+      roomName,
+      TEST_SUBJECT,
+      "authenticated",
+      "",
+    );
+    await identifyVoiceSocket(socket, crypto.randomUUID(), roomName);
+    const response = nextMessageWithOpcode(socket, 18);
+
+    await seedSoundboardCatalogEntry(
+      "dm-nonmember-server",
+      "dm-nonmember-sound",
+    );
+    socket.send(
+      JSON.stringify({
+        op: 106,
+        d: {
+          type: "soundboard.play",
+          server_key: "dm-call",
+          source_server_id: "dm-nonmember-server",
+          playback_id: createSoundboardPlaybackId(
+            TEST_SUBJECT,
+            "dm-nonmember-sound",
+          ),
+          sound_id: "dm-nonmember-sound",
+          name: "Airhorn",
+          media_url: "/api/soundboard/uploads/dm-nonmember-sound",
+        },
+      }),
+    );
+
+    await expect(response).resolves.toMatchObject({
+      d: { message: "Soundboard event was rejected" },
+    });
+    socket.close();
+  });
+
+  it("rejects a DM uploaded server sound after membership is removed", async () => {
+    const roomName = `dm-call-${TEST_SUBJECT}-${crypto.randomUUID()}`;
+    await seedSoundboardCatalogEntry("dm-removed-server", "dm-removed-sound");
+    await seedSoundboardMembership("dm-removed-server", TEST_SUBJECT);
+    await env.DB.prepare(
+      "DELETE FROM server_members WHERE server_id = ? AND user_id = ?",
+    )
+      .bind("dm-removed-server", TEST_SUBJECT)
+      .run();
+    const socket = await openVoiceSocket(
+      roomName,
+      TEST_SUBJECT,
+      "authenticated",
+      "",
+    );
+    await identifyVoiceSocket(socket, crypto.randomUUID(), roomName);
+    const response = nextMessageWithOpcode(socket, 18);
+
+    socket.send(
+      JSON.stringify({
+        op: 106,
+        d: {
+          type: "soundboard.play",
+          server_key: "dm-call",
+          source_server_id: "dm-removed-server",
+          playback_id: createSoundboardPlaybackId(
+            TEST_SUBJECT,
+            "dm-removed-sound",
+          ),
+          sound_id: "dm-removed-sound",
+          name: "Airhorn",
+          media_url: "/api/soundboard/uploads/dm-removed-sound",
+        },
+      }),
+    );
+
+    await expect(response).resolves.toMatchObject({
+      d: { message: "Soundboard event was rejected" },
+    });
+    socket.close();
+  });
+
+  it.each([
+    {
+      label: "forged source server",
+      sourceServerId: "dm-forged-other-server",
+      soundId: "dm-forged-sound",
+      mediaUrl: "/api/soundboard/uploads/dm-forged-sound",
+    },
+    {
+      label: "forged sound ID",
+      sourceServerId: "dm-forged-server",
+      soundId: "dm-forged-other",
+      mediaUrl: "/api/soundboard/uploads/dm-forged-other",
+    },
+    {
+      label: "mismatched canonical URL",
+      sourceServerId: "dm-forged-server",
+      soundId: "dm-forged-sound",
+      mediaUrl: "/api/soundboard/uploads/dm-forged-other",
+    },
+  ])("rejects a DM uploaded sound with a $label", async (caseData) => {
+    const roomName = `dm-call-${TEST_SUBJECT}-${crypto.randomUUID()}`;
+    await seedSoundboardCatalogEntry("dm-forged-server", "dm-forged-sound");
+    await seedSoundboardMembership("dm-forged-server", TEST_SUBJECT);
+    const socket = await openVoiceSocket(
+      roomName,
+      TEST_SUBJECT,
+      "authenticated",
+      "",
+    );
+    await identifyVoiceSocket(socket, crypto.randomUUID(), roomName);
+    const response = nextMessageWithOpcode(socket, 18);
+
+    socket.send(
+      JSON.stringify({
+        op: 106,
+        d: {
+          type: "soundboard.play",
+          server_key: "dm-call",
+          source_server_id: caseData.sourceServerId,
+          playback_id: createSoundboardPlaybackId(
+            TEST_SUBJECT,
+            caseData.soundId,
+          ),
+          sound_id: caseData.soundId,
+          name: "Airhorn",
+          media_url: caseData.mediaUrl,
+        },
+      }),
+    );
+
+    await expect(response).resolves.toMatchObject({
+      d: { message: "Soundboard event was rejected" },
     });
     socket.close();
   });
@@ -1614,6 +2645,99 @@ describe("VoiceRoom lifecycle", () => {
     socket.close();
   });
 
+  it("serves state requests while a radio mutation is stalled", async () => {
+    const roomName = crypto.randomUUID();
+    const room = env.VOICE_ROOM.get(env.VOICE_ROOM.idFromName(roomName));
+    let resolutionStarted = false;
+
+    await runInDurableObject(room, () => {
+      globalThis.fetch = async (input) => {
+        if (!String(input).includes("/json/stations/byuuid/")) {
+          return new Response(null, { status: 404 });
+        }
+        resolutionStarted = true;
+        await new Promise((resolve) => setTimeout(resolve, 500));
+        return new Response(
+          JSON.stringify([
+            {
+              stationuuid: RADIO_STATION_UUID,
+              name: "Stalled Radio Station",
+              url_resolved: "https://stream.example.com/stalled",
+            },
+          ]),
+          { headers: { "Content-Type": "application/json" } },
+        );
+      };
+    });
+
+    const socket = await openVoiceSocket(roomName);
+    await identifyVoiceSocket(socket, crypto.randomUUID(), roomName);
+    socket.send(
+      JSON.stringify({
+        op: 106,
+        d: {
+          type: "listen_together.enqueue",
+          room_slug: roomName,
+          entries: [
+            {
+              track: {
+                kind: "radio",
+                provider: "radio",
+                station_uuid: RADIO_STATION_UUID,
+              },
+            },
+          ],
+        },
+      }),
+    );
+    for (let attempt = 0; attempt < 20 && !resolutionStarted; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+    expect(resolutionStarted).toBe(true);
+
+    const stateRequest = nextMessageWithOpcodeAndType(
+      socket,
+      106,
+      "listen_together.snapshot",
+    );
+    socket.send(
+      JSON.stringify({
+        op: 106,
+        d: { type: "listen_together.state.request", room_slug: roomName },
+      }),
+    );
+
+    await expect(
+      Promise.race([
+        stateRequest,
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error("state request timed out")), 100),
+        ),
+      ]),
+    ).resolves.toMatchObject({
+      d: {
+        type: "listen_together.snapshot",
+        snapshot: { revision: 0, queue: [] },
+      },
+    });
+
+    const mutationSnapshot = nextMessageWithOpcodeAndType(
+      socket,
+      106,
+      "listen_together.snapshot",
+    );
+    await expect(mutationSnapshot).resolves.toMatchObject({
+      d: {
+        type: "listen_together.snapshot",
+        snapshot: {
+          revision: 1,
+          queue: [{ track: { title: "Stalled Radio Station" } }],
+        },
+      },
+    });
+    socket.close();
+  });
+
   it("schedules an alarm after queueing a finite music track", async () => {
     const roomName = crypto.randomUUID();
     const socket = await openVoiceSocket(roomName);
@@ -1793,6 +2917,230 @@ describe("VoiceRoom lifecycle", () => {
       },
     });
     socket.close();
+  });
+
+  it("broadcasts one canonical snapshot per changed mutation and none for no-ops", async () => {
+    const roomName = crypto.randomUUID();
+    const socket = await openVoiceSocket(roomName);
+    await identifyVoiceSocket(socket, crypto.randomUUID(), roomName);
+
+    const sendCommand = (d: Record<string, unknown>) =>
+      socket.send(JSON.stringify({ op: 106, d }));
+    const collectCommand = (d: Record<string, unknown>) =>
+      collectListenTogetherEvents(socket, () => sendCommand(d));
+
+    const enqueued = await collectCommand({
+      type: "listen_together.enqueue",
+      room_slug: roomName,
+      mode: "append",
+      entries: [listenTogetherMusicEntry()],
+    });
+    expect(enqueued).toHaveLength(1);
+    expect(enqueued[0]).toMatchObject({
+      type: "listen_together.snapshot",
+      snapshot: { revision: 1 },
+    });
+    const firstEntryId = enqueued[0]?.snapshot?.currentEntryId ?? "";
+
+    const paused = await collectCommand({
+      type: "listen_together.pause",
+      room_slug: roomName,
+      paused: true,
+      entryId: firstEntryId,
+    });
+    expect(paused).toHaveLength(1);
+    expect(paused[0]).toMatchObject({
+      type: "listen_together.snapshot",
+      snapshot: { revision: 2, paused: true },
+    });
+
+    const sought = await collectCommand({
+      type: "listen_together.seek",
+      room_slug: roomName,
+      positionMs: 250,
+      entryId: firstEntryId,
+    });
+    expect(sought).toHaveLength(1);
+    expect(sought[0]).toMatchObject({
+      type: "listen_together.snapshot",
+      snapshot: { revision: 3, positionMs: 250 },
+    });
+
+    const appended = await collectCommand({
+      type: "listen_together.enqueue",
+      room_slug: roomName,
+      mode: "append",
+      entries: [
+        {
+          ...listenTogetherMusicEntry(),
+          track: {
+            ...listenTogetherMusicEntry().track,
+            id: "music-2",
+            videoId: "dQw4w9WgXcQ-2",
+            title: "Second Track",
+          },
+        },
+      ],
+    });
+    expect(appended).toHaveLength(1);
+    expect(appended[0]).toMatchObject({
+      type: "listen_together.snapshot",
+      snapshot: { revision: 4 },
+    });
+    const secondEntryId = appended[0]?.snapshot?.queue?.[1]?.entryId;
+
+    const skipped = await collectCommand({
+      type: "listen_together.skip",
+      room_slug: roomName,
+      entryId: firstEntryId,
+    });
+    expect(skipped).toHaveLength(1);
+    expect(skipped[0]).toMatchObject({
+      type: "listen_together.snapshot",
+      snapshot: { revision: 5, currentEntryId: secondEntryId },
+    });
+
+    const cleared = await collectCommand({
+      type: "listen_together.clear",
+      room_slug: roomName,
+    });
+    expect(cleared).toHaveLength(1);
+    expect(cleared[0]).toMatchObject({
+      type: "listen_together.snapshot",
+      snapshot: { revision: 6, queue: [] },
+    });
+
+    const repeatedClear = await collectCommand({
+      type: "listen_together.clear",
+      room_slug: roomName,
+    });
+    expect(repeatedClear).toHaveLength(0);
+
+    const stateAfterRepeatedClear = await collectCommand({
+      type: "listen_together.state.request",
+      room_slug: roomName,
+    });
+    expect(stateAfterRepeatedClear).toHaveLength(1);
+    expect(stateAfterRepeatedClear[0]).toMatchObject({
+      type: "listen_together.snapshot",
+      snapshot: { revision: 6, queue: [] },
+    });
+
+    const noOp = await collectCommand({
+      type: "listen_together.play",
+      room_slug: roomName,
+    });
+    expect(noOp).toHaveLength(0);
+
+    const stale = await collectCommand({
+      type: "listen_together.skip",
+      room_slug: roomName,
+      entryId: firstEntryId,
+    });
+    expect(stale).toHaveLength(0);
+
+    const stateRequest = await collectCommand({
+      type: "listen_together.state.request",
+      room_slug: roomName,
+    });
+    expect(stateRequest).toHaveLength(1);
+    expect(stateRequest[0]).toMatchObject({
+      type: "listen_together.snapshot",
+      snapshot: { revision: 6, queue: [] },
+    });
+
+    socket.close();
+  });
+
+  it("selects Listen Together event envelopes per recipient capability", async () => {
+    const roomName = crypto.randomUUID();
+    const capable = await openVoiceSocket(roomName, "capable-user");
+    await identifyVoiceSocket(
+      capable,
+      crypto.randomUUID(),
+      roomName,
+      "capable-user",
+      true,
+    );
+    const legacy = await openVoiceSocket(roomName, "legacy-user");
+    await identifyVoiceSocket(
+      legacy,
+      crypto.randomUUID(),
+      roomName,
+      "legacy-user",
+      false,
+    );
+
+    const sendCommand = (d: Record<string, unknown>) =>
+      capable.send(JSON.stringify({ op: 106, d }));
+    const collectCommand = (d: Record<string, unknown>) =>
+      collectListenTogetherEventsForSockets([capable, legacy], () =>
+        sendCommand(d),
+      );
+
+    const enqueued = await collectCommand({
+      type: "listen_together.enqueue",
+      room_slug: roomName,
+      mode: "append",
+      entries: [listenTogetherMusicEntry()],
+    });
+    expect(enqueued[0]?.map((event) => event.type)).toEqual([
+      "listen_together.snapshot",
+    ]);
+    expect(enqueued[1]?.map((event) => event.type)).toEqual([
+      "listen_together.queue.updated",
+      "listen_together.playback.updated",
+    ]);
+    expect(enqueued[0]?.[0]?.snapshot).toMatchObject({ revision: 1 });
+    expect(enqueued[1]?.[0]?.snapshot).toEqual(enqueued[0]?.[0]?.snapshot);
+    expect(enqueued[1]?.[1]?.snapshot).toEqual(enqueued[0]?.[0]?.snapshot);
+
+    const currentEntryId = enqueued[0]?.[0]?.snapshot?.currentEntryId ?? "";
+    const appended = await collectCommand({
+      type: "listen_together.enqueue",
+      room_slug: roomName,
+      mode: "append",
+      entries: [
+        {
+          ...listenTogetherMusicEntry(),
+          track: {
+            ...listenTogetherMusicEntry().track,
+            id: "music-2",
+            videoId: "dQw4w9WgXcQ-2",
+            title: "Second Track",
+          },
+        },
+      ],
+    });
+    expect(appended[0]?.map((event) => event.type)).toEqual([
+      "listen_together.snapshot",
+    ]);
+    expect(appended[1]?.map((event) => event.type)).toEqual([
+      "listen_together.queue.updated",
+    ]);
+    expect(appended[0]?.[0]?.snapshot).toMatchObject({ revision: 2 });
+    expect(appended[1]?.[0]?.snapshot).toEqual(appended[0]?.[0]?.snapshot);
+
+    const paused = await collectCommand({
+      type: "listen_together.pause",
+      room_slug: roomName,
+      paused: true,
+      entryId: currentEntryId,
+    });
+    expect(paused[0]?.map((event) => event.type)).toEqual([
+      "listen_together.snapshot",
+    ]);
+    expect(paused[1]?.map((event) => event.type)).toEqual([
+      "listen_together.playback.updated",
+    ]);
+    expect(paused[0]?.[0]?.snapshot).toMatchObject({
+      revision: 3,
+      paused: true,
+    });
+    expect(paused[1]?.[0]?.snapshot).toEqual(paused[0]?.[0]?.snapshot);
+
+    capable.close();
+    legacy.close();
   });
 
   it("persists recently played across clear and reconnect snapshots", async () => {
@@ -2107,65 +3455,146 @@ describe("VoiceRoom lifecycle", () => {
     socket.close();
   });
 
-  it.each([
-    [
-      "/api/soundboard/uploads/airhorn.mp3",
-      "/api/soundboard/uploads/airhorn.mp3",
-    ],
-    [
-      "https://www.myinstants.com/media/sounds/airhorn.mp3",
-      "https://www.myinstants.com/media/sounds/airhorn.mp3",
-    ],
-  ])(
-    "allows approved soundboard media URL: %s",
-    async (mediaUrl, expectedMediaUrl) => {
-      const roomName = crypto.randomUUID();
-      const participantId = crypto.randomUUID();
-      const socket = await openVoiceSocket(roomName);
-      await identifyVoiceSocket(socket, participantId, roomName);
-      const listener = await openVoiceSocket(roomName);
-      await identifyVoiceSocket(listener, crypto.randomUUID(), roomName);
+  it("allows an approved external soundboard media URL", async () => {
+    const roomName = crypto.randomUUID();
+    const participantId = crypto.randomUUID();
+    const socket = await openVoiceSocket(roomName);
+    await identifyVoiceSocket(socket, participantId, roomName);
+    const listener = await openVoiceSocket(roomName);
+    await identifyVoiceSocket(listener, crypto.randomUUID(), roomName);
+    const mediaUrl = "https://www.myinstants.com/media/sounds/airhorn.mp3";
 
-      socket.send(
-        JSON.stringify({
-          op: 106,
-          d: {
-            type: "soundboard.play",
-            user_id: "forged-owner",
-            participant_id: "forged-participant",
-            server_key: "server-1",
-            playback_id: `s-${TEST_SUBJECT}-sound-1`,
-            sound_id: "sound-1",
-            name: "Airhorn",
-            media_url: mediaUrl,
-            volume: 4,
-            unexpected: "must not be broadcast",
-          },
-        }),
-      );
+    socket.send(
+      JSON.stringify({
+        op: 106,
+        d: {
+          type: "soundboard.play",
+          user_id: "forged-owner",
+          participant_id: "forged-participant",
+          server_key: "server-1",
+          playback_id: `s-${TEST_SUBJECT}-sound-1`,
+          sound_id: "sound-1",
+          name: "Airhorn",
+          media_url: mediaUrl,
+          volume: 4,
+          unexpected: "must not be broadcast",
+        },
+      }),
+    );
 
-      const response = await nextMessageWithOpcodeAndType(
-        listener,
-        106,
-        "soundboard.play",
-      );
-      expect(response.d).toEqual({
-        type: "soundboard.play",
-        user_id: TEST_SUBJECT,
-        participant_id: participantId,
-        server_key: "server-1",
-        playback_id: `s-${TEST_SUBJECT}-sound-1`,
-        sound_id: "sound-1",
-        name: "Airhorn",
-        media_url: expectedMediaUrl,
-        volume: 1,
-        sent_at: expect.any(Number),
-      });
+    const response = await nextMessageWithOpcodeAndType(
+      listener,
+      106,
+      "soundboard.play",
+    );
+    expect(response.d).toEqual({
+      type: "soundboard.play",
+      user_id: TEST_SUBJECT,
+      participant_id: participantId,
+      server_key: "server-1",
+      playback_id: `s-${TEST_SUBJECT}-sound-1`,
+      sound_id: "sound-1",
+      name: "Airhorn",
+      media_url: mediaUrl,
+      volume: 1,
+      sent_at: expect.any(Number),
+    });
 
-      socket.close();
-      listener.close();
-    },
-  );
+    socket.close();
+    listener.close();
+  });
+
+  it("uses an approved external media URL as the canonical soundboard source", async () => {
+    const roomName = crypto.randomUUID();
+    const participantId = crypto.randomUUID();
+    const socket = await openVoiceSocket(roomName);
+    await identifyVoiceSocket(socket, participantId, roomName);
+    const listener = await openVoiceSocket(roomName);
+    await identifyVoiceSocket(listener, crypto.randomUUID(), roomName);
+    const mediaUrl = "https://www.myinstants.com/media/sounds/airhorn.mp3";
+
+    socket.send(
+      JSON.stringify({
+        op: 106,
+        d: {
+          type: "soundboard.play",
+          server_key: "server-1",
+          playback_id: `s-${TEST_SUBJECT}-canonical`,
+          sound_id: "sound-1",
+          name: "Airhorn",
+          data_url: audioDataUrlForDecodedBytes(1),
+          media_url: mediaUrl,
+        },
+      }),
+    );
+
+    const response = await nextMessageWithOpcodeAndType(
+      listener,
+      106,
+      "soundboard.play",
+    );
+    expect(response.d).toEqual({
+      type: "soundboard.play",
+      participant_id: participantId,
+      user_id: TEST_SUBJECT,
+      server_key: "server-1",
+      playback_id: `s-${TEST_SUBJECT}-canonical`,
+      sound_id: "sound-1",
+      name: "Airhorn",
+      media_url: mediaUrl,
+      volume: 1,
+      sent_at: expect.any(Number),
+    });
+
+    socket.close();
+    listener.close();
+  });
+
+  it("keeps a valid external media URL when the legacy data URL is invalid", async () => {
+    const roomName = crypto.randomUUID();
+    const participantId = crypto.randomUUID();
+    const socket = await openVoiceSocket(roomName);
+    await identifyVoiceSocket(socket, participantId, roomName);
+    const listener = await openVoiceSocket(roomName);
+    await identifyVoiceSocket(listener, crypto.randomUUID(), roomName);
+    const mediaUrl = "https://www.myinstants.com/media/sounds/airhorn.mp3";
+
+    socket.send(
+      JSON.stringify({
+        op: 106,
+        d: {
+          type: "soundboard.play",
+          server_key: "server-1",
+          playback_id: `s-${TEST_SUBJECT}-invalid-legacy`,
+          sound_id: "sound-1",
+          name: "Airhorn",
+          data_url: "data:audio/wav;base64,AAA==",
+          media_url: mediaUrl,
+        },
+      }),
+    );
+
+    const response = await nextMessageWithOpcodeAndType(
+      listener,
+      106,
+      "soundboard.play",
+    );
+    expect(response.d).toEqual({
+      type: "soundboard.play",
+      participant_id: participantId,
+      user_id: TEST_SUBJECT,
+      server_key: "server-1",
+      playback_id: `s-${TEST_SUBJECT}-invalid-legacy`,
+      sound_id: "sound-1",
+      name: "Airhorn",
+      media_url: mediaUrl,
+      volume: 1,
+      sent_at: expect.any(Number),
+    });
+
+    socket.close();
+    listener.close();
+  });
 
   it("rejects an arbitrary HTTPS soundboard media URL", async () => {
     const roomName = crypto.randomUUID();
@@ -2189,6 +3618,232 @@ describe("VoiceRoom lifecycle", () => {
       d: { code: 4000, message: "Soundboard event was rejected" },
     });
     socket.close();
+  });
+
+  it.each([
+    "https://www.myinstants.com/media/sounds/airhorn.mp3?token=secret",
+    "https://www.myinstants.com/media/sounds/airhorn.mp3#access_token=secret",
+    "/api/soundboard/uploads/sound-1?token=secret",
+    "/api/soundboard/uploads/sound-1?download=1",
+    "/api/soundboard/uploads/sound-1#fragment",
+    "https://www.myinstants.com/media/sounds/airhorn.mp3?download=1",
+    "https://www.myinstants.com/media/sounds/airhorn.mp3#clip",
+  ])(
+    "rejects credential-bearing soundboard URL metadata: %s",
+    async (mediaUrl) => {
+      const roomName = crypto.randomUUID();
+      const socket = await openVoiceSocket(roomName);
+      await identifyVoiceSocket(socket, crypto.randomUUID(), roomName);
+      const response = nextMessageWithOpcodeOrNull(socket, 18);
+      const broadcast = nextMessageWithOpcodeAndTypeOrNull(
+        socket,
+        106,
+        "soundboard.play",
+      );
+
+      socket.send(
+        JSON.stringify({
+          op: 106,
+          d: {
+            type: "soundboard.play",
+            server_key: "server-1",
+            playback_id: `s-${TEST_SUBJECT}-credential-url`,
+            name: "Airhorn",
+            media_url: mediaUrl,
+          },
+        }),
+      );
+
+      expect(await response).toMatchObject({
+        op: 18,
+        d: { code: 4000, message: "Soundboard event was rejected" },
+      });
+      expect(await broadcast).toBeNull();
+      socket.close();
+    },
+  );
+
+  it.each([
+    ["malformed base64", "data:audio/wav;base64,A"],
+    ["invalid padding", "data:audio/wav;base64,AAA=="],
+    ["padding in the middle", "data:audio/wav;base64,AA=A"],
+    ["noncanonical padding bits", "data:audio/wav;base64,AB=="],
+  ])("rejects %s soundboard data URLs", async (_label, dataUrl) => {
+    const roomName = crypto.randomUUID();
+    const socket = await openVoiceSocket(roomName);
+    await identifyVoiceSocket(socket, crypto.randomUUID(), roomName);
+    const response = nextMessageWithOpcodeOrNull(socket, 18);
+    const broadcast = nextMessageWithOpcodeAndTypeOrNull(
+      socket,
+      106,
+      "soundboard.play",
+    );
+
+    socket.send(
+      JSON.stringify({
+        op: 106,
+        d: {
+          type: "soundboard.play",
+          server_key: "server-1",
+          playback_id: `s-${TEST_SUBJECT}-invalid-data-url`,
+          sound_id: "sound-1",
+          name: "Custom",
+          data_url: dataUrl,
+        },
+      }),
+    );
+
+    expect(await response).toMatchObject({
+      op: 18,
+      d: { code: 4000, message: "Soundboard event was rejected" },
+    });
+    expect(await broadcast).toBeNull();
+    socket.close();
+  });
+
+  it.each([
+    "/api/attachments/clip.mp3",
+    "/api/soundboard/../clip.mp3",
+    "/api/soundboard/uploads/../clip.mp3",
+    "/api/soundboard/uploads/%2e%2e/clip.mp3",
+    "/api/soundboard/uploads/%252e%252e/clip.mp3",
+    "/api/soundboard/uploads/%2f..%2fclip.mp3",
+  ])("rejects unsafe local soundboard media URL: %s", async (mediaUrl) => {
+    const roomName = crypto.randomUUID();
+    const socket = await openVoiceSocket(roomName);
+    await identifyVoiceSocket(socket, crypto.randomUUID(), roomName);
+    const response = nextMessageWithOpcodeOrNull(socket, 18);
+    const broadcast = nextMessageWithOpcodeAndTypeOrNull(
+      socket,
+      106,
+      "soundboard.play",
+    );
+
+    socket.send(
+      JSON.stringify({
+        op: 106,
+        d: {
+          type: "soundboard.play",
+          server_key: "server-1",
+          playback_id: `s-${TEST_SUBJECT}-unsafe-media`,
+          name: "Custom",
+          media_url: mediaUrl,
+        },
+      }),
+    );
+
+    expect(await response).toMatchObject({
+      op: 18,
+      d: { code: 4000, message: "Soundboard event was rejected" },
+    });
+    expect(await broadcast).toBeNull();
+    socket.close();
+  });
+
+  it("rejects a local soundboard media URL that is not bound to a catalog row", async () => {
+    const roomName = crypto.randomUUID();
+    const socket = await openVoiceSocket(roomName);
+    await identifyVoiceSocket(socket, crypto.randomUUID(), roomName);
+    const response = nextMessageWithOpcodeOrNull(socket, 18);
+    const broadcast = nextMessageWithOpcodeAndTypeOrNull(
+      socket,
+      106,
+      "soundboard.play",
+    );
+
+    socket.send(
+      JSON.stringify({
+        op: 106,
+        d: {
+          type: "soundboard.play",
+          server_key: "server-1",
+          playback_id: `s-${TEST_SUBJECT}-catalog-media`,
+          sound_id: "sound-1",
+          name: "Airhorn",
+          media_url: "/api/soundboard/uploads/sound-1",
+        },
+      }),
+    );
+
+    expect(await response).toMatchObject({
+      op: 18,
+      d: { code: 4000, message: "Soundboard event was rejected" },
+    });
+    expect(await broadcast).toBeNull();
+    socket.close();
+  });
+
+  it("allows a local soundboard media URL only when the catalog row matches the admitted server", async () => {
+    const roomName = crypto.randomUUID();
+    const participantId = crypto.randomUUID();
+    const socket = await openVoiceSocket(roomName);
+    await identifyVoiceSocket(socket, participantId, roomName);
+    const listener = await openVoiceSocket(roomName);
+    await identifyVoiceSocket(listener, crypto.randomUUID(), roomName);
+    await seedSoundboardCatalogEntry("server-1", "sound-1");
+
+    socket.send(
+      JSON.stringify({
+        op: 106,
+        d: {
+          type: "soundboard.play",
+          server_key: "server-1",
+          playback_id: `s-${TEST_SUBJECT}-catalog-media`,
+          sound_id: "sound-1",
+          name: "Airhorn",
+          media_url: "/api/soundboard/uploads/sound-1",
+        },
+      }),
+    );
+
+    const response = await nextMessageWithOpcodeAndType(
+      listener,
+      106,
+      "soundboard.play",
+    );
+    expect(response.d).toMatchObject({
+      media_url: "/api/soundboard/uploads/sound-1",
+      sound_id: "sound-1",
+      server_key: "server-1",
+    });
+
+    socket.close();
+    listener.close();
+  });
+
+  it("closes an already-connected server voice socket after membership is revoked", async () => {
+    const roomName = crypto.randomUUID();
+    await seedSoundboardMembership("server-1", TEST_SUBJECT);
+    const socket = await openVoiceSocket(roomName);
+    await identifyVoiceSocket(socket, crypto.randomUUID(), roomName);
+    await env.DB.prepare(
+      "DELETE FROM server_members WHERE server_id = ? AND user_id = ?",
+    )
+      .bind("server-1", TEST_SUBJECT)
+      .run();
+
+    const response = nextMessageWithOpcode(socket, 18);
+    const closed = new Promise<void>((resolve) => {
+      socket.addEventListener("close", () => resolve(), { once: true });
+    });
+    socket.send(
+      JSON.stringify({
+        op: 106,
+        d: {
+          type: "soundboard.play",
+          server_key: "server-1",
+          playback_id: createSoundboardPlaybackId(TEST_SUBJECT, "ping"),
+          sound_id: "ping",
+          name: "Ping",
+        },
+      }),
+    );
+
+    await expect(response).resolves.toMatchObject({
+      op: 18,
+      d: { message: "Server membership is required for soundboard actions" },
+    });
+    await expect(closed).resolves.toBeUndefined();
   });
 
   it("rejects soundboard commands whose playback ID is not owned by the caller", async () => {
@@ -2215,6 +3870,136 @@ describe("VoiceRoom lifecycle", () => {
       op: 18,
       d: { code: 4000, message: "Soundboard event was rejected" },
     });
+    socket.close();
+  });
+
+  it.each([
+    {
+      type: "soundboard.stop",
+      playback_id: createSoundboardPlaybackId(TEST_SUBJECT, "control"),
+    },
+    {
+      type: "soundboard.pause-set",
+      playback_id: createSoundboardPlaybackId(TEST_SUBJECT, "control"),
+      paused: true,
+    },
+    {
+      type: "soundboard.volume-set",
+      playback_id: createSoundboardPlaybackId(TEST_SUBJECT, "control"),
+      volume: 0.25,
+    },
+  ])("accepts an own %s control", async (event) => {
+    const roomName = crypto.randomUUID();
+    const participantId = crypto.randomUUID();
+    const socket = await openVoiceSocket(roomName);
+    await identifyVoiceSocket(socket, participantId, roomName);
+    const listener = await openVoiceSocket(roomName);
+    await identifyVoiceSocket(listener, crypto.randomUUID(), roomName);
+
+    socket.send(
+      JSON.stringify({
+        op: 106,
+        d: { server_key: "server-1", ...event },
+      }),
+    );
+
+    const response = await nextMessageWithOpcodeAndType(
+      listener,
+      106,
+      event.type,
+    );
+    expect(response.d).toMatchObject({
+      ...event,
+      participant_id: participantId,
+      user_id: TEST_SUBJECT,
+      server_key: "server-1",
+    });
+
+    socket.close();
+    listener.close();
+  });
+
+  it("rejects a prefix-colliding legacy control from user", async () => {
+    const roomName = crypto.randomUUID();
+    const owner = await openVoiceSocket(roomName, "user-other");
+    await identifyVoiceSocket(
+      owner,
+      crypto.randomUUID(),
+      roomName,
+      "user-other",
+    );
+    const caller = await openVoiceSocket(roomName, "user");
+    await identifyVoiceSocket(caller, crypto.randomUUID(), roomName, "user");
+    const response = nextMessageWithOpcode(caller, 18);
+    const broadcast = nextMessageWithOpcodeAndTypeOrNull(
+      owner,
+      106,
+      "soundboard.stop",
+    );
+
+    caller.send(
+      JSON.stringify({
+        op: 106,
+        d: {
+          type: "soundboard.stop",
+          server_key: "server-1",
+          playback_id: "s-user-other-control",
+        },
+      }),
+    );
+
+    expect(await response).toMatchObject({
+      op: 18,
+      d: { code: 4000, message: "Soundboard event was rejected" },
+    });
+    expect(await broadcast).toBeNull();
+    owner.close();
+    caller.close();
+  });
+
+  it.each([
+    {
+      type: "soundboard.stop",
+      playback_id: `s-${TEST_SUBJECT}-cross-user-control`,
+    },
+    {
+      type: "soundboard.pause-set",
+      playback_id: `s-${TEST_SUBJECT}-cross-user-control`,
+      paused: true,
+    },
+    {
+      type: "soundboard.volume-set",
+      playback_id: `s-${TEST_SUBJECT}-cross-user-control`,
+      volume: 0.25,
+    },
+  ])("rejects a cross-user %s control", async (event) => {
+    const roomName = crypto.randomUUID();
+    const socket = await openVoiceSocket(roomName, "other-user");
+    await identifyVoiceSocket(
+      socket,
+      crypto.randomUUID(),
+      roomName,
+      "other-user",
+    );
+    const response = nextMessageWithOpcodeOrNull(socket, 18);
+    const broadcast = nextMessageWithOpcodeAndTypeOrNull(
+      socket,
+      106,
+      event.type,
+    );
+
+    socket.send(
+      JSON.stringify({
+        op: 106,
+        d: { server_key: "server-1", ...event },
+      }),
+    );
+
+    expect(await response).toMatchObject({
+      op: 18,
+      d: { code: 4000, message: "Soundboard event was rejected" },
+    });
+    expect(await broadcast).toBeNull();
     socket.close();
   });
 
@@ -2248,6 +4033,7 @@ describe("VoiceRoom lifecycle", () => {
     await identifyVoiceSocket(socket, participantId, roomName);
     const listener = await openVoiceSocket(roomName);
     await identifyVoiceSocket(listener, crypto.randomUUID(), roomName);
+    await seedSoundboardCatalogEntry("server-1", "sound-1");
 
     socket.send(
       JSON.stringify({
@@ -2259,7 +4045,7 @@ describe("VoiceRoom lifecycle", () => {
           sound: {
             id: "sound-1",
             name: "  Airhorn  ",
-            file_url: "/api/soundboard/uploads/airhorn.mp3",
+            file_url: "/api/soundboard/uploads/sound-1",
             emoji: "!",
             volume: 3,
             unknown: "removed",
@@ -2280,10 +4066,10 @@ describe("VoiceRoom lifecycle", () => {
       server_key: "server-1",
       sound: {
         id: "sound-1",
-        name: "Airhorn",
-        file_url: "/api/soundboard/uploads/airhorn.mp3",
-        emoji: "!",
-        volume: 1,
+        name: "Canonical Airhorn",
+        file_url: "/api/soundboard/uploads/sound-1",
+        emoji: "🎺",
+        volume: 0.4,
       },
       sent_at: expect.any(Number),
     });
@@ -2291,13 +4077,325 @@ describe("VoiceRoom lifecycle", () => {
     listener.close();
   });
 
-  it("rejects oversized soundboard data URLs", async () => {
+  it("allows a catalog update by a MANAGE_SERVER member using canonical D1 metadata", async () => {
+    const roomName = crypto.randomUUID();
+    const managerId = `manager-${crypto.randomUUID()}`;
+    const participantId = crypto.randomUUID();
+    await seedSoundboardCatalogEntry("server-1", "sound-1", "uploader-1", {
+      name: "Manager Canonical",
+      emoji: "🔊",
+      volume: 0.6,
+    });
+    await seedManageServerPermission("server-1", managerId);
+    const socket = await openVoiceSocket(roomName, managerId);
+    await identifyVoiceSocket(socket, participantId, roomName, managerId);
+    const listener = await openVoiceSocket(roomName, "listener");
+    await identifyVoiceSocket(
+      listener,
+      crypto.randomUUID(),
+      roomName,
+      "listener",
+    );
+
+    socket.send(
+      JSON.stringify({
+        op: 106,
+        d: {
+          type: "soundboard.catalog-updated",
+          server_key: "server-1",
+          sound: {
+            id: "sound-1",
+            name: "Spoofed Name",
+            emoji: "!",
+            volume: 0,
+          },
+        },
+      }),
+    );
+
+    await expect(
+      nextMessageWithOpcodeAndType(listener, 106, "soundboard.catalog-updated"),
+    ).resolves.toMatchObject({
+      d: {
+        user_id: managerId,
+        sound: {
+          id: "sound-1",
+          name: "Manager Canonical",
+          emoji: "🔊",
+          volume: 0.6,
+          file_url: "/api/soundboard/uploads/sound-1",
+        },
+      },
+    });
+
+    socket.close();
+    listener.close();
+  });
+
+  it("rejects a catalog update from a non-owner without MANAGE_SERVER", async () => {
+    const roomName = crypto.randomUUID();
+    const unauthorizedId = `unauthorized-${crypto.randomUUID()}`;
+    await seedSoundboardCatalogEntry("server-1", "sound-1", "uploader-2");
+    const socket = await openVoiceSocket(roomName, unauthorizedId);
+    await identifyVoiceSocket(
+      socket,
+      crypto.randomUUID(),
+      roomName,
+      unauthorizedId,
+    );
+    const response = nextMessageWithOpcode(socket, 18);
+    const broadcast = nextMessageWithOpcodeAndTypeOrNull(
+      socket,
+      106,
+      "soundboard.catalog-updated",
+    );
+
+    socket.send(
+      JSON.stringify({
+        op: 106,
+        d: {
+          type: "soundboard.catalog-updated",
+          server_key: "server-1",
+          sound: { id: "sound-1", name: "Spoofed" },
+        },
+      }),
+    );
+
+    await expect(response).resolves.toMatchObject({
+      d: { message: "Soundboard event was rejected" },
+    });
+    await expect(broadcast).resolves.toBeNull();
+    socket.close();
+  });
+
+  it("rejects a catalog update for a server outside the signed voice admission", async () => {
     const roomName = crypto.randomUUID();
     const socket = await openVoiceSocket(roomName);
     await identifyVoiceSocket(socket, crypto.randomUUID(), roomName);
-    const oversizedDataUrl = `data:audio/wav;base64,${"A".repeat(700_000)}`;
+    const response = nextMessageWithOpcodeOrNull(socket, 18);
+    const broadcast = nextMessageWithOpcodeAndTypeOrNull(
+      socket,
+      106,
+      "soundboard.catalog-updated",
+    );
 
-    const response = nextMessageWithOpcode(socket, 18);
+    socket.send(
+      JSON.stringify({
+        op: 106,
+        d: {
+          type: "soundboard.catalog-updated",
+          server_key: "other-server",
+          sound: { id: "sound-1", name: "Airhorn" },
+        },
+      }),
+    );
+
+    await expect(response).resolves.toMatchObject({
+      op: 18,
+      d: { code: 4000, message: "Soundboard event was rejected" },
+    });
+    await expect(broadcast).resolves.toBeNull();
+    socket.close();
+  });
+
+  it("rejects a catalog update for an unknown sound id even on the admitted server", async () => {
+    const roomName = crypto.randomUUID();
+    const socket = await openVoiceSocket(roomName);
+    await identifyVoiceSocket(socket, crypto.randomUUID(), roomName);
+    const response = nextMessageWithOpcodeOrNull(socket, 18);
+    const broadcast = nextMessageWithOpcodeAndTypeOrNull(
+      socket,
+      106,
+      "soundboard.catalog-updated",
+    );
+
+    socket.send(
+      JSON.stringify({
+        op: 106,
+        d: {
+          type: "soundboard.catalog-updated",
+          server_key: "server-1",
+          sound: {
+            id: "missing-sound",
+            name: "Missing",
+            file_url: "/api/soundboard/uploads/missing-sound",
+          },
+        },
+      }),
+    );
+
+    await expect(response).resolves.toMatchObject({
+      op: 18,
+      d: { code: 4000, message: "Soundboard event was rejected" },
+    });
+    await expect(broadcast).resolves.toBeNull();
+    socket.close();
+  });
+
+  it("prunes expired legacy soundboard playback owner rows", async () => {
+    const roomName = crypto.randomUUID();
+    const room = env.VOICE_ROOM.get(env.VOICE_ROOM.idFromName(roomName));
+    const socket = await openVoiceSocket(roomName);
+    await identifyVoiceSocket(socket, crypto.randomUUID(), roomName);
+
+    await runInDurableObject(room, (instance) => {
+      const sql = (instance as { sql: SqlStorage }).sql;
+      sql.exec(
+        `INSERT OR REPLACE INTO soundboard_legacy_playback_owners (playback_id, owner_id, created_at)
+         VALUES (?, ?, ?)`,
+        `s-${TEST_SUBJECT}-stale`,
+        TEST_SUBJECT,
+        Date.now() - 11 * 60 * 1000,
+      );
+    });
+
+    await runDurableObjectAlarm(room);
+
+    await runInDurableObject(room, (instance) => {
+      const sql = (instance as { sql: SqlStorage }).sql;
+      const rows = [
+        ...sql.exec(
+          "SELECT playback_id FROM soundboard_legacy_playback_owners WHERE playback_id = ?",
+          `s-${TEST_SUBJECT}-stale`,
+        ),
+      ];
+      expect(rows).toHaveLength(0);
+    });
+
+    socket.close();
+  });
+
+  it("accepts soundboard data URLs just below the decoded byte cap", async () => {
+    const roomName = crypto.randomUUID();
+    const participantId = crypto.randomUUID();
+    const socket = await openVoiceSocket(roomName);
+    await identifyVoiceSocket(socket, participantId, roomName);
+    const listener = await openVoiceSocket(roomName);
+    await identifyVoiceSocket(listener, crypto.randomUUID(), roomName);
+    const dataUrl = audioDataUrlForDecodedBytes(
+      MAX_SOUNDBOARD_DATA_URL_BYTES - 1,
+    );
+
+    socket.send(
+      JSON.stringify({
+        op: 106,
+        d: {
+          type: "soundboard.play",
+          server_key: "server-1",
+          playback_id: `s-${TEST_SUBJECT}-under-cap`,
+          name: "Custom",
+          data_url: dataUrl,
+        },
+      }),
+    );
+
+    const response = await nextMessageWithOpcodeAndType(
+      listener,
+      106,
+      "soundboard.play",
+    );
+    expect(response.d).toEqual({
+      type: "soundboard.play",
+      participant_id: participantId,
+      user_id: TEST_SUBJECT,
+      server_key: "server-1",
+      playback_id: `s-${TEST_SUBJECT}-under-cap`,
+      name: "Custom",
+      data_url: dataUrl,
+      volume: 1,
+      sent_at: expect.any(Number),
+    });
+
+    socket.close();
+    listener.close();
+  });
+
+  it("accepts a soundboard data URL at the decoded byte cap", async () => {
+    const roomName = crypto.randomUUID();
+    const participantId = crypto.randomUUID();
+    const socket = await openVoiceSocket(roomName);
+    await identifyVoiceSocket(socket, participantId, roomName);
+    const listener = await openVoiceSocket(roomName);
+    await identifyVoiceSocket(listener, crypto.randomUUID(), roomName);
+    const dataUrl = audioDataUrlForDecodedBytes(MAX_SOUNDBOARD_DATA_URL_BYTES);
+
+    socket.send(
+      JSON.stringify({
+        op: 106,
+        d: {
+          type: "soundboard.play",
+          server_key: "server-1",
+          playback_id: `s-${TEST_SUBJECT}-at-cap`,
+          name: "Custom",
+          data_url: dataUrl,
+        },
+      }),
+    );
+
+    const response = await nextMessageWithOpcodeAndType(
+      listener,
+      106,
+      "soundboard.play",
+    );
+    expect(response.d).toMatchObject({
+      data_url: dataUrl,
+      playback_id: `s-${TEST_SUBJECT}-at-cap`,
+    });
+
+    socket.close();
+    listener.close();
+  });
+
+  it("rejects an oversized data URL even when a sound ID is supplied", async () => {
+    const roomName = crypto.randomUUID();
+    const socket = await openVoiceSocket(roomName);
+    await identifyVoiceSocket(socket, crypto.randomUUID(), roomName);
+    const oversizedDataUrl = audioDataUrlForDecodedBytes(
+      MAX_SOUNDBOARD_DATA_URL_BYTES + 1,
+    );
+    const response = nextMessageWithOpcodeOrNull(socket, 18);
+    const broadcast = nextMessageWithOpcodeAndTypeOrNull(
+      socket,
+      106,
+      "soundboard.play",
+    );
+
+    socket.send(
+      JSON.stringify({
+        op: 106,
+        d: {
+          type: "soundboard.play",
+          server_key: "server-1",
+          playback_id: `s-${TEST_SUBJECT}-oversized-with-id`,
+          sound_id: "sound-1",
+          name: "Custom",
+          data_url: oversizedDataUrl,
+        },
+      }),
+    );
+
+    expect(await response).toMatchObject({
+      op: 18,
+      d: { code: 4000, message: "Soundboard event was rejected" },
+    });
+    expect(await broadcast).toBeNull();
+    socket.close();
+  });
+
+  it("rejects oversized soundboard data URLs before broadcast", async () => {
+    const roomName = crypto.randomUUID();
+    const socket = await openVoiceSocket(roomName);
+    await identifyVoiceSocket(socket, crypto.randomUUID(), roomName);
+    const oversizedDataUrl = audioDataUrlForDecodedBytes(
+      MAX_SOUNDBOARD_DATA_URL_BYTES + 1,
+    );
+
+    const response = nextMessageWithOpcodeOrNull(socket, 18);
+    const broadcast = nextMessageWithOpcodeAndTypeOrNull(
+      socket,
+      106,
+      "soundboard.play",
+    );
     socket.send(
       JSON.stringify({
         op: 106,
@@ -2314,6 +4412,7 @@ describe("VoiceRoom lifecycle", () => {
       op: 18,
       d: { code: 4000, message: "Soundboard event was rejected" },
     });
+    expect(await broadcast).toBeNull();
     socket.close();
   });
 

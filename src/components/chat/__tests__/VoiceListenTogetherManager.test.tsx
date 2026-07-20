@@ -545,6 +545,53 @@ describe("VoiceListenTogetherManager", () => {
     );
   });
 
+  it.each([
+    "listen_together.queue.updated",
+    "listen_together.playback.updated",
+  ] as const)(
+    "applies legacy %s events like canonical snapshots",
+    async (eventType) => {
+      const listeners = new Map<string, (event: unknown) => void>();
+      const sfu = {
+        on: vi.fn((event: string, listener: (event: unknown) => void) => {
+          listeners.set(event, listener);
+          return () => listeners.delete(event);
+        }),
+        voiceGW: { sendAppEvent: vi.fn() },
+      };
+
+      render(
+        <VoiceListenTogetherManager
+          sfu={sfu as never}
+          roomSlug="room-1"
+          voiceSessionId="voice-session-1"
+        />,
+      );
+
+      await waitFor(() => expect(listeners.has("app-event")).toBe(true));
+      const nextSnapshot = {
+        ...makeSnapshot(),
+        revision: 2,
+        paused: true,
+        anchorPositionMs: 2_000,
+        positionMs: 2_000,
+        lastUpdatedAt: 2_000,
+      };
+
+      act(() => {
+        listeners.get("app-event")?.({
+          type: eventType,
+          room_slug: "room-1",
+          snapshot: nextSnapshot,
+        });
+      });
+
+      expect(
+        useListenTogetherStore.getState().rooms["room-1"]?.snapshot,
+      ).toEqual(nextSnapshot);
+    },
+  );
+
   it("applies fallback details for an inbound room error event", async () => {
     const listeners = new Map<string, (event: unknown) => void>();
     const sfu = {

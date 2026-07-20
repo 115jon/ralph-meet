@@ -226,7 +226,12 @@ describe("listen together room state helpers", () => {
       1_000,
     );
 
-    const cleared = clearListenTogether("room-1", started.state, 2_000);
+    const cleared = clearListenTogether(
+      "room-1",
+      started.queue,
+      started.state,
+      2_000,
+    );
 
     expect(cleared.queue).toEqual([]);
     expect(cleared.state.recentlyPlayed).toHaveLength(1);

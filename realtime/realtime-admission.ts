@@ -14,6 +14,7 @@ export interface RealtimeAdmissionContext {
   expiresAt: number;
   nonceDigest: string;
   roomSlug: string;
+  serverId?: string;
   subject: string;
 }
 
@@ -50,6 +51,7 @@ export async function createRealtimeAdmissionContext(
     expiresAt: claims.expiresAt,
     nonceDigest: await digestNonce(claims.nonce),
     roomSlug: claims.roomSlug,
+    ...(claims.serverId ? { serverId: claims.serverId } : {}),
     subject: claims.subject,
   };
 }
@@ -77,6 +79,9 @@ export function appendRealtimeAdmissionHeaders(
   next.set(`${ADMISSION_HEADER_PREFIX}expires-at`, String(context.expiresAt));
   next.set(`${ADMISSION_HEADER_PREFIX}nonce-digest`, context.nonceDigest);
   next.set(`${ADMISSION_HEADER_PREFIX}room-slug`, context.roomSlug);
+  if (context.serverId) {
+    next.set(`${ADMISSION_HEADER_PREFIX}server-id`, context.serverId);
+  }
   next.set(`${ADMISSION_HEADER_PREFIX}subject`, context.subject);
   return next;
 }
@@ -101,6 +106,7 @@ export function getRealtimeAdmissionFromHeaders(
   const expiresAtRaw = headers.get(`${ADMISSION_HEADER_PREFIX}expires-at`);
   const nonceDigest = headers.get(`${ADMISSION_HEADER_PREFIX}nonce-digest`);
   const roomSlug = headers.get(`${ADMISSION_HEADER_PREFIX}room-slug`);
+  const serverId = headers.get(`${ADMISSION_HEADER_PREFIX}server-id`);
   const subject = headers.get(`${ADMISSION_HEADER_PREFIX}subject`);
   const expiresAt = Number(expiresAtRaw);
 
@@ -124,6 +130,7 @@ export function getRealtimeAdmissionFromHeaders(
     expiresAt,
     nonceDigest,
     roomSlug,
+    ...(serverId ? { serverId } : {}),
     subject,
   };
 }

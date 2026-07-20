@@ -14,6 +14,7 @@ export interface SocketTicketClaims {
   expiresAt: number;
   nonce: string;
   roomSlug: string;
+  serverId?: string;
   subject: string;
 }
 
@@ -161,7 +162,10 @@ function isValidClaims(value: SocketTicketClaims): boolean {
     ticketTokenPattern.test(value.nonce) &&
     value.nonce.length >= 8 &&
     ticketTokenPattern.test(value.subject) &&
-    value.subject.length >= 1
+    value.subject.length >= 1 &&
+    (value.serverId === undefined ||
+      (typeof value.serverId === "string" &&
+        roomSlugPattern.test(value.serverId)))
   );
 }
 
@@ -176,6 +180,9 @@ function parseClaims(bytes: Uint8Array): SocketTicketClaims | null {
       expiresAt: value.expiresAt as number,
       nonce: value.nonce as string,
       roomSlug: value.roomSlug as string,
+      ...(value.serverId !== undefined
+        ? { serverId: value.serverId as string }
+        : {}),
       subject: value.subject as string,
     };
 

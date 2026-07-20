@@ -1,13 +1,25 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { apiError, apiSuccess, getDB, requireAuth } from "@/lib/api-helpers";
+import {
+  apiError,
+  apiSuccess,
+  getBucket,
+  getDB,
+  requireAuth,
+} from "@/lib/api-helpers";
 import { cacheFetch, cacheDel, CacheKey, CacheTTL } from "@/lib/cache";
 import { listServerSoundboardSounds } from "@/services/soundboard.service";
 import { getUserPermissions } from "@/lib/require-permission";
 import { hasPermission, PERMISSIONS } from "@/lib/permissions";
+import { getSoundboardUploadUrl } from "@/lib/voice/soundboard-media";
+import { logger } from "@/lib/logger";
+import {
+  recordR2CleanupFailure,
+  retryR2Cleanup,
+} from "@/services/r2-cleanup.service";
 
 // GET /api/servers/:id/soundboard — list server soundboard clips
-const GET = async ({ request, params }: any) => {
+export const GET = async ({ request, params }: any) => {
   const authResult = await requireAuth(request);
   if (authResult instanceof Response) return authResult;
   const { userId } = authResult;
@@ -29,7 +41,12 @@ const GET = async ({ request, params }: any) => {
     () => listServerSoundboardSounds(db, serverId),
   );
 
-  return apiSuccess(sounds);
+  return apiSuccess(
+    sounds.map((sound) => ({
+      ...sound,
+      file_url: getSoundboardUploadUrl(sound.id),
+    })),
+  );
 };
 
 // DELETE /api/servers/:id/soundboard?soundId=XYZ
@@ -66,13 +83,15 @@ const DELETE = async ({ request, params }: any) => {
     const canManageServer =
       isOwner || hasPermission(userPerms, PERMISSIONS.MANAGE_SERVER);
 
+    await retryR2Cleanup(db, getBucket());
+
     // Find the attachment
     const attachment = await db
       .prepare(
-        `SELECT user_id FROM attachments WHERE id = ? AND soundboard_server_id = ?`,
+        `SELECT user_id, file_key FROM attachments WHERE id = ? AND soundboard_server_id = ?`,
       )
       .bind(soundId, serverId)
-      .first<{ user_id: string }>();
+      .first<{ user_id: string; file_key: string }>();
 
     if (!attachment) return apiError("Sound not found", 404);
 
@@ -87,14 +106,42 @@ const DELETE = async ({ request, params }: any) => {
       .bind(soundId, serverId)
       .run();
 
+    try {
+      await getBucket().delete(attachment.file_key);
+    } catch (error) {
+      logger.error("soundboard_delete_cleanup_failed", {
+        soundId,
+        serverId,
+        fileKey: attachment.file_key,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      try {
+        await recordR2CleanupFailure(db, attachment.file_key, error);
+      } catch (queueError) {
+        logger.error("soundboard_delete_cleanup_record_failed", {
+          soundId,
+          serverId,
+          fileKey: attachment.file_key,
+          error:
+            queueError instanceof Error
+              ? queueError.message
+              : String(queueError),
+        });
+      }
+    }
+
     await cacheDel(CacheKey.serverSoundboard(serverId));
 
     return apiSuccess({ deleted: true });
-  } catch (err: any) {
-    console.error("DELETE soundboard error:", err.stack || err);
+  } catch (err: unknown) {
+    logger.error("DELETE soundboard error", {
+      error: err instanceof Error ? err.message : String(err),
+    });
     return apiError("Internal server error", 500);
   }
 };
+
+export { DELETE };
 
 // PATCH /api/servers/:id/soundboard?soundId=XYZ
 const PATCH = async ({ request, params }: any) => {

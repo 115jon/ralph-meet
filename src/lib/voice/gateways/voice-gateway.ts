@@ -140,6 +140,7 @@ export class VoiceGateway extends BaseGateway<VoiceGatewayEvents> {
             d: {
               participant_id: this.participantId!,
               voice_token: this.voiceToken!,
+              supports_listen_together_snapshot_events: true,
             },
           },
           true,

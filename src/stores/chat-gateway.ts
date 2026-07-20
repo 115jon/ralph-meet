@@ -838,6 +838,7 @@ export function createChatGateway(
         name: "ChatClient",
         clerk_user_id: clerkUserId,
         platform: getCurrentPresencePlatform(),
+        supports_voice_state_deltas: true,
       },
     });
     identified = true;
@@ -1122,6 +1123,7 @@ export function createChatGateway(
           name: "ChatClient",
           clerk_user_id: userId,
           platform: getCurrentPresencePlatform(),
+          supports_voice_state_deltas: true,
         },
       });
       identified = true;

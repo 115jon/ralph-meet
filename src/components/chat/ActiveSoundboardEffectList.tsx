@@ -43,9 +43,12 @@ export function ActiveSoundboardEffectList({
 
   const scopedPlaybacks = useMemo(() => {
     return Object.values(activePlaybacks)
-      .filter((playback) => playback.serverKey === serverKey)
+      .filter(
+        (playback) =>
+          playback.serverKey === serverKey && playback.ownerId === localUserId,
+      )
       .sort((a, b) => b.startedAt - a.startedAt);
-  }, [activePlaybacks, serverKey]);
+  }, [activePlaybacks, localUserId, serverKey]);
 
   if (scopedPlaybacks.length === 0) {
     return null;

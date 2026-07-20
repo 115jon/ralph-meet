@@ -53,9 +53,14 @@ import {
   playSoundboardPlayback,
 } from "@/lib/voice/soundboard";
 import {
+  getSoundboardUploadUrl,
+  normalizeSoundboardUploadUrl,
+} from "@/lib/voice/soundboard-media";
+import {
   toSoundboardCatalogSound,
   type SoundboardCatalogSound,
 } from "@/lib/voice/soundboard-catalog";
+import { createSoundboardPlaybackId } from "@/lib/voice/soundboard-playback-id";
 import EmojiToken from "./EmojiToken";
 import { HomeIcon } from "./HomeIcon";
 import { UploadSoundModal, type UploadSoundData } from "./UploadSoundModal";
@@ -92,6 +97,21 @@ interface RadioStation {
 }
 
 type CustomSound = SoundboardCatalogSound;
+type SoundboardSoundType =
+  | "myinstants"
+  | "custom"
+  | "default"
+  | "radio"
+  | "server";
+
+interface DmSoundCandidate {
+  id: string;
+  soundType?: SoundboardSoundType;
+  dataUrl?: string;
+  mediaUrl?: string;
+  serverId?: string;
+  source_server_id?: string;
+}
 
 type PickerServer = Pick<Server, "id" | "name" | "icon_url">;
 
@@ -143,7 +163,43 @@ interface MyInstantsSound {
   url: string;
   color: string;
   emoji?: string;
-  soundType?: "myinstants" | "custom" | "default" | "radio";
+  soundType?: SoundboardSoundType;
+  serverId?: string;
+  source_server_id?: string;
+}
+
+function normalizeFavoriteSound(sound: MyInstantsSound): MyInstantsSound {
+  const sourceServerId = sound.source_server_id ?? sound.serverId;
+  const isServerMedia =
+    !!sourceServerId &&
+    normalizeSoundboardUploadUrl(sound.url) ===
+      getSoundboardUploadUrl(sound.id);
+
+  return {
+    ...sound,
+    soundType: isServerMedia ? "server" : (sound.soundType ?? "myinstants"),
+    ...(sourceServerId
+      ? { serverId: sourceServerId, source_server_id: sourceServerId }
+      : {}),
+  };
+}
+
+function isDmSoundSourceValid(sound: DmSoundCandidate): boolean {
+  if (sound.soundType === "default") {
+    return (
+      DEFAULT_SOUNDBOARD_SOUNDS.some((entry) => entry.id === sound.id) &&
+      !sound.dataUrl &&
+      !sound.mediaUrl
+    );
+  }
+
+  return (
+    sound.soundType === "server" &&
+    !!(sound.source_server_id ?? sound.serverId) &&
+    !sound.dataUrl &&
+    normalizeSoundboardUploadUrl(sound.mediaUrl) ===
+      getSoundboardUploadUrl(sound.id)
+  );
 }
 
 interface SoundboardCatalogUpdatedEvent {
@@ -161,7 +217,7 @@ interface SoundboardCatalogUpdatedEvent {
 const FAVORITES_SECTION_ID = "favorites";
 const CUSTOM_SECTION_ID = "custom-sounds";
 const DEFAULT_SECTION_ID = "default-sounds";
-const MAX_LOCAL_SOUNDBOARD_DATA_URL_BYTES = 512 * 1024;
+const MAX_LOCAL_SOUNDBOARD_DATA_URL_BYTES = 128 * 1024;
 
 function isSoundboardAudioFile(file: File) {
   if (file.type.startsWith("audio/")) return true;
@@ -249,10 +305,17 @@ export default function SoundboardPicker({
   const serverKey = getSoundboardServerKey(serverId);
   const storageKey = `voice-soundboard:${serverKey}`;
   const isServerSoundboard = !!serverId && serverId !== "@me";
+  const isDirectMessageScope =
+    !selectionMode && serverKey === "dm-call" && !isServerSoundboard;
+  const pickerInitialView =
+    selectionMode ||
+    (isDirectMessageScope &&
+      (initialView === "myinstants" || initialView === "radio"))
+      ? "soundboard"
+      : initialView;
 
-  const [activeView, setActiveView] = useState<SoundboardView>(
-    selectionMode ? "soundboard" : initialView,
-  );
+  const [activeView, setActiveView] =
+    useState<SoundboardView>(pickerInitialView);
   const previousInitialViewRef = useRef(initialView);
   const previousSelectionModeRef = useRef(selectionMode);
   if (
@@ -261,7 +324,7 @@ export default function SoundboardPicker({
   ) {
     previousInitialViewRef.current = initialView;
     previousSelectionModeRef.current = selectionMode;
-    setActiveView(selectionMode ? "soundboard" : initialView);
+    setActiveView(pickerInitialView);
   }
   const [dynamicStyle, setDynamicStyle] = useState<React.CSSProperties>({
     opacity: 0,
@@ -270,7 +333,9 @@ export default function SoundboardPicker({
   const deferredSearch = useDeferredValue(search.trim());
 
   const [customSounds, setCustomSounds] = useState<CustomSound[]>(() =>
-    isServerSoundboard ? [] : readStoredSounds(storageKey),
+    isServerSoundboard || isDirectMessageScope
+      ? []
+      : readStoredSounds(storageKey),
   );
   const previousCustomSoundsContextRef = useRef({
     isServerSoundboard,
@@ -285,7 +350,11 @@ export default function SoundboardPicker({
       isServerSoundboard,
       storageKey,
     };
-    setCustomSounds(isServerSoundboard ? [] : readStoredSounds(storageKey));
+    setCustomSounds(
+      isServerSoundboard || isDirectMessageScope
+        ? []
+        : readStoredSounds(storageKey),
+    );
   }
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
@@ -380,12 +449,9 @@ export default function SoundboardPicker({
   const memberServers = useChatStore((state) => state.servers);
   const catalogServerIds = selectionMode
     ? serverIds
-    : Array.from(
-        new Set([
-          ...(serverId && serverId !== "@me" ? [serverId] : []),
-          ...memberServers.map((server) => server.id),
-        ]),
-      );
+    : isServerSoundboard
+      ? [serverId]
+      : memberServers.map((server) => server.id);
   const pickerServers: PickerServer[] = catalogServerIds.map((id) => {
     const server = memberServers.find((entry) => entry.id === id);
     return server
@@ -427,10 +493,7 @@ export default function SoundboardPicker({
     apiGet<{ favorites: MyInstantsSound[] }>("/api/myinstants/favorites")
       .then((res) => {
         const loaded = res.favorites || [];
-        const normalized = loaded.map((sound) => ({
-          ...sound,
-          soundType: sound.soundType || "myinstants", // Default to myinstants if old rows don't have it set yet
-        }));
+        const normalized = loaded.map(normalizeFavoriteSound);
         setMyInstantsFavorites(normalized);
       })
       .catch((err) =>
@@ -448,7 +511,10 @@ export default function SoundboardPicker({
       url?: string;
       color?: string;
       emoji?: string;
-      soundType?: "myinstants" | "custom" | "default" | "radio";
+      soundType?: "myinstants" | "custom" | "default" | "radio" | "server";
+      serverId?: string;
+      source_server_id?: string;
+      source?: "default" | "server" | "custom";
     },
     e: React.MouseEvent,
   ) => {
@@ -457,6 +523,12 @@ export default function SoundboardPicker({
     let derivedType = sound.soundType;
     if (!derivedType) {
       if (sound.color) derivedType = "myinstants";
+      else if (
+        sound.source === "server" ||
+        sound.serverId ||
+        sound.source_server_id
+      )
+        derivedType = "server";
       else if (
         sound.emoji ||
         sound.mediaUrl?.includes("blob:") ||
@@ -473,6 +545,12 @@ export default function SoundboardPicker({
       color: sound.color || "#4f46e5",
       emoji: sound.emoji,
       soundType: derivedType,
+      ...(sound.serverId || sound.source_server_id
+        ? { serverId: sound.serverId ?? sound.source_server_id }
+        : {}),
+      ...(sound.serverId || sound.source_server_id
+        ? { source_server_id: sound.source_server_id ?? sound.serverId }
+        : {}),
     };
 
     const isFav = myInstantsFavorites.some((s) => s.id === sound.id);
@@ -564,6 +642,7 @@ export default function SoundboardPicker({
           ...(existing ?? {}),
           id: soundId,
           name: soundName,
+          serverId: serverId ?? undefined,
           ...(typeof sound.file_url === "string"
             ? { mediaUrl: sound.file_url }
             : {}),
@@ -576,7 +655,7 @@ export default function SoundboardPicker({
         ];
       });
     });
-  }, [isServerSoundboard, sfu, serverKey]);
+  }, [isServerSoundboard, sfu, serverId, serverKey]);
 
   useEffect(() => {
     if (selectionMode || activeView !== "myinstants") return;
@@ -854,6 +933,22 @@ export default function SoundboardPicker({
     };
   }, [activeView, compact, markerRef, placement]);
 
+  const isDmPlayableSound = (sound: DmSoundCandidate) => {
+    if (!isDmSoundSourceValid(sound)) return false;
+    if (sound.soundType === "default") return true;
+    const sourceServerId = sound.source_server_id ?? sound.serverId;
+    return (
+      !!sourceServerId &&
+      serverSounds.some(
+        (serverSound) =>
+          serverSound.id === sound.id &&
+          serverSound.serverId === sourceServerId &&
+          normalizeSoundboardUploadUrl(serverSound.mediaUrl) ===
+            getSoundboardUploadUrl(sound.id),
+      )
+    );
+  };
+
   const broadcastSound = (sound: {
     id: string;
     name: string;
@@ -861,9 +956,11 @@ export default function SoundboardPicker({
     mediaUrl?: string;
     volume?: number;
     emoji?: string;
-    soundType?: "myinstants" | "custom" | "default" | "radio";
+    soundType?: SoundboardSoundType;
     artworkUrl?: string;
     serverId?: string;
+    source_server_id?: string;
+    source?: "default" | "server" | "custom";
   }) => {
     if (selectionMode) {
       const source =
@@ -892,6 +989,14 @@ export default function SoundboardPicker({
       );
       return;
     }
+    const sourceServerId = sound.serverId ?? sound.source_server_id;
+    if (isDirectMessageScope && !isDmPlayableSound(sound)) {
+      setUploadError(
+        "Only default and member-server sounds are available in DMs.",
+      );
+      return;
+    }
+
     // Radio stations are enqueued to Listen Together instead of soundboard.play
     if (sound.soundType === "radio") {
       if (!roomSlug || !sfu) {
@@ -935,19 +1040,40 @@ export default function SoundboardPicker({
     // Generate a deterministic playback ID so that playing the same sound
     // again by the same user automatically cancels their previous stream
     // locally for all clients and updates the same UI entry in the store.
-    const playbackId = `s-${localUserId}-${sound.id}`;
+    if (!localUserId) return;
+    const playbackId = createSoundboardPlaybackId(localUserId, sound.id);
 
-    sfu?.voiceGW.sendAppEvent({
+    const source = sound.mediaUrl
+      ? { media_url: sound.mediaUrl }
+      : sound.dataUrl
+        ? { data_url: sound.dataUrl }
+        : {};
+    if (sound.soundType === "server" && !sourceServerId) {
+      setUploadError("This server favorite is missing its source server.");
+      return;
+    }
+    if (isServerSoundboard && sourceServerId && sourceServerId !== serverId) {
+      setUploadError(
+        "This server sound is not available in the current voice server.",
+      );
+      return;
+    }
+    const dmSourceServer =
+      serverKey === "dm-call" && sourceServerId
+        ? { source_server_id: sourceServerId }
+        : {};
+    const accepted = sfu?.voiceGW.sendAppEvent({
       type: "soundboard.play",
       server_key: serverKey,
       user_id: localUserId,
       playback_id: playbackId,
       sound_id: sound.id,
       name: sound.name,
-      data_url: sound.dataUrl,
-      media_url: sound.mediaUrl,
+      ...source,
+      ...dmSourceServer,
       volume: sendVolume * (sound.volume ?? 1.0),
     });
+    if (accepted === false) setUploadError("Could not play this sound.");
   };
 
   const previewSound = (
@@ -958,10 +1084,29 @@ export default function SoundboardPicker({
       mediaUrl?: string;
       volume?: number;
       emoji?: string;
+      soundType?: SoundboardSoundType;
+      serverId?: string;
+      source_server_id?: string;
     },
     e: React.MouseEvent,
   ) => {
     e.stopPropagation();
+    if (
+      isDirectMessageScope &&
+      !isDmPlayableSound({
+        id: sound.id,
+        soundType: sound.soundType,
+        dataUrl: sound.dataUrl,
+        mediaUrl: sound.mediaUrl,
+        serverId: sound.serverId,
+        source_server_id: sound.source_server_id,
+      })
+    ) {
+      setUploadError(
+        "Only default and member-server sounds are available in DMs.",
+      );
+      return;
+    }
     stopSoundboardPlayback("local-preview");
 
     setTimeout(() => {
@@ -1067,7 +1212,7 @@ export default function SoundboardPicker({
       if (!isServerSoundboard) {
         if (file.size > MAX_LOCAL_SOUNDBOARD_DATA_URL_BYTES) {
           throw new Error(
-            "Custom sounds must be 512 KiB or smaller to play for everyone.",
+            "Custom sounds must be 128 KiB or smaller to play for everyone.",
           );
         }
         const dataUrl = await fileToDataUrl(file);
@@ -1109,6 +1254,7 @@ export default function SoundboardPicker({
         mediaUrl: uploaded.file_url,
         emoji: relatedEmoji || undefined,
         volume: soundVolume,
+        serverId: serverId ?? undefined,
       };
       setServerSounds((prev) => [
         nextSound,
@@ -1149,6 +1295,11 @@ export default function SoundboardPicker({
         s.title.toLowerCase().includes(deferredSearch.toLowerCase()),
       )
     : myInstantsFavorites;
+  const visibleFavorites = isDirectMessageScope
+    ? filteredFavorites.filter((sound) => {
+        return isDmPlayableSound({ ...sound, mediaUrl: sound.url });
+      })
+    : filteredFavorites;
   const filteredCustom = deferredSearch
     ? customSounds.filter((s) =>
         s.name.toLowerCase().includes(deferredSearch.toLowerCase()),
@@ -1168,7 +1319,7 @@ export default function SoundboardPicker({
   }));
   const soundSections = [
     ...serverSoundSections,
-    ...(!isServerSoundboard && !selectionMode
+    ...(!isServerSoundboard && !selectionMode && !isDirectMessageScope
       ? [{ id: CUSTOM_SECTION_ID, server: null, sounds: filteredCustom }]
       : []),
   ];
@@ -1250,7 +1401,7 @@ export default function SoundboardPicker({
                   </div>
 
                   <div className="flex shrink-0 items-center gap-2">
-                    {!selectionMode && (
+                    {!selectionMode && !isDirectMessageScope && (
                       <>
                         <Tooltip>
                           <TooltipTrigger asChild>
@@ -1363,17 +1514,16 @@ export default function SoundboardPicker({
                 </div>
               </>
             )}
-            {(uploadError || (activeView === "radio" && roomError)) &&
-              activeView !== "soundboard" && (
-                <div
-                  role="alert"
-                  className="mt-3 rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs text-red-800 dark:text-red-300"
-                >
-                  {activeView === "radio" && roomError
-                    ? roomError.message
-                    : uploadError}
-                </div>
-              )}
+            {(uploadError || (activeView === "radio" && roomError)) && (
+              <div
+                role="alert"
+                className="mt-3 rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs text-red-800 dark:text-red-300"
+              >
+                {activeView === "radio" && roomError
+                  ? roomError.message
+                  : uploadError}
+              </div>
+            )}
           </div>
 
           <div className="min-h-0 flex-1 overflow-hidden">
@@ -1449,30 +1599,32 @@ export default function SoundboardPicker({
                       </>
                     )}
 
-                    {!selectionMode && !isServerSoundboard && (
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <button
-                            type="button"
-                            aria-label="Custom Sounds"
-                            onClick={() => jumpToSection(CUSTOM_SECTION_ID)}
-                            className={cn(
-                              "flex h-11 w-11 items-center justify-center self-center rounded-2xl border transition-all",
-                              activeCategory === CUSTOM_SECTION_ID
-                                ? "border-primary/30 bg-primary/20 text-primary"
-                                : "border-transparent bg-transparent text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover",
-                            )}
-                          >
-                            <Volume2 className="h-5 w-5" />
-                          </button>
-                        </TooltipTrigger>
-                        <TooltipContent side="right" sideOffset={10}>
-                          {isServerSoundboard
-                            ? "Server Sounds"
-                            : "Custom Sounds"}
-                        </TooltipContent>
-                      </Tooltip>
-                    )}
+                    {!selectionMode &&
+                      !isServerSoundboard &&
+                      !isDirectMessageScope && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <button
+                              type="button"
+                              aria-label="Custom Sounds"
+                              onClick={() => jumpToSection(CUSTOM_SECTION_ID)}
+                              className={cn(
+                                "flex h-11 w-11 items-center justify-center self-center rounded-2xl border transition-all",
+                                activeCategory === CUSTOM_SECTION_ID
+                                  ? "border-primary/30 bg-primary/20 text-primary"
+                                  : "border-transparent bg-transparent text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover",
+                              )}
+                            >
+                              <Volume2 className="h-5 w-5" />
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent side="right" sideOffset={10}>
+                            {isServerSoundboard
+                              ? "Server Sounds"
+                              : "Custom Sounds"}
+                          </TooltipContent>
+                        </Tooltip>
+                      )}
 
                     <Tooltip>
                       <TooltipTrigger asChild>
@@ -1506,7 +1658,7 @@ export default function SoundboardPicker({
                 >
                   {/* Favorites Section */}
                   {!selectionMode &&
-                    (!deferredSearch || filteredFavorites.length > 0) && (
+                    (!deferredSearch || visibleFavorites.length > 0) && (
                       <div
                         ref={setSectionRef(FAVORITES_SECTION_ID)}
                         className="mb-6 mt-2 relative"
@@ -1523,12 +1675,14 @@ export default function SoundboardPicker({
                         />
                         {!collapsedCategories[FAVORITES_SECTION_ID] && (
                           <div className="grid grid-cols-4 gap-2">
-                            {filteredFavorites.length === 0 ? (
+                            {visibleFavorites.length === 0 ? (
                               <div className="col-span-4 text-center py-4 text-xs text-rm-text-muted">
-                                No favorites yet. Search MyInstants to add some!
+                                {isDirectMessageScope
+                                  ? "No member-server favorites yet."
+                                  : "No favorites yet. Search MyInstants to add some!"}
                               </div>
                             ) : (
-                              filteredFavorites.map((sound) => {
+                              visibleFavorites.map((sound) => {
                                 if (sound.soundType === "myinstants") {
                                   return (
                                     <div
@@ -1545,6 +1699,12 @@ export default function SoundboardPicker({
                                             id: sound.id,
                                             name: sound.title,
                                             mediaUrl: sound.url,
+                                            soundType: sound.soundType,
+                                            serverId:
+                                              sound.serverId ??
+                                              sound.source_server_id,
+                                            source_server_id:
+                                              sound.source_server_id,
                                           })
                                         }
                                       />
@@ -1585,6 +1745,12 @@ export default function SoundboardPicker({
                                                     id: sound.id,
                                                     name: sound.title,
                                                     mediaUrl: sound.url,
+                                                    soundType: sound.soundType,
+                                                    serverId:
+                                                      sound.serverId ??
+                                                      sound.source_server_id,
+                                                    source_server_id:
+                                                      sound.source_server_id,
                                                   },
                                                   e,
                                                 )
@@ -1687,6 +1853,7 @@ export default function SoundboardPicker({
                                                     id: sound.id,
                                                     name: sound.title,
                                                     mediaUrl: sound.url,
+                                                    soundType: "radio",
                                                   },
                                                   e,
                                                 )
@@ -1724,6 +1891,12 @@ export default function SoundboardPicker({
                                           id: sound.id,
                                           name: sound.title,
                                           mediaUrl: sound.url,
+                                          soundType: sound.soundType,
+                                          serverId:
+                                            sound.serverId ??
+                                            sound.source_server_id,
+                                          source_server_id:
+                                            sound.source_server_id,
                                         })
                                       }
                                     />
@@ -1775,6 +1948,12 @@ export default function SoundboardPicker({
                                                   id: sound.id,
                                                   name: sound.title,
                                                   mediaUrl: sound.url,
+                                                  soundType: sound.soundType,
+                                                  serverId:
+                                                    sound.serverId ??
+                                                    sound.source_server_id,
+                                                  source_server_id:
+                                                    sound.source_server_id,
                                                 },
                                                 e,
                                               )
@@ -1858,6 +2037,7 @@ export default function SoundboardPicker({
                                     broadcastSound({
                                       id: sound.id,
                                       name: sound.name,
+                                      soundType: "server",
                                       dataUrl: sound.dataUrl,
                                       mediaUrl: sound.mediaUrl,
                                       volume: sound.volume,
@@ -1889,7 +2069,12 @@ export default function SoundboardPicker({
                                         type="button"
                                         aria-label={`Preview ${sound.name}`}
                                         className="flex items-center justify-center p-1.5 rounded-full bg-black/70 backdrop-blur-sm hover:bg-black text-white shadow-md"
-                                        onClick={(e) => previewSound(sound, e)}
+                                        onClick={(e) =>
+                                          previewSound(
+                                            { ...sound, soundType: "server" },
+                                            e,
+                                          )
+                                        }
                                       >
                                         <Play size={10} />
                                       </button>
@@ -2044,7 +2229,12 @@ export default function SoundboardPicker({
                                       <button
                                         type="button"
                                         className="flex items-center justify-center p-1.5 rounded-full bg-black/70 backdrop-blur-sm hover:bg-black text-white shadow-md cursor-pointer"
-                                        onClick={(e) => previewSound(sound, e)}
+                                        onClick={(e) =>
+                                          previewSound(
+                                            { ...sound, soundType: "default" },
+                                            e,
+                                          )
+                                        }
                                       >
                                         <Play size={10} />
                                       </button>
@@ -2178,6 +2368,7 @@ export default function SoundboardPicker({
                                             id: sound.id,
                                             name: sound.title,
                                             mediaUrl: sound.url,
+                                            soundType: "myinstants",
                                           },
                                           e,
                                         )
@@ -2321,6 +2512,7 @@ export default function SoundboardPicker({
                                             id: station.stationuuid,
                                             name: station.name,
                                             mediaUrl: station.url_resolved,
+                                            soundType: "radio",
                                           },
                                           e,
                                         )

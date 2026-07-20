@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { chatReducer, initialState } from "./chat-reducer";
+import {
+  chatReducer,
+  initialState,
+  type VoiceChannelMemberDelta,
+  type VoiceChannelMember,
+} from "./chat-reducer";
 import type { Message } from "./types";
 
 const message = (id: string, created_at: string): Message =>
@@ -103,5 +108,220 @@ describe("chatReducer speaking sources", () => {
     });
 
     expect(cleared.speakingUsers).toEqual({ bob: true });
+  });
+});
+
+describe("chatReducer voice channel profiles", () => {
+  const fullMember: VoiceChannelMember = {
+    clerk_user_id: "user-1",
+    name: "Alice",
+    username: "alice",
+    display_name: "Alice Display",
+    avatar_url: "https://example.com/alice.png",
+    avatar_display: "frame:alice",
+    display_name_style: null,
+    self_mute: false,
+    self_deaf: false,
+    self_video: false,
+    self_stream: false,
+  };
+
+  it("preserves cached profile fields when a compact SET snapshot arrives", () => {
+    const state = chatReducer(initialState, {
+      type: "UPDATE_VOICE_CHANNEL_STATE",
+      channelId: "voice-1",
+      members: [fullMember],
+      startedAt: null,
+    });
+
+    const compactMember: VoiceChannelMemberDelta = {
+      clerk_user_id: fullMember.clerk_user_id,
+      self_mute: true,
+      self_deaf: false,
+      self_video: false,
+      self_stream: false,
+    };
+    const next = chatReducer(state, {
+      type: "SET_VOICE_CHANNEL_STATES",
+      states: { "voice-1": [compactMember] },
+      startedAt: { "voice-1": 123 },
+    });
+
+    expect(next.voiceChannelStates["voice-1"]?.[0]).toEqual(
+      expect.objectContaining({
+        clerk_user_id: "user-1",
+        name: "Alice Display",
+        username: "alice",
+        display_name: "Alice Display",
+        avatar_url: "https://example.com/alice.png",
+        avatar_display: "frame:alice",
+        self_mute: true,
+      }),
+    );
+  });
+
+  it("preserves cached profile fields when a compact member delta arrives", () => {
+    const state = chatReducer(initialState, {
+      type: "UPDATE_VOICE_CHANNEL_STATE",
+      channelId: "voice-1",
+      members: [fullMember],
+      startedAt: null,
+    });
+
+    const compactMember: VoiceChannelMemberDelta = {
+      clerk_user_id: fullMember.clerk_user_id,
+      self_mute: true,
+      self_deaf: false,
+      self_video: false,
+      self_stream: false,
+    };
+    const next = chatReducer(state, {
+      type: "UPDATE_VOICE_CHANNEL_STATE",
+      channelId: "voice-1",
+      members: [compactMember],
+      startedAt: null,
+    });
+
+    const member = next.voiceChannelStates["voice-1"]?.[0];
+    expect(member).toEqual({
+      clerk_user_id: "user-1",
+      name: "Alice Display",
+      username: "alice",
+      display_name: "Alice Display",
+      avatar_url: "https://example.com/alice.png",
+      avatar_display: "frame:alice",
+      self_mute: true,
+      display_name_style: null,
+      self_deaf: false,
+      self_video: false,
+      self_stream: false,
+    });
+  });
+
+  it("applies explicit null profile updates to cached voice members", () => {
+    const state = chatReducer(initialState, {
+      type: "UPDATE_VOICE_CHANNEL_STATE",
+      channelId: "voice-1",
+      members: [fullMember],
+      startedAt: null,
+    });
+
+    const next = chatReducer(state, {
+      type: "UPDATE_MEMBER_PROFILE",
+      userId: fullMember.clerk_user_id,
+      username: "alice-updated",
+      display_name: null,
+      avatar_url: null,
+      avatar_display: null,
+    });
+
+    expect(next.voiceChannelStates["voice-1"]?.[0]).toEqual(
+      expect.objectContaining({
+        name: "alice-updated",
+        username: "alice-updated",
+        display_name: null,
+        avatar_url: null,
+        avatar_display: null,
+      }),
+    );
+  });
+
+  it("uses an authoritative replacement profile over stale cached member data", () => {
+    const next = chatReducer(
+      {
+        ...initialState,
+        members: [
+          {
+            user: {
+              id: fullMember.clerk_user_id,
+              username: "stale-user",
+              display_name: "Stale Display",
+              avatar_url: "https://example.com/stale.png",
+              avatar_display: "frame:stale",
+              display_name_style: "stale-style",
+            },
+            roles: [],
+          },
+        ],
+      },
+      {
+        type: "SET_VOICE_CHANNEL_STATES",
+        states: {
+          "voice-1": [
+            {
+              ...fullMember,
+              name: "Fresh Name",
+              username: "fresh-user",
+              display_name: "Fresh Display",
+              avatar_url: "https://example.com/fresh.png",
+              avatar_display: "frame:fresh",
+              display_name_style: "fresh-style",
+            },
+          ],
+        },
+        startedAt: {},
+      },
+    );
+
+    expect(next.voiceChannelStates["voice-1"]?.[0]).toEqual(
+      expect.objectContaining({
+        name: "Fresh Display",
+        username: "fresh-user",
+        display_name: "Fresh Display",
+        avatar_url: "https://example.com/fresh.png",
+        avatar_display: "frame:fresh",
+        display_name_style: "fresh-style",
+      }),
+    );
+  });
+
+  it("keeps authoritative null profile fields ahead of stale relationship data", () => {
+    const next = chatReducer(
+      {
+        ...initialState,
+        relationships: [
+          {
+            user: {
+              id: fullMember.clerk_user_id,
+              username: "stale-user",
+              display_name: "Stale Display",
+              avatar_url: "https://example.com/stale.png",
+              avatar_display: "frame:stale",
+              display_name_style: "stale-style",
+            },
+            type: 1,
+            created_at: "2026-07-19T00:00:00Z",
+          },
+        ],
+      },
+      {
+        type: "SET_VOICE_CHANNEL_STATES",
+        states: {
+          "voice-1": [
+            {
+              ...fullMember,
+              name: "Fresh Name",
+              username: "fresh-user",
+              display_name: null,
+              avatar_url: null,
+              avatar_display: null,
+              display_name_style: null,
+            },
+          ],
+        },
+        startedAt: {},
+      },
+    );
+
+    expect(next.voiceChannelStates["voice-1"]?.[0]).toEqual(
+      expect.objectContaining({
+        name: "fresh-user",
+        username: "fresh-user",
+        display_name: null,
+        avatar_url: null,
+        avatar_display: null,
+        display_name_style: null,
+      }),
+    );
   });
 });

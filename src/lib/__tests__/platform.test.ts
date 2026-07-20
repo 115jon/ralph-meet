@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   getApiBaseUrl,
   getAuthAssetUrl,
+  getMediaUrl,
   getPublicApiUrl,
   getWsBaseUrl,
   isTauri,
@@ -18,6 +19,40 @@ afterEach(() => {
 });
 
 describe("platform asset urls", () => {
+  it("does not append a session token to capability media URLs", () => {
+    Object.defineProperty(window, "__TAURI_INTERNALS__", {
+      configurable: true,
+      value: {},
+    });
+    window.localStorage.setItem("desktop_auth_token", "session-token");
+
+    const url = new URL(
+      getMediaUrl(
+        "/api/soundboard/uploads/sound-1?cap=capability&room_slug=room-1&playback_id=playback-1",
+      ),
+    );
+
+    expect(url.searchParams.get("cap")).toBe("capability");
+    expect(url.searchParams.has("token")).toBe(false);
+  });
+
+  it("removes a stale session token from capability media URLs", () => {
+    Object.defineProperty(window, "__TAURI_INTERNALS__", {
+      configurable: true,
+      value: {},
+    });
+    window.localStorage.setItem("desktop_auth_token", "session-token");
+
+    const url = new URL(
+      getMediaUrl(
+        "/api/soundboard/uploads/sound-1?cap=capability&token=stale-token",
+      ),
+    );
+
+    expect(url.searchParams.get("cap")).toBe("capability");
+    expect(url.searchParams.has("token")).toBe(false);
+  });
+
   it("proxies Google user-content avatar urls through proxy-media", () => {
     expect(
       getAuthAssetUrl(

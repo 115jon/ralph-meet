@@ -134,6 +134,13 @@ export interface VoiceChannelMember {
   joined_at?: number;
 }
 
+export type VoiceChannelMemberDelta = Omit<
+  VoiceChannelMember,
+  "name" | "username" | "display_name" | "avatar_url" | "avatar_display"
+>;
+
+type VoiceChannelMemberInput = VoiceChannelMember | VoiceChannelMemberDelta;
+
 export const initialState: ChatState = {
   connected: false,
   reconnectAttempt: 0,
@@ -294,6 +301,7 @@ export type ChatAction =
   | {
       type: "UPDATE_MEMBER_PROFILE";
       userId: string;
+      name?: string;
       username?: string;
       display_name?: string | null;
       avatar_url?: string | null;
@@ -373,14 +381,17 @@ export type ChatAction =
     }
   | {
       type: "SET_VOICE_CHANNEL_STATES";
-      states: Record<string, VoiceChannelMember[]>;
+      states: Record<
+        string,
+        Array<VoiceChannelMember | VoiceChannelMemberDelta>
+      >;
       startedAt: Record<string, number>;
       spatialStates?: Record<string, SharedSpatialAudioState>;
     }
   | {
       type: "UPDATE_VOICE_CHANNEL_STATE";
       channelId: string;
-      members: VoiceChannelMember[];
+      members: Array<VoiceChannelMember | VoiceChannelMemberDelta>;
       startedAt: number | null;
       spatialAudioState?: SharedSpatialAudioState;
     }
@@ -477,22 +488,83 @@ function findKnownUser(state: ChatState, userId: string): User | undefined {
 }
 
 function enrichVoiceMembers(
-  members: VoiceChannelMember[],
+  members: VoiceChannelMemberInput[],
   state: ChatState,
 ): VoiceChannelMember[] {
   return members.map((m) => {
     const knownUser = findKnownUser(state, m.clerk_user_id);
-    const displayName = getDisplayName(knownUser, getDisplayName(m, m.name));
+    const hasName = hasVoiceMemberField(m, "name");
+    const hasUsername = hasVoiceMemberField(m, "username");
+    const hasDisplayName = hasVoiceMemberField(m, "display_name");
+    const hasAvatarUrl = hasVoiceMemberField(m, "avatar_url");
+    const hasAvatarDisplay = hasVoiceMemberField(m, "avatar_display");
+    const hasDisplayNameStyle = hasVoiceMemberField(m, "display_name_style");
+    const memberName = hasName && "name" in m ? m.name : undefined;
+    const memberUsername =
+      hasUsername && "username" in m ? m.username : undefined;
+    const memberDisplayName =
+      hasDisplayName && "display_name" in m ? m.display_name : undefined;
+    const memberAvatarUrl =
+      hasAvatarUrl && "avatar_url" in m ? m.avatar_url : undefined;
+    const memberAvatarDisplay =
+      hasAvatarDisplay && "avatar_display" in m ? m.avatar_display : undefined;
+    const memberDisplayNameStyle =
+      hasDisplayNameStyle && "display_name_style" in m
+        ? m.display_name_style
+        : undefined;
+    const fallbackName = memberName || memberUsername || m.clerk_user_id;
+    const displayName = getDisplayName(
+      {
+        display_name: hasDisplayName
+          ? memberDisplayName
+          : knownUser?.display_name,
+        username: hasUsername ? memberUsername : knownUser?.username,
+        name: hasName ? memberName : undefined,
+      },
+      fallbackName,
+    );
 
     return {
       ...m,
       name: displayName,
-      username: knownUser?.username ?? m.username ?? m.name,
-      display_name: knownUser?.display_name ?? m.display_name ?? null,
-      display_name_style:
-        knownUser?.display_name_style ?? m.display_name_style ?? null,
-      avatar_url: m.avatar_url || knownUser?.avatar_url || null,
-      avatar_display: m.avatar_display ?? knownUser?.avatar_display ?? null,
+      username: hasUsername
+        ? memberUsername
+        : (knownUser?.username ?? memberName ?? m.clerk_user_id),
+      display_name: hasDisplayName
+        ? (memberDisplayName ?? null)
+        : (knownUser?.display_name ?? null),
+      display_name_style: hasDisplayNameStyle
+        ? (memberDisplayNameStyle ?? null)
+        : (knownUser?.display_name_style ?? null),
+      avatar_url: hasAvatarUrl
+        ? (memberAvatarUrl ?? null)
+        : (knownUser?.avatar_url ?? null),
+      avatar_display: hasAvatarDisplay
+        ? (memberAvatarDisplay ?? null)
+        : (knownUser?.avatar_display ?? null),
+    };
+  });
+}
+
+function hasVoiceMemberField(
+  member: VoiceChannelMemberInput,
+  field: string,
+): boolean {
+  return Object.prototype.hasOwnProperty.call(member, field);
+}
+
+function mergeVoiceMemberProfiles(
+  members: VoiceChannelMemberInput[],
+  previous: VoiceChannelMember[],
+): VoiceChannelMemberInput[] {
+  const previousByUserId = new Map(
+    previous.map((member) => [member.clerk_user_id, member]),
+  );
+  return members.map((member) => {
+    const previousMember = previousByUserId.get(member.clerk_user_id);
+    return {
+      ...previousMember,
+      ...member,
     };
   });
 }
@@ -1394,6 +1466,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         );
         if (vcIdx !== -1) {
           const updated = { ...members[vcIdx] };
+          if (action.name !== undefined) updated.name = action.name;
           if (action.username !== undefined) updated.username = action.username;
           if (action.display_name !== undefined)
             updated.display_name = action.display_name;
@@ -2109,7 +2182,13 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       const enriched: Record<string, VoiceChannelMember[]> = {};
       const nextStartedAt: Record<string, number> = {};
       for (const [channelId, members] of Object.entries(action.states)) {
-        enriched[channelId] = enrichVoiceMembers(members, state);
+        enriched[channelId] = enrichVoiceMembers(
+          mergeVoiceMemberProfiles(
+            members,
+            state.voiceChannelStates[channelId] ?? [],
+          ),
+          state,
+        );
         const incoming = action.startedAt[channelId];
         const previous = state.voiceChannelStartedAt[channelId];
         const memberJoinedAt = members
@@ -2138,7 +2217,13 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         delete next[action.channelId];
         delete nextStartedAt[action.channelId];
       } else {
-        next[action.channelId] = enrichVoiceMembers(action.members, state);
+        next[action.channelId] = enrichVoiceMembers(
+          mergeVoiceMemberProfiles(
+            action.members,
+            state.voiceChannelStates[action.channelId] ?? [],
+          ),
+          state,
+        );
         const memberJoinedAt = action.members
           .map((m) => m.joined_at)
           .filter((ts): ts is number => typeof ts === "number" && ts > 0)
