@@ -32,15 +32,24 @@ export function getProfileFrameLayerStyle(
         frame.innerWidth) *
       100
     : 8;
+  const isContainedBorder = layer.type === "border";
 
   return {
     width: `${100 + horizontalOverflow}cqw`,
-    ...(layer.anchor === "bottom"
+    ...(isContainedBorder
       ? {
-          bottom: `calc(-${verticalOverflow}cqw)`,
+          height: "100%",
+          objectFit: "fill" as const,
+          top: "0%",
         }
-      : {
-          top: `calc(-${verticalOverflow}cqw)`,
-        }),
+      : {}),
+    ...(!isContainedBorder &&
+      (layer.anchor === "bottom"
+        ? {
+            bottom: `calc(-${verticalOverflow}cqw)`,
+          }
+        : {
+            top: `calc(-${verticalOverflow}cqw)`,
+          })),
   };
 }

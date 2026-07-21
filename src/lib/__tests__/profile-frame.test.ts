@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { getProfileFrameLayers } from "@/lib/profile-frame";
+import {
+  getProfileFrameLayerStyle,
+  getProfileFrameLayers,
+} from "@/lib/profile-frame";
 
 const display = {
   version: 1 as const,
@@ -22,6 +25,14 @@ const display = {
           responsive: true,
         },
         {
+          id: "rail",
+          src: "https://cdn.discordapp.com/rail.png",
+          type: "border",
+          order: "back" as const,
+          anchor: "center",
+          responsive: true,
+        },
+        {
           id: "front",
           src: "https://cdn.discordapp.com/front.png",
           type: "staple",
@@ -38,7 +49,7 @@ describe("getProfileFrameLayers", () => {
   it("returns only layers for the requested render order", () => {
     expect(
       getProfileFrameLayers(display, "back").map((layer) => layer.id),
-    ).toEqual(["back"]);
+    ).toEqual(["back", "rail"]);
     expect(
       getProfileFrameLayers(display, "front").map((layer) => layer.id),
     ).toEqual(["front"]);
@@ -60,5 +71,15 @@ describe("getProfileFrameLayers", () => {
     };
 
     expect(getProfileFrameLayers(invalid, "front")[0]).toBeDefined();
+  });
+
+  it("keeps border rails inside the surface bounds", () => {
+    const rail = display.collectibles.profileFrame.layers[1];
+
+    expect(getProfileFrameLayerStyle(display, rail)).toMatchObject({
+      height: "100%",
+      objectFit: "fill",
+      top: "0%",
+    });
   });
 });
