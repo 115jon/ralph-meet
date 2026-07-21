@@ -1396,7 +1396,6 @@ export default function ChatPage() {
                     )}
                   >
                     <ChatArea
-                      key={`voice-${activeChannelId}`}
                       channelId={activeChannelId!}
                       channelName={channelDisplayName}
                       onMenuClick={() =>
@@ -1466,7 +1465,6 @@ export default function ChatPage() {
               </Suspense>
             ) : (
               <ChatArea
-                key={activeChannelId}
                 channelId={activeChannelId}
                 channelName={channelDisplayName}
                 onMenuClick={() =>

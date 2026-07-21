@@ -14,9 +14,7 @@ import { useAuth } from "@kova/react";
 import {
   createFileRoute,
   Navigate,
-  Outlet,
   redirect,
-  useLocation,
   useNavigate,
 } from "@tanstack/react-router";
 import { createServerFn } from "@tanstack/react-start";
@@ -106,9 +104,6 @@ export const Route = createFileRoute("/chat")({
 
 function ChatLayout() {
   const { userId } = Route.useRouteContext();
-  const location = useLocation();
-  const isChatLanding =
-    location.pathname === "/chat" || location.pathname === "/chat/";
 
   if (userId === "oauth-callback") {
     return <ChatAuthCallbackGate />;
@@ -118,7 +113,7 @@ function ChatLayout() {
     <>
       <ChatGateway authenticatedUserId={userId} />
       <ConnectionOverlay />
-      {isChatLanding ? <ChatPageClient /> : <Outlet />}
+      <ChatPageClient />
       <ImageViewerModal />
       <CommandMenu />
     </>

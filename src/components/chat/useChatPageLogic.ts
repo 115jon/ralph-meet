@@ -4,6 +4,7 @@ import { isTauri } from "@/lib/platform";
 import { useChatActions, useChatStore } from "@/stores/chat-store";
 import { useCallStore } from "@/stores/useCallStore";
 import { useUser } from "@kova/react";
+import { useNavigate } from "@tanstack/react-router";
 import {
   useCallback,
   useEffect,
@@ -126,6 +127,7 @@ export function useChatPageLogic() {
       dmChannels: s.dmChannels,
     })),
   );
+  const navigate = useNavigate();
   const {
     bootstrapChat,
     loadChannels,
@@ -486,8 +488,13 @@ export function useChatPageLogic() {
       activeChannelId,
       pendingMessageId,
     );
-    silentPush(path);
-  }, [activeServerId, activeChannelId, ui.pendingJump]);
+    const current = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+    if (current === path) return;
+
+    void navigate({ to: path as any, replace: true } as any).catch(() => {
+      silentPush(path);
+    });
+  }, [activeServerId, activeChannelId, navigate, ui.pendingJump]);
 
   const isDmMode = activeServerId === "@me" || activeServerId === "%40me";
 
