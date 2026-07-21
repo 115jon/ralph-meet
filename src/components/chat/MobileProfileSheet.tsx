@@ -75,7 +75,7 @@ const statusColors: Record<string, string> = {
   online: "bg-primary",
   idle: "bg-warning",
   dnd: "bg-destructive",
-  offline: "bg-rm-text-muted/40",
+  offline: "bg-[var(--rm-profile-custom-ghost)]",
 };
 
 function ProfileBanner({
@@ -153,7 +153,7 @@ function ProfileHeader({
     <>
       <div className="px-5">
         <div className="relative inline-block">
-          <div className="relative flex h-[88px] w-[88px] items-center justify-center overflow-visible rounded-full bg-primary text-3xl font-bold text-primary-foreground ring-[5px] ring-rm-bg-primary">
+          <div className="relative flex h-[88px] w-[88px] items-center justify-center overflow-visible rounded-full bg-[var(--rm-profile-custom-button-bg)] text-3xl font-bold text-[color:var(--rm-profile-custom-button-text)] ring-[5px] ring-[color:var(--rm-profile-custom-card-border)]">
             {user.avatar_url ? (
               <AvatarImage
                 src={getAuthAssetUrl(user.avatar_url)}
@@ -164,7 +164,7 @@ function ProfileHeader({
               displayName[0].toUpperCase()
             )}
           </div>
-          <div className="absolute bottom-0 right-0 z-20 rounded-full bg-rm-bg-primary p-1">
+          <div className="absolute bottom-0 right-0 z-20 rounded-full bg-[var(--rm-profile-custom-card-bg-strong)] p-1">
             <span
               className={cn(
                 "block h-6 w-6 rounded-full",
@@ -182,15 +182,15 @@ function ProfileHeader({
           <ProfileDisplayName
             text={displayName}
             displayNameStyle={user.display_name_style}
-            className="text-rm-text-primary"
+            className="text-[color:var(--rm-profile-custom-text)]"
             backgroundColor={profileTheme.backgroundColor}
             readableFallbackColor={profileTheme.textColor}
           />
         </div>
-        <p className="text-[14px] text-rm-text-muted font-medium">
+        <p className="text-[14px] text-[color:var(--rm-profile-custom-muted)] font-medium">
           @{user.username.toLowerCase()}
         </p>
-        <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-rm-text-muted">
+        <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-[color:var(--rm-profile-custom-muted)]">
           {user.pronouns?.trim() ? <span>{user.pronouns.trim()}</span> : null}
           <UserPlatformIndicators
             userId={user.id}
@@ -203,13 +203,13 @@ function ProfileHeader({
         </div>
 
         {user.custom_status && (
-          <p className="text-[13px] text-rm-text-secondary mt-1 italic">
+          <p className="text-[13px] text-[color:var(--rm-profile-custom-muted)] mt-1 italic">
             {user.custom_status}
           </p>
         )}
 
         {!isMe && (mutualFriends.count > 0 || mutualServers.count > 0) && (
-          <div className="flex items-center gap-2 mt-2 text-[13px] text-rm-text-muted font-medium">
+          <div className="flex items-center gap-2 mt-2 text-[13px] text-[color:var(--rm-profile-custom-muted)] font-medium">
             {mutualFriends.count > 0 && (
               <span>
                 {mutualFriends.count} Mutual Friend
@@ -250,12 +250,12 @@ function ProfileActions({
               dispatchOpenProfileEditorEvent();
               onClose();
             }}
-            className="w-full py-3 rounded-2xl bg-primary hover:bg-primary/90 text-primary-foreground font-bold text-[15px] transition-colors flex items-center justify-center gap-2"
+            className="w-full py-3 rounded-2xl bg-[var(--rm-profile-custom-button-bg)] hover:brightness-110 text-[color:var(--rm-profile-custom-button-text)] font-bold text-[15px] transition-[filter] flex items-center justify-center gap-2"
           >
             <Settings size={18} />
             Edit Main Profile
           </ButtonBase>
-          <ButtonBase className="w-full py-3 rounded-2xl bg-primary/20 hover:bg-primary/30 text-primary font-bold text-[15px] transition-colors flex items-center justify-center gap-2">
+          <ButtonBase className="w-full py-3 rounded-2xl bg-[var(--rm-profile-custom-accent-muted)] hover:bg-[var(--rm-profile-custom-card-bg)] text-[color:var(--rm-profile-custom-text)] font-bold text-[15px] transition-colors flex items-center justify-center gap-2">
             <Settings size={18} />
             Edit Per-server Profile
           </ButtonBase>
@@ -266,26 +266,35 @@ function ProfileActions({
             onClick={handleMessage}
             className="flex flex-col items-center gap-2"
           >
-            <div className="h-14 w-14 rounded-full bg-rm-bg-elevated border border-rm-border flex items-center justify-center hover:bg-rm-bg-hover transition-colors">
-              <MessageSquare size={24} className="text-rm-text-primary" />
+            <div className="h-14 w-14 rounded-full bg-[var(--rm-profile-custom-card-bg-strong)] border border-[color:var(--rm-profile-custom-card-border)] flex items-center justify-center hover:bg-[var(--rm-profile-custom-card-bg)] transition-colors">
+              <MessageSquare
+                size={24}
+                className="text-[color:var(--rm-profile-custom-text)]"
+              />
             </div>
-            <span className="text-[12px] font-semibold text-rm-text-muted">
+            <span className="text-[12px] font-semibold text-[color:var(--rm-profile-custom-muted)]">
               Message
             </span>
           </ButtonBase>
           <ButtonBase className="flex flex-col items-center gap-2">
-            <div className="h-14 w-14 rounded-full bg-rm-bg-elevated border border-rm-border flex items-center justify-center hover:bg-rm-bg-hover transition-colors">
-              <Phone size={24} className="text-rm-text-primary" />
+            <div className="h-14 w-14 rounded-full bg-[var(--rm-profile-custom-card-bg-strong)] border border-[color:var(--rm-profile-custom-card-border)] flex items-center justify-center hover:bg-[var(--rm-profile-custom-card-bg)] transition-colors">
+              <Phone
+                size={24}
+                className="text-[color:var(--rm-profile-custom-text)]"
+              />
             </div>
-            <span className="text-[12px] font-semibold text-rm-text-muted">
+            <span className="text-[12px] font-semibold text-[color:var(--rm-profile-custom-muted)]">
               Voice Call
             </span>
           </ButtonBase>
           <ButtonBase className="flex flex-col items-center gap-2">
-            <div className="h-14 w-14 rounded-full bg-rm-bg-elevated border border-rm-border flex items-center justify-center hover:bg-rm-bg-hover transition-colors">
-              <Video size={24} className="text-rm-text-primary" />
+            <div className="h-14 w-14 rounded-full bg-[var(--rm-profile-custom-card-bg-strong)] border border-[color:var(--rm-profile-custom-card-border)] flex items-center justify-center hover:bg-[var(--rm-profile-custom-card-bg)] transition-colors">
+              <Video
+                size={24}
+                className="text-[color:var(--rm-profile-custom-text)]"
+              />
             </div>
-            <span className="text-[12px] font-semibold text-rm-text-muted">
+            <span className="text-[12px] font-semibold text-[color:var(--rm-profile-custom-muted)]">
               Video Call
             </span>
           </ButtonBase>
@@ -324,38 +333,41 @@ function ProfileCards({
   return (
     <div className="px-5 mt-6 space-y-3 pb-10">
       {user.bio?.trim() && (
-        <div className="bg-rm-bg-elevated rounded-2xl border border-rm-border/30 p-4">
-          <h3 className="text-[13px] font-bold text-rm-text-primary uppercase tracking-wide mb-2">
+        <div className="bg-[var(--rm-profile-custom-card-bg-strong)] rounded-2xl border border-[color:var(--rm-profile-custom-card-border)] p-4">
+          <h3 className="text-[13px] font-bold text-[color:var(--rm-profile-custom-text)] uppercase tracking-wide mb-2">
             Bio
           </h3>
-          <p className="text-[14px] text-rm-text-secondary leading-relaxed">
+          <p className="text-[14px] text-[color:var(--rm-profile-custom-muted)] leading-relaxed">
             {user.bio.trim()}
           </p>
         </div>
       )}
 
-      <div className="bg-rm-bg-elevated rounded-2xl border border-rm-border/30 p-4">
-        <h3 className="text-[13px] font-bold text-rm-text-primary uppercase tracking-wide mb-3">
+      <div className="bg-[var(--rm-profile-custom-card-bg-strong)] rounded-2xl border border-[color:var(--rm-profile-custom-card-border)] p-4">
+        <h3 className="text-[13px] font-bold text-[color:var(--rm-profile-custom-text)] uppercase tracking-wide mb-3">
           {profileReferenceDate.label}
         </h3>
-        <div className="flex items-center gap-3 text-[13px] text-rm-text-secondary">
+        <div className="flex items-center gap-3 text-[13px] text-[color:var(--rm-profile-custom-muted)]">
           <div className="flex items-center gap-2">
-            <Calendar size={16} className="text-rm-text-muted" />
+            <Calendar
+              size={16}
+              className="text-[color:var(--rm-profile-custom-muted)]"
+            />
             <span>{profileReferenceDate.value}</span>
           </div>
         </div>
       </div>
 
       {visibleMemberRoles.length > 0 && (
-        <div className="bg-rm-bg-elevated rounded-2xl border border-rm-border/30 p-4">
-          <h3 className="text-[13px] font-bold text-rm-text-primary uppercase tracking-wide mb-3">
+        <div className="bg-[var(--rm-profile-custom-card-bg-strong)] rounded-2xl border border-[color:var(--rm-profile-custom-card-border)] p-4">
+          <h3 className="text-[13px] font-bold text-[color:var(--rm-profile-custom-text)] uppercase tracking-wide mb-3">
             Roles
           </h3>
           <div className="flex flex-wrap gap-2">
             {visibleMemberRoles.map((role) => (
               <div
                 key={role.id}
-                className="flex items-center gap-1.5 rounded-full bg-rm-bg-primary pl-2 pr-3 py-1 border border-rm-border/50 text-[12px] font-medium"
+                className="flex items-center gap-1.5 rounded-full bg-[var(--rm-profile-custom-card-bg)] pl-2 pr-3 py-1 border border-[color:var(--rm-profile-custom-card-border)] text-[12px] font-medium"
               >
                 <div
                   className="h-3 w-3 rounded-full shrink-0"
@@ -363,7 +375,9 @@ function ProfileCards({
                     backgroundColor: role.color || "#94a3b8",
                   }}
                 />
-                <span className="text-rm-text-secondary">{role.name}</span>
+                <span className="text-[color:var(--rm-profile-custom-muted)]">
+                  {role.name}
+                </span>
               </div>
             ))}
           </div>
@@ -371,8 +385,8 @@ function ProfileCards({
       )}
 
       {hasModActions && (
-        <div className="bg-rm-bg-elevated rounded-2xl border border-rm-border/30 p-4">
-          <h3 className="text-[13px] font-bold text-rm-text-primary uppercase tracking-wide mb-3">
+        <div className="bg-[var(--rm-profile-custom-card-bg-strong)] rounded-2xl border border-[color:var(--rm-profile-custom-card-border)] p-4">
+          <h3 className="text-[13px] font-bold text-[color:var(--rm-profile-custom-text)] uppercase tracking-wide mb-3">
             Moderator Actions
           </h3>
           <div className="space-y-0.5">
@@ -381,8 +395,11 @@ function ProfileCards({
                 disabled
                 className="w-full flex items-center gap-4 px-2 py-3 rounded-xl opacity-60 cursor-not-allowed"
               >
-                <Settings size={22} className="text-rm-text-muted shrink-0" />
-                <span className="text-[15px] font-medium text-rm-text-primary">
+                <Settings
+                  size={22}
+                  className="text-[color:var(--rm-profile-custom-muted)] shrink-0"
+                />
+                <span className="text-[15px] font-medium text-[color:var(--rm-profile-custom-text)]">
                   Manage
                 </span>
               </ButtonBase>
@@ -393,7 +410,7 @@ function ProfileCards({
                   onKick(user.id, user.username);
                   onClose();
                 }}
-                className="w-full flex items-center gap-4 px-2 py-3 rounded-xl hover:bg-rm-bg-hover transition-colors"
+                className="w-full flex items-center gap-4 px-2 py-3 rounded-xl hover:bg-[var(--rm-profile-custom-card-bg)] transition-colors"
               >
                 <UserMinus size={22} className="text-destructive shrink-0" />
                 <span className="text-[15px] font-medium text-destructive">
@@ -407,7 +424,7 @@ function ProfileCards({
                   onBan(user.id, user.username);
                   onClose();
                 }}
-                className="w-full flex items-center gap-4 px-2 py-3 rounded-xl hover:bg-rm-bg-hover transition-colors"
+                className="w-full flex items-center gap-4 px-2 py-3 rounded-xl hover:bg-[var(--rm-profile-custom-card-bg)] transition-colors"
               >
                 <Ban size={22} className="text-destructive shrink-0" />
                 <span className="text-[15px] font-medium text-destructive">
@@ -419,9 +436,9 @@ function ProfileCards({
         </div>
       )}
 
-      <div className="bg-rm-bg-elevated rounded-2xl border border-rm-border/30 p-4">
+      <div className="bg-[var(--rm-profile-custom-card-bg-strong)] rounded-2xl border border-[color:var(--rm-profile-custom-card-border)] p-4">
         <div className="flex items-center justify-between">
-          <span className="text-[13px] font-medium text-rm-text-muted">
+          <span className="text-[13px] font-medium text-[color:var(--rm-profile-custom-muted)]">
             Note (only visible to you)
           </span>
         </div>
@@ -519,8 +536,12 @@ export default function MobileProfileSheet({
           isClosing && "animate-out slide-out-to-bottom fade-out",
         )}
         style={profileThemeStyle}
+        outsideSurface={
+          <div className="pointer-events-none absolute inset-x-0 top-2 z-50 flex justify-center">
+            <div className="h-1 w-10 rounded-full bg-[var(--rm-profile-custom-muted)]/45" />
+          </div>
+        }
       >
-        <div className="absolute top-2 left-1/2 -translate-x-1/2 w-10 h-1 rounded-full bg-rm-text-muted/30 z-20" />
         <ProfileBanner
           bannerUrl={resolvedUser.banner_url}
           bannerContentType={resolvedUser.banner_content_type}

@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   getProfileFrameLayerStyle,
   getProfileFrameLayers,
+  getProfileFrameSurfaceInsetStyle,
 } from "@/lib/profile-frame";
 
 const display = {
@@ -80,6 +81,31 @@ describe("getProfileFrameLayers", () => {
       height: "100%",
       objectFit: "fill",
       top: "0%",
+    });
+  });
+
+  it("fits staple layers to a full-screen surface when requested", () => {
+    const staple = display.collectibles.profileFrame.layers[2];
+
+    expect(
+      getProfileFrameLayerStyle(display, staple, { fitToSurface: true }),
+    ).toMatchObject({
+      bottom: "0%",
+    });
+
+    const border = display.collectibles.profileFrame.layers[1];
+    expect(
+      getProfileFrameLayerStyle(display, border, { fitToSurface: true }),
+    ).toMatchObject({
+      height: "calc(100% - 20cqw - 20cqw)",
+      top: "20cqw",
+    });
+  });
+
+  it("returns the inset needed to place a surface inside the frame", () => {
+    expect(getProfileFrameSurfaceInsetStyle(display)).toEqual({
+      top: "20cqw",
+      bottom: "20cqw",
     });
   });
 });

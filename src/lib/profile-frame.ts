@@ -7,6 +7,22 @@ import type { CSSProperties } from "react";
 
 export type ProfileFrameLayerOrder = "front" | "back";
 
+export interface ProfileFrameLayerStyleOptions {
+  fitToSurface?: boolean;
+}
+
+export function getProfileFrameSurfaceInsetStyle(
+  display: AvatarDisplay | string | null | undefined,
+): CSSProperties {
+  const frame = getProfileFrame(display);
+  if (!frame) return {};
+
+  return {
+    top: `${(frame.overflowTop / frame.innerWidth) * 100}cqw`,
+    bottom: `${(frame.overflowBottom / frame.innerWidth) * 100}cqw`,
+  };
+}
+
 export function getProfileFrameLayers(
   display: AvatarDisplay | string | null | undefined,
   order: ProfileFrameLayerOrder,
@@ -20,6 +36,7 @@ export function getProfileFrameLayers(
 export function getProfileFrameLayerStyle(
   display: AvatarDisplay | string | null | undefined,
   layer: ProfileFrameSelection["layers"][number],
+  { fitToSurface = false }: ProfileFrameLayerStyleOptions = {},
 ): CSSProperties {
   const frame = getProfileFrame(display);
   const horizontalOverflow = frame
@@ -33,23 +50,34 @@ export function getProfileFrameLayerStyle(
       100
     : 8;
   const isContainedBorder = layer.type === "border";
+  const fitVerticalBounds = fitToSurface || isContainedBorder;
+  const surfaceInset = getProfileFrameSurfaceInsetStyle(display);
+  const surfaceTop = surfaceInset.top;
+  const surfaceBottom = surfaceInset.bottom;
 
   return {
     width: `${100 + horizontalOverflow}cqw`,
     ...(isContainedBorder
       ? {
-          height: "100%",
+          height:
+            fitToSurface && surfaceTop && surfaceBottom
+              ? `calc(100% - ${surfaceTop} - ${surfaceBottom})`
+              : "100%",
           objectFit: "fill" as const,
-          top: "0%",
+          top: fitToSurface && surfaceTop ? surfaceTop : "0%",
         }
       : {}),
-    ...(!isContainedBorder &&
-      (layer.anchor === "bottom"
-        ? {
-            bottom: `calc(-${verticalOverflow}cqw)`,
-          }
-        : {
-            top: `calc(-${verticalOverflow}cqw)`,
-          })),
+    ...(fitVerticalBounds && !isContainedBorder
+      ? layer.anchor === "bottom"
+        ? { bottom: "0%" }
+        : { top: "0%" }
+      : !isContainedBorder &&
+        (layer.anchor === "bottom"
+          ? {
+              bottom: `calc(-${verticalOverflow}cqw)`,
+            }
+          : {
+              top: `calc(-${verticalOverflow}cqw)`,
+            })),
   };
 }
