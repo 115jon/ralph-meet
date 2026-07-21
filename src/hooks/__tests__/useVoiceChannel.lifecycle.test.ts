@@ -18,128 +18,144 @@ import {
   type LocalAudioProcessorHandle,
 } from "@/lib/voice/noise-reduction";
 
-const { chatState, chatActions, settingsState, sfuInstances, FakeSFUClient } =
-  vi.hoisted(() => {
-    const sfuInstances: FakeSFUClient[] = [];
+const {
+  authUser,
+  chatState,
+  chatActions,
+  settingsState,
+  sfuInstances,
+  FakeSFUClient,
+} = vi.hoisted(() => {
+  const sfuInstances: FakeSFUClient[] = [];
 
-    class FakeSFUClient {
-      readonly handlers = new Map<string, Set<(value: unknown) => void>>();
-      readonly audio = {
-        isAudioSuspended: () => false,
-        setMasterVolume: vi.fn(),
-        setOutputDevice: vi.fn(),
-      };
-      readonly vad = {
-        setThreshold: vi.fn(),
-        start: vi.fn(),
-        stop: vi.fn(),
-      };
-      readonly roomGW = { sendVoiceState: vi.fn(), send: vi.fn() };
-      readonly voiceGW = { send: vi.fn() };
-      readonly connect = vi.fn();
-      readonly resumeAudioContext = vi.fn();
-      readonly disconnect = vi.fn();
-      readonly setParticipantVolume = vi.fn();
-      readonly setTrackVolume = vi.fn();
-      readonly setTrackPan = vi.fn();
-      readonly setRemoteTrackSubscription = vi.fn();
-      readonly setClerkMapping = vi.fn();
-      readonly deleteClerkMapping = vi.fn();
-      readonly publishTracks = vi.fn();
-      readonly replaceTrack = vi.fn();
-      readonly setPublishedTrackEnabled = vi.fn();
-      readonly unpublishTrack = vi.fn();
+  class FakeSFUClient {
+    readonly handlers = new Map<string, Set<(value: unknown) => void>>();
+    readonly audio = {
+      isAudioSuspended: () => false,
+      setMasterVolume: vi.fn(),
+      setOutputDevice: vi.fn(),
+    };
+    readonly vad = {
+      setThreshold: vi.fn(),
+      start: vi.fn(),
+      stop: vi.fn(),
+    };
+    readonly roomGW = { sendVoiceState: vi.fn(), send: vi.fn() };
+    readonly voiceGW = {
+      isReady: true,
+      send: vi.fn(),
+      sendAppEvent: vi.fn(() => true),
+    };
+    readonly connect = vi.fn();
+    readonly resumeAudioContext = vi.fn();
+    readonly disconnect = vi.fn();
+    readonly waitForVoiceGatewayReady = vi.fn(() => Promise.resolve());
+    readonly setParticipantVolume = vi.fn();
+    readonly setTrackVolume = vi.fn();
+    readonly setTrackPan = vi.fn();
+    readonly setRemoteTrackSubscription = vi.fn();
+    readonly setClerkMapping = vi.fn();
+    readonly deleteClerkMapping = vi.fn();
+    readonly publishTracks = vi.fn();
+    readonly replaceTrack = vi.fn();
+    readonly setPublishedTrackEnabled = vi.fn();
+    readonly unpublishTrack = vi.fn();
 
-      constructor() {
-        sfuInstances.push(this);
-      }
-
-      on(event: string, handler: (value: unknown) => void): () => void {
-        let handlers = this.handlers.get(event);
-        if (!handlers) {
-          handlers = new Set();
-          this.handlers.set(event, handlers);
-        }
-        handlers.add(handler);
-        return () => handlers?.delete(handler);
-      }
-
-      activeHandlerCount(): number {
-        return Array.from(this.handlers.values()).reduce(
-          (count, handlers) => count + handlers.size,
-          0,
-        );
-      }
-
-      emit(event: string, value: unknown): void {
-        this.handlers.get(event)?.forEach((handler) => handler(value));
-      }
+    constructor() {
+      sfuInstances.push(this);
     }
 
-    const settings = {
-      isMuted: false,
-      isDeafened: false,
-      inputDeviceId: "default",
-      inputDeviceLabel: "",
-      inputDeviceGroupId: "",
-      videoDeviceId: "default",
-      videoDeviceLabel: "",
-      videoDeviceGroupId: "",
-      cameraQuality: "720p30",
-      cameraBackground: "none",
-      customCameraBackgrounds: {},
-      noiseSuppression: true,
-      noiseReductionEnabled: false,
-      noiseReductionProvider: "rnnoise",
-      echoCancellation: true,
-      autoSensitivity: true,
-      sensitivity: -50,
-      streamHighFidelity: false,
-      outputVolume: 100,
-      outputDeviceId: "default",
-      spatialAudioEnabled: false,
-      alwaysShowStreamPreview: false,
-      peerSettings: {},
-    };
+    on(event: string, handler: (value: unknown) => void): () => void {
+      let handlers = this.handlers.get(event);
+      if (!handlers) {
+        handlers = new Set();
+        this.handlers.set(event, handlers);
+      }
+      handlers.add(handler);
+      return () => handlers?.delete(handler);
+    }
 
-    const settingsState = {
-      getSettings: () => settings,
-      setCurrentUser: vi.fn(),
-      setIsMuted: vi.fn(),
-      setIsDeafened: vi.fn(),
-      setDevice: vi.fn(),
-      updateUserSettings: vi.fn(),
-    };
+    activeHandlerCount(): number {
+      return Array.from(this.handlers.values()).reduce(
+        (count, handlers) => count + handlers.size,
+        0,
+      );
+    }
 
-    const chatState = {
-      voiceChannelStates: {},
-      voiceChannelSpatialAudioStates: {},
-      user: null,
-      connected: true,
-      voiceChannelStartedAt: {},
-      gateway: { getSessionId: () => null },
-    };
+    emit(event: string, value: unknown): void {
+      this.handlers.get(event)?.forEach((handler) => handler(value));
+    }
+  }
 
-    const chatActions = {
-      dispatch: vi.fn(),
-      sendVoiceChannelJoin: vi.fn(),
-      sendVoiceChannelLeave: vi.fn(),
-      sendVoiceStateUpdate: vi.fn(),
-      setSpeakingUsers: vi.fn(),
-      clearSpeakingUsers: vi.fn(),
-    };
+  const settings = {
+    isMuted: false,
+    isDeafened: false,
+    inputDeviceId: "default",
+    inputDeviceLabel: "",
+    inputDeviceGroupId: "",
+    videoDeviceId: "default",
+    videoDeviceLabel: "",
+    videoDeviceGroupId: "",
+    cameraQuality: "720p30",
+    cameraBackground: "none",
+    customCameraBackgrounds: {},
+    noiseSuppression: true,
+    noiseReductionEnabled: false,
+    noiseReductionProvider: "rnnoise",
+    echoCancellation: true,
+    autoSensitivity: true,
+    sensitivity: -50,
+    streamHighFidelity: false,
+    outputVolume: 100,
+    outputDeviceId: "default",
+    spatialAudioEnabled: false,
+    alwaysShowStreamPreview: false,
+    peerSettings: {},
+  };
 
-    return {
-      chatState,
-      chatActions,
-      settingsState,
-      sfuInstances,
-      FakeSFUClient,
-    };
-  });
+  const settingsState = {
+    getSettings: () => settings,
+    setCurrentUser: vi.fn(),
+    setIsMuted: vi.fn(),
+    setIsDeafened: vi.fn(),
+    setDevice: vi.fn(),
+    updateUserSettings: vi.fn(),
+  };
+
+  const chatState = {
+    voiceChannelStates: {},
+    voiceChannelSpatialAudioStates: {},
+    user: null,
+    connected: true,
+    voiceChannelStartedAt: {},
+    gateway: { getSessionId: () => null },
+  };
+
+  const authUser: { current: { id: string } | null } = { current: null };
+
+  const chatActions = {
+    dispatch: vi.fn(),
+    sendVoiceChannelJoin: vi.fn(),
+    sendVoiceChannelLeave: vi.fn(),
+    sendVoiceStateUpdate: vi.fn(),
+    setSpeakingUsers: vi.fn(),
+    clearSpeakingUsers: vi.fn(),
+  };
+
+  return {
+    chatState,
+    chatActions,
+    authUser,
+    settingsState,
+    sfuInstances,
+    FakeSFUClient,
+  };
+});
 
 vi.mock("@/lib/sfu-client", () => ({ SFUClient: FakeSFUClient }));
-vi.mock("@kova/react", () => ({ useUser: () => ({ user: null }) }));
+vi.mock("@kova/react", () => ({
+  useUser: () => ({ user: authUser.current }),
+}));
 vi.mock("@/lib/console-logger", () => ({
   clog: () => ({
     debug: vi.fn(),
@@ -211,6 +227,7 @@ vi.mock("@/lib/sounds", () => ({
 vi.mock("@/lib/voice/auto-soundboard", () => ({
   cancelAutomaticSoundboardCleanup: vi.fn(),
   getAutomaticSoundboardSessionId: vi.fn(() => "session"),
+  getAutomaticSoundboardSessionGeneration: vi.fn(() => 1),
   playAutomaticSoundboardTrigger: vi.fn().mockResolvedValue(undefined),
   resetAutomaticSoundboardSession: vi.fn(),
   scheduleAutomaticSoundboardCleanup: vi.fn(),
@@ -243,6 +260,7 @@ vi.mock("@/stores/useSoundSettingsStore", () => ({
 }));
 
 import { mergeVoiceState, useVoiceChannel } from "@/hooks/useVoiceChannel";
+import { playAutomaticSoundboardTrigger } from "@/lib/voice/auto-soundboard";
 import type { VoiceState, VoiceStateDelta } from "@/lib/types";
 
 class TestMediaStream {
@@ -333,6 +351,7 @@ describe("useVoiceChannel SFU lifecycle", () => {
     vi.mocked(getCameraBackgroundEffectKey).mockReset();
     vi.mocked(getCameraBackgroundEffectKey).mockReturnValue("none");
     sfuInstances.length = 0;
+    authUser.current = null;
     settingsState.getSettings().inputDeviceId = "default";
     settingsState.getSettings().videoDeviceId = "default";
     settingsState.getSettings().cameraQuality = "720p30";
@@ -384,6 +403,76 @@ describe("useVoiceChannel SFU lifecycle", () => {
     });
     expect(mergeVoiceState(undefined, legacyUpdate)).toEqual(legacyUpdate);
     expect(mergeVoiceState(undefined, delta)).toBeNull();
+  });
+
+  it("passes the active voice gateway to automatic join and leave triggers", async () => {
+    authUser.current = { id: "user-1" };
+    const hook = renderHook(() =>
+      useVoiceChannel({ channelId: "channel", serverId: "server" }),
+    );
+
+    await act(async () => {
+      await hook.result.current.handleJoin();
+    });
+    const sfu = sfuInstances[0];
+    if (!sfu) throw new Error("SFU was not created");
+
+    await act(async () => {
+      sfu.emit("joined", { participantId: "self", participants: [] });
+    });
+
+    const automaticMock = vi.mocked(playAutomaticSoundboardTrigger);
+    expect(automaticMock).toHaveBeenCalledWith(
+      "join",
+      "session",
+      "server",
+      expect.objectContaining({
+        serverKey: "server",
+        userId: "user-1",
+      }),
+    );
+
+    await act(async () => {
+      hook.result.current.handleLeave();
+      await Promise.resolve();
+    });
+    await new Promise((resolve) => setTimeout(resolve, 120));
+
+    expect(automaticMock).toHaveBeenCalledWith(
+      "leave",
+      "session",
+      "server",
+      expect.objectContaining({
+        serverKey: "server",
+        userId: "user-1",
+      }),
+    );
+    expect(sfu.disconnect).toHaveBeenCalledWith("user-leave");
+    hook.unmount();
+  });
+
+  it("disconnects an SFU that is still connecting without sending an exit sound", async () => {
+    const hook = renderHook(() =>
+      useVoiceChannel({ channelId: "channel", serverId: "server" }),
+    );
+    await act(async () => {
+      await hook.result.current.handleJoin();
+    });
+    const sfu = sfuInstances[0];
+    if (!sfu) throw new Error("SFU was not created");
+
+    await act(async () => {
+      hook.result.current.handleLeave();
+    });
+
+    expect(sfu.disconnect).toHaveBeenCalledWith("user-leave");
+    expect(playAutomaticSoundboardTrigger).not.toHaveBeenCalledWith(
+      "leave",
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+    );
+    hook.unmount();
   });
 
   it("merges compact participant updates and forwards profile updates to the sidebar cache", async () => {

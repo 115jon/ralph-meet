@@ -20,6 +20,7 @@ const PLAYBACK_UI_VISIBLE_AFTER_MS = 500;
 const DATA_URL_PATTERN = /^data:([^;,]+)?(;base64)?,(.*)$/;
 const MAX_SOUNDBOARD_EVENT_PAST_SKEW_MS = 5_000;
 const MAX_SOUNDBOARD_EVENT_FUTURE_SKEW_MS = 5_000;
+export const MAX_AUTOMATIC_SOUNDBOARD_DURATION_SECONDS = 3;
 
 interface PlaybackController {
   ownerId: string;
@@ -32,6 +33,8 @@ interface PlaybackController {
   volume?: number;
   rawVolume?: number;
   showTimer?: ReturnType<typeof setTimeout>;
+  automaticEvent?: "join" | "leave";
+  automaticStopTimer?: ReturnType<typeof setTimeout>;
 }
 
 export interface SoundboardPlayRequest {
@@ -48,6 +51,8 @@ export interface SoundboardPlayRequest {
   mediaCapabilityExpiresAt?: number;
   currentTime?: number;
   paused?: boolean;
+  automaticEvent?: "join" | "leave";
+  maxDurationSeconds?: number;
   renewCapability?: (state: {
     currentTime: number;
     paused: boolean;
@@ -84,6 +89,8 @@ export function getSoundboardEventReceivedAt(
 function cleanupPlayback(playbackId: string) {
   const controller = activeControllers.get(playbackId);
   if (controller?.showTimer) clearTimeout(controller.showTimer);
+  if (controller?.automaticStopTimer)
+    clearTimeout(controller.automaticStopTimer);
   activeControllers.delete(playbackId);
   useVoiceSoundboardStore.getState().removePlayback(playbackId);
 }
@@ -119,6 +126,18 @@ export function stopSoundboardPlaybacksByOwner(
   for (const controller of activeControllers.values()) {
     if (controller.ownerId !== ownerId) continue;
     if (serverKey && controller.serverKey !== serverKey) continue;
+    controller.stop();
+  }
+}
+
+export function stopAutomaticJoinSoundboardPlaybacksByOwner(
+  ownerId: string,
+  serverKey?: string,
+) {
+  for (const controller of activeControllers.values()) {
+    if (controller.ownerId !== ownerId) continue;
+    if (serverKey && controller.serverKey !== serverKey) continue;
+    if (controller.automaticEvent !== "join") continue;
     controller.stop();
   }
 }
@@ -218,6 +237,8 @@ export function playSoundboardPlayback({
   currentTime,
   paused = false,
   renewCapability,
+  automaticEvent,
+  maxDurationSeconds,
 }: SoundboardPlayRequest) {
   // If the same playbackId is received again (e.g. deterministic ID for spam clicks),
   // we let it proceed to stopSoundboardPlayback and restart the audio buffer.
@@ -305,6 +326,7 @@ export function playSoundboardPlayback({
         serverKey,
         stop: finalize,
         paused: requestedPaused,
+        automaticEvent,
         pause: () => {
           if (finished) return;
           requestedPaused = true;
@@ -329,6 +351,21 @@ export function playSoundboardPlayback({
     );
     const controller = activeControllers.get(playbackId);
     if (controller) controller.rawVolume = normalizeVolume(volume);
+    if (automaticEvent) {
+      const durationSeconds = Math.min(
+        MAX_AUTOMATIC_SOUNDBOARD_DURATION_SECONDS,
+        Math.max(
+          0,
+          maxDurationSeconds ?? MAX_AUTOMATIC_SOUNDBOARD_DURATION_SECONDS,
+        ),
+      );
+      if (controller) {
+        controller.automaticStopTimer = setTimeout(
+          finalize,
+          durationSeconds * 1000,
+        );
+      }
+    }
 
     audio.volume = initialVolume;
     audio.preload = "auto";
@@ -439,6 +476,7 @@ export function playSoundboardPlayback({
         } catch {}
         finalize();
       },
+      automaticEvent,
     },
   );
   const controller = activeControllers.get(playbackId);

@@ -60,7 +60,7 @@ export interface CallVoiceState {
   isDeafened: boolean;
 
   // ── Callbacks (set by CallVoiceManager) ──────────────────────────────
-  handleLeave: (() => void) | null;
+  handleLeave: (() => void | Promise<void>) | null;
   toggleMic: (() => void) | null;
   toggleDeafen: (() => void) | null;
   toggleCamera: (() => Promise<void>) | null;

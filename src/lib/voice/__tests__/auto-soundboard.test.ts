@@ -19,13 +19,18 @@ vi.mock("@/lib/api-client", () => ({ apiGet: mocks.apiGet }));
 import {
   playAutomaticSoundboardTrigger,
   resetAutomaticSoundboardSession,
+  scheduleAutomaticSoundboardCleanup,
 } from "@/lib/voice/auto-soundboard";
 import { useSoundSettingsStore } from "@/stores/useSoundSettingsStore";
 
 describe("automatic soundboard triggers", () => {
+  const sendAppEvent = vi.fn(() => true);
+
   beforeEach(() => {
     mocks.playSoundboardPlayback.mockReset();
     mocks.apiGet.mockReset();
+    sendAppEvent.mockReset();
+    sendAppEvent.mockReturnValue(true);
     useSoundSettingsStore.setState({
       currentUser: "user-1",
       userSettings: {
@@ -62,34 +67,120 @@ describe("automatic soundboard triggers", () => {
   });
 
   it("plays a configured join sound once with general effects volume applied", async () => {
-    await playAutomaticSoundboardTrigger("join", "session-1");
-    await playAutomaticSoundboardTrigger("join", "session-1");
+    await playAutomaticSoundboardTrigger("join", "session-1", undefined, {
+      serverKey: "server-1",
+      userId: "user-1",
+      sendAppEvent,
+    });
+    await playAutomaticSoundboardTrigger("join", "session-1", undefined, {
+      serverKey: "server-1",
+      userId: "user-1",
+      sendAppEvent,
+    });
 
-    expect(mocks.playSoundboardPlayback).toHaveBeenCalledTimes(1);
-    expect(mocks.playSoundboardPlayback).toHaveBeenCalledWith(
+    expect(sendAppEvent).toHaveBeenCalledTimes(1);
+    expect(sendAppEvent).toHaveBeenCalledWith(
       expect.objectContaining({
-        playbackId: expect.stringContaining("session-1:join"),
-        soundId: "chime",
+        type: "soundboard.play",
+        server_key: "server-1",
+        user_id: "user-1",
+        playback_id: expect.stringMatching(/^sb1:/),
+        sound_id: "chime",
         volume: 0.4,
-        isLocal: true,
+        automatic_event: "join",
       }),
     );
-  });
-
-  it("does not play a leave sound until a session has joined", async () => {
-    await playAutomaticSoundboardTrigger("leave", "session-2");
     expect(mocks.playSoundboardPlayback).not.toHaveBeenCalled();
   });
 
+  it("does not play a leave sound until a session has joined", async () => {
+    await playAutomaticSoundboardTrigger("leave", "session-2", undefined, {
+      serverKey: "server-1",
+      userId: "user-1",
+      sendAppEvent,
+    });
+    expect(sendAppEvent).not.toHaveBeenCalled();
+  });
+
+  it("waits for a reconnecting voice gateway before sending the join trigger", async () => {
+    let resolveReady!: () => void;
+    let ready = false;
+    const waitUntilReady = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveReady = resolve;
+        }),
+    );
+    const trigger = playAutomaticSoundboardTrigger(
+      "join",
+      "reconnect-session",
+      undefined,
+      {
+        serverKey: "server-1",
+        userId: "user-1",
+        sendAppEvent,
+        isReady: () => ready,
+        waitUntilReady,
+      },
+    );
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(sendAppEvent).not.toHaveBeenCalled();
+
+    ready = true;
+    resolveReady();
+    await expect(trigger).resolves.toBe(true);
+    expect(waitUntilReady).toHaveBeenCalledTimes(1);
+    expect(sendAppEvent).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not wait for gateway readiness before sending a leave trigger", async () => {
+    await playAutomaticSoundboardTrigger("join", "fast-leave", undefined, {
+      serverKey: "server-1",
+      userId: "user-1",
+      sendAppEvent,
+    });
+    const result = await playAutomaticSoundboardTrigger(
+      "leave",
+      "fast-leave",
+      undefined,
+      {
+        serverKey: "server-1",
+        userId: "user-1",
+        sendAppEvent,
+        isReady: () => false,
+        waitUntilReady: () => new Promise<void>(() => {}),
+      },
+    );
+
+    expect(result).toBe(false);
+  });
+
   it("plays leave once after join and can be reused after reset", async () => {
-    await playAutomaticSoundboardTrigger("join", "session-3");
-    await playAutomaticSoundboardTrigger("leave", "session-3");
-    await playAutomaticSoundboardTrigger("leave", "session-3");
-    expect(mocks.playSoundboardPlayback).toHaveBeenCalledTimes(2);
+    await playAutomaticSoundboardTrigger("join", "session-3", undefined, {
+      serverKey: "server-1",
+      userId: "user-1",
+      sendAppEvent,
+    });
+    await playAutomaticSoundboardTrigger("leave", "session-3", undefined, {
+      serverKey: "server-1",
+      userId: "user-1",
+      sendAppEvent,
+    });
+    await playAutomaticSoundboardTrigger("leave", "session-3", undefined, {
+      serverKey: "server-1",
+      userId: "user-1",
+      sendAppEvent,
+    });
+    expect(sendAppEvent).toHaveBeenCalledTimes(2);
 
     resetAutomaticSoundboardSession("session-3");
-    await playAutomaticSoundboardTrigger("join", "session-3");
-    expect(mocks.playSoundboardPlayback).toHaveBeenCalledTimes(3);
+    await playAutomaticSoundboardTrigger("join", "session-3", undefined, {
+      serverKey: "server-1",
+      userId: "user-1",
+      sendAppEvent,
+    });
+    expect(sendAppEvent).toHaveBeenCalledTimes(3);
   });
 
   it("resolves server selections from the authorized catalog before playing", async () => {
@@ -99,7 +190,7 @@ describe("automatic soundboard triggers", () => {
           enabled: true,
           sound: {
             source: "server",
-            serverId: "server-1",
+            serverId: "active-server",
             soundId: "clip-1",
             name: "Saved name",
             volume: 1,
@@ -111,21 +202,118 @@ describe("automatic soundboard triggers", () => {
       {
         id: "clip-1",
         name: "Catalog clip",
-        file_url: "/api/attachments/clip-1",
+        file_url: "/api/soundboard/uploads/clip-1",
         volume: 0.75,
       },
     ]);
 
-    await playAutomaticSoundboardTrigger("join", "session-4");
+    await playAutomaticSoundboardTrigger("join", "session-4", undefined, {
+      serverKey: "active-server",
+      userId: "user-1",
+      sendAppEvent,
+    });
 
-    expect(mocks.playSoundboardPlayback).toHaveBeenCalledWith(
+    expect(sendAppEvent).toHaveBeenCalledWith(
       expect.objectContaining({
+        type: "soundboard.play",
+        server_key: "active-server",
+        user_id: "user-1",
         name: "Catalog clip",
-        mediaUrl: "/api/attachments/clip-1",
+        media_url: "/api/soundboard/uploads/clip-1",
         volume: 0.375,
-        serverKey: "server-1",
       }),
     );
+    expect(mocks.playSoundboardPlayback).not.toHaveBeenCalled();
+  });
+
+  it("includes the source server when a DM call plays a server sound", async () => {
+    useSoundSettingsStore.getState().updateSettings({
+      voiceJoinSoundboard: {
+        "*": {
+          enabled: true,
+          sound: {
+            source: "server",
+            serverId: "source-server",
+            soundId: "clip-1",
+            name: "Saved name",
+            volume: 1,
+          },
+        },
+      },
+    });
+    mocks.apiGet.mockResolvedValue([
+      {
+        id: "clip-1",
+        name: "Catalog clip",
+        file_url: "/api/soundboard/uploads/clip-1",
+      },
+    ]);
+
+    await playAutomaticSoundboardTrigger("join", "dm-session", undefined, {
+      serverKey: "dm-call",
+      userId: "user-1",
+      sendAppEvent,
+    });
+
+    expect(sendAppEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        server_key: "dm-call",
+        source_server_id: "source-server",
+        media_url: "/api/soundboard/uploads/clip-1",
+      }),
+    );
+  });
+
+  it("does not send custom automatic media to a DM call", async () => {
+    useSoundSettingsStore.getState().updateSettings({
+      voiceJoinSoundboard: {
+        "*": {
+          enabled: true,
+          sound: {
+            source: "custom",
+            soundId: "custom-clip",
+            name: "Custom clip",
+            mediaUrl: "/uploads/custom-clip.mp3",
+            volume: 1,
+          },
+        },
+      },
+    });
+
+    await expect(
+      playAutomaticSoundboardTrigger("join", "dm-custom", undefined, {
+        serverKey: "dm-call",
+        userId: "user-1",
+        sendAppEvent,
+      }),
+    ).resolves.toBe(false);
+    expect(sendAppEvent).not.toHaveBeenCalled();
+  });
+
+  it("does not send server media across active server scopes", async () => {
+    useSoundSettingsStore.getState().updateSettings({
+      voiceJoinSoundboard: {
+        "*": {
+          enabled: true,
+          sound: {
+            source: "server",
+            serverId: "source-server",
+            soundId: "clip-1",
+            name: "Saved name",
+            volume: 1,
+          },
+        },
+      },
+    });
+
+    await expect(
+      playAutomaticSoundboardTrigger("join", "cross-server", undefined, {
+        serverKey: "active-server",
+        userId: "user-1",
+        sendAppEvent,
+      }),
+    ).resolves.toBe(false);
+    expect(sendAppEvent).not.toHaveBeenCalled();
   });
 
   it("does not play a stale leave sound after the session is replaced", async () => {
@@ -150,27 +338,92 @@ describe("automatic soundboard triggers", () => {
       }),
     );
 
-    await playAutomaticSoundboardTrigger("join", "race-session");
-    const staleLeave = playAutomaticSoundboardTrigger("leave", "race-session");
+    await playAutomaticSoundboardTrigger("join", "race-session", undefined, {
+      serverKey: "server-1",
+      userId: "user-1",
+      sendAppEvent,
+    });
+    const staleLeave = playAutomaticSoundboardTrigger(
+      "leave",
+      "race-session",
+      undefined,
+      {
+        serverKey: "server-1",
+        userId: "user-1",
+        sendAppEvent,
+      },
+    );
     resetAutomaticSoundboardSession("race-session");
-    await playAutomaticSoundboardTrigger("join", "race-session");
+    await playAutomaticSoundboardTrigger("join", "race-session", undefined, {
+      serverKey: "server-1",
+      userId: "user-1",
+      sendAppEvent,
+    });
     resolveCatalog([
       {
         id: "clip-1",
         name: "Catalog clip",
-        file_url: "/api/attachments/clip-1",
+        file_url: "/api/soundboard/uploads/clip-1",
         volume: 1,
       },
     ]);
     await staleLeave;
 
-    expect(mocks.playSoundboardPlayback).toHaveBeenCalledTimes(2);
-    expect(mocks.playSoundboardPlayback).toHaveBeenCalledWith(
-      expect.objectContaining({ soundId: "chime" }),
+    expect(sendAppEvent).toHaveBeenCalledTimes(2);
+    expect(sendAppEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ sound_id: "chime" }),
     );
-    expect(mocks.playSoundboardPlayback).not.toHaveBeenCalledWith(
-      expect.objectContaining({ mediaUrl: "/api/attachments/clip-1" }),
+    expect(sendAppEvent).not.toHaveBeenCalledWith(
+      expect.objectContaining({ media_url: "/api/attachments/clip-1" }),
     );
+  });
+
+  it("does not let stale scheduled cleanup reset a replacement session", async () => {
+    await playAutomaticSoundboardTrigger(
+      "join",
+      "scheduled-session",
+      undefined,
+      {
+        serverKey: "server-1",
+        userId: "user-1",
+        sendAppEvent,
+      },
+    );
+
+    scheduleAutomaticSoundboardCleanup("scheduled-session", undefined, {
+      serverKey: "server-1",
+      userId: "user-1",
+      sendAppEvent,
+      isReady: () => false,
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    resetAutomaticSoundboardSession("scheduled-session");
+    await playAutomaticSoundboardTrigger(
+      "join",
+      "scheduled-session",
+      undefined,
+      {
+        serverKey: "server-1",
+        userId: "user-1",
+        sendAppEvent,
+      },
+    );
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    await playAutomaticSoundboardTrigger(
+      "leave",
+      "scheduled-session",
+      undefined,
+      {
+        serverKey: "server-1",
+        userId: "user-1",
+        sendAppEvent,
+      },
+    );
+
+    expect(sendAppEvent).toHaveBeenCalledTimes(3);
   });
 
   it("uses the current server override and falls back to All Servers", async () => {
@@ -197,15 +450,28 @@ describe("automatic soundboard triggers", () => {
       },
     });
 
-    await playAutomaticSoundboardTrigger("join", "scoped-server", "server-1");
-    expect(mocks.playSoundboardPlayback).toHaveBeenLastCalledWith(
-      expect.objectContaining({ soundId: "ping" }),
+    await playAutomaticSoundboardTrigger("join", "scoped-server", "server-1", {
+      serverKey: "server-1",
+      userId: "user-1",
+      sendAppEvent,
+    });
+    expect(sendAppEvent).toHaveBeenLastCalledWith(
+      expect.objectContaining({ sound_id: "ping" }),
     );
 
     resetAutomaticSoundboardSession("scoped-server");
-    await playAutomaticSoundboardTrigger("join", "scoped-fallback", "server-2");
-    expect(mocks.playSoundboardPlayback).toHaveBeenLastCalledWith(
-      expect.objectContaining({ soundId: "chime" }),
+    await playAutomaticSoundboardTrigger(
+      "join",
+      "scoped-fallback",
+      "server-2",
+      {
+        serverKey: "server-2",
+        userId: "user-1",
+        sendAppEvent,
+      },
+    );
+    expect(sendAppEvent).toHaveBeenLastCalledWith(
+      expect.objectContaining({ sound_id: "chime" }),
     );
   });
 });

@@ -802,6 +802,10 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
     });
   }
 
+  public waitForVoiceGatewayReady(): Promise<void> {
+    return this.voiceReadyPromise;
+  }
+
   private applyIceServers(iceServers: IceServer[]) {
     this.iceServers = iceServers;
     const config = { iceServers: this.iceServers };

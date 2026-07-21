@@ -21,7 +21,11 @@ import {
 } from "@/lib/platform";
 import { areReconnectSoundsSuppressed } from "@/lib/reconnect-sound-guard";
 import type { ScreenShareOptions } from "@/lib/screen-share-types";
-import { SFUClient, type SFUEventMap } from "@/lib/sfu-client";
+import {
+  SFUClient,
+  type SFUDisconnectReason,
+  type SFUEventMap,
+} from "@/lib/sfu-client";
 import { sendVoiceDisconnectBeacon } from "@/lib/voice-disconnect-beacon";
 import {
   applyStreamWatcherSnapshot,
@@ -50,12 +54,34 @@ import {
 } from "@/lib/voice/spatial-audio";
 import { getVoiceActivityThreshold } from "@/lib/voice/vad";
 import {
+  getSoundboardServerKey,
+  stopAutomaticJoinSoundboardPlaybacksByOwner,
+} from "@/lib/voice/soundboard";
+import {
   cancelAutomaticSoundboardCleanup,
   getAutomaticSoundboardSessionId,
+  getAutomaticSoundboardSessionGeneration,
   playAutomaticSoundboardTrigger,
   resetAutomaticSoundboardSession,
-  scheduleAutomaticSoundboardCleanup,
+  type AutomaticSoundboardTransport,
 } from "@/lib/voice/auto-soundboard";
+
+const AUTOMATIC_LEAVE_SEND_WINDOW_MS = 100;
+
+function finishAutomaticLeave(
+  sfu: SFUClient | null,
+  sessionId: string,
+  generation: number | undefined,
+  reason: SFUDisconnectReason,
+  onFinished?: () => void,
+) {
+  window.setTimeout(() => {
+    sfu?.disconnect(reason);
+    resetAutomaticSoundboardSession(sessionId, generation);
+    onFinished?.();
+  }, AUTOMATIC_LEAVE_SEND_WINDOW_MS);
+}
+
 import {
   playConnected,
   playDeafen,
@@ -605,6 +631,25 @@ export function useVoiceChannel({
   const automaticSoundboardSessionId = getAutomaticSoundboardSessionId(
     isCall ? "call" : mode,
     resolvedRoomSlug || channelId || "voice",
+  );
+  const createAutomaticSoundboardTransport = useCallback(
+    (
+      voiceClient: SFUClient | null,
+    ): AutomaticSoundboardTransport | undefined => {
+      const userId = user?.id;
+      const serverKey = isCall ? "dm-call" : serverId;
+      if (!voiceClient || !userId || !serverKey || mode === "room") {
+        return undefined;
+      }
+      return {
+        serverKey,
+        userId,
+        sendAppEvent: (payload) => voiceClient.voiceGW.sendAppEvent(payload),
+        isReady: () => voiceClient.voiceGW.isReady,
+        waitUntilReady: () => voiceClient.waitForVoiceGatewayReady(),
+      };
+    },
+    [isCall, mode, serverId, user?.id],
   );
 
   const [voiceState, voiceDispatch] = useReducer(
@@ -1497,6 +1542,7 @@ export function useVoiceChannel({
           "join",
           automaticSoundboardSessionId,
           serverId,
+          createAutomaticSoundboardTransport(sfu),
         );
 
         if (mode !== "room" && channelId) {
@@ -1662,6 +1708,10 @@ export function useVoiceChannel({
     onSfu("participant-left", ({ participantId }) => {
       const clerkId =
         uuidToClerkRef.current.get(participantId) || participantId;
+      stopAutomaticJoinSoundboardPlaybacksByOwner(
+        clerkId,
+        getSoundboardServerKey(isCall ? "dm-call" : serverId),
+      );
       participantsRef.current.delete(participantId);
       uuidToClerkRef.current.delete(participantId);
       sfu.deleteClerkMapping(participantId);
@@ -2018,6 +2068,7 @@ export function useVoiceChannel({
     localStreamRef.current = new MediaStream();
   }, [
     automaticSoundboardSessionId,
+    createAutomaticSoundboardTransport,
     user,
     serverId,
     channelId,
@@ -2620,7 +2671,10 @@ export function useVoiceChannel({
     const thumbnails = capturingThumbnails.current;
 
     return () => {
-      if (sfuRef.current) {
+      const activeSfu = sfuRef.current;
+      const automaticSoundboardTransport =
+        createAutomaticSoundboardTransport(activeSfu);
+      if (activeSfu) {
         vcLog.info("Voice lifecycle teardown", {
           reason: "component-unmount",
           channelId,
@@ -2629,7 +2683,6 @@ export function useVoiceChannel({
           joined: joinedRef.current,
         });
         cleanupSfuHandlers();
-        sfuRef.current.disconnect("component-unmount");
         sfuRef.current = null;
         setSfuInstance(null);
         stopCameraBackgroundEffect(true);
@@ -2669,10 +2722,23 @@ export function useVoiceChannel({
       }
 
       if (joinedRef.current) {
-        scheduleAutomaticSoundboardCleanup(
+        const generation = getAutomaticSoundboardSessionGeneration(
+          automaticSoundboardSessionId,
+        );
+        void playAutomaticSoundboardTrigger(
+          "leave",
           automaticSoundboardSessionId,
           serverId,
+          automaticSoundboardTransport,
+        ).catch(() => false);
+        finishAutomaticLeave(
+          activeSfu,
+          automaticSoundboardSessionId,
+          generation,
+          "component-unmount",
         );
+      } else {
+        activeSfu?.disconnect("component-unmount");
       }
 
       if (joinedRef.current && mode !== "room" && channelId) {
@@ -2686,6 +2752,7 @@ export function useVoiceChannel({
     serverId,
     stopCameraBackgroundEffect,
     automaticSoundboardSessionId,
+    createAutomaticSoundboardTransport,
     cleanupSfuHandlers,
     localMediaOwner,
   ]);
@@ -2693,13 +2760,16 @@ export function useVoiceChannel({
   // Listen for forced disconnects (e.g. user was banned/kicked from the server)
   useEffect(() => {
     const handleForceDisconnect = () => {
-      if (sfuRef.current) {
+      const activeSfu = sfuRef.current;
+      if (activeSfu) {
+        const wasJoined = joinedRef.current;
+        joinedRef.current = false;
         vcLog.warn("Voice lifecycle teardown", {
           reason: "forced-disconnect",
           channelId,
           serverId,
           mode,
-          joined: joinedRef.current,
+          joined: wasJoined,
         });
         // Play disconnect sound before cleanup (skip for calls — gateway plays call-end sound)
         if (
@@ -2709,16 +2779,27 @@ export function useVoiceChannel({
           playDisconnect();
         }
         cancelAutomaticSoundboardCleanup(automaticSoundboardSessionId);
+        const expectedGeneration = getAutomaticSoundboardSessionGeneration(
+          automaticSoundboardSessionId,
+        );
+        sfuRef.current = null;
         void playAutomaticSoundboardTrigger(
           "leave",
           automaticSoundboardSessionId,
           serverId,
-        ).finally(() =>
-          resetAutomaticSoundboardSession(automaticSoundboardSessionId),
-        );
+          createAutomaticSoundboardTransport(activeSfu),
+        ).catch(() => false);
         cleanupSfuHandlers();
-        sfuRef.current.disconnect("forced-disconnect");
-        sfuRef.current = null;
+        finishAutomaticLeave(
+          activeSfu,
+          automaticSoundboardSessionId,
+          expectedGeneration,
+          "forced-disconnect",
+          () => {
+            setSfuInstance(null);
+            onLeft?.();
+          },
+        );
         stopCameraBackgroundEffect(true);
         publishedAudioProcessorRef.current?.destroy();
         publishedAudioProcessorRef.current = null;
@@ -2734,8 +2815,7 @@ export function useVoiceChannel({
         screenStreamRef.current = null;
         releaseLocalStream(localMediaOwner);
         voiceDispatch({ type: "LEFT" });
-        onLeft?.();
-        if (mode !== "room" && channelId) {
+        if (wasJoined && mode !== "room" && channelId) {
           sendVoiceChannelLeave(channelId);
         }
       }
@@ -2755,18 +2835,37 @@ export function useVoiceChannel({
     serverId,
     stopCameraBackgroundEffect,
     automaticSoundboardSessionId,
+    createAutomaticSoundboardTransport,
     cleanupSfuHandlers,
     localMediaOwner,
   ]);
 
   const handleLeave = useCallback(() => {
+    const activeSfu = sfuRef.current;
+    if (!activeSfu) return;
+    const wasJoined = joinedRef.current;
     cancelAutomaticSoundboardCleanup(automaticSoundboardSessionId);
+    if (!wasJoined) {
+      sfuRef.current = null;
+      cleanupSfuHandlers();
+      activeSfu.disconnect("user-leave");
+      setSfuInstance(null);
+      hasAutoJoined.current = true;
+      return;
+    }
+    const automaticSoundboardTransport =
+      createAutomaticSoundboardTransport(activeSfu);
+    const expectedGeneration = getAutomaticSoundboardSessionGeneration(
+      automaticSoundboardSessionId,
+    );
+    joinedRef.current = false;
+    sfuRef.current = null;
     vcLog.info("Voice lifecycle teardown", {
       reason: "user-leave",
       channelId,
       serverId,
       mode,
-      joined: joinedRef.current,
+      joined: wasJoined,
     });
     // Play disconnect sound (skip for calls — gateway plays call-end sound)
     if (
@@ -2779,13 +2878,19 @@ export function useVoiceChannel({
       "leave",
       automaticSoundboardSessionId,
       serverId,
-    ).finally(() =>
-      resetAutomaticSoundboardSession(automaticSoundboardSessionId),
-    );
+      automaticSoundboardTransport,
+    ).catch(() => false);
     cleanupSfuHandlers();
-    sfuRef.current?.disconnect("user-leave");
-    sfuRef.current = null;
-    setSfuInstance(null);
+    finishAutomaticLeave(
+      activeSfu,
+      automaticSoundboardSessionId,
+      expectedGeneration,
+      "user-leave",
+      () => {
+        setSfuInstance(null);
+        if (!isCall) onLeft?.();
+      },
+    );
     stopCameraBackgroundEffect(true);
     publishedAudioProcessorRef.current?.destroy();
     publishedAudioProcessorRef.current = null;
@@ -2806,8 +2911,7 @@ export function useVoiceChannel({
     capturingThumbnails.current.clear();
 
     voiceDispatch({ type: "LEFT" });
-    onLeft?.();
-    if (mode !== "room" && channelId) {
+    if (wasJoined && mode !== "room" && channelId) {
       sendVoiceChannelLeave(channelId);
     }
     // Prevent the auto-join effect from immediately re-joining after an explicit
@@ -2822,6 +2926,7 @@ export function useVoiceChannel({
     serverId,
     stopCameraBackgroundEffect,
     automaticSoundboardSessionId,
+    createAutomaticSoundboardTransport,
     cleanupSfuHandlers,
     localMediaOwner,
   ]);

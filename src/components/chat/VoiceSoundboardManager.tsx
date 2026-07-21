@@ -120,6 +120,15 @@ export function VoiceSoundboardManager({
           mediaCapabilityExpiresAt: mediaCapabilityExpiresAt ?? undefined,
           currentTime,
           paused,
+          automaticEvent:
+            event.automatic_event === "join" ||
+            event.automatic_event === "leave"
+              ? event.automatic_event
+              : undefined,
+          maxDurationSeconds:
+            typeof event.max_duration_seconds === "number"
+              ? event.max_duration_seconds
+              : undefined,
           renewCapability,
         });
         return;

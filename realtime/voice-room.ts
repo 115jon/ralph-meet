@@ -3915,6 +3915,16 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
       const soundId = stringField("sound_id", 160);
       const name = stringField("name", 160);
       const sourceServerId = stringField("source_server_id", 160);
+      const automaticEvent =
+        payload.automatic_event === "join" ||
+        payload.automatic_event === "leave"
+          ? payload.automatic_event
+          : undefined;
+      const maxDurationSeconds =
+        typeof payload.max_duration_seconds === "number" &&
+        Number.isFinite(payload.max_duration_seconds)
+          ? Math.min(3, Math.max(0, payload.max_duration_seconds))
+          : undefined;
       const dataUrl = this.sanitizeSoundboardDataUrl(payload.data_url);
       const mediaUrl = this.sanitizeSoundboardMediaUrl(payload.media_url);
       const currentTime =
@@ -4013,6 +4023,10 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
         ...(soundId ? { sound_id: soundId } : {}),
         ...(isDmAdmission && sourceServerId
           ? { source_server_id: sourceServerId }
+          : {}),
+        ...(automaticEvent ? { automatic_event: automaticEvent } : {}),
+        ...(maxDurationSeconds !== undefined
+          ? { max_duration_seconds: maxDurationSeconds }
           : {}),
         name,
         ...(outboundMediaUrl

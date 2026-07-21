@@ -122,6 +122,54 @@ describe("soundboard playback runtime", () => {
     ).toBeUndefined();
   });
 
+  it("stops automatic entrance playback when its owner leaves without stopping the exit cue", async () => {
+    const {
+      playSoundboardPlayback,
+      stopAutomaticJoinSoundboardPlaybacksByOwner,
+    } = await import("@/lib/voice/soundboard");
+
+    playSoundboardPlayback({
+      playbackId: "join-1",
+      ownerId: "user-1",
+      serverKey: "server-1",
+      name: "Entrance",
+      mediaUrl: "https://example.com/entrance.mp3",
+      automaticEvent: "join",
+    });
+    playSoundboardPlayback({
+      playbackId: "leave-1",
+      ownerId: "user-1",
+      serverKey: "server-1",
+      name: "Exit",
+      mediaUrl: "https://example.com/exit.mp3",
+      automaticEvent: "leave",
+    });
+
+    stopAutomaticJoinSoundboardPlaybacksByOwner("user-1", "server-1");
+
+    expect(FakeAudio.instances[0]?.paused).toBe(true);
+    expect(FakeAudio.instances[1]?.paused).toBe(false);
+  });
+
+  it("caps automatic media playback at three seconds", async () => {
+    const { playSoundboardPlayback } = await import("@/lib/voice/soundboard");
+
+    playSoundboardPlayback({
+      playbackId: "long-auto",
+      ownerId: "user-1",
+      serverKey: "server-1",
+      name: "Long entrance",
+      mediaUrl: "https://example.com/long.mp3",
+      automaticEvent: "join",
+      maxDurationSeconds: 3,
+    });
+
+    await vi.advanceTimersByTimeAsync(2999);
+    expect(FakeAudio.instances[0]?.paused).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(FakeAudio.instances[0]?.paused).toBe(true);
+  });
+
   it("ignores an unknown source-less sound instead of using the first default", async () => {
     const { playSoundboardPlayback } = await import("@/lib/voice/soundboard");
 
