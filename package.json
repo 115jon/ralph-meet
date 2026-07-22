@@ -10,7 +10,8 @@
     "doctor": "react-doctor --project .,desktop,mobile --blocking none -y",
     "doctor:verbose": "react-doctor --project .,desktop,mobile --blocking none --verbose -y",
     "doctor:changed": "react-doctor --project .,desktop,mobile --blocking none --scope changed -y",
-    "deploy:main": "vite build && wrangler deploy --env=\"\"",
+    "migrate:main": "wrangler d1 migrations apply ralph-chat-db --remote",
+    "deploy:main": "pnpm run migrate:main && vite build && wrangler deploy --env=\"\"",
     "deploy": "pnpm run deploy:main",
     "lint": "eslint",
     "lint:fix": "eslint --fix",
@@ -66,9 +67,9 @@
     "zustand": "^5.0.11"
   },
   "devDependencies": {
-    "@cloudflare/vite-plugin": "^1.40.2",
+    "@cloudflare/vite-plugin": "1.44.0",
     "@cloudflare/vitest-pool-workers": "0.18.4",
-    "@cloudflare/workers-types": "^4.20260612.1",
+    "@cloudflare/workers-types": "^5.20260718.1",
     "@eslint/js": "^9.39.3",
     "@tanstack/eslint-plugin-router": "^1.161.4",
     "@tauri-apps/api": "^2.10.1",
@@ -100,7 +101,7 @@
     "vite": "^7.3.1",
     "vite-plugin-killer-instincts": "^1.0.0",
     "vitest": "^4.1.9",
-    "wrangler": "^4.110.0"
+    "wrangler": "4.110.0"
   },
   "simple-git-hooks": {
     "pre-commit": "pnpm exec lint-staged"

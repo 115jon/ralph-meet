@@ -706,6 +706,8 @@ export interface Message {
   pending?: boolean;
   /** Number of replies to this message (for thread badge) */
   reply_count?: number;
+  /** Durable server revision used to reject reordered realtime updates */
+  content_revision?: number;
 }
 
 /** Attachment object */

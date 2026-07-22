@@ -4,10 +4,15 @@ const mocks = vi.hoisted(() => ({
   apiError: vi.fn((message: string, status: number) =>
     Response.json({ error: message }, { status }),
   ),
-  apiSuccess: vi.fn((data: unknown) => Response.json(data)),
+  apiSuccess: vi.fn((data: unknown, status = 200) =>
+    Response.json(data, { status }),
+  ),
+  broadcastToChannel: vi.fn(),
   broadcastToServerMembers: vi.fn(),
   getBucket: vi.fn(),
   getDB: vi.fn(),
+  getEnv: vi.fn(() => ({})),
+  genId: vi.fn(),
   getUserChannelPermissions: vi.fn(),
   hasPermission: vi.fn(),
   requireAuth: vi.fn(),
@@ -16,17 +21,21 @@ const mocks = vi.hoisted(() => ({
   retryR2Cleanup: vi.fn(),
   listMessages: vi.fn(),
   refreshMessageEmbeds: vi.fn(),
+  recordMessagePostprocessingJob: vi.fn(),
+  scheduleMessagePostprocessing: vi.fn(),
+  scheduleR2Cleanup: vi.fn(),
 }));
 
 vi.mock("@/lib/api-helpers", () => ({
   apiError: mocks.apiError,
   apiSuccess: mocks.apiSuccess,
-  broadcastToChannel: vi.fn(),
+  broadcastToChannel: mocks.broadcastToChannel,
   broadcastToServerMembers: mocks.broadcastToServerMembers,
   broadcastToUser: vi.fn(),
-  genId: vi.fn(),
+  genId: mocks.genId,
   getBucket: mocks.getBucket,
   getDB: mocks.getDB,
+  getEnv: mocks.getEnv,
   requireAuth: mocks.requireAuth,
 }));
 
@@ -48,6 +57,12 @@ vi.mock("@/services/r2-cleanup.service", () => ({
   retryR2Cleanup: mocks.retryR2Cleanup,
 }));
 
+vi.mock("@/lib/background-tasks", () => ({
+  recordMessagePostprocessingJob: mocks.recordMessagePostprocessingJob,
+  scheduleMessagePostprocessing: mocks.scheduleMessagePostprocessing,
+  scheduleR2Cleanup: mocks.scheduleR2Cleanup,
+}));
+
 vi.mock("@/services/message.service", async (importOriginal) => {
   const actual =
     await importOriginal<typeof import("@/services/message.service")>();
@@ -63,15 +78,20 @@ vi.mock("@/services/message.service", async (importOriginal) => {
   };
 });
 
-import { DELETE, GET, PATCH } from "../channels/$id/messages";
+import { DELETE, GET, PATCH, POST } from "../channels/$id/messages";
 
 describe("message history GET limit", () => {
   beforeEach(() => {
     mocks.apiError.mockClear();
     mocks.apiSuccess.mockClear();
     mocks.broadcastToServerMembers.mockReset();
+    mocks.broadcastToChannel.mockReset();
     mocks.getBucket.mockReset();
     mocks.getDB.mockReset();
+    mocks.getEnv.mockReset();
+    mocks.getEnv.mockReturnValue({});
+    mocks.genId.mockReset();
+    mocks.genId.mockReturnValue("message-1");
     mocks.getUserChannelPermissions.mockReset();
     mocks.hasPermission.mockReset();
     mocks.requireAuth.mockReset();
@@ -80,6 +100,8 @@ describe("message history GET limit", () => {
     mocks.retryR2Cleanup.mockReset();
     mocks.listMessages.mockReset();
     mocks.refreshMessageEmbeds.mockReset();
+    mocks.scheduleMessagePostprocessing.mockReset();
+    mocks.scheduleR2Cleanup.mockReset();
     mocks.requireAuth.mockResolvedValue({ userId: "user-1" });
     mocks.requireChannelAccess.mockResolvedValue({ serverId: "server-1" });
     mocks.getDB.mockReturnValue({});
@@ -92,6 +114,106 @@ describe("message history GET limit", () => {
       hasMoreAfter: false,
       mode: "latest",
     });
+  });
+
+  it("enqueues postprocessing after REST message creation without resolving embeds inline", async () => {
+    const order: string[] = [];
+    mocks.scheduleMessagePostprocessing.mockImplementation(() => {
+      order.push("schedule");
+    });
+    mocks.broadcastToServerMembers.mockImplementation(async () => {
+      order.push("broadcast");
+    });
+    const { createMessage } = await import("@/services/message.service");
+    vi.mocked(createMessage).mockResolvedValue({
+      id: "message-1",
+      channel_id: "channel-1",
+      author_id: "user-1",
+      author: {
+        id: "user-1",
+        username: "author",
+        display_name: null,
+        avatar_url: null,
+      },
+      content: "https://example.test",
+      reply_to_id: null,
+      is_pinned: false,
+      created_at: "2026-07-22T00:00:00.000Z",
+      updated_at: null,
+      attachments: [],
+      reactions: [],
+      reply_count: 0,
+      content_revision: 1,
+    });
+
+    const response = await POST({
+      request: new Request(
+        "https://meet.test/api/channels/channel-1/messages",
+        {
+          method: "POST",
+          body: JSON.stringify({ content: "https://example.test" }),
+        },
+      ),
+      params: { id: "channel-1" },
+    });
+
+    expect(response.status).toBe(201);
+    expect(
+      mocks.scheduleMessagePostprocessing.mock.calls[0]?.slice(0, 2),
+    ).toEqual([
+      {},
+      {
+        messageId: "message-1",
+        channelId: "channel-1",
+        revision: 1,
+        notify: true,
+      },
+    ]);
+    expect(vi.mocked(createMessage)).toHaveBeenCalledOnce();
+    expect(order).toEqual(["broadcast", "schedule"]);
+  });
+
+  it("enqueues the next content revision after a REST edit", async () => {
+    const order: string[] = [];
+    mocks.scheduleMessagePostprocessing.mockImplementation(() => {
+      order.push("schedule");
+    });
+    mocks.broadcastToServerMembers.mockImplementation(async () => {
+      order.push("broadcast");
+    });
+    const { editMessage } = await import("@/services/message.service");
+    vi.mocked(editMessage).mockResolvedValue({
+      id: "message-1",
+      channel_id: "channel-1",
+      content: "edited",
+      updated_at: "2026-07-22T00:01:00.000Z",
+      content_revision: 2,
+    });
+
+    const response = await PATCH({
+      request: new Request(
+        "https://meet.test/api/channels/channel-1/messages",
+        {
+          method: "PATCH",
+          body: JSON.stringify({ message_id: "message-1", content: "edited" }),
+        },
+      ),
+      params: { id: "channel-1" },
+    });
+
+    expect(response.status).toBe(200);
+    expect(
+      mocks.scheduleMessagePostprocessing.mock.calls[0]?.slice(0, 2),
+    ).toEqual([
+      {},
+      {
+        messageId: "message-1",
+        channelId: "channel-1",
+        revision: 2,
+        notify: false,
+      },
+    ]);
+    expect(order).toEqual(["broadcast", "schedule"]);
   });
 
   it.each([
@@ -118,7 +240,12 @@ describe("message history GET limit", () => {
   it("refreshes embed metadata without entering the message edit path", async () => {
     const embeds = [{ url: "https://cdn.test/video.mp4" }];
     mocks.refreshMessageEmbeds.mockResolvedValue([
-      { id: "message-1", channel_id: "channel-1", embeds },
+      {
+        id: "message-1",
+        channel_id: "channel-1",
+        content_revision: 3,
+        embeds,
+      },
     ]);
 
     const response = await PATCH({
@@ -142,7 +269,12 @@ describe("message history GET limit", () => {
     expect(mocks.broadcastToServerMembers).toHaveBeenCalledWith(
       "server-1",
       "MESSAGE_UPDATE",
-      { id: "message-1", channel_id: "channel-1", embeds },
+      {
+        id: "message-1",
+        channel_id: "channel-1",
+        content_revision: 3,
+        embeds,
+      },
     );
   });
 
@@ -172,6 +304,39 @@ describe("message history GET limit", () => {
       {},
       fileKey,
       expect.any(Error),
+    );
+    expect(mocks.scheduleR2Cleanup).toHaveBeenCalledWith(
+      {},
+      fileKey,
+      undefined,
+    );
+    expect(mocks.retryR2Cleanup).not.toHaveBeenCalled();
+  });
+
+  it("schedules cleanup even when recording the outbox row fails", async () => {
+    const fileKey = "attachments/channel-1/attachment-2/file.txt";
+    const { deleteMessage } = await import("@/services/message.service");
+    vi.mocked(deleteMessage).mockResolvedValue([fileKey]);
+    mocks.getBucket.mockReturnValue({
+      delete: vi.fn().mockRejectedValue(new Error("R2 unavailable")),
+    });
+    mocks.recordR2CleanupFailure.mockRejectedValue(new Error("D1 unavailable"));
+
+    await DELETE({
+      request: new Request(
+        "https://meet.test/api/channels/channel-1/messages",
+        {
+          method: "DELETE",
+          body: JSON.stringify({ message_id: "message-1" }),
+        },
+      ),
+      params: { id: "channel-1" },
+    });
+
+    expect(mocks.scheduleR2Cleanup).toHaveBeenCalledWith(
+      {},
+      fileKey,
+      undefined,
     );
   });
 });

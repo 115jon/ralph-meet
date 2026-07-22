@@ -71,6 +71,52 @@ describe("chatReducer message snapshots", () => {
     expect(next.messages[0]?.content).toBe("edited");
   });
 
+  it("ignores an older embed revision", () => {
+    const original = {
+      ...message("same", "2026-07-16T00:00:01.000Z"),
+      content_revision: 2,
+    };
+    const state = chatReducer(
+      { ...initialState, activeChannelId: "channel-1" },
+      { type: "APPEND_MESSAGE", message: original },
+    );
+
+    const next = chatReducer(state, {
+      type: "UPDATE_MESSAGE",
+      id: original.id,
+      content_revision: 1,
+      embeds: [{ url: "https://old.example" } as import("./types").EmbedInfo],
+    });
+
+    expect(next.messages[0]?.embeds).toEqual([]);
+    expect(next.messages[0]?.content_revision).toBe(2);
+  });
+
+  it("ignores duplicate notification IDs before changing unread state", () => {
+    const notification = {
+      id: "notification-1",
+      type: "mention" as const,
+      channel_id: "channel-1",
+      server_id: "server-1",
+      message_id: "message-1",
+      from_user: { id: "user-2", username: "user-2" },
+      content: "hello",
+      is_read: false,
+      created_at: "2026-07-16T00:00:01.000Z",
+    };
+    const once = chatReducer(initialState, {
+      type: "ADD_NOTIFICATION",
+      notification,
+    });
+    const twice = chatReducer(once, {
+      type: "ADD_NOTIFICATION",
+      notification,
+    });
+
+    expect(twice.notifications).toEqual(once.notifications);
+    expect(twice.unreadNotificationCount).toBe(once.unreadNotificationCount);
+  });
+
   it("marks cached channels stale without removing live messages", () => {
     const cached = message("cached", "2026-07-16T00:00:01.000Z");
     const state = {

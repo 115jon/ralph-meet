@@ -3,6 +3,10 @@ import { describe, expect, it, vi } from "vitest";
 const consumeBackgroundTaskBatch = vi.hoisted(() =>
   vi.fn(async () => undefined),
 );
+const retryR2Cleanup = vi.hoisted(() => vi.fn(async () => undefined));
+const retryMessagePostprocessing = vi.hoisted(() =>
+  vi.fn(async () => undefined),
+);
 const syncCollectiblesCatalog = vi.hoisted(() =>
   vi.fn(async () => ({
     source: "yapper" as const,
@@ -39,6 +43,11 @@ vi.mock("../../../realtime/voice-room", () => ({
 
 vi.mock("../../../src/lib/background-tasks", () => ({
   consumeBackgroundTaskBatch,
+  retryMessagePostprocessing,
+}));
+
+vi.mock("../../../src/services/r2-cleanup.service", () => ({
+  retryR2Cleanup,
 }));
 
 vi.mock("../../../src/lib/collectibles-catalog", () => ({
@@ -86,12 +95,20 @@ describe("custom server soundboard media rate limiting", () => {
       queue: "ralph-meet-background-tasks",
       messages: [],
     } as unknown as MessageBatch<unknown>;
-    const env = { CACHE: {} } as Parameters<typeof server.queue>[1];
+    const env = {
+      CACHE: {},
+      DB: {},
+      BUCKET: {},
+      MEETING_ROOM: {},
+    } as Parameters<typeof server.queue>[1];
 
     await server.queue(batch, env, {} as ExecutionContext);
 
     expect(consumeBackgroundTaskBatch).toHaveBeenCalledWith(batch, {
+      DB: env.DB,
+      BUCKET: env.BUCKET,
       CACHE: env.CACHE,
+      MEETING_ROOM: env.MEETING_ROOM,
     });
   });
 
@@ -107,6 +124,8 @@ describe("custom server soundboard media rate limiting", () => {
     );
 
     expect(syncCollectiblesCatalog).toHaveBeenCalledWith(env.DB);
+    expect(retryR2Cleanup).toHaveBeenCalledWith(env.DB, undefined);
+    expect(retryMessagePostprocessing).toHaveBeenCalledWith(env);
     expect(waitUntil).toHaveBeenCalledTimes(1);
     await waitUntil.mock.calls[0][0];
   });

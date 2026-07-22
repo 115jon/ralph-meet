@@ -156,7 +156,7 @@ export function createMockD1(): MockD1 {
       async run(): Promise<D1Result> {
         calls.push({ sql, bindings, method: "run" });
         const response = findResponse(sql, bindings);
-        if (response && "meta" in response) {
+        if (response && ("meta" in response || "results" in response)) {
           return response as D1Result;
         }
         return { success: true };

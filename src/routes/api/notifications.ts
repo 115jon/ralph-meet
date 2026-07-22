@@ -88,8 +88,10 @@ const DELETE = async ({ request: _request, params: _params }: any) => {
   const { userId } = authResult;
 
   const db = getDB();
-  await clearNotifications(db, userId);
-  await broadcastToUser(userId, "NOTIFICATIONS_CLEAR", {});
+  const clearedAt = await clearNotifications(db, userId);
+  await broadcastToUser(userId, "NOTIFICATIONS_CLEAR", {
+    cleared_at: clearedAt,
+  });
 
   return apiSuccess({ cleared: true });
 };

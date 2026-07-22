@@ -15,6 +15,7 @@ import type { D1Database } from "@cloudflare/workers-types";
 import { markSharesDeletedForMessage } from "./message-share.service";
 import type { BroadcastDescriptor } from "./server.service";
 import { clog } from "@/lib/console-logger";
+import { extractAndProcessEmbedsWithStatus } from "./embed-fetcher";
 
 const messageHistoryLog = clog("message-history");
 
@@ -177,6 +178,7 @@ export function formatMessageRow(
       avatar_display: row.author_avatar_display,
     },
     content: row.content,
+    content_revision: Number(row.content_revision ?? 0),
     reply_to_id: row.reply_to_id,
     reply_to: replyData,
     attachment_count: (row.attachment_count as number) ?? 0,
@@ -764,6 +766,7 @@ export async function listMessages(
 export interface MessageEmbedUpdate {
   id: string;
   channel_id: string;
+  content_revision: number;
   embeds: EmbedInfo[];
 }
 
@@ -789,7 +792,8 @@ export async function refreshMessageEmbeds(
   const placeholders = ids.map(() => "?").join(", ");
   const { results } = await db
     .prepare(
-      `SELECT id, embeds FROM messages WHERE channel_id = ? AND id IN (${placeholders})`,
+      `SELECT id, channel_id, embeds, content_revision
+       FROM messages WHERE channel_id = ? AND id IN (${placeholders})`,
     )
     .bind(channelId, ...ids)
     .all();
@@ -802,14 +806,28 @@ export async function refreshMessageEmbeds(
       const refreshedEmbeds = await hydrateSocialEmbeds(embeds);
       if (refreshedEmbeds === embeds) return null;
 
-      await db
-        .prepare(`UPDATE messages SET embeds = ? WHERE id = ?`)
-        .bind(JSON.stringify(refreshedEmbeds), row.id)
+      const capturedChannelId = String(row.channel_id ?? channelId);
+      const capturedRevision = Number(row.content_revision ?? 0);
+      const updateResult = await db
+        .prepare(
+          `UPDATE messages SET embeds = ?
+           WHERE id = ? AND channel_id = ? AND content_revision = ?
+             AND COALESCE(embeds, '[]') = ?`,
+        )
+        .bind(
+          JSON.stringify(refreshedEmbeds),
+          row.id,
+          capturedChannelId,
+          capturedRevision,
+          JSON.stringify(embeds),
+        )
         .run();
+      if (Number(updateResult.meta?.changes ?? 0) !== 1) return null;
 
       return {
         id: String(row.id),
-        channel_id: channelId,
+        channel_id: capturedChannelId,
+        content_revision: capturedRevision,
         embeds: refreshedEmbeds,
       } satisfies MessageEmbedUpdate;
     }),
@@ -818,6 +836,155 @@ export async function refreshMessageEmbeds(
   return updates.filter(
     (update): update is MessageEmbedUpdate => update !== null,
   );
+}
+
+export interface MessagePostprocessingTask {
+  messageId: string;
+  channelId: string;
+  revision: number;
+  notify?: boolean;
+}
+
+export type MessagePostprocessingBroadcastTarget =
+  | { kind: "server"; id: string }
+  | { kind: "channel"; id: string }
+  | { kind: "user"; id: string };
+
+export type MessagePostprocessingBroadcast = (
+  target: MessagePostprocessingBroadcastTarget,
+  event: string,
+  data: Record<string, unknown>,
+) => Promise<void>;
+
+export async function processMessagePostprocessingTask(
+  db: D1Database,
+  task: MessagePostprocessingTask,
+  broadcast: MessagePostprocessingBroadcast,
+  genId: () => string = () => crypto.randomUUID(),
+): Promise<void> {
+  const message = (await db
+    .prepare(
+      `SELECT m.id, m.channel_id, m.author_id, m.content, m.reply_to_id,
+              m.content_revision, m.embeds,
+              u.username as author_username, u.display_name as author_display_name,
+              u.avatar_url as author_avatar_url, c.server_id
+       FROM messages m
+       LEFT JOIN users u ON u.id = m.author_id
+       LEFT JOIN channels c ON c.id = m.channel_id
+       WHERE m.id = ? AND m.channel_id = ?`,
+    )
+    .bind(task.messageId, task.channelId)
+    .first()) as Record<string, unknown> | null;
+
+  if (!message || Number(message.content_revision) !== task.revision) return;
+
+  const extraction = await extractAndProcessEmbedsWithStatus(
+    String(message.content ?? "").trim(),
+  );
+  const storedEmbeds = parseStoredEmbeds(message.embeds);
+  const embeds = extraction.hadFailures ? storedEmbeds : extraction.embeds;
+  const nextEmbeds = JSON.stringify(embeds);
+  const currentEmbeds = JSON.stringify(storedEmbeds);
+  const serverId =
+    typeof message.server_id === "string" ? message.server_id : null;
+
+  let embedWriteWon = true;
+  if (!extraction.hadFailures && currentEmbeds !== nextEmbeds) {
+    const updateResult = await db
+      .prepare(
+        `UPDATE messages SET embeds = ?
+          WHERE id = ? AND channel_id = ? AND content_revision = ?
+            AND COALESCE(embeds, '[]') = ?`,
+      )
+      .bind(
+        nextEmbeds,
+        task.messageId,
+        task.channelId,
+        task.revision,
+        currentEmbeds,
+      )
+      .run();
+    embedWriteWon = Number(updateResult.meta?.changes ?? 0) === 1;
+  }
+
+  const embedUpdate = {
+    id: task.messageId,
+    channel_id: task.channelId,
+    content_revision: task.revision,
+    embeds,
+  };
+  const isCurrentRevision = async (): Promise<boolean> => {
+    const current = (await db
+      .prepare(
+        `SELECT content_revision FROM messages
+         WHERE id = ? AND channel_id = ?`,
+      )
+      .bind(task.messageId, task.channelId)
+      .first()) as { content_revision: number } | null;
+    return !!current && Number(current.content_revision) === task.revision;
+  };
+  const emitEmbedUpdate = async (
+    target: MessagePostprocessingBroadcastTarget,
+  ): Promise<void> => {
+    if (!(await isCurrentRevision())) return;
+    await broadcast(target, "MESSAGE_UPDATE", embedUpdate);
+  };
+
+  const shouldEmitEmbedUpdate =
+    !extraction.hadFailures &&
+    embedWriteWon &&
+    (task.notify === false ||
+      currentEmbeds !== nextEmbeds ||
+      embeds.length > 0);
+  if (shouldEmitEmbedUpdate) {
+    if (serverId) {
+      await emitEmbedUpdate({ kind: "server", id: serverId });
+    } else {
+      await emitEmbedUpdate({ kind: "channel", id: task.channelId });
+      const recipients = await getDMRecipients(
+        db,
+        task.channelId,
+        String(message.author_id),
+      );
+      for (const recipientId of recipients) {
+        await emitEmbedUpdate({ kind: "user", id: recipientId });
+      }
+    }
+  }
+
+  if (task.notify !== false) {
+    const notifBroadcasts = await generateMessageNotifications(db, genId, {
+      channelId: task.channelId,
+      messageId: task.messageId,
+      authorId: String(message.author_id),
+      authorUsername: String(message.author_username ?? "User"),
+      authorDisplayName:
+        typeof message.author_display_name === "string"
+          ? message.author_display_name
+          : null,
+      authorAvatarUrl:
+        typeof message.author_avatar_url === "string"
+          ? message.author_avatar_url
+          : null,
+      content: String(message.content ?? ""),
+      replyToId:
+        typeof message.reply_to_id === "string"
+          ? message.reply_to_id
+          : undefined,
+      contentRevision: task.revision,
+      notificationId: (type, userId) =>
+        `message:${task.messageId}:${type}:${userId}`,
+    });
+
+    for (const notification of notifBroadcasts) {
+      if (!(await isCurrentRevision())) return;
+      await broadcast(
+        { kind: "user", id: notification.userId },
+        notification.event,
+        notification.data,
+      );
+    }
+  }
 }
 
 // ─── createMessage ───────────────────────────────────────────────────────────
@@ -840,13 +1007,29 @@ export async function createMessage(
   const now = new Date().toISOString();
   const content = (input.content ?? "").trim();
 
-  await db
-    .prepare(
-      `INSERT INTO messages (id, channel_id, author_id, content, reply_to_id, created_at)
-     VALUES (?, ?, ?, ?, ?, ?)`,
-    )
-    .bind(messageId, channelId, userId, content, input.reply_to_id ?? null, now)
-    .run();
+  await db.batch([
+    db
+      .prepare(
+        `INSERT INTO messages
+           (id, channel_id, author_id, content, reply_to_id, created_at, content_revision)
+         VALUES (?, ?, ?, ?, ?, ?, 1)`,
+      )
+      .bind(
+        messageId,
+        channelId,
+        userId,
+        content,
+        input.reply_to_id ?? null,
+        now,
+      ),
+    db
+      .prepare(
+        `INSERT INTO message_postprocessing_jobs
+           (message_id, revision, channel_id, notify)
+         VALUES (?, 1, ?, 1)`,
+      )
+      .bind(messageId, channelId),
+  ]);
 
   // Link pre-uploaded attachments
   let attachments: Attachment[] = [];
@@ -948,6 +1131,7 @@ export async function createMessage(
     attachments,
     reactions: [],
     reply_count: 0,
+    content_revision: 1,
   };
 }
 
@@ -964,6 +1148,7 @@ export async function editMessage(
   channel_id: string;
   content: string;
   updated_at: string;
+  content_revision: number;
 }> {
   const msg = (await db
     .prepare(`SELECT author_id FROM messages WHERE id = ? AND channel_id = ?`)
@@ -975,17 +1160,54 @@ export async function editMessage(
     throw ServiceError.forbidden("Not your message");
 
   const now = new Date().toISOString();
-  await db
-    .prepare(`UPDATE messages SET content = ?, updated_at = ? WHERE id = ?`)
-    .bind(newContent.trim(), now, messageId)
-    .run();
+  const [revisionResult] = await db.batch([
+    db
+      .prepare(
+        `UPDATE messages
+         SET content = ?, updated_at = ?, content_revision = content_revision + 1
+         WHERE id = ? AND channel_id = ?
+         RETURNING content_revision`,
+      )
+      .bind(newContent.trim(), now, messageId, channelId),
+    db
+      .prepare(
+        `INSERT INTO message_postprocessing_jobs
+           (message_id, revision, channel_id, notify)
+         SELECT ?, content_revision, ?, 0
+         FROM messages
+         WHERE id = ? AND channel_id = ?`,
+      )
+      .bind(messageId, channelId, messageId, channelId),
+  ]);
+  const revisionRow =
+    (revisionResult?.results?.[0] as
+      | {
+          content_revision: number;
+        }
+      | undefined) ?? null;
+
+  if (!revisionRow) throw ServiceError.notFound("Message not found");
 
   return {
     id: messageId,
     channel_id: channelId,
     content: newContent.trim(),
     updated_at: now,
+    content_revision: Number(revisionRow.content_revision),
   };
+}
+
+export async function fetchMessageAttachmentKeys(
+  db: D1Database,
+  messageId: string,
+): Promise<string[]> {
+  const { results } = await db
+    .prepare(`SELECT file_key FROM attachments WHERE message_id = ?`)
+    .bind(messageId)
+    .all<{ file_key: string }>();
+  return (results ?? [])
+    .map((row) => row.file_key)
+    .filter((fileKey): fileKey is string => typeof fileKey === "string");
 }
 
 // ─── deleteMessage ───────────────────────────────────────────────────────────
@@ -1007,16 +1229,16 @@ export async function deleteMessage(
     throw ServiceError.forbidden("Not your message");
   }
 
-  const { results: attachmentRows } = await db
-    .prepare(`SELECT file_key FROM attachments WHERE message_id = ?`)
-    .bind(messageId)
-    .all<{ file_key: string }>();
-  const fileKeys = (attachmentRows ?? [])
-    .map((row) => row.file_key)
-    .filter((fileKey): fileKey is string => typeof fileKey === "string");
+  const fileKeys = await fetchMessageAttachmentKeys(db, messageId);
 
   await markSharesDeletedForMessage(db, messageId);
-  await db.prepare(`DELETE FROM messages WHERE id = ?`).bind(messageId).run();
+  const deleteResult = await db
+    .prepare(`DELETE FROM messages WHERE id = ? AND channel_id = ?`)
+    .bind(messageId, channelId)
+    .run();
+  if (Number(deleteResult.meta?.changes ?? 0) === 0) {
+    throw ServiceError.notFound("Message not found");
+  }
   return fileKeys;
 }
 
@@ -1044,6 +1266,133 @@ export interface NotificationBroadcast {
   data: Record<string, unknown>;
 }
 
+async function insertMessageNotification(
+  db: D1Database,
+  values: {
+    id: string;
+    userId: string;
+    type: "mention" | "reply" | "dm";
+    channelId: string;
+    serverId: string | null;
+    messageId: string;
+    fromUserId: string;
+    content: string;
+    createdAt: string;
+    contentRevision?: number;
+  },
+): Promise<string | null> {
+  if (values.contentRevision === undefined) {
+    await db
+      .prepare(
+        `INSERT INTO notifications
+           (id, user_id, type, channel_id, server_id, message_id, from_user_id,
+            content, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .bind(
+        values.id,
+        values.userId,
+        values.type,
+        values.channelId,
+        values.serverId,
+        values.messageId,
+        values.fromUserId,
+        values.content,
+        values.createdAt,
+      )
+      .run();
+    return values.id;
+  }
+
+  const dedupeKey = `${values.messageId}:${values.type}:${values.userId}`;
+  const [markerResult, notificationResult] = await db.batch([
+    db
+      .prepare(
+        `INSERT OR IGNORE INTO notification_delivery_markers
+           (dedupe_key, message_id, notification_id)
+         SELECT ?, ?, ?
+         WHERE EXISTS (
+           SELECT 1 FROM messages m
+            WHERE m.id = ? AND m.content_revision = ?
+               AND julianday(m.created_at) > COALESCE(
+                 julianday((SELECT cleared_at FROM notification_clear_watermarks
+                  WHERE user_id = ?)),
+                 -1
+               )
+          )`,
+      )
+      .bind(
+        dedupeKey,
+        values.messageId,
+        values.id,
+        values.messageId,
+        values.contentRevision,
+        values.userId,
+      ),
+    db
+      .prepare(
+        `INSERT OR IGNORE INTO notifications
+           (id, user_id, type, channel_id, server_id, message_id, from_user_id,
+            content, created_at, dedupe_key)
+         SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+         WHERE EXISTS (
+           SELECT 1 FROM messages m
+            WHERE m.id = ? AND m.content_revision = ?
+               AND julianday(m.created_at) > COALESCE(
+                 julianday((SELECT cleared_at FROM notification_clear_watermarks
+                  WHERE user_id = ?)),
+                 -1
+               )
+          )`,
+      )
+      .bind(
+        values.id,
+        values.userId,
+        values.type,
+        values.channelId,
+        values.serverId,
+        values.messageId,
+        values.fromUserId,
+        values.content,
+        values.createdAt,
+        dedupeKey,
+        values.messageId,
+        values.contentRevision,
+        values.userId,
+      ),
+  ]);
+  const markerInserted = Number(markerResult?.meta?.changes ?? 0) > 0;
+  if (markerInserted) {
+    const marker = (await db
+      .prepare(
+        `SELECT notification_id FROM notification_delivery_markers
+         WHERE dedupe_key = ?`,
+      )
+      .bind(dedupeKey)
+      .first()) as { notification_id: string } | null;
+    return (
+      marker?.notification_id ??
+      (Number(notificationResult?.meta?.changes ?? 0) > 0 ? values.id : null)
+    );
+  }
+
+  const marker = (await db
+    .prepare(
+      `SELECT marker.notification_id
+       FROM notification_delivery_markers marker
+       JOIN messages m ON m.id = marker.message_id
+       WHERE marker.dedupe_key = ?
+         AND julianday(m.created_at) > COALESCE(
+           julianday((SELECT cleared_at FROM notification_clear_watermarks
+            WHERE user_id = ?)),
+           -1
+         )`,
+    )
+    .bind(dedupeKey, values.userId)
+    .first()) as { notification_id: string } | null;
+  return marker?.notification_id ?? null;
+}
+
 export async function generateMessageNotifications(
   db: D1Database,
   genId: () => string,
@@ -1056,6 +1405,11 @@ export async function generateMessageNotifications(
     authorAvatarUrl: string | null;
     content: string;
     replyToId?: string;
+    contentRevision?: number;
+    notificationId?: (
+      type: "mention" | "reply" | "dm",
+      userId: string,
+    ) => string;
   },
 ): Promise<NotificationBroadcast[]> {
   const broadcasts: NotificationBroadcast[] = [];
@@ -1089,61 +1443,64 @@ export async function generateMessageNotifications(
   }
 
   if (mentionedUsernames.size > 0) {
-    const placeholders = [...mentionedUsernames]
-      .map(() => "LOWER(?)")
-      .join(",");
-    const { results: mentionedUsers } = await db
-      .prepare(
-        `SELECT id, username FROM users WHERE LOWER(username) IN (${placeholders})`,
-      )
-      .bind(...mentionedUsernames)
-      .all();
+    const mentionedUsers: Record<string, unknown>[] = [];
+    const usernames = [...mentionedUsernames];
+    for (let offset = 0; offset < usernames.length; offset += 90) {
+      const { results } = await db
+        .prepare(
+          `SELECT id, username FROM users WHERE LOWER(username) IN (${usernames
+            .slice(offset, offset + 90)
+            .map(() => "LOWER(?)")
+            .join(",")})`,
+        )
+        .bind(...usernames.slice(offset, offset + 90))
+        .all();
+      mentionedUsers.push(...(results ?? []));
+    }
 
     for (const mu of mentionedUsers ?? []) {
       const mentionedId = mu.id as string;
       if (mentionedId === opts.authorId) continue;
       notifiedUserIds.add(mentionedId);
 
-      const notifId = genId();
-      await db
-        .prepare(
-          `INSERT INTO notifications (id, user_id, type, channel_id, server_id, message_id, from_user_id, content, created_at)
-         VALUES (?, ?, 'mention', ?, ?, ?, ?, ?, ?)`,
-        )
-        .bind(
-          notifId,
-          mentionedId,
-          opts.channelId,
-          serverId,
-          opts.messageId,
-          opts.authorId,
-          snippet,
-          now,
-        )
-        .run();
-
-      broadcasts.push({
+      const notifId = opts.notificationId?.("mention", mentionedId) ?? genId();
+      const deliveredNotificationId = await insertMessageNotification(db, {
+        id: notifId,
         userId: mentionedId,
-        event: "NOTIFICATION_CREATE",
-        data: {
-          id: notifId,
-          type: "mention",
-          channel_id: opts.channelId,
-          server_id: serverId,
-          message_id: opts.messageId,
-          from_user: {
-            id: opts.authorId,
-            username: opts.authorUsername,
-            display_name: opts.authorDisplayName,
-            avatar_url: opts.authorAvatarUrl,
-          },
-          content: snippet,
-          is_read: false,
-          created_at: now,
-          channel_name: channelInfo?.channel_name,
-          server_name: channelInfo?.server_name,
-        },
+        type: "mention",
+        channelId: opts.channelId,
+        serverId,
+        messageId: opts.messageId,
+        fromUserId: opts.authorId,
+        content: snippet,
+        createdAt: now,
+        contentRevision: opts.contentRevision,
       });
+
+      if (deliveredNotificationId) {
+        broadcasts.push({
+          userId: mentionedId,
+          event: "NOTIFICATION_CREATE",
+          data: {
+            id: deliveredNotificationId,
+            type: "mention",
+            channel_id: opts.channelId,
+            server_id: serverId,
+            message_id: opts.messageId,
+            from_user: {
+              id: opts.authorId,
+              username: opts.authorUsername,
+              display_name: opts.authorDisplayName,
+              avatar_url: opts.authorAvatarUrl,
+            },
+            content: snippet,
+            is_read: false,
+            created_at: now,
+            channel_name: channelInfo?.channel_name,
+            server_name: channelInfo?.server_name,
+          },
+        });
+      }
     }
   }
 
@@ -1159,46 +1516,45 @@ export async function generateMessageNotifications(
       parentMsg.author_id !== opts.authorId &&
       !notifiedUserIds.has(parentMsg.author_id)
     ) {
-      const notifId = genId();
-      await db
-        .prepare(
-          `INSERT INTO notifications (id, user_id, type, channel_id, server_id, message_id, from_user_id, content, created_at)
-         VALUES (?, ?, 'reply', ?, ?, ?, ?, ?, ?)`,
-        )
-        .bind(
-          notifId,
-          parentMsg.author_id,
-          opts.channelId,
-          serverId,
-          opts.messageId,
-          opts.authorId,
-          snippet,
-          now,
-        )
-        .run();
-
-      broadcasts.push({
+      const notifId =
+        opts.notificationId?.("reply", parentMsg.author_id) ?? genId();
+      const deliveredNotificationId = await insertMessageNotification(db, {
+        id: notifId,
         userId: parentMsg.author_id,
-        event: "NOTIFICATION_CREATE",
-        data: {
-          id: notifId,
-          type: "reply",
-          channel_id: opts.channelId,
-          server_id: serverId,
-          message_id: opts.messageId,
-          from_user: {
-            id: opts.authorId,
-            username: opts.authorUsername,
-            display_name: opts.authorDisplayName,
-            avatar_url: opts.authorAvatarUrl,
-          },
-          content: snippet,
-          is_read: false,
-          created_at: now,
-          channel_name: channelInfo?.channel_name,
-          server_name: channelInfo?.server_name,
-        },
+        type: "reply",
+        channelId: opts.channelId,
+        serverId,
+        messageId: opts.messageId,
+        fromUserId: opts.authorId,
+        content: snippet,
+        createdAt: now,
+        contentRevision: opts.contentRevision,
       });
+
+      if (deliveredNotificationId) {
+        broadcasts.push({
+          userId: parentMsg.author_id,
+          event: "NOTIFICATION_CREATE",
+          data: {
+            id: deliveredNotificationId,
+            type: "reply",
+            channel_id: opts.channelId,
+            server_id: serverId,
+            message_id: opts.messageId,
+            from_user: {
+              id: opts.authorId,
+              username: opts.authorUsername,
+              display_name: opts.authorDisplayName,
+              avatar_url: opts.authorAvatarUrl,
+            },
+            content: snippet,
+            is_read: false,
+            created_at: now,
+            channel_name: channelInfo?.channel_name,
+            server_name: channelInfo?.server_name,
+          },
+        });
+      }
     }
   }
 
@@ -1210,46 +1566,44 @@ export async function generateMessageNotifications(
       if (!notifiedUserIds.has(recipientId)) {
         notifiedUserIds.add(recipientId);
 
-        const notifId = genId();
-        await db
-          .prepare(
-            `INSERT INTO notifications (id, user_id, type, channel_id, server_id, message_id, from_user_id, content, created_at)
-           VALUES (?, ?, 'dm', ?, ?, ?, ?, ?, ?)`,
-          )
-          .bind(
-            notifId,
-            recipientId,
-            opts.channelId,
-            null,
-            opts.messageId,
-            opts.authorId,
-            snippet,
-            now,
-          )
-          .run();
-
-        broadcasts.push({
+        const notifId = opts.notificationId?.("dm", recipientId) ?? genId();
+        const deliveredNotificationId = await insertMessageNotification(db, {
+          id: notifId,
           userId: recipientId,
-          event: "NOTIFICATION_CREATE",
-          data: {
-            id: notifId,
-            type: "dm",
-            channel_id: opts.channelId,
-            server_id: null,
-            message_id: opts.messageId,
-            from_user: {
-              id: opts.authorId,
-              username: opts.authorUsername,
-              display_name: opts.authorDisplayName,
-              avatar_url: opts.authorAvatarUrl,
-            },
-            content: snippet,
-            is_read: false,
-            created_at: now,
-            channel_name: opts.authorUsername,
-            server_name: null,
-          },
+          type: "dm",
+          channelId: opts.channelId,
+          serverId: null,
+          messageId: opts.messageId,
+          fromUserId: opts.authorId,
+          content: snippet,
+          createdAt: now,
+          contentRevision: opts.contentRevision,
         });
+
+        if (deliveredNotificationId) {
+          broadcasts.push({
+            userId: recipientId,
+            event: "NOTIFICATION_CREATE",
+            data: {
+              id: deliveredNotificationId,
+              type: "dm",
+              channel_id: opts.channelId,
+              server_id: null,
+              message_id: opts.messageId,
+              from_user: {
+                id: opts.authorId,
+                username: opts.authorUsername,
+                display_name: opts.authorDisplayName,
+                avatar_url: opts.authorAvatarUrl,
+              },
+              content: snippet,
+              is_read: false,
+              created_at: now,
+              channel_name: opts.authorUsername,
+              server_name: null,
+            },
+          });
+        }
       }
     }
   }

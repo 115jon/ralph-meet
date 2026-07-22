@@ -9,7 +9,6 @@
 // ============================================================================
 
 import { DurableObject } from "cloudflare:workers";
-import { extractAndProcessEmbeds } from "../src/services/embed-fetcher";
 import {
   resolveVisibleChannelPermissions,
   type ChannelVisibilityOverride,
@@ -41,9 +40,16 @@ import { ProfileRequestCoordinator } from "./meeting-room/profile-request-coordi
 import { generateTurnCredentials as resolveTurnCredentials } from "./meeting-room/turn-credentials";
 import { issueVoiceToken } from "./voice-token";
 import {
+  scheduleMessagePostprocessing,
+  scheduleR2Cleanup,
   scheduleServerMemberCacheInvalidation,
   type BackgroundTaskEnvelope,
 } from "../src/lib/background-tasks";
+import { recordR2CleanupFailure } from "../src/services/r2-cleanup.service";
+import {
+  fetchMessageAttachmentKeys,
+  type MessagePostprocessingTask,
+} from "../src/services/message.service";
 import {
   getSpatialAudioStorageKey,
   isSpatialAudioState,
@@ -865,7 +871,7 @@ export class MeetingRoom extends DurableObject<Env> {
       });
       return;
     }
-    if (rawMsg.length > MAX_GATEWAY_FRAME_BYTES) {
+    if (new TextEncoder().encode(rawMsg).byteLength > MAX_GATEWAY_FRAME_BYTES) {
       this.sendTo(ws, {
         op: Op.Error,
         d: { code: 4000, message: "Websocket frame is too large" },
@@ -3994,19 +4000,24 @@ export class MeetingRoom extends DurableObject<Env> {
 
     // Persist to D1
     try {
-      await this.env.DB.prepare(
-        `INSERT INTO messages (id, channel_id, author_id, content, reply_to_id, created_at)
-         VALUES (?, ?, ?, ?, ?, ?)`,
-      )
-        .bind(
+      await this.env.DB.batch([
+        this.env.DB.prepare(
+          `INSERT INTO messages (id, channel_id, author_id, content, reply_to_id, created_at, content_revision)
+             VALUES (?, ?, ?, ?, ?, ?, 1)`,
+        ).bind(
           messageId,
           d.channel_id,
           session.clerk_user_id,
           d.content.trim(),
           d.reply_to_id ?? null,
           now,
-        )
-        .run();
+        ),
+        this.env.DB.prepare(
+          `INSERT INTO message_postprocessing_jobs
+               (message_id, revision, channel_id, notify)
+             VALUES (?, 1, ?, 1)`,
+        ).bind(messageId, d.channel_id),
+      ]);
     } catch (err) {
       log.error("Failed to insert message:", err);
       this.sendTo(ws, {
@@ -4029,6 +4040,7 @@ export class MeetingRoom extends DurableObject<Env> {
         avatar_display: session.avatar_display,
       },
       content: d.content.trim(),
+      content_revision: 1,
       reply_to_id: d.reply_to_id,
       is_pinned: false,
       created_at: now,
@@ -4041,50 +4053,32 @@ export class MeetingRoom extends DurableObject<Env> {
       op: Op.Dispatch,
       d: { event: "MESSAGE_CREATE", data: message },
     };
+    const postprocessingTask = {
+      messageId,
+      channelId: d.channel_id,
+      revision: 1,
+      notify: true,
+    } satisfies MessagePostprocessingTask;
     if (access.serverId) {
       await this.broadcastToServerMembers(access.serverId, messageDispatch);
     } else {
       await this.broadcastToChannel(d.channel_id, messageDispatch);
-    }
-
-    // Asynchronously fetch embeds without blocking the initial send
-    this.ctx.waitUntil(
-      (async () => {
-        const embeds = await extractAndProcessEmbeds(d.content.trim());
-        if (embeds.length > 0) {
-          try {
-            // Store embeds in the database
-            await this.env.DB.prepare(
-              `UPDATE messages SET embeds = ? WHERE id = ?`,
-            )
-              .bind(JSON.stringify(embeds), messageId)
-              .run();
-
-            // Dispatch update event to clients
-            const embedDispatch = {
-              op: Op.Dispatch,
-              d: {
-                event: "MESSAGE_UPDATE",
-                data: {
-                  id: messageId,
-                  channel_id: d.channel_id,
-                  embeds: embeds,
-                },
-              },
-            };
-            if (access.serverId) {
-              await this.broadcastToServerMembers(
-                access.serverId,
-                embedDispatch,
-              );
-            } else {
-              await this.broadcastToChannel(d.channel_id, embedDispatch);
-            }
-          } catch (e) {
-            log.error("Failed to update message with embeds:", e);
-          }
+      const { results } = await this.env.DB.prepare(
+        "SELECT user_id FROM dm_recipients WHERE channel_id = ? AND user_id != ?",
+      )
+        .bind(d.channel_id, session.clerk_user_id)
+        .all<{ user_id: string }>();
+      for (const row of results ?? []) {
+        if (typeof row.user_id === "string") {
+          this.broadcastToUser(row.user_id, messageDispatch);
         }
-      })(),
+      }
+    }
+    scheduleMessagePostprocessing(
+      this.env,
+      postprocessingTask,
+      (promise) => this.ctx.waitUntil(promise),
+      { outboxRecorded: true },
     );
   }
 
@@ -4146,32 +4140,61 @@ export class MeetingRoom extends DurableObject<Env> {
       return;
     }
 
+    let revision: number;
     try {
-      const result = await this.env.DB.prepare(
-        `UPDATE messages SET content = ?, updated_at = ?
-         WHERE id = ? AND channel_id = ? AND (author_id = ? OR ? = 1)`,
-      )
-        .bind(
+      const [updatedResult] = await this.env.DB.batch([
+        this.env.DB.prepare(
+          `UPDATE messages
+             SET content = ?, updated_at = ?, content_revision = content_revision + 1
+             WHERE id = ? AND channel_id = ? AND (author_id = ? OR ? = 1)
+             RETURNING content_revision`,
+        ).bind(
           d.content.trim(),
           now,
           d.message_id,
           messageRow.channel_id,
           session.clerk_user_id,
           canManage ? 1 : 0,
-        )
-        .run();
+        ),
+        this.env.DB.prepare(
+          `INSERT INTO message_postprocessing_jobs
+               (message_id, revision, channel_id, notify)
+             SELECT ?, content_revision, ?, 0
+             FROM messages
+             WHERE id = ? AND channel_id = ?`,
+        ).bind(
+          d.message_id,
+          messageRow.channel_id,
+          d.message_id,
+          messageRow.channel_id,
+        ),
+      ]);
+      const updated =
+        (updatedResult?.results?.[0] as
+          | {
+              content_revision: number;
+            }
+          | undefined) ?? null;
 
-      if (!result.meta.changes || result.meta.changes === 0) {
+      if (!updated) {
         this.sendTo(ws, {
           op: Op.Error,
           d: { code: 4004, message: "Message not found or not owner" },
         });
         return;
       }
+      revision = Number(updated.content_revision);
     } catch (err) {
       log.error("Failed to update message:", err);
       return;
     }
+
+    const postprocessingTask = {
+      messageId: d.message_id,
+      channelId: messageRow.channel_id,
+      revision,
+      notify: false,
+    } satisfies MessagePostprocessingTask;
 
     {
       const updateDispatch = {
@@ -4183,6 +4206,7 @@ export class MeetingRoom extends DurableObject<Env> {
             channel_id: messageRow.channel_id,
             content: d.content.trim(),
             updated_at: now,
+            content_revision: revision,
           },
         },
       };
@@ -4191,46 +4215,11 @@ export class MeetingRoom extends DurableObject<Env> {
       } else {
         await this.broadcastToChannel(messageRow.channel_id, updateDispatch);
       }
-
-      // Asynchronously fetch new embeds if content changed
-      this.ctx.waitUntil(
-        (async () => {
-          const embeds = await extractAndProcessEmbeds(d.content.trim());
-          if (embeds.length > 0) {
-            try {
-              await this.env.DB.prepare(
-                `UPDATE messages SET embeds = ? WHERE id = ?`,
-              )
-                .bind(JSON.stringify(embeds), d.message_id)
-                .run();
-
-              const embedDispatch = {
-                op: Op.Dispatch,
-                d: {
-                  event: "MESSAGE_UPDATE",
-                  data: {
-                    id: d.message_id,
-                    channel_id: messageRow.channel_id,
-                    embeds: embeds,
-                  },
-                },
-              };
-              if (access.serverId) {
-                await this.broadcastToServerMembers(
-                  access.serverId,
-                  embedDispatch,
-                );
-              } else {
-                await this.broadcastToChannel(
-                  messageRow.channel_id,
-                  embedDispatch,
-                );
-              }
-            } catch (e) {
-              log.error("Failed to update message with new embeds:", e);
-            }
-          }
-        })(),
+      scheduleMessagePostprocessing(
+        this.env,
+        postprocessingTask,
+        (promise) => this.ctx.waitUntil(promise),
+        { outboxRecorded: true },
       );
     }
   }
@@ -4291,6 +4280,21 @@ export class MeetingRoom extends DurableObject<Env> {
       return;
     }
 
+    let attachmentKeys: string[];
+    try {
+      attachmentKeys = await fetchMessageAttachmentKeys(
+        this.env.DB,
+        d.message_id,
+      );
+    } catch (error: unknown) {
+      log.error("Failed to load message attachments before delete:", error);
+      this.sendTo(ws, {
+        op: Op.Error,
+        d: { code: 5000, message: "Failed to delete message" },
+      });
+      return;
+    }
+
     try {
       const result = await this.env.DB.prepare(
         `DELETE FROM messages
@@ -4314,6 +4318,25 @@ export class MeetingRoom extends DurableObject<Env> {
     } catch (err) {
       log.error("Failed to delete message:", err);
       return;
+    }
+
+    for (const fileKey of attachmentKeys) {
+      try {
+        await this.env.BUCKET.delete(fileKey);
+      } catch (cleanupError: unknown) {
+        try {
+          await recordR2CleanupFailure(this.env.DB, fileKey, cleanupError);
+        } catch (recordError: unknown) {
+          log.error("Failed to record R2 cleanup failure:", recordError);
+        }
+        try {
+          scheduleR2Cleanup(this.env, fileKey, (promise) =>
+            this.ctx.waitUntil(promise),
+          );
+        } catch (scheduleError: unknown) {
+          log.error("Failed to schedule R2 cleanup failure:", scheduleError);
+        }
+      }
     }
 
     const deleteDispatch = {

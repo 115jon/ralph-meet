@@ -36,8 +36,10 @@ import {
 import { RateLimiter } from "./realtime/rate-limiter";
 import {
   consumeBackgroundTaskBatch,
+  retryMessagePostprocessing,
   type BackgroundTaskEnvelope,
 } from "./src/lib/background-tasks";
+import { retryR2Cleanup } from "./src/services/r2-cleanup.service";
 import { syncCollectiblesCatalog } from "./src/lib/collectibles-catalog";
 import {
   appendRealtimeAdmissionHeaders,
@@ -111,6 +113,7 @@ interface Env {
   MEETING_ROOM: DurableObjectNamespace;
   VOICE_ROOM: DurableObjectNamespace;
   DB: D1Database;
+  BUCKET: R2Bucket;
   CACHE: KVNamespace;
   BACKGROUND_TASKS?: Queue<BackgroundTaskEnvelope>;
   REALTIME_ALLOWED_ORIGINS?: string;
@@ -400,6 +403,12 @@ export default {
         syncYtDlpUpstream(true).catch((error) => {
           console.error("yt-dlp upstream sync failed:", error);
         }),
+        retryR2Cleanup(env.DB, env.BUCKET).catch((error) => {
+          console.error("R2 cleanup retry failed:", error);
+        }),
+        retryMessagePostprocessing(env).catch((error) => {
+          console.error("Message postprocessing retry failed:", error);
+        }),
         syncCollectiblesCatalog(env.DB)
           .then((catalog) => {
             console.info("Collectibles catalog sync completed", {
@@ -422,6 +431,11 @@ export default {
     env: Env,
     _ctx: ExecutionContext,
   ): Promise<void> {
-    await consumeBackgroundTaskBatch(batch, { CACHE: env.CACHE });
+    await consumeBackgroundTaskBatch(batch, {
+      DB: env.DB,
+      BUCKET: env.BUCKET,
+      CACHE: env.CACHE,
+      MEETING_ROOM: env.MEETING_ROOM,
+    });
   },
 };

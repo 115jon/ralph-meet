@@ -96,6 +96,8 @@ export interface ChatState {
   speakingUsersBySource: Record<string, Record<string, boolean>>;
   /** User notifications (mentions, replies, DMs) */
   notifications: Notification[];
+  /** Latest server-side notification clear watermark received by this client */
+  notificationsClearedAt: string | null;
   /** Unread notification count (for badge) */
   unreadNotificationCount: number;
   /** Per-server unread mention/reply count: serverId → count */
@@ -180,6 +182,7 @@ export const initialState: ChatState = {
   speakingUsers: {},
   speakingUsersBySource: {},
   notifications: [],
+  notificationsClearedAt: null,
   unreadNotificationCount: 0,
   serverMentionCounts: {},
   channelMentionCounts: {},
@@ -278,6 +281,7 @@ export type ChatAction =
       id: string;
       content?: string;
       updated_at?: string;
+      content_revision?: number;
       embeds?: import("@/lib/types").EmbedInfo[];
     }
   | { type: "DELETE_MESSAGE"; id: string }
@@ -416,7 +420,7 @@ export type ChatAction =
     }
   | { type: "ADD_NOTIFICATION"; notification: Notification }
   | { type: "MARK_NOTIFICATIONS_READ"; ids?: string[]; all?: boolean }
-  | { type: "CLEAR_NOTIFICATIONS" }
+  | { type: "CLEAR_NOTIFICATIONS"; clearedAt?: string }
   | { type: "SET_SCROLL_POSITION"; channelId: string; messageId: string }
   | { type: "SET_JUMP_ANCHOR"; channelId: string; messageId: string }
   | { type: "CLEAR_JUMP_ANCHOR"; channelId: string };
@@ -1071,14 +1075,25 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       };
     }
     case "UPDATE_MESSAGE": {
-      const updateMessage = (m: Message) => ({
-        ...m,
-        ...(action.content !== undefined ? { content: action.content } : {}),
-        ...(action.updated_at !== undefined
-          ? { updated_at: action.updated_at }
-          : {}),
-        ...(action.embeds !== undefined ? { embeds: action.embeds } : {}),
-      });
+      const updateMessage = (m: Message) => {
+        if (
+          action.content_revision !== undefined &&
+          action.content_revision < (m.content_revision ?? 0)
+        ) {
+          return m;
+        }
+        return {
+          ...m,
+          ...(action.content !== undefined ? { content: action.content } : {}),
+          ...(action.updated_at !== undefined
+            ? { updated_at: action.updated_at }
+            : {}),
+          ...(action.content_revision !== undefined
+            ? { content_revision: action.content_revision }
+            : {}),
+          ...(action.embeds !== undefined ? { embeds: action.embeds } : {}),
+        };
+      };
       const nextMessageCaches = mapMessageCaches(
         state.messagesByChannelId,
         (messages) => replaceMessageById(messages, action.id, updateMessage),
@@ -2314,6 +2329,13 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       };
     }
     case "ADD_NOTIFICATION": {
+      if (
+        state.notifications.some(
+          (notification) => notification.id === action.notification.id,
+        )
+      ) {
+        return state;
+      }
       const nextNotifs = [action.notification, ...state.notifications];
       const counts = computeMentionCounts(nextNotifs);
       return {
@@ -2352,6 +2374,8 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       return {
         ...state,
         notifications: [],
+        notificationsClearedAt:
+          action.clearedAt ?? state.notificationsClearedAt,
         unreadNotificationCount: 0,
         serverMentionCounts: {},
         channelMentionCounts: {},

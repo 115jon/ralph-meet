@@ -281,6 +281,7 @@ export function createChatGateway(
           id: d.data.id,
           content: d.data.content,
           updated_at: d.data.updated_at,
+          content_revision: d.data.content_revision,
           embeds: d.data.embeds,
         });
         break;
@@ -570,7 +571,13 @@ export function createChatGateway(
         void syncDesktopState();
         break;
       case "NOTIFICATIONS_CLEAR":
-        dispatch({ type: "CLEAR_NOTIFICATIONS" });
+        dispatch({
+          type: "CLEAR_NOTIFICATIONS",
+          clearedAt:
+            typeof d.data.cleared_at === "string"
+              ? d.data.cleared_at
+              : undefined,
+        });
         void syncDesktopState();
         break;
       case "MESSAGE_PIN":
@@ -623,6 +630,17 @@ export function createChatGateway(
       }
       case "NOTIFICATION_CREATE": {
         const notif = d.data as AppNotification;
+        const clearedAt = get().notificationsClearedAt;
+        if (
+          clearedAt &&
+          typeof notif.created_at === "string" &&
+          notif.created_at <= clearedAt
+        ) {
+          break;
+        }
+        if (get().notifications.some((existing) => existing.id === notif.id)) {
+          break;
+        }
         dispatch({ type: "ADD_NOTIFICATION", notification: notif });
 
         // Play notification sound
