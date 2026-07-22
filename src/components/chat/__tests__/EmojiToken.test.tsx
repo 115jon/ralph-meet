@@ -34,4 +34,11 @@ describe("EmojiToken selection rendering", () => {
     expect(markup).toContain(":party_blob:");
     expect(markup).toContain("/api/emojis/assets/emoji-123");
   });
+
+  it("applies the large size to the rendered emoji artwork", () => {
+    const markup = renderToStaticMarkup(<EmojiToken value="😂" size="large" />);
+
+    expect(markup).toContain("height:2rem");
+    expect(markup).toContain("width:2rem");
+  });
 });

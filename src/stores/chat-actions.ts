@@ -36,6 +36,7 @@ export interface ChatRestActions {
     channelId: string,
     messageId: string,
     emoji: string,
+    targetUserId?: string,
   ) => Promise<void>;
   deleteMessage: (channelId: string, messageId: string) => Promise<void>;
   editMessage: (messageId: string, content: string) => Promise<void>;
@@ -333,19 +334,32 @@ export function createChatActions(
     channelId: string,
     messageId: string,
     emoji: string,
+    targetUserId?: string,
   ) => {
     const user = get().user;
     if (!user) return;
+    const removedUserId = targetUserId ?? user.id;
 
-    dispatch({ type: "REMOVE_REACTION", messageId, emoji, userId: user.id });
+    dispatch({
+      type: "REMOVE_REACTION",
+      messageId,
+      emoji,
+      userId: removedUserId,
+    });
 
     try {
       await apiDelete(`/api/channels/${channelId}/reactions`, {
         message_id: messageId,
         emoji,
+        ...(targetUserId ? { target_user_id: targetUserId } : {}),
       });
     } catch {
-      dispatch({ type: "ADD_REACTION", messageId, emoji, userId: user.id });
+      dispatch({
+        type: "ADD_REACTION",
+        messageId,
+        emoji,
+        userId: removedUserId,
+      });
     }
   };
 

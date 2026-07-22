@@ -13,6 +13,7 @@ interface InlineEmojiProps {
   className?: string;
   loading?: "eager" | "lazy";
   decoding?: "async" | "auto" | "sync";
+  size?: "default" | "reaction" | "large";
 }
 
 export default function InlineEmoji({
@@ -25,11 +26,14 @@ export default function InlineEmoji({
   className,
   loading,
   decoding,
+  size = "default",
 }: InlineEmojiProps) {
   const [imageFailed, setImageFailed] = useState(false);
   const resolvedSelectionText = selectionText ?? fallbackText ?? native ?? alt;
   const resolvedImageUrl = imageUrl ?? "";
   const shouldRenderImage = resolvedImageUrl.length > 0 && !imageFailed;
+  const emojiSize =
+    size === "large" ? "2rem" : size === "reaction" ? "1.5rem" : "1.35em";
 
   if (selectable) {
     return (
@@ -133,8 +137,9 @@ export default function InlineEmoji({
         )}
         style={{
           aspectRatio: "1 / 1",
-          height: "1.35em",
-          verticalAlign: "-0.3em",
+          height: emojiSize,
+          verticalAlign: size === "default" ? "-0.3em" : "middle",
+          width: emojiSize,
         }}
       />
     );
@@ -145,6 +150,11 @@ export default function InlineEmoji({
       <span
         className={cn("inline-block select-none leading-none", className)}
         aria-label={alt}
+        style={
+          size === "default"
+            ? undefined
+            : { fontSize: emojiSize, height: emojiSize, width: emojiSize }
+        }
       >
         {native}
       </span>

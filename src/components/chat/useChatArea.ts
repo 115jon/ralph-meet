@@ -1099,10 +1099,10 @@ export function useChatArea({
 
   const canDeleteMessages = useMemo(() => {
     return (
-      hasPermission(userPermissions, PERMISSIONS.MANAGE_MESSAGES) ||
-      hasPermission(userPermissions, PERMISSIONS.ADMINISTRATOR)
+      hasPermission(effectivePermissions, PERMISSIONS.MANAGE_MESSAGES) ||
+      hasPermission(effectivePermissions, PERMISSIONS.ADMINISTRATOR)
     );
-  }, [userPermissions]);
+  }, [effectivePermissions]);
 
   const canBan = useMemo(() => {
     return (

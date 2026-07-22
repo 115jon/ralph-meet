@@ -473,8 +473,30 @@ describe("removeReaction", () => {
     );
 
     db.assertCalled(/DELETE FROM message_reactions/);
-    expect(result.broadcast.event).toBe("REACTION_REMOVE");
+    expect(result.broadcast?.event).toBe("REACTION_REMOVE");
   });
+});
+
+it("does not broadcast when the message is outside the requested channel", async () => {
+  db.mockQuery(/DELETE FROM message_reactions/, {
+    meta: { changes: 0 },
+  });
+
+  const result = await removeReaction(
+    db as any,
+    "different-channel",
+    USER_ID,
+    "msg_1",
+    "👍",
+  );
+
+  expect(result.broadcast).toBeUndefined();
+  db.assertCalledWith(/DELETE FROM message_reactions/, [
+    "msg_1",
+    USER_ID,
+    "👍",
+    "different-channel",
+  ]);
 });
 
 // ─── markChannelAsRead ───────────────────────────────────────────────────────

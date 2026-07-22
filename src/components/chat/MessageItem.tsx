@@ -15,6 +15,10 @@ import { useUserResolution } from "@/hooks/useUserResolution";
 import { getAttachmentUrl } from "@/lib/attachment-url";
 import { extractCustomEmojiIds, type EmojiRecentItem } from "@/lib/emoji";
 import {
+  formatReactionUserNames,
+  getReactionEmojiLabel,
+} from "@/lib/reaction-tooltip";
+import {
   getQuickReactionItems,
   rememberRecentReaction,
 } from "@/lib/message-reaction-recents";
@@ -64,6 +68,7 @@ import { GifFavoriteButton } from "./GifFavoriteButton";
 import { LinkEmbed } from "./LinkEmbed";
 import { MarkdownRenderer } from "./MarkdownRenderer";
 import MessageShareModal from "./MessageShareModal";
+import ReactionDetailsModal from "./ReactionDetailsModal";
 import SensitiveMediaFrame from "./SensitiveMediaFrame";
 import UserProfilePopover from "./UserProfilePopover";
 import VideoAttachment from "./VideoAttachment";
@@ -205,6 +210,71 @@ function ToolbarEmojiButton({
   );
 }
 
+function ReactionTooltipContent({
+  emoji,
+  count,
+  users,
+  customEmojiMap,
+  onOpenDetails,
+}: {
+  emoji: string;
+  count: number;
+  users: string[];
+  customEmojiMap: Record<string, { image_url?: string | null }>;
+  onOpenDetails?: () => void;
+}) {
+  const visibleUsers = users.slice(0, 3);
+  const firstUser = useUserResolution(visibleUsers[0]);
+  const secondUser = useUserResolution(visibleUsers[1]);
+  const thirdUser = useUserResolution(visibleUsers[2]);
+  const userNames = [
+    firstUser.displayName,
+    secondUser.displayName,
+    thirdUser.displayName,
+  ].slice(0, visibleUsers.length);
+
+  return (
+    <div className="max-w-[320px] leading-normal">
+      <div className="flex items-start gap-2">
+        {onOpenDetails ? (
+          <button
+            type="button"
+            onClick={onOpenDetails}
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-rm-bg-surface transition-[background-color,transform] hover:bg-rm-bg-hover active:scale-[0.96]"
+            aria-label={`View all reactions for ${getReactionEmojiLabel(emoji)}`}
+          >
+            <EmojiToken
+              value={emoji}
+              customEmojiMap={customEmojiMap}
+              size="large"
+              className="h-8 w-8"
+              fallbackClassName="text-2xl leading-none"
+            />
+          </button>
+        ) : (
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-rm-bg-surface">
+            <EmojiToken
+              value={emoji}
+              customEmojiMap={customEmojiMap}
+              size="large"
+              className="h-8 w-8"
+              fallbackClassName="text-2xl leading-none"
+            />
+          </div>
+        )}
+        <div className="min-w-0 space-y-1">
+          <p className="font-semibold">
+            {getReactionEmojiLabel(emoji)} reacted by
+          </p>
+          <p className="text-rm-text-secondary">
+            {formatReactionUserNames(userNames, count)}
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const MessageItem = memo(
   ({
     id,
@@ -239,6 +309,12 @@ const MessageItem = memo(
     } = useChatActions();
     const activeServerId = useChatStore((state) => state.activeServerId);
     const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+    const [showReactionEmojiPicker, setShowReactionEmojiPicker] =
+      useState(false);
+    const [showReactionDetails, setShowReactionDetails] = useState(false);
+    const [reactionDetailsEmoji, setReactionDetailsEmoji] = useState<
+      string | null
+    >(null);
     const [showProfile, setShowProfile] = useState(false);
     const [editing, setEditing] = useState(false);
     const [showShareModal, setShowShareModal] = useState(false);
@@ -255,6 +331,7 @@ const MessageItem = memo(
     const visibilityReportedRef = useRef(false);
     const editTextAreaRef = useRef<HTMLTextAreaElement>(null);
     const emojiBtnRef = useRef<HTMLButtonElement>(null);
+    const reactionEmojiBtnRef = useRef<HTMLButtonElement>(null);
     const contextEmojiPickerAnchorRef = useRef<HTMLSpanElement>(null);
     const { menu, openMenu, closeMenu, shouldRender, isClosing } =
       useContextMenu();
@@ -410,6 +487,43 @@ const MessageItem = memo(
       ],
     );
 
+    const closeToolbarEmojiPicker = useCallback(() => {
+      setShowEmojiPicker(false);
+      if (typeof window !== "undefined") {
+        window.requestAnimationFrame(() => emojiBtnRef.current?.focus());
+      }
+    }, []);
+
+    const closeInlineEmojiPicker = useCallback(() => {
+      setShowReactionEmojiPicker(false);
+      if (typeof window !== "undefined") {
+        window.requestAnimationFrame(() =>
+          reactionEmojiBtnRef.current?.focus(),
+        );
+      }
+    }, []);
+
+    const openReactionDetails = useCallback((emoji: string) => {
+      setShowEmojiPicker(false);
+      setShowReactionEmojiPicker(false);
+      setContextEmojiPickerAnchor(null);
+      setReactionDetailsEmoji(emoji);
+      setShowReactionDetails(true);
+    }, []);
+
+    const closeReactionDetails = useCallback(() => {
+      setShowReactionDetails(false);
+      setReactionDetailsEmoji(null);
+    }, []);
+
+    const handleRemoveReactionForUser = useCallback(
+      (emoji: string, userId: string) => {
+        if (!message.channel_id) return;
+        void removeReaction(message.channel_id, message.id, emoji, userId);
+      },
+      [message.channel_id, message.id, removeReaction],
+    );
+
     const handleQuickReaction = useCallback(
       (item: EmojiRecentItem) => {
         if (!message.channel_id) return;
@@ -439,6 +553,7 @@ const MessageItem = memo(
       (emoji: string) => {
         toggleReaction(emoji);
         setShowEmojiPicker(false);
+        setShowReactionEmojiPicker(false);
         setContextEmojiPickerAnchor(null);
         setToolbarQuickReactions(getQuickReactionItems(3));
       },
@@ -449,6 +564,7 @@ const MessageItem = memo(
       (event: React.MouseEvent<HTMLButtonElement>) => {
         const rect = event.currentTarget.getBoundingClientRect();
         setShowEmojiPicker(false);
+        setShowReactionEmojiPicker(false);
         setContextEmojiPickerAnchor({
           x: rect.left,
           y: rect.bottom,
@@ -483,6 +599,7 @@ const MessageItem = memo(
       const quickReactionEmojiMap = buildRecentEmojiTokenMap(quickReactions);
 
       setShowEmojiPicker(false);
+      setShowReactionEmojiPicker(false);
       setContextEmojiPickerAnchor(null);
 
       const reactionSubmenu = (
@@ -1103,40 +1220,105 @@ const MessageItem = memo(
 
             {/* Reactions */}
             {message.reactions && message.reactions.length > 0 && (
-              <div className="mt-2 flex flex-wrap gap-1.5">
-                {message.reactions.map((reaction) => {
-                  const hasReacted = reaction.users?.includes(
-                    currentUserId ?? "",
-                  );
-                  return (
-                    <button
-                      key={reaction.emoji}
-                      className={cn(
-                        "flex cursor-pointer items-center gap-1.5 rounded-lg border px-2 py-0.5 text-[12px] font-bold transition-all",
-                        previewOnly && "cursor-default",
-                        hasReacted
-                          ? "border-primary/40 bg-primary/10 text-primary shadow-[0_0_10px_var(--rm-glow)]"
-                          : "border-rm-border bg-rm-bg-elevated/50 text-rm-text-muted hover:border-rm-text-muted/20 hover:text-rm-text-secondary",
-                      )}
-                      onClick={
-                        previewOnly
-                          ? undefined
-                          : () => toggleReaction(reaction.emoji)
-                      }
-                    >
-                      <EmojiToken
-                        value={reaction.emoji}
-                        customEmojiMap={reactionEmojiMap}
-                        className="h-4 w-4"
-                        fallbackClassName="max-w-[84px] truncate text-[11px]"
+              <TooltipProvider delayDuration={180}>
+                <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                  {message.reactions.map((reaction) => {
+                    const reactionUsers = reaction.users ?? [];
+                    const hasReacted = reactionUsers.includes(
+                      currentUserId ?? "",
+                    );
+                    return (
+                      <Tooltip
+                        key={reaction.emoji}
+                        disableHoverableContent={false}
+                      >
+                        <TooltipTrigger asChild>
+                          <button
+                            type="button"
+                            aria-pressed={hasReacted}
+                            aria-label={`${hasReacted ? "Remove" : "Add"} ${getReactionEmojiLabel(reaction.emoji)} reaction`}
+                            className={cn(
+                              "flex min-h-9 cursor-pointer items-center gap-2 rounded-md border px-3 py-1 text-xs font-bold transition-[background-color,border-color,color,box-shadow,transform] active:scale-[0.96]",
+                              previewOnly && "cursor-default",
+                              hasReacted
+                                ? "border-primary/40 bg-primary/10 text-primary shadow-[0_0_10px_var(--rm-glow)]"
+                                : "border-rm-border bg-rm-bg-elevated/50 text-rm-text-muted hover:border-rm-text-muted/20 hover:bg-rm-bg-hover hover:text-rm-text-secondary",
+                            )}
+                            onClick={
+                              previewOnly
+                                ? undefined
+                                : () => toggleReaction(reaction.emoji)
+                            }
+                          >
+                            <EmojiToken
+                              value={reaction.emoji}
+                              customEmojiMap={reactionEmojiMap}
+                              size="reaction"
+                              className="h-6 w-6"
+                              fallbackClassName="max-w-[84px] truncate text-xs"
+                            />
+                            <span className="tabular-nums text-xs opacity-70">
+                              {reaction.count}
+                            </span>
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent
+                          side="top"
+                          sideOffset={8}
+                          className={cn(
+                            MESSAGE_TOOLBAR_TOOLTIP_CLASS,
+                            "pointer-events-auto hidden max-w-xs text-xs sm:block",
+                          )}
+                        >
+                          <ReactionTooltipContent
+                            emoji={reaction.emoji}
+                            count={reaction.count}
+                            users={reactionUsers}
+                            customEmojiMap={reactionEmojiMap}
+                            onOpenDetails={
+                              previewOnly
+                                ? undefined
+                                : () => openReactionDetails(reaction.emoji)
+                            }
+                          />
+                        </TooltipContent>
+                      </Tooltip>
+                    );
+                  })}
+
+                  {!previewOnly && (
+                    <div className="relative">
+                      <IconButton
+                        ref={reactionEmojiBtnRef}
+                        icon={Smile}
+                        size="sm"
+                        tooltip="Add Reaction"
+                        aria-label="Add another reaction"
+                        aria-haspopup="dialog"
+                        aria-expanded={showReactionEmojiPicker}
+                        className={cn(
+                          "border border-rm-border bg-rm-bg-elevated/60 text-rm-text-muted hover:border-primary/30 hover:bg-primary/10 hover:text-primary",
+                          showReactionEmojiPicker &&
+                            "border-primary/40 bg-primary/10 text-primary",
+                        )}
+                        onClick={() => {
+                          setShowEmojiPicker(false);
+                          setContextEmojiPickerAnchor(null);
+                          setShowReactionEmojiPicker((current) => !current);
+                        }}
                       />
-                      <span className="text-[10px] opacity-60">
-                        {reaction.count}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
+                      {showReactionEmojiPicker && (
+                        <EmojiPicker
+                          placement="right"
+                          onSelect={handleEmojiPickerSelect}
+                          onClose={closeInlineEmojiPicker}
+                          markerRef={reactionEmojiBtnRef}
+                        />
+                      )}
+                    </div>
+                  )}
+                </div>
+              </TooltipProvider>
             )}
 
             {/* Thread badge */}
@@ -1156,7 +1338,13 @@ const MessageItem = memo(
           {/* Hover action toolbar */}
           {!previewOnly && !message.pending && !editing && (
             <TooltipProvider delayDuration={120}>
-              <div className="pointer-events-none absolute -top-3 right-4 z-20 flex max-w-[calc(100vw-96px)] origin-bottom scale-95 items-center gap-0.5 overflow-x-auto rounded-lg border border-rm-border bg-rm-bg-elevated p-0.5 opacity-0 shadow-2xl transition-all group-hover:pointer-events-auto group-hover:scale-100 group-hover:opacity-100 focus-within:pointer-events-auto focus-within:scale-100 focus-within:opacity-100">
+              <div
+                className={cn(
+                  "pointer-events-none absolute -top-3 right-4 z-20 flex max-w-[calc(100vw-96px)] origin-bottom scale-95 items-center gap-0.5 overflow-x-auto rounded-lg border border-rm-border bg-rm-bg-elevated p-0.5 opacity-0 shadow-2xl transition-all group-hover:pointer-events-auto group-hover:scale-100 group-hover:opacity-100 focus-within:pointer-events-auto focus-within:scale-100 focus-within:opacity-100",
+                  showEmojiPicker &&
+                    "pointer-events-auto scale-100 opacity-100",
+                )}
+              >
                 {isShiftPressed ? (
                   <>
                     <IconButton
@@ -1220,21 +1408,24 @@ const MessageItem = memo(
                         icon={Smile}
                         size="sm"
                         tooltip="Add Reaction"
+                        aria-haspopup="dialog"
+                        aria-expanded={showEmojiPicker}
                         className={
                           showEmojiPicker
                             ? "bg-primary/10 text-primary"
                             : undefined
                         }
                         onClick={() => {
+                          setShowReactionEmojiPicker(false);
                           setContextEmojiPickerAnchor(null);
                           setShowEmojiPicker((current) => !current);
                         }}
                       />
                       {showEmojiPicker && (
                         <EmojiPicker
-                          placement="bottom-end"
+                          placement="left"
                           onSelect={handleEmojiPickerSelect}
-                          onClose={() => setShowEmojiPicker(false)}
+                          onClose={closeToolbarEmojiPicker}
                           markerRef={emojiBtnRef}
                         />
                       )}
@@ -1282,21 +1473,24 @@ const MessageItem = memo(
                         icon={Smile}
                         size="sm"
                         tooltip="Add Reaction"
+                        aria-haspopup="dialog"
+                        aria-expanded={showEmojiPicker}
                         className={
                           showEmojiPicker
                             ? "bg-primary/10 text-primary"
                             : undefined
                         }
                         onClick={() => {
+                          setShowReactionEmojiPicker(false);
                           setContextEmojiPickerAnchor(null);
                           setShowEmojiPicker((current) => !current);
                         }}
                       />
                       {showEmojiPicker && (
                         <EmojiPicker
-                          placement="bottom-end"
+                          placement="left"
                           onSelect={handleEmojiPickerSelect}
-                          onClose={() => setShowEmojiPicker(false)}
+                          onClose={closeToolbarEmojiPicker}
                           markerRef={emojiBtnRef}
                         />
                       )}
@@ -1355,6 +1549,17 @@ const MessageItem = memo(
         )}
 
         {!previewOnly && confirmation}
+
+        {!previewOnly && showReactionDetails && (
+          <ReactionDetailsModal
+            message={message}
+            initialEmoji={reactionDetailsEmoji}
+            canManageReactions={canDeleteMessages}
+            customEmojiMap={reactionEmojiMap}
+            onRemoveReaction={handleRemoveReactionForUser}
+            onClose={closeReactionDetails}
+          />
+        )}
 
         {!previewOnly && contextEmojiPickerAnchor ? (
           <>

@@ -242,13 +242,25 @@ export async function removeReaction(
   userId: string,
   messageId: string,
   emoji: string,
-): Promise<{ broadcast: BroadcastDescriptor }> {
-  await db
+): Promise<{ broadcast?: BroadcastDescriptor }> {
+  const result = await db
     .prepare(
-      `DELETE FROM message_reactions WHERE message_id = ? AND user_id = ? AND emoji = ?`,
+      `DELETE FROM message_reactions
+       WHERE message_id = ?
+         AND user_id = ?
+         AND emoji = ?
+         AND EXISTS (
+           SELECT 1 FROM messages
+           WHERE messages.id = message_reactions.message_id
+             AND messages.channel_id = ?
+         )`,
     )
-    .bind(messageId, userId, emoji)
+    .bind(messageId, userId, emoji, channelId)
     .run();
+
+  if (typeof result.meta?.changes === "number" && result.meta.changes === 0) {
+    return {};
+  }
 
   return {
     broadcast: {

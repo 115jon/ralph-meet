@@ -170,6 +170,10 @@ export const AddReactionSchema = z.object({
   emoji: z.string().min(1).max(128),
 });
 
+export const RemoveReactionSchema = AddReactionSchema.extend({
+  target_user_id: z.string().min(1).max(128).optional(),
+});
+
 export const PinMessageSchema = z.object({
   message_id: z.string().uuid("Invalid message ID"),
   pinned: z.boolean(),
