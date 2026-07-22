@@ -225,6 +225,7 @@ export async function previewSoundboardTriggerSelection(
     volume:
       clampVolume(resolved.volume) * clampVolume(settings.soundVolume / 100),
     isLocal: true,
+    includeInVoiceActivity: false,
   });
   return true;
 }

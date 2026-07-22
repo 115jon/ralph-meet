@@ -139,6 +139,40 @@ function createMicrophoneStream(stream: MediaStream): MediaStream | null {
     : null;
 }
 
+interface VoiceActivityStream {
+  stream: MediaStream;
+  ownsTracks: boolean;
+}
+
+function createVoiceActivityStream(
+  rawStream: MediaStream,
+  processor: LocalAudioProcessorHandle | null,
+): VoiceActivityStream | null {
+  if (processor) {
+    try {
+      const monitorStream = processor.createMonitorStream();
+      if (
+        monitorStream
+          .getAudioTracks()
+          .some((track) => track.readyState !== "ended")
+      ) {
+        return { stream: monitorStream, ownsTracks: true };
+      }
+    } catch {
+      // Fall back to raw capture if a processor monitor is unavailable.
+    }
+  }
+
+  const microphoneStream = createMicrophoneStream(rawStream);
+  return microphoneStream
+    ? { stream: microphoneStream, ownsTracks: false }
+    : null;
+}
+
+function disposeVoiceActivityStream(stream: MediaStream | null): void {
+  stream?.getTracks().forEach((track) => track.stop());
+}
+
 const SCREEN_QUALITY_MAP: Record<
   string,
   { width: number; height: number; bitrate: number }
@@ -1010,6 +1044,7 @@ export function useVoiceChannel({
   const publishedAudioProcessorRef = useRef<LocalAudioProcessorHandle | null>(
     null,
   );
+  const ownedVadMonitorStreamRef = useRef<MediaStream | null>(null);
   const rawCameraTrackRef = useRef<MediaStreamTrack | null>(null);
   const cameraBackgroundEffectRef = useRef<CameraBackgroundEffect | null>(null);
   const activeCameraBackgroundKeyRef = useRef("none");
@@ -1995,25 +2030,41 @@ export function useVoiceChannel({
             sfuRef.current === sfu;
           if (isCurrentMedia) {
             const audioTrack = stream.getAudioTracks()[0];
-            const microphoneStream = createMicrophoneStream(stream);
+            const vadInput = createVoiceActivityStream(
+              stream,
+              publishedAudioProcessorRef.current,
+            );
             if (
               isMicOnRef.current &&
               audioTrack &&
               audioTrack.readyState !== "ended" &&
               audioTrack.enabled &&
-              microphoneStream
+              vadInput
             ) {
               sfu.vad.stop();
-              sfu.vad.start(microphoneStream);
+              disposeVoiceActivityStream(ownedVadMonitorStreamRef.current);
+              ownedVadMonitorStreamRef.current = vadInput.ownsTracks
+                ? vadInput.stream
+                : null;
+              sfu.vad.start(vadInput.stream);
             } else {
               sfu.vad.stop();
+              if (vadInput?.ownsTracks) {
+                disposeVoiceActivityStream(vadInput.stream);
+              }
+              disposeVoiceActivityStream(ownedVadMonitorStreamRef.current);
+              ownedVadMonitorStreamRef.current = null;
             }
           } else if (!isMicOnRef.current) {
             sfu.vad.stop();
+            disposeVoiceActivityStream(ownedVadMonitorStreamRef.current);
+            ownedVadMonitorStreamRef.current = null;
           }
         }
         if (!isMicOnRef.current && sfuRef.current === sfu) {
           sfu.vad.stop();
+          disposeVoiceActivityStream(ownedVadMonitorStreamRef.current);
+          ownedVadMonitorStreamRef.current = null;
         }
         const currentStream = localStreamRef.current;
         if (!currentStream || sfuRef.current !== sfu) return;
@@ -2448,12 +2499,17 @@ export function useVoiceChannel({
         }
 
         if (audioNeedsUpdate && isMicOn) {
-          const rawMicrophoneStream = rawAudioTrack
-            ? new MediaStream([rawAudioTrack])
-            : null;
+          const vadInput = createVoiceActivityStream(
+            displayStream,
+            nextAudioProcessor,
+          );
           sfu.vad.stop();
-          if (rawMicrophoneStream) {
-            sfu.vad.start(rawMicrophoneStream);
+          disposeVoiceActivityStream(ownedVadMonitorStreamRef.current);
+          ownedVadMonitorStreamRef.current = vadInput?.ownsTracks
+            ? vadInput.stream
+            : null;
+          if (vadInput) {
+            sfu.vad.start(vadInput.stream);
           }
         }
 
@@ -2575,14 +2631,23 @@ export function useVoiceChannel({
     }
 
     if (isMicOn) {
-      const microphoneStream = createMicrophoneStream(stream);
-      if (microphoneStream) {
-        sfuRef.current?.vad.start(microphoneStream);
+      const vadInput = createVoiceActivityStream(
+        stream,
+        publishedAudioProcessorRef.current,
+      );
+      disposeVoiceActivityStream(ownedVadMonitorStreamRef.current);
+      ownedVadMonitorStreamRef.current = vadInput?.ownsTracks
+        ? vadInput.stream
+        : null;
+      if (vadInput) {
+        sfuRef.current?.vad.start(vadInput.stream);
       } else {
         sfuRef.current?.vad.stop();
       }
     } else {
       sfuRef.current?.vad.stop();
+      disposeVoiceActivityStream(ownedVadMonitorStreamRef.current);
+      ownedVadMonitorStreamRef.current = null;
     }
 
     if (joined) {
@@ -2686,6 +2751,8 @@ export function useVoiceChannel({
         sfuRef.current = null;
         setSfuInstance(null);
         stopCameraBackgroundEffect(true);
+        disposeVoiceActivityStream(ownedVadMonitorStreamRef.current);
+        ownedVadMonitorStreamRef.current = null;
         publishedAudioProcessorRef.current?.destroy();
         publishedAudioProcessorRef.current = null;
         localStreamRef.current?.getTracks().forEach((t) => {
@@ -2813,6 +2880,8 @@ export function useVoiceChannel({
           t.stop();
         });
         screenStreamRef.current = null;
+        disposeVoiceActivityStream(ownedVadMonitorStreamRef.current);
+        ownedVadMonitorStreamRef.current = null;
         releaseLocalStream(localMediaOwner);
         voiceDispatch({ type: "LEFT" });
         if (wasJoined && mode !== "room" && channelId) {
@@ -2892,6 +2961,8 @@ export function useVoiceChannel({
       },
     );
     stopCameraBackgroundEffect(true);
+    disposeVoiceActivityStream(ownedVadMonitorStreamRef.current);
+    ownedVadMonitorStreamRef.current = null;
     publishedAudioProcessorRef.current?.destroy();
     publishedAudioProcessorRef.current = null;
     localStreamRef.current?.getTracks().forEach((t) => {

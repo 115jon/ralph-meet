@@ -3,21 +3,30 @@
 import { act, cleanup, render } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-const mocks = vi.hoisted(() => ({
-  playSoundboardPlayback: vi.fn(),
-  stopAllSoundboardPlaybacksForServer: vi.fn(),
-  stopSoundboardPlayback: vi.fn(),
-  stopSoundboardPlaybacksByOwner: vi.fn(),
-  pauseSoundboardPlayback: vi.fn(),
-  resumeSoundboardPlayback: vi.fn(),
-  setSoundboardPlaybackVolume: vi.fn(),
-  getSoundboardEventReceivedAt: vi.fn((sentAt: unknown) =>
-    typeof sentAt === "number" ? sentAt : Date.now(),
-  ),
-  getSoundboardServerKey: vi.fn(
-    (serverId?: string | null) => serverId || "dm-call",
-  ),
-}));
+const mocks = vi.hoisted(() => {
+  const soundboardActivityListeners = new Set<() => void>();
+  return {
+    soundboardActivityListeners,
+    playSoundboardPlayback: vi.fn(),
+    stopAllSoundboardPlaybacksForServer: vi.fn(),
+    stopSoundboardPlayback: vi.fn(),
+    stopSoundboardPlaybacksByOwner: vi.fn(),
+    pauseSoundboardPlayback: vi.fn(),
+    resumeSoundboardPlayback: vi.fn(),
+    setSoundboardPlaybackVolume: vi.fn(),
+    hasActiveSoundboardPlayback: vi.fn(() => false),
+    subscribeSoundboardActivity: vi.fn((listener: () => void) => {
+      soundboardActivityListeners.add(listener);
+      return () => soundboardActivityListeners.delete(listener);
+    }),
+    getSoundboardEventReceivedAt: vi.fn((sentAt: unknown) =>
+      typeof sentAt === "number" ? sentAt : Date.now(),
+    ),
+    getSoundboardServerKey: vi.fn(
+      (serverId?: string | null) => serverId || "dm-call",
+    ),
+  };
+});
 
 vi.mock("@/lib/voice/soundboard", () => mocks);
 
@@ -31,8 +40,76 @@ describe("VoiceSoundboardManager", () => {
   afterEach(() => {
     cleanup();
     vi.restoreAllMocks();
+    mocks.soundboardActivityListeners.clear();
     mocks.playSoundboardPlayback.mockReset();
     mocks.stopAllSoundboardPlaybacksForServer.mockReset();
+    mocks.hasActiveSoundboardPlayback.mockReset();
+    mocks.hasActiveSoundboardPlayback.mockReturnValue(false);
+  });
+
+  it("bridges only local server playback activity into VAD", () => {
+    const listeners = new Map<string, (event: unknown) => void>();
+    const setSoundboardSpeaking = vi.fn();
+    const sfu = {
+      on: vi.fn((event: string, listener: (event: unknown) => void) => {
+        listeners.set(event, listener);
+        return () => listeners.delete(event);
+      }),
+      vad: { setSoundboardSpeaking },
+    };
+
+    render(
+      <VoiceSoundboardManager
+        sfu={sfu as never}
+        serverId="server-1"
+        localUserId="local-user"
+      />,
+    );
+
+    expect(mocks.hasActiveSoundboardPlayback).toHaveBeenCalledWith(
+      "local-user",
+      "server-1",
+    );
+    expect(setSoundboardSpeaking).toHaveBeenLastCalledWith(false);
+
+    mocks.hasActiveSoundboardPlayback.mockReturnValue(true);
+    act(() => {
+      for (const listener of mocks.soundboardActivityListeners) listener();
+    });
+
+    expect(setSoundboardSpeaking).toHaveBeenLastCalledWith(true);
+
+    act(() => {
+      listeners.get("app-event")?.({
+        type: "soundboard.play",
+        server_key: "server-2",
+        user_id: "local-user",
+        playback_id: "other-server",
+        name: "Other server",
+      });
+    });
+
+    expect(mocks.playSoundboardPlayback).not.toHaveBeenCalled();
+  });
+
+  it("clears VAD soundboard activity when the manager unmounts", () => {
+    const setSoundboardSpeaking = vi.fn();
+    const sfu = {
+      on: vi.fn(() => () => {}),
+      vad: { setSoundboardSpeaking },
+    };
+
+    const view = render(
+      <VoiceSoundboardManager
+        sfu={sfu as never}
+        serverId="server-1"
+        localUserId="local-user"
+      />,
+    );
+
+    view.unmount();
+
+    expect(setSoundboardSpeaking).toHaveBeenLastCalledWith(false);
   });
 
   it("uses a bounded valid server sent_at for recipient playback timing", () => {
@@ -42,6 +119,7 @@ describe("VoiceSoundboardManager", () => {
         listeners.set(event, listener);
         return () => listeners.delete(event);
       }),
+      vad: { setSoundboardSpeaking: vi.fn() },
     };
     const now = 1_000_000;
     vi.spyOn(Date, "now").mockReturnValue(now);
@@ -96,6 +174,7 @@ describe("VoiceSoundboardManager", () => {
         listeners.set(event, listener);
         return () => listeners.delete(event);
       }),
+      vad: { setSoundboardSpeaking: vi.fn() },
       voiceGW: { sendAppEvent },
     };
     const playbackId = "sb1:6:local-1:sound-1";
@@ -181,6 +260,7 @@ describe("VoiceSoundboardManager", () => {
         listeners.set(event, listener);
         return () => listeners.delete(event);
       }),
+      vad: { setSoundboardSpeaking: vi.fn() },
     };
     const playbackId = "sb1:6:local-1:sound-1";
     const token = await issueSoundboardMediaCapability(

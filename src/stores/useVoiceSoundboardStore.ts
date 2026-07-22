@@ -15,10 +15,18 @@ export interface VoiceSoundboardStore {
   activePlaybacks: Record<string, SoundboardPlaybackState>;
   serverMutedByServer: Record<string, Record<string, boolean>>;
   upsertPlayback: (playback: SoundboardPlaybackState) => void;
-  removePlayback: (playbackId: string) => void;
+  removePlayback: (playbackId: string, serverKey?: string) => void;
   clearServerPlaybacks: (serverKey: string) => void;
-  setPlaybackPaused: (playbackId: string, paused: boolean) => void;
-  setPlaybackVolume: (playbackId: string, volume: number) => void;
+  setPlaybackPaused: (
+    playbackId: string,
+    paused: boolean,
+    serverKey?: string,
+  ) => void;
+  setPlaybackVolume: (
+    playbackId: string,
+    volume: number,
+    serverKey?: string,
+  ) => void;
   setServerSoundboardMuted: (
     serverKey: string,
     userId: string,
@@ -26,22 +34,50 @@ export interface VoiceSoundboardStore {
   ) => void;
 }
 
+function findPlaybackKey(
+  activePlaybacks: VoiceSoundboardStore["activePlaybacks"],
+  playbackId: string,
+  serverKey?: string,
+): string | null {
+  if (!serverKey) return activePlaybacks[playbackId] ? playbackId : null;
+
+  const scopedKey = `${serverKey}::${playbackId}`;
+  if (activePlaybacks[scopedKey]) return scopedKey;
+  return activePlaybacks[playbackId]?.serverKey === serverKey
+    ? playbackId
+    : null;
+}
+
 export const useVoiceSoundboardStore = create<VoiceSoundboardStore>()(
   (set) => ({
     activePlaybacks: {},
     serverMutedByServer: {},
     upsertPlayback: (playback) =>
-      set((state) => ({
-        activePlaybacks: {
-          ...state.activePlaybacks,
-          [playback.playbackId]: playback,
-        },
-      })),
-    removePlayback: (playbackId) =>
       set((state) => {
-        if (!state.activePlaybacks[playbackId]) return state;
+        const scopedKey = `${playback.serverKey}::${playback.playbackId}`;
+        const existingPrimary = state.activePlaybacks[playback.playbackId];
+        const key = state.activePlaybacks[scopedKey]
+          ? scopedKey
+          : !existingPrimary || existingPrimary.serverKey === playback.serverKey
+            ? playback.playbackId
+            : scopedKey;
+        return {
+          activePlaybacks: {
+            ...state.activePlaybacks,
+            [key]: playback,
+          },
+        };
+      }),
+    removePlayback: (playbackId, serverKey) =>
+      set((state) => {
+        const key = findPlaybackKey(
+          state.activePlaybacks,
+          playbackId,
+          serverKey,
+        );
+        if (!key) return state;
         const next = { ...state.activePlaybacks };
-        delete next[playbackId];
+        delete next[key];
         return { activePlaybacks: next };
       }),
     clearServerPlaybacks: (serverKey) =>
@@ -52,25 +88,35 @@ export const useVoiceSoundboardStore = create<VoiceSoundboardStore>()(
           ),
         ),
       })),
-    setPlaybackPaused: (playbackId, paused) =>
+    setPlaybackPaused: (playbackId, paused, serverKey) =>
       set((state) => {
-        const playback = state.activePlaybacks[playbackId];
-        if (!playback || playback.paused === paused) return state;
+        const key = findPlaybackKey(
+          state.activePlaybacks,
+          playbackId,
+          serverKey,
+        );
+        const playback = key ? state.activePlaybacks[key] : undefined;
+        if (!key || !playback || playback.paused === paused) return state;
         return {
           activePlaybacks: {
             ...state.activePlaybacks,
-            [playbackId]: { ...playback, paused },
+            [key]: { ...playback, paused },
           },
         };
       }),
-    setPlaybackVolume: (playbackId, volume) =>
+    setPlaybackVolume: (playbackId, volume, serverKey) =>
       set((state) => {
-        const playback = state.activePlaybacks[playbackId];
-        if (!playback || playback.volume === volume) return state;
+        const key = findPlaybackKey(
+          state.activePlaybacks,
+          playbackId,
+          serverKey,
+        );
+        const playback = key ? state.activePlaybacks[key] : undefined;
+        if (!key || !playback || playback.volume === volume) return state;
         return {
           activePlaybacks: {
             ...state.activePlaybacks,
-            [playbackId]: { ...playback, volume },
+            [key]: { ...playback, volume },
           },
         };
       }),

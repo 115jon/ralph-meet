@@ -6,12 +6,13 @@ import { cn } from "@/lib/utils";
 import {
   pauseSoundboardPlayback,
   resumeSoundboardPlayback,
+  setSoundboardPlaybackVolume,
   stopSoundboardPlayback,
   getSoundboardServerKey,
 } from "@/lib/voice/soundboard";
 import { useVoiceSoundboardStore } from "@/stores/useVoiceSoundboardStore";
 import { useUserResolution } from "@/hooks/useUserResolution";
-import { Pause, Play, Square } from "lucide-react";
+import { Pause, Play, Square, Volume2 } from "lucide-react";
 import { useMemo } from "react";
 import {
   Tooltip,
@@ -25,7 +26,7 @@ interface ActiveSoundboardEffectListProps {
   serverKey?: string;
   localUserId?: string | null;
   sfu: SFUClient | null;
-  variant?: "default" | "compact";
+  variant?: "default" | "compact" | "floating";
   className?: string;
 }
 
@@ -57,13 +58,8 @@ export function ActiveSoundboardEffectList({
   return (
     <TooltipProvider delayDuration={100}>
       <div className={cn("space-y-2", className)}>
-        {variant === "compact" && (
-          <div className="text-[10px] font-normal text-rm-text-muted/50 mb-1">
-            {scopedPlaybacks.length} active
-          </div>
-        )}
         {scopedPlaybacks.map((playback) => (
-          <EffectItem
+          <SoundboardPlaybackRow
             key={playback.playbackId}
             playback={playback}
             localUserId={localUserId}
@@ -85,14 +81,15 @@ interface EffectItemProps {
     name: string;
     isLocal: boolean;
     paused: boolean;
+    volume: number;
   };
   localUserId?: string | null;
   serverKey: string;
   sfu: SFUClient | null;
-  variant: "default" | "compact";
+  variant: "default" | "compact" | "floating";
 }
 
-function EffectItem({
+export function SoundboardPlaybackRow({
   playback,
   localUserId,
   serverKey,
@@ -104,9 +101,9 @@ function EffectItem({
 
   const handleTogglePause = () => {
     if (playback.paused) {
-      resumeSoundboardPlayback(playback.playbackId);
+      resumeSoundboardPlayback(playback.playbackId, serverKey);
     } else {
-      pauseSoundboardPlayback(playback.playbackId);
+      pauseSoundboardPlayback(playback.playbackId, serverKey);
     }
 
     if (playback.playbackId === "local-preview") return;
@@ -121,7 +118,7 @@ function EffectItem({
   };
 
   const handleStop = () => {
-    stopSoundboardPlayback(playback.playbackId);
+    stopSoundboardPlayback(playback.playbackId, serverKey);
 
     if (playback.playbackId === "local-preview") return;
 
@@ -133,11 +130,33 @@ function EffectItem({
     });
   };
 
+  const handleVolumeChange = (volume: number) => {
+    setSoundboardPlaybackVolume(playback.playbackId, volume, serverKey);
+
+    if (playback.playbackId === "local-preview") return;
+
+    sfu?.voiceGW.sendAppEvent({
+      type: "soundboard.volume-set",
+      server_key: serverKey,
+      user_id: localUserId,
+      playback_id: playback.playbackId,
+      volume,
+    });
+  };
+
+  const volumeControlId = `soundboard-volume-${encodeURIComponent(
+    `${serverKey}:${playback.playbackId}`,
+  )}`;
+
   return (
     <div
       className={cn(
         "rounded-md border bg-rm-bg-hover text-rm-text border-rm-border/30",
-        variant === "compact" ? "px-2 py-1.5" : "px-3 py-2",
+        variant === "compact"
+          ? "px-2 py-1.5"
+          : variant === "floating"
+            ? "border-rm-border/50 bg-rm-bg-surface/70 px-2.5 py-2"
+            : "px-3 py-2",
       )}
     >
       <div className="flex items-center justify-between gap-2">
@@ -175,7 +194,10 @@ function EffectItem({
                   {playback.paused ? <Play size={12} /> : <Pause size={12} />}
                 </button>
               </TooltipTrigger>
-              <TooltipContent side="top">
+              <TooltipContent
+                side="top"
+                className="border border-rm-border bg-rm-bg-floating text-rm-text shadow-lg"
+              >
                 {playback.paused ? "Resume" : "Pause"}
               </TooltipContent>
             </Tooltip>
@@ -191,10 +213,38 @@ function EffectItem({
                 <Square size={11} />
               </button>
             </TooltipTrigger>
-            <TooltipContent side="top">Stop</TooltipContent>
+            <TooltipContent
+              side="top"
+              className="border border-rm-border bg-rm-bg-floating text-rm-text shadow-lg"
+            >
+              Stop
+            </TooltipContent>
           </Tooltip>
         </div>
       </div>
+      {variant === "floating" && (
+        <div className="mt-2 flex items-center gap-2 pl-8">
+          <Volume2 className="h-3 w-3 shrink-0 text-rm-text-muted" />
+          <label className="sr-only" htmlFor={volumeControlId}>
+            Volume for {playback.name}
+          </label>
+          <input
+            id={volumeControlId}
+            type="range"
+            min={0}
+            max={100}
+            value={Math.round(playback.volume * 100)}
+            aria-valuetext={`${Math.round(playback.volume * 100)} percent`}
+            onChange={(event) =>
+              handleVolumeChange(Number(event.currentTarget.value) / 100)
+            }
+            className="h-4 min-w-0 flex-1 cursor-pointer accent-primary"
+          />
+          <span className="w-8 text-right text-[10px] tabular-nums text-rm-text-muted">
+            {Math.round(playback.volume * 100)}%
+          </span>
+        </div>
+      )}
     </div>
   );
 }

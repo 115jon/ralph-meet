@@ -23,9 +23,12 @@ const MAX_SOUNDBOARD_EVENT_FUTURE_SKEW_MS = 5_000;
 export const MAX_AUTOMATIC_SOUNDBOARD_DURATION_SECONDS = 3;
 
 interface PlaybackController {
+  playbackId: string;
   ownerId: string;
   serverKey: string;
   stop: () => void;
+  includeInVoiceActivity: boolean;
+  playing: boolean;
   pause?: () => void;
   resume?: () => void;
   setVolume?: (volume: number) => void;
@@ -47,6 +50,7 @@ export interface SoundboardPlayRequest {
   mediaUrl?: string;
   volume?: number;
   isLocal?: boolean;
+  includeInVoiceActivity?: boolean;
   receivedAt?: number;
   mediaCapabilityExpiresAt?: number;
   currentTime?: number;
@@ -60,13 +64,77 @@ export interface SoundboardPlayRequest {
 }
 
 const activeControllers = new Map<string, PlaybackController>();
+const soundboardActivityListeners = new Set<() => void>();
+
+function getPlaybackKey(playbackId: string, serverKey: string): string {
+  return `${serverKey}::${playbackId}`;
+}
 
 function normalizeVolume(volume: number) {
   return Math.max(0, Math.min(1, volume));
 }
 
+function notifySoundboardActivity() {
+  for (const listener of soundboardActivityListeners) listener();
+}
+
+function isCurrentPlayback(playbackId: string, controller: PlaybackController) {
+  return (
+    activeControllers.get(getPlaybackKey(playbackId, controller.serverKey)) ===
+    controller
+  );
+}
+
+function updatePlaybackActivityState(
+  playbackId: string,
+  controller: PlaybackController,
+  next: { paused?: boolean; playing?: boolean },
+) {
+  if (!isCurrentPlayback(playbackId, controller)) return;
+
+  const changed =
+    (next.paused !== undefined && controller.paused !== next.paused) ||
+    (next.playing !== undefined && controller.playing !== next.playing);
+  if (!changed) return;
+
+  if (next.paused !== undefined) controller.paused = next.paused;
+  if (next.playing !== undefined) controller.playing = next.playing;
+  useVoiceSoundboardStore
+    .getState()
+    .setPlaybackPaused(
+      playbackId,
+      controller.paused ?? false,
+      controller.serverKey,
+    );
+  notifySoundboardActivity();
+}
+
 export function getSoundboardServerKey(serverId?: string | null) {
   return serverId || "dm-call";
+}
+
+export function hasActiveSoundboardPlayback(
+  ownerId: string,
+  serverKey: string,
+): boolean {
+  for (const controller of activeControllers.values()) {
+    if (
+      controller.ownerId === ownerId &&
+      controller.serverKey === serverKey &&
+      controller.includeInVoiceActivity &&
+      controller.playing &&
+      !controller.paused &&
+      (controller.volume ?? 0) > 0
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+export function subscribeSoundboardActivity(listener: () => void) {
+  soundboardActivityListeners.add(listener);
+  return () => soundboardActivityListeners.delete(listener);
 }
 
 export function getSoundboardEventReceivedAt(
@@ -86,36 +154,71 @@ export function getSoundboardEventReceivedAt(
   return Math.min(sentAt, now);
 }
 
-function cleanupPlayback(playbackId: string) {
-  const controller = activeControllers.get(playbackId);
+function cleanupPlayback(
+  playbackId: string,
+  expectedController: PlaybackController,
+) {
+  const controller = activeControllers.get(
+    getPlaybackKey(playbackId, expectedController.serverKey),
+  );
+  if (controller !== expectedController) return;
   if (controller?.showTimer) clearTimeout(controller.showTimer);
   if (controller?.automaticStopTimer)
     clearTimeout(controller.automaticStopTimer);
-  activeControllers.delete(playbackId);
-  useVoiceSoundboardStore.getState().removePlayback(playbackId);
+  controller.playing = false;
+  activeControllers.delete(
+    getPlaybackKey(playbackId, expectedController.serverKey),
+  );
+  useVoiceSoundboardStore
+    .getState()
+    .removePlayback(playbackId, expectedController.serverKey);
+  notifySoundboardActivity();
 }
 
-export function stopSoundboardPlayback(playbackId: string) {
-  const controller = activeControllers.get(playbackId);
+export function stopSoundboardPlayback(playbackId: string, serverKey?: string) {
+  const controller = serverKey
+    ? activeControllers.get(getPlaybackKey(playbackId, serverKey))
+    : [...activeControllers.values()].find(
+        (candidate) => candidate.playbackId === playbackId,
+      );
   if (!controller) return;
   controller.stop();
 }
 
-export function pauseSoundboardPlayback(playbackId: string) {
-  const controller = activeControllers.get(playbackId);
+export function pauseSoundboardPlayback(
+  playbackId: string,
+  serverKey?: string,
+) {
+  const controller = serverKey
+    ? activeControllers.get(getPlaybackKey(playbackId, serverKey))
+    : [...activeControllers.values()].find(
+        (candidate) => candidate.playbackId === playbackId,
+      );
   controller?.pause?.();
 }
 
-export function resumeSoundboardPlayback(playbackId: string) {
-  const controller = activeControllers.get(playbackId);
+export function resumeSoundboardPlayback(
+  playbackId: string,
+  serverKey?: string,
+) {
+  const controller = serverKey
+    ? activeControllers.get(getPlaybackKey(playbackId, serverKey))
+    : [...activeControllers.values()].find(
+        (candidate) => candidate.playbackId === playbackId,
+      );
   controller?.resume?.();
 }
 
 export function setSoundboardPlaybackVolume(
   playbackId: string,
   volume: number,
+  serverKey?: string,
 ) {
-  const controller = activeControllers.get(playbackId);
+  const controller = serverKey
+    ? activeControllers.get(getPlaybackKey(playbackId, serverKey))
+    : [...activeControllers.values()].find(
+        (candidate) => candidate.playbackId === playbackId,
+      );
   controller?.setVolume?.(normalizeVolume(volume));
 }
 
@@ -161,10 +264,14 @@ function registerPlayback(
 ) {
   const startedAt = Date.now();
   controller.paused = controller.paused ?? false;
+  controller.playing = controller.playing ?? false;
   controller.volume = volume;
-  activeControllers.set(playbackId, controller);
+  activeControllers.set(
+    getPlaybackKey(playbackId, controller.serverKey),
+    controller,
+  );
   controller.showTimer = setTimeout(() => {
-    if (activeControllers.get(playbackId) !== controller) return;
+    if (!isCurrentPlayback(playbackId, controller)) return;
     controller.showTimer = undefined;
     useVoiceSoundboardStore.getState().upsertPlayback({
       playbackId,
@@ -232,6 +339,7 @@ export function playSoundboardPlayback({
   mediaUrl,
   volume = 0.8,
   isLocal = false,
+  includeInVoiceActivity = true,
   receivedAt,
   mediaCapabilityExpiresAt,
   currentTime,
@@ -244,7 +352,7 @@ export function playSoundboardPlayback({
   // we let it proceed to stopSoundboardPlayback and restart the audio buffer.
   // We removed the early return here to support restarting the same sound.
 
-  stopSoundboardPlayback(playbackId);
+  stopSoundboardPlayback(playbackId, serverKey);
   const initialVolume = normalizeVolume(volume) * masterVolume;
 
   const objectUrl =
@@ -259,10 +367,13 @@ export function playSoundboardPlayback({
     let finished = false;
     let requestedPaused = paused;
     let renewalRequested = false;
+    let controller: PlaybackController | null = null;
     const syncPausedState = (paused: boolean) => {
-      const controller = activeControllers.get(playbackId);
-      if (controller) controller.paused = paused;
-      useVoiceSoundboardStore.getState().setPlaybackPaused(playbackId, paused);
+      if (!controller || !isCurrentPlayback(playbackId, controller)) return;
+      updatePlaybackActivityState(playbackId, controller, {
+        paused,
+        playing: paused ? false : undefined,
+      });
     };
     const finalize = () => {
       if (finished) return;
@@ -270,7 +381,7 @@ export function playSoundboardPlayback({
       audio.pause();
       audio.currentTime = 0;
       if (objectUrl) URL.revokeObjectURL(objectUrl);
-      cleanupPlayback(playbackId);
+      if (controller) cleanupPlayback(playbackId, controller);
     };
 
     const requestCapabilityRenewal = (
@@ -278,6 +389,9 @@ export function playSoundboardPlayback({
       pausedOverride?: boolean,
     ) => {
       if (
+        finished ||
+        !controller ||
+        !isCurrentPlayback(playbackId, controller) ||
         !renewCapability ||
         renewalRequested ||
         typeof mediaCapabilityExpiresAt !== "number" ||
@@ -314,6 +428,37 @@ export function playSoundboardPlayback({
       );
     };
 
+    controller = {
+      playbackId,
+      ownerId,
+      serverKey,
+      stop: finalize,
+      includeInVoiceActivity,
+      playing: false,
+      paused: requestedPaused,
+      automaticEvent,
+      pause: () => {
+        if (finished) return;
+        requestedPaused = true;
+        if (!audio.paused) audio.pause();
+        syncPausedState(true);
+      },
+      resume: () => {
+        if (finished) return;
+        requestedPaused = false;
+        if (requestCapabilityRenewal(false, false)) return;
+        startAudio();
+      },
+      setVolume: (nextVolume) => {
+        if (!controller || !isCurrentPlayback(playbackId, controller)) return;
+        audio.volume = nextVolume;
+        controller.volume = nextVolume;
+        useVoiceSoundboardStore
+          .getState()
+          .setPlaybackVolume(playbackId, nextVolume, serverKey);
+        notifySoundboardActivity();
+      },
+    };
     registerPlayback(
       playbackId,
       ownerId,
@@ -321,36 +466,9 @@ export function playSoundboardPlayback({
       name,
       isLocal,
       initialVolume,
-      {
-        ownerId,
-        serverKey,
-        stop: finalize,
-        paused: requestedPaused,
-        automaticEvent,
-        pause: () => {
-          if (finished) return;
-          requestedPaused = true;
-          if (!audio.paused) audio.pause();
-          syncPausedState(true);
-        },
-        resume: () => {
-          if (finished) return;
-          requestedPaused = false;
-          if (requestCapabilityRenewal(false, false)) return;
-          startAudio();
-        },
-        setVolume: (nextVolume) => {
-          audio.volume = nextVolume;
-          const controller = activeControllers.get(playbackId);
-          if (controller) controller.volume = nextVolume;
-          useVoiceSoundboardStore
-            .getState()
-            .setPlaybackVolume(playbackId, nextVolume);
-        },
-      },
+      controller,
     );
-    const controller = activeControllers.get(playbackId);
-    if (controller) controller.rawVolume = normalizeVolume(volume);
+    controller.rawVolume = normalizeVolume(volume);
     if (automaticEvent) {
       const durationSeconds = Math.min(
         MAX_AUTOMATIC_SOUNDBOARD_DURATION_SECONDS,
@@ -376,6 +494,12 @@ export function playSoundboardPlayback({
     audio.addEventListener("play", () => {
       if (finished) return;
       syncPausedState(false);
+      if (controller) {
+        updatePlaybackActivityState(playbackId, controller, {
+          paused: false,
+          playing: true,
+        });
+      }
     });
     audio.addEventListener("ended", finalize, { once: true });
     audio.addEventListener(
@@ -437,6 +561,7 @@ export function playSoundboardPlayback({
   const gain = ctx.createGain();
   const osc = ctx.createOscillator();
   let finished = false;
+  let controller: PlaybackController | null = null;
 
   const finalize = () => {
     if (finished) return;
@@ -445,7 +570,7 @@ export function playSoundboardPlayback({
       osc.disconnect();
       gain.disconnect();
     } catch {}
-    cleanupPlayback(playbackId);
+    if (controller) cleanupPlayback(playbackId, controller);
     void ctx.close().catch(() => {});
   };
 
@@ -460,6 +585,31 @@ export function playSoundboardPlayback({
   gain.connect(ctx.destination);
   osc.onended = finalize;
 
+  controller = {
+    playbackId,
+    ownerId,
+    serverKey,
+    stop: () => {
+      try {
+        osc.stop();
+      } catch {}
+      finalize();
+    },
+    includeInVoiceActivity,
+    playing: false,
+    paused: false,
+    setVolume: (nextVolume) => {
+      if (!controller || !isCurrentPlayback(playbackId, controller)) return;
+      gain.gain.cancelScheduledValues(ctx.currentTime);
+      gain.gain.setValueAtTime(nextVolume, ctx.currentTime);
+      controller.volume = nextVolume;
+      useVoiceSoundboardStore
+        .getState()
+        .setPlaybackVolume(playbackId, nextVolume, serverKey);
+      notifySoundboardActivity();
+    },
+    automaticEvent,
+  };
   registerPlayback(
     playbackId,
     ownerId,
@@ -467,21 +617,29 @@ export function playSoundboardPlayback({
     name,
     isLocal,
     initialVolume,
-    {
-      ownerId,
-      serverKey,
-      stop: () => {
-        try {
-          osc.stop();
-        } catch {}
-        finalize();
-      },
-      automaticEvent,
-    },
+    controller,
   );
-  const controller = activeControllers.get(playbackId);
-  if (controller) controller.rawVolume = normalizeVolume(volume);
+  controller.rawVolume = normalizeVolume(volume);
 
-  osc.start();
-  osc.stop(ctx.currentTime + sound.duration);
+  let oscillatorStarted = false;
+  const startOscillator = () => {
+    if (finished || oscillatorStarted) return;
+    oscillatorStarted = true;
+    osc.start();
+    if (controller) controller.playing = true;
+    notifySoundboardActivity();
+    osc.stop(ctx.currentTime + sound.duration);
+  };
+
+  if (ctx.state === "running") {
+    startOscillator();
+  } else {
+    void ctx.resume().then(
+      () => {
+        if (ctx.state === "running") startOscillator();
+        else finalize();
+      },
+      () => finalize(),
+    );
+  }
 }

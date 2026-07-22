@@ -28,8 +28,7 @@ import {
 import { createPortal } from "react-dom";
 import { useDelayUnmount } from "@/hooks/useDelayUnmount";
 import { FloatingListenTogetherPlayer } from "./FloatingListenTogetherPlayer";
-import { ActiveSoundboardEffectList } from "./ActiveSoundboardEffectList";
-import { getSoundboardServerKey } from "@/lib/voice/soundboard";
+import { FloatingSoundboardManager } from "./FloatingSoundboardManager";
 import { AppWindow, AudioWaveform } from "lucide-react";
 import {
   Gamepad2,
@@ -189,7 +188,6 @@ export function VoiceDashboard({
     ? (watchersByStreamer[localUserId] ?? [])
     : [];
   const streamQualityBadge = formatScreenQualityBadge(screenQuality);
-  const soundboardServerKey = getSoundboardServerKey(serverId);
   const hasSpecificStreamSource = !!(
     currentScreenSource?.sourceName?.trim() ||
     currentScreenSource?.sourceAppName?.trim() ||
@@ -325,13 +323,10 @@ export function VoiceDashboard({
           roomSlug={roomSlug}
           onOpenQueue={openListenTogetherPicker}
         />
-
-        <ActiveSoundboardEffectList
-          serverKey={soundboardServerKey}
+        <FloatingSoundboardManager
+          serverId={serverId}
           localUserId={localUserId}
           sfu={sfu}
-          variant="compact"
-          className="mx-2 mb-1"
         />
 
         <div className="p-2 space-y-2">

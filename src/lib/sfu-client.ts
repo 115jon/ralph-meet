@@ -213,6 +213,7 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
   private wireRoomEvents() {
     this.roomGW.on("ready", (e) => {
       this.participantId = e.participantId;
+      this.vad.refreshSpeakingState();
       this.applyIceServers(e.iceServers);
       this.voiceToken = e.voiceToken;
       this.createPeerConnections();
@@ -358,6 +359,7 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
 
       // Reset circuit breakers on successful reconnect
       this.rtcSessionManager.resetCircuitBreakers();
+      this.vad.refreshSpeakingState();
       this.emit("voice-ready", { speaking: e.speaking ?? {} });
 
       // Cleanup orphaned tracks from server state sync and enqueue existing tracks.

@@ -1107,7 +1107,7 @@ export default function SoundboardPicker({
       );
       return;
     }
-    stopSoundboardPlayback("local-preview");
+    stopSoundboardPlayback("local-preview", serverKey);
 
     setTimeout(() => {
       playSoundboardPlayback({
@@ -1120,6 +1120,7 @@ export default function SoundboardPicker({
         mediaUrl: sound.mediaUrl,
         volume: sendVolume * (sound.volume ?? 1.0),
         isLocal: true,
+        includeInVoiceActivity: false,
         receivedAt: Date.now(),
       });
     }, 0);

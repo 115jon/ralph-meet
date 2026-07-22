@@ -2,10 +2,12 @@ import type { SFUClient } from "@/lib/sfu-client";
 import {
   getSoundboardServerKey,
   getSoundboardEventReceivedAt,
+  hasActiveSoundboardPlayback,
   pauseSoundboardPlayback,
   playSoundboardPlayback,
   resumeSoundboardPlayback,
   setSoundboardPlaybackVolume,
+  subscribeSoundboardActivity,
   stopAllSoundboardPlaybacksForServer,
   stopSoundboardPlayback,
   stopSoundboardPlaybacksByOwner,
@@ -136,7 +138,7 @@ export function VoiceSoundboardManager({
 
       if (event.type === "soundboard.stop") {
         if (typeof event.playback_id === "string") {
-          stopSoundboardPlayback(event.playback_id);
+          stopSoundboardPlayback(event.playback_id, serverKey);
           return;
         }
 
@@ -156,8 +158,8 @@ export function VoiceSoundboardManager({
           typeof event.paused !== "boolean"
         )
           return;
-        if (event.paused) pauseSoundboardPlayback(event.playback_id);
-        else resumeSoundboardPlayback(event.playback_id);
+        if (event.paused) pauseSoundboardPlayback(event.playback_id, serverKey);
+        else resumeSoundboardPlayback(event.playback_id, serverKey);
         return;
       }
 
@@ -167,7 +169,7 @@ export function VoiceSoundboardManager({
           typeof event.volume !== "number"
         )
           return;
-        setSoundboardPlaybackVolume(event.playback_id, event.volume);
+        setSoundboardPlaybackVolume(event.playback_id, event.volume, serverKey);
         return;
       }
 
@@ -183,6 +185,25 @@ export function VoiceSoundboardManager({
       }
     });
   }, [localUserId, serverKey, setServerSoundboardMuted, sfu]);
+
+  useEffect(() => {
+    if (!sfu) return;
+
+    const syncSoundboardSpeaking = () => {
+      sfu.vad.setSoundboardSpeaking(
+        localUserId
+          ? hasActiveSoundboardPlayback(localUserId, serverKey)
+          : false,
+      );
+    };
+
+    syncSoundboardSpeaking();
+    const unsubscribe = subscribeSoundboardActivity(syncSoundboardSpeaking);
+    return () => {
+      unsubscribe();
+      sfu.vad.setSoundboardSpeaking(false);
+    };
+  }, [localUserId, serverKey, sfu]);
 
   useEffect(
     () => () => {
