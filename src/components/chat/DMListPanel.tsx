@@ -1,6 +1,7 @@
 import { getDisplayInitial, getDisplayName } from "@/lib/display-name";
 import { getAuthAssetUrl } from "@/lib/platform";
 import { cn } from "@/lib/utils";
+import { UserStatusDot } from "./UserStatusDot";
 import { useChatStore } from "@/stores/chat-store";
 import { useMemo } from "react";
 import { AvatarImage } from "./AvatarImage";
@@ -113,17 +114,9 @@ export function DMListPanel({
                   )}
                 </button>
                 {/* Status dot */}
-                <div
-                  className={cn(
-                    "absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-rm-sidebar",
-                    dm.recipient?.status === "online"
-                      ? "bg-emerald-500"
-                      : dm.recipient?.status === "idle"
-                        ? "bg-amber-500"
-                        : dm.recipient?.status === "dnd"
-                          ? "bg-rose-500"
-                          : "bg-zinc-500",
-                  )}
+                <UserStatusDot
+                  status={dm.recipient?.status ?? "offline"}
+                  className="absolute -bottom-0.5 -right-0.5 h-3 w-3 border-2 border-rm-sidebar"
                 />
               </div>
               <div className="min-w-0 flex-1">

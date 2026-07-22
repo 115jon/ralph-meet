@@ -13,6 +13,7 @@ import { dispatchOpenProfileEditorEvent } from "@/lib/profile-editor-events";
 import { resolveProfileTheme } from "@/lib/profile-customization";
 import type { Role, User } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { UserStatusDot } from "./UserStatusDot";
 import { useChatActions, useChatStore } from "@/stores/chat-store";
 import {
   ArrowLeft,
@@ -69,13 +70,6 @@ const EMPTY_MUTUAL_FRIENDS: MutualFriendSummary = {
 const EMPTY_MUTUAL_SERVERS: MutualServerSummary = {
   count: 0,
   items: [],
-};
-
-const statusColors: Record<string, string> = {
-  online: "bg-primary",
-  idle: "bg-warning",
-  dnd: "bg-destructive",
-  offline: "bg-[var(--rm-profile-custom-ghost)]",
 };
 
 function ProfileBanner({
@@ -165,13 +159,9 @@ function ProfileHeader({
             )}
           </div>
           <div className="absolute bottom-0 right-0 z-20 rounded-full bg-[var(--rm-profile-custom-card-bg-strong)] p-1">
-            <span
-              className={cn(
-                "block h-6 w-6 rounded-full",
-                isOnline
-                  ? statusColors[user.status ?? "online"]
-                  : statusColors["offline"],
-              )}
+            <UserStatusDot
+              status={isOnline ? (user.status ?? "online") : "offline"}
+              className="h-6 w-6"
             />
           </div>
         </div>

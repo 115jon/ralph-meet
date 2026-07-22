@@ -44,6 +44,7 @@ import { useDelayUnmount } from "@/hooks/useDelayUnmount";
 import { UserDisplayName } from "./UserDisplayName";
 import { UserNameplateLayer } from "./UserNameplateLayer";
 import { getUserNameplatePresentation } from "./user-nameplate-presentation";
+import { UserStatusDot } from "./UserStatusDot";
 
 const EMPTY_QUALITIES: string[] = [];
 const EMPTY_GRID_ITEMS: any[] = [];
@@ -109,13 +110,6 @@ interface Props {
   onOpenSoundboard?: () => void;
   sidebarWidthPx?: number;
 }
-
-const statusColors: Record<string, string> = {
-  online: "bg-primary",
-  idle: "bg-warning",
-  dnd: "bg-destructive",
-  offline: "bg-rm-text-muted/40",
-};
 
 const statusLabels: Record<string, string> = {
   online: "Online",
@@ -530,12 +524,9 @@ export default function UserPanel({
                       getDisplayInitial(user)
                     )}
                   </div>
-                  <div
-                    className={cn(
-                      "absolute -bottom-0.5 -right-0.5 z-20 h-3.5 w-3.5 rounded-full border-2 transition-colors",
-                      statusColors[currentStatus],
-                      "border-rm-bg-elevated",
-                    )}
+                  <UserStatusDot
+                    status={currentStatus}
+                    className="absolute -bottom-0.5 -right-0.5 z-20 h-3.5 w-3.5 border-2 border-rm-bg-elevated transition-colors"
                   />
                 </div>
                 {showIdentity && (

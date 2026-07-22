@@ -4,6 +4,7 @@ import { useContextMenu } from "@/hooks/useContextMenu";
 import { apiDelete, apiPost, apiPut } from "@/lib/api-client";
 import { getAuthAssetUrl } from "@/lib/platform";
 import { cn } from "@/lib/utils";
+import { UserStatusDot } from "./UserStatusDot";
 import { useChatActions, useChatStore } from "@/stores/chat-store";
 import { useCallStore } from "@/stores/useCallStore";
 import { useCallback, useEffect, useReducer } from "react";
@@ -403,17 +404,9 @@ export default function FriendsView({ onMenuClick, onSelectDm }: Props) {
                           getDisplayInitial(rel.user)
                         )}
                       </div>
-                      <div
-                        className={cn(
-                          "absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full border-[2.5px] border-rm-bg-primary transition-colors",
-                          rel.user.status === "online"
-                            ? "bg-emerald-500"
-                            : rel.user.status === "idle"
-                              ? "bg-amber-500"
-                              : rel.user.status === "dnd"
-                                ? "bg-rose-500"
-                                : "bg-zinc-500",
-                        )}
+                      <UserStatusDot
+                        status={rel.user.status ?? "offline"}
+                        className="absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 border-[2.5px] border-rm-bg-primary transition-colors"
                       />
                     </ButtonBase>
 

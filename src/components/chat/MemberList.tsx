@@ -24,6 +24,7 @@ import { useChatActions, useChatStore } from "@/stores/chat-store";
 import { useCallStore } from "@/stores/useCallStore";
 import type { ViewerContext } from "@/stores/useImageViewerStore";
 import { useImageViewerActions } from "@/stores/useImageViewerStore";
+import { UserStatusDot } from "./UserStatusDot";
 import {
   ArrowLeft,
   Bell,
@@ -171,13 +172,6 @@ function compareMembersByRole(
   if (roleA !== roleB) return roleB - roleA;
   return a.user.username.localeCompare(b.user.username);
 }
-
-const statusColors: Record<string, string> = {
-  online: "bg-primary",
-  idle: "bg-warning",
-  dnd: "bg-destructive",
-  offline: "bg-rm-text-muted/40",
-};
 
 function formatFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -1928,13 +1922,9 @@ function MemberItem({
             <span className="h-0.5 w-0.5 rounded-full bg-rm-bg-primary animate-[pulse_900ms_cubic-bezier(0.16,1,0.3,1)_infinite] [animation-delay:300ms]" />
           </div>
         ) : (
-          <div
-            className={cn(
-              "absolute -bottom-0.5 -right-0.5 z-20 h-3.5 w-3.5 lg:h-3 lg:w-3 rounded-full border-2 border-rm-bg-elevated lg:border-rm-bg-sidebar transition-colors",
-              isOnline
-                ? statusColors[member.user.status ?? "online"]
-                : "bg-rm-text-muted/40",
-            )}
+          <UserStatusDot
+            status={isOnline ? (member.user.status ?? "online") : "offline"}
+            className="absolute -bottom-0.5 -right-0.5 z-20 h-3.5 w-3.5 border-2 border-rm-bg-elevated transition-colors lg:h-3 lg:w-3 lg:border-rm-bg-sidebar"
           />
         )}
       </div>
