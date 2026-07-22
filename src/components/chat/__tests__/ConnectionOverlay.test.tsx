@@ -5,16 +5,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ConnectionOverlay } from "../ConnectionOverlay";
 
-const themeState = vi.hoisted(() => ({
-  resolvedTheme: "light" as string | undefined,
-}));
 const chatState = vi.hoisted(() => ({
   connected: false,
   reconnectAttempt: 0,
-}));
-
-vi.mock("next-themes", () => ({
-  useTheme: () => themeState,
 }));
 
 vi.mock("@/stores/chat-store", () => ({
@@ -31,7 +24,6 @@ describe("ConnectionOverlay", () => {
     vi.useRealTimers();
     chatState.connected = false;
     chatState.reconnectAttempt = 0;
-    themeState.resolvedTheme = "light";
     document.documentElement.className = "";
   });
 
@@ -46,35 +38,32 @@ describe("ConnectionOverlay", () => {
   });
 
   it("uses the theme-aware logo variant", () => {
+    document.documentElement.className = "light";
     const { rerender } = render(<ConnectionOverlay />);
 
     expect(screen.getByTestId("connection-overlay-logo")).toHaveClass(
       "theme-aware-splash-logo",
     );
-    expect(screen.getByTestId("connection-overlay-logo")).toHaveStyle(
-      "filter: brightness(0)",
+    expect(screen.getByTestId("connection-overlay-logo")).not.toHaveAttribute(
+      "style",
     );
 
-    themeState.resolvedTheme = "dark";
+    document.documentElement.className = "dark";
     rerender(<ConnectionOverlay />);
 
-    expect(screen.getByTestId("connection-overlay-logo")).not.toHaveStyle(
-      "filter: brightness(0)",
+    expect(screen.getByTestId("connection-overlay-logo")).not.toHaveAttribute(
+      "style",
     );
   });
 
-  it("uses the bootstrapped document theme before resolvedTheme is ready", () => {
-    themeState.resolvedTheme = undefined;
+  it("keeps logo markup stable while the theme class is bootstrapped", () => {
     document.documentElement.className = "light";
 
     render(<ConnectionOverlay />);
 
-    expect(screen.getByTestId("connection-overlay-logo")).toHaveStyle(
-      "filter: brightness(0)",
+    expect(screen.getByTestId("connection-overlay-logo")).not.toHaveAttribute(
+      "style",
     );
-
-    document.documentElement.className = "";
-    themeState.resolvedTheme = "light";
   });
 
   it("reserves tip space while fading out", () => {
