@@ -282,7 +282,10 @@ export default function UserAccountPopover({
   return createPortal(
     <>
       <div
-        className="fixed inset-0 z-[999] cursor-default bg-transparent"
+        className={cn(
+          "fixed inset-0 z-[999] cursor-default bg-transparent",
+          isClosing && "pointer-events-none",
+        )}
         onClick={onClose}
         role="presentation"
         aria-hidden="true"

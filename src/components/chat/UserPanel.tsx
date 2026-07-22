@@ -117,6 +117,13 @@ const statusColors: Record<string, string> = {
   offline: "bg-rm-text-muted/40",
 };
 
+const statusLabels: Record<string, string> = {
+  online: "Online",
+  idle: "Idle",
+  dnd: "Do Not Disturb",
+  offline: "Invisible",
+};
+
 function CallDashboardSection({
   onOpenActivities,
   onOpenSoundboard,
@@ -381,7 +388,8 @@ export default function UserPanel({
 
   const currentStatus = user.status ?? "online";
   const displayName = getDisplayName(user);
-  const userHandle = user.username ? `@${user.username}` : displayName;
+  const userHandle = user.username || displayName;
+  const currentStatusLabel = statusLabels[currentStatus] ?? "Online";
   const hasNameplate = nameplatePresentation.hasNameplate;
   const nameplateTheme = nameplatePresentation.theme;
   const nameplateDangerColor =
@@ -464,7 +472,7 @@ export default function UserPanel({
         {/* User Info Bar */}
         <div
           className={cn(
-            "flex items-center gap-2 p-1.5 relative z-10 overflow-hidden",
+            "group/user-panel-row flex items-center gap-2 rounded-[12px] p-1.5 relative z-10 overflow-hidden",
             !showIdentity && "gap-1.5",
             hasNameplate && "isolate",
             (voiceConnected || callActive) && "border-t border-white/5",
@@ -491,13 +499,17 @@ export default function UserPanel({
               <button
                 type="button"
                 ref={setUserAvatarEl}
-                className="group relative z-10 cursor-pointer border-0 bg-transparent p-0 pl-0.5 outline-none"
+                className={cn(
+                  "relative z-10 flex min-w-0 flex-1 items-center gap-2 rounded-[12px] border-0 bg-transparent p-1 text-left outline-none transition-colors duration-200 ease-[cubic-bezier(0.32,0.72,0,1)] focus-visible:ring-2 focus-visible:ring-primary/70 active:scale-[0.98]",
+                  "hover:bg-black/20 focus-visible:bg-black/20",
+                  !showIdentity && "gap-1.5",
+                )}
                 onClick={() => setShowMenu((v) => !v)}
-                aria-label="View user account"
+                aria-label={`${displayName}, ${userHandle}, ${currentStatusLabel}. View user account`}
               >
                 <div
                   className={cn(
-                    "relative z-10 flex h-[32px] w-[32px] shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground transition-all opacity-90 group-hover:opacity-100",
+                    "relative z-10 flex h-[32px] w-[32px] shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground transition-all opacity-90 group-hover/user-panel-row:opacity-100",
                     speakingUsers[user.id] &&
                       cn(
                         "ring-[3px] ring-primary shadow-[0_0_20px_var(--rm-glow)] ring-offset-2",
@@ -518,14 +530,40 @@ export default function UserPanel({
                       getDisplayInitial(user)
                     )}
                   </div>
+                  <div
+                    className={cn(
+                      "absolute -bottom-0.5 -right-0.5 z-20 h-3.5 w-3.5 rounded-full border-2 transition-colors",
+                      statusColors[currentStatus],
+                      "border-rm-bg-elevated",
+                    )}
+                  />
                 </div>
-                <div
-                  className={cn(
-                    "absolute -bottom-0.5 -right-0.5 z-20 h-3.5 w-3.5 rounded-full border-2 transition-colors",
-                    statusColors[currentStatus],
-                    "border-rm-bg-elevated",
-                  )}
-                />
+                {showIdentity && (
+                  <div className="relative min-w-0 flex-1 py-1">
+                    <UserDisplayName
+                      user={user}
+                      className="block truncate text-[13px] font-bold leading-tight text-rm-text-primary"
+                      minContrastRatio={hasNameplate ? 2.8 : undefined}
+                    />
+                    {showUsername ? (
+                      <div className="relative h-[14px] overflow-hidden text-[11px] leading-tight text-rm-text-muted">
+                        <span className="block truncate transition-transform duration-200 ease-[cubic-bezier(0.32,0.72,0,1)] group-hover/user-panel-row:-translate-y-full group-focus-within/user-panel-row:-translate-y-full motion-reduce:transition-none">
+                          {currentStatusLabel}
+                        </span>
+                        <span
+                          aria-hidden="true"
+                          className="absolute inset-x-0 top-full block truncate transition-transform duration-200 ease-[cubic-bezier(0.32,0.72,0,1)] group-hover/user-panel-row:-translate-y-full group-focus-within/user-panel-row:-translate-y-full motion-reduce:transition-none"
+                        >
+                          {userHandle}
+                        </span>
+                      </div>
+                    ) : (
+                      <p className="truncate text-[11px] leading-tight text-rm-text-muted">
+                        {currentStatusLabel}
+                      </p>
+                    )}
+                  </div>
+                )}
               </button>
             </TooltipTrigger>
             <TooltipContent
@@ -536,30 +574,6 @@ export default function UserPanel({
               <p>View Profile</p>
             </TooltipContent>
           </Tooltip>
-
-          {showIdentity ? (
-            <div
-              className={cn(
-                "relative z-10 min-w-0 flex-1 py-1 cursor-pointer group/name rounded-[12px] px-2 -ml-1 transition-colors",
-                hasNameplate ? "hover:bg-white/10" : "hover:bg-rm-bg-hover/50",
-              )}
-            >
-              <div className="relative min-w-0">
-                <UserDisplayName
-                  user={user}
-                  className="block truncate text-[13px] font-bold leading-tight text-rm-text-primary"
-                  minContrastRatio={hasNameplate ? 2.8 : undefined}
-                />
-                {showUsername && (
-                  <p className="truncate text-[11px] leading-tight text-rm-text-muted">
-                    {userHandle}
-                  </p>
-                )}
-              </div>
-            </div>
-          ) : (
-            <div className="flex-1" aria-hidden="true" />
-          )}
 
           <div className="relative z-10 flex items-center -mr-1">
             {/* Mic Group */}
