@@ -3,6 +3,14 @@ import { describe, expect, it, vi } from "vitest";
 const consumeBackgroundTaskBatch = vi.hoisted(() =>
   vi.fn(async () => undefined),
 );
+const syncCollectiblesCatalog = vi.hoisted(() =>
+  vi.fn(async () => ({
+    source: "yapper" as const,
+    categories: [],
+    items: [],
+    syncedAt: "2026-07-22T00:00:00.000Z",
+  })),
+);
 
 vi.mock("@tanstack/react-start/server", () => ({
   createStartHandler: vi.fn(() => vi.fn(async () => new Response("fallback"))),
@@ -31,6 +39,10 @@ vi.mock("../../../realtime/voice-room", () => ({
 
 vi.mock("../../../src/lib/background-tasks", () => ({
   consumeBackgroundTaskBatch,
+}));
+
+vi.mock("../../../src/lib/collectibles-catalog", () => ({
+  syncCollectiblesCatalog,
 }));
 
 import server from "../../../custom-server-entry";
@@ -81,5 +93,21 @@ describe("custom server soundboard media rate limiting", () => {
     expect(consumeBackgroundTaskBatch).toHaveBeenCalledWith(batch, {
       CACHE: env.CACHE,
     });
+  });
+
+  it("syncs the collectibles catalog from the scheduled handler", async () => {
+    syncCollectiblesCatalog.mockClear();
+    const waitUntil = vi.fn();
+    const env = { DB: {} } as Parameters<typeof server.scheduled>[1];
+
+    await server.scheduled(
+      { cron: "0 */6 * * *" } as ScheduledController,
+      env,
+      { waitUntil } as unknown as ExecutionContext,
+    );
+
+    expect(syncCollectiblesCatalog).toHaveBeenCalledWith(env.DB);
+    expect(waitUntil).toHaveBeenCalledTimes(1);
+    await waitUntil.mock.calls[0][0];
   });
 });

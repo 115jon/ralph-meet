@@ -207,7 +207,7 @@ describe("bundle collectible helpers", () => {
   });
   const catalog: CollectiblesCatalog = {
     version: 1,
-    source: "cache",
+    source: "yapper",
     syncedAt: "2026-07-03T00:00:00.000Z",
     stale: false,
     categories: [],

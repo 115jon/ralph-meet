@@ -38,6 +38,7 @@ import {
   consumeBackgroundTaskBatch,
   type BackgroundTaskEnvelope,
 } from "./src/lib/background-tasks";
+import { syncCollectiblesCatalog } from "./src/lib/collectibles-catalog";
 import {
   appendRealtimeAdmissionHeaders,
   createRealtimeAdmissionContext,
@@ -109,6 +110,7 @@ function withDesktopCors(request: Request, response: Response): Response {
 interface Env {
   MEETING_ROOM: DurableObjectNamespace;
   VOICE_ROOM: DurableObjectNamespace;
+  DB: D1Database;
   CACHE: KVNamespace;
   BACKGROUND_TASKS?: Queue<BackgroundTaskEnvelope>;
   REALTIME_ALLOWED_ORIGINS?: string;
@@ -390,13 +392,28 @@ export default {
 
   async scheduled(
     _controller: ScheduledController,
-    _env: Env,
+    env: Env,
     ctx: ExecutionContext,
   ): Promise<void> {
     ctx.waitUntil(
-      syncYtDlpUpstream(true).catch((error) => {
-        console.error("yt-dlp upstream sync failed:", error);
-      }),
+      Promise.all([
+        syncYtDlpUpstream(true).catch((error) => {
+          console.error("yt-dlp upstream sync failed:", error);
+        }),
+        syncCollectiblesCatalog(env.DB)
+          .then((catalog) => {
+            console.info("Collectibles catalog sync completed", {
+              source: catalog.source,
+              categories: catalog.categories.length,
+              items: catalog.items.length,
+              syncedAt: catalog.syncedAt,
+            });
+          })
+          .catch((error) => {
+            console.error("Collectibles catalog sync failed:", error);
+            throw error;
+          }),
+      ]).then(() => undefined),
     );
   },
 

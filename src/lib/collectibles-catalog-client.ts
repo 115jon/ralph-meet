@@ -7,6 +7,16 @@ let cachedCatalog: CollectiblesCatalog | null = null;
 let loadPromise: Promise<CollectiblesCatalog> | null = null;
 let syncPromise: Promise<CollectiblesCatalog> | null = null;
 const listeners = new Set<CatalogListener>();
+const MAX_CLIENT_CATALOG_AGE_MS = 1000 * 60 * 60 * 6;
+
+function isFreshCatalog(catalog: CollectiblesCatalog) {
+  const syncedAtMs = Date.parse(catalog.syncedAt);
+  return (
+    !catalog.stale &&
+    !Number.isNaN(syncedAtMs) &&
+    Date.now() - syncedAtMs <= MAX_CLIENT_CATALOG_AGE_MS
+  );
+}
 
 function publishCatalog(catalog: CollectiblesCatalog) {
   cachedCatalog = catalog;
@@ -35,7 +45,7 @@ export async function loadCollectiblesCatalog(
     forceRefresh?: boolean;
   } = {},
 ) {
-  if (!options.forceRefresh && cachedCatalog) {
+  if (!options.forceRefresh && cachedCatalog && isFreshCatalog(cachedCatalog)) {
     return cachedCatalog;
   }
 
