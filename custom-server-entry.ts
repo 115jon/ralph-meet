@@ -35,6 +35,10 @@ import {
 } from "./src/lib/voice/socket-ticket";
 import { RateLimiter } from "./realtime/rate-limiter";
 import {
+  consumeBackgroundTaskBatch,
+  type BackgroundTaskEnvelope,
+} from "./src/lib/background-tasks";
+import {
   appendRealtimeAdmissionHeaders,
   createRealtimeAdmissionContext,
   getRealtimeAdmissionConfig,
@@ -105,6 +109,8 @@ function withDesktopCors(request: Request, response: Response): Response {
 interface Env {
   MEETING_ROOM: DurableObjectNamespace;
   VOICE_ROOM: DurableObjectNamespace;
+  CACHE: KVNamespace;
+  BACKGROUND_TASKS?: Queue<BackgroundTaskEnvelope>;
   REALTIME_ALLOWED_ORIGINS?: string;
   REALTIME_TICKET_SECRET?: string;
   [key: string]: unknown;
@@ -392,5 +398,13 @@ export default {
         console.error("yt-dlp upstream sync failed:", error);
       }),
     );
+  },
+
+  async queue(
+    batch: MessageBatch<unknown>,
+    env: Env,
+    _ctx: ExecutionContext,
+  ): Promise<void> {
+    await consumeBackgroundTaskBatch(batch, { CACHE: env.CACHE });
   },
 };

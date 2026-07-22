@@ -1,7 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { waitUntil } from "cloudflare:workers";
 import { z } from "zod";
 
-import { apiSuccess, getDB, requireAuth } from "@/lib/api-helpers";
+import { apiSuccess, getDB, getEnv, requireAuth } from "@/lib/api-helpers";
+import { scheduleServerMemberCacheInvalidation } from "@/lib/background-tasks";
 import { ServiceError } from "@/lib/service-error";
 import { validateBody } from "@/lib/validate-body";
 import { getPresence, updatePresence } from "@/services/presence.service";
@@ -43,6 +45,18 @@ export const POST = async ({ request, params: _params }: any) => {
       status: body.status,
       custom_status: body.custom_status,
     });
+
+    if (result.presenceChanged) {
+      const scheduleArgs = [
+        getEnv(),
+        result.cacheInvalidationServerIds,
+      ] as const;
+      if (typeof waitUntil === "function") {
+        scheduleServerMemberCacheInvalidation(...scheduleArgs, waitUntil);
+      } else {
+        await scheduleServerMemberCacheInvalidation(...scheduleArgs);
+      }
+    }
 
     for (const broadcast of result.broadcasts) {
       await executeBroadcast(broadcast);

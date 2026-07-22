@@ -1,4 +1,5 @@
 import { env } from "cloudflare:workers";
+import { runDurableObjectAlarm, runInDurableObject } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
 import {
   issueSocketTicket,
@@ -226,22 +227,6 @@ async function nextDispatchEventMatching(
     const message = await nextDispatchEvent(socket, eventName);
     if (predicate(message)) return message;
   }
-}
-
-async function nextDispatchEventWithin(
-  socket: WebSocket,
-  eventName: string,
-  timeoutMs = 2_000,
-) {
-  return Promise.race([
-    nextDispatchEvent(socket, eventName),
-    new Promise<never>((_, reject) => {
-      setTimeout(
-        () => reject(new Error(`Timed out waiting for event ${eventName}`)),
-        timeoutMs,
-      );
-    }),
-  ]);
 }
 
 async function hasMessageWithOpcode(
@@ -1357,6 +1342,107 @@ describe("MeetingRoom lifecycle", () => {
     callee.close();
   });
 
+  it("persists pending calls and expires them through the durable alarm", async () => {
+    await env.DB.prepare(
+      "CREATE TABLE IF NOT EXISTS channels (id TEXT PRIMARY KEY, server_id TEXT, channel_type TEXT NOT NULL)",
+    ).run();
+    await env.DB.prepare(
+      "CREATE TABLE IF NOT EXISTS dm_recipients (channel_id TEXT NOT NULL, user_id TEXT NOT NULL)",
+    ).run();
+    await env.DB.prepare(
+      "CREATE TABLE IF NOT EXISTS relationships (user_id TEXT NOT NULL, target_user_id TEXT NOT NULL, type INTEGER NOT NULL)",
+    ).run();
+
+    const roomName = crypto.randomUUID();
+    const channelId = `call-persistence-${crypto.randomUUID()}`;
+    const callerId = `call-persist-caller-${crypto.randomUUID()}`;
+    const calleeId = `call-persist-callee-${crypto.randomUUID()}`;
+    await env.DB.prepare(
+      "INSERT INTO channels (id, server_id, channel_type) VALUES (?, NULL, 'dm')",
+    )
+      .bind(channelId)
+      .run();
+    await env.DB.prepare(
+      "INSERT INTO dm_recipients (channel_id, user_id) VALUES (?, ?), (?, ?)",
+    )
+      .bind(channelId, callerId, channelId, calleeId)
+      .run();
+
+    const caller = await openMeetingSocket(roomName, callerId);
+    await identifyMeetingSocket(caller, { name: "Persist Caller" });
+    const callee = await openMeetingSocket(roomName, calleeId);
+    await identifyMeetingSocket(callee, { name: "Persist Callee" });
+
+    const calleeRing = nextDispatchEvent(callee, "CALL_RING");
+    caller.send(
+      JSON.stringify({
+        op: 36,
+        d: { target_user_id: calleeId, channel_id: channelId },
+      }),
+    );
+    const ring = await calleeRing;
+    const callId = (ring.d as { data: { call_id: string } }).data.call_id;
+    const room = env.MEETING_ROOM.get(env.MEETING_ROOM.idFromName(roomName));
+
+    await runInDurableObject(room, async (instance, state) => {
+      const stored =
+        await state.storage.get<Record<string, unknown>>("pendingCalls");
+      expect(stored).toMatchObject({
+        [calleeId]: {
+          callId,
+          callerId,
+          calleeId,
+          channelId,
+          expiresAt: expect.any(Number),
+        },
+      });
+      expect(await state.storage.getAlarm()).toBeLessThanOrEqual(
+        Date.now() + 30_000,
+      );
+      await state.storage.put("pendingCalls", {
+        [calleeId]: {
+          ...(stored?.[calleeId] as object),
+          expiresAt: Date.now() - 1,
+        },
+      });
+      const liveState = instance as unknown as {
+        pendingCalls: Map<string, { expiresAt: number }>;
+      };
+      const livePendingCall = liveState.pendingCalls.get(calleeId);
+      if (!livePendingCall) throw new Error("Expected live pending call");
+      livePendingCall.expiresAt = Date.now() - 1;
+    });
+
+    const callerStop = nextDispatchEventMatching(
+      caller,
+      "CALL_RING_STOP",
+      (message) =>
+        (message.d as { data?: { call_id?: string; reason?: string } }).data
+          ?.call_id === callId,
+    );
+    const calleeStop = nextDispatchEventMatching(
+      callee,
+      "CALL_RING_STOP",
+      (message) =>
+        (message.d as { data?: { call_id?: string; reason?: string } }).data
+          ?.call_id === callId,
+    );
+
+    expect(await runDurableObjectAlarm(room)).toBe(true);
+    await expect(callerStop).resolves.toMatchObject({
+      d: { data: { call_id: callId, reason: "timeout" } },
+    });
+    await expect(calleeStop).resolves.toMatchObject({
+      d: { data: { call_id: callId, reason: "timeout" } },
+    });
+    await runInDurableObject(room, async (_instance, state) => {
+      await expect(state.storage.get("pendingCalls")).resolves.toEqual({});
+    });
+
+    caller.close();
+    callee.close();
+  }, 12_000);
+
   it("accepts a hibernatable room socket and sends Hello", async () => {
     const roomId = env.MEETING_ROOM.idFromName("lifecycle-test-room");
     const room = env.MEETING_ROOM.get(roomId);
@@ -1538,6 +1624,88 @@ describe("MeetingRoom lifecycle", () => {
     });
     socket.close();
   });
+
+  it("only invalidates member caches when presence status changes", async () => {
+    await env.DB.prepare(
+      "CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, username TEXT NOT NULL, display_name TEXT, avatar_url TEXT, avatar_display TEXT, status TEXT DEFAULT 'online', updated_at TEXT)",
+    ).run();
+    await env.DB.prepare(
+      "CREATE TABLE IF NOT EXISTS server_members (server_id TEXT NOT NULL, user_id TEXT NOT NULL)",
+    ).run();
+
+    try {
+      await env.DB.prepare(
+        "ALTER TABLE users ADD COLUMN status TEXT DEFAULT 'online'",
+      ).run();
+    } catch {
+      // The shared test database may already have the column.
+    }
+    try {
+      await env.DB.prepare(
+        "ALTER TABLE users ADD COLUMN updated_at TEXT",
+      ).run();
+    } catch {
+      // The shared test database may already have the column.
+    }
+
+    const userId = `presence-cache-${crypto.randomUUID()}`;
+    const serverIds = [
+      `presence-server-${crypto.randomUUID()}`,
+      `presence-server-${crypto.randomUUID()}`,
+    ];
+    await env.DB.prepare(
+      "INSERT INTO users (id, username, status) VALUES (?, ?, NULL)",
+    )
+      .bind(userId, userId)
+      .run();
+    for (const serverId of serverIds) {
+      await env.DB.prepare(
+        "INSERT INTO server_members (server_id, user_id) VALUES (?, ?)",
+      )
+        .bind(serverId, userId)
+        .run();
+      await env.CACHE.put(`v1:server:members:${serverId}`, "present", {
+        expirationTtl: 60,
+      });
+    }
+
+    const socket = await openMeetingSocket(crypto.randomUUID(), userId);
+    await identifyMeetingSocket(socket);
+    socket.send(JSON.stringify({ op: 26, d: { status: "online" } }));
+
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    for (const serverId of serverIds) {
+      await expect(
+        env.CACHE.get(`v1:server:members:${serverId}`),
+      ).resolves.toBeNull();
+      await env.CACHE.put(`v1:server:members:${serverId}`, "present", {
+        expirationTtl: 60,
+      });
+    }
+
+    socket.send(JSON.stringify({ op: 26, d: { status: "online" } }));
+    expect(await hasMessageWithOpcode(socket, 19, 100)).toBe(false);
+
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    for (const serverId of serverIds) {
+      await expect(
+        env.CACHE.get(`v1:server:members:${serverId}`),
+      ).resolves.toBe("present");
+    }
+
+    socket.send(JSON.stringify({ op: 26, d: { status: "idle" } }));
+
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    for (const serverId of serverIds) {
+      await expect(
+        env.CACHE.get(`v1:server:members:${serverId}`),
+      ).resolves.toBeNull();
+    }
+    socket.close();
+  }, 12_000);
 
   it("rejects subscriptions to a private server channel", async () => {
     await env.DB.prepare(

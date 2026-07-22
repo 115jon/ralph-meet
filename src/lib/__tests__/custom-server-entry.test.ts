@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 
+const consumeBackgroundTaskBatch = vi.hoisted(() =>
+  vi.fn(async () => undefined),
+);
+
 vi.mock("@tanstack/react-start/server", () => ({
   createStartHandler: vi.fn(() => vi.fn(async () => new Response("fallback"))),
   defaultStreamHandler: vi.fn(),
@@ -23,6 +27,10 @@ vi.mock("../../../realtime/rate-limiter-do", () => ({
 
 vi.mock("../../../realtime/voice-room", () => ({
   VoiceRoom: class {},
+}));
+
+vi.mock("../../../src/lib/background-tasks", () => ({
+  consumeBackgroundTaskBatch,
 }));
 
 import server from "../../../custom-server-entry";
@@ -58,5 +66,20 @@ describe("custom server soundboard media rate limiting", () => {
 
     expect(response.status).toBe(429);
     expect(response.headers.get("Retry-After")).toBeTruthy();
+  });
+
+  it("wires Queue batches to the background task consumer", async () => {
+    consumeBackgroundTaskBatch.mockClear();
+    const batch = {
+      queue: "ralph-meet-background-tasks",
+      messages: [],
+    } as unknown as MessageBatch<unknown>;
+    const env = { CACHE: {} } as Parameters<typeof server.queue>[1];
+
+    await server.queue(batch, env, {} as ExecutionContext);
+
+    expect(consumeBackgroundTaskBatch).toHaveBeenCalledWith(batch, {
+      CACHE: env.CACHE,
+    });
   });
 });

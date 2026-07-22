@@ -40,6 +40,20 @@ import { resolveMeetingProfile } from "./meeting-room/profile-resolver";
 import { ProfileRequestCoordinator } from "./meeting-room/profile-request-coordinator";
 import { generateTurnCredentials as resolveTurnCredentials } from "./meeting-room/turn-credentials";
 import { issueVoiceToken } from "./voice-token";
+import {
+  scheduleServerMemberCacheInvalidation,
+  type BackgroundTaskEnvelope,
+} from "../src/lib/background-tasks";
+import {
+  getSpatialAudioStorageKey,
+  isSpatialAudioState,
+  PENDING_CALLS_STORAGE_KEY,
+  restorePendingCalls,
+  serializePendingCalls,
+  SPATIAL_AUDIO_STORAGE_PREFIX,
+  type StoredPendingCall,
+  type StoredSpatialAudioState,
+} from "./meeting-room-persistence";
 
 const log = clog("ChatGW");
 const meetingLog = clog("MeetingRoom");
@@ -55,6 +69,7 @@ interface Env {
   DB: D1Database;
   BUCKET: R2Bucket;
   CACHE: KVNamespace;
+  BACKGROUND_TASKS?: Queue<BackgroundTaskEnvelope>;
   DEBUG?: string;
 }
 
@@ -247,33 +262,10 @@ interface ProfileIdentity {
   avatar_display: string | null;
 }
 
-interface SpatialAudioState {
-  enabled: boolean;
-  placementMode: "line" | "arc" | "grid" | "manual";
-  roomSize: number;
-  distance: number;
-  arcAngle: number;
-  manualPositions: Record<string, { x: number; y: number }>;
-  updatedBy?: string;
-  updatedAt: number;
-}
-
 /** A pending (ringing) or active call between two users */
-interface PendingCall {
-  callId: string;
-  callerId: string; // clerk_user_id of caller
-  calleeId: string; // clerk_user_id of callee
-  channelId: string; // DM channel ID
-  voiceRoomId: string; // SFU room slug for media
+type SpatialAudioState = StoredSpatialAudioState;
+interface PendingCall extends StoredPendingCall {
   timeout: ReturnType<typeof setTimeout>;
-  callerName: string;
-  callerUsername?: string;
-  callerDisplayName?: string | null;
-  callerAvatar?: string;
-  calleeName?: string;
-  calleeUsername?: string;
-  calleeDisplayName?: string | null;
-  calleeAvatar?: string;
 }
 
 // ── Constants ───────────────────────────────────────────────────────────────
@@ -298,6 +290,7 @@ const WS_RATE_LIMITS: Record<number, number> = {
   [Op.CallAccept]: 12,
   [Op.CallDecline]: 12,
   [Op.CallEnd]: 12,
+  [Op.VoiceStateUpdate]: 60,
 };
 
 // ── MeetingRoom Durable Object ──────────────────────────────────────────────
@@ -340,15 +333,12 @@ export class MeetingRoom extends DurableObject<Env> {
   > = new Map();
   /** Resumable session expiry: participantId → epoch ms when disconnect happened */
   private resumableSessionExpiry: Map<string, number> = new Map();
-  /** Debounced D1 presence writes: clerkId → latest status */
-  private presenceD1Pending: Map<string, string> = new Map();
-  /** Debounce timer handles for presence writes */
-  private presenceD1Timers: Map<string, ReturnType<typeof setTimeout>> =
-    new Map();
   /** Dirty storage keys pending batch flush */
   private dirtyStorage: Map<string, unknown> = new Map();
   /** Per-channel voice member keys scheduled for deletion */
   private deletedVcKeys: Set<string> = new Set();
+  /** Serializes shared-state storage writes while keeping the hot path in memory. */
+  private durableStateWrite: Promise<void> = Promise.resolve();
 
   constructor(
     public ctx: DurableObjectState,
@@ -522,6 +512,50 @@ export class MeetingRoom extends DurableObject<Env> {
         }
       }
 
+      // Restore pending calls and recreate only process-local timeout optimizations.
+      try {
+        const storedPendingCalls = await this.ctx.storage.get<unknown>(
+          PENDING_CALLS_STORAGE_KEY,
+        );
+        const restored = restorePendingCalls(storedPendingCalls, Date.now());
+        for (const [calleeId, call] of restored.calls) {
+          const pendingCall: PendingCall = {
+            ...call,
+            timeout: this.schedulePendingCallTimeout(call),
+          };
+          this.pendingCalls.set(calleeId, pendingCall);
+        }
+        if (restored.hadInvalidEntries) {
+          if (restored.calls.size > 0) {
+            await this.ctx.storage.put(
+              PENDING_CALLS_STORAGE_KEY,
+              serializePendingCalls(restored.calls),
+            );
+          } else {
+            await this.ctx.storage.delete(PENDING_CALLS_STORAGE_KEY);
+          }
+        }
+      } catch (error) {
+        log.error("Failed to restore pending calls", error);
+      }
+
+      // Restore valid spatial layouts from per-room storage keys.
+      try {
+        const spatialEntries = await this.ctx.storage.list({
+          prefix: SPATIAL_AUDIO_STORAGE_PREFIX,
+        });
+        for (const [key, value] of spatialEntries) {
+          const roomKey = key.slice(SPATIAL_AUDIO_STORAGE_PREFIX.length);
+          if (roomKey && isSpatialAudioState(value)) {
+            this.spatialAudioStates.set(roomKey, value);
+          } else {
+            await this.ctx.storage.delete(key);
+          }
+        }
+      } catch (error) {
+        log.error("Failed to restore spatial audio states", error);
+      }
+
       // Sync voice_channel_id on sessions from the stored voice members
       for (const [ws, session] of this.sessions) {
         await this.restoreSessionSubscriptions(ws, session);
@@ -541,14 +575,18 @@ export class MeetingRoom extends DurableObject<Env> {
       // Reconcile: remove voice members that have no live session
       this.reconcileVoiceMembers();
 
-      if (this.sessions.size > 0 || this.resumableSessionExpiry.size > 0) {
-        this.scheduleAlarm();
+      if (
+        this.sessions.size > 0 ||
+        this.resumableSessionExpiry.size > 0 ||
+        this.pendingCalls.size > 0
+      ) {
+        this.ctx.waitUntil(this.scheduleAlarm());
       }
     });
 
     // Schedule prune alarm if there are live sessions
-    if (this.sessions.size > 0) {
-      this.scheduleAlarm();
+    if (this.sessions.size > 0 || this.pendingCalls.size > 0) {
+      this.ctx.waitUntil(this.scheduleAlarm());
     }
   }
 
@@ -1136,6 +1174,13 @@ export class MeetingRoom extends DurableObject<Env> {
         this.persistResumableSessionExpiry();
       }
 
+      // Pending calls use durable deadlines so a hibernated room still stops
+      // ringing and removes the call from storage.
+      for (const pending of this.pendingCalls.values()) {
+        if (pending.expiresAt > now) continue;
+        await this.expirePendingCall(pending);
+      }
+
       // Reconcile voice members against live sessions
       this.reconcileVoiceMembers();
 
@@ -1146,7 +1191,11 @@ export class MeetingRoom extends DurableObject<Env> {
     } finally {
       // ALWAYS reschedule if there are active sessions, even after an exception.
       // Without this, a transient error would stop zombie pruning permanently.
-      if (this.sessions.size > 0 || this.resumableSessionExpiry.size > 0) {
+      if (
+        this.sessions.size > 0 ||
+        this.resumableSessionExpiry.size > 0 ||
+        this.pendingCalls.size > 0
+      ) {
         await this.scheduleAlarm(true);
       }
     }
@@ -1161,6 +1210,9 @@ export class MeetingRoom extends DurableObject<Env> {
     }
     for (const disconnectedAt of this.resumableSessionExpiry.values()) {
       deadlines.push(disconnectedAt + RESUME_GRACE_PERIOD_MS);
+    }
+    for (const pending of this.pendingCalls.values()) {
+      deadlines.push(pending.expiresAt);
     }
 
     return getNextVoicePresenceAlarmTime(
@@ -1188,6 +1240,21 @@ export class MeetingRoom extends DurableObject<Env> {
     }
   }
 
+  private scheduleDurableStateWrite(
+    operation: () => Promise<unknown>,
+    description: string,
+  ): Promise<void> {
+    const write = this.durableStateWrite
+      .then(operation)
+      .then(() => undefined)
+      .catch((error) => {
+        log.error(`Failed to persist ${description}`, error);
+      });
+    this.durableStateWrite = write;
+    this.ctx.waitUntil(write);
+    return write;
+  }
+
   // ── Batched storage writes ─────────────────────────────────────────────
 
   /** Mark a storage key as dirty — will be flushed in batch at end of message cycle */
@@ -1201,29 +1268,38 @@ export class MeetingRoom extends DurableObject<Env> {
     if (this.deletedVcKeys.size > 0) {
       const keys = [...this.deletedVcKeys];
       this.deletedVcKeys.clear();
-      this.ctx.storage.delete(keys).catch(() => {});
+      this.ctx.waitUntil(this.ctx.storage.delete(keys).catch(() => {}));
     }
     if (this.dirtyStorage.size === 0) return;
     const entries = Object.fromEntries(this.dirtyStorage);
     this.dirtyStorage.clear();
-    this.ctx.storage.put(entries).catch((error) => {
-      log.error("Failed to flush Durable Object storage", error);
-      if (!Object.prototype.hasOwnProperty.call(entries, "resumableSessions")) {
-        return;
-      }
+    this.ctx.waitUntil(
+      this.ctx.storage.put(entries).catch((error) => {
+        log.error("Failed to flush Durable Object storage", error);
+        if (
+          !Object.prototype.hasOwnProperty.call(entries, "resumableSessions")
+        ) {
+          return;
+        }
 
-      // Never keep serving a warm snapshot whose replay write failed. The
-      // client will reconnect and reconcile message history from REST.
-      this.resumableSessions.clear();
-      this.replayBuffers.clear();
-      this.replayPersistWrites.clear();
-      this.resumableSessionExpiry.clear();
-      this.ctx.storage
-        .delete(["resumableSessions", "resumableSessionExpiry"])
-        .catch((deleteError) => {
-          log.error("Failed to clear stale resumable snapshots", deleteError);
-        });
-    });
+        // Never keep serving a warm snapshot whose replay write failed. The
+        // client will reconnect and reconcile message history from REST.
+        this.resumableSessions.clear();
+        this.replayBuffers.clear();
+        this.replayPersistWrites.clear();
+        this.resumableSessionExpiry.clear();
+        this.ctx.waitUntil(
+          this.ctx.storage
+            .delete(["resumableSessions", "resumableSessionExpiry"])
+            .catch((deleteError) => {
+              log.error(
+                "Failed to clear stale resumable snapshots",
+                deleteError,
+              );
+            }),
+        );
+      }),
+    );
   }
 
   // ── Helpers ────────────────────────────────────────────────────────────
@@ -1266,7 +1342,7 @@ export class MeetingRoom extends DurableObject<Env> {
       }
     }
     this.sessions.set(ws, serializedData);
-    if (wasEmpty) this.scheduleAlarm();
+    if (wasEmpty) this.ctx.waitUntil(this.scheduleAlarm());
   }
 
   private getSessionAdmission(
@@ -1426,6 +1502,70 @@ export class MeetingRoom extends DurableObject<Env> {
     this.deletedVcKeys.add(`vc:members:${channelId}`);
     // Also remove from dirty in case it was just marked
     this.dirtyStorage.delete(`vc:members:${channelId}`);
+    this.deleteSpatialAudioState(channelId);
+  }
+
+  private schedulePendingCallTimeout(
+    call: StoredPendingCall,
+  ): ReturnType<typeof setTimeout> {
+    return setTimeout(
+      () => {
+        const pending = this.pendingCalls.get(call.calleeId);
+        if (!pending || pending.callId !== call.callId) return;
+        void this.expirePendingCall(pending);
+      },
+      Math.max(0, call.expiresAt - Date.now()),
+    );
+  }
+
+  private async expirePendingCall(pending: PendingCall) {
+    const current = this.pendingCalls.get(pending.calleeId);
+    if (!current || current.callId !== pending.callId) return;
+
+    clearTimeout(pending.timeout);
+    this.pendingCalls.delete(pending.calleeId);
+    await this.persistPendingCalls();
+
+    const timeoutMessage = {
+      op: Op.Dispatch,
+      d: {
+        event: "CALL_RING_STOP",
+        data: { call_id: pending.callId, reason: "timeout" },
+      },
+    };
+    this.broadcastToUser(pending.callerId, timeoutMessage);
+    this.broadcastToUser(pending.calleeId, timeoutMessage);
+    log.info(
+      `Call ${pending.callId} ring timed out (caller stays in voice channel)`,
+    );
+  }
+
+  private persistPendingCalls(): Promise<void> {
+    const serializedPendingCalls = serializePendingCalls(this.pendingCalls);
+    const write = this.scheduleDurableStateWrite(
+      () =>
+        this.ctx.storage.put(PENDING_CALLS_STORAGE_KEY, serializedPendingCalls),
+      "pending calls",
+    );
+    if (this.pendingCalls.size > 0) {
+      this.ctx.waitUntil(this.scheduleAlarm());
+    }
+    return write;
+  }
+
+  private persistSpatialAudioState(roomKey: string, state: SpatialAudioState) {
+    this.scheduleDurableStateWrite(
+      () => this.ctx.storage.put(getSpatialAudioStorageKey(roomKey), state),
+      `spatial audio state for ${roomKey}`,
+    );
+  }
+
+  private deleteSpatialAudioState(roomKey: string) {
+    this.spatialAudioStates.delete(roomKey);
+    this.scheduleDurableStateWrite(
+      () => this.ctx.storage.delete(getSpatialAudioStorageKey(roomKey)),
+      `spatial audio state for ${roomKey}`,
+    );
   }
 
   /** Persist voice channel started-at timestamps to storage */
@@ -2726,12 +2866,14 @@ export class MeetingRoom extends DurableObject<Env> {
     if (d.spatial_audio_high_fidelity !== undefined)
       session.spatial_audio_high_fidelity = d.spatial_audio_high_fidelity;
     const spatialRoomKey = session.voice_channel_id || this.roomSlug;
-    if (d.spatial_audio_state) {
-      this.spatialAudioStates.set(spatialRoomKey, {
+    if (d.spatial_audio_state && isSpatialAudioState(d.spatial_audio_state)) {
+      const nextSpatialAudioState = {
         ...d.spatial_audio_state,
         updatedBy: session.clerk_user_id || session.id,
         updatedAt: Date.now(),
-      });
+      };
+      this.spatialAudioStates.set(spatialRoomKey, nextSpatialAudioState);
+      this.persistSpatialAudioState(spatialRoomKey, nextSpatialAudioState);
     }
     // Also update the voice channel sidebar state if user is in a VC
     if (session.voice_channel_id && session.clerk_user_id) {
@@ -2764,14 +2906,18 @@ export class MeetingRoom extends DurableObject<Env> {
     if (!["online", "idle", "dnd", "offline"].includes(d.status)) return;
 
     if (session.clerk_user_id) {
+      let presenceChanged = false;
       for (const [sessionWs, otherSession] of this.sessions) {
         if (otherSession.clerk_user_id !== session.clerk_user_id) continue;
+        if (otherSession.status !== d.status) presenceChanged = true;
         otherSession.status = d.status;
         this.persist(sessionWs, otherSession);
       }
 
       // 1. Debounced persist to D1 (coalesces rapid toggles into one write)
-      this.debouncePersistPresence(session.clerk_user_id, d.status);
+      this.ctx.waitUntil(this.persistPresence(session.clerk_user_id, d.status));
+
+      if (!presenceChanged) return;
 
       // 3. Broadcast to all
       const presenceSnapshot = this.buildPresenceSnapshotForUser(
@@ -2791,51 +2937,32 @@ export class MeetingRoom extends DurableObject<Env> {
     this.persist(ws, session);
   }
 
-  /** Debounce D1 presence writes — coalesces rapid status toggles into one write */
-  private debouncePersistPresence(clerkId: string, status: string) {
-    this.presenceD1Pending.set(clerkId, status);
+  /** Persist presence immediately without blocking the WebSocket response. */
+  private async persistPresence(clerkId: string, status: string) {
+    try {
+      const { results } = await this.env.DB.prepare(
+        "SELECT server_id FROM server_members WHERE user_id = ?",
+      )
+        .bind(clerkId)
+        .all();
 
-    // Clear existing timer for this user
-    const existing = this.presenceD1Timers.get(clerkId);
-    if (existing) clearTimeout(existing);
+      const presenceUpdate = await this.env.DB.prepare(
+        "UPDATE users SET status = ?, updated_at = ? WHERE id = ? AND status IS NOT ?",
+      )
+        .bind(status, new Date().toISOString(), clerkId, status)
+        .run();
 
-    // Schedule flush after 2s — only the final status gets written
-    const timer = setTimeout(() => {
-      this.presenceD1Timers.delete(clerkId);
-      const finalStatus = this.presenceD1Pending.get(clerkId);
-      this.presenceD1Pending.delete(clerkId);
-      if (!finalStatus) return;
+      if (presenceUpdate.meta.changes === 0) return;
 
-      this.ctx.waitUntil(
-        (async () => {
-          try {
-            await this.env.DB.prepare(
-              "UPDATE users SET status = ?, updated_at = ? WHERE id = ?",
-            )
-              .bind(finalStatus, new Date().toISOString(), clerkId)
-              .run();
-
-            const { results } = await this.env.DB.prepare(
-              "SELECT server_id FROM server_members WHERE user_id = ?",
-            )
-              .bind(clerkId)
-              .all();
-
-            if (results) {
-              for (const row of results) {
-                const serverId = row.server_id as string;
-                const cacheKey = `v1:server:members:${serverId}`;
-                this.env.CACHE.delete(cacheKey).catch(() => {});
-              }
-            }
-          } catch (e) {
-            presenceLog.error("D1 update failed:", e);
-          }
-        })(),
+      const serverIds = (results ?? [])
+        .map((row) => row.server_id)
+        .filter((serverId): serverId is string => typeof serverId === "string");
+      scheduleServerMemberCacheInvalidation(this.env, serverIds, (promise) =>
+        this.ctx.waitUntil(promise),
       );
-    }, 2000);
-
-    this.presenceD1Timers.set(clerkId, timer);
+    } catch (e) {
+      presenceLog.error("D1 update failed:", e);
+    }
   }
 
   // ── Op 17: ProfileRefresh ──────────────────────────────────────────────
@@ -2952,7 +3079,7 @@ export class MeetingRoom extends DurableObject<Env> {
       this.persistResumableSessions();
       this.persistResumableSessionExpiry();
       // Ensure the alarm keeps running to prune expired resumable sessions
-      this.scheduleAlarm();
+      this.ctx.waitUntil(this.scheduleAlarm());
     } else {
       this.resumableSessions.delete(participantId);
       this.replayBuffers.delete(participantId);
@@ -3689,6 +3816,7 @@ export class MeetingRoom extends DurableObject<Env> {
       const callIdToCache = pending.callId;
       clearTimeout(pending.timeout);
       this.pendingCalls.delete(session.clerk_user_id);
+      this.persistPendingCalls();
 
       // Cache the accepted call to avoid race conditions with a late Op 37 (CallAccept)
       this.acceptedCalls.add(callIdToCache);
@@ -3756,7 +3884,7 @@ export class MeetingRoom extends DurableObject<Env> {
       // If the channel is fully empty, check if there's a pending call ringing
       // that we should also cancel (e.g., caller abandoned before answer)
       let abandonedPendingCall: PendingCall | null = null;
-      for (const [calleeId, call] of this.pendingCalls) {
+      for (const call of this.pendingCalls.values()) {
         if (call.channelId === channelId) {
           abandonedPendingCall = call;
           break;
@@ -3768,6 +3896,7 @@ export class MeetingRoom extends DurableObject<Env> {
         );
         clearTimeout(abandonedPendingCall.timeout);
         this.pendingCalls.delete(abandonedPendingCall.calleeId);
+        this.persistPendingCalls();
 
         // Tell both parties the ring stopped
         const endMsg = {
@@ -4595,7 +4724,7 @@ export class MeetingRoom extends DurableObject<Env> {
     let calleeName: string | undefined;
     let calleeUsername: string | undefined;
     let calleeDisplayName: string | null | undefined;
-    let calleeAvatar: string | undefined;
+    let calleeAvatar: string | null | undefined;
     for (const [, sess] of this.sessions) {
       if (sess.clerk_user_id === calleeId) {
         calleeOnline = true;
@@ -4629,46 +4758,13 @@ export class MeetingRoom extends DurableObject<Env> {
     const sortedIds = [callerId, calleeId].sort();
     const voiceRoomId = `dm-call-${sortedIds[0]}-${sortedIds[1]}`;
 
-    const timeout = setTimeout(() => {
-      // Auto-cancel on timeout — callee didn't answer
-      const pending = this.pendingCalls.get(calleeId);
-      if (pending?.callId === callId) {
-        this.pendingCalls.delete(calleeId);
-
-        // NOTE: We do NOT remove the caller from the voice channel here.
-        // The caller initiated the call and is already connected to the SFU.
-        // They should remain in the call "room" even if the callee didn't pick up.
-        // The caller can choose to leave manually, or wait and call again.
-
-        // Tell the caller the ringing timed out (but they stay in the call)
-        this.broadcastToUser(callerId, {
-          op: Op.Dispatch,
-          d: {
-            event: "CALL_RING_STOP",
-            data: { call_id: callId, reason: "timeout" },
-          },
-        });
-        // Tell the callee the ringing timed out
-        this.broadcastToUser(calleeId, {
-          op: Op.Dispatch,
-          d: {
-            event: "CALL_RING_STOP",
-            data: { call_id: callId, reason: "timeout" },
-          },
-        });
-        log.info(
-          `Call ${callId} ring timed out (caller stays in voice channel)`,
-        );
-      }
-    }, CALL_RING_TIMEOUT_MS);
-
-    const pendingCall: PendingCall = {
+    const pendingCallData: StoredPendingCall = {
       callId,
       callerId,
       calleeId,
       channelId: d.channel_id,
       voiceRoomId,
-      timeout,
+      expiresAt: Date.now() + CALL_RING_TIMEOUT_MS,
       callerName: session.name,
       callerUsername: session.username ?? session.name,
       callerDisplayName: session.display_name ?? session.name,
@@ -4678,7 +4774,12 @@ export class MeetingRoom extends DurableObject<Env> {
       calleeDisplayName,
       calleeAvatar,
     };
+    const pendingCall: PendingCall = {
+      ...pendingCallData,
+      timeout: this.schedulePendingCallTimeout(pendingCallData),
+    };
     this.pendingCalls.set(calleeId, pendingCall);
+    this.persistPendingCalls();
 
     // Notify callee — ring!
     this.broadcastToUser(calleeId, {
@@ -4760,9 +4861,9 @@ export class MeetingRoom extends DurableObject<Env> {
     this.acceptedCalls.add(callIdToCache);
     setTimeout(() => this.acceptedCalls.delete(callIdToCache), 10000);
 
-    // Clear the timeout
     clearTimeout(pending.timeout);
     this.pendingCalls.delete(calleeId);
+    this.persistPendingCalls();
 
     // Auto-leave callee from any previous voice channel before putting them in the DM channel
     if (session.voice_channel_id) {
@@ -4808,6 +4909,7 @@ export class MeetingRoom extends DurableObject<Env> {
 
     clearTimeout(pending.timeout);
     this.pendingCalls.delete(calleeId);
+    this.persistPendingCalls();
 
     // Notify both parties that ringing should stop
     this.broadcastToUser(pending.callerId, {
@@ -4842,6 +4944,7 @@ export class MeetingRoom extends DurableObject<Env> {
     if (pending) {
       clearTimeout(pending.timeout);
       this.pendingCalls.delete(pending.calleeId);
+      this.persistPendingCalls();
 
       // Also remove caller from voiceChannelMembers since they are abandoning the entire call attempt
       const callerWs = this.findWsByClerkUserId(pending.callerId);
@@ -4898,6 +5001,7 @@ export class MeetingRoom extends DurableObject<Env> {
       );
       clearTimeout(pendingAsCallee.timeout);
       this.pendingCalls.delete(userId);
+      this.persistPendingCalls();
       this.broadcastToUser(pendingAsCallee.callerId, {
         op: Op.Dispatch,
         d: {
@@ -4913,6 +5017,7 @@ export class MeetingRoom extends DurableObject<Env> {
         log.info(`Cleaning up pending call as caller: callId=${call.callId}`);
         clearTimeout(call.timeout);
         this.pendingCalls.delete(calleeId);
+        this.persistPendingCalls();
         this.broadcastToUser(calleeId, {
           op: Op.Dispatch,
           d: {

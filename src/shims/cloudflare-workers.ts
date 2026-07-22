@@ -10,3 +10,7 @@
  * The actual `cloudflare:workers` module is used at runtime on the server.
  */
 export const env: Record<string, any> = {};
+
+export function waitUntil(_promise: Promise<unknown>): void {
+  // Server-side request lifetimes are unavailable in the client bundle.
+}
