@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 import {
   getProfileFrameLayerStyle,
   getProfileFrameLayers,
+  getProfileFramePreviewScale,
+  getProfileFramePreviewTransform,
   getProfileFrameSurfaceInsetStyle,
 } from "@/lib/profile-frame";
 
@@ -106,6 +108,46 @@ describe("getProfileFrameLayers", () => {
     expect(getProfileFrameSurfaceInsetStyle(display)).toEqual({
       top: "20cqw",
       bottom: "20cqw",
+    });
+  });
+});
+
+describe("getProfileFramePreviewScale", () => {
+  it("fits the frame footprint to the profile surface without enlarging it", () => {
+    expect(getProfileFramePreviewScale(display)).toBeCloseTo(0.83, 2);
+    expect(getProfileFramePreviewScale({ version: 1 })).toBe(1);
+  });
+
+  it("only counts vertical overflow for layers that can render outside the surface", () => {
+    const borderOnlyDisplay = {
+      ...display,
+      collectibles: {
+        profileFrame: {
+          ...display.collectibles.profileFrame,
+          layers: [display.collectibles.profileFrame.layers[1]],
+        },
+      },
+    };
+
+    expect(getProfileFramePreviewScale(borderOnlyDisplay)).toBeCloseTo(
+      1 / 1.2,
+      3,
+    );
+  });
+
+  it("anchors asymmetric overflow around the rendered frame bounds", () => {
+    const topOnlyDisplay = {
+      ...display,
+      collectibles: {
+        profileFrame: {
+          ...display.collectibles.profileFrame,
+          layers: [display.collectibles.profileFrame.layers[0]],
+        },
+      },
+    };
+
+    expect(getProfileFramePreviewTransform(topOnlyDisplay)).toMatchObject({
+      transformOrigin: "50% 100%",
     });
   });
 });

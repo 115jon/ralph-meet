@@ -41,6 +41,7 @@ import type { CollectibleKind } from "@/lib/collectibles-catalog";
 import { getDisplayInitial } from "@/lib/display-name";
 import { getAuthAssetUrl } from "@/lib/platform";
 import { resolveProfileReferenceDate } from "@/lib/profile-dates";
+import { getProfileFramePreviewTransform } from "@/lib/profile-frame";
 import {
   applyProfileThemeDefaults,
   DEFAULT_PROFILE_THEME,
@@ -2487,6 +2488,8 @@ export default function SettingsAccountTab({
     : currentNameplateSelection?.animatedUrl
       ? "video/mp4"
       : null;
+  const profileFramePreviewTransform =
+    getProfileFramePreviewTransform(currentAvatarDisplay);
   const avatarDecorationPreviewArtUrl = currentAvatarDecoration?.asset
     ? `https://cdn.discordapp.com/avatar-decoration-presets/${currentAvatarDecoration.asset}.png?size=240&passthrough=true`
     : (currentAvatarDecoration?.imageUrl ?? null);
@@ -3849,6 +3852,15 @@ export default function SettingsAccountTab({
                 <ProfileSurfaceShell
                   display={currentAvatarDisplay}
                   className="relative h-auto w-full max-w-[400px] lg:h-full lg:aspect-[450/880] lg:w-[min(400px,calc(51.136dvh_-_55.2px))]"
+                  style={
+                    asModal && profileFramePreviewTransform.scale < 1
+                      ? {
+                          transform: `scale(${profileFramePreviewTransform.scale})`,
+                          transformOrigin:
+                            profileFramePreviewTransform.transformOrigin,
+                        }
+                      : undefined
+                  }
                   surfaceStyle={{ aspectRatio: PROFILE_SURFACE_ASPECT_RATIO }}
                 >
                   <div
