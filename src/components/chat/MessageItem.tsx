@@ -1208,7 +1208,12 @@ const MessageItem = memo(
                         onClick={() => onThread(message.id)}
                       />
                     )}
-                    <ToolbarSeparator />
+                    <IconButton
+                      icon={CornerUpLeft}
+                      size="sm"
+                      tooltip="Reply"
+                      onClick={() => onReply?.(message)}
+                    />
                     <div className="relative">
                       <IconButton
                         ref={emojiBtnRef}
@@ -1234,12 +1239,14 @@ const MessageItem = memo(
                         />
                       )}
                     </div>
-                    <IconButton
-                      icon={CornerUpLeft}
-                      size="sm"
-                      tooltip="Reply"
-                      onClick={() => onReply?.(message)}
-                    />
+                    {isOwnMessage && (
+                      <IconButton
+                        icon={Edit2}
+                        size="sm"
+                        tooltip="Edit Message"
+                        onClick={startEditing}
+                      />
+                    )}
                     <IconButton
                       icon={Forward}
                       size="sm"
@@ -1295,10 +1302,12 @@ const MessageItem = memo(
                       )}
                     </div>
                     <IconButton
-                      icon={CornerUpLeft}
+                      icon={isOwnMessage ? Edit2 : CornerUpLeft}
                       size="sm"
-                      tooltip="Reply"
-                      onClick={() => onReply?.(message)}
+                      tooltip={isOwnMessage ? "Edit Message" : "Reply"}
+                      onClick={
+                        isOwnMessage ? startEditing : () => onReply?.(message)
+                      }
                     />
                     <IconButton
                       icon={Forward}
