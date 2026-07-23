@@ -250,7 +250,11 @@ export async function getVisibleChannels<T extends { id: string }>(
     channels,
     userId,
     userRoles,
-    (overrides ?? []) as ChannelVisibilityOverride[],
+    (overrides ?? [])
+      .map(toChannelVisibilityOverride)
+      .filter(
+        (override): override is ChannelVisibilityOverride => override !== null,
+      ),
   );
 
   return channels.reduce((acc: T[], channel) => {
@@ -259,4 +263,29 @@ export async function getVisibleChannels<T extends { id: string }>(
     acc.push({ ...channel, permissions });
     return acc;
   }, []);
+}
+
+function toChannelVisibilityOverride(
+  value: unknown,
+): ChannelVisibilityOverride | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+  const candidate = Object.fromEntries(Object.entries(value));
+  if (
+    typeof candidate.channel_id === "string" &&
+    typeof candidate.target_id === "string" &&
+    typeof candidate.target_type === "string" &&
+    typeof candidate.allow === "number" &&
+    typeof candidate.deny === "number"
+  ) {
+    return {
+      channel_id: candidate.channel_id,
+      target_id: candidate.target_id,
+      target_type: candidate.target_type,
+      allow: candidate.allow,
+      deny: candidate.deny,
+    };
+  }
+  return null;
 }

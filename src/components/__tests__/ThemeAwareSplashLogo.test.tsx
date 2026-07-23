@@ -60,7 +60,7 @@ describe("ThemeAwareSplashLogo", () => {
       });
 
       const hydrationWarnings = consoleError.mock.calls.filter(
-        ([message]) =>
+        ([message]: unknown[]) =>
           typeof message === "string" &&
           message.includes(
             "A tree hydrated but some attributes of the server rendered HTML didn't match",

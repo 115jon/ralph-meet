@@ -124,7 +124,11 @@ describe("CustomSelect", () => {
         <button type="button" hidden>
           Hidden
         </button>
-        <div ref={(element) => element?.setAttribute("inert", "")}>
+        <div
+          ref={(element) => {
+            element?.setAttribute("inert", "");
+          }}
+        >
           <button type="button">Inert</button>
         </div>
         <div aria-hidden="true">

@@ -264,6 +264,15 @@ export interface ResumePayload {
   seq_ack: number;
 }
 
+export interface CallInitiatePayload {
+  target_user_id: string;
+  channel_id: string;
+}
+
+export interface CallIdPayload {
+  call_id: string;
+}
+
 export interface AnswerPayload {
   sdp: string;
   request_id?: string;

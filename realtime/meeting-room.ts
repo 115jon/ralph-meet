@@ -14,6 +14,11 @@ import {
   type ChannelVisibilityOverride,
   type ChannelVisibilityRole,
 } from "../src/lib/channel-visibility";
+import type {
+  CallIdPayload,
+  CallInitiatePayload,
+  ResumePayload,
+} from "../src/lib/types";
 import { clog } from "../src/lib/console-logger";
 import {
   isReconnectWithinGrace,
@@ -347,7 +352,7 @@ export class MeetingRoom extends DurableObject<Env> {
   private durableStateWrite: Promise<void> = Promise.resolve();
 
   constructor(
-    public ctx: DurableObjectState,
+    public ctx: DurableObjectState<{}>,
     public env: Env,
   ) {
     super(ctx, env);
@@ -963,11 +968,7 @@ export class MeetingRoom extends DurableObject<Env> {
         break;
 
       case Op.Resume:
-        if (
-          !this.isPlainObject(msg.d) ||
-          typeof msg.d.session_id !== "string" ||
-          typeof msg.d.seq_ack !== "number"
-        ) {
+        if (!this.isResumePayload(msg.d)) {
           this.sendTo(ws, {
             op: Op.Error,
             d: { code: 4000, message: "Invalid resume payload" },
@@ -1044,11 +1045,7 @@ export class MeetingRoom extends DurableObject<Env> {
         break;
 
       case Op.CallInitiate:
-        if (
-          !this.isPlainObject(msg.d) ||
-          typeof msg.d.target_user_id !== "string" ||
-          typeof msg.d.channel_id !== "string"
-        ) {
+        if (!this.isCallInitiatePayload(msg.d)) {
           this.sendTo(ws, {
             op: Op.Error,
             d: { code: 4000, message: "Invalid call payload" },
@@ -1059,7 +1056,7 @@ export class MeetingRoom extends DurableObject<Env> {
         break;
 
       case Op.CallAccept:
-        if (!this.isPlainObject(msg.d)) {
+        if (!this.isCallIdPayload(msg.d)) {
           this.sendTo(ws, {
             op: Op.Error,
             d: { code: 4000, message: "Invalid call payload" },
@@ -1070,7 +1067,7 @@ export class MeetingRoom extends DurableObject<Env> {
         break;
 
       case Op.CallDecline:
-        if (!this.isPlainObject(msg.d)) {
+        if (!this.isCallIdPayload(msg.d)) {
           this.sendTo(ws, {
             op: Op.Error,
             d: { code: 4000, message: "Invalid call payload" },
@@ -1081,7 +1078,7 @@ export class MeetingRoom extends DurableObject<Env> {
         break;
 
       case Op.CallEnd:
-        if (!this.isPlainObject(msg.d)) {
+        if (!this.isCallIdPayload(msg.d)) {
           this.sendTo(ws, {
             op: Op.Error,
             d: { code: 4000, message: "Invalid call payload" },
@@ -1375,6 +1372,26 @@ export class MeetingRoom extends DurableObject<Env> {
       return false;
     const prototype = Object.getPrototypeOf(value);
     return prototype === Object.prototype || prototype === null;
+  }
+
+  private isResumePayload(value: unknown): value is ResumePayload {
+    return (
+      this.isPlainObject(value) &&
+      typeof value.session_id === "string" &&
+      typeof value.seq_ack === "number"
+    );
+  }
+
+  private isCallInitiatePayload(value: unknown): value is CallInitiatePayload {
+    return (
+      this.isPlainObject(value) &&
+      typeof value.target_user_id === "string" &&
+      typeof value.channel_id === "string"
+    );
+  }
+
+  private isCallIdPayload(value: unknown): value is CallIdPayload {
+    return this.isPlainObject(value) && typeof value.call_id === "string";
   }
 
   private isRateLimited(ws: WebSocket, op: number): boolean {
@@ -3193,11 +3210,10 @@ export class MeetingRoom extends DurableObject<Env> {
     const seq = (session.outbound_seq ?? 0) + 1;
     session.outbound_seq = seq;
     const data = this.isPlainObject(msg.d) ? msg.d : {};
+    const channelId = this.getDispatchChannelId(msg);
     const replayScope =
       scope ??
-      (this.getDispatchChannelId(msg)
-        ? { kind: "channel", channelId: this.getDispatchChannelId(msg) }
-        : { kind: "global" });
+      (channelId ? { kind: "channel", channelId } : { kind: "global" });
     return { seq, msg: { ...msg, d: { ...data, seq } }, scope: replayScope };
   }
 
@@ -4657,10 +4673,7 @@ export class MeetingRoom extends DurableObject<Env> {
     return new Set(ids);
   }
 
-  private async handleCallInitiate(
-    ws: WebSocket,
-    d: { target_user_id: string; channel_id: string },
-  ) {
+  private async handleCallInitiate(ws: WebSocket, d: CallInitiatePayload) {
     const session = this.requireSession(ws);
     if (
       !session ||
@@ -4851,7 +4864,7 @@ export class MeetingRoom extends DurableObject<Env> {
 
   // ── Op 37: CallAccept ────────────────────────────────────────────────
 
-  private handleCallAccept(ws: WebSocket, d: { call_id: string }) {
+  private handleCallAccept(ws: WebSocket, d: CallIdPayload) {
     const session = this.requireSession(ws);
     if (!session || !session.clerk_user_id || !d.call_id) return;
 
@@ -4922,7 +4935,7 @@ export class MeetingRoom extends DurableObject<Env> {
 
   // ── Op 38: CallDecline ───────────────────────────────────────────────
 
-  private handleCallDecline(ws: WebSocket, d: { call_id: string }) {
+  private handleCallDecline(ws: WebSocket, d: CallIdPayload) {
     const session = this.requireSession(ws);
     if (!session || !session.clerk_user_id || !d.call_id) return;
 
@@ -4953,7 +4966,7 @@ export class MeetingRoom extends DurableObject<Env> {
     log.info(`Call declined: ${pending.callId}`);
   }
 
-  private handleCallEnd(ws: WebSocket, d: { call_id: string }) {
+  private handleCallEnd(ws: WebSocket, d: CallIdPayload) {
     const session = this.requireSession(ws);
     if (!session || !session.clerk_user_id) return;
 

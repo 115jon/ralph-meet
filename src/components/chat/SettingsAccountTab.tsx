@@ -232,7 +232,9 @@ function areDisplayNameStylesEqual(
   return JSON.stringify(leftStyle) === JSON.stringify(rightStyle);
 }
 
-function getFocusableElements(container: ParentNode | null | undefined) {
+function getFocusableElements(
+  container: Pick<ParentNode, "querySelectorAll"> | null | undefined,
+) {
   if (!container) return [];
 
   return Array.from(

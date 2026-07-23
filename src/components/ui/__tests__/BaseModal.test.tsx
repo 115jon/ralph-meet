@@ -134,7 +134,11 @@ describe("BaseModal", () => {
         <button type="button" hidden>
           Hidden action
         </button>
-        <div ref={(element) => element?.setAttribute("inert", "")}>
+        <div
+          ref={(element) => {
+            element?.setAttribute("inert", "");
+          }}
+        >
           <button type="button">Inert action</button>
         </div>
         <button type="button">Visible action</button>

@@ -22,6 +22,10 @@ declare global {
     INSTAGRAM_RUR?: string;
   }
 
+  namespace Cloudflare {
+    interface Env extends CloudflareEnv {}
+  }
+
   // ── Chromium Insertable Streams (WebRTC Breakout Box) ───────────────────
   // These APIs are Chromium-only (Chrome 94+, Edge 94+).
   // Used to bypass Chrome's APM mono downmix for true stereo mic input.
