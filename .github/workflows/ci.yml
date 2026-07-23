@@ -11,12 +11,62 @@ on:
 
 permissions:
   contents: read
+  pull-requests: read
 
 concurrency:
   group: ci-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
+  changes:
+    name: changes
+    runs-on: ubuntu-latest
+    outputs:
+      code: ${{ steps.manual.outputs.code || steps.filter.outputs.code }}
+    steps:
+      - name: Checkout
+        # actions/checkout v4.2.2
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 0
+
+      - name: Mark all files as relevant for manual runs
+        id: manual
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        run: echo "code=true" >> "$GITHUB_OUTPUT"
+
+      - name: Detect code-affecting changes
+        id: filter
+        if: ${{ github.event_name != 'workflow_dispatch' }}
+        # dorny/paths-filter v3
+        uses: dorny/paths-filter@6852f92c20ea7fd3b0c25de3b5112db3a98da050
+        with:
+          filters: |
+            code:
+              - 'src/**'
+              - 'realtime/**'
+              - 'scripts/**'
+              - 'public/**'
+              - 'desktop/**'
+              - 'mobile/**'
+              - '**/*.ts'
+              - '**/*.tsx'
+              - '**/*.js'
+              - '**/*.mjs'
+              - '**/*.cjs'
+              - '**/*.json'
+              - '**/*.toml'
+              - '**/*.yaml'
+              - '**/*.yml'
+              - '**/*.sql'
+              - '**/*.css'
+              - '**/*.scss'
+              - '**/*.html'
+              - '**/*.svg'
+              - 'package.json'
+              - 'pnpm-lock.yaml'
+              - 'pnpm-workspace.yaml'
+
   quality:
     name: quality
     runs-on: ubuntu-latest
@@ -53,6 +103,8 @@ jobs:
 
   unit:
     name: unit
+    needs: changes
+    if: ${{ needs.changes.outputs.code == 'true' }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -83,6 +135,8 @@ jobs:
 
   worker-runtime:
     name: worker-runtime
+    needs: changes
+    if: ${{ needs.changes.outputs.code == 'true' }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -121,6 +175,8 @@ jobs:
 
   build:
     name: build
+    needs: changes
+    if: ${{ needs.changes.outputs.code == 'true' }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -151,6 +207,7 @@ jobs:
     name: required
     if: ${{ always() }}
     needs:
+      - changes
       - quality
       - unit
       - worker-runtime
@@ -159,15 +216,17 @@ jobs:
     steps:
       - name: Require all CI jobs to pass
         env:
+          CHANGES_RESULT: ${{ needs.changes.result }}
           QUALITY_RESULT: ${{ needs.quality.result }}
           UNIT_RESULT: ${{ needs.unit.result }}
           WORKER_RESULT: ${{ needs.worker-runtime.result }}
           BUILD_RESULT: ${{ needs.build.result }}
         run: |
-          if [[ "$QUALITY_RESULT" != "success" || \
-            "$UNIT_RESULT" != "success" || \
-            "$WORKER_RESULT" != "success" || \
-            "$BUILD_RESULT" != "success" ]]; then
-            echo "CI failed: quality=$QUALITY_RESULT unit=$UNIT_RESULT worker=$WORKER_RESULT build=$BUILD_RESULT"
+          if [[ "$CHANGES_RESULT" != "success" || \
+            "$QUALITY_RESULT" != "success" || \
+            ( "$UNIT_RESULT" != "success" && "$UNIT_RESULT" != "skipped" ) || \
+            ( "$WORKER_RESULT" != "success" && "$WORKER_RESULT" != "skipped" ) || \
+            ( "$BUILD_RESULT" != "success" && "$BUILD_RESULT" != "skipped" ) ]]; then
+            echo "CI failed: changes=$CHANGES_RESULT quality=$QUALITY_RESULT unit=$UNIT_RESULT worker=$WORKER_RESULT build=$BUILD_RESULT"
             exit 1
           fi
