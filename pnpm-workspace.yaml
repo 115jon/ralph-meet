@@ -23,3 +23,5 @@ onlyBuiltDependencies:
   - msw
   - sharp
   - workerd
+patchedDependencies:
+  miniflare@4.20260708.1: patches/miniflare@4.20260708.1.patch
