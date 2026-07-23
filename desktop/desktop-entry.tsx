@@ -6,6 +6,7 @@
  */
 import "./styles.css";
 
+import { AppTitleBarContent } from "@/components/chat/AppTitleBar";
 import { SplashScreen } from "@/components/SplashScreen";
 import { StandaloneUpdater } from "@/components/StandaloneUpdater";
 import { UpdateChecker } from "@/components/UpdateChecker";
@@ -134,7 +135,7 @@ function DesktopWindowChrome({ children }: { children: ReactNode }) {
     <div className="desktop-window-shell">
       <header
         className="desktop-window-titlebar"
-        aria-label="Ralph Meet window title bar"
+        aria-label="Application title bar"
       >
         <div className="desktop-window-titlebar-leading">
           <button
@@ -157,7 +158,7 @@ function DesktopWindowChrome({ children }: { children: ReactNode }) {
           </button>
         </div>
 
-        <div className="desktop-window-title">Ralph Meet</div>
+        <AppTitleBarContent className="desktop-window-title" />
 
         <div className="desktop-window-controls">
           <WindowControlButton

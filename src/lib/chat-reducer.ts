@@ -43,6 +43,8 @@ export interface ChatState {
   activeServerId: string | null;
   /** Active channel ID */
   activeChannelId: string | null;
+  /** Selected home view when the direct-message area has no active channel */
+  dmHomeView: "friends" | "shop";
   /** Messages for the current channel */
   messages: Message[];
   /** Cached message slices per channel */
@@ -155,6 +157,7 @@ export const initialState: ChatState = {
   categoriesByServerId: {},
   activeServerId: null,
   activeChannelId: null,
+  dmHomeView: "friends",
   messages: [],
   messagesByChannelId: {},
   messagesLoadedByChannelId: {},
@@ -254,6 +257,7 @@ export type ChatAction =
   | { type: "REMOVE_CHANNEL"; channelId: string }
   | { type: "SET_ACTIVE_SERVER"; serverId: string | null }
   | { type: "SET_ACTIVE_CHANNEL"; channelId: string | null }
+  | { type: "SET_DM_HOME_VIEW"; view: "friends" | "shop" }
   | {
       type: "SET_MESSAGES";
       messages: Message[];
@@ -868,6 +872,9 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
             ? action.channelId
             : null,
       };
+    case "SET_DM_HOME_VIEW":
+      if (state.dmHomeView === action.view) return state;
+      return { ...state, dmHomeView: action.view };
     case "SWITCH_SERVER":
       if (
         state.activeServerId === action.serverId &&

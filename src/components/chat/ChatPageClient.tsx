@@ -1,4 +1,5 @@
 import ChannelSidebar from "@/components/chat/ChannelSidebar";
+import { WebAppTitleBar } from "@/components/chat/AppTitleBar";
 import ChatArea from "@/components/chat/ChatArea";
 import { DesktopThumbnailToolbarSync } from "@/components/chat/DesktopThumbnailToolbarSync";
 import DMSidebar from "@/components/chat/DMSidebar";
@@ -27,6 +28,7 @@ import {
   syncDesktopNotificationState,
 } from "@/lib/desktop-native-sync";
 import { hasPermission, PERMISSIONS } from "@/lib/permissions";
+import { isTauri } from "@/lib/platform";
 import { dispatchOpenProfileEditorEvent } from "@/lib/profile-editor-events";
 import {
   resolveStreamPreviewAutomation,
@@ -143,6 +145,7 @@ export default function ChatPage() {
     servers,
     activeServerId,
     activeChannelId,
+    dmHomeView,
     channels,
     categories,
     members,
@@ -162,6 +165,7 @@ export default function ChatPage() {
       servers: s.servers,
       activeServerId: s.activeServerId,
       activeChannelId: s.activeChannelId,
+      dmHomeView: s.dmHomeView,
       channels: s.channels,
       categories: s.categories,
       members: s.members,
@@ -211,7 +215,6 @@ export default function ChatPage() {
   const shouldRenderVoiceAppsModal = useDelayUnmount(!!voiceAppsModal, 200);
   const { shouldRender: shouldRenderProfileUser, value: renderedProfileUser } =
     useDelayedUnmountValue(profileUser, 200);
-  const [dmHomeView, setDmHomeView] = useState<"friends" | "shop">("friends");
   const [channelSidebarWidth, setChannelSidebarWidth] = useState(
     CHANNEL_SIDEBAR_DEFAULT_WIDTH_PX,
   );
@@ -995,13 +998,13 @@ export default function ChatPage() {
           activeView={dmHomeView}
           onSelectDm={onSelectDm}
           onShowFriends={() => {
-            setDmHomeView("friends");
+            dispatch({ type: "SET_DM_HOME_VIEW", view: "friends" });
             uiDispatch({ type: "SET_SIDEBAR", open: false });
             dispatch({ type: "SET_ACTIVE_SERVER", serverId: "@me" });
             dispatch({ type: "SET_ACTIVE_CHANNEL", channelId: null });
           }}
           onShowShop={() => {
-            setDmHomeView("shop");
+            dispatch({ type: "SET_DM_HOME_VIEW", view: "shop" });
             uiDispatch({ type: "SET_SIDEBAR", open: false });
             dispatch({ type: "SET_ACTIVE_SERVER", serverId: "@me" });
             dispatch({ type: "SET_ACTIVE_CHANNEL", channelId: null });
@@ -1086,6 +1089,7 @@ export default function ChatPage() {
       className="flex h-full flex-col overflow-hidden bg-rm-bg-primary"
       data-app-layout="true"
     >
+      {!isTauri() && <WebAppTitleBar />}
       <div
         className="flex flex-1 overflow-hidden relative"
         style={channelSidebarStyle}
