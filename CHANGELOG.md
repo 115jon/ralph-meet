@@ -1,5 +1,115 @@
 # Changelog
 
+## [2.0.0](https://github.com/115jon/ralph-meet/compare/v1.20.0...v2.0.0) (2026-07-23)
+
+
+### ⚠ BREAKING CHANGES
+
+* **listen-together:** listen_together.pause, listen_together.seek, and listen_together.skip commands now require entryId matching the current queue entry.
+* Native deep links carrying session_token are rejected; use the short-lived auth-code handoff instead.
+* **voice:** rename the internal VoiceActivity store exports to generic Activity names.
+* **platform:** Native deep links carrying session_token are rejected; use the short-lived auth-code handoff instead.
+
+### Features
+
+* ✨ merge accumulated mainline changes ([7881468](https://github.com/115jon/ralph-meet/commit/78814684f48ed3cc62b7f4c2f9938e384b4f55a1))
+* **chat:** ✨ add media actions and accurate X GIF WebP handling ([64e4bd9](https://github.com/115jon/ralph-meet/commit/64e4bd93aec05f1ba20e4eb68c6b4af709e77895))
+* **chat:** ✨ add reaction details and picker interactions ([9d3b6c1](https://github.com/115jon/ralph-meet/commit/9d3b6c1248808f1a38efe69cbf1a6f25a5bd5cbf))
+* **chat:** ✨ animate user panel identity and profile trigger ([00131c3](https://github.com/115jon/ralph-meet/commit/00131c394a15259292911cf7fdd03a1959397bde))
+* **desktop:** ✨ add native custom titlebar ([1377440](https://github.com/115jon/ralph-meet/commit/13774407ee8a61a753676aea3bddcd80fb8d6b77))
+* **listen-together:** ✨ preview pasted media links ([b298495](https://github.com/115jon/ralph-meet/commit/b298495160ddde026f57773a84f9288265b389bd))
+* **listen-together:** ✨ ship interactive listening workspace ([9f4bd5d](https://github.com/115jon/ralph-meet/commit/9f4bd5d5507fd881fa842c38faf3448a320d3f4f))
+* **profile:** ✨ add avatar picker and upload history ([8018170](https://github.com/115jon/ralph-meet/commit/801817086c46fd41b3bc450e459b50186221872d))
+* **profile:** ✨ unify collectible profile surfaces ([14ab3ea](https://github.com/115jon/ralph-meet/commit/14ab3eafa14ce448bbb36bc8282ac47543e278b9))
+* **realtime:** ✨ defer message postprocessing through queues ([fb1f712](https://github.com/115jon/ralph-meet/commit/fb1f712d7a3ec2811a8bc23b5eaa85576bc98f5e))
+* **realtime:** ✨ optimize gateway payloads and DM soundboards ([fad3e58](https://github.com/115jon/ralph-meet/commit/fad3e58dd80dbb60581391778040776edcb81ae0))
+* **realtime:** 🏗️ add durable background state processing ([5782990](https://github.com/115jon/ralph-meet/commit/57829908aa5f5afc572538814e0bd181ad23b2e3))
+* **safe-fetch:** ✨ add streaming-aware safeFetch helper with capped readers ([72ea937](https://github.com/115jon/ralph-meet/commit/72ea937af16b577c0a94cc9e20299c10567ebc18))
+* **soundboard:** ✨ add scoped playback manager and VAD activity ([e28c344](https://github.com/115jon/ralph-meet/commit/e28c344e3ce0595a79355a739902b17df7633c9c))
+* **voice:** ✨ add per-server soundboard triggers ([38c154a](https://github.com/115jon/ralph-meet/commit/38c154a448eda4f02b447b8e427284390e198c1d))
+* **voice:** ✨ move listen-together playback to floating UI ([#51](https://github.com/115jon/ralph-meet/issues/51)) ([c5ea7e4](https://github.com/115jon/ralph-meet/commit/c5ea7e4fe4c1624c7bcaea9f3017a44558288c21))
+* **voice:** ✨ unify room media playback ([5e2e033](https://github.com/115jon/ralph-meet/commit/5e2e0338dd08ce5380f3d8e57dbf20cef1ef14ed))
+* **wordle:** ✨ add onboarding and invalid guess feedback ([ce19d84](https://github.com/115jon/ralph-meet/commit/ce19d842c1e2cce637dc7dbb8da0cd867f950b84))
+
+
+### Bug Fixes
+
+* **api:** 🔒 add permissive zod validation for request bodies ([4a37cf9](https://github.com/115jon/ralph-meet/commit/4a37cf95012c82d7fef86e0a876058dc5372bf77))
+* **api:** 🔒 validate channel request bodies ([755f366](https://github.com/115jon/ralph-meet/commit/755f366ef9801393b2f4aad202a2886f5349b872))
+* **api:** 🔒 validate media request bodies ([666d2d7](https://github.com/115jon/ralph-meet/commit/666d2d723dd971f5cb597e2bc95c1c9d56754f6b))
+* **api:** 🔒 validate server request bodies ([e631f40](https://github.com/115jon/ralph-meet/commit/e631f406cc97ed48daf8e0a2b454aca6dc2f8b64))
+* **api:** 🔒 validate social request bodies ([65975ba](https://github.com/115jon/ralph-meet/commit/65975bafc20fe713c83da19a2985251a634087e3))
+* **chat:** 🐛 improve mobile navigation layout ([b0ea0d6](https://github.com/115jon/ralph-meet/commit/b0ea0d6204a6caa703264e9e43d627bf694b3a47))
+* **chat:** 🐛 keep sidebar channels clear of user panel ([d3934b3](https://github.com/115jon/ralph-meet/commit/d3934b3b9776469e35414f921e45be6dc2cb625b))
+* **chat:** 🐛 normalize server flags for name edits ([#49](https://github.com/115jon/ralph-meet/issues/49)) ([f7dbb36](https://github.com/115jon/ralph-meet/commit/f7dbb36797eaf8dd4788a48c3843dfca7231bee2))
+* **chat:** 🐛 preserve channel URLs without remounting chat ([c3547d3](https://github.com/115jon/ralph-meet/commit/c3547d3fc9ca5464da015783dfa25444699f2420))
+* **chat:** 🐛 prevent home icon mask collisions ([8730bdc](https://github.com/115jon/ralph-meet/commit/8730bdc2550b8918f722b390d490ad6aa04a8b22))
+* **chat:** 🐛 restore route-aware title bars ([8a1c98b](https://github.com/115jon/ralph-meet/commit/8a1c98b1e0fa640cba95c6ee5e0a46d08b55133d))
+* **chat:** 🐛 stabilize chat state synchronization ([aa415dc](https://github.com/115jon/ralph-meet/commit/aa415dc4959f1a825f735453ad846949f6552a53))
+* **chat:** 🐛 stabilize profile editor and soundboard drag ([0984579](https://github.com/115jon/ralph-meet/commit/098457986f7368e57923c9abe3af4a5ae40b68e1))
+* **chat:** 🐛 stop notification updates from reloading history ([a15420c](https://github.com/115jon/ralph-meet/commit/a15420c4162ed9431c22d1c57a278c4923dbd90e))
+* **chat:** 🐛 swap quick reply for edit on own messages ([433df84](https://github.com/115jon/ralph-meet/commit/433df848fe2c5e9105999ebac7cd71ddd27c51bf))
+* **chat:** 🐛 unify theme-aware status indicators ([79c366e](https://github.com/115jon/ralph-meet/commit/79c366ef2f63110f879dfa1eb8de911d9ef19a73))
+* **ci:** 🐛 configure Worker capability secret ([73d375a](https://github.com/115jon/ralph-meet/commit/73d375a71c888838b024e8157bc52da81b91b57a))
+* **ci:** 🐛 ignore generated changelog formatting ([267c40d](https://github.com/115jon/ralph-meet/commit/267c40d8b0e6e0b4829ac0d3d1cf06ba57207ac3))
+* **ci:** 🐛 ignore generated changelog formatting ([448a15d](https://github.com/115jon/ralph-meet/commit/448a15d0e16257939238879f8781ba73ba740cb0))
+* **ci:** 🐛 serialize Worker runtime tests ([6cda657](https://github.com/115jon/ralph-meet/commit/6cda657bb351acc08d2a794284520f3a5922a0de))
+* **desktop:** 🐛 harden native titlebar lifecycle ([b9f15b3](https://github.com/115jon/ralph-meet/commit/b9f15b322f014760accc7e1d8c8faf6180353e96))
+* **dev:** 🐛 type optional Vite dependency exclusions ([f3f46bc](https://github.com/115jon/ralph-meet/commit/f3f46bcbb79126afe8f1a9a7c8dc311e4ec7d60e))
+* **embeds:** 🔒 route external fetchers through safeFetch with capped reads ([55a8a1b](https://github.com/115jon/ralph-meet/commit/55a8a1b33d67707911dfea874af664a196c1e8b1))
+* **listen-together:** 🐛 avoid playback resync when opening queue ([170a9b8](https://github.com/115jon/ralph-meet/commit/170a9b8cffa858fe9095d098cdaa3bbb674535e8))
+* **listen-together:** 🐛 fix player layout and contrast ([0fc4564](https://github.com/115jon/ralph-meet/commit/0fc4564478647b109d71ac91a3b5f850a2d46e8b))
+* **listen-together:** 🐛 harden playback synchronization ([cc6b548](https://github.com/115jon/ralph-meet/commit/cc6b548d752168172bb18e329f7e31efab4a3c87))
+* **listen-together:** 🐛 keep playback synced across tracks ([d88cc45](https://github.com/115jon/ralph-meet/commit/d88cc4532e59f3df90d1e9bb72c3e002cb26ebf3))
+* **listen-together:** 🐛 preserve cross-browser playback ([7122b23](https://github.com/115jon/ralph-meet/commit/7122b231c1051d284aa6e02c30390aa40c8145b6))
+* **media:** 🐛 prevent passive microphone capture ([6cd2f40](https://github.com/115jon/ralph-meet/commit/6cd2f401efaf685f712570ebd01cd5b2c472c009))
+* **media:** 🔒 tighten proxy host allowlist ([7c80c8a](https://github.com/115jon/ralph-meet/commit/7c80c8aa6d4f5934fd7a8533a86f08846c356608))
+* **navigation:** 🐛 isolate back button history cleanup ([3fafc62](https://github.com/115jon/ralph-meet/commit/3fafc625f9a5f3dc6017c0d39f63829da1e38fc8))
+* **platform:** 🔒 harden realtime access and package boundaries ([1fb6988](https://github.com/115jon/ralph-meet/commit/1fb6988be4fd2d5f3e56ec0f662c3d7f997e4165))
+* **profile-frame:** 🐛 contain border layers within surfaces ([d2d81e3](https://github.com/115jon/ralph-meet/commit/d2d81e38eb674d3be96d943ebc705f4d72051a7a))
+* **profile-frame:** 🐛 fit framed editor previews to frame bounds ([3c9d479](https://github.com/115jon/ralph-meet/commit/3c9d479f24238f85d1976cf18b5ca9ecde6d7cf4))
+* **profile-mobile:** 🐛 contain themed drawer content within frame ([31b25a5](https://github.com/115jon/ralph-meet/commit/31b25a5bd229b4741a8d847ee10f081246191245))
+* **profile:** 🐛 validate identity edits with shared Zod schemas ([a4cec09](https://github.com/115jon/ralph-meet/commit/a4cec09416410f8e92f9b5c266772684cfbb63cd))
+* **rate-limiter:** 🔒 persist DO rate-limit buckets to SQLite storage ([58e1de4](https://github.com/115jon/ralph-meet/commit/58e1de43c77a02b941341e78330b72528ce8e828))
+* **realtime:** 🐛 harden websocket resume continuity ([58afc2a](https://github.com/115jon/ralph-meet/commit/58afc2a3c187423ce2dd5c9b7583db2df83ebcaa))
+* **realtime:** 🐛 resume chat gateway events safely ([3ab4f5b](https://github.com/115jon/ralph-meet/commit/3ab4f5bd2e8c66eddbcb2bcdd84c99a276c4504a))
+* **routes:** 🐛 ignore soundboard upload test as route ([bf2be65](https://github.com/115jon/ralph-meet/commit/bf2be65b69d3900a0656dc6526538e8bd7acc9ed))
+* **server:** 🔒 hide internal error details ([5b14a9d](https://github.com/115jon/ralph-meet/commit/5b14a9d84e8335131291ad5485a20b051c0e300d))
+* **shop:** 🐛 use Yapper as the sole catalog source ([d7a3ff0](https://github.com/115jon/ralph-meet/commit/d7a3ff0e1ff7b2b14b9c40ab7dfdfa020ea8358f))
+* **soundboard:** 🐛 broadcast and bound automatic playback ([36f47b6](https://github.com/115jon/ralph-meet/commit/36f47b6006157e89bc5bd04cdf46a2305db31d16))
+* **tooling:** 🐛 complete lint baseline ([6c793d8](https://github.com/115jon/ralph-meet/commit/6c793d8bb10b59b5df5b7df8be5dad106dce7a6f))
+* **types:** 🐛 restore Cloudflare payload type safety ([1e5adbe](https://github.com/115jon/ralph-meet/commit/1e5adbe0d26f4098ddaa92c27b19799e0da719c3))
+* **ui:** 🐛 prevent modal focus from resetting scroll ([6979ead](https://github.com/115jon/ralph-meet/commit/6979ead30fabcaa6f5afe3b74c03eeecd64a41c0))
+* **ui:** 🐛 prevent splash logo hydration mismatch ([d850b52](https://github.com/115jon/ralph-meet/commit/d850b527a809d4ef2e43b73c38b3370aaf320f1e))
+* **ui:** 🐛 prevent splash logo theme flicker ([c8209ad](https://github.com/115jon/ralph-meet/commit/c8209ad78eae43794da1770962202cab2eeb4723))
+* **voice:** 🐛 analyze the raw microphone for speaking state ([3aa49a6](https://github.com/115jon/ralph-meet/commit/3aa49a693e90625e9bf52edd1aecb322d09e9ad7))
+* **voice:** 🐛 dispose SFU and audio lifecycle resources ([7f255f4](https://github.com/115jon/ralph-meet/commit/7f255f4045ca325bc77153309f0b35bbff416e5e))
+* **voice:** 🐛 harden asynchronous media lifecycle ([1e8746e](https://github.com/115jon/ralph-meet/commit/1e8746e317c7f0199b88fa6817eef63348f4ec62))
+* **voice:** 🐛 ignore expected listen-together play cancellation ([4694282](https://github.com/115jon/ralph-meet/commit/46942822111085703714e71e1f18411d60db3974))
+* **voice:** 🐛 keep camera publishing live in background ([64cf6de](https://github.com/115jon/ralph-meet/commit/64cf6de94ec7316fc5ae84146ba761e3fffed270))
+* **voice:** 🐛 log SFU teardown reasons ([1b7b6d8](https://github.com/115jon/ralph-meet/commit/1b7b6d8e5376e666fa14f24a30be0d686cb3a714))
+* **voice:** 🐛 preserve call when navigating to text ([b0c46df](https://github.com/115jon/ralph-meet/commit/b0c46dfb5a8438b8db99b2c7732bdca238f6fd5d))
+* **voice:** 🐛 restore Cloudflare pull negotiation ([7db6524](https://github.com/115jon/ralph-meet/commit/7db652433d52ed12ee323fcb688826fc17c59ea1))
+* **voice:** 🐛 restore spatial audio join guard ([fe1e7e9](https://github.com/115jon/ralph-meet/commit/fe1e7e90731bf94f572a92feeeb887b4eeb43227))
+* **voice:** 🐛 scope VAD to the outbound microphone ([64a5bb7](https://github.com/115jon/ralph-meet/commit/64a5bb7a01c97341bc7acc45739c7fbdff75e2d0))
+* **voice:** 🐛 stabilize playback and focused stage ([376d060](https://github.com/115jon/ralph-meet/commit/376d060388f9e9612536dac249e428edfa3d3d3d))
+* **wordle:** 🐛 enforce valid guesses and secure activity sync ([5956227](https://github.com/115jon/ralph-meet/commit/595622753d5a2e2fb797946a6382de776612a772))
+
+
+### Performance Improvements
+
+* **chat:** ⚡️ speed up channel history loading ([8c459e1](https://github.com/115jon/ralph-meet/commit/8c459e10f4ce61bc024a401e08e6a5063a432ac1))
+* **listen-together:** ⚡️ batch Spotify playlist resolution ([dac8d66](https://github.com/115jon/ralph-meet/commit/dac8d66e73ceb743740c7202a7768d0cbc1eb24e))
+* **meeting-room:** ⚡️ batch channel access checks ([a07b8a0](https://github.com/115jon/ralph-meet/commit/a07b8a016e7dc2c8267f7be881c055be8a0fa20e))
+* **meeting-room:** ⚡️ batch server-membership check in broadcastToServerMembers ([2d83a6c](https://github.com/115jon/ralph-meet/commit/2d83a6cbceb0555e624e61a067c670e3c29284d8))
+* **proxy-media:** ⚡️ stream synthetic range slices instead of buffering full body ([6fb7cd0](https://github.com/115jon/ralph-meet/commit/6fb7cd09fce7010cb16184c56f1ed798ef141411))
+* **voice:** ⚡️ isolate listen-together playback renders ([7d7ab37](https://github.com/115jon/ralph-meet/commit/7d7ab37c043b9892c563f3b9f72ef1e0cf19857b))
+
+
+### Code Refactoring
+
+* ♻️ consolidate realtime under root Worker ([#54](https://github.com/115jon/ralph-meet/issues/54)) ([39ef729](https://github.com/115jon/ralph-meet/commit/39ef729ce40223a6bfc5f7e61bfb8f7cabf7ef9f))
+
 ## [1.20.0](https://github.com/115jon/ralph-meet/compare/v1.19.1...v1.20.0) (2026-07-10)
 
 ### Features
