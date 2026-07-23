@@ -103,6 +103,132 @@ pub async fn set_title_bar_dark_mode(app: tauri::AppHandle<TauriRuntime>, dark: 
     }
 }
 
+/// Start a native resize drag from one of the invisible edge handles in the
+/// custom title bar. The CEF runtime does not implement Tauri's generic
+/// `start_resize_dragging` dispatcher, so Windows must receive the native
+/// non-client resize message directly.
+#[tauri::command]
+pub fn start_window_resize(
+    window: tauri::WebviewWindow<TauriRuntime>,
+    edge: String,
+) -> Result<(), String> {
+    if window.label() != "main" {
+        return Err("window resize is only available for the main window".to_string());
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        use windows::Win32::Foundation::{LPARAM, POINT, WPARAM};
+        use windows::Win32::UI::Input::KeyboardAndMouse::ReleaseCapture;
+        use windows::Win32::UI::WindowsAndMessaging::{
+            GetCursorPos, SendMessageW, HTBOTTOM, HTBOTTOMLEFT, HTBOTTOMRIGHT, HTLEFT, HTRIGHT,
+            HTTOP, HTTOPLEFT, HTTOPRIGHT, WM_NCLBUTTONDOWN,
+        };
+
+        let hit_test = match edge.as_str() {
+            "top" => HTTOP,
+            "right" => HTRIGHT,
+            "bottom" => HTBOTTOM,
+            "left" => HTLEFT,
+            "top-left" => HTTOPLEFT,
+            "top-right" => HTTOPRIGHT,
+            "bottom-left" => HTBOTTOMLEFT,
+            "bottom-right" => HTBOTTOMRIGHT,
+            _ => return Err(format!("unsupported resize edge: {edge}")),
+        };
+
+        if window.is_maximized().map_err(|error| error.to_string())? {
+            return Ok(());
+        }
+
+        let raw_hwnd = window.hwnd().map_err(|error| error.to_string())?;
+        let hwnd = windows::Win32::Foundation::HWND(raw_hwnd.0 as _);
+        let mut cursor = POINT::default();
+        unsafe {
+            GetCursorPos(&mut cursor).map_err(|error| error.to_string())?;
+            let packed_position =
+                ((cursor.x as u32 & 0xffff) | ((cursor.y as u32 & 0xffff) << 16)) as i32 as isize;
+            let _ = ReleaseCapture();
+            SendMessageW(
+                hwnd,
+                WM_NCLBUTTONDOWN,
+                Some(WPARAM(hit_test as usize)),
+                Some(LPARAM(packed_position)),
+            );
+        }
+
+        return Ok(());
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = (window, edge);
+        Ok(())
+    }
+}
+
+/// Start a native drag without using the CEF fork's pointer-valued
+/// `WM_NCLBUTTONDOWN` payload.
+#[tauri::command]
+pub fn start_window_drag(window: tauri::WebviewWindow<TauriRuntime>) -> Result<(), String> {
+    if window.label() != "main" {
+        return Err("window dragging is only available for the main window".to_string());
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        use windows::Win32::Foundation::{LPARAM, POINT, WPARAM};
+        use windows::Win32::UI::Input::KeyboardAndMouse::ReleaseCapture;
+        use windows::Win32::UI::WindowsAndMessaging::{
+            GetCursorPos, SendMessageW, HTCAPTION, WM_NCLBUTTONDOWN,
+        };
+
+        let raw_hwnd = window.hwnd().map_err(|error| error.to_string())?;
+        let hwnd = windows::Win32::Foundation::HWND(raw_hwnd.0 as _);
+        let mut cursor = POINT::default();
+        unsafe {
+            GetCursorPos(&mut cursor).map_err(|error| error.to_string())?;
+            let packed_position =
+                ((cursor.x as u32 & 0xffff) | ((cursor.y as u32 & 0xffff) << 16)) as i32 as isize;
+            let _ = ReleaseCapture();
+            SendMessageW(
+                hwnd,
+                WM_NCLBUTTONDOWN,
+                Some(WPARAM(HTCAPTION as usize)),
+                Some(LPARAM(packed_position)),
+            );
+        }
+        return Ok(());
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    window.start_dragging().map_err(|error| error.to_string())
+}
+
+/// Minimize the main window without routing through CEF's minimize dispatcher.
+/// The CEF fork documents that dispatcher as unsafe for this application.
+#[tauri::command]
+pub fn minimize_main_window(window: tauri::WebviewWindow<TauriRuntime>) -> Result<(), String> {
+    if window.label() != "main" {
+        return Err("minimize is only available for the main window".to_string());
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        use windows::Win32::UI::WindowsAndMessaging::{ShowWindow, SW_MINIMIZE};
+
+        let raw_hwnd = window.hwnd().map_err(|error| error.to_string())?;
+        let hwnd = windows::Win32::Foundation::HWND(raw_hwnd.0 as _);
+        unsafe {
+            let _ = ShowWindow(hwnd, SW_MINIMIZE);
+        }
+        return Ok(());
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    window.minimize().map_err(|error| error.to_string())
+}
+
 /// Flash or clear the main window's taskbar button on Windows.
 ///
 /// `active = true` uses `FLASHW_TRAY | FLASHW_TIMERNOFG`, which keeps the

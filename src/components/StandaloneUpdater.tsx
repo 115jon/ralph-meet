@@ -1,5 +1,6 @@
 import { ThemeAwareSplashLogo } from "@/components/ThemeAwareSplashLogo";
 import { restartDesktopApp } from "@/lib/desktop-restart";
+import { useDesktopSettingsStore } from "@/stores/useDesktopSettingsStore";
 import { useEffect, useState } from "react";
 
 type StandaloneUpdaterStatus =
@@ -102,6 +103,7 @@ export function StandaloneUpdater() {
         await import("@tauri-apps/api/window");
 
       try {
+        await useDesktopSettingsStore.getState().syncToBackend();
         const mainWindow = await Window.getByLabel("main");
         if (mainWindow) {
           await mainWindow.show();

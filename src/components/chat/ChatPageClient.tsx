@@ -27,7 +27,6 @@ import {
   syncDesktopNotificationState,
 } from "@/lib/desktop-native-sync";
 import { hasPermission, PERMISSIONS } from "@/lib/permissions";
-import { getAuthAssetUrl } from "@/lib/platform";
 import { dispatchOpenProfileEditorEvent } from "@/lib/profile-editor-events";
 import {
   resolveStreamPreviewAutomation,
@@ -41,7 +40,6 @@ import { useChatActions, useChatStore } from "@/stores/chat-store";
 import { useCallStore } from "@/stores/useCallStore";
 import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
 import { getPersistentVoiceViewIdentity } from "./voice-session-view";
-import { ChevronLeft, ChevronRight } from "lucide-react";
 import {
   lazy,
   Suspense,
@@ -1088,47 +1086,6 @@ export default function ChatPage() {
       className="flex h-full flex-col overflow-hidden bg-rm-bg-primary"
       data-app-layout="true"
     >
-      {/* OS-level Title Bar (Mock Discord Topbar) */}
-      <div
-        className="hidden md:flex w-full shrink-0 flex-row items-center justify-between bg-rm-bg-secondary px-2 border-b border-rm-border/30 drag-region"
-        style={{
-          height: "calc(24px + var(--safe-area-top, 0px))",
-          paddingTop: "var(--safe-area-top, 0px)",
-        }}
-      >
-        <div className="flex items-center gap-2 no-drag ml-1">
-          <button
-            onClick={() => window.history.back()}
-            className="hidden md:flex h-4 w-4 items-center justify-center rounded-sm text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text transition-colors"
-          >
-            <ChevronLeft className="h-3 w-3" />
-          </button>
-          <button
-            onClick={() => window.history.forward()}
-            className="hidden md:flex h-4 w-4 items-center justify-center rounded-sm text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text transition-colors"
-          >
-            <ChevronRight className="h-3 w-3" />
-          </button>
-        </div>
-        <div className="flex text-[12px] font-bold tracking-wider text-rm-text-muted select-none items-center gap-1.5 justify-center flex-1">
-          {activeServer && (
-            <div className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-rm-bg-elevated text-[9px] font-bold text-rm-text overflow-hidden">
-              {activeServer.icon_url ? (
-                <img
-                  src={getAuthAssetUrl(activeServer.icon_url)}
-                  alt=""
-                  className="h-full w-full object-cover"
-                />
-              ) : (
-                activeServer.name.charAt(0).toUpperCase()
-              )}
-            </div>
-          )}
-          {activeServer?.name ?? "Ralph Meet"}
-        </div>
-        <div className="flex w-12" /> {/* Spacer for symmetry */}
-      </div>
-
       <div
         className="flex flex-1 overflow-hidden relative"
         style={channelSidebarStyle}

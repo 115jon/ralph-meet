@@ -37,7 +37,7 @@ namespace Installer
 
         private static readonly string[] ShortcutFileNames = { "RalphMeet.lnk", "Ralph Meet.lnk" };
 
-        public static async Task RunInstallationAsync()
+        public static async Task RunInstallationAsync(bool launchApplication = true)
         {
             await Task.Run(() =>
             {
@@ -81,7 +81,10 @@ namespace Installer
                 RegisterDeepLinkProtocol(uninstallerPath);
                 CreateShortcuts(layout.RootPath, uninstallerPath, activation.ActiveExecutablePath);
 
-                LaunchApplication(uninstallerPath, LauncherArguments, layout.RootPath);
+                if (launchApplication)
+                {
+                    LaunchApplication(uninstallerPath, LauncherArguments, layout.RootPath);
+                }
                 InstallerLogger.Info("Installation finished successfully.");
             }).ConfigureAwait(false);
         }

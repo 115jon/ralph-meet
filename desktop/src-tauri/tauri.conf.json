@@ -21,7 +21,7 @@
         "devtools": true,
         "resizable": true,
         "fullscreen": false,
-        "decorations": true,
+        "decorations": false,
         "center": true,
         "visible": false,
         "useHttpsScheme": false,
@@ -47,9 +47,7 @@
     "active": true,
     "targets": "all",
     "createUpdaterArtifacts": true,
-    "resources": [
-      "resources/obs-capture/*"
-    ],
+    "resources": ["resources/obs-capture/*"],
     "publisher": "115jon",
     "category": "SocialNetworking",
     "shortDescription": "Ralph Meet Desktop Application",
@@ -76,9 +74,7 @@
   "plugins": {
     "deep-link": {
       "desktop": {
-        "schemes": [
-          "ralphmeet"
-        ]
+        "schemes": ["ralphmeet"]
       }
     },
     "updater": {
@@ -88,9 +84,7 @@
       ],
       "windows": {
         "installMode": "passive",
-        "installerArgs": [
-          "/S"
-        ]
+        "installerArgs": ["/S"]
       }
     }
   }
