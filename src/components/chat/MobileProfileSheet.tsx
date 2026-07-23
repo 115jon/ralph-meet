@@ -9,7 +9,6 @@ import { apiGet } from "@/lib/api-client";
 import { hasPermission, PERMISSIONS } from "@/lib/permissions";
 import { getAuthAssetUrl } from "@/lib/platform";
 import { resolveProfileReferenceDate } from "@/lib/profile-dates";
-import { dispatchOpenProfileEditorEvent } from "@/lib/profile-editor-events";
 import { resolveProfileTheme } from "@/lib/profile-customization";
 import type { Role, User } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -34,6 +33,7 @@ interface MobileProfileSheetProps {
   user: User;
   roles?: Role[];
   onClose: () => void;
+  onOpenProfileEditor: () => void;
   onBan?: (userId: string, username: string) => void;
   onKick?: (userId: string, username: string) => void;
   isClosing?: boolean;
@@ -225,21 +225,18 @@ function ProfileHeader({
 function ProfileActions({
   isMe,
   handleMessage,
-  onClose,
+  onOpenProfileEditor,
 }: {
   isMe: boolean;
   handleMessage: () => void;
-  onClose: () => void;
+  onOpenProfileEditor: () => void;
 }) {
   return (
     <div className="px-5 mt-5">
       {isMe ? (
         <div className="space-y-2.5">
           <ButtonBase
-            onClick={() => {
-              dispatchOpenProfileEditorEvent();
-              onClose();
-            }}
+            onClick={onOpenProfileEditor}
             className="w-full py-3 rounded-2xl bg-[var(--rm-profile-custom-button-bg)] hover:brightness-110 text-[color:var(--rm-profile-custom-button-text)] font-bold text-[15px] transition-[filter] flex items-center justify-center gap-2"
           >
             <Settings size={18} />
@@ -441,6 +438,7 @@ export default function MobileProfileSheet({
   user,
   roles,
   onClose,
+  onOpenProfileEditor,
   onBan,
   onKick,
   isClosing,
@@ -551,7 +549,7 @@ export default function MobileProfileSheet({
           <ProfileActions
             isMe={isMe}
             handleMessage={handleMessage}
-            onClose={onClose}
+            onOpenProfileEditor={onOpenProfileEditor}
           />
 
           <ProfileCards

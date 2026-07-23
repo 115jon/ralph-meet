@@ -824,7 +824,7 @@ export default function UserProfilePopover({
   };
 
   const handleOpenProfileEditor = () => {
-    dispatchOpenProfileEditorEvent();
+    dispatchOpenProfileEditorEvent(anchorEl);
     onClose();
   };
 

@@ -10,7 +10,10 @@ import {
   getCachedCollectiblesCatalog,
   subscribeCollectiblesCatalog,
 } from "@/lib/collectibles-catalog-client";
-import { OPEN_PROFILE_EDITOR_EVENT } from "@/lib/profile-editor-events";
+import {
+  OPEN_PROFILE_EDITOR_EVENT,
+  type OpenProfileEditorEventDetail,
+} from "@/lib/profile-editor-events";
 import { useUserResolution } from "@/hooks/useUserResolution";
 import { getAuthAssetUrl } from "@/lib/platform";
 import type {
@@ -64,6 +67,9 @@ const AudioDeviceMenu = lazy(() =>
   })),
 );
 const SettingsModal = lazy(() => import("@/components/chat/SettingsModal"));
+const ProfileEditorModal = lazy(
+  () => import("@/components/chat/ProfileEditorModal"),
+);
 const UserAccountPopover = lazy(
   () => import("@/components/chat/UserAccountPopover"),
 );
@@ -273,8 +279,8 @@ export default function UserPanel({
   const [settingsInitialTab, setSettingsInitialTab] = useState<
     "account" | "voice" | "shares" | "appearance"
   >("account");
-  const [settingsStartInProfileEditor, setSettingsStartInProfileEditor] =
-    useState(false);
+  const [showProfileEditor, setShowProfileEditor] = useState(false);
+  const profileEditorTriggerRef = useRef<HTMLElement | null>(null);
   const [showMenu, setShowMenu] = useState(false);
   const [userAvatarEl, setUserAvatarEl] = useState<HTMLButtonElement | null>(
     null,
@@ -321,18 +327,24 @@ export default function UserPanel({
 
   const openSettings = useCallback(
     (tab: "account" | "voice" | "shares" | "appearance" = "account") => {
-      setSettingsStartInProfileEditor(false);
       setSettingsInitialTab(tab);
       setShowSettings(true);
     },
     [],
   );
 
-  const openProfileEditor = useCallback(() => {
-    setSettingsInitialTab("account");
-    setSettingsStartInProfileEditor(true);
-    setShowSettings(true);
+  const openProfileEditor = useCallback((trigger?: HTMLElement) => {
+    profileEditorTriggerRef.current = trigger ?? null;
+    setShowProfileEditor(true);
   }, []);
+
+  useEffect(() => {
+    if (showProfileEditor) return;
+
+    const trigger = profileEditorTriggerRef.current;
+    profileEditorTriggerRef.current = null;
+    if (trigger?.isConnected) trigger.focus();
+  }, [showProfileEditor]);
 
   useEffect(() => {
     const handleOpenShares = () => {
@@ -348,8 +360,10 @@ export default function UserPanel({
   }, [openSettings]);
 
   useEffect(() => {
-    const handleOpenProfileEditor = () => {
-      openProfileEditor();
+    const handleOpenProfileEditor = (event: Event) => {
+      const detail = (event as CustomEvent<OpenProfileEditorEventDetail>)
+        .detail;
+      openProfileEditor(detail?.trigger ?? undefined);
     };
     window.addEventListener(OPEN_PROFILE_EDITOR_EVENT, handleOpenProfileEditor);
     return () => {
@@ -849,14 +863,17 @@ export default function UserPanel({
           <Suspense fallback={null}>
             <SettingsModal
               initialTab={settingsInitialTab}
-              initialProfileEditorOpen={settingsStartInProfileEditor}
               onClose={() => {
                 setShowSettings(false);
-                setSettingsStartInProfileEditor(false);
                 setSettingsInitialTab("account"); // reset for next open
               }}
               isClosing={!showSettings}
             />
+          </Suspense>
+        )}
+        {showProfileEditor && (
+          <Suspense fallback={null}>
+            <ProfileEditorModal onClose={() => setShowProfileEditor(false)} />
           </Suspense>
         )}
       </div>

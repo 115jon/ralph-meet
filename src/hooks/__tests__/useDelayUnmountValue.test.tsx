@@ -4,7 +4,7 @@ import { renderHook, waitFor } from "@testing-library/react";
 import { act } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { useDelayedUnmountValue } from "../useDelayUnmount";
+import { useDelayUnmount, useDelayedUnmountValue } from "../useDelayUnmount";
 
 describe("useDelayedUnmountValue", () => {
   afterEach(() => {
@@ -49,6 +49,30 @@ describe("useDelayedUnmountValue", () => {
 
     expect(result.current.shouldRender).toBe(false);
     expect(result.current.value).toBeNull();
+  });
+
+  it("keeps a component mounted during the exit delay after opening it", () => {
+    vi.useFakeTimers();
+
+    const { result, rerender } = renderHook(
+      ({ isMounted }: { isMounted: boolean }) =>
+        useDelayUnmount(isMounted, 200),
+      { initialProps: { isMounted: false } },
+    );
+
+    expect(result.current).toBe(false);
+
+    rerender({ isMounted: true });
+    expect(result.current).toBe(true);
+
+    rerender({ isMounted: false });
+    expect(result.current).toBe(true);
+
+    act(() => {
+      vi.advanceTimersByTime(200);
+    });
+
+    expect(result.current).toBe(false);
   });
 
   it("tracks live values while mounted and keeps the latest one during close", async () => {

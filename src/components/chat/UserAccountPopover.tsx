@@ -32,7 +32,7 @@ interface Props {
   user: User;
   onClose: () => void;
   updateStatus: (status: UserStatus, custom_status?: string | null) => void;
-  onOpenProfileEditor: () => void;
+  onOpenProfileEditor: (trigger?: HTMLElement) => void;
   anchorEl: HTMLElement;
 }
 
@@ -412,7 +412,7 @@ export default function UserAccountPopover({
                         label="Edit Profile"
                         onClick={() => {
                           onClose();
-                          onOpenProfileEditor();
+                          onOpenProfileEditor(anchorEl);
                         }}
                       />
                       <ActionRow

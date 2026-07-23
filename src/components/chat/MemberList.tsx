@@ -15,6 +15,7 @@ import { getFileIcon } from "@/lib/file-icons";
 import { isVideo } from "@/lib/media";
 import { PERMISSIONS } from "@/lib/permissions";
 import { getAuthAssetUrl, getDownloadUrl, getMediaUrl } from "@/lib/platform";
+import { dispatchOpenProfileEditorEvent } from "@/lib/profile-editor-events";
 import { buildProxyMediaPath } from "@/lib/proxy-media-url";
 import type { Attachment, Message, Role, User } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -255,6 +256,27 @@ export default function MemberList({
     tabLoading: false,
     tabError: null as string | null,
   });
+  const mobileProfileCloseTimeoutRef = useRef<number | null>(null);
+  const mobileProfileAfterCloseRef = useRef<(() => void) | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (mobileProfileCloseTimeoutRef.current !== null) {
+        window.clearTimeout(mobileProfileCloseTimeoutRef.current);
+      }
+      mobileProfileAfterCloseRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (state.mobileProfileUser !== null || state.mobileProfileUserClosing) {
+      return;
+    }
+
+    const afterClose = mobileProfileAfterCloseRef.current;
+    mobileProfileAfterCloseRef.current = null;
+    afterClose?.();
+  }, [state.mobileProfileUser, state.mobileProfileUserClosing]);
 
   // Reset tab when desktop details mode is closed
   useEffect(() => {
@@ -395,6 +417,21 @@ export default function MemberList({
   // Stable close callback that clears both popoverUser AND popoverAnchor
   const closePopover = useCallback(() => {
     setState((prev) => ({ ...prev, popoverUser: null, popoverAnchor: null }));
+  }, []);
+
+  const closeMobileProfile = useCallback((afterClose?: () => void) => {
+    if (afterClose) mobileProfileAfterCloseRef.current = afterClose;
+    if (mobileProfileCloseTimeoutRef.current !== null) return;
+
+    setState((prev) => ({ ...prev, mobileProfileUserClosing: true }));
+    mobileProfileCloseTimeoutRef.current = window.setTimeout(() => {
+      mobileProfileCloseTimeoutRef.current = null;
+      setState((prev) => ({
+        ...prev,
+        mobileProfileUser: null,
+        mobileProfileUserClosing: false,
+      }));
+    }, 300);
   }, []);
 
   // Shared member click/context-menu handlers
@@ -695,16 +732,10 @@ export default function MemberList({
             user={state.mobileProfileUser.user}
             roles={state.mobileProfileUser.roles}
             isClosing={state.mobileProfileUserClosing}
-            onClose={() => {
-              setState((prev) => ({ ...prev, mobileProfileUserClosing: true }));
-              setTimeout(() => {
-                setState((prev) => ({
-                  ...prev,
-                  mobileProfileUser: null,
-                  mobileProfileUserClosing: false,
-                }));
-              }, 300);
-            }}
+            onClose={closeMobileProfile}
+            onOpenProfileEditor={() =>
+              closeMobileProfile(() => dispatchOpenProfileEditorEvent())
+            }
             onBan={onBan}
             onKick={handleKick}
           />

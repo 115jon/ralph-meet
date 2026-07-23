@@ -130,6 +130,31 @@ describe("FloatingSoundboardManager", () => {
     ).toHaveAttribute("aria-expanded", "false");
   });
 
+  it("does not require Pointer Capture APIs", () => {
+    render(
+      <FloatingSoundboardManager
+        serverId="server-1"
+        localUserId="user-1"
+        sfu={null}
+      />,
+    );
+
+    const manager = screen.getByTestId("floating-soundboard-manager");
+    const handle = screen.getByRole("button", {
+      name: "Collapse soundboard manager",
+    });
+
+    expect(() => {
+      fireEvent.pointerDown(handle, {
+        button: 0,
+        pointerId: 1,
+        clientX: 10,
+        clientY: 10,
+      });
+      fireEvent.pointerUp(manager, { pointerId: 1 });
+    }).not.toThrow();
+  });
+
   it("keeps playback tooltips on the dark floating surface", async () => {
     const user = userEvent.setup();
     render(

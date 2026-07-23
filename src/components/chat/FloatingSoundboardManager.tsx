@@ -113,8 +113,8 @@ export function FloatingSoundboardManager({
 
     dragState.moved = true;
     suppressHandleClickRef.current = true;
-    if (!event.currentTarget.hasPointerCapture(event.pointerId)) {
-      event.currentTarget.setPointerCapture(event.pointerId);
+    if (!event.currentTarget.hasPointerCapture?.(event.pointerId)) {
+      event.currentTarget.setPointerCapture?.(event.pointerId);
     }
 
     const rect = containerRef.current?.getBoundingClientRect();
@@ -144,8 +144,8 @@ export function FloatingSoundboardManager({
       }, 0);
     }
     dragStateRef.current = null;
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-      event.currentTarget.releasePointerCapture(event.pointerId);
+    if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
+      event.currentTarget.releasePointerCapture?.(event.pointerId);
     }
   };
 
