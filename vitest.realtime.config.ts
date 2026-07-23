@@ -14,10 +14,6 @@ export default defineConfig({
   test: {
     include: ["realtime/__tests__/**/*.worker.test.ts"],
     setupFiles: ["./realtime/test-setup.ts"],
-    // Worker tests share the Miniflare Durable Object runtime; isolate files
-    // to avoid timing contention and cross-file state interference.
-    fileParallelism: false,
-    maxWorkers: 1,
   },
   resolve: {
     alias: {
