@@ -41,6 +41,30 @@ describe("CustomSelect", () => {
     expect(trigger).toHaveFocus();
   });
 
+  it("prevents scrolling when restoring focus to the trigger", () => {
+    const focus = vi.spyOn(HTMLElement.prototype, "focus");
+    try {
+      render(
+        <CustomSelect
+          value="one"
+          onChange={() => {}}
+          ariaLabel="Test select"
+          options={[{ value: "one", label: "One" }]}
+        />,
+      );
+
+      const trigger = screen.getByRole("button", { name: "Test select" });
+      fireEvent.keyDown(trigger, { key: "ArrowDown" });
+      fireEvent.keyDown(screen.getByRole("option", { name: "One" }), {
+        key: "Escape",
+      });
+
+      expect(focus.mock.calls.at(-1)).toEqual([{ preventScroll: true }]);
+    } finally {
+      focus.mockRestore();
+    }
+  });
+
   it("closes when focus leaves the popup", async () => {
     render(
       <>
@@ -100,7 +124,11 @@ describe("CustomSelect", () => {
         <button type="button" hidden>
           Hidden
         </button>
-        <div ref={(element) => element?.setAttribute("inert", "")}>
+        <div
+          ref={(element) => {
+            element?.setAttribute("inert", "");
+          }}
+        >
           <button type="button">Inert</button>
         </div>
         <div aria-hidden="true">

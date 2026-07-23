@@ -47,7 +47,7 @@ export type CollectibleCatalogItem = {
   summary: string;
   label?: string;
   kind: CollectibleKind;
-  source: "yapper" | "infinitay";
+  source: "yapper";
   categoryId: string;
   categoryName: string;
   productIds?: string[];
@@ -98,7 +98,7 @@ export type CollectibleCatalogCategory = {
 
 export type CollectiblesCatalog = {
   version: 1;
-  source: "yapper" | "infinitay" | "cache";
+  source: "yapper";
   syncedAt: string;
   stale: boolean;
   categories: CollectibleCatalogCategory[];
@@ -125,8 +125,6 @@ const CACHE_SOURCE = "discord-collectibles";
 const MAX_CACHE_AGE_MS = 1000 * 60 * 60 * 6;
 const DISCORD_CDN = "https://cdn.discordapp.com";
 const YAPPER_CATALOG_URL = "https://api.yapper.dev/v4/categories/catalog";
-const INFINITAY_RAW_URL =
-  "https://raw.githubusercontent.com/Infinitay/discord-collectibles-archive/main/discord-data/raw/collectibles-categories.json";
 let memoryCatalogEntry: MemoryCatalogEntry | null = null;
 let inFlightCatalogSync: Promise<CollectiblesCatalog> | null = null;
 
@@ -491,95 +489,6 @@ function normalizeYapperCatalog(
   };
 }
 
-function normalizeInfinitayCatalog(
-  raw: unknown,
-  syncedAt = new Date().toISOString(),
-): CollectiblesCatalog {
-  const rawCategories = asArray(raw);
-  const itemMap = new Map<string, CollectibleCatalogItem>();
-  const categories: CollectibleCatalogCategory[] = [];
-
-  for (const rawCategory of rawCategories) {
-    const category = asRecord(rawCategory);
-    const categoryId =
-      asString(category.sku_id) ??
-      asString(category.store_listing_id) ??
-      asString(category.name) ??
-      "uncategorized";
-    const categoryName = asString(category.name) ?? "Uncategorized";
-    const itemIds = new Set<string>();
-
-    for (const rawProduct of asArray(category.products)) {
-      const product = asRecord(rawProduct);
-      for (const rawItem of asArray(product.items)) {
-        const item = asRecord(rawItem);
-        const kind = kindFromItemType(item.type);
-        const skuId = asString(item.sku_id) ?? asString(product.sku_id);
-        if (!kind || !skuId) continue;
-
-        const asset = asString(item.asset);
-        const normalized: CollectibleCatalogItem = {
-          id: makeItemId(kind, skuId),
-          skuId,
-          name: asString(product.name) ?? skuId,
-          summary: asString(product.summary) ?? asString(item.label) ?? "",
-          label: asString(item.label),
-          kind,
-          source: "infinitay",
-          categoryId,
-          categoryName,
-          productType: typeof product.type === "number" ? product.type : -1,
-          itemType: typeof item.type === "number" ? item.type : -1,
-          premiumType:
-            typeof product.premium_type === "number"
-              ? product.premium_type
-              : undefined,
-          price: firstPrice(product.prices, "0"),
-          nitroPrice: firstPrice(product.prices, "4"),
-          asset,
-          staticUrl:
-            kind === "avatar_decoration" && asset
-              ? avatarDecorationUrl(asset, 240)
-              : undefined,
-          animatedUrl:
-            kind === "avatar_decoration" && asset
-              ? avatarDecorationUrl(asset, 4096)
-              : undefined,
-          previewUrl:
-            kind === "avatar_decoration" && asset
-              ? avatarDecorationUrl(asset, 240)
-              : undefined,
-        };
-        itemMap.set(normalized.id, normalized);
-        itemIds.add(normalized.id);
-      }
-    }
-
-    categories.push({
-      id: categoryId,
-      name: categoryName,
-      summary: asString(category.summary) ?? "",
-      bannerUrl: asString(category.banner),
-      updatedAt: asString(category.updated_at),
-      itemIds: [...itemIds],
-    });
-  }
-
-  const items = [...itemMap.values()];
-  const counts = defaultCounts();
-  for (const item of items) counts[item.kind] += 1;
-
-  return {
-    version: 1,
-    source: "infinitay",
-    syncedAt,
-    stale: false,
-    categories: categories.filter((category) => category.itemIds.length > 0),
-    items,
-    counts,
-  };
-}
-
 async function ensureCatalogCacheTable(db: D1Database) {
   await db
     .prepare(
@@ -640,9 +549,9 @@ async function writeCatalogCache(
 function parseCachedCatalog(row: CatalogCacheRow): CollectiblesCatalog | null {
   try {
     const parsed = JSON.parse(row.payload) as CollectiblesCatalog;
+    if (parsed.version !== 1 || parsed.source !== "yapper") return null;
     return {
       ...parsed,
-      source: parsed.source ?? "cache",
       stale: Date.now() - Date.parse(row.synced_at) > MAX_CACHE_AGE_MS,
     };
   } catch {
@@ -724,17 +633,30 @@ async function fetchYapperCatalog(cachedEtag?: string | null): Promise<{
   };
 }
 
-async function fetchInfinitayCatalog(): Promise<CollectiblesCatalog> {
-  const response = await fetch(INFINITAY_RAW_URL, {
-    headers: {
-      Accept: "application/json",
-      "User-Agent": YAPPER_HEADERS["User-Agent"],
-    },
-  });
-  if (!response.ok) {
-    throw new Error(`Infinitay catalog fetch failed with ${response.status}`);
+async function syncCollectiblesCatalogOnce(
+  db: D1Database,
+  cachedRow: CatalogCacheRow | null,
+  cachedCatalog: CollectiblesCatalog | null,
+): Promise<CollectiblesCatalog> {
+  const knownCatalog = cachedCatalog ?? memoryCatalogEntry?.catalog ?? null;
+  const { catalog, etag, notModified } = await fetchYapperCatalog(
+    knownCatalog ? (cachedRow?.etag ?? memoryCatalogEntry?.etag ?? null) : null,
+  );
+  if (notModified && knownCatalog) {
+    const syncedAt = new Date().toISOString();
+    const refreshedCatalog = {
+      ...knownCatalog,
+      syncedAt,
+      stale: false,
+    };
+    await touchCatalogCache(db, etag, syncedAt);
+    return primeMemoryCatalog(refreshedCatalog, etag, syncedAt);
   }
-  return normalizeInfinitayCatalog(await response.json());
+  if (!catalog) {
+    throw new Error("Yapper catalog returned no data");
+  }
+  await writeCatalogCache(db, catalog, etag);
+  return primeMemoryCatalog(catalog, etag, catalog.syncedAt);
 }
 
 export async function syncCollectiblesCatalog(
@@ -742,38 +664,25 @@ export async function syncCollectiblesCatalog(
   cachedRow?: CatalogCacheRow | null,
   cachedCatalog?: CollectiblesCatalog | null,
 ): Promise<CollectiblesCatalog> {
-  try {
-    const { catalog, etag, notModified } = await fetchYapperCatalog(
-      cachedRow?.etag ?? memoryCatalogEntry?.etag ?? null,
-    );
-    if (notModified && cachedCatalog) {
-      const syncedAt = new Date().toISOString();
-      const refreshedCatalog = {
-        ...cachedCatalog,
-        syncedAt,
-        stale: false,
-      };
-      await touchCatalogCache(db, etag, syncedAt);
-      return primeMemoryCatalog(refreshedCatalog, etag, syncedAt);
-    }
-    if (!catalog) {
-      throw new Error("Yapper catalog returned no data");
-    }
-    await writeCatalogCache(db, catalog, etag);
-    return primeMemoryCatalog(catalog, etag, catalog.syncedAt);
-  } catch {
-    const fallback = await fetchInfinitayCatalog();
-    await writeCatalogCache(db, fallback, null);
-    return primeMemoryCatalog(
-      {
-        ...fallback,
-        stale: false,
-        source: "infinitay",
-      },
-      null,
-      fallback.syncedAt,
-    );
-  }
+  if (inFlightCatalogSync) return inFlightCatalogSync;
+
+  const sync = (async () => {
+    const row =
+      cachedRow === undefined ? await readCatalogCache(db) : cachedRow;
+    const cached =
+      cachedCatalog === undefined
+        ? row
+          ? parseCachedCatalog(row)
+          : null
+        : cachedCatalog;
+    return syncCollectiblesCatalogOnce(db, row, cached);
+  })();
+
+  const trackedSync = sync.finally(() => {
+    if (inFlightCatalogSync === trackedSync) inFlightCatalogSync = null;
+  });
+  inFlightCatalogSync = trackedSync;
+  return trackedSync;
 }
 
 export async function getCollectiblesCatalog(
@@ -803,16 +712,7 @@ export async function getCollectiblesCatalog(
   }
 
   try {
-    if (!inFlightCatalogSync) {
-      inFlightCatalogSync = syncCollectiblesCatalog(
-        db,
-        cachedRow,
-        cached,
-      ).finally(() => {
-        inFlightCatalogSync = null;
-      });
-    }
-    return await inFlightCatalogSync;
+    return await syncCollectiblesCatalog(db, cachedRow, cached);
   } catch {
     if (cached) return { ...cached, stale: true };
     throw new Error("Unable to load collectibles catalog");

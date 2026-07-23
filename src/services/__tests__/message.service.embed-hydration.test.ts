@@ -82,18 +82,54 @@ describe("listMessages embed hydration", () => {
         video: { url: "https://cdn.test/video.mp4" },
       },
     ];
-    db.mockQuery("SELECT id, embeds FROM messages", {
-      results: [{ id: "msg_1", embeds: JSON.stringify(originalEmbeds) }],
+    db.mockQuery("SELECT id, channel_id, embeds,", {
+      results: [
+        {
+          id: "msg_1",
+          channel_id: CHANNEL_ID,
+          embeds: JSON.stringify(originalEmbeds),
+          content_revision: 4,
+        },
+      ],
     });
     hoisted.hydrateSocialEmbedsMock.mockResolvedValue(refreshedEmbeds);
+    db.mockQuery("UPDATE messages SET embeds", { meta: { changes: 1 } });
 
     const updates = await refreshMessageEmbeds(db as any, CHANNEL_ID, [
       "msg_1",
     ]);
 
     expect(updates).toEqual([
-      { id: "msg_1", channel_id: CHANNEL_ID, embeds: refreshedEmbeds },
+      {
+        id: "msg_1",
+        channel_id: CHANNEL_ID,
+        content_revision: 4,
+        embeds: refreshedEmbeds,
+      },
     ]);
     expect(db.getCalls("UPDATE messages SET embeds")).toHaveLength(1);
+  });
+
+  it("does not return an embed update when the captured revision was replaced", async () => {
+    db.mockQuery("SELECT id, channel_id, embeds,", {
+      results: [
+        {
+          id: "msg_1",
+          channel_id: CHANNEL_ID,
+          embeds: JSON.stringify([
+            { url: "https://www.instagram.com/p/example", type: "rich" },
+          ]),
+          content_revision: 4,
+        },
+      ],
+    });
+    hoisted.hydrateSocialEmbedsMock.mockResolvedValue([
+      { url: "https://cdn.test/video.mp4", type: "rich" as const },
+    ]);
+    db.mockQuery("UPDATE messages SET embeds", { meta: { changes: 0 } });
+
+    await expect(
+      refreshMessageEmbeds(db as any, CHANNEL_ID, ["msg_1"]),
+    ).resolves.toEqual([]);
   });
 });

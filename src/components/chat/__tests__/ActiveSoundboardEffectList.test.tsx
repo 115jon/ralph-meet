@@ -108,7 +108,7 @@ describe("ActiveSoundboardEffectList", () => {
     );
 
     expect(screen.getByText("Airhorn")).toBeInTheDocument();
-    expect(screen.getByText("Drumroll")).toBeInTheDocument();
+    expect(screen.queryByText("Drumroll")).not.toBeInTheDocument();
     expect(screen.queryByText("Should Not Show")).not.toBeInTheDocument();
   });
 
@@ -152,9 +152,7 @@ describe("ActiveSoundboardEffectList", () => {
     });
   });
 
-  it("allows anyone to stop any effect", async () => {
-    const user = userEvent.setup();
-
+  it("does not render effects owned by another user", () => {
     const activePlaybacks = {
       "effect-2": {
         playbackId: "effect-2",
@@ -180,15 +178,8 @@ describe("ActiveSoundboardEffectList", () => {
       />,
     );
 
-    const stopButton = screen.getByRole("button", { name: /stop/i });
-    await user.click(stopButton);
-
-    expect(mockSfu.voiceGW.sendAppEvent).toHaveBeenCalledWith({
-      type: "soundboard.stop",
-      server_key: "server-1",
-      user_id: "user-1",
-      playback_id: "effect-2",
-    });
+    expect(screen.queryByText("Drumroll")).not.toBeInTheDocument();
+    expect(mockSfu.voiceGW.sendAppEvent).not.toHaveBeenCalled();
   });
 
   it("pauses a local preview without sending an app event", async () => {

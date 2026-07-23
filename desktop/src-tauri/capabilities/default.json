@@ -2,10 +2,7 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "Default capabilities for the Ralph Meet desktop client",
-  "windows": [
-    "main",
-    "updater"
-  ],
+  "windows": ["main", "updater"],
   "permissions": [
     "core:default",
     "core:app:allow-default-window-icon",
@@ -21,6 +18,9 @@
     "notification:default",
     "window-state:default",
     "core:window:allow-close",
+    "core:window:allow-toggle-maximize",
+    "core:window:allow-is-maximized",
+    "core:window:allow-start-dragging",
     "core:window:allow-show",
     "core:window:allow-set-focus",
     "core:window:allow-hide",
@@ -48,6 +48,9 @@
     "allow-restart-app",
     "allow-set-close-to-tray",
     "allow-set-start-minimized",
+    "allow-start-window-resize",
+    "allow-start-window-drag",
+    "allow-minimize-main-window",
     "allow-set-title-bar-dark-mode",
     "allow-set-taskbar-notification-attention",
     "allow-sync-taskbar-thumbnail-toolbar",

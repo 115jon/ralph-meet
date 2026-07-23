@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   requireAuth: vi.fn(),
   getDB: vi.fn(),
+  getEnv: vi.fn(),
   executeBroadcast: vi.fn(),
   broadcastToUser: vi.fn(),
   getOrCreateDM: vi.fn(),
@@ -11,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   blockUser: vi.fn(),
   removeRelationship: vi.fn(),
   updatePresence: vi.fn(),
+  scheduleServerMemberCacheInvalidation: vi.fn(),
   listNotifications: vi.fn(),
   markNotificationsRead: vi.fn(),
 }));
@@ -21,6 +23,7 @@ vi.mock("@/lib/api-helpers", () => ({
   apiSuccess: (data: unknown, status = 200) => Response.json(data, { status }),
   broadcastToUser: mocks.broadcastToUser,
   getDB: mocks.getDB,
+  getEnv: mocks.getEnv,
   requireAuth: mocks.requireAuth,
 }));
 
@@ -38,6 +41,11 @@ vi.mock("@/services/social.service", () => ({
 
 vi.mock("@/services/presence.service", () => ({
   updatePresence: mocks.updatePresence,
+}));
+
+vi.mock("@/lib/background-tasks", () => ({
+  scheduleServerMemberCacheInvalidation:
+    mocks.scheduleServerMemberCacheInvalidation,
 }));
 
 vi.mock("@/services/notification.service", () => ({
@@ -89,6 +97,7 @@ describe("social request body validation", () => {
     vi.clearAllMocks();
     mocks.requireAuth.mockResolvedValue({ userId: "user-1" });
     mocks.getDB.mockReturnValue({});
+    mocks.getEnv.mockReturnValue({});
     mocks.executeBroadcast.mockResolvedValue(undefined);
     mocks.getOrCreateDM.mockResolvedValue({
       isNew: false,
@@ -106,9 +115,64 @@ describe("social request body validation", () => {
     mocks.updatePresence.mockResolvedValue({
       status: "online",
       custom_status: null,
-      broadcasts: [],
+      broadcasts: [
+        {
+          type: "server",
+          target: "server-1",
+          event: "PRESENCE_UPDATE",
+          data: {},
+        },
+      ],
+      cacheInvalidationServerIds: ["server-1", "server-2"],
+      presenceChanged: true,
     });
     mocks.markNotificationsRead.mockResolvedValue(undefined);
+  });
+
+  it("schedules member cache invalidation after a successful presence write", async () => {
+    const response = await postPresence({
+      request: jsonRequest({ status: "idle", custom_status: "Away" }),
+      params: {},
+    });
+
+    expect(response.status).toBe(200);
+    expect(mocks.scheduleServerMemberCacheInvalidation).toHaveBeenCalledWith(
+      {},
+      ["server-1", "server-2"],
+    );
+    expect(mocks.executeBroadcast).toHaveBeenCalled();
+  });
+
+  it("does not schedule or broadcast when the presence write fails", async () => {
+    mocks.updatePresence.mockRejectedValueOnce(new Error("D1 unavailable"));
+
+    await expect(
+      postPresence({
+        request: jsonRequest({ status: "idle" }),
+        params: {},
+      }),
+    ).rejects.toThrow("D1 unavailable");
+
+    expect(mocks.scheduleServerMemberCacheInvalidation).not.toHaveBeenCalled();
+    expect(mocks.executeBroadcast).not.toHaveBeenCalled();
+  });
+
+  it("does not schedule member cache invalidation for an unchanged presence", async () => {
+    mocks.updatePresence.mockResolvedValueOnce({
+      status: "online",
+      custom_status: null,
+      broadcasts: [],
+      cacheInvalidationServerIds: [],
+      presenceChanged: false,
+    });
+
+    const response = await postPresence({
+      request: jsonRequest({ status: "online" }),
+      params: {},
+    });
+
+    expect(response.status).toBe(200);
+    expect(mocks.scheduleServerMemberCacheInvalidation).not.toHaveBeenCalled();
   });
 
   it.each([

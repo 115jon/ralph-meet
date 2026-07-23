@@ -1,4 +1,4 @@
-import splashLogo from "@/assets/splash-logo.svg";
+import { ThemeAwareSplashLogo } from "@/components/ThemeAwareSplashLogo";
 import { useChatStore } from "@/stores/chat-store";
 import { useCallback, useEffect, useReducer } from "react";
 
@@ -151,7 +151,11 @@ export function ConnectionOverlay() {
 
       {/* Logo with breathing animation */}
       <div className="w-24 h-24 z-10 flex items-center justify-center animate-[conn-breathe_2.8s_ease-in-out_infinite]">
-        <img src={splashLogo} alt="" className="h-full w-full object-contain" />
+        <ThemeAwareSplashLogo
+          alt=""
+          data-testid="connection-overlay-logo"
+          className="h-full w-full object-contain"
+        />
       </div>
 
       {/* Loading bar */}
@@ -169,17 +173,19 @@ export function ConnectionOverlay() {
         {getStatusText()}
       </p>
 
-      {/* Rotating tip */}
-      {!state.fadeOut && (
-        <p
-          aria-hidden="true"
-          className={`mt-2 text-[13px] font-normal tracking-[0.01em] z-10 text-rm-text-muted transition-opacity duration-400 ${
-            state.tipVisible ? "opacity-100" : "opacity-0"
-          }`}
-        >
-          {tips[state.tipIndex]}
-        </p>
-      )}
+      {/* Rotating tip; keep its space reserved during fade-out to avoid shifting the stack. */}
+      <p
+        aria-hidden="true"
+        className={`mt-2 min-h-5 text-[13px] font-normal tracking-[0.01em] z-10 text-rm-text-muted transition-opacity duration-400 ${
+          state.fadeOut
+            ? "invisible opacity-0"
+            : state.tipVisible
+              ? "opacity-100"
+              : "opacity-0"
+        }`}
+      >
+        {tips[state.tipIndex]}
+      </p>
 
       {/* Keyframe definitions */}
       <style>{`

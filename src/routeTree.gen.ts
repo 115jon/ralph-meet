@@ -62,6 +62,7 @@ import { Route as ApiAuthDesktopRouteImport } from './routes/api/auth/desktop'
 import { Route as ApiAttachmentsSplatRouteImport } from './routes/api/attachments/$'
 import { Route as ApiInvitesCodeIndexRouteImport } from './routes/api/invites/$code/index'
 import { Route as ApiUsersIdProfileRouteImport } from './routes/api/users/$id/profile'
+import { Route as ApiSoundboardUploadsIdRouteImport } from './routes/api/soundboard/uploads/$id'
 import { Route as ApiSharedMessagesTokenPreviewImageRouteImport } from './routes/api/shared-messages/$token/preview-image'
 import { Route as ApiServersIdSoundboardRouteImport } from './routes/api/servers/$id/soundboard'
 import { Route as ApiServersIdSettingsRouteImport } from './routes/api/servers/$id/settings'
@@ -367,6 +368,11 @@ const ApiUsersIdProfileRoute = ApiUsersIdProfileRouteImport.update({
   path: '/api/users/$id/profile',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiSoundboardUploadsIdRoute = ApiSoundboardUploadsIdRouteImport.update({
+  id: '/api/soundboard/uploads/$id',
+  path: '/api/soundboard/uploads/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiSharedMessagesTokenPreviewImageRoute =
   ApiSharedMessagesTokenPreviewImageRouteImport.update({
     id: '/preview-image',
@@ -639,6 +645,7 @@ export interface FileRoutesByFullPath {
   '/api/servers/$id/settings': typeof ApiServersIdSettingsRoute
   '/api/servers/$id/soundboard': typeof ApiServersIdSoundboardRoute
   '/api/shared-messages/$token/preview-image': typeof ApiSharedMessagesTokenPreviewImageRoute
+  '/api/soundboard/uploads/$id': typeof ApiSoundboardUploadsIdRoute
   '/api/users/$id/profile': typeof ApiUsersIdProfileRoute
   '/api/invites/$code/': typeof ApiInvitesCodeIndexRoute
   '/api/channels/$id/messages/gif': typeof ApiChannelsIdMessagesGifRoute
@@ -730,6 +737,7 @@ export interface FileRoutesByTo {
   '/api/servers/$id/settings': typeof ApiServersIdSettingsRoute
   '/api/servers/$id/soundboard': typeof ApiServersIdSoundboardRoute
   '/api/shared-messages/$token/preview-image': typeof ApiSharedMessagesTokenPreviewImageRoute
+  '/api/soundboard/uploads/$id': typeof ApiSoundboardUploadsIdRoute
   '/api/users/$id/profile': typeof ApiUsersIdProfileRoute
   '/api/invites/$code': typeof ApiInvitesCodeIndexRoute
   '/api/channels/$id/messages/gif': typeof ApiChannelsIdMessagesGifRoute
@@ -822,6 +830,7 @@ export interface FileRoutesById {
   '/api/servers/$id/settings': typeof ApiServersIdSettingsRoute
   '/api/servers/$id/soundboard': typeof ApiServersIdSoundboardRoute
   '/api/shared-messages/$token/preview-image': typeof ApiSharedMessagesTokenPreviewImageRoute
+  '/api/soundboard/uploads/$id': typeof ApiSoundboardUploadsIdRoute
   '/api/users/$id/profile': typeof ApiUsersIdProfileRoute
   '/api/invites/$code/': typeof ApiInvitesCodeIndexRoute
   '/api/channels/$id/messages/gif': typeof ApiChannelsIdMessagesGifRoute
@@ -915,6 +924,7 @@ export interface FileRouteTypes {
     | '/api/servers/$id/settings'
     | '/api/servers/$id/soundboard'
     | '/api/shared-messages/$token/preview-image'
+    | '/api/soundboard/uploads/$id'
     | '/api/users/$id/profile'
     | '/api/invites/$code/'
     | '/api/channels/$id/messages/gif'
@@ -1006,6 +1016,7 @@ export interface FileRouteTypes {
     | '/api/servers/$id/settings'
     | '/api/servers/$id/soundboard'
     | '/api/shared-messages/$token/preview-image'
+    | '/api/soundboard/uploads/$id'
     | '/api/users/$id/profile'
     | '/api/invites/$code'
     | '/api/channels/$id/messages/gif'
@@ -1097,6 +1108,7 @@ export interface FileRouteTypes {
     | '/api/servers/$id/settings'
     | '/api/servers/$id/soundboard'
     | '/api/shared-messages/$token/preview-image'
+    | '/api/soundboard/uploads/$id'
     | '/api/users/$id/profile'
     | '/api/invites/$code/'
     | '/api/channels/$id/messages/gif'
@@ -1161,6 +1173,7 @@ export interface RootRouteChildren {
   ApiSharesIndexRoute: typeof ApiSharesIndexRoute
   ApiInvitesCodeJoinRoute: typeof ApiInvitesCodeJoinRoute
   ApiMessagesIdShareRoute: typeof ApiMessagesIdShareRoute
+  ApiSoundboardUploadsIdRoute: typeof ApiSoundboardUploadsIdRoute
   ApiUsersIdProfileRoute: typeof ApiUsersIdProfileRoute
   ApiInvitesCodeIndexRoute: typeof ApiInvitesCodeIndexRoute
 }
@@ -1536,6 +1549,13 @@ declare module '@tanstack/react-router' {
       path: '/api/users/$id/profile'
       fullPath: '/api/users/$id/profile'
       preLoaderRoute: typeof ApiUsersIdProfileRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/soundboard/uploads/$id': {
+      id: '/api/soundboard/uploads/$id'
+      path: '/api/soundboard/uploads/$id'
+      fullPath: '/api/soundboard/uploads/$id'
+      preLoaderRoute: typeof ApiSoundboardUploadsIdRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/shared-messages/$token/preview-image': {
@@ -2075,6 +2095,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiSharesIndexRoute: ApiSharesIndexRoute,
   ApiInvitesCodeJoinRoute: ApiInvitesCodeJoinRoute,
   ApiMessagesIdShareRoute: ApiMessagesIdShareRoute,
+  ApiSoundboardUploadsIdRoute: ApiSoundboardUploadsIdRoute,
   ApiUsersIdProfileRoute: ApiUsersIdProfileRoute,
   ApiInvitesCodeIndexRoute: ApiInvitesCodeIndexRoute,
 }

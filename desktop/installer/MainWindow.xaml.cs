@@ -79,8 +79,11 @@ namespace Installer
             try
             {
                 await RunInstallationAsync();
-                StatusText.Text = "Launching...";
-                await Task.Delay(1000);
+                StatusText.Text = App.IsNoLaunch ? "Installation complete" : "Launching...";
+                if (!App.IsNoLaunch)
+                {
+                    await Task.Delay(1000);
+                }
 
                 Application.Current.Shutdown();
             }
@@ -104,7 +107,7 @@ namespace Installer
                 ActionButtonsPanel.Visibility = Visibility.Collapsed;
                 ProgressContainer.Visibility = Visibility.Visible;
             });
-            await InstallerLogic.RunInstallationAsync();
+            await InstallerLogic.RunInstallationAsync(!App.IsNoLaunch);
         }
 
         private void ConfigureForInteractiveUninstall()

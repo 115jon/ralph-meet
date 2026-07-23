@@ -19,6 +19,7 @@ import { dispatchOpenProfileEditorEvent } from "@/lib/profile-editor-events";
 import { resolveProfileTheme } from "@/lib/profile-customization";
 import type { Role, User } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { UserStatusDot, type UserStatus } from "./UserStatusDot";
 import { useChatStore } from "@/stores/chat-store";
 import {
   Check,
@@ -57,13 +58,6 @@ interface Props {
   side?: "left" | "right" | "top" | "bottom";
   align?: "start" | "center" | "end";
 }
-
-const statusColors: Record<string, string> = {
-  online: "bg-primary",
-  idle: "bg-warning",
-  dnd: "bg-destructive",
-  offline: "bg-rm-text-muted/40",
-};
 
 const MOBILE_MAX_SURFACE_HEIGHT = 680;
 const DESKTOP_MAX_SURFACE_HEIGHT = 640;
@@ -184,7 +178,7 @@ function PopoverAvatar({
   avatarDisplay?: User["avatar_display"];
   displayName: string;
   isOnline: boolean;
-  status?: string | null;
+  status: UserStatus;
 }) {
   return (
     <div className="relative z-30 -mt-12 px-4">
@@ -201,13 +195,9 @@ function PopoverAvatar({
           )}
         </div>
         <div className="absolute bottom-1 right-1 z-20 rounded-full bg-[var(--rm-profile-custom-card-bg-strong)] p-1">
-          <span
-            className={cn(
-              "block h-5 w-5 rounded-full border-rm-bg-primary",
-              isOnline
-                ? statusColors[status ?? "online"]
-                : statusColors.offline,
-            )}
+          <UserStatusDot
+            status={isOnline ? status : "offline"}
+            className="h-5 w-5 border-rm-bg-primary"
           />
         </div>
       </div>
@@ -834,7 +824,7 @@ export default function UserProfilePopover({
   };
 
   const handleOpenProfileEditor = () => {
-    dispatchOpenProfileEditorEvent();
+    dispatchOpenProfileEditorEvent(anchorEl);
     onClose();
   };
 

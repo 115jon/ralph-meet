@@ -140,6 +140,7 @@ export class VoiceGateway extends BaseGateway<VoiceGatewayEvents> {
             d: {
               participant_id: this.participantId!,
               voice_token: this.voiceToken!,
+              supports_listen_together_snapshot_events: true,
             },
           },
           true,
@@ -248,7 +249,7 @@ export class VoiceGateway extends BaseGateway<VoiceGatewayEvents> {
     return this.isIdentified && this.ws?.readyState === WebSocket.OPEN;
   }
 
-  public sendAppEvent(payload: Record<string, unknown>) {
+  public sendAppEvent(payload: Record<string, unknown>): boolean {
     const eventType = payload.type;
     if (
       typeof eventType === "string" &&
@@ -272,9 +273,9 @@ export class VoiceGateway extends BaseGateway<VoiceGatewayEvents> {
       this.log.warn(
         `Dropping listen-together command while voice gateway is not ready: ${eventType}`,
       );
-      return;
+      return false;
     }
 
-    this.send({ op: VoiceOpcode.VoiceAppEvent, d: payload } as any);
+    return this.send({ op: VoiceOpcode.VoiceAppEvent, d: payload } as any);
   }
 }

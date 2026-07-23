@@ -8,6 +8,10 @@ import type { User } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useChatStore } from "@/stores/chat-store";
 import {
+  UserStatusDot,
+  type UserStatus,
+} from "@/components/chat/UserStatusDot";
+import {
   ChevronLeft,
   ChevronRight,
   Copy,
@@ -27,29 +31,18 @@ import { createPortal } from "react-dom";
 interface Props {
   user: User;
   onClose: () => void;
-  updateStatus: (
-    status: "online" | "idle" | "dnd" | "offline",
-    custom_status?: string | null,
-  ) => void;
-  onOpenProfileEditor: () => void;
+  updateStatus: (status: UserStatus, custom_status?: string | null) => void;
+  onOpenProfileEditor: (trigger?: HTMLElement) => void;
   anchorEl: HTMLElement;
 }
 
-const statusColors: Record<string, string> = {
-  online: "bg-primary",
-  idle: "bg-warning",
-  dnd: "bg-destructive",
-  offline: "bg-rm-text-muted/40",
-};
-
 const STATUS_OPTIONS = [
-  { value: "online" as const, label: "Online", color: "bg-primary" },
-  { value: "idle" as const, label: "Idle", color: "bg-warning" },
-  { value: "dnd" as const, label: "Do Not Disturb", color: "bg-destructive" },
+  { value: "online" as const, label: "Online" },
+  { value: "idle" as const, label: "Idle" },
+  { value: "dnd" as const, label: "Do Not Disturb" },
   {
     value: "offline" as const,
     label: "Invisible",
-    color: "bg-rm-text-muted/40",
   },
 ];
 
@@ -60,40 +53,6 @@ const ACTION_CARD_CLASS =
   "rounded-[18px] border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] p-2 shadow-[0_18px_38px_rgba(0,0,0,0.24)] backdrop-blur-md";
 const ACTION_ROW_CLASS =
   "group/item flex w-full items-center gap-3 rounded-[12px] px-3 py-2.5 text-[14px] font-medium text-[color:var(--rm-profile-custom-text)] transition-colors hover:bg-[var(--rm-profile-custom-card-bg)] outline-none";
-
-function StatusDot({
-  status,
-  className,
-  innerClassName,
-}: {
-  status: "online" | "idle" | "dnd" | "offline";
-  className?: string;
-  innerClassName?: string;
-}) {
-  return (
-    <span
-      className={cn(
-        "relative flex items-center justify-center rounded-full",
-        statusColors[status],
-        className,
-      )}
-    >
-      {status === "offline" ? (
-        <span
-          className={cn(
-            "absolute h-[42%] w-[42%] rounded-full",
-            innerClassName,
-          )}
-        />
-      ) : null}
-      {status === "dnd" ? (
-        <span
-          className={cn("absolute h-[18%] w-[55%] rounded-sm", innerClassName)}
-        />
-      ) : null}
-    </span>
-  );
-}
 
 function ActionRow({
   icon,
@@ -282,7 +241,10 @@ export default function UserAccountPopover({
   return createPortal(
     <>
       <div
-        className="fixed inset-0 z-[999] cursor-default bg-transparent"
+        className={cn(
+          "fixed inset-0 z-[999] cursor-default bg-transparent",
+          isClosing && "pointer-events-none",
+        )}
         onClick={onClose}
         role="presentation"
         aria-hidden="true"
@@ -337,10 +299,9 @@ export default function UserAccountPopover({
                     )}
                   </div>
                   <div className="absolute bottom-1 right-1 z-40 flex h-5 w-5 items-center justify-center rounded-full border-[3.5px] border-rm-bg-elevated bg-rm-bg-elevated">
-                    <StatusDot
+                    <UserStatusDot
                       status={currentStatus}
                       className="h-full w-full"
-                      innerClassName="bg-rm-bg-elevated"
                     />
                   </div>
                 </div>
@@ -426,14 +387,12 @@ export default function UserAccountPopover({
                         onClick={() => {
                           updateStatus(option.value, user.custom_status);
                           setShowStatusMenu(false);
-                          onClose();
                         }}
                       >
                         <span className="flex h-4 w-4 shrink-0 items-center justify-center">
-                          <StatusDot
+                          <UserStatusDot
                             status={option.value}
                             className="h-3 w-3"
-                            innerClassName="bg-rm-bg-surface group-hover/item:bg-rm-bg-hover"
                           />
                         </span>
                         <span className="truncate">{option.label}</span>
@@ -453,15 +412,14 @@ export default function UserAccountPopover({
                         label="Edit Profile"
                         onClick={() => {
                           onClose();
-                          onOpenProfileEditor();
+                          onOpenProfileEditor(anchorEl);
                         }}
                       />
                       <ActionRow
                         icon={
-                          <StatusDot
+                          <UserStatusDot
                             status={currentStatus}
                             className="h-3 w-3"
-                            innerClassName="bg-rm-bg-surface group-hover/item:bg-rm-bg-hover"
                           />
                         }
                         label={currentStatusLabel}

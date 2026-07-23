@@ -40,6 +40,12 @@ export class VoiceActivityDetector {
   private silentOutput: GainNode | null = null;
   private timer: ReturnType<typeof setInterval> | null = null;
   private isSpeaking: boolean = false;
+  private microphoneSpeaking = false;
+  private soundboardSpeaking = false;
+  private lastSentFlags = SpeakingFlags.NONE;
+  private lastSentParticipantId: string | null = null;
+  private lastEmittedParticipantId: string | null = null;
+  private lifecycleGeneration = 0;
   private silenceStart: number = 0;
   private threshold = getVoiceActivityThreshold(true, -50);
   private silenceDelay: number = 300; // ms of silence before "stopped speaking"
@@ -64,13 +70,15 @@ export class VoiceActivityDetector {
    */
   start(stream: MediaStream): void {
     this.stop();
+    const generation = ++this.lifecycleGeneration;
 
     const audioTrack = stream.getAudioTracks()[0];
     if (!audioTrack) return;
 
     try {
-      this.audioContext = new AudioContext();
-      this.analyser = this.audioContext.createAnalyser();
+      const context = new AudioContext();
+      this.audioContext = context;
+      this.analyser = context.createAnalyser();
       this.analyser.fftSize = 512;
       this.analyser.smoothingTimeConstant = 0.3;
 
@@ -81,55 +89,80 @@ export class VoiceActivityDetector {
       this.vadTrack = audioTrack.clone();
       const vadStream = new MediaStream([this.vadTrack]);
 
-      this.source = this.audioContext.createMediaStreamSource(vadStream);
+      this.source = context.createMediaStreamSource(vadStream);
       this.source.connect(this.analyser);
 
       // Keep the Web Audio graph rendering without routing microphone audio
       // back to the user. AnalyserNode data can remain stale when its output
       // is disconnected from the destination.
-      this.silentOutput = this.audioContext.createGain();
+      this.silentOutput = context.createGain();
       this.silentOutput.gain.value = 0;
       this.analyser.connect(this.silentOutput);
-      this.silentOutput.connect(this.audioContext.destination);
+      this.silentOutput.connect(context.destination);
 
       // Explicitly resume in case it's suspended
       this.contextResumed = false;
-      this.audioContext.resume().catch(() => {});
+      context.resume().then(
+        () => {
+          if (
+            this.lifecycleGeneration !== generation ||
+            this.audioContext !== context
+          )
+            return;
+          this.contextResumed = true;
+        },
+        () => {},
+      );
 
       const dataArray = new Uint8Array(this.analyser.frequencyBinCount);
 
       // Listen for context state changes so we can apply the pending gate
       // when the context transitions to 'running' (user gesture on Firefox).
-      this.audioContext.addEventListener("statechange", () => {
-        if (this.audioContext?.state === "running" && !this.contextResumed) {
+      context.addEventListener("statechange", () => {
+        if (
+          this.lifecycleGeneration !== generation ||
+          this.audioContext !== context
+        )
+          return;
+        if (context.state === "running" && !this.contextResumed) {
           this.contextResumed = true;
           if (DEBUG) vadLog.info("AudioContext resumed via statechange");
           // Now that we can actually detect speech, apply the pending gate
           // state. If the user IS speaking we'll detect it on the next tick
           // and un-gate. If they're silent, the gate activates correctly.
-          if (this.gateEnabled && !this.isSpeaking) {
+          if (this.gateEnabled && !this.microphoneSpeaking) {
             this.applyGate(true);
           }
         }
       });
 
       this.timer = setInterval(() => {
-        if (!this.analyser || !this.audioContext) return;
+        if (
+          this.lifecycleGeneration !== generation ||
+          !this.analyser ||
+          !this.audioContext
+        )
+          return;
 
         // Auto-resume: Chrome suspends AudioContexts created before user
         // gesture. Try to resume every tick until it succeeds. Once the
         // user has interacted with the page, resume() will work.
-        if (!this.contextResumed && this.audioContext.state === "suspended") {
-          this.audioContext
+        if (!this.contextResumed && context.state === "suspended") {
+          context
             .resume()
             .then(() => {
+              if (
+                this.lifecycleGeneration !== generation ||
+                this.audioContext !== context
+              )
+                return;
               this.contextResumed = true;
               if (DEBUG) vadLog.info("AudioContext resumed");
             })
             .catch(() => {});
           return; // skip this tick — data is stale while suspended
         }
-        if (this.audioContext.state === "running") {
+        if (context.state === "running") {
           this.contextResumed = true;
         }
 
@@ -166,32 +199,24 @@ export class VoiceActivityDetector {
         if (rms >= this.threshold) {
           // Speaking
           this.silenceStart = 0;
-          if (!this.isSpeaking) {
-            this.isSpeaking = true;
+          if (!this.microphoneSpeaking) {
+            this.microphoneSpeaking = true;
             if (this.gateEnabled) {
               this.applyGate(false);
             }
-            const pid = this.callbacks.getParticipantId();
-            if (pid) {
-              this.callbacks.onSpeakingChange(true, SpeakingFlags.MICROPHONE);
-              this.callbacks.sendSpeaking(SpeakingFlags.MICROPHONE);
-            }
+            this.refreshSpeakingState();
           }
         } else {
           // Silence
-          if (this.isSpeaking) {
+          if (this.microphoneSpeaking) {
             if (this.silenceStart === 0) {
               this.silenceStart = now;
             } else if (now - this.silenceStart >= this.silenceDelay) {
-              this.isSpeaking = false;
+              this.microphoneSpeaking = false;
               if (this.gateEnabled) {
                 this.applyGate(true);
               }
-              const pid = this.callbacks.getParticipantId();
-              if (pid) {
-                this.callbacks.onSpeakingChange(false, SpeakingFlags.NONE);
-                this.callbacks.sendSpeaking(0);
-              }
+              this.refreshSpeakingState();
             }
           }
         }
@@ -201,6 +226,53 @@ export class VoiceActivityDetector {
     } catch (err) {
       vadLog.error("Failed to start:", err);
     }
+  }
+
+  /** Reconcile speaking signaling after a participant ID becomes available. */
+  refreshSpeakingState(): void {
+    const flags =
+      (this.microphoneSpeaking
+        ? SpeakingFlags.MICROPHONE
+        : SpeakingFlags.NONE) |
+      (this.soundboardSpeaking ? SpeakingFlags.SOUNDSHARE : SpeakingFlags.NONE);
+    const nextIsSpeaking = flags !== SpeakingFlags.NONE;
+    const speakingChanged = this.isSpeaking !== nextIsSpeaking;
+    this.isSpeaking = nextIsSpeaking;
+
+    const participantId = this.callbacks.getParticipantId();
+    if (!participantId) {
+      this.lastSentParticipantId = null;
+      this.lastEmittedParticipantId = null;
+      return;
+    }
+
+    const signalingChanged =
+      this.lastSentParticipantId !== participantId ||
+      this.lastSentFlags !== flags;
+    if (
+      signalingChanged &&
+      (flags !== SpeakingFlags.NONE ||
+        this.lastSentFlags !== SpeakingFlags.NONE)
+    ) {
+      this.lastSentFlags = flags;
+      this.callbacks.sendSpeaking(flags);
+    }
+    this.lastSentParticipantId = participantId;
+
+    const participantChanged = this.lastEmittedParticipantId !== participantId;
+    if (
+      (speakingChanged || participantChanged) &&
+      (speakingChanged || nextIsSpeaking)
+    ) {
+      this.callbacks.onSpeakingChange(nextIsSpeaking, flags);
+    }
+    this.lastEmittedParticipantId = participantId;
+  }
+
+  /** Update activity contributed by local soundboard playback. */
+  setSoundboardSpeaking(isSpeaking: boolean): void {
+    this.soundboardSpeaking = isSpeaking;
+    this.refreshSpeakingState();
   }
 
   /**
@@ -214,7 +286,7 @@ export class VoiceActivityDetector {
     // Only gate immediately if the VAD AudioContext is running — otherwise
     // we can't detect speech and the gate would stay ON permanently on
     // Firefox autoJoin (suspended context, no user gesture).
-    if (this.gateEnabled && !this.isSpeaking && this.contextResumed) {
+    if (this.gateEnabled && !this.microphoneSpeaking && this.contextResumed) {
       if (DEBUG) vadLog.info("Transceiver ready — applying initial gate");
       this.applyGate(true);
     }
@@ -224,6 +296,7 @@ export class VoiceActivityDetector {
    * Stop VAD monitoring. Call when mic is turned off or leaving.
    */
   stop(): void {
+    this.lifecycleGeneration += 1;
     if (this.timer) {
       clearInterval(this.timer);
       this.timer = null;
@@ -260,14 +333,9 @@ export class VoiceActivityDetector {
     // SFU actually receives DTX silence when the user hits "Mute"
     this.applyGate(true);
 
-    if (this.isSpeaking) {
-      this.isSpeaking = false;
-      const pid = this.callbacks.getParticipantId();
-      if (pid) {
-        this.callbacks.onSpeakingChange(false, SpeakingFlags.NONE);
-        this.callbacks.sendSpeaking(0);
-      }
-    }
+    this.microphoneSpeaking = false;
+    this.silenceStart = 0;
+    this.refreshSpeakingState();
   }
 
   /**
@@ -282,10 +350,17 @@ export class VoiceActivityDetector {
    * Resume the VAD's AudioContext after a user gesture.
    */
   resumeContext(): void {
-    if (this.audioContext && this.audioContext.state === "suspended") {
-      this.audioContext
+    const context = this.audioContext;
+    const generation = this.lifecycleGeneration;
+    if (context && context.state === "suspended") {
+      context
         .resume()
         .then(() => {
+          if (
+            this.lifecycleGeneration !== generation ||
+            this.audioContext !== context
+          )
+            return;
           this.contextResumed = true;
           if (DEBUG) vadLog.info("AudioContext resumed");
         })
@@ -305,7 +380,7 @@ export class VoiceActivityDetector {
    */
   enableNoiseGate(): void {
     this.gateEnabled = true;
-    if (!this.isSpeaking && this.contextResumed) {
+    if (!this.microphoneSpeaking && this.contextResumed) {
       this.applyGate(true);
     }
     if (DEBUG) vadLog.info("Noise gate enabled");

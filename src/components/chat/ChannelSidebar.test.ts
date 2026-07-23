@@ -9,7 +9,7 @@ import { useListenTogetherStore } from "@/stores/useListenTogetherStore";
 import { cleanup, render } from "@testing-library/react";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import ChannelSidebar from "./ChannelSidebar";
 
@@ -32,9 +32,14 @@ describe("ChannelSidebar voice member identities", () => {
     useListenTogetherStore.setState({ rooms: {} });
   });
 
-  afterEach(() => cleanup());
+  afterEach(() => {
+    cleanup();
+    vi.useRealTimers();
+  });
 
   it("renders the current track beneath the connected voice channel", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(1_000);
     useChatStore.setState({ user: { id: "me", username: "me" } });
     useListenTogetherStore.setState({
       rooms: {
@@ -157,6 +162,96 @@ describe("ChannelSidebar voice member identities", () => {
 
     expect(markup).toContain("Alice Display");
     expect(markup).not.toContain("Legacy Name");
+  });
+
+  it("does not restore stale cached avatars or styles over authoritative nulls", () => {
+    useChatStore.setState({
+      user: { id: "me", username: "me" },
+      members: [
+        {
+          user: {
+            id: "member-user",
+            username: "stale-member",
+            display_name: "Stale Member",
+            avatar_url: "https://example.com/stale-member.png",
+            avatar_display: "frame:stale-member",
+            display_name_style: styledDisplayName,
+          },
+          roles: [],
+        },
+      ],
+      relationships: [
+        {
+          user: {
+            id: "relationship-user",
+            username: "stale-relationship",
+            display_name: "Stale Relationship",
+            avatar_url: "https://example.com/stale-relationship.png",
+            avatar_display: "frame:stale-relationship",
+            display_name_style: styledDisplayName,
+          },
+          type: 1,
+          created_at: "2026-07-19T00:00:00Z",
+        },
+      ],
+    });
+
+    const { container } = render(
+      React.createElement(ChannelSidebar, {
+        channels: [
+          {
+            id: "vc-1",
+            server_id: "srv-1",
+            name: "Standup",
+            channel_type: "voice",
+            position: 0,
+            created_at: "2026-01-01T00:00:00Z",
+          },
+        ],
+        categories: [],
+        activeChannelId: null,
+        serverId: "srv-1",
+        serverName: "Server",
+        onSelect: () => {},
+        voiceChannelStates: {
+          "vc-1": [
+            {
+              clerk_user_id: "member-user",
+              name: "Authoritative Member",
+              username: "member-user",
+              display_name: null,
+              avatar_url: null,
+              avatar_display: null,
+              display_name_style: null,
+              self_mute: false,
+              self_deaf: false,
+              self_video: false,
+              self_stream: false,
+            },
+            {
+              clerk_user_id: "relationship-user",
+              name: "Authoritative Relationship",
+              username: "relationship-user",
+              display_name: null,
+              avatar_url: null,
+              avatar_display: null,
+              display_name_style: null,
+              self_mute: false,
+              self_deaf: false,
+              self_video: false,
+              self_stream: false,
+            },
+          ],
+        },
+      }),
+    );
+    const markup = container.innerHTML;
+
+    expect(markup).toContain("member-user");
+    expect(markup).toContain("relationship-user");
+    expect(markup).not.toContain("stale-member.png");
+    expect(markup).not.toContain("stale-relationship.png");
+    expect(markup).not.toContain("linear-gradient");
   });
 
   it("renders voice member display name styles from the cached member profile", () => {

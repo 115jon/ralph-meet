@@ -40,6 +40,23 @@ interface Puzzle {
   source: "nyt";
 }
 
+function isWordlePuzzle(value: unknown, puzzleDate: string): value is Puzzle {
+  if (!isRecord(value)) return false;
+  const candidate = value;
+  return (
+    (typeof candidate.id === "number" || candidate.id === null) &&
+    candidate.print_date === puzzleDate &&
+    typeof candidate.solution === "string" &&
+    /^[a-zA-Z]{5}$/.test(candidate.solution) &&
+    (typeof candidate.editor === "string" || candidate.editor === null) &&
+    candidate.source === "nyt"
+  );
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === "object" && !Array.isArray(value);
+}
+
 interface WordleSettings {
   hardMode: boolean;
   darkTheme: boolean;
@@ -630,13 +647,8 @@ function WordleActivityStageContent({
         return res.json();
       })
       .then((data) => {
-        if (
-          typeof data?.solution === "string" &&
-          /^[a-zA-Z]{5}$/.test(data.solution) &&
-          data.print_date === puzzleDate &&
-          data.source === "nyt"
-        ) {
-          setPuzzle(data as Puzzle);
+        if (isWordlePuzzle(data, puzzleDate)) {
+          setPuzzle(data);
           return;
         }
         throw new Error("Today's Wordle response was invalid.");

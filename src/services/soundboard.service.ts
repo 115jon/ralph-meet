@@ -1,5 +1,5 @@
 import { CacheKey } from "@/lib/cache";
-import { getAttachmentUrl } from "@/lib/attachment-url";
+import { getSoundboardUploadUrl } from "@/lib/voice/soundboard-media";
 import type { D1Database } from "@cloudflare/workers-types";
 
 export interface ServerSoundboardSound {
@@ -48,7 +48,7 @@ export async function listServerSoundboardSounds(
     user_id: row.user_id as string,
     filename: row.filename as string,
     file_key: row.file_key as string,
-    file_url: getAttachmentUrl(row.file_key as string),
+    file_url: getSoundboardUploadUrl(row.id as string),
     content_type: row.content_type as string,
     size_bytes: Number(row.size_bytes ?? 0),
     name: row.sound_name

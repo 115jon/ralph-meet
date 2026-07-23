@@ -1,0 +1,15 @@
+diff --git a/dist/src/index.js b/dist/src/index.js
+index ad98301515853b6fcc56684654c9113c4ad4ef82..e51ca45d00cdf87dfe827745a17689f20ce87bfe 100644
+--- a/dist/src/index.js
++++ b/dist/src/index.js
+@@ -91788,7 +91788,9 @@ See https://developers.cloudflare.com/cloudflare-one/access-controls/service-cre
+     const response = await fetch5(url40, forwardInit);
+     const stack = response.headers.get(CoreHeaders.ERROR_STACK);
+     if (response.status === 500 && stack !== null) {
+-      const caught = JsonErrorSchema.parse(await response.json());
++      const body = new Uint8Array(await response.arrayBuffer());
++      const decoded = body[0] === 31 && body[1] === 139 ? import_node_zlib.gunzipSync(body).toString("utf8") : new TextDecoder().decode(body);
++      const caught = JsonErrorSchema.parse(JSON.parse(decoded));
+       throw reviveError(this.#workerSrcOpts, caught);
+     }
+     const contentEncoding = response.headers.get("Content-Encoding");

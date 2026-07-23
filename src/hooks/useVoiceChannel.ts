@@ -21,7 +21,11 @@ import {
 } from "@/lib/platform";
 import { areReconnectSoundsSuppressed } from "@/lib/reconnect-sound-guard";
 import type { ScreenShareOptions } from "@/lib/screen-share-types";
-import { SFUClient, type SFUEventMap } from "@/lib/sfu-client";
+import {
+  SFUClient,
+  type SFUDisconnectReason,
+  type SFUEventMap,
+} from "@/lib/sfu-client";
 import { sendVoiceDisconnectBeacon } from "@/lib/voice-disconnect-beacon";
 import {
   applyStreamWatcherSnapshot,
@@ -50,12 +54,34 @@ import {
 } from "@/lib/voice/spatial-audio";
 import { getVoiceActivityThreshold } from "@/lib/voice/vad";
 import {
+  getSoundboardServerKey,
+  stopAutomaticJoinSoundboardPlaybacksByOwner,
+} from "@/lib/voice/soundboard";
+import {
   cancelAutomaticSoundboardCleanup,
   getAutomaticSoundboardSessionId,
+  getAutomaticSoundboardSessionGeneration,
   playAutomaticSoundboardTrigger,
   resetAutomaticSoundboardSession,
-  scheduleAutomaticSoundboardCleanup,
+  type AutomaticSoundboardTransport,
 } from "@/lib/voice/auto-soundboard";
+
+const AUTOMATIC_LEAVE_SEND_WINDOW_MS = 100;
+
+function finishAutomaticLeave(
+  sfu: SFUClient | null,
+  sessionId: string,
+  generation: number | undefined,
+  reason: SFUDisconnectReason,
+  onFinished?: () => void,
+) {
+  window.setTimeout(() => {
+    sfu?.disconnect(reason);
+    resetAutomaticSoundboardSession(sessionId, generation);
+    onFinished?.();
+  }, AUTOMATIC_LEAVE_SEND_WINDOW_MS);
+}
+
 import {
   playConnected,
   playDeafen,
@@ -68,7 +94,7 @@ import {
   playUndeafen,
   playUnmute,
 } from "@/lib/sounds";
-import type { VoiceState } from "@/lib/types";
+import type { VoiceState, VoiceStateDelta } from "@/lib/types";
 import { useMediaDevices } from "@/lib/useMediaDevices";
 import { useChatActions, useChatStore } from "@/stores/chat-store";
 import { useSoundSettingsStore } from "@/stores/useSoundSettingsStore";
@@ -98,11 +124,53 @@ const STREAM_PREVIEW_CAPTURE_INTERVAL_MS = 8000;
 const STREAM_PREVIEW_CAPTURE_INITIAL_DELAY_MS = 750;
 let speakingSourceSequence = 0;
 
+export function mergeVoiceState(
+  cached: VoiceState | undefined,
+  incoming: VoiceState | VoiceStateDelta,
+): VoiceState | null {
+  if (cached) return { ...cached, ...incoming };
+  return "name" in incoming ? incoming : null;
+}
+
 function createMicrophoneStream(stream: MediaStream): MediaStream | null {
   const audioTrack = stream.getAudioTracks()[0];
   return audioTrack && audioTrack.readyState !== "ended"
     ? new MediaStream([audioTrack])
     : null;
+}
+
+interface VoiceActivityStream {
+  stream: MediaStream;
+  ownsTracks: boolean;
+}
+
+function createVoiceActivityStream(
+  rawStream: MediaStream,
+  processor: LocalAudioProcessorHandle | null,
+): VoiceActivityStream | null {
+  if (processor) {
+    try {
+      const monitorStream = processor.createMonitorStream();
+      if (
+        monitorStream
+          .getAudioTracks()
+          .some((track) => track.readyState !== "ended")
+      ) {
+        return { stream: monitorStream, ownsTracks: true };
+      }
+    } catch {
+      // Fall back to raw capture if a processor monitor is unavailable.
+    }
+  }
+
+  const microphoneStream = createMicrophoneStream(rawStream);
+  return microphoneStream
+    ? { stream: microphoneStream, ownsTracks: false }
+    : null;
+}
+
+function disposeVoiceActivityStream(stream: MediaStream | null): void {
+  stream?.getTracks().forEach((track) => track.stop());
 }
 
 const SCREEN_QUALITY_MAP: Record<
@@ -577,6 +645,7 @@ export function useVoiceChannel({
     })),
   );
   const {
+    dispatch,
     sendVoiceChannelJoin,
     sendVoiceChannelLeave,
     sendVoiceStateUpdate,
@@ -596,6 +665,25 @@ export function useVoiceChannel({
   const automaticSoundboardSessionId = getAutomaticSoundboardSessionId(
     isCall ? "call" : mode,
     resolvedRoomSlug || channelId || "voice",
+  );
+  const createAutomaticSoundboardTransport = useCallback(
+    (
+      voiceClient: SFUClient | null,
+    ): AutomaticSoundboardTransport | undefined => {
+      const userId = user?.id;
+      const serverKey = isCall ? "dm-call" : serverId;
+      if (!voiceClient || !userId || !serverKey || mode === "room") {
+        return undefined;
+      }
+      return {
+        serverKey,
+        userId,
+        sendAppEvent: (payload) => voiceClient.voiceGW.sendAppEvent(payload),
+        isReady: () => voiceClient.voiceGW.isReady,
+        waitUntilReady: () => voiceClient.waitForVoiceGatewayReady(),
+      };
+    },
+    [isCall, mode, serverId, user?.id],
   );
 
   const [voiceState, voiceDispatch] = useReducer(
@@ -956,6 +1044,7 @@ export function useVoiceChannel({
   const publishedAudioProcessorRef = useRef<LocalAudioProcessorHandle | null>(
     null,
   );
+  const ownedVadMonitorStreamRef = useRef<MediaStream | null>(null);
   const rawCameraTrackRef = useRef<MediaStreamTrack | null>(null);
   const cameraBackgroundEffectRef = useRef<CameraBackgroundEffect | null>(null);
   const activeCameraBackgroundKeyRef = useRef("none");
@@ -1488,6 +1577,7 @@ export function useVoiceChannel({
           "join",
           automaticSoundboardSessionId,
           serverId,
+          createAutomaticSoundboardTransport(sfu),
         );
 
         if (mode !== "room" && channelId) {
@@ -1514,8 +1604,19 @@ export function useVoiceChannel({
 
     onSfu(
       "voice-state-update",
-      ({ participant, spatialAudioState: nextSpatialAudioState }: any) => {
-        upsertParticipant(participant);
+      ({
+        participant,
+        spatialAudioState: nextSpatialAudioState,
+      }: {
+        participant: VoiceState | VoiceStateDelta;
+        spatialAudioState?: SharedSpatialAudioState;
+      }) => {
+        const mergedParticipant = mergeVoiceState(
+          participantsRef.current.get(participant.id),
+          participant,
+        );
+        if (!mergedParticipant) return;
+        upsertParticipant(mergedParticipant);
         if (nextSpatialAudioState) {
           voiceDispatch({
             type: "SET_SPATIAL_AUDIO_STATE",
@@ -1602,27 +1703,38 @@ export function useVoiceChannel({
         avatarDisplay,
       }) => {
         const p = participantsRef.current.get(participantId);
+        const clerkUserId =
+          p?.clerk_user_id ?? uuidToClerkRef.current.get(participantId);
         if (p) {
-          p.name = newName;
-          p.username = username;
-          p.display_name = displayName ?? null;
-          p.avatar_url = avatarUrl;
-          p.avatar_display = avatarDisplay;
+          const updated = {
+            ...p,
+            name: newName,
+            ...(username !== undefined ? { username } : {}),
+            ...(displayName !== undefined ? { display_name: displayName } : {}),
+            ...(avatarUrl !== undefined ? { avatar_url: avatarUrl } : {}),
+            ...(avatarDisplay !== undefined
+              ? { avatar_display: avatarDisplay }
+              : {}),
+          };
+          participantsRef.current.set(participantId, updated);
           voiceDispatch({
             type: "SET_PARTICIPANTS",
             payload: (prev: VoiceState[]) =>
-              prev.map((x) =>
-                x.id === participantId
-                  ? {
-                      ...x,
-                      name: newName,
-                      username,
-                      display_name: displayName ?? null,
-                      avatar_url: avatarUrl,
-                      avatar_display: avatarDisplay,
-                    }
-                  : x,
-              ),
+              prev.map((x) => (x.id === participantId ? updated : x)),
+          });
+          voiceDispatch({ type: "BUMP_PARTICIPANTS" });
+        }
+        if (clerkUserId) {
+          dispatch({
+            type: "UPDATE_MEMBER_PROFILE",
+            userId: clerkUserId,
+            name: newName,
+            ...(username !== undefined ? { username } : {}),
+            ...(displayName !== undefined ? { display_name: displayName } : {}),
+            ...(avatarUrl !== undefined ? { avatar_url: avatarUrl } : {}),
+            ...(avatarDisplay !== undefined
+              ? { avatar_display: avatarDisplay }
+              : {}),
           });
         }
       },
@@ -1631,6 +1743,10 @@ export function useVoiceChannel({
     onSfu("participant-left", ({ participantId }) => {
       const clerkId =
         uuidToClerkRef.current.get(participantId) || participantId;
+      stopAutomaticJoinSoundboardPlaybacksByOwner(
+        clerkId,
+        getSoundboardServerKey(isCall ? "dm-call" : serverId),
+      );
       participantsRef.current.delete(participantId);
       uuidToClerkRef.current.delete(participantId);
       sfu.deleteClerkMapping(participantId);
@@ -1914,25 +2030,41 @@ export function useVoiceChannel({
             sfuRef.current === sfu;
           if (isCurrentMedia) {
             const audioTrack = stream.getAudioTracks()[0];
-            const microphoneStream = createMicrophoneStream(stream);
+            const vadInput = createVoiceActivityStream(
+              stream,
+              publishedAudioProcessorRef.current,
+            );
             if (
               isMicOnRef.current &&
               audioTrack &&
               audioTrack.readyState !== "ended" &&
               audioTrack.enabled &&
-              microphoneStream
+              vadInput
             ) {
               sfu.vad.stop();
-              sfu.vad.start(microphoneStream);
+              disposeVoiceActivityStream(ownedVadMonitorStreamRef.current);
+              ownedVadMonitorStreamRef.current = vadInput.ownsTracks
+                ? vadInput.stream
+                : null;
+              sfu.vad.start(vadInput.stream);
             } else {
               sfu.vad.stop();
+              if (vadInput?.ownsTracks) {
+                disposeVoiceActivityStream(vadInput.stream);
+              }
+              disposeVoiceActivityStream(ownedVadMonitorStreamRef.current);
+              ownedVadMonitorStreamRef.current = null;
             }
           } else if (!isMicOnRef.current) {
             sfu.vad.stop();
+            disposeVoiceActivityStream(ownedVadMonitorStreamRef.current);
+            ownedVadMonitorStreamRef.current = null;
           }
         }
         if (!isMicOnRef.current && sfuRef.current === sfu) {
           sfu.vad.stop();
+          disposeVoiceActivityStream(ownedVadMonitorStreamRef.current);
+          ownedVadMonitorStreamRef.current = null;
         }
         const currentStream = localStreamRef.current;
         if (!currentStream || sfuRef.current !== sfu) return;
@@ -1987,6 +2119,7 @@ export function useVoiceChannel({
     localStreamRef.current = new MediaStream();
   }, [
     automaticSoundboardSessionId,
+    createAutomaticSoundboardTransport,
     user,
     serverId,
     channelId,
@@ -2001,6 +2134,7 @@ export function useVoiceChannel({
     chatUserAvatarDisplay,
     chatUserDisplayName,
     chatUsername,
+    dispatch,
     autoJoin,
     chatConnected,
     currentVoiceChannelStartedAt,
@@ -2365,12 +2499,17 @@ export function useVoiceChannel({
         }
 
         if (audioNeedsUpdate && isMicOn) {
-          const rawMicrophoneStream = rawAudioTrack
-            ? new MediaStream([rawAudioTrack])
-            : null;
+          const vadInput = createVoiceActivityStream(
+            displayStream,
+            nextAudioProcessor,
+          );
           sfu.vad.stop();
-          if (rawMicrophoneStream) {
-            sfu.vad.start(rawMicrophoneStream);
+          disposeVoiceActivityStream(ownedVadMonitorStreamRef.current);
+          ownedVadMonitorStreamRef.current = vadInput?.ownsTracks
+            ? vadInput.stream
+            : null;
+          if (vadInput) {
+            sfu.vad.start(vadInput.stream);
           }
         }
 
@@ -2492,14 +2631,23 @@ export function useVoiceChannel({
     }
 
     if (isMicOn) {
-      const microphoneStream = createMicrophoneStream(stream);
-      if (microphoneStream) {
-        sfuRef.current?.vad.start(microphoneStream);
+      const vadInput = createVoiceActivityStream(
+        stream,
+        publishedAudioProcessorRef.current,
+      );
+      disposeVoiceActivityStream(ownedVadMonitorStreamRef.current);
+      ownedVadMonitorStreamRef.current = vadInput?.ownsTracks
+        ? vadInput.stream
+        : null;
+      if (vadInput) {
+        sfuRef.current?.vad.start(vadInput.stream);
       } else {
         sfuRef.current?.vad.stop();
       }
     } else {
       sfuRef.current?.vad.stop();
+      disposeVoiceActivityStream(ownedVadMonitorStreamRef.current);
+      ownedVadMonitorStreamRef.current = null;
     }
 
     if (joined) {
@@ -2588,7 +2736,10 @@ export function useVoiceChannel({
     const thumbnails = capturingThumbnails.current;
 
     return () => {
-      if (sfuRef.current) {
+      const activeSfu = sfuRef.current;
+      const automaticSoundboardTransport =
+        createAutomaticSoundboardTransport(activeSfu);
+      if (activeSfu) {
         vcLog.info("Voice lifecycle teardown", {
           reason: "component-unmount",
           channelId,
@@ -2597,10 +2748,11 @@ export function useVoiceChannel({
           joined: joinedRef.current,
         });
         cleanupSfuHandlers();
-        sfuRef.current.disconnect("component-unmount");
         sfuRef.current = null;
         setSfuInstance(null);
         stopCameraBackgroundEffect(true);
+        disposeVoiceActivityStream(ownedVadMonitorStreamRef.current);
+        ownedVadMonitorStreamRef.current = null;
         publishedAudioProcessorRef.current?.destroy();
         publishedAudioProcessorRef.current = null;
         localStreamRef.current?.getTracks().forEach((t) => {
@@ -2637,10 +2789,23 @@ export function useVoiceChannel({
       }
 
       if (joinedRef.current) {
-        scheduleAutomaticSoundboardCleanup(
+        const generation = getAutomaticSoundboardSessionGeneration(
+          automaticSoundboardSessionId,
+        );
+        void playAutomaticSoundboardTrigger(
+          "leave",
           automaticSoundboardSessionId,
           serverId,
+          automaticSoundboardTransport,
+        ).catch(() => false);
+        finishAutomaticLeave(
+          activeSfu,
+          automaticSoundboardSessionId,
+          generation,
+          "component-unmount",
         );
+      } else {
+        activeSfu?.disconnect("component-unmount");
       }
 
       if (joinedRef.current && mode !== "room" && channelId) {
@@ -2654,6 +2819,7 @@ export function useVoiceChannel({
     serverId,
     stopCameraBackgroundEffect,
     automaticSoundboardSessionId,
+    createAutomaticSoundboardTransport,
     cleanupSfuHandlers,
     localMediaOwner,
   ]);
@@ -2661,13 +2827,16 @@ export function useVoiceChannel({
   // Listen for forced disconnects (e.g. user was banned/kicked from the server)
   useEffect(() => {
     const handleForceDisconnect = () => {
-      if (sfuRef.current) {
+      const activeSfu = sfuRef.current;
+      if (activeSfu) {
+        const wasJoined = joinedRef.current;
+        joinedRef.current = false;
         vcLog.warn("Voice lifecycle teardown", {
           reason: "forced-disconnect",
           channelId,
           serverId,
           mode,
-          joined: joinedRef.current,
+          joined: wasJoined,
         });
         // Play disconnect sound before cleanup (skip for calls — gateway plays call-end sound)
         if (
@@ -2677,16 +2846,27 @@ export function useVoiceChannel({
           playDisconnect();
         }
         cancelAutomaticSoundboardCleanup(automaticSoundboardSessionId);
+        const expectedGeneration = getAutomaticSoundboardSessionGeneration(
+          automaticSoundboardSessionId,
+        );
+        sfuRef.current = null;
         void playAutomaticSoundboardTrigger(
           "leave",
           automaticSoundboardSessionId,
           serverId,
-        ).finally(() =>
-          resetAutomaticSoundboardSession(automaticSoundboardSessionId),
-        );
+          createAutomaticSoundboardTransport(activeSfu),
+        ).catch(() => false);
         cleanupSfuHandlers();
-        sfuRef.current.disconnect("forced-disconnect");
-        sfuRef.current = null;
+        finishAutomaticLeave(
+          activeSfu,
+          automaticSoundboardSessionId,
+          expectedGeneration,
+          "forced-disconnect",
+          () => {
+            setSfuInstance(null);
+            onLeft?.();
+          },
+        );
         stopCameraBackgroundEffect(true);
         publishedAudioProcessorRef.current?.destroy();
         publishedAudioProcessorRef.current = null;
@@ -2700,10 +2880,11 @@ export function useVoiceChannel({
           t.stop();
         });
         screenStreamRef.current = null;
+        disposeVoiceActivityStream(ownedVadMonitorStreamRef.current);
+        ownedVadMonitorStreamRef.current = null;
         releaseLocalStream(localMediaOwner);
         voiceDispatch({ type: "LEFT" });
-        onLeft?.();
-        if (mode !== "room" && channelId) {
+        if (wasJoined && mode !== "room" && channelId) {
           sendVoiceChannelLeave(channelId);
         }
       }
@@ -2723,18 +2904,37 @@ export function useVoiceChannel({
     serverId,
     stopCameraBackgroundEffect,
     automaticSoundboardSessionId,
+    createAutomaticSoundboardTransport,
     cleanupSfuHandlers,
     localMediaOwner,
   ]);
 
   const handleLeave = useCallback(() => {
+    const activeSfu = sfuRef.current;
+    if (!activeSfu) return;
+    const wasJoined = joinedRef.current;
     cancelAutomaticSoundboardCleanup(automaticSoundboardSessionId);
+    if (!wasJoined) {
+      sfuRef.current = null;
+      cleanupSfuHandlers();
+      activeSfu.disconnect("user-leave");
+      setSfuInstance(null);
+      hasAutoJoined.current = true;
+      return;
+    }
+    const automaticSoundboardTransport =
+      createAutomaticSoundboardTransport(activeSfu);
+    const expectedGeneration = getAutomaticSoundboardSessionGeneration(
+      automaticSoundboardSessionId,
+    );
+    joinedRef.current = false;
+    sfuRef.current = null;
     vcLog.info("Voice lifecycle teardown", {
       reason: "user-leave",
       channelId,
       serverId,
       mode,
-      joined: joinedRef.current,
+      joined: wasJoined,
     });
     // Play disconnect sound (skip for calls — gateway plays call-end sound)
     if (
@@ -2747,14 +2947,22 @@ export function useVoiceChannel({
       "leave",
       automaticSoundboardSessionId,
       serverId,
-    ).finally(() =>
-      resetAutomaticSoundboardSession(automaticSoundboardSessionId),
-    );
+      automaticSoundboardTransport,
+    ).catch(() => false);
     cleanupSfuHandlers();
-    sfuRef.current?.disconnect("user-leave");
-    sfuRef.current = null;
-    setSfuInstance(null);
+    finishAutomaticLeave(
+      activeSfu,
+      automaticSoundboardSessionId,
+      expectedGeneration,
+      "user-leave",
+      () => {
+        setSfuInstance(null);
+        if (!isCall) onLeft?.();
+      },
+    );
     stopCameraBackgroundEffect(true);
+    disposeVoiceActivityStream(ownedVadMonitorStreamRef.current);
+    ownedVadMonitorStreamRef.current = null;
     publishedAudioProcessorRef.current?.destroy();
     publishedAudioProcessorRef.current = null;
     localStreamRef.current?.getTracks().forEach((t) => {
@@ -2774,8 +2982,7 @@ export function useVoiceChannel({
     capturingThumbnails.current.clear();
 
     voiceDispatch({ type: "LEFT" });
-    onLeft?.();
-    if (mode !== "room" && channelId) {
+    if (wasJoined && mode !== "room" && channelId) {
       sendVoiceChannelLeave(channelId);
     }
     // Prevent the auto-join effect from immediately re-joining after an explicit
@@ -2790,6 +2997,7 @@ export function useVoiceChannel({
     serverId,
     stopCameraBackgroundEffect,
     automaticSoundboardSessionId,
+    createAutomaticSoundboardTransport,
     cleanupSfuHandlers,
     localMediaOwner,
   ]);

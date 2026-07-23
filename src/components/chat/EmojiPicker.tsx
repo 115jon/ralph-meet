@@ -55,7 +55,7 @@ import InlineEmoji from "./InlineEmoji";
 interface Props {
   onSelect: (emoji: string) => void;
   onClose: () => void;
-  placement?: "top-end" | "bottom-end";
+  placement?: "top-end" | "bottom-start" | "bottom-end" | "left" | "right";
   markerRef?: React.RefObject<HTMLElement | null>;
   isClosing?: boolean;
 }
@@ -600,21 +600,39 @@ export default function EmojiPicker({
         maxHeight: MAX_HEIGHT,
       };
 
-      let left = rect.left;
-      if (left + pickerWidth > window.innerWidth - 10) {
-        left = Math.max(10, window.innerWidth - pickerWidth - 10);
+      if (placement === "left" || placement === "right") {
+        const opensToRight = placement === "right";
+        let left = opensToRight ? rect.right + 8 : rect.left - pickerWidth - 8;
+        if (
+          (opensToRight && left + pickerWidth > window.innerWidth - 10) ||
+          (!opensToRight && left < 10)
+        ) {
+          left = opensToRight ? rect.left - pickerWidth - 8 : rect.right + 8;
+        }
+        const maxLeft = Math.max(10, window.innerWidth - pickerWidth - 10);
+        left = Math.min(Math.max(10, left), maxLeft);
+        style.left = left;
+        style.top = Math.min(
+          Math.max(10, rect.top),
+          Math.max(10, window.innerHeight - MAX_HEIGHT - 10),
+        );
+      } else {
+        let left = rect.left;
+        if (left + pickerWidth > window.innerWidth - 10) {
+          left = Math.max(10, window.innerWidth - pickerWidth - 10);
+        }
+        if (left < 10) left = 10;
+        style.left = left;
       }
-      if (left < 10) left = 10;
-      style.left = left;
 
-      if (placement === "bottom-end") {
+      if (placement.startsWith("bottom")) {
         if (rect.bottom + 8 + MAX_HEIGHT > window.innerHeight - 10) {
           // Will clip bottom! Pin to safe bottom edge instead.
           style.bottom = 10;
         } else {
           style.top = rect.bottom + 8;
         }
-      } else {
+      } else if (placement !== "left" && placement !== "right") {
         style.bottom = window.innerHeight - rect.top + 8;
         style.maxHeight = Math.min(MAX_HEIGHT, Math.max(100, rect.top - 16));
       }

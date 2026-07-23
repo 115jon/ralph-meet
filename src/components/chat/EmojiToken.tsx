@@ -16,6 +16,7 @@ interface EmojiTokenProps {
   className?: string;
   fallbackClassName?: string;
   selectable?: boolean;
+  size?: "default" | "reaction" | "large";
 }
 
 const EMPTY_CUSTOM_EMOJI_MAP: Record<string, EmojiTokenCustomMapItem> = {};
@@ -26,6 +27,7 @@ export default function EmojiToken({
   className,
   fallbackClassName,
   selectable = false,
+  size = "default",
 }: EmojiTokenProps) {
   const customEmoji = parseCustomEmojiToken(value);
   if (customEmoji) {
@@ -44,6 +46,7 @@ export default function EmojiToken({
         imageUrl={item.image_url}
         selectionText={`:${customEmoji.shortcode}:`}
         selectable={selectable}
+        size={size}
         className={className}
       />
     );
@@ -62,6 +65,7 @@ export default function EmojiToken({
         native={nativeEmoji.native}
         selectionText={nativeEmoji.native}
         selectable={selectable}
+        size={size}
         className={className}
       />
     );

@@ -1,5 +1,7 @@
 /// <reference types="vite/client" />
 
+import type { BackgroundTaskEnvelope } from "./lib/background-tasks";
+
 // Augment the CloudflareEnv interface with our custom bindings
 // These are defined in wrangler.toml and injected at runtime
 
@@ -11,12 +13,17 @@ declare global {
     MEETING_ROOM: DurableObjectNamespace;
     VOICE_ROOM: DurableObjectNamespace;
     RATE_LIMITER: DurableObjectNamespace;
+    BACKGROUND_TASKS?: Queue<BackgroundTaskEnvelope>;
     INSTAGRAM_SESSIONID?: string;
     INSTAGRAM_CSRFTOKEN?: string;
     INSTAGRAM_DS_USER_ID?: string;
     INSTAGRAM_MID?: string;
     INSTAGRAM_IG_DID?: string;
     INSTAGRAM_RUR?: string;
+  }
+
+  namespace Cloudflare {
+    interface Env extends CloudflareEnv {}
   }
 
   // ── Chromium Insertable Streams (WebRTC Breakout Box) ───────────────────

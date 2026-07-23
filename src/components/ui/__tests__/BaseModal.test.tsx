@@ -58,6 +58,19 @@ describe("BaseModal", () => {
     expect(first).toHaveFocus();
   });
 
+  it("prevents scrolling during initial focus but not Tab navigation", () => {
+    const focus = vi.spyOn(HTMLElement.prototype, "focus");
+    try {
+      render(<TestModal onClose={() => {}} />);
+
+      fireEvent.keyDown(window, { key: "Tab" });
+
+      expect(focus.mock.calls).toEqual([[{ preventScroll: true }], []]);
+    } finally {
+      focus.mockRestore();
+    }
+  });
+
   it("restores focus and only the topmost modal handles Escape", () => {
     function Harness() {
       const [outerOpen, setOuterOpen] = useState(false);
@@ -121,7 +134,11 @@ describe("BaseModal", () => {
         <button type="button" hidden>
           Hidden action
         </button>
-        <div ref={(element) => element?.setAttribute("inert", "")}>
+        <div
+          ref={(element) => {
+            element?.setAttribute("inert", "");
+          }}
+        >
           <button type="button">Inert action</button>
         </div>
         <button type="button">Visible action</button>

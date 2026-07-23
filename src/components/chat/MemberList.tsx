@@ -15,6 +15,7 @@ import { getFileIcon } from "@/lib/file-icons";
 import { isVideo } from "@/lib/media";
 import { PERMISSIONS } from "@/lib/permissions";
 import { getAuthAssetUrl, getDownloadUrl, getMediaUrl } from "@/lib/platform";
+import { dispatchOpenProfileEditorEvent } from "@/lib/profile-editor-events";
 import { buildProxyMediaPath } from "@/lib/proxy-media-url";
 import type { Attachment, Message, Role, User } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -24,6 +25,7 @@ import { useChatActions, useChatStore } from "@/stores/chat-store";
 import { useCallStore } from "@/stores/useCallStore";
 import type { ViewerContext } from "@/stores/useImageViewerStore";
 import { useImageViewerActions } from "@/stores/useImageViewerStore";
+import { UserStatusDot } from "./UserStatusDot";
 import {
   ArrowLeft,
   Bell,
@@ -172,13 +174,6 @@ function compareMembersByRole(
   return a.user.username.localeCompare(b.user.username);
 }
 
-const statusColors: Record<string, string> = {
-  online: "bg-primary",
-  idle: "bg-warning",
-  dnd: "bg-destructive",
-  offline: "bg-rm-text-muted/40",
-};
-
 function formatFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
@@ -261,6 +256,27 @@ export default function MemberList({
     tabLoading: false,
     tabError: null as string | null,
   });
+  const mobileProfileCloseTimeoutRef = useRef<number | null>(null);
+  const mobileProfileAfterCloseRef = useRef<(() => void) | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (mobileProfileCloseTimeoutRef.current !== null) {
+        window.clearTimeout(mobileProfileCloseTimeoutRef.current);
+      }
+      mobileProfileAfterCloseRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (state.mobileProfileUser !== null || state.mobileProfileUserClosing) {
+      return;
+    }
+
+    const afterClose = mobileProfileAfterCloseRef.current;
+    mobileProfileAfterCloseRef.current = null;
+    afterClose?.();
+  }, [state.mobileProfileUser, state.mobileProfileUserClosing]);
 
   // Reset tab when desktop details mode is closed
   useEffect(() => {
@@ -401,6 +417,21 @@ export default function MemberList({
   // Stable close callback that clears both popoverUser AND popoverAnchor
   const closePopover = useCallback(() => {
     setState((prev) => ({ ...prev, popoverUser: null, popoverAnchor: null }));
+  }, []);
+
+  const closeMobileProfile = useCallback((afterClose?: () => void) => {
+    if (afterClose) mobileProfileAfterCloseRef.current = afterClose;
+    if (mobileProfileCloseTimeoutRef.current !== null) return;
+
+    setState((prev) => ({ ...prev, mobileProfileUserClosing: true }));
+    mobileProfileCloseTimeoutRef.current = window.setTimeout(() => {
+      mobileProfileCloseTimeoutRef.current = null;
+      setState((prev) => ({
+        ...prev,
+        mobileProfileUser: null,
+        mobileProfileUserClosing: false,
+      }));
+    }, 300);
   }, []);
 
   // Shared member click/context-menu handlers
@@ -701,16 +732,10 @@ export default function MemberList({
             user={state.mobileProfileUser.user}
             roles={state.mobileProfileUser.roles}
             isClosing={state.mobileProfileUserClosing}
-            onClose={() => {
-              setState((prev) => ({ ...prev, mobileProfileUserClosing: true }));
-              setTimeout(() => {
-                setState((prev) => ({
-                  ...prev,
-                  mobileProfileUser: null,
-                  mobileProfileUserClosing: false,
-                }));
-              }, 300);
-            }}
+            onClose={closeMobileProfile}
+            onOpenProfileEditor={() =>
+              closeMobileProfile(() => dispatchOpenProfileEditorEvent())
+            }
             onBan={onBan}
             onKick={handleKick}
           />
@@ -1928,13 +1953,9 @@ function MemberItem({
             <span className="h-0.5 w-0.5 rounded-full bg-rm-bg-primary animate-[pulse_900ms_cubic-bezier(0.16,1,0.3,1)_infinite] [animation-delay:300ms]" />
           </div>
         ) : (
-          <div
-            className={cn(
-              "absolute -bottom-0.5 -right-0.5 z-20 h-3.5 w-3.5 lg:h-3 lg:w-3 rounded-full border-2 border-rm-bg-elevated lg:border-rm-bg-sidebar transition-colors",
-              isOnline
-                ? statusColors[member.user.status ?? "online"]
-                : "bg-rm-text-muted/40",
-            )}
+          <UserStatusDot
+            status={isOnline ? (member.user.status ?? "online") : "offline"}
+            className="absolute -bottom-0.5 -right-0.5 z-20 h-3.5 w-3.5 border-2 border-rm-bg-elevated transition-colors lg:h-3 lg:w-3 lg:border-rm-bg-sidebar"
           />
         )}
       </div>

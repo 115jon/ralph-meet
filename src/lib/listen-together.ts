@@ -173,17 +173,20 @@ export interface ListenTogetherPauseCommand {
   type: "listen_together.pause";
   room_slug: string;
   paused: boolean;
+  entryId: string;
 }
 
 export interface ListenTogetherSeekCommand {
   type: "listen_together.seek";
   room_slug: string;
   positionMs: number;
+  entryId: string;
 }
 
 export interface ListenTogetherSkipCommand {
   type: "listen_together.skip";
   room_slug: string;
+  entryId: string;
 }
 
 export interface ListenTogetherRemoveCommand {

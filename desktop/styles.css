@@ -4,3 +4,195 @@
 @import "../src/styles.css";
 @source "../src";
 @source "./";
+
+.desktop-window-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--rm-bg-primary);
+}
+
+.desktop-window-titlebar {
+  position: relative;
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  flex: 0 0 28px;
+  height: 28px;
+  min-height: 28px;
+  user-select: none;
+  -webkit-user-select: none;
+  background: var(--rm-bg-secondary);
+  border-bottom: 1px solid var(--rm-border);
+  color: var(--rm-text-muted);
+  cursor: default;
+}
+
+.desktop-window-titlebar-leading {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  width: 68px;
+  padding-left: 6px;
+}
+
+.desktop-window-nav-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--rm-text-muted);
+  font-size: 21px;
+  line-height: 1;
+}
+
+.desktop-window-nav-button:hover {
+  background: var(--rm-bg-hover);
+  color: var(--rm-text-primary);
+}
+
+.desktop-window-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--rm-text-muted);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  line-height: 28px;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.desktop-window-controls {
+  display: flex;
+  align-items: stretch;
+  align-self: stretch;
+}
+
+.desktop-window-control {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--rm-text-secondary);
+  cursor: default;
+}
+
+.desktop-window-control:hover {
+  background: var(--rm-bg-hover);
+  color: var(--rm-text-primary);
+}
+
+.desktop-window-control:active {
+  background: var(--rm-bg-active);
+}
+
+.desktop-window-control-close:hover {
+  background: #c42b1c;
+  color: #fff;
+}
+
+.desktop-window-control-icon {
+  width: 12px;
+  height: 12px;
+  pointer-events: none;
+}
+
+.desktop-window-content {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.desktop-window-content > * {
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
+}
+
+.desktop-resize-handle {
+  position: fixed;
+  z-index: 10001;
+}
+
+.desktop-resize-handle-top,
+.desktop-resize-handle-bottom {
+  left: 8px;
+  right: 8px;
+  height: 6px;
+  cursor: ns-resize;
+}
+
+.desktop-resize-handle-top {
+  top: 28px;
+}
+
+.desktop-resize-handle-bottom {
+  bottom: 0;
+}
+
+.desktop-resize-handle-left,
+.desktop-resize-handle-right {
+  top: 28px;
+  bottom: 8px;
+  width: 6px;
+  cursor: ew-resize;
+}
+
+.desktop-resize-handle-left {
+  left: 0;
+}
+
+.desktop-resize-handle-right {
+  right: 0;
+}
+
+.desktop-resize-handle-top-left,
+.desktop-resize-handle-top-right,
+.desktop-resize-handle-bottom-left,
+.desktop-resize-handle-bottom-right {
+  width: 9px;
+  height: 9px;
+  z-index: 10002;
+}
+
+.desktop-resize-handle-top-left {
+  top: 28px;
+  left: 0;
+  cursor: nwse-resize;
+}
+
+.desktop-resize-handle-top-right {
+  top: 28px;
+  right: 0;
+  cursor: nesw-resize;
+}
+
+.desktop-resize-handle-bottom-left {
+  bottom: 0;
+  left: 0;
+  cursor: nesw-resize;
+}
+
+.desktop-resize-handle-bottom-right {
+  right: 0;
+  bottom: 0;
+  cursor: nwse-resize;
+}

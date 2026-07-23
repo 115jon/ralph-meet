@@ -89,7 +89,7 @@ export function CustomSelect({
 
   const closeSelect = (restoreFocus = true) => {
     setIsOpen(false);
-    if (restoreFocus) triggerRef.current?.focus();
+    if (restoreFocus) triggerRef.current?.focus({ preventScroll: true });
   };
 
   const selectOption = (index: number) => {
@@ -107,7 +107,7 @@ export function CustomSelect({
         !containerRef.current.contains(e.target as Node)
       ) {
         setIsOpen(false);
-        triggerRef.current?.focus();
+        triggerRef.current?.focus({ preventScroll: true });
       }
     };
     document.addEventListener("mousedown", clickOutside);
@@ -134,7 +134,7 @@ export function CustomSelect({
       if (event.key !== "Escape") return;
       event.preventDefault();
       setIsOpen(false);
-      triggerRef.current?.focus();
+      triggerRef.current?.focus({ preventScroll: true });
     };
     document.addEventListener("keydown", handleDocumentKeyDown);
     return () => document.removeEventListener("keydown", handleDocumentKeyDown);
@@ -172,7 +172,7 @@ export function CustomSelect({
       }
     }
     setIsOpen(false);
-    triggerRef.current?.focus();
+    triggerRef.current?.focus({ preventScroll: true });
   };
 
   const handleTriggerKeyDown = (

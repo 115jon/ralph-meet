@@ -3,6 +3,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { apiError, apiSuccess, getDB, requireAuth } from "@/lib/api-helpers";
 import { getCurrentUser } from "@/lib/kova-auth-server";
 import { applyProfileThemeDefaults } from "@/lib/profile-customization";
+import { normalizeUsernameForStorage } from "@/lib/validations";
 import { getMe } from "@/services/user.service";
 
 type ClaimCandidate = {
@@ -138,7 +139,14 @@ const POST = async ({ request }: any) => {
   const legacyProfileTheme = applyProfileThemeDefaults(legacy);
 
   const references = await getExistingUserIdReferences(db);
-  const legacyHoldingUsername = `${legacy.username}__claimed__${Date.now()}`;
+  const legacyHoldingUsername = normalizeUsernameForStorage(
+    `claimed_${legacyUserId.slice(-24)}`,
+    `user_${legacyUserId.slice(-6)}`,
+  );
+  const claimedUsername = normalizeUsernameForStorage(
+    legacy.username,
+    `user_${userId.slice(-6)}`,
+  );
   const statements = [
     db.prepare("PRAGMA defer_foreign_keys = ON"),
     db.prepare("DELETE FROM users WHERE id = ?").bind(userId),
@@ -152,7 +160,7 @@ const POST = async ({ request }: any) => {
       )
       .bind(
         userId,
-        legacy.username,
+        claimedUsername,
         legacy.display_name,
         legacy.avatar_url,
         legacy.avatar_display ?? null,

@@ -6,6 +6,7 @@ import {
   getListenTogetherInputMode,
   type ListenTogetherEnqueueMode,
   type ListenTogetherResolveResponse,
+  type ListenTogetherQueueEntry,
   type ListenTogetherSearchFilter,
   type ListenTogetherSearchResponse,
   type ListenTogetherSearchResult,
@@ -53,6 +54,7 @@ import {
   useDeferredValue,
   useEffect,
   useMemo,
+  memo,
   useRef,
   useState,
 } from "react";
@@ -83,6 +85,162 @@ function getRequeueTrack(track: ListenTogetherTrack): ListenTogetherTrack {
     station_uuid: track.station_uuid ?? track.id,
   };
 }
+
+interface ListenTogetherQueueRowProps {
+  entry: ListenTogetherQueueEntry;
+  index: number;
+  isCurrent: boolean;
+  roomSlug?: string | null;
+  sfu: SFUClient | null;
+  onCommandRejected?: (message: string) => void;
+  onCommandAccepted?: () => void;
+}
+
+// Stable render seam for testing memoization without adding runtime observer props.
+// eslint-disable-next-line react-refresh/only-export-components
+export const listenTogetherQueueRowRenderer = {
+  render({
+    entry,
+    index,
+    isCurrent,
+    roomSlug,
+    sfu,
+    onCommandRejected,
+    onCommandAccepted,
+  }: ListenTogetherQueueRowProps) {
+    const sendQueueCommand = (payload: Record<string, unknown>) => {
+      if (!sfu || !roomSlug || sfu.voiceGW.isReady === false) {
+        onCommandRejected?.(
+          "Connect to the voice room before changing the queue.",
+        );
+        return false;
+      }
+      listenTogetherLog.info("Sending listen together queue command", {
+        source: "listen-together-panel",
+        type: payload.type,
+        roomSlug,
+        entryId: payload.entryId ?? null,
+      });
+      sfu.resumeAudioContext?.();
+      const accepted = sfu.voiceGW.sendAppEvent(payload);
+      if (accepted === false) {
+        onCommandRejected?.("Could not update the listen together queue.");
+      } else {
+        onCommandAccepted?.();
+      }
+      return accepted;
+    };
+
+    return (
+      <div
+        className={cn(
+          "grid grid-cols-[auto_auto_minmax(0,1fr)_auto] items-center gap-2 px-2 py-2.5 transition-colors sm:gap-3 sm:py-3",
+          isCurrent ? "rounded-2xl bg-primary/10" : "hover:bg-rm-bg-hover/45",
+        )}
+      >
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center text-xs font-black tabular-nums text-rm-text-muted">
+          {isCurrent ? (
+            <span className="h-2 w-2 rounded-full bg-primary" />
+          ) : (
+            index + 1
+          )}
+        </div>
+        <div className="h-10 w-10 shrink-0 overflow-hidden rounded-xl bg-rm-bg-elevated/60 ring-1 ring-white/5 sm:h-11 sm:w-11">
+          {entry.track.artworkUrl ? (
+            <img
+              src={entry.track.artworkUrl}
+              alt=""
+              className="h-full w-full object-cover"
+            />
+          ) : (
+            <div className="flex h-full w-full items-center justify-center text-rm-text-muted">
+              <Headphones className="h-4 w-4" />
+            </div>
+          )}
+        </div>
+        <div className="min-w-0">
+          <div className="truncate text-[13px] font-bold text-rm-text sm:text-sm">
+            {entry.track.title}
+          </div>
+          <div className="mt-1 flex min-w-0 items-center gap-1.5 truncate text-[11px] text-rm-text-muted sm:gap-2 sm:text-xs">
+            <span className="truncate">
+              {entry.track.artist || entry.track.sourceLabel}
+            </span>
+            <span aria-hidden="true">•</span>
+            <span className="shrink-0">{entry.track.sourceLabel}</span>
+            {entry.track.kind === "music" && (
+              <>
+                <span aria-hidden="true">•</span>
+                <span className="shrink-0 tabular-nums">
+                  {formatListenTogetherDuration(entry.track.durationMs)}
+                </span>
+              </>
+            )}
+          </div>
+          <div className="mt-1 flex min-w-0 items-center gap-1.5 text-[10px] text-rm-text-muted/75 sm:text-[11px]">
+            <div className="h-4 w-4 shrink-0 overflow-hidden rounded-full bg-rm-bg-hover">
+              {entry.requester.avatarUrl ? (
+                <AvatarImage
+                  src={getAuthAssetUrl(entry.requester.avatarUrl)}
+                  alt={`${entry.requester.displayName} avatar`}
+                  display={entry.requester.avatarDisplay}
+                />
+              ) : (
+                <div className="flex h-full w-full items-center justify-center text-[8px] font-black text-rm-text-muted">
+                  {entry.requester.displayName.charAt(0).toUpperCase()}
+                </div>
+              )}
+            </div>
+            <span className="truncate">{entry.requester.displayName}</span>
+            {entry.importBatchLabel && (
+              <>
+                <span aria-hidden="true">•</span>
+                <span className="truncate">{entry.importBatchLabel}</span>
+              </>
+            )}
+          </div>
+        </div>
+        <div className="flex shrink-0 gap-1">
+          {!isCurrent && (
+            <button
+              type="button"
+              onClick={() =>
+                sendQueueCommand({
+                  type: "listen_together.play",
+                  room_slug: roomSlug,
+                  entryId: entry.entryId,
+                })
+              }
+              className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-rm-text-muted transition-colors hover:bg-rm-bg-active hover:text-rm-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+              aria-label={`Play ${entry.track.title}`}
+            >
+              <Play className="h-3.5 w-3.5" />
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() =>
+              sendQueueCommand({
+                type: "listen_together.remove",
+                room_slug: roomSlug,
+                entryId: entry.entryId,
+              })
+            }
+            className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-rm-text-muted transition-colors hover:bg-red-500/10 hover:text-red-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400/30"
+            aria-label={`Remove ${entry.track.title}`}
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      </div>
+    );
+  },
+};
+
+export const ListenTogetherQueueRow = memo(
+  (props: ListenTogetherQueueRowProps) =>
+    listenTogetherQueueRowRenderer.render(props),
+);
 
 export function ListenTogetherPanel({
   sfu,
@@ -140,6 +298,13 @@ export function ListenTogetherPanel({
       : false,
   );
   const [isPaneDragging, setIsPaneDragging] = useState(false);
+
+  const handleQueueCommandRejected = useCallback((message: string) => {
+    setResolveFeedback(message);
+  }, []);
+  const handleQueueCommandAccepted = useCallback(() => {
+    setResolveFeedback(null);
+  }, []);
 
   paneRatioRef.current = workspacePaneRatio;
 
@@ -255,14 +420,6 @@ export function ListenTogetherPanel({
     setQueryHistory(nextHistory);
     writeListenTogetherQueryHistory(nextHistory);
   };
-
-  useEffect(() => {
-    if (!sfu || !roomSlug) return;
-    sfu.voiceGW.sendAppEvent({
-      type: "listen_together.state.request",
-      room_slug: roomSlug,
-    });
-  }, [roomSlug, sfu]);
 
   const runSearch = useCallback(
     async (query: string, signal?: AbortSignal) => {
@@ -488,7 +645,12 @@ export function ListenTogetherPanel({
       entryId: payload.entryId ?? null,
     });
     sfu.resumeAudioContext?.();
-    sfu.voiceGW.sendAppEvent(payload);
+    const accepted = sfu.voiceGW.sendAppEvent(payload);
+    if (accepted === false) {
+      setResolveFeedback("Could not update the queue. Please try again.");
+      return false;
+    }
+    setResolveFeedback(null);
     return true;
   };
 
@@ -1220,129 +1382,18 @@ export function ListenTogetherPanel({
             {activeRightTab === "queue" ? (
               snapshot?.queue?.length ? (
                 <div className="divide-y divide-rm-border/70">
-                  {snapshot.queue.map((entry, index) => {
-                    const isCurrent = entry.entryId === snapshot.currentEntryId;
-                    return (
-                      <div
-                        key={entry.entryId}
-                        className={cn(
-                          "grid grid-cols-[auto_auto_minmax(0,1fr)_auto] items-center gap-2 px-2 py-2.5 transition-colors sm:gap-3 sm:py-3",
-                          isCurrent
-                            ? "rounded-2xl bg-primary/10"
-                            : "hover:bg-rm-bg-hover/45",
-                        )}
-                      >
-                        <div className="flex h-8 w-8 shrink-0 items-center justify-center text-xs font-black tabular-nums text-rm-text-muted">
-                          {isCurrent ? (
-                            <span className="h-2 w-2 rounded-full bg-primary" />
-                          ) : (
-                            index + 1
-                          )}
-                        </div>
-                        <div className="h-10 w-10 shrink-0 overflow-hidden rounded-xl bg-rm-bg-elevated/60 ring-1 ring-white/5 sm:h-11 sm:w-11">
-                          {entry.track.artworkUrl ? (
-                            <img
-                              src={entry.track.artworkUrl}
-                              alt=""
-                              className="h-full w-full object-cover"
-                            />
-                          ) : (
-                            <div className="flex h-full w-full items-center justify-center text-rm-text-muted">
-                              <Headphones className="h-4 w-4" />
-                            </div>
-                          )}
-                        </div>
-                        <div className="min-w-0">
-                          <div className="truncate text-[13px] font-bold text-rm-text sm:text-sm">
-                            {entry.track.title}
-                          </div>
-                          <div className="mt-1 flex min-w-0 items-center gap-1.5 truncate text-[11px] text-rm-text-muted sm:gap-2 sm:text-xs">
-                            <span className="truncate">
-                              {entry.track.artist || entry.track.sourceLabel}
-                            </span>
-                            <span aria-hidden="true">•</span>
-                            <span className="shrink-0">
-                              {entry.track.sourceLabel}
-                            </span>
-                            {entry.track.kind === "music" && (
-                              <>
-                                <span aria-hidden="true">•</span>
-                                <span className="shrink-0 tabular-nums">
-                                  {formatListenTogetherDuration(
-                                    entry.track.durationMs,
-                                  )}
-                                </span>
-                              </>
-                            )}
-                          </div>
-                          <div className="mt-1 flex min-w-0 items-center gap-1.5 text-[10px] text-rm-text-muted/75 sm:text-[11px]">
-                            <div className="h-4 w-4 shrink-0 overflow-hidden rounded-full bg-rm-bg-hover">
-                              {entry.requester.avatarUrl ? (
-                                <AvatarImage
-                                  src={getAuthAssetUrl(
-                                    entry.requester.avatarUrl,
-                                  )}
-                                  alt={`${entry.requester.displayName} avatar`}
-                                  display={entry.requester.avatarDisplay}
-                                />
-                              ) : (
-                                <div className="flex h-full w-full items-center justify-center text-[8px] font-black text-rm-text-muted">
-                                  {entry.requester.displayName
-                                    .charAt(0)
-                                    .toUpperCase()}
-                                </div>
-                              )}
-                            </div>
-                            <span className="truncate">
-                              {entry.requester.displayName}
-                            </span>
-                            {entry.importBatchLabel && (
-                              <>
-                                <span aria-hidden="true">•</span>
-                                <span className="truncate">
-                                  {entry.importBatchLabel}
-                                </span>
-                              </>
-                            )}
-                          </div>
-                        </div>
-                        <div className="flex shrink-0 gap-1">
-                          {!isCurrent && (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                if (!roomSlug) return;
-                                sendCommand({
-                                  type: "listen_together.play",
-                                  room_slug: roomSlug,
-                                  entryId: entry.entryId,
-                                });
-                              }}
-                              className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-rm-text-muted transition-colors hover:bg-rm-bg-active hover:text-rm-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
-                              aria-label={`Play ${entry.track.title}`}
-                            >
-                              <Play className="h-3.5 w-3.5" />
-                            </button>
-                          )}
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (!roomSlug) return;
-                              sendCommand({
-                                type: "listen_together.remove",
-                                room_slug: roomSlug,
-                                entryId: entry.entryId,
-                              });
-                            }}
-                            className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-rm-text-muted transition-colors hover:bg-red-500/10 hover:text-red-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400/30"
-                            aria-label={`Remove ${entry.track.title}`}
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
+                  {snapshot.queue.map((entry, index) => (
+                    <ListenTogetherQueueRow
+                      key={entry.entryId}
+                      entry={entry}
+                      index={index}
+                      isCurrent={entry.entryId === snapshot.currentEntryId}
+                      roomSlug={roomSlug}
+                      sfu={sfu}
+                      onCommandRejected={handleQueueCommandRejected}
+                      onCommandAccepted={handleQueueCommandAccepted}
+                    />
+                  ))}
                 </div>
               ) : (
                 <div className="rounded-[22px] border border-dashed border-rm-border bg-rm-bg-hover/30 px-4 py-10 text-center text-sm text-rm-text-muted">

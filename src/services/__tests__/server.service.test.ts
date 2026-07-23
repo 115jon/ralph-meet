@@ -266,10 +266,21 @@ describe("deleteServer", () => {
     db.mockQuery(/SELECT user_id FROM server_members/, {
       results: [{ user_id: USER_ID }, { user_id: "u2" }],
     });
+    db.mockQuery(/SELECT file_key FROM attachments/, {
+      results: [
+        { file_key: "attachments/channel-1/sound-1/airhorn.mp3" },
+        { file_key: "attachments/channel-2/sound-2/boop.ogg" },
+      ],
+    });
 
     const result = await deleteServer(db as any, SERVER_ID, USER_ID);
 
     db.assertCalled(/DELETE FROM servers WHERE id/);
+    db.assertCalledWith(/SELECT file_key FROM attachments/, [SERVER_ID]);
+    expect(result.soundboardFileKeys).toEqual([
+      "attachments/channel-1/sound-1/airhorn.mp3",
+      "attachments/channel-2/sound-2/boop.ogg",
+    ]);
     expect(result.cacheKeysToInvalidate.length).toBeGreaterThan(0);
     expect(result.broadcasts).toEqual([
       expect.objectContaining({

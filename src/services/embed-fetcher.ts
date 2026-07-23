@@ -28,16 +28,33 @@ const X_EMBED_HOSTS = new Set([
   "d.fixvx.com",
 ]);
 
-let embedCounter = 0;
-function nextEmbedId(): string {
-  return `embed_${++embedCounter}`;
+function nextEmbedId(url: string): string {
+  let hash = 2166136261;
+  for (let index = 0; index < url.length; index += 1) {
+    hash ^= url.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return `embed_${(hash >>> 0).toString(36)}`;
 }
 
 export async function extractAndProcessEmbeds(
   content: string,
 ): Promise<EmbedInfo[]> {
+  const result = await extractAndProcessEmbedsWithStatus(content);
+  return result.embeds;
+}
+
+export interface EmbedExtractionResult {
+  embeds: EmbedInfo[];
+  hadFailures: boolean;
+}
+
+export async function extractAndProcessEmbedsWithStatus(
+  content: string,
+): Promise<EmbedExtractionResult> {
   const matches = content.match(URL_REGEX);
-  if (!matches || matches.length === 0) return [];
+  if (!matches || matches.length === 0)
+    return { embeds: [], hadFailures: false };
 
   // Limit to 3 embeds max per message to prevent abuse
   const urls = [...new Set(matches)].slice(0, 3);
@@ -46,49 +63,51 @@ export async function extractAndProcessEmbeds(
   const results = await Promise.allSettled(embedPromises);
 
   const embeds: EmbedInfo[] = [];
+  let hadFailures = false;
   for (const result of results) {
     if (result.status === "fulfilled" && result.value) {
       embeds.push(result.value);
+    } else {
+      hadFailures = true;
+      log.error(
+        "Failed to fetch embed metadata:",
+        result.status === "rejected" ? result.reason : "no metadata returned",
+      );
     }
   }
 
-  return embeds;
+  return { embeds, hadFailures };
 }
 
 async function fetchEmbedMetadata(url: string): Promise<EmbedInfo | null> {
   const parsed = new URL(url);
   const hostname = parsed.hostname.toLowerCase();
 
-  try {
-    if (hostname.includes("youtube.com") || hostname.includes("youtu.be")) {
-      return await fetchYouTubeData(url);
-    }
-
-    if (isXPostHostname(hostname)) {
-      return await fetchTwitterData(url);
-    }
-
-    if (hostname.includes("instagram.com")) {
-      return await fetchInstagramData(url);
-    }
-
-    if (hostname.includes("tiktok.com")) {
-      return await fetchTikTokDataRefreshed(url);
-    }
-
-    if (
-      hostname.includes("spotify.com") ||
-      hostname.includes("open.spotify.com")
-    ) {
-      return await fetchSpotifyData(url);
-    }
-
-    // Default OpenGraph fallback
-    return await fetchOpenGraphData(url);
-  } catch (err) {
-    log.error(`Failed to fetch metadata for ${url}:`, err);
-    return null; // Silent fail, just don't embed
+  if (hostname.includes("youtube.com") || hostname.includes("youtu.be")) {
+    return await fetchYouTubeData(url);
   }
+
+  if (isXPostHostname(hostname)) {
+    return await fetchTwitterData(url);
+  }
+
+  if (hostname.includes("instagram.com")) {
+    return await fetchInstagramData(url);
+  }
+
+  if (hostname.includes("tiktok.com")) {
+    return await fetchTikTokDataRefreshed(url);
+  }
+
+  if (
+    hostname.includes("spotify.com") ||
+    hostname.includes("open.spotify.com")
+  ) {
+    return await fetchSpotifyData(url);
+  }
+
+  // Default OpenGraph fallback
+  return await fetchOpenGraphData(url);
 }
 
 function normalizeHostname(hostname: string): string {
@@ -154,7 +173,7 @@ async function fetchYouTubeData(url: string): Promise<EmbedInfo | null> {
   const resolvedDimensions = videoDimensions ?? fallbackDimensions;
 
   return {
-    id: nextEmbedId(),
+    id: nextEmbedId(url),
     url,
     type: "video",
     rawTitle: data.title,
@@ -475,7 +494,7 @@ async function fetchTwitterData(url: string): Promise<EmbedInfo | null> {
         }
 
         const embed: EmbedInfo = {
-          id: nextEmbedId(),
+          id: nextEmbedId(url),
           url,
           type: "rich",
           rawDescription: descMatch?.[1],
@@ -687,7 +706,7 @@ function buildTwitterEmbed(
   const metrics = extractTweetMetrics(tweet);
 
   const embed: EmbedInfo = {
-    id: nextEmbedId(),
+    id: nextEmbedId(url),
     url,
     type: "rich",
     rawDescription,
@@ -1332,7 +1351,7 @@ async function fetchInstagramData(url: string): Promise<EmbedInfo | null> {
   }
 
   return {
-    id: nextEmbedId(),
+    id: nextEmbedId(url),
     url,
     type: "rich",
     rawTitle,
@@ -1433,7 +1452,7 @@ async function fetchTikTokDataRefreshed(
   }
 
   return {
-    id: nextEmbedId(),
+    id: nextEmbedId(url),
     url,
     type: postType === "slideshow" ? "rich" : "video",
     rawTitle:
@@ -1494,7 +1513,7 @@ async function _fetchTikTokDataLegacy(url: string): Promise<EmbedInfo | null> {
   if (!videoId) return null;
 
   const embed: EmbedInfo = {
-    id: nextEmbedId(),
+    id: nextEmbedId(url),
     url,
     type: "video",
     rawTitle: `TikTok · ${data.author_name || "Unknown"}`,
@@ -1561,7 +1580,7 @@ async function fetchOpenGraphData(url: string): Promise<EmbedInfo | null> {
     const hostname = new URL(url).hostname;
 
     const embed: EmbedInfo = {
-      id: nextEmbedId(),
+      id: nextEmbedId(url),
       url,
       type: typeMatch?.[1]?.includes("video") ? "video" : "link",
       rawTitle: titleMatch?.[1] || hostname,
@@ -1597,7 +1616,7 @@ async function fetchSpotifyData(url: string): Promise<EmbedInfo | null> {
     const data = (await readJsonCapped(res)) as any;
 
     return {
-      id: nextEmbedId(),
+      id: nextEmbedId(url),
       url,
       type: "link",
       rawTitle: data.title,

@@ -5,6 +5,7 @@ import {
   DeleteMessageSchema,
   EditMessageSchema,
   PinMessageSchema,
+  RemoveReactionSchema,
   SendMessageSchema,
   UpdateRoleSchema,
   UpdateServerSchema,
@@ -222,6 +223,18 @@ describe("Zod Validation Schemas", () => {
         emoji: "x".repeat(129),
       });
       expect(result.success).toBe(false);
+    });
+  });
+
+  describe("RemoveReactionSchema", () => {
+    it("accepts an optional target user for message reaction management", () => {
+      const result = RemoveReactionSchema.safeParse({
+        message_id: "550e8400-e29b-41d4-a716-446655440000",
+        emoji: "✅",
+        target_user_id: "user-42",
+      });
+
+      expect(result.success).toBe(true);
     });
   });
 

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { RateLimiter } from "./rate-limiter";
+import { RateLimiter, SOUNDBOARD_MEDIA_RATE_LIMIT } from "./rate-limiter";
 
 describe("RateLimiter", () => {
   let limiter: RateLimiter;
@@ -78,5 +78,47 @@ describe("RateLimiter", () => {
       "/api/channels/abc/messages/upload",
     );
     expect(result.allowed).toBe(false);
+  });
+
+  it("allows soundboard range bursts but bounds a single media identity", () => {
+    for (let i = 0; i < 120; i += 1) {
+      expect(
+        limiter.check(
+          "soundboard-media:cap:cap-1:sound:sound-1",
+          "GET",
+          "/api/soundboard/uploads/sound-1",
+        ).allowed,
+      ).toBe(true);
+    }
+
+    const result = limiter.check(
+      "soundboard-media:cap:cap-1:sound:sound-1",
+      "GET",
+      "/api/soundboard/uploads/sound-1",
+    );
+    expect(result.allowed).toBe(false);
+    expect(result.remaining).toBe(0);
+  });
+
+  it("blocks rotating sound IDs with one requester and route aggregate", () => {
+    for (let i = 0; i < SOUNDBOARD_MEDIA_RATE_LIMIT.limit; i += 1) {
+      const soundId = `rotating-sound-${i}`;
+      expect(
+        limiter.check(
+          "soundboard-media:aggregate:requester:1.2.3.4",
+          "GET",
+          `/api/soundboard/uploads/${soundId}`,
+        ).allowed,
+      ).toBe(true);
+    }
+
+    const result = limiter.check(
+      "soundboard-media:aggregate:requester:1.2.3.4",
+      "GET",
+      "/api/soundboard/uploads/a-new-sound-id",
+    );
+
+    expect(result.allowed).toBe(false);
+    expect(result.remaining).toBe(0);
   });
 });

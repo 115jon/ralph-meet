@@ -166,5 +166,7 @@ describe("clearNotifications", () => {
 
     db.assertCalled(/DELETE FROM notifications/);
     db.assertCalledWith(/DELETE FROM notifications/, [USER_ID]);
+    db.assertCalled(/notification_clear_watermarks/);
+    db.assertCalledWith(/notification_clear_watermarks/, [USER_ID]);
   });
 });

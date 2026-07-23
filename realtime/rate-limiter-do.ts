@@ -3,7 +3,7 @@ import { clog } from "../src/lib/console-logger";
 
 const log = clog("RateLimiterDO");
 
-interface Env {
+interface Env extends Cloudflare.Env {
   // Bindings
 }
 

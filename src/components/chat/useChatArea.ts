@@ -129,10 +129,15 @@ export function useChatArea({
   const pendingInitialJumpRef = useRef<string | null>(null);
   const onJumpedRef = useRef(onJumped);
   const channelRequestControllerRef = useRef<AbortController | null>(null);
+  const notificationsRef = useRef(state.notifications);
 
   useEffect(() => {
     onJumpedRef.current = onJumped;
   }, [onJumped]);
+
+  useEffect(() => {
+    notificationsRef.current = state.notifications;
+  }, [state.notifications]);
 
   const scheduleVirtualListJump = useCallback((messageId: string) => {
     const run = () => {
@@ -209,7 +214,7 @@ export function useChatArea({
     (messageId: string) => {
       if (!channelId) return;
       const ids = getUnreadNotificationIdsForMessage(
-        state.notifications,
+        notificationsRef.current,
         messageId,
         channelId,
       );
@@ -217,7 +222,7 @@ export function useChatArea({
         void markNotificationsRead(ids);
       }
     },
-    [channelId, markNotificationsRead, state.notifications],
+    [channelId, markNotificationsRead],
   );
 
   const handleInitialScrollSettled = useCallback(() => {
@@ -1094,10 +1099,10 @@ export function useChatArea({
 
   const canDeleteMessages = useMemo(() => {
     return (
-      hasPermission(userPermissions, PERMISSIONS.MANAGE_MESSAGES) ||
-      hasPermission(userPermissions, PERMISSIONS.ADMINISTRATOR)
+      hasPermission(effectivePermissions, PERMISSIONS.MANAGE_MESSAGES) ||
+      hasPermission(effectivePermissions, PERMISSIONS.ADMINISTRATOR)
     );
-  }, [userPermissions]);
+  }, [effectivePermissions]);
 
   const canBan = useMemo(() => {
     return (

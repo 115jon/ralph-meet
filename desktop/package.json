@@ -28,7 +28,7 @@
     "vite": "^7.0.0"
   },
   "dependencies": {
-    "@kova/react": "github:115jon/kova.git#kova-react-v0.1.0&path:/packages/kova-react",
+    "@kova/react": "https://github.com/115jon/kova/releases/download/kova-react-v0.1.0/kova-react-0.1.0.tgz",
     "@tauri-apps/api": "^2.5.0",
     "@tauri-apps/plugin-autostart": "^2.5.1",
     "@tauri-apps/plugin-deep-link": "^2.4.9",

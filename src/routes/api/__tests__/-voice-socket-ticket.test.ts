@@ -2,7 +2,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   env: {} as Record<string, unknown>,
+  getDB: vi.fn(),
   requireAuth: vi.fn(),
+  requireChannelAccess: vi.fn(),
+  getUserChannelPermissions: vi.fn(),
 }));
 
 vi.mock("@/lib/api-helpers", () => ({
@@ -14,7 +17,7 @@ vi.mock("@/lib/api-helpers", () => ({
     "Access-Control-Allow-Credentials": "true",
     "Access-Control-Allow-Origin": request?.headers.get("origin") ?? "",
   }),
-  getDB: vi.fn(),
+  getDB: mocks.getDB,
   getEnv: () => mocks.env,
   handleCorsPreflightIfNeeded: (request: Request) =>
     request.method === "OPTIONS"
@@ -30,10 +33,10 @@ vi.mock("@/lib/api-helpers", () => ({
 }));
 
 vi.mock("@/lib/require-channel-access", () => ({
-  requireChannelAccess: vi.fn(),
+  requireChannelAccess: mocks.requireChannelAccess,
 }));
 vi.mock("@/lib/require-permission", () => ({
-  getUserChannelPermissions: vi.fn(),
+  getUserChannelPermissions: mocks.getUserChannelPermissions,
 }));
 vi.mock("@/lib/rate-limit", () => ({
   checkRateLimitDOFailClosed: vi.fn().mockResolvedValue(null),
@@ -50,7 +53,12 @@ describe("socket ticket route", () => {
       REALTIME_TICKET_SECRET: ticketSecret,
     };
     mocks.requireAuth.mockReset();
+    mocks.getDB.mockReset();
+    mocks.requireChannelAccess.mockReset();
+    mocks.getUserChannelPermissions.mockReset();
     mocks.requireAuth.mockResolvedValue({ userId: "user-123" });
+    mocks.requireChannelAccess.mockResolvedValue({ serverId: "server-1" });
+    mocks.getUserChannelPermissions.mockResolvedValue(8192);
   });
 
   it("allows credentialed Tauri preflight requests", async () => {
@@ -116,6 +124,64 @@ describe("socket ticket route", () => {
     });
     expect(response.status).toBe(503);
     expect(response.headers.get("Cache-Control")).toBe("no-store");
+  });
+
+  it("includes the canonical serverId in production voice ticket claims", async () => {
+    const first = vi.fn().mockResolvedValue({ channel_type: "voice" });
+    mocks.getDB.mockReturnValue({
+      prepare: vi.fn(() => ({ bind: vi.fn(() => ({ first })) })),
+    });
+
+    const response = await socketTicketPost({
+      request: new Request("https://meet.test/api/voice/socket-ticket", {
+        method: "POST",
+        body: JSON.stringify({
+          audience: "voice",
+          channelId: "channel-1",
+          serverId: "server-1",
+        }),
+      }),
+    });
+    const body = (await response.json()) as {
+      expires_at: number;
+      ticket: string;
+    };
+
+    expect(response.status).toBe(200);
+    await expect(
+      verifySocketTicket(body.ticket, ticketSecret, {
+        accessMode: "authenticated",
+        audience: "voice",
+        now: body.expires_at - 1,
+        roomSlug: "voice-server-1-channel-1",
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      claims: { serverId: "server-1", subject: "user-123" },
+    });
+  });
+
+  it("rejects a production voice ticket when body serverId mismatches the channel", async () => {
+    const first = vi.fn().mockResolvedValue({ channel_type: "voice" });
+    mocks.getDB.mockReturnValue({
+      prepare: vi.fn(() => ({ bind: vi.fn(() => ({ first })) })),
+    });
+
+    const response = await socketTicketPost({
+      request: new Request("https://meet.test/api/voice/socket-ticket", {
+        method: "POST",
+        body: JSON.stringify({
+          audience: "voice",
+          channelId: "channel-1",
+          serverId: "spoofed-server",
+        }),
+      }),
+    });
+
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toMatchObject({
+      code: "SERVER_MISMATCH",
+    });
   });
 
   it("uses a stable anonymous subject for configured public-demo rooms", async () => {

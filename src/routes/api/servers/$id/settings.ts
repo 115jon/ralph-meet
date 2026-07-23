@@ -1,10 +1,15 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { apiSuccess, getDB, requireAuth } from "@/lib/api-helpers";
+import { apiSuccess, getBucket, getDB, requireAuth } from "@/lib/api-helpers";
+import { logger } from "@/lib/logger";
 import { PERMISSIONS } from "@/lib/permissions";
 import { requirePermission } from "@/lib/require-permission";
 import { ServiceError } from "@/lib/service-error";
 import { UpdateServerSchema } from "@/lib/validations";
+import {
+  recordR2CleanupFailure,
+  retryR2Cleanup,
+} from "@/services/r2-cleanup.service";
 import { deleteServer, updateServer } from "@/services/server.service";
 import {
   executeAuditLog,
@@ -61,7 +66,7 @@ const PATCH = async ({ request, params }: any) => {
 };
 
 // DELETE /api/servers/:id/settings — delete a server (owner only)
-const DELETE = async ({ request: _request, params }: any) => {
+export const DELETE = async ({ request: _request, params }: any) => {
   const authResult = await requireAuth();
   if (authResult instanceof Response) return authResult;
   const { userId } = authResult;
@@ -70,7 +75,35 @@ const DELETE = async ({ request: _request, params }: any) => {
   const db = getDB();
 
   try {
+    await retryR2Cleanup(db, getBucket());
     const result = await deleteServer(db, serverId, userId);
+
+    for (const fileKey of result.soundboardFileKeys) {
+      try {
+        await getBucket().delete(fileKey);
+      } catch (cleanupError) {
+        logger.error("server_soundboard_delete_cleanup_failed", {
+          serverId,
+          fileKey,
+          error:
+            cleanupError instanceof Error
+              ? cleanupError.message
+              : String(cleanupError),
+        });
+        try {
+          await recordR2CleanupFailure(db, fileKey, cleanupError);
+        } catch (queueError) {
+          logger.error("server_soundboard_delete_cleanup_record_failed", {
+            serverId,
+            fileKey,
+            error:
+              queueError instanceof Error
+                ? queueError.message
+                : String(queueError),
+          });
+        }
+      }
+    }
 
     // Execute side effects
     await executeInvalidation(result.cacheKeysToInvalidate);

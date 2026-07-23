@@ -1,5 +1,10 @@
 import { apiError, getBucket, getDB, requireAuth } from "@/lib/api-helpers";
 import { requireChannelAccess } from "@/lib/require-channel-access";
+import {
+  getR2ObjectRangeBounds,
+  resolveR2ByteRangeHeader,
+  toR2GetOptions,
+} from "@/lib/r2-range";
 import { createFileRoute } from "@tanstack/react-router";
 
 // Content types that should NEVER be served as their declared type.
@@ -61,34 +66,27 @@ export const GET = async ({ request, params }: any) => {
 
   // ── Range request support ──────────────────────────────────────────
   const rangeHeader = request.headers.get("Range");
-  let rangeOption: any = undefined;
-  let reqStart: number | undefined;
-  let reqEnd: number | undefined;
-  let reqSuffix: number | undefined;
-
-  if (rangeHeader) {
-    const match = rangeHeader.trim().match(/^bytes=(\d*)-(\d*)$/);
-    if (match) {
-      const s = match[1];
-      const e = match[2];
-      if (!s && e) {
-        reqSuffix = parseInt(e, 10);
-        rangeOption = { suffix: reqSuffix };
-      } else if (s && !e) {
-        reqStart = parseInt(s, 10);
-        rangeOption = { offset: reqStart };
-      } else if (s && e) {
-        reqStart = parseInt(s, 10);
-        reqEnd = parseInt(e, 10);
-        rangeOption = { offset: reqStart, length: reqEnd - reqStart + 1 };
-      }
-    }
+  const metadata = await bucket.head(key);
+  if (!metadata) {
+    return apiError("File not found", 404);
   }
 
-  const object = await bucket.get(
-    key,
-    rangeOption ? { range: rangeOption } : undefined,
-  );
+  const parsedRange = resolveR2ByteRangeHeader(rangeHeader, metadata.size);
+  if (parsedRange.requested && parsedRange.invalid) {
+    const h = new Headers();
+    h.set("Content-Range", `bytes */${metadata.size}`);
+    h.set("X-Content-Type-Options", "nosniff");
+    h.set(
+      "Content-Security-Policy",
+      "default-src 'none'; style-src 'unsafe-inline'; img-src 'self' data:; media-src 'self'; script-src 'none';",
+    );
+    h.set("X-Frame-Options", "DENY");
+    h.set("Referrer-Policy", "no-referrer");
+    h.set("Cross-Origin-Resource-Policy", "cross-origin");
+    return new Response(null, { status: 416, headers: h });
+  }
+
+  const object = await bucket.get(key, toR2GetOptions(parsedRange.range));
 
   if (!object) {
     return apiError("File not found", 404);
@@ -126,7 +124,7 @@ export const GET = async ({ request, params }: any) => {
 
   let status = 200;
 
-  if (rangeHeader !== null) {
+  if (parsedRange.requested) {
     status = 206;
     // Partial responses MUST NOT be cached aggressively. CEF/Chromium will try
     // to satisfy future Range requests from its HTTP cache — but the cached 206
@@ -135,23 +133,19 @@ export const GET = async ({ request, params }: any) => {
     // without ever hitting the network.
     headers.set("Cache-Control", "no-store");
 
-    let offset = reqStart ?? 0;
-    let length = object.size;
+    let offset = parsedRange.offset ?? 0;
+    let length = parsedRange.length ?? metadata.size - offset;
 
-    if (reqSuffix !== undefined) {
-      offset = Math.max(0, object.size - reqSuffix);
-      length = Math.min(reqSuffix, object.size);
-    } else {
-      if (reqEnd !== undefined) {
-        length = Math.min(reqEnd - offset + 1, object.size - offset);
-      } else {
-        length = object.size - offset;
-      }
-    }
-
-    if (offset >= object.size || length <= 0) {
+    if (
+      !Number.isSafeInteger(offset) ||
+      !Number.isSafeInteger(length) ||
+      offset < 0 ||
+      offset >= metadata.size ||
+      length <= 0 ||
+      offset + length > metadata.size
+    ) {
       const h = new Headers();
-      h.set("Content-Range", `bytes */${object.size}`);
+      h.set("Content-Range", `bytes */${metadata.size}`);
       h.set("X-Content-Type-Options", "nosniff");
       h.set(
         "Content-Security-Policy",
@@ -164,15 +158,26 @@ export const GET = async ({ request, params }: any) => {
     }
 
     // Miniflare might populate `object.range`, use it as source of truth
-    if ("range" in object && (object as any).range) {
-      const r = (object as any).range;
-      if (typeof r.offset === "number") offset = r.offset;
-      if (typeof r.length === "number") length = r.length;
+    const objectRange = getR2ObjectRangeBounds(object.range);
+    if (objectRange.offset !== undefined) offset = objectRange.offset;
+    if (objectRange.length !== undefined) length = objectRange.length;
+
+    if (
+      !Number.isSafeInteger(offset) ||
+      !Number.isSafeInteger(length) ||
+      offset < 0 ||
+      offset >= metadata.size ||
+      length <= 0 ||
+      offset + length > metadata.size
+    ) {
+      const h = new Headers();
+      h.set("Content-Range", `bytes */${metadata.size}`);
+      return new Response(null, { status: 416, headers: h });
     }
 
     headers.set(
       "Content-Range",
-      `bytes ${offset}-${offset + length - 1}/${object.size}`,
+      `bytes ${offset}-${offset + length - 1}/${metadata.size}`,
     );
     headers.set("Content-Length", length.toString());
   } else {
@@ -188,7 +193,7 @@ export const GET = async ({ request, params }: any) => {
       "Cache-Control",
       isMedia ? "no-store" : "private, max-age=31536000, immutable",
     );
-    headers.set("Content-Length", object.size.toString());
+    headers.set("Content-Length", metadata.size.toString());
   }
 
   // ── Defense-in-depth security headers ─────────────────────────────

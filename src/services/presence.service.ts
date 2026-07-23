@@ -48,6 +48,8 @@ export async function updatePresence(
   status: string;
   custom_status: string | null;
   broadcasts: BroadcastDescriptor[];
+  cacheInvalidationServerIds: string[];
+  presenceChanged: boolean;
 }> {
   if (!VALID_STATUSES.has(input.status)) {
     throw ServiceError.badRequest("Invalid status");
@@ -56,36 +58,63 @@ export async function updatePresence(
   const customStatus = input.custom_status ?? null;
 
   try {
-    await db
+    const { results: memberships } = await db
+      .prepare("SELECT server_id FROM server_members WHERE user_id = ?")
+      .bind(userId)
+      .all();
+
+    const updateResult = await db
       .prepare(
-        `UPDATE users SET status = ?, custom_status = ?, updated_at = datetime('now') WHERE id = ?`,
+        `UPDATE users SET status = ?, custom_status = ?, updated_at = datetime('now')
+         WHERE id = ? AND (status IS NOT ? OR custom_status IS NOT ?)`,
       )
-      .bind(input.status, customStatus, userId)
+      .bind(input.status, customStatus, userId, input.status, customStatus)
       .run();
+
+    const presenceChanged = updateResult.meta?.changes !== 0;
+
+    if (!presenceChanged) {
+      const user = await db
+        .prepare("SELECT id FROM users WHERE id = ?")
+        .bind(userId)
+        .first();
+      if (!user) throw ServiceError.notFound("User not found");
+
+      return {
+        status: input.status,
+        custom_status: customStatus,
+        broadcasts: [],
+        cacheInvalidationServerIds: [],
+        presenceChanged: false,
+      };
+    }
+
+    return {
+      status: input.status,
+      custom_status: customStatus,
+      broadcasts: (memberships ?? []).map(
+        (membership: Record<string, unknown>) => ({
+          type: "server",
+          target: membership.server_id as string,
+          event: "PRESENCE_UPDATE",
+          data: {
+            user_id: userId,
+            status: input.status,
+            custom_status: customStatus,
+          },
+        }),
+      ),
+      cacheInvalidationServerIds: presenceChanged
+        ? (memberships ?? [])
+            .map((membership: Record<string, unknown>) => membership.server_id)
+            .filter(
+              (serverId): serverId is string => typeof serverId === "string",
+            )
+        : [],
+      presenceChanged,
+    };
   } catch (error) {
-    // Log but don't block — presence broadcast is more important than DB write
     log.error("Failed to update presence in DB:", error);
+    throw error;
   }
-
-  const { results: memberships } = await db
-    .prepare("SELECT server_id FROM server_members WHERE user_id = ?")
-    .bind(userId)
-    .all();
-
-  return {
-    status: input.status,
-    custom_status: customStatus,
-    broadcasts: (memberships ?? []).map(
-      (membership: Record<string, unknown>) => ({
-        type: "server",
-        target: membership.server_id as string,
-        event: "PRESENCE_UPDATE",
-        data: {
-          user_id: userId,
-          status: input.status,
-          custom_status: customStatus,
-        },
-      }),
-    ),
-  };
 }

@@ -5,7 +5,11 @@ import {
   batchFetchAttachments,
   batchFetchReactions,
   batchFetchReplyPreviews,
+  createMessage,
+  deleteMessage,
+  editMessage,
   fetchChannelThreads,
+  fetchMessageAttachmentKeys,
   fetchMessageRows,
   formatMessageRow,
   normalizeMessageLimit,
@@ -129,6 +133,124 @@ describe("batchFetchAttachments", () => {
 
     const map = await batchFetchAttachments(db as any, ["m1"]);
     expect(map["m1"][0].url).toBe("https://static.klipy.com/provider.gif");
+  });
+});
+
+describe("createMessage attachment linking", () => {
+  it("writes content_revision with matching INSERT bindings", async () => {
+    const db = createMockD1();
+    db.mockQuery("FROM users WHERE id", {
+      username: "alice",
+      display_name: null,
+      avatar_url: null,
+      avatar_display: null,
+    });
+
+    await createMessage(db as never, CHANNEL_ID, USER_ID, "msg_revision", {
+      content: "hello",
+    });
+
+    const insert = db.getCalls("INSERT INTO messages")[0];
+    expect(insert?.sql).toContain("content_revision");
+    expect(insert?.sql).toContain("VALUES (?, ?, ?, ?, ?, ?, 1)");
+    expect(insert?.bindings).toHaveLength(6);
+  });
+
+  it("does not reassociate a soundboard attachment with a message", async () => {
+    const db = createMockD1();
+    db.mockQuery("FROM users WHERE id", {
+      username: "alice",
+      display_name: null,
+      avatar_url: null,
+      avatar_display: null,
+    });
+
+    await createMessage(db as never, CHANNEL_ID, USER_ID, "msg_1", {
+      content: "hello",
+      attachment_ids: ["sound-1"],
+    });
+
+    db.assertCalledWith("UPDATE attachments SET message_id", [
+      "msg_1",
+      "sound-1",
+      USER_ID,
+    ]);
+    expect(
+      db
+        .getCalls("UPDATE attachments SET message_id")
+        .some((call) => call.sql.includes("soundboard_server_id IS NULL")),
+    ).toBe(true);
+    expect(
+      db
+        .getCalls("SELECT id, filename, file_key")
+        .some((call) => call.sql.includes("message_id = ?")),
+    ).toBe(true);
+  });
+
+  it("does not claim an already-linked attachment from another channel", async () => {
+    const db = createMockD1();
+    db.mockQuery("FROM users WHERE id", {
+      username: "alice",
+      display_name: null,
+      avatar_url: null,
+      avatar_display: null,
+    });
+
+    await createMessage(db as never, CHANNEL_ID, USER_ID, "msg_2", {
+      content: "hello",
+      attachment_ids: ["already-linked"],
+    });
+
+    const update = db.getCalls("UPDATE attachments SET message_id")[0];
+    expect(update?.sql).toContain("message_id IS NULL");
+    expect(update?.sql).toContain("file_key LIKE ?");
+    expect(update?.bindings).toContain(`attachments/${CHANNEL_ID}/%`);
+    expect(
+      db
+        .getCalls("SELECT id, filename, file_key")
+        .some((call) => call.sql.includes("message_id = ?")),
+    ).toBe(true);
+  });
+});
+
+describe("editMessage revision", () => {
+  it("returns the revision from the atomic UPDATE RETURNING statement", async () => {
+    const db = createMockD1();
+    db.mockQuery("SELECT author_id FROM messages", { author_id: USER_ID });
+    db.mockQuery("SET content", {
+      results: [{ content_revision: 7 }],
+    });
+
+    const result = await editMessage(
+      db as never,
+      CHANNEL_ID,
+      USER_ID,
+      "msg_1",
+      "edited",
+    );
+
+    expect(result.content_revision).toBe(7);
+    expect(db.getCalls("SELECT content_revision")).toHaveLength(0);
+  });
+
+  it("propagates attachment lookup failures", async () => {
+    const db = {
+      prepare() {
+        return {
+          bind() {
+            return {
+              all: async () => {
+                throw new Error("D1 unavailable");
+              },
+            };
+          },
+        };
+      },
+    };
+
+    await expect(
+      fetchMessageAttachmentKeys(db as never, "msg_1"),
+    ).rejects.toThrow("D1 unavailable");
   });
 });
 
@@ -414,7 +536,29 @@ describe("removeReaction", () => {
     );
 
     db.assertCalled(/DELETE FROM message_reactions/);
-    expect(result.broadcast.event).toBe("REACTION_REMOVE");
+    expect(result.broadcast?.event).toBe("REACTION_REMOVE");
+  });
+
+  it("does not broadcast when the message is outside the requested channel", async () => {
+    db.mockQuery(/DELETE FROM message_reactions/, {
+      meta: { changes: 0 },
+    });
+
+    const result = await removeReaction(
+      db as any,
+      "different-channel",
+      USER_ID,
+      "msg_1",
+      "👍",
+    );
+
+    expect(result.broadcast).toBeUndefined();
+    db.assertCalledWith(/DELETE FROM message_reactions/, [
+      "msg_1",
+      USER_ID,
+      "👍",
+      "different-channel",
+    ]);
   });
 });
 
@@ -515,10 +659,29 @@ describe("deleteMessage", () => {
   it("marks public shares deleted before deleting the source message", async () => {
     const { deleteMessage } = await import("../message.service");
     db.mockQuery("SELECT author_id FROM messages", { author_id: USER_ID });
+    db.mockQuery("SELECT file_key FROM attachments WHERE message_id", {
+      results: [{ file_key: "attachments/channel-1/a-1/file.txt" }],
+    });
+    db.mockQuery("DELETE FROM messages", { meta: { changes: 1 } });
 
-    await deleteMessage(db as any, CHANNEL_ID, "msg_1", USER_ID, false);
+    await expect(
+      deleteMessage(db as any, CHANNEL_ID, "msg_1", USER_ID, false),
+    ).resolves.toEqual(["attachments/channel-1/a-1/file.txt"]);
 
     db.assertCalled(/UPDATE message_shares SET status = 'deleted'/);
+    db.assertCalled(/SELECT file_key FROM attachments WHERE message_id/);
     db.assertCalled(/DELETE FROM messages WHERE id = \?/);
+  });
+
+  it("rejects when a concurrent delete already removed the message", async () => {
+    db.mockQuery("SELECT author_id FROM messages", { author_id: USER_ID });
+    db.mockQuery("SELECT file_key FROM attachments WHERE message_id", {
+      results: [],
+    });
+    db.mockQuery("DELETE FROM messages", { meta: { changes: 0 } });
+
+    await expect(
+      deleteMessage(db as any, CHANNEL_ID, "msg_1", USER_ID, false),
+    ).rejects.toMatchObject({ status: 404 });
   });
 });

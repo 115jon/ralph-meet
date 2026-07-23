@@ -10,6 +10,7 @@ import {
 import { cacheDel, CacheKey } from "@/lib/cache";
 import { logger } from "@/lib/logger";
 import { applyProfileThemeDefaults } from "@/lib/profile-customization";
+import { normalizeUsernameForStorage } from "@/lib/validations";
 import { checkRateLimitDO, RATE_LIMITS } from "@/lib/rate-limit";
 import type { D1Database } from "@cloudflare/workers-types";
 
@@ -141,10 +142,12 @@ const POST = async ({ request }: any) => {
   if (rl) return rl;
 
   const db = getDB();
-  const username =
+  const username = normalizeUsernameForStorage(
     user.username ??
-    usernameFromEmail(user.email ?? user.actorEmail) ??
-    `user_${userId.slice(-6)}`;
+      usernameFromEmail(user.email ?? user.actorEmail) ??
+      `user_${userId.slice(-6)}`,
+    `user_${userId.slice(-6)}`,
+  );
   const fullName = [user.firstName, user.lastName].filter(Boolean).join(" ");
   const displayName =
     user.displayName ?? user.name ?? user.actorName ?? (fullName || username);

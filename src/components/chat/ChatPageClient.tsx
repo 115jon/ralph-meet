@@ -1,4 +1,5 @@
 import ChannelSidebar from "@/components/chat/ChannelSidebar";
+import { WebAppTitleBar } from "@/components/chat/AppTitleBar";
 import ChatArea from "@/components/chat/ChatArea";
 import { DesktopThumbnailToolbarSync } from "@/components/chat/DesktopThumbnailToolbarSync";
 import DMSidebar from "@/components/chat/DMSidebar";
@@ -27,7 +28,7 @@ import {
   syncDesktopNotificationState,
 } from "@/lib/desktop-native-sync";
 import { hasPermission, PERMISSIONS } from "@/lib/permissions";
-import { getAuthAssetUrl } from "@/lib/platform";
+import { isTauri } from "@/lib/platform";
 import { dispatchOpenProfileEditorEvent } from "@/lib/profile-editor-events";
 import {
   resolveStreamPreviewAutomation,
@@ -40,7 +41,7 @@ import { prewarmAudioContext } from "@/lib/voice/audio-pipeline";
 import { useChatActions, useChatStore } from "@/stores/chat-store";
 import { useCallStore } from "@/stores/useCallStore";
 import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { getPersistentVoiceViewIdentity } from "./voice-session-view";
 import {
   lazy,
   Suspense,
@@ -144,6 +145,7 @@ export default function ChatPage() {
     servers,
     activeServerId,
     activeChannelId,
+    dmHomeView,
     channels,
     categories,
     members,
@@ -163,6 +165,7 @@ export default function ChatPage() {
       servers: s.servers,
       activeServerId: s.activeServerId,
       activeChannelId: s.activeChannelId,
+      dmHomeView: s.dmHomeView,
       channels: s.channels,
       categories: s.categories,
       members: s.members,
@@ -212,7 +215,6 @@ export default function ChatPage() {
   const shouldRenderVoiceAppsModal = useDelayUnmount(!!voiceAppsModal, 200);
   const { shouldRender: shouldRenderProfileUser, value: renderedProfileUser } =
     useDelayedUnmountValue(profileUser, 200);
-  const [dmHomeView, setDmHomeView] = useState<"friends" | "shop">("friends");
   const [channelSidebarWidth, setChannelSidebarWidth] = useState(
     CHANNEL_SIDEBAR_DEFAULT_WIDTH_PX,
   );
@@ -404,6 +406,13 @@ export default function ChatPage() {
     (!voiceState.joined || isViewingCurrentVoiceChannel);
   const shouldAutoJoinVoice =
     !!showVoiceAsMain && voiceJoinOnSelectChannelId === activeChannelId;
+  const persistentVoiceViewIdentity = getPersistentVoiceViewIdentity({
+    joined: voiceState.joined,
+    activeServerId,
+    activeChannelId,
+    voiceServerId: voiceState.serverId,
+    voiceChannelId: voiceState.channelId,
+  });
   const shouldRenderFloatingStreamPreview = !!(
     voiceState.joined &&
     localStreamState?.isScreenSharing &&
@@ -989,13 +998,13 @@ export default function ChatPage() {
           activeView={dmHomeView}
           onSelectDm={onSelectDm}
           onShowFriends={() => {
-            setDmHomeView("friends");
+            dispatch({ type: "SET_DM_HOME_VIEW", view: "friends" });
             uiDispatch({ type: "SET_SIDEBAR", open: false });
             dispatch({ type: "SET_ACTIVE_SERVER", serverId: "@me" });
             dispatch({ type: "SET_ACTIVE_CHANNEL", channelId: null });
           }}
           onShowShop={() => {
-            setDmHomeView("shop");
+            dispatch({ type: "SET_DM_HOME_VIEW", view: "shop" });
             uiDispatch({ type: "SET_SIDEBAR", open: false });
             dispatch({ type: "SET_ACTIVE_SERVER", serverId: "@me" });
             dispatch({ type: "SET_ACTIVE_CHANNEL", channelId: null });
@@ -1080,47 +1089,7 @@ export default function ChatPage() {
       className="flex h-full flex-col overflow-hidden bg-rm-bg-primary"
       data-app-layout="true"
     >
-      {/* OS-level Title Bar (Mock Discord Topbar) */}
-      <div
-        className="hidden md:flex w-full shrink-0 flex-row items-center justify-between bg-rm-bg-secondary px-2 border-b border-rm-border/30 drag-region"
-        style={{
-          height: "calc(24px + var(--safe-area-top, 0px))",
-          paddingTop: "var(--safe-area-top, 0px)",
-        }}
-      >
-        <div className="flex items-center gap-2 no-drag ml-1">
-          <button
-            onClick={() => window.history.back()}
-            className="hidden md:flex h-4 w-4 items-center justify-center rounded-sm text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text transition-colors"
-          >
-            <ChevronLeft className="h-3 w-3" />
-          </button>
-          <button
-            onClick={() => window.history.forward()}
-            className="hidden md:flex h-4 w-4 items-center justify-center rounded-sm text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text transition-colors"
-          >
-            <ChevronRight className="h-3 w-3" />
-          </button>
-        </div>
-        <div className="flex text-[12px] font-bold tracking-wider text-rm-text-muted select-none items-center gap-1.5 justify-center flex-1">
-          {activeServer && (
-            <div className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-rm-bg-elevated text-[9px] font-bold text-rm-text overflow-hidden">
-              {activeServer.icon_url ? (
-                <img
-                  src={getAuthAssetUrl(activeServer.icon_url)}
-                  alt=""
-                  className="h-full w-full object-cover"
-                />
-              ) : (
-                activeServer.name.charAt(0).toUpperCase()
-              )}
-            </div>
-          )}
-          {activeServer?.name ?? "Ralph Meet"}
-        </div>
-        <div className="flex w-12" /> {/* Spacer for symmetry */}
-      </div>
-
+      {!isTauri() && <WebAppTitleBar />}
       <div
         className="flex flex-1 overflow-hidden relative"
         style={channelSidebarStyle}
@@ -1346,16 +1315,12 @@ export default function ChatPage() {
             >
               <Suspense fallback={null}>
                 <VoiceChannelView
-                  key={`persistent-voice-session-${showVoiceAsMain ? activeServerId : voiceState.serverId}-${showVoiceAsMain ? activeChannelId : voiceState.channelId}`}
-                  channelId={
-                    (showVoiceAsMain ? activeChannelId : voiceState.channelId)!
-                  }
+                  key={persistentVoiceViewIdentity.key}
+                  channelId={persistentVoiceViewIdentity.channelId!}
                   channelName={
                     showVoiceAsMain ? channelDisplayName : voiceChannelName
                   }
-                  serverId={
-                    (showVoiceAsMain ? activeServerId : voiceState.serverId)!
-                  }
+                  serverId={persistentVoiceViewIdentity.serverId!}
                   onToggleTextChat={handleToggleVoiceTextChat}
                   showTextChat={showVoiceTextChat}
                   onOpenActivities={() => setVoiceAppsModal("activities")}
@@ -1392,7 +1357,6 @@ export default function ChatPage() {
                     )}
                   >
                     <ChatArea
-                      key={`voice-${activeChannelId}`}
                       channelId={activeChannelId!}
                       channelName={channelDisplayName}
                       onMenuClick={() =>
@@ -1462,7 +1426,6 @@ export default function ChatPage() {
               </Suspense>
             ) : (
               <ChatArea
-                key={activeChannelId}
                 channelId={activeChannelId}
                 channelName={channelDisplayName}
                 onMenuClick={() =>

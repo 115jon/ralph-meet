@@ -10,7 +10,10 @@ import {
   getCachedCollectiblesCatalog,
   subscribeCollectiblesCatalog,
 } from "@/lib/collectibles-catalog-client";
-import { OPEN_PROFILE_EDITOR_EVENT } from "@/lib/profile-editor-events";
+import {
+  OPEN_PROFILE_EDITOR_EVENT,
+  type OpenProfileEditorEventDetail,
+} from "@/lib/profile-editor-events";
 import { useUserResolution } from "@/hooks/useUserResolution";
 import { getAuthAssetUrl } from "@/lib/platform";
 import type {
@@ -44,6 +47,7 @@ import { useDelayUnmount } from "@/hooks/useDelayUnmount";
 import { UserDisplayName } from "./UserDisplayName";
 import { UserNameplateLayer } from "./UserNameplateLayer";
 import { getUserNameplatePresentation } from "./user-nameplate-presentation";
+import { UserStatusDot } from "./UserStatusDot";
 
 const EMPTY_QUALITIES: string[] = [];
 const EMPTY_GRID_ITEMS: any[] = [];
@@ -63,6 +67,9 @@ const AudioDeviceMenu = lazy(() =>
   })),
 );
 const SettingsModal = lazy(() => import("@/components/chat/SettingsModal"));
+const ProfileEditorModal = lazy(
+  () => import("@/components/chat/ProfileEditorModal"),
+);
 const UserAccountPopover = lazy(
   () => import("@/components/chat/UserAccountPopover"),
 );
@@ -110,11 +117,11 @@ interface Props {
   sidebarWidthPx?: number;
 }
 
-const statusColors: Record<string, string> = {
-  online: "bg-primary",
-  idle: "bg-warning",
-  dnd: "bg-destructive",
-  offline: "bg-rm-text-muted/40",
+const statusLabels: Record<string, string> = {
+  online: "Online",
+  idle: "Idle",
+  dnd: "Do Not Disturb",
+  offline: "Invisible",
 };
 
 function CallDashboardSection({
@@ -272,8 +279,8 @@ export default function UserPanel({
   const [settingsInitialTab, setSettingsInitialTab] = useState<
     "account" | "voice" | "shares" | "appearance"
   >("account");
-  const [settingsStartInProfileEditor, setSettingsStartInProfileEditor] =
-    useState(false);
+  const [showProfileEditor, setShowProfileEditor] = useState(false);
+  const profileEditorTriggerRef = useRef<HTMLElement | null>(null);
   const [showMenu, setShowMenu] = useState(false);
   const [userAvatarEl, setUserAvatarEl] = useState<HTMLButtonElement | null>(
     null,
@@ -320,18 +327,24 @@ export default function UserPanel({
 
   const openSettings = useCallback(
     (tab: "account" | "voice" | "shares" | "appearance" = "account") => {
-      setSettingsStartInProfileEditor(false);
       setSettingsInitialTab(tab);
       setShowSettings(true);
     },
     [],
   );
 
-  const openProfileEditor = useCallback(() => {
-    setSettingsInitialTab("account");
-    setSettingsStartInProfileEditor(true);
-    setShowSettings(true);
+  const openProfileEditor = useCallback((trigger?: HTMLElement) => {
+    profileEditorTriggerRef.current = trigger ?? null;
+    setShowProfileEditor(true);
   }, []);
+
+  useEffect(() => {
+    if (showProfileEditor) return;
+
+    const trigger = profileEditorTriggerRef.current;
+    profileEditorTriggerRef.current = null;
+    if (trigger?.isConnected) trigger.focus();
+  }, [showProfileEditor]);
 
   useEffect(() => {
     const handleOpenShares = () => {
@@ -347,8 +360,10 @@ export default function UserPanel({
   }, [openSettings]);
 
   useEffect(() => {
-    const handleOpenProfileEditor = () => {
-      openProfileEditor();
+    const handleOpenProfileEditor = (event: Event) => {
+      const detail = (event as CustomEvent<OpenProfileEditorEventDetail>)
+        .detail;
+      openProfileEditor(detail?.trigger ?? undefined);
     };
     window.addEventListener(OPEN_PROFILE_EDITOR_EVENT, handleOpenProfileEditor);
     return () => {
@@ -381,7 +396,8 @@ export default function UserPanel({
 
   const currentStatus = user.status ?? "online";
   const displayName = getDisplayName(user);
-  const userHandle = user.username ? `@${user.username}` : displayName;
+  const userHandle = user.username || displayName;
+  const currentStatusLabel = statusLabels[currentStatus] ?? "Online";
   const hasNameplate = nameplatePresentation.hasNameplate;
   const nameplateTheme = nameplatePresentation.theme;
   const nameplateDangerColor =
@@ -464,7 +480,7 @@ export default function UserPanel({
         {/* User Info Bar */}
         <div
           className={cn(
-            "flex items-center gap-2 p-1.5 relative z-10 overflow-hidden",
+            "group/user-panel-row flex items-center gap-2 rounded-[12px] p-1.5 relative z-10 overflow-hidden",
             !showIdentity && "gap-1.5",
             hasNameplate && "isolate",
             (voiceConnected || callActive) && "border-t border-white/5",
@@ -491,13 +507,17 @@ export default function UserPanel({
               <button
                 type="button"
                 ref={setUserAvatarEl}
-                className="group relative z-10 cursor-pointer border-0 bg-transparent p-0 pl-0.5 outline-none"
+                className={cn(
+                  "relative z-10 flex min-w-0 flex-1 items-center gap-2 rounded-[12px] border-0 bg-transparent p-1 text-left outline-none transition-colors duration-200 ease-[cubic-bezier(0.32,0.72,0,1)] focus-visible:ring-2 focus-visible:ring-primary/70 active:scale-[0.98]",
+                  "hover:bg-black/20 focus-visible:bg-black/20",
+                  !showIdentity && "gap-1.5",
+                )}
                 onClick={() => setShowMenu((v) => !v)}
-                aria-label="View user account"
+                aria-label={`${displayName}, ${userHandle}, ${currentStatusLabel}. View user account`}
               >
                 <div
                   className={cn(
-                    "relative z-10 flex h-[32px] w-[32px] shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground transition-all opacity-90 group-hover:opacity-100",
+                    "relative z-10 flex h-[32px] w-[32px] shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground transition-all opacity-90 group-hover/user-panel-row:opacity-100",
                     speakingUsers[user.id] &&
                       cn(
                         "ring-[3px] ring-primary shadow-[0_0_20px_var(--rm-glow)] ring-offset-2",
@@ -518,14 +538,37 @@ export default function UserPanel({
                       getDisplayInitial(user)
                     )}
                   </div>
+                  <UserStatusDot
+                    status={currentStatus}
+                    className="absolute -bottom-0.5 -right-0.5 z-20 h-3.5 w-3.5 border-2 border-rm-bg-elevated transition-colors"
+                  />
                 </div>
-                <div
-                  className={cn(
-                    "absolute -bottom-0.5 -right-0.5 z-20 h-3.5 w-3.5 rounded-full border-2 transition-colors",
-                    statusColors[currentStatus],
-                    "border-rm-bg-elevated",
-                  )}
-                />
+                {showIdentity && (
+                  <div className="relative min-w-0 flex-1 py-1">
+                    <UserDisplayName
+                      user={user}
+                      className="block truncate text-[13px] font-bold leading-tight text-rm-text-primary"
+                      minContrastRatio={hasNameplate ? 2.8 : undefined}
+                    />
+                    {showUsername ? (
+                      <div className="relative h-[14px] overflow-hidden text-[11px] leading-tight text-rm-text-muted">
+                        <span className="block truncate transition-transform duration-200 ease-[cubic-bezier(0.32,0.72,0,1)] group-hover/user-panel-row:-translate-y-full group-focus-within/user-panel-row:-translate-y-full motion-reduce:transition-none">
+                          {currentStatusLabel}
+                        </span>
+                        <span
+                          aria-hidden="true"
+                          className="absolute inset-x-0 top-full block truncate transition-transform duration-200 ease-[cubic-bezier(0.32,0.72,0,1)] group-hover/user-panel-row:-translate-y-full group-focus-within/user-panel-row:-translate-y-full motion-reduce:transition-none"
+                        >
+                          {userHandle}
+                        </span>
+                      </div>
+                    ) : (
+                      <p className="truncate text-[11px] leading-tight text-rm-text-muted">
+                        {currentStatusLabel}
+                      </p>
+                    )}
+                  </div>
+                )}
               </button>
             </TooltipTrigger>
             <TooltipContent
@@ -536,30 +579,6 @@ export default function UserPanel({
               <p>View Profile</p>
             </TooltipContent>
           </Tooltip>
-
-          {showIdentity ? (
-            <div
-              className={cn(
-                "relative z-10 min-w-0 flex-1 py-1 cursor-pointer group/name rounded-[12px] px-2 -ml-1 transition-colors",
-                hasNameplate ? "hover:bg-white/10" : "hover:bg-rm-bg-hover/50",
-              )}
-            >
-              <div className="relative min-w-0">
-                <UserDisplayName
-                  user={user}
-                  className="block truncate text-[13px] font-bold leading-tight text-rm-text-primary"
-                  minContrastRatio={hasNameplate ? 2.8 : undefined}
-                />
-                {showUsername && (
-                  <p className="truncate text-[11px] leading-tight text-rm-text-muted">
-                    {userHandle}
-                  </p>
-                )}
-              </div>
-            </div>
-          ) : (
-            <div className="flex-1" aria-hidden="true" />
-          )}
 
           <div className="relative z-10 flex items-center -mr-1">
             {/* Mic Group */}
@@ -844,14 +863,17 @@ export default function UserPanel({
           <Suspense fallback={null}>
             <SettingsModal
               initialTab={settingsInitialTab}
-              initialProfileEditorOpen={settingsStartInProfileEditor}
               onClose={() => {
                 setShowSettings(false);
-                setSettingsStartInProfileEditor(false);
                 setSettingsInitialTab("account"); // reset for next open
               }}
               isClosing={!showSettings}
             />
+          </Suspense>
+        )}
+        {showProfileEditor && (
+          <Suspense fallback={null}>
+            <ProfileEditorModal onClose={() => setShowProfileEditor(false)} />
           </Suspense>
         )}
       </div>

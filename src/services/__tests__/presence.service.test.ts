@@ -68,6 +68,13 @@ describe("updatePresence", () => {
     });
 
     db.assertCalled(/UPDATE users SET status/);
+    const membershipQueryIndex = db.calls.findIndex((call) =>
+      call.sql.includes("SELECT server_id FROM server_members"),
+    );
+    const updateQueryIndex = db.calls.findIndex((call) =>
+      call.sql.includes("UPDATE users SET status"),
+    );
+    expect(membershipQueryIndex).toBeLessThan(updateQueryIndex);
     expect(result.status).toBe("idle");
     expect(result.custom_status).toBe("Afk");
     expect(result.broadcasts).toHaveLength(1);
@@ -113,5 +120,32 @@ describe("updatePresence", () => {
     });
 
     expect(result.broadcasts[0].type).toBe("server");
+  });
+
+  it("does not broadcast or invalidate caches for an unchanged presence", async () => {
+    db.mockQuery(/UPDATE users SET status/, {
+      success: true,
+      meta: { changes: 0 },
+    });
+    db.mockQuery(/SELECT id FROM users/, { id: USER_ID });
+
+    const result = await updatePresence(db as any, USER_ID, {
+      status: "online",
+    });
+
+    expect(result.presenceChanged).toBe(false);
+    expect(result.broadcasts).toEqual([]);
+    expect(result.cacheInvalidationServerIds).toEqual([]);
+  });
+
+  it("rejects a no-op update when the user row is missing", async () => {
+    db.mockQuery(/UPDATE users SET status/, {
+      success: true,
+      meta: { changes: 0 },
+    });
+
+    await expect(
+      updatePresence(db as any, USER_ID, { status: "online" }),
+    ).rejects.toHaveProperty("status", 404);
   });
 });

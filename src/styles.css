@@ -204,7 +204,7 @@
   --rm-status-online: #22c55e;
   --rm-status-idle: #f59e0b;
   --rm-status-dnd: #ef4444;
-  --rm-status-offline: rgba(255, 255, 255, 0.25);
+  --rm-status-offline: #6b7280;
 
   --rm-glow: rgba(99, 102, 241, 0.12);
 
@@ -282,7 +282,7 @@
   --rm-bg-elevated: #e3e5e8;
   --rm-bg-floating: #e3e5e8;
 
-  --rm-status-offline: rgba(0, 0, 0, 0.25);
+  --rm-status-offline: #80848e;
 
   --rm-sidebar: #f2f3f5;
   --rm-server-bar: #e3e5e8;
@@ -311,6 +311,10 @@
   --rm-text-secondary: #2e3338;
   --rm-text-muted: #4e5058;
   --rm-text-ghost: #5c5e66;
+}
+
+:is(.light, .miku-light, .spiderman-light) .theme-aware-splash-logo {
+  filter: brightness(0);
 }
 
 .miku-light {
@@ -362,7 +366,7 @@
   --rm-bg-hover: rgba(57, 197, 187, 0.08);
   --rm-bg-active: rgba(57, 197, 187, 0.15);
 
-  --rm-status-offline: rgba(27, 34, 64, 0.3);
+  --rm-status-offline: #606f99;
 
   /* RALPH SEMANTIC TEXT (Miku Light) */
   --rm-text-primary: #1b2240;
@@ -447,7 +451,7 @@
   --rm-bg-hover: rgba(57, 197, 187, 0.06);
   --rm-bg-active: rgba(57, 197, 187, 0.12);
 
-  --rm-status-offline: rgba(255, 255, 255, 0.25);
+  --rm-status-offline: #7c83a0;
 
   /* RALPH SEMANTIC TEXT (Miku Dark) */
   --rm-text-primary: #ffffff;
@@ -532,7 +536,7 @@
   --rm-bg-hover: rgba(15, 23, 42, 0.04);
   --rm-bg-active: rgba(229, 9, 20, 0.08);
 
-  --rm-status-offline: rgba(15, 23, 42, 0.3);
+  --rm-status-offline: #64748b;
 
   /* RALPH SEMANTIC TEXT (Spiderman Light) */
   --rm-text-primary: #0f172a;
@@ -617,7 +621,7 @@
   --rm-bg-hover: rgba(26, 115, 232, 0.15);
   --rm-bg-active: rgba(229, 9, 20, 0.3);
 
-  --rm-status-offline: rgba(255, 255, 255, 0.25);
+  --rm-status-offline: #8e94a5;
 
   /* RALPH SEMANTIC TEXT (Spiderman Dark) */
   --rm-text-primary: #ffffff;

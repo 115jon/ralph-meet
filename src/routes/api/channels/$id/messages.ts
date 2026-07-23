@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { waitUntil } from "cloudflare:workers";
 
 import {
   apiError,
@@ -7,7 +8,9 @@ import {
   broadcastToServerMembers,
   broadcastToUser,
   genId,
+  getBucket,
   getDB,
+  getEnv,
   requireAuth,
 } from "@/lib/api-helpers";
 import { hasPermission, PERMISSIONS } from "@/lib/permissions";
@@ -15,22 +18,23 @@ import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 import { requireChannelAccess } from "@/lib/require-channel-access";
 import { getUserChannelPermissions } from "@/lib/require-permission";
 import { ServiceError } from "@/lib/service-error";
-import { clog } from "@/lib/console-logger";
+import { logger } from "@/lib/logger";
 import { validateBody } from "@/lib/validate-body";
 import { z } from "zod";
 import {
   createMessage,
   deleteMessage,
   editMessage,
-  generateMessageNotifications,
   getDMRecipients,
   listMessages,
   normalizeMessageLimit,
   refreshMessageEmbeds,
 } from "@/services/message.service";
-
-const embedLog = clog("embed");
-const notifLog = clog("notifications");
+import {
+  scheduleMessagePostprocessing,
+  scheduleR2Cleanup,
+} from "@/lib/background-tasks";
+import { recordR2CleanupFailure } from "@/services/r2-cleanup.service";
 
 // GET /api/channels/:id/messages — get message history (paginated)
 export const GET = async ({ request, params }: any) => {
@@ -86,7 +90,7 @@ export const GET = async ({ request, params }: any) => {
 // rules. The content-or-attachments requirement is enforced separately below,
 // exactly as before, so existing clients are unaffected.
 const messageCreateSchema = z.object({
-  content: z.string().default(""),
+  content: z.string().max(4000).default(""),
   reply_to_id: z.string().optional(),
   nonce: z.string().optional(),
   attachment_ids: z.array(z.string()).optional(),
@@ -94,7 +98,7 @@ const messageCreateSchema = z.object({
 });
 
 // POST /api/channels/:id/messages — send a message
-const POST = async ({ request, params }: any) => {
+export const POST = async ({ request, params }: any) => {
   const authResult = await requireAuth();
   if (authResult instanceof Response) return authResult;
   const { userId } = authResult;
@@ -135,7 +139,13 @@ const POST = async ({ request, params }: any) => {
   const messageId = genId();
 
   const message = await createMessage(db, channelId, userId, messageId, body);
-
+  const revision = Number(message.content_revision ?? 1);
+  const postprocessingTask = {
+    messageId,
+    channelId,
+    revision,
+    notify: true,
+  } as const;
   // Broadcast MESSAGE_CREATE immediately (without embeds) — Discord-style
   if (serverId) {
     await broadcastToServerMembers(serverId, "MESSAGE_CREATE", message);
@@ -148,68 +158,9 @@ const POST = async ({ request, params }: any) => {
     }
   }
 
-  // Asynchronously resolve embeds and deliver via MESSAGE_UPDATE
-  // (still within request lifecycle since Workers can't fire-and-forget)
-  try {
-    const { extractAndProcessEmbeds } =
-      await import("@/services/embed-fetcher");
-    const contentToScan = body.content ?? "";
-    embedLog.info(
-      `Scanning content for URLs: "${contentToScan.substring(0, 200)}"`,
-    );
-    const embeds = await extractAndProcessEmbeds(contentToScan);
-    embedLog.info(
-      `Resolved ${embeds.length} embed(s) for message ${messageId}`,
-    );
-    if (embeds.length > 0) {
-      await db
-        .prepare(`UPDATE messages SET embeds = ? WHERE id = ?`)
-        .bind(JSON.stringify(embeds), messageId)
-        .run();
-      embedLog.info(`Saved embeds to DB for message ${messageId}`);
-
-      const embedUpdate = { id: messageId, channel_id: channelId, embeds };
-      if (serverId) {
-        embedLog.info(`Broadcasting MESSAGE_UPDATE to server ${serverId}`);
-        await broadcastToServerMembers(serverId, "MESSAGE_UPDATE", embedUpdate);
-      } else {
-        embedLog.info(`Broadcasting MESSAGE_UPDATE to channel ${channelId}`);
-        await broadcastToChannel(channelId, "MESSAGE_UPDATE", embedUpdate);
-        const recipients = await getDMRecipients(db, channelId, userId);
-        for (const recipientId of recipients) {
-          await broadcastToUser(recipientId, "MESSAGE_UPDATE", embedUpdate);
-        }
-      }
-      embedLog.info(`MESSAGE_UPDATE broadcast complete`);
-    }
-  } catch (e) {
-    embedLog.error("Async embed processing failed:", e);
-  }
-
-  // Notification generation
-  try {
-    const author = message.author as {
-      id: unknown;
-      username: string;
-      display_name?: string | null;
-      avatar_url: unknown;
-    };
-    const notifBroadcasts = await generateMessageNotifications(db, genId, {
-      channelId,
-      messageId,
-      authorId: userId,
-      authorUsername: author.username,
-      authorDisplayName: author.display_name ?? null,
-      authorAvatarUrl: (author.avatar_url as string) ?? null,
-      content: (message.content as string) ?? "",
-      replyToId: body.reply_to_id,
-    });
-    for (const nb of notifBroadcasts) {
-      await broadcastToUser(nb.userId, nb.event, nb.data);
-    }
-  } catch (e) {
-    notifLog.error("Failed to create notifications:", e);
-  }
+  scheduleMessagePostprocessing(getEnv(), postprocessingTask, waitUntil, {
+    outboxRecorded: true,
+  });
 
   return apiSuccess(message, 201);
 };
@@ -237,7 +188,7 @@ export const PATCH = async ({ request, params }: any) => {
   if (body.refresh_embeds) {
     const messageIds =
       body.message_ids ?? (body.message_id ? [body.message_id] : []);
-    if (messageIds.length === 0) {
+    if (messageIds.length === 0 || messageIds.length > 50) {
       return apiError("message_ids required", 400);
     }
 
@@ -263,6 +214,10 @@ export const PATCH = async ({ request, params }: any) => {
     return apiError("message_id required", 400);
   }
 
+  if (body.content !== undefined && body.content.length > 4000) {
+    return apiError("Message content is too long", 400);
+  }
+
   // Must provide either content or embeds update
   if (!body.content?.trim() && !Array.isArray(body.embeds)) {
     return apiError("content or embeds required", 400);
@@ -274,21 +229,29 @@ export const PATCH = async ({ request, params }: any) => {
       // Verify ownership
       const msg = (await db
         .prepare(
-          `SELECT author_id FROM messages WHERE id = ? AND channel_id = ?`,
+          `SELECT author_id, content_revision
+           FROM messages WHERE id = ? AND channel_id = ?`,
         )
         .bind(body.message_id, channelId)
-        .first()) as { author_id: string } | null;
+        .first()) as { author_id: string; content_revision: number } | null;
       if (!msg) return apiError("Message not found", 404);
       if (msg.author_id !== userId) return apiError("Not your message", 403);
 
-      await db
-        .prepare(`UPDATE messages SET embeds = ? WHERE id = ?`)
-        .bind(JSON.stringify(body.embeds), body.message_id)
-        .run();
+      const cleared = await db
+        .prepare(
+          `UPDATE messages
+           SET embeds = ?, content_revision = content_revision + 1
+           WHERE id = ? AND channel_id = ?
+           RETURNING content_revision`,
+        )
+        .bind(JSON.stringify(body.embeds), body.message_id, channelId)
+        .first<{ content_revision: number }>();
+      if (!cleared) return apiError("Message not found", 404);
 
       const update = {
         id: body.message_id,
         channel_id: channelId,
+        content_revision: Number(cleared.content_revision),
         embeds: body.embeds,
       };
       const { serverId: editServerId } = accessResult as {
@@ -310,6 +273,12 @@ export const PATCH = async ({ request, params }: any) => {
       body.message_id,
       body.content!,
     );
+    const postprocessingTask = {
+      messageId: update.id,
+      channelId,
+      revision: update.content_revision,
+      notify: false,
+    } as const;
     const { serverId: editServerId } = accessResult as {
       serverId: string | null;
     };
@@ -318,6 +287,9 @@ export const PATCH = async ({ request, params }: any) => {
     } else {
       await broadcastToChannel(channelId, "MESSAGE_UPDATE", update);
     }
+    scheduleMessagePostprocessing(getEnv(), postprocessingTask, waitUntil, {
+      outboxRecorded: true,
+    });
     return apiSuccess(update);
   } catch (e) {
     if (e instanceof ServiceError) {
@@ -328,7 +300,7 @@ export const PATCH = async ({ request, params }: any) => {
 };
 
 // DELETE /api/channels/:id/messages — delete a message
-const DELETE = async ({ request, params }: any) => {
+export const DELETE = async ({ request, params }: any) => {
   const authResult = await requireAuth();
   if (authResult instanceof Response) return authResult;
   const { userId } = authResult;
@@ -356,7 +328,56 @@ const DELETE = async ({ request, params }: any) => {
   }
 
   try {
-    await deleteMessage(db, channelId, body.message_id, userId, hasModPerm);
+    const bucket = getBucket();
+    const fileKeys = await deleteMessage(
+      db,
+      channelId,
+      body.message_id,
+      userId,
+      hasModPerm,
+    );
+
+    for (const fileKey of fileKeys) {
+      try {
+        await bucket.delete(fileKey);
+      } catch (cleanupError) {
+        logger.error("message_attachment_delete_cleanup_failed", {
+          channelId,
+          messageId: body.message_id,
+          fileKey,
+          error:
+            cleanupError instanceof Error
+              ? cleanupError.message
+              : String(cleanupError),
+        });
+        try {
+          await recordR2CleanupFailure(db, fileKey, cleanupError);
+        } catch (queueError) {
+          logger.error("message_attachment_delete_cleanup_record_failed", {
+            channelId,
+            messageId: body.message_id,
+            fileKey,
+            error:
+              queueError instanceof Error
+                ? queueError.message
+                : String(queueError),
+          });
+        }
+        try {
+          scheduleR2Cleanup(getEnv(), fileKey, waitUntil);
+        } catch (scheduleError) {
+          logger.error("message_attachment_delete_cleanup_schedule_failed", {
+            channelId,
+            messageId: body.message_id,
+            fileKey,
+            error:
+              scheduleError instanceof Error
+                ? scheduleError.message
+                : String(scheduleError),
+          });
+        }
+      }
+    }
 
     if (serverId) {
       await broadcastToServerMembers(serverId, "MESSAGE_DELETE", {

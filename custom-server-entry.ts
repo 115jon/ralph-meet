@@ -22,11 +22,25 @@ import { buildHealthzPayload } from "./src/lib/healthz";
 import { handleYtDlpRequest } from "./src/lib/ytdlp/http";
 import { syncYtDlpUpstream } from "./src/lib/ytdlp/upstream";
 import {
+  getSoundboardMediaAggregateRateLimitKey,
+  getSoundboardMediaRateLimitKey,
+  getSoundboardMediaRequesterRateLimitKey,
+  isSoundboardMediaRead,
+  isStaticAssetRead,
+} from "./src/lib/api-rate-limit";
+import {
   parseSocketTicketProtocols,
   verifySocketTicket,
   type SocketTicketAudience,
 } from "./src/lib/voice/socket-ticket";
 import { RateLimiter } from "./realtime/rate-limiter";
+import {
+  consumeBackgroundTaskBatch,
+  retryMessagePostprocessing,
+  type BackgroundTaskEnvelope,
+} from "./src/lib/background-tasks";
+import { retryR2Cleanup } from "./src/services/r2-cleanup.service";
+import { syncCollectiblesCatalog } from "./src/lib/collectibles-catalog";
 import {
   appendRealtimeAdmissionHeaders,
   createRealtimeAdmissionContext,
@@ -98,6 +112,10 @@ function withDesktopCors(request: Request, response: Response): Response {
 interface Env {
   MEETING_ROOM: DurableObjectNamespace;
   VOICE_ROOM: DurableObjectNamespace;
+  DB: D1Database;
+  BUCKET: R2Bucket;
+  CACHE: KVNamespace;
+  BACKGROUND_TASKS?: Queue<BackgroundTaskEnvelope>;
   REALTIME_ALLOWED_ORIGINS?: string;
   REALTIME_TICKET_SECRET?: string;
   [key: string]: unknown;
@@ -233,22 +251,44 @@ export default {
     }
 
     // ── Rate limiting for API routes ─────────────────────────────────────
-    // Skip WebSocket upgrades and static asset reads. Attachment/background GETs are
-    // static file reads that Chromium's media player hits rapidly with Range
-    // headers during video playback — rate limiting them causes
-    // ERR_REQUEST_RANGE_NOT_SATISFIABLE retry storms.
+    // Skip WebSocket upgrades and attachment/background static asset reads.
+    // Soundboard media has an aggregate requester/route bucket first, followed
+    // by per-sound and per-capability buckets for legitimate range bursts.
     const isWebSocket = !!request.headers.get("Upgrade");
-    const isStaticAssetRead =
-      request.method === "GET" &&
-      (url.pathname.startsWith("/api/attachments/") ||
-        url.pathname.startsWith("/api/camera-backgrounds/"));
     if (
       url.pathname.startsWith("/api/") &&
       !isWebSocket &&
-      !isStaticAssetRead
+      !isStaticAssetRead(request.method, url.pathname)
     ) {
       const clientIP = request.headers.get("CF-Connecting-IP") ?? "unknown";
-      const result = rateLimiter.check(clientIP, request.method, url.pathname);
+      const isSoundboardMedia = isSoundboardMediaRead(
+        request.method,
+        url.pathname,
+      );
+      let result = isSoundboardMedia
+        ? rateLimiter.check(
+            clientIP,
+            request.method,
+            url.pathname,
+            getSoundboardMediaAggregateRateLimitKey(request, clientIP),
+          )
+        : rateLimiter.check(clientIP, request.method, url.pathname);
+      if (isSoundboardMedia && result.allowed) {
+        result = rateLimiter.check(
+          clientIP,
+          request.method,
+          url.pathname,
+          getSoundboardMediaRequesterRateLimitKey(request, clientIP),
+        );
+      }
+      if (isSoundboardMedia && result.allowed) {
+        result = rateLimiter.check(
+          clientIP,
+          request.method,
+          url.pathname,
+          getSoundboardMediaRateLimitKey(request, clientIP),
+        );
+      }
 
       if (!result.allowed) {
         logger.security("rate_limit_exceeded", {
@@ -355,13 +395,47 @@ export default {
 
   async scheduled(
     _controller: ScheduledController,
-    _env: Env,
+    env: Env,
     ctx: ExecutionContext,
   ): Promise<void> {
     ctx.waitUntil(
-      syncYtDlpUpstream(true).catch((error) => {
-        console.error("yt-dlp upstream sync failed:", error);
-      }),
+      Promise.all([
+        syncYtDlpUpstream(true).catch((error) => {
+          console.error("yt-dlp upstream sync failed:", error);
+        }),
+        retryR2Cleanup(env.DB, env.BUCKET).catch((error) => {
+          console.error("R2 cleanup retry failed:", error);
+        }),
+        retryMessagePostprocessing(env).catch((error) => {
+          console.error("Message postprocessing retry failed:", error);
+        }),
+        syncCollectiblesCatalog(env.DB)
+          .then((catalog) => {
+            console.info("Collectibles catalog sync completed", {
+              source: catalog.source,
+              categories: catalog.categories.length,
+              items: catalog.items.length,
+              syncedAt: catalog.syncedAt,
+            });
+          })
+          .catch((error) => {
+            console.error("Collectibles catalog sync failed:", error);
+            throw error;
+          }),
+      ]).then(() => undefined),
     );
+  },
+
+  async queue(
+    batch: MessageBatch<unknown>,
+    env: Env,
+    _ctx: ExecutionContext,
+  ): Promise<void> {
+    await consumeBackgroundTaskBatch(batch, {
+      DB: env.DB,
+      BUCKET: env.BUCKET,
+      CACHE: env.CACHE,
+      MEETING_ROOM: env.MEETING_ROOM,
+    });
   },
 };

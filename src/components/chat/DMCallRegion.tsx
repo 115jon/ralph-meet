@@ -241,12 +241,12 @@ export function DMCallRegion({ channelId }: { channelId: string }) {
     useCallStore.getState().endCall("declined");
   };
 
-  const handleLeave = () => {
+  const handleLeave = async () => {
     // Leave the SFU and fully reset the call store.
     // The SFU disconnect (via callVoice.handleLeave) sends sendVoiceChannelLeave
     // which removes from voiceChannelMembers → broadcasts VOICE_CHANNEL_STATE_UPDATE.
     playCallEnd();
-    callVoice.handleLeave?.();
+    await callVoice.handleLeave?.();
     useCallStore.getState().endCall("left");
   };
 

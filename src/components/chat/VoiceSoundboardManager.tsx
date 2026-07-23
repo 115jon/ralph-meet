@@ -1,14 +1,19 @@
 import type { SFUClient } from "@/lib/sfu-client";
 import {
   getSoundboardServerKey,
+  getSoundboardEventReceivedAt,
+  hasActiveSoundboardPlayback,
   pauseSoundboardPlayback,
   playSoundboardPlayback,
   resumeSoundboardPlayback,
   setSoundboardPlaybackVolume,
+  subscribeSoundboardActivity,
   stopAllSoundboardPlaybacksForServer,
   stopSoundboardPlayback,
   stopSoundboardPlaybacksByOwner,
 } from "@/lib/voice/soundboard";
+import { getSoundboardUploadUrl } from "@/lib/voice/soundboard-media";
+import { getSoundboardMediaCapabilityExpiresAtFromUrl } from "@/lib/voice/soundboard-media-capability";
 import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
 import { useVoiceSoundboardStore } from "@/stores/useVoiceSoundboardStore";
 import { useEffect } from "react";
@@ -37,7 +42,7 @@ export function VoiceSoundboardManager({
     return sfu.on("app-event", (event) => {
       if (event.server_key !== serverKey || typeof event.type !== "string")
         return;
-      const receivedAt = Date.now();
+      const receivedAt = getSoundboardEventReceivedAt(event.sent_at);
       const peerSettings = useVoiceSettingsStore
         .getState()
         .getSettings(localUserId).peerSettings;
@@ -56,6 +61,45 @@ export function VoiceSoundboardManager({
         const name = typeof event.name === "string" ? event.name : "Sound";
         if (!ownerId || !playbackId) return;
 
+        const soundId =
+          typeof event.sound_id === "string" ? event.sound_id : undefined;
+        const sourceServerId =
+          typeof event.source_server_id === "string"
+            ? event.source_server_id
+            : undefined;
+        const mediaUrl =
+          typeof event.media_url === "string" ? event.media_url : undefined;
+        const mediaCapabilityExpiresAt =
+          getSoundboardMediaCapabilityExpiresAtFromUrl(mediaUrl);
+        const currentTime =
+          typeof event.current_time === "number" &&
+          Number.isFinite(event.current_time) &&
+          event.current_time >= 0
+            ? event.current_time
+            : undefined;
+        const paused =
+          typeof event.paused === "boolean" ? event.paused : undefined;
+        const renewCapability =
+          ownerId === localUserId &&
+          !!soundId &&
+          !!sourceServerId &&
+          mediaCapabilityExpiresAt !== null
+            ? (state: { currentTime: number; paused: boolean }) =>
+                sfu.voiceGW.sendAppEvent({
+                  type: "soundboard.play",
+                  server_key: serverKey,
+                  playback_id: playbackId,
+                  sound_id: soundId,
+                  source_server_id: sourceServerId,
+                  name,
+                  media_url: getSoundboardUploadUrl(soundId),
+                  current_time: state.currentTime,
+                  paused: state.paused,
+                  volume:
+                    typeof event.volume === "number" ? event.volume : undefined,
+                })
+            : undefined;
+
         if (
           ownerId !== localUserId &&
           (peerSettings[ownerId]?.soundboardMuted || serverMutedMap[ownerId])
@@ -68,22 +112,33 @@ export function VoiceSoundboardManager({
           ownerId,
           serverKey,
           name,
-          soundId:
-            typeof event.sound_id === "string" ? event.sound_id : undefined,
+          soundId,
           dataUrl:
             typeof event.data_url === "string" ? event.data_url : undefined,
-          mediaUrl:
-            typeof event.media_url === "string" ? event.media_url : undefined,
+          mediaUrl,
           volume: typeof event.volume === "number" ? event.volume : undefined,
           isLocal: ownerId === localUserId,
           receivedAt,
+          mediaCapabilityExpiresAt: mediaCapabilityExpiresAt ?? undefined,
+          currentTime,
+          paused,
+          automaticEvent:
+            event.automatic_event === "join" ||
+            event.automatic_event === "leave"
+              ? event.automatic_event
+              : undefined,
+          maxDurationSeconds:
+            typeof event.max_duration_seconds === "number"
+              ? event.max_duration_seconds
+              : undefined,
+          renewCapability,
         });
         return;
       }
 
       if (event.type === "soundboard.stop") {
         if (typeof event.playback_id === "string") {
-          stopSoundboardPlayback(event.playback_id);
+          stopSoundboardPlayback(event.playback_id, serverKey);
           return;
         }
 
@@ -103,8 +158,8 @@ export function VoiceSoundboardManager({
           typeof event.paused !== "boolean"
         )
           return;
-        if (event.paused) pauseSoundboardPlayback(event.playback_id);
-        else resumeSoundboardPlayback(event.playback_id);
+        if (event.paused) pauseSoundboardPlayback(event.playback_id, serverKey);
+        else resumeSoundboardPlayback(event.playback_id, serverKey);
         return;
       }
 
@@ -114,7 +169,7 @@ export function VoiceSoundboardManager({
           typeof event.volume !== "number"
         )
           return;
-        setSoundboardPlaybackVolume(event.playback_id, event.volume);
+        setSoundboardPlaybackVolume(event.playback_id, event.volume, serverKey);
         return;
       }
 
@@ -130,6 +185,25 @@ export function VoiceSoundboardManager({
       }
     });
   }, [localUserId, serverKey, setServerSoundboardMuted, sfu]);
+
+  useEffect(() => {
+    if (!sfu) return;
+
+    const syncSoundboardSpeaking = () => {
+      sfu.vad.setSoundboardSpeaking(
+        localUserId
+          ? hasActiveSoundboardPlayback(localUserId, serverKey)
+          : false,
+      );
+    };
+
+    syncSoundboardSpeaking();
+    const unsubscribe = subscribeSoundboardActivity(syncSoundboardSpeaking);
+    return () => {
+      unsubscribe();
+      sfu.vad.setSoundboardSpeaking(false);
+    };
+  }, [localUserId, serverKey, sfu]);
 
   useEffect(
     () => () => {

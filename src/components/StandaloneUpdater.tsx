@@ -1,5 +1,6 @@
-import splashLogo from "@/assets/splash-logo.svg";
+import { ThemeAwareSplashLogo } from "@/components/ThemeAwareSplashLogo";
 import { restartDesktopApp } from "@/lib/desktop-restart";
+import { useDesktopSettingsStore } from "@/stores/useDesktopSettingsStore";
 import { useEffect, useState } from "react";
 
 type StandaloneUpdaterStatus =
@@ -102,6 +103,7 @@ export function StandaloneUpdater() {
         await import("@tauri-apps/api/window");
 
       try {
+        await useDesktopSettingsStore.getState().syncToBackend();
         const mainWindow = await Window.getByLabel("main");
         if (mainWindow) {
           await mainWindow.show();
@@ -144,8 +146,7 @@ export function StandaloneUpdater() {
 
       {/* Logo with breathing animation */}
       <div className="w-24 h-24 z-10 flex items-center justify-center animate-[conn-breathe_2.8s_ease-in-out_infinite]">
-        <img
-          src={splashLogo}
+        <ThemeAwareSplashLogo
           alt="Ralph Meet"
           className="h-full w-full object-contain"
         />

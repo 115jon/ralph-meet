@@ -41,6 +41,7 @@ import type { CollectibleKind } from "@/lib/collectibles-catalog";
 import { getDisplayInitial } from "@/lib/display-name";
 import { getAuthAssetUrl } from "@/lib/platform";
 import { resolveProfileReferenceDate } from "@/lib/profile-dates";
+import { getProfileFramePreviewTransform } from "@/lib/profile-frame";
 import {
   applyProfileThemeDefaults,
   DEFAULT_PROFILE_THEME,
@@ -231,7 +232,9 @@ function areDisplayNameStylesEqual(
   return JSON.stringify(leftStyle) === JSON.stringify(rightStyle);
 }
 
-function getFocusableElements(container: ParentNode | null | undefined) {
+function getFocusableElements(
+  container: Pick<ParentNode, "querySelectorAll"> | null | undefined,
+) {
   if (!container) return [];
 
   return Array.from(
@@ -2297,12 +2300,6 @@ export default function SettingsAccountTab({
   }, [nameplatePreview]);
 
   const hasChanges =
-    displayName !==
-      (chatUser?.display_name ||
-        (user?.unsafeMetadata?.displayName as string) ||
-        user?.username ||
-        "") ||
-    username !== (chatUser?.username || user?.username || "") ||
     pronouns !== (chatUser?.pronouns || "") ||
     bio !== (chatUser?.bio || "") ||
     avatarFile !== null ||
@@ -2493,6 +2490,8 @@ export default function SettingsAccountTab({
     : currentNameplateSelection?.animatedUrl
       ? "video/mp4"
       : null;
+  const profileFramePreviewTransform =
+    getProfileFramePreviewTransform(currentAvatarDisplay);
   const avatarDecorationPreviewArtUrl = currentAvatarDecoration?.asset
     ? `https://cdn.discordapp.com/avatar-decoration-presets/${currentAvatarDecoration.asset}.png?size=240&passthrough=true`
     : (currentAvatarDecoration?.imageUrl ?? null);
@@ -2792,15 +2791,11 @@ export default function SettingsAccountTab({
     setSaved(false);
     setError(null);
 
-    const trimmedName = displayName.trim();
-    const trimmedUsername = username.trim().toLowerCase();
     const trimmedPronouns = pronouns.trim();
     const trimmedBio = bio.trim();
 
     try {
       await apiPatch("/api/update-profile", {
-        displayName: trimmedName || trimmedUsername,
-        username: trimmedUsername,
         pronouns: trimmedPronouns || null,
         bio: trimmedBio || null,
         profileAccentColor,
@@ -2924,8 +2919,6 @@ export default function SettingsAccountTab({
     }
   }, [
     user,
-    displayName,
-    username,
     pronouns,
     bio,
     avatarFile,
@@ -3041,8 +3034,7 @@ export default function SettingsAccountTab({
         <div className="mb-6">
           <h1 className="text-2xl font-bold text-rm-text">Edit Profile</h1>
           <p className="mt-2 text-sm text-rm-text-muted">
-            Update your identity, collectibles, and profile surfaces in one
-            place.
+            Update your collectibles and profile surfaces in one place.
           </p>
         </div>
       )}
@@ -3862,6 +3854,15 @@ export default function SettingsAccountTab({
                 <ProfileSurfaceShell
                   display={currentAvatarDisplay}
                   className="relative h-auto w-full max-w-[400px] lg:h-full lg:aspect-[450/880] lg:w-[min(400px,calc(51.136dvh_-_55.2px))]"
+                  style={
+                    asModal && profileFramePreviewTransform.scale < 1
+                      ? {
+                          transform: `scale(${profileFramePreviewTransform.scale})`,
+                          transformOrigin:
+                            profileFramePreviewTransform.transformOrigin,
+                        }
+                      : undefined
+                  }
                   surfaceStyle={{ aspectRatio: PROFILE_SURFACE_ASPECT_RATIO }}
                 >
                   <div

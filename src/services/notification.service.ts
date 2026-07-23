@@ -144,9 +144,17 @@ export async function markNotificationsRead(
 export async function clearNotifications(
   db: D1Database,
   userId: string,
-): Promise<void> {
-  await db
-    .prepare(`DELETE FROM notifications WHERE user_id = ?`)
-    .bind(userId)
-    .run();
+): Promise<string> {
+  const clearedAt = new Date().toISOString();
+  await db.batch([
+    db.prepare(`DELETE FROM notifications WHERE user_id = ?`).bind(userId),
+    db
+      .prepare(
+        `INSERT INTO notification_clear_watermarks (user_id, cleared_at)
+         VALUES (?, ?)
+         ON CONFLICT(user_id) DO UPDATE SET cleared_at = excluded.cleared_at`,
+      )
+      .bind(userId, clearedAt),
+  ]);
+  return clearedAt;
 }

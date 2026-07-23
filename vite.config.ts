@@ -95,7 +95,7 @@ function clientEnvironmentShims(): Plugin {
   };
 }
 
-export default defineConfig({
+export default defineConfig(({ command }) => ({
   server: {
     host: "0.0.0.0",
     strictPort: true,
@@ -127,6 +127,21 @@ export default defineConfig({
       },
     }),
     cloudflare({
+      config:
+        command === "serve"
+          ? {
+              migrations: [
+                {
+                  tag: "v1-local",
+                  new_sqlite_classes: [
+                    "RootMeetingRoom",
+                    "RootVoiceRoom",
+                    "RootRateLimiterDO",
+                  ],
+                },
+              ],
+            }
+          : undefined,
       viteEnvironment: { name: "ssr" },
     }),
     clientEnvironmentShims(),
@@ -162,4 +177,4 @@ export default defineConfig({
       ),
     },
   },
-});
+}));

@@ -775,6 +775,7 @@ export function resolveProfileTheme(
 
   return {
     variables: {
+      "--rm-profile-custom-background": resolvedBackground,
       "--rm-profile-custom-accent": resolvedAccent,
       "--rm-profile-custom-accent-muted": withAlpha(
         resolvedAccent,

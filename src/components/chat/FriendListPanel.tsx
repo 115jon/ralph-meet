@@ -1,6 +1,7 @@
 import { getDisplayInitial, getDisplayName } from "@/lib/display-name";
 import { getAuthAssetUrl } from "@/lib/platform";
 import { cn } from "@/lib/utils";
+import { UserStatusDot } from "./UserStatusDot";
 import React from "react";
 import { AvatarImage } from "./AvatarImage";
 import { Ban, Check, MessageSquare, UserPlus, Users, X } from "./Icons";
@@ -182,13 +183,9 @@ export function FriendListPanel({
                           getDisplayInitial(rel.user)
                         )}
                       </div>
-                      <div
-                        className={cn(
-                          "absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-rm-bg-surface transition-colors",
-                          rel.user.status === "online"
-                            ? "bg-primary"
-                            : "bg-zinc-500",
-                        )}
+                      <UserStatusDot
+                        status={rel.user.status ?? "offline"}
+                        className="absolute -bottom-0.5 -right-0.5 h-3 w-3 border-2 border-rm-bg-surface transition-colors"
                       />
                     </button>
                     <div className="min-w-0 flex-1">

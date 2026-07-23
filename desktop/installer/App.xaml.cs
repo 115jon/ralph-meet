@@ -10,6 +10,7 @@ namespace Installer
     {
         public static bool IsSilentLaunch { get; private set; }
         public static bool IsUninstallLaunch { get; private set; }
+        public static bool IsNoLaunch { get; private set; }
 
         protected override void OnStartup(StartupEventArgs e)
         {
@@ -57,6 +58,11 @@ namespace Installer
 
             IsSilentLaunch = isSilent;
             IsUninstallLaunch = isUninstall;
+            IsNoLaunch = e.Args.Any(arg =>
+                arg.Equals("/NoLaunch", StringComparison.OrdinalIgnoreCase) ||
+                arg.Equals("--no-launch", StringComparison.OrdinalIgnoreCase) ||
+                arg.Equals("-no-launch", StringComparison.OrdinalIgnoreCase)
+            );
 
             DispatcherUnhandledException += (sender, args) =>
             {
@@ -93,7 +99,7 @@ namespace Installer
             {
                 try
                 {
-                    InstallerLogic.RunInstallationAsync().GetAwaiter().GetResult();
+                    InstallerLogic.RunInstallationAsync(!IsNoLaunch).GetAwaiter().GetResult();
                 }
                 catch (Exception ex)
                 {

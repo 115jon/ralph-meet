@@ -10,12 +10,17 @@ export function useDelayUnmount(isMounted: boolean, delayTime: number) {
   const [shouldRender, setShouldRender] = useState(isMounted);
 
   useEffect(() => {
-    let timeoutId: NodeJS.Timeout;
-
-    if (!isMounted && shouldRender) {
-      timeoutId = setTimeout(() => setShouldRender(false), delayTime);
+    if (isMounted) {
+      // Retain the component after a closed-to-open transition so the next
+      // close can render its exit animation.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setShouldRender(true);
+      return;
     }
 
+    if (!shouldRender) return;
+
+    const timeoutId = setTimeout(() => setShouldRender(false), delayTime);
     return () => clearTimeout(timeoutId);
   }, [isMounted, delayTime, shouldRender]);
 

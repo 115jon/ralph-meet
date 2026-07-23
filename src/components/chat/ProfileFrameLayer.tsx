@@ -10,12 +10,14 @@ interface ProfileFrameLayerProps {
   display?: AvatarDisplay | string | null;
   order: ProfileFrameLayerOrder;
   className?: string;
+  fitToSurface?: boolean;
 }
 
 export function ProfileFrameLayer({
   display,
   order,
   className,
+  fitToSurface = false,
 }: ProfileFrameLayerProps) {
   const layers = getProfileFrameLayers(display, order);
   if (!layers.length) return null;
@@ -36,7 +38,7 @@ export function ProfileFrameLayer({
           className={cn(
             "absolute left-1/2 max-w-none -translate-x-1/2 object-contain",
           )}
-          style={getProfileFrameLayerStyle(display, layer)}
+          style={getProfileFrameLayerStyle(display, layer, { fitToSurface })}
           loading="lazy"
           decoding="async"
         />

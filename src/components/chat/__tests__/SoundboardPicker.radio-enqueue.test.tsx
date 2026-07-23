@@ -1,11 +1,18 @@
 /**
  * @vitest-environment jsdom
  */
-import { act, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import SoundboardPicker from "../SoundboardPicker";
 import type { SFUClient } from "@/lib/sfu-client";
 import type { ListenTogetherEnqueueCommand } from "@/lib/listen-together";
+import { useListenTogetherStore } from "@/stores/useListenTogetherStore";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 vi.mock("@/lib/api-client", () => ({
@@ -36,6 +43,7 @@ describe("SoundboardPicker - Radio Enqueue", () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
+    useListenTogetherStore.setState({ rooms: {} });
 
     const { apiGet } = await import("@/lib/api-client");
     vi.mocked(apiGet).mockImplementation((path) => {
@@ -66,6 +74,82 @@ describe("SoundboardPicker - Radio Enqueue", () => {
             },
           ]),
       } as Response),
+    );
+  });
+
+  it("shows a shared room error and clears it with a successful retry", async () => {
+    const user = userEvent.setup();
+    const sendAppEvent = vi
+      .fn()
+      .mockReturnValueOnce(false)
+      .mockReturnValue(true);
+    mockSfu.voiceGW.sendAppEvent = sendAppEvent as never;
+
+    render(
+      <SoundboardPicker
+        onClose={vi.fn()}
+        sfu={mockSfu}
+        serverId="server-1"
+        channelId="channel-1"
+        roomSlug="room-1"
+        voiceSessionId="session-1"
+        localUserId="user-1"
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: /radio/i }));
+    await waitFor(() =>
+      expect(screen.getByText("Test Radio Station")).toBeInTheDocument(),
+    );
+
+    await user.click(screen.getByLabelText("Play Test Radio Station"));
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Could not enqueue the radio station",
+    );
+
+    act(() => {
+      useListenTogetherStore.getState().setError("room-1", {
+        code: "RADIO_UNAVAILABLE",
+        message: "The radio station is unavailable.",
+      });
+    });
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "The radio station is unavailable.",
+    );
+
+    await user.click(screen.getByLabelText("Play Test Radio Station"));
+    await waitFor(() => {
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+      expect(
+        useListenTogetherStore.getState().rooms["room-1"]?.error,
+      ).toBeNull();
+    });
+  });
+
+  it("shows feedback instead of falling through when radio has no voice room", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <SoundboardPicker
+        onClose={vi.fn()}
+        sfu={null}
+        serverId="server-1"
+        channelId="channel-1"
+        roomSlug="room-1"
+        voiceSessionId="session-1"
+        localUserId="user-1"
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: /radio/i }));
+    await waitFor(() =>
+      expect(screen.getByText("Test Radio Station")).toBeInTheDocument(),
+    );
+
+    await user.click(screen.getByLabelText("Play Test Radio Station"));
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Connect to the voice room before playing radio.",
     );
   });
 
@@ -174,6 +258,137 @@ describe("SoundboardPicker - Radio Enqueue", () => {
       });
     });
   });
+
+  it("shows a visible error when the gateway rejects a radio enqueue", async () => {
+    const user = userEvent.setup();
+    mockSfu.voiceGW.sendAppEvent = vi.fn(() => false) as never;
+
+    render(
+      <SoundboardPicker
+        onClose={vi.fn()}
+        sfu={mockSfu}
+        serverId="server-1"
+        channelId="channel-1"
+        roomSlug="room-1"
+        voiceSessionId="session-1"
+        localUserId="user-1"
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: /radio/i }));
+    await waitFor(() =>
+      expect(screen.getByText("Test Radio Station")).toBeInTheDocument(),
+    );
+    await user.click(screen.getByLabelText("Play Test Radio Station"));
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Could not enqueue the radio station",
+    );
+  });
+
+  it("clears a radio enqueue error after a later accepted retry", async () => {
+    const user = userEvent.setup();
+    const sendAppEvent = vi
+      .fn()
+      .mockReturnValueOnce(false)
+      .mockReturnValueOnce(true);
+    mockSfu.voiceGW.sendAppEvent = sendAppEvent as never;
+
+    render(
+      <SoundboardPicker
+        onClose={vi.fn()}
+        sfu={mockSfu}
+        serverId="server-1"
+        channelId="channel-1"
+        roomSlug="room-1"
+        voiceSessionId="session-1"
+        localUserId="user-1"
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: /radio/i }));
+    await waitFor(() =>
+      expect(screen.getByText("Test Radio Station")).toBeInTheDocument(),
+    );
+    const stationButton = screen.getByLabelText("Play Test Radio Station");
+    await user.click(stationButton);
+    expect(screen.getByRole("alert")).toBeInTheDocument();
+
+    await user.click(stationButton);
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it.each(["network failure", "non-OK response"] as const)(
+    "clears radio results and loading state after a %s",
+    async (failureMode) => {
+      const initialStation = {
+        stationuuid: "station-1",
+        name: "Initial Station",
+        url_resolved: "https://stream.example.com/initial",
+        favicon: "",
+        tags: "rock",
+        clickcount: 100,
+      };
+      const failedStation = {
+        ...initialStation,
+        stationuuid: "station-failed",
+        name: "Unexpected Failed Response Station",
+      };
+      let fetchCount = 0;
+      global.fetch = vi.fn(() => {
+        fetchCount += 1;
+        if (fetchCount === 1) {
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve([initialStation]),
+          } as Response);
+        }
+        if (failureMode === "network failure") {
+          return Promise.reject(new Error("radio browser unavailable"));
+        }
+        return Promise.resolve({
+          ok: false,
+          status: 503,
+          json: () => Promise.resolve([failedStation]),
+        } as Response);
+      });
+      const user = userEvent.setup();
+
+      render(
+        <SoundboardPicker
+          onClose={vi.fn()}
+          sfu={mockSfu}
+          serverId="server-1"
+          channelId="channel-1"
+          roomSlug="room-1"
+          voiceSessionId="session-1"
+          localUserId="user-1"
+        />,
+      );
+
+      await user.click(screen.getByRole("button", { name: /radio/i }));
+      await waitFor(() =>
+        expect(screen.getByText("Initial Station")).toBeInTheDocument(),
+      );
+
+      fireEvent.change(screen.getByLabelText("Search radio stations"), {
+        target: { value: "jazz" },
+      });
+
+      await waitFor(
+        () => {
+          expect(screen.queryByText("Initial Station")).not.toBeInTheDocument();
+          expect(
+            screen.queryByText("Unexpected Failed Response Station"),
+          ).not.toBeInTheDocument();
+          expect(
+            screen.getByText('No stations found for "jazz"'),
+          ).toBeInTheDocument();
+        },
+        { timeout: 2_000 },
+      );
+    },
+  );
 
   it("merges metadata-only server catalog updates into the existing sound", async () => {
     let onAppEvent: ((event: unknown) => void) | undefined;

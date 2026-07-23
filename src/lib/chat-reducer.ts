@@ -43,6 +43,8 @@ export interface ChatState {
   activeServerId: string | null;
   /** Active channel ID */
   activeChannelId: string | null;
+  /** Selected home view when the direct-message area has no active channel */
+  dmHomeView: "friends" | "shop";
   /** Messages for the current channel */
   messages: Message[];
   /** Cached message slices per channel */
@@ -96,6 +98,8 @@ export interface ChatState {
   speakingUsersBySource: Record<string, Record<string, boolean>>;
   /** User notifications (mentions, replies, DMs) */
   notifications: Notification[];
+  /** Latest server-side notification clear watermark received by this client */
+  notificationsClearedAt: string | null;
   /** Unread notification count (for badge) */
   unreadNotificationCount: number;
   /** Per-server unread mention/reply count: serverId → count */
@@ -134,6 +138,13 @@ export interface VoiceChannelMember {
   joined_at?: number;
 }
 
+export type VoiceChannelMemberDelta = Omit<
+  VoiceChannelMember,
+  "name" | "username" | "display_name" | "avatar_url" | "avatar_display"
+>;
+
+type VoiceChannelMemberInput = VoiceChannelMember | VoiceChannelMemberDelta;
+
 export const initialState: ChatState = {
   connected: false,
   reconnectAttempt: 0,
@@ -146,6 +157,7 @@ export const initialState: ChatState = {
   categoriesByServerId: {},
   activeServerId: null,
   activeChannelId: null,
+  dmHomeView: "friends",
   messages: [],
   messagesByChannelId: {},
   messagesLoadedByChannelId: {},
@@ -173,6 +185,7 @@ export const initialState: ChatState = {
   speakingUsers: {},
   speakingUsersBySource: {},
   notifications: [],
+  notificationsClearedAt: null,
   unreadNotificationCount: 0,
   serverMentionCounts: {},
   channelMentionCounts: {},
@@ -220,6 +233,7 @@ function reconcileChannelIdentity(
 export type ChatAction =
   | { type: "SET_CONNECTED"; connected: boolean }
   | { type: "SET_RECONNECT_ATTEMPT"; attempt: number }
+  | { type: "MARK_MESSAGE_CACHES_STALE" }
   | { type: "SET_USER"; user: User }
   | {
       type: "SET_STATUS";
@@ -243,6 +257,7 @@ export type ChatAction =
   | { type: "REMOVE_CHANNEL"; channelId: string }
   | { type: "SET_ACTIVE_SERVER"; serverId: string | null }
   | { type: "SET_ACTIVE_CHANNEL"; channelId: string | null }
+  | { type: "SET_DM_HOME_VIEW"; view: "friends" | "shop" }
   | {
       type: "SET_MESSAGES";
       messages: Message[];
@@ -270,6 +285,7 @@ export type ChatAction =
       id: string;
       content?: string;
       updated_at?: string;
+      content_revision?: number;
       embeds?: import("@/lib/types").EmbedInfo[];
     }
   | { type: "DELETE_MESSAGE"; id: string }
@@ -293,6 +309,7 @@ export type ChatAction =
   | {
       type: "UPDATE_MEMBER_PROFILE";
       userId: string;
+      name?: string;
       username?: string;
       display_name?: string | null;
       avatar_url?: string | null;
@@ -372,14 +389,17 @@ export type ChatAction =
     }
   | {
       type: "SET_VOICE_CHANNEL_STATES";
-      states: Record<string, VoiceChannelMember[]>;
+      states: Record<
+        string,
+        Array<VoiceChannelMember | VoiceChannelMemberDelta>
+      >;
       startedAt: Record<string, number>;
       spatialStates?: Record<string, SharedSpatialAudioState>;
     }
   | {
       type: "UPDATE_VOICE_CHANNEL_STATE";
       channelId: string;
-      members: VoiceChannelMember[];
+      members: Array<VoiceChannelMember | VoiceChannelMemberDelta>;
       startedAt: number | null;
       spatialAudioState?: SharedSpatialAudioState;
     }
@@ -404,7 +424,7 @@ export type ChatAction =
     }
   | { type: "ADD_NOTIFICATION"; notification: Notification }
   | { type: "MARK_NOTIFICATIONS_READ"; ids?: string[]; all?: boolean }
-  | { type: "CLEAR_NOTIFICATIONS" }
+  | { type: "CLEAR_NOTIFICATIONS"; clearedAt?: string }
   | { type: "SET_SCROLL_POSITION"; channelId: string; messageId: string }
   | { type: "SET_JUMP_ANCHOR"; channelId: string; messageId: string }
   | { type: "CLEAR_JUMP_ANCHOR"; channelId: string };
@@ -476,22 +496,83 @@ function findKnownUser(state: ChatState, userId: string): User | undefined {
 }
 
 function enrichVoiceMembers(
-  members: VoiceChannelMember[],
+  members: VoiceChannelMemberInput[],
   state: ChatState,
 ): VoiceChannelMember[] {
   return members.map((m) => {
     const knownUser = findKnownUser(state, m.clerk_user_id);
-    const displayName = getDisplayName(knownUser, getDisplayName(m, m.name));
+    const hasName = hasVoiceMemberField(m, "name");
+    const hasUsername = hasVoiceMemberField(m, "username");
+    const hasDisplayName = hasVoiceMemberField(m, "display_name");
+    const hasAvatarUrl = hasVoiceMemberField(m, "avatar_url");
+    const hasAvatarDisplay = hasVoiceMemberField(m, "avatar_display");
+    const hasDisplayNameStyle = hasVoiceMemberField(m, "display_name_style");
+    const memberName = hasName && "name" in m ? m.name : undefined;
+    const memberUsername =
+      hasUsername && "username" in m ? m.username : undefined;
+    const memberDisplayName =
+      hasDisplayName && "display_name" in m ? m.display_name : undefined;
+    const memberAvatarUrl =
+      hasAvatarUrl && "avatar_url" in m ? m.avatar_url : undefined;
+    const memberAvatarDisplay =
+      hasAvatarDisplay && "avatar_display" in m ? m.avatar_display : undefined;
+    const memberDisplayNameStyle =
+      hasDisplayNameStyle && "display_name_style" in m
+        ? m.display_name_style
+        : undefined;
+    const fallbackName = memberName || memberUsername || m.clerk_user_id;
+    const displayName = getDisplayName(
+      {
+        display_name: hasDisplayName
+          ? memberDisplayName
+          : knownUser?.display_name,
+        username: hasUsername ? memberUsername : knownUser?.username,
+        name: hasName ? memberName : undefined,
+      },
+      fallbackName,
+    );
 
     return {
       ...m,
       name: displayName,
-      username: knownUser?.username ?? m.username ?? m.name,
-      display_name: knownUser?.display_name ?? m.display_name ?? null,
-      display_name_style:
-        knownUser?.display_name_style ?? m.display_name_style ?? null,
-      avatar_url: m.avatar_url || knownUser?.avatar_url || null,
-      avatar_display: m.avatar_display ?? knownUser?.avatar_display ?? null,
+      username: hasUsername
+        ? memberUsername
+        : (knownUser?.username ?? memberName ?? m.clerk_user_id),
+      display_name: hasDisplayName
+        ? (memberDisplayName ?? null)
+        : (knownUser?.display_name ?? null),
+      display_name_style: hasDisplayNameStyle
+        ? (memberDisplayNameStyle ?? null)
+        : (knownUser?.display_name_style ?? null),
+      avatar_url: hasAvatarUrl
+        ? (memberAvatarUrl ?? null)
+        : (knownUser?.avatar_url ?? null),
+      avatar_display: hasAvatarDisplay
+        ? (memberAvatarDisplay ?? null)
+        : (knownUser?.avatar_display ?? null),
+    };
+  });
+}
+
+function hasVoiceMemberField(
+  member: VoiceChannelMemberInput,
+  field: string,
+): boolean {
+  return Object.prototype.hasOwnProperty.call(member, field);
+}
+
+function mergeVoiceMemberProfiles(
+  members: VoiceChannelMemberInput[],
+  previous: VoiceChannelMember[],
+): VoiceChannelMemberInput[] {
+  const previousByUserId = new Map(
+    previous.map((member) => [member.clerk_user_id, member]),
+  );
+  return members.map((member) => {
+    const previousMember = previousByUserId.get(member.clerk_user_id);
+    return {
+      ...previousMember,
+      ...member,
     };
   });
 }
@@ -545,6 +626,18 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       };
     case "SET_RECONNECT_ATTEMPT":
       return { ...state, reconnectAttempt: action.attempt };
+    case "MARK_MESSAGE_CACHES_STALE":
+      return {
+        ...state,
+        messagesLoadedByChannelId: Object.fromEntries(
+          [
+            ...new Set([
+              ...Object.keys(state.messagesByChannelId),
+              ...Object.keys(state.messagesLoadedByChannelId),
+            ]),
+          ].map((channelId) => [channelId, false]),
+        ),
+      };
     case "SET_USER": {
       const nextState = { ...state, user: action.user };
       return {
@@ -779,6 +872,9 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
             ? action.channelId
             : null,
       };
+    case "SET_DM_HOME_VIEW":
+      if (state.dmHomeView === action.view) return state;
+      return { ...state, dmHomeView: action.view };
     case "SWITCH_SERVER":
       if (
         state.activeServerId === action.serverId &&
@@ -986,14 +1082,25 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       };
     }
     case "UPDATE_MESSAGE": {
-      const updateMessage = (m: Message) => ({
-        ...m,
-        ...(action.content !== undefined ? { content: action.content } : {}),
-        ...(action.updated_at !== undefined
-          ? { updated_at: action.updated_at }
-          : {}),
-        ...(action.embeds !== undefined ? { embeds: action.embeds } : {}),
-      });
+      const updateMessage = (m: Message) => {
+        if (
+          action.content_revision !== undefined &&
+          action.content_revision < (m.content_revision ?? 0)
+        ) {
+          return m;
+        }
+        return {
+          ...m,
+          ...(action.content !== undefined ? { content: action.content } : {}),
+          ...(action.updated_at !== undefined
+            ? { updated_at: action.updated_at }
+            : {}),
+          ...(action.content_revision !== undefined
+            ? { content_revision: action.content_revision }
+            : {}),
+          ...(action.embeds !== undefined ? { embeds: action.embeds } : {}),
+        };
+      };
       const nextMessageCaches = mapMessageCaches(
         state.messagesByChannelId,
         (messages) => replaceMessageById(messages, action.id, updateMessage),
@@ -1381,6 +1488,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         );
         if (vcIdx !== -1) {
           const updated = { ...members[vcIdx] };
+          if (action.name !== undefined) updated.name = action.name;
           if (action.username !== undefined) updated.username = action.username;
           if (action.display_name !== undefined)
             updated.display_name = action.display_name;
@@ -2096,7 +2204,13 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       const enriched: Record<string, VoiceChannelMember[]> = {};
       const nextStartedAt: Record<string, number> = {};
       for (const [channelId, members] of Object.entries(action.states)) {
-        enriched[channelId] = enrichVoiceMembers(members, state);
+        enriched[channelId] = enrichVoiceMembers(
+          mergeVoiceMemberProfiles(
+            members,
+            state.voiceChannelStates[channelId] ?? [],
+          ),
+          state,
+        );
         const incoming = action.startedAt[channelId];
         const previous = state.voiceChannelStartedAt[channelId];
         const memberJoinedAt = members
@@ -2125,7 +2239,13 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         delete next[action.channelId];
         delete nextStartedAt[action.channelId];
       } else {
-        next[action.channelId] = enrichVoiceMembers(action.members, state);
+        next[action.channelId] = enrichVoiceMembers(
+          mergeVoiceMemberProfiles(
+            action.members,
+            state.voiceChannelStates[action.channelId] ?? [],
+          ),
+          state,
+        );
         const memberJoinedAt = action.members
           .map((m) => m.joined_at)
           .filter((ts): ts is number => typeof ts === "number" && ts > 0)
@@ -2216,6 +2336,13 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       };
     }
     case "ADD_NOTIFICATION": {
+      if (
+        state.notifications.some(
+          (notification) => notification.id === action.notification.id,
+        )
+      ) {
+        return state;
+      }
       const nextNotifs = [action.notification, ...state.notifications];
       const counts = computeMentionCounts(nextNotifs);
       return {
@@ -2254,6 +2381,8 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       return {
         ...state,
         notifications: [],
+        notificationsClearedAt:
+          action.clearedAt ?? state.notificationsClearedAt,
         unreadNotificationCount: 0,
         serverMentionCounts: {},
         channelMentionCounts: {},

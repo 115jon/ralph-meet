@@ -1,15 +1,16 @@
 <#
 .SYNOPSIS
-    Builds and runs the Ralph Meet desktop app in a production-like mode
-    against the deployed backend.
+    Builds and installs the Ralph Meet desktop app in a production-like mode
+    against the deployed backend without launching it.
 
 .DESCRIPTION
-    Mirrors the environment setup used by build-installer.ps1, but instead of
-    stopping at an installer artifact it silently installs the freshly-built
-    custom bootstrapper into the real default install target
-    (%LOCALAPPDATA%\<ProductName>) and launches the installed executable.
+    Mirrors the environment setup used by build-installer.ps1 and silently
+    installs the freshly-built custom bootstrapper into the real default
+    install target (%LOCALAPPDATA%\<ProductName>). The installed executable
+    is deliberately not launched by this script so the build command remains
+    finite; launch it separately after the script exits.
 
-    This gives us a local run that is much closer to a real production install:
+    This gives us a local install that is much closer to a real production install:
     - deployed frontend build
     - release Rust build
     - packaged Tauri layout
@@ -230,9 +231,9 @@ Get-CimInstance Win32_Process -Filter "Name = 'Update.exe'" -ErrorAction Silentl
     Where-Object { $_.ExecutablePath -eq (Join-Path $expectedDir "Update.exe") } |
     ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
 
-Write-Host "==> Running Custom Installer RalphMeetSetup.exe (/S) ..." -ForegroundColor Yellow
+Write-Host "==> Running Custom Installer RalphMeetSetup.exe (/S /NoLaunch) ..." -ForegroundColor Yellow
 Write-Host "==> Installer logs   : $installerLogDir" -ForegroundColor Cyan
-$installerProc = Start-Process -FilePath $installer -ArgumentList "/S" -PassThru -Wait
+$installerProc = Start-Process -FilePath $installer -ArgumentList "/S", "/NoLaunch" -PassThru -Wait
 if ($installerProc.ExitCode -ne 0) {
     Write-Error "Installer failed with exit code $($installerProc.ExitCode). Check installer logs under: $installerLogDir"
     exit $installerProc.ExitCode
@@ -268,7 +269,7 @@ if (-not (Test-Path $rootLauncherPath)) {
     exit 1
 }
 
-Write-Host "==> Installation complete. Target app has been launched by the bootstrapper!" -ForegroundColor Green
+Write-Host "==> Installation complete. The target app was not launched." -ForegroundColor Green
 Write-Host "==> Root launcher    : $rootLauncherPath" -ForegroundColor Cyan
 Write-Host "==> Active version   : $($installedState.currentVersion)" -ForegroundColor Cyan
 Write-Host "==> Active app dir   : $installDir" -ForegroundColor Cyan

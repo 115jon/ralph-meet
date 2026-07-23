@@ -24,6 +24,32 @@ const listenTogetherInMemoryStreamCache = new Map<
   }
 >();
 
+type ListenTogetherResolvedStream = Awaited<
+  ReturnType<typeof resolveListenTogetherAudioStream>
+>;
+
+export async function refreshListenTogetherResolvedStream(
+  current: ListenTogetherResolvedStream,
+  refresh: () => Promise<ListenTogetherResolvedStream>,
+): Promise<{
+  resolved: ListenTogetherResolvedStream;
+  refreshError: unknown | null;
+}> {
+  try {
+    return { resolved: await refresh(), refreshError: null };
+  } catch (refreshError) {
+    return { resolved: current, refreshError };
+  }
+}
+
+async function cancelUpstreamBody(response: Response | null) {
+  try {
+    await response?.body?.cancel();
+  } catch {
+    // The body may already be consumed or locked by the runtime.
+  }
+}
+
 export function buildProxyHeaders(upstreamHeaders: Headers) {
   const headers = new Headers();
   const passthroughHeaders = [
@@ -464,33 +490,54 @@ export async function proxyListenTogetherStream(
         upstreamRange,
         status: upstream.status,
       });
-      resolved = await resolveListenTogetherAudioStream(
-        videoId,
-        preferredFormat,
-        { forceRefresh: true },
+      const refreshResult = await refreshListenTogetherResolvedStream(
+        resolved,
+        () =>
+          resolveListenTogetherAudioStream(videoId, preferredFormat, {
+            forceRefresh: true,
+          }),
       );
-      upstreamUrl = new URL(resolved.url);
-      if (!upstreamUrl.hostname.toLowerCase().includes("googlevideo.com")) {
-        streamLog.error(
-          "Refreshed listen together stream host is not allowed",
+      resolved = refreshResult.resolved;
+      if (refreshResult.refreshError) {
+        streamLog.warn(
+          "Resolved stream refresh failed; retrying the current direct URL",
           {
             roomSlug,
             videoId,
             preferredFormat,
-            host: upstreamUrl.hostname.toLowerCase(),
+            message:
+              refreshResult.refreshError instanceof Error
+                ? refreshResult.refreshError.message
+                : String(refreshResult.refreshError),
           },
         );
-        return Response.json(
-          { error: "Resolved stream host is not allowed" },
-          { status: 502 },
+      }
+      if (!refreshResult.refreshError) {
+        upstreamUrl = new URL(resolved.url);
+        if (!upstreamUrl.hostname.toLowerCase().includes("googlevideo.com")) {
+          await cancelUpstreamBody(upstream);
+          streamLog.error(
+            "Refreshed listen together stream host is not allowed",
+            {
+              roomSlug,
+              videoId,
+              preferredFormat,
+              host: upstreamUrl.hostname.toLowerCase(),
+            },
+          );
+          return Response.json(
+            { error: "Resolved stream host is not allowed" },
+            { status: 502 },
+          );
+        }
+
+        await cancelUpstreamBody(upstream);
+        upstream = await fetchListenTogetherUpstream(
+          upstreamUrl,
+          upstreamRange,
+          "header",
         );
       }
-
-      upstream = await fetchListenTogetherUpstream(
-        upstreamUrl,
-        upstreamRange,
-        "header",
-      );
     }
 
     if (!upstream.ok && upstreamRange) {
@@ -501,6 +548,7 @@ export async function proxyListenTogetherStream(
         upstreamRange,
         status: upstream.status,
       });
+      await cancelUpstreamBody(upstream);
       upstream = await fetchListenTogetherUpstream(
         upstreamUrl,
         upstreamRange,
@@ -509,6 +557,7 @@ export async function proxyListenTogetherStream(
     }
 
     if (!upstream.ok) {
+      await cancelUpstreamBody(upstream);
       const knownLength = resolved.contentLength ?? null;
       const canAttemptBufferedFallback =
         knownLength === null ||
@@ -550,6 +599,7 @@ export async function proxyListenTogetherStream(
           return bufferedResponse;
         }
       }
+      await cancelUpstreamBody(fullStream);
 
       streamLog.error("All upstream audio fetch strategies failed", {
         roomSlug,
@@ -573,11 +623,16 @@ export async function proxyListenTogetherStream(
           range,
         ))
     ) {
+      const syntheticSource = upstream.clone();
       const syntheticRange = await makeSyntheticRangeResponse(
-        upstream.clone(),
+        syntheticSource,
         range,
       );
-      if (syntheticRange) return syntheticRange;
+      if (syntheticRange) {
+        await cancelUpstreamBody(upstream);
+        return syntheticRange;
+      }
+      await cancelUpstreamBody(syntheticSource);
     }
 
     const headers = buildProxyHeaders(upstream.headers);
@@ -599,6 +654,7 @@ export async function proxyListenTogetherStream(
         }
       }
 
+      await cancelUpstreamBody(upstream);
       return new Response(null, {
         status: range ? upstream.status : 200,
         headers,

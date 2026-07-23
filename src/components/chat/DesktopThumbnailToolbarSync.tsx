@@ -17,7 +17,10 @@ import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useShallow } from "zustand/shallow";
-import { useListenTogetherPlaybackState } from "./listen-together-playback";
+import {
+  useListenTogetherPlaybackState,
+  type ListenTogetherPlaybackState,
+} from "./listen-together-playback";
 import type { VoiceSessionStreamState } from "./VoiceChannelView";
 
 interface DesktopThumbnailToolbarSyncProps {
@@ -41,6 +44,52 @@ interface ToolbarVoiceSession {
   disconnect: () => void;
 }
 
+export interface DesktopMediaControls {
+  entryId: string;
+  paused: boolean;
+  positionMs: number;
+  localPlayback: ListenTogetherPlaybackState["localPlayback"];
+  snapshotRevision: number;
+  roomSlug: string;
+  setLocalPlayback: ListenTogetherPlaybackState["setLocalPlayback"];
+  sfu: SFUClient;
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function getNextDesktopMediaControls(
+  media: DesktopMediaControls,
+): DesktopMediaControls {
+  const paused = !media.paused;
+  const previousCommandStates =
+    media.localPlayback?.source === "command"
+      ? (media.localPlayback.pendingStates ?? [])
+      : [];
+  const nextSnapshotRevision =
+    media.snapshotRevision + previousCommandStates.length;
+
+  return {
+    ...media,
+    paused,
+    localPlayback: {
+      paused,
+      positionMs: media.positionMs,
+      entryId: media.entryId,
+      snapshotRevision: nextSnapshotRevision,
+      source: "command",
+      accepted: true,
+      pendingStates: [
+        ...previousCommandStates,
+        {
+          paused,
+          positionMs: media.positionMs,
+          snapshotRevision: nextSnapshotRevision,
+          sequence: (previousCommandStates.at(-1)?.sequence ?? 0) + 1,
+        },
+      ],
+    },
+  };
+}
+
 const listenTogetherLog = clog("ListenTogether");
 
 function sendListenTogetherCommand(
@@ -57,8 +106,7 @@ function sendListenTogetherCommand(
     entryId: payload.entryId ?? null,
   });
   sfu.resumeAudioContext?.();
-  sfu.voiceGW.sendAppEvent(payload);
-  return true;
+  return sfu.voiceGW.sendAppEvent(payload);
 }
 
 async function focusCurrentDesktopWindow() {
@@ -157,12 +205,15 @@ export function DesktopThumbnailToolbarSync({
   );
   const playback = useListenTogetherPlaybackState(activeSession?.roomSlug);
 
-  const mediaControls = useMemo(
+  const mediaControls = useMemo<DesktopMediaControls | null>(
     () =>
       activeSession?.sfu && activeSession.roomSlug && playback.currentEntry
         ? {
+            entryId: playback.currentEntry.entryId,
             paused: playback.isPaused,
             positionMs: playback.effectiveSeekValue,
+            localPlayback: playback.localPlayback,
+            snapshotRevision: playback.snapshot?.revision ?? 0,
             roomSlug: activeSession.roomSlug,
             setLocalPlayback: playback.setLocalPlayback,
             sfu: activeSession.sfu,
@@ -173,6 +224,8 @@ export function DesktopThumbnailToolbarSync({
       playback.currentEntry,
       playback.effectiveSeekValue,
       playback.isPaused,
+      playback.localPlayback,
+      playback.snapshot?.revision,
       playback.setLocalPlayback,
     ],
   );
@@ -243,12 +296,12 @@ export function DesktopThumbnailToolbarSync({
             type: "listen_together.pause",
             room_slug: media.roomSlug,
             paused: !media.paused,
+            entryId: media.entryId,
           });
           if (sent) {
-            media.setLocalPlayback(media.roomSlug, {
-              paused: !media.paused,
-              positionMs: media.positionMs,
-            });
+            const nextMedia = getNextDesktopMediaControls(media);
+            mediaControlsRef.current = nextMedia;
+            media.setLocalPlayback(media.roomSlug, nextMedia.localPlayback);
           }
           return;
         }
@@ -257,6 +310,7 @@ export function DesktopThumbnailToolbarSync({
           sendListenTogetherCommand(media.sfu, media.roomSlug, {
             type: "listen_together.skip",
             room_slug: media.roomSlug,
+            entryId: media.entryId,
           });
           return;
       }

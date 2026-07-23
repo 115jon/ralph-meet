@@ -92,6 +92,20 @@ id = "0ee41653bb684978af83430e53623019"
 binding = "BUCKET"
 bucket_name = "ralph-chat-attachments"
 
+# Optional background task channel. Named environments below intentionally do
+# not inherit this binding, so local/mobile runs use the KV fallback.
+[[queues.producers]]
+binding = "BACKGROUND_TASKS"
+queue = "ralph-meet-background-tasks"
+
+[[queues.consumers]]
+queue = "ralph-meet-background-tasks"
+max_batch_size = 5
+max_batch_timeout = 5
+max_retries = 5
+retry_delay = 30
+dead_letter_queue = "ralph-meet-background-tasks-dlq"
+
 # The mobile-dev environment runs Worker code locally while using the deployed
 # data resources so an Android dev session starts with real server membership.
 [env.mobile-dev]
@@ -145,6 +159,8 @@ crons = ["0 */6 * * *"]
 [observability.logs]
 enabled = true
 invocation_logs = true
+head_sampling_rate = 0.25
 
 [observability.traces]
-enabled = false
+enabled = true
+head_sampling_rate = 0.05

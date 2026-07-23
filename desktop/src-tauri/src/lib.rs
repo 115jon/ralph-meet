@@ -1131,6 +1131,9 @@ pub fn run() {
             set_start_minimized,
             thumbnail_toolbar::sync_taskbar_thumbnail_toolbar,
             window::set_title_bar_dark_mode,
+            window::start_window_resize,
+            window::start_window_drag,
+            window::minimize_main_window,
             window::set_taskbar_notification_attention,
             // Updater commands — exposed so the Settings UI can trigger
             // a manual check or display the current update status.

@@ -28,6 +28,7 @@ import {
   useDeferredValue,
   useEffect,
   useMemo,
+  useRef,
   useState,
   useSyncExternalStore,
 } from "react";
@@ -159,8 +160,30 @@ export default function SettingsModal({
   const [profileEditorOpen, setProfileEditorOpen] = useState(
     initialProfileEditorOpen,
   );
+  const profileEditorRef = useRef<HTMLElement>(null);
+  const profileEditorTriggerRef = useRef<HTMLElement | null>(null);
+  const profileEditorWasOpen = useRef(false);
   const [searchQuery, setSearchQuery] = useState("");
   const deferredSearchQuery = useDeferredValue(searchQuery);
+
+  useEffect(() => {
+    if (profileEditorOpen) {
+      profileEditorRef.current?.focus();
+      profileEditorWasOpen.current = true;
+    } else if (profileEditorWasOpen.current) {
+      profileEditorTriggerRef.current?.focus();
+      profileEditorWasOpen.current = false;
+    }
+  }, [profileEditorOpen]);
+
+  const openProfileEditor = useCallback((trigger?: HTMLElement) => {
+    profileEditorTriggerRef.current =
+      trigger ??
+      (document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null);
+    setProfileEditorOpen(true);
+  }, []);
 
   const mounted = useSyncExternalStore(
     () => () => {},
@@ -348,6 +371,8 @@ export default function SettingsModal({
       >
         <dialog
           open
+          aria-hidden={profileEditorOpen ? "true" : undefined}
+          inert={profileEditorOpen ? true : undefined}
           className={cn(
             "relative m-0 flex w-full overflow-hidden p-0 outline-none animate-in duration-200",
             previewOpen
@@ -423,7 +448,9 @@ export default function SettingsModal({
                         </div>
                         <button
                           type="button"
-                          onClick={() => setProfileEditorOpen(true)}
+                          onClick={(event) =>
+                            openProfileEditor(event.currentTarget)
+                          }
                           className="mt-1 text-sm text-rm-text-muted transition-colors hover:text-rm-text"
                         >
                           Edit profile
@@ -542,7 +569,7 @@ export default function SettingsModal({
                   >
                     {activeTab === "account" && (
                       <SettingsAccountOverviewTab
-                        onOpenProfileEditor={() => setProfileEditorOpen(true)}
+                        onOpenProfileEditor={openProfileEditor}
                       />
                     )}
                     {activeTab === "appearance" && (
@@ -622,6 +649,11 @@ export default function SettingsModal({
             onClick={() => setProfileEditorOpen(false)}
           >
             <section
+              ref={profileEditorRef}
+              role="dialog"
+              aria-modal="true"
+              aria-label="Edit profile"
+              tabIndex={-1}
               className="relative overflow-hidden rounded-[30px] border border-rm-border bg-[#09090d] shadow-[0_36px_110px_rgba(0,0,0,0.52)] md:rounded-[32px]"
               style={{
                 width: "min(1240px, calc(100vw - 32px))",

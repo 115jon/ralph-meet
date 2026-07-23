@@ -3,6 +3,7 @@ import { ServiceError } from "@/lib/service-error";
 import { isPlayableVideo } from "@/lib/media";
 import { getPublicMessageShare } from "@/services/message-share.service";
 import { createFileRoute } from "@tanstack/react-router";
+import type { R2Range } from "@cloudflare/workers-types";
 
 const DANGEROUS_CONTENT_TYPES = new Set([
   "text/html",
@@ -14,7 +15,7 @@ const DANGEROUS_CONTENT_TYPES = new Set([
 ]);
 
 function parseRange(rangeHeader: string | null): {
-  rangeOption?: { offset?: number; length?: number; suffix?: number };
+  rangeOption?: R2Range;
   reqStart?: number;
   reqEnd?: number;
   reqSuffix?: number;

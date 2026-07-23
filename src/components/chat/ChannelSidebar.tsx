@@ -1608,18 +1608,19 @@ function VoiceChannelMemberRow({
   const closePreviewTimeoutRef = useRef<number | null>(null);
   // Use a targeted selector so this component only re-renders when the specific member's avatar changes
   const resolvedAvatarUrl = useChatStore((s) => {
-    // 1. Prefer the gateway-provided avatar (already resolved server-side)
-    if (member.avatar_url) return member.avatar_url;
-    // 2. Fall back to the server members list (D1 data incl. Clerk avatar from ensureUser)
+    if (Object.prototype.hasOwnProperty.call(member, "avatar_url")) {
+      return member.avatar_url ?? null;
+    }
     const m = s.members.find((m) => m.user.id === member.clerk_user_id);
     if (m?.user.avatar_url) return m.user.avatar_url;
-    // 3. Fall back to relationships list
     const r = s.relationships.find((r) => r.user.id === member.clerk_user_id);
     if (r?.user.avatar_url) return r.user.avatar_url;
     return null;
   });
   const resolvedAvatarDisplay = useChatStore((s) => {
-    if (member.avatar_display) return member.avatar_display;
+    if (Object.prototype.hasOwnProperty.call(member, "avatar_display")) {
+      return member.avatar_display ?? null;
+    }
     const m = s.members.find((m) => m.user.id === member.clerk_user_id);
     if (m?.user.avatar_display) return m.user.avatar_display;
     const r = s.relationships.find((r) => r.user.id === member.clerk_user_id);
@@ -1627,7 +1628,9 @@ function VoiceChannelMemberRow({
     return null;
   });
   const resolvedDisplayNameStyle = useChatStore((s) => {
-    if (member.display_name_style) return member.display_name_style;
+    if (Object.prototype.hasOwnProperty.call(member, "display_name_style")) {
+      return member.display_name_style ?? null;
+    }
     const m = s.members.find((m) => m.user.id === member.clerk_user_id);
     if (m?.user.display_name_style) return m.user.display_name_style;
     const r = s.relationships.find((r) => r.user.id === member.clerk_user_id);
@@ -1644,15 +1647,9 @@ function VoiceChannelMemberRow({
         name: member.name,
         username: member.username ?? member.name,
         display_name: member.display_name ?? null,
-        avatar_url: resolvedAvatarUrl ?? member.avatar_url ?? null,
+        avatar_url: resolvedAvatarUrl,
       }),
-    [
-      member.name,
-      member.username,
-      member.display_name,
-      member.avatar_url,
-      resolvedAvatarUrl,
-    ],
+    [member.name, member.username, member.display_name, resolvedAvatarUrl],
   );
 
   const userInfo = useMemo(

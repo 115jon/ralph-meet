@@ -4,6 +4,7 @@ import {
   type ServerMessage,
   type TrackInfo,
   type VoiceState,
+  type VoiceStateDelta,
 } from "@/lib/types";
 import { fetchSocketProtocols } from "@/lib/voice/socket-ticket-client";
 import type { SharedSpatialAudioState } from "@/lib/voice/spatial-audio";
@@ -25,11 +26,11 @@ export interface RoomGatewayEvents extends BaseGatewayEvents {
     participants?: VoiceState[];
     spatialAudioState?: SharedSpatialAudioState;
   };
-  "participant-joined": { participant: any };
+  "participant-joined": { participant: VoiceState };
   "participant-left": { participantId: string };
   "voice-state-update": {
-    participant: any;
-    action: string;
+    participant: VoiceState | VoiceStateDelta;
+    action: "join" | "leave" | "update";
     spatialAudioState?: SharedSpatialAudioState;
   };
   speaking: { participantId: string; speaking: number };
@@ -38,7 +39,7 @@ export interface RoomGatewayEvents extends BaseGatewayEvents {
     name: string;
     username?: string;
     displayName?: string | null;
-    avatarUrl?: string;
+    avatarUrl?: string | null;
     avatarDisplay?:
       | import("@/lib/avatar-display").AvatarDisplay
       | string
@@ -63,7 +64,7 @@ export interface ConnectOptions {
 export class RoomGateway extends BaseGateway<RoomGatewayEvents> {
   private sessionId: string | null = null;
   private participantId: string | null = null;
-  private lastSeqAck = -1;
+  private lastReplayableSeq = 0;
   private options: ConnectOptions | null = null;
   private connecting = false;
   private reconnectQueued = false;
@@ -125,7 +126,7 @@ export class RoomGateway extends BaseGateway<RoomGatewayEvents> {
   public disconnect() {
     this.sessionId = null;
     this.participantId = null;
-    this.lastSeqAck = -1;
+    this.lastReplayableSeq = 0;
     super.disconnect();
   }
 
@@ -138,6 +139,18 @@ export class RoomGateway extends BaseGateway<RoomGatewayEvents> {
   }
 
   protected handleMessage(msg: ServerMessage) {
+    if (
+      msg.op !== VoiceOpcode.HeartbeatACK &&
+      msg.d !== null &&
+      typeof msg.d === "object" &&
+      "seq" in msg.d &&
+      typeof msg.d.seq === "number" &&
+      Number.isInteger(msg.d.seq) &&
+      msg.d.seq > this.lastReplayableSeq
+    ) {
+      this.lastReplayableSeq = msg.d.seq;
+    }
+
     switch (msg.op) {
       case VoiceOpcode.Hello: {
         const hello = msg.d as any;
@@ -149,7 +162,10 @@ export class RoomGateway extends BaseGateway<RoomGatewayEvents> {
           this.send(
             {
               op: VoiceOpcode.Resume,
-              d: { session_id: this.participantId, seq_ack: this.lastSeqAck },
+              d: {
+                session_id: this.participantId,
+                seq_ack: this.lastReplayableSeq,
+              },
             },
             true,
           );
@@ -164,6 +180,7 @@ export class RoomGateway extends BaseGateway<RoomGatewayEvents> {
                 avatar_url: this.options?.avatarUrl,
                 avatar_display: this.options?.avatarDisplay,
                 clerk_user_id: this.options?.clerkUserId,
+                supports_voice_state_deltas: true,
               },
             },
             true,
@@ -219,15 +236,11 @@ export class RoomGateway extends BaseGateway<RoomGatewayEvents> {
 
       case VoiceOpcode.HeartbeatACK: {
         this.heartbeat.onAck();
-        const ack = msg.d as any;
-        if (ack?.seq != null) {
-          this.lastSeqAck = ack.seq;
-        }
         break;
       }
 
       case VoiceOpcode.VoiceStateUpdate: {
-        const vsu = msg.d as any;
+        const vsu = msg.d;
         this.emit("voice-state-update", {
           participant: vsu.participant,
           action: vsu.action,
@@ -241,7 +254,7 @@ export class RoomGateway extends BaseGateway<RoomGatewayEvents> {
       }
 
       case VoiceOpcode.ProfileUpdate: {
-        const pu = msg.d as any;
+        const pu = msg.d;
         this.emit("profile-update", {
           participantId: pu.participant_id,
           name: pu.name,
@@ -261,7 +274,7 @@ export class RoomGateway extends BaseGateway<RoomGatewayEvents> {
           this.log.warn("Resume failed — falling back to fresh Identify");
           this.sessionId = null;
           this.participantId = null;
-          this.lastSeqAck = -1;
+          this.lastReplayableSeq = 0;
           this.send(
             {
               op: VoiceOpcode.Identify,
@@ -272,6 +285,7 @@ export class RoomGateway extends BaseGateway<RoomGatewayEvents> {
                 avatar_url: this.options?.avatarUrl,
                 avatar_display: this.options?.avatarDisplay,
                 clerk_user_id: this.options?.clerkUserId,
+                supports_voice_state_deltas: true,
               },
             },
             true,

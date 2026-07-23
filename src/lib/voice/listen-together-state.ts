@@ -446,10 +446,25 @@ export function removeListenTogetherEntry(
 
 export function clearListenTogether(
   roomSlug: string,
+  queue: ListenTogetherQueueEntry[],
   state: ListenTogetherPersistentState | null | undefined,
   now = Date.now(),
 ): ListenTogetherMutationResult {
   const nextState = ensureListenTogetherState(roomSlug, state);
+  if (
+    queue.length === 0 &&
+    nextState.currentEntryId === null &&
+    nextState.paused &&
+    nextState.anchorPositionMs === 0
+  ) {
+    return {
+      state: nextState,
+      queue,
+      queueChanged: false,
+      playbackChanged: false,
+    };
+  }
+
   return {
     state: touchState(
       nextState,
