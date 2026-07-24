@@ -229,6 +229,54 @@ pub fn minimize_main_window(window: tauri::WebviewWindow<TauriRuntime>) -> Resul
     window.minimize().map_err(|error| error.to_string())
 }
 
+/// Set maximize/restore without routing through CEF's generic window
+/// dispatcher. The dispatcher can misclassify a maximize request as a close
+/// request while the CEF host window is transitioning.
+#[cfg(target_os = "windows")]
+pub fn set_maximized_native(hwnd: windows::Win32::Foundation::HWND, maximized: bool) {
+    use windows::Win32::UI::WindowsAndMessaging::{IsZoomed, ShowWindow, SW_MAXIMIZE, SW_RESTORE};
+
+    unsafe {
+        let before = IsZoomed(hwnd).as_bool();
+        let command = if maximized { SW_MAXIMIZE } else { SW_RESTORE };
+        let _ = ShowWindow(hwnd, command);
+        let after = IsZoomed(hwnd).as_bool();
+        log::info!(
+            "[Window][set-maximized-native] requested={} before={} after={}",
+            maximized,
+            before,
+            after
+        );
+    }
+}
+
+#[tauri::command]
+pub fn set_maximized_main_window(
+    window: tauri::WebviewWindow<TauriRuntime>,
+    maximized: bool,
+) -> Result<(), String> {
+    if window.label() != "main" {
+        return Err("maximize is only available for the main window".to_string());
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        let raw_hwnd = window.hwnd().map_err(|error| error.to_string())?;
+        let hwnd = windows::Win32::Foundation::HWND(raw_hwnd.0 as _);
+        set_maximized_native(hwnd, maximized);
+        return Ok(());
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        if maximized {
+            window.maximize().map_err(|error| error.to_string())
+        } else {
+            window.unmaximize().map_err(|error| error.to_string())
+        }
+    }
+}
+
 /// Flash or clear the main window's taskbar button on Windows.
 ///
 /// `active = true` uses `FLASHW_TRAY | FLASHW_TIMERNOFG`, which keeps the
@@ -328,5 +376,30 @@ pub fn restore_window_visibility(hwnd: windows::Win32::Foundation::HWND) {
             255,
             LWA_ALPHA,
         );
+    }
+}
+
+/// Restore and foreground the existing native window after tray activation.
+///
+/// The CEF runtime's generic show/focus messages are asynchronous and can
+/// accumulate during rapid tray clicks. The HWND path is idempotent and avoids
+/// queueing CEF window operations for a window that is already alive.
+#[cfg(target_os = "windows")]
+pub fn restore_window_from_tray(hwnd: windows::Win32::Foundation::HWND) -> bool {
+    use windows::Win32::UI::WindowsAndMessaging::{
+        IsIconic, IsWindowVisible, SetForegroundWindow, ShowWindow, SW_RESTORE, SW_SHOW,
+    };
+
+    restore_window_visibility(hwnd);
+
+    unsafe {
+        let was_hidden = !IsWindowVisible(hwnd).as_bool();
+        if IsIconic(hwnd).as_bool() {
+            let _ = ShowWindow(hwnd, SW_RESTORE);
+        } else if was_hidden {
+            let _ = ShowWindow(hwnd, SW_SHOW);
+        }
+        let _ = SetForegroundWindow(hwnd);
+        was_hidden
     }
 }

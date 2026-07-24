@@ -1,4 +1,5 @@
 import { isDesktop } from "@/lib/platform";
+import { fetchDesktopUpdate, installDesktopUpdate } from "@/lib/desktop-update";
 import { restartDesktopApp } from "@/lib/desktop-restart";
 import { clog } from "@/lib/console-logger";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -29,37 +30,37 @@ export function UpdateChecker() {
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
   const [progress, setProgress] = useState(0);
   const [dismissed, setDismissed] = useState(false);
-  const updateRef = useRef<any>(null);
+  const updateAvailableRef = useRef(false);
 
   const checkForUpdate = useCallback(async () => {
     if (!isDesktop()) return;
 
     try {
       setStatus("checking");
-      const { check } = await import("@tauri-apps/plugin-updater");
-      const update = await check();
+      const update = await fetchDesktopUpdate();
 
       if (update) {
-        updateRef.current = update;
+        updateAvailableRef.current = true;
         setUpdateInfo({
           version: update.version,
-          body: update.body,
-          date: update.date,
+          body: update.notes,
+          date: null,
         });
         setStatus("available");
         setDismissed(false);
       } else {
+        updateAvailableRef.current = false;
         setStatus("idle");
       }
     } catch (e) {
+      updateAvailableRef.current = false;
       log.warn("Check failed:", e);
       setStatus("idle"); // Silent fail — don't nag the user
     }
   }, []);
 
   const downloadAndInstall = useCallback(async () => {
-    const update = updateRef.current;
-    if (!update) return;
+    if (!updateAvailableRef.current) return;
 
     try {
       setStatus("downloading");
@@ -68,12 +69,12 @@ export function UpdateChecker() {
       let downloaded = 0;
       let contentLength = 0;
 
-      await update.downloadAndInstall((event: any) => {
+      await installDesktopUpdate((event) => {
         switch (event.event) {
-          case "Started":
+          case "started":
             contentLength = event.data.contentLength ?? 0;
             break;
-          case "Progress":
+          case "progress":
             downloaded += event.data.chunkLength;
             if (contentLength > 0) {
               setProgress(
@@ -81,7 +82,7 @@ export function UpdateChecker() {
               );
             }
             break;
-          case "Finished":
+          case "finished":
             setProgress(100);
             break;
         }

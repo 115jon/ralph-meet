@@ -15,7 +15,7 @@ import { useDesktopSettingsStore } from "@/stores/useDesktopSettingsStore";
 import { routeTree } from "@/routeTree.gen";
 import { createRouter, RouterProvider } from "@tanstack/react-router";
 import { invoke } from "@tauri-apps/api/core";
-import { StrictMode, Suspense, useEffect, useState } from "react";
+import { StrictMode, Suspense, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import type { ReactNode } from "react";
@@ -87,6 +87,8 @@ const resizeEdges = Object.keys(resizeEdgeClasses) as ResizeEdge[];
 function DesktopWindowChrome({ children }: { children: ReactNode }) {
   const [appWindow] = useState(() => getCurrentWindow());
   const [isMaximized, setIsMaximized] = useState(false);
+  const pendingMaximizedState = useRef<boolean | null>(null);
+  const maximizeRequestChain = useRef(Promise.resolve());
 
   useEffect(() => {
     let disposed = false;
@@ -98,6 +100,9 @@ function DesktopWindowChrome({ children }: { children: ReactNode }) {
         .isMaximized()
         .then((maximized) => {
           if (!disposed && currentRequest === requestVersion) {
+            if (pendingMaximizedState.current === maximized) {
+              pendingMaximizedState.current = null;
+            }
             setIsMaximized(maximized);
           }
         })
@@ -129,6 +134,31 @@ function DesktopWindowChrome({ children }: { children: ReactNode }) {
     void action().catch((error: unknown) => {
       console.error("[DesktopWindowChrome] Window action failed", error);
     });
+  };
+
+  const requestMaximizeState = () => {
+    const current = pendingMaximizedState.current ?? isMaximized;
+    const desired = !current;
+    pendingMaximizedState.current = desired;
+    console.info("[DesktopWindowChrome] maximize click", {
+      desired,
+      current,
+    });
+    const request = maximizeRequestChain.current.then(() =>
+      invoke("set_maximized_main_window", { maximized: desired }).catch(
+        (error: unknown) => {
+          if (pendingMaximizedState.current === desired) {
+            pendingMaximizedState.current = null;
+          }
+          throw error;
+        },
+      ),
+    );
+    maximizeRequestChain.current = request.then(
+      () => undefined,
+      () => undefined,
+    );
+    runWindowAction(() => request);
   };
 
   return (
@@ -171,7 +201,7 @@ function DesktopWindowChrome({ children }: { children: ReactNode }) {
           <WindowControlButton
             icon="maximize"
             label={isMaximized ? "Restore" : "Maximize"}
-            onClick={() => runWindowAction(() => appWindow.toggleMaximize())}
+            onClick={requestMaximizeState}
           />
           <WindowControlButton
             icon="close"
@@ -199,12 +229,17 @@ function WindowControlButton({
   close?: boolean;
   onClick: () => void;
 }) {
+  const handleClick = () => {
+    console.info("[DesktopWindowChrome] control click", { label });
+    onClick();
+  };
+
   return (
     <button
       type="button"
       className={`desktop-window-control${close ? " desktop-window-control-close" : ""}`}
       aria-label={label}
-      onClick={onClick}
+      onClick={handleClick}
     >
       <WindowControlIcon icon={icon} />
     </button>

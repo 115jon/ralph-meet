@@ -31,6 +31,12 @@ const WHITE = [255, 255, 255, 255] as const;
 export const MOBILE_ACTION_TYPE_ID = "messages";
 let notificationPluginInitialized = false;
 let notificationActionUnlisten: (() => void) | null = null;
+let nativeBadgeActive = false;
+let nativeTaskbarAttentionActive = false;
+let notificationPluginInitialization: Promise<void> | null = null;
+let taskbarAttentionChain = Promise.resolve();
+let pendingBadgeState: DesktopBadgeState | null = null;
+let badgeDrain: Promise<void> | null = null;
 
 interface NativeSyncInput {
   notifications: AppNotification[];
@@ -56,91 +62,122 @@ function isDesktopTauriRuntime() {
   return isDesktop() && isTauri() && typeof window !== "undefined";
 }
 
-async function setTaskbarNotificationAttention(active: boolean) {
+type DesktopBadgeState = {
+  count: number;
+  showDot: boolean;
+  tooltip: string;
+};
+
+async function setTaskbarNotificationAttentionNow(active: boolean) {
   if (!isDesktopTauriRuntime()) return;
-  await invoke("set_taskbar_notification_attention", { active }).catch(() => {
-    /* taskbar attention unavailable */
-  });
+  await invoke("set_taskbar_notification_attention", { active })
+    .then(() => {
+      nativeTaskbarAttentionActive = active;
+    })
+    .catch(() => {
+      /* taskbar attention unavailable */
+    });
+}
+
+function setTaskbarNotificationAttention(active: boolean): Promise<void> {
+  const next = taskbarAttentionChain.then(() =>
+    setTaskbarNotificationAttentionNow(active),
+  );
+  taskbarAttentionChain = next.catch(() => undefined);
+  return next;
 }
 
 async function ensureNotificationPluginReady() {
   if (!isDesktopTauriRuntime() || notificationPluginInitialized) return;
-
-  try {
-    await createChannel({
-      id: "messages",
-      name: "Messages",
-      description: "Message and mention notifications",
-      importance: Importance.High,
-      visibility: Visibility.Private,
-      vibration: true,
-    });
-  } catch {
-    // Channel creation is best-effort and can fail if it already exists.
+  if (notificationPluginInitialization) {
+    return notificationPluginInitialization;
   }
 
-  try {
-    await registerActionTypes([
-      {
-        id: MOBILE_ACTION_TYPE_ID,
-        actions: [
-          {
-            id: "reply",
-            title: "Reply",
-            input: true,
-            inputButtonTitle: "Send",
-            inputPlaceholder: "Type your reply...",
-            foreground: true,
-          },
-          {
-            id: "mark-read",
-            title: "Mark as Read",
-            foreground: false,
-          },
-        ],
-      },
-    ]);
-  } catch {
-    // Unsupported on desktop; safe to ignore.
-  }
+  const initialization = (async () => {
+    try {
+      await createChannel({
+        id: "messages",
+        name: "Messages",
+        description: "Message and mention notifications",
+        importance: Importance.High,
+        visibility: Visibility.Private,
+        vibration: true,
+      });
+    } catch {
+      // Channel creation is best-effort and can fail if it already exists.
+    }
 
-  try {
-    notificationActionUnlisten = await onAction(
-      (event: NotificationActionEvent) => {
-        const payload = event as NotificationActionPayload;
-        desktopNotificationsLog.info("Notification action received", payload);
-        const notification = payload.notification ?? payload;
-        const messageId = notification.extra?.messageId;
-        const channelId = notification.extra?.channelId;
-        if (payload.actionId === "mark-read" && channelId) {
-          window.dispatchEvent(
-            new CustomEvent("notification-mark-read", {
-              detail: { channelId, messageId },
-            }),
-          );
-        }
-        if (
-          payload.actionId === "reply" &&
-          channelId &&
-          payload.inputValue?.trim()
-        ) {
-          window.dispatchEvent(
-            new CustomEvent("notification-reply", {
-              detail: {
-                channelId,
-                messageId,
-                content: payload.inputValue.trim(),
-              },
-            }),
-          );
-        }
-      },
-    );
-  } catch {
-    // Desktop may not support action callbacks.
-  }
+    try {
+      await registerActionTypes([
+        {
+          id: MOBILE_ACTION_TYPE_ID,
+          actions: [
+            {
+              id: "reply",
+              title: "Reply",
+              input: true,
+              inputButtonTitle: "Send",
+              inputPlaceholder: "Type your reply...",
+              foreground: true,
+            },
+            {
+              id: "mark-read",
+              title: "Mark as Read",
+              foreground: false,
+            },
+          ],
+        },
+      ]);
+    } catch {
+      // Unsupported on desktop; safe to ignore.
+    }
 
-  notificationPluginInitialized = true;
+    try {
+      notificationActionUnlisten = await onAction(
+        (event: NotificationActionEvent) => {
+          const payload = event as NotificationActionPayload;
+          desktopNotificationsLog.info("Notification action received", payload);
+          const notification = payload.notification ?? payload;
+          const messageId = notification.extra?.messageId;
+          const channelId = notification.extra?.channelId;
+          if (payload.actionId === "mark-read" && channelId) {
+            window.dispatchEvent(
+              new CustomEvent("notification-mark-read", {
+                detail: { channelId, messageId },
+              }),
+            );
+          }
+          if (
+            payload.actionId === "reply" &&
+            channelId &&
+            payload.inputValue?.trim()
+          ) {
+            window.dispatchEvent(
+              new CustomEvent("notification-reply", {
+                detail: {
+                  channelId,
+                  messageId,
+                  content: payload.inputValue.trim(),
+                },
+              }),
+            );
+          }
+        },
+      );
+    } catch {
+      // Desktop may not support action callbacks.
+    }
+
+    notificationPluginInitialized = true;
+  })();
+  notificationPluginInitialization = initialization;
+  try {
+    await initialization;
+  } finally {
+    if (notificationPluginInitialization === initialization) {
+      notificationPluginInitialization = null;
+    }
+  }
 }
 
 async function ensureNotificationPermission() {
@@ -354,12 +391,16 @@ async function createTrayIconWithBadge(options: {
   return Image.new(rgba, width, height);
 }
 
-export async function applyDesktopBadgeState(input: {
-  count: number;
-  showDot: boolean;
-  tooltip: string;
-}) {
+async function applyDesktopBadgeStateNow(input: DesktopBadgeState) {
   if (!isDesktopTauriRuntime()) return;
+
+  // A fresh process already has the default tray icon and no taskbar
+  // attention. Avoid crossing the CEF tray IPC during startup just to clear
+  // state that cannot exist yet; this path runs while the main window is
+  // hidden and can otherwise block the updater renderer.
+  const hasBadge = input.count > 0 || input.showDot;
+  if (!hasBadge && !nativeBadgeActive && !nativeTaskbarAttentionActive) return;
+
   const tray = await TrayIcon.getById("main");
   const window = getCurrentWindow();
   const tooltip = input.tooltip || "Ralph Meet";
@@ -378,6 +419,7 @@ export async function applyDesktopBadgeState(input: {
       await tray.setIcon(defaultIcon);
     }
     await setTaskbarNotificationAttention(false);
+    nativeBadgeActive = false;
     return;
   }
 
@@ -388,6 +430,32 @@ export async function applyDesktopBadgeState(input: {
   if (tray) {
     await tray.setIcon(trayIcon);
   }
+  nativeBadgeActive = true;
+}
+
+export function applyDesktopBadgeState(
+  input: DesktopBadgeState,
+): Promise<void> {
+  pendingBadgeState = input;
+  if (badgeDrain) return badgeDrain;
+
+  const drain = (async () => {
+    let firstError: unknown = null;
+    while (pendingBadgeState) {
+      const nextState = pendingBadgeState;
+      pendingBadgeState = null;
+      try {
+        await applyDesktopBadgeStateNow(nextState);
+      } catch (error: unknown) {
+        firstError ??= error;
+      }
+    }
+    if (firstError) throw firstError;
+  })();
+  badgeDrain = drain.finally(() => {
+    badgeDrain = null;
+  });
+  return badgeDrain;
 }
 
 export async function syncDesktopNotificationState(input: NativeSyncInput) {
@@ -444,4 +512,7 @@ export function teardownDesktopNotificationSync() {
   notificationActionUnlisten?.();
   notificationActionUnlisten = null;
   notificationPluginInitialized = false;
+  nativeBadgeActive = false;
+  nativeTaskbarAttentionActive = false;
+  pendingBadgeState = null;
 }
