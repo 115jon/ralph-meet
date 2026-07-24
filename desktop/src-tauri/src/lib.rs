@@ -79,6 +79,8 @@ use tauri_plugin_log::{RotationStrategy, Target, TargetKind, TimezoneStrategy};
 pub struct DesktopSettings {
     pub close_to_tray: AtomicBool,
     pub start_minimized: AtomicBool,
+    pub shutdown_started: AtomicBool,
+    pub exit_requested: AtomicBool,
 }
 
 #[derive(serde::Deserialize, serde::Serialize)]
@@ -619,6 +621,13 @@ pub(crate) fn restore_main_window_geometry_from_state<R: tauri::Runtime>(
     }
 
     if state.maximized {
+        #[cfg(target_os = "windows")]
+        {
+            let raw_hwnd = window.hwnd().map_err(|err| err.to_string())?;
+            let hwnd = windows::Win32::Foundation::HWND(raw_hwnd.0 as _);
+            window::set_maximized_native(hwnd, true);
+        }
+        #[cfg(not(target_os = "windows"))]
         window.maximize().map_err(|err| err.to_string())?;
     }
 
@@ -673,22 +682,83 @@ fn log_window_snapshot_by_label<R: tauri::Runtime>(
     }
 }
 
-#[cfg(feature = "native-screen-share")]
-fn shutdown_native_share_blocking<R: tauri::Runtime>(app: &tauri::AppHandle<R>, context: &str) {
-    let prep = tauri::async_runtime::block_on(async {
-        let state = app.state::<native_share::NativeShareState>();
-        native_share::prepare_native_share_for_update(state.inner()).await
-    });
-    log::info!(
-        "[DesktopRuntime][{context}] native-share shutdown_required={} hook_related_active={} residual_state_detected={}",
-        prep.shutdown_required(),
-        prep.hook_related_state_was_active(),
-        prep.residual_state_detected(),
-    );
+fn claim_shutdown<R: tauri::Runtime>(app: &tauri::AppHandle<R>, context: &'static str) -> bool {
+    let settings = app.state::<DesktopSettings>();
+    if settings.shutdown_started.swap(true, Ordering::AcqRel) {
+        log::debug!("[DesktopRuntime][{context}] shutdown already in progress");
+        false
+    } else {
+        true
+    }
 }
 
-#[cfg(not(feature = "native-screen-share"))]
-fn shutdown_native_share_blocking<R: tauri::Runtime>(_app: &tauri::AppHandle<R>, _context: &str) {}
+fn spawn_app_exit_claimed<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    context: &'static str,
+    restart: bool,
+) {
+    let watchdog_app = app.clone();
+    let _ = std::thread::Builder::new()
+        .name("RalphExitWatchdog".into())
+        .spawn(move || {
+            std::thread::sleep(std::time::Duration::from_secs(5));
+            let settings = watchdog_app.state::<DesktopSettings>();
+            if !settings.exit_requested.swap(true, Ordering::AcqRel) {
+                log::warn!(
+                    "[DesktopRuntime][{context}] shutdown exceeded 5 seconds; forcing application termination"
+                );
+                if restart {
+                    watchdog_app.request_restart();
+                } else {
+                    watchdog_app.exit(0);
+                }
+            }
+        });
+
+    let app = app.clone();
+    let _ = tauri::async_runtime::spawn(async move {
+        use tauri_plugin_window_state::AppHandleExt;
+
+        let flags = tauri_plugin_window_state::StateFlags::SIZE
+            | tauri_plugin_window_state::StateFlags::POSITION
+            | tauri_plugin_window_state::StateFlags::MAXIMIZED
+            | tauri_plugin_window_state::StateFlags::FULLSCREEN;
+        if let Err(err) = app.save_window_state(flags) {
+            log::error!("[DesktopRuntime][{context}] failed to save window state: {err}");
+        }
+
+        #[cfg(feature = "native-screen-share")]
+        {
+            let state = app.state::<native_share::NativeShareState>();
+            let prep = native_share::prepare_native_share_for_update(state.inner()).await;
+            log::info!(
+                "[DesktopRuntime][{context}] native-share shutdown_required={} hook_related_active={} residual_state_detected={}",
+                prep.shutdown_required(),
+                prep.hook_related_state_was_active(),
+                prep.residual_state_detected(),
+            );
+        }
+
+        let settings = app.state::<DesktopSettings>();
+        if !settings.exit_requested.swap(true, Ordering::AcqRel) {
+            if restart {
+                app.request_restart();
+            } else {
+                app.exit(0);
+            }
+        }
+    });
+}
+
+pub(crate) fn spawn_app_exit<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    context: &'static str,
+    restart: bool,
+) {
+    if claim_shutdown(app, context) {
+        spawn_app_exit_claimed(app, context, restart);
+    }
+}
 
 fn spawn_window_state_diagnostics<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
@@ -746,6 +816,8 @@ pub fn run() {
         .manage(DesktopSettings {
             close_to_tray: AtomicBool::new(false),
             start_minimized: AtomicBool::new(false),
+            shutdown_started: AtomicBool::new(false),
+            exit_requested: AtomicBool::new(false),
         })
         .plugin(
             tauri_plugin_log::Builder::default()
@@ -1057,7 +1129,13 @@ pub fn run() {
             }
 
             if window.label() == "updater" {
-                if matches!(event, tauri::WindowEvent::Destroyed) {
+                if matches!(event, tauri::WindowEvent::Destroyed)
+                    && !window
+                        .app_handle()
+                        .state::<DesktopSettings>()
+                        .shutdown_started
+                        .load(Ordering::Acquire)
+                {
                     if let Some(main) = window.app_handle().get_webview_window("main") {
                         if let Ok(false) = main.is_visible() {
                             log::info!("[WindowState][updater:destroyed-fallback] showing main after updater closed");
@@ -1077,14 +1155,18 @@ pub fn run() {
                 }
 
                 // Check if user wants close-to-tray behavior
+                #[cfg(target_os = "windows")]
                 let close_to_tray = window
                     .state::<DesktopSettings>()
                     .close_to_tray
                     .load(Ordering::Relaxed);
+                #[cfg(not(target_os = "windows"))]
+                let close_to_tray = false;
 
                 if !close_to_tray {
                     // User disabled minimize-to-tray — actually quit the app
-                    shutdown_native_share_blocking(&window.app_handle(), "main-close:quit");
+                    api.prevent_close();
+                    spawn_app_exit(&window.app_handle(), "main-close:quit", false);
                     return;
                 }
 
@@ -1129,11 +1211,14 @@ pub fn run() {
             set_hardware_acceleration,
             set_close_to_tray,
             set_start_minimized,
+            show_main_window,
+            close_updater_window,
             thumbnail_toolbar::sync_taskbar_thumbnail_toolbar,
             window::set_title_bar_dark_mode,
             window::start_window_resize,
             window::start_window_drag,
             window::minimize_main_window,
+            window::set_maximized_main_window,
             window::set_taskbar_notification_attention,
             // Updater commands — exposed so the Settings UI can trigger
             // a manual check or display the current update status.
@@ -1163,6 +1248,38 @@ fn set_close_to_tray(state: tauri::State<'_, DesktopSettings>, enabled: bool) {
 fn set_start_minimized(state: tauri::State<'_, DesktopSettings>, enabled: bool) {
     state.start_minimized.store(enabled, Ordering::Relaxed);
     log::info!("[Settings] start_minimized = {}", enabled);
+}
+
+/// Shows the already-created main window without enumerating windows through
+/// the CEF window plugin. This is used during updater handoff, where the main
+/// window is intentionally created hidden.
+#[tauri::command]
+fn show_main_window(app: tauri::AppHandle<TauriRuntime>) -> Result<(), String> {
+    if app
+        .state::<DesktopSettings>()
+        .shutdown_started
+        .load(Ordering::Acquire)
+    {
+        return Err("application shutdown is already in progress".to_string());
+    }
+
+    let window = app
+        .get_webview_window("main")
+        .ok_or_else(|| "main window is unavailable".to_string())?;
+
+    window.show().map_err(|error| error.to_string())?;
+    if let Err(error) = window.set_focus() {
+        log::warn!("[Window] main window shown but focus failed: {error}");
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn close_updater_window(app: tauri::AppHandle<TauriRuntime>) -> Result<(), String> {
+    if let Some(window) = app.get_webview_window("updater") {
+        window.close().map_err(|error| error.to_string())?;
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -1200,20 +1317,34 @@ fn get_hardware_acceleration() -> bool {
 fn restart_app(app: tauri::AppHandle<TauriRuntime>) -> Result<(), String> {
     #[cfg(target_os = "windows")]
     {
+        if !claim_shutdown(&app, "restart") {
+            return Ok(());
+        }
         let parent_pid = std::process::id();
-        let helper_pid = spawn_windows_restart_helper(parent_pid)?;
+        let helper_pid = match spawn_windows_restart_helper(parent_pid) {
+            Ok(pid) => pid,
+            Err(error) => {
+                app.state::<DesktopSettings>()
+                    .shutdown_started
+                    .store(true, Ordering::Release);
+                spawn_app_exit_claimed(&app, "restart-helper-failed", false);
+                return Err(error);
+            }
+        };
         log::info!(
             "[DesktopRuntime] restart requested helper_pid={} parent_pid={}",
             helper_pid,
             parent_pid
         );
-        app.exit(0);
+        // The external helper owns relaunch on Windows; the parent only exits
+        // after native-share cleanup completes.
+        spawn_app_exit_claimed(&app, "restart", false);
         return Ok(());
     }
 
     #[cfg(not(target_os = "windows"))]
     {
-        app.request_restart();
+        spawn_app_exit(&app, "restart", true);
         Ok(())
     }
 }

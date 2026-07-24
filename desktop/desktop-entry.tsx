@@ -171,7 +171,13 @@ function DesktopWindowChrome({ children }: { children: ReactNode }) {
           <WindowControlButton
             icon="maximize"
             label={isMaximized ? "Restore" : "Maximize"}
-            onClick={() => runWindowAction(() => appWindow.toggleMaximize())}
+            onClick={() =>
+              runWindowAction(() =>
+                invoke("set_maximized_main_window", {
+                  maximized: !isMaximized,
+                }),
+              )
+            }
           />
           <WindowControlButton
             icon="close"

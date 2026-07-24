@@ -658,6 +658,9 @@ pub struct NativeShareStatsSnapshot {
 
 #[derive(Default)]
 pub struct NativeShareState {
+    /// Serializes session start/stop/update preparation so cleanup cannot race
+    /// with a start that has not published all of its resources yet.
+    pub lifecycle_gate: Mutex<()>,
     pub active_connection: Mutex<Option<Arc<RTCPeerConnection>>>,
     pub video_track: Mutex<Option<Arc<TrackLocalStaticSample>>>,
     /// WGC capture session — drop to stop capture.
@@ -916,6 +919,7 @@ pub(crate) async fn shutdown_native_share_sessions(state: &NativeShareState) {
 pub(crate) async fn prepare_native_share_for_update(
     state: &NativeShareState,
 ) -> NativeShareUpdatePreparationReport {
+    let _lifecycle_guard = state.lifecycle_gate.lock().await;
     let before = snapshot_update_preparation_state(state).await;
     log_update_preparation_state("before", &before);
 
@@ -3125,6 +3129,7 @@ pub async fn start_native_screen_share<R: tauri::Runtime>(
     with_audio: Option<bool>,
     ice_servers: Option<Vec<NativeIceServer>>,
 ) -> Result<SdpOfferPayload, String> {
+    let _lifecycle_guard = state.lifecycle_gate.lock().await;
     let _ = source_name; // not needed with WGC (HWND / monitor index is sufficient)
     let with_audio = with_audio.unwrap_or(false);
 
@@ -4344,6 +4349,7 @@ pub async fn wait_native_screen_share_connected(
 pub async fn stop_native_screen_share(
     state: tauri::State<'_, NativeShareState>,
 ) -> Result<(), String> {
+    let _lifecycle_guard = state.lifecycle_gate.lock().await;
     shutdown_native_share_sessions(&state).await;
     Ok(())
 }
@@ -4368,6 +4374,7 @@ pub async fn update_native_screen_quality(
     state: tauri::State<'_, NativeShareState>,
     quality: String,
 ) -> Result<(), String> {
+    let _lifecycle_guard = state.lifecycle_gate.lock().await;
     let (src_width, src_height) = state
         .session_src_dims
         .lock()
@@ -4458,6 +4465,7 @@ pub async fn start_preview_loopback<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     state: tauri::State<'_, NativeShareState>,
 ) -> Result<SdpOfferPayload, String> {
+    let _lifecycle_guard = state.lifecycle_gate.lock().await;
     // Tear down any stale preview PC from a previous resume cycle.
     if let Some(old) = state.preview_pc.lock().await.take() {
         let _ = old.close().await;
@@ -4706,6 +4714,7 @@ pub async fn handle_preview_loopback_ice_candidate(
 pub async fn stop_preview_loopback(
     state: tauri::State<'_, NativeShareState>,
 ) -> Result<(), String> {
+    let _lifecycle_guard = state.lifecycle_gate.lock().await;
     if close_preview_loopback_pc(&state).await {
         log::info!("[NativeShare] preview loopback PC stopped");
     }

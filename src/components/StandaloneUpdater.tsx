@@ -1,6 +1,8 @@
 import { ThemeAwareSplashLogo } from "@/components/ThemeAwareSplashLogo";
+import { fetchDesktopUpdate, installDesktopUpdate } from "@/lib/desktop-update";
 import { restartDesktopApp } from "@/lib/desktop-restart";
 import { useDesktopSettingsStore } from "@/stores/useDesktopSettingsStore";
+import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useState } from "react";
 
 type StandaloneUpdaterStatus =
@@ -11,6 +13,9 @@ type StandaloneUpdaterStatus =
   | "error";
 
 const STARTING_HANDOFF_DELAY_MS = 700;
+const HANDOFF_RETRY_COUNT = 3;
+const HANDOFF_RETRY_DELAY_MS = 250;
+const HANDOFF_TIMEOUT_MS = 5_000;
 
 export function getStandaloneUpdaterStatusText(
   status: StandaloneUpdaterStatus,
@@ -32,6 +37,25 @@ export function getStandaloneUpdaterStatusText(
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+function withTimeout<T>(promise: Promise<T>, message: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(
+      () => reject(new Error(message)),
+      HANDOFF_TIMEOUT_MS,
+    );
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (error: unknown) => {
+        clearTimeout(timer);
+        reject(error);
+      },
+    );
+  });
+}
+
 export function StandaloneUpdater() {
   const [status, setStatus] = useState<StandaloneUpdaterStatus>("checking");
   const [progress, setProgress] = useState(0);
@@ -43,20 +67,18 @@ export function StandaloneUpdater() {
     async function runUpdateCheck() {
       console.info("[StandaloneUpdater] runUpdateCheck called");
       try {
-        const { check } = await import("@tauri-apps/plugin-updater");
-
-        const update = await check();
+        const update = await fetchDesktopUpdate();
         if (update && mounted) {
           setStatus("downloading");
           let downloaded = 0;
           let contentLength = 0;
 
-          await update.downloadAndInstall((event: any) => {
+          await installDesktopUpdate((event) => {
             switch (event.event) {
-              case "Started":
+              case "started":
                 contentLength = event.data.contentLength ?? 0;
                 break;
-              case "Progress":
+              case "progress":
                 downloaded += event.data.chunkLength;
                 if (contentLength > 0 && mounted) {
                   setProgress(
@@ -67,7 +89,7 @@ export function StandaloneUpdater() {
                   );
                 }
                 break;
-              case "Finished":
+              case "finished":
                 if (mounted) setStatus("installing");
                 break;
             }
@@ -85,7 +107,7 @@ export function StandaloneUpdater() {
           // No update, switch to main window
           if (mounted) showStartingThenSwitch();
         }
-      } catch (e: any) {
+      } catch (e: unknown) {
         console.error("Update check failed:", e);
         // On error, fallback to main window
         if (mounted) showStartingThenSwitch();
@@ -99,23 +121,71 @@ export function StandaloneUpdater() {
     }
 
     async function switchToMain() {
-      const { Window, getCurrentWindow } =
-        await import("@tauri-apps/api/window");
+      const { getCurrentWindow } = await import("@tauri-apps/api/window");
+      let handedOff = false;
 
       try {
-        await useDesktopSettingsStore.getState().syncToBackend();
-        const mainWindow = await Window.getByLabel("main");
-        if (mainWindow) {
-          await mainWindow.show();
-          await mainWindow.setFocus();
+        // Resolve and show the main window in Rust. Window.getByLabel() first
+        // enumerates every window through CEF, which can deadlock while the
+        // hidden main window is still completing startup.
+        await withTimeout(
+          useDesktopSettingsStore.getState().syncToBackend(),
+          "desktop settings sync timed out",
+        ).catch((error: unknown) => {
+          console.error("Failed to sync desktop settings:", error);
+        });
+        let lastError: unknown = null;
+        for (let attempt = 0; attempt < HANDOFF_RETRY_COUNT; attempt++) {
+          try {
+            await withTimeout(
+              invoke("show_main_window"),
+              "main window handoff timed out",
+            );
+            handedOff = true;
+            break;
+          } catch (error: unknown) {
+            lastError = error;
+            if (attempt + 1 < HANDOFF_RETRY_COUNT) {
+              await sleep(HANDOFF_RETRY_DELAY_MS);
+            }
+          }
+        }
+        if (!handedOff) {
+          throw lastError ?? new Error("main window handoff failed");
         }
       } catch (e) {
         console.error("Failed to show main window:", e);
+        if (mounted) setStatus("error");
       } finally {
-        try {
-          await getCurrentWindow().close();
-        } catch (closeErr) {
-          console.error("Failed to close updater window:", closeErr);
+        if (handedOff) {
+          let updaterClosed = false;
+          for (let attempt = 0; attempt < HANDOFF_RETRY_COUNT; attempt++) {
+            try {
+              await withTimeout(
+                getCurrentWindow().close(),
+                "updater window close timed out",
+              );
+              updaterClosed = true;
+              break;
+            } catch (closeErr) {
+              if (attempt + 1 === HANDOFF_RETRY_COUNT) {
+                console.error("Failed to close updater window:", closeErr);
+              } else {
+                await sleep(HANDOFF_RETRY_DELAY_MS);
+              }
+            }
+          }
+          if (!updaterClosed) {
+            try {
+              await withTimeout(
+                invoke("close_updater_window"),
+                "native updater close timed out",
+              );
+            } catch (closeErr: unknown) {
+              console.error("Native updater close failed:", closeErr);
+            }
+            if (mounted) setStatus("error");
+          }
         }
       }
     }
@@ -168,6 +238,14 @@ export function StandaloneUpdater() {
       <p className="mt-5 text-[13px] font-semibold tracking-[0.01em] z-10 text-rm-text-secondary">
         {getStandaloneUpdaterStatusText(status, progress)}
       </p>
+      {status === "error" && (
+        <button
+          className="mt-4 rounded-lg bg-rm-accent px-3.5 py-1.5 text-[13px] font-semibold text-white transition-all hover:bg-rm-accent-hover active:scale-[0.97]"
+          onClick={() => window.location.reload()}
+        >
+          Retry startup
+        </button>
+      )}
 
       {/* Keyframe definitions */}
       <style>{`

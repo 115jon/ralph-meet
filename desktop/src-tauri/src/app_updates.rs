@@ -12,7 +12,7 @@
 // - `PendingUpdate` holds at most one cached Update at a time. A new `fetch_update`
 //   call replaces the previous one.
 
-use std::sync::Mutex;
+use std::{sync::Mutex, time::Duration};
 
 use serde::Serialize;
 use tauri::{ipc::Channel, AppHandle, Manager, Runtime, State};
@@ -61,6 +61,8 @@ pub enum Error {
     Updater(#[from] tauri_plugin_updater::Error),
     #[error("no pending update — call fetch_update first")]
     NoPendingUpdate,
+    #[error("update check timed out")]
+    Timeout,
 }
 
 impl Serialize for Error {
@@ -91,7 +93,9 @@ pub async fn fetch_update<R: Runtime>(
     log::info!("[Updater] checking for updates…");
     log::debug!("[Updater] fetch_update command invoked by frontend");
 
-    let update = app.updater()?.check().await?;
+    let update = tokio::time::timeout(Duration::from_secs(10), app.updater()?.check())
+        .await
+        .map_err(|_| Error::Timeout)??;
 
     let metadata = update.as_ref().map(|u| {
         log::info!(

@@ -204,6 +204,16 @@ description = "Denies minimizing the main window through the native platform pat
 commands.deny = ["minimize_main_window"]
 
 [[permission]]
+identifier = "allow-set-maximized-main-window"
+description = "Allows the frontend to toggle native maximize and restore."
+commands.allow = ["set_maximized_main_window"]
+
+[[permission]]
+identifier = "deny-set-maximized-main-window"
+description = "Denies toggling native maximize and restore."
+commands.deny = ["set_maximized_main_window"]
+
+[[permission]]
 identifier = "deny-set-start-minimized"
 description = "Denies syncing the start-minimized desktop preference."
 commands.deny = ["set_start_minimized"]
@@ -217,6 +227,26 @@ commands.allow = ["set_open_on_startup"]
 identifier = "deny-set-open-on-startup"
 description = "Denies updating the desktop open-on-startup preference."
 commands.deny = ["set_open_on_startup"]
+
+[[permission]]
+identifier = "allow-show-main-window"
+description = "Allows the updater to hand off visibility to the existing main window."
+commands.allow = ["show_main_window"]
+
+[[permission]]
+identifier = "deny-show-main-window"
+description = "Denies updater handoff to the main window."
+commands.deny = ["show_main_window"]
+
+[[permission]]
+identifier = "allow-close-updater-window"
+description = "Allows the updater to close its splash window after handoff."
+commands.allow = ["close_updater_window"]
+
+[[permission]]
+identifier = "deny-close-updater-window"
+description = "Denies closing the updater splash window."
+commands.deny = ["close_updater_window"]
 
 [[permission]]
 identifier = "allow-set-title-bar-dark-mode"
