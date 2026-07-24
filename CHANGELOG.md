@@ -1,5 +1,14 @@
 # Changelog
 
+## [2.0.1](https://github.com/115jon/ralph-meet/compare/v2.0.0...v2.0.1) (2026-07-24)
+
+
+### Bug Fixes
+
+* **desktop:** 🐛 harden window lifecycle and updater handoff ([92e15a4](https://github.com/115jon/ralph-meet/commit/92e15a492e0381f9010bd2670314a7e393dbb4de))
+* **desktop:** 🐛 prevent DPI titlebar clicks from closing ([47a7b37](https://github.com/115jon/ralph-meet/commit/47a7b37075951990cb1be0164e36787abc5bc1b3))
+* **desktop:** prevent DPI titlebar clicks from closing ([7ff230a](https://github.com/115jon/ralph-meet/commit/7ff230adcd519905b8cc466ca7755bcb6f6889d3))
+
 ## [2.0.0](https://github.com/115jon/ralph-meet/compare/v1.20.0...v2.0.0) (2026-07-23)
 
 
