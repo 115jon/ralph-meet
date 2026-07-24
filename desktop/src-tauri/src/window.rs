@@ -234,11 +234,19 @@ pub fn minimize_main_window(window: tauri::WebviewWindow<TauriRuntime>) -> Resul
 /// request while the CEF host window is transitioning.
 #[cfg(target_os = "windows")]
 pub fn set_maximized_native(hwnd: windows::Win32::Foundation::HWND, maximized: bool) {
-    use windows::Win32::UI::WindowsAndMessaging::{ShowWindow, SW_MAXIMIZE, SW_RESTORE};
+    use windows::Win32::UI::WindowsAndMessaging::{IsZoomed, ShowWindow, SW_MAXIMIZE, SW_RESTORE};
 
     unsafe {
+        let before = IsZoomed(hwnd).as_bool();
         let command = if maximized { SW_MAXIMIZE } else { SW_RESTORE };
         let _ = ShowWindow(hwnd, command);
+        let after = IsZoomed(hwnd).as_bool();
+        log::info!(
+            "[Window][set-maximized-native] requested={} before={} after={}",
+            maximized,
+            before,
+            after
+        );
     }
 }
 

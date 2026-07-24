@@ -1163,6 +1163,10 @@ pub fn run() {
                 #[cfg(not(target_os = "windows"))]
                 let close_to_tray = false;
 
+                log::warn!(
+                    "[Window][close-requested] label=main close_to_tray={}",
+                    close_to_tray
+                );
                 if !close_to_tray {
                     // User disabled minimize-to-tray — actually quit the app
                     api.prevent_close();
