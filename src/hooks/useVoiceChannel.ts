@@ -1987,7 +1987,19 @@ export function useVoiceChannel({
           uuidToClerkRef.current.get(participantId) || participantId;
         nextSpeakingUsers[clerkId] = true;
       }
-      voiceDispatch({ type: "SET_SPEAKING", payload: nextSpeakingUsers });
+      const localParticipantId = myIdRef.current;
+      const localUserId = localParticipantId
+        ? uuidToClerkRef.current.get(localParticipantId) || localParticipantId
+        : null;
+      voiceDispatch({
+        type: "SET_SPEAKING",
+        payload: (previous: Record<string, boolean>) => {
+          if (localUserId && previous[localUserId]) {
+            return { ...nextSpeakingUsers, [localUserId]: true };
+          }
+          return nextSpeakingUsers;
+        },
+      });
     });
 
     onSfu("vad-speaking", ({ participantId, isSpeaking }) => {

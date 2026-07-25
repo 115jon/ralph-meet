@@ -799,6 +799,43 @@ describe("useVoiceChannel SFU lifecycle", () => {
     hook.unmount();
   });
 
+  it("preserves local speaking state when a voice-ready snapshot omits self", async () => {
+    const rawTrack = createTrack("audio", "raw-audio");
+    const rawStream = createStream([rawTrack.track]);
+    vi.mocked(acquireLocalStream).mockResolvedValue(rawStream);
+    vi.mocked(createLocalAudioProcessor).mockResolvedValue(
+      createProcessor(rawStream),
+    );
+
+    const hook = renderHook(() =>
+      useVoiceChannel({ channelId: "channel", serverId: "server" }),
+    );
+    await act(async () => {
+      await hook.result.current.handleJoin();
+    });
+    const sfu = sfuInstances[0];
+    if (!sfu) throw new Error("SFU was not created");
+
+    await act(async () => {
+      sfu.emit("joined", { participantId: "self", participants: [] });
+    });
+    await waitFor(() => expect(sfu.vad.start).toHaveBeenCalledTimes(1));
+
+    await act(async () => {
+      sfu.emit("vad-speaking", { participantId: "self", isSpeaking: true });
+    });
+    await waitFor(() =>
+      expect(hook.result.current.speakingUsers.self).toBe(true),
+    );
+
+    await act(async () => {
+      sfu.emit("voice-ready", { speaking: {} });
+    });
+
+    expect(hook.result.current.speakingUsers.self).toBe(true);
+    hook.unmount();
+  });
+
   it("cancels a pending device swap when direct camera capture starts", async () => {
     const initialAudio = createTrack("audio", "initial-audio");
     const pendingSwap = deferred<MediaStream>();
