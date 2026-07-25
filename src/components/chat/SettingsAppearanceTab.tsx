@@ -8,7 +8,7 @@ import { useDesktopSettingsStore } from "@/stores/useDesktopSettingsStore";
 import { Cpu, Eye, RefreshCw } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { clog } from "@/lib/console-logger";
-import { HomeDarkSvg, HomeLightSvg } from "./home-svgs";
+import { HomeIcon } from "./HomeIcon";
 import { useAppearanceTheme } from "./useAppearanceTheme";
 
 const log = clog("Settings");
@@ -126,11 +126,15 @@ function ThemeSwatch({
         <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center">
           <div
             className={cn(
-              "relative flex h-8 w-8 items-center justify-center [&>svg]:h-full [&>svg]:w-full",
+              "relative flex h-8 w-8 items-center justify-center",
               choice.id === "miku-light" ? "text-[#1b2240]" : "text-white",
             )}
           >
-            {choice.id === "miku-light" ? <HomeLightSvg /> : <HomeDarkSvg />}
+            <HomeIcon
+              variant={choice.id === "miku-light" ? "light" : "dark"}
+              showThemeOverlay={false}
+              className="h-full w-full"
+            />
             <img
               src="/themes/miku/miku-wig.svg"
               alt=""
