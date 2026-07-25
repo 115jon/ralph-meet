@@ -80,6 +80,7 @@ export function ImageViewerThumbnails({
                     <img
                       src={posterUrl}
                       alt={`Video thumbnail ${idx + 1}`}
+                      data-rm-preserve-blur={shouldBlur ? "true" : undefined}
                       className={cn(
                         "w-full h-full object-cover",
                         shouldBlur && "scale-110 blur-sm saturate-50",
@@ -106,6 +107,7 @@ export function ImageViewerThumbnails({
                     <video
                       src={getUrl(img)}
                       aria-label="Media thumbnail preview"
+                      data-rm-preserve-blur={shouldBlur ? "true" : undefined}
                       muted
                       autoPlay={isAnimated}
                       loop={isAnimated}
@@ -149,6 +151,7 @@ export function ImageViewerThumbnails({
                 <img
                   src={getUrl(img)}
                   alt={`Thumbnail ${idx + 1}`}
+                  data-rm-preserve-blur={shouldBlur ? "true" : undefined}
                   className={cn(
                     "w-full h-full object-cover",
                     shouldBlur && "scale-110 blur-sm saturate-50",

@@ -78,18 +78,6 @@ export default function InviteClient() {
 
   return (
     <div className="flex h-full items-center justify-center bg-rm-bg-primary px-4 select-none">
-      {/* Ambient glows */}
-      <div className="pointer-events-none absolute inset-0 overflow-hidden">
-        <div
-          className="absolute h-[500px] w-[500px] rounded-full bg-rm-accent/8 blur-[120px]"
-          style={{ top: "15%", left: "25%" }}
-        />
-        <div
-          className="absolute h-[400px] w-[400px] rounded-full bg-primary/5 blur-[100px]"
-          style={{ bottom: "20%", right: "20%" }}
-        />
-      </div>
-
       <div className="relative z-10 w-full max-w-[420px]">
         {/* Loading */}
         {status === "loading" && (

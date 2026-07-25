@@ -264,9 +264,6 @@ const PinnedMessageItem = ({
           )}
         </div>
       </div>
-
-      {/* Decoration */}
-      <div className="absolute top-0 right-0 w-32 h-32 bg-rm-accent/[0.02] blur-3xl rounded-full pointer-events-none" />
     </div>
   );
 };

@@ -247,17 +247,6 @@ export default function DesktopLogin() {
 
   return (
     <SafeAreaView className="flex h-full flex-col items-center justify-center bg-rm-bg-primary px-6 select-none border-0">
-      <div className="pointer-events-none absolute inset-0 flex items-center justify-center overflow-hidden">
-        <div
-          className="absolute h-[500px] w-[500px] rounded-full bg-rm-accent/8 blur-[100px]"
-          style={{ top: "20%", left: "30%" }}
-        />
-        <div
-          className="absolute h-[400px] w-[400px] rounded-full bg-primary/6 blur-[80px]"
-          style={{ bottom: "20%", right: "25%" }}
-        />
-      </div>
-
       <main className="relative z-10 flex flex-col items-center gap-8 w-full max-w-[360px]">
         <div className="flex flex-col items-center gap-4">
           <div className="flex h-20 w-20 items-center justify-center rounded-3xl bg-rm-accent/10 border border-rm-accent/20 shadow-lg shadow-rm-accent/10 ring-1 ring-white/10">

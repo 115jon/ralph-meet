@@ -1191,3 +1191,23 @@
 .emoji-selectable *::selection {
   color: transparent !important;
 }
+
+/* Keep overlays and surfaces crisp. Elevation comes from their existing shadows. */
+:is(
+  [class~="backdrop-blur"],
+  [class*=" backdrop-blur-"],
+  [class^="backdrop-blur-"]
+) {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+:is([class~="blur"], [class*=" blur-"], [class^="blur-"]):not(
+  [data-rm-preserve-blur="true"]
+) {
+  filter: none !important;
+}
+
+:is([class*=" blur-["], [class^="blur-["]):not([data-rm-preserve-blur="true"]) {
+  opacity: 0 !important;
+}

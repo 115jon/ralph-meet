@@ -113,7 +113,6 @@ export default function RoomPageClient() {
   if (!guestState.submitted) {
     return (
       <div className="flex h-full items-center justify-center bg-rm-bg-primary px-6">
-        <div className="pointer-events-none absolute -top-48 left-1/2 h-[600px] w-[600px] -translate-x-1/2 rounded-full bg-[radial-gradient(circle,var(--rm-glow)_0%,transparent_70%)] opacity-50 blur-xl" />
         <div className="z-10 w-full max-w-sm">
           <div className="mb-6 flex flex-col items-center gap-3">
             <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-rm-accent-dim shadow-[0_0_40px_var(--rm-accent-dim)] ring-1 ring-rm-border">

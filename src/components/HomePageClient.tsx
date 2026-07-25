@@ -447,9 +447,6 @@ function HeroInteractiveWorkspace() {
       className="relative flex w-full flex-1 items-center justify-center lg:w-[54%] animate-fade-in-up mt-8 lg:mt-0"
       style={{ animationDelay: "450ms" }}
     >
-      {/* Underlay glow */}
-      <div className="absolute h-80 w-80 rounded-full bg-rm-accent/20 blur-[120px] pointer-events-none" />
-
       {/* Main Workspace Frame - 1-to-1 App Replica */}
       <div className="relative w-full max-w-[660px] overflow-hidden rounded-2xl border border-rm-border bg-rm-bg-primary text-rm-text shadow-2xl backdrop-blur-xl transition-all duration-300 hover:border-rm-accent/30 flex flex-col h-[400px] sm:h-[430px] select-none">
         {/* Window Header Bar */}
@@ -1438,10 +1435,6 @@ function HomePageCTA({
 }) {
   return (
     <section className="relative flex w-full flex-col items-center justify-center px-6 py-24 text-center sm:py-32">
-      <div className="pointer-events-none absolute inset-0 flex items-center justify-center overflow-hidden">
-        <div className="h-[350px] w-[350px] animate-pulse rounded-full bg-rm-accent/5 blur-[100px]" />
-      </div>
-
       <h2 className="relative z-10 mb-8 text-3xl font-extrabold tracking-tight text-rm-text sm:text-4xl md:text-5xl">
         Ready to start your journey?
       </h2>
@@ -1635,7 +1628,7 @@ export default function HomePageClient() {
   return (
     <div className="relative flex min-h-full flex-col overflow-y-auto bg-rm-bg-primary selection:bg-rm-accent/30">
       {/* Premium Orb Background - Fixed so it doesn't scroll */}
-      <div className="pointer-events-none fixed inset-0 flex items-center justify-center overflow-hidden">
+      <div className="hidden">
         <div className="absolute left-[-10%] top-[-10%] h-[600px] w-[600px] rounded-full bg-rm-accent/10 mix-blend-screen blur-[120px] animate-[pulse_960ms_cubic-bezier(0.16,1,0.3,1)_infinite]" />
         <div className="absolute bottom-[-10%] right-[-10%] h-[600px] w-[600px] rounded-full bg-primary/5 mix-blend-screen blur-[120px] animate-[pulse_980ms_cubic-bezier(0.16,1,0.3,1)_infinite] [animation-delay:120ms]" />
         <div className="absolute left-[20%] top-[40%] h-[400px] w-[400px] rounded-full bg-rm-accent/5 mix-blend-screen blur-[100px]" />
