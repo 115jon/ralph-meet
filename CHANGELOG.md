@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.0.2](https://github.com/115jon/ralph-meet/compare/v2.0.1...v2.0.2) (2026-07-25)
+
+
+### Bug Fixes
+
+* **voice:** 🐛 cancel delayed leave callbacks on unmount ([e1c5e9e](https://github.com/115jon/ralph-meet/commit/e1c5e9efa2bf2ff81329aa339704e6eb99f4aad0))
+* **voice:** cancel delayed leave callbacks on unmount ([975fb49](https://github.com/115jon/ralph-meet/commit/975fb4943d184e0859e2bfc46d91f56cab25b44a))
+
 ## [2.0.1](https://github.com/115jon/ralph-meet/compare/v2.0.0...v2.0.1) (2026-07-24)
 
 
