@@ -33,14 +33,14 @@ export class WebRTCSessionManager {
 
   // ── WebRTC Teardown Guard ───────────────────────────────────────────
 
-  public safelyClosePC(pc: RTCPeerConnection | null) {
+  public safelyClosePC(pc: RTCPeerConnection | null, preserveTracks = false) {
     if (!pc) return;
     try {
       pc.getSenders().forEach((s) => {
         if (s.track) {
           s.track.onended = null;
           s.replaceTrack(null).catch(() => {});
-          s.track.stop();
+          if (!preserveTracks) s.track.stop();
         }
         try {
           pc.removeTrack(s);
@@ -176,7 +176,10 @@ export class WebRTCSessionManager {
     );
     if (trackNames.length > 0) {
       for (const name of trackNames) {
-        this.negotiator.teardownTransceiver(name);
+        this.negotiator.teardownTransceiver(
+          name,
+          !isScreen && name.startsWith("cam-video-"),
+        );
       }
       this.voiceGateway.send({
         op: VoiceOpcode.StopTracks,
@@ -192,7 +195,7 @@ export class WebRTCSessionManager {
       pc.onconnectionstatechange = null;
       pc.oniceconnectionstatechange = null;
       pc.onsignalingstatechange = null;
-      this.safelyClosePC(pc);
+      this.safelyClosePC(pc, !isScreen);
       if (isScreen) this.negotiator.screenPushPC = null;
       else this.negotiator.camPushPC = null;
     }

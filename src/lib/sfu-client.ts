@@ -13,7 +13,7 @@ import { ConnectionStatsMonitor } from "./voice/stats-monitor";
 import { TrackNegotiator } from "./voice/track-negotiator";
 import { VoiceActivityDetector } from "./voice/vad";
 
-import { AudioSentinel } from "./voice/audio-sentinel";
+import { AudioSentinel, OutboundAudioSentinel } from "./voice/audio-sentinel";
 import { RoomGateway } from "./voice/gateways/room-gateway";
 import { VoiceGateway } from "./voice/gateways/voice-gateway";
 import { WebRTCSessionManager } from "./voice/webrtc-session-manager";
@@ -42,6 +42,7 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
   public readonly audio: AudioPipeline;
   public readonly stats: ConnectionStatsMonitor;
   public readonly audioSentinel: AudioSentinel;
+  public readonly outboundAudioSentinel: OutboundAudioSentinel;
 
   // --- State ---
   private roomSlug: string;
@@ -85,9 +86,13 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
   private pullResolver: (() => void) | null = null;
   private pullRejector: ((reason?: any) => void) | null = null;
   private camPushNegotiationResolve: (() => void) | null = null;
+  private camPushNegotiationRejector: ((reason?: any) => void) | null = null;
   private camPushRejector: ((reason?: any) => void) | null = null;
+  private activeCamPushRequestId: string | null = null;
   private screenPushNegotiationResolve: (() => void) | null = null;
+  private screenPushNegotiationRejector: ((reason?: any) => void) | null = null;
   private screenPushRejector: ((reason?: any) => void) | null = null;
+  private activeScreenPushRequestId: string | null = null;
   private pullNegotiationResolve: (() => void) | null = null;
   private pullNegotiationRejector: ((reason?: any) => void) | null = null;
   private pullRetryCount: number = 0;
@@ -95,10 +100,21 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
   private pullEpoch: number = 0;
   private voiceRequestSeq: number = 0;
   private activePullRequestId: string | null = null;
+  private stalePullRequestIds = new Set<string>();
+  private stalePushSessionIds = new Set<string>();
+  private republishMediaOnVoiceReady = false;
+  private mediaGeneration = 0;
   private remoteSpeakingUntil = new Map<string, number>();
   private nativeScreenShareActive = false;
   private nativeScreenSharePending = false;
   private nativeScreenTrackNames: string[] = [];
+  private nativeScreenShareGeneration = 0;
+  private nativeScreenShareOptions: {
+    sourceId: string;
+    sourceName?: string | null;
+    quality: string;
+    withAudio: boolean;
+  } | null = null;
   // Preview loopback state — a localhost RTCPeerConnection carrying the same
   // encoded H.264 the SFU receives, for the local preview tile (no WGC border).
   private previewLoopbackPC: RTCPeerConnection | null = null;
@@ -119,9 +135,11 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
       getUnsubscribedMids: () => this.unsubscribedTrackMids,
       getUnsubscribedNames: () => this.unsubscribedTrackNames,
       pcReadyPromise: () => this.pcReadyPromise,
-      waitForPushNegotiationDone: (prefix, t) =>
-        this.waitForPushNegotiationDone(prefix, t),
-      waitForPushAnswer: (prefix, t) => this.waitForPushAnswer(prefix, t),
+      waitForPushNegotiationDone: (prefix, requestId, t) =>
+        this.waitForPushNegotiationDone(prefix, requestId, t),
+      waitForPushAnswer: (prefix, requestId, t) =>
+        this.waitForPushAnswer(prefix, requestId, t),
+      nextRequestId: (prefix) => this.nextRequestId(prefix),
     });
 
     this.rtcSessionManager = new WebRTCSessionManager(
@@ -206,12 +224,48 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
       },
     });
 
+    this.outboundAudioSentinel = new OutboundAudioSentinel({
+      pc: () => this.negotiator.camPushPC,
+      track: () => {
+        const participantId = this.participantId;
+        if (!participantId) return null;
+        return (
+          this.negotiator.getPushTransceiver(`cam-audio-${participantId}`)
+            ?.sender.track ?? null
+        );
+      },
+      onStall: (diagnostics) => {
+        sfuLog.warn("Outbound microphone RTP stalled", diagnostics);
+        this.emit("outbound-audio-stalled", true);
+      },
+      onRecover: () => this.emit("outbound-audio-stalled", false),
+    });
+
     this.wireRoomEvents();
     this.wireVoiceEvents();
   }
 
   private wireRoomEvents() {
     this.roomGW.on("ready", (e) => {
+      const participantGenerationChanged =
+        this.participantId !== null && this.participantId !== e.participantId;
+      if (participantGenerationChanged) {
+        this.pcReadyResolve?.();
+        this.pcReadyResolve = null;
+        this.voiceReadyResolve?.();
+        this.voiceReadyResolve = null;
+        sfuLog.warn(
+          `RoomGW created a new participant generation (${this.participantId} -> ${e.participantId}); rebuilding media sessions`,
+        );
+        this.resetMediaSessionsForParticipantChange();
+        this.republishMediaOnVoiceReady = true;
+        this.pcReadyPromise = new Promise((resolve) => {
+          this.pcReadyResolve = resolve;
+        });
+        this.voiceReadyPromise = new Promise((resolve) => {
+          this.voiceReadyResolve = resolve;
+        });
+      }
       this.participantId = e.participantId;
       this.vad.refreshSpeakingState();
       this.applyIceServers(e.iceServers);
@@ -308,7 +362,10 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
         try {
           const trackNames = JSON.parse(e.message.split("pull-retry:")[1]);
           const err = new Error(`pull-retry:${JSON.stringify(trackNames)}`);
-          if (this.pullRejector) {
+          if (
+            this.pullRejector &&
+            this.isStalePullSignal(e.request_id) === false
+          ) {
             this.pullRejector(err);
             this.pullRejector = null;
             this.pullResolver = null;
@@ -343,6 +400,28 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
           ...this.negotiator.pulledTracks,
           ...this.pendingPullTracks,
         ]);
+      } else if (e.operation === "pull") {
+        if (this.pullRejector) {
+          this.pullRejector(new Error(e.message));
+          this.pullRejector = null;
+          this.pullResolver = null;
+        }
+        if (this.pullNegotiationRejector) {
+          this.pullNegotiationRejector(new Error(e.message));
+          this.pullNegotiationRejector = null;
+          this.pullNegotiationResolve = null;
+        }
+        this.activePullRequestId = null;
+        this.emit("error", { message: e.message });
+      } else if (e.operation === "push") {
+        const reject =
+          e.request_id === this.activeCamPushRequestId
+            ? this.camPushRejector
+            : e.request_id === this.activeScreenPushRequestId
+              ? this.screenPushRejector
+              : null;
+        reject?.(new Error(e.message));
+        this.emit("error", { message: e.message });
       } else {
         this.rejectPendingSignalWaiters(new Error(e.message));
         this.emit("error", { message: e.message });
@@ -351,6 +430,17 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
 
     this.voiceGW.on("voice-ready", (e) => {
       this.rtcSessionManager.clearAllDisconnectTimers();
+
+      if (
+        e.sfu_session_transferred === false &&
+        this.hasEstablishedMediaSession()
+      ) {
+        sfuLog.warn(
+          "VoiceGW returned a fresh SFU session; rebuilding existing media sessions",
+        );
+        this.resetMediaSessionsForParticipantChange();
+        this.republishMediaOnVoiceReady = true;
+      }
 
       if (this.voiceReadyResolve) {
         this.voiceReadyResolve();
@@ -362,11 +452,34 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
       this.vad.refreshSpeakingState();
       this.emit("voice-ready", { speaking: e.speaking ?? {} });
 
+      const shouldRepublishMedia = this.republishMediaOnVoiceReady;
+      this.republishMediaOnVoiceReady = false;
+      if (shouldRepublishMedia) {
+        this.emit("voice-reconnected", undefined as never);
+        if (this.isNativeScreenShareActive) {
+          void this.republishNativeScreenShare().catch((error) => {
+            sfuLog.warn("Native screen share republish failed", error);
+          });
+        }
+      }
+
       // Cleanup orphaned tracks from server state sync and enqueue existing tracks.
       // VoiceReady can be empty during reconnect races, so only a non-empty
       // server list is authoritative enough to purge local pull state.
-      const serverTracks = this.uniqueTrackList(e.tracks || []);
+      const rebuildingFreshMedia =
+        e.sfu_session_transferred === false && shouldRepublishMedia;
+      const serverTracks = rebuildingFreshMedia
+        ? []
+        : this.uniqueTrackList(e.tracks || []);
       const serverNames = new Set(serverTracks.map((t) => t.track_name));
+
+      if (rebuildingFreshMedia) {
+        // VoiceReady may contain descriptors from the previous generation.
+        // Do not pull them until the other participant republishes and emits a
+        // fresh Video/track-offered event.
+        this.pendingPullTracks = [];
+        this.negotiator.pulledTracks = [];
+      }
 
       // Queue server tracks that are not already represented by local pull state.
       const existingNames = new Set(
@@ -513,6 +626,27 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
           this.negotiator.getPrefixBySessionId(sd.session_id) ||
           "cam"
         : undefined;
+      if (
+        isPush &&
+        sd.request_id &&
+        this.isStalePushRequest(sd.request_id, prefix)
+      ) {
+        sfuLog.warn(
+          `Ignoring stale push SDP answer for request ${sd.request_id}`,
+        );
+        return;
+      }
+      if (
+        isPush &&
+        !sd.request_id &&
+        sd.session_id &&
+        this.isStalePushSignal(sd.session_id, prefix)
+      ) {
+        sfuLog.warn(
+          `Ignoring stale push SDP answer for session ${sd.session_id}`,
+        );
+        return;
+      }
 
       if (!isPush) {
         if (this.isStalePullSignal(sd.request_id)) {
@@ -618,15 +752,38 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
       }
 
       if (e.operation === "push") {
+        if (
+          e.request_id &&
+          this.isStalePushRequest(e.request_id, e.push_prefix)
+        ) {
+          sfuLog.warn(
+            `Ignoring stale push NegotiationDone for request ${e.request_id}`,
+          );
+          return;
+        }
+        if (
+          !e.request_id &&
+          e.session_id &&
+          this.isStalePushSignal(e.session_id, e.push_prefix)
+        ) {
+          sfuLog.warn(
+            `Ignoring stale push NegotiationDone for session ${e.session_id}`,
+          );
+          return;
+        }
         if (e.push_prefix === "screen" && this.screenPushNegotiationResolve) {
           const resolve = this.screenPushNegotiationResolve;
           this.screenPushNegotiationResolve = null;
+          this.screenPushNegotiationRejector = null;
+          this.activeScreenPushRequestId = null;
           resolve();
           return;
         }
         if (e.push_prefix === "cam" && this.camPushNegotiationResolve) {
           const resolve = this.camPushNegotiationResolve;
           this.camPushNegotiationResolve = null;
+          this.camPushNegotiationRejector = null;
+          this.activeCamPushRequestId = null;
           resolve();
           this.vad.onTransceiverReady();
           return;
@@ -642,11 +799,15 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
       if (!preferScreen && this.camPushNegotiationResolve) {
         const resolve = this.camPushNegotiationResolve;
         this.camPushNegotiationResolve = null;
+        this.camPushNegotiationRejector = null;
+        this.activeCamPushRequestId = null;
         resolve();
         this.vad.onTransceiverReady();
       } else if (this.screenPushNegotiationResolve) {
         const resolve = this.screenPushNegotiationResolve;
         this.screenPushNegotiationResolve = null;
+        this.screenPushNegotiationRejector = null;
+        this.activeScreenPushRequestId = null;
         resolve();
       } else if (this.pullNegotiationResolve) {
         const resolve = this.pullNegotiationResolve;
@@ -731,6 +892,10 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
   }
 
   private handleStopTracks(trackNames: string[]) {
+    this.pendingPullTracks = this.pendingPullTracks.filter(
+      (track) => !trackNames.includes(track.track_name),
+    );
+
     // Capture track info before removing
     const toRemove = this.negotiator.pulledTracks.filter((t) =>
       trackNames.includes(t.track_name),
@@ -940,8 +1105,34 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
   private isStalePullSignal(requestId?: string) {
     return (
       !!requestId &&
-      !!this.activePullRequestId &&
-      requestId !== this.activePullRequestId
+      (this.stalePullRequestIds.has(requestId) ||
+        requestId !== this.activePullRequestId)
+    );
+  }
+
+  private isStalePushSignal(sessionId: string, prefix?: "cam" | "screen") {
+    if (!this.stalePushSessionIds.has(sessionId)) return false;
+    if (prefix === "screen") {
+      return !(this.screenPushResolver || this.screenPushNegotiationResolve);
+    }
+    if (prefix === "cam") {
+      return !(this.camPushResolver || this.camPushNegotiationResolve);
+    }
+    return !(
+      this.camPushResolver ||
+      this.camPushNegotiationResolve ||
+      this.screenPushResolver ||
+      this.screenPushNegotiationResolve
+    );
+  }
+
+  private isStalePushRequest(requestId: string, prefix?: "cam" | "screen") {
+    if (prefix === "screen")
+      return this.activeScreenPushRequestId !== requestId;
+    if (prefix === "cam") return this.activeCamPushRequestId !== requestId;
+    return (
+      this.activeCamPushRequestId !== requestId &&
+      this.activeScreenPushRequestId !== requestId
     );
   }
 
@@ -965,13 +1156,122 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
     }
   }
 
+  private rejectPendingPushWaiters(reason: Error) {
+    if (this.camPushRejector) {
+      const reject = this.camPushRejector;
+      this.camPushRejector = null;
+      this.camPushResolver = null;
+      this.activeCamPushRequestId = null;
+      reject(reason);
+    } else {
+      this.camPushResolver = null;
+      this.activeCamPushRequestId = null;
+    }
+
+    if (this.screenPushRejector) {
+      const reject = this.screenPushRejector;
+      this.screenPushRejector = null;
+      this.screenPushResolver = null;
+      this.activeScreenPushRequestId = null;
+      reject(reason);
+    } else {
+      this.screenPushResolver = null;
+      this.activeScreenPushRequestId = null;
+    }
+
+    if (this.camPushNegotiationRejector) {
+      const reject = this.camPushNegotiationRejector;
+      this.camPushNegotiationRejector = null;
+      this.camPushNegotiationResolve = null;
+      reject(reason);
+    } else {
+      this.camPushNegotiationResolve = null;
+    }
+
+    if (this.screenPushNegotiationRejector) {
+      const reject = this.screenPushNegotiationRejector;
+      this.screenPushNegotiationRejector = null;
+      this.screenPushNegotiationResolve = null;
+      reject(reason);
+    } else {
+      this.screenPushNegotiationResolve = null;
+    }
+  }
+
   private resetServerPullSession() {
     if (!this.voiceGW.isReady || this.isLeaving) return;
     this.voiceGW.send({ op: VoiceOpcode.ResetPullSession, d: {} });
   }
 
+  private hasEstablishedMediaSession() {
+    const hasPublishedTrack = [
+      this.negotiator.camPushPC,
+      this.negotiator.screenPushPC,
+    ].some((pc) => pc?.getSenders?.()?.some((sender) => sender.track !== null));
+    const hasActivePush =
+      this.negotiator.camPushPC?.iceConnectionState === "connected" ||
+      this.negotiator.camPushPC?.iceConnectionState === "completed" ||
+      this.negotiator.screenPushPC?.iceConnectionState === "connected" ||
+      this.negotiator.screenPushPC?.iceConnectionState === "completed";
+    const hasActivePull =
+      this.negotiator.pullPC?.iceConnectionState === "connected" ||
+      this.negotiator.pullPC?.iceConnectionState === "completed";
+    return (
+      hasPublishedTrack ||
+      hasActivePush ||
+      hasActivePull ||
+      this.negotiator.pulledTracks.length > 0 ||
+      this.nativeScreenShareActive ||
+      this.nativeScreenSharePending
+    );
+  }
+
+  private resetMediaSessionsForParticipantChange() {
+    this.mediaGeneration++;
+    this.rejectPendingPullWaiters(new Error("Participant generation changed"));
+    this.rejectPendingPushWaiters(new Error("Participant generation changed"));
+    if (this.activePullRequestId) {
+      this.stalePullRequestIds.add(this.activePullRequestId);
+    }
+    if (this.negotiator.camPushSessionId) {
+      this.stalePushSessionIds.add(this.negotiator.camPushSessionId);
+    }
+    if (this.negotiator.screenPushSessionId) {
+      this.stalePushSessionIds.add(this.negotiator.screenPushSessionId);
+    }
+    this.activePullRequestId = null;
+    this.pullQueue = Promise.resolve();
+    this.pullEpoch++;
+
+    const oldPulledTracks = [...this.negotiator.pulledTracks];
+    if (oldPulledTracks.length > 0) {
+      this.handleStopTracks(oldPulledTracks.map((track) => track.track_name));
+    }
+
+    this.rtcSessionManager.clearAllDisconnectTimers();
+    this.rtcSessionManager.safelyClosePC(this.negotiator.camPushPC, true);
+    this.rtcSessionManager.safelyClosePC(this.negotiator.screenPushPC, true);
+    this.rtcSessionManager.safelyClosePC(this.negotiator.pullPC);
+    this.negotiator.camPushPC = null;
+    this.negotiator.screenPushPC = null;
+    this.negotiator.pullPC = null;
+    this.negotiator.resetPushSession();
+    this.negotiator.resetPullSession();
+    this.pendingPullTracks = [];
+    this.emittedMids.clear();
+    this.lastPullPushHash = "";
+    this.audioSentinel.stop();
+    this.outboundAudioSentinel.stop();
+    this.stats.stopStatsMonitoring();
+    this.stats.stopConnectionStatsMonitoring();
+    this.createPeerConnections();
+  }
+
   private resetPullAndRepull(tracksToRestore: TrackInfo[]) {
     const tracks = this.uniqueTrackList(tracksToRestore);
+    if (this.activePullRequestId) {
+      this.stalePullRequestIds.add(this.activePullRequestId);
+    }
     this.rejectPendingPullWaiters(new Error("Pull session reset"));
     this.activePullRequestId = null;
     this.pullQueue = Promise.resolve();
@@ -1013,6 +1313,7 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
     this.vad.stop();
     this.audio.dispose();
     this.audioSentinel.stop();
+    this.outboundAudioSentinel.stop();
     this.stats.stopStatsMonitoring();
     this.stats.stopConnectionStatsMonitoring();
 
@@ -1155,6 +1456,7 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
     if (prefix === "cam") {
       this.stats.startStatsMonitoring();
       this.stats.startConnectionStatsMonitoring();
+      this.outboundAudioSentinel.start();
     }
   }
 
@@ -1272,7 +1574,7 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
             );
             this.activePullRequestId = null;
             setTimeout(() => {
-              if (!this.isLeaving) {
+              if (!this.isLeaving && this.pullEpoch === epoch) {
                 const tracksToRetry = this.negotiator.pulledTracks.filter((t) =>
                   trackNames.includes(t.track_name),
                 );
@@ -1433,6 +1735,9 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
       const senderTrack =
         newTrack && newTrack.kind === "audio" ? newTrack.clone() : newTrack;
       await transceiver.sender.replaceTrack(senderTrack);
+      if (trackName.startsWith("cam-audio-")) {
+        this.outboundAudioSentinel.resetMonitoring();
+      }
       if (previousTrack && previousTrack !== senderTrack) {
         previousTrack.stop();
       }
@@ -1446,6 +1751,9 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
     const track = this.negotiator.getPushTransceiver(trackName)?.sender.track;
     if (!track) return false;
     track.enabled = enabled;
+    if (trackName.startsWith("cam-audio-")) {
+      this.outboundAudioSentinel.resetMonitoring();
+    }
     return true;
   }
 
@@ -1468,15 +1776,37 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
     sourceName?: string | null;
     quality: string;
     withAudio: boolean;
-  }) {
+  }): Promise<void> {
     if (!this.participantId) {
       throw new Error("Cannot start native screen share before joining voice");
     }
+    const generation = ++this.nativeScreenShareGeneration;
+    this.nativeScreenShareOptions = { ...options };
+    const optionRecord = this.nativeScreenShareOptions;
+    const isCurrent = () => generation === this.nativeScreenShareGeneration;
+    const stopOrphanedNativeShare = async () => {
+      if (
+        this.nativeScreenShareOptions !== null &&
+        this.nativeScreenShareOptions !== optionRecord
+      ) {
+        return;
+      }
+      this.nativeScreenShareActive = false;
+      this.nativeScreenSharePending = false;
+      this.nativeScreenTrackNames = [];
+      try {
+        await this.invokeNative<void>("stop_native_screen_share");
+      } catch (error) {
+        sfuLog.warn("Failed to stop cancelled native screen share", error);
+      }
+    };
+
     if (!this.voiceGW.isReady) {
       sfuLog.warn(
         "VoiceGW not ready, waiting to publish native screen share...",
       );
       await this.voiceReadyPromise;
+      if (!isCurrent()) return;
     }
 
     const videoTrackName = `screen-video-${this.participantId}`;
@@ -1503,12 +1833,18 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
         iceServers: this.iceServers,
       },
     );
+    if (!isCurrent()) {
+      await stopOrphanedNativeShare();
+      return;
+    }
 
+    const requestId = this.nextRequestId("push-screen");
     const negotiationDonePromise = this.waitForPushNegotiationDone(
       "screen",
+      requestId,
       10000,
     );
-    const answerPromise = this.waitForPushAnswer("screen", 10000);
+    const answerPromise = this.waitForPushAnswer("screen", requestId, 10000);
     negotiationDonePromise.catch(() => {});
     answerPromise.catch(() => {});
 
@@ -1519,14 +1855,23 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
         push_tracks: pushTracks,
         pull_tracks: [],
         push_prefix: "screen",
+        request_id: requestId,
       },
     });
 
     await answerPromise;
     await negotiationDonePromise;
+    if (!isCurrent()) {
+      await stopOrphanedNativeShare();
+      return;
+    }
     await this.invokeNative<string>("wait_native_screen_share_connected", {
       timeoutMs: 10000,
     });
+    if (!isCurrent()) {
+      await stopOrphanedNativeShare();
+      return;
+    }
 
     this.voiceGW.send({
       op: VoiceOpcode.TracksReady,
@@ -1540,11 +1885,16 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
   }
 
   public async stopNativeScreenShare() {
-    if (!this.nativeScreenShareActive && !this.nativeScreenSharePending) return;
+    this.nativeScreenShareGeneration++;
+    if (!this.nativeScreenShareActive && !this.nativeScreenSharePending) {
+      this.nativeScreenShareOptions = null;
+      return;
+    }
     const trackNames = [...this.nativeScreenTrackNames];
     this.nativeScreenShareActive = false;
     this.nativeScreenSharePending = false;
     this.nativeScreenTrackNames = [];
+    this.nativeScreenShareOptions = null;
     // Tear down the preview loopback PC if it is still live.
     await this.stopPreviewLoopback();
     try {
@@ -1558,6 +1908,15 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
         d: { track_names: trackNames },
       });
     }
+  }
+
+  private async republishNativeScreenShare() {
+    const options = this.nativeScreenShareOptions;
+    if (!options) return;
+    const recoveryGeneration = this.nativeScreenShareGeneration;
+    await this.stopNativeScreenShare();
+    if (this.nativeScreenShareGeneration !== recoveryGeneration + 1) return;
+    await this.publishNativeScreenShare(options);
   }
 
   /// Whether a native hardware screen share is currently live (connected or
@@ -1578,6 +1937,12 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
       await this.invokeNative<void>("update_native_screen_quality", {
         quality,
       });
+      if (this.nativeScreenShareOptions) {
+        this.nativeScreenShareOptions = {
+          ...this.nativeScreenShareOptions,
+          quality,
+        };
+      }
       sfuLog.info("Native screen quality switched in place", { quality });
       return true;
     } catch (err) {
@@ -1866,6 +2231,7 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
 
   private async runVoiceGWReconnectRecovery() {
     const RECOVERY_TIMEOUT_MS = 30_000; // give backoff more time since audio is still flowing
+    const mediaGenerationAtStart = this.mediaGeneration;
 
     sfuLog.info(
       "VoiceGW signaling lost — audio continues on UDP, waiting for WS re-identify...",
@@ -1911,6 +2277,12 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
 
     // VoiceGW re-identified successfully!
     if (this.isLeaving) return;
+    if (this.mediaGeneration !== mediaGenerationAtStart) {
+      sfuLog.info(
+        "Media sessions were rebuilt during re-identification; skipping stale PC recovery checks",
+      );
+      return;
+    }
     sfuLog.info(
       "VoiceGW signaling restored — checking if PCs need recovery...",
     );
@@ -2002,18 +2374,7 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
   }
 
   private rejectPendingSignalWaiters(reason: any) {
-    if (this.camPushRejector) {
-      const reject = this.camPushRejector;
-      this.camPushRejector = null;
-      this.camPushResolver = null;
-      reject(reason);
-    }
-    if (this.screenPushRejector) {
-      const reject = this.screenPushRejector;
-      this.screenPushRejector = null;
-      this.screenPushResolver = null;
-      reject(reason);
-    }
+    this.rejectPendingPushWaiters(reason);
     if (this.pullRejector) {
       const reject = this.pullRejector;
       this.pullRejector = null;
@@ -2065,26 +2426,41 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
 
   private waitForPushAnswer(
     prefix: "cam" | "screen" = "cam",
+    requestId: string,
     timeoutMs = 10000,
   ) {
     if (prefix === "screen") {
-      return this.waitForSignal(
+      const promise = this.waitForSignal(
         (res, rej) => {
           this.screenPushResolver = res;
           this.screenPushRejector = rej || null;
+          this.activeScreenPushRequestId = requestId;
         },
         timeoutMs,
         "Screen Push SDP Answer",
       );
+      return promise.finally(() => {
+        if (this.activeScreenPushRequestId === requestId) {
+          this.screenPushResolver = null;
+          this.screenPushRejector = null;
+        }
+      });
     }
-    return this.waitForSignal(
+    const promise = this.waitForSignal(
       (res, rej) => {
         this.camPushResolver = res;
         this.camPushRejector = rej || null;
+        this.activeCamPushRequestId = requestId;
       },
       timeoutMs,
       "Cam Push SDP Answer",
     );
+    return promise.finally(() => {
+      if (this.activeCamPushRequestId === requestId) {
+        this.camPushResolver = null;
+        this.camPushRejector = null;
+      }
+    });
   }
 
   private waitForPullOffer(timeoutMs = 10000) {
@@ -2100,24 +2476,41 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
 
   private async waitForPushNegotiationDone(
     prefix: "cam" | "screen" = "cam",
+    requestId: string,
     timeoutMs = 10000,
   ) {
     if (prefix === "screen") {
-      return this.waitForSignal(
-        (res) => {
+      const promise = this.waitForSignal(
+        (res, rej) => {
           this.screenPushNegotiationResolve = res;
+          this.screenPushNegotiationRejector = rej || null;
         },
         timeoutMs,
         "Screen Push Negotiation Done",
       );
+      return promise.finally(() => {
+        if (this.activeScreenPushRequestId === requestId) {
+          this.screenPushNegotiationResolve = null;
+          this.screenPushNegotiationRejector = null;
+          this.activeScreenPushRequestId = null;
+        }
+      });
     }
-    return this.waitForSignal(
-      (res) => {
+    const promise = this.waitForSignal(
+      (res, rej) => {
         this.camPushNegotiationResolve = res;
+        this.camPushNegotiationRejector = rej || null;
       },
       timeoutMs,
       "Cam Push Negotiation Done",
     );
+    return promise.finally(() => {
+      if (this.activeCamPushRequestId === requestId) {
+        this.camPushNegotiationResolve = null;
+        this.camPushNegotiationRejector = null;
+        this.activeCamPushRequestId = null;
+      }
+    });
   }
 
   private async waitForPullNegotiationDone(timeoutMs = 10000) {

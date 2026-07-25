@@ -1048,6 +1048,7 @@ export function useVoiceChannel({
   const publishedAudioProcessorRef = useRef<LocalAudioProcessorHandle | null>(
     null,
   );
+  const preferRawPublishedAudioRef = useRef(false);
   const ownedVadMonitorStreamRef = useRef<MediaStream | null>(null);
   const rawCameraTrackRef = useRef<MediaStreamTrack | null>(null);
   const cameraBackgroundEffectRef = useRef<CameraBackgroundEffect | null>(null);
@@ -1647,6 +1648,51 @@ export function useVoiceChannel({
       voiceDispatch({ type: "SET_AUDIO_STALLED", payload: isStalled });
     });
 
+    onSfu("outbound-audio-stalled", (isStalled: boolean) => {
+      if (!isStalled || !isMicOnRef.current) return;
+
+      const sfu = sfuRef.current;
+      const participantId = myIdRef.current;
+      const rawAudioTrack = localStreamRef.current?.getAudioTracks()[0];
+      if (
+        !sfu ||
+        !participantId ||
+        !rawAudioTrack ||
+        rawAudioTrack.readyState === "ended"
+      ) {
+        vcLog.warn(
+          "Outbound audio stalled but no live raw microphone track is available",
+        );
+        return;
+      }
+
+      preferRawPublishedAudioRef.current = true;
+      rawAudioTrack.enabled = true;
+      vcLog.warn(
+        "Replacing stalled processed microphone track with raw capture",
+        {
+          processorMode:
+            publishedAudioProcessorRef.current?.mode ?? "passthrough",
+        },
+      );
+      const trackName = `cam-audio-${participantId}`;
+      void Promise.resolve(sfu.replaceTrack(trackName, rawAudioTrack))
+        .then(() => {
+          if (sfuRef.current !== sfu || myIdRef.current !== participantId) {
+            return;
+          }
+          const enabled = isMicOnRef.current;
+          rawAudioTrack.enabled = enabled;
+          sfu.setPublishedTrackEnabled(trackName, enabled);
+        })
+        .catch((error) => {
+          vcLog.warn(
+            "Failed to recover stalled outbound microphone audio",
+            error,
+          );
+        });
+    });
+
     onSfu("app-event", (event) => {
       if (!isStreamWatcherSnapshotPayload(event)) return;
 
@@ -2023,6 +2069,12 @@ export function useVoiceChannel({
         const getPublishedAudioStream = (
           source: MediaStream,
         ): MediaStream | null => {
+          if (preferRawPublishedAudioRef.current) {
+            const rawAudioTrack = source.getAudioTracks()[0];
+            return rawAudioTrack?.readyState === "live"
+              ? new MediaStream([rawAudioTrack])
+              : null;
+          }
           const processedStream =
             publishedAudioProcessorRef.current?.processedStream;
           if (processedStream && processedStream.getAudioTracks().length > 0) {
@@ -2048,7 +2100,9 @@ export function useVoiceChannel({
             const audioTrack = stream.getAudioTracks()[0];
             const vadInput = createVoiceActivityStream(
               stream,
-              publishedAudioProcessorRef.current,
+              preferRawPublishedAudioRef.current
+                ? null
+                : publishedAudioProcessorRef.current,
             );
             if (
               isMicOnRef.current &&
@@ -2506,6 +2560,9 @@ export function useVoiceChannel({
         }
         localStreamRef.current = displayStream;
         publishedAudioProcessorRef.current = nextAudioProcessor;
+        if (audioNeedsUpdate) {
+          preferRawPublishedAudioRef.current = false;
+        }
         if (
           previousAudioProcessor &&
           previousAudioProcessor !== nextAudioProcessor
@@ -3161,7 +3218,11 @@ export function useVoiceChannel({
         if (!isCurrent()) return;
         stream.getVideoTracks().forEach((t) => (t.enabled = true));
         if (!isCurrent()) return;
-        session.publishTracks(new MediaStream(stream.getVideoTracks()), "cam");
+        await session.publishTracks(
+          new MediaStream(stream.getVideoTracks()),
+          "cam",
+        );
+        if (!isCurrent()) return;
       } else {
         if (!isCurrent()) return;
         stopCameraBackgroundEffect(true);
@@ -3438,6 +3499,7 @@ export function useVoiceChannel({
                 quality: targetQuality,
                 withAudio: targetAudio,
               });
+              if (!sfuRef.current.isNativeScreenShareActive) return;
               logScreenShare("Native hardware screen publisher connected", {
                 elapsedMs: elapsed(),
                 sourceId: effectiveOptions.sourceId,

@@ -25,6 +25,7 @@ describe("TrackNegotiator", () => {
       pcReadyPromise: vi.fn().mockReturnValue(Promise.resolve()),
       waitForPushNegotiationDone: vi.fn().mockResolvedValue(undefined),
       waitForPushAnswer: vi.fn().mockResolvedValue(undefined),
+      nextRequestId: vi.fn((prefix: string) => `${prefix}-request`),
     };
 
     negotiator = new TrackNegotiator(mockConfig);

@@ -102,6 +102,21 @@ describe("SFUClient Baseline Tests", () => {
   });
 
   describe("publishTracks", () => {
+    it("starts and stops outbound audio monitoring with cam publication", async () => {
+      const audioTrack = new MockMediaStreamTrack("audio");
+      const start = vi.spyOn(client.outboundAudioSentinel, "start");
+      const stop = vi.spyOn(client.outboundAudioSentinel, "stop");
+
+      await client.publishTracks(
+        new MockMediaStream([audioTrack]) as any,
+        "cam",
+      );
+
+      expect(start).toHaveBeenCalledOnce();
+      client.disconnect();
+      expect(stop).toHaveBeenCalledOnce();
+    });
+
     it("does not start microphone VAD for a video-only publication", async () => {
       const videoTrack = new MockMediaStreamTrack("video");
       const startVad = vi.spyOn(client.vad, "start");
@@ -367,6 +382,127 @@ describe("SFUClient Baseline Tests", () => {
   });
 
   describe("VoiceReady pull reconciliation", () => {
+    it("rebuilds media when RoomGW creates a fresh participant generation", () => {
+      const oldCamPC = new MockRTCPeerConnection();
+      const oldPullPC = new MockRTCPeerConnection();
+      (client as any).participantId = "old-participant";
+      (client as any).negotiator.camPushPC = oldCamPC;
+      (client as any).negotiator.pullPC = oldPullPC;
+
+      const mediaReconnect = vi.fn();
+      client.on("voice-reconnected", mediaReconnect);
+      vi.spyOn(client.voiceGW, "disconnect").mockImplementation(() => {});
+      vi.spyOn(client.voiceGW, "connectVoice").mockImplementation(() => {});
+
+      client.roomGW.emit("ready", {
+        participantId: "new-participant",
+        sessionId: "new-participant",
+        iceServers: [],
+        voiceToken: "voice-token",
+        tracksToQueue: [],
+        participants: [],
+      });
+      client.voiceGW.emit("voice-ready", { tracks: [] });
+
+      expect(oldCamPC.close).toHaveBeenCalledOnce();
+      expect(oldPullPC.close).toHaveBeenCalledOnce();
+      expect(mediaReconnect).toHaveBeenCalledOnce();
+    });
+
+    it("rebuilds established media when VoiceGW cannot transfer the SFU session", () => {
+      const oldPullPC = new MockRTCPeerConnection();
+      oldPullPC.iceConnectionState = "connected";
+      (client as any).negotiator.pullPC = oldPullPC;
+
+      const mediaReconnect = vi.fn();
+      client.on("voice-reconnected", mediaReconnect);
+
+      client.voiceGW.emit("voice-ready", {
+        tracks: [],
+        sfu_session_transferred: false,
+      });
+
+      expect(oldPullPC.close).toHaveBeenCalledOnce();
+      expect(mediaReconnect).toHaveBeenCalledOnce();
+    });
+
+    it("does not pull stale VoiceReady tracks during a fresh SFU rebuild", () => {
+      const pullSpy = vi
+        .spyOn(client, "pullTracks")
+        .mockResolvedValue(undefined);
+      const oldPullPC = new MockRTCPeerConnection();
+      oldPullPC.iceConnectionState = "connected";
+      (client as any).negotiator.pullPC = oldPullPC;
+
+      vi.spyOn(client.voiceGW, "disconnect").mockImplementation(() => {});
+      vi.spyOn(client.voiceGW, "connectVoice").mockImplementation(() => {});
+      client.on("voice-reconnected", () => {});
+
+      client.voiceGW.emit("voice-ready", {
+        sfu_session_transferred: false,
+        tracks: [
+          {
+            participant_id: "remote-a",
+            track_name: "cam-audio-remote-a",
+            session_id: "dead-session",
+            kind: "audio",
+          },
+        ],
+      });
+
+      expect(pullSpy).not.toHaveBeenCalled();
+      expect((client as any).pendingPullTracks).toEqual([]);
+    });
+
+    it("isolates a correlated pull error from an active push publication", () => {
+      const pushRejector = vi.fn();
+      const pullRejector = vi.fn();
+      (client as any).camPushRejector = pushRejector;
+      (client as any).pullRejector = pullRejector;
+      (client as any).activePullRequestId = "pull-1";
+
+      client.voiceGW.emit("error", {
+        message: "Requested track is not available",
+        code: 4000,
+        request_id: "pull-1",
+        operation: "pull",
+      });
+
+      expect(pullRejector).toHaveBeenCalledOnce();
+      expect(pushRejector).not.toHaveBeenCalled();
+    });
+
+    it("does not run stale PC recovery after media generation reset", async () => {
+      let resolveOldVoiceReady!: () => void;
+      (client as any).voiceReadyPromise = new Promise<void>((resolve) => {
+        resolveOldVoiceReady = resolve;
+      });
+      (client as any).voiceReadyResolve = resolveOldVoiceReady;
+      (client as any).participantId = "old-participant";
+      vi.spyOn(client.voiceGW, "disconnect").mockImplementation(() => {});
+      vi.spyOn(client.voiceGW, "connectVoice").mockImplementation(() => {});
+      const forceReconnect = vi.spyOn(client.voiceGW, "forceReconnect");
+
+      const recovery = (
+        client as any
+      ).runVoiceGWReconnectRecovery() as Promise<void>;
+      client.roomGW.emit("ready", {
+        participantId: "new-participant",
+        sessionId: "new-participant",
+        iceServers: [],
+        voiceToken: "voice-token",
+        tracksToQueue: [],
+        participants: [],
+      });
+      client.voiceGW.emit("voice-ready", { tracks: [] });
+      const freshCamPC = (client as any).negotiator.camPushPC;
+
+      await recovery;
+
+      expect(freshCamPC.close).not.toHaveBeenCalled();
+      expect(forceReconnect).not.toHaveBeenCalled();
+    });
+
     it("keeps a fresh new pull PC and uses it for the initial pull", () => {
       const pullPC = new MockRTCPeerConnection();
       pullPC.iceConnectionState = "new";
@@ -392,6 +528,7 @@ describe("SFUClient Baseline Tests", () => {
             kind: "audio",
           },
         ],
+        sfu_session_transferred: true,
       });
 
       expect(resetSpy).not.toHaveBeenCalled();
@@ -439,6 +576,7 @@ describe("SFUClient Baseline Tests", () => {
             kind: "audio",
           },
         ],
+        sfu_session_transferred: true,
       });
 
       expect(resetSpy).not.toHaveBeenCalled();

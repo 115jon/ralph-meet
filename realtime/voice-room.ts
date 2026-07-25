@@ -170,6 +170,7 @@ interface VoiceAttachment {
   };
   participant_id: string;
   connection_id?: string;
+  active_pull_request_id?: string;
   supports_listen_together_snapshot_events?: boolean;
 }
 
@@ -178,7 +179,9 @@ interface VoiceAttachment {
 const VOICE_HEARTBEAT_INTERVAL_MS = 15_000;
 const VOICE_ZOMBIE_TIMEOUT_MS = VOICE_HEARTBEAT_INTERVAL_MS * 6;
 const VOICE_PRUNE_ALARM_INTERVAL_MS = 300_000;
-const SFU_SESSION_REUSE_GRACE_MS = 20_000;
+// Cloudflare Realtime keeps sessions and tracks reusable for 30 seconds after
+// a connectivity loss, so the reconnect window must not expire earlier.
+const SFU_SESSION_REUSE_GRACE_MS = 30_000;
 const DEMO_CHAT_TTL_MS = 10 * 60 * 1000;
 const DEMO_CHAT_MAX_MESSAGES = 75;
 const DEMO_CHAT_MAX_CONTENT_LENGTH = 1_000;
@@ -2106,13 +2109,10 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
           push_session_cam = pRows[0].push_session_cam as string;
           push_session_screen = pRows[0].push_session_screen as string;
 
-          const tRows = [
-            ...this.sql.exec(
-              "SELECT COUNT(*) as c FROM tracks WHERE participant_id = ? AND is_pending = 0",
-              d.participant_id,
-            ),
-          ];
-          didTransfer = (tRows[0].c as number) > 0;
+          // The reconnect grace applies to the whole participant generation,
+          // including a publication that was still pending TracksReady when
+          // the signaling socket disappeared.
+          didTransfer = true;
 
           roomLog.info(
             `Transferring pending SFU sessions for ${d.participant_id}: cam=${push_session_cam ?? "none"}`,
@@ -2160,6 +2160,15 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
         this.sql.exec("DELETE FROM tracks WHERE participant_id = ?", oldPid);
         this.sql.exec("DELETE FROM participants WHERE id = ?", oldPid);
       }
+    }
+
+    // A VoiceGW reconnect can arrive without a RoomGW pending-reconnect row.
+    // In that case the participant id is reused, but its Cloudflare SFU
+    // sessions and track descriptors are no longer authoritative. Remove them
+    // before returning VoiceReady(false), so the next publication starts from
+    // fresh SFU sessions and cannot advertise dead remote state indefinitely.
+    if (!didTransfer) {
+      await this.purgeParticipantState(d.participant_id);
     }
 
     // Evict any existing LIVE session for the same participant_id OR clerk_user_id
@@ -2370,7 +2379,12 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
         ) {
           this.sendTo(ws, {
             op: Op.Error,
-            d: { code: 4000, message: "Track name is already in use" },
+            d: {
+              code: 4000,
+              message: "Track name is already in use",
+              request_id: d.request_id,
+              operation: "push",
+            },
           });
           return;
         }
@@ -2497,7 +2511,12 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
           if (isCurrent()) {
             this.sendTo(ws, {
               op: Op.Error,
-              d: { code: 4000, message: "Track name is already in use" },
+              d: {
+                code: 4000,
+                message: "Track name is already in use",
+                request_id: d.request_id,
+                operation: "push",
+              },
             });
           }
           return;
@@ -2545,6 +2564,13 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
         if (!isCurrent()) return;
         activeOperation = "pull";
         activePushPrefix = null;
+        const attachment = this.getVoiceAttachment(ws);
+        if (d.request_id) {
+          ws.serializeAttachment({
+            ...attachment,
+            active_pull_request_id: d.request_id,
+          });
+        }
 
         const requestedNames = d.pull_tracks.map((track) => track.track_name);
         if (
@@ -2590,7 +2616,12 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
         if (canonicalPullTracks.some((track) => track === null)) {
           this.sendTo(ws, {
             op: Op.Error,
-            d: { code: 4000, message: "Requested track is not available" },
+            d: {
+              code: 4000,
+              message: "Requested track is not available",
+              request_id: d.request_id,
+              operation: "pull",
+            },
           });
           return;
         }
@@ -2897,6 +2928,11 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
   ) {
     const pid = this.requireParticipantId(ws);
     if (!pid) return;
+    const attachment = this.getVoiceAttachment(ws);
+    const activeRequestId = attachment?.active_pull_request_id;
+    if (!d.request_id || !activeRequestId || d.request_id !== activeRequestId) {
+      return;
+    }
     const connectionId = this.getVoiceAttachment(ws)?.connection_id;
     if (!this.isCurrentVoiceConnection(ws, pid, connectionId)) return;
 
@@ -2912,7 +2948,12 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
     if (!pullId) {
       this.sendTo(ws, {
         op: Op.Error,
-        d: { code: 0, message: "No pull session" },
+        d: {
+          code: 0,
+          message: "No pull session",
+          request_id: d.request_id,
+          operation: "pull",
+        },
       });
       return;
     }
@@ -2926,6 +2967,10 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
       this.sendTo(ws, {
         op: Op.NegotiationDone,
         d: { session_id: pullId, request_id: d.request_id, operation: "pull" },
+      });
+      ws.serializeAttachment({
+        ...attachment,
+        active_pull_request_id: undefined,
       });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
@@ -3047,6 +3092,8 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
   private handleTracksReady(ws: WebSocket, d: { track_names: string[] }) {
     const pid = this.requireParticipantId(ws);
     if (!pid) return;
+    const connectionId = this.getVoiceAttachment(ws)?.connection_id;
+    if (!this.isCurrentVoiceConnection(ws, pid, connectionId)) return;
 
     if (d.track_names.length === 0) return;
 
@@ -3078,10 +3125,26 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
 
     if (readyTracks.length === 0) return;
 
+    // A peer may have identified while this publisher was reconnecting and
+    // therefore missed the initial Video broadcast. Replay the now-promoted
+    // tracks to every current peer so deferred VoiceReady state is satisfied
+    // only by a fresh TracksReady-backed publication.
+    const replayTracks = [
+      ...this.sql.exec(
+        "SELECT track_name, participant_id, session_id, mid, kind FROM tracks WHERE participant_id = ? AND is_pending = 0",
+        pid,
+      ),
+    ].map((row) => ({
+      track_name: row.track_name as string,
+      participant_id: row.participant_id as string,
+      session_id: row.session_id as string,
+      mid: (row.mid as string) || undefined,
+      kind: row.kind as "audio" | "video",
+    }));
     this.broadcast(
       {
         op: Op.Video,
-        d: { participant_id: pid, tracks: readyTracks },
+        d: { participant_id: pid, tracks: replayTracks },
       },
       ws,
     );

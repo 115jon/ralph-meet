@@ -982,6 +982,7 @@ export interface SFUEventMap {
   speaking: { participantId: string; speaking: number };
   "vad-speaking": { participantId: string; isSpeaking: boolean };
   "audio-stalled": boolean;
+  "outbound-audio-stalled": boolean;
   "profile-update": {
     participantId: string;
     name: string;

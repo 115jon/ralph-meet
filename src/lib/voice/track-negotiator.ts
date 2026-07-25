@@ -122,12 +122,15 @@ export interface TrackNegotiatorConfig {
   pcReadyPromise: () => Promise<void>;
   waitForPushNegotiationDone: (
     prefix: "cam" | "screen",
+    requestId: string,
     timeoutMs?: number,
   ) => Promise<void>;
   waitForPushAnswer: (
     prefix: "cam" | "screen",
+    requestId: string,
     timeoutMs?: number,
   ) => Promise<void>;
+  nextRequestId: (prefix: string) => string;
 }
 
 /** Per-prefix push state: each prefix gets its own PC, queue, and session */
@@ -477,12 +480,15 @@ export class TrackNegotiator {
           }
         }
 
+        const requestId = this.config.nextRequestId(`push-${prefix}`);
         const negotiationDonePromise = this.config.waitForPushNegotiationDone(
           prefix as "cam" | "screen",
+          requestId,
           10000,
         );
         const answerPromise = this.config.waitForPushAnswer(
           prefix as "cam" | "screen",
+          requestId,
           10000,
         );
 
@@ -496,6 +502,7 @@ export class TrackNegotiator {
             push_tracks: pushTracks,
             pull_tracks: [],
             push_prefix: prefix, // Tell server which push session to use
+            request_id: requestId,
           },
         });
 
@@ -699,7 +706,11 @@ export class TrackNegotiator {
       }
 
       try {
-        const remoteSdp = sd.sdp ? mungeStereoOpus(sd.sdp) : sd.sdp;
+        const remoteSdp = prefix
+          ? sd.sdp
+            ? mungeStereoOpus(sd.sdp, prefix)
+            : sd.sdp
+          : sd.sdp;
         if (remoteSdp && DEBUG) {
           const hasDtx = remoteSdp.includes("usedtx=1");
           const hasStereo = remoteSdp.includes("stereo=1");
@@ -871,7 +882,7 @@ export class TrackNegotiator {
   /**
    * Tears down the local transceiver for a track without sending any WS message.
    */
-  public teardownTransceiver(trackName: string) {
+  public teardownTransceiver(trackName: string, preserveTrack = false) {
     // Determine which context owns this track
     const ctx = trackName.startsWith("screen-")
       ? this.screenPush
@@ -881,7 +892,7 @@ export class TrackNegotiator {
     if (ctx.pc) {
       const transceiver = ctx.transceivers.get(trackName);
       if (transceiver) {
-        if (transceiver.sender.track) {
+        if (transceiver.sender.track && !preserveTrack) {
           transceiver.sender.track.onended = null;
           transceiver.sender.track.stop();
         }

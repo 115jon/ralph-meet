@@ -110,6 +110,38 @@ describe("VoiceGateway", () => {
     gateway.disconnect();
   });
 
+  it("forwards whether the SFU session was transferred on VoiceReady", async () => {
+    mocks.fetchSocketProtocols.mockResolvedValue([
+      "ralph.realtime.v1",
+      "ralph.ticket.test",
+    ]);
+    const gateway = new VoiceGateway();
+    const onReady = vi.fn();
+    gateway.on("voice-ready", onReady);
+
+    gateway.connectVoice(
+      "participant-1",
+      "voice-token",
+      "voice-server-channel",
+      (path) => `ws://meet.test${path}`,
+      { channelId: "channel", serverId: "server" },
+    );
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const socket = TestWebSocket.instances[0]!;
+    socket.onmessage?.({
+      data: JSON.stringify({
+        op: VoiceOpcode.VoiceReady,
+        d: { sfu_session_transferred: false, tracks: [] },
+      }),
+    } as MessageEvent);
+
+    expect(onReady).toHaveBeenCalledWith(
+      expect.objectContaining({ sfu_session_transferred: false }),
+    );
+    gateway.disconnect();
+  });
+
   it("flushes app events queued while the initial ticket is loading", async () => {
     mocks.fetchSocketProtocols.mockResolvedValue([
       "ralph.realtime.v1",

@@ -799,6 +799,94 @@ describe("useVoiceChannel SFU lifecycle", () => {
     hook.unmount();
   });
 
+  it("replaces a stalled processed microphone with the raw capture", async () => {
+    const rawTrack = createTrack("audio", "raw-audio");
+    const processedTrack = createTrack("audio", "processed-audio");
+    const rawStream = createStream([rawTrack.track]);
+    const processedStream = createStream([processedTrack.track]);
+    vi.mocked(acquireLocalStream).mockResolvedValue(rawStream);
+    vi.mocked(createLocalAudioProcessor).mockResolvedValue(
+      createProcessor(processedStream),
+    );
+
+    const hook = renderHook(() =>
+      useVoiceChannel({ channelId: "channel", serverId: "server" }),
+    );
+    await act(async () => {
+      await hook.result.current.handleJoin();
+    });
+    const sfu = sfuInstances[0];
+    if (!sfu) throw new Error("SFU was not created");
+
+    await act(async () => {
+      sfu.emit("joined", { participantId: "self", participants: [] });
+    });
+    await waitFor(() => expect(sfu.publishTracks).toHaveBeenCalledTimes(1));
+
+    rawTrack.track.enabled = false;
+    await act(async () => {
+      sfu.emit("outbound-audio-stalled", true);
+    });
+
+    await waitFor(() =>
+      expect(sfu.replaceTrack).toHaveBeenCalledWith(
+        "cam-audio-self",
+        rawTrack.track,
+      ),
+    );
+    expect(rawTrack.track.enabled).toBe(true);
+
+    sfu.publishTracks.mockClear();
+    await act(async () => {
+      sfu.emit("voice-reconnected", undefined);
+    });
+    await waitFor(() => expect(sfu.publishTracks).toHaveBeenCalledTimes(1));
+    const reconnectStream = sfu.publishTracks.mock.calls[0]?.[0] as MediaStream;
+    expect(reconnectStream.getAudioTracks()).toEqual([rawTrack.track]);
+
+    hook.unmount();
+  });
+
+  it("reapplies mute state when raw-track recovery finishes asynchronously", async () => {
+    const rawTrack = createTrack("audio", "raw-audio");
+    const rawStream = createStream([rawTrack.track]);
+    vi.mocked(acquireLocalStream).mockResolvedValue(rawStream);
+    vi.mocked(createLocalAudioProcessor).mockResolvedValue(
+      createProcessor(rawStream),
+    );
+
+    const hook = renderHook(() =>
+      useVoiceChannel({ channelId: "channel", serverId: "server" }),
+    );
+    await act(async () => {
+      await hook.result.current.handleJoin();
+    });
+    const sfu = sfuInstances[0];
+    if (!sfu) throw new Error("SFU was not created");
+    await act(async () => {
+      sfu.emit("joined", { participantId: "self", participants: [] });
+    });
+    await waitFor(() => expect(sfu.publishTracks).toHaveBeenCalledTimes(1));
+
+    const replacement = deferred<void>();
+    sfu.replaceTrack.mockReturnValueOnce(replacement.promise);
+    sfu.setPublishedTrackEnabled.mockClear();
+    await act(async () => {
+      sfu.emit("outbound-audio-stalled", true);
+      settingsState.getSettings().isMuted = true;
+      hook.rerender();
+      replacement.resolve();
+    });
+
+    await waitFor(() =>
+      expect(sfu.setPublishedTrackEnabled).toHaveBeenLastCalledWith(
+        "cam-audio-self",
+        false,
+      ),
+    );
+    hook.unmount();
+  });
+
   it("preserves local speaking state when a voice-ready snapshot omits self", async () => {
     const rawTrack = createTrack("audio", "raw-audio");
     const rawStream = createStream([rawTrack.track]);
