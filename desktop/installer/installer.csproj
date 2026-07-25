@@ -9,7 +9,7 @@
     <ApplicationIcon>Assets\icon.ico</ApplicationIcon>
     <Company>115jon</Company>
     <Product>Ralph Meet Setup</Product>
-    <Version>2.0.1</Version>
+    <Version>2.0.2</Version>
   </PropertyGroup>
 
   <ItemGroup>
