@@ -74,12 +74,15 @@ function finishAutomaticLeave(
   generation: number | undefined,
   reason: SFUDisconnectReason,
   onFinished?: () => void,
+  pendingTimers?: Set<number>,
 ) {
-  window.setTimeout(() => {
+  const timerId = window.setTimeout(() => {
+    pendingTimers?.delete(timerId);
     sfu?.disconnect(reason);
     resetAutomaticSoundboardSession(sessionId, generation);
     onFinished?.();
   }, AUTOMATIC_LEAVE_SEND_WINDOW_MS);
+  pendingTimers?.add(timerId);
 }
 
 import {
@@ -1023,6 +1026,7 @@ export function useVoiceChannel({
 
   const sfuRef = useRef<SFUClient | null>(null);
   const sfuHandlerCleanupRef = useRef<(() => void) | null>(null);
+  const automaticLeaveTimersRef = useRef<Set<number>>(new Set());
   const cleanupSfuHandlers = useCallback(() => {
     const cleanup = sfuHandlerCleanupRef.current;
     sfuHandlerCleanupRef.current = null;
@@ -2788,6 +2792,11 @@ export function useVoiceChannel({
         releaseLocalStream(localMediaOwner);
       }
 
+      for (const timerId of automaticLeaveTimersRef.current) {
+        window.clearTimeout(timerId);
+      }
+      automaticLeaveTimersRef.current.clear();
+
       if (joinedRef.current) {
         const generation = getAutomaticSoundboardSessionGeneration(
           automaticSoundboardSessionId,
@@ -2803,6 +2812,8 @@ export function useVoiceChannel({
           automaticSoundboardSessionId,
           generation,
           "component-unmount",
+          undefined,
+          automaticLeaveTimersRef.current,
         );
       } else {
         activeSfu?.disconnect("component-unmount");
@@ -2866,6 +2877,7 @@ export function useVoiceChannel({
             setSfuInstance(null);
             onLeft?.();
           },
+          automaticLeaveTimersRef.current,
         );
         stopCameraBackgroundEffect(true);
         publishedAudioProcessorRef.current?.destroy();
@@ -2959,6 +2971,7 @@ export function useVoiceChannel({
         setSfuInstance(null);
         if (!isCall) onLeft?.();
       },
+      automaticLeaveTimersRef.current,
     );
     stopCameraBackgroundEffect(true);
     disposeVoiceActivityStream(ownedVadMonitorStreamRef.current);
