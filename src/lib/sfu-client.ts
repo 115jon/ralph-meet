@@ -19,7 +19,7 @@ import { VoiceGateway } from "./voice/gateways/voice-gateway";
 import { WebRTCSessionManager } from "./voice/webrtc-session-manager";
 
 const sfuLog = clog("SFU");
-const CREDENTIAL_REFRESH_MS = 47 * 60 * 60 * 1000;
+const CREDENTIAL_REFRESH_MS = 45 * 60 * 1000;
 
 export type { SFUEventMap, VoiceConnectionStats } from "./types";
 
@@ -267,7 +267,7 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
         });
       }
       this.participantId = e.participantId;
-      this.vad.refreshSpeakingState();
+      this.vad.refreshSpeakingState(true);
       this.applyIceServers(e.iceServers);
       this.voiceToken = e.voiceToken;
       this.createPeerConnections();
@@ -464,13 +464,11 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
       }
 
       // Cleanup orphaned tracks from server state sync and enqueue existing tracks.
-      // VoiceReady can be empty during reconnect races, so only a non-empty
-      // server list is authoritative enough to purge local pull state.
+      // A fresh local SFU generation still needs to subscribe to remote tracks
+      // that remained valid while this participant re-authenticated.
       const rebuildingFreshMedia =
         e.sfu_session_transferred === false && shouldRepublishMedia;
-      const serverTracks = rebuildingFreshMedia
-        ? []
-        : this.uniqueTrackList(e.tracks || []);
+      const serverTracks = this.uniqueTrackList(e.tracks || []);
       const serverNames = new Set(serverTracks.map((t) => t.track_name));
 
       if (rebuildingFreshMedia) {
@@ -868,6 +866,11 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
     this.voiceGW.on("stop-tracks", (st) =>
       this.handleStopTracks(st.track_names),
     );
+
+    this.voiceGW.on("client-disconnect", ({ participant_id }) => {
+      this.remoteSpeakingUntil.delete(participant_id);
+      this.emit("speaking", { participantId: participant_id, speaking: 0 });
+    });
 
     this.voiceGW.on("kicked", () => {
       sfuLog.warn(
@@ -1409,8 +1412,8 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
     return this.audio.applyVolumeToTrack(pId, track, name);
   }
 
-  public resumeAudioContext() {
-    this.audio.resumeAudioContext();
+  public resumeAudioContext(): Promise<void> {
+    return this.audio.resumeAudioContext();
   }
 
   public setRemoteTrackSubscription(
@@ -1723,25 +1726,31 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
   public async replaceTrack(
     trackName: string,
     newTrack: MediaStreamTrack | null,
-  ) {
+  ): Promise<boolean> {
     const pc = trackName.startsWith("screen-")
       ? this.negotiator.screenPushPC
       : this.negotiator.camPushPC;
-    if (!pc) return;
+    if (!pc) return false;
 
     const transceiver = this.negotiator.getPushTransceiver(trackName);
-    if (transceiver) {
-      const previousTrack = transceiver.sender.track;
-      const senderTrack =
-        newTrack && newTrack.kind === "audio" ? newTrack.clone() : newTrack;
+    if (!transceiver) return false;
+
+    const previousTrack = transceiver.sender.track;
+    const senderTrack =
+      newTrack && newTrack.kind === "audio" ? newTrack.clone() : newTrack;
+    try {
       await transceiver.sender.replaceTrack(senderTrack);
-      if (trackName.startsWith("cam-audio-")) {
-        this.outboundAudioSentinel.resetMonitoring();
-      }
-      if (previousTrack && previousTrack !== senderTrack) {
-        previousTrack.stop();
-      }
+    } catch (error) {
+      if (senderTrack && senderTrack !== newTrack) senderTrack.stop();
+      throw error;
     }
+    if (trackName.startsWith("cam-audio-")) {
+      this.outboundAudioSentinel.resetMonitoring();
+    }
+    if (previousTrack && previousTrack !== senderTrack) {
+      previousTrack.stop();
+    }
+    return true;
   }
 
   public setPublishedTrackEnabled(

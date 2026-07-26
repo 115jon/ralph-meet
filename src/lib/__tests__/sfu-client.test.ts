@@ -86,6 +86,22 @@ describe("SFUClient Baseline Tests", () => {
     });
   });
 
+  it("refreshes voice credentials before the one-hour token expires", async () => {
+    vi.useFakeTimers();
+    const send = (client.roomGW as any).ws.send as ReturnType<typeof vi.fn>;
+
+    (client as any).scheduleCredentialRefresh();
+    await vi.advanceTimersByTimeAsync(45 * 60 * 1000 - 1);
+    expect(send).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1);
+
+    expect(JSON.parse(send.mock.calls[0]?.[0] as string)).toEqual({
+      op: 40,
+      d: {},
+    });
+    vi.useRealTimers();
+  });
+
   describe("disconnect", () => {
     it("logs the caller's teardown reason before closing the session", () => {
       client.disconnect("component-unmount");
@@ -98,6 +114,21 @@ describe("SFUClient Baseline Tests", () => {
           participantId: "p123",
         }),
       );
+    });
+
+    it("turns a remote voice-gateway disconnect into speaking-off", () => {
+      const onSpeaking = vi.fn();
+      client.on("speaking", onSpeaking);
+
+      (client.voiceGW as any).handleMessage({
+        op: 11,
+        d: { participant_id: "remote-participant" },
+      });
+
+      expect(onSpeaking).toHaveBeenCalledWith({
+        participantId: "remote-participant",
+        speaking: 0,
+      });
     });
   });
 
@@ -426,7 +457,7 @@ describe("SFUClient Baseline Tests", () => {
       expect(mediaReconnect).toHaveBeenCalledOnce();
     });
 
-    it("does not pull stale VoiceReady tracks during a fresh SFU rebuild", () => {
+    it("pulls remote VoiceReady tracks during a fresh local SFU rebuild", () => {
       const pullSpy = vi
         .spyOn(client, "pullTracks")
         .mockResolvedValue(undefined);
@@ -450,8 +481,40 @@ describe("SFUClient Baseline Tests", () => {
         ],
       });
 
-      expect(pullSpy).not.toHaveBeenCalled();
-      expect((client as any).pendingPullTracks).toEqual([]);
+      expect(pullSpy).toHaveBeenCalledWith([
+        expect.objectContaining({ track_name: "cam-audio-remote-a" }),
+      ]);
+    });
+
+    it("sends a real pull operation for remote tracks after fresh VoiceReady", async () => {
+      const send = (client.voiceGW as any).ws.send as ReturnType<typeof vi.fn>;
+      const pullPC = new MockRTCPeerConnection();
+      pullPC.iceConnectionState = "new";
+      (client as any).negotiator.pullPC = pullPC;
+      vi.spyOn(client as any, "waitForPullOffer").mockResolvedValue(undefined);
+      vi.spyOn(client as any, "waitForPullNegotiationDone").mockResolvedValue(
+        undefined,
+      );
+
+      client.voiceGW.emit("voice-ready", {
+        sfu_session_transferred: false,
+        tracks: [
+          {
+            participant_id: "remote-a",
+            track_name: "cam-audio-remote-a",
+            session_id: "remote-session",
+            kind: "audio",
+          },
+        ],
+      });
+
+      await vi.waitFor(() => {
+        const payload = JSON.parse(send.mock.calls[0]?.[0] as string);
+        expect(payload.op).toBe(1);
+        expect(payload.d.pull_tracks).toEqual([
+          expect.objectContaining({ track_name: "cam-audio-remote-a" }),
+        ]);
+      });
     });
 
     it("isolates a correlated pull error from an active push publication", () => {
