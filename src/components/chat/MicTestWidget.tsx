@@ -1,4 +1,5 @@
 import { clog } from "@/lib/console-logger";
+import { getAudioCaptureStream } from "@/lib/audio-capture";
 import {
   createLocalAudioProcessor,
   resolveCaptureAudioProcessing,
@@ -6,7 +7,7 @@ import {
   type VoiceAudioProcessingSettings,
 } from "@/lib/voice/noise-reduction";
 import { getVoiceActivityThreshold } from "@/lib/voice/vad";
-import { Activity, Headphones, Mic2, Square } from "lucide-react";
+import { Mic2, Square } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 const log = clog("MicTest");
@@ -32,6 +33,11 @@ interface MicTestWidgetProps {
   processing: VoiceAudioProcessingSettings;
 }
 
+interface StartTestOptions {
+  playback?: boolean;
+  preserveUi?: boolean;
+}
+
 export function MicTestWidget({
   sensitivity,
   autoSensitivity,
@@ -42,7 +48,7 @@ export function MicTestWidget({
   const [isActive, setIsActive] = useState(false);
   const [rms, setRms] = useState(0);
   const [isSpeaking, setIsSpeaking] = useState(false);
-  const [heardAudio, setHeardAudio] = useState(false);
+  const [isPlaybackActive, setIsPlaybackActive] = useState(false);
   const streamRef = useRef<MediaStream | null>(null);
   const analysisStreamRef = useRef<MediaStream | null>(null);
   const previewStreamRef = useRef<MediaStream | null>(null);
@@ -52,6 +58,7 @@ export function MicTestWidget({
   const processorRef = useRef<LocalAudioProcessorHandle | null>(null);
   const rafRef = useRef<number>(0);
   const startRequestRef = useRef(0);
+  const activeConfigRef = useRef<string | null>(null);
   const meterStateRef = useRef({
     smoothedRms: 0,
     isSpeaking: false,
@@ -59,6 +66,10 @@ export function MicTestWidget({
   });
 
   const threshold = getVoiceActivityThreshold(autoSensitivity, sensitivity);
+  const thresholdRef = useRef(threshold);
+  useEffect(() => {
+    thresholdRef.current = threshold;
+  }, [threshold]);
   const barPercent = Math.min(100, (rms / 50) * 100);
   const thresholdPercent = Math.min(100, (threshold / 50) * 100);
 
@@ -132,24 +143,22 @@ export function MicTestWidget({
       analyserRef.current = null;
       if (!options?.preserveUi) {
         resetMeterState();
-        setHeardAudio(false);
         setIsActive(false);
       }
+      setIsPlaybackActive(false);
+      if (!options?.preserveUi) activeConfigRef.current = null;
     },
     [resetMeterState],
   );
 
   const startTest = useCallback(
-    async (options?: { preserveUi?: boolean }) => {
+    async (options?: StartTestOptions) => {
       const requestId = startRequestRef.current + 1;
       startRequestRef.current = requestId;
+      const shouldPlay = options?.playback ?? false;
 
       // Keep the loopback panel visually stable while we rebuild the processing path.
       stopTest({ preserveUi: options?.preserveUi, cancelPendingStart: false });
-      if (!options?.preserveUi) {
-        setHeardAudio(false);
-      }
-
       const resources: DetachedTestResources = {
         stream: null,
         analysisStream: null,
@@ -161,13 +170,9 @@ export function MicTestWidget({
 
       try {
         const capture = resolveCaptureAudioProcessing(processing);
-        const useExact =
-          inputDeviceId &&
-          inputDeviceId !== "default" &&
-          !inputDeviceId.startsWith("native:");
-        const stream = await navigator.mediaDevices.getUserMedia({
+        const stream = await getAudioCaptureStream({
+          deviceId: inputDeviceId,
           audio: {
-            deviceId: useExact ? { exact: inputDeviceId } : undefined,
             noiseSuppression: capture.noiseSuppression,
             echoCancellation: capture.echoCancellation,
             autoGainControl: capture.autoGainControl,
@@ -181,52 +186,61 @@ export function MicTestWidget({
         const analysisStream =
           processor?.createMonitorStream() ??
           new MediaStream([stream.getAudioTracks()[0].clone()]);
-        const previewStream =
-          processor?.createMonitorStream() ??
-          new MediaStream([stream.getAudioTracks()[0].clone()]);
         resources.analysisStream = analysisStream;
+        const previewStream = shouldPlay
+          ? (processor?.createMonitorStream() ??
+            new MediaStream([stream.getAudioTracks()[0].clone()]))
+          : null;
         resources.previewStream = previewStream;
 
         const ctx = new AudioContext();
+        resources.audioContext = ctx;
         const analyser = ctx.createAnalyser();
         analyser.fftSize = 512;
         analyser.smoothingTimeConstant = 0.3;
         const source = ctx.createMediaStreamSource(analysisStream);
         source.connect(analyser);
+        const silentOutput = ctx.createGain();
+        silentOutput.gain.value = 0;
+        analyser.connect(silentOutput);
+        silentOutput.connect(ctx.destination);
         ctx.resume().catch(() => {});
-        resources.audioContext = ctx;
 
-        const previewAudio = new Audio();
-        previewAudio.autoplay = true;
-        previewAudio.muted = false;
-        (
-          previewAudio as HTMLAudioElement & { playsInline?: boolean }
-        ).playsInline = true;
-        previewAudio.srcObject = previewStream;
-        resources.previewAudio = previewAudio;
+        if (shouldPlay && previewStream) {
+          const previewAudio = new Audio();
+          resources.previewAudio = previewAudio;
+          previewAudio.autoplay = true;
+          previewAudio.muted = false;
+          (
+            previewAudio as HTMLAudioElement & { playsInline?: boolean }
+          ).playsInline = true;
+          previewAudio.srcObject = previewStream;
 
-        const sinkId =
-          outputDeviceId === "default" || outputDeviceId.startsWith("native:")
-            ? ""
-            : outputDeviceId;
-        const sinkable = previewAudio as HTMLAudioElement & {
-          setSinkId?: (nextSinkId: string) => Promise<void>;
-        };
-        if (typeof sinkable.setSinkId === "function") {
-          await sinkable.setSinkId(sinkId).catch(() => {});
+          const sinkId =
+            outputDeviceId === "default" || outputDeviceId.startsWith("native:")
+              ? ""
+              : outputDeviceId;
+          const sinkable = previewAudio as HTMLAudioElement & {
+            setSinkId?: (nextSinkId: string) => Promise<void>;
+          };
+          if (typeof sinkable.setSinkId === "function") {
+            await sinkable.setSinkId(sinkId).catch(() => {});
+          }
+          await previewAudio
+            .play()
+            .then(() => {
+              if (startRequestRef.current === requestId) {
+                setIsPlaybackActive(true);
+              }
+            })
+            .catch(() => {
+              if (startRequestRef.current === requestId) {
+                setIsPlaybackActive(false);
+              }
+            });
+        } else {
+          setIsPlaybackActive(false);
         }
-        await previewAudio
-          .play()
-          .then(() => {
-            if (startRequestRef.current === requestId) {
-              setHeardAudio(true);
-            }
-          })
-          .catch(() => {
-            if (!options?.preserveUi && startRequestRef.current === requestId) {
-              setHeardAudio(false);
-            }
-          });
 
         if (startRequestRef.current !== requestId) {
           clearDetachedResources(resources);
@@ -237,7 +251,7 @@ export function MicTestWidget({
         processorRef.current = processor;
         analysisStreamRef.current = analysisStream;
         previewStreamRef.current = previewStream;
-        previewAudioRef.current = previewAudio;
+        previewAudioRef.current = resources.previewAudio;
         audioCtxRef.current = ctx;
         analyserRef.current = analyser;
 
@@ -258,11 +272,12 @@ export function MicTestWidget({
                 currentRms * RMS_SMOOTHING
               : currentRms;
           const now = performance.now();
-          const exitThreshold = threshold * SPEAKING_EXIT_RATIO;
+          const currentThreshold = thresholdRef.current;
+          const exitThreshold = currentThreshold * SPEAKING_EXIT_RATIO;
           let nextSpeaking = previousMeterState.isSpeaking;
           let lastSpeechAt = previousMeterState.lastSpeechAt;
 
-          if (smoothedRms >= threshold) {
+          if (smoothedRms >= currentThreshold) {
             nextSpeaking = true;
             lastSpeechAt = now;
           } else if (
@@ -292,6 +307,7 @@ export function MicTestWidget({
       } catch (error) {
         if (startRequestRef.current === requestId) {
           log.error("Failed to start mic test:", error);
+          clearDetachedResources(resources);
           stopTest({ cancelPendingStart: true });
         } else {
           clearDetachedResources(resources);
@@ -304,15 +320,17 @@ export function MicTestWidget({
       outputDeviceId,
       processing,
       stopTest,
-      threshold,
     ],
   );
 
   useEffect(() => {
     if (!isActive) return;
+    const configKey = `${inputDeviceId}:${outputDeviceId}:${processingSignature}`;
+    if (activeConfigRef.current === configKey) return;
+    activeConfigRef.current = configKey;
 
     const timeoutId = window.setTimeout(() => {
-      startTest({ preserveUi: true }).catch(() => {});
+      startTest({ playback: true, preserveUi: true }).catch(() => {});
     }, 120);
 
     return () => window.clearTimeout(timeoutId);
@@ -325,91 +343,59 @@ export function MicTestWidget({
   }, [stopTest]);
 
   return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <Activity size={14} className="text-emerald-400" />
-          <span className="text-[11px] font-bold uppercase tracking-wider text-rm-text-muted">
-            Mic Test
-          </span>
-        </div>
-        <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-rm-text-muted/80">
-          <Headphones size={12} className="text-rm-text-muted/70" />
-          Headphones Recommended
-        </div>
-      </div>
+    <div className="flex min-w-0 items-center gap-3">
+      <button
+        type="button"
+        onClick={() => {
+          if (isPlaybackActive) {
+            stopTest({ cancelPendingStart: true });
+          } else {
+            startTest({ playback: true }).catch(() => {});
+          }
+        }}
+        className={`shrink-0 rounded-lg border px-4 py-2 text-sm font-semibold transition-colors active:scale-[0.96] ${
+          isPlaybackActive
+            ? "border-red-500/30 bg-red-500/10 text-red-300 hover:bg-red-500/20"
+            : "border-rm-accent bg-rm-accent text-white hover:bg-rm-accent/90"
+        }`}
+      >
+        <span className="flex items-center gap-1.5">
+          {isPlaybackActive ? <Square size={12} /> : <Mic2 size={12} />}
+          {isPlaybackActive ? "Stop testing" : "Mic Test"}
+        </span>
+      </button>
 
-      <div className="rounded-xl border border-rm-border bg-rm-bg-elevated/40 p-3">
-        <div className="flex items-center gap-3">
-          <button
-            type="button"
-            onClick={() => {
-              if (isActive) {
-                stopTest({ cancelPendingStart: true });
-              } else {
-                startTest().catch(() => {});
-              }
-            }}
-            className={`shrink-0 rounded-lg border px-3 py-2 text-xs font-bold transition-all ${
-              isActive
-                ? "border-red-500/30 bg-red-500/10 text-red-300 hover:bg-red-500/20"
-                : "border-rm-border bg-rm-bg-surface text-rm-text hover:bg-rm-bg-hover"
-            }`}
-          >
-            <span className="flex items-center gap-1.5">
-              {isActive ? <Square size={12} /> : <Mic2 size={12} />}
-              {isActive ? "Stop" : "Test"}
-            </span>
-          </button>
+      <div
+        className="flex min-w-0 flex-1 items-center gap-1.5"
+        aria-label="Microphone test level"
+      >
+        {Array.from({ length: METER_BARS }, (_, index) => {
+          const start = (index / METER_BARS) * 100;
+          const end = ((index + 1) / METER_BARS) * 100;
+          const isFilled = isActive && barPercent >= start;
+          const marksThreshold =
+            isActive &&
+            thresholdPercent >= start &&
+            (thresholdPercent < end ||
+              (index === METER_BARS - 1 && thresholdPercent === 100));
 
-          <div className="flex min-w-0 flex-1 items-center gap-1.5">
-            {Array.from({ length: METER_BARS }, (_, index) => {
-              const start = (index / METER_BARS) * 100;
-              const end = ((index + 1) / METER_BARS) * 100;
-              const isFilled = isActive && barPercent >= start;
-              const marksThreshold =
-                !autoSensitivity &&
-                thresholdPercent >= start &&
-                thresholdPercent < end;
-
-              return (
-                <div
-                  key={index}
-                  className={`h-5 flex-1 rounded-full transition-all ${
-                    marksThreshold
-                      ? "bg-amber-400/90 shadow-[0_0_10px_rgba(251,191,36,0.28)]"
-                      : isFilled
-                        ? isSpeaking
-                          ? "bg-emerald-400/90 shadow-[0_0_10px_rgba(74,222,128,0.28)]"
-                          : "bg-sky-400/80"
-                        : "bg-rm-bg-surface"
-                  }`}
-                />
-              );
-            })}
-          </div>
-        </div>
-
-        <div className="mt-3 flex items-center justify-between gap-3 text-[11px]">
-          <span className="text-rm-text-muted">
-            {isActive
-              ? heardAudio
-                ? "You are hearing the current outbound mic processing in real time."
-                : "Live meter running. Browser blocked local playback, but the processing path is active."
-              : "Start a loopback test to hear how your microphone sounds after cleanup."}
-          </span>
-          <span
-            className={`shrink-0 font-bold uppercase tracking-wider ${
-              isActive
-                ? isSpeaking
-                  ? "text-emerald-300"
-                  : "text-sky-300"
-                : "text-rm-text-muted/70"
-            }`}
-          >
-            {isActive ? (isSpeaking ? "Speaking" : "Listening") : "Idle"}
-          </span>
-        </div>
+          return (
+            <div
+              key={index}
+              className={`h-1.5 flex-1 rounded-sm transition-colors ${
+                !isActive
+                  ? "bg-rm-bg-elevated"
+                  : marksThreshold
+                    ? "bg-amber-400/90"
+                    : isFilled
+                      ? isSpeaking
+                        ? "bg-emerald-400/90"
+                        : "bg-sky-400/80"
+                      : "bg-rm-bg-surface"
+              }`}
+            />
+          );
+        })}
       </div>
     </div>
   );

@@ -142,6 +142,38 @@ describe("VoiceGateway", () => {
     gateway.disconnect();
   });
 
+  it("emits remote client disconnects so speaking state can be cleared", async () => {
+    mocks.fetchSocketProtocols.mockResolvedValue([
+      "ralph.realtime.v1",
+      "ralph.ticket.test",
+    ]);
+    const gateway = new VoiceGateway();
+    const onDisconnect = vi.fn();
+    gateway.on("client-disconnect", onDisconnect);
+
+    gateway.connectVoice(
+      "participant-1",
+      "voice-token",
+      "voice-server-channel",
+      (path) => `ws://meet.test${path}`,
+      { channelId: "channel", serverId: "server" },
+    );
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const socket = TestWebSocket.instances[0]!;
+    socket.onmessage?.({
+      data: JSON.stringify({
+        op: VoiceOpcode.ClientDisconnect,
+        d: { participant_id: "participant-remote" },
+      }),
+    } as MessageEvent);
+
+    expect(onDisconnect).toHaveBeenCalledWith({
+      participant_id: "participant-remote",
+    });
+    gateway.disconnect();
+  });
+
   it("flushes app events queued while the initial ticket is loading", async () => {
     mocks.fetchSocketProtocols.mockResolvedValue([
       "ralph.realtime.v1",

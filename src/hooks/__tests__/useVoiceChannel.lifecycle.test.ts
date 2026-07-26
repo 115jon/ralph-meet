@@ -57,7 +57,12 @@ const {
     readonly setClerkMapping = vi.fn();
     readonly deleteClerkMapping = vi.fn();
     readonly publishTracks = vi.fn();
-    readonly replaceTrack = vi.fn();
+    readonly replaceTrack = vi.fn(
+      (
+        _trackName: string,
+        _newTrack: MediaStreamTrack | null,
+      ): Promise<boolean> => Promise.resolve(true),
+    );
     readonly setPublishedTrackEnabled = vi.fn();
     readonly unpublishTrack = vi.fn();
 
@@ -205,6 +210,7 @@ vi.mock("@/lib/voice-identity", () => ({
 }));
 vi.mock("@/lib/voice/noise-reduction", () => ({
   createLocalAudioProcessor: vi.fn(),
+  isNoiseReductionProviderSupported: vi.fn(() => false),
   resolveCaptureAudioProcessing: vi.fn(() => ({
     noiseSuppression: true,
     echoCancellation: true,
@@ -684,7 +690,7 @@ describe("useVoiceChannel SFU lifecycle", () => {
       undefined,
       { label: "audio-actual-b", groupId: "group-actual-b" },
     );
-    expect(trackA.stop).not.toHaveBeenCalled();
+    expect(trackA.stop).toHaveBeenCalled();
     expect(processors[0]?.destroy).not.toHaveBeenCalled();
 
     hook.unmount();
@@ -824,6 +830,7 @@ describe("useVoiceChannel SFU lifecycle", () => {
     await waitFor(() => expect(sfu.publishTracks).toHaveBeenCalledTimes(1));
 
     rawTrack.track.enabled = false;
+    sfu.vad.start.mockClear();
     await act(async () => {
       sfu.emit("outbound-audio-stalled", true);
     });
@@ -835,6 +842,10 @@ describe("useVoiceChannel SFU lifecycle", () => {
       ),
     );
     expect(rawTrack.track.enabled).toBe(true);
+    await waitFor(() => expect(sfu.vad.start).toHaveBeenCalledTimes(1));
+    expect(sfu.vad.start.mock.lastCall?.[0].getAudioTracks()).toEqual([
+      rawTrack.track,
+    ]);
 
     sfu.publishTracks.mockClear();
     await act(async () => {
@@ -868,14 +879,14 @@ describe("useVoiceChannel SFU lifecycle", () => {
     });
     await waitFor(() => expect(sfu.publishTracks).toHaveBeenCalledTimes(1));
 
-    const replacement = deferred<void>();
+    const replacement = deferred<boolean>();
     sfu.replaceTrack.mockReturnValueOnce(replacement.promise);
     sfu.setPublishedTrackEnabled.mockClear();
     await act(async () => {
       sfu.emit("outbound-audio-stalled", true);
       settingsState.getSettings().isMuted = true;
       hook.rerender();
-      replacement.resolve();
+      replacement.resolve(true);
     });
 
     await waitFor(() =>
@@ -921,6 +932,58 @@ describe("useVoiceChannel SFU lifecycle", () => {
     });
 
     expect(hook.result.current.speakingUsers.self).toBe(true);
+    hook.unmount();
+  });
+
+  it("clears mapped remote speaking state when disconnect reports speaking off", async () => {
+    const rawTrack = createTrack("audio", "raw-audio");
+    const rawStream = createStream([rawTrack.track]);
+    vi.mocked(acquireLocalStream).mockResolvedValue(rawStream);
+    vi.mocked(createLocalAudioProcessor).mockResolvedValue(
+      createProcessor(rawStream),
+    );
+
+    const hook = renderHook(() =>
+      useVoiceChannel({ channelId: "channel", serverId: "server" }),
+    );
+    await act(async () => {
+      await hook.result.current.handleJoin();
+    });
+    const sfu = sfuInstances[0];
+    if (!sfu) throw new Error("SFU was not created");
+
+    const remote = {
+      id: "remote-uuid",
+      clerk_user_id: "user-remote",
+      name: "Remote",
+      self_mute: false,
+      self_deaf: false,
+      self_stream: false,
+      self_video: false,
+      suppress: false,
+      tracks: [],
+    } as const;
+    const replacementRemote = { ...remote, id: "replacement-uuid" };
+    await act(async () => {
+      sfu.emit("joined", {
+        participantId: "self",
+        participants: [remote, replacementRemote],
+      });
+      sfu.emit("speaking", { participantId: remote.id, speaking: 1 });
+    });
+    expect(hook.result.current.speakingUsers[remote.clerk_user_id]).toBe(true);
+
+    await act(async () => {
+      sfu.emit("speaking", {
+        participantId: replacementRemote.id,
+        speaking: 0,
+      });
+      sfu.emit("speaking", { participantId: remote.id, speaking: 0 });
+    });
+    expect(hook.result.current.speakingUsers[remote.clerk_user_id]).toBe(
+      undefined,
+    );
+
     hook.unmount();
   });
 

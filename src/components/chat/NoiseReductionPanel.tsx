@@ -3,12 +3,10 @@ import { cn } from "@/lib/utils";
 import {
   NOISE_REDUCTION_PROVIDER_LABELS,
   isNoiseReductionProviderSupported,
-  type VoiceAudioProcessingSettings,
 } from "@/lib/voice/noise-reduction";
 import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
 import { AudioWaveform, ShieldCheck } from "lucide-react";
 import { useShallow } from "zustand/shallow";
-import { MicTestWidget } from "./MicTestWidget";
 
 interface NoiseReductionPanelProps {
   settingsUserId?: string | null;
@@ -33,15 +31,6 @@ export function NoiseReductionPanel({
   const providerLabel =
     NOISE_REDUCTION_PROVIDER_LABELS[settings.noiseReductionProvider] ??
     "RNNoise";
-
-  const processing: VoiceAudioProcessingSettings = {
-    noiseSuppression: settings.noiseSuppression,
-    echoCancellation: settings.echoCancellation,
-    autoSensitivity: settings.autoSensitivity,
-    streamHighFidelity: settings.streamHighFidelity,
-    noiseReductionEnabled: supported ? settings.noiseReductionEnabled : false,
-    noiseReductionProvider: settings.noiseReductionProvider,
-  };
 
   return (
     <div
@@ -104,16 +93,6 @@ export function NoiseReductionPanel({
           provider-based noise suppression here yet.
         </div>
       )}
-
-      <div className="mt-4">
-        <MicTestWidget
-          sensitivity={settings.sensitivity}
-          autoSensitivity={settings.autoSensitivity}
-          inputDeviceId={settings.inputDeviceId}
-          outputDeviceId={settings.outputDeviceId}
-          processing={processing}
-        />
-      </div>
 
       <div className="mt-4 flex items-center justify-between rounded-lg border border-rm-border bg-rm-bg-elevated/30 px-3 py-2">
         <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-rm-text-muted">

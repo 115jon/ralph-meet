@@ -348,6 +348,10 @@ export interface SpeakingPayloadServer {
   ssrc?: number;
 }
 
+export interface ClientDisconnectPayload {
+  participant_id: string;
+}
+
 export type VoiceStateUpdatePayload =
   | {
       participant: VoiceState;
@@ -936,6 +940,7 @@ export type ServerMessage =
   | { op: VoiceOpcode.Resumed; d: ResumedPayload }
   | { op: VoiceOpcode.NegotiationDone; d: NegotiationDonePayload }
   | { op: VoiceOpcode.Speaking; d: SpeakingPayloadServer }
+  | { op: VoiceOpcode.ClientDisconnect; d: ClientDisconnectPayload }
   | { op: VoiceOpcode.VoiceStateUpdate; d: VoiceStateUpdatePayload }
   | { op: VoiceOpcode.Video; d: VideoPayloadServer }
   | { op: VoiceOpcode.StopTracks; d: StopTracksPayloadServer }

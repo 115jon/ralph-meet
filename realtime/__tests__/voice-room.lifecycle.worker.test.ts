@@ -2373,6 +2373,54 @@ describe("VoiceRoom lifecycle", () => {
     });
   });
 
+  it("clears persisted speaking state when a publisher disconnects", async () => {
+    const roomName = crypto.randomUUID();
+    const publisherId = crypto.randomUUID();
+    const publisher = await openVoiceSocket(roomName, "publisher-user");
+    await identifyVoiceSocket(
+      publisher,
+      publisherId,
+      roomName,
+      "publisher-user",
+    );
+
+    const observer = await openVoiceSocket(roomName, "observer-user");
+    await identifyVoiceSocket(
+      observer,
+      crypto.randomUUID(),
+      roomName,
+      "observer-user",
+    );
+
+    publisher.send(
+      JSON.stringify({
+        op: 5,
+        d: { speaking: 1 },
+      }),
+    );
+    await expect(nextMessageWithOpcode(observer, 5)).resolves.toMatchObject({
+      d: { participant_id: publisherId, speaking: 1 },
+    });
+
+    publisher.close();
+    await expect(nextMessageWithOpcode(observer, 5)).resolves.toMatchObject({
+      d: { participant_id: publisherId, speaking: 0 },
+    });
+
+    const room = env.VOICE_ROOM.get(env.VOICE_ROOM.idFromName(roomName));
+    await runInDurableObject(room, (_instance, state) => {
+      const row = [
+        ...state.storage.sql.exec(
+          "SELECT speaking FROM participants WHERE id = ?",
+          publisherId,
+        ),
+      ][0];
+      expect(row?.speaking).toBe(0);
+    });
+
+    observer.close();
+  });
+
   it("ignores stale authenticated state and broadcast opcodes after reconnect", async () => {
     const roomName = crypto.randomUUID();
     const participantId = crypto.randomUUID();

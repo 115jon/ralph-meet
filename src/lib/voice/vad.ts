@@ -19,6 +19,40 @@ export function getVoiceActivityThreshold(
   return Math.max(0.1, Math.min(50, threshold));
 }
 
+/** Map the VAD RMS scale back to the manual sensitivity slider position. */
+export function getVoiceActivityLevelPercent(rms: number): number {
+  if (rms <= 0) return 0;
+  const decibels = 20 * Math.log10(rms / 100);
+  return Math.max(0, Math.min(100, decibels + 100));
+}
+
+/** Calculate RMS from Web Audio time-domain samples in the VAD's 0..100 scale. */
+export function calculateTimeDomainRms(
+  data: Float32Array | Uint8Array,
+): number {
+  if (data.length === 0) return 0;
+
+  if (data instanceof Float32Array) {
+    let mean = 0;
+    for (const sample of data) mean += sample;
+    mean /= data.length;
+
+    let sum = 0;
+    for (const sample of data) {
+      const centered = sample - mean;
+      sum += centered * centered;
+    }
+    return Math.sqrt(sum / data.length) * 100;
+  }
+
+  let sum = 0;
+  for (const sample of data) {
+    const normalized = (sample - 128) / 128;
+    sum += normalized * normalized;
+  }
+  return Math.sqrt(sum / data.length) * 100;
+}
+
 /** Callbacks from the VAD to the owning SFUClient */
 export interface VADCallbacks {
   /** Emit speaking / vad-speaking events */
@@ -68,12 +102,12 @@ export class VoiceActivityDetector {
   /**
    * Start VAD on a local audio stream.
    */
-  start(stream: MediaStream): void {
+  start(stream: MediaStream): boolean {
     this.stop();
     const generation = ++this.lifecycleGeneration;
 
     const audioTrack = stream.getAudioTracks()[0];
-    if (!audioTrack) return;
+    if (!audioTrack) return false;
 
     try {
       const context = new AudioContext();
@@ -114,7 +148,7 @@ export class VoiceActivityDetector {
         () => {},
       );
 
-      const dataArray = new Uint8Array(this.analyser.frequencyBinCount);
+      const dataArray = new Float32Array(this.analyser.frequencyBinCount);
 
       // Listen for context state changes so we can apply the pending gate
       // when the context transitions to 'running' (user gesture on Firefox).
@@ -166,14 +200,15 @@ export class VoiceActivityDetector {
           this.contextResumed = true;
         }
 
-        this.analyser.getByteTimeDomainData(dataArray);
-
-        let sum = 0;
-        for (let i = 0; i < dataArray.length; i++) {
-          const val = (dataArray[i] - 128) / 128.0;
-          sum += val * val;
+        let rms: number;
+        if (typeof this.analyser.getFloatTimeDomainData === "function") {
+          this.analyser.getFloatTimeDomainData(dataArray);
+          rms = calculateTimeDomainRms(dataArray);
+        } else {
+          const byteData = new Uint8Array(dataArray.length);
+          this.analyser.getByteTimeDomainData(byteData);
+          rms = calculateTimeDomainRms(byteData);
         }
-        const rms = Math.sqrt(sum / dataArray.length) * 100;
         this.lastRms = rms;
         const now = Date.now();
 
@@ -223,13 +258,16 @@ export class VoiceActivityDetector {
       }, 50);
 
       if (DEBUG) vadLog.info("Started voice activity detection");
+      return true;
     } catch (err) {
+      this.stop();
       vadLog.error("Failed to start:", err);
+      return false;
     }
   }
 
   /** Reconcile speaking signaling after a participant ID becomes available. */
-  refreshSpeakingState(): void {
+  refreshSpeakingState(force = false): void {
     const flags =
       (this.microphoneSpeaking
         ? SpeakingFlags.MICROPHONE
@@ -247,6 +285,7 @@ export class VoiceActivityDetector {
     }
 
     const signalingChanged =
+      force ||
       this.lastSentParticipantId !== participantId ||
       this.lastSentFlags !== flags;
     if (

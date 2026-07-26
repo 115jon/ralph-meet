@@ -1,5 +1,6 @@
 import {
   VoiceOpcode,
+  type ClientDisconnectPayload,
   type NegotiationDonePayload,
   type ServerMessage,
   type SessionDescriptionPayload,
@@ -30,6 +31,7 @@ export interface VoiceGatewayEvents extends BaseGatewayEvents {
   "session-description": SessionDescriptionPayload;
   "negotiation-done": NegotiationDonePayload;
   speaking: { participantId: string; speaking: number };
+  "client-disconnect": ClientDisconnectPayload;
   "stop-tracks": { track_names: string[] };
   "app-event": Record<string, unknown>;
   error: {
@@ -231,6 +233,14 @@ export class VoiceGateway extends BaseGateway<VoiceGatewayEvents> {
           participantId: speak.participant_id,
           speaking: speak.speaking,
         });
+        break;
+      }
+
+      case VoiceOpcode.ClientDisconnect: {
+        const disconnect = msg.d as ClientDisconnectPayload;
+        if (disconnect.participant_id !== this.participantId) {
+          this.emit("client-disconnect", disconnect);
+        }
         break;
       }
 

@@ -2126,7 +2126,7 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
         roomLog.info(
           `Pending reconnect already expired for ${d.participant_id}, forcing fresh media state`,
         );
-        await this.purgeParticipantState(d.participant_id);
+        await this.purgeParticipantState(d.participant_id, ws, true);
       }
     } else if (clerkUserId) {
       const staleCursor = this.sql.exec(
@@ -2138,27 +2138,7 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
         roomLog.info(
           `Fresh join for clerk=${clerkUserId}, cleaning up stale SFU sessions from old participant=${oldPid}`,
         );
-        this.ctx.waitUntil(this.cleanupSfuSessionsByParticipantId(oldPid));
-
-        const trackNames = [
-          ...this.sql.exec(
-            "SELECT track_name FROM tracks WHERE participant_id = ?",
-            oldPid,
-          ),
-        ].map((r) => r.track_name as string);
-        if (trackNames.length > 0) {
-          this.broadcast({
-            op: Op.StopTracks,
-            d: { participant_id: oldPid, track_names: trackNames },
-          });
-        }
-
-        this.sql.exec(
-          "DELETE FROM pending_reconnects WHERE participant_id = ?",
-          oldPid,
-        );
-        this.sql.exec("DELETE FROM tracks WHERE participant_id = ?", oldPid);
-        this.sql.exec("DELETE FROM participants WHERE id = ?", oldPid);
+        await this.purgeParticipantState(oldPid, ws, true);
       }
     }
 
@@ -2168,7 +2148,7 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
     // before returning VoiceReady(false), so the next publication starts from
     // fresh SFU sessions and cannot advertise dead remote state indefinitely.
     if (!didTransfer) {
-      await this.purgeParticipantState(d.participant_id);
+      await this.purgeParticipantState(d.participant_id, ws, true);
     }
 
     // Evict any existing LIVE session for the same participant_id OR clerk_user_id
@@ -3879,11 +3859,23 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
 
     const pRows = [
       ...this.sql.exec(
-        "SELECT clerk_user_id, push_session_cam, push_session_screen, pull_session_id FROM participants WHERE id = ?",
+        "SELECT clerk_user_id, push_session_cam, push_session_screen, pull_session_id, speaking FROM participants WHERE id = ?",
         participantId,
       ),
     ];
     if (pRows.length === 0) return;
+
+    const wasSpeaking = Number(pRows[0].speaking ?? 0) !== 0;
+    if (wasSpeaking) {
+      this.sql.exec(
+        "UPDATE participants SET speaking = 0 WHERE id = ?",
+        participantId,
+      );
+      this.broadcast({
+        op: Op.Speaking,
+        d: { participant_id: participantId, speaking: 0 },
+      });
+    }
 
     // Broadcast leave
     this.broadcast({
@@ -4460,8 +4452,41 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
     );
   }
 
-  private async purgeParticipantState(participantId: string): Promise<void> {
-    await this.cleanupSfuSessionsByParticipantId(participantId);
+  private async purgeParticipantState(
+    participantId: string,
+    excludeWs?: WebSocket,
+    deferSfuCleanup = false,
+  ): Promise<void> {
+    const participantRows = [
+      ...this.sql.exec(
+        "SELECT speaking FROM participants WHERE id = ?",
+        participantId,
+      ),
+    ];
+    if (participantRows.length > 0) {
+      if (Number(participantRows[0].speaking ?? 0) !== 0) {
+        this.broadcast(
+          {
+            op: Op.Speaking,
+            d: { participant_id: participantId, speaking: 0 },
+          },
+          excludeWs,
+        );
+      }
+      this.broadcast(
+        {
+          op: Op.ClientDisconnect,
+          d: { participant_id: participantId },
+        },
+        excludeWs,
+      );
+    }
+
+    if (deferSfuCleanup) {
+      this.ctx.waitUntil(this.cleanupSfuSessionsByParticipantId(participantId));
+    } else {
+      await this.cleanupSfuSessionsByParticipantId(participantId);
+    }
     const didChangeStreamWatchers =
       this.clearStreamWatchersByParticipantId(participantId);
 
@@ -4472,10 +4497,13 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
       ),
     ].map((r) => r.track_name as string);
     if (trackNames.length > 0) {
-      this.broadcast({
-        op: Op.StopTracks,
-        d: { participant_id: participantId, track_names: trackNames },
-      });
+      this.broadcast(
+        {
+          op: Op.StopTracks,
+          d: { participant_id: participantId, track_names: trackNames },
+        },
+        excludeWs,
+      );
     }
 
     this.sql.exec(

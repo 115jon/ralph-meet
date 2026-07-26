@@ -119,6 +119,66 @@ describe("VoiceActivityDetector", () => {
     expect(sendSpeaking).toHaveBeenLastCalledWith(SpeakingFlags.NONE);
   });
 
+  it("applies threshold changes to the next live audio sample", () => {
+    const analyser = {
+      connect: vi.fn(),
+      disconnect: vi.fn(),
+      fftSize: 0,
+      frequencyBinCount: 256,
+      getByteTimeDomainData: vi.fn((data: Uint8Array) => data.fill(150)),
+      smoothingTimeConstant: 0,
+    };
+    const gain = {
+      connect: vi.fn(),
+      disconnect: vi.fn(),
+      gain: { value: 1 },
+    };
+    const source = { connect: vi.fn(), disconnect: vi.fn() };
+    const context = {
+      addEventListener: vi.fn(),
+      close: vi.fn().mockResolvedValue(undefined),
+      createAnalyser: vi.fn(() => analyser),
+      createGain: vi.fn(() => gain),
+      createMediaStreamSource: vi.fn(() => source),
+      destination: {},
+      resume: vi.fn().mockResolvedValue(undefined),
+      state: "running",
+    };
+    vi.stubGlobal(
+      "AudioContext",
+      vi.fn(function () {
+        return context;
+      }),
+    );
+
+    const track = {
+      clone: vi.fn(() => track),
+      stop: vi.fn(),
+    } as unknown as MediaStreamTrack;
+    const onSpeakingChange = vi.fn();
+    const detector = new VoiceActivityDetector({
+      getAudioTransceiver: () => undefined,
+      getParticipantId: () => "participant",
+      onSpeakingChange,
+      sendSpeaking: vi.fn(),
+    });
+
+    detector.setThreshold(20);
+    detector.start(new TestMediaStream([track]) as unknown as MediaStream);
+    vi.advanceTimersByTime(50);
+    expect(detector.getCurrentRMS()).toBeCloseTo(17.19, 1);
+    expect(onSpeakingChange).not.toHaveBeenCalled();
+
+    detector.setThreshold(10);
+    vi.advanceTimersByTime(50);
+    expect(onSpeakingChange).toHaveBeenCalledWith(
+      true,
+      SpeakingFlags.MICROPHONE,
+    );
+
+    detector.stop();
+  });
+
   it("preserves both speaking bits while microphone and soundboard overlap", () => {
     let microphoneAudio = true;
     const analyser = {
