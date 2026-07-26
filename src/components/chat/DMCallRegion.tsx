@@ -32,6 +32,7 @@ import {
   type MouseEvent,
 } from "react";
 import { AvatarImage } from "./AvatarImage";
+import InlineEmojiText from "./InlineEmojiText";
 import { VoiceControls } from "../voice/VoiceControls";
 import { VoiceGrid } from "../voice/VoiceGrid";
 
@@ -566,7 +567,7 @@ export function DMCallRegion({ channelId }: { channelId: string }) {
 
                     <div className="mt-4 text-center">
                       <p className="text-sm font-bold text-white">
-                        {item.name}
+                        <InlineEmojiText text={item.name} />
                       </p>
                       {item.isLocal && (
                         <p className="text-[11px] font-medium text-white/50">

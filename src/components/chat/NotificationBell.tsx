@@ -12,6 +12,7 @@ import { useChatActions, useChatStore } from "@/stores/chat-store";
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { AvatarImage } from "./AvatarImage";
 import { Bell, Hash, X } from "./Icons";
+import InlineEmojiText from "./InlineEmojiText";
 
 // ── Notification Bell — toolbar icon + dropdown ─────────────────────────────
 
@@ -251,7 +252,7 @@ const NotificationRow = memo(function NotificationRow({
       <div className="flex-1 min-w-0">
         <p className="text-[12px] leading-tight">
           <span className="font-semibold text-rm-text-primary">
-            {authorInfo.displayName}
+            <InlineEmojiText text={authorInfo.displayName} />
           </span>{" "}
           <span className="text-rm-text-muted">{label}</span>
         </p>
@@ -261,8 +262,13 @@ const NotificationRow = memo(function NotificationRow({
           <div className="flex items-center gap-1 mt-0.5">
             <Hash className="h-2.5 w-2.5 text-rm-text-muted opacity-60" />
             <span className="text-[10px] text-rm-text-muted truncate">
-              {notification.channel_name ?? "channel"}
-              {notification.server_name && ` · ${notification.server_name}`}
+              <InlineEmojiText
+                text={`${notification.channel_name ?? "channel"}${
+                  notification.server_name
+                    ? ` · ${notification.server_name}`
+                    : ""
+                }`}
+              />
             </span>
           </div>
         )}
@@ -270,7 +276,7 @@ const NotificationRow = memo(function NotificationRow({
         {/* Message snippet */}
         {notification.content && (
           <p className="mt-1 text-[11px] text-rm-text-muted/80 line-clamp-2 leading-relaxed">
-            {notification.content}
+            <InlineEmojiText text={notification.content} />
           </p>
         )}
 

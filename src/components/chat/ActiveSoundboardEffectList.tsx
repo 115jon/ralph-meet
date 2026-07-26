@@ -1,4 +1,5 @@
 import { AvatarImage } from "@/components/chat/AvatarImage";
+import InlineEmojiText from "@/components/chat/InlineEmojiText";
 import { getDisplayInitial } from "@/lib/display-name";
 import { getAuthAssetUrl } from "@/lib/platform";
 import type { SFUClient } from "@/lib/sfu-client";
@@ -175,9 +176,12 @@ export function SoundboardPlaybackRow({
             )}
           </div>
           <div className="flex flex-col min-w-0">
-            <span className="truncate text-xs font-bold">{playback.name}</span>
+            <InlineEmojiText
+              text={playback.name}
+              className="truncate text-xs font-bold"
+            />
             <span className="text-[10px] font-normal text-rm-text-muted truncate">
-              {authorInfo.displayName}
+              <InlineEmojiText text={authorInfo.displayName} />
             </span>
           </div>
         </div>

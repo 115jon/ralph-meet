@@ -273,7 +273,7 @@ export default function ChannelSettingsModal({
                             <Hash className="h-3 w-3 opacity-40" />
                             Preview:{" "}
                             <span className="font-medium text-rm-text-secondary">
-                              {previewName || "—"}
+                              <InlineEmojiText text={previewName || "—"} />
                             </span>
                           </p>
                         )}

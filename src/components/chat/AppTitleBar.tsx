@@ -6,6 +6,7 @@ import { getAppTitleBarModel } from "./AppTitleBarModel";
 import { HomeIcon } from "./HomeIcon";
 import { Users } from "./Icons";
 import { useShallow } from "zustand/shallow";
+import InlineEmojiText from "./InlineEmojiText";
 
 export function AppTitleBarContent({ className }: { className?: string }) {
   const { servers, activeServerId, activeChannelId, dmHomeView } = useChatStore(
@@ -50,7 +51,9 @@ export function AppTitleBarContent({ className }: { className?: string }) {
           <HomeIcon className="h-4 w-4" />
         )}
       </span>
-      {model.label && <span className="truncate">{model.label}</span>}
+      {model.label && (
+        <InlineEmojiText text={model.label} className="truncate" />
+      )}
     </div>
   );
 }

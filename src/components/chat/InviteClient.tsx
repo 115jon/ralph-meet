@@ -1,4 +1,5 @@
 import { apiGet, apiPost } from "@/lib/api-client";
+import InlineEmojiText from "@/components/chat/InlineEmojiText";
 import { useNavigate, useParams } from "@tanstack/react-router";
 import { Check, Link2, Loader2, Users, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
@@ -119,7 +120,7 @@ export default function InviteClient() {
               </div>
               <div className="min-w-0 flex-1">
                 <h2 className="truncate text-lg font-bold text-rm-text">
-                  {invite.server.name}
+                  <InlineEmojiText text={invite.server.name} />
                 </h2>
                 <div className="flex items-center gap-1.5 text-sm text-rm-text-muted">
                   <Users className="h-3.5 w-3.5" />
@@ -135,7 +136,9 @@ export default function InviteClient() {
             <p className="text-xs text-rm-text-muted">
               Invited by{" "}
               <span className="font-semibold text-rm-text-secondary">
-                {invite.inviter.display_name ?? invite.inviter.username}
+                <InlineEmojiText
+                  text={invite.inviter.display_name ?? invite.inviter.username}
+                />
               </span>
             </p>
 
@@ -164,7 +167,8 @@ export default function InviteClient() {
               <Loader2 className="h-8 w-8 animate-spin text-rm-accent" />
             </div>
             <p className="text-sm font-medium text-rm-text">
-              Joining {invite?.server.name}...
+              Joining <InlineEmojiText text={invite?.server.name ?? ""} />
+              ...
             </p>
           </div>
         )}
@@ -177,7 +181,7 @@ export default function InviteClient() {
             </div>
             <div className="text-center">
               <h2 className="text-lg font-bold text-rm-text">
-                Joined {invite?.server.name}!
+                Joined <InlineEmojiText text={invite?.server.name ?? ""} />!
               </h2>
               <p className="mt-1 text-sm text-rm-text-muted">
                 Redirecting to chat...

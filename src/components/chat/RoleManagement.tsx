@@ -4,6 +4,7 @@ import type { Role } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useEffect, useReducer } from "react";
 import { Loader2, Plus, Settings2, Shield, Trash2 } from "./Icons";
+import InlineEmojiText from "./InlineEmojiText";
 
 interface RoleManagementProps {
   serverId: string;
@@ -283,7 +284,7 @@ export default function RoleManagement({ serverId }: RoleManagementProps) {
                 className="w-3 h-3 rounded-full shrink-0"
                 style={{ backgroundColor: role.color || "#94a3b8" }}
               />
-              <span className="truncate">{role.name}</span>
+              <InlineEmojiText text={role.name} className="truncate" />
             </button>
           ))}
           {state.editState.isCreating && (

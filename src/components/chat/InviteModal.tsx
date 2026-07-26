@@ -4,6 +4,7 @@ import { getWebOrigin } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 import { useEffect as _useEffect, useState } from "react";
 import { Check, Copy, Loader2, X } from "./Icons";
+import InlineEmojiText from "./InlineEmojiText";
 interface InviteModalProps {
   serverId: string;
   serverName: string;
@@ -82,7 +83,8 @@ export default function InviteModal({
           </button>
 
           <h2 className="mb-6 text-base font-semibold text-rm-text">
-            Invite people to <span className="text-primary">{serverName}</span>
+            Invite people to{" "}
+            <InlineEmojiText text={serverName} className="text-primary" />
           </h2>
 
           {!state.inviteCode ? (

@@ -1,4 +1,5 @@
 import { AvatarImage } from "@/components/chat/AvatarImage";
+import InlineEmojiText from "@/components/chat/InlineEmojiText";
 import { clog } from "@/lib/console-logger";
 import {
   Tooltip,
@@ -359,7 +360,7 @@ export function ListenTogetherNowPlayingCard({
                 <div className="h-5 w-5 shrink-0 overflow-hidden rounded-full bg-rm-bg-hover">
                   {requesterAvatar}
                 </div>
-                <span className="truncate">{requesterLine}</span>
+                <InlineEmojiText text={requesterLine} className="truncate" />
               </div>
             </div>
           </div>
@@ -498,7 +499,7 @@ export function ListenTogetherNowPlayingCard({
               <div className="h-5 w-5 shrink-0 overflow-hidden rounded-full bg-rm-bg-hover">
                 {requesterAvatar}
               </div>
-              <span className="truncate">{requesterLine}</span>
+              <InlineEmojiText text={requesterLine} className="truncate" />
             </div>
           </div>
         </div>

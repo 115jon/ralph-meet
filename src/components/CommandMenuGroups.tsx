@@ -1,4 +1,5 @@
 import { getAuthAssetUrl } from "@/lib/platform";
+import InlineEmojiText from "@/components/chat/InlineEmojiText";
 import type { AppTheme } from "@/lib/theme-preferences";
 import type { Channel, Server, User } from "@/lib/types";
 import { Command } from "cmdk";
@@ -46,7 +47,7 @@ export function CommandMenuServersGroup({
               server.name.charAt(0).toUpperCase()
             )}
           </div>
-          <span>{server.name}</span>
+          <InlineEmojiText text={server.name} />
           <ServerIcon className="ml-auto h-3.5 w-3.5 text-[var(--rm-text-ghost)]" />
         </Command.Item>
       ))}
@@ -78,9 +79,9 @@ export function CommandMenuTextChannelsGroup({
           className="flex cursor-pointer items-center gap-3 rounded-md px-3 py-2 text-sm text-[var(--rm-text-secondary)] aria-selected:bg-[var(--rm-bg-hover)] aria-selected:text-[var(--rm-text-primary)] transition-colors"
         >
           <Hash className="h-4 w-4 shrink-0 text-[var(--rm-text-muted)]" />
-          <span>{channel.name}</span>
+          <InlineEmojiText text={channel.name} />
           <span className="ml-auto text-xs text-[var(--rm-text-ghost)]">
-            {serverMap.get(channel.server_id!) ?? ""}
+            <InlineEmojiText text={serverMap.get(channel.server_id!) ?? ""} />
           </span>
         </Command.Item>
       ))}
@@ -112,9 +113,9 @@ export function CommandMenuVoiceChannelsGroup({
           className="flex cursor-pointer items-center gap-3 rounded-md px-3 py-2 text-sm text-[var(--rm-text-secondary)] aria-selected:bg-[var(--rm-bg-hover)] aria-selected:text-[var(--rm-text-primary)] transition-colors"
         >
           <Volume2 className="h-4 w-4 shrink-0 text-[var(--rm-text-muted)]" />
-          <span>{channel.name}</span>
+          <InlineEmojiText text={channel.name} />
           <span className="ml-auto text-xs text-[var(--rm-text-ghost)]">
-            {serverMap.get(channel.server_id!) ?? ""}
+            <InlineEmojiText text={serverMap.get(channel.server_id!) ?? ""} />
           </span>
         </Command.Item>
       ))}
@@ -159,7 +160,7 @@ export function CommandMenuDMsGroup({
                 <MessageSquare className="h-3 w-3 text-[var(--rm-text-muted)]" />
               )}
             </div>
-            <span>{displayName}</span>
+            <InlineEmojiText text={displayName} />
           </Command.Item>
         );
       })}

@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 import { useChatStore } from "@/stores/chat-store";
 import { useCallback, useEffect, useReducer, useRef } from "react";
 import { Check, Copy, Hash, Link, Loader2, Plus, X } from "./Icons";
+import InlineEmojiText from "./InlineEmojiText";
 
 interface InvitesTabProps {
   serverId: string;
@@ -431,7 +432,8 @@ export default function InvitesTab({ serverId, serverName }: InvitesTabProps) {
           <Link className="h-10 w-10 mb-3 text-rm-text-muted/30" />
           <p className="text-sm text-rm-text-muted">No active invites</p>
           <p className="text-xs text-rm-text-muted/60 mt-1">
-            Create an invite link to let others join {serverName}
+            Create an invite link to let others join{" "}
+            <InlineEmojiText text={serverName} />
           </p>
         </div>
       ) : (

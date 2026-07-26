@@ -146,7 +146,7 @@ export default function ChannelInviteModal({
 
             <h2 className="text-base font-bold text-rm-text">
               Invite friends to{" "}
-              <span className="text-primary">{serverName}</span>
+              <InlineEmojiText text={serverName} className="text-primary" />
             </h2>
             <p className="mt-0.5 flex items-center gap-1 text-sm text-rm-text-muted">
               Recipients will land in <Hash className="h-3 w-3" />
@@ -212,7 +212,7 @@ export default function ChannelInviteModal({
                     {/* Name */}
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-semibold text-rm-text truncate">
-                        {displayName}
+                        <InlineEmojiText text={displayName} />
                       </p>
                     </div>
 

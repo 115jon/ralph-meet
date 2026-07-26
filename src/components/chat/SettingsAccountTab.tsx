@@ -10,6 +10,7 @@ import {
   ProfileSurfaceBackdrop,
 } from "@/components/chat/ProfilePreviewPrimitives";
 import { AvatarImage } from "@/components/chat/AvatarImage";
+import InlineEmojiText from "@/components/chat/InlineEmojiText";
 import { CollectiblesCatalogModal } from "@/components/chat/CollectiblesCatalogModal";
 import { ProfileCollectiblesLayer } from "@/components/chat/ProfileCollectiblesLayer";
 import { ProfileFrameLayer } from "@/components/chat/ProfileFrameLayer";
@@ -4571,7 +4572,11 @@ export default function SettingsAccountTab({
                             </div>
                             <div className="min-w-0">
                               <p className="truncate text-sm font-bold text-rm-text">
-                                {candidate.display_name || candidate.username}
+                                <InlineEmojiText
+                                  text={
+                                    candidate.display_name || candidate.username
+                                  }
+                                />
                               </p>
                               <p className="truncate text-xs text-rm-text-muted">
                                 @{candidate.username}

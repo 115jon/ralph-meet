@@ -150,7 +150,7 @@ export function VoiceHeader({
                     focusedItem ? "text-white" : "text-rm-text/90",
                   )}
                 >
-                  {focusedLabel}
+                  <InlineEmojiText text={focusedLabel} />
                 </span>
               </div>
               {focusedWatchers.length > 0 && (

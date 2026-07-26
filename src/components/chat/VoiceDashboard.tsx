@@ -6,6 +6,7 @@ import {
 } from "@/components/ui/tooltip";
 import { CameraSettingsModal } from "@/components/CameraSettingsModal";
 import { VoiceDetailsPanel } from "@/components/voice/VoiceDetailsPanel";
+import InlineEmojiText from "@/components/chat/InlineEmojiText";
 import { StreamWatcherList } from "@/components/voice/StreamWatcherList";
 import type { GridItem } from "@/components/voice/types";
 import { useVoiceStats } from "@/hooks/useVoiceStats";
@@ -382,7 +383,9 @@ export function VoiceDashboard({
                   Voice Connected
                 </span>
                 <span className="text-[12px] font-medium text-rm-text-muted/80 truncate max-w-[140px] group-hover/voice-status:text-rm-text-muted">
-                  {voiceChannelName || "General"} / {serverName}
+                  <InlineEmojiText
+                    text={`${voiceChannelName || "General"} / ${serverName}`}
+                  />
                 </span>
               </div>
             </button>

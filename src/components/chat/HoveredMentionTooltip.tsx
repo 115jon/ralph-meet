@@ -1,5 +1,6 @@
 import { getAuthAssetUrl } from "@/lib/platform";
 import { AvatarImage } from "./AvatarImage";
+import InlineEmojiText from "./InlineEmojiText";
 
 export function HoveredMentionTooltip({
   hoveredMember,
@@ -34,7 +35,7 @@ export function HoveredMentionTooltip({
           )}
         </div>
         <span className="text-xs font-semibold text-rm-text-primary">
-          {displayName}
+          <InlineEmojiText text={displayName} />
         </span>
       </div>
       <div className="h-1.5 w-3 -mt-[1px]">

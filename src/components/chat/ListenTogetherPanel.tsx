@@ -24,6 +24,7 @@ import {
 import { useChatStore } from "@/stores/chat-store";
 import { useListenTogetherStore } from "@/stores/useListenTogetherStore";
 import ContextMenu from "./ContextMenu";
+import InlineEmojiText from "./InlineEmojiText";
 import { ListenTogetherNowPlayingCard } from "./ListenTogetherNowPlayingCard";
 import {
   getListenTogetherContextMenuItems,
@@ -191,7 +192,10 @@ export const listenTogetherQueueRowRenderer = {
                 </div>
               )}
             </div>
-            <span className="truncate">{entry.requester.displayName}</span>
+            <InlineEmojiText
+              text={entry.requester.displayName}
+              className="truncate"
+            />
             {entry.importBatchLabel && (
               <>
                 <span aria-hidden="true">•</span>

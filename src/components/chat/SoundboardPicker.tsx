@@ -62,6 +62,7 @@ import {
 } from "@/lib/voice/soundboard-catalog";
 import { createSoundboardPlaybackId } from "@/lib/voice/soundboard-playback-id";
 import EmojiToken from "./EmojiToken";
+import InlineEmojiText from "./InlineEmojiText";
 import { HomeIcon } from "./HomeIcon";
 import { UploadSoundModal, type UploadSoundData } from "./UploadSoundModal";
 import { useDelayUnmount } from "@/hooks/useDelayUnmount";
@@ -1592,7 +1593,7 @@ export default function SoundboardPicker({
                                 </button>
                               </TooltipTrigger>
                               <TooltipContent side="right" sideOffset={10}>
-                                {server.name}
+                                <InlineEmojiText text={server.name} />
                               </TooltipContent>
                             </Tooltip>
                           );
@@ -2677,7 +2678,7 @@ export default function SoundboardPicker({
                         fallbackClassName="text-base"
                       />
                     )}
-                    <span>{soundToDelete.name}</span>
+                    <InlineEmojiText text={soundToDelete.name} />
                   </div>
                 </div>
               </div>

@@ -181,7 +181,7 @@ export function VoiceDebugScreen({
         <div className="flex items-center gap-2 sm:gap-3 min-w-0">
           <div className="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full bg-rm-status-online animate-pulse shrink-0" />
           <span className="font-bold text-[13px] sm:text-[15px] text-rm-text tracking-tight truncate">
-            RTC DEBUG: {data.roomSlug}
+            <InlineEmojiText text={`RTC DEBUG: ${data.roomSlug}`} />
           </span>
         </div>
         <div className="flex items-center gap-2 sm:gap-3 shrink-0">

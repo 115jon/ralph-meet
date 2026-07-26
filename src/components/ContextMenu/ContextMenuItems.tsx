@@ -1,4 +1,5 @@
 import { cn } from "@/lib/utils";
+import InlineEmojiText from "@/components/chat/InlineEmojiText";
 import { Check, ChevronRight } from "lucide-react";
 import React, { memo, useCallback, useEffect, useRef } from "react";
 
@@ -121,11 +122,11 @@ export const MenuItem = memo(
                 boldLabel ? "font-bold" : "font-medium",
               )}
             >
-              {label}
+              <InlineEmojiText text={label} />
             </span>
             {description && (
               <span className="truncate text-[10px] leading-tight text-rm-text-muted group-hover:primary-foreground/60">
-                {description}
+                <InlineEmojiText text={description} />
               </span>
             )}
           </div>

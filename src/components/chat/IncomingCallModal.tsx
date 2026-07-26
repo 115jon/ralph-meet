@@ -20,6 +20,7 @@ import { useEffect, useRef } from "react";
 import { useDelayUnmount } from "@/hooks/useDelayUnmount";
 import { cn } from "@/lib/utils";
 import { AvatarImage } from "./AvatarImage";
+import InlineEmojiText from "./InlineEmojiText";
 
 /**
  * Simple centered popup shown to the callee when receiving an incoming call.
@@ -127,7 +128,7 @@ export function IncomingCallModal() {
 
         {/* Caller info */}
         <h2 className="text-sm font-bold text-rm-text">
-          {activeCaller.displayName}
+          <InlineEmojiText text={activeCaller.displayName} />
         </h2>
         <p className="text-xs text-rm-text-muted mt-0.5 mb-5">
           Incoming Call...

@@ -1,4 +1,5 @@
 import { AvatarImage } from "@/components/chat/AvatarImage";
+import InlineEmojiText from "@/components/chat/InlineEmojiText";
 import { HomeIcon } from "@/components/chat/HomeIcon";
 import { ProfileCollectiblesLayer } from "@/components/chat/ProfileCollectiblesLayer";
 import { ProfileFrameLayer } from "@/components/chat/ProfileFrameLayer";
@@ -519,7 +520,7 @@ function CatalogItemCard({
       <div className="space-y-3 p-3">
         <div className="min-h-[48px]">
           <div className="line-clamp-1 text-sm font-bold text-rm-text">
-            {item.name}
+            <InlineEmojiText text={item.name} />
           </div>
           <div className="line-clamp-1 text-xs text-rm-text-muted">
             {item.categoryName}

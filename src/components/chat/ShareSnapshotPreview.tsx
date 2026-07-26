@@ -15,6 +15,7 @@ import SensitiveMediaFrame from "./SensitiveMediaFrame";
 import VideoAttachment from "./VideoAttachment";
 import EmojiToken from "./EmojiToken";
 import { AvatarImage } from "./AvatarImage";
+import InlineEmojiText from "./InlineEmojiText";
 
 interface SharePreviewAuthor {
   username: string;
@@ -121,7 +122,9 @@ export default function ShareSnapshotPreview({
         </div>
         <div className="min-w-0">
           <div className="flex flex-wrap items-baseline gap-2">
-            <h3 className="text-sm font-bold text-rm-text">{displayName}</h3>
+            <h3 className="text-sm font-bold text-rm-text">
+              <InlineEmojiText text={displayName} />
+            </h3>
             {createdAt && (
               <time className="text-xs text-rm-text-muted">
                 {formatDate(createdAt)}
@@ -130,7 +133,9 @@ export default function ShareSnapshotPreview({
           </div>
           {source && (
             <p className="mt-0.5 truncate text-xs text-rm-text-muted">
-              {source.server_name} / #{source.channel_name}
+              <InlineEmojiText
+                text={`${source.server_name ?? ""} / #${source.channel_name ?? ""}`}
+              />
             </p>
           )}
         </div>

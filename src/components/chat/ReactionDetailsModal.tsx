@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import { useEffect, useState } from "react";
 import EmojiToken from "./EmojiToken";
 import { X } from "./Icons";
+import InlineEmojiText from "./InlineEmojiText";
 
 type CustomEmojiMap = Record<string, { image_url?: string | null }>;
 const EMPTY_REACTIONS: Reaction[] = [];
@@ -48,7 +49,7 @@ function ReactionUserRow({
       </div>
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-semibold text-rm-text">
-          {displayName}
+          <InlineEmojiText text={displayName} />
         </p>
         <p className="truncate text-xs text-rm-text-muted">@{username}</p>
       </div>

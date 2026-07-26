@@ -8,6 +8,7 @@ import { disposePrewarmedAudioContext } from "@/lib/voice/audio-pipeline";
 import { PhoneOff } from "lucide-react";
 import { useDelayUnmount } from "@/hooks/useDelayUnmount";
 import { AvatarImage } from "./AvatarImage";
+import InlineEmojiText from "./InlineEmojiText";
 
 /**
  * Modal overlay shown to the caller while waiting for the callee to answer.
@@ -65,7 +66,7 @@ export function OutgoingCallModal() {
         {/* Callee info */}
         <div className="text-center">
           <h2 className="text-xl font-bold text-white">
-            {activeCallee.displayName}
+            <InlineEmojiText text={activeCallee.displayName} />
           </h2>
           <p className="text-sm text-rm-text-muted mt-1">
             <span className="inline-flex items-center gap-1.5">

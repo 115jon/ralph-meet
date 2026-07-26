@@ -6,6 +6,7 @@ import { Eye, EyeOff, Phone } from "lucide-react";
 import React, { lazy, Suspense, useEffect, useState } from "react";
 import { useDelayedUnmountValue } from "@/hooks/useDelayUnmount";
 import { AvatarImage } from "@/components/chat/AvatarImage";
+import InlineEmojiText from "@/components/chat/InlineEmojiText";
 import {
   Camera,
   ChevronDown,
@@ -237,7 +238,7 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
 
               <div className="shrink min-h-0 flex flex-col items-center justify-center mt-1 sm:mt-2">
                 <h3 className="text-[9px] sm:text-[11px] font-bold text-rm-text tracking-tight truncate w-full text-center px-1">
-                  {item.name.replace(/'s Stream$/, "")}'s Stream
+                  <InlineEmojiText text={`${streamDisplayName}'s Stream`} />
                 </h3>
               </div>
 
@@ -323,7 +324,7 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
           {isScreen ? (
             <div className="bg-rm-bg-primary/60 backdrop-blur-md px-2.5 py-1 rounded-lg border border-rm-border shadow-lg">
               <span className="text-[10px] font-bold text-rm-text truncate max-w-[120px]">
-                {streamDisplayName}
+                <InlineEmojiText text={streamDisplayName} />
               </span>
             </div>
           ) : (
@@ -348,7 +349,7 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
               </div>
 
               <span className="text-[10px] font-bold text-rm-text truncate max-w-[100px]">
-                {streamDisplayName}
+                <InlineEmojiText text={streamDisplayName} />
               </span>
               {isCamera && (
                 <span className="bg-rm-bg-surface/60 px-1.5 rounded-[3px] text-[8px] font-black text-rm-text uppercase tracking-tighter border border-rm-border tabular-nums">

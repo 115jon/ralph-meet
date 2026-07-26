@@ -624,7 +624,9 @@ function SortableChannelItem({
                         : "text-rm-text-muted",
                     )}
                   >
-                    {textStatus || "Set a channel status"}
+                    <InlineEmojiText
+                      text={textStatus || "Set a channel status"}
+                    />
                   </span>
                   <Edit2 className="h-3 w-3 shrink-0 text-rm-text-muted transition-colors group-hover/text:text-rm-text" />
                 </button>
@@ -690,7 +692,7 @@ function SortableChannelItem({
           {textStatus && (
             <div className="mb-1 ml-7 mr-2">
               <span className="inline-block max-w-full truncate px-1 py-0.5 text-[12px] font-medium leading-4 text-rm-text-secondary">
-                {textStatus}
+                <InlineEmojiText text={textStatus} />
               </span>
             </div>
           )}
@@ -1048,7 +1050,7 @@ export default function ChannelSidebar({
               <h1 className="font-black text-[20px] tracking-wide leading-tight uppercase truncate max-w-full drop-shadow-md">
                 {serverName.split(" ").map((word, i) => (
                   <span key={i} className="block">
-                    {word}
+                    <InlineEmojiText text={word} />
                   </span>
                 ))}
               </h1>
@@ -1075,7 +1077,10 @@ export default function ChannelSidebar({
             onClick={handleServerHeaderClick}
           >
             <div className="flex items-center min-w-0">
-              <h1 className="truncate text-[15px]">{serverName}</h1>
+              <InlineEmojiText
+                text={serverName}
+                className="truncate text-[15px]"
+              />
               <ChevronDown className="ml-1 h-3.5 w-3.5 opacity-90 dark:opacity-60 shrink-0 text-rm-text-primary" />
             </div>
           </button>
@@ -1900,7 +1905,7 @@ function ChannelCategoryGroup({
             )}
           />
           <span className="truncate text-[12px] font-bold tracking-wide uppercase leading-none pt-0.5">
-            {group.name}
+            <InlineEmojiText text={group.name} />
           </span>
         </button>
         {canManageChannels && (

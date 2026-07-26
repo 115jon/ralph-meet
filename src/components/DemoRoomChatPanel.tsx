@@ -1,4 +1,5 @@
 import GifPickerModal from "@/components/chat/GifPickerModal";
+import InlineEmojiText from "@/components/chat/InlineEmojiText";
 import { GifProviderBranding } from "@/components/chat/GifProviderBranding";
 import {
   DEMO_CHAT_MAX_CONTENT_LENGTH,
@@ -195,7 +196,7 @@ export function DemoRoomChatPanel({
             >
               <div className="mb-1 flex items-center justify-between gap-3">
                 <span className="truncate text-xs font-bold text-rm-text">
-                  {message.author_name}
+                  <InlineEmojiText text={message.author_name} />
                 </span>
                 <time
                   className="shrink-0 text-[10px] font-medium text-rm-text-muted"
@@ -206,7 +207,7 @@ export function DemoRoomChatPanel({
               </div>
               {message.content && (
                 <p className="whitespace-pre-wrap wrap-break-word text-sm leading-relaxed text-rm-text/90">
-                  {message.content}
+                  <InlineEmojiText text={message.content} />
                 </p>
               )}
               {message.gif && <DemoChatGifPreview gif={message.gif} />}

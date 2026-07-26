@@ -1,4 +1,5 @@
 import { ImageIcon } from "lucide-react";
+import InlineEmojiText from "./InlineEmojiText";
 
 type ReplyPreviewContentProps = {
   content: string;
@@ -22,7 +23,7 @@ export function ReplyPreviewContent({
   const trimmed = content.trim();
 
   if (trimmed) {
-    return <span>{content}</span>;
+    return <InlineEmojiText text={content} />;
   }
 
   if (attachmentsCount > 0) {

@@ -19,6 +19,7 @@ import { useEffect, useRef, useState } from "react";
 import { useShallow } from "zustand/shallow";
 import { useSoundSettingsStore } from "@/stores/useSoundSettingsStore";
 import EmojiToken from "./EmojiToken";
+import InlineEmojiText from "./InlineEmojiText";
 import SoundboardPicker from "./SoundboardPicker";
 
 type TriggerKey = "voiceJoinSoundboard" | "voiceLeaveSoundboard";
@@ -101,7 +102,10 @@ function TriggerRow({
               fallbackClassName="shrink-0 text-base leading-none"
             />
           )}
-          <span className="truncate">{sound?.name ?? "No sound selected"}</span>
+          <InlineEmojiText
+            text={sound?.name ?? "No sound selected"}
+            className="truncate"
+          />
         </div>
       </div>
 
@@ -343,7 +347,9 @@ export function SettingsSoundboardTriggers({ userId, servers }: Props) {
       {selectedServer && (
         <div className="flex items-center gap-2 text-[11px] text-rm-text-muted">
           <ServerIcon server={selectedServer} />
-          <span>{selectedServer.name} overrides inherit from All Servers.</span>
+          <InlineEmojiText
+            text={`${selectedServer.name} overrides inherit from All Servers.`}
+          />
         </div>
       )}
 

@@ -7,6 +7,7 @@ import {
   ProfileSurfaceBackdrop,
 } from "@/components/chat/ProfilePreviewPrimitives";
 import { ProfileDisplayName } from "@/components/chat/ProfileDisplayName";
+import InlineEmojiText from "@/components/chat/InlineEmojiText";
 import { BaseModal } from "@/components/ui/BaseModal";
 import { Button } from "@/components/ui/button";
 import { apiDelete, apiGet, apiPost, apiPut } from "@/lib/api-client";
@@ -662,7 +663,7 @@ export default function UserProfileModal({ user, onClose, isClosing }: Props) {
                                       )}
                                     </div>
                                     <span className="max-w-[180px] truncate text-[13px] text-[color:var(--rm-profile-custom-text)]">
-                                      {server.name}
+                                      <InlineEmojiText text={server.name} />
                                     </span>
                                   </div>
                                 ))

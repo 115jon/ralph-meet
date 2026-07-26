@@ -13,6 +13,7 @@ import { resolveProfileTheme } from "@/lib/profile-customization";
 import type { Role, User } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { UserStatusDot } from "./UserStatusDot";
+import InlineEmojiText from "./InlineEmojiText";
 import { useChatActions, useChatStore } from "@/stores/chat-store";
 import {
   ArrowLeft,
@@ -363,7 +364,7 @@ function ProfileCards({
                   }}
                 />
                 <span className="text-[color:var(--rm-profile-custom-muted)]">
-                  {role.name}
+                  <InlineEmojiText text={role.name} />
                 </span>
               </div>
             ))}

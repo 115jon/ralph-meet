@@ -20,6 +20,7 @@ import { resolveProfileTheme } from "@/lib/profile-customization";
 import type { Role, User } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { UserStatusDot, type UserStatus } from "./UserStatusDot";
+import InlineEmojiText from "./InlineEmojiText";
 import { useChatStore } from "@/stores/chat-store";
 import {
   Check,
@@ -289,7 +290,7 @@ function PopoverMutuals({
                   sideOffset={8}
                   className={PROFILE_TOOLTIP_CLASS}
                 >
-                  {server.name}
+                  <InlineEmojiText text={server.name} />
                 </TooltipContent>
               </Tooltip>
             ))}
@@ -365,7 +366,10 @@ function RoleAssignmentDropdown({
                     className="h-3 w-3 shrink-0 rounded-full"
                     style={{ backgroundColor: role.color || "#94a3b8" }}
                   />
-                  <span className="flex-1 truncate">{role.name}</span>
+                  <InlineEmojiText
+                    text={role.name}
+                    className="flex-1 truncate"
+                  />
                   {hasRole ? (
                     <Check
                       size={14}
@@ -420,7 +424,7 @@ function PopoverRoles({
               style={{ backgroundColor: role.color || "#94a3b8" }}
             />
             <span className="max-w-[120px] truncate py-0.5 pr-1 text-[color:var(--rm-profile-custom-muted)]">
-              {role.name}
+              <InlineEmojiText text={role.name} />
             </span>
             {canManageRoles ? (
               <ButtonBase

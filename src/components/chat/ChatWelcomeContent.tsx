@@ -42,7 +42,13 @@ export const ChatWelcomeContent = memo(function ChatWelcomeContent({
             )}
           </div>
           <h1 className="mb-0 text-3xl font-black tracking-tight text-rm-text-primary">
-            {dmRecipient?.display_name ?? dmRecipient?.username ?? channelName}
+            <InlineEmojiText
+              text={
+                dmRecipient?.display_name ??
+                dmRecipient?.username ??
+                channelName
+              }
+            />
           </h1>
           <h2 className="mb-4 text-xl font-bold text-rm-text-muted tracking-tight">
             @{dmRecipient?.username ?? channelName.toLowerCase()}
@@ -50,9 +56,13 @@ export const ChatWelcomeContent = memo(function ChatWelcomeContent({
           <p className="max-w-md text-[14px] font-medium leading-relaxed text-rm-text-muted">
             This is the absolute beginning of your direct message history with{" "}
             <span className="text-rm-text-secondary font-semibold">
-              {dmRecipient?.display_name ??
-                dmRecipient?.username ??
-                channelName}
+              <InlineEmojiText
+                text={
+                  dmRecipient?.display_name ??
+                  dmRecipient?.username ??
+                  channelName
+                }
+              />
             </span>
             . Be kind, be bold, and let the conversation flow.
           </p>

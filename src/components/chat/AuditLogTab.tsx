@@ -5,6 +5,7 @@ import type { ServerAuditLog } from "@/lib/types";
 import { useEffect, useReducer } from "react";
 import { AvatarImage } from "./AvatarImage";
 import { Loader2 } from "./Icons";
+import InlineEmojiText from "./InlineEmojiText";
 
 interface AuditLogTabProps {
   serverId: string;
@@ -171,7 +172,7 @@ export default function AuditLogTab({ serverId }: AuditLogTabProps) {
                   <div className="flex justify-between items-start mb-2">
                     <div className="flex gap-2 items-center">
                       <span className="font-semibold text-sm text-rm-text">
-                        {actorDisplayName}
+                        <InlineEmojiText text={actorDisplayName} />
                       </span>
                       <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-primary/10 text-primary uppercase tracking-wider">
                         {formatActionType(log.action_type)}
@@ -193,7 +194,7 @@ export default function AuditLogTab({ serverId }: AuditLogTabProps) {
 
                   {log.reason && (
                     <div className="mt-2 text-sm text-rm-text border-l-2 border-rm-border pl-3 italic">
-                      "{log.reason}"
+                      <InlineEmojiText text={`"${log.reason}"`} />
                     </div>
                   )}
 

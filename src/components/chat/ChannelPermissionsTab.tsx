@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 import { Check, Loader2, Plus, Slash, Trash2, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { AvatarImage } from "./AvatarImage";
+import InlineEmojiText from "./InlineEmojiText";
 import { ButtonBase } from "@/components/ui/button-base";
 
 interface Override {
@@ -165,7 +166,7 @@ function PermissionsSidebar({
                       className="w-3 h-3 rounded-full shrink-0"
                       style={{ backgroundColor: role.color || "#94a3b8" }}
                     />
-                    <span className="truncate">{role.name}</span>
+                    <InlineEmojiText text={role.name} className="truncate" />
                   </ButtonBase>
                 ))}
               </div>
@@ -209,7 +210,10 @@ function PermissionsSidebar({
                           </span>
                         )}
                       </div>
-                      <span className="truncate">{displayName}</span>
+                      <InlineEmojiText
+                        text={displayName}
+                        className="truncate"
+                      />
                     </ButtonBase>
                   );
                 })}
@@ -259,7 +263,10 @@ function PermissionsSidebar({
                     )}
                   </div>
                 )}
-                <span className="truncate flex-1">{o.name}</span>
+                <InlineEmojiText
+                  text={o.name ?? ""}
+                  className="truncate flex-1"
+                />
                 {!isDefault && (
                   <Trash2
                     className="h-3 w-3 opacity-0 group-hover:opacity-100 hover:text-destructive shrink-0"
@@ -306,7 +313,7 @@ function PermissionsEditor({
                   }}
                 />
               ) : null}
-              {selectedOverride.name}
+              <InlineEmojiText text={selectedOverride.name ?? ""} />
             </span>
             {savingTarget === selectedOverride.target_id && (
               <Loader2 className="h-4 w-4 animate-spin text-rm-text-muted" />

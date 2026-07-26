@@ -234,7 +234,7 @@ export default function FloatingStreamPreview({
           </button>
 
           <div className="absolute bottom-3 left-3 z-20 max-w-[55%] rounded-md bg-black/40 px-2.5 py-1 text-sm font-bold tracking-tight text-white">
-            <span className="truncate">{displayName}</span>
+            <InlineEmojiText text={displayName} className="truncate" />
           </div>
 
           <div className="absolute bottom-3 right-3 z-20 flex items-center gap-2">

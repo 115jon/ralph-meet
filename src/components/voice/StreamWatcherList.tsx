@@ -2,6 +2,7 @@ import { getAuthAssetUrl } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 import type { StreamWatcherIdentity } from "@/lib/stream-watchers";
 import { AvatarImage } from "@/components/chat/AvatarImage";
+import InlineEmojiText from "@/components/chat/InlineEmojiText";
 
 const MAX_VISIBLE_AVATARS = 4;
 const MAX_VISIBLE_NAMES = 2;
@@ -104,7 +105,7 @@ export function StreamWatcherList({
             isInline ? "text-[11px] text-white" : "text-[11px] text-rm-text",
           )}
         >
-          {namesLabel}
+          <InlineEmojiText text={namesLabel} />
         </div>
       </div>
     </div>
