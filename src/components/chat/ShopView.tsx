@@ -1,11 +1,18 @@
 import { AvatarImage } from "@/components/chat/AvatarImage";
+import InlineEmojiText from "@/components/chat/InlineEmojiText";
 import { HomeIcon } from "@/components/chat/HomeIcon";
 import { Menu } from "@/components/chat/Icons";
 import { ProfileCollectiblesLayer } from "@/components/chat/ProfileCollectiblesLayer";
 import { ProfileFrameLayer } from "@/components/chat/ProfileFrameLayer";
 import { BaseModal } from "@/components/ui/BaseModal";
 import { Button } from "@/components/ui/button";
-import { CustomSelect, type SelectOption } from "@/components/ui/CustomSelect";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { apiPatch } from "@/lib/api-client";
 import {
@@ -1669,7 +1676,7 @@ export default function ShopView({ onMenuClick }: ShopViewProps) {
     }),
     [featuredSections, pageGroups],
   );
-  const pageSelectOptions = useMemo<SelectOption[]>(
+  const pageSelectOptions = useMemo<Array<{ value: string; label: string }>>(
     () =>
       SHOP_PAGE_ORDER.map((page) => ({
         value: page,
@@ -1677,7 +1684,9 @@ export default function ShopView({ onMenuClick }: ShopViewProps) {
       })),
     [pageItemCounts],
   );
-  const featuredSelectOptions = useMemo<SelectOption[]>(
+  const featuredSelectOptions = useMemo<
+    Array<{ value: string; label: string }>
+  >(
     () => [
       { value: "", label: "All collections" },
       ...featuredCollectionOptions.map((section) => ({
@@ -1902,15 +1911,32 @@ export default function ShopView({ onMenuClick }: ShopViewProps) {
                   <ActivePageIcon className="h-3 w-3 text-primary/75" />
                   Category
                 </span>
-                <CustomSelect
+                <Select
                   value={activePage}
-                  onChange={(value) => selectPage(value as ShopPage)}
-                  options={pageSelectOptions}
-                  className="w-full"
-                  triggerClassName={SHOP_SELECT_TRIGGER_CLASS}
-                  menuClassName={SHOP_SELECT_MENU_CLASS}
-                  ariaLabel="Select collectible category"
-                />
+                  onValueChange={(value) => selectPage(value as ShopPage)}
+                >
+                  <SelectTrigger
+                    aria-label="Select collectible category"
+                    className={cn("w-full", SHOP_SELECT_TRIGGER_CLASS)}
+                  >
+                    <SelectValue placeholder="Select collectible category" />
+                  </SelectTrigger>
+                  <SelectContent
+                    position="popper"
+                    align="start"
+                    className={SHOP_SELECT_MENU_CLASS}
+                  >
+                    {pageSelectOptions.map((option) => (
+                      <SelectItem
+                        key={option.value}
+                        value={option.value}
+                        textValue={option.label}
+                      >
+                        <InlineEmojiText text={option.label} />
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </label>
 
               {showCollectionSelect ? (
@@ -1919,20 +1945,37 @@ export default function ShopView({ onMenuClick }: ShopViewProps) {
                     <Sparkles className="h-3 w-3 text-primary/75" />
                     Collection
                   </span>
-                  <CustomSelect
+                  <Select
                     value={featuredFocus ?? ""}
-                    onChange={(value) => {
+                    onValueChange={(value) => {
                       startTransition(() => {
                         setActivePage("featured");
                         setFeaturedFocus(value || null);
                       });
                     }}
-                    options={featuredSelectOptions}
-                    className="w-full"
-                    triggerClassName={SHOP_SELECT_TRIGGER_CLASS}
-                    menuClassName={SHOP_SELECT_MENU_CLASS}
-                    ariaLabel="Select featured collection"
-                  />
+                  >
+                    <SelectTrigger
+                      aria-label="Select featured collection"
+                      className={cn("w-full", SHOP_SELECT_TRIGGER_CLASS)}
+                    >
+                      <SelectValue placeholder="Select featured collection" />
+                    </SelectTrigger>
+                    <SelectContent
+                      position="popper"
+                      align="start"
+                      className={SHOP_SELECT_MENU_CLASS}
+                    >
+                      {featuredSelectOptions.map((option) => (
+                        <SelectItem
+                          key={option.value}
+                          value={option.value}
+                          textValue={option.label}
+                        >
+                          <InlineEmojiText text={option.label} />
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </label>
               ) : null}
 

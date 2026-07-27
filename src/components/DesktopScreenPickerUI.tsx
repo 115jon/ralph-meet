@@ -1,4 +1,11 @@
 import { cn } from "@/lib/utils";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { AppWindow, Check, Monitor, Music, Tv } from "lucide-react";
 
 export interface ScreenSource {
@@ -258,17 +265,25 @@ export function DesktopScreenPickerBottomBar({
 
       {/* Center: Quality selector + Audio toggle */}
       <div className="flex items-center gap-3">
-        <select
-          value={selectedQuality}
-          onChange={(e) => setQuality(e.target.value)}
-          className="rounded-lg border border-rm-border bg-rm-bg-elevated px-3 py-1.5 text-xs font-bold text-rm-text outline-none focus:ring-2 focus:ring-primary/30"
-        >
-          {qualities.map((q) => (
-            <option key={q.id} value={q.id}>
-              {q.label} · {q.fps}fps
-            </option>
-          ))}
-        </select>
+        <Select value={selectedQuality} onValueChange={setQuality}>
+          <SelectTrigger
+            aria-label="Select stream quality"
+            className="h-auto rounded-lg border-rm-border bg-rm-bg-elevated px-3 py-1.5 text-xs font-bold text-rm-text outline-none focus:ring-2 focus:ring-primary/30"
+          >
+            <SelectValue placeholder="Select quality" />
+          </SelectTrigger>
+          <SelectContent position="popper" align="start">
+            {qualities.map((quality) => (
+              <SelectItem
+                key={quality.id}
+                value={quality.id}
+                textValue={`${quality.label} ${quality.fps}fps`}
+              >
+                {quality.label} · {quality.fps}fps
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
 
         <button
           onClick={toggleAudio}

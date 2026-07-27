@@ -1,4 +1,11 @@
 import { BaseModal } from "@/components/ui/BaseModal";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { apiPatch } from "@/lib/api-client";
 import type { Channel } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -307,7 +314,7 @@ export default function ChannelSettingsModal({
                       <span className="text-[11px] font-bold uppercase tracking-widest text-rm-text-muted block">
                         Public Sharing
                       </span>
-                      <select
+                      <Select
                         value={
                           shareOverride === null
                             ? "inherit"
@@ -315,18 +322,30 @@ export default function ChannelSettingsModal({
                               ? "allow"
                               : "deny"
                         }
-                        onChange={(event) => {
-                          const value = event.target.value;
+                        onValueChange={(value) => {
                           setShareOverride(
                             value === "inherit" ? null : value === "allow",
                           );
                         }}
-                        className="w-full max-w-sm rounded-lg border border-rm-border bg-rm-bg-surface px-4 py-2.5 text-[15px] text-rm-text outline-none transition-all focus:border-primary/40 focus:ring-2 focus:ring-primary/20"
                       >
-                        <option value="inherit">Inherit server default</option>
-                        <option value="allow">Allow public shares</option>
-                        <option value="deny">Disable public shares</option>
-                      </select>
+                        <SelectTrigger
+                          aria-label="Public sharing"
+                          className="w-full max-w-sm rounded-lg border-rm-border bg-rm-bg-surface px-4 py-2.5 text-[15px] text-rm-text outline-none transition-all focus:border-primary/40 focus:ring-2 focus:ring-primary/20"
+                        >
+                          <SelectValue placeholder="Public sharing" />
+                        </SelectTrigger>
+                        <SelectContent position="popper" align="start">
+                          <SelectItem value="inherit">
+                            Inherit server default
+                          </SelectItem>
+                          <SelectItem value="allow">
+                            Allow public shares
+                          </SelectItem>
+                          <SelectItem value="deny">
+                            Disable public shares
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
                     </div>
 
                     {/* Error */}

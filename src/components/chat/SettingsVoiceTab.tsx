@@ -1,4 +1,11 @@
-import { CustomSelect } from "@/components/ui/CustomSelect";
+import InlineEmojiText from "@/components/chat/InlineEmojiText";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { SettingsSwitch } from "@/components/chat/SettingsSwitch";
 import { useMediaDevices } from "@/lib/useMediaDevices";
 import {
@@ -286,9 +293,9 @@ export default function SettingsVoiceTab() {
                 <Mic size={16} className="text-rm-text-muted" />
                 Microphone
               </label>
-              <CustomSelect
+              <Select
                 value={vSettings.inputDeviceId}
-                onChange={(value) => {
+                onValueChange={(value) => {
                   const device = audioInputs.find(
                     (item) => item.deviceId === value,
                   );
@@ -297,19 +304,42 @@ export default function SettingsVoiceTab() {
                     groupId: device?.groupId,
                   });
                 }}
-                options={deviceOptions.input}
-                triggerClassName="h-11 rounded-lg bg-rm-bg-surface px-3 text-sm"
-                ariaLabel="Select microphone"
-              />
+              >
+                <SelectTrigger
+                  aria-label="Select microphone"
+                  className="w-full h-11 rounded-lg border-rm-border bg-rm-bg-surface px-3 text-sm text-rm-text hover:bg-rm-bg-elevated"
+                >
+                  <SelectValue placeholder="Select microphone" />
+                </SelectTrigger>
+                <SelectContent
+                  position="popper"
+                  align="start"
+                  className="rounded-xl border-rm-border bg-rm-bg-floating p-1.5 text-rm-text shadow-2xl"
+                >
+                  {deviceOptions.input.map((option) => (
+                    <SelectItem
+                      key={option.value}
+                      value={option.value}
+                      textValue={option.label}
+                      className="text-rm-text-secondary hover:bg-rm-bg-elevated hover:text-rm-text focus:bg-rm-bg-elevated focus:text-rm-text"
+                    >
+                      <span className="flex min-w-0 items-center gap-2">
+                        {option.icon}
+                        <InlineEmojiText text={option.label} />
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-2">
               <label className="flex items-center gap-2 text-sm font-semibold text-rm-text">
                 <Headphones size={16} className="text-rm-text-muted" />
                 Speaker
               </label>
-              <CustomSelect
+              <Select
                 value={vSettings.outputDeviceId}
-                onChange={(value) => {
+                onValueChange={(value) => {
                   const device = audioOutputs.find(
                     (item) => item.deviceId === value,
                   );
@@ -318,10 +348,33 @@ export default function SettingsVoiceTab() {
                     groupId: device?.groupId,
                   });
                 }}
-                options={deviceOptions.output}
-                triggerClassName="h-11 rounded-lg bg-rm-bg-surface px-3 text-sm"
-                ariaLabel="Select speaker"
-              />
+              >
+                <SelectTrigger
+                  aria-label="Select speaker"
+                  className="w-full h-11 rounded-lg border-rm-border bg-rm-bg-surface px-3 text-sm text-rm-text hover:bg-rm-bg-elevated"
+                >
+                  <SelectValue placeholder="Select speaker" />
+                </SelectTrigger>
+                <SelectContent
+                  position="popper"
+                  align="start"
+                  className="rounded-xl border-rm-border bg-rm-bg-floating p-1.5 text-rm-text shadow-2xl"
+                >
+                  {deviceOptions.output.map((option) => (
+                    <SelectItem
+                      key={option.value}
+                      value={option.value}
+                      textValue={option.label}
+                      className="text-rm-text-secondary hover:bg-rm-bg-elevated hover:text-rm-text focus:bg-rm-bg-elevated focus:text-rm-text"
+                    >
+                      <span className="flex min-w-0 items-center gap-2">
+                        {option.icon}
+                        <InlineEmojiText text={option.label} />
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
 
@@ -436,25 +489,48 @@ export default function SettingsVoiceTab() {
                   </>
                 }
               >
-                <CustomSelect
+                <Select
                   value={vSettings.noiseReductionEnabled ? "rnnoise" : "none"}
-                  onChange={setNoiseReductionProvider}
-                  options={[
-                    {
-                      value: "none",
-                      label: "None",
-                      icon: <AudioWaveform size={16} />,
-                    },
-                    {
-                      value: "rnnoise",
-                      label:
-                        NOISE_REDUCTION_PROVIDER_LABELS.rnnoise ?? "RNNoise",
-                      icon: <AudioWaveform size={16} />,
-                    },
-                  ]}
-                  triggerClassName="h-10 min-w-[180px] rounded-lg bg-rm-bg-surface px-3 text-sm"
-                  ariaLabel="Select noise suppression"
-                />
+                  onValueChange={setNoiseReductionProvider}
+                >
+                  <SelectTrigger
+                    aria-label="Select noise suppression"
+                    className="h-10 min-w-[180px] rounded-lg border-rm-border bg-rm-bg-surface px-3 text-sm text-rm-text hover:bg-rm-bg-elevated"
+                  >
+                    <SelectValue placeholder="Select noise suppression" />
+                  </SelectTrigger>
+                  <SelectContent
+                    position="popper"
+                    align="start"
+                    className="rounded-xl border-rm-border bg-rm-bg-floating p-1.5 text-rm-text shadow-2xl"
+                  >
+                    {[
+                      {
+                        value: "none",
+                        label: "None",
+                        icon: <AudioWaveform size={16} />,
+                      },
+                      {
+                        value: "rnnoise",
+                        label:
+                          NOISE_REDUCTION_PROVIDER_LABELS.rnnoise ?? "RNNoise",
+                        icon: <AudioWaveform size={16} />,
+                      },
+                    ].map((option) => (
+                      <SelectItem
+                        key={option.value}
+                        value={option.value}
+                        textValue={option.label}
+                        className="text-rm-text-secondary hover:bg-rm-bg-elevated hover:text-rm-text focus:bg-rm-bg-elevated focus:text-rm-text"
+                      >
+                        <span className="flex min-w-0 items-center gap-2">
+                          {option.icon}
+                          <InlineEmojiText text={option.label} />
+                        </span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </VoiceSettingRow>
 
               <VoiceSettingRow

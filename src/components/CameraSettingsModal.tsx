@@ -1,4 +1,12 @@
 import { BaseModal } from "@/components/ui/BaseModal";
+import InlineEmojiText from "@/components/chat/InlineEmojiText";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { createCameraBackgroundEffect } from "@/lib/camera-background-effects";
 import {
   CAMERA_BACKGROUND_ACCEPT,
@@ -18,7 +26,6 @@ import {
 } from "@/stores/useVoiceSettingsStore";
 import { Ban, Check, Sparkles, Trash2, Upload, X } from "lucide-react";
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { CustomSelect } from "./ui/CustomSelect";
 import { VideoPlayer } from "./voice/VideoPlayer";
 
 interface CameraSettingsModalProps {
@@ -418,12 +425,30 @@ export const CameraSettingsModal: React.FC<CameraSettingsModalProps> = ({
               <p className="ml-1 text-[10px] font-bold uppercase tracking-wider text-rm-text-muted">
                 Camera
               </p>
-              <CustomSelect
-                value={selectedDeviceId}
-                onChange={selectDevice}
-                options={dropdownOptions}
-                placeholder="Select camera device"
-              />
+              <Select value={selectedDeviceId} onValueChange={selectDevice}>
+                <SelectTrigger
+                  aria-label="Select camera device"
+                  className="w-full rounded-xl border-rm-border bg-rm-bg-elevated/50 px-4 py-3 text-rm-text hover:bg-rm-bg-elevated"
+                >
+                  <SelectValue placeholder="Select camera device" />
+                </SelectTrigger>
+                <SelectContent
+                  position="popper"
+                  align="start"
+                  className="rounded-xl border-rm-border bg-rm-bg-floating p-1.5 text-rm-text shadow-2xl"
+                >
+                  {dropdownOptions.map((option) => (
+                    <SelectItem
+                      key={option.value}
+                      value={option.value}
+                      textValue={option.label}
+                      className="text-rm-text-secondary hover:bg-rm-bg-elevated hover:text-rm-text focus:bg-rm-bg-elevated focus:text-rm-text"
+                    >
+                      <InlineEmojiText text={option.label} />
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
             {/* Background selection */}

@@ -1,4 +1,11 @@
-import { CustomSelect } from "@/components/ui/CustomSelect";
+import InlineEmojiText from "@/components/chat/InlineEmojiText";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { SettingsSwitch } from "@/components/chat/SettingsSwitch";
 import { getAuthAssetUrl } from "@/lib/platform";
 import { previewSoundboardTriggerSelection } from "@/lib/voice/auto-soundboard";
@@ -19,7 +26,6 @@ import { useEffect, useRef, useState } from "react";
 import { useShallow } from "zustand/shallow";
 import { useSoundSettingsStore } from "@/stores/useSoundSettingsStore";
 import EmojiToken from "./EmojiToken";
-import InlineEmojiText from "./InlineEmojiText";
 import SoundboardPicker from "./SoundboardPicker";
 
 type TriggerKey = "voiceJoinSoundboard" | "voiceLeaveSoundboard";
@@ -287,17 +293,39 @@ export function SettingsSoundboardTriggers({ userId, servers }: Props) {
         <label className="text-[11px] font-bold uppercase tracking-wider text-rm-text-muted">
           Server scope
         </label>
-        <CustomSelect
+        <Select
           value={selectedScope}
-          onChange={(value) => {
+          onValueChange={(value) => {
             setSelectedScope(value);
             setActiveTrigger(null);
           }}
-          options={scopeOptions}
-          ariaLabel="Soundboard server scope"
-          triggerClassName="rounded-lg py-2.5"
-          menuClassName="rounded-lg"
-        />
+        >
+          <SelectTrigger
+            aria-label="Soundboard server scope"
+            className="w-full rounded-lg border-rm-border bg-rm-bg-elevated/50 px-4 py-2.5 text-rm-text hover:bg-rm-bg-elevated"
+          >
+            <SelectValue placeholder="Select server scope" />
+          </SelectTrigger>
+          <SelectContent
+            position="popper"
+            align="start"
+            className="rounded-lg border-rm-border bg-rm-bg-floating p-1.5 text-rm-text shadow-2xl"
+          >
+            {scopeOptions.map((option) => (
+              <SelectItem
+                key={option.value}
+                value={option.value}
+                textValue={option.label}
+                className="text-rm-text-secondary hover:bg-rm-bg-elevated hover:text-rm-text focus:bg-rm-bg-elevated focus:text-rm-text"
+              >
+                <span className="flex min-w-0 items-center gap-2">
+                  {option.icon}
+                  <InlineEmojiText text={option.label} />
+                </span>
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
       <div className="overflow-hidden rounded-xl border border-rm-border bg-rm-bg-surface">

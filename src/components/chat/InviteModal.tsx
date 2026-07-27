@@ -1,4 +1,11 @@
 import { BaseModal } from "@/components/ui/BaseModal";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { apiPost } from "@/lib/api-client";
 import { getWebOrigin } from "@/lib/platform";
 import { cn } from "@/lib/utils";
@@ -96,23 +103,30 @@ export default function InviteModal({
                 >
                   Expire after
                 </label>
-                <select
-                  id="expire-after"
-                  value={state.expiresHours}
-                  onChange={(e) =>
+                <Select
+                  value={String(state.expiresHours)}
+                  onValueChange={(value) =>
                     setState((prev) => ({
                       ...prev,
-                      expiresHours: Number(e.target.value),
+                      expiresHours: Number(value),
                     }))
                   }
-                  className={selectStyle}
                 >
-                  <option value={1}>1 hour</option>
-                  <option value={6}>6 hours</option>
-                  <option value={24}>24 hours</option>
-                  <option value={168}>7 days</option>
-                  <option value={0}>Never</option>
-                </select>
+                  <SelectTrigger
+                    id="expire-after"
+                    aria-label="Expire after"
+                    className={selectStyle}
+                  >
+                    <SelectValue placeholder="Expire after" />
+                  </SelectTrigger>
+                  <SelectContent position="popper" align="start">
+                    <SelectItem value="1">1 hour</SelectItem>
+                    <SelectItem value="6">6 hours</SelectItem>
+                    <SelectItem value="24">24 hours</SelectItem>
+                    <SelectItem value="168">7 days</SelectItem>
+                    <SelectItem value="0">Never</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
               <div className="space-y-2">
                 <label
@@ -121,24 +135,31 @@ export default function InviteModal({
                 >
                   Max uses
                 </label>
-                <select
-                  id="max-uses"
-                  value={state.maxUses}
-                  onChange={(e) =>
+                <Select
+                  value={String(state.maxUses)}
+                  onValueChange={(value) =>
                     setState((prev) => ({
                       ...prev,
-                      maxUses: Number(e.target.value),
+                      maxUses: Number(value),
                     }))
                   }
-                  className={selectStyle}
                 >
-                  <option value={0}>No limit</option>
-                  <option value={1}>1 use</option>
-                  <option value={5}>5 uses</option>
-                  <option value={10}>10 uses</option>
-                  <option value={25}>25 uses</option>
-                  <option value={100}>100 uses</option>
-                </select>
+                  <SelectTrigger
+                    id="max-uses"
+                    aria-label="Maximum uses"
+                    className={selectStyle}
+                  >
+                    <SelectValue placeholder="Maximum uses" />
+                  </SelectTrigger>
+                  <SelectContent position="popper" align="start">
+                    <SelectItem value="0">No limit</SelectItem>
+                    <SelectItem value="1">1 use</SelectItem>
+                    <SelectItem value="5">5 uses</SelectItem>
+                    <SelectItem value="10">10 uses</SelectItem>
+                    <SelectItem value="25">25 uses</SelectItem>
+                    <SelectItem value="100">100 uses</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
               <button
                 className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/20 transition-all hover:brightness-110 disabled:opacity-40"

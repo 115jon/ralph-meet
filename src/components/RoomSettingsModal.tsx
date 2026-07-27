@@ -51,7 +51,14 @@ import {
 } from "react";
 import { useShallow } from "zustand/shallow";
 import { NoiseReductionPanel } from "./chat/NoiseReductionPanel";
-import { CustomSelect } from "./ui/CustomSelect";
+import InlineEmojiText from "./chat/InlineEmojiText";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "./ui/select";
 import { VideoPlayer } from "./voice/VideoPlayer";
 
 interface RoomSettingsModalProps {
@@ -520,34 +527,56 @@ export default function RoomSettingsModal({
                           >
                             Input Device
                           </Label>
-                          <select
-                            id="room-settings-input-device"
+                          <Select
                             value={vSettings.inputDeviceId}
-                            onChange={(e) => {
+                            onValueChange={(value) => {
                               const device = audioInputs.find(
-                                (d) => d.deviceId === e.target.value,
+                                (d) => d.deviceId === value,
                               );
-                              setDevice(
-                                "input",
-                                e.target.value,
-                                settingsUserId,
-                                {
-                                  label: device?.label,
-                                  groupId: device?.groupId,
-                                },
-                              );
+                              setDevice("input", value, settingsUserId, {
+                                label: device?.label,
+                                groupId: device?.groupId,
+                              });
                             }}
-                            className="w-full rounded-lg border border-rm-border bg-rm-bg-elevated px-3 py-2 text-sm text-rm-text outline-none"
                           >
-                            <option value="default">
-                              {defaultAudioInput?.label || "Default Microphone"}
-                            </option>
-                            {filteredAudioInputs.map((d) => (
-                              <option key={d.deviceId} value={d.deviceId}>
-                                {d.label || `Mic ${d.deviceId.slice(0, 5)}`}
-                              </option>
-                            ))}
-                          </select>
+                            <SelectTrigger
+                              id="room-settings-input-device"
+                              aria-label="Select input device"
+                              className="w-full rounded-lg border-rm-border bg-rm-bg-elevated px-3 py-2 text-sm text-rm-text outline-none"
+                            >
+                              <SelectValue placeholder="Select input device" />
+                            </SelectTrigger>
+                            <SelectContent position="popper" align="start">
+                              <SelectItem
+                                value="default"
+                                textValue={
+                                  defaultAudioInput?.label ||
+                                  "Default Microphone"
+                                }
+                              >
+                                <InlineEmojiText
+                                  text={
+                                    defaultAudioInput?.label ||
+                                    "Default Microphone"
+                                  }
+                                />
+                              </SelectItem>
+                              {filteredAudioInputs.map((device) => {
+                                const label =
+                                  device.label ||
+                                  `Mic ${device.deviceId.slice(0, 5)}`;
+                                return (
+                                  <SelectItem
+                                    key={device.deviceId}
+                                    value={device.deviceId}
+                                    textValue={label}
+                                  >
+                                    <InlineEmojiText text={label} />
+                                  </SelectItem>
+                                );
+                              })}
+                            </SelectContent>
+                          </Select>
                         </div>
                         <div className="space-y-2">
                           <Label
@@ -556,34 +585,55 @@ export default function RoomSettingsModal({
                           >
                             Output Device
                           </Label>
-                          <select
-                            id="room-settings-output-device"
+                          <Select
                             value={vSettings.outputDeviceId}
-                            onChange={(e) => {
+                            onValueChange={(value) => {
                               const device = audioOutputs.find(
-                                (d) => d.deviceId === e.target.value,
+                                (d) => d.deviceId === value,
                               );
-                              setDevice(
-                                "output",
-                                e.target.value,
-                                settingsUserId,
-                                {
-                                  label: device?.label,
-                                  groupId: device?.groupId,
-                                },
-                              );
+                              setDevice("output", value, settingsUserId, {
+                                label: device?.label,
+                                groupId: device?.groupId,
+                              });
                             }}
-                            className="w-full rounded-lg border border-rm-border bg-rm-bg-elevated px-3 py-2 text-sm text-rm-text outline-none"
                           >
-                            <option value="default">
-                              {defaultAudioOutput?.label || "Default Speaker"}
-                            </option>
-                            {filteredAudioOutputs.map((d) => (
-                              <option key={d.deviceId} value={d.deviceId}>
-                                {d.label || `Speaker ${d.deviceId.slice(0, 5)}`}
-                              </option>
-                            ))}
-                          </select>
+                            <SelectTrigger
+                              id="room-settings-output-device"
+                              aria-label="Select output device"
+                              className="w-full rounded-lg border-rm-border bg-rm-bg-elevated px-3 py-2 text-sm text-rm-text outline-none"
+                            >
+                              <SelectValue placeholder="Select output device" />
+                            </SelectTrigger>
+                            <SelectContent position="popper" align="start">
+                              <SelectItem
+                                value="default"
+                                textValue={
+                                  defaultAudioOutput?.label || "Default Speaker"
+                                }
+                              >
+                                <InlineEmojiText
+                                  text={
+                                    defaultAudioOutput?.label ||
+                                    "Default Speaker"
+                                  }
+                                />
+                              </SelectItem>
+                              {filteredAudioOutputs.map((device) => {
+                                const label =
+                                  device.label ||
+                                  `Speaker ${device.deviceId.slice(0, 5)}`;
+                                return (
+                                  <SelectItem
+                                    key={device.deviceId}
+                                    value={device.deviceId}
+                                    textValue={label}
+                                  >
+                                    <InlineEmojiText text={label} />
+                                  </SelectItem>
+                                );
+                              })}
+                            </SelectContent>
+                          </Select>
                         </div>
                       </div>
                     </section>
@@ -781,9 +831,9 @@ export default function RoomSettingsModal({
                       <p className="ml-1 text-[10px] font-bold uppercase tracking-wider text-rm-text-muted">
                         Camera Device
                       </p>
-                      <CustomSelect
+                      <Select
                         value={vSettings.videoDeviceId || "default"}
-                        onChange={(val) => {
+                        onValueChange={(val) => {
                           const device = videoInputs.find(
                             (d) => d.deviceId === val,
                           );
@@ -792,16 +842,37 @@ export default function RoomSettingsModal({
                             groupId: device?.groupId,
                           });
                         }}
-                        options={videoInputs.map((d) => ({
-                          value: d.deviceId,
-                          label:
-                            d.label ||
-                            (d.deviceId === "default"
-                              ? "Default Camera"
-                              : "Camera"),
-                        }))}
-                        placeholder="Select camera device"
-                      />
+                      >
+                        <SelectTrigger
+                          aria-label="Select camera device"
+                          className="w-full max-w-[480px] rounded-xl border-rm-border bg-rm-bg-elevated/50 px-4 py-3 text-rm-text hover:bg-rm-bg-elevated"
+                        >
+                          <SelectValue placeholder="Select camera device" />
+                        </SelectTrigger>
+                        <SelectContent
+                          position="popper"
+                          align="start"
+                          className="rounded-xl border-rm-border bg-rm-bg-floating p-1.5 text-rm-text shadow-2xl"
+                        >
+                          {videoInputs.map((device) => {
+                            const label =
+                              device.label ||
+                              (device.deviceId === "default"
+                                ? "Default Camera"
+                                : "Camera");
+                            return (
+                              <SelectItem
+                                key={device.deviceId}
+                                value={device.deviceId}
+                                textValue={label}
+                                className="text-rm-text-secondary hover:bg-rm-bg-elevated hover:text-rm-text focus:bg-rm-bg-elevated focus:text-rm-text"
+                              >
+                                <InlineEmojiText text={label} />
+                              </SelectItem>
+                            );
+                          })}
+                        </SelectContent>
+                      </Select>
                     </div>
                   </div>
 

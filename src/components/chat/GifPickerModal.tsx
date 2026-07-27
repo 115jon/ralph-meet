@@ -1,5 +1,12 @@
 import { BaseModal } from "@/components/ui/BaseModal";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
@@ -37,7 +44,6 @@ import { useMediaSafetySettingsStore } from "@/stores/useMediaSafetySettingsStor
 import { useUser } from "@kova/react";
 import {
   ArrowLeft,
-  ChevronDown,
   Maximize2,
   Minimize2,
   Search,
@@ -1543,27 +1549,33 @@ export default function GifPickerModal({
                     <div className="relative shrink-0">
                       {providerOptions.length > 1 ? (
                         <>
-                          <select
+                          <Select
                             value={provider}
-                            onChange={(event) =>
-                              handleProviderChange(
-                                event.target.value as GifProvider,
-                              )
+                            onValueChange={(value) =>
+                              handleProviderChange(value as GifProvider)
                             }
-                            aria-label="GIF provider"
-                            className="picker-pill h-11 appearance-none rounded-xl border pl-3 pr-9 text-sm font-semibold outline-none transition shadow-sm dark:shadow-none"
                           >
-                            {providerOptions.map((option) => (
-                              <option
-                                key={option}
-                                value={option}
-                                className="bg-rm-bg-elevated text-rm-text"
-                              >
-                                {getGifProviderLabel(option)}
-                              </option>
-                            ))}
-                          </select>
-                          <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-rm-text-muted" />
+                            <SelectTrigger
+                              aria-label="GIF provider"
+                              className="picker-pill h-11 rounded-xl border pl-3 pr-9 text-sm font-semibold text-rm-text outline-none transition shadow-sm dark:shadow-none"
+                            >
+                              <SelectValue placeholder="GIF provider" />
+                            </SelectTrigger>
+                            <SelectContent position="popper" align="start">
+                              {providerOptions.map((option) => {
+                                const label = getGifProviderLabel(option);
+                                return (
+                                  <SelectItem
+                                    key={option}
+                                    value={option}
+                                    textValue={label}
+                                  >
+                                    {label}
+                                  </SelectItem>
+                                );
+                              })}
+                            </SelectContent>
+                          </Select>
                         </>
                       ) : (
                         <div className="flex h-11 items-center rounded-xl border border-rm-border bg-rm-bg-elevated px-3 text-sm font-semibold text-rm-text shadow-sm dark:shadow-none">
