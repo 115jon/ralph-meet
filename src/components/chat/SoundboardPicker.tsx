@@ -65,7 +65,6 @@ import EmojiToken from "./EmojiToken";
 import InlineEmojiText from "./InlineEmojiText";
 import { HomeIcon } from "./HomeIcon";
 import { UploadSoundModal, type UploadSoundData } from "./UploadSoundModal";
-import { useDelayUnmount } from "@/hooks/useDelayUnmount";
 import { ListenTogetherPanel } from "./ListenTogetherPanel";
 
 interface Props {
@@ -360,7 +359,7 @@ export default function SoundboardPicker({
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
-  const shouldRenderUploadModal = useDelayUnmount(isUploadModalOpen, 200);
+  const shouldRenderUploadModal = isUploadModalOpen;
   const [editingSound, setEditingSound] = useState<CustomSound | null>(null);
   const [soundToDelete, setSoundToDelete] = useState<CustomSound | null>(null);
   const [sendVolume, setSendVolume] = useState(0.8);

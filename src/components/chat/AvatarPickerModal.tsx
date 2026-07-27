@@ -3,7 +3,6 @@ import { apiDelete, apiGet } from "@/lib/api-client";
 import { getApiBaseUrl, getAuthAssetUrl } from "@/lib/platform";
 import { buildProxyMediaUrl } from "@/lib/proxy-media-url";
 import { cn } from "@/lib/utils";
-import { useDelayUnmount } from "@/hooks/useDelayUnmount";
 import type { GifPickerItem } from "@/lib/gif-picker";
 import { ImagePlus, Loader2, Sparkles, Trash2, Upload, X } from "lucide-react";
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
@@ -93,7 +92,7 @@ export function AvatarPickerModal({
   const [showGifPicker, setShowGifPicker] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const shouldRenderGifPicker = useDelayUnmount(showGifPicker, 200);
+  const shouldRenderGifPicker = showGifPicker;
 
   useEffect(() => {
     if (!showRecent) {

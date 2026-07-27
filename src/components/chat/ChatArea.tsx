@@ -38,7 +38,6 @@ import { EmptyChatArea } from "./EmptyChatArea";
 // --- Main Component ---
 
 import { useChatArea } from "./useChatArea";
-import { useDelayUnmount } from "@/hooks/useDelayUnmount";
 
 const MemoizedChatWelcomeContent = memo(ChatWelcomeContent);
 
@@ -113,7 +112,7 @@ export default function ChatArea({
     handleMessageVisible,
   } = useChatArea({ channelId, jumpToMessageId, onJumped });
 
-  const shouldRenderPinModal = useDelayUnmount(pinModal.isOpen, 200);
+  const shouldRenderPinModal = pinModal.isOpen;
 
   useBackButton(
     useCallback(() => {

@@ -6,7 +6,6 @@ import GifPickerModal from "./GifPickerModal";
 import EmojiPicker from "./EmojiPicker";
 import { Gif, Smile, Sticker } from "./Icons";
 import { Send } from "lucide-react";
-import { useDelayUnmount } from "@/hooks/useDelayUnmount";
 
 export function InputControls({
   showEmoji,
@@ -33,8 +32,8 @@ export function InputControls({
   const stickerBtnRef = useRef<HTMLButtonElement>(null);
   const emojiBtnRef = useRef<HTMLButtonElement>(null);
 
-  const renderEmojiPicker = useDelayUnmount(showEmoji, 150);
-  const renderGifPicker = useDelayUnmount(showGifPicker, 150);
+  const renderEmojiPicker = showEmoji;
+  const renderGifPicker = showGifPicker;
 
   useEffect(() => {
     const handleFavoriteAdded = () => {

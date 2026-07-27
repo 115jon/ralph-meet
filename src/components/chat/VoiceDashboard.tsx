@@ -27,7 +27,6 @@ import {
   Suspense,
 } from "react";
 import { createPortal } from "react-dom";
-import { useDelayUnmount } from "@/hooks/useDelayUnmount";
 import { FloatingListenTogetherPlayer } from "./FloatingListenTogetherPlayer";
 import { FloatingSoundboardManager } from "./FloatingSoundboardManager";
 import { AppWindow, AudioWaveform } from "lucide-react";
@@ -150,23 +149,20 @@ export function VoiceDashboard({
   showNoiseReductionShortcut = true,
 }: VoiceDashboardProps) {
   const [isStreamMenuOpen, setIsStreamMenuOpen] = useState(false);
-  const shouldRenderStreamMenu = useDelayUnmount(isStreamMenuOpen, 200);
+  const shouldRenderStreamMenu = isStreamMenuOpen;
   const [isCameraModalOpen, setIsCameraModalOpen] = useState(false);
   const [isVoiceDetailsOpen, setIsVoiceDetailsOpen] = useState(false);
   const [isSpatialOpen, setIsSpatialOpen] = useState(false);
-  const shouldRenderSpatial = useDelayUnmount(isSpatialOpen, 200);
+  const shouldRenderSpatial = isSpatialOpen;
   const [isStickerPickerOpen, setIsStickerPickerOpen] = useState(false);
-  const shouldRenderStickerPicker = useDelayUnmount(isStickerPickerOpen, 200);
+  const shouldRenderStickerPicker = isStickerPickerOpen;
   const [isSoundboardPickerOpen, setIsSoundboardPickerOpen] = useState(false);
-  const shouldRenderSoundboardPicker = useDelayUnmount(
-    isSoundboardPickerOpen,
-    200,
-  );
+  const shouldRenderSoundboardPicker = isSoundboardPickerOpen;
   const [soundboardInitialView, setSoundboardInitialView] = useState<
     "soundboard" | "listenTogether"
   >("soundboard");
   const [isNoiseReductionOpen, setIsNoiseReductionOpen] = useState(false);
-  const shouldRenderNoiseReduction = useDelayUnmount(isNoiseReductionOpen, 200);
+  const shouldRenderNoiseReduction = isNoiseReductionOpen;
   const stickerBtnRef = useRef<HTMLButtonElement>(null);
   const soundboardBtnRef = useRef<HTMLButtonElement>(null);
   const noiseReductionBtnRef = useRef<HTMLButtonElement>(null);

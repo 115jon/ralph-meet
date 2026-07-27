@@ -43,7 +43,6 @@ import {
 } from "react";
 import { useShallow } from "zustand/shallow";
 import { ChevronDown, Headphones, Mic, MicOff, Settings } from "./Icons";
-import { useDelayUnmount } from "@/hooks/useDelayUnmount";
 import { UserDisplayName } from "./UserDisplayName";
 import { UserNameplateLayer } from "./UserNameplateLayer";
 import { getUserNameplatePresentation } from "./user-nameplate-presentation";
@@ -292,8 +291,8 @@ export default function UserPanel({
   const micCaretRef = useRef<HTMLButtonElement>(null);
   const headphoneCaretRef = useRef<HTMLButtonElement>(null);
 
-  const shouldRenderMenu = useDelayUnmount(showMenu, 200);
-  const shouldRenderSettings = useDelayUnmount(showSettings, 200);
+  const shouldRenderMenu = showMenu;
+  const shouldRenderSettings = showSettings;
 
   const settings = useVoiceSettingsStore(
     useShallow((s) => s.getSettings(user?.id)),

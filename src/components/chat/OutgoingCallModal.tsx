@@ -6,7 +6,6 @@ import { useChatStore } from "@/stores/chat-store";
 import { useCallStore } from "@/stores/useCallStore";
 import { disposePrewarmedAudioContext } from "@/lib/voice/audio-pipeline";
 import { PhoneOff } from "lucide-react";
-import { useDelayUnmount } from "@/hooks/useDelayUnmount";
 import { AvatarImage } from "./AvatarImage";
 import InlineEmojiText from "./InlineEmojiText";
 
@@ -20,15 +19,8 @@ export function OutgoingCallModal() {
 
   const activeCallee = useUserResolution(remoteUser?.id, remoteUser);
 
-  const shouldRender = useDelayUnmount(
-    status === "ringing_outgoing" && !!remoteUser && !!callId,
-    200,
-  );
-  const _isClosing = !(
-    status === "ringing_outgoing" &&
-    !!remoteUser &&
-    !!callId
-  );
+  const shouldRender =
+    status === "ringing_outgoing" && !!remoteUser && !!callId;
 
   if (!shouldRender || !remoteUser || !callId) return null;
 

@@ -1,7 +1,6 @@
 import { isTauri } from "@/lib/platform";
 import type { StartScreenShareOptions } from "@/lib/screen-share-types";
 import { lazy, Suspense } from "react";
-import { useDelayUnmount } from "@/hooks/useDelayUnmount";
 
 export interface UnifiedScreenShareModalProps {
   isOpen: boolean;
@@ -27,7 +26,7 @@ export function UnifiedScreenShareModal({
   onStart,
   availableQualities,
 }: UnifiedScreenShareModalProps) {
-  const shouldRender = useDelayUnmount(isOpen, 200);
+  const shouldRender = isOpen;
 
   if (!shouldRender) return null;
 

@@ -10,7 +10,6 @@ import { voiceChannelStatusMediaFromGifItem } from "@/lib/voice-channel-status";
 import { useChatActions } from "@/stores/chat-store";
 import { Loader2, Sparkles, Upload, X } from "lucide-react";
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
-import { useDelayUnmount } from "@/hooks/useDelayUnmount";
 import { cn } from "@/lib/utils";
 
 const GifPickerModal = lazy(() => import("@/components/chat/GifPickerModal"));
@@ -173,7 +172,7 @@ export default function VoiceChannelMediaStatusModal({
   const [uploading, setUploading] = useState(false);
   const [applying, setApplying] = useState(false);
   const [showGifPicker, setShowGifPicker] = useState(false);
-  const shouldRenderGifPicker = useDelayUnmount(showGifPicker, 200);
+  const shouldRenderGifPicker = showGifPicker;
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const voiceSessionHeaders = useMemo(

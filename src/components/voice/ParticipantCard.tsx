@@ -4,7 +4,6 @@ import { getAuthAssetUrl } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 import { Eye, EyeOff, Phone } from "lucide-react";
 import React, { lazy, Suspense, useEffect, useState } from "react";
-import { useDelayedUnmountValue } from "@/hooks/useDelayUnmount";
 import { AvatarImage } from "@/components/chat/AvatarImage";
 import InlineEmojiText from "@/components/chat/InlineEmojiText";
 import {
@@ -56,8 +55,8 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
     y: number;
     isMini?: boolean;
   } | null>(null);
-  const { shouldRender: shouldRenderStreamMenu, value: renderedContextMenu } =
-    useDelayedUnmountValue(contextMenu, 150);
+  const shouldRenderStreamMenu = contextMenu != null;
+  const renderedContextMenu = contextMenu;
   const [dominantColor, setDominantColor] = useState<string | null>(null);
 
   useEffect(() => {

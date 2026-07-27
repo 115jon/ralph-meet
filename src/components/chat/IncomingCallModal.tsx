@@ -17,7 +17,6 @@ import { useChatStore } from "@/stores/chat-store";
 import { useCallStore } from "@/stores/useCallStore";
 import { Phone, X } from "lucide-react";
 import { useEffect, useRef } from "react";
-import { useDelayUnmount } from "@/hooks/useDelayUnmount";
 import { cn } from "@/lib/utils";
 import { AvatarImage } from "./AvatarImage";
 import InlineEmojiText from "./InlineEmojiText";
@@ -51,10 +50,8 @@ export function IncomingCallModal() {
     };
   }, [status]);
 
-  const shouldRender = useDelayUnmount(
-    status === "ringing_incoming" && !!remoteUser && !!callId,
-    200,
-  );
+  const shouldRender =
+    status === "ringing_incoming" && !!remoteUser && !!callId;
   const isClosing = !(
     status === "ringing_incoming" &&
     !!remoteUser &&

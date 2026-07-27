@@ -14,10 +14,6 @@ import {
   useChatPageLogic,
 } from "@/components/chat/useChatPageLogic";
 import {
-  useDelayUnmount,
-  useDelayedUnmountValue,
-} from "@/hooks/useDelayUnmount";
-import {
   shouldShowStartCallModal,
   shouldShowVoiceSwitchModal,
 } from "@/components/chat/voice-confirmation-preferences";
@@ -208,13 +204,13 @@ export default function ChatPage() {
 
   // ── Unified audio interaction modal ──────────────────────────────────────
   const [showAudioModal, setShowAudioModal] = useState(false);
-  const shouldRenderAudioModal = useDelayUnmount(showAudioModal, 200);
+  const shouldRenderAudioModal = showAudioModal;
   const [voiceAppsModal, setVoiceAppsModal] = useState<null | "activities">(
     null,
   );
-  const shouldRenderVoiceAppsModal = useDelayUnmount(!!voiceAppsModal, 200);
-  const { shouldRender: shouldRenderProfileUser, value: renderedProfileUser } =
-    useDelayedUnmountValue(profileUser, 200);
+  const shouldRenderVoiceAppsModal = !!voiceAppsModal;
+  const shouldRenderProfileUser = profileUser != null;
+  const renderedProfileUser = profileUser;
   const [channelSidebarWidth, setChannelSidebarWidth] = useState(
     CHANNEL_SIDEBAR_DEFAULT_WIDTH_PX,
   );
@@ -248,16 +244,9 @@ export default function ChatPage() {
     pendingJump,
   } = ui;
 
-  const shouldRenderInviteModal = useDelayUnmount(
-    activeModal === "invite",
-    200,
-  );
-  const shouldRenderSettingsModal = useDelayUnmount(
-    activeModal === "settings",
-    200,
-  );
-  const shouldRenderVoiceTextChat = useDelayUnmount(showVoiceTextChat, 200);
-  const voiceTextChatVisible = showVoiceTextChat || shouldRenderVoiceTextChat;
+  const shouldRenderInviteModal = activeModal === "invite";
+  const shouldRenderSettingsModal = activeModal === "settings";
+  const voiceTextChatVisible = showVoiceTextChat;
 
   const activeServer = useMemo(
     () => servers.find((s) => s.id === activeServerId),
@@ -453,7 +442,7 @@ export default function ChatPage() {
   const [pendingSwitch, setPendingSwitch] = useState<PendingSwitch | null>(
     null,
   );
-  const shouldRenderVoiceSwitchModal = useDelayUnmount(!!pendingSwitch, 200);
+  const shouldRenderVoiceSwitchModal = !!pendingSwitch;
   const pendingSwitchRef = useRef(pendingSwitch);
   useEffect(() => {
     pendingSwitchRef.current = pendingSwitch;
@@ -774,7 +763,7 @@ export default function ChatPage() {
   };
   const [pendingCallTarget, setPendingCallTarget] =
     useState<PendingCallTarget | null>(null);
-  const shouldRenderStartCallModal = useDelayUnmount(!!pendingCallTarget, 200);
+  const shouldRenderStartCallModal = !!pendingCallTarget;
 
   const executeStartCall = useCallback(
     (target: PendingCallTarget) => {

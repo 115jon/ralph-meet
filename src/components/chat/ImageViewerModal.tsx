@@ -21,7 +21,6 @@ import {
 import { useMediaSafetySettingsStore } from "@/stores/useMediaSafetySettingsStore";
 import { Copy, Download, ExternalLink, X } from "lucide-react";
 import React, { useCallback, useEffect, useMemo, useRef } from "react";
-import { useDelayUnmount } from "@/hooks/useDelayUnmount";
 import { ImageViewerContent } from "./ImageViewerContent";
 import { ImageViewerNavigation } from "./ImageViewerNavigation";
 import { ImageViewerThumbnails } from "./ImageViewerThumbnails";
@@ -32,7 +31,7 @@ import { useImageViewerState } from "./useImageViewerState";
 
 export const ImageViewerModal: React.FC = () => {
   const { isOpen, images, initialIndex, context } = useImageViewerStore();
-  const shouldRender = useDelayUnmount(isOpen, 200);
+  const shouldRender = isOpen;
   const { close } = useImageViewerActions();
   const {
     menu,

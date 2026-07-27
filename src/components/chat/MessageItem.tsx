@@ -28,7 +28,6 @@ import { shouldBlurSensitiveAttachment } from "@/lib/media-safety";
 import { cn } from "@/lib/utils";
 import { useChatActions, useChatStore } from "@/stores/chat-store";
 import { useMediaSafetySettingsStore } from "@/stores/useMediaSafetySettingsStore";
-import { useDelayUnmount } from "@/hooks/useDelayUnmount";
 import { useExternalLinkConfirmation } from "@/hooks/useExternalLinkConfirmation";
 import {
   copyMediaLink,
@@ -318,9 +317,9 @@ const MessageItem = memo(
     const [showProfile, setShowProfile] = useState(false);
     const [editing, setEditing] = useState(false);
     const [showShareModal, setShowShareModal] = useState(false);
-    const shouldRenderShareModal = useDelayUnmount(showShareModal, 200);
+    const shouldRenderShareModal = showShareModal;
     const [showDeleteModal, setShowDeleteModal] = useState(false);
-    const shouldRenderDeleteModal = useDelayUnmount(showDeleteModal, 200);
+    const shouldRenderDeleteModal = showDeleteModal;
     const [editInput, setEditInput] = useState("");
     const [toolbarQuickReactions, setToolbarQuickReactions] = useState(() =>
       getQuickReactionItems(3),

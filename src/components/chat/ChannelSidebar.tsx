@@ -97,10 +97,6 @@ import VoiceChannelMediaStatusModal from "./VoiceChannelMediaStatusModal";
 import VoiceChannelTextStatusModal from "./VoiceChannelTextStatusModal";
 import InlineEmojiText from "./InlineEmojiText";
 import { ListenTogetherSidebarStatus } from "./ListenTogetherSidebarStatus";
-import {
-  useDelayUnmount,
-  useDelayedUnmountValue,
-} from "@/hooks/useDelayUnmount";
 
 const StreamContextMenu = lazy(() =>
   import("../StreamContextMenu").then((mod) => ({
@@ -411,7 +407,7 @@ function SortableChannelItem({
     (channel.permissions != null &&
       hasPermission(channel.permissions, PERMISSIONS.MANAGE_CHANNELS));
   const [isVoiceTextStatusOpen, setIsVoiceTextStatusOpen] = useState(false);
-  const shouldRenderTextStatus = useDelayUnmount(isVoiceTextStatusOpen, 200);
+  const shouldRenderTextStatus = isVoiceTextStatusOpen;
   const [isVoiceMediaStatusOpen, setIsVoiceMediaStatusOpen] = useState(false);
   const [isRemovingVoiceMedia, setIsRemovingVoiceMedia] = useState(false);
   const {
@@ -909,20 +905,12 @@ export default function ChannelSidebar({
   const liveInviteChannel = inviteChannel
     ? (channels.find((channel) => channel.id === inviteChannel) ?? null)
     : null;
-  const shouldRenderCreateCategory = useDelayUnmount(showCreateCategory, 200);
-  const shouldRenderCreateChannel = useDelayUnmount(!!showCreateChannel, 200);
-  const {
-    shouldRender: shouldRenderChannelSettings,
-    value: renderedChannelSettings,
-  } = useDelayedUnmountValue(
-    liveChannelSettings,
-    200,
-    showChannelSettings != null,
-  );
-  const {
-    shouldRender: shouldRenderInviteChannel,
-    value: renderedInviteChannel,
-  } = useDelayedUnmountValue(liveInviteChannel, 200, inviteChannel != null);
+  const shouldRenderCreateCategory = showCreateCategory;
+  const shouldRenderCreateChannel = !!showCreateChannel;
+  const shouldRenderChannelSettings = showChannelSettings != null;
+  const renderedChannelSettings = liveChannelSettings;
+  const shouldRenderInviteChannel = inviteChannel != null;
+  const renderedInviteChannel = liveInviteChannel;
   const { menu, openMenu, closeMenu } = useContextMenu();
   const voiceSettings = useVoiceSettingsStore((s) => s.getSettings(user?.id));
   const setIsMuted = useVoiceSettingsStore((s) => s.setIsMuted);

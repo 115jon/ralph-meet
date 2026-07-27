@@ -1,5 +1,4 @@
 import { Slider } from "@/components/ContextMenu/ContextMenuItems";
-import { useDelayedUnmountValue } from "@/hooks/useDelayUnmount";
 import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
 import { cn } from "@/lib/utils";
 import { EyeOff, Headphones, MicOff, Volume2 } from "lucide-react";
@@ -68,8 +67,8 @@ export const VoiceGrid = React.memo(
       x: number;
       y: number;
     } | null>(null);
-    const { shouldRender: shouldRenderStreamMenu, value: renderedContextMenu } =
-      useDelayedUnmountValue(contextMenu, 150);
+    const shouldRenderStreamMenu = contextMenu != null;
+    const renderedContextMenu = contextMenu;
     const [dominantColor, setDominantColor] = useState<string | null>(null);
     const setPeerVolume = useVoiceSettingsStore((s) => s.setPeerVolume);
     const setPeerStreamVolume = useVoiceSettingsStore(

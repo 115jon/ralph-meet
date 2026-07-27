@@ -5,7 +5,6 @@ import type { VoiceChannelMember } from "@/lib/chat-reducer";
 import type { Channel, Server, User } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useMemo, useState } from "react";
-import { useDelayUnmount } from "@/hooks/useDelayUnmount";
 import { Volume2 } from "lucide-react";
 import {
   Tooltip,
@@ -126,7 +125,7 @@ export default function ServerList({
   onMarkAllRead: _onMarkAllRead,
 }: Props) {
   const [showCreate, setShowCreate] = useState(false);
-  const shouldRenderCreateServer = useDelayUnmount(showCreate, 200);
+  const shouldRenderCreateServer = showCreate;
   const [dmExpanded, setDmExpanded] = useState(false);
   const { menu, openMenu, closeMenu, shouldRender, isClosing } =
     useContextMenu();
