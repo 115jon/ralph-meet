@@ -358,7 +358,7 @@ function ProfileActionMenu({
   anchorRef,
   restoreFocusRef,
   placement = "below",
-  portal = false,
+  useBodyPortal = false,
   onRequestClose,
 }: {
   actions: Array<{
@@ -369,7 +369,7 @@ function ProfileActionMenu({
   anchorRef?: RefObject<HTMLElement | null>;
   restoreFocusRef?: RefObject<HTMLElement | null>;
   placement?: "below" | "right";
-  portal?: boolean;
+  useBodyPortal?: boolean;
   onRequestClose?: () => void;
 }) {
   const [position, setPosition] = useState({ left: 8, top: 8 });
@@ -387,7 +387,7 @@ function ProfileActionMenu({
   }, [anchorRef, restoreFocusRef]);
 
   useLayoutEffect(() => {
-    if (!portal || !anchorRef?.current) return;
+    if (!useBodyPortal || !anchorRef?.current) return;
 
     const updatePosition = () => {
       const rect = anchorRef.current?.getBoundingClientRect();
@@ -407,7 +407,7 @@ function ProfileActionMenu({
       window.removeEventListener("resize", updatePosition);
       window.removeEventListener("scroll", updatePosition, true);
     };
-  }, [anchorRef, placement, portal]);
+  }, [anchorRef, placement, useBodyPortal]);
 
   const handleMenuKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
     const actions = Array.from(
@@ -436,16 +436,18 @@ function ProfileActionMenu({
   const menu = (
     <div
       ref={menuRef}
-      onPointerDown={portal ? (event) => event.stopPropagation() : undefined}
+      onPointerDown={
+        useBodyPortal ? (event) => event.stopPropagation() : undefined
+      }
       onKeyDown={handleMenuKeyDown}
       role="menu"
       className={cn(
-        portal
-          ? "fixed z-[2000]"
+        useBodyPortal
+          ? "fixed z-80"
           : "absolute left-[calc(100%+8px)] top-1 z-[180] max-md:left-1/2 max-md:top-[calc(100%+8px)] max-md:-translate-x-1/2",
         "min-w-[198px] rounded-[12px] border border-rm-border bg-rm-bg-floating p-1.5 shadow-[0_18px_44px_rgba(0,0,0,0.42)] animate-in fade-in zoom-in-95 duration-150",
       )}
-      style={portal ? position : undefined}
+      style={useBodyPortal ? position : undefined}
     >
       {actions.map((action) => (
         <button
@@ -467,7 +469,7 @@ function ProfileActionMenu({
     </div>
   );
 
-  return portal && typeof document !== "undefined"
+  return useBodyPortal && typeof document !== "undefined"
     ? createPortal(menu, document.body)
     : menu;
 }
@@ -823,7 +825,7 @@ function ColorField({
             aria-modal="false"
             aria-label={`${label} color picker`}
             data-display-name-style-color-popover="true"
-            className="fixed z-[1450] w-[calc(100vw-1rem)] max-w-[320px] rounded-[24px] border border-rm-border bg-rm-bg-floating/96 p-4 text-rm-text shadow-[0_32px_80px_rgba(0,0,0,0.45)] backdrop-blur-xl"
+            className="fixed z-80 w-[calc(100vw-1rem)] max-w-[320px] rounded-[24px] border border-rm-border bg-rm-bg-floating/96 p-4 text-rm-text shadow-[0_32px_80px_rgba(0,0,0,0.45)] backdrop-blur-xl"
             style={{
               left: popoverPosition?.left ?? 8,
               top: popoverPosition?.top ?? 8,
@@ -1256,7 +1258,7 @@ function DisplayNameStyleDialog({
 
   return (
     <div
-      className="fixed inset-0 z-[1200] flex items-center justify-center bg-black/58 p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/58 p-4"
       onClick={(event) => {
         if (event.target === event.currentTarget) onClose();
       }}
@@ -3091,7 +3093,7 @@ export default function SettingsAccountTab({
             <aside
               className={cn(
                 "self-start transition-[opacity,transform,max-width] duration-300",
-                asModal && "relative z-[140] min-h-0",
+                asModal && "relative z-20 min-h-0",
                 !stylesCollapsed && "overflow-visible",
                 asModal &&
                   stylesCollapsed &&
@@ -3911,7 +3913,7 @@ export default function SettingsAccountTab({
                         anchorRef={profileBannerActionRef}
                         restoreFocusRef={profileBannerTriggerRef}
                         placement="right"
-                        portal
+                        useBodyPortal
                         onRequestClose={() => setProfileMenuAnchor(null)}
                         actions={[
                           {
@@ -4679,6 +4681,7 @@ export default function SettingsAccountTab({
 
       {avatarPickerOpen ? (
         <AvatarPickerModal
+          open={avatarPickerOpen}
           displayName={currentDisplayName}
           currentAvatarUrl={
             removeAvatar ? null : (selectedAvatarUrl ?? chatUser?.avatar_url)
@@ -4690,6 +4693,7 @@ export default function SettingsAccountTab({
       ) : null}
       {bannerPickerOpen ? (
         <AvatarPickerModal
+          open={bannerPickerOpen}
           displayName={currentDisplayName}
           onClose={() => setBannerPickerOpen(false)}
           onUpload={handleBannerFile}

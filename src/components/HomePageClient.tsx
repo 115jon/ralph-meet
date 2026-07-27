@@ -1647,7 +1647,7 @@ export default function HomePageClient() {
 
       <HomePageFooter />
 
-      {profileOpen && <SettingsModal onClose={() => setProfileOpen(false)} />}
+      <SettingsModal open={profileOpen} onClose={() => setProfileOpen(false)} />
 
       <style>{`
         @keyframes float {

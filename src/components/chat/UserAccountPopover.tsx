@@ -242,7 +242,7 @@ export default function UserAccountPopover({
     <>
       <div
         className={cn(
-          "fixed inset-0 z-[999] cursor-default bg-transparent",
+          "fixed inset-0 z-40 cursor-default bg-transparent",
           isClosing && "pointer-events-none",
         )}
         onClick={onClose}
@@ -254,7 +254,7 @@ export default function UserAccountPopover({
         variant="popover"
         display={profileDisplay}
         className={cn(
-          "fixed z-[1000] animate-in fade-in zoom-in-95 duration-200 outline-none",
+          "fixed z-60 animate-in fade-in zoom-in-95 duration-200 outline-none",
           isClosing && "animate-out fade-out zoom-out-95",
         )}
         style={{

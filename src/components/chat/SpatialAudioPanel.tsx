@@ -318,7 +318,7 @@ export function SpatialAudioPanel({
       {!isClosing && (
         <button
           type="button"
-          className="fixed inset-0 z-[990]"
+          className="fixed inset-0 z-20"
           aria-label="Close spatial audio panel"
           onClick={onClose}
         />
@@ -327,7 +327,7 @@ export function SpatialAudioPanel({
         ref={panelRef}
         aria-label="Spatial Audio"
         className={cn(
-          "fixed z-[1000] w-[min(620px,calc(100vw-24px))] rounded-xl border border-rm-border bg-rm-bg-primary p-4 shadow-2xl",
+          "fixed z-30 w-[min(620px,calc(100vw-24px))] rounded-xl border border-rm-border bg-rm-bg-primary p-4 shadow-2xl",
           panelPosition.placement === "top"
             ? isClosing
               ? "origin-bottom animate-out fade-out slide-out-to-bottom-2 zoom-out-95 duration-200"

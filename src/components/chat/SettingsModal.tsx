@@ -1,5 +1,11 @@
 import { AvatarImage } from "@/components/chat/AvatarImage";
-import { BaseModal } from "@/components/ui/BaseModal";
+import {
+  Dialog,
+  DialogOverlay,
+  DialogPortal,
+  DialogSurface,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { IconButton } from "@/components/ui/IconButton";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
@@ -28,7 +34,6 @@ import {
   useDeferredValue,
   useEffect,
   useMemo,
-  useRef,
   useState,
   useSyncExternalStore,
 } from "react";
@@ -48,10 +53,10 @@ import SettingsMediaTab from "./SettingsMediaTab";
 import ThemePreviewSidebar from "./ThemePreviewSidebar";
 
 interface SettingsModalProps {
+  open: boolean;
   onClose: () => void;
   initialTab?: Tab;
   initialProfileEditorOpen?: boolean;
-  isClosing?: boolean;
 }
 
 type Tab =
@@ -138,10 +143,10 @@ function TabButton({
 }
 
 export default function SettingsModal({
+  open,
   onClose,
   initialTab,
   initialProfileEditorOpen = false,
-  isClosing,
 }: SettingsModalProps) {
   const { isLoaded: isUserLoaded } = useUser();
   const { clearSessionToken } = useKovaAuth();
@@ -160,28 +165,10 @@ export default function SettingsModal({
   const [profileEditorOpen, setProfileEditorOpen] = useState(
     initialProfileEditorOpen,
   );
-  const profileEditorRef = useRef<HTMLElement>(null);
-  const profileEditorTriggerRef = useRef<HTMLElement | null>(null);
-  const profileEditorWasOpen = useRef(false);
   const [searchQuery, setSearchQuery] = useState("");
   const deferredSearchQuery = useDeferredValue(searchQuery);
 
-  useEffect(() => {
-    if (profileEditorOpen) {
-      profileEditorRef.current?.focus();
-      profileEditorWasOpen.current = true;
-    } else if (profileEditorWasOpen.current) {
-      profileEditorTriggerRef.current?.focus();
-      profileEditorWasOpen.current = false;
-    }
-  }, [profileEditorOpen]);
-
-  const openProfileEditor = useCallback((trigger?: HTMLElement) => {
-    profileEditorTriggerRef.current =
-      trigger ??
-      (document.activeElement instanceof HTMLElement
-        ? document.activeElement
-        : null);
+  const openProfileEditor = useCallback(() => {
     setProfileEditorOpen(true);
   }, []);
 
@@ -349,37 +336,27 @@ export default function SettingsModal({
     onClose,
   ]);
 
-  if (!mounted) {
-    return (
-      <div
-        className="fixed inset-0 z-1000 flex bg-rm-bg-primary"
-        suppressHydrationWarning
-      />
-    );
-  }
+  if (!mounted) return null;
 
   return (
-    <BaseModal onClose={handleModalCloseOrBack}>
-      <div
-        className={cn(
-          "fixed inset-0 z-1000 flex flex-col items-center justify-center animate-in fade-in duration-200",
-          previewOpen
-            ? "bg-transparent p-0"
-            : "bg-black/60 backdrop-blur-sm p-0 md:p-8",
-          isClosing && "animate-out fade-out",
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) => !nextOpen && handleModalCloseOrBack()}
+    >
+      <DialogPortal>
+        {!previewOpen && (
+          <DialogOverlay className="bg-black/60 backdrop-blur-sm" />
         )}
-      >
-        <dialog
-          open
-          aria-hidden={profileEditorOpen ? "true" : undefined}
-          inert={profileEditorOpen ? true : undefined}
+        <DialogSurface
+          showCloseButton={false}
           className={cn(
-            "relative m-0 flex w-full overflow-hidden p-0 outline-none animate-in duration-200",
+            "fixed inset-0 z-50 m-0 flex min-h-0 flex-col items-stretch justify-center overflow-hidden p-0 outline-none animate-in fade-in duration-200 shadow-2xl",
+            previewOpen ? "bg-transparent" : "bg-rm-bg-primary",
             previewOpen
               ? "h-full max-w-none flex-row bg-transparent shadow-none border-0 rounded-none"
-              : "h-full flex-col bg-rm-bg-primary md:flex-row md:max-h-[820px] md:max-w-[1040px] md:rounded-xl shadow-2xl border-0 md:border md:border-rm-border",
+              : "h-full w-full flex-col bg-rm-bg-primary md:inset-auto md:left-1/2 md:top-1/2 md:h-[min(820px,calc(100dvh-32px))] md:w-[min(1040px,calc(100vw-32px))] md:-translate-x-1/2 md:-translate-y-1/2 md:flex-row md:rounded-xl shadow-2xl border-0 md:border md:border-rm-border",
             !previewOpen && "zoom-in-95",
-            isClosing && "animate-out zoom-out-95",
+            "data-[state=closed]:animate-out data-[state=closed]:fade-out data-[state=closed]:zoom-out-95",
           )}
           aria-label="Settings"
         >
@@ -403,7 +380,7 @@ export default function SettingsModal({
                 }
                 inert={isMobileViewport && !showMobileMenu ? true : undefined}
                 className={cn(
-                  "w-full md:w-[248px] flex-col shrink-0 bg-rm-bg-sidebar pt-0 md:pt-4 pb-5 md:pl-4 pr-0 md:pr-2 overflow-y-auto overflow-x-hidden custom-scrollbar",
+                  "w-full min-h-0 md:w-[248px] flex-col shrink-0 bg-rm-bg-sidebar pt-0 md:pt-4 pb-5 md:pl-4 pr-0 md:pr-2 overflow-y-auto overflow-x-hidden custom-scrollbar",
                   "max-md:absolute max-md:inset-0 max-md:z-10 max-md:transition-transform max-md:duration-300 max-md:ease-out flex",
                   showMobileMenu
                     ? "max-md:translate-x-0"
@@ -446,15 +423,36 @@ export default function SettingsModal({
                         <div className="truncate text-sm font-bold text-rm-text">
                           {profileDisplayName}
                         </div>
-                        <button
-                          type="button"
-                          onClick={(event) =>
-                            openProfileEditor(event.currentTarget)
-                          }
-                          className="mt-1 text-sm text-rm-text-muted transition-colors hover:text-rm-text"
+                        <Dialog
+                          open={profileEditorOpen && !previewOpen}
+                          onOpenChange={setProfileEditorOpen}
                         >
-                          Edit profile
-                        </button>
+                          <DialogTrigger asChild>
+                            <button
+                              type="button"
+                              className="mt-1 text-sm text-rm-text-muted transition-colors hover:text-rm-text"
+                            >
+                              Edit profile
+                            </button>
+                          </DialogTrigger>
+                          <DialogPortal>
+                            <DialogSurface
+                              showCloseButton={false}
+                              aria-label="Edit profile"
+                              className="fixed inset-0 z-60 flex items-center justify-center overflow-hidden rounded-[30px] border border-rm-border bg-[#09090d] p-0 shadow-[0_36px_110px_rgba(0,0,0,0.52)] animate-in zoom-in-95 duration-200 data-[state=closed]:animate-out data-[state=closed]:zoom-out-95 md:inset-auto md:left-1/2 md:top-1/2 md:h-[min(860px,calc(100dvh-32px))] md:w-[min(1240px,calc(100vw-32px))] md:-translate-x-1/2 md:-translate-y-1/2 md:rounded-[32px]"
+                              style={{
+                                width: "min(1240px, calc(100vw - 32px))",
+                                height: "min(860px, calc(100dvh - 32px))",
+                              }}
+                            >
+                              <SettingsAccountTab
+                                authUserLoaded={isUserLoaded}
+                                asModal
+                                onClose={() => setProfileEditorOpen(false)}
+                              />
+                            </DialogSurface>
+                          </DialogPortal>
+                        </Dialog>
                       </div>
                     </div>
                     <div className="relative mt-3">
@@ -522,7 +520,7 @@ export default function SettingsModal({
                 }
                 inert={isMobileViewport && showMobileMenu ? true : undefined}
                 className={cn(
-                  "flex-1 flex-col relative overflow-hidden bg-rm-bg-primary",
+                  "flex-1 min-h-0 flex-col relative overflow-hidden bg-rm-bg-primary",
                   "max-md:absolute max-md:inset-0 max-md:z-20 max-md:transition-transform max-md:duration-300 max-md:ease-out flex",
                   !showMobileMenu
                     ? "max-md:translate-x-0"
@@ -561,7 +559,7 @@ export default function SettingsModal({
                   </span>
                 </div>
 
-                <div className="flex-1 overflow-y-auto custom-scrollbar pt-6 md:pt-8 pb-[60px]">
+                <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar pt-6 md:pt-8 pb-[60px]">
                   <div
                     className={cn(
                       "px-[16px] md:px-[36px] max-w-[940px] w-full mx-auto transition-opacity duration-150",
@@ -642,34 +640,8 @@ export default function SettingsModal({
               </div>
             </>
           )}
-        </dialog>
-        {profileEditorOpen && !previewOpen && (
-          <div
-            className="fixed inset-0 z-[1010] flex items-center justify-center bg-black/56 p-4 backdrop-blur-[2px] md:p-6"
-            onClick={() => setProfileEditorOpen(false)}
-          >
-            <section
-              ref={profileEditorRef}
-              role="dialog"
-              aria-modal="true"
-              aria-label="Edit profile"
-              tabIndex={-1}
-              className="relative overflow-hidden rounded-[30px] border border-rm-border bg-[#09090d] shadow-[0_36px_110px_rgba(0,0,0,0.52)] md:rounded-[32px]"
-              style={{
-                width: "min(1240px, calc(100vw - 32px))",
-                height: "min(860px, calc(100dvh - 32px))",
-              }}
-              onClick={(event) => event.stopPropagation()}
-            >
-              <SettingsAccountTab
-                authUserLoaded={isUserLoaded}
-                asModal
-                onClose={() => setProfileEditorOpen(false)}
-              />
-            </section>
-          </div>
-        )}
-      </div>
-    </BaseModal>
+        </DialogSurface>
+      </DialogPortal>
+    </Dialog>
   );
 }

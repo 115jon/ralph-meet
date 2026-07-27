@@ -90,7 +90,7 @@ export function ListenTogetherMobileActionSheet({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[1100] flex items-end bg-black/55 p-3 lg:hidden"
+      className="fixed inset-0 z-50 flex items-end bg-black/55 p-3 lg:hidden"
       role="presentation"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) onClose();

@@ -325,7 +325,7 @@ export const StreamContextMenu: React.FC<StreamContextMenuProps> = ({
       onContextMenu={(event) => event.stopPropagation()}
       onMouseLeave={clearSubmenu}
       onMouseMove={handleMouseMove}
-      className="fixed z-[9999] w-[210px] bg-rm-bg-elevated border border-rm-border shadow-2xl rounded-lg p-1 pb-2 animate-in fade-in zoom-in-95 duration-100 backdrop-blur-xl flex flex-col"
+      className="fixed z-70 w-[210px] bg-rm-bg-elevated border border-rm-border shadow-2xl rounded-lg p-1 pb-2 animate-in fade-in zoom-in-95 duration-100 backdrop-blur-xl flex flex-col"
     >
       <div className="flex flex-col">
         {isLocal ? (

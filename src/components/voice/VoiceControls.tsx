@@ -395,9 +395,10 @@ export function VoiceControls({
         settingsUserId={settingsUserId}
       />
       {/* GIF Picker in voice reaction mode */}
-      {gifPickerVoiceMode && isStickerOpen && (
+      {gifPickerVoiceMode && (
         <Suspense fallback={null}>
           <GifPickerModal
+            open={isStickerOpen}
             onClose={handleStickerClose}
             onSelect={handleStickerSelect}
             voiceMode={gifPickerVoiceMode}

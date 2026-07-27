@@ -1,6 +1,5 @@
 // @vitest-environment jsdom
 
-import type { ReactNode } from "react";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -9,10 +8,6 @@ const mocks = vi.hoisted(() => ({
     "user-1": { username: "alex", displayName: "Alex" },
     "user-2": { username: "sam", displayName: "Sam" },
   } as Record<string, { username: string; displayName: string }>,
-}));
-
-vi.mock("@/components/ui/BaseModal", () => ({
-  BaseModal: ({ children }: { children: ReactNode }) => <>{children}</>,
 }));
 
 vi.mock("@/hooks/useUserResolution", () => ({

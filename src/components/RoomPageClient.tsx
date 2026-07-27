@@ -384,7 +384,7 @@ function RoomHeader({
   return (
     <div
       className={cn(
-        "absolute top-0 inset-x-0 flex items-center justify-between px-6 z-100 pointer-events-none",
+        "absolute top-0 inset-x-0 flex items-center justify-between px-6 z-10 pointer-events-none",
         focusedId
           ? "bg-linear-to-b from-rm-bg-primary/80 to-transparent"
           : "bg-rm-bg-primary/20",
@@ -638,7 +638,7 @@ function RoomVoiceView({
       onDrop={handleDrop}
     >
       {isFileDragging && (
-        <div className="pointer-events-none absolute inset-4 z-[900] flex items-center justify-center rounded-3xl border border-dashed border-primary/50 bg-rm-bg-primary/70 backdrop-blur-sm">
+        <div className="pointer-events-none absolute inset-4 z-20 flex items-center justify-center rounded-3xl border border-dashed border-primary/50 bg-rm-bg-primary/70 backdrop-blur-sm">
           <div className="rounded-2xl border border-rm-border bg-rm-bg-elevated px-5 py-4 text-center shadow-2xl">
             <p className="text-sm font-black text-rm-text">
               Uploads unlock in the full app
@@ -770,29 +770,26 @@ function RoomVoiceView({
         />
       </Suspense>
 
-      {audioBlocked && (
-        <AudioInteractionModal
-          onInteract={() => {
-            sfu?.resumeAudioContext();
-            resumeSoundContext();
-            setAudioBlocked(false);
-          }}
-          onClose={() => setAudioBlocked(false)}
-        />
-      )}
+      <AudioInteractionModal
+        open={audioBlocked}
+        onInteract={() => {
+          sfu?.resumeAudioContext();
+          resumeSoundContext();
+          setAudioBlocked(false);
+        }}
+        onClose={() => setAudioBlocked(false)}
+      />
 
-      {isSettingsOpen && (
-        <RoomSettingsModal
-          onClose={() => setIsSettingsOpen(false)}
-          settingsUserId={settingsUserId}
-        />
-      )}
-      {showUploadBlocker && (
-        <DemoUploadBlockerModal
-          onClose={() => setShowUploadBlocker(false)}
-          onSignIn={onSignIn}
-        />
-      )}
+      <RoomSettingsModal
+        open={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+        settingsUserId={settingsUserId}
+      />
+      <DemoUploadBlockerModal
+        open={showUploadBlocker}
+        onClose={() => setShowUploadBlocker(false)}
+        onSignIn={onSignIn}
+      />
     </div>
   );
 }

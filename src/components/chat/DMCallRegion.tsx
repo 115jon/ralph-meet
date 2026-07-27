@@ -425,7 +425,7 @@ export function DMCallRegion({ channelId }: { channelId: string }) {
         // Force hardware acceleration to prevent Chromium's diagonal tearing bug
         "bg-black transform-gpu will-change-transform",
         isExpanded
-          ? "fixed inset-0 z-200 border-none"
+          ? "fixed inset-0 z-50 border-none"
           : isChatHidden
             ? "flex-1 absolute inset-0 z-40 border-none"
             : "h-[300px] sm:h-[340px] border-b border-rm-border",

@@ -1,4 +1,4 @@
-import { BaseModal } from "@/components/ui/BaseModal";
+import { Dialog, DialogPortal, DialogSurface } from "@/components/ui/dialog";
 import { useContextMenu } from "@/hooks/useContextMenu";
 import { useExternalLinkConfirmation } from "@/hooks/useExternalLinkConfirmation";
 import {
@@ -31,7 +31,6 @@ import { useImageViewerState } from "./useImageViewerState";
 
 export const ImageViewerModal: React.FC = () => {
   const { isOpen, images, initialIndex, context } = useImageViewerStore();
-  const shouldRender = isOpen;
   const { close } = useImageViewerActions();
   const {
     menu,
@@ -131,7 +130,6 @@ export const ImageViewerModal: React.FC = () => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (menu.isOpen) return;
       if (confirmation) return;
-      if (e.key === "Escape") close();
       if (e.key === "ArrowLeft") handlePrev();
       if (e.key === "ArrowRight") handleNext();
     };
@@ -518,124 +516,126 @@ export const ImageViewerModal: React.FC = () => {
     [handleImageClick],
   );
 
-  if (!shouldRender) return null;
   if (!currentImage) return null;
 
   return (
-    <BaseModal onClose={close} portal={false} aria-label="Image viewer">
-      <div
-        className={cn(
-          "fixed inset-0 z-200 flex flex-col items-center justify-center bg-rm-bg-primary/95 backdrop-blur-md duration-200",
-          !isOpen ? "animate-out fade-out" : "animate-in fade-in",
-        )}
-      >
-        {/* Top Toolbar */}
-        {!hideUi && (
-          <ImageViewerToolbar
-            context={context}
-            currentImage={currentImage}
-            showMore={showMore}
-            showDetails={showDetails}
-            dimensions={dimensions}
-            setLocalState={setLocalState}
-            viewDispatch={viewDispatch}
-            close={close}
-            getUrl={getUrl}
-            isVideo={isItemVideo}
-            isAnimatedMedia={isItemAnimatedMedia}
-          />
-        )}
-
-        {/* Floating X button when clean mode active */}
-        {hideUi && (
-          <div className="absolute top-4 right-4 z-60 bg-rm-bg-elevated/80 backdrop-blur-md border border-rm-border rounded-xl p-1 shadow-lg">
-            <button
-              onClick={close}
-              className="p-2 text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover rounded-lg transition-all outline-none"
-            >
-              <X size={18} />
-            </button>
-          </div>
-        )}
-
-        {/* Main Content Container */}
-        <div
-          ref={containerRef}
-          data-testid="image-viewer-stage"
+    <Dialog open={isOpen} onOpenChange={(open) => !open && close()}>
+      <DialogPortal>
+        <DialogSurface
+          showCloseButton={false}
+          onEscapeKeyDown={(event) => {
+            if (menu.isOpen || confirmation) event.preventDefault();
+          }}
           className={cn(
-            "relative w-full flex-1 flex items-center justify-center overflow-hidden touch-none overscroll-none",
-            hideUi ? "p-0" : "pt-14 pb-24 px-4 md:pt-16 md:pb-32 md:px-8",
-            isItemVideo
-              ? "cursor-default"
-              : isZoomed
-                ? "cursor-grab active:cursor-grabbing"
-                : "cursor-zoom-in",
+            "fixed inset-0 z-50 flex flex-col items-center justify-center bg-rm-bg-primary/95 backdrop-blur-md duration-200",
+            "animate-in fade-in data-[state=closed]:animate-out data-[state=closed]:fade-out",
           )}
-          onMouseDown={handleStageMouseDown}
-          onMouseMove={handleStageMouseMove}
-          onMouseUp={handleStageMouseUp}
-          onTouchStart={handleStageTouchStart}
-          onTouchMove={handleStageTouchMove}
-          onTouchEnd={handleStageTouchEnd}
-          onTouchCancel={handleStageTouchCancel}
-          onContextMenu={handleMediaContextMenu}
-          onClick={(e) => {
-            if (e.target === e.currentTarget) close();
-          }}
-          onKeyDown={(e) => {
-            if (e.key === "Escape") close();
-          }}
-          role="presentation"
         >
-          <ImageViewerContent
-            currentImage={currentImage}
-            isVideo={!!isItemVideo}
-            isAnimatedMedia={isItemAnimatedMedia}
-            blurSensitiveMedia={blurSensitiveMedia}
-            isLoaded={isLoaded}
-            viewState={viewState}
-            imageRef={imageRef}
-            handleImageClick={handleContentImageClick}
-            setLocalState={setLocalState}
-            getUrl={getUrl}
-            getPosterUrl={getPosterUrl}
-            swipeOffset={swipeOffset}
-            isSwipeDragging={isSwipeDragging}
-          />
-
-          {/* Navigation Arrows */}
-          {!hideUi && images.length > 1 && (
-            <ImageViewerNavigation onPrev={handlePrev} onNext={handleNext} />
+          {/* Top Toolbar */}
+          {!hideUi && (
+            <ImageViewerToolbar
+              context={context}
+              currentImage={currentImage}
+              showMore={showMore}
+              showDetails={showDetails}
+              dimensions={dimensions}
+              setLocalState={setLocalState}
+              viewDispatch={viewDispatch}
+              close={close}
+              getUrl={getUrl}
+              isVideo={isItemVideo}
+              isAnimatedMedia={isItemAnimatedMedia}
+            />
           )}
-        </div>
 
-        {shouldRenderContextMenu && menu.isOpen && (
-          <ContextMenu
-            x={menu.x}
-            y={menu.y}
-            items={menu.items}
-            onClose={closeMenu}
-            isClosing={isClosing}
-          />
-        )}
+          {/* Floating X button when clean mode active */}
+          {hideUi && (
+            <div className="absolute top-4 right-4 z-60 bg-rm-bg-elevated/80 backdrop-blur-md border border-rm-border rounded-xl p-1 shadow-lg">
+              <button
+                onClick={close}
+                className="p-2 text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover rounded-lg transition-all outline-none"
+              >
+                <X size={18} />
+              </button>
+            </div>
+          )}
 
-        {confirmation}
+          {/* Main Content Container */}
+          <div
+            ref={containerRef}
+            data-testid="image-viewer-stage"
+            className={cn(
+              "relative w-full flex-1 flex items-center justify-center overflow-hidden touch-none overscroll-none",
+              hideUi ? "p-0" : "pt-14 pb-24 px-4 md:pt-16 md:pb-32 md:px-8",
+              isItemVideo
+                ? "cursor-default"
+                : isZoomed
+                  ? "cursor-grab active:cursor-grabbing"
+                  : "cursor-zoom-in",
+            )}
+            onMouseDown={handleStageMouseDown}
+            onMouseMove={handleStageMouseMove}
+            onMouseUp={handleStageMouseUp}
+            onTouchStart={handleStageTouchStart}
+            onTouchMove={handleStageTouchMove}
+            onTouchEnd={handleStageTouchEnd}
+            onTouchCancel={handleStageTouchCancel}
+            onContextMenu={handleMediaContextMenu}
+            onClick={(e) => {
+              if (e.target === e.currentTarget) close();
+            }}
+            role="presentation"
+          >
+            <ImageViewerContent
+              currentImage={currentImage}
+              isVideo={!!isItemVideo}
+              isAnimatedMedia={isItemAnimatedMedia}
+              blurSensitiveMedia={blurSensitiveMedia}
+              isLoaded={isLoaded}
+              viewState={viewState}
+              imageRef={imageRef}
+              handleImageClick={handleContentImageClick}
+              setLocalState={setLocalState}
+              getUrl={getUrl}
+              getPosterUrl={getPosterUrl}
+              swipeOffset={swipeOffset}
+              isSwipeDragging={isSwipeDragging}
+            />
 
-        {/* Bottom Thumbnail Strip */}
-        {!hideUi && images.length > 1 && (
-          <ImageViewerThumbnails
-            images={images}
-            currentIndex={currentIndex}
-            contentFilter={contentFilter}
-            thumbAspects={
-              thumbAspects as React.MutableRefObject<Map<number, number>>
-            }
-            setLocalState={setLocalState}
-            getUrl={getUrl}
-            getPosterUrl={getPosterUrl}
-          />
-        )}
-      </div>
-    </BaseModal>
+            {/* Navigation Arrows */}
+            {!hideUi && images.length > 1 && (
+              <ImageViewerNavigation onPrev={handlePrev} onNext={handleNext} />
+            )}
+          </div>
+
+          {shouldRenderContextMenu && menu.isOpen && (
+            <ContextMenu
+              x={menu.x}
+              y={menu.y}
+              items={menu.items}
+              onClose={closeMenu}
+              isClosing={isClosing}
+            />
+          )}
+
+          {confirmation}
+
+          {/* Bottom Thumbnail Strip */}
+          {!hideUi && images.length > 1 && (
+            <ImageViewerThumbnails
+              images={images}
+              currentIndex={currentIndex}
+              contentFilter={contentFilter}
+              thumbAspects={
+                thumbAspects as React.MutableRefObject<Map<number, number>>
+              }
+              setLocalState={setLocalState}
+              getUrl={getUrl}
+              getPosterUrl={getPosterUrl}
+            />
+          )}
+        </DialogSurface>
+      </DialogPortal>
+    </Dialog>
   );
 };

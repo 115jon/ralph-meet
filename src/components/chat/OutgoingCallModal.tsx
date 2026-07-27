@@ -34,7 +34,7 @@ export function OutgoingCallModal() {
     : undefined;
 
   return (
-    <div className="fixed inset-0 z-100 flex items-center justify-center bg-black/70 backdrop-blur-md animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-md animate-in fade-in duration-200">
       <div className="flex flex-col items-center gap-6 p-8">
         {/* Pulsing animation around avatar */}
         <div className="relative">

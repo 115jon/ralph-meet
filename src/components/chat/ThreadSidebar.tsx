@@ -164,7 +164,7 @@ export default function ThreadSidebar({
   );
 
   return (
-    <div className="flex h-full w-[380px] flex-col border-l border-rm-border bg-rm-bg-primary max-md:fixed max-md:inset-0 max-md:z-[120] max-md:w-full max-md:border-l-0 max-md:shadow-2xl">
+    <div className="flex h-full w-[380px] flex-col border-l border-rm-border bg-rm-bg-primary max-md:fixed max-md:inset-0 max-md:z-20 max-md:w-full max-md:border-l-0 max-md:shadow-2xl">
       {/* Header */}
       <div
         className="flex min-h-12 items-center justify-between border-b border-rm-border px-4"

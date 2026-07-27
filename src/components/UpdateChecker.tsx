@@ -122,7 +122,7 @@ export function UpdateChecker() {
   if (status === "idle" || status === "checking" || dismissed) return null;
 
   return (
-    <div className="fixed bottom-6 right-6 z-[9998] w-full max-w-[360px] rounded-xl bg-rm-bg-elevated p-4 shadow-2xl ring-1 ring-rm-border animate-[update-slide-in_0.3s_ease-out]">
+    <div className="fixed bottom-6 right-6 z-90 w-full max-w-[360px] rounded-xl bg-rm-bg-elevated p-4 shadow-2xl ring-1 ring-rm-border animate-[update-slide-in_0.3s_ease-out]">
       {status === "available" && (
         <>
           <div className="flex flex-col gap-1.5">

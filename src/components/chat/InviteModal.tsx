@@ -1,4 +1,10 @@
-import { BaseModal } from "@/components/ui/BaseModal";
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
@@ -9,21 +15,21 @@ import {
 import { apiPost } from "@/lib/api-client";
 import { getWebOrigin } from "@/lib/platform";
 import { cn } from "@/lib/utils";
-import { useEffect as _useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { Check, Copy, Loader2, X } from "./Icons";
 import InlineEmojiText from "./InlineEmojiText";
 interface InviteModalProps {
+  open: boolean;
   serverId: string;
   serverName: string;
   onClose: () => void;
-  isClosing?: boolean;
 }
 
 export default function InviteModal({
+  open,
   serverId,
   serverName,
   onClose,
-  isClosing,
 }: InviteModalProps) {
   const [state, setState] = useState({
     inviteCode: "",
@@ -32,6 +38,17 @@ export default function InviteModal({
     expiresHours: 24,
     maxUses: 0,
   });
+
+  useEffect(() => {
+    if (!open) return;
+    // A reopened controlled dialog starts a fresh invite flow.
+    setState((previous) => ({
+      ...previous,
+      inviteCode: "",
+      loading: false,
+      copied: false,
+    }));
+  }, [open, serverId]);
 
   // Close on Escape
 
@@ -64,35 +81,29 @@ export default function InviteModal({
     "w-full rounded-xl border border-rm-border bg-rm-bg-surface px-3 py-2.5 text-sm text-rm-text outline-none transition-all focus:border-primary/30 focus:ring-2 focus:ring-primary/20";
 
   return (
-    <BaseModal onClose={onClose} aria-label="Invite members">
-      <div className="fixed inset-0 z-[200] flex items-center justify-center">
-        <button
-          type="button"
-          className={cn(
-            "absolute inset-0 border-0 bg-black/60 p-0 backdrop-blur-sm animate-in fade-in duration-200",
-            isClosing && "animate-out fade-out duration-200",
-          )}
-          onClick={onClose}
-          aria-label="Close invite modal"
-        />
+    <Dialog open={open} onOpenChange={(nextOpen) => !nextOpen && onClose()}>
+      <DialogContent
+        showCloseButton={false}
+        className="relative w-full max-w-[440px] animate-in fade-in zoom-in-95 rounded-2xl border border-rm-border bg-rm-bg-primary p-6 shadow-2xl duration-200"
+      >
+        <div>
+          <DialogClose asChild>
+            <button
+              type="button"
+              className="absolute right-4 top-4 rounded-lg p-1 text-rm-text-muted/40 transition-colors hover:text-rm-text outline-none"
+              aria-label="Close invite modal"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </DialogClose>
 
-        <div
-          className={cn(
-            "relative z-10 w-full max-w-[440px] animate-in fade-in zoom-in-95 rounded-2xl border border-rm-border bg-rm-bg-primary p-6 shadow-2xl duration-200",
-            isClosing && "animate-out fade-out zoom-out-95",
-          )}
-        >
-          <button
-            onClick={onClose}
-            className="absolute right-4 top-4 rounded-lg p-1 text-rm-text-muted/40 transition-colors hover:text-rm-text outline-none"
-          >
-            <X className="h-4 w-4" />
-          </button>
-
-          <h2 className="mb-6 text-base font-semibold text-rm-text">
+          <DialogTitle className="mb-6 text-base font-semibold text-rm-text">
             Invite people to{" "}
             <InlineEmojiText text={serverName} className="text-primary" />
-          </h2>
+          </DialogTitle>
+          <DialogDescription className="sr-only">
+            Generate an invite link for this server.
+          </DialogDescription>
 
           {!state.inviteCode ? (
             <div className="space-y-4">
@@ -216,7 +227,7 @@ export default function InviteModal({
             </div>
           )}
         </div>
-      </div>
-    </BaseModal>
+      </DialogContent>
+    </Dialog>
   );
 }

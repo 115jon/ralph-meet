@@ -248,7 +248,7 @@ export const SubMenu = memo(
             )
             ?.focus();
         }}
-        className="absolute left-[calc(100%+4px)] top-0 z-[10001] flex max-h-[70vh] w-[200px] flex-col overflow-y-auto rounded-lg border border-rm-border bg-rm-bg-elevated p-1 shadow-2xl backdrop-blur-xl transition-all duration-200 animate-in fade-in slide-in-from-left-2 no-scrollbar"
+        className="absolute left-[calc(100%+4px)] top-0 z-80 flex max-h-[70vh] w-[200px] flex-col overflow-y-auto rounded-lg border border-rm-border bg-rm-bg-elevated p-1 shadow-2xl backdrop-blur-xl transition-all duration-200 animate-in fade-in slide-in-from-left-2 no-scrollbar"
       >
         <div className="absolute top-0 bottom-0 -left-4 w-4" />
         {children}

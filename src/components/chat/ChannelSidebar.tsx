@@ -407,7 +407,6 @@ function SortableChannelItem({
     (channel.permissions != null &&
       hasPermission(channel.permissions, PERMISSIONS.MANAGE_CHANNELS));
   const [isVoiceTextStatusOpen, setIsVoiceTextStatusOpen] = useState(false);
-  const shouldRenderTextStatus = isVoiceTextStatusOpen;
   const [isVoiceMediaStatusOpen, setIsVoiceMediaStatusOpen] = useState(false);
   const [isRemovingVoiceMedia, setIsRemovingVoiceMedia] = useState(false);
   const {
@@ -739,22 +738,21 @@ function SortableChannelItem({
         </div>
       )}
 
-      {shouldRenderTextStatus ? (
+      <>
         <VoiceChannelTextStatusModal
+          open={isVoiceTextStatusOpen}
           channel={channel}
           voiceSessionId={localVoiceSessionId}
           onClose={() => setIsVoiceTextStatusOpen(false)}
-          isClosing={!isVoiceTextStatusOpen}
         />
-      ) : null}
 
-      {isVoiceMediaStatusOpen ? (
         <VoiceChannelMediaStatusModal
+          open={isVoiceMediaStatusOpen}
           channel={channel}
           voiceSessionId={localVoiceSessionId}
           onClose={() => setIsVoiceMediaStatusOpen(false)}
         />
-      ) : null}
+      </>
     </div>
   );
 }
@@ -905,12 +903,40 @@ export default function ChannelSidebar({
   const liveInviteChannel = inviteChannel
     ? (channels.find((channel) => channel.id === inviteChannel) ?? null)
     : null;
+  const [retainedChannelSettings, setRetainedChannelSettings] =
+    useState<Channel | null>(liveChannelSettings);
+  const [retainedInviteChannel, setRetainedInviteChannel] =
+    useState<Channel | null>(liveInviteChannel);
+  const [retainedCreateChannel, setRetainedCreateChannel] = useState<{
+    categoryId: string | null;
+  } | null>(showCreateChannel);
+  useEffect(() => {
+    if (liveChannelSettings) {
+      // Retain the controlled dialog payload through Radix's exit state.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setRetainedChannelSettings(liveChannelSettings);
+    }
+  }, [liveChannelSettings]);
+  useEffect(() => {
+    if (liveInviteChannel) {
+      // Retain the controlled dialog payload through Radix's exit state.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setRetainedInviteChannel(liveInviteChannel);
+    }
+  }, [liveInviteChannel]);
+  useEffect(() => {
+    if (showCreateChannel) {
+      // Retain the category payload while the controlled dialog exits.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setRetainedCreateChannel(showCreateChannel);
+    }
+  }, [showCreateChannel]);
   const shouldRenderCreateCategory = showCreateCategory;
   const shouldRenderCreateChannel = !!showCreateChannel;
   const shouldRenderChannelSettings = showChannelSettings != null;
-  const renderedChannelSettings = liveChannelSettings;
+  const renderedChannelSettings = retainedChannelSettings;
   const shouldRenderInviteChannel = inviteChannel != null;
-  const renderedInviteChannel = liveInviteChannel;
+  const renderedInviteChannel = retainedInviteChannel;
   const { menu, openMenu, closeMenu } = useContextMenu();
   const voiceSettings = useVoiceSettingsStore((s) => s.getSettings(user?.id));
   const setIsMuted = useVoiceSettingsStore((s) => s.setIsMuted);
@@ -1115,27 +1141,28 @@ export default function ChannelSidebar({
         </div>
 
         {/* Modals & Popovers */}
-        {shouldRenderCreateCategory && serverId && (
+        {serverId && (
           <CreateCategoryModal
+            open={shouldRenderCreateCategory}
             serverId={serverId}
             onClose={() =>
               uiDispatch({ type: "SET_CREATE_CATEGORY", value: false })
             }
-            isClosing={!showCreateCategory}
           />
         )}
-        {shouldRenderCreateChannel && serverId && (
+        {serverId && (
           <CreateChannelModal
+            open={shouldRenderCreateChannel}
             serverId={serverId}
-            defaultCategoryId={showCreateChannel?.categoryId}
+            defaultCategoryId={retainedCreateChannel?.categoryId}
             onClose={() =>
               uiDispatch({ type: "SET_CREATE_CHANNEL", value: null })
             }
-            isClosing={!showCreateChannel}
           />
         )}
-        {shouldRenderChannelSettings && serverId && renderedChannelSettings && (
+        {serverId && renderedChannelSettings && (
           <ChannelSettingsModal
+            open={shouldRenderChannelSettings}
             serverId={serverId}
             channel={renderedChannelSettings}
             onUpdated={(updates) =>
@@ -1147,18 +1174,17 @@ export default function ChannelSidebar({
             onClose={() =>
               uiDispatch({ type: "SET_CHANNEL_SETTINGS", value: null })
             }
-            isClosing={!showChannelSettings}
           />
         )}
-        {shouldRenderInviteChannel && serverId && renderedInviteChannel && (
+        {serverId && renderedInviteChannel && (
           <ChannelInviteModal
+            open={shouldRenderInviteChannel}
             serverId={serverId}
             serverName={serverName}
             channel={renderedInviteChannel}
             onClose={() =>
               uiDispatch({ type: "SET_INVITE_CHANNEL", value: null })
             }
-            isClosing={!inviteChannel}
           />
         )}
         {popoverUser && popoverAnchor && (
@@ -1775,7 +1801,7 @@ function VoiceChannelMemberRow({
 
       {shouldShowStreamState && streamPreviewPosition && (
         <div
-          className="fixed z-[140]"
+          className="fixed z-40"
           style={{
             left: streamPreviewPosition.left,
             top: streamPreviewPosition.top,

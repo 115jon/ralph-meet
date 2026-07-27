@@ -1,6 +1,8 @@
+// @vitest-environment jsdom
+
 import React from "react";
-import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it, vi } from "vitest";
+import { cleanup, render } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { CameraSettingsModal } from "../CameraSettingsModal";
 import { DesktopScreenPickerModal } from "../DesktopScreenPickerModal";
@@ -28,8 +30,12 @@ vi.mock("@/stores/useVoiceSettingsStore", () => ({
 }));
 
 describe("dialog positioning regression guard", () => {
-  it("keeps the screen share modal dialog in normal flow for overlay centering", () => {
-    const markup = renderToStaticMarkup(
+  afterEach(() => {
+    cleanup();
+  });
+
+  it("uses the shadcn dialog primitive for screen share positioning", () => {
+    render(
       <ScreenShareModal
         isOpen
         onClose={() => {}}
@@ -37,12 +43,14 @@ describe("dialog positioning regression guard", () => {
         availableQualities={["720p30"]}
       />,
     );
+    const markup = document.body.innerHTML;
 
-    expect(markup).toContain('<dialog open="" class="relative m-0');
+    expect(markup).not.toContain("<dialog");
+    expect(markup).toContain("fixed inset-0 z-90");
   });
 
-  it("keeps the desktop screen picker dialog in normal flow for overlay centering", () => {
-    const markup = renderToStaticMarkup(
+  it("uses the shadcn dialog primitive for desktop screen picker positioning", () => {
+    render(
       <DesktopScreenPickerModal
         isOpen
         onClose={() => {}}
@@ -50,15 +58,22 @@ describe("dialog positioning regression guard", () => {
         availableQualities={["720p30"]}
       />,
     );
+    const markup = document.body.innerHTML;
 
-    expect(markup).toContain('<dialog open="" class="relative m-0');
+    expect(markup).not.toContain("<dialog");
+    expect(markup).toContain("fixed inset-0 z-90");
   });
 
-  it("keeps the camera settings dialog in normal flow for overlay centering", () => {
-    const markup = renderToStaticMarkup(
-      <CameraSettingsModal isOpen onClose={() => {}} />,
+  it("uses the shadcn dialog primitive for camera settings positioning", () => {
+    render(<CameraSettingsModal isOpen onClose={() => {}} />);
+    const markup = document.body.innerHTML;
+    const scrollRegion = document.querySelector<HTMLElement>(
+      ".flex-1.space-y-5.overflow-y-auto",
     );
 
-    expect(markup).toContain('<dialog open="" class="relative m-0');
+    expect(markup).not.toContain("<dialog");
+    expect(markup).toContain("fixed inset-0 z-50");
+    expect(scrollRegion).not.toBeNull();
+    expect(scrollRegion).toHaveClass("min-h-0");
   });
 });

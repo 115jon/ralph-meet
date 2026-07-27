@@ -154,7 +154,7 @@ export function VoiceDebugScreen({
 
   if (!data) {
     return (
-      <div className="fixed inset-0 z-[9999] bg-[#111214] flex flex-col items-center justify-center gap-4">
+      <div className="fixed inset-0 z-100 bg-[#111214] flex flex-col items-center justify-center gap-4">
         <div className="w-8 h-8 border-4 border-rm-accent/30 border-t-rm-accent rounded-full animate-spin" />
         <p className="text-rm-text-muted text-[13px] font-medium animate-pulse">
           Gathering RTC metrics…
@@ -175,7 +175,7 @@ export function VoiceDebugScreen({
   const isConnected = sessionState === "connected";
 
   return (
-    <div className="fixed inset-0 z-[9999] bg-rm-bg-primary flex flex-col text-rm-text text-[13px] overflow-hidden">
+    <div className="fixed inset-0 z-100 bg-rm-bg-primary flex flex-col text-rm-text text-[13px] overflow-hidden">
       {/* Top bar */}
       <div className="flex items-center justify-between px-3 sm:px-5 py-2.5 sm:py-3 border-b border-rm-border bg-rm-bg-surface gap-2">
         <div className="flex items-center gap-2 sm:gap-3 min-w-0">

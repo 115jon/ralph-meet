@@ -207,7 +207,7 @@ export default function ServerList({
   return (
     <TooltipProvider delayDuration={80}>
       <div
-        className="relative z-100 flex h-full w-full flex-col items-center gap-2 overflow-y-auto bg-rm-bg-floating pt-3 no-scrollbar"
+        className="relative z-10 flex h-full w-full flex-col items-center gap-2 overflow-y-auto bg-rm-bg-floating pt-3 no-scrollbar"
         style={{
           paddingTop: "calc(12px + var(--safe-area-top, 0px))",
           paddingBottom: "calc(12px + var(--safe-area-bottom, 0px))",
@@ -528,12 +528,10 @@ export default function ServerList({
           <Plus className="h-6 w-6" />
         </button>
 
-        {shouldRenderCreateServer && (
-          <CreateServerModal
-            onClose={() => setShowCreate(false)}
-            isClosing={!showCreate}
-          />
-        )}
+        <CreateServerModal
+          open={shouldRenderCreateServer}
+          onClose={() => setShowCreate(false)}
+        />
 
         {shouldRender && (
           <ContextMenu

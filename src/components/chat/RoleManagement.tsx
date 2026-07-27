@@ -253,7 +253,7 @@ export default function RoleManagement({ serverId }: RoleManagementProps) {
   }
 
   return (
-    <div className="flex h-[500px] border border-rm-border rounded-xl overflow-hidden bg-rm-bg-surface">
+    <div className="flex min-h-0 h-[500px] border border-rm-border rounded-xl overflow-hidden bg-rm-bg-surface">
       {/* Role List Sidebar */}
       <div className="w-48 bg-rm-bg-secondary border-r border-rm-border flex flex-col">
         <div className="p-3 border-b border-rm-border flex justify-between items-center">
@@ -267,7 +267,7 @@ export default function RoleManagement({ serverId }: RoleManagementProps) {
             <Plus className="h-4 w-4" />
           </button>
         </div>
-        <div className="overflow-y-auto p-2 space-y-1">
+        <div className="min-h-0 overflow-y-auto p-2 space-y-1">
           {state.roles.map((role) => (
             <button
               key={role.id}
@@ -297,7 +297,7 @@ export default function RoleManagement({ serverId }: RoleManagementProps) {
       </div>
 
       {/* Role Editor */}
-      <div className="flex-1 flex flex-col bg-rm-bg-primary overflow-hidden">
+      <div className="flex min-h-0 flex-1 flex-col bg-rm-bg-primary overflow-hidden">
         {state.selectedRole || state.editState.isCreating ? (
           <>
             <div className="p-4 border-b border-rm-border flex justify-between items-center">
@@ -334,7 +334,7 @@ export default function RoleManagement({ serverId }: RoleManagementProps) {
               </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-6 space-y-6">
+            <div className="min-h-0 flex-1 overflow-y-auto p-6 space-y-6">
               {state.error && (
                 <div className="bg-destructive/10 text-destructive text-xs p-3 rounded">
                   {state.error}

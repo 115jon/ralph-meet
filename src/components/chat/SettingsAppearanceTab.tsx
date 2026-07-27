@@ -1,4 +1,4 @@
-import { BaseModal } from "@/components/ui/BaseModal";
+import { Dialog, DialogPortal, DialogSurface } from "@/components/ui/dialog";
 import { SettingsToggleRow } from "@/components/ui/SettingsToggleRow";
 import { isDesktop } from "@/lib/platform";
 import { APP_THEMES, type AppTheme } from "@/lib/theme-preferences";
@@ -363,11 +363,14 @@ export default function SettingsAppearanceTab({
         )}
       </div>
 
-      {pendingHardwareAcceleration !== null && (
-        <BaseModal onClose={() => setPendingHardwareAcceleration(null)}>
-          <div className="fixed inset-0 z-[1100] flex items-center justify-center bg-black/70 px-4">
-            <dialog
-              open
+      <Dialog
+        open={pendingHardwareAcceleration !== null}
+        onOpenChange={(open) => !open && setPendingHardwareAcceleration(null)}
+      >
+        <DialogPortal>
+          <div className="fixed inset-0 z-60 flex items-center justify-center bg-black/70 px-4">
+            <DialogSurface
+              showCloseButton={false}
               className="relative m-0 w-full max-w-[420px] rounded-xl border border-rm-border bg-rm-bg-primary p-5 shadow-2xl outline-none"
               aria-labelledby="hardware-acceleration-title"
             >
@@ -396,10 +399,10 @@ export default function SettingsAppearanceTab({
                   Change and Restart
                 </button>
               </div>
-            </dialog>
+            </DialogSurface>
           </div>
-        </BaseModal>
-      )}
+        </DialogPortal>
+      </Dialog>
     </div>
   );
 }

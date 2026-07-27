@@ -157,7 +157,6 @@ export function VoiceDashboard({
   const [isStickerPickerOpen, setIsStickerPickerOpen] = useState(false);
   const shouldRenderStickerPicker = isStickerPickerOpen;
   const [isSoundboardPickerOpen, setIsSoundboardPickerOpen] = useState(false);
-  const shouldRenderSoundboardPicker = isSoundboardPickerOpen;
   const [soundboardInitialView, setSoundboardInitialView] = useState<
     "soundboard" | "listenTogether"
   >("soundboard");
@@ -526,14 +525,14 @@ export function VoiceDashboard({
               <>
                 <button
                   type="button"
-                  className="fixed inset-0 z-[990]"
+                  className="fixed inset-0 z-20"
                   aria-label="Close noise suppression panel"
                   onClick={() => setIsNoiseReductionOpen(false)}
                 />
                 <div
                   ref={noiseReductionPanelRef}
                   className={cn(
-                    "fixed z-[1000] w-[min(340px,calc(100vw-1.5rem))]",
+                    "fixed z-30 w-[min(340px,calc(100vw-1.5rem))]",
                     noiseReductionPanelPosition.placement === "top"
                       ? !isNoiseReductionOpen
                         ? "origin-bottom animate-out fade-out slide-out-to-bottom-2 zoom-out-95 duration-200"
@@ -902,23 +901,22 @@ export function VoiceDashboard({
                     <p>Open Soundboard</p>
                   </TooltipContent>
                 </Tooltip>
-                {shouldRenderSoundboardPicker && (
-                  <Suspense fallback={null}>
-                    <SoundboardPicker
-                      onClose={() => setIsSoundboardPickerOpen(false)}
-                      placement="top-start"
-                      markerRef={soundboardBtnRef}
-                      initialView={soundboardInitialView}
-                      sfu={sfu}
-                      serverId={serverId}
-                      channelId={voiceChannelId}
-                      roomSlug={roomSlug}
-                      voiceSessionId={voiceSessionId}
-                      isClosing={!isSoundboardPickerOpen}
-                      localUserId={localUserId}
-                    />
-                  </Suspense>
-                )}
+                <Suspense fallback={null}>
+                  <SoundboardPicker
+                    open={isSoundboardPickerOpen}
+                    onClose={() => setIsSoundboardPickerOpen(false)}
+                    placement="top-start"
+                    markerRef={soundboardBtnRef}
+                    initialView={soundboardInitialView}
+                    sfu={sfu}
+                    serverId={serverId}
+                    channelId={voiceChannelId}
+                    roomSlug={roomSlug}
+                    voiceSessionId={voiceSessionId}
+                    isClosing={!isSoundboardPickerOpen}
+                    localUserId={localUserId}
+                  />
+                </Suspense>
               </div>
 
               {/* GIF/Sticker Reactions — only shown when connected to voice */}
@@ -966,16 +964,16 @@ export function VoiceDashboard({
         />
 
         {/* GIF Picker in voice reaction mode */}
-        {gifPickerVoiceMode && shouldRenderStickerPicker && (
+        {gifPickerVoiceMode && (
           <Suspense fallback={null}>
             <GifPickerModal
+              open={shouldRenderStickerPicker}
               onClose={() => setIsStickerPickerOpen(false)}
               onSelect={async () => {
                 /* no-op: voice mode handles send */
               }}
               voiceMode={gifPickerVoiceMode}
               markerRef={stickerBtnRef}
-              isClosing={!isStickerPickerOpen}
             />
           </Suspense>
         )}

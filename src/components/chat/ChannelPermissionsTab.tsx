@@ -124,7 +124,7 @@ function PermissionsSidebar({
   handleDeleteOverride: (id: string) => void;
 }) {
   return (
-    <div className="w-56 bg-rm-bg-secondary border-r border-rm-border flex flex-col relative z-10">
+    <div className="flex min-h-0 w-56 flex-col bg-rm-bg-secondary border-r border-rm-border relative z-10">
       <div className="p-3 border-b border-rm-border flex justify-between items-center">
         <span className="text-xs font-bold uppercase tracking-widest text-rm-text-muted">
           Roles/Members
@@ -142,7 +142,7 @@ function PermissionsSidebar({
       </div>
 
       {isAddingTarget ? (
-        <div className="flex-1 overflow-y-auto p-2 bg-rm-bg-surface space-y-4">
+        <div className="min-h-0 flex-1 overflow-y-auto p-2 bg-rm-bg-surface space-y-4">
           {availableRoles.length > 0 && (
             <div>
               <span className="px-2 text-[10px] font-bold uppercase text-rm-text-muted">
@@ -227,7 +227,7 @@ function PermissionsSidebar({
           )}
         </div>
       ) : (
-        <div className="flex-1 overflow-y-auto p-2 space-y-1">
+        <div className="min-h-0 flex-1 overflow-y-auto p-2 space-y-1">
           {overrides.map((o) => {
             const roleInfo = roles.find((r) => r.id === o.target_id);
             const isDefault = roleInfo?.is_default;
@@ -300,7 +300,7 @@ function PermissionsEditor({
   ) => void;
 }) {
   return (
-    <div className="flex-1 flex flex-col bg-rm-bg-primary overflow-hidden relative">
+    <div className="flex min-h-0 flex-1 flex-col bg-rm-bg-primary overflow-hidden relative">
       {selectedOverride ? (
         <>
           <div className="p-5 border-b border-rm-border flex items-center gap-3">
@@ -320,7 +320,7 @@ function PermissionsEditor({
             )}
           </div>
 
-          <div className="flex-1 overflow-y-auto px-6 py-4 space-y-3 relative z-0">
+          <div className="min-h-0 flex-1 overflow-y-auto px-6 py-4 space-y-3 relative z-0">
             {permissionList.map((perm) => {
               const isAllowed =
                 (selectedOverride.allow & perm.mask) === perm.mask;

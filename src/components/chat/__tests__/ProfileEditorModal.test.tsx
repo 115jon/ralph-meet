@@ -21,7 +21,7 @@ import ProfileEditorModal from "../ProfileEditorModal";
 
 describe("ProfileEditorModal", () => {
   it("renders only the profile editor surface", () => {
-    render(<ProfileEditorModal onClose={() => {}} />);
+    render(<ProfileEditorModal open onClose={() => {}} />);
 
     expect(
       screen.getByRole("dialog", { name: "Edit profile" }),
@@ -34,7 +34,7 @@ describe("ProfileEditorModal", () => {
   it("forwards close actions to its owner", () => {
     const onClose = vi.fn();
 
-    render(<ProfileEditorModal onClose={onClose} />);
+    render(<ProfileEditorModal open onClose={onClose} />);
     fireEvent.click(
       screen.getByRole("button", { name: "Close profile editor" }),
     );

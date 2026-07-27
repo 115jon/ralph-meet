@@ -251,7 +251,7 @@ export default function ContextMenu({
     <div
       ref={menuRef}
       className={cn(
-        "fixed z-[1000] min-w-[220px] overflow-visible",
+        "fixed z-70 min-w-[220px] overflow-visible",
         isClosing
           ? "animate-out fade-out zoom-out-95 duration-150"
           : "animate-in fade-in zoom-in-95 duration-150",
@@ -395,7 +395,7 @@ export default function ContextMenu({
           ref={submenuRef}
           role="menu"
           aria-label={`${activeSubmenuItem.label} submenu`}
-          className="absolute z-[1001] w-[210px] overflow-hidden rounded-2xl border border-rm-border bg-rm-bg-elevated p-1.5 shadow-2xl backdrop-blur-xl"
+          className="absolute z-80 w-[210px] overflow-hidden rounded-2xl border border-rm-border bg-rm-bg-elevated p-1.5 shadow-2xl backdrop-blur-xl"
           style={submenuStyle}
         >
           {activeSubmenuItem.submenu}

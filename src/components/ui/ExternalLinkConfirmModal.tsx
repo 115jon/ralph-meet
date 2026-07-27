@@ -1,4 +1,10 @@
-import { BaseModal } from "@/components/ui/BaseModal";
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { X } from "lucide-react";
 
 export interface PendingExternalLink {
@@ -7,12 +13,14 @@ export interface PendingExternalLink {
 }
 
 export function ExternalLinkConfirmModal({
+  open,
   pending,
   trustDomain,
   onTrustDomainChange,
   onClose,
   onConfirm,
 }: {
+  open: boolean;
   pending: PendingExternalLink;
   trustDomain: boolean;
   onTrustDomainChange: (value: boolean) => void;
@@ -20,32 +28,28 @@ export function ExternalLinkConfirmModal({
   onConfirm: () => void;
 }) {
   return (
-    <BaseModal onClose={onClose} aria-label="Leaving Ralph Meet">
-      <div className="fixed inset-0 z-[1100] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
-        <button
-          type="button"
-          aria-label="Close external link confirmation"
-          className="absolute inset-0 cursor-default"
-          tabIndex={-1}
-          data-base-modal-backdrop="true"
-          onClick={onClose}
-        />
-        <section className="relative w-full max-w-[510px] rounded-2xl border border-rm-border bg-rm-bg-primary p-6 text-rm-text-primary shadow-2xl">
-          <button
-            type="button"
-            aria-label="Close external link confirmation"
-            className="absolute right-4 top-4 rounded-lg p-1.5 text-rm-text-muted transition-colors hover:bg-rm-bg-hover hover:text-rm-text-primary"
-            onClick={onClose}
-          >
-            <X className="h-5 w-5" />
-          </button>
+    <Dialog open={open} onOpenChange={(nextOpen) => !nextOpen && onClose()}>
+      <DialogContent
+        showCloseButton={false}
+        className="relative w-full max-w-[510px] rounded-2xl border border-rm-border bg-rm-bg-primary p-6 text-rm-text-primary shadow-2xl"
+      >
+        <section>
+          <DialogClose asChild>
+            <button
+              type="button"
+              aria-label="Close external link confirmation"
+              className="absolute right-4 top-4 rounded-lg p-1.5 text-rm-text-muted transition-colors hover:bg-rm-bg-hover hover:text-rm-text-primary"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </DialogClose>
 
-          <h2 className="pr-8 text-xl font-extrabold tracking-tight">
+          <DialogTitle className="pr-8 text-xl font-extrabold tracking-tight">
             Leaving Ralph Meet
-          </h2>
-          <p className="mt-1 text-sm text-rm-text-muted">
+          </DialogTitle>
+          <DialogDescription className="mt-1 text-sm text-rm-text-muted">
             This link is taking you to the following website
-          </p>
+          </DialogDescription>
 
           <div className="mt-5 max-h-24 overflow-auto rounded-xl border border-rm-border bg-rm-bg-surface/70 px-4 py-3 text-sm leading-5 text-rm-text-secondary [overflow-wrap:anywhere]">
             {pending.url}
@@ -78,7 +82,7 @@ export function ExternalLinkConfirmModal({
             </button>
           </div>
         </section>
-      </div>
-    </BaseModal>
+      </DialogContent>
+    </Dialog>
   );
 }

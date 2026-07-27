@@ -275,7 +275,7 @@ export function VoiceDetailsPanel({
           <aside
             ref={panelRef}
             className={cn(
-              "fixed z-[1000] w-[min(320px,calc(100vw-24px))] overflow-hidden rounded-xl border border-rm-border bg-rm-bg-floating shadow-2xl",
+              "fixed z-30 w-[min(320px,calc(100vw-24px))] overflow-hidden rounded-xl border border-rm-border bg-rm-bg-floating shadow-2xl",
               panelPosition.placement === "top"
                 ? isClosing
                   ? "origin-bottom-left animate-out fade-out slide-out-to-bottom-2 zoom-out-95 duration-200"

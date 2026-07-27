@@ -245,7 +245,7 @@ export function ImageViewerToolbar({
               <MoreHorizontal size={18} />
             </button>
             {showMore && (
-              <div className="absolute top-full right-0 z-100 mt-2 w-[min(16rem,calc(100vw-1rem))] max-w-[calc(100vw-1rem)] overflow-visible rounded-lg border border-rm-border bg-rm-bg-elevated py-1 shadow-2xl animate-in slide-in-from-top-2 fade-in duration-200 md:w-64">
+              <div className="absolute top-full right-0 z-70 mt-2 w-[min(16rem,calc(100vw-1rem))] max-w-[calc(100vw-1rem)] overflow-visible rounded-lg border border-rm-border bg-rm-bg-elevated py-1 shadow-2xl animate-in slide-in-from-top-2 fade-in duration-200 md:w-64">
                 {!isVideo && (
                   <button
                     type="button"

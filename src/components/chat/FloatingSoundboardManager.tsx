@@ -166,7 +166,7 @@ export function FloatingSoundboardManager({
         ref={containerRef}
         data-testid="floating-soundboard-manager"
         aria-label="Soundboard manager"
-        className="fixed z-[130] w-[min(360px,calc(100vw-24px))] touch-none select-none"
+        className="fixed z-40 w-[min(360px,calc(100vw-24px))] touch-none select-none"
         style={{ left: position.x, top: position.y }}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}

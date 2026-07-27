@@ -327,7 +327,7 @@ function RoleAssignmentDropdown({
   return (
     <div
       ref={dropdownRef}
-      className="absolute right-0 top-7 z-[1010] w-48 rounded-lg border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] p-1 shadow-xl animate-in fade-in zoom-in-95"
+      className="absolute right-0 top-7 z-70 w-48 rounded-lg border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] p-1 shadow-xl animate-in fade-in zoom-in-95"
     >
       {loadingRoles ? (
         <div className="p-3 text-center text-xs text-[color:var(--rm-profile-custom-muted)]">
@@ -845,7 +845,7 @@ export default function UserProfilePopover({
     <TooltipProvider delayDuration={0}>
       <div className="contents">
         <div
-          className="fixed inset-0 z-[999] cursor-default bg-black/50 md:bg-transparent backdrop-blur-sm md:pointer-events-none md:backdrop-blur-none animate-in fade-in duration-200"
+          className="fixed inset-0 z-40 cursor-default bg-black/50 md:bg-transparent backdrop-blur-sm md:pointer-events-none md:backdrop-blur-none animate-in fade-in duration-200"
           onClick={onClose}
           onKeyDown={(event) => {
             if (
@@ -864,7 +864,7 @@ export default function UserProfilePopover({
           ref={popoverRef}
           variant="popover"
           display={resolvedAvatarDisplay}
-          className="fixed z-[1000] animate-in fade-in zoom-in-95 duration-200 outline-none"
+          className="fixed z-60 animate-in fade-in zoom-in-95 duration-200 outline-none"
           style={{
             ...surfaceStyle,
             ...profileThemeStyle,

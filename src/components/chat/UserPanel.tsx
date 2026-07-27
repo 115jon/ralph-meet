@@ -292,7 +292,6 @@ export default function UserPanel({
   const headphoneCaretRef = useRef<HTMLButtonElement>(null);
 
   const shouldRenderMenu = showMenu;
-  const shouldRenderSettings = showSettings;
 
   const settings = useVoiceSettingsStore(
     useShallow((s) => s.getSettings(user?.id)),
@@ -858,23 +857,22 @@ export default function UserPanel({
           </Suspense>
         )}
         {/* Settings Modal */}
-        {shouldRenderSettings && (
-          <Suspense fallback={null}>
-            <SettingsModal
-              initialTab={settingsInitialTab}
-              onClose={() => {
-                setShowSettings(false);
-                setSettingsInitialTab("account"); // reset for next open
-              }}
-              isClosing={!showSettings}
-            />
-          </Suspense>
-        )}
-        {showProfileEditor && (
-          <Suspense fallback={null}>
-            <ProfileEditorModal onClose={() => setShowProfileEditor(false)} />
-          </Suspense>
-        )}
+        <Suspense fallback={null}>
+          <SettingsModal
+            open={showSettings}
+            initialTab={settingsInitialTab}
+            onClose={() => {
+              setShowSettings(false);
+              setSettingsInitialTab("account"); // reset for next open
+            }}
+          />
+        </Suspense>
+        <Suspense fallback={null}>
+          <ProfileEditorModal
+            open={showProfileEditor}
+            onClose={() => setShowProfileEditor(false)}
+          />
+        </Suspense>
       </div>
     </TooltipProvider>
   );

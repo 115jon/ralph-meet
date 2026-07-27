@@ -6,6 +6,14 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import {
+  Dialog,
+  DialogClose,
+  DialogDescription,
+  DialogPortal,
+  DialogSurface,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { useUserResolution } from "@/hooks/useUserResolution";
 import { getAuthAssetUrl } from "@/lib/platform";
 import { resumeSoundContext } from "@/lib/sounds";
@@ -16,8 +24,7 @@ import {
 import { useChatStore } from "@/stores/chat-store";
 import { useCallStore } from "@/stores/useCallStore";
 import { Phone, X } from "lucide-react";
-import { useEffect, useRef } from "react";
-import { cn } from "@/lib/utils";
+import { useEffect, useState } from "react";
 import { AvatarImage } from "./AvatarImage";
 import InlineEmojiText from "./InlineEmojiText";
 
@@ -35,38 +42,44 @@ export function IncomingCallModal() {
   const gateway = useChatStore((s) => s.gateway);
   const activeChannelId = useChatStore((s) => s.activeChannelId);
   const dispatch = useChatStore((s) => s.dispatch);
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [renderedCall, setRenderedCall] = useState<{
+    callId: string;
+    channelId: string | null;
+    remoteUser: NonNullable<typeof remoteUser>;
+  } | null>(null);
 
-  const activeCaller = useUserResolution(remoteUser?.id, remoteUser);
+  const activeCaller = useUserResolution(
+    renderedCall?.remoteUser.id ?? remoteUser?.id,
+    renderedCall?.remoteUser ?? remoteUser,
+  );
 
-  // Auto-dismiss after 30s (server also times out, but this is a client safety net)
   useEffect(() => {
-    if (status !== "ringing_incoming") return;
-    timerRef.current = setTimeout(() => {
-      // Don't dispatch from here — the server will send CALL_END on timeout
-    }, 31_000);
-    return () => {
-      if (timerRef.current) clearTimeout(timerRef.current);
-    };
-  }, [status]);
+    if (status === "ringing_incoming" && remoteUser && callId) {
+      // Retain caller data while the controlled Dialog exits.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setRenderedCall({ callId, channelId: callChannelId, remoteUser });
+    }
+  }, [callChannelId, callId, remoteUser, status]);
 
   const shouldRender =
     status === "ringing_incoming" && !!remoteUser && !!callId;
-  const isClosing = !(
-    status === "ringing_incoming" &&
-    !!remoteUser &&
-    !!callId
-  );
-
-  if (!shouldRender || !remoteUser || !callId) return null;
-  if (activeChannelId === callChannelId) return null; // Already viewing the DM, inline region handles it!
+  const activeCall =
+    renderedCall ??
+    (remoteUser && callId
+      ? { callId, channelId: callChannelId, remoteUser }
+      : null);
+  const dialogOpen =
+    shouldRender &&
+    activeCall !== null &&
+    activeChannelId !== activeCall.channelId;
+  if (!activeCall) return null;
 
   const handleAccept = () => {
     // Prewarm AudioContext during this user gesture (see audio-pipeline.ts)
     prewarmAudioContext();
     resumeSoundContext();
     window.dispatchEvent(new CustomEvent("force-voice-disconnect"));
-    gateway?.sendCallAccept(callId);
+    gateway?.sendCallAccept(activeCall.callId);
 
     // Navigate to the DM channel
     if (callChannelId) {
@@ -84,7 +97,7 @@ export function IncomingCallModal() {
 
   const handleDecline = () => {
     disposePrewarmedAudioContext();
-    gateway?.sendCallDecline(callId);
+    gateway?.sendCallDecline(activeCall.callId);
   };
 
   const avatarSrc = activeCaller.avatarUrl
@@ -92,76 +105,78 @@ export function IncomingCallModal() {
     : undefined;
 
   return (
-    <div
-      className={cn(
-        "fixed inset-0 z-100 flex items-center justify-center pointer-events-none",
-        isClosing && "animate-out fade-out duration-200",
-      )}
+    <Dialog
+      open={dialogOpen}
+      modal={false}
+      onOpenChange={(open) => !open && handleDecline()}
     >
-      <div
-        className={cn(
-          "pointer-events-auto flex flex-col items-center w-[280px] rounded-xl bg-rm-bg-elevated shadow-2xl p-6",
-          isClosing
-            ? "animate-out fade-out zoom-out-95 duration-200"
-            : "animate-in fade-in zoom-in-95 duration-200",
-        )}
-      >
-        {/* Avatar with theme-aware pulsing outline */}
-        <div className="relative mb-4">
-          <div className="h-[72px] w-[72px] rounded-full border-[3px] border-rm-text-muted/40 animate-pulse overflow-visible bg-rm-bg-surface">
-            {avatarSrc ? (
-              <AvatarImage
-                src={avatarSrc}
-                alt={activeCaller.displayName}
-                display={activeCaller.avatarDisplay}
-              />
-            ) : (
-              <div className="h-full w-full flex items-center justify-center text-2xl font-bold text-rm-text-muted">
-                {activeCaller.displayName[0]?.toUpperCase()}
+      <DialogPortal forceMount>
+        <DialogSurface
+          showCloseButton={false}
+          forceMount
+          className="fixed inset-0 z-50 flex items-center justify-center bg-transparent p-4 transition-opacity duration-200 data-[state=closed]:pointer-events-none data-[state=closed]:opacity-0"
+        >
+          <div
+            data-state={dialogOpen ? "open" : "closed"}
+            className="pointer-events-auto flex flex-col items-center w-[280px] rounded-xl bg-rm-bg-elevated shadow-2xl p-6 animate-in fade-in zoom-in-95 duration-200 data-[state=closed]:animate-out data-[state=closed]:fade-out data-[state=closed]:zoom-out-95"
+          >
+            {/* Avatar with theme-aware pulsing outline */}
+            <div className="relative mb-4">
+              <div className="h-[72px] w-[72px] rounded-full border-[3px] border-rm-text-muted/40 animate-pulse overflow-visible bg-rm-bg-surface">
+                {avatarSrc ? (
+                  <AvatarImage
+                    src={avatarSrc}
+                    alt={activeCaller.displayName}
+                    display={activeCaller.avatarDisplay}
+                  />
+                ) : (
+                  <div className="h-full w-full flex items-center justify-center text-2xl font-bold text-rm-text-muted">
+                    {activeCaller.displayName[0]?.toUpperCase()}
+                  </div>
+                )}
               </div>
-            )}
+            </div>
+
+            {/* Caller info */}
+            <DialogTitle className="text-sm font-bold text-rm-text">
+              <InlineEmojiText text={activeCaller.displayName} />
+            </DialogTitle>
+            <DialogDescription className="text-xs text-rm-text-muted mt-0.5 mb-5">
+              Incoming Call...
+            </DialogDescription>
+
+            {/* Buttons */}
+            <div className="flex items-center gap-3">
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <DialogClose asChild>
+                      <button className="flex h-10 w-16 items-center justify-center rounded-md bg-red-600 hover:bg-red-500 text-white transition-colors">
+                        <X className="h-5 w-5" />
+                      </button>
+                    </DialogClose>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom">Dismiss</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      onClick={handleAccept}
+                      className="flex h-10 w-16 items-center justify-center rounded-md bg-emerald-600 hover:bg-emerald-500 text-white transition-colors"
+                    >
+                      <Phone className="h-5 w-5" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom">Join Call</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </div>
           </div>
-        </div>
-
-        {/* Caller info */}
-        <h2 className="text-sm font-bold text-rm-text">
-          <InlineEmojiText text={activeCaller.displayName} />
-        </h2>
-        <p className="text-xs text-rm-text-muted mt-0.5 mb-5">
-          Incoming Call...
-        </p>
-
-        {/* Buttons */}
-        <div className="flex items-center gap-3">
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button
-                  onClick={handleDecline}
-                  className="flex h-10 w-16 items-center justify-center rounded-md bg-red-600 hover:bg-red-500 text-white transition-colors"
-                >
-                  <X className="h-5 w-5" />
-                </button>
-              </TooltipTrigger>
-              <TooltipContent side="bottom">Dismiss</TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button
-                  onClick={handleAccept}
-                  className="flex h-10 w-16 items-center justify-center rounded-md bg-emerald-600 hover:bg-emerald-500 text-white transition-colors"
-                >
-                  <Phone className="h-5 w-5" />
-                </button>
-              </TooltipTrigger>
-              <TooltipContent side="bottom">Join Call</TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-        </div>
-      </div>
-    </div>
+        </DialogSurface>
+      </DialogPortal>
+    </Dialog>
   );
 }

@@ -32,9 +32,6 @@ export function InputControls({
   const stickerBtnRef = useRef<HTMLButtonElement>(null);
   const emojiBtnRef = useRef<HTMLButtonElement>(null);
 
-  const renderEmojiPicker = showEmoji;
-  const renderGifPicker = showGifPicker;
-
   useEffect(() => {
     const handleFavoriteAdded = () => {
       setShowFavoriteNotice(true);
@@ -136,24 +133,23 @@ export function InputControls({
         >
           <Smile className="h-5 w-5" />
         </button>
-        {renderEmojiPicker && (
-          <EmojiPicker
-            onSelect={handleEmojiSelect}
-            onClose={() => setLocalState({ showEmoji: false })}
-            markerRef={emojiBtnRef}
-            isClosing={!showEmoji}
-          />
-        )}
+        <EmojiPicker
+          open={showEmoji}
+          onSelect={handleEmojiSelect}
+          onClose={() => setLocalState({ showEmoji: false })}
+          markerRef={emojiBtnRef}
+          isClosing={!showEmoji}
+        />
       </div>
-      {renderGifPicker && (
+      {showGifPicker ? (
         <GifPickerModal
+          open
           onClose={() => setLocalState({ showGifPicker: false })}
           onSelect={handleGifSelect}
           defaultMediaType={gifPickerMediaType}
           markerRef={gifPickerMarkerRef}
-          isClosing={!showGifPicker}
         />
-      )}
+      ) : null}
       <div
         className={cn(
           "flex items-center overflow-hidden transition-all duration-300 ease-out md:hidden",

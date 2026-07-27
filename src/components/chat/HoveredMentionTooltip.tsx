@@ -15,7 +15,7 @@ export function HoveredMentionTooltip({
 
   return (
     <div
-      className="fixed flex flex-col items-center animate-in fade-in zoom-in-95 duration-100 z-[100] pointer-events-none"
+      className="fixed flex flex-col items-center animate-in fade-in zoom-in-95 duration-100 z-80 pointer-events-none"
       style={{
         left: pos.left,
         top: pos.top - 4,

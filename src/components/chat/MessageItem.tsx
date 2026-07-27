@@ -1,6 +1,6 @@
 import { AvatarImage } from "@/components/chat/AvatarImage";
 import { ProfileDisplayName } from "@/components/chat/ProfileDisplayName";
-import { BaseModal } from "@/components/ui/BaseModal";
+import { Dialog, DialogPortal, DialogSurface } from "@/components/ui/dialog";
 import { IconButton } from "@/components/ui/IconButton";
 import {
   Tooltip,
@@ -317,9 +317,7 @@ const MessageItem = memo(
     const [showProfile, setShowProfile] = useState(false);
     const [editing, setEditing] = useState(false);
     const [showShareModal, setShowShareModal] = useState(false);
-    const shouldRenderShareModal = showShareModal;
     const [showDeleteModal, setShowDeleteModal] = useState(false);
-    const shouldRenderDeleteModal = showDeleteModal;
     const [editInput, setEditInput] = useState("");
     const [toolbarQuickReactions, setToolbarQuickReactions] = useState(() =>
       getQuickReactionItems(3),
@@ -1306,14 +1304,13 @@ const MessageItem = memo(
                           setShowReactionEmojiPicker((current) => !current);
                         }}
                       />
-                      {showReactionEmojiPicker && (
-                        <EmojiPicker
-                          placement="right"
-                          onSelect={handleEmojiPickerSelect}
-                          onClose={closeInlineEmojiPicker}
-                          markerRef={reactionEmojiBtnRef}
-                        />
-                      )}
+                      <EmojiPicker
+                        open={showReactionEmojiPicker}
+                        placement="right"
+                        onSelect={handleEmojiPickerSelect}
+                        onClose={closeInlineEmojiPicker}
+                        markerRef={reactionEmojiBtnRef}
+                      />
                     </div>
                   )}
                 </div>
@@ -1420,14 +1417,13 @@ const MessageItem = memo(
                           setShowEmojiPicker((current) => !current);
                         }}
                       />
-                      {showEmojiPicker && (
-                        <EmojiPicker
-                          placement="left"
-                          onSelect={handleEmojiPickerSelect}
-                          onClose={closeToolbarEmojiPicker}
-                          markerRef={emojiBtnRef}
-                        />
-                      )}
+                      <EmojiPicker
+                        open={showEmojiPicker}
+                        placement="left"
+                        onSelect={handleEmojiPickerSelect}
+                        onClose={closeToolbarEmojiPicker}
+                        markerRef={emojiBtnRef}
+                      />
                     </div>
                     {isOwnMessage && (
                       <IconButton
@@ -1485,14 +1481,13 @@ const MessageItem = memo(
                           setShowEmojiPicker((current) => !current);
                         }}
                       />
-                      {showEmojiPicker && (
-                        <EmojiPicker
-                          placement="left"
-                          onSelect={handleEmojiPickerSelect}
-                          onClose={closeToolbarEmojiPicker}
-                          markerRef={emojiBtnRef}
-                        />
-                      )}
+                      <EmojiPicker
+                        open={showEmojiPicker}
+                        placement="left"
+                        onSelect={handleEmojiPickerSelect}
+                        onClose={closeToolbarEmojiPicker}
+                        markerRef={emojiBtnRef}
+                      />
                     </div>
                     <IconButton
                       icon={isOwnMessage ? Edit2 : CornerUpLeft}
@@ -1549,9 +1544,10 @@ const MessageItem = memo(
 
         {!previewOnly && confirmation}
 
-        {!previewOnly && showReactionDetails && (
+        {!previewOnly && (
           <ReactionDetailsModal
             message={message}
+            open={showReactionDetails}
             initialEmoji={reactionDetailsEmoji}
             canManageReactions={canDeleteMessages}
             customEmojiMap={reactionEmojiMap}
@@ -1560,29 +1556,33 @@ const MessageItem = memo(
           />
         )}
 
-        {!previewOnly && contextEmojiPickerAnchor ? (
+        {!previewOnly && (
           <>
-            <span
-              ref={contextEmojiPickerAnchorRef}
-              aria-hidden="true"
-              className="fixed h-0 w-0"
-              style={{
-                left: contextEmojiPickerAnchor.x,
-                top: contextEmojiPickerAnchor.y,
-                pointerEvents: "none",
-              }}
-            />
+            {contextEmojiPickerAnchor && (
+              <span
+                ref={contextEmojiPickerAnchorRef}
+                aria-hidden="true"
+                className="fixed h-0 w-0"
+                style={{
+                  left: contextEmojiPickerAnchor.x,
+                  top: contextEmojiPickerAnchor.y,
+                  pointerEvents: "none",
+                }}
+              />
+            )}
             <EmojiPicker
+              open={contextEmojiPickerAnchor !== null}
               placement="bottom-end"
               markerRef={contextEmojiPickerAnchorRef}
               onSelect={handleEmojiPickerSelect}
               onClose={() => setContextEmojiPickerAnchor(null)}
             />
           </>
-        ) : null}
+        )}
 
-        {!previewOnly && shouldRenderShareModal && (
+        {!previewOnly && (
           <MessageShareModal
+            open={showShareModal}
             message={message}
             onClose={() => setShowShareModal(false)}
             onCreateShare={createMessageShare}
@@ -1598,11 +1598,11 @@ const MessageItem = memo(
           />
         )}
 
-        {!previewOnly && shouldRenderDeleteModal && (
+        {!previewOnly && (
           <DeleteMessageModal
+            open={showDeleteModal}
             message={message}
             currentUserId={currentUserId}
-            isClosing={!showDeleteModal}
             onClose={() => setShowDeleteModal(false)}
             onConfirm={() => {
               performDelete();
@@ -1616,15 +1616,15 @@ const MessageItem = memo(
 );
 
 function DeleteMessageModal({
+  open,
   message,
   currentUserId,
-  isClosing,
   onClose,
   onConfirm,
 }: {
+  open: boolean;
   message: Message;
   currentUserId?: string;
-  isClosing?: boolean;
   onClose: () => void;
   onConfirm: () => void;
 }) {
@@ -1635,104 +1635,103 @@ function DeleteMessageModal({
   }, []);
 
   return (
-    <BaseModal onClose={onClose}>
-      <div
-        className={cn(
-          "fixed inset-0 z-[1100] flex items-end justify-center bg-black/65 p-0 backdrop-blur-sm md:items-center md:p-6",
-          isClosing
-            ? "animate-out fade-out duration-200"
-            : "animate-in fade-in duration-200",
-        )}
-        onClick={(event) => {
-          if (event.target === event.currentTarget) {
-            onClose();
-          }
-        }}
-        role="presentation"
-      >
-        <dialog
-          open
+    <Dialog open={open} onOpenChange={(nextOpen) => !nextOpen && onClose()}>
+      <DialogPortal>
+        <div
+          data-state={open ? "open" : "closed"}
           className={cn(
-            "relative m-0 flex max-h-[calc(100dvh-16px)] w-full max-w-[480px] flex-col overflow-hidden rounded-t-xl border border-rm-border bg-rm-bg-primary p-0 shadow-2xl outline-none md:max-h-[min(760px,calc(100dvh-48px))] md:rounded-xl",
-            isClosing
-              ? "animate-out fade-out zoom-out-95 duration-200"
-              : "animate-in fade-in zoom-in-95 duration-200",
+            "fixed inset-0 z-50 flex items-end justify-center bg-black/65 p-0 backdrop-blur-sm transition-opacity duration-200 md:items-center md:p-6",
+            "animate-in fade-in data-[state=closed]:pointer-events-none data-[state=closed]:opacity-0 data-[state=closed]:animate-out data-[state=closed]:fade-out",
           )}
-          aria-labelledby="delete-message-title"
-          aria-describedby="delete-message-description"
+          onClick={(event) => {
+            if (event.target === event.currentTarget) {
+              onClose();
+            }
+          }}
+          role="presentation"
         >
-          <div className="flex shrink-0 items-start justify-between px-6 pb-3 pt-6">
-            <div>
-              <h2
-                id="delete-message-title"
-                className="text-lg font-bold text-rm-text"
-              >
-                Delete Message
-              </h2>
-              <p
-                id="delete-message-description"
-                className="mt-1 text-sm text-rm-text-muted"
-              >
-                Are you sure you want to delete this message?
-              </p>
+          <DialogSurface
+            showCloseButton={false}
+            className={cn(
+              "relative m-0 flex max-h-[calc(100dvh-16px)] w-full max-w-[480px] flex-col overflow-hidden rounded-t-xl border border-rm-border bg-rm-bg-primary p-0 shadow-2xl outline-none md:max-h-[min(760px,calc(100dvh-48px))] md:rounded-xl",
+              "animate-in fade-in zoom-in-95 duration-200 data-[state=closed]:animate-out data-[state=closed]:fade-out data-[state=closed]:zoom-out-95",
+            )}
+            aria-labelledby="delete-message-title"
+            aria-describedby="delete-message-description"
+          >
+            <div className="flex shrink-0 items-start justify-between px-6 pb-3 pt-6">
+              <div>
+                <h2
+                  id="delete-message-title"
+                  className="text-lg font-bold text-rm-text"
+                >
+                  Delete Message
+                </h2>
+                <p
+                  id="delete-message-description"
+                  className="mt-1 text-sm text-rm-text-muted"
+                >
+                  Are you sure you want to delete this message?
+                </p>
+              </div>
+              <IconButton
+                icon={X}
+                size="sm"
+                shape="circle"
+                tooltip="Close"
+                onClick={onClose}
+                className="-mr-1 -mt-1"
+              />
             </div>
-            <IconButton
-              icon={X}
-              size="sm"
-              shape="circle"
-              tooltip="Close"
-              onClick={onClose}
-              className="-mr-1 -mt-1"
-            />
-          </div>
 
-          <div className="min-h-0 flex-1 overflow-y-auto px-6 py-3 custom-scrollbar">
-            <div className="overflow-hidden rounded border border-rm-border bg-black/30 py-3">
-              <div
-                ref={previewRef}
-                aria-hidden="true"
-                className="pointer-events-none select-none"
-              >
-                <MessageItem
-                  message={message}
-                  showHeader
-                  currentUserId={currentUserId}
-                  hideReplyConnector={false}
-                  previewOnly
-                />
+            <div className="min-h-0 flex-1 overflow-y-auto px-6 py-3 custom-scrollbar">
+              <div className="overflow-hidden rounded border border-rm-border bg-black/30 py-3">
+                <div
+                  ref={previewRef}
+                  aria-hidden="true"
+                  className="pointer-events-none select-none"
+                >
+                  <MessageItem
+                    message={message}
+                    showHeader
+                    currentUserId={currentUserId}
+                    hideReplyConnector={false}
+                    previewOnly
+                  />
+                </div>
               </div>
             </div>
-          </div>
 
-          <div className="shrink-0 border-t border-rm-border/60 px-6 pb-2 pt-4 text-sm leading-tight">
-            <p className="text-[12px] font-black uppercase text-emerald-400">
-              Protip:
-            </p>
-            <p className="mt-1 text-rm-text-secondary">
-              You can hold down Shift when clicking delete message to bypass
-              this confirmation entirely.
-            </p>
-          </div>
+            <div className="shrink-0 border-t border-rm-border/60 px-6 pb-2 pt-4 text-sm leading-tight">
+              <p className="text-[12px] font-black uppercase text-emerald-400">
+                Protip:
+              </p>
+              <p className="mt-1 text-rm-text-secondary">
+                You can hold down Shift when clicking delete message to bypass
+                this confirmation entirely.
+              </p>
+            </div>
 
-          <div className="grid shrink-0 grid-cols-2 gap-2 px-6 pb-6 pt-4">
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-lg border border-rm-border bg-rm-bg-elevated px-4 py-2.5 text-sm font-bold text-rm-text-secondary transition hover:bg-rm-bg-hover hover:text-rm-text"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={onConfirm}
-              className="rounded-lg bg-destructive px-4 py-2.5 text-sm font-bold text-white transition hover:brightness-110"
-            >
-              Delete
-            </button>
-          </div>
-        </dialog>
-      </div>
-    </BaseModal>
+            <div className="grid shrink-0 grid-cols-2 gap-2 px-6 pb-6 pt-4">
+              <button
+                type="button"
+                onClick={onClose}
+                className="rounded-lg border border-rm-border bg-rm-bg-elevated px-4 py-2.5 text-sm font-bold text-rm-text-secondary transition hover:bg-rm-bg-hover hover:text-rm-text"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={onConfirm}
+                className="rounded-lg bg-destructive px-4 py-2.5 text-sm font-bold text-white transition hover:brightness-110"
+              >
+                Delete
+              </button>
+            </div>
+          </DialogSurface>
+        </div>
+      </DialogPortal>
+    </Dialog>
   );
 }
 

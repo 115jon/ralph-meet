@@ -121,7 +121,7 @@ export function FloatingListenTogetherPlayer({
     <div
       ref={containerRef}
       data-testid="floating-listen-together-player"
-      className="fixed z-[130] w-[min(340px,calc(100vw-24px))] touch-none select-none cursor-grab active:cursor-grabbing"
+      className="fixed z-40 w-[min(340px,calc(100vw-24px))] touch-none select-none cursor-grab active:cursor-grabbing"
       style={{ left: position.x, top: position.y }}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}

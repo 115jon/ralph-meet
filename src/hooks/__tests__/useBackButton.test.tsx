@@ -22,7 +22,7 @@ describe("useBackButton", () => {
     vi.useRealTimers();
   });
 
-  it("cleans up each instance's history entry independently", () => {
+  it("shares one history entry across active handlers", () => {
     const first = renderHook(() => useBackButton(() => true));
     const second = renderHook(() => useBackButton(() => true));
 
@@ -31,8 +31,8 @@ describe("useBackButton", () => {
     act(() => second.unmount());
     act(() => vi.advanceTimersByTime(10));
 
-    expect(historyGo).toHaveBeenNthCalledWith(1, -1);
-    expect(historyGo).toHaveBeenNthCalledWith(2, -1);
+    expect(historyGo).toHaveBeenCalledOnce();
+    expect(historyGo).toHaveBeenCalledWith(-1);
   });
 
   it("does not let a rapid inactive-to-active toggle remove its active entry", () => {
@@ -56,7 +56,7 @@ describe("useBackButton", () => {
     expect(historyGo).toHaveBeenCalledWith(-1);
   });
 
-  it("keeps back handlers LIFO and suppresses programmatic cleanup popstate", () => {
+  it("keeps back handlers LIFO without reintroducing history after user back", () => {
     const firstHandler = vi.fn(() => true);
     const secondHandler = vi.fn(() => true);
     const first = renderHook(() => useBackButton(firstHandler));
@@ -73,7 +73,7 @@ describe("useBackButton", () => {
     act(() => first.unmount());
     act(() => vi.advanceTimersByTime(10));
 
-    expect(historyGo).toHaveBeenCalledWith(-1);
+    expect(historyGo).not.toHaveBeenCalled();
     expect(firstHandler).not.toHaveBeenCalled();
   });
 });

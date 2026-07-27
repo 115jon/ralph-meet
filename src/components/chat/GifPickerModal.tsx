@@ -1,4 +1,4 @@
-import { BaseModal } from "@/components/ui/BaseModal";
+import { Dialog, DialogPortal, DialogSurface } from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
@@ -121,6 +121,7 @@ function useColumnsCount(expanded: boolean) {
 }
 
 interface GifPickerModalProps {
+  open: boolean;
   onClose: () => void;
   onSelect: (gif: GifPickerItem) => Promise<void>;
   apiQuery?: string;
@@ -135,10 +136,10 @@ interface GifPickerModalProps {
    *  Clicking an item sends via SFU and keeps the picker open. */
   voiceMode?: { sfu: SFUClient };
   markerRef?: React.RefObject<HTMLElement | null>;
-  isClosing?: boolean;
 }
 
 export default function GifPickerModal({
+  open,
   onClose,
   onSelect,
   apiQuery = "",
@@ -148,10 +149,9 @@ export default function GifPickerModal({
   skipAuth = false,
   initialExpanded = false,
   lockExpanded = false,
-  overlayZIndexClassName = "z-[250]",
+  overlayZIndexClassName = "z-60",
   voiceMode,
   markerRef,
-  isClosing = false,
 }: GifPickerModalProps) {
   const { resolvedTheme } = useTheme();
   const { user } = useUser();
@@ -320,6 +320,10 @@ export default function GifPickerModal({
   }, [query, mode, results, saveQueryToHistory]);
 
   const isExpanded = lockExpanded || expanded;
+  const effectiveOverlayZIndexClassName = cn(
+    overlayZIndexClassName,
+    isExpanded && "z-90",
+  );
   const numCols = useColumnsCount(isExpanded);
   const columnItems = useMemo(() => {
     const cols: GifPickerItem[][] = Array.from({ length: numCols }, () => []);
@@ -531,11 +535,13 @@ export default function GifPickerModal({
   }, [favorites, skipAuth]);
 
   useEffect(() => {
-    if (skipAuth) return;
+    if (!open || skipAuth) return;
     void loadDbFavorites();
-  }, [loadDbFavorites, skipAuth]);
+  }, [loadDbFavorites, open, skipAuth]);
 
   useEffect(() => {
+    if (!open) return undefined;
+
     let cancelled = false;
     const controller = new AbortController();
 
@@ -607,9 +613,12 @@ export default function GifPickerModal({
     provider,
     requestApiQuerySuffix,
     skipAuth,
+    open,
   ]);
 
   useEffect(() => {
+    if (!open) return undefined;
+
     let cancelled = false;
     const controller = new AbortController();
 
@@ -650,7 +659,14 @@ export default function GifPickerModal({
       cancelled = true;
       controller.abort();
     };
-  }, [provider, mediaType, requestApiQuerySuffix, skipAuth, categoriesCache]);
+  }, [
+    provider,
+    mediaType,
+    requestApiQuerySuffix,
+    skipAuth,
+    categoriesCache,
+    open,
+  ]);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
@@ -666,6 +682,8 @@ export default function GifPickerModal({
   }, [searchValue]);
 
   useEffect(() => {
+    if (!open) return undefined;
+
     const trimmed = searchValue.trim();
     if (trimmed.length < 2) {
       setSuggestions([]);
@@ -755,7 +773,14 @@ export default function GifPickerModal({
       window.clearTimeout(timeout);
       controller.abort();
     };
-  }, [searchValue, provider, skipAuth, requestApiQuerySuffix, recentQueries]);
+  }, [
+    searchValue,
+    provider,
+    skipAuth,
+    requestApiQuerySuffix,
+    recentQueries,
+    open,
+  ]);
 
   useEffect(() => {
     if (suggestions.length === 0) {
@@ -768,6 +793,8 @@ export default function GifPickerModal({
   }, [activeSuggestionIndex, suggestions]);
 
   useEffect(() => {
+    if (!open) return undefined;
+
     let cancelled = false;
     const controller = new AbortController();
 
@@ -916,6 +943,7 @@ export default function GifPickerModal({
     mediaType,
     getCacheKey,
     saveQueryToHistory,
+    open,
   ]);
 
   const favoriteIds = useMemo(
@@ -1305,544 +1333,558 @@ export default function GifPickerModal({
       : "bottom-[calc(88px+var(--safe-area-bottom,0px))] right-4 h-[min(68vh,620px)] w-[min(420px,calc(100vw-2rem))] max-sm:inset-x-2 max-sm:bottom-[calc(76px+var(--safe-area-bottom,0px))] max-sm:h-[min(72vh,560px)] max-sm:w-auto";
 
   return (
-    <BaseModal onClose={onClose} aria-label="GIF picker">
-      <TooltipProvider>
-        <div className={cn("fixed inset-0", overlayZIndexClassName)}>
-          <button
-            type="button"
-            data-base-modal-backdrop
-            className={cn(
-              "absolute inset-0 border-0 p-0",
-              expanded ? "bg-black/55 backdrop-blur-sm" : "bg-transparent",
-            )}
-            aria-label="Close GIF picker"
-            onMouseDown={onClose}
-          />
+    <Dialog open={open} onOpenChange={(nextOpen) => !nextOpen && onClose()}>
+      <DialogPortal>
+        <TooltipProvider>
           <div
+            data-state={open ? "open" : "closed"}
             className={cn(
-              "picker-panel absolute flex flex-col overflow-hidden rounded-[26px] border backdrop-blur-2xl shadow-2xl transition-all duration-150 ease-out",
-              !isClosing
-                ? "animate-in fade-in zoom-in-95 opacity-100"
-                : "opacity-0 scale-95 max-sm:translate-y-8",
-              markerRef && !expanded
-                ? "max-sm:fixed max-sm:inset-x-0 max-sm:bottom-0 max-sm:top-auto max-sm:h-[85dvh] max-sm:w-full max-sm:rounded-t-[26px] max-sm:rounded-b-none max-sm:border-x-0 max-sm:border-b-0 max-sm:translate-y-0 max-sm:slide-in-from-bottom max-sm:zoom-in-100"
-                : "",
-              panelLayout,
+              "fixed inset-0 transition-opacity duration-150",
+              effectiveOverlayZIndexClassName,
+              !open && "pointer-events-none opacity-0",
             )}
-            style={markerRef && !expanded ? dynamicStyle : undefined}
-            onMouseDown={(event) => event.stopPropagation()}
           >
-            <div className="picker-header flex items-center justify-between border-b px-4 py-3">
-              <div className="flex items-center gap-1.5 text-sm font-bold text-rm-text">
-                <button
-                  type="button"
-                  onClick={() => handleMediaTypeChange("gifs")}
-                  className={cn(
-                    "rounded-xl px-3.5 py-2 transition-all duration-150 active:scale-95",
-                    mediaType === "gifs"
-                      ? "bg-rm-bg-active text-rm-text shadow-sm dark:shadow-none"
-                      : "text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover",
-                  )}
-                >
-                  GIFs
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleMediaTypeChange("stickers")}
-                  className={cn(
-                    "rounded-xl px-3.5 py-2 transition-all duration-150 active:scale-95",
-                    mediaType === "stickers"
-                      ? "bg-rm-bg-active text-rm-text shadow-sm dark:shadow-none"
-                      : "text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover",
-                  )}
-                >
-                  Stickers
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleMediaTypeChange("clips")}
-                  className={cn(
-                    "rounded-xl px-3.5 py-2 transition-all duration-150 active:scale-95",
-                    mediaType === "clips"
-                      ? "bg-rm-bg-active text-rm-text shadow-sm dark:shadow-none"
-                      : "text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover",
-                  )}
-                >
-                  Clips
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleMediaTypeChange("memes")}
-                  className={cn(
-                    "rounded-xl px-3.5 py-2 transition-all duration-150 active:scale-95",
-                    mediaType === "memes"
-                      ? "bg-rm-bg-active text-rm-text shadow-sm dark:shadow-none"
-                      : "text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover",
-                  )}
-                >
-                  Memes
-                </button>
-              </div>
-              <div className="flex items-center gap-1">
-                {!voiceMode && !lockExpanded && (
+            <button
+              type="button"
+              className={cn(
+                "absolute inset-0 z-0 border-0 p-0",
+                expanded ? "bg-black/55 backdrop-blur-sm" : "bg-transparent",
+              )}
+              aria-label="Close GIF picker"
+            />
+            <DialogSurface
+              showCloseButton={false}
+              className={cn(
+                "picker-panel absolute z-10 flex min-h-0 flex-col overflow-hidden rounded-[26px] border backdrop-blur-2xl shadow-2xl transition-all duration-150 ease-out",
+                "animate-in fade-in zoom-in-95 opacity-100 data-[state=closed]:animate-out data-[state=closed]:fade-out data-[state=closed]:zoom-out-95 data-[state=closed]:opacity-0",
+                markerRef && !expanded
+                  ? "max-sm:fixed max-sm:inset-x-0 max-sm:bottom-0 max-sm:top-auto max-sm:h-[85dvh] max-sm:w-full max-sm:rounded-t-[26px] max-sm:rounded-b-none max-sm:border-x-0 max-sm:border-b-0 max-sm:translate-y-0 max-sm:slide-in-from-bottom max-sm:zoom-in-100"
+                  : "",
+                panelLayout,
+              )}
+              style={markerRef && !expanded ? dynamicStyle : undefined}
+              onMouseDown={(event) => event.stopPropagation()}
+            >
+              <div className="picker-header flex items-center justify-between border-b px-4 py-3">
+                <div className="flex items-center gap-1.5 text-sm font-bold text-rm-text">
                   <button
                     type="button"
-                    onClick={() => setExpanded((value) => !value)}
-                    className="rounded-lg p-2 text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text transition"
-                    aria-label={
-                      expanded ? "Shrink GIF picker" : "Expand GIF picker"
-                    }
-                    title={expanded ? "Shrink" : "Expand"}
-                  >
-                    {expanded ? (
-                      <Minimize2 className="h-4 w-4" />
-                    ) : (
-                      <Maximize2 className="h-4 w-4" />
-                    )}
-                  </button>
-                )}
-                <button
-                  type="button"
-                  onClick={onClose}
-                  className="rounded-lg p-2 text-rm-text-muted hover:bg-red-500/10 hover:text-red-500 transition"
-                  aria-label="Close GIF picker"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
-            </div>
-
-            {/* Voice reaction mode: display mode selector + rate limit banner */}
-            {voiceMode && (
-              <div className="flex items-center gap-1.5 px-4 py-2 border-b border-rm-border bg-rm-bg-surface/30 overflow-x-auto scrollbar-none shrink-0">
-                <span className="text-[10px] font-black uppercase tracking-widest text-rm-text-secondary shrink-0 mr-1">
-                  React Mode
-                </span>
-                {VOICE_DISPLAY_MODES.map((mode) => (
-                  <button
-                    key={mode}
-                    type="button"
-                    onClick={() => persistVoiceDisplayMode(mode)}
+                    onClick={() => handleMediaTypeChange("gifs")}
                     className={cn(
-                      "shrink-0 rounded-lg px-2.5 py-1 text-[11px] font-bold transition-all duration-150 active:scale-95",
-                      voiceDisplayMode === mode
-                        ? "bg-primary text-white shadow-sm shadow-primary/40"
+                      "rounded-xl px-3.5 py-2 transition-all duration-150 active:scale-95",
+                      mediaType === "gifs"
+                        ? "bg-rm-bg-active text-rm-text shadow-sm dark:shadow-none"
                         : "text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover",
                     )}
                   >
-                    {VOICE_DISPLAY_MODE_LABELS[mode]}
+                    GIFs
                   </button>
-                ))}
-                {voiceRateLimited && (
-                  <span className="ml-auto shrink-0 text-[11px] font-semibold text-amber-500 dark:text-amber-400">
-                    Slow down! ⚠️
-                  </span>
-                )}
-              </div>
-            )}
-
-            {mode === "favorites" ? (
-              <div className="flex items-center gap-3 px-4 py-3 bg-transparent">
-                <button
-                  type="button"
-                  onClick={handleBack}
-                  className="rounded-lg p-2 text-rm-text-muted transition hover:bg-rm-bg-hover hover:text-rm-text"
-                  aria-label="Back"
-                >
-                  <ArrowLeft className="h-5 w-5" />
-                </button>
-                <h3 className="truncate text-sm font-black text-rm-text">
-                  Favorite {mediaLabel}
-                </h3>
-              </div>
-            ) : (
-              <div className="border-b border-rm-border bg-transparent px-4 py-3">
-                <div className="flex gap-2 items-center">
-                  {mode === "search" || mode === "featured" ? (
-                    <button
-                      type="button"
-                      onClick={handleBack}
-                      className="rounded-lg p-2 text-rm-text-muted transition hover:bg-rm-bg-hover hover:text-rm-text shrink-0"
-                      aria-label="Back"
-                    >
-                      <ArrowLeft className="h-5 w-5" />
-                    </button>
-                  ) : null}
-                  <div className="relative flex-1">
-                    <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-rm-text-muted" />
-                    <input
-                      ref={searchInputRef}
-                      value={searchValue}
-                      onChange={(event) => setSearchValue(event.target.value)}
-                      onFocus={() => {
-                        if (
-                          suggestions.length > 0 &&
-                          searchValue.trim().length >= 2
-                        ) {
-                          setIsSuggestionListOpen(true);
-                        }
-                      }}
-                      onKeyDown={handleSearchInputKeyDown}
-                      placeholder={getGifProviderSearchPlaceholder(provider)}
-                      aria-autocomplete="list"
-                      aria-controls={
-                        suggestionsVisible
-                          ? "gif-picker-search-suggestions"
-                          : undefined
-                      }
-                      aria-label={`Search ${providerLabel} ${mediaLabel}`}
-                      aria-activedescendant={
-                        suggestionsVisible && activeSuggestionIndex >= 0
-                          ? `gif-picker-suggestion-${activeSuggestionIndex}`
-                          : undefined
-                      }
-                      className="picker-search-input h-11 w-full rounded-xl border pl-11 pr-4 text-[15px] font-medium outline-none transition placeholder:text-rm-text-muted"
-                    />
-                    {suggestionsVisible && (
-                      <div
-                        id="gif-picker-search-suggestions"
-                        className="absolute left-0 right-0 top-[calc(100%+0.5rem)] z-20 overflow-hidden rounded-2xl border border-rm-border bg-rm-bg-floating shadow-2xl backdrop-blur-xl"
-                      >
-                        {suggestions.map((suggestion, index) => (
-                          <button
-                            key={`${suggestion}-${index}`}
-                            id={`gif-picker-suggestion-${index}`}
-                            type="button"
-                            role="option"
-                            aria-selected={activeSuggestionIndex === index}
-                            onMouseEnter={() => setActiveSuggestionIndex(index)}
-                            onMouseDown={(event) => {
-                              event.preventDefault();
-                              selectSuggestion(suggestion);
-                            }}
-                            className={cn(
-                              "flex w-full items-center justify-between gap-3 px-4 py-3 text-left text-sm font-semibold transition",
-                              activeSuggestionIndex === index
-                                ? "bg-rm-bg-active text-rm-text"
-                                : "text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text",
-                            )}
-                          >
-                            <span className="flex min-w-0 items-center gap-2">
-                              <Search className="h-3.5 w-3.5 shrink-0" />
-                              <span className="truncate">{suggestion}</span>
-                            </span>
-                            {activeSuggestionIndex === index && (
-                              <span className="shrink-0 text-[10px] font-black uppercase tracking-[0.16em] text-rm-text-muted">
-                                Enter
-                              </span>
-                            )}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
                   <button
                     type="button"
-                    onClick={openFavorites}
-                    className="rounded-xl border border-rm-border bg-rm-bg-elevated p-3 text-rm-text-muted transition hover:bg-rm-bg-hover hover:text-amber-500 dark:hover:text-yellow-400 shrink-0 shadow-sm dark:shadow-none"
-                    aria-label="View Favorites"
-                    title="View Favorites"
+                    onClick={() => handleMediaTypeChange("stickers")}
+                    className={cn(
+                      "rounded-xl px-3.5 py-2 transition-all duration-150 active:scale-95",
+                      mediaType === "stickers"
+                        ? "bg-rm-bg-active text-rm-text shadow-sm dark:shadow-none"
+                        : "text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover",
+                    )}
                   >
-                    <Star className="h-5 w-5" />
+                    Stickers
                   </button>
-                  {mediaType === "gifs" && (
-                    <div className="relative shrink-0">
-                      {providerOptions.length > 1 ? (
-                        <>
-                          <Select
-                            value={provider}
-                            onValueChange={(value) =>
-                              handleProviderChange(value as GifProvider)
-                            }
-                          >
-                            <SelectTrigger
-                              aria-label="GIF provider"
-                              className="picker-pill h-11 rounded-xl border pl-3 pr-9 text-sm font-semibold text-rm-text outline-none transition shadow-sm dark:shadow-none"
-                            >
-                              <SelectValue placeholder="GIF provider" />
-                            </SelectTrigger>
-                            <SelectContent position="popper" align="start">
-                              {providerOptions.map((option) => {
-                                const label = getGifProviderLabel(option);
-                                return (
-                                  <SelectItem
-                                    key={option}
-                                    value={option}
-                                    textValue={label}
-                                  >
-                                    {label}
-                                  </SelectItem>
-                                );
-                              })}
-                            </SelectContent>
-                          </Select>
-                        </>
+                  <button
+                    type="button"
+                    onClick={() => handleMediaTypeChange("clips")}
+                    className={cn(
+                      "rounded-xl px-3.5 py-2 transition-all duration-150 active:scale-95",
+                      mediaType === "clips"
+                        ? "bg-rm-bg-active text-rm-text shadow-sm dark:shadow-none"
+                        : "text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover",
+                    )}
+                  >
+                    Clips
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleMediaTypeChange("memes")}
+                    className={cn(
+                      "rounded-xl px-3.5 py-2 transition-all duration-150 active:scale-95",
+                      mediaType === "memes"
+                        ? "bg-rm-bg-active text-rm-text shadow-sm dark:shadow-none"
+                        : "text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover",
+                    )}
+                  >
+                    Memes
+                  </button>
+                </div>
+                <div className="flex items-center gap-1">
+                  {!voiceMode && !lockExpanded && (
+                    <button
+                      type="button"
+                      onClick={() => setExpanded((value) => !value)}
+                      className="rounded-lg p-2 text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text transition"
+                      aria-label={
+                        expanded ? "Shrink GIF picker" : "Expand GIF picker"
+                      }
+                      title={expanded ? "Shrink" : "Expand"}
+                    >
+                      {expanded ? (
+                        <Minimize2 className="h-4 w-4" />
                       ) : (
-                        <div className="flex h-11 items-center rounded-xl border border-rm-border bg-rm-bg-elevated px-3 text-sm font-semibold text-rm-text shadow-sm dark:shadow-none">
-                          {getGifProviderLabel(provider)}
-                        </div>
+                        <Maximize2 className="h-4 w-4" />
                       )}
-                    </div>
+                    </button>
                   )}
+                  <button
+                    type="button"
+                    onClick={onClose}
+                    className="rounded-lg p-2 text-rm-text-muted hover:bg-red-500/10 hover:text-red-500 transition"
+                    aria-label="Close GIF picker"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
                 </div>
               </div>
-            )}
 
-            <div
-              ref={scrollRef}
-              onScroll={() => void handleScroll()}
-              className="custom-scrollbar flex-1 overflow-y-auto px-4 py-3"
-            >
-              {mode === "categories" &&
-                searchValue.trim() === "" &&
-                recentQueries.length > 0 && (
-                  <div className="mb-4 rounded-xl border border-rm-border bg-rm-bg-elevated p-3 shadow-sm dark:shadow-none">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-xs font-black uppercase tracking-wider text-rm-text-muted">
-                        Recent Searches
-                      </span>
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          clearRecentQueries();
-                        }}
-                        className="text-xs font-semibold text-red-500 hover:text-red-600 dark:text-red-400 dark:hover:text-red-300 transition"
-                      >
-                        Clear All
-                      </button>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      {recentQueries.map((q) => (
-                        <div
-                          key={q}
-                          className="picker-pill inline-flex items-center gap-1.5 rounded-full border pl-3 pr-2 py-1 text-xs font-semibold transition shadow-sm dark:shadow-none"
-                        >
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setSearchValue(q);
-                              setQuery(q);
-                              setMode("search");
-                              saveQueryToHistory(q);
-                            }}
-                            className="text-left hover:underline text-rm-text"
-                            style={{ color: "var(--rm-text-primary)" }}
-                          >
-                            {q}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              removeRecentQuery(q);
-                            }}
-                            className="rounded-full p-0.5 hover:bg-rm-bg-active text-rm-text-muted hover:text-rm-text transition"
-                            aria-label={`Remove ${q} from history`}
-                          >
-                            <X className="h-3.5 w-3.5" />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-              {mode === "categories" && (
-                <div
-                  className={cn(
-                    "mb-4 grid grid-cols-2 gap-2",
-                    expanded && "md:grid-cols-3",
-                  )}
-                >
-                  <button
-                    type="button"
-                    onClick={openFavorites}
-                    className="group relative h-24 overflow-hidden rounded-xl border border-rm-border bg-rm-bg-surface"
-                    style={shortcutCardShadowStyle}
-                  >
-                    <GifShortcutCardMedia item={latestFavoritePreview} />
-                    {!latestFavoritePreview ? (
-                      <div
-                        className="absolute inset-0"
-                        style={shortcutCardFallbackStyle}
-                      />
-                    ) : null}
-                    <div
-                      className="absolute inset-0"
-                      style={shortcutCardOverlayStyle}
-                    />
-                    <div
-                      className="absolute right-3 top-3 rounded-full border border-white/12 p-2 text-white backdrop-blur-sm"
-                      style={shortcutCardBadgeStyle}
-                    >
-                      <Star className="h-4.5 w-4.5" />
-                    </div>
-                    <div className="absolute inset-0 flex flex-col items-center justify-center text-white">
-                      <span className="text-[10px] font-black uppercase tracking-[0.16em] text-white/75">
-                        {latestFavoritePreview ? "Latest saved" : "Your picks"}
-                      </span>
-                      <span className="mt-1 text-lg font-black">Favorites</span>
-                    </div>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={openFeatured}
-                    className="group relative h-24 overflow-hidden rounded-xl border border-rm-border bg-rm-bg-surface"
-                    style={shortcutCardShadowStyle}
-                  >
-                    <GifShortcutCardMedia item={featuredCardPreview} />
-                    {!featuredCardPreview ? (
-                      <div
-                        className="absolute inset-0"
-                        style={shortcutCardFallbackStyle}
-                      />
-                    ) : null}
-                    <div
-                      className="absolute inset-0"
-                      style={shortcutCardOverlayStyle}
-                    />
-                    <div
-                      className="absolute right-3 top-3 rounded-full border border-white/12 p-2 text-white backdrop-blur-sm"
-                      style={shortcutCardBadgeStyle}
-                    >
-                      <TrendingUp className="h-4.5 w-4.5" />
-                    </div>
-                    <div className="absolute inset-0 flex flex-col items-center justify-center text-white">
-                      <span className="text-[10px] font-black uppercase tracking-[0.16em] text-white/75">
-                        {providerLabel}
-                      </span>
-                      <span className="mt-1 text-lg font-black">Trending</span>
-                    </div>
-                  </button>
-                  {categories.map((category) => (
+              {/* Voice reaction mode: display mode selector + rate limit banner */}
+              {voiceMode && (
+                <div className="flex items-center gap-1.5 px-4 py-2 border-b border-rm-border bg-rm-bg-surface/30 overflow-x-auto scrollbar-none shrink-0">
+                  <span className="text-[10px] font-black uppercase tracking-widest text-rm-text-secondary shrink-0 mr-1">
+                    React Mode
+                  </span>
+                  {VOICE_DISPLAY_MODES.map((mode) => (
                     <button
-                      key={category.id}
+                      key={mode}
                       type="button"
-                      onClick={() => handleCategorySearch(category)}
-                      className="group relative h-24 overflow-hidden rounded-xl border border-rm-border shadow-sm dark:shadow-none"
+                      onClick={() => persistVoiceDisplayMode(mode)}
+                      className={cn(
+                        "shrink-0 rounded-lg px-2.5 py-1 text-[11px] font-bold transition-all duration-150 active:scale-95",
+                        voiceDisplayMode === mode
+                          ? "bg-primary text-white shadow-sm shadow-primary/40"
+                          : "text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover",
+                      )}
                     >
-                      <img
-                        src={category.imageUrl}
-                        alt=""
-                        loading="lazy"
-                        decoding="async"
-                        className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
-                      />
-                      <div className="absolute inset-0 bg-black/45 dark:bg-black/60" />
-                      <div className="absolute inset-0 flex items-center justify-center px-3 text-center text-lg font-black capitalize text-white drop-shadow-md">
-                        {category.label}
-                      </div>
+                      {VOICE_DISPLAY_MODE_LABELS[mode]}
                     </button>
                   ))}
+                  {voiceRateLimited && (
+                    <span className="ml-auto shrink-0 text-[11px] font-semibold text-amber-500 dark:text-amber-400">
+                      Slow down! ⚠️
+                    </span>
+                  )}
                 </div>
               )}
 
-              {mode === "categories" && categoriesLoading ? (
-                <div className="py-8 text-center text-sm font-medium text-rm-text-muted">
-                  Loading {providerLabel} {mediaLabel} categories…
+              {mode === "favorites" ? (
+                <div className="flex items-center gap-3 px-4 py-3 bg-transparent">
+                  <button
+                    type="button"
+                    onClick={handleBack}
+                    className="rounded-lg p-2 text-rm-text-muted transition hover:bg-rm-bg-hover hover:text-rm-text"
+                    aria-label="Back"
+                  >
+                    <ArrowLeft className="h-5 w-5" />
+                  </button>
+                  <h3 className="truncate text-sm font-black text-rm-text">
+                    Favorite {mediaLabel}
+                  </h3>
                 </div>
-              ) : null}
-
-              {mode === "categories" &&
-              !categoriesLoading &&
-              categories.length === 0 ? (
-                <div className="flex h-40 items-center justify-center text-center text-sm font-medium text-rm-text-muted">
-                  No {providerLabel} {mediaLabel} categories available right
-                  now.
-                </div>
-              ) : null}
-
-              {error ? (
-                <div className="mb-3 rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-sm font-medium text-red-800 dark:text-red-200">
-                  {error}
-                </div>
-              ) : null}
-
-              {mode === "favorites" && results.length === 0 ? (
-                <FavoritesEmptyState mediaLabel={mediaLabel} />
-              ) : null}
-
-              {mode !== "categories" && results.length > 0 ? (
-                <div
-                  className={cn(
-                    "flex items-start",
-                    expanded ? "gap-2 md:gap-3" : "gap-2",
-                  )}
-                >
-                  {columnItems.map((col, colIdx) => (
-                    <div
-                      key={colIdx}
-                      className={cn(
-                        "flex flex-col flex-1 min-w-0",
-                        expanded ? "gap-2 md:gap-3" : "gap-2",
-                      )}
-                    >
-                      {col.map((gif) => (
-                        <GifTile
-                          key={getGifItemIdentityKey(gif)}
-                          gif={gif}
-                          isFavorite={favoriteIds.has(
-                            getGifItemIdentityKey(gif),
-                          )}
-                          favoriteCardBg={favoriteCardBg}
-                          favoriteIconBase={favoriteIconBase}
-                          onToggleFavorite={handleToggleFavorite}
-                          onSelect={handleSelect}
-                          isClip={
-                            mediaType === "clips" ||
-                            (mode === "favorites" &&
-                              inferGifPickerMediaType(gif) === "clips")
+              ) : (
+                <div className="border-b border-rm-border bg-transparent px-4 py-3">
+                  <div className="flex gap-2 items-center">
+                    {mode === "search" || mode === "featured" ? (
+                      <button
+                        type="button"
+                        onClick={handleBack}
+                        className="rounded-lg p-2 text-rm-text-muted transition hover:bg-rm-bg-hover hover:text-rm-text shrink-0"
+                        aria-label="Back"
+                      >
+                        <ArrowLeft className="h-5 w-5" />
+                      </button>
+                    ) : null}
+                    <div className="relative flex-1">
+                      <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-rm-text-muted" />
+                      <input
+                        ref={searchInputRef}
+                        value={searchValue}
+                        onChange={(event) => setSearchValue(event.target.value)}
+                        onFocus={() => {
+                          if (
+                            suggestions.length > 0 &&
+                            searchValue.trim().length >= 2
+                          ) {
+                            setIsSuggestionListOpen(true);
                           }
-                          clipsMuted={clipsMuted}
-                          onToggleClipsMuted={handleToggleClipsMuted}
-                        />
-                      ))}
+                        }}
+                        onKeyDown={handleSearchInputKeyDown}
+                        placeholder={getGifProviderSearchPlaceholder(provider)}
+                        aria-autocomplete="list"
+                        aria-controls={
+                          suggestionsVisible
+                            ? "gif-picker-search-suggestions"
+                            : undefined
+                        }
+                        aria-label={`Search ${providerLabel} ${mediaLabel}`}
+                        aria-activedescendant={
+                          suggestionsVisible && activeSuggestionIndex >= 0
+                            ? `gif-picker-suggestion-${activeSuggestionIndex}`
+                            : undefined
+                        }
+                        className="picker-search-input h-11 w-full rounded-xl border pl-11 pr-4 text-[15px] font-medium outline-none transition placeholder:text-rm-text-muted"
+                      />
+                      {suggestionsVisible && (
+                        <div
+                          id="gif-picker-search-suggestions"
+                          className="absolute left-0 right-0 top-[calc(100%+0.5rem)] z-20 overflow-hidden rounded-2xl border border-rm-border bg-rm-bg-floating shadow-2xl backdrop-blur-xl"
+                        >
+                          {suggestions.map((suggestion, index) => (
+                            <button
+                              key={`${suggestion}-${index}`}
+                              id={`gif-picker-suggestion-${index}`}
+                              type="button"
+                              role="option"
+                              aria-selected={activeSuggestionIndex === index}
+                              onMouseEnter={() =>
+                                setActiveSuggestionIndex(index)
+                              }
+                              onMouseDown={(event) => {
+                                event.preventDefault();
+                                selectSuggestion(suggestion);
+                              }}
+                              className={cn(
+                                "flex w-full items-center justify-between gap-3 px-4 py-3 text-left text-sm font-semibold transition",
+                                activeSuggestionIndex === index
+                                  ? "bg-rm-bg-active text-rm-text"
+                                  : "text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text",
+                              )}
+                            >
+                              <span className="flex min-w-0 items-center gap-2">
+                                <Search className="h-3.5 w-3.5 shrink-0" />
+                                <span className="truncate">{suggestion}</span>
+                              </span>
+                              {activeSuggestionIndex === index && (
+                                <span className="shrink-0 text-[10px] font-black uppercase tracking-[0.16em] text-rm-text-muted">
+                                  Enter
+                                </span>
+                              )}
+                            </button>
+                          ))}
+                        </div>
+                      )}
                     </div>
-                  ))}
+                    <button
+                      type="button"
+                      onClick={openFavorites}
+                      className="rounded-xl border border-rm-border bg-rm-bg-elevated p-3 text-rm-text-muted transition hover:bg-rm-bg-hover hover:text-amber-500 dark:hover:text-yellow-400 shrink-0 shadow-sm dark:shadow-none"
+                      aria-label="View Favorites"
+                      title="View Favorites"
+                    >
+                      <Star className="h-5 w-5" />
+                    </button>
+                    {mediaType === "gifs" && (
+                      <div className="relative shrink-0">
+                        {providerOptions.length > 1 ? (
+                          <>
+                            <Select
+                              value={provider}
+                              onValueChange={(value) =>
+                                handleProviderChange(value as GifProvider)
+                              }
+                            >
+                              <SelectTrigger
+                                aria-label="GIF provider"
+                                className="picker-pill h-11 rounded-xl border pl-3 pr-9 text-sm font-semibold text-rm-text outline-none transition shadow-sm dark:shadow-none"
+                              >
+                                <SelectValue placeholder="GIF provider" />
+                              </SelectTrigger>
+                              <SelectContent position="popper" align="start">
+                                {providerOptions.map((option) => {
+                                  const label = getGifProviderLabel(option);
+                                  return (
+                                    <SelectItem
+                                      key={option}
+                                      value={option}
+                                      textValue={label}
+                                    >
+                                      {label}
+                                    </SelectItem>
+                                  );
+                                })}
+                              </SelectContent>
+                            </Select>
+                          </>
+                        ) : (
+                          <div className="flex h-11 items-center rounded-xl border border-rm-border bg-rm-bg-elevated px-3 text-sm font-semibold text-rm-text shadow-sm dark:shadow-none">
+                            {getGifProviderLabel(provider)}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </div>
-              ) : (mode === "search" || mode === "featured") &&
-                !loading &&
-                !error ? (
-                <div className="flex h-40 items-center justify-center text-center text-sm font-medium text-rm-text-muted">
-                  {getNoResultsMessage()}
-                </div>
-              ) : null}
+              )}
 
-              {loading ? (
-                <GifLoadingSkeleton
-                  message={`Loading ${providerLabel} ${mediaLabel}…`}
-                />
-              ) : null}
+              <div
+                ref={scrollRef}
+                onScroll={() => void handleScroll()}
+                className="custom-scrollbar min-h-0 flex-1 overflow-y-auto px-4 py-3"
+              >
+                {mode === "categories" &&
+                  searchValue.trim() === "" &&
+                  recentQueries.length > 0 && (
+                    <div className="mb-4 rounded-xl border border-rm-border bg-rm-bg-elevated p-3 shadow-sm dark:shadow-none">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-xs font-black uppercase tracking-wider text-rm-text-muted">
+                          Recent Searches
+                        </span>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            clearRecentQueries();
+                          }}
+                          className="text-xs font-semibold text-red-500 hover:text-red-600 dark:text-red-400 dark:hover:text-red-300 transition"
+                        >
+                          Clear All
+                        </button>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {recentQueries.map((q) => (
+                          <div
+                            key={q}
+                            className="picker-pill inline-flex items-center gap-1.5 rounded-full border pl-3 pr-2 py-1 text-xs font-semibold transition shadow-sm dark:shadow-none"
+                          >
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSearchValue(q);
+                                setQuery(q);
+                                setMode("search");
+                                saveQueryToHistory(q);
+                              }}
+                              className="text-left hover:underline text-rm-text"
+                              style={{ color: "var(--rm-text-primary)" }}
+                            >
+                              {q}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                removeRecentQuery(q);
+                              }}
+                              className="rounded-full p-0.5 hover:bg-rm-bg-active text-rm-text-muted hover:text-rm-text transition"
+                              aria-label={`Remove ${q} from history`}
+                            >
+                              <X className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
 
-              {loadingMore || loadMoreCooldownUntil ? (
-                <GifLoadingSkeleton
-                  compact
-                  message={
-                    loadMoreCooldownUntil
-                      ? `${providerLabel} is rate limiting us. Waiting before the next retry…`
-                      : `Loading more ${providerLabel} ${mediaLabel}…`
-                  }
-                />
-              ) : null}
-            </div>
+                {mode === "categories" && (
+                  <div
+                    className={cn(
+                      "mb-4 grid grid-cols-2 gap-2",
+                      expanded && "md:grid-cols-3",
+                    )}
+                  >
+                    <button
+                      type="button"
+                      onClick={openFavorites}
+                      className="group relative h-24 overflow-hidden rounded-xl border border-rm-border bg-rm-bg-surface"
+                      style={shortcutCardShadowStyle}
+                    >
+                      <GifShortcutCardMedia item={latestFavoritePreview} />
+                      {!latestFavoritePreview ? (
+                        <div
+                          className="absolute inset-0"
+                          style={shortcutCardFallbackStyle}
+                        />
+                      ) : null}
+                      <div
+                        className="absolute inset-0"
+                        style={shortcutCardOverlayStyle}
+                      />
+                      <div
+                        className="absolute right-3 top-3 rounded-full border border-white/12 p-2 text-white backdrop-blur-sm"
+                        style={shortcutCardBadgeStyle}
+                      >
+                        <Star className="h-4.5 w-4.5" />
+                      </div>
+                      <div className="absolute inset-0 flex flex-col items-center justify-center text-white">
+                        <span className="text-[10px] font-black uppercase tracking-[0.16em] text-white/75">
+                          {latestFavoritePreview
+                            ? "Latest saved"
+                            : "Your picks"}
+                        </span>
+                        <span className="mt-1 text-lg font-black">
+                          Favorites
+                        </span>
+                      </div>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={openFeatured}
+                      className="group relative h-24 overflow-hidden rounded-xl border border-rm-border bg-rm-bg-surface"
+                      style={shortcutCardShadowStyle}
+                    >
+                      <GifShortcutCardMedia item={featuredCardPreview} />
+                      {!featuredCardPreview ? (
+                        <div
+                          className="absolute inset-0"
+                          style={shortcutCardFallbackStyle}
+                        />
+                      ) : null}
+                      <div
+                        className="absolute inset-0"
+                        style={shortcutCardOverlayStyle}
+                      />
+                      <div
+                        className="absolute right-3 top-3 rounded-full border border-white/12 p-2 text-white backdrop-blur-sm"
+                        style={shortcutCardBadgeStyle}
+                      >
+                        <TrendingUp className="h-4.5 w-4.5" />
+                      </div>
+                      <div className="absolute inset-0 flex flex-col items-center justify-center text-white">
+                        <span className="text-[10px] font-black uppercase tracking-[0.16em] text-white/75">
+                          {providerLabel}
+                        </span>
+                        <span className="mt-1 text-lg font-black">
+                          Trending
+                        </span>
+                      </div>
+                    </button>
+                    {categories.map((category) => (
+                      <button
+                        key={category.id}
+                        type="button"
+                        onClick={() => handleCategorySearch(category)}
+                        className="group relative h-24 overflow-hidden rounded-xl border border-rm-border shadow-sm dark:shadow-none"
+                      >
+                        <img
+                          src={category.imageUrl}
+                          alt=""
+                          loading="lazy"
+                          decoding="async"
+                          className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                        />
+                        <div className="absolute inset-0 bg-black/45 dark:bg-black/60" />
+                        <div className="absolute inset-0 flex items-center justify-center px-3 text-center text-lg font-black capitalize text-white drop-shadow-md">
+                          {category.label}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
 
-            {provider === "klipy" && (
-              <div className="flex items-center justify-center border-t border-rm-border py-2 bg-rm-bg-surface/30 select-none pointer-events-none shrink-0">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-rm-text-muted mr-1.5 opacity-70">
-                  Powered by
-                </span>
-                <img
-                  src={klipyTextLightUrl}
-                  alt="KLIPY"
-                  className="h-3.5 w-auto opacity-70 dark:opacity-70 invert dark:invert-0"
-                />
+                {mode === "categories" && categoriesLoading ? (
+                  <div className="py-8 text-center text-sm font-medium text-rm-text-muted">
+                    Loading {providerLabel} {mediaLabel} categories…
+                  </div>
+                ) : null}
+
+                {mode === "categories" &&
+                !categoriesLoading &&
+                categories.length === 0 ? (
+                  <div className="flex h-40 items-center justify-center text-center text-sm font-medium text-rm-text-muted">
+                    No {providerLabel} {mediaLabel} categories available right
+                    now.
+                  </div>
+                ) : null}
+
+                {error ? (
+                  <div className="mb-3 rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-sm font-medium text-red-800 dark:text-red-200">
+                    {error}
+                  </div>
+                ) : null}
+
+                {mode === "favorites" && results.length === 0 ? (
+                  <FavoritesEmptyState mediaLabel={mediaLabel} />
+                ) : null}
+
+                {mode !== "categories" && results.length > 0 ? (
+                  <div
+                    className={cn(
+                      "flex items-start",
+                      expanded ? "gap-2 md:gap-3" : "gap-2",
+                    )}
+                  >
+                    {columnItems.map((col, colIdx) => (
+                      <div
+                        key={colIdx}
+                        className={cn(
+                          "flex flex-col flex-1 min-w-0",
+                          expanded ? "gap-2 md:gap-3" : "gap-2",
+                        )}
+                      >
+                        {col.map((gif) => (
+                          <GifTile
+                            key={getGifItemIdentityKey(gif)}
+                            gif={gif}
+                            isFavorite={favoriteIds.has(
+                              getGifItemIdentityKey(gif),
+                            )}
+                            favoriteCardBg={favoriteCardBg}
+                            favoriteIconBase={favoriteIconBase}
+                            onToggleFavorite={handleToggleFavorite}
+                            onSelect={handleSelect}
+                            isClip={
+                              mediaType === "clips" ||
+                              (mode === "favorites" &&
+                                inferGifPickerMediaType(gif) === "clips")
+                            }
+                            clipsMuted={clipsMuted}
+                            onToggleClipsMuted={handleToggleClipsMuted}
+                          />
+                        ))}
+                      </div>
+                    ))}
+                  </div>
+                ) : (mode === "search" || mode === "featured") &&
+                  !loading &&
+                  !error ? (
+                  <div className="flex h-40 items-center justify-center text-center text-sm font-medium text-rm-text-muted">
+                    {getNoResultsMessage()}
+                  </div>
+                ) : null}
+
+                {loading ? (
+                  <GifLoadingSkeleton
+                    message={`Loading ${providerLabel} ${mediaLabel}…`}
+                  />
+                ) : null}
+
+                {loadingMore || loadMoreCooldownUntil ? (
+                  <GifLoadingSkeleton
+                    compact
+                    message={
+                      loadMoreCooldownUntil
+                        ? `${providerLabel} is rate limiting us. Waiting before the next retry…`
+                        : `Loading more ${providerLabel} ${mediaLabel}…`
+                    }
+                  />
+                ) : null}
               </div>
-            )}
+
+              {provider === "klipy" && (
+                <div className="flex items-center justify-center border-t border-rm-border py-2 bg-rm-bg-surface/30 select-none pointer-events-none shrink-0">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-rm-text-muted mr-1.5 opacity-70">
+                    Powered by
+                  </span>
+                  <img
+                    src={klipyTextLightUrl}
+                    alt="KLIPY"
+                    className="h-3.5 w-auto opacity-70 dark:opacity-70 invert dark:invert-0"
+                  />
+                </div>
+              )}
+            </DialogSurface>
           </div>
-        </div>
-      </TooltipProvider>
-    </BaseModal>
+        </TooltipProvider>
+      </DialogPortal>
+    </Dialog>
   );
 }
 

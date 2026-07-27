@@ -572,7 +572,7 @@ export default function MemberList({
       <div
         data-testid="members-list"
         className={cn(
-          "fixed inset-y-0 right-0 z-100 flex h-full w-full shrink-0 flex-col overflow-hidden bg-rm-bg-primary shadow-2xl animate-in slide-in-from-right-full transition-all duration-300",
+          "fixed inset-y-0 right-0 z-20 flex h-full w-full shrink-0 flex-col overflow-hidden bg-rm-bg-primary shadow-2xl animate-in slide-in-from-right-full transition-all duration-300",
           // Desktop: static sidebar, width depends on details mode
           showDetails
             ? "lg:static lg:z-auto lg:w-[360px] lg:bg-rm-bg-sidebar lg:shadow-none lg:animate-none"
@@ -729,9 +729,9 @@ export default function MemberList({
 
         {state.mobileProfileUser && (
           <MobileProfileSheet
+            open={state.mobileProfileUser !== null}
             user={state.mobileProfileUser.user}
             roles={state.mobileProfileUser.roles}
-            isClosing={state.mobileProfileUserClosing}
             onClose={closeMobileProfile}
             onOpenProfileEditor={() =>
               closeMobileProfile(() => dispatchOpenProfileEditorEvent())

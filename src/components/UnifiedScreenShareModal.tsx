@@ -26,16 +26,11 @@ export function UnifiedScreenShareModal({
   onStart,
   availableQualities,
 }: UnifiedScreenShareModalProps) {
-  const shouldRender = isOpen;
-
-  if (!shouldRender) return null;
-
   if (isTauri()) {
     return (
       <Suspense fallback={null}>
         <DesktopScreenPickerModal
           isOpen={isOpen}
-          isClosing={!isOpen}
           onClose={onClose}
           onStart={onStart}
           availableQualities={availableQualities}
@@ -48,7 +43,6 @@ export function UnifiedScreenShareModal({
     <Suspense fallback={null}>
       <ScreenShareModal
         isOpen={isOpen}
-        isClosing={!isOpen}
         onClose={onClose}
         onStart={onStart}
         availableQualities={availableQualities}

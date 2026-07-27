@@ -51,7 +51,7 @@ export function VoiceHeader({
   return (
     <div
       className={cn(
-        "absolute top-0 inset-x-0 h-24 flex items-start pt-4 justify-between px-4 md:px-6 z-[100] transition-all duration-300 pointer-events-none",
+        "absolute top-0 inset-x-0 h-24 flex items-start pt-4 justify-between px-4 md:px-6 z-10 transition-all duration-300 pointer-events-none",
         focusedItem
           ? "bg-gradient-to-b from-black/80 via-black/40 to-transparent"
           : "bg-rm-bg-primary/20 h-16 items-center pt-0",

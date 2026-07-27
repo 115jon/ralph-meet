@@ -209,7 +209,7 @@ export function AudioDeviceMenu({
       {/* Main menu */}
       <div
         ref={menuRef}
-        className="fixed z-[1000] animate-in fade-in slide-in-from-bottom-2 duration-200"
+        className="fixed z-70 animate-in fade-in slide-in-from-bottom-2 duration-200"
         style={{ top: menuPos.top, left: menuPos.left }}
       >
         <div className="w-[220px] bg-rm-bg-floating border border-rm-border rounded-xl shadow-2xl backdrop-blur-xl">
@@ -320,7 +320,7 @@ export function AudioDeviceMenu({
       {showDeviceSubmenu && (
         <div
           id="audio-device-submenu"
-          className="fixed z-[1010] animate-in fade-in slide-in-from-left-2 duration-150"
+          className="fixed z-80 animate-in fade-in slide-in-from-left-2 duration-150"
           style={{ top: submenuPos.top, left: submenuPos.left }}
           onMouseEnter={() => handleDeviceHover(true)}
           onMouseLeave={() => handleDeviceHover(false)}
