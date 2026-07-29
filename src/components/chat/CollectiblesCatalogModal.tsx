@@ -684,7 +684,7 @@ export function CollectiblesCatalogModal({
   };
 
   return createPortal(
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-3 backdrop-blur-sm">
+    <div className="pointer-events-auto fixed inset-0 z-70 flex items-center justify-center bg-black/70 p-3 backdrop-blur-sm">
       <section className="flex max-h-[88vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-rm-border bg-rm-bg-primary shadow-2xl">
         <header className="flex items-center gap-3 border-b border-rm-border px-4 py-3">
           <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/15 text-primary">

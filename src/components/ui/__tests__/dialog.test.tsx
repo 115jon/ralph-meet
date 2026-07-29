@@ -184,6 +184,21 @@ describe("shadcn Dialog composition", () => {
     expect(screen.getByTestId("surface-content")).not.toHaveClass("fixed");
   });
 
+  it("keeps custom portal layers interactive outside the dialog surface", () => {
+    render(
+      <Dialog open>
+        <DialogPortal>
+          <button type="button">Close from the portal layer</button>
+        </DialogPortal>
+      </Dialog>,
+    );
+
+    const portalRoot = screen
+      .getByRole("button", { name: "Close from the portal layer" })
+      .closest('[data-slot="dialog-portal-root"]');
+    expect(portalRoot).toHaveClass("pointer-events-auto");
+  });
+
   it("restores focus for a dialog opened without a DialogTrigger", async () => {
     render(<NoTriggerHarness />);
     const opener = screen.getByRole("button", { name: "Open without trigger" });

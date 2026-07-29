@@ -100,9 +100,16 @@ function DialogTrigger({
 }
 
 function DialogPortal({
+  children,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Portal>) {
-  return <DialogPrimitive.Portal data-slot="dialog-portal" {...props} />;
+  return (
+    <DialogPrimitive.Portal data-slot="dialog-portal" {...props}>
+      <div data-slot="dialog-portal-root" className="pointer-events-auto">
+        {children}
+      </div>
+    </DialogPrimitive.Portal>
+  );
 }
 
 function DialogClose({
