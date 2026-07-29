@@ -299,6 +299,7 @@ export default function UserPanel({
   const setIsMuted = useVoiceSettingsStore((s) => s.setIsMuted);
   const setIsDeafened = useVoiceSettingsStore((s) => s.setIsDeafened);
   const callActive = useCallStore((s) => s.status) === "active";
+  const hasVoiceDashboard = voiceConnected || callActive;
   const participantCapabilities = useMemo(() => {
     const vcMembers = voiceChannelId
       ? (useChatStore.getState().voiceChannelStates[voiceChannelId] ?? [])
@@ -407,10 +408,7 @@ export default function UserPanel({
 
   return (
     <TooltipProvider delayDuration={0}>
-      <div
-        className="mt-auto flex shrink-0 flex-col relative overflow-hidden bg-rm-bg-elevated border border-white/5 rounded-lg m-2 shadow-lg"
-        style={{ marginBottom: "calc(8px + var(--safe-area-bottom, 0px))" }}
-      >
+      <div className="mt-auto flex w-full shrink-0 flex-col relative overflow-hidden rounded-lg border border-rm-border bg-rm-bg-elevated">
         {/* VOICE CONNECTED dashboard (hidden when active call takes precedence) */}
         {voiceConnected && !callActive && (
           <div className="relative z-10">
@@ -479,17 +477,11 @@ export default function UserPanel({
         <div
           className={cn(
             "group/user-panel-row flex items-center gap-2 rounded-[12px] p-1.5 relative z-10 overflow-hidden",
+            hasVoiceDashboard && "rounded-t-none",
             !showIdentity && "gap-1.5",
             hasNameplate && "isolate",
-            (voiceConnected || callActive) && "border-t border-white/5",
+            hasVoiceDashboard && "border-t border-rm-border",
           )}
-          style={
-            hasNameplate && nameplateTheme
-              ? {
-                  boxShadow: `inset 0 1px 0 ${nameplateTheme.rowBorder}, 0 0 0 1px ${nameplateTheme.rowBorder}, 0 14px 28px ${nameplateTheme.rowGlow}`,
-                }
-              : undefined
-          }
         >
           {hasNameplate && (
             <>

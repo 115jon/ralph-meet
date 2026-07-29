@@ -313,7 +313,7 @@ export function VoiceDashboard({
 
   return (
     <TooltipProvider delayDuration={0}>
-      <div className="animate-in slide-in-from-bottom-5 duration-300">
+      <div className="animate-in slide-in-from-bottom-5 duration-300 border-b-0 rounded-b-none">
         <FloatingListenTogetherPlayer
           sfu={sfu}
           roomSlug={roomSlug}
@@ -785,10 +785,10 @@ export function VoiceDashboard({
                     }}
                     disabled={!hasCamera}
                     className={cn(
-                      "flex flex-1 h-8 items-center justify-center rounded-[8px] transition-all outline-none border border-transparent group",
+                      "flex flex-1 h-8 items-center justify-center rounded-[8px] transition-colors outline-none border border-transparent group",
                       isCameraActive
-                        ? "bg-rm-bg-hover text-rm-text"
-                        : "bg-rm-bg-elevated/40 border-white/5 text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover",
+                        ? "bg-rm-bg-active text-rm-text"
+                        : "bg-rm-bg-hover border-rm-border text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-active",
                       !hasCamera && "opacity-20 cursor-not-allowed grayscale",
                     )}
                   >
@@ -830,10 +830,10 @@ export function VoiceDashboard({
                       }
                     }}
                     className={cn(
-                      "flex flex-1 h-8 items-center justify-center rounded-[8px] transition-all outline-none border border-transparent group",
+                      "flex flex-1 h-8 items-center justify-center rounded-[8px] transition-colors outline-none border border-transparent group",
                       isScreenSharing
                         ? "bg-[#23a559] text-white hover:bg-[#1f8b4c]"
-                        : "bg-rm-bg-elevated/40 border-white/5 text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover",
+                        : "bg-rm-bg-hover border-rm-border text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-active",
                     )}
                   >
                     <Monitor size={18} className="group-hover:animate-wiggle" />
@@ -858,7 +858,7 @@ export function VoiceDashboard({
                     onClick={() => {
                       onOpenActivities?.();
                     }}
-                    className="flex flex-1 h-8 items-center justify-center rounded-[8px] transition-all outline-none bg-rm-bg-elevated/40 border border-white/5 text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover group"
+                    className="flex flex-1 h-8 items-center justify-center rounded-[8px] transition-colors outline-none bg-rm-bg-hover border border-rm-border text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-active group"
                   >
                     <Gamepad2
                       size={18}
@@ -884,10 +884,10 @@ export function VoiceDashboard({
                       ref={soundboardBtnRef}
                       onClick={toggleSoundboardPicker}
                       className={cn(
-                        "flex w-full h-8 items-center justify-center rounded-[8px] transition-all outline-none border group",
+                        "flex w-full h-8 items-center justify-center rounded-[8px] transition-colors outline-none border group",
                         isSoundboardPickerOpen
                           ? "bg-[#5865f2]/20 border-[#5865f2]/40 text-[#5865f2]"
-                          : "bg-rm-bg-elevated/40 border-white/5 text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover",
+                          : "bg-rm-bg-hover border-rm-border text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-active",
                       )}
                     >
                       <Radio size={18} className="group-hover:animate-wiggle" />
@@ -929,10 +929,10 @@ export function VoiceDashboard({
                         ref={stickerBtnRef}
                         onClick={() => setIsStickerPickerOpen((v) => !v)}
                         className={cn(
-                          "flex w-full h-8 items-center justify-center rounded-[8px] transition-all outline-none border group",
+                          "flex w-full h-8 items-center justify-center rounded-[8px] transition-colors outline-none border group",
                           isStickerPickerOpen
                             ? "bg-[#5865f2]/20 border-[#5865f2]/40 text-[#5865f2]"
-                            : "bg-rm-bg-elevated/40 border-white/5 text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover",
+                            : "bg-rm-bg-hover border-rm-border text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-active",
                         )}
                       >
                         <Sticker

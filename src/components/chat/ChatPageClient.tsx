@@ -1101,7 +1101,7 @@ export default function ChatPage() {
         className="flex flex-1 overflow-hidden relative"
         style={channelSidebarStyle}
       >
-        <div className="hidden h-full shrink-0 flex-col md:flex md:w-[var(--left-nav-width)]">
+        <div className="hidden h-full shrink-0 flex-col bg-rm-bg-secondary md:flex md:w-[var(--left-nav-width)]">
           <div className="flex min-h-0 flex-1">
             {/* Desktop server icon strip */}
             <div className="z-10 hidden w-[calc(var(--spacing)*18)] shrink-0 flex-col items-center overflow-y-auto bg-rm-bg-floating scrollbar-none md:flex">
@@ -1201,7 +1201,7 @@ export default function ChatPage() {
             </div>
           </div>
 
-          <div className="shrink-0">
+          <div className="shrink-0 bg-rm-bg-secondary">
             <UserPanel
               user={user}
               serverId={voiceState.serverId ?? activeServerId}
@@ -1262,6 +1262,13 @@ export default function ChatPage() {
               voiceSessionId={localStreamState?.voiceSessionId}
               onOpenActivities={() => setVoiceAppsModal("activities")}
               sidebarWidthPx={channelSidebarWidth}
+            />
+            <div
+              className="shrink-0 bg-rm-bg-secondary"
+              style={{
+                height: "calc(8px + var(--safe-area-bottom, 0px))",
+              }}
+              aria-hidden="true"
             />
           </div>
         </div>

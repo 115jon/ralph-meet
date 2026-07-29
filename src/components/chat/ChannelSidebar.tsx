@@ -1049,7 +1049,7 @@ export default function ChannelSidebar({
   return (
     <TooltipProvider delayDuration={0}>
       <div
-        className="flex h-full flex-col bg-rm-bg-secondary select-none border-x border-rm-border rounded-tl-lg overflow-hidden"
+        className="flex h-full flex-col bg-rm-bg-secondary select-none border-x border-rm-border overflow-hidden"
         onContextMenu={handleSidebarContextMenu}
       >
         {/* Server Header */}
