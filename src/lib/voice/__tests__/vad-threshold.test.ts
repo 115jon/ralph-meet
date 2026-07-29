@@ -14,9 +14,9 @@ describe("getVoiceActivityThreshold", () => {
     expect(getVoiceActivityThreshold(false, -50)).toBeCloseTo(0.316, 2);
   });
 
-  it("clamps manual sensitivity to the supported VAD range", () => {
-    expect(getVoiceActivityThreshold(false, 0)).toBe(50);
-    expect(getVoiceActivityThreshold(false, -100)).toBeCloseTo(0.1);
+  it("keeps manual sensitivity on the displayed dB scale", () => {
+    expect(getVoiceActivityThreshold(false, 0)).toBe(100);
+    expect(getVoiceActivityThreshold(false, -100)).toBeCloseTo(0.001);
   });
 
   it("maps the VAD RMS value back to the same manual slider scale", () => {

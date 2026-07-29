@@ -117,8 +117,14 @@ describe("MicTestWidget", () => {
     mocks.createLocalAudioProcessor.mockResolvedValue({
       createMonitorStream: vi.fn(() => processedMonitorStream),
       destroy: vi.fn(),
+      gateController: {
+        resume: vi.fn(),
+        setGated: vi.fn(),
+      },
       mode: "rnnoise",
-      processedStream: processedMonitorStream,
+      preGateStream: processedMonitorStream,
+      publicationStream: processedMonitorStream,
+      resume: vi.fn(),
     });
 
     const view = (sensitivity: number) => (

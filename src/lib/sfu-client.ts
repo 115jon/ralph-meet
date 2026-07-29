@@ -120,6 +120,7 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
   private previewLoopbackPC: RTCPeerConnection | null = null;
   private previewLoopbackStream: MediaStream | null = null;
   private previewLoopbackUnlisten: (() => void) | null = null;
+  private audioTrackOperation: Promise<void> = Promise.resolve();
 
   constructor(roomSlug: string) {
     super();
@@ -1450,17 +1451,42 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
     this.negotiator.unpublishTrack(trackName);
   }
 
-  public async publishTracks(stream: MediaStream, prefix: string) {
-    if (!this.voiceGW.isReady) {
-      sfuLog.warn(`VoiceGW not ready, waiting to publish ${prefix} tracks...`);
-      await this.voiceReadyPromise;
+  public unpublishTrackIfCurrent(
+    trackName: string,
+    expectedTrack: MediaStreamTrack,
+  ): Promise<boolean> {
+    return this.enqueueAudioTrackOperation(async () => {
+      if (this.getPublishedTrack(trackName) !== expectedTrack) return false;
+      this.unpublishTrack(trackName);
+      return true;
+    });
+  }
+
+  public getPublishedTrack(trackName: string): MediaStreamTrack | null {
+    return this.negotiator.getPushTransceiver(trackName)?.sender.track ?? null;
+  }
+
+  public publishTracks(stream: MediaStream, prefix: string): Promise<void> {
+    const publish = async () => {
+      if (!this.voiceGW.isReady) {
+        sfuLog.warn(
+          `VoiceGW not ready, waiting to publish ${prefix} tracks...`,
+        );
+        await this.voiceReadyPromise;
+      }
+      await this.negotiator.publishTracks(stream, prefix);
+      if (prefix === "cam") {
+        this.stats.startStatsMonitoring();
+        this.stats.startConnectionStatsMonitoring();
+        this.outboundAudioSentinel.start();
+        this.vad.reapplyGate();
+      }
+    };
+
+    if (prefix === "cam" && stream.getAudioTracks().length > 0) {
+      return this.enqueueAudioTrackOperation(publish);
     }
-    await this.negotiator.publishTracks(stream, prefix);
-    if (prefix === "cam") {
-      this.stats.startStatsMonitoring();
-      this.stats.startConnectionStatsMonitoring();
-      this.outboundAudioSentinel.start();
-    }
+    return publish();
   }
 
   public async pullTracks(tracks: TrackInfo[]) {
@@ -1727,6 +1753,43 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
     trackName: string,
     newTrack: MediaStreamTrack | null,
   ): Promise<boolean> {
+    if (trackName.startsWith("cam-audio-")) {
+      return this.enqueueAudioTrackOperation(() =>
+        this.replaceTrackInternal(trackName, newTrack),
+      );
+    }
+    return this.replaceTrackInternal(trackName, newTrack);
+  }
+
+  public replaceTrackIfCurrent(
+    trackName: string,
+    expectedTrack: MediaStreamTrack,
+    newTrack: MediaStreamTrack | null,
+  ): Promise<boolean> {
+    if (!trackName.startsWith("cam-audio-")) {
+      return Promise.resolve(false);
+    }
+    return this.enqueueAudioTrackOperation(async () => {
+      if (this.getPublishedTrack(trackName) !== expectedTrack) return false;
+      return this.replaceTrackInternal(trackName, newTrack);
+    });
+  }
+
+  private enqueueAudioTrackOperation<T>(
+    operation: () => Promise<T>,
+  ): Promise<T> {
+    const result = this.audioTrackOperation.then(operation, operation);
+    this.audioTrackOperation = result.then(
+      () => undefined,
+      () => undefined,
+    );
+    return result;
+  }
+
+  private async replaceTrackInternal(
+    trackName: string,
+    newTrack: MediaStreamTrack | null,
+  ): Promise<boolean> {
     const pc = trackName.startsWith("screen-")
       ? this.negotiator.screenPushPC
       : this.negotiator.camPushPC;
@@ -1741,11 +1804,22 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
     try {
       await transceiver.sender.replaceTrack(senderTrack);
     } catch (error) {
+      if (transceiver.sender.track !== previousTrack) {
+        try {
+          await transceiver.sender.replaceTrack(previousTrack);
+        } catch (restoreError) {
+          sfuLog.warn("Failed to restore audio track after replacement error", {
+            trackName,
+            error: restoreError,
+          });
+        }
+      }
       if (senderTrack && senderTrack !== newTrack) senderTrack.stop();
       throw error;
     }
     if (trackName.startsWith("cam-audio-")) {
       this.outboundAudioSentinel.resetMonitoring();
+      this.vad.reapplyGate();
     }
     if (previousTrack && previousTrack !== senderTrack) {
       previousTrack.stop();
@@ -1762,6 +1836,7 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
     track.enabled = enabled;
     if (trackName.startsWith("cam-audio-")) {
       this.outboundAudioSentinel.resetMonitoring();
+      this.vad.setMicrophoneEnabled(enabled);
     }
     return true;
   }

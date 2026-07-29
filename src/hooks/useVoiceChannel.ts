@@ -137,43 +137,6 @@ export function mergeVoiceState(
   return "name" in incoming ? incoming : null;
 }
 
-function createMicrophoneStream(stream: MediaStream): MediaStream | null {
-  const audioTrack = stream.getAudioTracks()[0];
-  return audioTrack && audioTrack.readyState !== "ended"
-    ? new MediaStream([audioTrack])
-    : null;
-}
-
-interface VoiceActivityStream {
-  stream: MediaStream;
-  ownsTracks: boolean;
-}
-
-function createVoiceActivityStream(
-  rawStream: MediaStream,
-  processor: LocalAudioProcessorHandle | null,
-): VoiceActivityStream | null {
-  if (processor) {
-    try {
-      const monitorStream = processor.createMonitorStream();
-      if (
-        monitorStream
-          .getAudioTracks()
-          .some((track) => track.readyState !== "ended")
-      ) {
-        return { stream: monitorStream, ownsTracks: true };
-      }
-    } catch {
-      // Fall back to raw capture if a processor monitor is unavailable.
-    }
-  }
-
-  const microphoneStream = createMicrophoneStream(rawStream);
-  return microphoneStream
-    ? { stream: microphoneStream, ownsTracks: false }
-    : null;
-}
-
 function disposeVoiceActivityStream(stream: MediaStream | null): void {
   stream?.getTracks().forEach((track) => track.stop());
 }
@@ -1053,7 +1016,6 @@ export function useVoiceChannel({
   const failedAudioProcessingModeRef = useRef<LocalAudioProcessingMode | null>(
     null,
   );
-  const preferRawPublishedAudioRef = useRef(false);
   const ownedVadMonitorStreamRef = useRef<MediaStream | null>(null);
   const rawCameraTrackRef = useRef<MediaStreamTrack | null>(null);
   const cameraBackgroundEffectRef = useRef<CameraBackgroundEffect | null>(null);
@@ -1260,23 +1222,18 @@ export function useVoiceChannel({
 
     if (!isMicOnRef.current) return;
 
-    const stream = localStreamRef.current;
-    const audioTrack = stream?.getAudioTracks()[0];
-    if (!stream || !audioTrack || audioTrack.readyState === "ended") return;
+    const processor = publishedAudioProcessorRef.current;
+    if (!processor) return;
 
-    const vadInput = createVoiceActivityStream(
-      stream,
-      preferRawPublishedAudioRef.current
-        ? null
-        : publishedAudioProcessorRef.current,
-    );
-    if (!vadInput) return;
+    const monitorStream = processor.createMonitorStream();
+    if (monitorStream.getAudioTracks().length === 0) {
+      disposeVoiceActivityStream(monitorStream);
+      return;
+    }
 
-    ownedVadMonitorStreamRef.current = vadInput.ownsTracks
-      ? vadInput.stream
-      : null;
-    if (!sfu.vad.start(vadInput.stream)) {
-      if (vadInput.ownsTracks) disposeVoiceActivityStream(vadInput.stream);
+    ownedVadMonitorStreamRef.current = monitorStream;
+    if (!sfu.vad.start(monitorStream)) {
+      disposeVoiceActivityStream(monitorStream);
       ownedVadMonitorStreamRef.current = null;
     }
   }, []);
@@ -1367,7 +1324,10 @@ export function useVoiceChannel({
     const resume = () => {
       const sfu = sfuRef.current;
       if (!sfu) return;
-      void Promise.resolve(sfu.resumeAudioContext()).then(() => {
+      void Promise.all([
+        Promise.resolve(publishedAudioProcessorRef.current?.resume()),
+        Promise.resolve(sfu.resumeAudioContext()),
+      ]).then(() => {
         sfu.vad.resumeContext();
         const blocked = sfu.audio.isAudioSuspended();
         voiceDispatch({ type: "SET_AUDIO_BLOCKED", payload: !!blocked });
@@ -1494,7 +1454,6 @@ export function useVoiceChannel({
     }
     cancelAutomaticSoundboardCleanup(automaticSoundboardSessionId);
     resetAutomaticSoundboardSession(automaticSoundboardSessionId);
-
     vcLog.info("handleJoin invoked", {
       channelId,
       serverId,
@@ -1817,61 +1776,97 @@ export function useVoiceChannel({
 
       rawAudioTrack.enabled = true;
       vcLog.warn(
-        "Replacing stalled processed microphone track with raw capture",
+        "Replacing stalled processed microphone track with gated identity audio",
         {
           processorMode:
             publishedAudioProcessorRef.current?.mode ?? "passthrough",
         },
       );
       const trackName = `cam-audio-${participantId}`;
-      void Promise.resolve(sfu.replaceTrack(trackName, rawAudioTrack))
-        .then((replaced) => {
+      void (async () => {
+        let recoveryProcessor: LocalAudioProcessorHandle | null = null;
+        try {
+          recoveryProcessor = await createLocalAudioProcessor(
+            new MediaStream([rawAudioTrack]),
+            {
+              ...audioProcessingSettings,
+              noiseReductionEnabled: false,
+              streamHighFidelity: false,
+            },
+          );
+          const recoveryTrack =
+            recoveryProcessor?.publicationStream.getAudioTracks()[0];
+          if (!recoveryProcessor || !recoveryTrack) {
+            recoveryProcessor?.destroy();
+            sfu.outboundAudioSentinel?.resetMonitoring();
+            vcLog.warn(
+              "Failed to recover stalled outbound microphone audio; gated identity graph unavailable",
+            );
+            return;
+          }
+
+          const replaced = await sfu.replaceTrack(trackName, recoveryTrack);
           if (replaced !== true) {
+            recoveryProcessor.destroy();
             sfu.outboundAudioSentinel?.resetMonitoring();
             return;
           }
           if (sfuRef.current !== sfu || myIdRef.current !== participantId) {
+            recoveryProcessor.destroy();
             return;
           }
 
+          const recoverySenderTrack = sfu.getPublishedTrack(trackName);
           const recoveryIsStale =
             localMediaGenerationRef.current !== recoveryGeneration ||
             localStreamRef.current !== recoveryStream;
           if (recoveryIsStale) {
-            const currentTrack = preferRawPublishedAudioRef.current
-              ? localStreamRef.current?.getAudioTracks()[0]
-              : (publishedAudioProcessorRef.current?.processedStream.getAudioTracks()[0] ??
-                localStreamRef.current?.getAudioTracks()[0]);
-            if (currentTrack && currentTrack.readyState !== "ended") {
-              return sfu
-                .replaceTrack(trackName, currentTrack)
-                .then((replaced) => {
-                  if (!replaced) return;
-                  if (
-                    sfuRef.current !== sfu ||
-                    myIdRef.current !== participantId
-                  )
-                    return;
-                  sfu.setPublishedTrackEnabled(trackName, isMicOnRef.current);
-                  restartVadMonitoring(sfu);
-                });
+            const currentTrack =
+              publishedAudioProcessorRef.current?.publicationStream.getAudioTracks()[0];
+            if (
+              recoverySenderTrack &&
+              currentTrack &&
+              currentTrack.readyState !== "ended"
+            ) {
+              const restored = await sfu.replaceTrackIfCurrent(
+                trackName,
+                recoverySenderTrack,
+                currentTrack,
+              );
+              recoveryProcessor.destroy();
+              if (restored) {
+                sfu.setPublishedTrackEnabled(trackName, isMicOnRef.current);
+                restartVadMonitoring(sfu);
+              }
+              return;
             }
+            if (recoverySenderTrack) {
+              void sfu.unpublishTrackIfCurrent(trackName, recoverySenderTrack);
+            }
+            recoveryProcessor.destroy();
             return;
           }
 
-          const enabled = isMicOnRef.current;
-          preferRawPublishedAudioRef.current = true;
-          rawAudioTrack.enabled = enabled;
-          sfu.setPublishedTrackEnabled(trackName, enabled);
+          const previousProcessor = publishedAudioProcessorRef.current;
+          publishedAudioProcessorRef.current = recoveryProcessor;
+          recoveryProcessor = null;
+          failedAudioProcessingModeRef.current =
+            resolveLocalAudioProcessingMode(audioProcessingSettings);
+          sfu.vad.setGateController(
+            publishedAudioProcessorRef.current.gateController,
+          );
+          sfu.setPublishedTrackEnabled(trackName, isMicOnRef.current);
+          previousProcessor?.destroy();
           restartVadMonitoring(sfu);
-        })
-        .catch((error) => {
+        } catch (error) {
+          recoveryProcessor?.destroy();
           sfu.outboundAudioSentinel?.resetMonitoring();
           vcLog.warn(
             "Failed to recover stalled outbound microphone audio",
             error,
           );
-        });
+        }
+      })();
     });
 
     onSfu("app-event", (event) => {
@@ -2316,21 +2311,14 @@ export function useVoiceChannel({
         let stream = localStreamRef.current;
         if (!stream) return;
         const getPublishedAudioStream = (
-          source: MediaStream,
+          _source: MediaStream,
         ): MediaStream | null => {
-          if (preferRawPublishedAudioRef.current) {
-            const rawAudioTrack = source.getAudioTracks()[0];
-            return rawAudioTrack?.readyState === "live"
-              ? new MediaStream([rawAudioTrack])
-              : null;
-          }
-          const processedStream =
-            publishedAudioProcessorRef.current?.processedStream;
-          if (processedStream && processedStream.getAudioTracks().length > 0) {
-            return processedStream;
-          }
-          const audioTracks = source.getAudioTracks();
-          return audioTracks.length > 0 ? new MediaStream(audioTracks) : null;
+          const publicationStream =
+            publishedAudioProcessorRef.current?.publicationStream;
+          return publicationStream &&
+            publicationStream.getAudioTracks().length > 0
+            ? publicationStream
+            : null;
         };
         const reconcileCurrentAudio = async (): Promise<{
           stream: MediaStream;
@@ -2430,48 +2418,11 @@ export function useVoiceChannel({
             );
           }
           if (isCurrentMedia) {
-            const audioTrack = stream.getAudioTracks()[0];
-            const vadInput = createVoiceActivityStream(
-              stream,
-              preferRawPublishedAudioRef.current
-                ? null
-                : publishedAudioProcessorRef.current,
+            sfu.vad.setGateController(
+              publishedAudioProcessorRef.current?.gateController ?? null,
             );
-            if (
-              isMicOnRef.current &&
-              audioTrack &&
-              audioTrack.readyState !== "ended" &&
-              audioTrack.enabled &&
-              vadInput
-            ) {
-              sfu.vad.stop();
-              disposeVoiceActivityStream(ownedVadMonitorStreamRef.current);
-              ownedVadMonitorStreamRef.current = vadInput.ownsTracks
-                ? vadInput.stream
-                : null;
-              const started = sfu.vad.start(vadInput.stream);
-              if (!started && vadInput.ownsTracks) {
-                disposeVoiceActivityStream(vadInput.stream);
-                ownedVadMonitorStreamRef.current = null;
-              }
-            } else {
-              sfu.vad.stop();
-              if (vadInput?.ownsTracks) {
-                disposeVoiceActivityStream(vadInput.stream);
-              }
-              disposeVoiceActivityStream(ownedVadMonitorStreamRef.current);
-              ownedVadMonitorStreamRef.current = null;
-            }
-          } else if (!isMicOnRef.current) {
-            sfu.vad.stop();
-            disposeVoiceActivityStream(ownedVadMonitorStreamRef.current);
-            ownedVadMonitorStreamRef.current = null;
+            restartVadMonitoring(sfu);
           }
-        }
-        if (!isMicOnRef.current && sfuRef.current === sfu) {
-          sfu.vad.stop();
-          disposeVoiceActivityStream(ownedVadMonitorStreamRef.current);
-          ownedVadMonitorStreamRef.current = null;
         }
         const currentStream = localStreamRef.current;
         if (!currentStream || sfuRef.current !== sfu) return;
@@ -2649,6 +2600,42 @@ export function useVoiceChannel({
           acquiredStream.getTracks().forEach((track) => track.stop());
         }
       };
+      const restorePreviousAudio = async () => {
+        if (!replacedAudioTrack) return;
+        const trackName = `cam-audio-${myIdRef.current}`;
+        if (!previousAudioTrack) {
+          await sfu.unpublishTrackIfCurrent(trackName, replacedAudioTrack);
+          replacedAudioTrack = null;
+          return;
+        }
+        try {
+          const restored = await sfu.replaceTrackIfCurrent(
+            trackName,
+            replacedAudioTrack,
+            previousAudioTrack,
+          );
+          if (restored) {
+            sfu.setPublishedTrackEnabled(
+              `cam-audio-${myIdRef.current}`,
+              isMicOnRef.current,
+            );
+          }
+        } catch (error) {
+          devicesLog.warn(
+            "Failed to restore microphone after an abandoned device swap",
+            error,
+          );
+        }
+        replacedAudioTrack = null;
+        previousAudioTrack = null;
+      };
+      const abortStaleSwap = async (
+        audioProcessor: LocalAudioProcessorHandle | null,
+        cameraEffect: CameraBackgroundEffect | null = null,
+      ) => {
+        await restorePreviousAudio();
+        disposeStaleResources(audioProcessor, cameraEffect);
+      };
       const oldStream = localStreamRef.current;
       const requestedCameraBackgroundKey = getCameraBackgroundEffectKey(
         cameraBackground,
@@ -2752,7 +2739,7 @@ export function useVoiceChannel({
           );
           acquiredStream = newStream;
           if (!isCurrent()) {
-            disposeStaleResources(null);
+            await abortStaleSwap(null);
             return;
           }
         } catch (err: any) {
@@ -2762,29 +2749,48 @@ export function useVoiceChannel({
           return;
         }
 
-        let streamToPublish = newStream;
+        let streamToPublish: MediaStream | null = null;
         if (newStream.getAudioTracks().length > 0) {
           try {
             nextAudioProcessor = await createLocalAudioProcessor(
               newStream,
               audioProcessingSettings,
             );
-            if (nextAudioProcessor) {
-              streamToPublish = nextAudioProcessor.processedStream;
-            }
           } catch (error) {
             failedAudioProcessingModeRef.current =
               resolveLocalAudioProcessingMode(audioProcessingSettings);
             devicesLog.warn(
-              "Failed to create outbound audio processor; publishing raw microphone",
+              "Failed to create gated outbound audio processor",
               error,
             );
             nextAudioProcessor = null;
           }
+
+          if (!nextAudioProcessor) {
+            devicesLog.warn(
+              "Outbound audio processor unavailable; preserving the previous publication",
+            );
+            await abortStaleSwap(null);
+            return;
+          }
+          const requestedAudioProcessingMode = resolveLocalAudioProcessingMode(
+            audioProcessingSettings,
+          );
+          if (nextAudioProcessor.mode !== requestedAudioProcessingMode) {
+            failedAudioProcessingModeRef.current = requestedAudioProcessingMode;
+          }
+          streamToPublish = nextAudioProcessor.publicationStream;
+
+          if (!isCurrent()) {
+            await abortStaleSwap(nextAudioProcessor);
+            return;
+          }
+        } else {
+          streamToPublish = newStream;
         }
 
         if (!isCurrent()) {
-          disposeStaleResources(nextAudioProcessor);
+          await abortStaleSwap(nextAudioProcessor);
           return;
         }
 
@@ -2794,9 +2800,9 @@ export function useVoiceChannel({
         const previousAudioProcessor = publishedAudioProcessorRef.current;
 
         const oldAudio = oldStream?.getAudioTracks()[0];
-        const newAudio = streamToPublish.getAudioTracks()[0];
+        const newAudio = streamToPublish?.getAudioTracks()[0];
         const previousPublishedAudio =
-          previousAudioProcessor?.processedStream.getAudioTracks()[0] ??
+          previousAudioProcessor?.publicationStream.getAudioTracks()[0] ??
           oldAudio;
         const audioNeedsUpdate =
           !!newAudio &&
@@ -2804,13 +2810,12 @@ export function useVoiceChannel({
             previousPublishedAudio.id !== newAudio.id);
         if (audioNeedsUpdate && newAudio) {
           if (!isCurrent()) {
-            disposeStaleResources(nextAudioProcessor);
+            await abortStaleSwap(nextAudioProcessor);
             return;
           }
-          newAudio.enabled = isMicOn;
           if (oldAudio) {
             if (!isCurrent()) {
-              disposeStaleResources(nextAudioProcessor);
+              await abortStaleSwap(nextAudioProcessor);
               return;
             }
             if (
@@ -2823,24 +2828,28 @@ export function useVoiceChannel({
             }
           } else {
             if (!isCurrent()) {
-              disposeStaleResources(nextAudioProcessor);
+              await abortStaleSwap(nextAudioProcessor);
               return;
             }
             await sfu.publishTracks(new MediaStream([newAudio]), "cam");
           }
-          newAudio.enabled = isMicOnRef.current;
+          if (oldAudio) {
+            replacedAudioTrack = sfu.getPublishedTrack(
+              `cam-audio-${myIdRef.current}`,
+            );
+            previousAudioTrack = previousPublishedAudio ?? null;
+          } else {
+            replacedAudioTrack = sfu.getPublishedTrack(
+              `cam-audio-${myIdRef.current}`,
+            );
+          }
           sfu.setPublishedTrackEnabled(
             `cam-audio-${myIdRef.current}`,
             isMicOnRef.current,
           );
           if (!isCurrent()) {
-            disposeStaleResources(nextAudioProcessor);
+            await abortStaleSwap(nextAudioProcessor);
             return;
-          }
-          if (oldAudio && oldAudio !== newAudio) oldAudio.stop();
-          if (oldAudio) {
-            replacedAudioTrack = newAudio;
-            previousAudioTrack = previousPublishedAudio ?? null;
           }
         }
 
@@ -2851,7 +2860,7 @@ export function useVoiceChannel({
 
         if (rawVideo) {
           if (!isCurrent()) {
-            disposeStaleResources(nextAudioProcessor);
+            await abortStaleSwap(nextAudioProcessor);
             return;
           }
           if (requestedCameraBackgroundKey !== "none") {
@@ -2863,7 +2872,7 @@ export function useVoiceChannel({
               );
               acquiredCameraEffect = effect;
               if (!isCurrent()) {
-                disposeStaleResources(nextAudioProcessor, effect);
+                await abortStaleSwap(nextAudioProcessor, effect);
                 return;
               }
               cameraBackgroundEffectRef.current?.stop();
@@ -2880,7 +2889,7 @@ export function useVoiceChannel({
                 error,
               );
               if (!isCurrent()) {
-                disposeStaleResources(nextAudioProcessor);
+                await abortStaleSwap(nextAudioProcessor);
                 return;
               }
               stopCameraBackgroundEffect(false);
@@ -2888,14 +2897,14 @@ export function useVoiceChannel({
             }
           } else {
             if (!isCurrent()) {
-              disposeStaleResources(nextAudioProcessor);
+              await abortStaleSwap(nextAudioProcessor);
               return;
             }
             stopCameraBackgroundEffect(false);
           }
 
           if (!isCurrent()) {
-            disposeStaleResources(nextAudioProcessor);
+            await abortStaleSwap(nextAudioProcessor);
             return;
           }
           rawCameraTrackRef.current = rawVideo;
@@ -2903,7 +2912,7 @@ export function useVoiceChannel({
           displayStream.addTrack(newVideo);
         } else {
           if (!isCurrent()) {
-            disposeStaleResources(nextAudioProcessor);
+            await abortStaleSwap(nextAudioProcessor);
             return;
           }
           stopCameraBackgroundEffect(true);
@@ -2911,13 +2920,13 @@ export function useVoiceChannel({
 
         if (newVideo && (!oldVideo || newVideo.id !== oldVideo.id)) {
           if (!isCurrent()) {
-            disposeStaleResources(nextAudioProcessor);
+            await abortStaleSwap(nextAudioProcessor);
             return;
           }
           newVideo.enabled = isCameraActive;
           if (oldVideo) {
             if (!isCurrent()) {
-              disposeStaleResources(nextAudioProcessor);
+              await abortStaleSwap(nextAudioProcessor);
               return;
             }
             if (
@@ -2930,22 +2939,14 @@ export function useVoiceChannel({
             }
           } else {
             if (!isCurrent()) {
-              disposeStaleResources(nextAudioProcessor);
+              await abortStaleSwap(nextAudioProcessor);
               return;
             }
             await sfu.publishTracks(new MediaStream([newVideo]), "cam");
           }
           if (!isCurrent()) {
-            disposeStaleResources(nextAudioProcessor);
+            await abortStaleSwap(nextAudioProcessor);
             return;
-          }
-          if (oldVideo && oldVideo !== newVideo) oldVideo.stop();
-          if (
-            previousRawVideo &&
-            previousRawVideo !== rawVideo &&
-            previousRawVideo !== oldVideo
-          ) {
-            previousRawVideo.stop();
           }
         } else if (
           previousRawVideo &&
@@ -2953,28 +2954,42 @@ export function useVoiceChannel({
           previousRawVideo !== oldVideo
         ) {
           if (!isCurrent()) {
-            disposeStaleResources(nextAudioProcessor);
+            await abortStaleSwap(nextAudioProcessor);
             return;
           }
-          previousRawVideo.stop();
         }
 
         if (!isCurrent()) {
-          disposeStaleResources(nextAudioProcessor);
+          await abortStaleSwap(nextAudioProcessor);
           return;
         }
+        const committedAudioProcessor = nextAudioProcessor;
         localStreamRef.current = displayStream;
-        publishedAudioProcessorRef.current = nextAudioProcessor;
+        publishedAudioProcessorRef.current = committedAudioProcessor;
+        nextAudioProcessor = null;
         if (audioNeedsUpdate) {
-          preferRawPublishedAudioRef.current = false;
+          sfu.vad.setGateController(
+            committedAudioProcessor?.gateController ?? null,
+          );
         }
         if (
           previousAudioProcessor &&
-          previousAudioProcessor !== nextAudioProcessor
+          previousAudioProcessor !== committedAudioProcessor
         ) {
-          if (!isCurrent()) return;
           previousAudioProcessor.destroy();
         }
+
+        if (oldAudio && oldAudio !== newAudio) oldAudio.stop();
+        if (oldVideo && oldVideo !== newVideo) oldVideo.stop();
+        if (
+          previousRawVideo &&
+          previousRawVideo !== rawVideo &&
+          previousRawVideo !== oldVideo
+        ) {
+          previousRawVideo.stop();
+        }
+        replacedAudioTrack = null;
+        previousAudioTrack = null;
 
         if (audioNeedsUpdate && isMicOn) restartVadMonitoring(sfu);
 
@@ -3011,19 +3026,7 @@ export function useVoiceChannel({
           }
         }
       } catch (err) {
-        if (replacedAudioTrack && previousAudioTrack) {
-          try {
-            await sfu.replaceTrack(
-              `cam-audio-${myIdRef.current}`,
-              previousAudioTrack,
-            );
-          } catch (rollbackError) {
-            devicesLog.warn(
-              "Failed to roll back microphone replacement after device swap failure",
-              rollbackError,
-            );
-          }
-        }
+        await restorePreviousAudio();
         nextAudioProcessor?.destroy();
         acquiredCameraEffect?.stop();
         if (cameraBackgroundEffectRef.current === acquiredCameraEffect) {
@@ -3226,6 +3229,7 @@ export function useVoiceChannel({
         sfuRef.current = null;
         setSfuInstance(null);
         stopCameraBackgroundEffect(true);
+        activeSfu.vad.setGateController(null);
         disposeVoiceActivityStream(ownedVadMonitorStreamRef.current);
         ownedVadMonitorStreamRef.current = null;
         publishedAudioProcessorRef.current?.destroy();
@@ -3351,6 +3355,7 @@ export function useVoiceChannel({
           automaticLeaveTimersRef.current,
         );
         stopCameraBackgroundEffect(true);
+        activeSfu.vad.setGateController(null);
         publishedAudioProcessorRef.current?.destroy();
         publishedAudioProcessorRef.current = null;
         localStreamRef.current?.getTracks().forEach((t) => {
@@ -3401,6 +3406,13 @@ export function useVoiceChannel({
       sfuRef.current = null;
       cleanupSfuHandlers();
       activeSfu.disconnect("user-leave");
+      activeSfu.vad.setGateController(null);
+      publishedAudioProcessorRef.current?.destroy();
+      publishedAudioProcessorRef.current = null;
+      localStreamRef.current?.getTracks().forEach((track) => track.stop());
+      localStreamRef.current = null;
+      cancelPendingLocalStreamAcquisition(localMediaOwner);
+      releaseLocalStream(localMediaOwner);
       setSfuInstance(null);
       hasAutoJoined.current = true;
       return;
@@ -3445,6 +3457,7 @@ export function useVoiceChannel({
       automaticLeaveTimersRef.current,
     );
     stopCameraBackgroundEffect(true);
+    activeSfu.vad.setGateController(null);
     disposeVoiceActivityStream(ownedVadMonitorStreamRef.current);
     ownedVadMonitorStreamRef.current = null;
     publishedAudioProcessorRef.current?.destroy();

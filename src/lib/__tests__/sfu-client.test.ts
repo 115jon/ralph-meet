@@ -300,6 +300,84 @@ describe("SFUClient Baseline Tests", () => {
         newVideoTrack,
       );
     });
+
+    it("replaces audio with a sender clone and reapplies the VAD gate", async () => {
+      const initialTrack = new MockMediaStreamTrack("audio");
+      await client.publishTracks(
+        new MockMediaStream([initialTrack]) as any,
+        "cam",
+      );
+      const transceiver = (client as any).negotiator.camPushPC.transceivers[0];
+      const previousSenderTrack = transceiver.sender.track;
+      expect(previousSenderTrack).not.toBe(initialTrack);
+      expect(initialTrack.stop).not.toHaveBeenCalled();
+      const reapplyGate = vi.spyOn(client.vad, "reapplyGate");
+      const replacementTrack = new MockMediaStreamTrack("audio");
+
+      await expect(
+        client.replaceTrack(
+          "cam-audio-p123",
+          replacementTrack as unknown as MediaStreamTrack,
+        ),
+      ).resolves.toBe(true);
+
+      expect(transceiver.sender.track).not.toBe(replacementTrack);
+      expect(transceiver.sender.track).not.toBe(previousSenderTrack);
+      expect(previousSenderTrack.stop).toHaveBeenCalledOnce();
+      expect(reapplyGate).toHaveBeenCalledOnce();
+    });
+
+    it("restores the previous audio sender when replacement changes then rejects", async () => {
+      const initialTrack = new MockMediaStreamTrack("audio");
+      await client.publishTracks(
+        new MockMediaStream([initialTrack]) as any,
+        "cam",
+      );
+      const transceiver = (client as any).negotiator.camPushPC.transceivers[0];
+      const previousSenderTrack = transceiver.sender.track;
+      const replacementTrack = new MockMediaStreamTrack("audio");
+      transceiver.sender.replaceTrack.mockImplementationOnce(
+        async (track: MediaStreamTrack) => {
+          transceiver.sender.track = track;
+          throw new Error("replacement failed after sender update");
+        },
+      );
+
+      await expect(
+        client.replaceTrack(
+          "cam-audio-p123",
+          replacementTrack as unknown as MediaStreamTrack,
+        ),
+      ).rejects.toThrow("replacement failed after sender update");
+
+      expect(transceiver.sender.track).toBe(previousSenderTrack);
+      expect(replacementTrack.stop).not.toHaveBeenCalled();
+    });
+
+    it("rejects a conditional audio replacement after ownership changes", async () => {
+      const initialTrack = new MockMediaStreamTrack("audio");
+      await client.publishTracks(
+        new MockMediaStream([initialTrack]) as any,
+        "cam",
+      );
+      const transceiver = (client as any).negotiator.camPushPC.transceivers[0];
+      const expectedTrack = transceiver.sender.track;
+      const newerTrack = new MockMediaStreamTrack("audio");
+      await client.replaceTrack(
+        "cam-audio-p123",
+        newerTrack as unknown as MediaStreamTrack,
+      );
+      const attemptedTrack = new MockMediaStreamTrack("audio");
+
+      await expect(
+        client.replaceTrackIfCurrent(
+          "cam-audio-p123",
+          expectedTrack,
+          attemptedTrack as unknown as MediaStreamTrack,
+        ),
+      ).resolves.toBe(false);
+      expect(transceiver.sender.track).not.toBe(attemptedTrack);
+    });
   });
 
   describe("handleSessionDescription", () => {

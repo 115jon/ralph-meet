@@ -9,6 +9,11 @@ import {
   calculateTimeDomainRms,
   getVoiceActivityLevelPercent,
 } from "@/lib/voice/vad";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 interface InputSensitivityMeterProps {
@@ -28,6 +33,7 @@ export function InputSensitivityMeter({
 }: InputSensitivityMeterProps) {
   const [rms, setRms] = useState(0);
   const [draftValue, setDraftValue] = useState(value);
+  const [isTooltipOpen, setIsTooltipOpen] = useState(false);
   const requestIdRef = useRef(0);
   const processingSignature = useMemo(
     () =>
@@ -57,7 +63,6 @@ export function InputSensitivityMeter({
     let monitorStream: MediaStream | null = null;
     let processor: LocalAudioProcessorHandle | null = null;
     let context: AudioContext | null = null;
-
     const cleanup = () => {
       if (animationFrame) cancelAnimationFrame(animationFrame);
       monitorStream?.getTracks().forEach((track) => track.stop());
@@ -84,14 +89,15 @@ export function InputSensitivityMeter({
         }
 
         processor = await createLocalAudioProcessor(stream, processing);
-        if (requestIdRef.current !== requestId) {
-          processor?.destroy();
+        if (!processor) {
           stream.getTracks().forEach((track) => track.stop());
           return;
         }
-        monitorStream =
-          processor?.createMonitorStream() ??
-          new MediaStream([stream.getAudioTracks()[0].clone()]);
+        monitorStream = processor.createMonitorStream();
+        if (monitorStream.getAudioTracks().length === 0) {
+          cleanup();
+          return;
+        }
         context = new AudioContext();
         const analyser = context.createAnalyser();
         analyser.fftSize = 512;
@@ -132,59 +138,94 @@ export function InputSensitivityMeter({
 
   const sensitivityPercent = Math.min(100, Math.max(0, draftValue + 100));
   const levelPercent = getVoiceActivityLevelPercent(rms);
-  const levelDb = rms > 0 ? Math.max(-100, 20 * Math.log10(rms / 100)) : -100;
+
+  const sensitivitySlider = (
+    <input
+      id="input-sensitivity"
+      type="range"
+      min="-100"
+      max="0"
+      value={draftValue}
+      disabled={autoSensitivity}
+      onChange={(event) => {
+        const nextValue = Number(event.target.value);
+        setDraftValue(nextValue);
+      }}
+      onPointerEnter={() => setIsTooltipOpen(true)}
+      onPointerLeave={() => setIsTooltipOpen(false)}
+      onPointerDown={() => setIsTooltipOpen(true)}
+      onPointerUp={() => {
+        onCommit(draftValue);
+      }}
+      onFocus={() => setIsTooltipOpen(true)}
+      onBlur={() => setIsTooltipOpen(false)}
+      onKeyUp={(event) => {
+        if (["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) {
+          onCommit(draftValue);
+        }
+      }}
+      aria-label="Input sensitivity"
+      className={`absolute inset-0 h-2 w-full appearance-none bg-transparent ${
+        autoSensitivity
+          ? "pointer-events-none cursor-default opacity-0 [&::-moz-range-thumb]:hidden [&::-webkit-slider-thumb]:hidden"
+          : "cursor-ew-resize accent-rm-accent"
+      } [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:cursor-ew-resize [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:bg-white [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:cursor-ew-resize [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white`}
+    />
+  );
 
   return (
-    <label className="block space-y-3 py-3" htmlFor="input-sensitivity">
-      <span className="flex items-center justify-between gap-3 text-sm font-semibold text-rm-text">
-        <span>Input sensitivity</span>
-        <span className="flex items-center gap-2 tabular-nums text-xs font-medium text-rm-text-muted">
-          <span className="text-rm-text" title="Measured microphone level">
-            {levelDb <= -99 ? "< -99 dB" : `${Math.round(levelDb)} dB`}
-          </span>
-          <span>
-            Threshold {autoSensitivity ? "Automatic" : `${draftValue} dB`}
-          </span>
-        </span>
+    <label
+      className={`block space-y-3 py-3 ${
+        autoSensitivity ? "cursor-default" : ""
+      }`}
+      htmlFor="input-sensitivity"
+    >
+      <span className="text-sm font-semibold text-rm-text">
+        Input sensitivity
       </span>
-      <div className="relative h-2 overflow-hidden rounded-full bg-rm-bg-elevated">
-        <div
-          className="absolute inset-0"
-          style={{
-            background: `linear-gradient(to right, color-mix(in srgb, var(--rm-status-idle) 88%, var(--rm-bg-surface)) 0%, color-mix(in srgb, var(--rm-status-idle) 88%, var(--rm-bg-surface)) ${sensitivityPercent}%, color-mix(in srgb, var(--rm-status-online) 88%, var(--rm-bg-surface)) ${sensitivityPercent}%, color-mix(in srgb, var(--rm-status-online) 88%, var(--rm-bg-surface)) 100%)`,
-          }}
-        />
-        <div
-          className="absolute inset-y-0 right-0"
-          style={{
-            width: `${100 - levelPercent}%`,
-            backgroundColor:
-              "color-mix(in srgb, var(--rm-bg-primary) 56%, transparent)",
-          }}
-          aria-hidden="true"
-        />
-        <input
-          id="input-sensitivity"
-          type="range"
-          min="-100"
-          max="0"
-          value={draftValue}
-          disabled={autoSensitivity}
-          onChange={(event) => {
-            const nextValue = Number(event.target.value);
-            setDraftValue(nextValue);
-          }}
-          onPointerUp={() => onCommit(draftValue)}
-          onKeyUp={(event) => {
-            if (
-              ["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)
-            ) {
-              onCommit(draftValue);
-            }
-          }}
-          className="absolute inset-0 h-2 w-full cursor-ew-resize appearance-none bg-transparent accent-rm-accent disabled:cursor-not-allowed disabled:opacity-40 [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:cursor-ew-resize [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:bg-white [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:cursor-ew-resize [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white"
-          aria-label="Input sensitivity"
-        />
+      <div
+        className={`relative h-2 overflow-visible rounded-full ${
+          autoSensitivity
+            ? "cursor-default bg-rm-text-muted/30"
+            : "bg-rm-bg-elevated"
+        }`}
+      >
+        {!autoSensitivity && (
+          <>
+            <div
+              className="absolute inset-0 overflow-hidden rounded-full"
+              style={{
+                background: `linear-gradient(to right, color-mix(in srgb, var(--rm-status-idle) 88%, var(--rm-bg-surface)) 0%, color-mix(in srgb, var(--rm-status-idle) 88%, var(--rm-bg-surface)) ${sensitivityPercent}%, color-mix(in srgb, var(--rm-status-online) 88%, var(--rm-bg-surface)) ${sensitivityPercent}%, color-mix(in srgb, var(--rm-status-online) 88%, var(--rm-bg-surface)) 100%)`,
+              }}
+            />
+            <div
+              className="absolute inset-y-0 right-0 rounded-r-full"
+              style={{
+                width: `${100 - levelPercent}%`,
+                backgroundColor:
+                  "color-mix(in srgb, var(--rm-bg-primary) 56%, transparent)",
+              }}
+              aria-hidden="true"
+            />
+          </>
+        )}
+        {autoSensitivity ? (
+          sensitivitySlider
+        ) : (
+          <Tooltip open={isTooltipOpen} onOpenChange={setIsTooltipOpen}>
+            <TooltipTrigger asChild>
+              <span
+                className="pointer-events-none absolute top-1/2 z-20 h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full"
+                style={{ left: `${sensitivityPercent}%` }}
+                aria-hidden="true"
+              />
+            </TooltipTrigger>
+            <TooltipContent side="top" sideOffset={8}>
+              {draftValue} dB
+            </TooltipContent>
+            {sensitivitySlider}
+          </Tooltip>
+        )}
       </div>
     </label>
   );

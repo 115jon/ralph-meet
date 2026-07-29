@@ -6,7 +6,10 @@ import {
   type LocalAudioProcessorHandle,
   type VoiceAudioProcessingSettings,
 } from "@/lib/voice/noise-reduction";
-import { getVoiceActivityThreshold } from "@/lib/voice/vad";
+import {
+  getVoiceActivityLevelPercent,
+  getVoiceActivityThreshold,
+} from "@/lib/voice/vad";
 import { Mic2, Square } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -15,7 +18,6 @@ const METER_BARS = 24;
 const RMS_SMOOTHING = 0.28;
 const SPEAKING_HOLD_MS = 220;
 const SPEAKING_EXIT_RATIO = 0.82;
-
 interface DetachedTestResources {
   stream: MediaStream | null;
   analysisStream: MediaStream | null;
@@ -70,8 +72,8 @@ export function MicTestWidget({
   useEffect(() => {
     thresholdRef.current = threshold;
   }, [threshold]);
-  const barPercent = Math.min(100, (rms / 50) * 100);
-  const thresholdPercent = Math.min(100, (threshold / 50) * 100);
+  const barPercent = getVoiceActivityLevelPercent(rms);
+  const thresholdPercent = getVoiceActivityLevelPercent(threshold);
 
   const processingSignature = useMemo(
     () =>
