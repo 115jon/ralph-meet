@@ -51,7 +51,11 @@ const {
         this.activeGateController?.setGated(gated);
       }),
     };
-    readonly roomGW = { sendVoiceState: vi.fn(), send: vi.fn() };
+    readonly roomGW = {
+      sendVoiceState: vi.fn(),
+      send: vi.fn(),
+      refreshProfile: vi.fn(),
+    };
     readonly voiceGW = {
       isReady: true,
       send: vi.fn(),
@@ -655,6 +659,38 @@ describe("useVoiceChannel SFU lifecycle", () => {
         }),
       ]),
     );
+    hook.unmount();
+  });
+
+  it("refreshes the active SFU profile when the local gateway profile changes", async () => {
+    authUser.current = { id: "user-1" };
+    const hook = renderHook(() =>
+      useVoiceChannel({ channelId: "channel", serverId: "server" }),
+    );
+    await act(async () => {
+      await hook.result.current.handleJoin();
+    });
+    const sfu = sfuInstances[0];
+    if (!sfu) throw new Error("SFU was not created");
+
+    await act(async () => {
+      sfu.emit("joined", { participantId: "self", participants: [] });
+    });
+
+    window.dispatchEvent(
+      new CustomEvent("chat-gateway-event", {
+        detail: {
+          event: "USER_PROFILE_UPDATE",
+          data: {
+            user_id: "user-1",
+            avatar_url: "https://example.com/new.png",
+            avatar_display: null,
+          },
+        },
+      }),
+    );
+
+    expect(sfu.roomGW.refreshProfile).toHaveBeenCalledTimes(1);
     hook.unmount();
   });
 

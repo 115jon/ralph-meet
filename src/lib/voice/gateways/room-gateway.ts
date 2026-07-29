@@ -123,6 +123,10 @@ export class RoomGateway extends BaseGateway<RoomGatewayEvents> {
     }
   }
 
+  public refreshProfile() {
+    this.send({ op: VoiceOpcode.ProfileRefresh, d: {} });
+  }
+
   public disconnect() {
     this.sessionId = null;
     this.participantId = null;

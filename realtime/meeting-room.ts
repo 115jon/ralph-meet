@@ -14,6 +14,7 @@ import {
   type ChannelVisibilityOverride,
   type ChannelVisibilityRole,
 } from "../src/lib/channel-visibility";
+import { getDisplayName } from "../src/lib/display-name";
 import type {
   CallIdPayload,
   CallInitiatePayload,
@@ -271,6 +272,14 @@ interface ProfileIdentity {
   display_name: string | null;
   avatar_url: string | null;
   avatar_display: string | null;
+}
+
+interface ProfileIdentityPatch {
+  name?: string;
+  username?: string;
+  display_name?: string | null;
+  avatar_url?: string | null;
+  avatar_display?: string | null;
 }
 
 /** A pending (ringing) or active call between two users */
@@ -681,6 +690,22 @@ export class MeetingRoom extends DurableObject<Env> {
           op: Op.Dispatch,
           d: { event: body.event, data: body.data },
         };
+        if (
+          body.event === "USER_PROFILE_UPDATE" &&
+          this.isPlainObject(body.data) &&
+          typeof body.data.user_id === "string" &&
+          [
+            "name",
+            "username",
+            "display_name",
+            "avatar_url",
+            "avatar_display",
+          ].some((field) =>
+            Object.prototype.hasOwnProperty.call(body.data, field),
+          )
+        ) {
+          await this.applyPartialProfileIdentity(body.data.user_id, body.data);
+        }
         log.info(
           `Internal broadcast: event=${body.event}, type=${body.broadcast_all ? "all" : body.target_user_id ? "user" : "channel"}, recipient=${body.target_user_id || body.channel_id || "all"}`,
         );
@@ -2274,6 +2299,67 @@ export class MeetingRoom extends DurableObject<Env> {
     session.display_name = identity.display_name;
     session.avatar_url = identity.avatar_url;
     session.avatar_display = identity.avatar_display;
+  }
+
+  private async applyPartialProfileIdentity(
+    userId: string,
+    patch: ProfileIdentityPatch,
+  ) {
+    const currentIdentity = this.getCanonicalProfileIdentity(userId);
+    if (!currentIdentity) return;
+
+    const mergedIdentity: ProfileIdentity = {
+      ...currentIdentity,
+      ...(patch.name !== undefined ? { name: patch.name } : {}),
+      ...(patch.username !== undefined ? { username: patch.username } : {}),
+      ...(patch.display_name !== undefined
+        ? { display_name: patch.display_name }
+        : {}),
+      ...(patch.avatar_url !== undefined
+        ? { avatar_url: patch.avatar_url }
+        : {}),
+      ...(patch.avatar_display !== undefined
+        ? { avatar_display: patch.avatar_display }
+        : {}),
+    };
+    mergedIdentity.name = getDisplayName(
+      {
+        display_name: mergedIdentity.display_name,
+        username: mergedIdentity.username,
+        name: mergedIdentity.name,
+      },
+      mergedIdentity.name,
+    );
+    this.profileIdentities.set(userId, mergedIdentity);
+
+    for (const [sessionWs, session] of this.sessions) {
+      if (session.clerk_user_id !== userId) continue;
+      this.setSessionProfileIdentity(session, mergedIdentity);
+      this.persist(sessionWs, session);
+    }
+
+    let updatedResumableSession = false;
+    for (const session of this.resumableSessions.values()) {
+      if (session.clerk_user_id !== userId) continue;
+      this.setSessionProfileIdentity(session, mergedIdentity);
+      updatedResumableSession = true;
+    }
+    if (updatedResumableSession) this.persistResumableSessions();
+
+    const updatedChannelIds: string[] = [];
+    for (const [channelId, members] of this.voiceChannelMembers) {
+      const member = members.get(userId);
+      if (!member) continue;
+      members.set(userId, refreshVoiceMemberIdentity(member, mergedIdentity));
+      updatedChannelIds.push(channelId);
+    }
+    if (updatedChannelIds.length > 0) this.persistVoiceChannelMembers();
+
+    // ProfileUpdate is an SFU-room protocol message; global chat clients
+    // consume the existing USER_PROFILE_UPDATE dispatch below instead.
+    for (const channelId of updatedChannelIds) {
+      await this.broadcastVoiceChannelState(channelId, undefined, true);
+    }
   }
 
   private async updateProfileIdentity(

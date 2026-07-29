@@ -1840,6 +1840,181 @@ describe("MeetingRoom lifecycle", () => {
     },
   );
 
+  it("applies profile broadcasts before a later voice-channel join", async () => {
+    await env.DB.prepare(
+      "CREATE TABLE IF NOT EXISTS channels (id TEXT PRIMARY KEY, server_id TEXT, channel_type TEXT NOT NULL)",
+    ).run();
+    await env.DB.prepare(
+      "CREATE TABLE IF NOT EXISTS dm_recipients (channel_id TEXT NOT NULL, user_id TEXT NOT NULL)",
+    ).run();
+
+    const roomName = crypto.randomUUID();
+    const channelId = `profile-voice-${crypto.randomUUID()}`;
+    await env.DB.prepare(
+      "INSERT INTO channels (id, server_id, channel_type) VALUES (?, NULL, 'dm')",
+    )
+      .bind(channelId)
+      .run();
+    await env.DB.prepare(
+      "INSERT INTO dm_recipients (channel_id, user_id) VALUES (?, ?), (?, ?)",
+    )
+      .bind(channelId, "user-test", channelId, "observer")
+      .run();
+
+    const owner = await openMeetingSocket(roomName, "user-test");
+    await identifyMeetingSocket(owner, {
+      name: "Old Name",
+      username: "old-user",
+      display_name: "Old Name",
+      avatar_url: "https://example.com/old.png",
+      avatar_display: "frame:old",
+    });
+    const observer = await openMeetingSocket(roomName, "observer");
+    await identifyMeetingSocket(observer, {
+      name: "Observer",
+      username: "observer",
+    });
+
+    const initialJoin = nextDispatchEventMatching(
+      observer,
+      "VOICE_CHANNEL_STATE_UPDATE",
+      (message) =>
+        (
+          message.d as {
+            data?: { members?: Array<Record<string, unknown>> };
+          }
+        ).data?.members?.some(
+          (member) => member.clerk_user_id === "user-test",
+        ) ?? false,
+    );
+    owner.send(
+      JSON.stringify({
+        op: 33,
+        d: { channel_id: channelId, self_mute: true },
+      }),
+    );
+    await initialJoin;
+
+    const updatedState = nextDispatchEventMatching(
+      observer,
+      "VOICE_CHANNEL_STATE_UPDATE",
+      (message) =>
+        (
+          message.d as {
+            data?: { members?: Array<Record<string, unknown>> };
+          }
+        ).data?.members?.some(
+          (member) =>
+            member.clerk_user_id === "user-test" &&
+            member.avatar_url === "https://example.com/new.png" &&
+            member.avatar_display === "frame:new",
+        ) ?? false,
+    );
+    const updatedProfile = nextDispatchEventMatching(
+      observer,
+      "USER_PROFILE_UPDATE",
+      (message) =>
+        (
+          message.d as {
+            data?: { user_id?: string; avatar_url?: string };
+          }
+        ).data?.user_id === "user-test",
+    );
+    const room = env.MEETING_ROOM.get(env.MEETING_ROOM.idFromName(roomName));
+    const broadcast = await room.fetch("https://internal/broadcast", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        broadcast_all: true,
+        event: "USER_PROFILE_UPDATE",
+        data: {
+          user_id: "user-test",
+          username: "new-user",
+          display_name: "New Name",
+          avatar_url: "https://example.com/new.png",
+          avatar_display: "frame:new",
+          updated_at: new Date().toISOString(),
+        },
+      }),
+    });
+    expect(broadcast.status).toBe(200);
+    await expect(updatedState).resolves.toMatchObject({
+      d: {
+        data: {
+          members: [
+            expect.objectContaining({
+              clerk_user_id: "user-test",
+              name: "New Name",
+              username: "new-user",
+              display_name: "New Name",
+              avatar_url: "https://example.com/new.png",
+              avatar_display: "frame:new",
+            }),
+          ],
+        },
+      },
+    });
+    await expect(updatedProfile).resolves.toMatchObject({
+      d: {
+        event: "USER_PROFILE_UPDATE",
+        data: {
+          user_id: "user-test",
+          avatar_url: "https://example.com/new.png",
+        },
+      },
+    });
+
+    const left = nextDispatchEventMatching(
+      observer,
+      "VOICE_CHANNEL_STATE_UPDATE",
+      (message) =>
+        (
+          message.d as {
+            data?: { members?: Array<Record<string, unknown>> };
+          }
+        ).data?.members?.length === 0,
+    );
+    owner.send(JSON.stringify({ op: 34, d: { channel_id: channelId } }));
+    await left;
+
+    const rejoined = nextDispatchEventMatching(
+      observer,
+      "VOICE_CHANNEL_STATE_UPDATE",
+      (message) =>
+        (
+          message.d as {
+            data?: { members?: Array<Record<string, unknown>> };
+          }
+        ).data?.members?.some(
+          (member) =>
+            member.clerk_user_id === "user-test" &&
+            member.avatar_url === "https://example.com/new.png",
+        ) ?? false,
+    );
+    owner.send(
+      JSON.stringify({
+        op: 33,
+        d: { channel_id: channelId, self_mute: true },
+      }),
+    );
+    await expect(rejoined).resolves.toMatchObject({
+      d: {
+        data: {
+          members: [
+            expect.objectContaining({
+              clerk_user_id: "user-test",
+              avatar_url: "https://example.com/new.png",
+              avatar_display: "frame:new",
+            }),
+          ],
+        },
+      },
+    });
+
+    owner.close();
+    observer.close();
+  });
+
   it("broadcasts through the trusted internal endpoint and disconnects an exact session", async () => {
     const roomName = crypto.randomUUID();
     const sender = await openMeetingSocket(roomName);

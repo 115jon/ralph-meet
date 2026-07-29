@@ -3182,6 +3182,49 @@ export function useVoiceChannel({
   }, [joined, channelId, serverId, mode]);
 
   useEffect(() => {
+    if (typeof window === "undefined" || !user?.id) return;
+
+    const handleProfileUpdate = (event: Event) => {
+      const detail = (
+        event as CustomEvent<{
+          event?: string;
+          data?: {
+            user_id?: string;
+            name?: string;
+            username?: string;
+            display_name?: string | null;
+            avatar_url?: string | null;
+            avatar_display?: string | null;
+          };
+        }>
+      ).detail;
+      const profile = detail?.data;
+      if (!joined || !profile || detail.event !== "USER_PROFILE_UPDATE") return;
+      if (profile.user_id !== user.id) return;
+
+      const identityFields = [
+        "name",
+        "username",
+        "display_name",
+        "avatar_url",
+        "avatar_display",
+      ] as const;
+      if (
+        !identityFields.some((field) =>
+          Object.prototype.hasOwnProperty.call(profile, field),
+        )
+      ) {
+        return;
+      }
+      sfuRef.current?.roomGW.refreshProfile();
+    };
+
+    window.addEventListener("chat-gateway-event", handleProfileUpdate);
+    return () =>
+      window.removeEventListener("chat-gateway-event", handleProfileUpdate);
+  }, [joined, user?.id]);
+
+  useEffect(() => {
     if (mode !== "channel" || !channelId || !serverId) return;
 
     const handlePageExit = () => {
@@ -4657,24 +4700,15 @@ export function useVoiceChannel({
         ([, cId]) => cId === m.clerk_user_id,
       )?.[0];
       const p = pId ? participantsRef.current.get(pId) : null;
-      const identity = resolveVoiceIdentity(
-        p
-          ? {
-              name: p.name,
-              username: p.username,
-              display_name: p.display_name,
-              avatar_url: p.avatar_url ?? null,
-              avatar_display: p.avatar_display ?? null,
-            }
-          : null,
-        {
-          name: m.name,
-          username: m.username,
-          display_name: m.display_name,
-          avatar_url: m.avatar_url ?? null,
-          avatar_display: m.avatar_display ?? null,
-        },
-      );
+      // Gateway presence is canonical once available; SFU data is only a
+      // fallback for participants not represented in the gateway state.
+      const identity = resolveVoiceIdentity({
+        name: m.name,
+        username: m.username,
+        display_name: m.display_name,
+        avatar_url: m.avatar_url ?? null,
+        avatar_display: m.avatar_display ?? null,
+      });
       remotes.push({
         clerkId: m.clerk_user_id,
         name: identity.name,

@@ -113,6 +113,41 @@ describe("RoomGateway", () => {
     gateway.disconnect();
   });
 
+  it("sends a profile refresh through the existing opcode", async () => {
+    const gateway = new RoomGateway();
+    gateway.connectRoom({
+      name: "Test User",
+      clerkUserId: "user-1",
+      roomSlug: "voice-server-channel",
+      wsUrlGenerator: (path) => `ws://meet.test${path}`,
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const socket = TestWebSocket.instances[0]!;
+    socket.readyState = TestWebSocket.OPEN;
+    socket.message({
+      op: VoiceOpcode.Hello,
+      d: { heartbeat_interval: 45_000 },
+    });
+    socket.message({
+      op: VoiceOpcode.Ready,
+      d: {
+        participant_id: "session-1",
+        ice_servers: [],
+        participants: [],
+        voice_token: "voice-token",
+      },
+    });
+
+    gateway.refreshProfile();
+
+    expect(sentMessages(socket)).toContainEqual({
+      op: VoiceOpcode.ProfileRefresh,
+      d: {},
+    });
+    gateway.disconnect();
+  });
+
   it("resumes from the latest event sequence instead of a heartbeat ACK", async () => {
     const gateway = new RoomGateway();
     gateway.connectRoom({
