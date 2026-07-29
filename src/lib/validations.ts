@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+z.config({ jitless: true });
+
 export function normalizeUsername(value: string): string {
   return value.trim().toLowerCase();
 }
