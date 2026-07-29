@@ -109,6 +109,55 @@ function withDesktopCors(request: Request, response: Response): Response {
   }
 }
 
+const DOCUMENT_CONTENT_SECURITY_POLICY =
+  "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' https: data: blob:; media-src 'self' https: blob:; connect-src 'self' https: wss: ws: https://auth.115jon.site https://api.github.com https://cloudflareinsights.com; worker-src 'self' blob:; frame-src 'self' https:";
+
+const DOCUMENT_SECURITY_HEADERS = {
+  "Content-Security-Policy": DOCUMENT_CONTENT_SECURITY_POLICY,
+  "X-Frame-Options": "DENY",
+  "X-Content-Type-Options": "nosniff",
+  "Referrer-Policy": "strict-origin-when-cross-origin",
+  "Permissions-Policy":
+    'camera=(self), microphone=(self), display-capture=(self), fullscreen=(self "https://www.youtube.com" "https://www.youtube-nocookie.com" "https://www.tiktok.com" "https://open.spotify.com"), geolocation=()',
+} as const;
+
+function withDocumentSecurityHeaders(
+  request: Request,
+  response: Response,
+): Response {
+  const contentType = response.headers
+    .get("Content-Type")
+    ?.split(";", 1)[0]
+    .trim()
+    .toLowerCase();
+  if (
+    contentType !== "text/html" ||
+    response.body === null ||
+    response.status === 204 ||
+    response.status === 304 ||
+    response.status < 200
+  ) {
+    return response;
+  }
+
+  const headers = new Headers(response.headers);
+  for (const [name, value] of Object.entries(DOCUMENT_SECURITY_HEADERS)) {
+    headers.set(name, value);
+  }
+  if (new URL(request.url).protocol === "https:") {
+    headers.set(
+      "Strict-Transport-Security",
+      "max-age=31536000; includeSubDomains",
+    );
+  }
+
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+}
+
 interface Env {
   MEETING_ROOM: DurableObjectNamespace;
   VOICE_ROOM: DurableObjectNamespace;
@@ -388,9 +437,10 @@ export default {
         },
       );
     }
-    return url.pathname.startsWith("/api/")
-      ? withDesktopCors(request, response)
-      : response;
+    if (url.pathname.startsWith("/api/")) {
+      return withDesktopCors(request, response);
+    }
+    return withDocumentSecurityHeaders(request, response);
   },
 
   async scheduled(

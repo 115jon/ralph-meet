@@ -15,9 +15,17 @@ const syncCollectiblesCatalog = vi.hoisted(() =>
     syncedAt: "2026-07-22T00:00:00.000Z",
   })),
 );
+const tanStackHandler = vi.hoisted(() =>
+  vi.fn(
+    async () =>
+      new Response("<html><body>fallback</body></html>", {
+        headers: { "Content-Type": "text/html; charset=utf-8" },
+      }),
+  ),
+);
 
 vi.mock("@tanstack/react-start/server", () => ({
-  createStartHandler: vi.fn(() => vi.fn(async () => new Response("fallback"))),
+  createStartHandler: vi.fn(() => tanStackHandler),
   defaultStreamHandler: vi.fn(),
 }));
 
@@ -128,5 +136,126 @@ describe("custom server soundboard media rate limiting", () => {
     expect(retryMessagePostprocessing).toHaveBeenCalledWith(env);
     expect(waitUntil).toHaveBeenCalledTimes(1);
     await waitUntil.mock.calls[0][0];
+  });
+});
+
+describe("custom server document security headers", () => {
+  const env = {} as Parameters<typeof server.fetch>[1];
+  const ctx = { waitUntil: vi.fn() } as unknown as ExecutionContext;
+
+  it("adds compatible security headers to HTML fallback responses", async () => {
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode("<html>streamed</html>"));
+        controller.close();
+      },
+    });
+    const fallback = new Response(body, {
+      status: 201,
+      statusText: "Created",
+      headers: {
+        "Content-Type": "text/html; charset=utf-8",
+        "X-Preserved": "yes",
+      },
+    });
+    tanStackHandler.mockResolvedValueOnce(fallback);
+
+    const response = await server.fetch(
+      new Request("https://meet.test/"),
+      env,
+      ctx,
+    );
+
+    expect(response.status).toBe(201);
+    expect(response.statusText).toBe("Created");
+    expect(response.headers.get("X-Preserved")).toBe("yes");
+    expect(response.headers.get("Content-Security-Policy")).toBe(
+      "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' https: data: blob:; media-src 'self' https: blob:; connect-src 'self' https: wss: ws: https://auth.115jon.site https://api.github.com https://cloudflareinsights.com; worker-src 'self' blob:; frame-src 'self' https:",
+    );
+    expect(response.headers.get("X-Frame-Options")).toBe("DENY");
+    expect(response.headers.get("X-Content-Type-Options")).toBe("nosniff");
+    expect(response.headers.get("Referrer-Policy")).toBe(
+      "strict-origin-when-cross-origin",
+    );
+    expect(response.headers.get("Permissions-Policy")).toBe(
+      'camera=(self), microphone=(self), display-capture=(self), fullscreen=(self "https://www.youtube.com" "https://www.youtube-nocookie.com" "https://www.tiktok.com" "https://open.spotify.com"), geolocation=()',
+    );
+    expect(response.headers.get("Strict-Transport-Security")).toBe(
+      "max-age=31536000; includeSubDomains",
+    );
+    expect(response.body).toBe(fallback.body);
+    await expect(response.text()).resolves.toBe("<html>streamed</html>");
+  });
+
+  it("omits HSTS from HTTP document responses", async () => {
+    const fallback = new Response("<html>http</html>", {
+      headers: { "Content-Type": "text/html; charset=utf-8" },
+    });
+    tanStackHandler.mockResolvedValueOnce(fallback);
+
+    const response = await server.fetch(
+      new Request("http://meet.test/"),
+      env,
+      ctx,
+    );
+
+    expect(response.headers.get("Content-Security-Policy")).toBeTruthy();
+    expect(response.headers.get("Strict-Transport-Security")).toBeNull();
+  });
+
+  it("does not add document security headers to JSON or non-document responses", async () => {
+    const jsonFallback = new Response(JSON.stringify({ ok: true }), {
+      headers: { "Content-Type": "application/json" },
+    });
+    tanStackHandler.mockResolvedValueOnce(jsonFallback);
+
+    const jsonResponse = await server.fetch(
+      new Request("https://meet.test/api/example"),
+      env,
+      ctx,
+    );
+
+    expect(jsonResponse).toBe(jsonFallback);
+    expect(jsonResponse.headers.get("Content-Security-Policy")).toBeNull();
+    expect(jsonResponse.headers.get("X-Frame-Options")).toBeNull();
+    expect(jsonResponse.headers.get("Strict-Transport-Security")).toBeNull();
+
+    const assetFallback = new Response("console.log('asset')", {
+      headers: { "Content-Type": "application/javascript" },
+    });
+    tanStackHandler.mockResolvedValueOnce(assetFallback);
+
+    const assetResponse = await server.fetch(
+      new Request("https://meet.test/assets/app.js"),
+      env,
+      ctx,
+    );
+
+    expect(assetResponse).toBe(assetFallback);
+    expect(assetResponse.headers.get("Content-Security-Policy")).toBeNull();
+    expect(assetResponse.headers.get("X-Content-Type-Options")).toBeNull();
+    expect(assetResponse.headers.get("Permissions-Policy")).toBeNull();
+  });
+
+  it("leaves no-body fallback responses unchanged", async () => {
+    const fallback = new Response(null, {
+      status: 204,
+      statusText: "No Content",
+      headers: { "Content-Type": "text/html", "X-Preserved": "yes" },
+    });
+    tanStackHandler.mockResolvedValueOnce(fallback);
+
+    const response = await server.fetch(
+      new Request("https://meet.test/empty"),
+      env,
+      ctx,
+    );
+
+    expect(response).toBe(fallback);
+    expect(response.status).toBe(204);
+    expect(response.statusText).toBe("No Content");
+    expect(response.body).toBeNull();
+    expect(response.headers.get("X-Preserved")).toBe("yes");
+    expect(response.headers.get("Content-Security-Policy")).toBeNull();
   });
 });
