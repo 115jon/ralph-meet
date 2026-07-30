@@ -27,6 +27,7 @@ import {
 import { cn } from "@/lib/utils";
 import { Dialog, DialogPortal, DialogSurface } from "@/components/ui/dialog";
 import { primeCustomEmojiCache } from "@/hooks/useCustomEmojiLookup";
+import { useMounted } from "@/hooks/useMounted";
 import {
   AlertCircle,
   ChevronDown,
@@ -63,6 +64,7 @@ interface Props {
 
 const CUSTOM_SECTION_ID = "custom-creations";
 const RECENTS_SECTION_ID = "recently-used";
+const EMPTY_EMOJI_RECENTS: EmojiRecentItem[] = [];
 const SKIN_TONE_STORAGE_KEY = "chat:emoji:skin-tone:v1";
 const EMOJI_RECENTS_EVENT = "emoji-recents-updated";
 
@@ -99,14 +101,18 @@ function buildInitialCollapsedCategories(
 function getStoredSkinTone(): NativeEmojiSkinTone {
   if (typeof window === "undefined") return 0;
 
-  const rawValue = window.localStorage.getItem(SKIN_TONE_STORAGE_KEY);
-  const numericValue = Number(rawValue);
+  try {
+    const rawValue = window.localStorage.getItem(SKIN_TONE_STORAGE_KEY);
+    const numericValue = Number(rawValue);
 
-  return Number.isInteger(numericValue) &&
-    numericValue >= 0 &&
-    numericValue <= 5
-    ? (numericValue as NativeEmojiSkinTone)
-    : 0;
+    return Number.isInteger(numericValue) &&
+      numericValue >= 0 &&
+      numericValue <= 5
+      ? (numericValue as NativeEmojiSkinTone)
+      : 0;
+  } catch {
+    return 0;
+  }
 }
 
 function subscribeEmojiRecents(onStoreChange: () => void): () => void {
@@ -327,10 +333,11 @@ export default function EmojiPicker({
   markerRef: externalMarkerRef,
   isClosing = false,
 }: Props) {
+  const mounted = useMounted();
   const [activeView, setActiveView] = useState<EmojiView>("emoji");
   const [search, setSearch] = useState("");
   const [selectedSkinTone, setSelectedSkinTone] =
-    useState<NativeEmojiSkinTone>(getStoredSkinTone);
+    useState<NativeEmojiSkinTone>(0);
   const [showSkinToneMenu, setShowSkinToneMenu] = useState(false);
   const [generatedEmojis, setGeneratedEmojis] = useState<GeneratedEmoji[]>([]);
   const [loadingGeneratedEmojis, setLoadingGeneratedEmojis] = useState(true);
@@ -340,7 +347,7 @@ export default function EmojiPicker({
   const recents = useSyncExternalStore(
     subscribeEmojiRecents,
     loadEmojiRecents,
-    () => [],
+    () => EMPTY_EMOJI_RECENTS,
   );
   const nativeCategories = useMemo(
     () => getNativeEmojiCategories(selectedSkinTone),
@@ -357,6 +364,10 @@ export default function EmojiPicker({
   const [isGenerating, setIsGenerating] = useState(false);
   const [generateError, setGenerateError] = useState<string | null>(null);
   const [generateSuccess, setGenerateSuccess] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (mounted) setSelectedSkinTone(getStoredSkinTone());
+  }, [mounted]);
 
   const internalMarkerRef = useRef<HTMLSpanElement>(null);
   const markerRef = externalMarkerRef ?? internalMarkerRef;
@@ -424,7 +435,11 @@ export default function EmojiPicker({
   const persistSkinTone = useCallback((tone: NativeEmojiSkinTone) => {
     setSelectedSkinTone(tone);
     if (typeof window !== "undefined") {
-      window.localStorage.setItem(SKIN_TONE_STORAGE_KEY, String(tone));
+      try {
+        window.localStorage.setItem(SKIN_TONE_STORAGE_KEY, String(tone));
+      } catch {
+        // Skin tone persistence is optional when browser storage is unavailable.
+      }
     }
   }, []);
 
@@ -751,7 +766,7 @@ export default function EmojiPicker({
           style={{ pointerEvents: "none" }}
         />
       ) : null}
-      {typeof document !== "undefined"
+      {mounted
         ? createPortal(
             <>
               {open ? (

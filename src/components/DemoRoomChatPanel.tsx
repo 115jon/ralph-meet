@@ -8,6 +8,10 @@ import {
 } from "@/lib/demo-chat-limits";
 import type { GifPickerItem, GifProvider } from "@/lib/gif-picker";
 import type { SFUClient } from "@/lib/sfu-client";
+import {
+  useClientDateFormatter,
+  type ClientDateFormatter,
+} from "@/lib/client-date-format";
 import { cn } from "@/lib/utils";
 import { Dialog, DialogPortal, DialogSurface } from "@/components/ui/dialog";
 import {
@@ -35,8 +39,8 @@ interface DemoChatMessage {
   author_name: string;
   content: string;
   gif?: DemoChatGif;
-  created_at: number;
-  expires_at: number;
+  created_at: number | null;
+  expires_at: number | null;
 }
 
 interface DemoRoomChatPanelProps {
@@ -64,6 +68,7 @@ export function DemoRoomChatPanel({
   const [value, setValue] = useState("");
   const [showGifPicker, setShowGifPicker] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const formatDate = useClientDateFormatter();
   const characterCounter = getDemoChatCharacterCounter(value);
 
   // `sfu.on(...)` returns the unsubscribe function from EventEmitter.on.
@@ -202,9 +207,9 @@ export function DemoRoomChatPanel({
                 </span>
                 <time
                   className="shrink-0 text-[10px] font-medium text-rm-text-muted"
-                  dateTime={new Date(message.created_at).toISOString()}
+                  dateTime={formatDateTimeAttribute(message.created_at)}
                 >
-                  {formatChatTime(message.created_at)}
+                  {formatChatTime(message.created_at, formatDate)}
                 </time>
               </div>
               {message.content && (
@@ -377,15 +382,23 @@ function DemoChatGifPreview({ gif }: { gif: DemoChatGif }) {
   );
 }
 
-function parseDemoChatMessage(value: unknown): DemoChatMessage | null {
+function normalizeDemoTimestamp(value: unknown): number | null {
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : null;
+  }
+  if (typeof value !== "string" || value.trim() === "") return null;
+
+  const timestamp = Date.parse(value);
+  return Number.isFinite(timestamp) ? timestamp : null;
+}
+
+export function parseDemoChatMessage(value: unknown): DemoChatMessage | null {
   if (!value || typeof value !== "object") return null;
   const message = value as Record<string, unknown>;
   if (typeof message.id !== "string") return null;
   if (typeof message.participant_id !== "string") return null;
   if (typeof message.author_name !== "string") return null;
   if (typeof message.content !== "string") return null;
-  if (typeof message.created_at !== "number") return null;
-  if (typeof message.expires_at !== "number") return null;
 
   const gif = parseDemoChatGif(message.gif);
   return {
@@ -394,8 +407,8 @@ function parseDemoChatMessage(value: unknown): DemoChatMessage | null {
     author_name: message.author_name,
     content: message.content,
     ...(gif ? { gif } : {}),
-    created_at: message.created_at,
-    expires_at: message.expires_at,
+    created_at: normalizeDemoTimestamp(message.created_at),
+    expires_at: normalizeDemoTimestamp(message.expires_at),
   };
 }
 
@@ -430,8 +443,17 @@ function parseDemoChatGif(value: unknown): DemoChatGif | undefined {
   };
 }
 
-function formatChatTime(timestamp: number) {
-  return new Date(timestamp).toLocaleTimeString([], {
+function formatDateTimeAttribute(timestamp: number | null): string | undefined {
+  if (timestamp === null) return undefined;
+  const date = new Date(timestamp);
+  return Number.isFinite(date.getTime()) ? date.toISOString() : undefined;
+}
+
+function formatChatTime(
+  timestamp: number | null,
+  formatDate: ClientDateFormatter,
+): string {
+  return formatDate(timestamp ?? Number.NaN, {
     hour: "2-digit",
     minute: "2-digit",
   });

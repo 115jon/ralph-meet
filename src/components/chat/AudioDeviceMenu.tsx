@@ -9,6 +9,7 @@
 // dynamically using getBoundingClientRect to avoid overlap + viewport clipping.
 // ============================================================================
 
+import { useMounted } from "@/hooks/useMounted";
 import { useMediaDevices } from "@/lib/useMediaDevices";
 import { cn } from "@/lib/utils";
 import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
@@ -45,6 +46,7 @@ export function AudioDeviceMenu({
   onOpenVoiceSettings,
   anchorRef,
 }: AudioDeviceMenuProps) {
+  const mounted = useMounted();
   const { user } = useUser();
   const settingsUserId = user?.id ?? null;
   const { audioInputs, audioOutputs } = useMediaDevices();
@@ -203,6 +205,8 @@ export function AudioDeviceMenu({
 
   const ModeIcon = mode === "input" ? Mic : Headphones;
   const deviceLabel = mode === "input" ? "Input Device" : "Output Device";
+
+  if (!mounted) return null;
 
   return createPortal(
     <>

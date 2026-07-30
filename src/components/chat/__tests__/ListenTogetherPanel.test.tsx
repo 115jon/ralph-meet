@@ -2,6 +2,7 @@
 
 import { apiGet, apiPost } from "@/lib/api-client";
 import type { ListenTogetherStateSnapshot } from "@/lib/listen-together";
+import { LISTEN_TOGETHER_PANE_RATIO_KEY } from "@/lib/listen-together-local";
 import { useListenTogetherStore } from "@/stores/useListenTogetherStore";
 import {
   act,
@@ -10,6 +11,7 @@ import {
   render,
   screen,
 } from "@testing-library/react";
+import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   ListenTogetherPanel,
@@ -66,12 +68,33 @@ function makeSnapshot(): ListenTogetherStateSnapshot {
 }
 
 describe("ListenTogetherPanel", () => {
+  it("applies persisted pane width after the stable initial render", () => {
+    localStorage.setItem(LISTEN_TOGETHER_PANE_RATIO_KEY, "0.47");
+    expect(useListenTogetherStore.getState().workspacePaneRatio).toBe(0.38);
+
+    render(
+      <ListenTogetherPanel
+        sfu={null}
+        roomSlug="room-1"
+        voiceSessionId="voice-1"
+        localUserId="user-1"
+      />,
+    );
+
+    expect(
+      screen.getByRole("separator", {
+        name: "Resize Listen Together panes",
+      }),
+    ).toHaveAttribute("aria-valuenow", "47");
+  });
+
   beforeEach(() => {
     vi.useRealTimers();
     localStorage.clear();
     vi.mocked(apiGet).mockReset();
     vi.mocked(apiPost).mockReset();
     useListenTogetherStore.setState({
+      workspacePaneRatio: 0.38,
       rooms: {
         "room-1": {
           snapshot: makeSnapshot(),
@@ -733,6 +756,20 @@ describe("ListenTogetherPanel", () => {
       "listen-together:query-history:v1",
       JSON.stringify(["late night mix"]),
     );
+    const getItem = vi.spyOn(Storage.prototype, "getItem");
+    renderToString(
+      <ListenTogetherPanel
+        sfu={null}
+        roomSlug="room-1"
+        voiceSessionId="voice-1"
+        localUserId="user-1"
+      />,
+    );
+    expect(getItem).not.toHaveBeenCalledWith(
+      "listen-together:query-history:v1",
+    );
+    getItem.mockRestore();
+
     render(
       <ListenTogetherPanel
         sfu={null}

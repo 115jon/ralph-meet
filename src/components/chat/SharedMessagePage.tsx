@@ -1,4 +1,5 @@
 import type { Attachment, EmbedInfo } from "@/lib/types";
+import { useClientDateFormatter } from "@/lib/client-date-format";
 import { Radio } from "lucide-react";
 import { useEffect, useState } from "react";
 import ShareSnapshotPreview from "./ShareSnapshotPreview";
@@ -26,16 +27,6 @@ export interface PublicShare {
   };
 }
 
-function formatDate(iso: string): string {
-  return new Date(iso).toLocaleString([], {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
-}
-
 function avatarUrl(value: string | null | undefined): string | undefined {
   if (!value) return undefined;
   return value;
@@ -59,6 +50,7 @@ export default function SharedMessagePage({
   const [share, setShare] = useState<PublicShare | null>(initialShare);
   const [gone, setGone] = useState(initialGone);
   const [loading, setLoading] = useState(!initialShare && !initialGone);
+  const formatDate = useClientDateFormatter();
 
   useEffect(() => {
     if (initialShare || initialGone) return;
@@ -136,7 +128,13 @@ export default function SharedMessagePage({
             <footer className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-rm-border pt-4 text-xs text-rm-text-muted">
               <span>
                 {share.expires_at
-                  ? `Expires ${formatDate(share.expires_at)}`
+                  ? `Expires ${formatDate(share.expires_at, {
+                      month: "short",
+                      day: "numeric",
+                      year: "numeric",
+                      hour: "numeric",
+                      minute: "2-digit",
+                    })}`
                   : "Permanent share"}
               </span>
               <a

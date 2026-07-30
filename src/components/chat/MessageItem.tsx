@@ -13,6 +13,11 @@ import { useContextMenu } from "@/hooks/useContextMenu";
 import { useCustomEmojiLookup } from "@/hooks/useCustomEmojiLookup";
 import { useUserResolution } from "@/hooks/useUserResolution";
 import { getAttachmentUrl } from "@/lib/attachment-url";
+import {
+  useClientDateFormatter,
+  useClientReferenceTime,
+  type ClientDateFormatter,
+} from "@/lib/client-date-format";
 import { extractCustomEmojiIds, type EmojiRecentItem } from "@/lib/emoji";
 import {
   formatReactionUserNames,
@@ -98,34 +103,50 @@ interface Props {
   previewOnly?: boolean;
 }
 
-function formatTime(iso: string): string {
-  const d = new Date(iso);
-  return d.toLocaleTimeString([], {
+const MESSAGE_DAY_OPTIONS: Intl.DateTimeFormatOptions = {
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+};
+
+function formatMessageTime(
+  iso: string,
+  formatDate: ClientDateFormatter,
+): string {
+  return formatDate(iso, {
     hour: "numeric",
     minute: "2-digit",
     hour12: true,
   });
 }
 
-function formatDate(iso: string): string {
-  const d = new Date(iso);
-  const today = new Date();
-  const yesterday = new Date(today);
-  yesterday.setDate(today.getDate() - 1);
+export function formatMessageDate(
+  iso: string,
+  formatClientDate: ClientDateFormatter,
+  referenceTime: number | null,
+): string {
+  const messageDate = new Date(iso);
+  if (!Number.isFinite(messageDate.getTime())) {
+    return formatClientDate(iso, MESSAGE_DAY_OPTIONS);
+  }
 
-  if (d.toDateString() === today.toDateString()) {
-    return `Today at ${formatTime(iso)}`;
+  const messageDay = formatClientDate(messageDate, MESSAGE_DAY_OPTIONS);
+
+  if (referenceTime !== null) {
+    const today = formatClientDate(referenceTime, MESSAGE_DAY_OPTIONS);
+    const yesterdayDate = new Date(referenceTime);
+    yesterdayDate.setDate(yesterdayDate.getDate() - 1);
+    const yesterday = formatClientDate(yesterdayDate, MESSAGE_DAY_OPTIONS);
+
+    if (messageDay === today) {
+      return `Today at ${formatMessageTime(iso, formatClientDate)}`;
+    }
+    if (messageDay === yesterday) {
+      return `Yesterday at ${formatMessageTime(iso, formatClientDate)}`;
+    }
   }
-  if (d.toDateString() === yesterday.toDateString()) {
-    return `Yesterday at ${formatTime(iso)}`;
-  }
-  return (
-    d.toLocaleDateString([], {
-      month: "2-digit",
-      day: "2-digit",
-      year: "numeric",
-    }) + ` ${formatTime(iso)}`
-  );
+
+  return `${messageDay} ${formatMessageTime(iso, formatClientDate)}`;
 }
 
 function formatFileSize(bytes: number): string {
@@ -296,6 +317,8 @@ const MessageItem = memo(
     onHeightChange,
     previewOnly = false,
   }: Props) => {
+    const formatClientDate = useClientDateFormatter();
+    const referenceTime = useClientReferenceTime();
     const {
       addReaction,
       removeReaction,
@@ -319,9 +342,9 @@ const MessageItem = memo(
     const [showShareModal, setShowShareModal] = useState(false);
     const [showDeleteModal, setShowDeleteModal] = useState(false);
     const [editInput, setEditInput] = useState("");
-    const [toolbarQuickReactions, setToolbarQuickReactions] = useState(() =>
-      getQuickReactionItems(3),
-    );
+    const [toolbarQuickReactions, setToolbarQuickReactions] = useState<
+      EmojiRecentItem[]
+    >([]);
     const [isShiftPressed, setIsShiftPressed] = useState(false);
     const [authorNameEl, setAuthorNameEl] = useState<HTMLElement | null>(null);
     const rootRef = useRef<HTMLDivElement>(null);
@@ -338,6 +361,12 @@ const MessageItem = memo(
       x: number;
       y: number;
     } | null>(null);
+
+    useEffect(() => {
+      // Load persisted reaction preferences only after the server snapshot exists.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setToolbarQuickReactions(getQuickReactionItems(3));
+    }, []);
 
     const authorInfo = useUserResolution(message.author_id, message.author);
     const replyInfo = useUserResolution(
@@ -994,7 +1023,7 @@ const MessageItem = memo(
           ) : (
             <div className="flex w-10 shrink-0 items-start justify-center pt-1 opacity-0 group-hover:opacity-100 transition-opacity">
               <span className="select-none text-[10.5px] font-medium text-rm-text-muted">
-                {formatTime(message.created_at)}
+                {formatMessageTime(message.created_at, formatClientDate)}
               </span>
             </div>
           )}
@@ -1016,7 +1045,11 @@ const MessageItem = memo(
                   />
                 </button>
                 <span className="text-[11.5px] font-medium text-rm-text-muted ml-0.5 mt-0.5">
-                  {formatDate(message.created_at)}
+                  {formatMessageDate(
+                    message.created_at,
+                    formatClientDate,
+                    referenceTime,
+                  )}
                 </span>
                 {message.is_pinned && (
                   <div className="flex items-center gap-1 rounded border border-primary/20 bg-primary/10 px-1.5 py-0.5 text-[10px] font-bold text-primary">
@@ -1068,7 +1101,11 @@ const MessageItem = memo(
                 {message.updated_at && (
                   <span
                     className="ml-1 text-[10px] text-rm-text-muted"
-                    title={`Edited ${formatDate(message.updated_at)}`}
+                    title={`Edited ${formatMessageDate(
+                      message.updated_at,
+                      formatClientDate,
+                      referenceTime,
+                    )}`}
                   >
                     (edited)
                   </span>

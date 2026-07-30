@@ -2,6 +2,7 @@ import { getDisplayInitial, getDisplayName } from "@/lib/display-name";
 import { getAuthAssetUrl } from "@/lib/platform";
 import { apiGet } from "@/lib/api-client";
 import type { ServerAuditLog } from "@/lib/types";
+import { useClientDateFormatter } from "@/lib/client-date-format";
 import { useEffect, useReducer } from "react";
 import { AvatarImage } from "./AvatarImage";
 import { Loader2 } from "./Icons";
@@ -41,6 +42,7 @@ export default function AuditLogTab({ serverId }: AuditLogTabProps) {
     loading: true,
     error: null,
   });
+  const formatDate = useClientDateFormatter();
 
   useEffect(() => {
     let mounted = true;
@@ -181,7 +183,16 @@ export default function AuditLogTab({ serverId }: AuditLogTabProps) {
                   </div>
 
                   <div className="text-xs text-rm-text-muted mb-3 flex items-center gap-2">
-                    <span>{new Date(log.created_at).toLocaleString()}</span>
+                    <span>
+                      {formatDate(log.created_at, {
+                        year: "numeric",
+                        month: "numeric",
+                        day: "numeric",
+                        hour: "numeric",
+                        minute: "numeric",
+                        second: "numeric",
+                      })}
+                    </span>
                     {log.target_id && (
                       <>
                         <span>•</span>

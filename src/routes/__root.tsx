@@ -106,13 +106,12 @@ function RootDocument({ children }: { children: React.ReactNode }) {
 function RootComponent() {
   // Intercept external link clicks on desktop → open in system browser
   useExternalLinkHandler();
-  const [sessionToken, setSessionToken] = useState<string | undefined>(() =>
-    typeof window !== "undefined"
-      ? (getDesktopAuthHandoffToken() ?? undefined)
-      : undefined,
-  );
+  const [sessionToken, setSessionToken] = useState<string | undefined>();
 
   useEffect(() => {
+    // Auth handoff storage is intentionally read after the stable server snapshot.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setSessionToken(getDesktopAuthHandoffToken() ?? undefined);
     if (!isTauri()) return;
     return subscribeDesktopTokenChanges((token) => {
       setSessionToken(token ?? undefined);

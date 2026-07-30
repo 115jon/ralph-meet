@@ -1,3 +1,4 @@
+import { useMounted } from "@/hooks/useMounted";
 import { useVoiceStats } from "@/hooks/useVoiceStats";
 import { clog } from "@/lib/console-logger";
 import type { SFUClient, VoiceConnectionStats } from "@/lib/sfu-client";
@@ -83,6 +84,7 @@ export function VoiceDetailsPanel({
   channelName,
   isClosing,
 }: VoiceDetailsPanelProps) {
+  const mounted = useMounted();
   const [activeTab, setActiveTab] = useState<TabId>("connection");
   const [copyFeedback, setCopyFeedback] = useState(false);
   const [showDebugScreen, setShowDebugScreen] = useState(false);
@@ -258,7 +260,7 @@ export function VoiceDetailsPanel({
   // A CSS transform on an ancestor breaks `position: fixed` — the fixed
   // element would be confined to the transformed box rather than the viewport.
   const debugPortal =
-    showDebugScreen && typeof document !== "undefined"
+    showDebugScreen && mounted
       ? createPortal(
           <VoiceDebugScreen
             sfu={sfu}
@@ -270,7 +272,7 @@ export function VoiceDetailsPanel({
       : null;
 
   const panelPortal =
-    isOpen && typeof document !== "undefined"
+    isOpen && mounted
       ? createPortal(
           <aside
             ref={panelRef}

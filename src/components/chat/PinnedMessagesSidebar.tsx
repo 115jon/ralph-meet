@@ -4,6 +4,7 @@ import { useUserResolution } from "@/hooks/useUserResolution";
 import { getFileIcon } from "@/lib/file-icons";
 import { isPlayableVideo } from "@/lib/media";
 import { getDownloadUrl } from "@/lib/platform";
+import { useClientDateFormatter } from "@/lib/client-date-format";
 import type { Message } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { Download, Loader2 } from "lucide-react";
@@ -121,6 +122,7 @@ const PinnedMessageItem = ({
   canUnpin: boolean;
 }) => {
   const authorInfo = useUserResolution(msg.author_id, msg.author);
+  const formatDate = useClientDateFormatter();
   const attachments = msg.attachments ?? [];
   const imageAttachments: Message["attachments"] = [];
   const videoAttachments: Message["attachments"] = [];
@@ -160,7 +162,11 @@ const PinnedMessageItem = ({
                 {authorInfo.displayName}
               </span>
               <span className="text-[11px] text-rm-text-muted font-medium shrink-0">
-                {new Date(msg.created_at).toLocaleDateString()}
+                {formatDate(msg.created_at, {
+                  year: "numeric",
+                  month: "numeric",
+                  day: "numeric",
+                })}
               </span>
             </div>
 
@@ -170,7 +176,14 @@ const PinnedMessageItem = ({
                 {msg.updated_at && (
                   <span
                     className="ml-1.5 text-[10px] text-rm-text-muted font-medium"
-                    title={`Edited ${new Date(msg.updated_at).toLocaleString()}`}
+                    title={`Edited ${formatDate(msg.updated_at, {
+                      year: "numeric",
+                      month: "numeric",
+                      day: "numeric",
+                      hour: "numeric",
+                      minute: "numeric",
+                      second: "numeric",
+                    })}`}
                   >
                     (edited)
                   </span>

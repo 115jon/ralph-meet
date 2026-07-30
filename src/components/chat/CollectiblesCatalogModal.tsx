@@ -1,3 +1,4 @@
+import { useMounted } from "@/hooks/useMounted";
 import { AvatarImage } from "@/components/chat/AvatarImage";
 import InlineEmojiText from "@/components/chat/InlineEmojiText";
 import { HomeIcon } from "@/components/chat/HomeIcon";
@@ -564,6 +565,7 @@ export function CollectiblesCatalogModal({
   onClose,
   onApplied,
 }: CollectiblesCatalogModalProps) {
+  const mounted = useMounted();
   const [catalog, setCatalog] = useState<CollectiblesCatalog | null>(() =>
     getCachedCollectiblesCatalog(),
   );
@@ -682,6 +684,8 @@ export function CollectiblesCatalogModal({
       setApplyingId(null);
     }
   };
+
+  if (!mounted) return null;
 
   return createPortal(
     <div className="pointer-events-auto fixed inset-0 z-70 flex items-center justify-center bg-black/70 p-3 backdrop-blur-sm">

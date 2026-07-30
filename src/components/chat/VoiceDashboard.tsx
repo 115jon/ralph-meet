@@ -9,6 +9,7 @@ import { VoiceDetailsPanel } from "@/components/voice/VoiceDetailsPanel";
 import InlineEmojiText from "@/components/chat/InlineEmojiText";
 import { StreamWatcherList } from "@/components/voice/StreamWatcherList";
 import type { GridItem } from "@/components/voice/types";
+import { useMounted } from "@/hooks/useMounted";
 import { useVoiceStats } from "@/hooks/useVoiceStats";
 import type { SFUClient } from "@/lib/sfu-client";
 import type { ScreenShareSourceState } from "@/lib/screen-share-types";
@@ -148,6 +149,7 @@ export function VoiceDashboard({
   onOpenSoundboard,
   showNoiseReductionShortcut = true,
 }: VoiceDashboardProps) {
+  const mounted = useMounted();
   const [isStreamMenuOpen, setIsStreamMenuOpen] = useState(false);
   const shouldRenderStreamMenu = isStreamMenuOpen;
   const [isCameraModalOpen, setIsCameraModalOpen] = useState(false);
@@ -521,6 +523,7 @@ export function VoiceDashboard({
           </div>
 
           {shouldRenderNoiseReduction &&
+            mounted &&
             createPortal(
               <>
                 <button

@@ -1,8 +1,10 @@
-const PROFILE_REFERENCE_DATE_FORMATTER = new Intl.DateTimeFormat(undefined, {
+const PROFILE_REFERENCE_DATE_FORMAT: Intl.DateTimeFormatOptions = {
   month: "short",
   day: "numeric",
   year: "numeric",
-});
+};
+const PROFILE_REFERENCE_DATE_LOCALE = "en-US";
+const PROFILE_REFERENCE_DATE_TIME_ZONE = "UTC";
 
 export function formatProfileReferenceDate(
   value: Date | string | number | null | undefined,
@@ -12,7 +14,10 @@ export function formatProfileReferenceDate(
   const date = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(date.getTime())) return null;
 
-  return PROFILE_REFERENCE_DATE_FORMATTER.format(date);
+  return new Intl.DateTimeFormat(PROFILE_REFERENCE_DATE_LOCALE, {
+    ...PROFILE_REFERENCE_DATE_FORMAT,
+    timeZone: PROFILE_REFERENCE_DATE_TIME_ZONE,
+  }).format(date);
 }
 
 export function resolveProfileReferenceDate(options: {

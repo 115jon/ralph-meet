@@ -1,3 +1,4 @@
+import { useMounted } from "@/hooks/useMounted";
 import { AvatarImage } from "@/components/chat/AvatarImage";
 import { Button } from "@/components/ui/button";
 import {
@@ -147,6 +148,7 @@ export function AvatarFrameEditor({
   onCancel,
   onConfirm,
 }: AvatarFrameEditorProps) {
+  const mounted = useMounted();
   const viewportRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<{
     pointerId: number;
@@ -298,6 +300,8 @@ export function AvatarFrameEditor({
       collectibles: existing?.collectibles,
     });
   };
+
+  if (!mounted) return null;
 
   return createPortal(
     <div

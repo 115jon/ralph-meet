@@ -1,3 +1,4 @@
+import { useMounted } from "@/hooks/useMounted";
 import { hasPermission, PERMISSIONS } from "@/lib/permissions";
 import type {
   ScreenShareOptions,
@@ -95,6 +96,7 @@ export const StreamContextMenu: React.FC<StreamContextMenuProps> = ({
   alwaysShowStreamPreview,
   onToggleAlwaysShowStreamPreview,
 }) => {
+  const mounted = useMounted();
   const containerRef = useRef<HTMLDivElement>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
   const settings = useVoiceSettingsStore(useShallow((s) => s.getSettings()));
@@ -312,6 +314,8 @@ export const StreamContextMenu: React.FC<StreamContextMenuProps> = ({
     () => handleMouseEnterRoot(null),
     [handleMouseEnterRoot],
   );
+
+  if (!mounted) return null;
 
   return createPortal(
     <div

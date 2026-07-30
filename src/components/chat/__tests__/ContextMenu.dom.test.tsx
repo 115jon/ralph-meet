@@ -1,12 +1,69 @@
 // @vitest-environment jsdom
 
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act } from "react";
+import { hydrateRoot, type Root } from "react-dom/client";
+import { renderToString } from "react-dom/server";
 import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 
 import ContextMenu from "../ContextMenu";
 
 describe("ContextMenu", () => {
+  it("renders no portal markup or layout-effect warning during SSR", () => {
+    const consoleError = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    try {
+      expect(
+        renderToString(
+          <ContextMenu
+            x={10}
+            y={10}
+            onClose={() => {}}
+            items={[{ label: "Action", onClick: () => {} }]}
+          />,
+        ),
+      ).toBe("");
+      expect(consoleError).not.toHaveBeenCalledWith(
+        expect.stringContaining("useLayoutEffect does nothing on the server"),
+      );
+    } finally {
+      consoleError.mockRestore();
+    }
+  });
+
+  it("focuses the first item after the portal mounts during hydration", async () => {
+    const container = document.createElement("div");
+    container.innerHTML = renderToString(
+      <ContextMenu
+        x={10}
+        y={10}
+        onClose={() => {}}
+        items={[{ label: "Action", onClick: () => {} }]}
+      />,
+    );
+    document.body.appendChild(container);
+    let root: Root | undefined;
+    try {
+      await act(async () => {
+        root = hydrateRoot(
+          container,
+          <ContextMenu
+            x={10}
+            y={10}
+            onClose={() => {}}
+            items={[{ label: "Action", onClick: () => {} }]}
+          />,
+        );
+      });
+      expect(screen.getByRole("menuitem", { name: "Action" })).toHaveFocus();
+    } finally {
+      act(() => root?.unmount());
+      container.remove();
+    }
+  });
+
   it("provides menu semantics, initial focus, and keyboard navigation", () => {
     const onClose = vi.fn();
     render(

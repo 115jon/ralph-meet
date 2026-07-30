@@ -7,6 +7,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { apiPatch } from "@/lib/api-client";
+import { useClientDateFormatter } from "@/lib/client-date-format";
 import type { Channel } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { sanitizeChannelName } from "@/lib/validations";
@@ -49,6 +50,7 @@ export default function ChannelSettingsModal({
   const [error, setError] = useState<string | null>(null);
   const [successFlash, setSuccessFlash] = useState(false);
   const nameInputRef = useRef<HTMLInputElement>(null);
+  const formatDate = useClientDateFormatter();
 
   // Reset when channel changes
   useEffect(() => {
@@ -378,10 +380,11 @@ export default function ChannelSettingsModal({
                       <div className="pt-4 border-t border-rm-border/50">
                         <p className="text-[11px] text-rm-text-muted">
                           Created{" "}
-                          {new Date(channel.created_at).toLocaleDateString(
-                            undefined,
-                            { year: "numeric", month: "long", day: "numeric" },
-                          )}
+                          {formatDate(channel.created_at, {
+                            year: "numeric",
+                            month: "long",
+                            day: "numeric",
+                          })}
                         </p>
                       </div>
                     </div>

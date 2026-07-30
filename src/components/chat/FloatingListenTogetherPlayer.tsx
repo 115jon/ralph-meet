@@ -1,3 +1,4 @@
+import { useMounted } from "@/hooks/useMounted";
 import { createPortal } from "react-dom";
 import { useEffect, useRef, useState } from "react";
 
@@ -46,6 +47,7 @@ export function FloatingListenTogetherPlayer({
   roomSlug,
   onOpenQueue,
 }: FloatingListenTogetherPlayerProps) {
+  const mounted = useMounted();
   const playback = useListenTogetherPlaybackState(roomSlug);
   const containerRef = useRef<HTMLDivElement>(null);
   const dragStateRef = useRef<{
@@ -53,7 +55,15 @@ export function FloatingListenTogetherPlayer({
     offsetX: number;
     offsetY: number;
   } | null>(null);
-  const [position, setPosition] = useState(getDefaultPosition);
+  const [position, setPosition] = useState({ x: 16, y: 16 });
+
+  useEffect(() => {
+    if (mounted) {
+      // Hydration must start from a stable position before reading the viewport.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setPosition(getDefaultPosition());
+    }
+  }, [mounted]);
 
   useEffect(() => {
     const clampToViewport = () => {
@@ -115,7 +125,7 @@ export function FloatingListenTogetherPlayer({
     }
   };
 
-  if (!playback.currentEntry || typeof document === "undefined") return null;
+  if (!mounted || !playback.currentEntry) return null;
 
   return createPortal(
     <div

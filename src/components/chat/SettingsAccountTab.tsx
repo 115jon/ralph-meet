@@ -10,6 +10,7 @@ import {
   ProfileSurfaceBackdrop,
 } from "@/components/chat/ProfilePreviewPrimitives";
 import { AvatarImage } from "@/components/chat/AvatarImage";
+import { useMounted } from "@/hooks/useMounted";
 import InlineEmojiText from "@/components/chat/InlineEmojiText";
 import { CollectiblesCatalogModal } from "@/components/chat/CollectiblesCatalogModal";
 import { ProfileCollectiblesLayer } from "@/components/chat/ProfileCollectiblesLayer";
@@ -372,6 +373,7 @@ function ProfileActionMenu({
   useBodyPortal?: boolean;
   onRequestClose?: () => void;
 }) {
+  const mounted = useMounted();
   const [position, setPosition] = useState({ left: 8, top: 8 });
   const menuRef = useRef<HTMLDivElement | null>(null);
 
@@ -469,9 +471,7 @@ function ProfileActionMenu({
     </div>
   );
 
-  return useBodyPortal && typeof document !== "undefined"
-    ? createPortal(menu, document.body)
-    : menu;
+  return useBodyPortal && mounted ? createPortal(menu, document.body) : menu;
 }
 
 function ColorField({
@@ -505,6 +505,7 @@ function ColorField({
     popoverId: string;
   }) => ReactNode;
 }) {
+  const mounted = useMounted();
   const [draft, setDraft] = useState(value ?? "");
   const [open, setOpen] = useState(false);
   const [eyeDropperPending, setEyeDropperPending] = useState(false);
@@ -816,7 +817,7 @@ function ColorField({
   }, [open]);
 
   const popoverContent =
-    open && typeof document !== "undefined"
+    open && mounted
       ? createPortal(
           <div
             id={popoverId}

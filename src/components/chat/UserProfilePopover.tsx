@@ -1,3 +1,4 @@
+import { useMounted } from "@/hooks/useMounted";
 import { ProfileAssetLayer } from "@/components/chat/ProfileAssetLayer";
 import { getProfileEffectStageHeight } from "@/components/chat/ProfileCollectiblesLayer";
 import { ProfileDisplayName } from "@/components/chat/ProfileDisplayName";
@@ -480,6 +481,7 @@ export default function UserProfilePopover({
   side = "bottom",
   align: _align = "start",
 }: Props) {
+  const mounted = useMounted();
   const state = useChatStore(
     useShallow((store) => ({
       members: store.members,
@@ -840,6 +842,8 @@ export default function UserProfilePopover({
     assignRole,
     dropdownRef,
   };
+
+  if (!mounted) return null;
 
   return createPortal(
     <TooltipProvider delayDuration={0}>

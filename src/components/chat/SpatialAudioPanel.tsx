@@ -1,3 +1,4 @@
+import { useMounted } from "@/hooks/useMounted";
 import { Button } from "@/components/ui/button";
 import { AvatarImage } from "@/components/chat/AvatarImage";
 import type { GridItem } from "@/components/voice/types";
@@ -139,6 +140,7 @@ export function SpatialAudioPanel({
   onOpenVoiceSettings,
   onClose,
 }: SpatialAudioPanelProps) {
+  const mounted = useMounted();
   const mapRef = useRef<HTMLDivElement>(null);
   const worldRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -235,6 +237,7 @@ export function SpatialAudioPanel({
     };
   }, [anchorRef, isClosing, isOpen]);
 
+  if (!mounted) return null;
   if (!isOpen && !isClosing) return null;
 
   const commit = (patch: Partial<SharedSpatialAudioState>) => {

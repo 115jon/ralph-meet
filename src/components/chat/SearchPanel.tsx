@@ -1,6 +1,7 @@
 import { useUserResolution } from "@/hooks/useUserResolution";
 import { registerBackHandler } from "@/hooks/useBackButton";
 import { apiGet } from "@/lib/api-client";
+import { useClientDateFormatter } from "@/lib/client-date-format";
 import { useCallback, useEffect, useId, useReducer, useRef } from "react";
 import {
   Sheet,
@@ -342,6 +343,7 @@ const SearchResultItem = ({
   highlightMatch: (text: string, q: string) => React.ReactNode;
 }) => {
   const authorInfo = useUserResolution(msg.author_id, msg.author);
+  const formatDate = useClientDateFormatter();
 
   return (
     <button
@@ -365,7 +367,11 @@ const SearchResultItem = ({
           {authorInfo.displayName}
         </span>
         <span className="ml-auto text-rm-text-muted/60">
-          {new Date(msg.created_at).toLocaleDateString()}
+          {formatDate(msg.created_at, {
+            year: "numeric",
+            month: "numeric",
+            day: "numeric",
+          })}
         </span>
       </div>
       <div className="text-[13px] leading-relaxed text-rm-text-secondary">

@@ -1,3 +1,4 @@
+import { useMounted } from "@/hooks/useMounted";
 import {
   Tooltip,
   TooltipContent,
@@ -305,6 +306,7 @@ export default function SoundboardPicker({
   onSelect,
   serverIds = [],
 }: Props) {
+  const mounted = useMounted();
   const serverKey = getSoundboardServerKey(serverId);
   const storageKey = `voice-soundboard:${serverKey}`;
   const isServerSoundboard = !!serverId && serverId !== "@me";
@@ -1365,6 +1367,8 @@ export default function SoundboardPicker({
       : !markerRef
         ? placementClasses
         : "";
+
+  if (!mounted) return null;
 
   return createPortal(
     <>
