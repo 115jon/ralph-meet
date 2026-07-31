@@ -186,12 +186,13 @@ const POST = async ({ params, request }: any) => {
 
   await db
     .prepare(
-      `INSERT INTO attachments (id, message_id, filename, file_key, content_type, size_bytes, user_id, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO attachments (id, message_id, channel_id, filename, file_key, content_type, size_bytes, user_id, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .bind(
       attachmentId,
       null,
+      channelId,
       filename,
       key,
       contentType,

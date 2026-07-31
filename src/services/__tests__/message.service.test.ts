@@ -203,13 +203,56 @@ describe("createMessage attachment linking", () => {
 
     const update = db.getCalls("UPDATE attachments SET message_id")[0];
     expect(update?.sql).toContain("message_id IS NULL");
-    expect(update?.sql).toContain("file_key LIKE ?");
-    expect(update?.bindings).toContain(`attachments/${CHANNEL_ID}/%`);
+    expect(update?.sql).toContain("channel_id = ?");
+    expect(update?.bindings).toContain(CHANNEL_ID);
     expect(
       db
         .getCalls("SELECT id, filename, file_key")
         .some((call) => call.sql.includes("message_id = ?")),
     ).toBe(true);
+  });
+
+  it("requires matching channel ownership when linking provider-hosted GIFs", async () => {
+    const db = createMockD1();
+    db.mockQuery("FROM users WHERE id", {
+      username: "alice",
+      display_name: null,
+      avatar_url: null,
+      avatar_display: null,
+    });
+    db.mockQuery("SELECT id, filename, file_key", {
+      results: [
+        {
+          id: "gif-1",
+          filename: "reaction.gif",
+          file_key: "https://static.klipy.com/reaction.gif",
+          content_type: "image/gif",
+          size_bytes: 100,
+          is_nsfw: 0,
+        },
+      ],
+    });
+
+    const message = await createMessage(
+      db as never,
+      CHANNEL_ID,
+      USER_ID,
+      "msg_gif",
+      {
+        content: " ",
+        attachment_ids: ["gif-1"],
+      },
+    );
+
+    const update = db.getCalls("UPDATE attachments SET message_id")[0];
+    expect(update?.sql).toContain("channel_id = ?");
+    expect(update?.bindings).toContain(CHANNEL_ID);
+    expect(message.attachments).toEqual([
+      expect.objectContaining({
+        id: "gif-1",
+        url: "https://static.klipy.com/reaction.gif",
+      }),
+    ]);
   });
 });
 

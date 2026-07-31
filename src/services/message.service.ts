@@ -1041,16 +1041,15 @@ export async function createMessage(
       ),
     );
     const placeholders = attIds.map(() => "?").join(",");
-    const attachmentKeyPrefix = `attachments/${channelId}/%`;
     await db
       .prepare(
         `UPDATE attachments SET message_id = ?, is_nsfw = 0
          WHERE id IN (${placeholders}) AND user_id = ?
            AND soundboard_server_id IS NULL
            AND message_id IS NULL
-           AND file_key LIKE ?`,
+           AND channel_id = ?`,
       )
-      .bind(messageId, ...attIds, userId, attachmentKeyPrefix)
+      .bind(messageId, ...attIds, userId, channelId)
       .run();
 
     if (sensitiveAttachmentIds.size > 0) {
@@ -1061,9 +1060,9 @@ export async function createMessage(
           `UPDATE attachments SET is_nsfw = 1
             WHERE message_id = ? AND user_id = ? AND id IN (${sensitivePlaceholders})
               AND soundboard_server_id IS NULL
-              AND file_key LIKE ?`,
+              AND channel_id = ?`,
         )
-        .bind(messageId, userId, ...sensitiveIds, attachmentKeyPrefix)
+        .bind(messageId, userId, ...sensitiveIds, channelId)
         .run();
     }
 
@@ -1073,9 +1072,9 @@ export async function createMessage(
          FROM attachments
          WHERE id IN (${placeholders}) AND message_id = ? AND user_id = ?
            AND soundboard_server_id IS NULL
-           AND file_key LIKE ?`,
+           AND channel_id = ?`,
       )
-      .bind(...attIds, messageId, userId, attachmentKeyPrefix)
+      .bind(...attIds, messageId, userId, channelId)
       .all();
 
     attachments = (attRows ?? []).map((r: Record<string, unknown>) => ({
