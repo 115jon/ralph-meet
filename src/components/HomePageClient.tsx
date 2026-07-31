@@ -5,6 +5,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { ArrowRight, Download, Globe2, MessageSquare, Zap } from "lucide-react";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { isWindows } from "@/lib/platform";
+import { motion, useInView } from "framer-motion";
 
 const subscribeToStaticPlatform = () => () => {};
 const getServerWindowsSnapshot = () => false;
@@ -131,26 +132,46 @@ function HomePageHero({ createRoom }: { createRoom: () => void }) {
       {/* Content */}
       <div className="relative z-10 mx-auto flex min-h-[calc(100vh-4rem)] w-full max-w-7xl flex-col items-center justify-center px-6 py-20 sm:px-10">
         {/* Badge */}
-        <div className="mb-8 inline-flex items-center gap-2 rounded-full border border-rm-border bg-rm-bg-surface/60 px-4 py-1.5 text-xs font-medium text-rm-text-secondary backdrop-blur-sm">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5 }}
+          className="mb-8 inline-flex items-center gap-2 rounded-full border border-rm-border bg-rm-bg-surface/60 px-4 py-1.5 text-xs font-medium text-rm-text-secondary backdrop-blur-sm"
+        >
           <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
           <span className="font-[family-name:var(--font-family-body)]">
             300+ edge nodes worldwide
           </span>
-        </div>
+        </motion.div>
 
         {/* Headline */}
-        <h1 className="mb-6 max-w-4xl text-center text-5xl font-normal leading-[0.95] tracking-tight text-rm-text sm:text-6xl md:text-7xl lg:text-8xl font-[family-name:var(--font-family-display)]">
+        <motion.h1
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, delay: 0.1 }}
+          className="mb-6 max-w-4xl text-center text-5xl font-normal leading-[0.95] tracking-tight text-rm-text sm:text-6xl md:text-7xl lg:text-8xl font-[family-name:var(--font-family-display)]"
+        >
           Real-time, <span className="italic text-rm-accent">reimagined</span>
-        </h1>
+        </motion.h1>
 
         {/* Subheadline */}
-        <p className="mb-10 max-w-2xl text-center text-base leading-relaxed text-rm-text-secondary sm:text-lg font-[family-name:var(--font-family-body)]">
+        <motion.p
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, delay: 0.2 }}
+          className="mb-10 max-w-2xl text-center text-base leading-relaxed text-rm-text-secondary sm:text-lg font-[family-name:var(--font-family-body)]"
+        >
           Instant video rooms, voice hangouts, and team chat. No sign-up
           needed—just share the link and connect.
-        </p>
+        </motion.p>
 
         {/* CTAs */}
-        <div className="mb-16 flex flex-col items-center gap-3 sm:flex-row">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, delay: 0.3 }}
+          className="mb-16 flex flex-col items-center gap-3 sm:flex-row"
+        >
           <button
             onClick={createRoom}
             className="group flex items-center gap-2 rounded-full bg-rm-accent hover:bg-rm-accent-hover px-6 py-3 text-sm font-semibold text-white shadow-lg shadow-rm-accent/20 transition-all hover:scale-[1.02] active:scale-[0.98] font-[family-name:var(--font-family-body)]"
@@ -176,99 +197,189 @@ function HomePageHero({ createRoom }: { createRoom: () => void }) {
             <MessageSquare className="h-4 w-4" />
             Open Web Chat
           </a>
-        </div>
+        </motion.div>
 
         {/* Product Screenshot */}
-        <div className="w-full max-w-6xl">
-          <div className="overflow-hidden rounded-2xl border border-rm-border bg-rm-bg-surface/40 p-2 backdrop-blur-sm">
+        <motion.div
+          initial={{ opacity: 0, y: 40 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.8, delay: 0.5 }}
+          className="w-full max-w-6xl"
+        >
+          <div className="group overflow-hidden rounded-2xl border border-rm-border bg-rm-bg-surface/40 p-2 backdrop-blur-sm transition-all duration-500 hover:border-rm-accent/30 hover:shadow-2xl hover:shadow-rm-accent/10">
             <img
               src="/screenshots/desktop-app.png"
               alt="Ralph Meet Desktop Application"
-              className="w-full rounded-lg"
+              className="w-full rounded-lg transition-transform duration-500 group-hover:scale-[1.02]"
             />
           </div>
-        </div>
+        </motion.div>
       </div>
     </section>
   );
 }
 
 function HomePageFeatures() {
-  return (
-    <section className="relative w-full border-t border-rm-border bg-rm-bg-secondary/20 px-6 py-24 sm:px-10 md:py-32">
-      <div className="mx-auto w-full max-w-7xl">
-        <h2 className="mb-20 text-center text-4xl font-normal tracking-tight text-rm-text sm:text-5xl md:text-6xl font-[family-name:var(--font-family-display)]">
-          Everything you need to <span className="italic">stay close</span>
-        </h2>
+  const ref = useRef(null);
+  const isInView = useInView(ref, { once: true, margin: "-100px" });
 
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-          {/* Voice Room */}
-          <div className="group overflow-hidden rounded-2xl border border-rm-border bg-rm-bg-surface/30 p-8 backdrop-blur-sm transition-all hover:border-rm-accent/30">
+  return (
+    <section
+      ref={ref}
+      className="relative w-full border-t border-rm-border bg-rm-bg-secondary/20 px-6 py-24 sm:px-10 md:py-32"
+    >
+      <div className="mx-auto w-full max-w-7xl">
+        <motion.h2
+          initial={{ opacity: 0, y: 20 }}
+          animate={isInView ? { opacity: 1, y: 0 } : { opacity: 0, y: 20 }}
+          transition={{ duration: 0.6 }}
+          className="mb-20 text-center text-4xl font-normal tracking-tight text-rm-text sm:text-5xl md:text-6xl font-[family-name:var(--font-family-display)]"
+        >
+          Everything you need to <span className="italic">stay close</span>
+        </motion.h2>
+
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+          {/* Voice Room Card - spans 2 columns, larger */}
+          <motion.div
+            initial={{ opacity: 0, y: 40 }}
+            animate={isInView ? { opacity: 1, y: 0 } : { opacity: 0, y: 40 }}
+            transition={{ duration: 0.6, delay: 0.1 }}
+            className="group relative overflow-hidden rounded-3xl border border-rm-border bg-gradient-to-br from-rm-bg-surface/40 to-rm-bg-surface/10 p-8 backdrop-blur-sm transition-all duration-500 hover:border-rm-accent/40 hover:shadow-2xl hover:shadow-rm-accent/10 hover:-translate-y-1 lg:col-span-2"
+          >
             <div className="mb-6">
-              <h3 className="mb-3 text-2xl font-semibold tracking-tight text-rm-text sm:text-3xl font-[family-name:var(--font-family-display)]">
-                Voice rooms that feel natural
+              <div className="mb-4 inline-flex rounded-xl bg-emerald-500/10 p-3 ring-1 ring-emerald-500/20">
+                <svg
+                  className="h-6 w-6 text-emerald-400"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"
+                  />
+                </svg>
+              </div>
+              <h3 className="mb-3 text-3xl font-semibold tracking-tight text-rm-text sm:text-4xl font-[family-name:var(--font-family-display)]">
+                Voice rooms that feel{" "}
+                <span className="italic text-emerald-400">natural</span>
               </h3>
-              <p className="text-sm leading-relaxed text-rm-text-secondary sm:text-base font-[family-name:var(--font-family-body)]">
+              <p className="text-base leading-relaxed text-rm-text-secondary font-[family-name:var(--font-family-body)]">
                 Drop in when you're free. Your friends can see you're around and
                 join instantly—no scheduling, no friction.
               </p>
             </div>
-            <div className="overflow-hidden rounded-xl border border-rm-border bg-rm-bg-primary/50">
+            <div className="overflow-hidden rounded-2xl border border-rm-border bg-rm-bg-primary/50 shadow-2xl transition-all duration-500 group-hover:border-emerald-500/30 group-hover:shadow-emerald-500/20">
               <img
                 src="/screenshots/voice-room.png"
                 alt="Voice Room Interface"
-                className="w-full"
+                className="w-full transition-transform duration-700 group-hover:scale-105"
               />
             </div>
-          </div>
+            <div className="pointer-events-none absolute -right-20 -top-20 h-64 w-64 rounded-full bg-emerald-500/5 blur-3xl transition-all duration-700 group-hover:bg-emerald-500/10" />
+          </motion.div>
 
-          {/* Chat */}
-          <div className="group overflow-hidden rounded-2xl border border-rm-border bg-rm-bg-surface/30 p-8 backdrop-blur-sm transition-all hover:border-rm-accent/30">
+          {/* Chat Card - 1 column, taller */}
+          <motion.div
+            initial={{ opacity: 0, y: 40 }}
+            animate={isInView ? { opacity: 1, y: 0 } : { opacity: 0, y: 40 }}
+            transition={{ duration: 0.6, delay: 0.2 }}
+            className="group relative overflow-hidden rounded-3xl border border-rm-border bg-gradient-to-br from-rm-bg-surface/40 to-rm-bg-surface/10 p-8 backdrop-blur-sm transition-all duration-500 hover:border-rm-accent/40 hover:shadow-2xl hover:shadow-rm-accent/10 hover:-translate-y-1"
+          >
             <div className="mb-6">
-              <h3 className="mb-3 text-2xl font-semibold tracking-tight text-rm-text sm:text-3xl font-[family-name:var(--font-family-display)]">
+              <div className="mb-4 inline-flex rounded-xl bg-rm-accent/10 p-3 ring-1 ring-rm-accent/20">
+                <MessageSquare className="h-6 w-6 text-rm-accent" />
+              </div>
+              <h3 className="mb-3 text-2xl font-semibold tracking-tight text-rm-text font-[family-name:var(--font-family-display)]">
                 Organized conversations
               </h3>
-              <p className="text-sm leading-relaxed text-rm-text-secondary sm:text-base font-[family-name:var(--font-family-body)]">
+              <p className="text-sm leading-relaxed text-rm-text-secondary font-[family-name:var(--font-family-body)]">
                 Topic-based channels keep discussions focused. Share code,
-                collaborate on projects, or just hang out.
+                collaborate, or hang out.
               </p>
             </div>
-            <div className="overflow-hidden rounded-xl border border-rm-border bg-rm-bg-primary/50">
+            <div className="overflow-hidden rounded-xl border border-rm-border bg-rm-bg-primary/50 shadow-xl transition-all duration-500 group-hover:border-rm-accent/30 group-hover:shadow-rm-accent/20">
               <img
                 src="/screenshots/chat-ui.png"
                 alt="Chat Interface"
-                className="w-full"
+                className="w-full transition-transform duration-700 group-hover:scale-105"
               />
             </div>
-          </div>
+            <div className="pointer-events-none absolute -left-20 -bottom-20 h-64 w-64 rounded-full bg-rm-accent/5 blur-3xl transition-all duration-700 group-hover:bg-rm-accent/10" />
+          </motion.div>
 
-          {/* Edge Network */}
-          <div className="group overflow-hidden rounded-2xl border border-rm-border bg-rm-bg-surface/30 p-8 lg:col-span-2 backdrop-blur-sm transition-all hover:border-rm-accent/30">
-            <div className="mb-6 text-center">
-              <h3 className="mb-3 text-2xl font-semibold tracking-tight text-rm-text sm:text-3xl font-[family-name:var(--font-family-display)]">
-                Built on the global edge
+          {/* Edge Network Card - full width */}
+          <motion.div
+            initial={{ opacity: 0, y: 40 }}
+            animate={isInView ? { opacity: 1, y: 0 } : { opacity: 0, y: 40 }}
+            transition={{ duration: 0.6, delay: 0.3 }}
+            className="group relative overflow-hidden rounded-3xl border border-rm-border bg-gradient-to-br from-rm-bg-surface/40 to-rm-bg-surface/10 p-8 lg:col-span-3 backdrop-blur-sm transition-all duration-500 hover:border-rm-accent/40 hover:shadow-2xl hover:shadow-rm-accent/10"
+          >
+            <div className="relative z-10 mb-8 text-center">
+              <div className="mb-4 inline-flex rounded-xl bg-rm-accent/10 p-3 ring-1 ring-rm-accent/20">
+                <Globe2 className="h-6 w-6 text-rm-accent" />
+              </div>
+              <h3 className="mb-3 text-3xl font-semibold tracking-tight text-rm-text font-[family-name:var(--font-family-display)]">
+                Built on the global{" "}
+                <span className="italic text-rm-accent">edge</span>
               </h3>
-              <p className="mx-auto max-w-2xl text-sm leading-relaxed text-rm-text-secondary sm:text-base font-[family-name:var(--font-family-body)]">
+              <p className="mx-auto max-w-2xl text-base leading-relaxed text-rm-text-secondary font-[family-name:var(--font-family-body)]">
                 Your video, audio, and screen shares route through the fastest
                 path on the planet. 300+ edge locations worldwide mean real-time
                 speed that feels instant.
               </p>
             </div>
-            <div className="flex flex-wrap items-center justify-center gap-6 text-sm text-rm-text-muted font-[family-name:var(--font-family-body)]">
-              <div className="flex items-center gap-2">
-                <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
-                <span>300+ Edge Nodes</span>
-              </div>
-              <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center justify-center gap-8">
+              <motion.div
+                initial={{ opacity: 0, scale: 0.8 }}
+                animate={
+                  isInView
+                    ? { opacity: 1, scale: 1 }
+                    : { opacity: 0, scale: 0.8 }
+                }
+                transition={{ duration: 0.5, delay: 0.4 }}
+                className="flex items-center gap-3 rounded-full border border-emerald-500/20 bg-emerald-500/5 px-5 py-3"
+              >
+                <span className="h-2.5 w-2.5 rounded-full bg-emerald-400 animate-pulse" />
+                <span className="text-sm font-semibold text-rm-text font-[family-name:var(--font-family-body)]">
+                  300+ Edge Nodes
+                </span>
+              </motion.div>
+              <motion.div
+                initial={{ opacity: 0, scale: 0.8 }}
+                animate={
+                  isInView
+                    ? { opacity: 1, scale: 1 }
+                    : { opacity: 0, scale: 0.8 }
+                }
+                transition={{ duration: 0.5, delay: 0.5 }}
+                className="flex items-center gap-3 rounded-full border border-rm-accent/20 bg-rm-accent/5 px-5 py-3"
+              >
                 <Globe2 className="h-4 w-4 text-rm-accent" />
-                <span>≤18ms Latency</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="h-2 w-2 rounded-full bg-rm-accent" />
-                <span>Open Source</span>
-              </div>
+                <span className="text-sm font-semibold text-rm-text font-[family-name:var(--font-family-body)]">
+                  ≤18ms Latency
+                </span>
+              </motion.div>
+              <motion.div
+                initial={{ opacity: 0, scale: 0.8 }}
+                animate={
+                  isInView
+                    ? { opacity: 1, scale: 1 }
+                    : { opacity: 0, scale: 0.8 }
+                }
+                transition={{ duration: 0.5, delay: 0.6 }}
+                className="flex items-center gap-3 rounded-full border border-rm-accent/20 bg-rm-accent/5 px-5 py-3"
+              >
+                <span className="h-2.5 w-2.5 rounded-full bg-rm-accent" />
+                <span className="text-sm font-semibold text-rm-text font-[family-name:var(--font-family-body)]">
+                  Open Source
+                </span>
+              </motion.div>
             </div>
-          </div>
+            <div className="pointer-events-none absolute left-1/2 top-1/2 h-96 w-96 -translate-x-1/2 -translate-y-1/2 rounded-full bg-rm-accent/5 blur-3xl transition-all duration-700 group-hover:bg-rm-accent/10" />
+          </motion.div>
         </div>
       </div>
     </section>
@@ -284,23 +395,44 @@ function HomePageCTA({
   room: string;
   setRoom: (r: string) => void;
 }) {
+  const ref = useRef(null);
+  const isInView = useInView(ref, { once: true, margin: "-100px" });
+
   return (
-    <section className="relative flex w-full flex-col items-center justify-center px-6 py-28 text-center sm:py-40">
-      <div className="relative z-10 mb-5 inline-flex items-center gap-2 rounded-full border border-rm-border bg-rm-bg-surface/60 px-4 py-1.5 text-xs font-semibold uppercase tracking-wider text-rm-text-secondary backdrop-blur-sm">
+    <section
+      ref={ref}
+      className="relative flex w-full flex-col items-center justify-center px-6 py-28 text-center sm:py-40"
+    >
+      <motion.div
+        initial={{ opacity: 0, scale: 0.9 }}
+        animate={
+          isInView ? { opacity: 1, scale: 1 } : { opacity: 0, scale: 0.9 }
+        }
+        transition={{ duration: 0.5 }}
+        className="relative z-10 mb-5 inline-flex items-center gap-2 rounded-full border border-rm-border bg-rm-bg-surface/60 px-4 py-1.5 text-xs font-semibold uppercase tracking-wider text-rm-text-secondary backdrop-blur-sm"
+      >
         <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
         <span className="font-[family-name:var(--font-family-body)]">
           Free forever
         </span>
-      </div>
+      </motion.div>
 
-      <h2 className="relative z-10 mb-8 max-w-2xl text-4xl font-normal leading-tight tracking-tight text-rm-text sm:text-5xl md:text-6xl font-[family-name:var(--font-family-display)]">
+      <motion.h2
+        initial={{ opacity: 0, y: 20 }}
+        animate={isInView ? { opacity: 1, y: 0 } : { opacity: 0, y: 20 }}
+        transition={{ duration: 0.6, delay: 0.1 }}
+        className="relative z-10 mb-8 max-w-2xl text-4xl font-normal leading-tight tracking-tight text-rm-text sm:text-5xl md:text-6xl font-[family-name:var(--font-family-display)]"
+      >
         Your people are already{" "}
         <span className="italic text-rm-accent">here</span>
-      </h2>
+      </motion.h2>
 
-      <form
+      <motion.form
+        initial={{ opacity: 0, y: 20 }}
+        animate={isInView ? { opacity: 1, y: 0 } : { opacity: 0, y: 20 }}
+        transition={{ duration: 0.6, delay: 0.2 }}
         onSubmit={joinRoom}
-        className="group relative z-10 flex w-full max-w-lg flex-col gap-2 rounded-2xl border border-rm-border bg-rm-bg-surface/60 p-2 backdrop-blur-xl transition-all focus-within:border-rm-accent sm:flex-row"
+        className="group relative z-10 flex w-full max-w-lg flex-col gap-2 rounded-2xl border border-rm-border bg-rm-bg-surface/60 p-2 backdrop-blur-xl transition-all focus-within:border-rm-accent focus-within:shadow-lg focus-within:shadow-rm-accent/20 sm:flex-row"
       >
         <input
           type="text"
@@ -319,11 +451,16 @@ function HomePageCTA({
           <span>Join Room</span>
           <ArrowRight className="h-4 w-4 transition-transform group-hover/btn:translate-x-1" />
         </button>
-      </form>
+      </motion.form>
 
-      <p className="relative z-10 mt-6 text-xs font-medium text-rm-text-muted font-[family-name:var(--font-family-body)]">
+      <motion.p
+        initial={{ opacity: 0 }}
+        animate={isInView ? { opacity: 1 } : { opacity: 0 }}
+        transition={{ duration: 0.6, delay: 0.3 }}
+        className="relative z-10 mt-6 text-xs font-medium text-rm-text-muted font-[family-name:var(--font-family-body)]"
+      >
         No credit card. No sign-up. Just share the link.
-      </p>
+      </motion.p>
     </section>
   );
 }
