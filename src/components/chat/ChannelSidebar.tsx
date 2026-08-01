@@ -57,6 +57,7 @@ import {
   Gem,
   GripVertical,
   Hash,
+  HeadphoneOff,
   LayoutGrid,
   Link,
   Loader2,
@@ -1616,6 +1617,10 @@ function VoiceChannelMemberRow({
   const isReconnecting =
     isVoiceMemberReconnecting(member) ||
     (isCurrentUser && !isCurrentClientVoiceConnected);
+  const isMutedByCurrentUser = useVoiceSettingsStore((state) => {
+    const settings = state.getSettings();
+    return settings.peerSettings[member.clerk_user_id]?.muted ?? false;
+  });
   const shouldShowStreamState = shouldShowVoiceMemberStreamState(member, {
     isCurrentUser,
     isCurrentClientVoiceConnected,
@@ -1793,7 +1798,52 @@ function VoiceChannelMemberRow({
           <div className="flex items-center gap-1 opacity-60">
             {member.self_video && <Shield className="h-3.5 w-3.5" />}
             {member.self_mute && (
-              <MicOff className="h-3.5 w-3.5 text-rm-danger" />
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span aria-label="Self-muted">
+                    <MicOff className="h-3.5 w-3.5 text-rm-danger" />
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent
+                  side="top"
+                  sideOffset={6}
+                  className={CHANNEL_TOOLTIP_CONTENT_CLASS}
+                >
+                  Self-muted
+                </TooltipContent>
+              </Tooltip>
+            )}
+            {member.self_deaf && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span aria-label="Self-deafened">
+                    <HeadphoneOff className="h-3.5 w-3.5 text-rm-danger" />
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent
+                  side="top"
+                  sideOffset={6}
+                  className={CHANNEL_TOOLTIP_CONTENT_CLASS}
+                >
+                  Self-deafened
+                </TooltipContent>
+              </Tooltip>
+            )}
+            {isMutedByCurrentUser && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span aria-label="Muted by you">
+                    <VolumeX className="h-3.5 w-3.5 text-rm-danger" />
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent
+                  side="top"
+                  sideOffset={6}
+                  className={CHANNEL_TOOLTIP_CONTENT_CLASS}
+                >
+                  Muted by you
+                </TooltipContent>
+              </Tooltip>
             )}
           </div>
         </div>
