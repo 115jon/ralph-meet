@@ -60,6 +60,7 @@ import {
   SelectValue,
 } from "./ui/select";
 import { VideoPlayer } from "./voice/VideoPlayer";
+import { AudioCompatibilityHint } from "./chat/AudioCompatibilityHint";
 
 interface RoomSettingsModalProps {
   open: boolean;
@@ -374,24 +375,25 @@ export default function RoomSettingsModal({
       const newVal = !s[key];
       const updates: any = { [key]: newVal };
 
-      // High Fidelity requires ALL audio processing to be OFF to allow stereo Opus
+      // High fidelity disables browser capture processing, but not local
+      // RNNoise or sensitivity gating.
       if (key === "streamHighFidelity" && newVal) {
         updates.echoCancellation = false;
         updates.noiseSuppression = false;
-        updates.autoSensitivity = false;
-        updates.noiseReductionEnabled = false;
       }
 
       if (key === "noiseReductionEnabled" && newVal) {
-        updates.streamHighFidelity = false;
         updates.noiseSuppression = false;
       }
 
-      // Any audio processing requires High Fidelity to be OFF (since processing downmixes to mono)
+      if (key === "noiseSuppression" && newVal) {
+        updates.noiseReductionEnabled = false;
+        updates.streamHighFidelity = false;
+      }
+
+      // Browser capture processing requires High Fidelity to be OFF.
       if (
-        (key === "echoCancellation" ||
-          key === "noiseSuppression" ||
-          key === "autoSensitivity") &&
+        (key === "echoCancellation" || key === "noiseSuppression") &&
         newVal
       ) {
         updates.streamHighFidelity = false;
@@ -730,25 +732,50 @@ export default function RoomSettingsModal({
                             {
                               id: "noiseSuppression",
                               label: "Browser Noise Suppression",
-                              desc: "Uses the browser's built-in noise suppression. Turn on Noise Suppression above for the stronger open-source path.",
+                              desc: (
+                                <>
+                                  Uses the browser's built-in noise suppression.
+                                  <AudioCompatibilityHint>
+                                    Browser noise suppression is unavailable
+                                    with RNNoise or high fidelity audio.
+                                  </AudioCompatibilityHint>
+                                </>
+                              ),
                               icon: <Mic size={16} />,
                             },
                             {
                               id: "echoCancellation",
                               label: "Echo Cancellation",
-                              desc: "Prevents mic picking up speakers (Disables High Fidelity)",
+                              desc: (
+                                <>
+                                  Prevents mic pickup from speakers.
+                                  <AudioCompatibilityHint>
+                                    Echo cancellation disables high fidelity
+                                    capture, but remains compatible with
+                                    RNNoise.
+                                  </AudioCompatibilityHint>
+                                </>
+                              ),
                               icon: <Speaker size={16} />,
                             },
                             {
                               id: "autoSensitivity",
                               label: "Input Sensitivity",
-                              desc: "Auto-detect best input level (Disables High Fidelity)",
+                              desc: "Auto-detect the best input level.",
                               icon: <Volume2 size={16} />,
                             },
                             {
                               id: "streamHighFidelity",
                               label: "High Fidelity Audio",
-                              desc: "Disables all processing for stereo mic",
+                              desc: (
+                                <>
+                                  Disables browser processing for stereo mic.
+                                  <AudioCompatibilityHint>
+                                    RNNoise and input sensitivity remain
+                                    available in high fidelity mode.
+                                  </AudioCompatibilityHint>
+                                </>
+                              ),
                               icon: <Music size={16} />,
                             },
                           ].map((opt) => (

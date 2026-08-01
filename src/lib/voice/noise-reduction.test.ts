@@ -187,6 +187,17 @@ describe("noise reduction helpers", () => {
     ).toBe("rnnoise");
   });
 
+  it("keeps RNNoise active when high-fidelity capture is also requested", () => {
+    expect(
+      resolveLocalAudioProcessingMode(
+        makeSettings({
+          noiseReductionEnabled: true,
+          streamHighFidelity: true,
+        }),
+      ),
+    ).toBe("rnnoise");
+  });
+
   it("disables browser noise suppression while keeping capture echo cancellation and agc", () => {
     expect(
       resolveCaptureAudioProcessing(

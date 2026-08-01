@@ -440,9 +440,6 @@ export function VoiceDashboard({
                             noiseSuppression: enabled
                               ? false
                               : current.noiseSuppression,
-                            autoSensitivity: enabled
-                              ? false
-                              : current.autoSensitivity,
                           }),
                           voiceSettingsUserId,
                         );

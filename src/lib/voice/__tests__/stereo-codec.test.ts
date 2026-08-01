@@ -19,13 +19,13 @@ const opusSdp = [
 ].join("\r\n");
 
 describe("mungeStereoOpus", () => {
-  it("keeps voice audio stereo and enables Opus DTX", () => {
+  it("keeps voice audio stereo without Opus DTX during gated silence", () => {
     const munged = mungeStereoOpus(opusSdp, "cam");
 
     expect(munged).toContain("stereo=1");
     expect(munged).toContain("sprop-stereo=1");
     expect(munged).toContain("maxaveragebitrate=128000");
-    expect(munged).toContain("usedtx=1");
+    expect(munged).toContain("usedtx=0");
   });
 
   it("keeps screen audio stereo without Opus DTX", () => {

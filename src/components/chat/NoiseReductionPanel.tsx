@@ -54,8 +54,8 @@ export function NoiseReductionPanel({
             </h3>
             <p className="text-[12px] leading-relaxed text-rm-text-muted">
               Enable live {providerLabel} noise suppression for your outbound
-              voice. It updates in real time while you test, and it takes
-              priority over high-fidelity pass-through while active.
+              voice. It updates in real time while you test and remains
+              compatible with high-fidelity and spatial audio.
             </p>
           </div>
         </div>
@@ -72,12 +72,6 @@ export function NoiseReductionPanel({
                 noiseReductionEnabled: nextEnabled,
                 noiseReductionProvider:
                   current.noiseReductionProvider ?? "rnnoise",
-                streamHighFidelity: nextEnabled
-                  ? false
-                  : current.streamHighFidelity,
-                spatialAudioEnabled: nextEnabled
-                  ? false
-                  : current.spatialAudioEnabled,
                 noiseSuppression: nextEnabled
                   ? false
                   : current.noiseSuppression,

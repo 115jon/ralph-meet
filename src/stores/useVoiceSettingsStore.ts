@@ -574,19 +574,18 @@ export const useVoiceSettingsStore = create<VoiceSettingsState>()(
     }),
     {
       name: "voice-settings-storage",
-      version: 3,
+      version: 4,
       migrate: (persisted: any, version: number) => {
         const state = persisted as VoiceSettingsState;
         if (version === 0 || version === undefined) {
-          // Fix contradictory defaults: if streamHighFidelity is on,
-          // all audio processing must be off.
+          // High fidelity only disables browser capture processing. RNNoise
+          // and the local sensitivity gate run after capture and remain valid.
           if (state?.userSettings) {
             for (const uid of Object.keys(state.userSettings)) {
               const s = state.userSettings[uid];
               if (s?.streamHighFidelity) {
                 s.noiseSuppression = false;
                 s.echoCancellation = false;
-                s.autoSensitivity = false;
               }
             }
           }

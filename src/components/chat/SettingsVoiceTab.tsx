@@ -29,6 +29,7 @@ import { useShallow } from "zustand/shallow";
 import { MicTestWidget } from "./MicTestWidget";
 import { InputSensitivityMeter } from "./InputSensitivityMeter";
 import { SettingsSoundboardTriggers } from "./SettingsSoundboardTriggers";
+import { AudioCompatibilityHint } from "./AudioCompatibilityHint";
 
 function VoiceSettingRow({
   title,
@@ -94,15 +95,16 @@ export default function SettingsVoiceTab() {
   const vSettings = useVoiceSettingsStore(
     useShallow((s) => s.getSettings(settingsUserId)),
   );
-  const inferredProfile = vSettings.streamHighFidelity
-    ? "studio"
-    : !vSettings.noiseSuppression ||
-        !vSettings.echoCancellation ||
-        vSettings.autoSensitivity ||
-        vSettings.noiseReductionEnabled ||
-        vSettings.spatialAudioEnabled
+  const inferredProfile =
+    vSettings.noiseReductionEnabled || vSettings.spatialAudioEnabled
       ? "custom"
-      : "standard";
+      : vSettings.streamHighFidelity
+        ? "studio"
+        : !vSettings.noiseSuppression ||
+            !vSettings.echoCancellation ||
+            vSettings.autoSensitivity
+          ? "custom"
+          : "standard";
   const [selectedProfile, setSelectedProfile] = useState(inferredProfile);
   const setDevice = useVoiceSettingsStore((s) => s.setDevice);
   const updateUserSettings = useVoiceSettingsStore((s) => s.updateUserSettings);
@@ -151,28 +153,25 @@ export default function SettingsVoiceTab() {
       if (key === "streamHighFidelity" && newVal) {
         updates.echoCancellation = false;
         updates.noiseSuppression = false;
-        updates.autoSensitivity = false;
-        updates.noiseReductionEnabled = false;
       }
 
       if (key === "spatialAudioEnabled" && newVal) {
         updates.streamHighFidelity = true;
         updates.echoCancellation = false;
         updates.noiseSuppression = false;
-        updates.autoSensitivity = false;
-        updates.noiseReductionEnabled = false;
       }
 
       if (key === "noiseReductionEnabled" && newVal) {
-        updates.streamHighFidelity = false;
-        updates.spatialAudioEnabled = false;
         updates.noiseSuppression = false;
       }
 
+      if (key === "noiseSuppression" && newVal) {
+        updates.noiseReductionEnabled = false;
+        updates.streamHighFidelity = false;
+      }
+
       if (
-        (key === "echoCancellation" ||
-          key === "noiseSuppression" ||
-          key === "autoSensitivity") &&
+        (key === "echoCancellation" || key === "noiseSuppression") &&
         newVal
       ) {
         updates.streamHighFidelity = false;
@@ -241,8 +240,6 @@ export default function SettingsVoiceTab() {
         noiseReductionProvider:
           provider as typeof current.noiseReductionProvider,
         noiseReductionEnabled: enabled,
-        streamHighFidelity: enabled ? false : current.streamHighFidelity,
-        spatialAudioEnabled: enabled ? false : current.spatialAudioEnabled,
         noiseSuppression: enabled ? false : current.noiseSuppression,
       }),
       settingsUserId ?? undefined,
@@ -485,7 +482,12 @@ export default function SettingsVoiceTab() {
                     >
                       RNNoise <ExternalLink size={11} className="inline" />
                     </a>
-                    .
+                    .{" "}
+                    <AudioCompatibilityHint>
+                      RNNoise replaces browser noise suppression while active,
+                      but it remains compatible with high fidelity, spatial
+                      audio, echo cancellation, and input sensitivity.
+                    </AudioCompatibilityHint>
                   </>
                 }
               >
@@ -535,7 +537,15 @@ export default function SettingsVoiceTab() {
 
               <VoiceSettingRow
                 title="Browser noise suppression"
-                description="Use the browser's built-in noise suppression path."
+                description={
+                  <>
+                    Use the browser's built-in noise suppression path.
+                    <AudioCompatibilityHint>
+                      Browser noise suppression is disabled when RNNoise or high
+                      fidelity audio is active.
+                    </AudioCompatibilityHint>
+                  </>
+                }
               >
                 <SettingsSwitch
                   checked={vSettings.noiseSuppression}
@@ -545,7 +555,16 @@ export default function SettingsVoiceTab() {
               </VoiceSettingRow>
               <VoiceSettingRow
                 title="Echo cancellation"
-                description="Reduce microphone pickup from your speaker output."
+                description={
+                  <>
+                    Reduce microphone pickup from your speaker output.
+                    <AudioCompatibilityHint>
+                      Echo cancellation is unavailable with high fidelity audio
+                      because high fidelity disables browser capture processing.
+                      It remains compatible with RNNoise.
+                    </AudioCompatibilityHint>
+                  </>
+                }
               >
                 <SettingsSwitch
                   checked={vSettings.echoCancellation}
@@ -555,7 +574,17 @@ export default function SettingsVoiceTab() {
               </VoiceSettingRow>
               <VoiceSettingRow
                 title="High fidelity audio"
-                description="Keep stereo microphone input with processing disabled."
+                description={
+                  <>
+                    Keep stereo microphone input with browser processing
+                    disabled.
+                    <AudioCompatibilityHint>
+                      High fidelity disables browser noise suppression and echo
+                      cancellation. RNNoise, spatial audio, and input
+                      sensitivity remain available.
+                    </AudioCompatibilityHint>
+                  </>
+                }
               >
                 <SettingsSwitch
                   checked={vSettings.streamHighFidelity}
@@ -565,7 +594,16 @@ export default function SettingsVoiceTab() {
               </VoiceSettingRow>
               <VoiceSettingRow
                 title="Spatial audio"
-                description="Hear room placement with stereo panning."
+                description={
+                  <>
+                    Hear room placement with stereo panning.
+                    <AudioCompatibilityHint>
+                      Spatial audio enables high fidelity capture, so browser
+                      noise suppression and echo cancellation are unavailable.
+                      RNNoise remains compatible.
+                    </AudioCompatibilityHint>
+                  </>
+                }
               >
                 <SettingsSwitch
                   checked={vSettings.spatialAudioEnabled}
