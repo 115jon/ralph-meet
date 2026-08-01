@@ -89,6 +89,9 @@ export default function RoomSettingsModal({
   );
   const setDevice = useVoiceSettingsStore((s) => s.setDevice);
   const updateUserSettings = useVoiceSettingsStore((s) => s.updateUserSettings);
+  const updateVoiceSettings = useVoiceSettingsStore(
+    (s) => s.updateVoiceSettings,
+  );
 
   const [previewStream, setPreviewStream] = useState<MediaStream | null>(null);
   const webcamStreamRef = useRef<MediaStream | null>(null);
@@ -371,7 +374,7 @@ export default function RoomSettingsModal({
   };
 
   const handleVoiceToggle = (key: string) => {
-    updateUserSettings((s: any) => {
+    updateVoiceSettings((s: any) => {
       const newVal = !s[key];
       const updates: any = { [key]: newVal };
 
@@ -404,7 +407,7 @@ export default function RoomSettingsModal({
   };
 
   const handleVoiceSlider = (key: string, val: number) => {
-    updateUserSettings((s: any) => ({ ...s, [key]: val }), settingsUserId);
+    updateVoiceSettings((s: any) => ({ ...s, [key]: val }), settingsUserId);
   };
 
   if (!mounted) return null;

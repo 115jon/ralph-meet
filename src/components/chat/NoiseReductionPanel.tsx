@@ -22,8 +22,8 @@ export function NoiseReductionPanel({
   const settings = useVoiceSettingsStore(
     useShallow((state) => state.getSettings(settingsUserId)),
   );
-  const updateUserSettings = useVoiceSettingsStore(
-    (state) => state.updateUserSettings,
+  const updateVoiceSettings = useVoiceSettingsStore(
+    (state) => state.updateVoiceSettings,
   );
   const supported = isNoiseReductionProviderSupported(
     settings.noiseReductionProvider,
@@ -65,7 +65,7 @@ export function NoiseReductionPanel({
           onChange={() => {
             if (!supported) return;
 
-            updateUserSettings((current) => {
+            updateVoiceSettings((current) => {
               const nextEnabled = !current.noiseReductionEnabled;
               return {
                 ...current,

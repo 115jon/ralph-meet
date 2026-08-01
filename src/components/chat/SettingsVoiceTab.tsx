@@ -13,6 +13,7 @@ import {
   isNoiseReductionProviderSupported,
   type VoiceAudioProcessingSettings,
 } from "@/lib/voice/noise-reduction";
+import type { VoiceInputProfile } from "@/lib/voice/input-profiles";
 import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
 import { useChatStore } from "@/stores/chat-store";
 import { useUser } from "@kova/react";
@@ -23,7 +24,7 @@ import {
   Headphones,
   Mic,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo } from "react";
 import type { ReactNode } from "react";
 import { useShallow } from "zustand/shallow";
 import { MicTestWidget } from "./MicTestWidget";
@@ -87,6 +88,12 @@ function VolumeSlider({
   );
 }
 
+const INPUT_PROFILES: Array<[VoiceInputProfile, string, string]> = [
+  ["standard", "Voice isolation", "Balanced processing for everyday voice."],
+  ["studio", "Studio", "Pure stereo input with processing disabled."],
+  ["custom", "Custom", "Choose the processing controls below."],
+];
+
 export default function SettingsVoiceTab() {
   const { user } = useUser();
   const settingsUserId = user?.id ?? null;
@@ -95,19 +102,13 @@ export default function SettingsVoiceTab() {
   const vSettings = useVoiceSettingsStore(
     useShallow((s) => s.getSettings(settingsUserId)),
   );
-  const inferredProfile =
-    vSettings.noiseReductionEnabled || vSettings.spatialAudioEnabled
-      ? "custom"
-      : vSettings.streamHighFidelity
-        ? "studio"
-        : !vSettings.noiseSuppression ||
-            !vSettings.echoCancellation ||
-            vSettings.autoSensitivity
-          ? "custom"
-          : "standard";
-  const [selectedProfile, setSelectedProfile] = useState(inferredProfile);
+  const selectedProfile = vSettings.inputProfile;
   const setDevice = useVoiceSettingsStore((s) => s.setDevice);
+  const updateVoiceSettings = useVoiceSettingsStore(
+    (s) => s.updateVoiceSettings,
+  );
   const updateUserSettings = useVoiceSettingsStore((s) => s.updateUserSettings);
+  const setInputProfileStore = useVoiceSettingsStore((s) => s.setInputProfile);
   const setCurrentUser = useVoiceSettingsStore((s) => s.setCurrentUser);
   const noiseReductionSupported = isNoiseReductionProviderSupported(
     vSettings.noiseReductionProvider,
@@ -146,7 +147,7 @@ export default function SettingsVoiceTab() {
   }, [settingsUserId, setCurrentUser]);
 
   const handleVoiceToggle = (key: string) => {
-    updateUserSettings((s: any) => {
+    updateVoiceSettings((s: any) => {
       const newVal = !s[key];
       const updates: any = { [key]: newVal };
 
@@ -182,10 +183,9 @@ export default function SettingsVoiceTab() {
   };
 
   const handleVoiceSlider = (key: string, val: number) => {
-    updateUserSettings(
-      (s: any) => ({ ...s, [key]: val }),
-      settingsUserId ?? undefined,
-    );
+    const update =
+      key === "sensitivity" ? updateVoiceSettings : updateUserSettings;
+    update((s: any) => ({ ...s, [key]: val }), settingsUserId ?? undefined);
   };
 
   const filteredAudioInputs = audioInputs.filter(
@@ -197,44 +197,13 @@ export default function SettingsVoiceTab() {
   const defaultAudioInput = audioInputs.find((d) => d.deviceId === "default");
   const defaultAudioOutput = audioOutputs.find((d) => d.deviceId === "default");
 
-  const setInputProfile = (profile: string) => {
-    setSelectedProfile(profile);
-    updateUserSettings((current) => {
-      if (profile === "studio") {
-        return {
-          ...current,
-          streamHighFidelity: true,
-          echoCancellation: false,
-          noiseSuppression: false,
-          autoSensitivity: false,
-          noiseReductionEnabled: false,
-          spatialAudioEnabled: false,
-        };
-      }
-      if (profile === "standard") {
-        return {
-          ...current,
-          streamHighFidelity: false,
-          echoCancellation: true,
-          noiseReductionEnabled: false,
-          noiseSuppression: true,
-          autoSensitivity: false,
-          spatialAudioEnabled: false,
-        };
-      }
-      return {
-        ...current,
-        streamHighFidelity: false,
-        // A custom profile must remain distinguishable from the default preset
-        // without persisting a separate profile flag.
-        noiseSuppression: false,
-      };
-    }, settingsUserId ?? undefined);
+  const setInputProfile = (profile: VoiceInputProfile) => {
+    setInputProfileStore(profile, settingsUserId ?? undefined);
   };
 
   const setNoiseReductionProvider = (provider: string) => {
     const enabled = provider === "rnnoise" && noiseReductionSupported;
-    updateUserSettings(
+    updateVoiceSettings(
       (current) => ({
         ...current,
         noiseReductionProvider:
@@ -406,19 +375,7 @@ export default function SettingsVoiceTab() {
             Input profile
           </h2>
           <div className="divide-y divide-rm-border">
-            {[
-              [
-                "standard",
-                "Voice isolation",
-                "Balanced processing for everyday voice.",
-              ],
-              [
-                "studio",
-                "Studio",
-                "Pure stereo input with processing disabled.",
-              ],
-              ["custom", "Custom", "Choose the processing controls below."],
-            ].map(([value, label, description]) => (
+            {INPUT_PROFILES.map(([value, label, description]) => (
               <button
                 key={value}
                 type="button"

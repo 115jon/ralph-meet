@@ -1088,6 +1088,7 @@ export function useVoiceChannel({
     outputVolume,
     outputDeviceId,
     spatialAudioEnabled,
+    inputProfile,
     alwaysShowStreamPreview,
   } = useVoiceSettingsStore(
     useShallow((s) => {
@@ -1112,6 +1113,7 @@ export function useVoiceChannel({
         sensitivity: st.sensitivity,
         streamHighFidelity: st.streamHighFidelity,
         spatialAudioEnabled: st.spatialAudioEnabled,
+        inputProfile: st.inputProfile,
         outputVolume: st.outputVolume,
         outputDeviceId: st.outputDeviceId,
         alwaysShowStreamPreview: !!st.alwaysShowStreamPreview,
@@ -1140,6 +1142,7 @@ export function useVoiceChannel({
       streamHighFidelity,
     ],
   );
+  const isStudioMode = inputProfile === "studio";
 
   useEffect(() => {
     failedAudioProcessingModeRef.current = null;
@@ -1213,30 +1216,36 @@ export function useVoiceChannel({
   const isMicOnRef = useRef(isMicOn);
   isMicOnRef.current = isMicOn;
 
-  const restartVadMonitoring = useCallback((sfu: SFUClient | null) => {
-    if (!sfu) return;
+  const restartVadMonitoring = useCallback(
+    (sfu: SFUClient | null) => {
+      if (!sfu) return;
 
-    sfu.vad.stop();
-    disposeVoiceActivityStream(ownedVadMonitorStreamRef.current);
-    ownedVadMonitorStreamRef.current = null;
+      if (isStudioMode) sfu.vad.disableNoiseGate();
+      else sfu.vad.enableNoiseGate();
 
-    if (!isMicOnRef.current) return;
-
-    const processor = publishedAudioProcessorRef.current;
-    if (!processor) return;
-
-    const monitorStream = processor.createMonitorStream();
-    if (monitorStream.getAudioTracks().length === 0) {
-      disposeVoiceActivityStream(monitorStream);
-      return;
-    }
-
-    ownedVadMonitorStreamRef.current = monitorStream;
-    if (!sfu.vad.start(monitorStream)) {
-      disposeVoiceActivityStream(monitorStream);
+      sfu.vad.stop();
+      disposeVoiceActivityStream(ownedVadMonitorStreamRef.current);
       ownedVadMonitorStreamRef.current = null;
-    }
-  }, []);
+
+      if (!isMicOnRef.current) return;
+
+      const processor = publishedAudioProcessorRef.current;
+      if (!processor) return;
+
+      const monitorStream = processor.createMonitorStream();
+      if (monitorStream.getAudioTracks().length === 0) {
+        disposeVoiceActivityStream(monitorStream);
+        return;
+      }
+
+      ownedVadMonitorStreamRef.current = monitorStream;
+      if (!sfu.vad.start(monitorStream)) {
+        disposeVoiceActivityStream(monitorStream);
+        ownedVadMonitorStreamRef.current = null;
+      }
+    },
+    [isStudioMode],
+  );
 
   const isDeafened = settingsDeafened;
   const isCameraOn = isCameraActive && hasCamera;
@@ -3084,9 +3093,12 @@ export function useVoiceChannel({
     if (!sfuRef.current) return;
 
     sfuRef.current.vad.setThreshold(
-      getVoiceActivityThreshold(autoSensitivity, sensitivity),
+      getVoiceActivityThreshold(
+        isStudioMode ? true : autoSensitivity,
+        sensitivity,
+      ),
     );
-  }, [autoSensitivity, sensitivity, sfuInstance]);
+  }, [autoSensitivity, isStudioMode, sensitivity, sfuInstance]);
 
   const setMasterVolume = useCallback((outputVolume: number) => {
     if (!sfuRef.current) return;

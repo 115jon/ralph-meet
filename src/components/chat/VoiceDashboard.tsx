@@ -181,6 +181,9 @@ export function VoiceDashboard({
   const settings = useVoiceSettingsStore((s) =>
     s.getSettings(voiceSettingsUserId),
   );
+  const updateVoiceSettings = useVoiceSettingsStore(
+    (s) => s.updateVoiceSettings,
+  );
   const updateUserSettings = useVoiceSettingsStore((s) => s.updateUserSettings);
   const localStreamWatchers = localUserId
     ? (watchersByStreamer[localUserId] ?? [])
@@ -427,7 +430,7 @@ export function VoiceDashboard({
                       localUserId={localUserId}
                       participantCapabilities={participantCapabilities}
                       onLocalSpatialEnabledChange={(enabled) => {
-                        updateUserSettings(
+                        updateVoiceSettings(
                           (current) => ({
                             ...current,
                             spatialAudioEnabled: enabled,

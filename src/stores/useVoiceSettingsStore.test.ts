@@ -64,4 +64,31 @@ describe("useVoiceSettingsStore peer volume settings", () => {
       screenShareWithAudio: false,
     });
   });
+
+  it("applies explicit Studio settings without profile inference", () => {
+    const store = useVoiceSettingsStore.getState();
+    store.setCurrentUser("viewer");
+    store.setInputProfile("studio");
+
+    expect(
+      useVoiceSettingsStore.getState().getSettings("viewer"),
+    ).toMatchObject({
+      inputProfile: "studio",
+      streamHighFidelity: true,
+      noiseSuppression: false,
+      noiseReductionEnabled: false,
+      echoCancellation: false,
+      autoSensitivity: false,
+      spatialAudioEnabled: false,
+    });
+
+    store.updateVoiceSettings((settings) => ({
+      ...settings,
+      autoSensitivity: true,
+    }));
+
+    expect(
+      useVoiceSettingsStore.getState().getSettings("viewer").inputProfile,
+    ).toBe("custom");
+  });
 });

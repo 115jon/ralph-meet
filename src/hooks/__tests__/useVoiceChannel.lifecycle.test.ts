@@ -44,6 +44,8 @@ const {
           this.activeGateController = controller;
         },
       ),
+      enableNoiseGate: vi.fn(),
+      disableNoiseGate: vi.fn(),
       setThreshold: vi.fn(),
       start: vi.fn(),
       stop: vi.fn(),
@@ -181,6 +183,7 @@ const {
     autoSensitivity: true,
     sensitivity: -50,
     streamHighFidelity: false,
+    inputProfile: "standard",
     outputVolume: 100,
     outputDeviceId: "default",
     spatialAudioEnabled: false,
@@ -944,6 +947,43 @@ describe("useVoiceChannel SFU lifecycle", () => {
     });
     await waitFor(() => expect(sfu.vad.start).toHaveBeenCalledTimes(1));
     expect(sfu.vad.start).toHaveBeenLastCalledWith(preGateStream);
+
+    hook.unmount();
+  });
+
+  it("disables sensitivity gating for the Studio profile", async () => {
+    const settings = settingsState.getSettings();
+    settings.noiseSuppression = false;
+    settings.noiseReductionEnabled = false;
+    settings.echoCancellation = false;
+    settings.autoSensitivity = false;
+    settings.streamHighFidelity = true;
+    settings.spatialAudioEnabled = false;
+    settings.inputProfile = "studio";
+    settings.sensitivity = 0;
+
+    const audio = createTrack("audio", "studio-audio");
+    vi.mocked(acquireLocalStream).mockResolvedValue(
+      createStream([audio.track]),
+    );
+
+    const hook = renderHook(() =>
+      useVoiceChannel({ channelId: "channel", serverId: "server" }),
+    );
+    await act(async () => {
+      await hook.result.current.handleJoin();
+    });
+    const sfu = sfuInstances[0];
+    if (!sfu) throw new Error("SFU was not created");
+
+    await act(async () => {
+      sfu.emit("joined", { participantId: "self", participants: [] });
+    });
+    await waitFor(() => expect(sfu.publishTracks).toHaveBeenCalledTimes(1));
+
+    expect(sfu.vad.disableNoiseGate).toHaveBeenCalled();
+    expect(sfu.vad.enableNoiseGate).not.toHaveBeenCalled();
+    expect(sfu.vad.setThreshold).toHaveBeenLastCalledWith(3);
 
     hook.unmount();
   });
