@@ -50,9 +50,41 @@ export class VoiceGateway extends BaseGateway<VoiceGatewayEvents> {
   private ticketContext: { channelId?: string; serverId?: string } = {};
   private connecting = false;
   private reconnectQueued = false;
+  private helloReceived = false;
+  private identifySent = false;
+  private identifiedParticipantId: string | null = null;
+  private identifiedVoiceToken: string | null = null;
+  private clearCredentialsOnNextPrepare = false;
 
   constructor() {
     super("VoiceGW", VoiceOpcode.Heartbeat);
+    this.on("disconnected", () => {
+      this.resetSocketIdentityState();
+    });
+  }
+
+  public prepareVoice(
+    roomSlug: string,
+    wsUrlGenerator: (path: string) => string,
+    ticketContext: { channelId?: string; serverId?: string },
+  ) {
+    if (this.clearCredentialsOnNextPrepare) {
+      this.participantId = null;
+      this.voiceToken = null;
+      this.clearCredentialsOnNextPrepare = false;
+      if (this.connecting) {
+        this.connectionRequestGeneration++;
+        this.reconnectQueued = true;
+      }
+    }
+    this.roomSlug = roomSlug;
+    this.wsUrlGenerator = wsUrlGenerator;
+    this.ticketContext = ticketContext;
+    this.isLeaving = false;
+
+    if (!this.ws && !this.connecting) {
+      void this.openVoiceSocket(true);
+    }
   }
 
   public connectVoice(
@@ -62,6 +94,12 @@ export class VoiceGateway extends BaseGateway<VoiceGatewayEvents> {
     wsUrlGenerator: (path: string) => string,
     ticketContext: { channelId?: string; serverId?: string },
   ) {
+    this.clearCredentialsOnNextPrepare = false;
+    const replacingIdentifiedGeneration =
+      this.identifySent &&
+      (this.identifiedParticipantId !== participantId ||
+        this.identifiedVoiceToken !== voiceToken);
+
     this.participantId = participantId;
     this.voiceToken = voiceToken;
     this.roomSlug = roomSlug;
@@ -69,11 +107,25 @@ export class VoiceGateway extends BaseGateway<VoiceGatewayEvents> {
     this.ticketContext = ticketContext;
     this.isLeaving = false;
 
+    if (replacingIdentifiedGeneration) {
+      super.disconnect();
+      this.isLeaving = false;
+      this.resetSocketIdentityState();
+    }
+
+    this.maybeSendIdentify();
     void this.openVoiceSocket(true);
   }
 
   private async openVoiceSocket(resetReconnectAttempt: boolean) {
     if (!this.roomSlug || !this.wsUrlGenerator) return;
+    if (
+      this.ws &&
+      (this.ws.readyState === WebSocket.CONNECTING ||
+        this.ws.readyState === WebSocket.OPEN)
+    ) {
+      return;
+    }
     if (this.connecting) {
       this.reconnectQueued = true;
       return;
@@ -95,6 +147,7 @@ export class VoiceGateway extends BaseGateway<VoiceGatewayEvents> {
       const url = this.wsUrlGenerator(
         `/api/channels/${this.roomSlug}/voice?v=1`,
       );
+      this.resetSocketIdentityState();
       super.connect(url, resetReconnectAttempt, protocols);
     } catch (error) {
       this.log.error("Failed to open voice socket", error);
@@ -115,13 +168,15 @@ export class VoiceGateway extends BaseGateway<VoiceGatewayEvents> {
     this.voiceToken = token;
   }
 
+  public disconnect() {
+    this.resetSocketIdentityState();
+    super.disconnect();
+    this.clearCredentialsOnNextPrepare =
+      this.participantId !== null || this.voiceToken !== null;
+  }
+
   protected performReconnect() {
-    if (
-      this.participantId &&
-      this.voiceToken &&
-      this.roomSlug &&
-      this.wsUrlGenerator
-    ) {
+    if (this.roomSlug && this.wsUrlGenerator) {
       this.log.info(
         "Voice connection lost — attempting to reconnect while preserving WebRTC peer connections",
       );
@@ -135,18 +190,8 @@ export class VoiceGateway extends BaseGateway<VoiceGatewayEvents> {
         const hello = msg.d as any;
         this.log.info(`Hello received, interval=${hello.heartbeat_interval}ms`);
         this.heartbeat.start(hello.heartbeat_interval);
-
-        this.send(
-          {
-            op: VoiceOpcode.VoiceIdentify,
-            d: {
-              participant_id: this.participantId!,
-              voice_token: this.voiceToken!,
-              supports_listen_together_snapshot_events: true,
-            },
-          },
-          true,
-        );
+        this.helloReceived = true;
+        this.maybeSendIdentify();
         break;
       }
 
@@ -291,5 +336,46 @@ export class VoiceGateway extends BaseGateway<VoiceGatewayEvents> {
     }
 
     return this.send({ op: VoiceOpcode.VoiceAppEvent, d: payload } as any);
+  }
+
+  private resetSocketIdentityState() {
+    this.helloReceived = false;
+    this.identifySent = false;
+    this.identifiedParticipantId = null;
+    this.identifiedVoiceToken = null;
+  }
+
+  private maybeSendIdentify() {
+    if (
+      !this.helloReceived ||
+      this.identifySent ||
+      !this.participantId ||
+      !this.voiceToken ||
+      this.ws?.readyState !== WebSocket.OPEN
+    ) {
+      return;
+    }
+
+    const participantId = this.participantId;
+    const voiceToken = this.voiceToken;
+    if (
+      !this.send(
+        {
+          op: VoiceOpcode.VoiceIdentify,
+          d: {
+            participant_id: participantId,
+            voice_token: voiceToken,
+            supports_listen_together_snapshot_events: true,
+          },
+        },
+        true,
+      )
+    ) {
+      return;
+    }
+
+    this.identifySent = true;
+    this.identifiedParticipantId = participantId;
+    this.identifiedVoiceToken = voiceToken;
   }
 }

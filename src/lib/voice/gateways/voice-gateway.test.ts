@@ -47,6 +47,360 @@ describe("VoiceGateway", () => {
     vi.stubGlobal("WebSocket", TestWebSocket);
   });
 
+  it("prepares without credentials and identifies once when credentials arrive after Hello", async () => {
+    mocks.fetchSocketProtocols.mockResolvedValue([
+      "ralph.realtime.v1",
+      "ralph.ticket.test",
+    ]);
+    const gateway = new VoiceGateway();
+
+    gateway.prepareVoice(
+      "voice-server-channel",
+      (path) => `ws://meet.test${path}`,
+      { channelId: "channel", serverId: "server" },
+    );
+    await vi.waitFor(() => expect(TestWebSocket.instances).toHaveLength(1));
+
+    const socket = TestWebSocket.instances[0]!;
+    socket.readyState = TestWebSocket.OPEN;
+    socket.onmessage?.({
+      data: JSON.stringify({
+        op: VoiceOpcode.Hello,
+        d: { heartbeat_interval: 45_000 },
+      }),
+    } as MessageEvent);
+
+    expect(socket.sent).toHaveLength(0);
+
+    gateway.connectVoice(
+      "participant-1",
+      "voice-token-1",
+      "voice-server-channel",
+      (path) => `ws://meet.test${path}`,
+      { channelId: "channel", serverId: "server" },
+    );
+    gateway.connectVoice(
+      "participant-1",
+      "voice-token-1",
+      "voice-server-channel",
+      (path) => `ws://meet.test${path}`,
+      { channelId: "channel", serverId: "server" },
+    );
+    socket.onmessage?.({
+      data: JSON.stringify({
+        op: VoiceOpcode.Hello,
+        d: { heartbeat_interval: 45_000 },
+      }),
+    } as MessageEvent);
+
+    expect(mocks.fetchSocketProtocols).toHaveBeenCalledOnce();
+    expect(TestWebSocket.instances).toHaveLength(1);
+    expect(socket.sent.map((message) => JSON.parse(message))).toEqual([
+      {
+        op: VoiceOpcode.VoiceIdentify,
+        d: {
+          participant_id: "participant-1",
+          voice_token: "voice-token-1",
+          supports_listen_together_snapshot_events: true,
+        },
+      },
+    ]);
+    gateway.disconnect();
+  });
+
+  it.each([
+    ["participant only", "participant-1", ""],
+    ["token only", "", "voice-token-1"],
+  ])(
+    "does not identify with %s credentials",
+    async (_label, participantId, voiceToken) => {
+      mocks.fetchSocketProtocols.mockResolvedValue([
+        "ralph.realtime.v1",
+        "ralph.ticket.test",
+      ]);
+      const gateway = new VoiceGateway();
+
+      gateway.connectVoice(
+        participantId,
+        voiceToken,
+        "voice-server-channel",
+        (path) => `ws://meet.test${path}`,
+        { channelId: "channel", serverId: "server" },
+      );
+      await vi.waitFor(() => expect(TestWebSocket.instances).toHaveLength(1));
+
+      const socket = TestWebSocket.instances[0]!;
+      socket.readyState = TestWebSocket.OPEN;
+      socket.onmessage?.({
+        data: JSON.stringify({
+          op: VoiceOpcode.Hello,
+          d: { heartbeat_interval: 45_000 },
+        }),
+      } as MessageEvent);
+
+      expect(socket.sent).toHaveLength(0);
+      gateway.disconnect();
+    },
+  );
+
+  it("replaces an identified socket before a fresh participant generation can identify", async () => {
+    mocks.fetchSocketProtocols.mockResolvedValue([
+      "ralph.realtime.v1",
+      "ralph.ticket.test",
+    ]);
+    const gateway = new VoiceGateway();
+
+    gateway.connectVoice(
+      "participant-1",
+      "voice-token-1",
+      "voice-server-channel",
+      (path) => `ws://meet.test${path}`,
+      { channelId: "channel", serverId: "server" },
+    );
+    await vi.waitFor(() => expect(TestWebSocket.instances).toHaveLength(1));
+    const first = TestWebSocket.instances[0]!;
+    first.readyState = TestWebSocket.OPEN;
+    first.onmessage?.({
+      data: JSON.stringify({
+        op: VoiceOpcode.Hello,
+        d: { heartbeat_interval: 45_000 },
+      }),
+    } as MessageEvent);
+
+    gateway.connectVoice(
+      "participant-2",
+      "voice-token-2",
+      "voice-server-channel",
+      (path) => `ws://meet.test${path}`,
+      { channelId: "channel", serverId: "server" },
+    );
+    await vi.waitFor(() => expect(TestWebSocket.instances).toHaveLength(2));
+
+    const second = TestWebSocket.instances[1]!;
+    second.readyState = TestWebSocket.OPEN;
+    second.onmessage?.({
+      data: JSON.stringify({
+        op: VoiceOpcode.Hello,
+        d: { heartbeat_interval: 45_000 },
+      }),
+    } as MessageEvent);
+
+    expect(first.sent.map((message) => JSON.parse(message))).toEqual([
+      {
+        op: VoiceOpcode.VoiceIdentify,
+        d: {
+          participant_id: "participant-1",
+          voice_token: "voice-token-1",
+          supports_listen_together_snapshot_events: true,
+        },
+      },
+    ]);
+    expect(second.sent.map((message) => JSON.parse(message))).toEqual([
+      {
+        op: VoiceOpcode.VoiceIdentify,
+        d: {
+          participant_id: "participant-2",
+          voice_token: "voice-token-2",
+          supports_listen_together_snapshot_events: true,
+        },
+      },
+    ]);
+    expect(first.readyState).toBe(TestWebSocket.CLOSED);
+    gateway.disconnect();
+  });
+
+  it("ignores a stale close callback after creating a replacement socket", async () => {
+    mocks.fetchSocketProtocols.mockResolvedValue([
+      "ralph.realtime.v1",
+      "ralph.ticket.test",
+    ]);
+    const gateway = new VoiceGateway();
+    const wsUrlGenerator = (path: string) => `ws://meet.test${path}`;
+    const ticketContext = { channelId: "channel", serverId: "server" };
+
+    gateway.connectVoice(
+      "participant-1",
+      "voice-token-1",
+      "voice-server-channel",
+      wsUrlGenerator,
+      ticketContext,
+    );
+    await vi.waitFor(() => expect(TestWebSocket.instances).toHaveLength(1));
+    const first = TestWebSocket.instances[0]!;
+    first.readyState = TestWebSocket.OPEN;
+    first.onmessage?.({
+      data: JSON.stringify({
+        op: VoiceOpcode.Hello,
+        d: { heartbeat_interval: 45_000 },
+      }),
+    } as MessageEvent);
+    const staleClose = first.onclose;
+    first.readyState = TestWebSocket.CLOSED;
+
+    gateway.connectVoice(
+      "participant-2",
+      "voice-token-2",
+      "voice-server-channel",
+      wsUrlGenerator,
+      ticketContext,
+    );
+    await vi.waitFor(() => expect(TestWebSocket.instances).toHaveLength(2));
+    const second = TestWebSocket.instances[1]!;
+    second.readyState = TestWebSocket.OPEN;
+
+    staleClose?.({ code: 1006, reason: "stale close" } as CloseEvent);
+    second.onmessage?.({
+      data: JSON.stringify({
+        op: VoiceOpcode.Hello,
+        d: { heartbeat_interval: 45_000 },
+      }),
+    } as MessageEvent);
+
+    expect(second.sent.map((message) => JSON.parse(message))).toEqual([
+      {
+        op: VoiceOpcode.VoiceIdentify,
+        d: {
+          participant_id: "participant-2",
+          voice_token: "voice-token-2",
+          supports_listen_together_snapshot_events: true,
+        },
+      },
+    ]);
+    gateway.disconnect();
+  });
+
+  it("does not identify stale credentials on a fresh prepared socket after disconnect", async () => {
+    mocks.fetchSocketProtocols.mockResolvedValue([
+      "ralph.realtime.v1",
+      "ralph.ticket.test",
+    ]);
+    const gateway = new VoiceGateway();
+    const wsUrlGenerator = (path: string) => `ws://meet.test${path}`;
+    const ticketContext = { channelId: "channel", serverId: "server" };
+
+    gateway.connectVoice(
+      "old-participant",
+      "old-token",
+      "voice-server-channel",
+      wsUrlGenerator,
+      ticketContext,
+    );
+    await vi.waitFor(() => expect(TestWebSocket.instances).toHaveLength(1));
+    const oldSocket = TestWebSocket.instances[0]!;
+    oldSocket.readyState = TestWebSocket.OPEN;
+    oldSocket.onmessage?.({
+      data: JSON.stringify({
+        op: VoiceOpcode.Hello,
+        d: { heartbeat_interval: 45_000 },
+      }),
+    } as MessageEvent);
+    expect(oldSocket.sent.map((message) => JSON.parse(message))).toContainEqual(
+      expect.objectContaining({
+        op: VoiceOpcode.VoiceIdentify,
+        d: expect.objectContaining({
+          participant_id: "old-participant",
+          voice_token: "old-token",
+        }),
+      }),
+    );
+
+    gateway.disconnect();
+    gateway.prepareVoice("voice-server-channel", wsUrlGenerator, ticketContext);
+    await vi.waitFor(() => expect(TestWebSocket.instances).toHaveLength(2));
+
+    const preparedSocket = TestWebSocket.instances[1]!;
+    preparedSocket.readyState = TestWebSocket.OPEN;
+    preparedSocket.onmessage?.({
+      data: JSON.stringify({
+        op: VoiceOpcode.Hello,
+        d: { heartbeat_interval: 45_000 },
+      }),
+    } as MessageEvent);
+    expect(preparedSocket.sent).toHaveLength(0);
+
+    gateway.connectVoice(
+      "new-participant",
+      "new-token",
+      "voice-server-channel",
+      wsUrlGenerator,
+      ticketContext,
+    );
+
+    expect(preparedSocket.sent.map((message) => JSON.parse(message))).toEqual([
+      {
+        op: VoiceOpcode.VoiceIdentify,
+        d: {
+          participant_id: "new-participant",
+          voice_token: "new-token",
+          supports_listen_together_snapshot_events: true,
+        },
+      },
+    ]);
+    gateway.disconnect();
+  });
+
+  it("invalidates an in-flight preparation before re-preparing after disconnect", async () => {
+    let resolveFirstTicket: ((protocols: string[]) => void) | undefined;
+    const firstTicket = new Promise<string[]>((resolve) => {
+      resolveFirstTicket = resolve;
+    });
+    mocks.fetchSocketProtocols
+      .mockReturnValueOnce(firstTicket)
+      .mockResolvedValue(["ralph.realtime.v1", "ralph.ticket.test"]);
+    const gateway = new VoiceGateway();
+    const wsUrlGenerator = (path: string) => `ws://meet.test${path}`;
+    const ticketContext = { channelId: "channel", serverId: "server" };
+
+    gateway.connectVoice(
+      "old-participant",
+      "old-token",
+      "voice-server-channel",
+      wsUrlGenerator,
+      ticketContext,
+    );
+    gateway.connectVoice(
+      "old-participant",
+      "old-token",
+      "voice-server-channel",
+      wsUrlGenerator,
+      ticketContext,
+    );
+    gateway.disconnect();
+    gateway.prepareVoice("voice-server-channel", wsUrlGenerator, ticketContext);
+    resolveFirstTicket?.(["ralph.realtime.v1", "ralph.ticket.test"]);
+
+    await vi.waitFor(() => expect(TestWebSocket.instances).toHaveLength(1));
+    const preparedSocket = TestWebSocket.instances[0]!;
+    preparedSocket.readyState = TestWebSocket.OPEN;
+    preparedSocket.onmessage?.({
+      data: JSON.stringify({
+        op: VoiceOpcode.Hello,
+        d: { heartbeat_interval: 45_000 },
+      }),
+    } as MessageEvent);
+    expect(preparedSocket.sent).toHaveLength(0);
+
+    gateway.connectVoice(
+      "new-participant",
+      "new-token",
+      "voice-server-channel",
+      wsUrlGenerator,
+      ticketContext,
+    );
+
+    expect(preparedSocket.sent.map((message) => JSON.parse(message))).toEqual([
+      {
+        op: VoiceOpcode.VoiceIdentify,
+        d: {
+          participant_id: "new-participant",
+          voice_token: "new-token",
+          supports_listen_together_snapshot_events: true,
+        },
+      },
+    ]);
+    gateway.disconnect();
+  });
+
   it("opens a new socket after a prior disconnect while ticket acquisition is asynchronous", async () => {
     let resolveTicket: ((protocols: string[]) => void) | undefined;
     mocks.fetchSocketProtocols.mockReturnValue(
@@ -98,14 +452,16 @@ describe("VoiceGateway", () => {
       }),
     } as MessageEvent);
 
-    expect(socket.sent.map((message) => JSON.parse(message))).toContainEqual({
-      op: VoiceOpcode.VoiceIdentify,
-      d: {
-        participant_id: "participant-1",
-        voice_token: "voice-token",
-        supports_listen_together_snapshot_events: true,
+    expect(socket.sent.map((message) => JSON.parse(message))).toEqual([
+      {
+        op: VoiceOpcode.VoiceIdentify,
+        d: {
+          participant_id: "participant-1",
+          voice_token: "voice-token",
+          supports_listen_together_snapshot_events: true,
+        },
       },
-    });
+    ]);
 
     gateway.disconnect();
   });

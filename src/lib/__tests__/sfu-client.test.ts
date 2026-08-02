@@ -68,6 +68,22 @@ describe("SFUClient Baseline Tests", () => {
     expect(client).toBeDefined();
   });
 
+  it("starts RoomGW and VoiceGW preparation in the same initial connect turn", () => {
+    const roomConnect = vi.spyOn(client.roomGW, "connectRoom");
+    const voicePrepare = vi.spyOn(client.voiceGW, "prepareVoice");
+
+    client.connect("Ada", undefined, "clerk-user", "ada", "Ada", null, {
+      channelId: "channel-1",
+      serverId: "server-1",
+    });
+
+    expect(roomConnect).toHaveBeenCalledOnce();
+    expect(voicePrepare).toHaveBeenCalledOnce();
+    expect(roomConnect.mock.invocationCallOrder[0]).toBeLessThan(
+      voicePrepare.mock.invocationCallOrder[0]!,
+    );
+  });
+
   describe("getConnectionState", () => {
     it("treats joined sessions without inbound media as connected", () => {
       (
@@ -469,6 +485,285 @@ describe("SFUClient Baseline Tests", () => {
 
       expect(selectProtocolCall).toBeDefined();
       expect(selectProtocolCall.d.request_id).toMatch(/^pull-/);
+    });
+
+    it("maps a synchronous ontrack event without the metadata retry delay", async () => {
+      (client as any).negotiator.pullPC = null;
+      (client as any).createPeerConnections();
+      const pullPC = (client as any).negotiator.pullPC as MockRTCPeerConnection;
+      const pullPCWithTrackHandler = pullPC as MockRTCPeerConnection & {
+        ontrack?: (event: RTCTrackEvent) => void;
+      };
+      const remoteTrack = new MockMediaStreamTrack("audio");
+      const onRemoteTrack = vi.fn();
+      client.on("remote-track", onRemoteTrack);
+
+      pullPC.setRemoteDescription.mockImplementationOnce(async () => {
+        pullPCWithTrackHandler.ontrack?.({
+          track: remoteTrack,
+          transceiver: { mid: "0" },
+        } as unknown as RTCTrackEvent);
+      });
+      (client as any).negotiator.pulledTracks = [
+        {
+          participant_id: "remote-a",
+          track_name: "cam-audio-remote-a",
+          session_id: "session-a",
+          kind: "audio",
+        },
+      ];
+
+      await (client as any).negotiator.handleSessionDescription(
+        {
+          sdp: "mock-pull-offer-sdp",
+          sdp_type: "offer",
+          session_id: "pull-session-a",
+          request_id: "pull-request-a",
+          tracks: [
+            {
+              participant_id: "remote-a",
+              track_name: "cam-audio-remote-a",
+              session_id: "session-a",
+              mid: "0",
+              kind: "audio",
+            },
+          ],
+        },
+        "pull",
+      );
+
+      expect(onRemoteTrack).toHaveBeenCalledWith(
+        expect.objectContaining({
+          participantId: "remote-a",
+          track: remoteTrack,
+          action: "add",
+        }),
+      );
+
+      const replacementTrack = new MockMediaStreamTrack("audio");
+      pullPC.setRemoteDescription.mockImplementationOnce(async () => {
+        pullPCWithTrackHandler.ontrack?.({
+          track: replacementTrack,
+          transceiver: { mid: "0" },
+        } as unknown as RTCTrackEvent);
+      });
+      (client as any).negotiator.pulledTracks = [
+        {
+          participant_id: "remote-a",
+          track_name: "cam-audio-remote-a",
+          session_id: "session-a",
+          mid: "0",
+          kind: "audio",
+        },
+        {
+          participant_id: "remote-b",
+          track_name: "cam-audio-remote-b",
+          session_id: "session-b",
+          kind: "audio",
+        },
+      ];
+
+      await (client as any).negotiator.handleSessionDescription(
+        {
+          sdp: "mock-pull-offer-sdp",
+          sdp_type: "offer",
+          session_id: "pull-session-b",
+          request_id: "pull-request-b",
+          tracks: [
+            {
+              participant_id: "remote-b",
+              track_name: "cam-audio-remote-b",
+              session_id: "session-b",
+              mid: "0",
+              kind: "audio",
+            },
+          ],
+        },
+        "pull",
+      );
+
+      expect(onRemoteTrack).toHaveBeenCalledTimes(2);
+      expect(onRemoteTrack).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          participantId: "remote-b",
+          track: replacementTrack,
+          action: "add",
+        }),
+      );
+    });
+
+    it("does not publish a remote track when pull answer creation fails", async () => {
+      (client as any).negotiator.pullPC = null;
+      (client as any).createPeerConnections();
+      const pullPC = (client as any).negotiator.pullPC as MockRTCPeerConnection;
+      const pullPCWithTrackHandler = pullPC as MockRTCPeerConnection & {
+        ontrack?: (event: RTCTrackEvent) => void;
+      };
+      const remoteTrack = new MockMediaStreamTrack("audio");
+      const onRemoteTrack = vi.fn();
+      client.on("remote-track", onRemoteTrack);
+
+      pullPC.setRemoteDescription.mockImplementationOnce(async () => {
+        pullPCWithTrackHandler.ontrack?.({
+          track: remoteTrack,
+          transceiver: { mid: "0" },
+        } as unknown as RTCTrackEvent);
+      });
+      pullPC.createAnswer.mockRejectedValueOnce(
+        new Error("pull answer failed"),
+      );
+      (client as any).negotiator.pulledTracks = [
+        {
+          participant_id: "remote-a",
+          track_name: "cam-audio-remote-a",
+          session_id: "session-a",
+          kind: "audio",
+        },
+      ];
+
+      await expect(
+        (client as any).negotiator.handleSessionDescription(
+          {
+            sdp: "mock-pull-offer-sdp",
+            sdp_type: "offer",
+            session_id: "pull-session-a",
+            request_id: "pull-request-a",
+            tracks: [
+              {
+                participant_id: "remote-a",
+                track_name: "cam-audio-remote-a",
+                session_id: "session-a",
+                mid: "0",
+                kind: "audio",
+              },
+            ],
+          },
+          "pull",
+        ),
+      ).rejects.toThrow("pull answer failed");
+      expect(onRemoteTrack).not.toHaveBeenCalled();
+    });
+
+    it("re-emits a track after the pull PC is rebuilt", async () => {
+      (client as any).negotiator.pullPC = null;
+      (client as any).createPeerConnections();
+      const firstPC = (client as any).negotiator
+        .pullPC as MockRTCPeerConnection;
+      const firstTrack = new MockMediaStreamTrack("audio");
+      const onRemoteTrack = vi.fn();
+      client.on("remote-track", onRemoteTrack);
+
+      const setTrackEvent = (
+        pc: MockRTCPeerConnection,
+        track: MockMediaStreamTrack,
+      ) => {
+        const withHandler = pc as MockRTCPeerConnection & {
+          ontrack?: (event: RTCTrackEvent) => void;
+        };
+        pc.setRemoteDescription.mockImplementationOnce(async () => {
+          withHandler.ontrack?.({
+            track,
+            transceiver: { mid: "0" },
+          } as unknown as RTCTrackEvent);
+        });
+      };
+
+      const offer = {
+        sdp: "mock-pull-offer-sdp",
+        sdp_type: "offer" as const,
+        session_id: "pull-session-a",
+        request_id: "pull-request-a",
+        tracks: [
+          {
+            participant_id: "remote-a",
+            track_name: "cam-audio-remote-a",
+            session_id: "session-a",
+            mid: "0",
+            kind: "audio" as const,
+          },
+        ],
+      };
+      (client as any).negotiator.pulledTracks = [
+        {
+          participant_id: "remote-a",
+          track_name: "cam-audio-remote-a",
+          session_id: "session-a",
+          kind: "audio",
+        },
+      ];
+      setTrackEvent(firstPC, firstTrack);
+      await (client as any).negotiator.handleSessionDescription(offer, "pull");
+
+      vi.spyOn(client, "pullTracks").mockResolvedValue(undefined);
+      (client as any).resetPullAndRepull([
+        {
+          participant_id: "remote-a",
+          track_name: "cam-audio-remote-a",
+          session_id: "session-a",
+          kind: "audio",
+        },
+      ]);
+      expect((client as any).emittedTrackKeys.size).toBe(0);
+      const secondPC = (client as any).negotiator
+        .pullPC as MockRTCPeerConnection;
+      (client as any).negotiator.pulledTracks = [
+        {
+          participant_id: "remote-a",
+          track_name: "cam-audio-remote-a",
+          session_id: "session-a",
+          kind: "audio",
+        },
+      ];
+      expect(
+        (secondPC as MockRTCPeerConnection & { ontrack?: unknown }).ontrack,
+      ).toBeDefined();
+      setTrackEvent(secondPC, new MockMediaStreamTrack("audio"));
+      await (client as any).negotiator.handleSessionDescription(offer, "pull");
+
+      expect(secondPC.setRemoteDescription).toHaveBeenCalledOnce();
+      expect(onRemoteTrack).toHaveBeenCalledTimes(2);
+    });
+
+    it("ignores delayed metadata from a retired pull PC", async () => {
+      (client as any).negotiator.pullPC = null;
+      (client as any).createPeerConnections();
+      const oldPC = (client as any).negotiator.pullPC as MockRTCPeerConnection;
+      const oldHandler = oldPC as MockRTCPeerConnection & {
+        ontrack?: (event: RTCTrackEvent) => void;
+      };
+      const onRemoteTrack = vi.fn();
+      client.on("remote-track", onRemoteTrack);
+      vi.spyOn(client, "pullTracks").mockResolvedValue(undefined);
+
+      oldHandler.ontrack?.({
+        track: new MockMediaStreamTrack("audio"),
+        transceiver: { mid: "0" },
+      } as unknown as RTCTrackEvent);
+      (client as any).resetPullAndRepull([]);
+
+      await new Promise((resolve) => setTimeout(resolve, 150));
+      expect(onRemoteTrack).not.toHaveBeenCalled();
+    });
+
+    it("allows the same track session to return after participant leave", () => {
+      (client as any).negotiator.pulledTracks = [
+        {
+          participant_id: "remote-a",
+          track_name: "cam-audio-remote-a",
+          session_id: "session-a",
+          mid: "0",
+          kind: "audio",
+        },
+      ];
+      (client as any).emittedTrackKeys.add("cam-audio-remote-a:session-a");
+
+      (client as any).roomGW.emit("participant-left", {
+        participantId: "remote-a",
+      });
+
+      expect((client as any).emittedTrackKeys).not.toContain(
+        "cam-audio-remote-a:session-a",
+      );
     });
   });
 

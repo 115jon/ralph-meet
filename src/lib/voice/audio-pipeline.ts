@@ -366,6 +366,13 @@ export class AudioPipeline {
       this.installContextStateListener();
     }
 
+    audioLog.info("Remote audio graph connected", {
+      participantId,
+      trackName,
+      contextState: ctx.state,
+      connectedAt: Date.now(),
+    });
+
     // Return the original stream; the AudioContext handles the audible output.
     return new MediaStream([track]);
   }

@@ -70,21 +70,27 @@ export abstract class BaseGateway<
 
     this.isIdentified = false;
 
-    this.ws = protocols ? new WebSocket(url, protocols) : new WebSocket(url);
+    const socket = protocols
+      ? new WebSocket(url, protocols)
+      : new WebSocket(url);
+    this.ws = socket;
 
-    this.ws.onopen = () => {
+    socket.onopen = () => {
+      if (this.ws !== socket) return;
       this.log.info("WebSocket connected, waiting for Hello");
       this.emit("connected", undefined as never);
     };
 
-    this.ws.onmessage = (event) => {
+    socket.onmessage = (event) => {
+      if (this.ws !== socket) return;
       const msg = JSON.parse(event.data) as ServerMessage;
       // Emit raw message for subclass handling
       this.emit("message", msg as unknown as EventMap["message"]);
       this.handleMessage(msg);
     };
 
-    this.ws.onclose = (event) => {
+    socket.onclose = (event) => {
+      if (this.ws !== socket) return;
       this.heartbeat.stop();
       this.isIdentified = false;
       this.ws = null;
@@ -118,7 +124,8 @@ export abstract class BaseGateway<
       }
     };
 
-    this.ws.onerror = () => {
+    socket.onerror = () => {
+      if (this.ws !== socket) return;
       // onclose will fire after this
     };
   }

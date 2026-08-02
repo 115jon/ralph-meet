@@ -221,7 +221,7 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
   private sfuClient: SfuClient;
   private roomSlug: string = "";
   private listenTogetherCommandQueue: Promise<void> = Promise.resolve();
-  private selectProtocolQueue: Promise<void> = Promise.resolve();
+  private selectProtocolQueues = new Map<string, Promise<void>>();
 
   constructor(ctx: DurableObjectState<unknown>, env: Env) {
     super(ctx, env);
@@ -2303,11 +2303,75 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
       request_id?: string;
     },
   ) {
-    const operation = this.selectProtocolQueue.then(() =>
+    if (d.push_tracks.length > 0 && d.pull_tracks.length > 0) {
+      this.sendTo(ws, {
+        op: Op.Error,
+        d: {
+          code: 4000,
+          message: "Mixed push and pull operations are not supported",
+          request_id: d.request_id,
+          operation: "push",
+        },
+      });
+      return Promise.resolve();
+    }
+
+    const queueKeys = this.selectProtocolQueueKeys(ws, d);
+    const previous = queueKeys.map(
+      (key) => this.selectProtocolQueues.get(key) ?? Promise.resolve(),
+    );
+    const operation = Promise.all(previous).then(() =>
       this.handleSelectProtocolInOrder(ws, d),
     );
-    this.selectProtocolQueue = operation.catch(() => {});
+    const tail = operation.catch(() => {});
+    for (const key of queueKeys) {
+      this.selectProtocolQueues.set(key, tail);
+      tail.then(
+        () => {
+          if (this.selectProtocolQueues.get(key) === tail) {
+            this.selectProtocolQueues.delete(key);
+          }
+        },
+        () => {
+          if (this.selectProtocolQueues.get(key) === tail) {
+            this.selectProtocolQueues.delete(key);
+          }
+        },
+      );
+    }
     return operation;
+  }
+
+  private selectProtocolQueueKeys(
+    ws: WebSocket,
+    d: {
+      push_tracks: PushTrackDescriptor[];
+      pull_tracks: TrackInfo[];
+      push_prefix?: string;
+    },
+  ) {
+    const participantId = this.getParticipantId(ws) ?? "unknown";
+    const participantPrefix = `participant:${participantId}`;
+    const hasPull = d.pull_tracks.length > 0;
+    const hasPush = d.push_tracks.length > 0;
+    const keys = new Set<string>();
+
+    if (hasPull && hasPush) {
+      keys.add(`${participantPrefix}:pull`);
+      keys.add(`${participantPrefix}:push:cam`);
+      keys.add(`${participantPrefix}:push:screen`);
+    } else if (hasPull) {
+      keys.add(`${participantPrefix}:pull`);
+    } else {
+      const pushPrefix = d.push_prefix === "screen" ? "screen" : "cam";
+      keys.add(`${participantPrefix}:push:${pushPrefix}`);
+    }
+
+    for (const track of d.push_tracks) {
+      keys.add(`track:${track.track_name}`);
+    }
+
+    return [...keys];
   }
 
   private async handleSelectProtocolInOrder(
@@ -2839,6 +2903,7 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
         });
       }
     } catch (err: unknown) {
+      if (!isCurrent()) return;
       const message = err instanceof Error ? err.message : String(err);
       roomLog.error("SFU error:", message);
       if (

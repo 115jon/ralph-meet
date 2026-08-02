@@ -9,6 +9,16 @@ import { TrackNegotiator, TrackNegotiatorConfig } from "../track-negotiator";
 
 setupWebRTCMocks();
 
+function deferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, reject, resolve };
+}
+
 describe("TrackNegotiator", () => {
   let negotiator: TrackNegotiator;
   let mockConfig: TrackNegotiatorConfig;
@@ -211,6 +221,214 @@ describe("TrackNegotiator", () => {
         }),
       );
       expect(pushPC.createOffer).toHaveBeenCalledTimes(1);
+    });
+
+    it("does not advertise tracks from a push PC cleared while waiting for connection", async () => {
+      const audioTrack = new MockMediaStreamTrack("audio");
+      const stream = new MockMediaStream([audioTrack]);
+      const pushPC = negotiator.camPushPC as any as MockRTCPeerConnection;
+      let onConnectionStateChange: (() => void) | undefined;
+      pushPC.addEventListener.mockImplementation((event, handler) => {
+        if (event === "connectionstatechange") {
+          onConnectionStateChange = handler as () => void;
+        }
+      });
+
+      const publication = negotiator.publishTracks(stream as any, "cam");
+      await vi.waitFor(() => expect(onConnectionStateChange).toBeDefined());
+
+      negotiator.camPushPC = null;
+      pushPC.connectionState = "closed";
+      onConnectionStateChange?.();
+
+      await expect(publication).resolves.toBeUndefined();
+      expect(mockConfig.sendWS).not.toHaveBeenCalledWith(
+        expect.objectContaining({ op: 102 }),
+      );
+    });
+
+    it("retries publication on a replacement push PC", async () => {
+      const audioTrack = new MockMediaStreamTrack("audio");
+      const stream = new MockMediaStream([audioTrack]);
+      const originalPC = negotiator.camPushPC as any as MockRTCPeerConnection;
+      let onConnectionStateChange: (() => void) | undefined;
+      originalPC.addEventListener.mockImplementation((event, handler) => {
+        if (event === "connectionstatechange") {
+          onConnectionStateChange = handler as () => void;
+        }
+      });
+
+      const publication = negotiator.publishTracks(stream as any, "cam");
+      await vi.waitFor(() => expect(onConnectionStateChange).toBeDefined());
+
+      const replacementPC = new MockRTCPeerConnection();
+      negotiator.resetPushSession("cam");
+      negotiator.camPushPC = replacementPC as any;
+      originalPC.connectionState = "closed";
+      onConnectionStateChange?.();
+
+      await expect(publication).resolves.toBeUndefined();
+      await vi.waitFor(() => {
+        const selectProtocolCalls = (
+          mockConfig.sendWS as ReturnType<typeof vi.fn>
+        ).mock.calls.filter(([message]) => message.op === 1);
+        expect(selectProtocolCalls).toHaveLength(2);
+      });
+      expect(replacementPC.createOffer).toHaveBeenCalledOnce();
+      expect(mockConfig.sendWS).toHaveBeenCalledWith(
+        expect.objectContaining({ op: 102 }),
+      );
+    });
+
+    it("rejects when the awaited replacement publication fails", async () => {
+      const audioTrack = new MockMediaStreamTrack("audio");
+      const stream = new MockMediaStream([audioTrack]);
+      const originalPC = negotiator.camPushPC as any as MockRTCPeerConnection;
+      let onConnectionStateChange: (() => void) | undefined;
+      originalPC.addEventListener.mockImplementation((event, handler) => {
+        if (event === "connectionstatechange") {
+          onConnectionStateChange = handler as () => void;
+        }
+      });
+
+      const publication = negotiator.publishTracks(stream as any, "cam");
+      await vi.waitFor(() => expect(onConnectionStateChange).toBeDefined());
+
+      const replacementPC = new MockRTCPeerConnection();
+      replacementPC.createOffer.mockRejectedValueOnce(
+        new Error("replacement offer failed"),
+      );
+      negotiator.resetPushSession("cam");
+      negotiator.camPushPC = replacementPC as any;
+      originalPC.connectionState = "closed";
+      onConnectionStateChange?.();
+
+      await expect(publication).rejects.toThrow("replacement offer failed");
+      expect(negotiator.getPushTransceiver("cam-audio-p123")).toBeUndefined();
+      expect(mockConfig.sendWS).toHaveBeenCalledWith(
+        expect.objectContaining({
+          op: 13,
+          d: { track_names: ["cam-audio-p123"] },
+        }),
+      );
+    });
+
+    it("serializes a stale retry behind a newer replacement publication", async () => {
+      const originalPC = negotiator.camPushPC as any as MockRTCPeerConnection;
+      let onConnectionStateChange: (() => void) | undefined;
+      originalPC.addEventListener.mockImplementation((event, handler) => {
+        if (event === "connectionstatechange") {
+          onConnectionStateChange = handler as () => void;
+        }
+      });
+
+      const stalePublication = negotiator.publishTracks(
+        new MockMediaStream([new MockMediaStreamTrack("audio")]) as any,
+        "cam",
+      );
+      await vi.waitFor(() => expect(onConnectionStateChange).toBeDefined());
+
+      const replacementPC = new MockRTCPeerConnection();
+      const firstReplacementOffer = deferred<RTCSessionDescriptionInit>();
+      replacementPC.createOffer.mockReturnValueOnce(
+        firstReplacementOffer.promise,
+      );
+      negotiator.resetPushSession("cam");
+      negotiator.camPushPC = replacementPC as any;
+
+      const replacementPublication = negotiator.publishTracks(
+        new MockMediaStream([new MockMediaStreamTrack("audio")]) as any,
+        "cam",
+      );
+      await vi.waitFor(() =>
+        expect(replacementPC.createOffer).toHaveBeenCalledOnce(),
+      );
+
+      originalPC.connectionState = "closed";
+      onConnectionStateChange?.();
+      await Promise.resolve();
+      expect(replacementPC.createOffer).toHaveBeenCalledOnce();
+
+      firstReplacementOffer.resolve({
+        type: "offer",
+        sdp: "replacement-offer-sdp",
+      });
+
+      await replacementPublication;
+      await stalePublication;
+      expect(replacementPC.createOffer).toHaveBeenCalledTimes(2);
+    });
+
+    it("abandons a deferred track replacement after the push PC is reset", async () => {
+      const initialTrack = new MockMediaStreamTrack("audio");
+      const originalPC = negotiator.camPushPC as any as MockRTCPeerConnection;
+      await negotiator.publishTracks(
+        new MockMediaStream([initialTrack]) as any,
+        "cam",
+      );
+      const originalTransceiver =
+        negotiator.getPushTransceiver("cam-audio-p123")!;
+      const replacement = deferred<void>();
+      originalTransceiver.sender.replaceTrack = vi
+        .fn()
+        .mockReturnValueOnce(replacement.promise);
+
+      const nextTrack = new MockMediaStreamTrack("audio");
+      const publication = negotiator.publishTracks(
+        new MockMediaStream([nextTrack]) as any,
+        "cam",
+      );
+      await vi.waitFor(() =>
+        expect(originalTransceiver.sender.replaceTrack).toHaveBeenCalledWith(
+          expect.objectContaining({ kind: "audio" }),
+        ),
+      );
+
+      const replacementPC = new MockRTCPeerConnection();
+      negotiator.resetPushSession("cam");
+      negotiator.camPushPC = replacementPC as any;
+      replacement.resolve();
+
+      await expect(publication).resolves.toBeUndefined();
+      await vi.waitFor(() =>
+        expect(replacementPC.addTransceiver).toHaveBeenCalledOnce(),
+      );
+      expect(originalPC.createOffer).toHaveBeenCalledOnce();
+      expect(replacementPC.createOffer).toHaveBeenCalledOnce();
+    });
+
+    it("retries when track replacement rejects after the push PC is reset", async () => {
+      const originalPC = negotiator.camPushPC as any as MockRTCPeerConnection;
+      await negotiator.publishTracks(
+        new MockMediaStream([new MockMediaStreamTrack("audio")]) as any,
+        "cam",
+      );
+      const originalTransceiver =
+        negotiator.getPushTransceiver("cam-audio-p123")!;
+      const replacement = deferred<void>();
+      originalTransceiver.sender.replaceTrack = vi
+        .fn()
+        .mockReturnValueOnce(replacement.promise);
+
+      const publication = negotiator.publishTracks(
+        new MockMediaStream([new MockMediaStreamTrack("audio")]) as any,
+        "cam",
+      );
+      await vi.waitFor(() =>
+        expect(originalTransceiver.sender.replaceTrack).toHaveBeenCalledOnce(),
+      );
+
+      const replacementPC = new MockRTCPeerConnection();
+      negotiator.resetPushSession("cam");
+      negotiator.camPushPC = replacementPC as any;
+      replacement.reject(new DOMException("PC closed", "InvalidStateError"));
+
+      await expect(publication).resolves.toBeUndefined();
+      await vi.waitFor(() =>
+        expect(replacementPC.addTransceiver).toHaveBeenCalledOnce(),
+      );
+      expect(originalPC.createOffer).toHaveBeenCalledOnce();
+      expect(replacementPC.createOffer).toHaveBeenCalledOnce();
     });
   });
 

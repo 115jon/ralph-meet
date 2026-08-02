@@ -11,6 +11,13 @@ import { mungeStereoOpus } from "./stereo-codec";
 const pushCam = clog("VoiceGW:push");
 const pullLog = clog("VoiceGW:pull");
 
+class StalePushContextError extends Error {
+  constructor(readonly retryable: boolean) {
+    super("Push context changed during publication");
+    this.name = "StalePushContextError";
+  }
+}
+
 const DEBUG = typeof import.meta !== "undefined" && import.meta.env?.DEV;
 
 function isUnsupportedRtpParameterError(error: unknown): boolean {
@@ -131,11 +138,15 @@ export interface TrackNegotiatorConfig {
     timeoutMs?: number,
   ) => Promise<void>;
   nextRequestId: (prefix: string) => string;
+  onPullNegotiationStarted?: (generation: number) => void;
+  onPullNegotiationComplete?: (generation: number) => void;
+  onPullNegotiationFailed?: (generation: number) => void;
 }
 
 /** Per-prefix push state: each prefix gets its own PC, queue, and session */
 interface PushContext {
   pc: RTCPeerConnection | null;
+  revision: number;
   queue: Promise<void>;
   sessionId: string | null;
   transceivers: Map<string, RTCRtpTransceiver>;
@@ -146,6 +157,7 @@ export class TrackNegotiator {
   // ── Per-prefix push PeerConnections ────────────────────────────────────
   private camPush: PushContext = this.createPushContext();
   private screenPush: PushContext = this.createPushContext();
+  private pullNegotiationGeneration = 0;
 
   // ── Safely Close util ──────────────────────────────────────────────────
   private safelyClosePC(pc: RTCPeerConnection | null) {
@@ -179,6 +191,7 @@ export class TrackNegotiator {
   private createPushContext(): PushContext {
     return {
       pc: null,
+      revision: 0,
       queue: Promise.resolve(),
       sessionId: null,
       transceivers: new Map(),
@@ -224,6 +237,7 @@ export class TrackNegotiator {
     return this.camPush.pc;
   }
   set camPushPC(pc: RTCPeerConnection | null) {
+    if (this.camPush.pc !== pc) this.camPush.revision += 1;
     this.camPush.pc = pc;
   }
 
@@ -232,6 +246,7 @@ export class TrackNegotiator {
     return this.screenPush.pc;
   }
   set screenPushPC(pc: RTCPeerConnection | null) {
+    if (this.screenPush.pc !== pc) this.screenPush.revision += 1;
     this.screenPush.pc = pc;
   }
 
@@ -261,6 +276,16 @@ export class TrackNegotiator {
   ): Promise<void> {
     const ctx = this.getPushContext(prefix);
 
+    return this.enqueuePublishTracks(stream, prefix, ctx, ctx.queue, 0);
+  }
+
+  private enqueuePublishTracks(
+    stream: MediaStream,
+    prefix: string,
+    ctx: PushContext,
+    baseQueue: Promise<void>,
+    retryCount: number,
+  ): Promise<void> {
     if (DEBUG)
       pushCam.info(
         `publishTracks called: tracks=${stream.getTracks().length}, kinds=${stream
@@ -269,7 +294,10 @@ export class TrackNegotiator {
           .join(",")}, pc=${!!ctx.pc}`,
       );
 
-    const operation = ctx.queue
+    const stagedTrackNames: string[] = [];
+    let stagedPushPC: RTCPeerConnection | null = null;
+    let stagedPushRevision = -1;
+    const operation = baseQueue
       .catch(() => {})
       .then(async () => {
         if (DEBUG) pushCam.info(`publishTracks queue executing`);
@@ -298,6 +326,15 @@ export class TrackNegotiator {
         if (!pushPC) {
           throw new Error(`Push PC unavailable for ${prefix} publication`);
         }
+        const revision = ctx.revision;
+        stagedPushPC = pushPC;
+        stagedPushRevision = revision;
+        const retryIfStale = (): boolean => {
+          if (ctx.pc === pushPC && ctx.revision === revision) return false;
+          throw new StalePushContextError(
+            !!ctx.pc && ctx.pc.connectionState !== "closed",
+          );
+        };
 
         const pushTracks: PushTrackDescriptor[] = [];
 
@@ -333,10 +370,12 @@ export class TrackNegotiator {
             const previousTrack = transceiver.sender.track;
             try {
               await transceiver.sender.replaceTrack(track);
+              if (retryIfStale()) return;
               if (previousTrack && previousTrack !== track) {
                 previousTrack.stop();
               }
             } catch (err) {
+              if (retryIfStale()) return;
               track.stop();
               throw err;
             }
@@ -450,6 +489,7 @@ export class TrackNegotiator {
             }
 
             ctx.transceivers.set(trackName, transceiver);
+            stagedTrackNames.push(trackName);
           }
 
           ctx.publishedTrackNames.add(trackName);
@@ -464,11 +504,24 @@ export class TrackNegotiator {
 
         pushCam.info(`Publishing ${pushTracks.length} tracks`);
 
-        const offer = await pushPC.createOffer();
+        let offer: RTCSessionDescriptionInit;
+        try {
+          offer = await pushPC.createOffer();
+        } catch (error) {
+          if (retryIfStale()) return;
+          throw error;
+        }
+        if (retryIfStale()) return;
         const mungedSDP = offer.sdp
           ? mungeStereoOpus(offer.sdp, prefix)
           : undefined;
-        await pushPC.setLocalDescription({ type: "offer", sdp: mungedSDP });
+        try {
+          await pushPC.setLocalDescription({ type: "offer", sdp: mungedSDP });
+        } catch (error) {
+          if (retryIfStale()) return;
+          throw error;
+        }
+        if (retryIfStale()) return;
 
         // Update mids after creating offer from the transceivers we just staged.
         for (const pt of pushTracks) {
@@ -506,8 +559,14 @@ export class TrackNegotiator {
           },
         });
 
-        await answerPromise;
-        await negotiationDonePromise;
+        try {
+          await answerPromise;
+          await negotiationDonePromise;
+        } catch (error) {
+          if (retryIfStale()) return;
+          throw error;
+        }
+        if (retryIfStale()) return;
         if (prefix === "screen") {
           for (const track of pushTracks) {
             if (track.kind === "video") {
@@ -557,7 +616,8 @@ export class TrackNegotiator {
           }
           // Only broadcast if the PC actually connected — if it failed/closed we
           // skip TracksReady (the push failure handler will clean up).
-          if (ctx.pc.connectionState === "connected") {
+          if (retryIfStale()) return;
+          if (pc.connectionState === "connected") {
             this.config.sendWS({
               op: VoiceOpcode.TracksReady,
               d: { track_names: pushTracks.map((pt) => pt.track_name) },
@@ -566,12 +626,53 @@ export class TrackNegotiator {
         }
       });
 
-    ctx.queue = operation.catch((err) => {
-      pushCam.error(`publishTracks error:`, err);
+    const operationWithRollback = operation.catch((err) => {
+      if (
+        stagedTrackNames.length > 0 &&
+        ctx.pc === stagedPushPC &&
+        ctx.revision === stagedPushRevision
+      ) {
+        for (const trackName of stagedTrackNames) {
+          this.teardownTransceiver(trackName);
+        }
+        this.config.sendWS({
+          op: VoiceOpcode.StopTracks,
+          d: { track_names: stagedTrackNames },
+        });
+      }
       throw err;
     });
+    const queuedOperation: Promise<void> = operationWithRollback.catch(
+      (err) => {
+        if (
+          err instanceof StalePushContextError &&
+          err.retryable &&
+          retryCount === 0
+        ) {
+          const currentQueueTail = ctx.queue;
+          const retryBaseQueue: Promise<void> =
+            currentQueueTail === baseQueue
+              ? operationWithRollback
+              : currentQueueTail;
+          return this.enqueuePublishTracks(
+            stream,
+            prefix,
+            ctx,
+            retryBaseQueue,
+            retryCount + 1,
+          );
+        }
+        if (err instanceof StalePushContextError && !err.retryable) {
+          return;
+        }
+        pushCam.error(`publishTracks error:`, err);
+        throw err;
+      },
+    );
 
-    return ctx.queue;
+    ctx.queue = queuedOperation;
+
+    return queuedOperation;
   }
 
   // ── SDP Handling ──────────────────────────────────────────────────────
@@ -590,8 +691,13 @@ export class TrackNegotiator {
       const previousPullSessionId = this.pullSessionId;
       const previousPulledTracks = [...this.pulledTracks];
       let nextPulledTracks = this.pulledTracks.map((t) => ({ ...t }));
+      const pullPC = this.pullPC;
+      const pullGeneration = this.pullNegotiationGeneration + 1;
+      const isCurrentPull = () =>
+        this.pullPC === pullPC &&
+        this.pullNegotiationGeneration === pullGeneration;
 
-      if (!this.pullPC) {
+      if (!pullPC) {
         pullLog.error("handleSessionDescription: no pull peer connection!");
         return;
       }
@@ -611,14 +717,23 @@ export class TrackNegotiator {
         nextPulledTracks = nextPulledTracks.filter((t) => t.mid !== undefined);
       }
 
+      // The browser may fire `ontrack` while setRemoteDescription() is still
+      // running. Publish the offer's metadata before that call so the SFU
+      // client can map the incoming track immediately instead of waiting for
+      // its 100 ms metadata retry timer.
+      this.pullNegotiationGeneration = pullGeneration;
+      this.config.onPullNegotiationStarted?.(pullGeneration);
+      this.pulledTracks = nextPulledTracks;
+
       try {
         const remoteSdp = sd.sdp ? mungeStereoOpus(sd.sdp) : sd.sdp;
-        await this.pullPC.setRemoteDescription({
+        await pullPC.setRemoteDescription({
           type: "offer",
           sdp: remoteSdp,
         });
+        if (!isCurrentPull()) return;
 
-        this.pullPC.getTransceivers().forEach((tr) => {
+        pullPC.getTransceivers().forEach((tr) => {
           const track = tr.mid
             ? nextPulledTracks.find((t) => t.mid === tr.mid)
             : null;
@@ -633,29 +748,34 @@ export class TrackNegotiator {
           }
         });
 
-        const answer = await this.pullPC.createAnswer();
+        const answer = await pullPC.createAnswer();
+        if (!isCurrentPull()) return;
         // Pull SDP carries both cam AND screen audio transceivers — we can't
         // prefix-differentiate here. Use default voice settings (DTX=1).
         // DTX only really matters on the push (encoder) side anyway.
         const mungedSDP = answer.sdp ? mungeStereoOpus(answer.sdp) : undefined;
-        await this.pullPC.setLocalDescription({
+        await pullPC.setLocalDescription({
           type: "answer",
           sdp: mungedSDP,
         });
+        if (!isCurrentPull()) return;
 
         this.config.sendWS({
           op: VoiceOpcode.Answer,
           d: {
-            sdp: this.pullPC.localDescription!.sdp,
+            sdp: pullPC.localDescription!.sdp,
             request_id: sd.request_id,
           },
         });
 
+        this.config.onPullNegotiationComplete?.(pullGeneration);
+
         this.pullSessionId = sd.session_id;
-        this.pulledTracks = nextPulledTracks;
       } catch (err) {
+        if (!isCurrentPull()) return;
         this.pullSessionId = previousPullSessionId;
         this.pulledTracks = previousPulledTracks;
+        this.config.onPullNegotiationFailed?.(pullGeneration);
         pullLog.error("Failed to handle SFU offer:", err);
         throw err;
       }
@@ -828,6 +948,7 @@ export class TrackNegotiator {
   // ── Reset ─────────────────────────────────────────────────────────────
 
   public resetPullSession(): void {
+    this.pullNegotiationGeneration += 1;
     if (this.pullPC) {
       this.pullPC.ontrack = null;
       this.pullPC.onconnectionstatechange = null;
@@ -844,6 +965,7 @@ export class TrackNegotiator {
   public resetPushSession(prefix?: "cam" | "screen"): void {
     if (prefix) {
       const ctx = this.getPushContext(prefix);
+      ctx.revision += 1;
       ctx.transceivers.clear();
       ctx.publishedTrackNames.clear();
       ctx.sessionId = null;
@@ -877,6 +999,10 @@ export class TrackNegotiator {
       this.camPush.transceivers.get(trackName) ||
       this.screenPush.transceivers.get(trackName)
     );
+  }
+
+  public getPullNegotiationGeneration(): number {
+    return this.pullNegotiationGeneration;
   }
 
   /**

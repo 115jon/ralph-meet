@@ -74,8 +74,21 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
 
   // Track state
   private pendingPullTracks: TrackInfo[] = [];
+  private knownPullTracks = new Map<string, TrackInfo>();
   private pullQueue: Promise<void> = Promise.resolve();
-  private emittedMids = new Set<string>();
+  private emittedTrackKeys = new Set<string>();
+  private pendingRemoteTrackEvents = new Map<
+    string,
+    {
+      participantId: string;
+      track: MediaStreamTrack;
+      trackInfo: TrackInfo;
+      mid: string;
+    }
+  >();
+  private pendingRemoteTrackFlushReady = false;
+  private activePullNegotiationGeneration: number | null = null;
+  private pullPcGeneration = 0;
   private unsubscribedTrackMids = new Set<string>();
   private unsubscribedTrackNames = new Set<string>();
   private trackRids = new Map<string, string>();
@@ -141,6 +154,20 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
       waitForPushAnswer: (prefix, requestId, t) =>
         this.waitForPushAnswer(prefix, requestId, t),
       nextRequestId: (prefix) => this.nextRequestId(prefix),
+      onPullNegotiationStarted: (generation) => {
+        this.activePullNegotiationGeneration = generation;
+        this.pendingRemoteTrackFlushReady = false;
+      },
+      onPullNegotiationComplete: (generation) => {
+        if (this.activePullNegotiationGeneration !== generation) return;
+        this.flushPendingRemoteTracks();
+      },
+      onPullNegotiationFailed: (generation) => {
+        if (this.activePullNegotiationGeneration !== generation) return;
+        this.activePullNegotiationGeneration = null;
+        this.pendingRemoteTrackFlushReady = false;
+        this.pendingRemoteTrackEvents.clear();
+      },
     });
 
     this.rtcSessionManager = new WebRTCSessionManager(
@@ -291,7 +318,6 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
         spatialAudioState: (e as any).spatialAudioState,
       });
 
-      this.voiceGW.disconnect();
       this.connectVoice();
     });
 
@@ -316,7 +342,6 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
       }
 
       if (!this.voiceGW.isReady) {
-        this.voiceGW.disconnect();
         this.connectVoice();
       }
     });
@@ -331,9 +356,40 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
     );
     this.roomGW.on("participant-left", (e) => {
       this.audio.removeParticipantVolume(e.participantId);
+      const departingTrackNames = new Set<string>([
+        ...this.negotiator.pulledTracks
+          .filter((track) => track.participant_id === e.participantId)
+          .map((track) => track.track_name),
+        ...this.pendingPullTracks
+          .filter((track) => track.participant_id === e.participantId)
+          .map((track) => track.track_name),
+      ]);
       this.negotiator.pulledTracks = this.negotiator.pulledTracks.filter(
         (t) => t.participant_id !== e.participantId,
       );
+      for (const [key, pending] of this.pendingRemoteTrackEvents) {
+        if (pending.participantId === e.participantId) {
+          this.pendingRemoteTrackEvents.delete(key);
+        }
+      }
+      this.pendingPullTracks = this.pendingPullTracks.filter(
+        (t) => t.participant_id !== e.participantId,
+      );
+      for (const [trackName, track] of this.knownPullTracks) {
+        if (track.participant_id === e.participantId) {
+          departingTrackNames.add(trackName);
+          this.knownPullTracks.delete(trackName);
+        }
+      }
+      for (const key of this.emittedTrackKeys) {
+        if (
+          [...departingTrackNames].some((trackName) =>
+            key.startsWith(`${trackName}:`),
+          )
+        ) {
+          this.emittedTrackKeys.delete(key);
+        }
+      }
       this.emit("participant-left", e);
     });
     this.roomGW.on("voice-state-update", (e) =>
@@ -354,7 +410,11 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
 
   private wireVoiceEvents() {
     this.voiceGW.on("error", (e) => {
-      if (e.operation === "pull" && this.isStalePullSignal(e.request_id)) {
+      if (
+        e.operation === "pull" &&
+        !e.message.startsWith("pull-retry:") &&
+        this.isStalePullSignal(e.request_id)
+      ) {
         sfuLog.warn(`Ignoring stale pull error for request ${e.request_id}`);
         return;
       }
@@ -363,6 +423,15 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
         try {
           const trackNames = JSON.parse(e.message.split("pull-retry:")[1]);
           const err = new Error(`pull-retry:${JSON.stringify(trackNames)}`);
+          const isCurrentPullRequest =
+            !e.request_id || this.isStalePullSignal(e.request_id) === false;
+          if (!isCurrentPullRequest) {
+            this.schedulePullRetry(trackNames);
+            return;
+          }
+          const hadPendingPullWaiter = Boolean(
+            this.pullRejector || this.pullNegotiationRejector,
+          );
           if (
             this.pullRejector &&
             this.isStalePullSignal(e.request_id) === false
@@ -375,6 +444,9 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
             this.pullNegotiationRejector(err);
             this.pullNegotiationRejector = null;
             this.pullNegotiationResolve = null;
+          }
+          if (!hadPendingPullWaiter) {
+            this.schedulePullRetry(trackNames);
           }
           this.activePullRequestId = null;
         } catch (err) {
@@ -668,16 +740,10 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
           })
           .catch((err) => {
             sfuLog.error("handleSessionDescription error:", err);
-            if (
-              err instanceof DOMException &&
-              (err.message.includes("media type") ||
-                err.message.includes("m-lines"))
-            ) {
-              const tracksToRestore = [...this.negotiator.pulledTracks];
-              this.resetPullAndRepull(tracksToRestore);
-            } else {
-              this.emit("error", { message: `SDP handling error: ${err}` });
-            }
+            const tracksToRestore = [...this.negotiator.pulledTracks];
+            this.rejectPendingPullWaiters(err);
+            this.resetPullAndRepull(tracksToRestore);
+            this.emit("error", { message: `SDP handling error: ${err}` });
           });
       } else if (
         prefix === "screen" &&
@@ -833,6 +899,16 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
         );
         return;
       }
+      const existingTrack = this.negotiator.pulledTracks.find(
+        (track) => track.track_name === v.track_name,
+      );
+      if (
+        existingTrack &&
+        existingTrack.session_id &&
+        existingTrack.session_id !== v.session_id
+      ) {
+        this.handleStopTracks([v.track_name]);
+      }
       const isNew = !this.negotiator.pulledTracks.some(
         (t) => t.track_name === v.track_name,
       );
@@ -861,6 +937,11 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
           return;
         }
         this.pullTracks([offeredTrack]);
+        sfuLog.info("Remote track offered to pull", {
+          trackName: v.track_name,
+          participantId: v.participant_id,
+          offeredAt: Date.now(),
+        });
       }
     });
 
@@ -896,6 +977,9 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
   }
 
   private handleStopTracks(trackNames: string[]) {
+    for (const trackName of trackNames) {
+      this.knownPullTracks.delete(trackName);
+    }
     this.pendingPullTracks = this.pendingPullTracks.filter(
       (track) => !trackNames.includes(track.track_name),
     );
@@ -909,6 +993,11 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
     this.negotiator.pulledTracks = this.negotiator.pulledTracks.filter(
       (t) => !trackNames.includes(t.track_name),
     );
+    for (const [key, pending] of this.pendingRemoteTrackEvents) {
+      if (trackNames.includes(pending.trackInfo.track_name)) {
+        this.pendingRemoteTrackEvents.delete(key);
+      }
+    }
 
     // 2. Tear down WebRTC receiver mappings
     for (const trackInfo of toRemove) {
@@ -927,7 +1016,11 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
             action: "remove",
           });
         }
-        this.emittedMids.delete(mid);
+        for (const key of this.emittedTrackKeys) {
+          if (key.startsWith(`${trackInfo.track_name}:`)) {
+            this.emittedTrackKeys.delete(key);
+          }
+        }
       }
     }
   }
@@ -970,6 +1063,10 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
       serverId: options?.serverId,
       roomSlug: this.roomSlug,
       wsUrlGenerator: wsUrl,
+    });
+    this.voiceGW.prepareVoice(this.roomSlug, wsUrl, {
+      channelId: options?.channelId,
+      serverId: options?.serverId,
     });
   }
 
@@ -1160,6 +1257,23 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
     }
   }
 
+  private schedulePullRetry(
+    trackNames: string[],
+    epoch = this.pullEpoch,
+  ): void {
+    setTimeout(() => {
+      if (this.isLeaving || this.pullEpoch !== epoch) return;
+      const tracksToRetry = trackNames
+        .map((trackName) => this.knownPullTracks.get(trackName))
+        .filter((track): track is TrackInfo => Boolean(track));
+      if (tracksToRetry.length === 0) return;
+      this.negotiator.pulledTracks = this.negotiator.pulledTracks.filter(
+        (track) => !trackNames.includes(track.track_name),
+      );
+      void this.pullTracks(tracksToRetry);
+    }, 1000);
+  }
+
   private rejectPendingPushWaiters(reason: Error) {
     if (this.camPushRejector) {
       const reject = this.camPushRejector;
@@ -1261,8 +1375,12 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
     this.negotiator.pullPC = null;
     this.negotiator.resetPushSession();
     this.negotiator.resetPullSession();
+    this.pullPcGeneration += 1;
     this.pendingPullTracks = [];
-    this.emittedMids.clear();
+    this.emittedTrackKeys.clear();
+    this.activePullNegotiationGeneration = null;
+    this.pendingRemoteTrackFlushReady = false;
+    this.pendingRemoteTrackEvents.clear();
     this.lastPullPushHash = "";
     this.audioSentinel.stop();
     this.outboundAudioSentinel.stop();
@@ -1272,7 +1390,13 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
   }
 
   private resetPullAndRepull(tracksToRestore: TrackInfo[]) {
+    if (this.isLeaving) return;
     const tracks = this.uniqueTrackList(tracksToRestore);
+    this.pullPcGeneration += 1;
+    this.emittedTrackKeys.clear();
+    this.activePullNegotiationGeneration = null;
+    this.pendingRemoteTrackFlushReady = false;
+    this.pendingRemoteTrackEvents.clear();
     if (this.activePullRequestId) {
       this.stalePullRequestIds.add(this.activePullRequestId);
     }
@@ -1300,6 +1424,12 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
     this.isLeaving = true;
     this.clearCredentialRefreshTimer();
     this.rtcSessionManager.clearAllDisconnectTimers();
+    this.cancelPendingSignalWaiters();
+    if (this.activePullRequestId) {
+      this.stalePullRequestIds.add(this.activePullRequestId);
+    }
+    this.activePullRequestId = null;
+    this.pullEpoch += 1;
 
     this.roomGW.send({ op: VoiceOpcode.ClientDisconnect, d: {} });
     this.voiceGW.send({ op: VoiceOpcode.ClientDisconnect, d: {} });
@@ -1313,6 +1443,7 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
     this.negotiator.screenPushPC = null;
     this.rtcSessionManager.safelyClosePC(this.negotiator.pullPC);
     this.negotiator.pullPC = null;
+    this.pullPcGeneration += 1;
 
     this.vad.stop();
     this.audio.dispose();
@@ -1320,6 +1451,9 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
     this.outboundAudioSentinel.stop();
     this.stats.stopStatsMonitoring();
     this.stats.stopConnectionStatsMonitoring();
+    this.activePullNegotiationGeneration = null;
+    this.pendingRemoteTrackFlushReady = false;
+    this.pendingRemoteTrackEvents.clear();
 
     this.negotiator.resetPushSession("cam");
     this.negotiator.resetPushSession("screen");
@@ -1475,7 +1609,7 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
         await this.voiceReadyPromise;
       }
       await this.negotiator.publishTracks(stream, prefix);
-      if (prefix === "cam") {
+      if (prefix === "cam" && this.negotiator.camPushPC) {
         this.stats.startStatsMonitoring();
         this.stats.startConnectionStatsMonitoring();
         this.outboundAudioSentinel.start();
@@ -1505,6 +1639,9 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
       (t) => !this.unsubscribedTrackNames.has(t.track_name),
     );
     if (toPull.length === 0) return;
+    for (const track of toPull) {
+      this.knownPullTracks.set(track.track_name, { ...track });
+    }
 
     if (!this.voiceGW.isReady) {
       sfuLog.warn(
@@ -1529,8 +1666,12 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
 
       const allTracks = [...this.pendingPullTracks, ...toPull];
       this.pendingPullTracks = [];
+      const newestByName = new Map<string, TrackInfo>();
+      for (const track of allTracks) {
+        newestByName.set(track.track_name, track);
+      }
 
-      const newTracks = allTracks.filter((nt) => {
+      const newTracks = [...newestByName.values()].filter((nt) => {
         const existing = this.negotiator.pulledTracks.find(
           (pt) => pt.track_name === nt.track_name,
         );
@@ -1543,7 +1684,11 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
           this.negotiator.pulledTracks = this.negotiator.pulledTracks.filter(
             (t) => t !== existing,
           );
-          if (existing.mid) this.emittedMids.delete(existing.mid);
+          for (const key of this.emittedTrackKeys) {
+            if (key.startsWith(`${existing.track_name}:`)) {
+              this.emittedTrackKeys.delete(key);
+            }
+          }
           return true;
         }
         return false;
@@ -1602,20 +1747,7 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
               `SFU returned empty_track_error. Retrying pull in 1s for: ${trackNames.join(", ")}`,
             );
             this.activePullRequestId = null;
-            setTimeout(() => {
-              if (!this.isLeaving && this.pullEpoch === epoch) {
-                const tracksToRetry = this.negotiator.pulledTracks.filter((t) =>
-                  trackNames.includes(t.track_name),
-                );
-                if (tracksToRetry.length > 0) {
-                  this.negotiator.pulledTracks =
-                    this.negotiator.pulledTracks.filter(
-                      (t) => !trackNames.includes(t.track_name),
-                    );
-                  this.pullTracks(tracksToRetry);
-                }
-              }
-            }, 1000);
+            this.schedulePullRetry(trackNames);
           } catch (e) {
             sfuLog.error("Error parsing pull-retry in catch block", e);
           }
@@ -1646,7 +1778,9 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
 
     // Pull
     if (!this.negotiator.pullPC) {
-      this.negotiator.pullPC = new RTCPeerConnection(config);
+      const pullPC = new RTCPeerConnection(config);
+      this.negotiator.pullPC = pullPC;
+      const pullPcGeneration = ++this.pullPcGeneration;
       this.audioSentinel.start();
 
       this.negotiator.pullPC.oniceconnectionstatechange = () => {
@@ -1690,26 +1824,74 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
       this.negotiator.pullPC.ontrack = (event) => {
         const t = event.track;
         const mid = event.transceiver.mid;
+        const eventPullPC = pullPC;
+        const eventPullGeneration =
+          this.negotiator.getPullNegotiationGeneration();
+        const eventTrackInfo = mid
+          ? this.negotiator.pulledTracks.find((track) => track.mid === mid)
+          : undefined;
+        const eventTrackKey = eventTrackInfo
+          ? `${eventTrackInfo.track_name}:${eventTrackInfo.session_id}`
+          : null;
+        sfuLog.info("Remote track received by browser", {
+          trackName: this.negotiator.pulledTracks.find(
+            (track) => track.mid === mid,
+          )?.track_name,
+          mid,
+          kind: t.kind,
+          receivedAt: Date.now(),
+        });
 
         // Use a timeout to wait for SDP metadata propagation if not immediately available
         const attemptFire = (attempts = 0) => {
+          if (
+            this.negotiator.pullPC !== eventPullPC ||
+            this.pullPcGeneration !== pullPcGeneration ||
+            this.negotiator.getPullNegotiationGeneration() !==
+              eventPullGeneration
+          ) {
+            return;
+          }
           const info = mid
             ? this.negotiator.pulledTracks.find((t) => t.mid === mid)
             : undefined;
           if (info) {
-            this.emittedMids.add(mid!);
-            this.emit("remote-track", {
+            const currentTrackKey = `${info.track_name}:${info.session_id}`;
+            if (eventTrackKey && currentTrackKey !== eventTrackKey) return;
+            this.pendingRemoteTrackEvents.set(`${mid}:${t.id}`, {
               participantId: info.participant_id,
               track: t,
               trackInfo: info,
-              action: "add",
-            } as any);
+              mid: mid!,
+            });
+            if (this.pendingRemoteTrackFlushReady) {
+              this.flushPendingRemoteTracks();
+            }
           } else if (attempts < 10) {
             setTimeout(() => attemptFire(attempts + 1), 100);
           }
         };
         attemptFire();
       };
+    }
+  }
+
+  private flushPendingRemoteTracks(): void {
+    this.pendingRemoteTrackFlushReady = true;
+    for (const [key, pending] of this.pendingRemoteTrackEvents) {
+      const trackKey = `${pending.trackInfo.track_name}:${pending.trackInfo.session_id}`;
+      if (this.emittedTrackKeys.has(trackKey)) {
+        this.pendingRemoteTrackEvents.delete(key);
+        continue;
+      }
+      this.emittedTrackKeys.add(trackKey);
+      this.pendingRemoteTrackEvents.delete(key);
+      this.emit("remote-track", {
+        participantId: pending.participantId,
+        track: pending.track,
+        trackInfo: pending.trackInfo,
+        action: "add",
+      } as any);
     }
   }
 

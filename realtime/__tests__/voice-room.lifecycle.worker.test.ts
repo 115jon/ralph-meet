@@ -1,6 +1,6 @@
 import { env } from "cloudflare:workers";
 import { runDurableObjectAlarm, runInDurableObject } from "cloudflare:test";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   issueSocketTicket,
   verifySocketTicket,
@@ -1762,6 +1762,335 @@ describe("VoiceRoom lifecycle", () => {
     observer.close();
   });
 
+  type SelectPayload = {
+    push_tracks: Array<{ track_name: string; kind: "audio" | "video" }>;
+    pull_tracks: Array<Record<string, unknown>>;
+    push_prefix?: "cam" | "screen";
+  };
+  type QueueHarness = {
+    handleSelectProtocol(ws: WebSocket, d: SelectPayload): Promise<void>;
+    handleSelectProtocolInOrder(ws: WebSocket, d: SelectPayload): Promise<void>;
+    selectProtocolQueues: Map<string, Promise<void>>;
+  };
+
+  const flushQueueMicrotasks = async () => {
+    await Promise.resolve();
+    await Promise.resolve();
+  };
+
+  const withQueueHarness = async (
+    test: (voiceRoom: QueueHarness) => Promise<void>,
+  ) => {
+    const roomName = crypto.randomUUID();
+    const room = env.VOICE_ROOM.get(env.VOICE_ROOM.idFromName(roomName));
+    await runInDurableObject(room, async (instance) => {
+      await test(instance as unknown as QueueHarness);
+    });
+  };
+
+  const makeQueueSocket = (participantId: string) =>
+    ({
+      deserializeAttachment: () => ({ participant_id: participantId }),
+    }) as unknown as WebSocket;
+
+  it("enters same-participant pull and cam operations before either is released", async () => {
+    await withQueueHarness(async (voiceRoom) => {
+      let releasePull: (() => void) | undefined;
+      let releaseCam: (() => void) | undefined;
+      let pullEntered = false;
+      let camEntered = false;
+      let screenEntered = false;
+      let otherParticipantEntered = false;
+      let resolvePullEntered: (() => void) | undefined;
+      const pullGate = new Promise<void>((resolve) => {
+        releasePull = resolve;
+      });
+      const camGate = new Promise<void>((resolve) => {
+        releaseCam = resolve;
+      });
+      const pullStarted = new Promise<void>((resolve) => {
+        resolvePullEntered = resolve;
+      });
+
+      voiceRoom.handleSelectProtocolInOrder = vi.fn(
+        async (ws: WebSocket, payload: SelectPayload) => {
+          if (payload.pull_tracks.length > 0) {
+            pullEntered = true;
+            resolvePullEntered?.();
+            await pullGate;
+          } else if (payload.push_prefix === "cam") {
+            camEntered = true;
+            await camGate;
+          } else if (
+            (ws.deserializeAttachment() as { participant_id: string })
+              .participant_id === "participant-1"
+          ) {
+            screenEntered = true;
+          } else {
+            otherParticipantEntered = true;
+          }
+        },
+      );
+
+      const socket = makeQueueSocket("participant-1");
+      const pullOperation = voiceRoom.handleSelectProtocol(socket, {
+        push_tracks: [],
+        pull_tracks: [{ track_name: "cam-audio-remote", kind: "audio" }],
+      });
+      await pullStarted;
+
+      const camOperation = voiceRoom.handleSelectProtocol(socket, {
+        push_tracks: [{ track_name: "cam-audio-participant-1", kind: "audio" }],
+        pull_tracks: [],
+        push_prefix: "cam",
+      });
+      await flushQueueMicrotasks();
+      const screenOperation = voiceRoom.handleSelectProtocol(socket, {
+        push_tracks: [{ track_name: "screen-video", kind: "video" }],
+        pull_tracks: [],
+        push_prefix: "screen",
+      });
+      const otherParticipantOperation = voiceRoom.handleSelectProtocol(
+        makeQueueSocket("participant-2"),
+        {
+          push_tracks: [{ track_name: "screen-video-other", kind: "video" }],
+          pull_tracks: [],
+          push_prefix: "screen",
+        },
+      );
+      await flushQueueMicrotasks();
+      const enteredBeforeRelease =
+        pullEntered && camEntered && screenEntered && otherParticipantEntered;
+
+      releasePull?.();
+      releaseCam?.();
+      await expect(pullOperation).resolves.toBeUndefined();
+      await expect(camOperation).resolves.toBeUndefined();
+      await expect(screenOperation).resolves.toBeUndefined();
+      await expect(otherParticipantOperation).resolves.toBeUndefined();
+      expect(enteredBeforeRelease).toBe(true);
+    });
+  });
+
+  it.each([
+    [
+      "cam push",
+      {
+        push_tracks: [{ track_name: "cam-audio", kind: "audio" }],
+        pull_tracks: [],
+        push_prefix: "cam" as const,
+      },
+    ],
+    [
+      "screen push",
+      {
+        push_tracks: [{ track_name: "screen-video", kind: "video" }],
+        pull_tracks: [],
+        push_prefix: "screen" as const,
+      },
+    ],
+    [
+      "pull",
+      {
+        push_tracks: [],
+        pull_tracks: [{ track_name: "cam-audio-remote", kind: "audio" }],
+      },
+    ],
+  ] as const)(
+    "serializes same-participant %s operations",
+    async (_label, payload) => {
+      await withQueueHarness(async (voiceRoom) => {
+        let releaseFirst: (() => void) | undefined;
+        let releaseSecond: (() => void) | undefined;
+        let invocationCount = 0;
+        let secondEntered = false;
+        let resolveFirstEntered: (() => void) | undefined;
+        let resolveSecondEntered: (() => void) | undefined;
+        const firstGate = new Promise<void>((resolve) => {
+          releaseFirst = resolve;
+        });
+        const secondGate = new Promise<void>((resolve) => {
+          releaseSecond = resolve;
+        });
+        const firstStarted = new Promise<void>((resolve) => {
+          resolveFirstEntered = resolve;
+        });
+        const secondStarted = new Promise<void>((resolve) => {
+          resolveSecondEntered = resolve;
+        });
+
+        voiceRoom.handleSelectProtocolInOrder = vi.fn(async () => {
+          invocationCount += 1;
+          if (invocationCount === 1) {
+            resolveFirstEntered?.();
+            await firstGate;
+          } else {
+            secondEntered = true;
+            resolveSecondEntered?.();
+            await secondGate;
+          }
+        });
+
+        const socket = makeQueueSocket("participant-1");
+        const firstOperation = voiceRoom.handleSelectProtocol(socket, payload);
+        await firstStarted;
+        const secondOperation = voiceRoom.handleSelectProtocol(
+          makeQueueSocket("participant-1"),
+          payload,
+        );
+        await flushQueueMicrotasks();
+        const enteredBeforeFirstRelease = secondEntered;
+
+        releaseFirst?.();
+        await firstOperation;
+        await secondStarted;
+        releaseSecond?.();
+        await secondOperation;
+
+        expect(enteredBeforeFirstRelease).toBe(false);
+      });
+    },
+  );
+
+  it("serializes same-track pushes globally across participants", async () => {
+    await withQueueHarness(async (voiceRoom) => {
+      let releaseFirst: (() => void) | undefined;
+      let resolveFirstEntered: (() => void) | undefined;
+      let secondEntered = false;
+      const firstGate = new Promise<void>((resolve) => {
+        releaseFirst = resolve;
+      });
+      const firstStarted = new Promise<void>((resolve) => {
+        resolveFirstEntered = resolve;
+      });
+
+      voiceRoom.handleSelectProtocolInOrder = vi.fn(
+        async (_ws: WebSocket, payload: SelectPayload) => {
+          if (payload.push_tracks[0]?.track_name === "globally-unique-track") {
+            if (resolveFirstEntered) {
+              resolveFirstEntered();
+              resolveFirstEntered = undefined;
+              await firstGate;
+            } else {
+              secondEntered = true;
+            }
+          }
+        },
+      );
+
+      const firstOperation = voiceRoom.handleSelectProtocol(
+        makeQueueSocket("participant-1"),
+        {
+          push_tracks: [{ track_name: "globally-unique-track", kind: "audio" }],
+          pull_tracks: [],
+          push_prefix: "cam",
+        },
+      );
+      await firstStarted;
+
+      const secondOperation = voiceRoom.handleSelectProtocol(
+        makeQueueSocket("participant-2"),
+        {
+          push_tracks: [{ track_name: "globally-unique-track", kind: "audio" }],
+          pull_tracks: [],
+          push_prefix: "cam",
+        },
+      );
+      await flushQueueMicrotasks();
+      const enteredBeforeFirstRelease = secondEntered;
+
+      releaseFirst?.();
+      await firstOperation;
+      await secondOperation;
+      expect(enteredBeforeFirstRelease).toBe(false);
+    });
+  });
+
+  it("releases rejected queue tails before starting the next same-key operation", async () => {
+    await withQueueHarness(async (voiceRoom) => {
+      let invocationCount = 0;
+      let resolveSecondStarted: (() => void) | undefined;
+      const secondStarted = new Promise<void>((resolve) => {
+        resolveSecondStarted = resolve;
+      });
+      voiceRoom.handleSelectProtocolInOrder = vi.fn(async () => {
+        invocationCount += 1;
+        if (invocationCount === 1) throw new Error("synthetic failure");
+        resolveSecondStarted?.();
+      });
+
+      const socket = makeQueueSocket("participant-1");
+      const payload: SelectPayload = {
+        push_tracks: [{ track_name: "cam-audio", kind: "audio" }],
+        pull_tracks: [],
+        push_prefix: "cam",
+      };
+      const firstOperation = voiceRoom.handleSelectProtocol(socket, payload);
+      await expect(firstOperation).rejects.toThrow("synthetic failure");
+
+      const secondOperation = voiceRoom.handleSelectProtocol(socket, payload);
+      await secondStarted;
+      await expect(secondOperation).resolves.toBeUndefined();
+      await flushQueueMicrotasks();
+      expect(voiceRoom.selectProtocolQueues.size).toBe(0);
+    });
+  });
+
+  it("rejects mixed push and pull operations before SFU side effects", async () => {
+    const roomName = crypto.randomUUID();
+    let callsApiRequests = 0;
+    await mockCallsApi(roomName, async (request) => {
+      callsApiRequests += 1;
+      const url = new URL(request.url);
+      if (url.pathname.endsWith("/sessions/new")) {
+        return Response.json({ sessionId: "mixed-session" });
+      }
+      if (url.pathname.endsWith("/tracks/new")) {
+        return Response.json({
+          sessionDescription: { type: "answer", sdp: "answer-sdp" },
+          tracks: [{ location: "local", trackName: "mixed-audio", mid: "0" }],
+        });
+      }
+      throw new Error(
+        `Unexpected Calls request: ${request.method} ${request.url}`,
+      );
+    });
+
+    const socket = await openVoiceSocket(roomName);
+    await identifyVoiceSocket(socket, crypto.randomUUID(), roomName);
+    const error = nextMessageWithOpcode(socket, 18);
+    socket.send(
+      JSON.stringify({
+        op: 1,
+        d: {
+          sdp: "offer-sdp",
+          request_id: "mixed-1",
+          push_prefix: "cam",
+          push_tracks: [{ track_name: "mixed-audio", kind: "audio", mid: "0" }],
+          pull_tracks: [
+            {
+              participant_id: "remote-participant",
+              track_name: "remote-audio",
+              session_id: "remote-session",
+              kind: "audio",
+            },
+          ],
+        },
+      }),
+    );
+
+    await expect(error).resolves.toMatchObject({
+      op: 18,
+      d: {
+        code: 4000,
+        message: "Mixed push and pull operations are not supported",
+        request_id: "mixed-1",
+      },
+    });
+    expect(callsApiRequests).toBe(0);
+    socket.close();
+  });
+
   it("rejects a publisher track name already owned by another participant", async () => {
     const roomName = crypto.randomUUID();
     await mockCallsApi(roomName, async (request) => {
@@ -1885,6 +2214,96 @@ describe("VoiceRoom lifecycle", () => {
         ),
       ];
       expect(rows[0]?.push_session_cam).toBeNull();
+    });
+  });
+
+  it("does not let a superseded SFU failure clear the current session", async () => {
+    const roomName = crypto.randomUUID();
+    const room = env.VOICE_ROOM.get(env.VOICE_ROOM.idFromName(roomName));
+    await runInDurableObject(room, async (instance, state) => {
+      type StaleFailureHarness = {
+        handleSelectProtocolInOrder(
+          ws: WebSocket,
+          d: {
+            sdp: string;
+            push_tracks: Array<{
+              track_name: string;
+              kind: "audio" | "video";
+              mid: string;
+            }>;
+            pull_tracks: [];
+            push_prefix: "cam";
+          },
+        ): Promise<void>;
+        isCurrentVoiceConnection(
+          ws: WebSocket,
+          participantId: string,
+          connectionId?: string,
+        ): boolean;
+        sfuPost(
+          path: string,
+          body: Record<string, unknown>,
+        ): Promise<Record<string, unknown>>;
+      };
+      const voiceRoom = instance as unknown as StaleFailureHarness;
+      const participantId = crypto.randomUUID();
+      const connectionId = crypto.randomUUID();
+      state.storage.sql.exec(
+        `INSERT INTO participants
+          (id, push_session_cam, last_heartbeat, speaking, connection_id)
+         VALUES (?, ?, 0, 0, ?)`,
+        participantId,
+        "old-session",
+        connectionId,
+      );
+
+      let releaseRequest: (() => void) | undefined;
+      let requestStarted: (() => void) | undefined;
+      const requestGate = new Promise<void>((resolve) => {
+        releaseRequest = resolve;
+      });
+      const started = new Promise<void>((resolve) => {
+        requestStarted = resolve;
+      });
+      let current = true;
+      voiceRoom.isCurrentVoiceConnection = vi.fn(() => current);
+      voiceRoom.sfuPost = vi.fn(async () => {
+        requestStarted?.();
+        await requestGate;
+        throw new Error("session_error");
+      });
+      const ws = {
+        deserializeAttachment: () => ({
+          participant_id: participantId,
+          connection_id: connectionId,
+        }),
+        send: vi.fn(),
+      } as unknown as WebSocket;
+
+      const operation = voiceRoom.handleSelectProtocolInOrder(ws, {
+        sdp: "offer-sdp",
+        push_prefix: "cam",
+        push_tracks: [{ track_name: "cam-audio", kind: "audio", mid: "0" }],
+        pull_tracks: [],
+      });
+      await started;
+      state.storage.sql.exec(
+        "UPDATE participants SET push_session_cam = ?, connection_id = ? WHERE id = ?",
+        "current-session",
+        crypto.randomUUID(),
+        participantId,
+      );
+      current = false;
+      releaseRequest?.();
+      await operation;
+
+      const rows = [
+        ...state.storage.sql.exec(
+          "SELECT push_session_cam FROM participants WHERE id = ?",
+          participantId,
+        ),
+      ];
+      expect(rows[0]?.push_session_cam).toBe("current-session");
     });
   });
 
