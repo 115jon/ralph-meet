@@ -148,6 +148,37 @@ describe("RoomGateway", () => {
     gateway.disconnect();
   });
 
+  it("emits MediaReady credentials from its discriminated server payload", async () => {
+    const gateway = new RoomGateway();
+    const onMediaReady = vi.fn();
+    gateway.on("media-ready", onMediaReady);
+    gateway.connectRoom({
+      name: "Test User",
+      clerkUserId: "user-1",
+      roomSlug: "voice-server-channel",
+      wsUrlGenerator: (path) => `ws://meet.test${path}`,
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const socket = TestWebSocket.instances[0]!;
+    socket.readyState = TestWebSocket.OPEN;
+    socket.message({
+      op: VoiceOpcode.MediaReady,
+      d: {
+        participant_id: "participant-1",
+        ice_servers: [{ urls: ["stun:example.test"] }],
+        voice_token: "voice-token",
+      },
+    });
+
+    expect(onMediaReady).toHaveBeenCalledWith({
+      participantId: "participant-1",
+      iceServers: [{ urls: ["stun:example.test"] }],
+      voiceToken: "voice-token",
+    });
+    gateway.disconnect();
+  });
+
   it("resumes from the latest event sequence instead of a heartbeat ACK", async () => {
     const gateway = new RoomGateway();
     gateway.connectRoom({

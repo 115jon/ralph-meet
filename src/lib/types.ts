@@ -15,13 +15,13 @@ import type { PresencePlatform } from "@/lib/presence-platform";
 export enum VoiceOpcode {
   /** C→S: Initial identification (join room) */
   Identify = 0,
-  /** C→S: SDP offer for push/pull tracks */
+  /** C→S: Native Rust screen-share SDP offer */
   SelectProtocol = 1,
   /** S→C: Confirm identification, send ICE/TURN config + roster */
   Ready = 2,
   /** C→S: Heartbeat keepalive */
   Heartbeat = 3,
-  /** S→C: SDP answer/offer from the SFU */
+  /** S→C: Native screen-share SDP answer from the SFU */
   SessionDescription = 4,
   /** C↔S: Speaking state with bitfield flags */
   Speaking = 5,
@@ -33,16 +33,14 @@ export enum VoiceOpcode {
   Hello = 8,
   /** S→C: Confirm session resume success */
   Resumed = 9,
-  /** S→C: Notification that a negotiation has completed on SFU */
+  /** S→C: Native screen-share negotiation completed on the SFU */
   NegotiationDone = 10,
   /** C→S: Graceful disconnect */
   ClientDisconnect = 11,
-  /** C↔S: Video/track subscription (pull request or track publish notification) */
+  /** C↔S: PartyTracks publication metadata */
   Video = 12,
   /** C↔S: Stop/remove tracks */
   StopTracks = 13,
-  /** C→S: SDP answer for pull renegotiation */
-  Answer = 14,
   /** S→C: Participant join/leave notification */
   VoiceStateUpdate = 15,
   /** S→C: Profile info broadcast */
@@ -104,6 +102,8 @@ export enum VoiceOpcode {
   CallEnd = 39,
   /** C→S: Refresh voice token and TURN credentials without reconnecting RoomGW */
   RefreshVoiceCredentials = 40,
+  /** S→C: Media credentials before full room/profile Ready */
+  MediaReady = 41,
 
   // ── Voice Gateway specific (100+) ─────────────────────────────────
 
@@ -111,14 +111,8 @@ export enum VoiceOpcode {
   VoiceIdentify = 100,
   /** S→C: Voice Gateway confirm authentication */
   VoiceReady = 101,
-  /** C→S: Publisher confirms tracks are flowing (push negotiation done) */
+  /** C→S: Native Rust publisher confirms screen tracks are flowing */
   TracksReady = 102,
-  /** C→S: Update simulcast layer on already-pulled tracks (no re-negotiation) */
-  TrackUpdate = 103,
-  /** C→S: Request ICE restart on an existing SFU session (network path change recovery) */
-  IceRestart = 104,
-  /** C->S: Drop the stored pull SFU session before rebuilding the pull PeerConnection */
-  ResetPullSession = 105,
   /** C<->S: Lightweight voice-session app events (activities, soundboard) */
   VoiceAppEvent = 106,
 }
@@ -159,23 +153,24 @@ export interface IceServer {
   credential?: string;
 }
 
-/** Describes a track to push (local → SFU) */
+/** Describes a native screen track to push (local → SFU). */
 export interface PushTrackDescriptor {
   track_name: string;
   mid?: string;
   kind: "audio" | "video";
-  rid?: string;
 }
 
 /** Info about a published track on the SFU */
 export interface TrackInfo {
   participant_id: string;
+  /** Stable Ralph alias used by the UI (for example, cam-audio-<participant>). */
   track_name: string;
+  /** Opaque PartyTracks/SFU track identifier used only at the transport boundary. */
+  sfu_track_name?: string;
   session_id: string;
   mid?: string;
-  rid?: string;
   kind: "audio" | "video";
-  track?: any; // The MediaStreamTrack object
+  track?: MediaStreamTrack;
 }
 
 /** A participant in the room — Discord-style voice state */
@@ -198,8 +193,6 @@ export interface VoiceState {
   suppress: boolean;
   status?: "online" | "idle" | "dnd" | "offline";
   custom_status?: string;
-  push_session_id?: string;
-  pull_session_id?: string;
   tracks: TrackInfo[];
 }
 
@@ -247,12 +240,11 @@ export interface IdentifyPayload {
 }
 
 export interface SelectProtocolPayload {
-  sdp?: string;
+  sdp: string;
   push_tracks: PushTrackDescriptor[];
-  pull_tracks: TrackInfo[];
+  pull_tracks: [];
   request_id?: string;
-  /** Identifies which push PeerConnection this offer belongs to ('cam' or 'screen') */
-  push_prefix?: string;
+  push_prefix: "screen";
 }
 
 export interface HeartbeatPayload {
@@ -271,11 +263,6 @@ export interface CallInitiatePayload {
 
 export interface CallIdPayload {
   call_id: string;
-}
-
-export interface AnswerPayload {
-  sdp: string;
-  request_id?: string;
 }
 
 export interface SpeakingPayloadClient {
@@ -312,20 +299,17 @@ export interface SessionDescriptionPayload {
   sdp: string;
   session_id: string;
   tracks: TrackInfo[];
-  sdp_type: "answer" | "offer";
+  sdp_type: "answer";
   request_id?: string;
-  operation?: "push" | "pull";
-  /** True when this SDP is an ICE restart answer (no new tracks) */
-  ice_restart?: boolean;
-  /** Explicit prefix provided by the backend to identify which tracks to resolve */
-  push_prefix?: "cam" | "screen";
+  operation: "push";
+  push_prefix: "screen";
 }
 
 export interface NegotiationDonePayload {
-  session_id?: string;
+  session_id: string;
   request_id?: string;
-  operation?: "push" | "pull";
-  push_prefix?: "cam" | "screen";
+  operation: "push";
+  push_prefix: "screen";
 }
 
 export interface HeartbeatACKPayload {
@@ -385,7 +369,7 @@ export interface VideoPayloadServer {
 export interface StopTracksPayloadServer {
   participant_id: string;
   track_names: string[];
-  session_id?: string;
+  tracks?: TrackInfo[];
 }
 
 export interface ProfileUpdatePayload {
@@ -401,7 +385,8 @@ export interface ErrorPayload {
   code: number;
   message: string;
   request_id?: string;
-  operation?: "push" | "pull";
+  operation?: "push";
+  push_prefix?: "screen";
 }
 
 /** C→S: Authenticate on Voice Gateway */
@@ -416,30 +401,12 @@ export interface VoiceReadyPayload {
   participant_id: string;
   tracks?: TrackInfo[];
   speaking?: Record<string, number>;
-  sfu_session_transferred?: boolean;
 }
 
-/** C→S: Publisher confirms tracks are flowing */
+/** C→S: Native Rust publisher confirms screen tracks are flowing. */
 export interface TracksReadyPayload {
   track_names: string[];
 }
-
-/** C→S: Update simulcast layer on already-pulled tracks */
-export interface TrackUpdatePayload {
-  tracks: Array<{
-    track_name: string;
-    session_id: string;
-    mid: string;
-    rid: string;
-  }>;
-}
-
-/** C→S: Request ICE restart on existing SFU session */
-export interface IceRestartPayload {
-  sdp: string;
-  session_type: "push_cam" | "push_screen" | "pull";
-}
-
 // ── Chat Data Types ─────────────────────────────────────────────────────────
 
 /** Dispatch event names (used in Dispatch opcode) */
@@ -801,7 +768,7 @@ export interface ServerAuditLog {
   actor?: User; // Joined in API response
   action_type: string;
   target_id?: string | null;
-  changes?: Record<string, any> | null;
+  changes?: Record<string, unknown> | null;
   reason?: string | null;
   created_at: string;
 }
@@ -904,6 +871,12 @@ export interface RelationshipUpdatePayload {
 
 // ── Gateway Message Types ───────────────────────────────────────────────────
 
+export interface MediaReadyPayload {
+  participant_id: string;
+  ice_servers: IceServer[];
+  voice_token: string;
+}
+
 export type ClientMessage =
   | { op: VoiceOpcode.Identify; d: IdentifyPayload }
   | { op: VoiceOpcode.SelectProtocol; d: SelectProtocolPayload }
@@ -913,14 +886,11 @@ export type ClientMessage =
   | { op: VoiceOpcode.Speaking; d: SpeakingPayloadClient }
   | { op: VoiceOpcode.Video; d: VideoPayloadClient }
   | { op: VoiceOpcode.StopTracks; d: StopTracksPayloadClient }
-  | { op: VoiceOpcode.Answer; d: AnswerPayload }
   | { op: VoiceOpcode.ProfileRefresh; d: Record<string, never> }
   | { op: VoiceOpcode.VoiceIdentify; d: VoiceIdentifyPayload }
   | { op: VoiceOpcode.VoiceStateUpdate; d: VoiceStateUpdateClientPayload }
   | { op: VoiceOpcode.TracksReady; d: TracksReadyPayload }
-  | { op: VoiceOpcode.TrackUpdate; d: TrackUpdatePayload }
-  | { op: VoiceOpcode.IceRestart; d: IceRestartPayload }
-  | { op: VoiceOpcode.ResetPullSession; d: Record<string, never> }
+  | { op: VoiceOpcode.VoiceAppEvent; d: Record<string, unknown> }
   | { op: VoiceOpcode.RefreshVoiceCredentials; d: Record<string, never> }
   // Chat opcodes
   | { op: VoiceOpcode.MessageCreate; d: MessageCreatePayload }
@@ -947,13 +917,13 @@ export type ServerMessage =
   | { op: VoiceOpcode.ProfileUpdate; d: ProfileUpdatePayload }
   | { op: VoiceOpcode.Error; d: ErrorPayload }
   | { op: VoiceOpcode.VoiceReady; d: VoiceReadyPayload }
-  | { op: VoiceOpcode.TracksReady; d: TracksReadyPayload }
   | { op: VoiceOpcode.VoiceAppEvent; d: Record<string, unknown> }
   // Chat opcodes
   | { op: VoiceOpcode.Dispatch; d: DispatchPayload }
   | { op: VoiceOpcode.PresenceUpdate; d: PresenceUpdatePayload }
   | { op: VoiceOpcode.ChannelUpdate; d: Channel }
   | { op: VoiceOpcode.ChannelDelete; d: { channel_id: string } }
+  | { op: VoiceOpcode.MediaReady; d: MediaReadyPayload }
   | { op: VoiceOpcode.GuildMemberUpdate; d: GuildMemberUpdatePayload }
   | { op: VoiceOpcode.RelationshipUpdate; d: RelationshipUpdatePayload };
 
@@ -1001,11 +971,9 @@ export interface SFUEventMap {
   disconnected: never;
   kicked: never;
   error: { message: string };
-  "push-pc-reset": never;
   "audio-resumed": {};
   "voice-reconnected": never;
   "voice-token-expired": never;
-  "native-sdp-answer": { sdp: string };
   "app-event": Record<string, unknown>;
 }
 

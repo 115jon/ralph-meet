@@ -864,6 +864,114 @@ describe("useVoiceChannel SFU lifecycle", () => {
     hook.unmount();
   });
 
+  it("commits pending processed audio when initial PartyTracks readiness reconciles it", async () => {
+    const rawTrack = createTrack("audio", "pending-raw-audio");
+    const preGateTrack = createTrack("audio", "pending-pre-gate-audio");
+    const publicationTrack = createTrack("audio", "pending-publication-audio");
+    const rawStream = createStream([rawTrack.track]);
+    const preGateStream = createStream([preGateTrack.track]);
+    const publicationStream = createStream([publicationTrack.track]);
+    const processor = createProcessor(
+      preGateStream,
+      publicationStream,
+      preGateStream,
+    );
+    vi.mocked(processor.destroy).mockImplementation(() => {
+      publicationTrack.track.stop();
+    });
+    const acquisition = deferred<MediaStream>();
+    vi.mocked(acquireLocalStream).mockReturnValue(acquisition.promise);
+    vi.mocked(createLocalAudioProcessor).mockResolvedValue(processor);
+
+    const hook = renderHook(() =>
+      useVoiceChannel({ channelId: "channel", serverId: "server" }),
+    );
+    await act(async () => {
+      await hook.result.current.handleJoin();
+    });
+    const sfu = sfuInstances[0];
+    if (!sfu) throw new Error("SFU was not created");
+
+    let partyTracksReady = false;
+    const voiceReadyBarrier = deferred<void>();
+    const legacyPublish = vi.fn();
+    const transportPush = vi.fn();
+    const transportSources = new Map<string, MediaStreamTrack>();
+    sfu.voiceGW.isReady = false;
+    sfu.publishTracks.mockImplementation(async (stream, prefix) => {
+      if (!partyTracksReady) await voiceReadyBarrier.promise;
+      if (!partyTracksReady) {
+        legacyPublish(stream, prefix);
+        return;
+      }
+
+      for (const track of stream.getTracks()) {
+        const trackName = `${prefix}-${track.kind}-self`;
+        if (!transportSources.has(trackName)) {
+          transportSources.set(trackName, track);
+          transportPush(trackName, track);
+        }
+        if (prefix === "cam") {
+          sfu.publishedTracks.set(
+            trackName,
+            track.clone ? track.clone() : track,
+          );
+        }
+      }
+    });
+
+    await act(async () => {
+      acquisition.resolve(rawStream);
+    });
+    await waitFor(() => expect(sfu.publishTracks).toHaveBeenCalledOnce());
+    expect(createLocalAudioProcessor).toHaveBeenCalledWith(
+      rawStream,
+      expect.any(Object),
+    );
+    expect(transportPush).not.toHaveBeenCalled();
+
+    await act(async () => {
+      sfu.emit("joined", { participantId: "self", participants: [] });
+      partyTracksReady = true;
+      sfu.voiceGW.isReady = true;
+      voiceReadyBarrier.resolve();
+      sfu.emit("voice-ready", { speaking: {} });
+      sfu.emit("voice-reconnected", undefined);
+    });
+
+    await waitFor(() => expect(sfu.publishTracks).toHaveBeenCalledTimes(2));
+    await waitFor(() =>
+      expect(settingsState.setDevice).toHaveBeenCalledWith(
+        "input",
+        "pending-raw-audio",
+        undefined,
+        {
+          label: "audio-pending-raw-audio",
+          groupId: "group-pending-raw-audio",
+        },
+      ),
+    );
+    expect(transportPush).toHaveBeenCalledOnce();
+    expect(transportSources.size).toBe(1);
+    expect(transportSources.get("cam-audio-self")).toBe(publicationTrack.track);
+    expect(legacyPublish).not.toHaveBeenCalled();
+    expect(
+      sfu.voiceGW.send.mock.calls.some(
+        ([message]) =>
+          message.op === 1 || message.op === 105 || message.op === 107,
+      ),
+    ).toBe(false);
+    expect(sfu.vad.start).toHaveBeenLastCalledWith(preGateStream);
+    expect(processor.destroy).not.toHaveBeenCalled();
+    expect(rawTrack.stop).not.toHaveBeenCalled();
+    expect(publicationTrack.stop).not.toHaveBeenCalled();
+
+    hook.unmount();
+    expect(processor.destroy).toHaveBeenCalledOnce();
+    expect(rawTrack.stop).toHaveBeenCalledOnce();
+    expect(publicationTrack.stop).toHaveBeenCalledOnce();
+  });
+
   it("stops pre-publication VAD when the initial publication fails", async () => {
     const audio = createTrack("audio", "failed-publish-audio");
     const acquisition = deferred<MediaStream>();
@@ -1262,7 +1370,7 @@ describe("useVoiceChannel SFU lifecycle", () => {
     };
     const processors: LocalAudioProcessorHandle[] = [];
     vi.mocked(acquireLocalStream).mockResolvedValue(rawStream);
-    vi.mocked(createLocalAudioProcessor).mockImplementation(async (stream) => {
+    vi.mocked(createLocalAudioProcessor).mockImplementation(async (_stream) => {
       const processor =
         processors.length === 0
           ? createProcessor(

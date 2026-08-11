@@ -1036,6 +1036,11 @@ export function useVoiceChannel({
     token: 0,
   });
   const initialMediaTokenRef = useRef(0);
+  const pendingInitialMediaRef = useRef<{
+    stream: MediaStream;
+    processor: LocalAudioProcessorHandle;
+    token: number;
+  } | null>(null);
   const [localMediaOwner] = useState<LocalMediaOwner>(() =>
     createLocalMediaOwner(),
   );
@@ -2087,6 +2092,7 @@ export function useVoiceChannel({
       };
 
       if (action === "remove") {
+        sfu.removeTrackVolume(participantId, trackInfo.track_name);
         voiceDispatch({
           type: "UPDATE_REMOTE_STREAMS",
           payload: (prev: RemoteStreamsByUser) =>
@@ -2106,7 +2112,7 @@ export function useVoiceChannel({
         payload: (prev: RemoteStreamsByUser) => {
           const nextStream = new MediaStream();
           if (track.kind === "audio") {
-            const processedStream = sfu.applyVolumeToTrack(
+            const processedStream = sfu.attachRemoteAudioTrack(
               participantId,
               track,
               trackInfo.track_name,
@@ -2343,13 +2349,15 @@ export function useVoiceChannel({
     onSfu("voice-reconnected", () => {
       void (async () => {
         vcLog.info("Voice reconnected — re-publishing local tracks");
-        let stream = localStreamRef.current;
+        let stream =
+          pendingInitialMediaRef.current?.stream ?? localStreamRef.current;
         if (!stream) return;
         const getPublishedAudioStream = (
           _source: MediaStream,
         ): MediaStream | null => {
           const publicationStream =
-            publishedAudioProcessorRef.current?.publicationStream;
+            publishedAudioProcessorRef.current?.publicationStream ??
+            pendingInitialMediaRef.current?.processor.publicationStream;
           return publicationStream &&
             publicationStream.getAudioTracks().length > 0
             ? publicationStream
@@ -2360,7 +2368,8 @@ export function useVoiceChannel({
           audioStream: MediaStream;
         } | null> => {
           for (let attempt = 0; attempt < 3; attempt += 1) {
-            const currentStream = localStreamRef.current;
+            const currentStream =
+              pendingInitialMediaRef.current?.stream ?? localStreamRef.current;
             const currentAudioStream = currentStream
               ? getPublishedAudioStream(currentStream)
               : null;
@@ -2386,7 +2395,8 @@ export function useVoiceChannel({
         };
         const reconcileCurrentVideo = async (): Promise<boolean> => {
           for (let attempt = 0; attempt < 3; attempt += 1) {
-            const currentStream = localStreamRef.current;
+            const currentStream =
+              pendingInitialMediaRef.current?.stream ?? localStreamRef.current;
             const currentTrack = currentStream?.getVideoTracks()[0];
             if (!currentStream || currentTrack?.readyState !== "live") {
               return false;
@@ -2431,10 +2441,23 @@ export function useVoiceChannel({
         if (audioStream) {
           await sfu.publishTracks(audioStream, "cam");
           if (sfuRef.current !== sfu) return;
+          const pendingInitialMedia = pendingInitialMediaRef.current;
           let isCurrentMedia =
             localMediaGenerationRef.current === mediaGeneration &&
-            localStreamRef.current === stream &&
+            (localStreamRef.current === stream ||
+              pendingInitialMedia?.stream === stream) &&
             sfuRef.current === sfu;
+
+          if (isCurrentMedia && pendingInitialMedia?.stream === stream) {
+            localStreamRef.current = pendingInitialMedia.stream;
+            publishedAudioProcessorRef.current = pendingInitialMedia.processor;
+            pendingInitialMediaRef.current = null;
+            if (
+              initialMediaSyncRef.current.token === pendingInitialMedia.token
+            ) {
+              initialMediaSyncRef.current.inFlight = false;
+            }
+          }
 
           if (!isCurrentMedia) {
             const reconciledAudio = await reconcileCurrentAudio();
@@ -2677,6 +2700,7 @@ export function useVoiceChannel({
       let acquiredCameraEffect: CameraBackgroundEffect | null = null;
       let replacedAudioTrack: MediaStreamTrack | null = null;
       let previousAudioTrack: MediaStreamTrack | null = null;
+      let pendingInitialCaptureStream: MediaStream | null = null;
       const disposeStaleResources = (
         audioProcessor: LocalAudioProcessorHandle | null,
         cameraEffect: CameraBackgroundEffect | null = null,
@@ -2884,6 +2908,7 @@ export function useVoiceChannel({
         }
 
         const displayStream = new MediaStream(newStream.getAudioTracks());
+        pendingInitialCaptureStream = newStream;
         const rawAudioTrack = newStream.getAudioTracks()[0];
         if (rawAudioTrack) rawAudioTrack.enabled = isMicOnRef.current;
         const previousAudioProcessor = publishedAudioProcessorRef.current;
@@ -2924,6 +2949,13 @@ export function useVoiceChannel({
             if (nextAudioProcessor) {
               sfu.vad.setGateController(nextAudioProcessor.gateController);
               restartVadMonitoring(sfu, nextAudioProcessor);
+            }
+            if (isInitialMediaSync && nextAudioProcessor) {
+              pendingInitialMediaRef.current = {
+                stream: newStream,
+                processor: nextAudioProcessor,
+                token: initialMediaToken,
+              };
             }
             await sfu.publishTracks(new MediaStream([newAudio]), "cam");
           }
@@ -3061,6 +3093,9 @@ export function useVoiceChannel({
         const committedAudioProcessor = nextAudioProcessor;
         localStreamRef.current = displayStream;
         publishedAudioProcessorRef.current = committedAudioProcessor;
+        if (pendingInitialMediaRef.current?.stream === newStream) {
+          pendingInitialMediaRef.current = null;
+        }
         clearInitialMediaSync();
         nextAudioProcessor = null;
         if (audioNeedsUpdate) {
@@ -3125,18 +3160,44 @@ export function useVoiceChannel({
         }
       } catch (err) {
         await restorePreviousAudio();
-        clearInitialMediaSync();
+        const pendingInitialMedia = pendingInitialMediaRef.current;
+        const retainPendingInitialMedia =
+          isInitialMediaSync &&
+          !sfu.voiceGW.isReady &&
+          pendingInitialMedia?.stream === pendingInitialCaptureStream;
+        if (!retainPendingInitialMedia) {
+          clearInitialMediaSync();
+          if (
+            pendingInitialMedia &&
+            pendingInitialMedia.stream === pendingInitialCaptureStream
+          ) {
+            pendingInitialMedia.processor.destroy();
+            pendingInitialMedia.stream
+              .getTracks()
+              .forEach((track) => track.stop());
+            pendingInitialMediaRef.current = null;
+            if (
+              initialMediaSyncRef.current.token === pendingInitialMedia.token
+            ) {
+              initialMediaSyncRef.current.inFlight = false;
+            }
+          }
+        }
         if (isInitialMediaSync) {
           sfu.vad.stop();
           sfu.vad.setGateController(null);
         }
-        nextAudioProcessor?.destroy();
+        if (!retainPendingInitialMedia) nextAudioProcessor?.destroy();
         acquiredCameraEffect?.stop();
         if (cameraBackgroundEffectRef.current === acquiredCameraEffect) {
           cameraBackgroundEffectRef.current = null;
           activeCameraBackgroundKeyRef.current = "none";
         }
-        if (acquiredStream && acquiredStream !== localStreamRef.current) {
+        if (
+          !retainPendingInitialMedia &&
+          acquiredStream &&
+          acquiredStream !== localStreamRef.current
+        ) {
           const currentTracks = new Set(
             localStreamRef.current?.getTracks() ?? [],
           );
@@ -3151,6 +3212,15 @@ export function useVoiceChannel({
     void swapDevices();
     return () => {
       cancelPendingLocalStreamAcquisition(localMediaOwner);
+      const pendingInitialMedia = pendingInitialMediaRef.current;
+      if (pendingInitialMedia) {
+        pendingInitialMedia.processor.destroy();
+        pendingInitialMedia.stream.getTracks().forEach((track) => track.stop());
+        pendingInitialMediaRef.current = null;
+        if (initialMediaSyncRef.current.token === pendingInitialMedia.token) {
+          initialMediaSyncRef.current.inFlight = false;
+        }
+      }
       clearInitialMediaSync();
       if (localMediaGenerationRef.current === generation) {
         localMediaGenerationRef.current += 1;

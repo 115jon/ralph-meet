@@ -23,6 +23,9 @@ const tanStackHandler = vi.hoisted(() =>
       }),
   ),
 );
+const handlePartyTracksProxyRequest = vi.hoisted(() =>
+  vi.fn(async () => Response.json({ proxied: true })),
+);
 
 vi.mock("@tanstack/react-start/server", () => ({
   createStartHandler: vi.fn(() => tanStackHandler),
@@ -49,6 +52,10 @@ vi.mock("../../../realtime/voice-room", () => ({
   VoiceRoom: class {},
 }));
 
+vi.mock("../../../realtime/partytracks-proxy", () => ({
+  handlePartyTracksProxyRequest,
+}));
+
 vi.mock("../../../src/lib/background-tasks", () => ({
   consumeBackgroundTaskBatch,
   retryMessagePostprocessing,
@@ -64,6 +71,28 @@ vi.mock("../../../src/lib/collectibles-catalog", () => ({
 
 import server from "../../../custom-server-entry";
 import { SOUNDBOARD_MEDIA_RATE_LIMIT } from "../../../realtime/rate-limiter";
+
+describe("custom server PartyTracks routing", () => {
+  it("routes channel PartyTracks requests before the application handler", async () => {
+    handlePartyTracksProxyRequest.mockClear();
+    tanStackHandler.mockClear();
+    const request = new Request(
+      "https://meet.test/api/channels/room-one/partytracks/sessions/new",
+      { method: "POST" },
+    );
+    const env = {
+      CALLS_APP_ID: "app",
+      CALLS_APP_SECRET: "secret",
+    } as Parameters<typeof server.fetch>[1];
+    const ctx = { waitUntil: vi.fn() } as unknown as ExecutionContext;
+
+    const response = await server.fetch(request, env, ctx);
+
+    await expect(response.json()).resolves.toEqual({ proxied: true });
+    expect(handlePartyTracksProxyRequest).toHaveBeenCalledWith(request, env);
+    expect(tanStackHandler).not.toHaveBeenCalled();
+  });
+});
 
 describe("custom server soundboard media rate limiting", () => {
   it("returns 429 after the aggregate requester and route threshold", async () => {

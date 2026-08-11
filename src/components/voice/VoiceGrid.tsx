@@ -154,6 +154,7 @@ export const VoiceGrid = React.memo(
               muted={
                 isFocusedScreen ||
                 globalDeafened ||
+                !focusedItem.isLocal ||
                 (focusedItem.isLocal
                   ? true
                   : !!currentSettings.peerSettings[focusedItem.userId]?.muted)

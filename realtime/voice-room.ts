@@ -1,19 +1,16 @@
 // ============================================================================
-// VoiceRoom — Cloudflare Durable Object for WebRTC media signaling
+// VoiceRoom — Cloudflare Durable Object for voice presence and media metadata
 //
-// Discord-style Voice Gateway: handles media-related opcodes only.
-// SelectProtocol, SessionDescription, Video, StopTracks, Answer.
-// Separate from MeetingRoom (Main Gateway) which handles presence/state.
+// Browser media uses PartyTracks; this room only verifies, persists, and
+// broadcasts its descriptors. Direct Calls signaling is limited to the native
+// Rust screen publisher's push-only session.
 //
 // Clients authenticate via voice_token issued by MeetingRoom on Identify.
 // ============================================================================
 
 import { DurableObject } from "cloudflare:workers";
 import { clog } from "../src/lib/console-logger";
-import {
-  isReconnectWithinGrace,
-  isSupersededVoiceConnection,
-} from "../src/lib/voice/connection-generation";
+import { isSupersededVoiceConnection } from "../src/lib/voice/connection-generation";
 import {
   buildListenTogetherSnapshot,
   isValidListenTogetherVideoId,
@@ -26,7 +23,6 @@ import {
   type ListenTogetherQueueEntry,
   type ListenTogetherStateSnapshot,
 } from "../src/lib/listen-together";
-import { decideFailedPublisherSessionEviction } from "../src/lib/voice/sfu-publisher-eviction";
 import {
   clearListenTogether,
   enqueueListenTogetherEntries,
@@ -57,7 +53,7 @@ import {
   getSoundboardMediaCapabilityUrl,
   issueSoundboardMediaCapability,
 } from "../src/lib/voice/soundboard-media-capability";
-import { toSafeSfuFailure } from "./sfu-diagnostics";
+import { verifyPartyTracksSessionCapability } from "./partytracks-proxy";
 import { getRealtimeAdmissionFromHeaders } from "./realtime-admission";
 import { verifyVoiceToken } from "./voice-token";
 import {
@@ -98,7 +94,6 @@ const enum Op {
   ClientDisconnect = 11,
   Video = 12,
   StopTracks = 13,
-  Answer = 14,
   Error = 18,
 
   // Voice-specific: authenticate with token from Main GW
@@ -106,12 +101,6 @@ const enum Op {
   VoiceReady = 101,
   // C->S: Publisher confirms push negotiation complete
   TracksReady = 102,
-  // C->S: Update simulcast layer on already-pulled tracks (no re-negotiation)
-  TrackUpdate = 103,
-  // C->S: Request ICE restart on existing SFU session (network path change)
-  IceRestart = 104,
-  // C->S: Forget this participant's pull session before client rebuilds pull PC
-  ResetPullSession = 105,
   VoiceAppEvent = 106,
 }
 
@@ -135,10 +124,10 @@ interface VoiceSql {
 interface TrackInfo {
   participant_id: string;
   track_name: string;
+  sfu_track_name?: string;
   session_id: string;
   mid?: string;
   kind: "audio" | "video";
-  rid?: string;
 }
 
 interface PushTrackDescriptor {
@@ -147,10 +136,17 @@ interface PushTrackDescriptor {
   kind: "audio" | "video";
 }
 
-interface SfuTrackCloseRow {
+interface NativeScreenTrackRow {
   mid: string;
-  session_id: string | null;
   track_name: string;
+}
+
+interface NativeScreenSelectProtocolPayload {
+  sdp: string;
+  push_tracks: PushTrackDescriptor[];
+  pull_tracks: [];
+  push_prefix: "screen";
+  request_id?: string;
 }
 
 interface GatewayMessage {
@@ -170,7 +166,6 @@ interface VoiceAttachment {
   };
   participant_id: string;
   connection_id?: string;
-  active_pull_request_id?: string;
   supports_listen_together_snapshot_events?: boolean;
 }
 
@@ -179,9 +174,6 @@ interface VoiceAttachment {
 const VOICE_HEARTBEAT_INTERVAL_MS = 15_000;
 const VOICE_ZOMBIE_TIMEOUT_MS = VOICE_HEARTBEAT_INTERVAL_MS * 6;
 const VOICE_PRUNE_ALARM_INTERVAL_MS = 300_000;
-// Cloudflare Realtime keeps sessions and tracks reusable for 30 seconds after
-// a connectivity loss, so the reconnect window must not expire earlier.
-const SFU_SESSION_REUSE_GRACE_MS = 30_000;
 const DEMO_CHAT_TTL_MS = 10 * 60 * 1000;
 const DEMO_CHAT_MAX_MESSAGES = 75;
 const DEMO_CHAT_MAX_CONTENT_LENGTH = 1_000;
@@ -202,13 +194,13 @@ const VOICE_WS_RATE_LIMIT_WINDOW_MS = 60_000;
 const VOICE_WS_RATE_LIMITS: Record<number, number> = {
   [Op.SelectProtocol]: 20,
   [Op.Video]: 20,
-  [Op.Answer]: 20,
   [Op.StopTracks]: 40,
-  [Op.TrackUpdate]: 60,
-  [Op.IceRestart]: 10,
   [Op.TracksReady]: 60,
   [Op.VoiceAppEvent]: 60,
 };
+const UNSUPPORTED_BROWSER_SFU_OPCODES: ReadonlySet<number> = new Set([
+  14, 103, 104, 105, 107, 108,
+]);
 
 // ── VoiceRoom Durable Object ────────────────────────────────────────────────
 
@@ -221,7 +213,7 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
   private sfuClient: SfuClient;
   private roomSlug: string = "";
   private listenTogetherCommandQueue: Promise<void> = Promise.resolve();
-  private selectProtocolQueues = new Map<string, Promise<void>>();
+  private nativeScreenOperations = new Map<string, symbol>();
 
   constructor(ctx: DurableObjectState<unknown>, env: Env) {
     super(ctx, env);
@@ -264,9 +256,7 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
       CREATE TABLE IF NOT EXISTS participants (
         id TEXT PRIMARY KEY,
         clerk_user_id TEXT,
-        push_session_cam TEXT,
-        push_session_screen TEXT,
-        pull_session_id TEXT,
+        native_screen_session_id TEXT,
         last_heartbeat INTEGER DEFAULT 0,
         speaking INTEGER DEFAULT 0,
         connection_id TEXT
@@ -298,25 +288,39 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
     } catch {
       // Existing SQLite-backed Durable Objects already have the column.
     }
-
-    this.sql.exec(`
-      CREATE TABLE IF NOT EXISTS pending_reconnects (
-        participant_id TEXT PRIMARY KEY,
-        disconnected_at INTEGER NOT NULL
+    try {
+      this.sql.exec(
+        `ALTER TABLE participants ADD COLUMN native_screen_session_id TEXT;`,
       );
-    `);
+    } catch {
+      // Existing SQLite-backed Durable Objects already have the column.
+    }
 
-    // is_pending = 1 means it's in "pending_broadcast", waiting for TracksReady
+    // PartyTracks descriptors are ready immediately. Only native screen tracks
+    // wait for the Rust publisher's TracksReady confirmation.
     this.sql.exec(`
       CREATE TABLE IF NOT EXISTS tracks (
         track_name TEXT PRIMARY KEY,
         participant_id TEXT NOT NULL,
+        sfu_track_name TEXT,
         session_id TEXT NOT NULL,
         mid TEXT,
         kind TEXT NOT NULL,
-        is_pending INTEGER NOT NULL DEFAULT 0
+        native_screen_pending INTEGER NOT NULL DEFAULT 0
       );
     `);
+    try {
+      this.sql.exec(`ALTER TABLE tracks ADD COLUMN sfu_track_name TEXT;`);
+    } catch {
+      // Existing SQLite-backed Durable Objects already have the column.
+    }
+    try {
+      this.sql.exec(
+        `ALTER TABLE tracks ADD COLUMN native_screen_pending INTEGER NOT NULL DEFAULT 0;`,
+      );
+    } catch {
+      // Existing SQLite-backed Durable Objects already have the column.
+    }
 
     this.sql.exec(`
       CREATE TABLE IF NOT EXISTS demo_chat_messages (
@@ -554,6 +558,11 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
       return;
     }
 
+    if (UNSUPPORTED_BROWSER_SFU_OPCODES.has(msg.op)) {
+      this.rejectBrowserSfuNegotiation(ws);
+      return;
+    }
+
     if (this.isRateLimited(ws, msg.op)) {
       this.sendTo(ws, {
         op: Op.Error,
@@ -591,13 +600,6 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
         break;
 
       case Op.SelectProtocol:
-        if (!this.isSelectProtocolPayload(msg.d)) {
-          this.sendTo(ws, {
-            op: Op.Error,
-            d: { code: 4000, message: "Invalid select protocol payload" },
-          });
-          break;
-        }
         await this.handleSelectProtocol(ws, msg.d);
         break;
 
@@ -631,28 +633,6 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
         }
         const stopTracksPayload = { track_names: msg.d.track_names };
         await this.handleStopTracks(ws, stopTracksPayload);
-        break;
-      }
-
-      case Op.Answer: {
-        if (
-          !this.isPlainObject(msg.d) ||
-          typeof msg.d.sdp !== "string" ||
-          msg.d.sdp.length > MAX_SDP_LENGTH
-        ) {
-          this.sendTo(ws, {
-            op: Op.Error,
-            d: { code: 4000, message: "Invalid answer payload" },
-          });
-          break;
-        }
-        const answerPayload = {
-          sdp: msg.d.sdp,
-          ...(typeof msg.d.request_id === "string"
-            ? { request_id: msg.d.request_id }
-            : {}),
-        };
-        await this.handleAnswer(ws, answerPayload);
         break;
       }
 
@@ -693,71 +673,6 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
         await this.handleLeave(ws, true);
         break;
 
-      case Op.TrackUpdate: {
-        if (
-          !this.isPlainObject(msg.d) ||
-          !Array.isArray(msg.d.tracks) ||
-          !msg.d.tracks.every(
-            (track: unknown) =>
-              this.isPlainObject(track) &&
-              typeof track.track_name === "string" &&
-              typeof track.session_id === "string" &&
-              typeof track.mid === "string" &&
-              typeof track.rid === "string",
-          )
-        ) {
-          this.sendTo(ws, {
-            op: Op.Error,
-            d: { code: 4000, message: "Invalid track update payload" },
-          });
-          break;
-        }
-        const trackUpdatePayload = {
-          tracks: msg.d.tracks.map((track) => {
-            const row = track as Record<string, unknown>;
-            return {
-              track_name: row.track_name as string,
-              session_id: row.session_id as string,
-              mid: row.mid as string,
-              rid: row.rid as string,
-            };
-          }),
-        };
-        await this.handleTrackUpdate(ws, trackUpdatePayload);
-        break;
-      }
-
-      case Op.IceRestart: {
-        if (!this.isPlainObject(msg.d) || typeof msg.d.sdp !== "string") {
-          this.sendTo(ws, {
-            op: Op.Error,
-            d: { code: 4000, message: "Invalid ICE restart payload" },
-          });
-          break;
-        }
-        const sessionType = msg.d.session_type;
-        if (
-          sessionType !== "push_cam" &&
-          sessionType !== "push_screen" &&
-          sessionType !== "pull"
-        ) {
-          this.sendTo(ws, {
-            op: Op.Error,
-            d: { code: 4000, message: "Invalid ICE restart payload" },
-          });
-          break;
-        }
-        await this.handleIceRestart(ws, {
-          sdp: msg.d.sdp,
-          session_type: sessionType,
-        });
-        break;
-      }
-
-      case Op.ResetPullSession:
-        this.handleResetPullSession(ws);
-        break;
-
       case Op.VoiceAppEvent:
         if (!this.isPlainObject(msg.d)) {
           this.sendTo(ws, {
@@ -785,7 +700,7 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
 
   async webSocketClose(ws: WebSocket, code: number, reason: string) {
     try {
-      await this.handleLeave(ws, false, false);
+      await this.handleLeave(ws, false);
     } catch (e) {
       roomLog.error(`webSocketClose(${code}) threw in handleLeave:`, e);
     }
@@ -798,7 +713,7 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
 
   async webSocketError(ws: WebSocket) {
     try {
-      await this.handleLeave(ws, false, false);
+      await this.handleLeave(ws, false);
     } catch (e) {
       roomLog.error(`webSocketError threw in handleLeave:`, e);
     }
@@ -835,47 +750,13 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
       for (const pid of zombies) {
         const ws = this.getWsByParticipant(pid);
         if (ws) {
-          await this.handleLeave(ws, false, true);
+          await this.handleLeave(ws, true);
         } else {
-          await this.disconnectParticipant(pid, false);
+          await this.disconnectParticipant(pid);
         }
       }
 
       // Prune pending reconnects whose grace period expired
-      const pending = this.sql.exec(
-        `SELECT participant_id, disconnected_at FROM pending_reconnects`,
-      );
-      for (const row of pending) {
-        const pid = row.participant_id as string;
-        const disconnectedAt = row.disconnected_at as number;
-
-        if (now - disconnectedAt >= SFU_SESSION_REUSE_GRACE_MS) {
-          roomLog.info(`Grace period expired for ${pid}, cleaning up SFU`);
-          await this.purgeParticipantState(pid);
-        }
-      }
-
-      // Garbage-collect pending tracks from participants that went zombie
-      // (is_pending = 1 means TracksReady was never received — publisher crashed)
-      this.sql.exec(
-        `DELETE FROM tracks WHERE is_pending = 1 AND participant_id NOT IN (SELECT id FROM participants)`,
-      );
-      const pendingZombie = this.sql.exec(
-        `DELETE FROM tracks WHERE is_pending = 1 AND participant_id IN (
-        SELECT id FROM participants WHERE last_heartbeat > 0 AND last_heartbeat < ?
-      ) RETURNING track_name, participant_id`,
-        now - VOICE_ZOMBIE_TIMEOUT_MS,
-      );
-      for (const row of pendingZombie) {
-        log.info(
-          `GC pending track: ${row.track_name} from ${row.participant_id}`,
-        );
-      }
-
-      // SFU session health check — validate pull sessions are still alive
-      // Run every cycle to detect 410'd sessions quickly
-      this.ctx.waitUntil(this.validateSfuSessions());
-
       this.advanceListenTogetherIfNeeded(now);
     } catch (error) {
       processingFailed = true;
@@ -899,13 +780,6 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
       `SELECT last_heartbeat FROM participants WHERE last_heartbeat > 0`,
     )) {
       deadlines.push((row.last_heartbeat as number) + VOICE_ZOMBIE_TIMEOUT_MS);
-    }
-    for (const row of this.sql.exec(
-      `SELECT disconnected_at FROM pending_reconnects`,
-    )) {
-      deadlines.push(
-        (row.disconnected_at as number) + SFU_SESSION_REUSE_GRACE_MS,
-      );
     }
     for (const row of this.sql.exec(
       `SELECT MIN(expires_at) as expires_at FROM demo_chat_messages`,
@@ -942,10 +816,6 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
         ...this.sql.exec(`SELECT COUNT(*) as c FROM participants`),
       ][0];
       const participantCount = Number(countRow?.c ?? 0);
-      const pendingCountRow = [
-        ...this.sql.exec(`SELECT COUNT(*) as c FROM pending_reconnects`),
-      ][0];
-      const pendingCount = Number(pendingCountRow?.c ?? 0);
       const demoChatCountRow = [
         ...this.sql.exec(`SELECT COUNT(*) as c FROM demo_chat_messages`),
       ][0];
@@ -961,7 +831,6 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
       const listenTogetherDeadline = this.getListenTogetherTrackDeadline(now);
       const hasWork =
         participantCount > 0 ||
-        pendingCount > 0 ||
         demoChatCount > 0 ||
         legacyPlaybackOwnerCount > 0 ||
         typeof listenTogetherDeadline === "number";
@@ -986,13 +855,7 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
   // ── Helpers ────────────────────────────────────────────────────────────
 
   private getActiveParticipantCount() {
-    const row = [
-      ...this.sql.exec(`
-      SELECT COUNT(*) as c
-      FROM participants
-      WHERE id NOT IN (SELECT participant_id FROM pending_reconnects)
-    `),
-    ][0];
+    const row = [...this.sql.exec(`SELECT COUNT(*) as c FROM participants`)][0];
     return Number(row?.c ?? 0);
   }
 
@@ -1494,54 +1357,99 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
         typeof item.track_name === "string" &&
         item.track_name.length > 0 &&
         item.track_name.length <= 200 &&
+        (item.sfu_track_name === undefined ||
+          (typeof item.sfu_track_name === "string" &&
+            item.sfu_track_name.length > 0 &&
+            item.sfu_track_name.length <= 200)) &&
         typeof item.session_id === "string" &&
         item.session_id.length > 0 &&
-        item.session_id.length <= 200 &&
+        item.session_id.length <= (item.sfu_track_name ? 4_096 : 200) &&
         (item.mid === undefined ||
           (typeof item.mid === "string" && item.mid.length <= 64)) &&
-        (item.kind === "audio" || item.kind === "video") &&
-        (item.rid === undefined ||
-          (typeof item.rid === "string" && item.rid.length <= 32))
+        (item.kind === "audio" || item.kind === "video")
       );
     });
   }
 
-  private isSelectProtocolPayload(value: unknown): value is {
-    sdp?: string;
-    push_tracks: PushTrackDescriptor[];
-    pull_tracks: TrackInfo[];
-    push_prefix?: string;
-    request_id?: string;
-  } {
+  private isNativeScreenSelectProtocolPayload(
+    value: unknown,
+    participantId: string,
+  ): value is NativeScreenSelectProtocolPayload {
     if (!this.isPlainObject(value)) return false;
     if (
-      (value.sdp !== undefined &&
-        (typeof value.sdp !== "string" || value.sdp.length > MAX_SDP_LENGTH)) ||
+      typeof value.sdp !== "string" ||
+      !value.sdp.trim() ||
+      value.sdp.length > MAX_SDP_LENGTH ||
+      value.push_prefix !== "screen" ||
+      value.media_mode !== undefined ||
       !Array.isArray(value.push_tracks) ||
+      value.push_tracks.length === 0 ||
       value.push_tracks.length > MAX_NEGOTIATION_TRACKS ||
       !value.push_tracks.every((item) => {
         if (!this.isPlainObject(item)) return false;
         return (
           typeof item.track_name === "string" &&
-          item.track_name.length > 0 &&
+          item.track_name.startsWith("screen-") &&
+          item.track_name.endsWith(`-${participantId}`) &&
           item.track_name.length <= 200 &&
           (item.mid === undefined ||
             (typeof item.mid === "string" && item.mid.length <= 64)) &&
           (item.kind === "audio" || item.kind === "video")
         );
       }) ||
-      !this.isTrackInfoArray(value.pull_tracks)
+      new Set(
+        value.push_tracks.map((track) =>
+          this.isPlainObject(track) ? track.track_name : undefined,
+        ),
+      ).size !== value.push_tracks.length ||
+      !Array.isArray(value.pull_tracks) ||
+      value.pull_tracks.length !== 0
     ) {
       return false;
     }
-    if (value.push_tracks.length > 0 && !value.sdp?.trim()) return false;
     return (
-      (value.push_prefix === undefined ||
-        value.push_prefix === "cam" ||
-        value.push_prefix === "screen") &&
-      (value.request_id === undefined ||
-        (typeof value.request_id === "string" &&
-          value.request_id.length <= 200))
+      value.request_id === undefined ||
+      (typeof value.request_id === "string" &&
+        value.request_id.length > 0 &&
+        value.request_id.length <= 200)
+    );
+  }
+
+  private rejectBrowserSfuNegotiation(ws: WebSocket): void {
+    this.sendTo(ws, {
+      op: Op.Error,
+      d: { code: 4000, message: "Browser SFU negotiation is unsupported" },
+    });
+  }
+
+  private beginNativeScreenOperation(participantId: string): symbol {
+    const token = Symbol();
+    this.nativeScreenOperations.set(participantId, token);
+    return token;
+  }
+
+  private invalidateNativeScreenOperation(participantId: string): void {
+    this.nativeScreenOperations.delete(participantId);
+  }
+
+  private finishNativeScreenOperation(
+    participantId: string,
+    token: symbol,
+  ): void {
+    if (this.nativeScreenOperations.get(participantId) === token) {
+      this.nativeScreenOperations.delete(participantId);
+    }
+  }
+
+  private isCurrentNativeScreenOperation(
+    ws: WebSocket,
+    participantId: string,
+    connectionId: string | undefined,
+    token: symbol,
+  ): boolean {
+    return (
+      this.nativeScreenOperations.get(participantId) === token &&
+      this.isCurrentVoiceConnection(ws, participantId, connectionId)
     );
   }
 
@@ -1793,14 +1701,11 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
       op === Op.SelectProtocol ||
       op === Op.Video ||
       op === Op.StopTracks ||
-      op === Op.Answer ||
       op === Op.TracksReady ||
       op === Op.Speaking ||
       op === Op.ClientDisconnect ||
-      op === Op.TrackUpdate ||
-      op === Op.IceRestart ||
-      op === Op.ResetPullSession ||
-      op === Op.VoiceAppEvent
+      op === Op.VoiceAppEvent ||
+      UNSUPPORTED_BROWSER_SFU_OPCODES.has(op)
     );
   }
 
@@ -1809,7 +1714,7 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
   ): Promise<boolean> {
     const ws = this.getWsByParticipant(participantId);
     if (ws) {
-      await this.handleLeave(ws, true, true);
+      await this.handleLeave(ws, true);
       return true;
     }
 
@@ -1823,7 +1728,7 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
       return false;
     }
 
-    await this.disconnectParticipant(participantId, false);
+    await this.disconnectParticipant(participantId);
     return true;
   }
 
@@ -1854,14 +1759,11 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
       op === Op.SelectProtocol ||
       op === Op.Video ||
       op === Op.StopTracks ||
-      op === Op.Answer ||
       op === Op.TracksReady ||
       op === Op.Speaking ||
       op === Op.ClientDisconnect ||
-      op === Op.TrackUpdate ||
-      op === Op.IceRestart ||
-      op === Op.ResetPullSession ||
-      op === Op.VoiceAppEvent
+      op === Op.VoiceAppEvent ||
+      UNSUPPORTED_BROWSER_SFU_OPCODES.has(op)
     );
   }
 
@@ -1934,6 +1836,7 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
            FROM tracks t
            WHERE t.participant_id = p.id
              AND t.track_name LIKE 'screen-%'
+             AND t.native_screen_pending = 0
          )
        LIMIT 1`,
         userId,
@@ -2076,145 +1979,63 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
         d.supports_listen_together_snapshot_events === true,
     };
 
-    let push_session_cam: string | null = null;
-    let push_session_screen: string | null = null;
-    const pull_session_id: string | null = null;
-    let didTransfer = false;
-
-    // Check for pending reconnects or stale sessions
-    const pendingRows = [
+    // Voice signaling reconnects never transfer browser transport state.
+    // PartyTracks reconciles its publications after VoiceReady, while a native
+    // screen publisher establishes a fresh, explicitly owned Calls session.
+    const existingParticipant = [
       ...this.sql.exec(
-        "SELECT * FROM pending_reconnects WHERE participant_id = ?",
+        "SELECT id FROM participants WHERE id = ?",
         d.participant_id,
       ),
-    ];
-
-    if (pendingRows.length > 0) {
-      const pending = pendingRows[0];
-      const disconnectedAt = pending.disconnected_at as number;
-      if (
-        isReconnectWithinGrace(
-          disconnectedAt,
-          Date.now(),
-          SFU_SESSION_REUSE_GRACE_MS,
-        )
-      ) {
-        const pRows = [
-          ...this.sql.exec(
-            "SELECT push_session_cam, push_session_screen FROM participants WHERE id = ?",
-            d.participant_id,
-          ),
-        ];
-        if (pRows.length > 0) {
-          push_session_cam = pRows[0].push_session_cam as string;
-          push_session_screen = pRows[0].push_session_screen as string;
-
-          // The reconnect grace applies to the whole participant generation,
-          // including a publication that was still pending TracksReady when
-          // the signaling socket disappeared.
-          didTransfer = true;
-
-          roomLog.info(
-            `Transferring pending SFU sessions for ${d.participant_id}: cam=${push_session_cam ?? "none"}`,
-          );
-        }
-        this.sql.exec(
-          "DELETE FROM pending_reconnects WHERE participant_id = ?",
-          d.participant_id,
-        );
-      } else {
-        roomLog.info(
-          `Pending reconnect already expired for ${d.participant_id}, forcing fresh media state`,
-        );
-        await this.purgeParticipantState(d.participant_id, ws, true);
-      }
-    } else if (clerkUserId) {
-      const staleCursor = this.sql.exec(
-        "SELECT p.id as pid FROM pending_reconnects r JOIN participants p ON r.participant_id = p.id WHERE p.clerk_user_id = ?",
-        clerkUserId,
-      );
-      for (const row of staleCursor) {
-        const oldPid = row.pid as string;
-        roomLog.info(
-          `Fresh join for clerk=${clerkUserId}, cleaning up stale SFU sessions from old participant=${oldPid}`,
-        );
-        await this.purgeParticipantState(oldPid, ws, true);
-      }
+    ][0];
+    if (existingParticipant) {
+      await this.purgeParticipantState(d.participant_id, ws);
     }
 
-    // A VoiceGW reconnect can arrive without a RoomGW pending-reconnect row.
-    // In that case the participant id is reused, but its Cloudflare SFU
-    // sessions and track descriptors are no longer authoritative. Remove them
-    // before returning VoiceReady(false), so the next publication starts from
-    // fresh SFU sessions and cannot advertise dead remote state indefinitely.
-    if (!didTransfer) {
-      await this.purgeParticipantState(d.participant_id, ws, true);
-    }
-
-    // Evict any existing LIVE session for the same participant_id OR clerk_user_id
+    // A reconnect replaces only the same participant identity. A user may have
+    // multiple participant IDs (for example, two authenticated test/device
+    // sessions) without either connection superseding the other.
     for (const otherWs of this.ctx.getWebSockets()) {
       if (otherWs === ws) continue;
       const otherAtt =
         otherWs.deserializeAttachment() as VoiceAttachment | null;
-      if (!otherAtt?.participant_id) continue;
+      if (otherAtt?.participant_id !== d.participant_id) continue;
 
-      const pRows = [
-        ...this.sql.exec(
-          "SELECT clerk_user_id FROM participants WHERE id = ?",
-          otherAtt.participant_id,
-        ),
-      ];
-      const otherClerkId =
-        pRows.length > 0 ? (pRows[0].clerk_user_id as string) : undefined;
-
-      if (
-        otherAtt.participant_id === d.participant_id ||
-        (clerkUserId && otherClerkId === clerkUserId)
-      ) {
-        roomLog.info(
-          `Evicting duplicate session for participant=${otherAtt.participant_id}`,
-        );
-        if (otherAtt.participant_id !== d.participant_id) {
-          // not already transferred
-          this.ctx.waitUntil(
-            this.cleanupSfuSessionsByParticipantId(otherAtt.participant_id),
-          );
-        }
-        try {
-          otherWs.close(1000, "Replaced by new connection");
-        } catch {}
-      }
+      roomLog.info(
+        `Evicting duplicate session for participant=${otherAtt.participant_id}`,
+      );
+      try {
+        otherWs.close(1000, "Replaced by new connection");
+      } catch {}
     }
 
     ws.serializeAttachment(attachment);
 
     this.sql.exec(
-      `INSERT INTO participants (id, clerk_user_id, push_session_cam, push_session_screen, pull_session_id, last_heartbeat, speaking, connection_id)
-       VALUES (?, ?, ?, ?, ?, ?, 0, ?)
+      `INSERT INTO participants (id, clerk_user_id, native_screen_session_id, last_heartbeat, speaking, connection_id)
+       VALUES (?, ?, NULL, ?, 0, ?)
        ON CONFLICT(id) DO UPDATE SET
          clerk_user_id = excluded.clerk_user_id,
+         native_screen_session_id = NULL,
          last_heartbeat = excluded.last_heartbeat,
          connection_id = excluded.connection_id`,
       d.participant_id,
       clerkUserId ?? null,
-      push_session_cam,
-      push_session_screen,
-      pull_session_id,
       Date.now(),
       connectionId,
     );
 
     roomLog.info(`VoiceIdentify: participant=${d.participant_id}`);
-
     const existingTracks: TrackInfo[] = [];
     const tCursor = this.sql.exec(
-      "SELECT track_name, participant_id, session_id, mid, kind FROM tracks WHERE participant_id != ? AND is_pending = 0",
+      "SELECT track_name, participant_id, sfu_track_name, session_id, mid, kind FROM tracks WHERE participant_id != ? AND native_screen_pending = 0",
       d.participant_id,
     );
     for (const row of tCursor) {
       existingTracks.push({
         track_name: row.track_name as string,
         participant_id: row.participant_id as string,
+        sfu_track_name: (row.sfu_track_name as string) || undefined,
         session_id: row.session_id as string,
         mid: (row.mid as string) || undefined,
         kind: row.kind as "audio" | "video",
@@ -2236,17 +2057,12 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
         participant_id: d.participant_id,
         tracks: existingTracks,
         speaking: speakingStates,
-        sfu_session_transferred: didTransfer,
       },
     });
     this.sendStreamWatcherSnapshot(ws);
     this.sendDemoChatHistory(ws);
 
     this.scheduleAlarm();
-
-    // Pull sessions are created lazily by the current negotiation. Creating
-    // them in the background can race a reconnect and strand an unused SFU
-    // session behind the newer participant generation.
   }
 
   // ── Op 3: Heartbeat ────────────────────────────────────────────────────
@@ -2291,301 +2107,229 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
     );
   }
 
-  // ── Op 1: SelectProtocol (push/pull tracks) ────────────────────────────
-
-  private handleSelectProtocol(
+  private async handleSelectProtocol(
     ws: WebSocket,
-    d: {
-      sdp?: string;
-      push_tracks: PushTrackDescriptor[];
-      pull_tracks: TrackInfo[];
-      push_prefix?: string;
-      request_id?: string;
-    },
-  ) {
-    if (d.push_tracks.length > 0 && d.pull_tracks.length > 0) {
-      this.sendTo(ws, {
-        op: Op.Error,
-        d: {
-          code: 4000,
-          message: "Mixed push and pull operations are not supported",
-          request_id: d.request_id,
-          operation: "push",
-        },
-      });
-      return Promise.resolve();
+    value: unknown,
+  ): Promise<void> {
+    const participantId = this.requireParticipantId(ws);
+    if (!participantId) return;
+    if (!this.isNativeScreenSelectProtocolPayload(value, participantId)) {
+      this.rejectBrowserSfuNegotiation(ws);
+      return;
     }
-
-    const queueKeys = this.selectProtocolQueueKeys(ws, d);
-    const previous = queueKeys.map(
-      (key) => this.selectProtocolQueues.get(key) ?? Promise.resolve(),
-    );
-    const operation = Promise.all(previous).then(() =>
-      this.handleSelectProtocolInOrder(ws, d),
-    );
-    const tail = operation.catch(() => {});
-    for (const key of queueKeys) {
-      this.selectProtocolQueues.set(key, tail);
-      tail.then(
-        () => {
-          if (this.selectProtocolQueues.get(key) === tail) {
-            this.selectProtocolQueues.delete(key);
-          }
-        },
-        () => {
-          if (this.selectProtocolQueues.get(key) === tail) {
-            this.selectProtocolQueues.delete(key);
-          }
-        },
-      );
-    }
-    return operation;
+    await this.handleNativeScreenSelectProtocol(ws, participantId, value);
   }
 
-  private selectProtocolQueueKeys(
+  private async handleNativeScreenSelectProtocol(
     ws: WebSocket,
-    d: {
-      push_tracks: PushTrackDescriptor[];
-      pull_tracks: TrackInfo[];
-      push_prefix?: string;
-    },
-  ) {
-    const participantId = this.getParticipantId(ws) ?? "unknown";
-    const participantPrefix = `participant:${participantId}`;
-    const hasPull = d.pull_tracks.length > 0;
-    const hasPush = d.push_tracks.length > 0;
-    const keys = new Set<string>();
-
-    if (hasPull && hasPush) {
-      keys.add(`${participantPrefix}:pull`);
-      keys.add(`${participantPrefix}:push:cam`);
-      keys.add(`${participantPrefix}:push:screen`);
-    } else if (hasPull) {
-      keys.add(`${participantPrefix}:pull`);
-    } else {
-      const pushPrefix = d.push_prefix === "screen" ? "screen" : "cam";
-      keys.add(`${participantPrefix}:push:${pushPrefix}`);
-    }
-
-    for (const track of d.push_tracks) {
-      keys.add(`track:${track.track_name}`);
-    }
-
-    return [...keys];
-  }
-
-  private async handleSelectProtocolInOrder(
-    ws: WebSocket,
-    d: {
-      sdp?: string;
-      push_tracks: PushTrackDescriptor[];
-      pull_tracks: TrackInfo[];
-      push_prefix?: string;
-      request_id?: string;
-    },
-  ) {
-    const pid = this.requireParticipantId(ws);
-    if (!pid) return;
+    participantId: string,
+    payload: NativeScreenSelectProtocolPayload,
+  ): Promise<void> {
     const connectionId = this.getVoiceAttachment(ws)?.connection_id;
-    const isCurrent = () =>
-      this.isCurrentVoiceConnection(ws, pid, connectionId);
-    if (!isCurrent()) return;
-
-    let activeOperation: "push" | "pull" | null = null;
-    let activePushPrefix: "cam" | "screen" | null = null;
+    if (!this.isCurrentVoiceConnection(ws, participantId, connectionId)) return;
+    const operationToken = this.beginNativeScreenOperation(participantId);
 
     try {
-      const pRows = [
-        ...this.sql.exec(
-          "SELECT push_session_cam, push_session_screen, pull_session_id FROM participants WHERE id = ?",
-          pid,
-        ),
-      ];
-      if (pRows.length === 0) return;
-      const row = pRows[0];
-      let push_session_cam = row.push_session_cam as string | null;
-      let push_session_screen = row.push_session_screen as string | null;
-      let pull_session_id = row.pull_session_id as string | null;
-
-      // ── Handle push (local) tracks ──────────────────────────────────
-      if (d.push_tracks.length > 0 && d.sdp) {
-        const prefix = d.push_prefix === "screen" ? "screen" : "cam";
-        const isScreen = prefix === "screen";
-        activeOperation = "push";
-        activePushPrefix = prefix;
-
-        if (
-          new Set(d.push_tracks.map((track) => track.track_name)).size !==
-            d.push_tracks.length ||
-          d.push_tracks.some((track) =>
-            this.hasTrackNameConflict(track.track_name, pid),
-          )
-        ) {
-          this.sendTo(ws, {
-            op: Op.Error,
-            d: {
-              code: 4000,
-              message: "Track name is already in use",
-              request_id: d.request_id,
-              operation: "push",
-            },
-          });
-          return;
-        }
-
-        let pushSessionId = isScreen ? push_session_screen : push_session_cam;
-
-        if (!pushSessionId) {
-          if (!isCurrent()) return;
-          const sessionResp = await this.sfuFetch("POST", "sessions/new");
-          if (!isCurrent()) return;
-          pushSessionId = sessionResp.sessionId as string;
-          sfuLog.info(`Created push session (${prefix}):`, pushSessionId);
-        }
-
-        const localTracks = d.push_tracks.map((desc) => ({
-          location: "local",
-          trackName: desc.track_name,
-          mid: desc.mid,
-        }));
-
-        let pushResp: Record<string, unknown>;
-        try {
-          if (!pushSessionId) {
-            throw new Error("push_session_missing");
-          }
-          if (!isCurrent()) return;
-          pushResp = await this.sfuPost(
-            `sessions/${pushSessionId}/tracks/new`,
-            {
-              tracks: localTracks,
-              sessionDescription: { type: "offer", sdp: d.sdp },
-            },
-          );
-        } catch (pushErr: unknown) {
-          const pushMsg =
-            pushErr instanceof Error ? pushErr.message : String(pushErr);
-          if (pushMsg.includes("(410)") || pushMsg.includes("session_error")) {
-            sfuLog.warn(
-              `Push session ${prefix} stale (${pushSessionId.slice(0, 8)}...), creating fresh session and retrying`,
-            );
-            if (!isCurrent()) return;
-            const freshResp = await this.sfuFetch("POST", "sessions/new");
-            if (!isCurrent()) return;
-            pushSessionId = freshResp.sessionId as string;
-
-            sfuLog.info(`Fresh push session (${prefix}):`, pushSessionId);
-            if (!isCurrent()) return;
-            pushResp = await this.sfuPost(
-              `sessions/${pushSessionId}/tracks/new`,
-              {
-                tracks: localTracks,
-                sessionDescription: { type: "offer", sdp: d.sdp },
-              },
-            );
-          } else {
-            throw pushErr;
-          }
-        }
-
-        if (!isCurrent()) return;
-        if (isScreen) {
-          push_session_screen = pushSessionId;
-          this.sql.exec(
-            "UPDATE participants SET push_session_screen = ? WHERE id = ?",
-            pushSessionId,
-            pid,
-          );
-        } else {
-          push_session_cam = pushSessionId;
-          this.sql.exec(
-            "UPDATE participants SET push_session_cam = ? WHERE id = ?",
-            pushSessionId,
-            pid,
-          );
-        }
-        sfuLog.info(
-          "Push tracks/new response tracks:",
-          JSON.stringify(pushResp.tracks),
+      if (
+        payload.push_tracks.some((track) =>
+          this.hasTrackNameConflict(track.track_name, participantId),
+        )
+      ) {
+        this.sendNativeScreenError(
+          ws,
+          payload.request_id,
+          "Track name is already in use",
         );
-        const answerSdp =
-          (pushResp.sessionDescription as { sdp?: string } | undefined)?.sdp ??
-          "";
-        if (!answerSdp) {
-          throw new Error(
-            `SFU push tracks/new returned no answer SDP for ${prefix} session ${pushSessionId.slice(0, 8)}...`,
-          );
-        }
+        return;
+      }
 
-        const respTracks =
-          (pushResp.tracks as Array<Record<string, unknown>>) ?? [];
-        const negotiatedTracks: TrackInfo[] = [];
-
-        for (const rt of respTracks) {
-          if (rt.location === "local") {
-            const track_name = rt.trackName as string;
-            negotiatedTracks.push({
-              participant_id: pid,
-              track_name,
-              session_id: pushSessionId,
-              mid: rt.mid as string | undefined,
-              kind: track_name.includes("audio") ? "audio" : "video",
-            });
-          }
-        }
-
-        if (negotiatedTracks.length === 0) {
-          for (const desc of d.push_tracks) {
-            negotiatedTracks.push({
-              participant_id: pid,
-              track_name: desc.track_name,
-              session_id: pushSessionId,
-              mid: desc.mid,
-              kind: desc.kind,
-            });
-          }
-        }
-
+      const previousSession = [
+        ...this.sql.exec(
+          "SELECT native_screen_session_id FROM participants WHERE id = ?",
+          participantId,
+        ),
+      ][0]?.native_screen_session_id;
+      if (typeof previousSession === "string" && previousSession) {
+        const previousTracks = await this.removeNativeScreenPublication(
+          participantId,
+          previousSession,
+        );
+        this.broadcastStoppedTracks(participantId, previousTracks, ws);
         if (
-          !isCurrent() ||
-          negotiatedTracks.some((track) =>
-            this.hasTrackNameConflict(track.track_name, pid),
+          !this.isCurrentNativeScreenOperation(
+            ws,
+            participantId,
+            connectionId,
+            operationToken,
           )
         ) {
-          if (isCurrent()) {
-            this.sendTo(ws, {
-              op: Op.Error,
-              d: {
-                code: 4000,
-                message: "Track name is already in use",
-                request_id: d.request_id,
-                operation: "push",
-              },
-            });
-          }
+          return;
+        }
+      }
+
+      let sessionId: string | null = null;
+      let cleanupTracks: NativeScreenTrackRow[] = payload.push_tracks.flatMap(
+        (track) =>
+          track.mid ? [{ mid: track.mid, track_name: track.track_name }] : [],
+      );
+      try {
+        const sessionResponse = await this.sfuFetch("POST", "sessions/new");
+        if (
+          typeof sessionResponse.sessionId !== "string" ||
+          !sessionResponse.sessionId
+        ) {
+          throw new Error("Calls did not return a native screen session");
+        }
+        sessionId = sessionResponse.sessionId;
+
+        if (
+          !this.isCurrentNativeScreenOperation(
+            ws,
+            participantId,
+            connectionId,
+            operationToken,
+          )
+        ) {
+          await this.closeNativeScreenSession(sessionId, []);
           return;
         }
 
-        // Insert tracks into SQLite as PENDING (is_pending = 1)
-        try {
-          for (const t of negotiatedTracks) {
-            this.sql.exec(
-              `INSERT INTO tracks (track_name, participant_id, session_id, mid, kind, is_pending)
-               VALUES (?, ?, ?, ?, ?, 1)
-               ON CONFLICT(track_name) DO UPDATE SET session_id=excluded.session_id, mid=excluded.mid, is_pending=1
-               WHERE tracks.participant_id = excluded.participant_id`,
-              t.track_name,
-              pid,
-              t.session_id,
-              t.mid ?? null,
-              t.kind,
-            );
+        const publishResponse = await this.sfuPost(
+          "sessions/" + sessionId + "/tracks/new",
+          {
+            tracks: payload.push_tracks.map((track) => ({
+              location: "local",
+              trackName: track.track_name,
+              mid: track.mid,
+            })),
+            sessionDescription: { type: "offer", sdp: payload.sdp },
+          },
+        );
+        if (
+          !this.isCurrentNativeScreenOperation(
+            ws,
+            participantId,
+            connectionId,
+            operationToken,
+          )
+        ) {
+          await this.closeNativeScreenSession(sessionId, cleanupTracks);
+          return;
+        }
+
+        const sessionDescription = this.isPlainObject(
+          publishResponse.sessionDescription,
+        )
+          ? publishResponse.sessionDescription
+          : null;
+        const answerSdp =
+          typeof sessionDescription?.sdp === "string"
+            ? sessionDescription.sdp
+            : "";
+        if (sessionDescription?.type !== "answer" || !answerSdp.trim()) {
+          throw new Error("Calls did not return a native screen SDP answer");
+        }
+
+        const rawResponseTracks: unknown[] = Array.isArray(
+          publishResponse.tracks,
+        )
+          ? publishResponse.tracks
+          : [];
+        const responseTracks = rawResponseTracks.filter(
+          (track: unknown): track is Record<string, unknown> =>
+            this.isPlainObject(track),
+        );
+        const midByTrackName = new Map<string, string>();
+        for (const track of responseTracks) {
+          if (
+            track.location === "local" &&
+            typeof track.trackName === "string" &&
+            typeof track.mid === "string" &&
+            payload.push_tracks.some(
+              (requested) => requested.track_name === track.trackName,
+            )
+          ) {
+            midByTrackName.set(track.trackName, track.mid);
           }
-        } catch {
-          this.sendTo(ws, {
-            op: Op.Error,
-            d: { code: 4000, message: "Track name is already in use" },
-          });
+        }
+        const negotiatedTracks: TrackInfo[] = payload.push_tracks.map(
+          (track) => ({
+            participant_id: participantId,
+            track_name: track.track_name,
+            session_id: sessionId as string,
+            mid: midByTrackName.get(track.track_name) ?? track.mid,
+            kind: track.kind,
+          }),
+        );
+        cleanupTracks = negotiatedTracks.flatMap((track) =>
+          track.mid ? [{ mid: track.mid, track_name: track.track_name }] : [],
+        );
+
+        if (
+          !this.isCurrentNativeScreenOperation(
+            ws,
+            participantId,
+            connectionId,
+            operationToken,
+          )
+        ) {
+          await this.closeNativeScreenSession(sessionId, cleanupTracks);
+          return;
+        }
+
+        for (const track of negotiatedTracks) {
+          this.sql.exec(
+            "INSERT INTO tracks " +
+              "(track_name, participant_id, sfu_track_name, session_id, mid, kind, native_screen_pending) " +
+              "VALUES (?, ?, NULL, ?, ?, ?, 1) " +
+              "ON CONFLICT(track_name) DO UPDATE SET " +
+              "participant_id = excluded.participant_id, " +
+              "sfu_track_name = NULL, session_id = excluded.session_id, " +
+              "mid = excluded.mid, kind = excluded.kind, native_screen_pending = 1 " +
+              "WHERE tracks.participant_id = excluded.participant_id",
+            track.track_name,
+            participantId,
+            track.session_id,
+            track.mid ?? null,
+            track.kind,
+          );
+        }
+        this.sql.exec(
+          "UPDATE participants SET native_screen_session_id = ? " +
+            "WHERE id = ? AND connection_id IS ?",
+          sessionId,
+          participantId,
+          connectionId ?? null,
+        );
+
+        const committedSession = [
+          ...this.sql.exec(
+            "SELECT native_screen_session_id FROM participants " +
+              "WHERE id = ? AND connection_id IS ?",
+            participantId,
+            connectionId ?? null,
+          ),
+        ][0]?.native_screen_session_id;
+        if (committedSession !== sessionId) {
+          this.sql.exec(
+            "DELETE FROM tracks WHERE participant_id = ? AND session_id = ? " +
+              "AND native_screen_pending = 1",
+            participantId,
+            sessionId,
+          );
+          await this.closeNativeScreenSession(sessionId, cleanupTracks);
+          return;
+        }
+
+        if (
+          !this.isCurrentNativeScreenOperation(
+            ws,
+            participantId,
+            connectionId,
+            operationToken,
+          )
+        ) {
+          await this.removeNativeScreenPublication(participantId, sessionId);
           return;
         }
 
@@ -2593,715 +2337,365 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
           op: Op.SessionDescription,
           d: {
             sdp: answerSdp,
-            session_id: pushSessionId,
+            session_id: sessionId,
             tracks: negotiatedTracks,
             sdp_type: "answer",
-            push_prefix: prefix,
-            request_id: d.request_id,
+            push_prefix: "screen",
+            request_id: payload.request_id,
             operation: "push",
           },
         });
-      }
-
-      // ── Handle pull (remote) tracks ─────────────────────────────────
-      if (d.pull_tracks.length > 0) {
-        if (!isCurrent()) return;
-        activeOperation = "pull";
-        activePushPrefix = null;
-        const attachment = this.getVoiceAttachment(ws);
-        if (d.request_id) {
-          ws.serializeAttachment({
-            ...attachment,
-            active_pull_request_id: d.request_id,
-          });
-        }
-
-        const requestedNames = d.pull_tracks.map((track) => track.track_name);
-        if (
-          requestedNames.some(
-            (name) => typeof name !== "string" || !name.trim(),
-          ) ||
-          new Set(requestedNames).size !== requestedNames.length
-        ) {
-          this.sendTo(ws, {
-            op: Op.Error,
-            d: { code: 4000, message: "Invalid pull track list" },
-          });
-          return;
-        }
-
-        const placeholders = requestedNames.map(() => "?").join(",");
-        const persistedTracks = new Map<string, TrackInfo>();
-        for (const row of this.sql.exec(
-          `SELECT track_name, participant_id, session_id, mid, kind
-           FROM tracks
-           WHERE track_name IN (${placeholders}) AND is_pending = 0`,
-          ...requestedNames,
-        )) {
-          persistedTracks.set(row.track_name as string, {
-            track_name: row.track_name as string,
-            participant_id: row.participant_id as string,
-            session_id: row.session_id as string,
-            mid: (row.mid as string) || undefined,
-            kind: row.kind as "audio" | "video",
-          });
-        }
-
-        const canonicalPullTracks = d.pull_tracks.map((requested) => {
-          const persisted = persistedTracks.get(requested.track_name);
-          if (
-            !persisted ||
-            requested.participant_id !== persisted.participant_id ||
-            requested.session_id !== persisted.session_id
-          )
-            return null;
-          return { requested, persisted };
-        });
-        if (canonicalPullTracks.some((track) => track === null)) {
-          this.sendTo(ws, {
-            op: Op.Error,
-            d: {
-              code: 4000,
-              message: "Requested track is not available",
-              request_id: d.request_id,
-              operation: "pull",
-            },
-          });
-          return;
-        }
-        const validCanonicalPullTracks = canonicalPullTracks.filter(
-          (track): track is { requested: TrackInfo; persisted: TrackInfo } =>
-            track !== null,
-        );
-
-        if (!pull_session_id) {
-          if (!isCurrent()) return;
-          const sessionResp = await this.sfuFetch("POST", "sessions/new");
-          if (!isCurrent()) return;
-          pull_session_id = sessionResp.sessionId as string;
-          this.sql.exec(
-            "UPDATE participants SET pull_session_id = ? WHERE id = ?",
-            pull_session_id,
-            pid,
-          );
-          sfuLog.info("Created pull session:", pull_session_id);
-        }
-
-        const remoteTracks = validCanonicalPullTracks.map(
-          ({ requested, persisted }) => {
-            const base: Record<string, unknown> = {
-              location: "remote",
-              trackName: persisted.track_name,
-              sessionId: persisted.session_id,
-            };
-            if (persisted.kind === "video" && requested.rid) {
-              const isScreen = persisted.track_name.startsWith("screen-");
-              base.simulcast = {
-                preferredRid: requested.rid,
-                priorityOrdering: isScreen ? "none" : "asciibetical",
-                ridNotAvailable: "asciibetical",
-              };
-            }
-            return base;
-          },
-        );
-
-        let pullResp: Record<string, unknown>;
-        try {
-          if (!isCurrent()) return;
-          pullResp = await this.sfuPost(
-            `sessions/${pull_session_id}/tracks/new`,
-            {
-              tracks: remoteTracks,
-            },
-          );
-        } catch (pullErr: unknown) {
-          const pullMsg =
-            pullErr instanceof Error ? pullErr.message : String(pullErr);
-          if (pullMsg.includes("(410)") || pullMsg.includes("session_error")) {
-            sfuLog.warn(
-              `Pull session stale (${pull_session_id.slice(0, 8)}...), creating fresh session and retrying`,
-            );
-            if (!isCurrent()) return;
-            const freshResp = await this.sfuFetch("POST", "sessions/new");
-            if (!isCurrent()) return;
-            pull_session_id = freshResp.sessionId as string;
-            this.sql.exec(
-              "UPDATE participants SET pull_session_id = ? WHERE id = ?",
-              pull_session_id,
-              pid,
-            );
-            sfuLog.info("Fresh pull session:", pull_session_id);
-
-            if (!isCurrent()) return;
-            pullResp = await this.sfuPost(
-              `sessions/${pull_session_id}/tracks/new`,
-              {
-                tracks: remoteTracks,
-              },
-            );
-          } else {
-            throw pullErr;
-          }
-        }
-
-        if (!isCurrent()) return;
-        sfuLog.info("Pull response keys:", Object.keys(pullResp).join(", "));
-        const pullSdp =
-          (pullResp.sessionDescription as { sdp: string })?.sdp ?? "";
-        const pullSdpType = ((pullResp.sessionDescription as { type: string })
-          ?.type ?? "offer") as "answer" | "offer";
-
-        const rawResponseTracks = pullResp.tracks;
-        const respTracks = Array.isArray(rawResponseTracks)
-          ? rawResponseTracks.filter(
-              (track): track is Record<string, unknown> =>
-                this.isPlainObject(track),
-            )
-          : [];
-        const hasInvalidTrackShape =
-          !Array.isArray(rawResponseTracks) ||
-          respTracks.length !== rawResponseTracks.length;
-        const matchedTrackNames = new Set<string>();
-        const hasInvalidTrackResponse =
-          hasInvalidTrackShape ||
-          respTracks.length !== validCanonicalPullTracks.length ||
-          respTracks.some((rt) => {
-            const trackName = rt.trackName;
-            const publisherSessionId = rt.sessionId;
-            const canonicalTrack =
-              typeof trackName === "string"
-                ? persistedTracks.get(trackName)
-                : undefined;
-
-            if (
-              (rt.location !== undefined && rt.location !== "remote") ||
-              typeof trackName !== "string" ||
-              typeof publisherSessionId !== "string" ||
-              !canonicalTrack ||
-              canonicalTrack.session_id !== publisherSessionId ||
-              matchedTrackNames.has(trackName)
-            ) {
-              return true;
-            }
-
-            matchedTrackNames.add(trackName);
-            return false;
-          }) ||
-          matchedTrackNames.size !== validCanonicalPullTracks.length;
-
-        if (hasInvalidTrackResponse) {
-          const activePullSessionId = pull_session_id;
-          if (!activePullSessionId) {
-            throw new Error("pull_session_missing");
-          }
-
-          await this.resetAndClosePullSession(
-            pid,
-            activePullSessionId,
-            respTracks,
-          );
-          if (!isCurrent()) return;
-          this.sendTo(ws, {
-            op: Op.Error,
-            d: {
-              code: 0,
-              message: "session-dead-reconnect",
-              request_id: d.request_id,
-              operation: "pull",
-            },
-          });
-          return;
-        }
-
-        const failedTracks = respTracks.filter((rt) => rt.errorCode);
-        const successTracks = respTracks.filter((rt) => !rt.errorCode);
-
-        if (failedTracks.length > 0) {
-          sfuLog.warn("Pull had failed tracks:", JSON.stringify(failedTracks));
-          this.evictDeadPublisherTracks(failedTracks);
-        }
-
-        if (!pullSdp || successTracks.length === 0) {
-          const failedTrackNames = failedTracks.map(
-            (rt) => rt.trackName as string,
-          );
-
-          this.sql.exec(
-            "UPDATE participants SET pull_session_id = NULL WHERE id = ?",
-            pid,
-          );
-          if (!isCurrent()) return;
-          this.sendTo(ws, {
-            op: Op.Error,
-            d: {
-              code: 0,
-              message: `pull-retry:${JSON.stringify(failedTrackNames)}`,
-              request_id: d.request_id,
-              operation: "pull",
-            },
-          });
-          return;
-        }
-
-        if (failedTracks.length > 0) {
-          const failedTrackNames = failedTracks.map(
-            (rt) => rt.trackName as string,
-          );
-          setTimeout(() => {
-            this.sendTo(ws, {
-              op: Op.Error,
-              d: {
-                code: 0,
-                message: `pull-retry:${JSON.stringify(failedTrackNames)}`,
-                request_id: d.request_id,
-                operation: "pull",
-              },
-            });
-          }, 100);
-        }
-
-        const pullNegotiated: TrackInfo[] = successTracks.map((rt) => {
-          const canonicalTrack = persistedTracks.get(rt.trackName as string);
-          return {
-            participant_id: canonicalTrack?.participant_id ?? "unknown",
-            track_name: rt.trackName as string,
-            session_id: (rt.sessionId as string) ?? pull_session_id,
-            mid: rt.mid as string | undefined,
-            kind: (rt.trackName as string)?.includes("audio")
-              ? ("audio" as const)
-              : ("video" as const),
-          };
-        });
-
-        this.sendTo(ws, {
-          op: Op.SessionDescription,
-          d: {
-            sdp: pullSdp,
-            session_id: pull_session_id,
-            tracks: pullNegotiated,
-            sdp_type: pullSdpType,
-            request_id: d.request_id,
-            operation: "pull",
-          },
-        });
-      }
-
-      if (d.push_tracks.length > 0 && d.sdp) {
-        if (!isCurrent()) return;
-        const prefix = d.push_prefix === "screen" ? "screen" : "cam";
-        const sessionId =
-          prefix === "screen" ? push_session_screen : push_session_cam;
         this.sendTo(ws, {
           op: Op.NegotiationDone,
           d: {
-            session_id: sessionId ?? undefined,
-            request_id: d.request_id,
+            session_id: sessionId,
+            request_id: payload.request_id,
             operation: "push",
-            push_prefix: prefix,
+            push_prefix: "screen",
           },
         });
-      }
-    } catch (err: unknown) {
-      if (!isCurrent()) return;
-      const message = err instanceof Error ? err.message : String(err);
-      roomLog.error("SFU error:", message);
-      if (
-        message.includes("Session is not ready") ||
-        message.includes("session_error") ||
-        message.includes("(410)") ||
-        message.includes("(425)")
-      ) {
-        if (activeOperation === "pull") {
-          this.sql.exec(
-            "UPDATE participants SET pull_session_id = NULL WHERE id = ?",
-            pid,
-          );
-          roomLog.info(
-            `Cleared stale pull session ID for next retry for ${pid}`,
-          );
-        } else if (
-          activeOperation === "push" &&
-          activePushPrefix === "screen"
+        sessionId = null;
+      } catch (error) {
+        if (sessionId)
+          await this.closeNativeScreenSession(sessionId, cleanupTracks);
+        if (
+          !this.isCurrentNativeScreenOperation(
+            ws,
+            participantId,
+            connectionId,
+            operationToken,
+          )
         ) {
-          this.sql.exec(
-            "UPDATE participants SET push_session_screen = NULL WHERE id = ?",
-            pid,
-          );
-          roomLog.info(
-            `Cleared stale screen push session ID for next retry for ${pid}`,
-          );
-        } else if (activeOperation === "push") {
-          this.sql.exec(
-            "UPDATE participants SET push_session_cam = NULL WHERE id = ?",
-            pid,
-          );
-          roomLog.info(
-            `Cleared stale cam push session ID for next retry for ${pid}`,
-          );
+          return;
         }
+        const message = error instanceof Error ? error.message : String(error);
+        roomLog.error("Native screen signaling failed:", message);
+        this.sendNativeScreenError(ws, payload.request_id, message);
       }
-      this.sendTo(ws, {
-        op: Op.Error,
-        d: {
-          code: 0,
-          message: `SFU error: ${message}`,
-          request_id: d.request_id,
-          operation: activeOperation ?? undefined,
-        },
-      });
+    } finally {
+      this.finishNativeScreenOperation(participantId, operationToken);
     }
   }
 
-  // ── Op 12: Video (client pull request) ─────────────────────────────────
-
-  private async handleVideo(ws: WebSocket, d: { tracks: TrackInfo[] }) {
-    const pid = this.getParticipantId(ws);
-    if (!pid) return;
-    await this.handleSelectProtocol(ws, {
-      sdp: "",
-      push_tracks: [],
-      pull_tracks: d.tracks,
-    });
-  }
-
-  // ── Op 14: Answer (pull renegotiation) ─────────────────────────────────
-
-  private async handleAnswer(
+  private async handleVideo(
     ws: WebSocket,
-    d: { sdp: string; request_id?: string },
-  ) {
-    const pid = this.requireParticipantId(ws);
-    if (!pid) return;
-    const attachment = this.getVoiceAttachment(ws);
-    const activeRequestId = attachment?.active_pull_request_id;
-    if (!d.request_id || !activeRequestId || d.request_id !== activeRequestId) {
+    d: { tracks: TrackInfo[] },
+  ): Promise<void> {
+    const participantId = this.requireParticipantId(ws);
+    if (!participantId) return;
+    if (d.tracks.length === 0) return;
+    if (
+      d.tracks.some(
+        (track) =>
+          typeof track.sfu_track_name !== "string" || !track.sfu_track_name,
+      )
+    ) {
+      this.rejectBrowserSfuNegotiation(ws);
       return;
     }
-    const connectionId = this.getVoiceAttachment(ws)?.connection_id;
-    if (!this.isCurrentVoiceConnection(ws, pid, connectionId)) return;
+    await this.handlePartyTracksPublication(ws, participantId, d.tracks);
+  }
 
-    const pRows = [
+  private async handlePartyTracksPublication(
+    ws: WebSocket,
+    participantId: string,
+    tracks: TrackInfo[],
+  ): Promise<void> {
+    const sanitizedTracks: TrackInfo[] = [];
+    for (const track of tracks) {
+      if (this.hasTrackNameConflict(track.track_name, participantId)) {
+        this.sendTo(ws, {
+          op: Op.Error,
+          d: { code: 4000, message: "Track name is already owned" },
+        });
+        return;
+      }
+      const claims = await verifyPartyTracksSessionCapability(
+        track.session_id,
+        this.env.CALLS_APP_SECRET,
+      );
+      if (
+        !claims ||
+        claims.roomSlug !== this.roomSlug ||
+        claims.participantId !== participantId
+      ) {
+        this.sendTo(ws, {
+          op: Op.Error,
+          d: { code: 4000, message: "Invalid PartyTracks session" },
+        });
+        return;
+      }
+      sanitizedTracks.push({
+        participant_id: participantId,
+        track_name: track.track_name,
+        sfu_track_name: track.sfu_track_name,
+        session_id: track.session_id,
+        kind: track.kind,
+      });
+    }
+
+    for (const track of sanitizedTracks) {
+      this.sql.exec(
+        "INSERT INTO tracks " +
+          "(track_name, participant_id, sfu_track_name, session_id, mid, kind, native_screen_pending) " +
+          "VALUES (?, ?, ?, ?, NULL, ?, 0) " +
+          "ON CONFLICT(track_name) DO UPDATE SET " +
+          "participant_id = excluded.participant_id, " +
+          "sfu_track_name = excluded.sfu_track_name, " +
+          "session_id = excluded.session_id, mid = NULL, " +
+          "kind = excluded.kind, native_screen_pending = 0",
+        track.track_name,
+        participantId,
+        track.sfu_track_name,
+        track.session_id,
+        track.kind,
+      );
+    }
+
+    this.broadcast(
+      {
+        op: Op.Video,
+        d: { participant_id: participantId, tracks: sanitizedTracks },
+      },
+      ws,
+    );
+  }
+
+  private async handleStopTracks(
+    ws: WebSocket,
+    d: { track_names: string[] },
+  ): Promise<void> {
+    const participantId = this.requireParticipantId(ws);
+    if (!participantId || d.track_names.length === 0) return;
+    const connectionId = this.getVoiceAttachment(ws)?.connection_id;
+    if (!this.isCurrentVoiceConnection(ws, participantId, connectionId)) return;
+    if (
+      d.track_names.some(
+        (trackName) =>
+          trackName.startsWith("screen-") &&
+          trackName.endsWith(`-${participantId}`),
+      )
+    ) {
+      this.invalidateNativeScreenOperation(participantId);
+    }
+
+    const requestedRows: TrackInfo[] = [];
+    for (const trackName of d.track_names) {
+      const row = [
+        ...this.sql.exec(
+          "SELECT track_name, participant_id, sfu_track_name, session_id, mid, kind " +
+            "FROM tracks WHERE track_name = ? AND participant_id = ?",
+          trackName,
+          participantId,
+        ),
+      ][0];
+      if (!row) continue;
+      requestedRows.push(this.toTrackInfo(row));
+    }
+
+    const partyTracks = requestedRows.filter(
+      (track) => typeof track.sfu_track_name === "string",
+    );
+    for (const track of partyTracks) {
+      this.sql.exec(
+        "DELETE FROM tracks WHERE track_name = ? AND participant_id = ? " +
+          "AND sfu_track_name IS NOT NULL",
+        track.track_name,
+        participantId,
+      );
+    }
+
+    const nativeSession = [
       ...this.sql.exec(
-        "SELECT pull_session_id FROM participants WHERE id = ?",
-        pid,
+        "SELECT native_screen_session_id FROM participants WHERE id = ?",
+        participantId,
+      ),
+    ][0]?.native_screen_session_id;
+    const shouldStopNative =
+      typeof nativeSession === "string" &&
+      requestedRows.some(
+        (track) =>
+          track.session_id === nativeSession &&
+          track.sfu_track_name === undefined &&
+          track.track_name.startsWith("screen-"),
+      );
+    const nativeTracks = shouldStopNative
+      ? await this.removeNativeScreenPublication(
+          participantId,
+          nativeSession as string,
+        )
+      : [];
+    const removedTracks = [...partyTracks, ...nativeTracks];
+    if (removedTracks.length === 0) return;
+
+    this.broadcastStoppedTracks(participantId, removedTracks, ws);
+  }
+
+  private handleTracksReady(ws: WebSocket, d: { track_names: string[] }): void {
+    const participantId = this.requireParticipantId(ws);
+    if (!participantId || d.track_names.length === 0) return;
+    const connectionId = this.getVoiceAttachment(ws)?.connection_id;
+    if (!this.isCurrentVoiceConnection(ws, participantId, connectionId)) return;
+
+    const nativeSession = [
+      ...this.sql.exec(
+        "SELECT native_screen_session_id FROM participants WHERE id = ?",
+        participantId,
+      ),
+    ][0]?.native_screen_session_id;
+    if (typeof nativeSession !== "string" || !nativeSession) return;
+
+    const readyTracks: TrackInfo[] = [];
+    for (const trackName of d.track_names) {
+      const row = [
+        ...this.sql.exec(
+          "SELECT track_name, participant_id, sfu_track_name, session_id, mid, kind " +
+            "FROM tracks WHERE track_name = ? AND participant_id = ? " +
+            "AND session_id = ? AND sfu_track_name IS NULL " +
+            "AND native_screen_pending = 1",
+          trackName,
+          participantId,
+          nativeSession,
+        ),
+      ][0];
+      if (!row) continue;
+      this.sql.exec(
+        "UPDATE tracks SET native_screen_pending = 0 " +
+          "WHERE track_name = ? AND participant_id = ? AND session_id = ?",
+        trackName,
+        participantId,
+        nativeSession,
+      );
+      readyTracks.push(this.toTrackInfo(row));
+    }
+    if (readyTracks.length === 0) return;
+
+    this.broadcast(
+      {
+        op: Op.Video,
+        d: { participant_id: participantId, tracks: readyTracks },
+      },
+      ws,
+    );
+  }
+
+  private toTrackInfo(row: Record<string, unknown>): TrackInfo {
+    return {
+      track_name: String(row.track_name),
+      participant_id: String(row.participant_id),
+      ...(typeof row.sfu_track_name === "string"
+        ? { sfu_track_name: row.sfu_track_name }
+        : {}),
+      session_id: String(row.session_id),
+      ...(typeof row.mid === "string" && row.mid ? { mid: row.mid } : {}),
+      kind: row.kind === "audio" ? "audio" : "video",
+    };
+  }
+
+  private getNativeScreenTracks(
+    participantId: string,
+    sessionId: string,
+  ): TrackInfo[] {
+    return [
+      ...this.sql.exec(
+        "SELECT track_name, participant_id, sfu_track_name, session_id, mid, kind " +
+          "FROM tracks WHERE participant_id = ? AND session_id = ? " +
+          "AND sfu_track_name IS NULL ORDER BY CASE kind WHEN 'video' THEN 0 ELSE 1 END, track_name",
+        participantId,
+        sessionId,
+      ),
+    ].map((row) => this.toTrackInfo(row));
+  }
+
+  private async removeNativeScreenPublication(
+    participantId: string,
+    sessionId: string,
+  ): Promise<TrackInfo[]> {
+    const cleared = [
+      ...this.sql.exec(
+        "UPDATE participants SET native_screen_session_id = NULL " +
+          "WHERE id = ? AND native_screen_session_id = ? RETURNING id",
+        participantId,
+        sessionId,
       ),
     ];
-    const pullId =
-      pRows.length > 0 ? (pRows[0].pull_session_id as string | null) : null;
+    if (cleared.length === 0) return [];
 
-    if (!pullId) {
-      this.sendTo(ws, {
-        op: Op.Error,
-        d: {
-          code: 0,
-          message: "No pull session",
-          request_id: d.request_id,
-          operation: "pull",
-        },
-      });
-      return;
-    }
+    const tracks = this.getNativeScreenTracks(participantId, sessionId);
+    this.sql.exec(
+      "DELETE FROM tracks WHERE participant_id = ? AND session_id = ? " +
+        "AND sfu_track_name IS NULL",
+      participantId,
+      sessionId,
+    );
+    await this.closeNativeScreenSession(
+      sessionId,
+      tracks.flatMap((track) =>
+        track.mid ? [{ mid: track.mid, track_name: track.track_name }] : [],
+      ),
+    );
+    return tracks;
+  }
 
+  private async closeNativeScreenSession(
+    sessionId: string,
+    tracks: NativeScreenTrackRow[],
+  ): Promise<void> {
     try {
-      if (!this.isCurrentVoiceConnection(ws, pid, connectionId)) return;
-      await this.sfuPut(`sessions/${pullId}/renegotiate`, {
-        sessionDescription: { type: "answer", sdp: d.sdp },
+      await this.sfuPut("sessions/" + sessionId + "/tracks/close", {
+        tracks: tracks.map((track) => ({ mid: track.mid })),
+        force: true,
       });
-      if (!this.isCurrentVoiceConnection(ws, pid, connectionId)) return;
-      this.sendTo(ws, {
-        op: Op.NegotiationDone,
-        d: { session_id: pullId, request_id: d.request_id, operation: "pull" },
-      });
-      ws.serializeAttachment({
-        ...attachment,
-        active_pull_request_id: undefined,
-      });
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : String(err);
-      this.sendTo(ws, {
-        op: Op.Error,
-        d: {
-          code: 0,
-          message: `Renegotiate error: ${message}`,
-          request_id: d.request_id,
-          operation: "pull",
-        },
-      });
+    } catch (error) {
+      sfuLog.warn(
+        "Native screen cleanup failed for " +
+          sessionId.slice(0, 8) +
+          ": " +
+          String(error),
+      );
     }
   }
 
-  // ── Op 13: StopTracks ──────────────────────────────────────────────────
-
-  private async handleStopTracks(ws: WebSocket, d: { track_names: string[] }) {
-    const pid = this.requireParticipantId(ws);
-    if (!pid) return;
-    const connectionId = this.getVoiceAttachment(ws)?.connection_id;
-    if (!this.isCurrentVoiceConnection(ws, pid, connectionId)) return;
-
-    const pRows = [
-      ...this.sql.exec(
-        "SELECT push_session_cam, push_session_screen FROM participants WHERE id = ?",
-        pid,
-      ),
-    ];
-    if (pRows.length === 0) return;
-    const row = pRows[0];
-    const push_session_cam = row.push_session_cam as string | null;
-    const push_session_screen = row.push_session_screen as string | null;
-
-    const trackNameSet = new Set(d.track_names);
-    const hasScreen = d.track_names.some((n) => n.startsWith("screen-"));
-    const oldPushSessionId = hasScreen ? push_session_screen : push_session_cam;
-
-    // Find matching tracks
-    const tracksToClose: Array<{ mid: string; trackName: string }> = [];
-    const tCursor = this.sql.exec(
-      "SELECT track_name, mid FROM tracks WHERE participant_id = ?",
-      pid,
-    );
-    for (const tRow of tCursor) {
-      const name = tRow.track_name as string;
-      const mid = tRow.mid as string | null;
-      if (trackNameSet.has(name) && mid) {
-        tracksToClose.push({ mid, trackName: name });
-      }
-    }
-
-    // Delete them
-    for (const name of d.track_names) {
-      this.sql.exec(
-        "DELETE FROM tracks WHERE track_name = ? AND participant_id = ?",
-        name,
-        pid,
-      );
-    }
-
-    if (hasScreen) {
-      this.sql.exec(
-        "UPDATE participants SET push_session_screen = NULL WHERE id = ?",
-        pid,
-      );
-    } else if (push_session_cam) {
-      // Check if any cam tracks remain
-      const cur = this.sql.exec(
-        "SELECT COUNT(*) as c FROM tracks WHERE participant_id = ? AND session_id = ?",
-        pid,
-        push_session_cam,
-      );
-      if (([...cur][0].c as number) === 0) {
-        roomLog.info(
-          `All cam tracks stopped — clearing push_session_cam for fresh session`,
-        );
-        this.sql.exec(
-          "UPDATE participants SET push_session_cam = NULL WHERE id = ?",
-          pid,
-        );
-      }
-    }
-
-    roomLog.info(`Tracks stopped by ${pid}:`, d.track_names);
-
+  private broadcastStoppedTracks(
+    participantId: string,
+    tracks: TrackInfo[],
+    excludeWs?: WebSocket,
+  ): void {
+    if (tracks.length === 0) return;
     this.broadcast(
       {
         op: Op.StopTracks,
         d: {
-          participant_id: pid,
-          track_names: d.track_names,
-          session_id: oldPushSessionId,
+          participant_id: participantId,
+          track_names: tracks.map((track) => track.track_name),
+          tracks,
         },
       },
-      ws,
+      excludeWs,
     );
-
-    if (hasScreen && this.clearStreamWatchersByParticipantId(pid)) {
+    if (
+      tracks.some((track) => track.track_name.startsWith("screen-")) &&
+      this.clearStreamWatchersByParticipantId(participantId)
+    ) {
       this.broadcastStreamWatcherSnapshot();
     }
-
-    if (oldPushSessionId && tracksToClose.length > 0) {
-      try {
-        if (!this.isCurrentVoiceConnection(ws, pid, connectionId)) return;
-        await this.sfuPut(`sessions/${oldPushSessionId}/tracks/close`, {
-          tracks: tracksToClose,
-          force: true,
-        });
-        if (!this.isCurrentVoiceConnection(ws, pid, connectionId)) return;
-      } catch {
-        sfuLog.warn("tracks/close failed (non-fatal)");
-      }
-    }
   }
 
-  // ── Op 102: TracksReady ──────────────────────────────────────────────────
-
-  private handleTracksReady(ws: WebSocket, d: { track_names: string[] }) {
-    const pid = this.requireParticipantId(ws);
-    if (!pid) return;
-    const connectionId = this.getVoiceAttachment(ws)?.connection_id;
-    if (!this.isCurrentVoiceConnection(ws, pid, connectionId)) return;
-
-    if (d.track_names.length === 0) return;
-
-    const readyTracks: TrackInfo[] = [];
-
-    // Find pending tracks and promote them
-    for (const name of d.track_names) {
-      const cur = this.sql.exec(
-        "SELECT session_id, mid, kind FROM tracks WHERE track_name = ? AND participant_id = ? AND is_pending = 1",
-        name,
-        pid,
-      );
-      const rows = [...cur];
-      if (rows.length > 0) {
-        readyTracks.push({
-          track_name: name,
-          participant_id: pid,
-          session_id: rows[0].session_id as string,
-          mid: (rows[0].mid as string) || undefined,
-          kind: rows[0].kind as "audio" | "video",
-        });
-
-        this.sql.exec(
-          "UPDATE tracks SET is_pending = 0 WHERE track_name = ?",
-          name,
-        );
-      }
-    }
-
-    if (readyTracks.length === 0) return;
-
-    // A peer may have identified while this publisher was reconnecting and
-    // therefore missed the initial Video broadcast. Replay the now-promoted
-    // tracks to every current peer so deferred VoiceReady state is satisfied
-    // only by a fresh TracksReady-backed publication.
-    const replayTracks = [
-      ...this.sql.exec(
-        "SELECT track_name, participant_id, session_id, mid, kind FROM tracks WHERE participant_id = ? AND is_pending = 0",
-        pid,
-      ),
-    ].map((row) => ({
-      track_name: row.track_name as string,
-      participant_id: row.participant_id as string,
-      session_id: row.session_id as string,
-      mid: (row.mid as string) || undefined,
-      kind: row.kind as "audio" | "video",
-    }));
-    this.broadcast(
-      {
-        op: Op.Video,
-        d: { participant_id: pid, tracks: replayTracks },
-      },
-      ws,
-    );
-  }
-
-  // ── Op 103: TrackUpdate (simulcast layer change, no renegotiation) ─────
-
-  private async handleTrackUpdate(
+  private sendNativeScreenError(
     ws: WebSocket,
-    d: {
-      tracks: Array<{
-        track_name: string;
-        session_id: string;
-        mid: string;
-        rid: string;
-      }>;
-    },
-  ) {
-    const pid = this.requireParticipantId(ws);
-    if (!pid) return;
-    const connectionId = this.getVoiceAttachment(ws)?.connection_id;
-    if (!this.isCurrentVoiceConnection(ws, pid, connectionId)) return;
-
-    const pRows = [
-      ...this.sql.exec(
-        "SELECT pull_session_id FROM participants WHERE id = ?",
-        pid,
-      ),
-    ];
-    const pullId =
-      pRows.length > 0 ? (pRows[0].pull_session_id as string | null) : null;
-
-    if (!pullId) return;
-
-    try {
-      if (!this.isCurrentVoiceConnection(ws, pid, connectionId)) return;
-      const updates = d.tracks.map((t) => ({
-        trackName: t.track_name,
-        sessionId: t.session_id,
-        mid: t.mid,
-        simulcast: {
-          preferredRid: t.rid,
-          priorityOrdering: (t.track_name.startsWith("screen-")
-            ? "none"
-            : "asciibetical") as "none" | "asciibetical",
-          ridNotAvailable: "asciibetical" as const,
-        },
-      }));
-
-      await this.sfuPut(`sessions/${pullId}/tracks/update`, {
-        tracks: updates,
-      });
-      if (!this.isCurrentVoiceConnection(ws, pid, connectionId)) return;
-
-      sfuLog.info(`Updated simulcast for ${d.tracks.length} tracks`);
-    } catch (err: unknown) {
-      sfuLog.warn("tracks/update failed (non-fatal):", String(err));
-    }
-  }
-
-  // ── Op 104: IceRestart ──────────────────────────────────────────────────
-
-  private handleResetPullSession(ws: WebSocket) {
-    const pid = this.requireParticipantId(ws);
-    if (!pid) return;
-
-    const rows = [
-      ...this.sql.exec(
-        "SELECT pull_session_id FROM participants WHERE id = ?",
-        pid,
-      ),
-    ];
-    const oldPullId =
-      rows.length > 0 ? (rows[0].pull_session_id as string | null) : null;
-
-    this.sql.exec(
-      "UPDATE participants SET pull_session_id = NULL WHERE id = ?",
-      pid,
-    );
-    sfuLog.info(
-      `Reset pull session for ${pid}${oldPullId ? ` (${oldPullId.slice(0, 8)}...)` : ""}`,
-    );
-  }
-
-  private async resetAndClosePullSession(
-    participantId: string,
-    pullSessionId: string,
-    responseTracks: Array<Record<string, unknown>>,
-  ) {
-    this.sql.exec(
-      "UPDATE participants SET pull_session_id = NULL WHERE id = ? AND pull_session_id = ?",
-      participantId,
-      pullSessionId,
-    );
-
-    const mids = Array.from(
-      new Set(
-        responseTracks.flatMap((track) =>
-          typeof track.mid === "string" && track.mid ? [track.mid] : [],
-        ),
-      ),
-    );
-    if (mids.length === 0) return;
-
-    try {
-      await this.sfuPut(`sessions/${pullSessionId}/tracks/close`, {
-        tracks: mids.map((mid) => ({ mid })),
-        force: true,
-      });
-    } catch {
-      sfuLog.warn("Invalid pull response cleanup failed (non-fatal)");
-    }
+    requestId: string | undefined,
+    message: string,
+  ): void {
+    this.sendTo(ws, {
+      op: Op.Error,
+      d: {
+        code: 0,
+        message,
+        request_id: requestId,
+        operation: "push",
+        push_prefix: "screen",
+      },
+    });
   }
 
   private async handleVoiceAppEvent(ws: WebSocket, d: Record<string, unknown>) {
@@ -3380,7 +2774,7 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
           message: "Server membership is required for soundboard actions",
         },
       });
-      await this.handleLeave(ws, true, true);
+      await this.handleLeave(ws, true);
       return;
     }
 
@@ -3701,304 +3095,45 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
    * Client should use full session teardown + recreate instead.
    * This handler now returns an error instructing the client to reset.
    */
-  private async handleIceRestart(
-    ws: WebSocket,
-    d: { sdp: string; session_type: "push_cam" | "push_screen" | "pull" },
-  ) {
-    const pid = this.requireParticipantId(ws);
-    if (!pid) return;
-
-    roomLog.warn(
-      `Received deprecated IceRestart op from ${pid} for ${d.session_type} — sending reset instruction`,
-    );
-    this.sendTo(ws, {
-      op: Op.Error,
-      d: { code: 0, message: "session-dead-reconnect" },
-    });
-  }
-
-  // ── SFU Session Health Check ───────────────────────────────────────────
-  // Called from alarm() to detect SFU sessions that have been silently evicted.
-  // Pull sessions are most vulnerable: in quiet rooms with no media, the SFU
-  // may idle-timeout the session. We check each and clean up 410'd ones.
-
-  private async validateSfuSessions() {
-    const participants = [
-      ...this.sql.exec(
-        "SELECT id, pull_session_id FROM participants WHERE pull_session_id IS NOT NULL",
-      ),
-    ];
-    if (participants.length === 0) return;
-
-    for (const p of participants) {
-      const pullId = p.pull_session_id as string;
-      try {
-        // Lightweight probe — a GET on the session endpoint
-        await this.sfuFetch("GET", `sessions/${pullId}`);
-      } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : String(err);
-        if (message.includes("(410)")) {
-          sfuLog.warn(
-            `Pull session ${pullId.slice(0, 8)}... is 410 — clearing for participant ${p.id}`,
-          );
-          this.sql.exec(
-            "UPDATE participants SET pull_session_id = NULL WHERE id = ?",
-            p.id,
-          );
-          // Notify the client so it can re-pull
-          const ws = this.getWsByParticipant(p.id as string);
-          if (ws) {
-            this.sendTo(ws, {
-              op: Op.Error,
-              d: { code: 0, message: "pull-session-expired" },
-            });
-          }
-        } else {
-          // Non-410 errors (5xx, network) = transient, skip for now
-          sfuLog.warn(
-            `Session probe for ${pullId.slice(0, 8)}... errored (non-fatal): ${message}`,
-          );
-        }
-      }
-    }
-  }
-
-  // If a track consistently fails to pull (e.g., SFU returns errorCode),
-  // it means the publisher's RTP upload fundamentally died (often an ICE failure
-  // on the publisher's end that their client hasn't realized or recovered from yet).
-  //
-  // If we leave the dead track in SQLite, every viewer that joins (or re-pulls)
-  // will keep asking the SFU for it, resulting in cascading error loops.
-  // This evicts the publisher's track globally.
-  //
-  // IMPORTANT: We only evict tracks from publishers that are DISCONNECTED.
-  // The SFU returns `empty_track_error` when the publisher's push PC hasn't
-  // completed ICE negotiation yet — this is a transient state, NOT a dead track.
-  // Evicting a connected publisher's tracks destroys healthy, still-connecting
-  // sessions (the root cause of the "User B can't speak" bug).
-  private evictDeadPublisherTracks(
-    failedTracks: Array<Record<string, unknown>>,
-  ) {
-    // Collect unique sessionIds from the failures, tracking whether the
-    // failure was a truly transient `empty_track_error` (ICE still negotiating)
-    // vs a permanent error like `not_found_track_error` (session dead).
-    const failedSids = new Map<string, boolean>(); // sessionId → isTransient
-    for (const failing of failedTracks) {
-      if (!failing.sessionId) continue;
-      const sid = failing.sessionId as string;
-      const errorCode = (failing.errorCode as string) || "";
-      const isTransient = errorCode === "empty_track_error";
-      // If any error for this session is permanent, mark the whole session
-      // as non-transient (evictable even if publisher is connected).
-      const prev = failedSids.get(sid);
-      failedSids.set(
-        sid,
-        prev === undefined ? isTransient : prev && isTransient,
-      );
-    }
-
-    if (failedSids.size === 0) return;
-
-    // Build a set of participant IDs that still have open WebSocket connections.
-    // These publishers are alive — their push PC may just be finishing ICE.
-    const connectedPids = new Set<string>();
-    for (const ws of this.ctx.getWebSockets()) {
-      const pid = this.getParticipantId(ws);
-      if (pid) connectedPids.add(pid);
-    }
-
-    for (const [badSessionId, isTransient] of failedSids) {
-      // Find who owns this push session
-      const pCur = this.sql.exec(
-        "SELECT id FROM participants WHERE push_session_cam = ? OR push_session_screen = ?",
-        badSessionId,
-        badSessionId,
-      );
-      const rows = [...pCur];
-
-      if (rows.length > 0) {
-        const ownerPid = rows[0].id as string;
-
-        const evictionDecision = decideFailedPublisherSessionEviction({
-          ownerConnected: connectedPids.has(ownerPid),
-          hasOnlyTransientErrors: isTransient,
-        });
-
-        if (!evictionDecision.evict) {
-          const reason = isTransient
-            ? "empty_track_error is likely transient while publisher ICE is still negotiating"
-            : "viewer-side pull failure should not evict a still-connected publisher";
-          sfuLog.info(
-            `Skipping eviction for connected publisher ${ownerPid} (session ${badSessionId.slice(0, 8)}…) — ${reason}`,
-          );
-          continue;
-        }
-
-        const deletedTracks: string[] = [];
-        const tCur = this.sql.exec(
-          "SELECT track_name FROM tracks WHERE session_id = ?",
-          badSessionId,
-        );
-        for (const tr of tCur) deletedTracks.push(tr.track_name as string);
-
-        if (deletedTracks.length > 0) {
-          sfuLog.warn(
-            `Evicting dead tracks for disconnected publisher ${ownerPid} due to pull failures. tracks=${deletedTracks.join(",")}`,
-          );
-
-          this.sql.exec(
-            "DELETE FROM tracks WHERE session_id = ?",
-            badSessionId,
-          );
-          const didClearStreamWatchers =
-            deletedTracks.some((trackName) =>
-              trackName.startsWith("screen-"),
-            ) && this.clearStreamWatchersByParticipantId(ownerPid);
-
-          this.broadcast({
-            op: Op.StopTracks,
-            d: {
-              participant_id: ownerPid,
-              track_names: deletedTracks,
-              session_id: badSessionId,
-            },
-          });
-
-          if (didClearStreamWatchers) {
-            this.broadcastStreamWatcherSnapshot();
-          }
-        }
-      }
-    }
-  }
-
-  // ── Op 2: Leave & Disconnect ───────────────────────────────────────────
-
-  private async handleLeave(
-    ws: WebSocket,
-    clientInitiated = false,
-    closeSocket = true,
-  ) {
+  private async handleLeave(ws: WebSocket, closeSocket = true): Promise<void> {
     const attachment = this.getVoiceAttachment(ws);
-    const pid = attachment?.participant_id;
-    // Remove from in-memory WebSockets list since we're closing it.
-    // The DO automatically removes it from this.ctx.getWebSockets(),
-    // but we also need to clean up DB state.
+    const participantId = attachment?.participant_id;
+    if (!participantId) return;
 
-    if (pid) {
-      const rows = [
-        ...this.sql.exec(
-          "SELECT connection_id FROM participants WHERE id = ?",
-          pid,
-        ),
-      ];
-      const currentConnectionId =
-        rows.length > 0 ? (rows[0].connection_id as string | null) : null;
-
-      if (
-        isSupersededVoiceConnection(
-          currentConnectionId,
-          attachment?.connection_id,
-        )
-      ) {
-        roomLog.info(`Ignoring stale disconnect for participant=${pid}`);
-        return;
-      }
-
-      await this.disconnectParticipant(
-        pid,
-        !clientInitiated,
-        closeSocket ? ws : undefined,
+    const current = [
+      ...this.sql.exec(
+        "SELECT connection_id FROM participants WHERE id = ?",
+        participantId,
+      ),
+    ][0];
+    const currentConnectionId = current?.connection_id as string | null;
+    if (
+      isSupersededVoiceConnection(currentConnectionId, attachment.connection_id)
+    ) {
+      roomLog.info(
+        "Ignoring stale disconnect for participant=" + participantId,
       );
+      return;
     }
+
+    await this.disconnectParticipant(
+      participantId,
+      closeSocket ? ws : undefined,
+    );
   }
 
   private async disconnectParticipant(
     participantId: string,
-    gracePeriod: boolean,
     ws?: WebSocket,
-  ) {
-    roomLog.info(
-      `Participant ${participantId} disconnecting (grace=${gracePeriod})`,
-    );
-
-    const pRows = [
-      ...this.sql.exec(
-        "SELECT clerk_user_id, push_session_cam, push_session_screen, pull_session_id, speaking FROM participants WHERE id = ?",
-        participantId,
-      ),
-    ];
-    if (pRows.length === 0) return;
-
-    const wasSpeaking = Number(pRows[0].speaking ?? 0) !== 0;
-    if (wasSpeaking) {
-      this.sql.exec(
-        "UPDATE participants SET speaking = 0 WHERE id = ?",
-        participantId,
-      );
-      this.broadcast({
-        op: Op.Speaking,
-        d: { participant_id: participantId, speaking: 0 },
-      });
-    }
-
-    // Broadcast leave
-    this.broadcast({
-      op: Op.ClientDisconnect,
-      d: { participant_id: participantId },
-    });
-
-    if (gracePeriod) {
-      // Move to pending, keep tracks alive
-      const now = Date.now();
-      this.sql.exec(
-        "INSERT INTO pending_reconnects (participant_id, disconnected_at) VALUES (?, ?) ON CONFLICT(participant_id) DO UPDATE SET disconnected_at = excluded.disconnected_at",
-        participantId,
-        now,
-      );
-    } else {
-      // Client intended to leave forever, or we are pruning them.
-      // Clean up SFU resources and SQLite data completely.
-      this.ctx.waitUntil(this.cleanupSfuSessionsByParticipantId(participantId));
-      const didChangeStreamWatchers =
-        this.clearStreamWatchersByParticipantId(participantId);
-
-      const trackNames = [
-        ...this.sql.exec(
-          "SELECT track_name FROM tracks WHERE participant_id = ?",
-          participantId,
-        ),
-      ].map((r) => r.track_name as string);
-      if (trackNames.length > 0) {
-        this.broadcast({
-          op: Op.StopTracks,
-          d: { participant_id: participantId, track_names: trackNames },
-        });
-      }
-
-      this.sql.exec(
-        "DELETE FROM pending_reconnects WHERE participant_id = ?",
-        participantId,
-      );
-      this.sql.exec(
-        "DELETE FROM tracks WHERE participant_id = ?",
-        participantId,
-      );
-      this.sql.exec("DELETE FROM participants WHERE id = ?", participantId);
-
-      if (didChangeStreamWatchers) {
-        this.broadcastStreamWatcherSnapshot();
-      }
-    }
-
-    this.maybeFreezeListenTogetherForEmptyRoom();
-    this.scheduleAlarm();
+  ): Promise<void> {
+    roomLog.info("Participant " + participantId + " disconnecting");
+    await this.purgeParticipantState(participantId, ws);
 
     if (ws) {
       try {
         ws.close(1000, "Left voice");
       } catch {
-        /* already closed */
+        // The voice socket may already be closed.
       }
     }
   }
@@ -4520,24 +3655,24 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
   private async purgeParticipantState(
     participantId: string,
     excludeWs?: WebSocket,
-    deferSfuCleanup = false,
   ): Promise<void> {
-    const participantRows = [
+    this.invalidateNativeScreenOperation(participantId);
+    const participant = [
       ...this.sql.exec(
-        "SELECT speaking FROM participants WHERE id = ?",
+        "SELECT speaking, native_screen_session_id FROM participants WHERE id = ?",
         participantId,
       ),
-    ];
-    if (participantRows.length > 0) {
-      if (Number(participantRows[0].speaking ?? 0) !== 0) {
-        this.broadcast(
-          {
-            op: Op.Speaking,
-            d: { participant_id: participantId, speaking: 0 },
-          },
-          excludeWs,
-        );
-      }
+    ][0];
+    if (participant && Number(participant.speaking ?? 0) !== 0) {
+      this.broadcast(
+        {
+          op: Op.Speaking,
+          d: { participant_id: participantId, speaking: 0 },
+        },
+        excludeWs,
+      );
+    }
+    if (participant) {
       this.broadcast(
         {
           op: Op.ClientDisconnect,
@@ -4547,134 +3682,55 @@ export class VoiceRoom extends DurableObject<Env, unknown> {
       );
     }
 
-    if (deferSfuCleanup) {
-      this.ctx.waitUntil(this.cleanupSfuSessionsByParticipantId(participantId));
-    } else {
-      await this.cleanupSfuSessionsByParticipantId(participantId);
-    }
-    const didChangeStreamWatchers =
-      this.clearStreamWatchersByParticipantId(participantId);
-
-    const trackNames = [
+    const tracks = [
       ...this.sql.exec(
-        "SELECT track_name FROM tracks WHERE participant_id = ?",
+        "SELECT track_name, participant_id, sfu_track_name, session_id, mid, kind " +
+          "FROM tracks WHERE participant_id = ?",
         participantId,
       ),
-    ].map((r) => r.track_name as string);
-    if (trackNames.length > 0) {
-      this.broadcast(
-        {
-          op: Op.StopTracks,
-          d: { participant_id: participantId, track_names: trackNames },
-        },
-        excludeWs,
-      );
-    }
+    ].map((row) => this.toTrackInfo(row));
+    const nativeSessionId =
+      typeof participant?.native_screen_session_id === "string"
+        ? participant.native_screen_session_id
+        : null;
+    const claimedNativeSession = nativeSessionId
+      ? [
+          ...this.sql.exec(
+            "UPDATE participants SET native_screen_session_id = NULL " +
+              "WHERE id = ? AND native_screen_session_id = ? RETURNING id",
+            participantId,
+            nativeSessionId,
+          ),
+        ].length > 0
+      : false;
 
-    this.sql.exec(
-      "DELETE FROM pending_reconnects WHERE participant_id = ?",
-      participantId,
-    );
+    const didChangeStreamWatchers =
+      this.clearStreamWatchersByParticipantId(participantId);
     this.sql.exec("DELETE FROM tracks WHERE participant_id = ?", participantId);
     this.sql.exec("DELETE FROM participants WHERE id = ?", participantId);
 
+    this.broadcastStoppedTracks(participantId, tracks, excludeWs);
     if (didChangeStreamWatchers) {
       this.broadcastStreamWatcherSnapshot();
+    }
+
+    if (nativeSessionId && claimedNativeSession) {
+      const nativeTracks = tracks.filter(
+        (track) =>
+          track.session_id === nativeSessionId &&
+          track.sfu_track_name === undefined,
+      );
+      await this.closeNativeScreenSession(
+        nativeSessionId,
+        nativeTracks.flatMap((track) =>
+          track.mid ? [{ mid: track.mid, track_name: track.track_name }] : [],
+        ),
+      );
     }
 
     this.maybeFreezeListenTogetherForEmptyRoom();
     this.scheduleAlarm();
   }
-
-  private async cleanupSfuSessionsByParticipantId(participantId: string) {
-    const pRows = [
-      ...this.sql.exec(
-        "SELECT push_session_cam, push_session_screen FROM participants WHERE id = ?",
-        participantId,
-      ),
-    ];
-    if (pRows.length === 0) return;
-    const p = pRows[0];
-    const push_session_cam = p.push_session_cam as string | null;
-    const push_session_screen = p.push_session_screen as string | null;
-
-    const tRows: SfuTrackCloseRow[] = [];
-    for (const row of this.sql.exec(
-      "SELECT track_name, session_id, mid FROM tracks WHERE participant_id = ?",
-      participantId,
-    )) {
-      if (typeof row.mid !== "string" || !row.mid) continue;
-      tRows.push({
-        mid: row.mid,
-        session_id: typeof row.session_id === "string" ? row.session_id : null,
-        track_name: String(row.track_name),
-      });
-    }
-
-    const camTracks = tRows.filter((t) => t.session_id === push_session_cam);
-    const screenTracks = tRows.filter(
-      (t) => t.session_id === push_session_screen,
-    );
-
-    const closeSession = async (
-      sessionId: string,
-      tracks: SfuTrackCloseRow[],
-    ) => {
-      const path = `sessions/${sessionId}/tracks/close`;
-      const operation = `PUT ${path}`;
-      const url = `https://rtc.live.cloudflare.com/v1/apps/${this.env.CALLS_APP_ID}/${path}`;
-      try {
-        const resp = await fetch(url, {
-          method: "PUT",
-          headers: {
-            Authorization: `Bearer ${this.env.CALLS_APP_SECRET}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            tracks: tracks.map((t) => ({ mid: t.mid })),
-            force: true,
-          }),
-        });
-        if (resp.ok) return;
-        if (resp.status === 410) {
-          sfuLog.warn(
-            `tracks/close 410 for session ${sessionId.slice(0, 8)}... — PC already disconnected, session evicted by SFU (expected)`,
-          );
-          return;
-        }
-        sfuLog.warn(
-          "SFU tracks/close failed",
-          toSafeSfuFailure({
-            attempt: 0,
-            operation,
-            requestId: resp.headers.get("cf-ray"),
-            status: resp.status,
-          }),
-        );
-      } catch (err) {
-        sfuLog.warn(
-          "SFU tracks/close failed",
-          toSafeSfuFailure({
-            attempt: 0,
-            operation,
-            status: null,
-            timedOut: err instanceof DOMException && err.name === "AbortError",
-          }),
-        );
-      }
-    };
-
-    const cleanupTasks: Promise<void>[] = [];
-    if (push_session_cam && camTracks.length > 0) {
-      cleanupTasks.push(closeSession(push_session_cam, camTracks));
-    }
-    if (push_session_screen && screenTracks.length > 0) {
-      cleanupTasks.push(closeSession(push_session_screen, screenTracks));
-    }
-    if (cleanupTasks.length > 0) await Promise.all(cleanupTasks);
-  }
-
-  // ── SFU API Helpers ────────────────────────────────────────────────────
 
   private async sfuFetch(
     method: string,

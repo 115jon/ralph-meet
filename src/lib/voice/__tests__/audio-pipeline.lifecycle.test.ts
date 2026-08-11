@@ -134,6 +134,102 @@ describe("AudioPipeline lifecycle", () => {
     ).toBe(0);
   });
 
+  it("attaches default remote audio directly without creating an AudioContext", () => {
+    const audioContext = vi.fn();
+    vi.stubGlobal("AudioContext", audioContext);
+    const pipeline = new AudioPipeline({ onAudioResumed: vi.fn() });
+    const track = { kind: "audio", readyState: "live" } as MediaStreamTrack;
+
+    const stream = pipeline.attachRemoteAudioTrack(
+      "participant",
+      track,
+      "cam-audio-participant",
+    );
+
+    expect(stream.getAudioTracks()).toEqual([track]);
+    expect(audioContext).not.toHaveBeenCalled();
+    expect(document.querySelectorAll("audio")).toHaveLength(1);
+    expect(document.querySelector("audio")?.autoplay).toBe(true);
+    pipeline.removeParticipantVolume("participant");
+  });
+
+  it("keeps direct volume and output-device controls AudioContext-free", async () => {
+    const audioContext = vi.fn();
+    vi.stubGlobal("AudioContext", audioContext);
+    const pipeline = new AudioPipeline({ onAudioResumed: vi.fn() });
+    pipeline.attachRemoteAudioTrack(
+      "participant",
+      { kind: "audio", readyState: "live" } as MediaStreamTrack,
+      "cam-audio-participant",
+    );
+
+    pipeline.setMasterVolume(0.5);
+    await pipeline.setOutputDevice("default");
+    await pipeline.resumeAudioContext();
+
+    const audioElements = document.querySelectorAll("audio");
+    expect(audioElements[audioElements.length - 1]?.volume).toBe(0.5);
+    expect(audioContext).not.toHaveBeenCalled();
+    pipeline.removeParticipantVolume("participant");
+  });
+
+  it("promotes direct audio when effective volume exceeds the element limit", () => {
+    const { context } = createAudioContext();
+    (context as { state: AudioContextState }).state = "running";
+    const audioContext = vi.fn(function () {
+      return context;
+    });
+    vi.stubGlobal("AudioContext", audioContext);
+    const pipeline = new AudioPipeline({ onAudioResumed: vi.fn() });
+
+    pipeline.attachRemoteAudioTrack(
+      "participant",
+      { kind: "audio", readyState: "live" } as MediaStreamTrack,
+      "cam-audio-participant",
+    );
+    pipeline.setParticipantVolume("participant", 1.5);
+
+    expect(audioContext).toHaveBeenCalledOnce();
+    expect(document.querySelectorAll("audio")).toHaveLength(0);
+    expect(
+      (
+        pipeline as unknown as {
+          directAudioElements: Map<string, Map<string, unknown>>;
+        }
+      ).directAudioElements.get("participant"),
+    ).toBeUndefined();
+    pipeline.removeParticipantVolume("participant");
+  });
+
+  it("preserves track-specific volume when promoting to Web Audio", () => {
+    const { context } = createAudioContext();
+    (context as { state: AudioContextState }).state = "running";
+    vi.stubGlobal(
+      "AudioContext",
+      vi.fn(function () {
+        return context;
+      }),
+    );
+    const pipeline = new AudioPipeline({ onAudioResumed: vi.fn() });
+    const trackName = "cam-audio-participant";
+
+    pipeline.attachRemoteAudioTrack(
+      "participant",
+      { kind: "audio", readyState: "live" } as MediaStreamTrack,
+      trackName,
+    );
+    pipeline.setTrackVolume("participant", trackName, 0.35);
+    pipeline.setTrackPan("participant", trackName, 0.5);
+
+    const gains = (
+      pipeline as unknown as {
+        volumeGains: Map<string, Map<string, { gain: { value: number } }>>;
+      }
+    ).volumeGains;
+    expect(gains.get("participant")?.get(trackName)?.gain.value).toBe(0.35);
+    pipeline.removeParticipantVolume("participant");
+  });
+
   it("closes an unconsumed prewarmed context after its bounded lifetime", () => {
     vi.useFakeTimers();
     const { context } = createAudioContext();

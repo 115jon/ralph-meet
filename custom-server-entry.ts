@@ -47,6 +47,7 @@ import {
   getRealtimeAdmissionConfig,
   stripRealtimeAdmissionHeaders,
 } from "./realtime/realtime-admission";
+import { handlePartyTracksProxyRequest } from "./realtime/partytracks-proxy";
 
 // DO classes are exported from the root Worker so its bindings and migration
 // history own the Durable Object namespaces.
@@ -159,6 +160,11 @@ function withDocumentSecurityHeaders(
 }
 
 interface Env {
+  CALLS_APP_ID: string;
+  CALLS_APP_SECRET: string;
+  CALLS_API_URL?: string;
+  TURN_TOKEN_ID?: string;
+  TURN_TOKEN_SECRET?: string;
   MEETING_ROOM: DurableObjectNamespace;
   VOICE_ROOM: DurableObjectNamespace;
   DB: D1Database;
@@ -364,6 +370,11 @@ export default {
           ),
         );
       }
+    }
+
+    if (/^\/api\/channels\/[^/]+\/partytracks(?:\/|$)/u.test(url.pathname)) {
+      const response = await handlePartyTracksProxyRequest(request, env);
+      if (response) return withDesktopCors(request, response);
     }
 
     const ytdlpResponse = await handleYtDlpRequest(request, _ctx);

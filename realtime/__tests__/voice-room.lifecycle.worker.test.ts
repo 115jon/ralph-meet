@@ -146,6 +146,25 @@ async function nextMessageWithOpcode(
   }
 }
 
+async function nextMessagesWithOpcodes(
+  socket: WebSocket,
+  opcodes: readonly number[],
+): Promise<Map<number, { op: number; d: unknown }>> {
+  const remaining = new Set(opcodes);
+  const messages = new Map<number, { op: number; d: unknown }>();
+  return new Promise((resolve) => {
+    const onMessage = (event: MessageEvent<string>) => {
+      const message = JSON.parse(event.data) as { op: number; d: unknown };
+      if (!remaining.delete(message.op)) return;
+      messages.set(message.op, message);
+      if (remaining.size > 0) return;
+      socket.removeEventListener("message", onMessage);
+      resolve(messages);
+    };
+    socket.addEventListener("message", onMessage);
+  });
+}
+
 async function nextMessageWithOpcodeOrNull(
   socket: WebSocket,
   opcode: number,
@@ -286,6 +305,42 @@ async function mockCallsApi(
   });
 }
 
+function createDeferred<T>(): {
+  promise: Promise<T>;
+  resolve: (value: T) => void;
+} {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((fulfill) => {
+    resolve = fulfill;
+  });
+  return { promise, resolve };
+}
+
+function sendNativeScreenSelect(
+  socket: WebSocket,
+  participantId: string,
+  requestId: string,
+): void {
+  socket.send(
+    JSON.stringify({
+      op: 1,
+      d: {
+        sdp: `native-offer-${requestId}`,
+        push_prefix: "screen",
+        request_id: requestId,
+        push_tracks: [
+          {
+            track_name: `screen-video-${participantId}`,
+            kind: "video",
+            mid: "0",
+          },
+        ],
+        pull_tracks: [],
+      },
+    }),
+  );
+}
+
 async function seedSoundboardCatalogEntry(
   serverId: string,
   soundId: string,
@@ -418,6 +473,40 @@ async function issueVoiceToken(
     String.fromCharCode(...new Uint8Array(signature)),
   );
   return `${payload}.${encodedSignature}`;
+}
+
+function bytesToBase64Url(bytes: Uint8Array): string {
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary)
+    .replaceAll("+", "-")
+    .replaceAll("/", "_")
+    .replace(/=+$/u, "");
+}
+
+async function issuePartyTracksSessionCapability(
+  participantId: string,
+  roomSlug: string,
+  sessionId: string,
+): Promise<string> {
+  const payload = bytesToBase64Url(
+    textEncoder.encode(
+      JSON.stringify({ version: 1, roomSlug, participantId, sessionId }),
+    ),
+  );
+  const key = await crypto.subtle.importKey(
+    "raw",
+    textEncoder.encode(env.CALLS_APP_SECRET),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  const signature = await crypto.subtle.sign(
+    "HMAC",
+    key,
+    textEncoder.encode(payload),
+  );
+  return `${payload}.${bytesToBase64Url(new Uint8Array(signature))}`;
 }
 
 async function identifyVoiceSocket(
@@ -1578,68 +1667,6 @@ describe("VoiceRoom lifecycle", () => {
     socket.close();
   });
 
-  it("rejects malformed select protocol payloads", async () => {
-    const roomName = crypto.randomUUID();
-    const socket = await openVoiceSocket(roomName);
-    await identifyVoiceSocket(socket, crypto.randomUUID(), roomName);
-    const response = nextMessageWithOpcode(socket, 18);
-
-    socket.send(JSON.stringify({ op: 1, d: {} }));
-
-    expect(await response).toMatchObject({
-      op: 18,
-      d: { code: 4000, message: "Invalid select protocol payload" },
-    });
-    socket.close();
-  });
-
-  it("rejects push select protocol payloads without an SDP", async () => {
-    const roomName = crypto.randomUUID();
-    const socket = await openVoiceSocket(roomName);
-    await identifyVoiceSocket(socket, crypto.randomUUID(), roomName);
-    const response = nextMessageWithOpcode(socket, 18);
-
-    socket.send(
-      JSON.stringify({
-        op: 1,
-        d: {
-          push_tracks: [{ track_name: "cam-audio", kind: "audio", mid: "0" }],
-          pull_tracks: [],
-        },
-      }),
-    );
-
-    expect(await response).toMatchObject({
-      op: 18,
-      d: { code: 4000, message: "Invalid select protocol payload" },
-    });
-    socket.close();
-  });
-
-  it("rejects push select protocol payloads with a blank SDP", async () => {
-    const roomName = crypto.randomUUID();
-    const socket = await openVoiceSocket(roomName);
-    await identifyVoiceSocket(socket, crypto.randomUUID(), roomName);
-    const response = nextMessageWithOpcode(socket, 18);
-
-    socket.send(
-      JSON.stringify({
-        op: 1,
-        d: {
-          sdp: " ",
-          push_tracks: [{ track_name: "cam-audio", kind: "audio", mid: "0" }],
-          pull_tracks: [],
-        },
-      }),
-    );
-
-    expect(await response).toMatchObject({
-      op: 18,
-      d: { code: 4000, message: "Invalid select protocol payload" },
-    });
-    socket.close();
-  });
-
   it("acks an unidentified heartbeat without creating a participant", async () => {
     const socket = await openVoiceSocket();
     const response = nextJsonMessage(socket);
@@ -1682,1064 +1709,983 @@ describe("VoiceRoom lifecycle", () => {
     socket.close();
   });
 
-  it("keeps negotiated tracks private until TracksReady promotes them", async () => {
+  it("broadcasts and persists PartyTracks publication metadata without calling the SFU", async () => {
     const roomName = crypto.randomUUID();
-    let sessionNumber = 0;
-    await mockCallsApi(roomName, async (request) => {
-      const url = new URL(request.url);
-      if (url.pathname.endsWith("/sessions/new")) {
-        sessionNumber += 1;
-        return Response.json({ sessionId: `session-${sessionNumber}` });
-      }
-      if (url.pathname.endsWith("/tracks/new")) {
-        return Response.json({
-          sessionDescription: { type: "answer", sdp: "answer-sdp" },
+    const publisherId = crypto.randomUUID();
+    const observerId = crypto.randomUUID();
+    let callsRequestCount = 0;
+    await mockCallsApi(roomName, async () => {
+      callsRequestCount += 1;
+      return Response.json({});
+    });
+    const firstSession = await issuePartyTracksSessionCapability(
+      publisherId,
+      roomName,
+      "raw-partytracks-session-1",
+    );
+    const refreshedSession = await issuePartyTracksSessionCapability(
+      publisherId,
+      roomName,
+      "raw-partytracks-session-2",
+    );
+    const publisher = await openVoiceSocket(roomName);
+    await identifyVoiceSocket(publisher, publisherId, roomName);
+    const observer = await openVoiceSocket(roomName, "observer-user");
+    await identifyVoiceSocket(observer, observerId, roomName, "observer-user");
+
+    const firstPublication = nextMessageWithOpcode(observer, 12);
+    publisher.send(
+      JSON.stringify({
+        op: 12,
+        d: {
           tracks: [
             {
-              location: "local",
-              trackName: "cam-audio",
-              mid: "0",
+              participant_id: publisherId,
+              track_name: `cam-audio-${publisherId}`,
+              sfu_track_name: "partytracks-opaque-audio",
+              session_id: firstSession,
+              kind: "audio",
             },
           ],
-        });
-      }
-      throw new Error(
-        `Unexpected Calls request: ${request.method} ${request.url}`,
-      );
-    });
-
-    const publisher = await openVoiceSocket(roomName);
-    await identifyVoiceSocket(publisher, crypto.randomUUID(), roomName);
-    const observer = await openVoiceSocket(roomName, "observer-user");
-    await identifyVoiceSocket(
-      observer,
-      crypto.randomUUID(),
-      roomName,
-      "observer-user",
-    );
-
-    const description = nextMessageWithOpcode(publisher, 4);
-    publisher.send(
-      JSON.stringify({
-        op: 1,
-        d: {
-          sdp: "offer-sdp",
-          push_prefix: "cam",
-          push_tracks: [{ track_name: "cam-audio", kind: "audio", mid: "0" }],
-          pull_tracks: [],
-          request_id: "push-1",
         },
       }),
     );
-    expect(await description).toMatchObject({
-      op: 4,
-      d: {
-        session_id: expect.any(String),
-        tracks: [
-          { track_name: "cam-audio", participant_id: expect.any(String) },
-        ],
-      },
-    });
 
-    expect(await hasMessageWithOpcode(observer, 12)).toBe(false);
-
-    publisher.send(
-      JSON.stringify({
-        op: 102,
-        d: { track_names: ["cam-audio"] },
-      }),
-    );
-    expect(await nextMessageWithOpcode(observer, 12)).toMatchObject({
+    await expect(firstPublication).resolves.toMatchObject({
       op: 12,
       d: {
-        tracks: [
-          { track_name: "cam-audio", session_id: expect.any(String), mid: "0" },
-        ],
-      },
-    });
-
-    publisher.close();
-    observer.close();
-  });
-
-  type SelectPayload = {
-    push_tracks: Array<{ track_name: string; kind: "audio" | "video" }>;
-    pull_tracks: Array<Record<string, unknown>>;
-    push_prefix?: "cam" | "screen";
-  };
-  type QueueHarness = {
-    handleSelectProtocol(ws: WebSocket, d: SelectPayload): Promise<void>;
-    handleSelectProtocolInOrder(ws: WebSocket, d: SelectPayload): Promise<void>;
-    selectProtocolQueues: Map<string, Promise<void>>;
-  };
-
-  const flushQueueMicrotasks = async () => {
-    await Promise.resolve();
-    await Promise.resolve();
-  };
-
-  const withQueueHarness = async (
-    test: (voiceRoom: QueueHarness) => Promise<void>,
-  ) => {
-    const roomName = crypto.randomUUID();
-    const room = env.VOICE_ROOM.get(env.VOICE_ROOM.idFromName(roomName));
-    await runInDurableObject(room, async (instance) => {
-      await test(instance as unknown as QueueHarness);
-    });
-  };
-
-  const makeQueueSocket = (participantId: string) =>
-    ({
-      deserializeAttachment: () => ({ participant_id: participantId }),
-    }) as unknown as WebSocket;
-
-  it("enters same-participant pull and cam operations before either is released", async () => {
-    await withQueueHarness(async (voiceRoom) => {
-      let releasePull: (() => void) | undefined;
-      let releaseCam: (() => void) | undefined;
-      let pullEntered = false;
-      let camEntered = false;
-      let screenEntered = false;
-      let otherParticipantEntered = false;
-      let resolvePullEntered: (() => void) | undefined;
-      const pullGate = new Promise<void>((resolve) => {
-        releasePull = resolve;
-      });
-      const camGate = new Promise<void>((resolve) => {
-        releaseCam = resolve;
-      });
-      const pullStarted = new Promise<void>((resolve) => {
-        resolvePullEntered = resolve;
-      });
-
-      voiceRoom.handleSelectProtocolInOrder = vi.fn(
-        async (ws: WebSocket, payload: SelectPayload) => {
-          if (payload.pull_tracks.length > 0) {
-            pullEntered = true;
-            resolvePullEntered?.();
-            await pullGate;
-          } else if (payload.push_prefix === "cam") {
-            camEntered = true;
-            await camGate;
-          } else if (
-            (ws.deserializeAttachment() as { participant_id: string })
-              .participant_id === "participant-1"
-          ) {
-            screenEntered = true;
-          } else {
-            otherParticipantEntered = true;
-          }
-        },
-      );
-
-      const socket = makeQueueSocket("participant-1");
-      const pullOperation = voiceRoom.handleSelectProtocol(socket, {
-        push_tracks: [],
-        pull_tracks: [{ track_name: "cam-audio-remote", kind: "audio" }],
-      });
-      await pullStarted;
-
-      const camOperation = voiceRoom.handleSelectProtocol(socket, {
-        push_tracks: [{ track_name: "cam-audio-participant-1", kind: "audio" }],
-        pull_tracks: [],
-        push_prefix: "cam",
-      });
-      await flushQueueMicrotasks();
-      const screenOperation = voiceRoom.handleSelectProtocol(socket, {
-        push_tracks: [{ track_name: "screen-video", kind: "video" }],
-        pull_tracks: [],
-        push_prefix: "screen",
-      });
-      const otherParticipantOperation = voiceRoom.handleSelectProtocol(
-        makeQueueSocket("participant-2"),
-        {
-          push_tracks: [{ track_name: "screen-video-other", kind: "video" }],
-          pull_tracks: [],
-          push_prefix: "screen",
-        },
-      );
-      await flushQueueMicrotasks();
-      const enteredBeforeRelease =
-        pullEntered && camEntered && screenEntered && otherParticipantEntered;
-
-      releasePull?.();
-      releaseCam?.();
-      await expect(pullOperation).resolves.toBeUndefined();
-      await expect(camOperation).resolves.toBeUndefined();
-      await expect(screenOperation).resolves.toBeUndefined();
-      await expect(otherParticipantOperation).resolves.toBeUndefined();
-      expect(enteredBeforeRelease).toBe(true);
-    });
-  });
-
-  it.each([
-    [
-      "cam push",
-      {
-        push_tracks: [{ track_name: "cam-audio", kind: "audio" }],
-        pull_tracks: [],
-        push_prefix: "cam" as const,
-      },
-    ],
-    [
-      "screen push",
-      {
-        push_tracks: [{ track_name: "screen-video", kind: "video" }],
-        pull_tracks: [],
-        push_prefix: "screen" as const,
-      },
-    ],
-    [
-      "pull",
-      {
-        push_tracks: [],
-        pull_tracks: [{ track_name: "cam-audio-remote", kind: "audio" }],
-      },
-    ],
-  ] as const)(
-    "serializes same-participant %s operations",
-    async (_label, payload) => {
-      await withQueueHarness(async (voiceRoom) => {
-        let releaseFirst: (() => void) | undefined;
-        let releaseSecond: (() => void) | undefined;
-        let invocationCount = 0;
-        let secondEntered = false;
-        let resolveFirstEntered: (() => void) | undefined;
-        let resolveSecondEntered: (() => void) | undefined;
-        const firstGate = new Promise<void>((resolve) => {
-          releaseFirst = resolve;
-        });
-        const secondGate = new Promise<void>((resolve) => {
-          releaseSecond = resolve;
-        });
-        const firstStarted = new Promise<void>((resolve) => {
-          resolveFirstEntered = resolve;
-        });
-        const secondStarted = new Promise<void>((resolve) => {
-          resolveSecondEntered = resolve;
-        });
-
-        voiceRoom.handleSelectProtocolInOrder = vi.fn(async () => {
-          invocationCount += 1;
-          if (invocationCount === 1) {
-            resolveFirstEntered?.();
-            await firstGate;
-          } else {
-            secondEntered = true;
-            resolveSecondEntered?.();
-            await secondGate;
-          }
-        });
-
-        const socket = makeQueueSocket("participant-1");
-        const firstOperation = voiceRoom.handleSelectProtocol(socket, payload);
-        await firstStarted;
-        const secondOperation = voiceRoom.handleSelectProtocol(
-          makeQueueSocket("participant-1"),
-          payload,
-        );
-        await flushQueueMicrotasks();
-        const enteredBeforeFirstRelease = secondEntered;
-
-        releaseFirst?.();
-        await firstOperation;
-        await secondStarted;
-        releaseSecond?.();
-        await secondOperation;
-
-        expect(enteredBeforeFirstRelease).toBe(false);
-      });
-    },
-  );
-
-  it("serializes same-track pushes globally across participants", async () => {
-    await withQueueHarness(async (voiceRoom) => {
-      let releaseFirst: (() => void) | undefined;
-      let resolveFirstEntered: (() => void) | undefined;
-      let secondEntered = false;
-      const firstGate = new Promise<void>((resolve) => {
-        releaseFirst = resolve;
-      });
-      const firstStarted = new Promise<void>((resolve) => {
-        resolveFirstEntered = resolve;
-      });
-
-      voiceRoom.handleSelectProtocolInOrder = vi.fn(
-        async (_ws: WebSocket, payload: SelectPayload) => {
-          if (payload.push_tracks[0]?.track_name === "globally-unique-track") {
-            if (resolveFirstEntered) {
-              resolveFirstEntered();
-              resolveFirstEntered = undefined;
-              await firstGate;
-            } else {
-              secondEntered = true;
-            }
-          }
-        },
-      );
-
-      const firstOperation = voiceRoom.handleSelectProtocol(
-        makeQueueSocket("participant-1"),
-        {
-          push_tracks: [{ track_name: "globally-unique-track", kind: "audio" }],
-          pull_tracks: [],
-          push_prefix: "cam",
-        },
-      );
-      await firstStarted;
-
-      const secondOperation = voiceRoom.handleSelectProtocol(
-        makeQueueSocket("participant-2"),
-        {
-          push_tracks: [{ track_name: "globally-unique-track", kind: "audio" }],
-          pull_tracks: [],
-          push_prefix: "cam",
-        },
-      );
-      await flushQueueMicrotasks();
-      const enteredBeforeFirstRelease = secondEntered;
-
-      releaseFirst?.();
-      await firstOperation;
-      await secondOperation;
-      expect(enteredBeforeFirstRelease).toBe(false);
-    });
-  });
-
-  it("releases rejected queue tails before starting the next same-key operation", async () => {
-    await withQueueHarness(async (voiceRoom) => {
-      let invocationCount = 0;
-      let resolveSecondStarted: (() => void) | undefined;
-      const secondStarted = new Promise<void>((resolve) => {
-        resolveSecondStarted = resolve;
-      });
-      voiceRoom.handleSelectProtocolInOrder = vi.fn(async () => {
-        invocationCount += 1;
-        if (invocationCount === 1) throw new Error("synthetic failure");
-        resolveSecondStarted?.();
-      });
-
-      const socket = makeQueueSocket("participant-1");
-      const payload: SelectPayload = {
-        push_tracks: [{ track_name: "cam-audio", kind: "audio" }],
-        pull_tracks: [],
-        push_prefix: "cam",
-      };
-      const firstOperation = voiceRoom.handleSelectProtocol(socket, payload);
-      await expect(firstOperation).rejects.toThrow("synthetic failure");
-
-      const secondOperation = voiceRoom.handleSelectProtocol(socket, payload);
-      await secondStarted;
-      await expect(secondOperation).resolves.toBeUndefined();
-      await flushQueueMicrotasks();
-      expect(voiceRoom.selectProtocolQueues.size).toBe(0);
-    });
-  });
-
-  it("rejects mixed push and pull operations before SFU side effects", async () => {
-    const roomName = crypto.randomUUID();
-    let callsApiRequests = 0;
-    await mockCallsApi(roomName, async (request) => {
-      callsApiRequests += 1;
-      const url = new URL(request.url);
-      if (url.pathname.endsWith("/sessions/new")) {
-        return Response.json({ sessionId: "mixed-session" });
-      }
-      if (url.pathname.endsWith("/tracks/new")) {
-        return Response.json({
-          sessionDescription: { type: "answer", sdp: "answer-sdp" },
-          tracks: [{ location: "local", trackName: "mixed-audio", mid: "0" }],
-        });
-      }
-      throw new Error(
-        `Unexpected Calls request: ${request.method} ${request.url}`,
-      );
-    });
-
-    const socket = await openVoiceSocket(roomName);
-    await identifyVoiceSocket(socket, crypto.randomUUID(), roomName);
-    const error = nextMessageWithOpcode(socket, 18);
-    socket.send(
-      JSON.stringify({
-        op: 1,
-        d: {
-          sdp: "offer-sdp",
-          request_id: "mixed-1",
-          push_prefix: "cam",
-          push_tracks: [{ track_name: "mixed-audio", kind: "audio", mid: "0" }],
-          pull_tracks: [
-            {
-              participant_id: "remote-participant",
-              track_name: "remote-audio",
-              session_id: "remote-session",
-              kind: "audio",
-            },
-          ],
-        },
-      }),
-    );
-
-    await expect(error).resolves.toMatchObject({
-      op: 18,
-      d: {
-        code: 4000,
-        message: "Mixed push and pull operations are not supported",
-        request_id: "mixed-1",
-      },
-    });
-    expect(callsApiRequests).toBe(0);
-    socket.close();
-  });
-
-  it("rejects a publisher track name already owned by another participant", async () => {
-    const roomName = crypto.randomUUID();
-    await mockCallsApi(roomName, async (request) => {
-      const url = new URL(request.url);
-      if (url.pathname.endsWith("/sessions/new")) {
-        return Response.json({ sessionId: crypto.randomUUID() });
-      }
-      if (url.pathname.endsWith("/tracks/new")) {
-        return Response.json({
-          sessionDescription: { type: "answer", sdp: "answer-sdp" },
-          tracks: [{ location: "local", trackName: "cam-audio", mid: "0" }],
-        });
-      }
-      throw new Error(
-        `Unexpected Calls request: ${request.method} ${request.url}`,
-      );
-    });
-
-    const first = await openVoiceSocket(roomName);
-    await identifyVoiceSocket(first, crypto.randomUUID(), roomName);
-    const firstDescription = nextMessageWithOpcode(first, 4);
-    first.send(
-      JSON.stringify({
-        op: 1,
-        d: {
-          sdp: "offer-sdp",
-          push_prefix: "cam",
-          push_tracks: [{ track_name: "cam-audio", kind: "audio", mid: "0" }],
-          pull_tracks: [],
-        },
-      }),
-    );
-    await firstDescription;
-    first.send(JSON.stringify({ op: 102, d: { track_names: ["cam-audio"] } }));
-    await nextMessageWithOpcode(first, 10);
-
-    const second = await openVoiceSocket(roomName, "second-user");
-    await identifyVoiceSocket(
-      second,
-      crypto.randomUUID(),
-      roomName,
-      "second-user",
-    );
-    const conflict = nextMessageWithOpcode(second, 18);
-    second.send(
-      JSON.stringify({
-        op: 1,
-        d: {
-          sdp: "offer-sdp",
-          push_prefix: "cam",
-          push_tracks: [{ track_name: "cam-audio", kind: "audio", mid: "0" }],
-          pull_tracks: [],
-        },
-      }),
-    );
-
-    await expect(conflict).resolves.toMatchObject({
-      op: 18,
-      d: { code: 4000, message: "Track name is already in use" },
-    });
-
-    first.close();
-    second.close();
-  });
-
-  it("drops an SFU negotiation that resumes on a superseded socket", async () => {
-    const roomName = crypto.randomUUID();
-    let releaseTracks: (() => void) | undefined;
-    let tracksStarted: (() => void) | undefined;
-    const tracksGate = new Promise<void>((resolve) => {
-      releaseTracks = resolve;
-    });
-    const started = new Promise<void>((resolve) => {
-      tracksStarted = resolve;
-    });
-    await mockCallsApi(roomName, async (request) => {
-      const url = new URL(request.url);
-      if (url.pathname.endsWith("/sessions/new")) {
-        return Response.json({ sessionId: "delayed-session" });
-      }
-      if (url.pathname.endsWith("/tracks/new")) {
-        tracksStarted?.();
-        await tracksGate;
-        return Response.json({
-          sessionDescription: { type: "answer", sdp: "answer-sdp" },
-          tracks: [{ location: "local", trackName: "cam-audio", mid: "0" }],
-        });
-      }
-      throw new Error(
-        `Unexpected Calls request: ${request.method} ${request.url}`,
-      );
-    });
-
-    const participantId = crypto.randomUUID();
-    const oldSocket = await openVoiceSocket(roomName);
-    await identifyVoiceSocket(oldSocket, participantId, roomName);
-    oldSocket.send(
-      JSON.stringify({
-        op: 1,
-        d: {
-          sdp: "offer-sdp",
-          push_prefix: "cam",
-          push_tracks: [{ track_name: "cam-audio", kind: "audio", mid: "0" }],
-          pull_tracks: [],
-        },
-      }),
-    );
-    await started;
-
-    const currentSocket = await openVoiceSocket(roomName);
-    await identifyVoiceSocket(currentSocket, participantId, roomName);
-    releaseTracks?.();
-
-    expect(await hasMessageWithOpcode(oldSocket, 4, 150)).toBe(false);
-    const room = env.VOICE_ROOM.get(env.VOICE_ROOM.idFromName(roomName));
-    await runInDurableObject(room, async (_instance, state) => {
-      const rows = [
-        ...state.storage.sql.exec(
-          "SELECT push_session_cam FROM participants WHERE id = ?",
-          participantId,
-        ),
-      ];
-      expect(rows[0]?.push_session_cam).toBeNull();
-    });
-  });
-
-  it("does not let a superseded SFU failure clear the current session", async () => {
-    const roomName = crypto.randomUUID();
-    const room = env.VOICE_ROOM.get(env.VOICE_ROOM.idFromName(roomName));
-    await runInDurableObject(room, async (instance, state) => {
-      type StaleFailureHarness = {
-        handleSelectProtocolInOrder(
-          ws: WebSocket,
-          d: {
-            sdp: string;
-            push_tracks: Array<{
-              track_name: string;
-              kind: "audio" | "video";
-              mid: string;
-            }>;
-            pull_tracks: [];
-            push_prefix: "cam";
-          },
-        ): Promise<void>;
-        isCurrentVoiceConnection(
-          ws: WebSocket,
-          participantId: string,
-          connectionId?: string,
-        ): boolean;
-        sfuPost(
-          path: string,
-          body: Record<string, unknown>,
-        ): Promise<Record<string, unknown>>;
-      };
-      const voiceRoom = instance as unknown as StaleFailureHarness;
-      const participantId = crypto.randomUUID();
-      const connectionId = crypto.randomUUID();
-      state.storage.sql.exec(
-        `INSERT INTO participants
-          (id, push_session_cam, last_heartbeat, speaking, connection_id)
-         VALUES (?, ?, 0, 0, ?)`,
-        participantId,
-        "old-session",
-        connectionId,
-      );
-
-      let releaseRequest: (() => void) | undefined;
-      let requestStarted: (() => void) | undefined;
-      const requestGate = new Promise<void>((resolve) => {
-        releaseRequest = resolve;
-      });
-      const started = new Promise<void>((resolve) => {
-        requestStarted = resolve;
-      });
-      let current = true;
-      voiceRoom.isCurrentVoiceConnection = vi.fn(() => current);
-      voiceRoom.sfuPost = vi.fn(async () => {
-        requestStarted?.();
-        await requestGate;
-        throw new Error("session_error");
-      });
-      const ws = {
-        deserializeAttachment: () => ({
-          participant_id: participantId,
-          connection_id: connectionId,
-        }),
-        send: vi.fn(),
-      } as unknown as WebSocket;
-
-      const operation = voiceRoom.handleSelectProtocolInOrder(ws, {
-        sdp: "offer-sdp",
-        push_prefix: "cam",
-        push_tracks: [{ track_name: "cam-audio", kind: "audio", mid: "0" }],
-        pull_tracks: [],
-      });
-      await started;
-      state.storage.sql.exec(
-        "UPDATE participants SET push_session_cam = ?, connection_id = ? WHERE id = ?",
-        "current-session",
-        crypto.randomUUID(),
-        participantId,
-      );
-      current = false;
-      releaseRequest?.();
-      await operation;
-
-      const rows = [
-        ...state.storage.sql.exec(
-          "SELECT push_session_cam FROM participants WHERE id = ?",
-          participantId,
-        ),
-      ];
-      expect(rows[0]?.push_session_cam).toBe("current-session");
-    });
-  });
-
-  it("rate-limits voice app events while preserving heartbeat acknowledgements", async () => {
-    const roomName = crypto.randomUUID();
-    const socket = await openVoiceSocket(roomName);
-    await identifyVoiceSocket(socket, crypto.randomUUID(), roomName);
-
-    const responses = [];
-    for (let index = 0; index < 61; index += 1) {
-      const response = nextMessageWithOpcode(socket, 18);
-      socket.send(
-        JSON.stringify({
-          op: 106,
-          d: { type: "unknown.rate-test-event" },
-        }),
-      );
-      responses.push(await response);
-    }
-    expect(
-      responses.some(
-        (message) =>
-          message.op === 18 && (message.d as { code?: number }).code === 4290,
-      ),
-    ).toBe(true);
-
-    const heartbeat = nextJsonMessage(socket);
-    socket.send(JSON.stringify({ op: 3, d: {} }));
-    await expect(heartbeat).resolves.toMatchObject({ op: 6 });
-    socket.close();
-  });
-
-  it("rejects pull tracks with cross-session identifiers", async () => {
-    const roomName = crypto.randomUUID();
-    let sessionNumber = 0;
-    await mockCallsApi(roomName, async (request) => {
-      const url = new URL(request.url);
-      if (url.pathname.endsWith("/sessions/new")) {
-        sessionNumber += 1;
-        return Response.json({ sessionId: `session-${sessionNumber}` });
-      }
-      if (url.pathname.endsWith("/tracks/new")) {
-        const body = (await request.json()) as {
-          tracks?: unknown;
-          sessionDescription?: { type?: string };
-        };
-        if (body.tracks && Array.isArray(body.tracks)) {
-          const first = body.tracks[0] as Record<string, unknown> | undefined;
-          if (first?.location === "remote") {
-            return Response.json({
-              sessionDescription: { type: "offer", sdp: "pull-offer" },
-              tracks: [
-                {
-                  location: "remote",
-                  trackName: "cam-audio",
-                  sessionId: "session-2",
-                  mid: "0",
-                },
-              ],
-            });
-          }
-        }
-        return Response.json({
-          sessionDescription: { type: "answer", sdp: "push-answer" },
-          tracks: [{ location: "local", trackName: "cam-audio", mid: "0" }],
-        });
-      }
-      throw new Error(
-        `Unexpected Calls request: ${request.method} ${request.url}`,
-      );
-    });
-
-    const publisher = await openVoiceSocket(roomName);
-    const publisherId = crypto.randomUUID();
-    await identifyVoiceSocket(publisher, publisherId, roomName);
-    const pushDescription = nextMessageWithOpcode(publisher, 4);
-    publisher.send(
-      JSON.stringify({
-        op: 1,
-        d: {
-          sdp: "push-offer",
-          push_prefix: "cam",
-          push_tracks: [{ track_name: "cam-audio", kind: "audio", mid: "0" }],
-          pull_tracks: [],
-        },
-      }),
-    );
-    await pushDescription;
-    publisher.send(
-      JSON.stringify({ op: 102, d: { track_names: ["cam-audio"] } }),
-    );
-
-    const viewer = await openVoiceSocket(roomName, "viewer-user");
-    await identifyVoiceSocket(
-      viewer,
-      crypto.randomUUID(),
-      roomName,
-      "viewer-user",
-    );
-    const pullError = nextMessageWithOpcode(viewer, 18);
-    viewer.send(
-      JSON.stringify({
-        op: 1,
-        d: {
-          push_tracks: [],
-          pull_tracks: [
-            {
-              participant_id: "forged-participant",
-              track_name: "cam-audio",
-              session_id: "forged-session",
-              kind: "audio",
-            },
-          ],
-          request_id: "pull-1",
-        },
-      }),
-    );
-
-    expect(await pullError).toMatchObject({
-      op: 18,
-      d: { code: 4000, message: "Requested track is not available" },
-    });
-
-    publisher.close();
-    viewer.close();
-  });
-
-  it("completes pull negotiation when Cloudflare omits response location", async () => {
-    const roomName = crypto.randomUUID();
-    const publisherId = crypto.randomUUID();
-    let sessionNumber = 0;
-    let renegotiated = false;
-
-    await mockCallsApi(roomName, async (request) => {
-      const url = new URL(request.url);
-      if (url.pathname.endsWith("/sessions/new")) {
-        sessionNumber += 1;
-        return Response.json({
-          sessionId: sessionNumber === 1 ? "publisher-session" : "pull-session",
-        });
-      }
-      if (url.pathname.endsWith("/renegotiate")) {
-        const body = (await request.json()) as {
-          sessionDescription?: { sdp?: string; type?: string };
-        };
-        expect(request.method).toBe("PUT");
-        expect(body.sessionDescription).toEqual({
-          sdp: "pull-answer",
-          type: "answer",
-        });
-        renegotiated = true;
-        return Response.json({});
-      }
-      if (url.pathname.endsWith("/tracks/new")) {
-        const body = (await request.json()) as {
-          tracks?: Array<Record<string, unknown>>;
-        };
-        if (body.tracks?.[0]?.location === "remote") {
-          return Response.json({
-            requiresImmediateRenegotiation: true,
-            sessionDescription: { type: "offer", sdp: "pull-offer" },
-            tracks: [
-              {
-                trackName: "cam-audio",
-                sessionId: "publisher-session",
-                mid: "1",
-              },
-            ],
-          });
-        }
-        return Response.json({
-          requiresImmediateRenegotiation: false,
-          sessionDescription: { type: "answer", sdp: "push-answer" },
-          tracks: [{ location: "local", trackName: "cam-audio", mid: "0" }],
-        });
-      }
-      throw new Error(
-        `Unexpected Calls request: ${request.method} ${request.url}`,
-      );
-    });
-
-    const publisher = await openVoiceSocket(roomName);
-    await identifyVoiceSocket(publisher, publisherId, roomName);
-    const pushDescription = nextMessageWithOpcode(publisher, 4);
-    publisher.send(
-      JSON.stringify({
-        op: 1,
-        d: {
-          sdp: "push-offer",
-          push_prefix: "cam",
-          push_tracks: [{ track_name: "cam-audio", kind: "audio", mid: "0" }],
-          pull_tracks: [],
-        },
-      }),
-    );
-    await pushDescription;
-    publisher.send(
-      JSON.stringify({ op: 102, d: { track_names: ["cam-audio"] } }),
-    );
-
-    const viewer = await openVoiceSocket(roomName, "viewer-user");
-    await identifyVoiceSocket(
-      viewer,
-      crypto.randomUUID(),
-      roomName,
-      "viewer-user",
-    );
-    const pullDescription = nextMessageWithOpcode(viewer, 4);
-    viewer.send(
-      JSON.stringify({
-        op: 1,
-        d: {
-          push_tracks: [],
-          pull_tracks: [
-            {
-              participant_id: publisherId,
-              track_name: "cam-audio",
-              session_id: "publisher-session",
-              kind: "audio",
-            },
-          ],
-          request_id: "pull-valid",
-        },
-      }),
-    );
-
-    await expect(pullDescription).resolves.toMatchObject({
-      op: 4,
-      d: {
-        sdp: "pull-offer",
-        sdp_type: "offer",
-        session_id: "pull-session",
-        request_id: "pull-valid",
-        operation: "pull",
+        participant_id: publisherId,
         tracks: [
           {
             participant_id: publisherId,
-            track_name: "cam-audio",
-            session_id: "publisher-session",
-            mid: "1",
+            track_name: `cam-audio-${publisherId}`,
+            sfu_track_name: "partytracks-opaque-audio",
+            session_id: firstSession,
             kind: "audio",
           },
         ],
       },
     });
+    expect(await hasMessageWithOpcode(observer, 12)).toBe(false);
 
-    const negotiationDone = nextMessageWithOpcode(viewer, 10);
-    viewer.send(
+    const refreshedPublication = nextMessageWithOpcode(observer, 12);
+    publisher.send(
       JSON.stringify({
-        op: 14,
-        d: { sdp: "pull-answer", request_id: "pull-valid" },
+        op: 12,
+        d: {
+          tracks: [
+            {
+              participant_id: publisherId,
+              track_name: `cam-audio-${publisherId}`,
+              sfu_track_name: "partytracks-opaque-audio",
+              session_id: refreshedSession,
+              kind: "audio",
+            },
+          ],
+        },
       }),
     );
-    await expect(negotiationDone).resolves.toMatchObject({
-      op: 10,
+
+    await expect(refreshedPublication).resolves.toMatchObject({
       d: {
-        session_id: "pull-session",
-        request_id: "pull-valid",
-        operation: "pull",
+        tracks: [
+          {
+            track_name: `cam-audio-${publisherId}`,
+            sfu_track_name: "partytracks-opaque-audio",
+            session_id: refreshedSession,
+          },
+        ],
       },
     });
-    expect(renegotiated).toBe(true);
+
+    const lateObserverId = crypto.randomUUID();
+    const lateObserver = await openVoiceSocket(roomName, "late-observer-user");
+    const lateReady = nextJsonMessage(lateObserver);
+    lateObserver.send(
+      JSON.stringify({
+        op: 100,
+        d: {
+          participant_id: lateObserverId,
+          voice_token: await issueVoiceToken(
+            lateObserverId,
+            roomName,
+            "late-observer-user",
+          ),
+        },
+      }),
+    );
+    const lateReadyMessage = await lateReady;
+    expect(lateReadyMessage).toMatchObject({
+      op: 101,
+      d: {
+        tracks: [
+          {
+            track_name: `cam-audio-${publisherId}`,
+            sfu_track_name: "partytracks-opaque-audio",
+            session_id: refreshedSession,
+          },
+        ],
+      },
+    });
+
+    const stoppedPublication = nextMessageWithOpcode(observer, 13);
+    publisher.send(
+      JSON.stringify({
+        op: 13,
+        d: { track_names: [`cam-audio-${publisherId}`] },
+      }),
+    );
+    await expect(stoppedPublication).resolves.toMatchObject({
+      op: 13,
+      d: {
+        participant_id: publisherId,
+        track_names: [`cam-audio-${publisherId}`],
+        tracks: [
+          {
+            track_name: `cam-audio-${publisherId}`,
+            sfu_track_name: "partytracks-opaque-audio",
+            session_id: refreshedSession,
+          },
+        ],
+      },
+    });
+
+    const postStopObserverId = crypto.randomUUID();
+    const postStopObserver = await openVoiceSocket(
+      roomName,
+      "post-stop-observer-user",
+    );
+    const postStopReady = nextJsonMessage(postStopObserver);
+    postStopObserver.send(
+      JSON.stringify({
+        op: 100,
+        d: {
+          participant_id: postStopObserverId,
+          voice_token: await issueVoiceToken(
+            postStopObserverId,
+            roomName,
+            "post-stop-observer-user",
+          ),
+        },
+      }),
+    );
+    await expect(postStopReady).resolves.toMatchObject({
+      op: 101,
+      d: { tracks: [] },
+    });
+    expect(callsRequestCount).toBe(0);
 
     publisher.close();
-    viewer.close();
+    observer.close();
+    lateObserver.close();
+    postStopObserver.close();
+  });
+
+  it("keeps two PartyTracks participants off the direct Calls signaling path", async () => {
+    const roomName = crypto.randomUUID();
+    const firstParticipantId = crypto.randomUUID();
+    const secondParticipantId = crypto.randomUUID();
+    let callsRequestCount = 0;
+    await mockCallsApi(roomName, async () => {
+      callsRequestCount += 1;
+      return Response.json({});
+    });
+
+    const first = await openVoiceSocket(roomName, "partytracks-first");
+    await identifyVoiceSocket(
+      first,
+      firstParticipantId,
+      roomName,
+      "partytracks-first",
+    );
+    const second = await openVoiceSocket(roomName, "partytracks-second");
+    await identifyVoiceSocket(
+      second,
+      secondParticipantId,
+      roomName,
+      "partytracks-second",
+    );
+
+    const firstCapability = await issuePartyTracksSessionCapability(
+      firstParticipantId,
+      roomName,
+      "partytracks-session-first",
+    );
+    const secondCapability = await issuePartyTracksSessionCapability(
+      secondParticipantId,
+      roomName,
+      "partytracks-session-second",
+    );
+    const firstOffer = nextMessageWithOpcode(second, 12);
+    first.send(
+      JSON.stringify({
+        op: 12,
+        d: {
+          tracks: [
+            {
+              participant_id: firstParticipantId,
+              track_name: `cam-audio-${firstParticipantId}`,
+              sfu_track_name: "opaque-first",
+              session_id: firstCapability,
+              kind: "audio",
+            },
+          ],
+        },
+      }),
+    );
+    await expect(firstOffer).resolves.toMatchObject({
+      d: {
+        tracks: [
+          {
+            sfu_track_name: "opaque-first",
+            session_id: firstCapability,
+          },
+        ],
+      },
+    });
+
+    const secondOffer = nextMessageWithOpcode(first, 12);
+    second.send(
+      JSON.stringify({
+        op: 12,
+        d: {
+          tracks: [
+            {
+              participant_id: secondParticipantId,
+              track_name: `cam-audio-${secondParticipantId}`,
+              sfu_track_name: "opaque-second",
+              session_id: secondCapability,
+              kind: "audio",
+            },
+          ],
+        },
+      }),
+    );
+    await expect(secondOffer).resolves.toMatchObject({
+      d: {
+        tracks: [
+          {
+            sfu_track_name: "opaque-second",
+            session_id: secondCapability,
+          },
+        ],
+      },
+    });
+
+    expect(callsRequestCount).toBe(0);
+    for (const opcode of [4, 10, 108]) {
+      expect(await hasMessageWithOpcode(first, opcode)).toBe(false);
+      expect(await hasMessageWithOpcode(second, opcode)).toBe(false);
+    }
+    first.close();
+    second.close();
   });
 
   it.each([
-    [
-      "an unexpected track name",
-      [
-        {
-          location: "remote",
-          trackName: "unexpected",
-          sessionId: "push-session",
-          mid: "0",
-        },
-      ],
-    ],
-    [
-      "a duplicate track",
-      [
-        {
-          location: "remote",
-          trackName: "cam-audio",
-          sessionId: "push-session",
-          mid: "0",
-        },
-        {
-          location: "remote",
-          trackName: "cam-audio",
-          sessionId: "push-session",
-          mid: "1",
-        },
-      ],
-    ],
-    [
-      "a mismatched publisher session",
-      [
-        {
-          location: "remote",
-          trackName: "cam-audio",
-          sessionId: "other-publisher-session",
-          mid: "0",
-        },
-      ],
-    ],
-    [
-      "a non-remote track",
-      [
-        {
-          location: "local",
-          trackName: "cam-audio",
-          sessionId: "push-session",
-          mid: "0",
-        },
-      ],
-    ],
-  ] as const)(
-    "resets and closes pull sessions for %s",
-    async (_kind, responseTracks) => {
+    {
+      label: "camera push",
+      op: 1,
+      d: {
+        sdp: "browser-camera-offer",
+        push_prefix: "cam",
+        push_tracks: [
+          { track_name: "cam-audio-browser", kind: "audio", mid: "0" },
+        ],
+        pull_tracks: [],
+      },
+    },
+    {
+      label: "pull",
+      op: 1,
+      d: {
+        push_tracks: [],
+        pull_tracks: [
+          {
+            participant_id: "publisher",
+            track_name: "cam-audio-publisher",
+            session_id: "publisher-session",
+            kind: "audio",
+          },
+        ],
+      },
+    },
+    {
+      label: "mixed push and pull",
+      op: 1,
+      d: {
+        sdp: "mixed-offer",
+        push_prefix: "screen",
+        push_tracks: [
+          { track_name: "screen-video-browser", kind: "video", mid: "0" },
+        ],
+        pull_tracks: [
+          {
+            participant_id: "publisher",
+            track_name: "cam-video-publisher",
+            session_id: "publisher-session",
+            kind: "video",
+          },
+        ],
+      },
+    },
+    { label: "pull prewarm", op: 107, d: {} },
+    { label: "pull reset", op: 105, d: {} },
+  ])(
+    "rejects unsupported browser SFU $label without side effects",
+    async (message) => {
       const roomName = crypto.randomUUID();
-      const publisherId = crypto.randomUUID();
-      const viewerId = crypto.randomUUID();
-      const closeRequests: Array<{ body: unknown; url: string }> = [];
-      let sessionNumber = 0;
-
+      const participantId = crypto.randomUUID();
+      let callsRequestCount = 0;
       await mockCallsApi(roomName, async (request) => {
+        callsRequestCount += 1;
         const url = new URL(request.url);
         if (url.pathname.endsWith("/sessions/new")) {
-          sessionNumber += 1;
-          const sessionId =
-            sessionNumber === 1 ? "push-session" : "pull-session";
-          return Response.json({ sessionId });
-        }
-        if (url.pathname.endsWith("/tracks/close")) {
-          closeRequests.push({ body: await request.json(), url: request.url });
-          return Response.json({});
+          return Response.json({ sessionId: "unexpected-browser-session" });
         }
         if (url.pathname.endsWith("/tracks/new")) {
-          const body = (await request.json()) as {
-            tracks?: Array<Record<string, unknown>>;
-          };
-          if (body.tracks?.[0]?.location === "remote") {
-            return Response.json({
-              sessionDescription: { type: "offer", sdp: "pull-offer" },
-              tracks: responseTracks,
-            });
-          }
           return Response.json({
-            sessionDescription: { type: "answer", sdp: "push-answer" },
-            tracks: [{ location: "local", trackName: "cam-audio", mid: "0" }],
-          });
-        }
-        throw new Error(
-          `Unexpected Calls request: ${request.method} ${request.url}`,
-        );
-      });
-
-      const publisher = await openVoiceSocket(roomName);
-      await identifyVoiceSocket(publisher, publisherId, roomName);
-      const pushDescription = nextMessageWithOpcode(publisher, 4);
-      publisher.send(
-        JSON.stringify({
-          op: 1,
-          d: {
-            sdp: "push-offer",
-            push_prefix: "cam",
-            push_tracks: [{ track_name: "cam-audio", kind: "audio", mid: "0" }],
-            pull_tracks: [],
-          },
-        }),
-      );
-      await pushDescription;
-      publisher.send(
-        JSON.stringify({ op: 102, d: { track_names: ["cam-audio"] } }),
-      );
-      await nextMessageWithOpcode(publisher, 10);
-
-      const viewer = await openVoiceSocket(roomName, "viewer-user");
-      await identifyVoiceSocket(viewer, viewerId, roomName, "viewer-user");
-      const pullResponse = nextMessageWithOpcodeOrNull(viewer, 18);
-      viewer.send(
-        JSON.stringify({
-          op: 1,
-          d: {
-            sdp: "",
-            push_tracks: [],
-            pull_tracks: [
+            sessionDescription: { type: "answer", sdp: "unexpected-answer" },
+            tracks: [
               {
-                participant_id: publisherId,
-                track_name: "cam-audio",
-                session_id: "push-session",
-                kind: "audio",
+                location: "local",
+                trackName: "cam-audio-browser",
+                mid: "0",
               },
             ],
-            request_id: "pull-invalid-response",
-          },
-        }),
-      );
+          });
+        }
+        return Response.json({});
+      });
+      const socket = await openVoiceSocket(roomName);
+      await identifyVoiceSocket(socket, participantId, roomName);
+      const unsupported = nextMessageWithOpcodeOrNull(socket, 18);
 
-      await expect(pullResponse).resolves.toMatchObject({
+      socket.send(JSON.stringify({ op: message.op, d: message.d }));
+
+      await expect(unsupported).resolves.toMatchObject({
         op: 18,
-        d: {
-          code: 0,
-          message: "session-dead-reconnect",
-          operation: "pull",
-          request_id: "pull-invalid-response",
+        d: { code: 4000, message: "Browser SFU negotiation is unsupported" },
+      });
+      expect(callsRequestCount).toBe(0);
+      await runInDurableObject(
+        env.VOICE_ROOM.get(env.VOICE_ROOM.idFromName(roomName)),
+        (_instance, state) => {
+          const tracks = [
+            ...state.storage.sql.exec(
+              "SELECT track_name FROM tracks WHERE participant_id = ?",
+              participantId,
+            ),
+          ];
+          expect(tracks).toHaveLength(0);
         },
-      });
-      expect(closeRequests).toHaveLength(1);
-      expect(closeRequests[0]).toMatchObject({
-        url: expect.stringContaining("/sessions/pull-session/tracks/close"),
-        body: {
-          tracks: Array.from(
-            new Set(responseTracks.map((track) => track.mid)),
-          ).map((mid) => ({ mid })),
-          force: true,
-        },
-      });
-
-      const room = env.VOICE_ROOM.get(env.VOICE_ROOM.idFromName(roomName));
-      await runInDurableObject(room, (_instance, state) => {
-        const row = [
-          ...state.storage.sql.exec(
-            "SELECT pull_session_id FROM participants WHERE id = ?",
-            viewerId,
-          ),
-        ][0];
-        expect(row?.pull_session_id).toBeNull();
-      });
-
-      publisher.close();
-      viewer.close();
+      );
+      for (const opcode of [4, 10, 108]) {
+        expect(await hasMessageWithOpcode(socket, opcode)).toBe(false);
+      }
+      socket.close();
     },
   );
+
+  it("negotiates and publishes only owned native screen tracks", async () => {
+    const roomName = crypto.randomUUID();
+    const participantId = crypto.randomUUID();
+    const callsRequests: Array<{
+      body: unknown;
+      method: string;
+      pathname: string;
+    }> = [];
+    await mockCallsApi(roomName, async (request) => {
+      const url = new URL(request.url);
+      const rawBody = await request.text();
+      const body: unknown = rawBody ? JSON.parse(rawBody) : null;
+      callsRequests.push({
+        body,
+        method: request.method,
+        pathname: url.pathname,
+      });
+      if (url.pathname.endsWith("/sessions/new")) {
+        return Response.json({ sessionId: "native-screen-session" });
+      }
+      if (url.pathname.endsWith("/tracks/new")) {
+        return Response.json({
+          sessionDescription: { type: "answer", sdp: "native-answer" },
+          tracks: [
+            {
+              location: "local",
+              trackName: `screen-video-${participantId}`,
+              mid: "0",
+            },
+            {
+              location: "local",
+              trackName: `screen-audio-${participantId}`,
+              mid: "1",
+            },
+          ],
+        });
+      }
+      if (url.pathname.endsWith("/tracks/close")) {
+        return Response.json({});
+      }
+      throw new Error(`Unexpected Calls request: ${request.url}`);
+    });
+
+    const publisher = await openVoiceSocket(roomName);
+    await identifyVoiceSocket(publisher, participantId, roomName);
+    const observer = await openVoiceSocket(roomName, "native-observer");
+    await identifyVoiceSocket(
+      observer,
+      crypto.randomUUID(),
+      roomName,
+      "native-observer",
+    );
+    const negotiationMessages = nextMessagesWithOpcodes(publisher, [4, 10]);
+    publisher.send(
+      JSON.stringify({
+        op: 1,
+        d: {
+          sdp: "native-offer",
+          push_prefix: "screen",
+          request_id: "native-screen-request",
+          push_tracks: [
+            {
+              track_name: `screen-video-${participantId}`,
+              kind: "video",
+              mid: "0",
+            },
+            {
+              track_name: `screen-audio-${participantId}`,
+              kind: "audio",
+              mid: "1",
+            },
+          ],
+          pull_tracks: [],
+        },
+      }),
+    );
+
+    const messages = await negotiationMessages;
+    expect(messages.get(4)).toMatchObject({
+      op: 4,
+      d: {
+        operation: "push",
+        push_prefix: "screen",
+        request_id: "native-screen-request",
+        sdp: "native-answer",
+        sdp_type: "answer",
+        session_id: "native-screen-session",
+      },
+    });
+    expect(messages.get(10)).toMatchObject({
+      op: 10,
+      d: {
+        operation: "push",
+        push_prefix: "screen",
+        request_id: "native-screen-request",
+        session_id: "native-screen-session",
+      },
+    });
+    expect(await hasMessageWithOpcode(observer, 12)).toBe(false);
+
+    const published = nextMessageWithOpcode(observer, 12);
+    publisher.send(
+      JSON.stringify({
+        op: 102,
+        d: {
+          track_names: [
+            `screen-video-${participantId}`,
+            `screen-audio-${participantId}`,
+            "screen-video-forged-participant",
+          ],
+        },
+      }),
+    );
+    await expect(published).resolves.toMatchObject({
+      d: {
+        tracks: [
+          {
+            participant_id: participantId,
+            track_name: `screen-video-${participantId}`,
+            session_id: "native-screen-session",
+          },
+          {
+            participant_id: participantId,
+            track_name: `screen-audio-${participantId}`,
+            session_id: "native-screen-session",
+          },
+        ],
+      },
+    });
+
+    const stopped = nextMessageWithOpcode(observer, 13);
+    publisher.send(
+      JSON.stringify({
+        op: 13,
+        d: {
+          track_names: [
+            `screen-video-${participantId}`,
+            `screen-audio-${participantId}`,
+          ],
+        },
+      }),
+    );
+    await expect(stopped).resolves.toMatchObject({
+      d: {
+        participant_id: participantId,
+        track_names: [
+          `screen-video-${participantId}`,
+          `screen-audio-${participantId}`,
+        ],
+      },
+    });
+    await vi.waitFor(() => {
+      expect(
+        callsRequests.filter((request) =>
+          request.pathname.endsWith("/tracks/close"),
+        ),
+      ).toHaveLength(1);
+    });
+    publisher.close();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(
+      callsRequests.filter((request) =>
+        request.pathname.endsWith("/tracks/close"),
+      ),
+    ).toHaveLength(1);
+    observer.close();
+  });
+
+  it("invalidates an in-flight native screen publication when StopTracks arrives", async () => {
+    const roomName = crypto.randomUUID();
+    const participantId = crypto.randomUUID();
+    const trackName = `screen-video-${participantId}`;
+    const delayedTracksResponse = createDeferred<void>();
+    const callsPaths: string[] = [];
+    await mockCallsApi(roomName, async (request) => {
+      const pathname = new URL(request.url).pathname;
+      callsPaths.push(pathname);
+      if (pathname.endsWith("/sessions/new")) {
+        return Response.json({ sessionId: "native-stop-race-session" });
+      }
+      if (pathname.endsWith("/tracks/new")) {
+        await delayedTracksResponse.promise;
+        return Response.json({
+          sessionDescription: { type: "answer", sdp: "stale-answer" },
+          tracks: [{ location: "local", trackName, mid: "0" }],
+        });
+      }
+      if (pathname.endsWith("/tracks/close")) return Response.json({});
+      throw new Error(`Unexpected Calls request: ${request.url}`);
+    });
+
+    const publisher = await openVoiceSocket(roomName, "native-stop-race");
+    await identifyVoiceSocket(
+      publisher,
+      participantId,
+      roomName,
+      "native-stop-race",
+    );
+    const observer = await openVoiceSocket(roomName, "native-stop-observer");
+    await identifyVoiceSocket(
+      observer,
+      crypto.randomUUID(),
+      roomName,
+      "native-stop-observer",
+    );
+
+    sendNativeScreenSelect(publisher, participantId, "native-stop-race");
+    await vi.waitFor(() => {
+      expect(
+        callsPaths.filter((pathname) => pathname.endsWith("/tracks/new")),
+      ).toHaveLength(1);
+    });
+
+    const heartbeat = nextMessageWithOpcode(publisher, 6);
+    publisher.send(JSON.stringify({ op: 13, d: { track_names: [trackName] } }));
+    publisher.send(JSON.stringify({ op: 3, d: {} }));
+    await heartbeat;
+
+    const staleDescription = hasMessageWithOpcode(publisher, 4, 250);
+    const staleNegotiation = hasMessageWithOpcode(publisher, 10, 250);
+    const staleError = hasMessageWithOpcode(publisher, 18, 250);
+    const stalePublication = hasMessageWithOpcode(observer, 12, 250);
+    delayedTracksResponse.resolve(undefined);
+
+    await vi.waitFor(() => {
+      expect(
+        callsPaths.filter((pathname) =>
+          pathname.endsWith("/sessions/native-stop-race-session/tracks/close"),
+        ),
+      ).toHaveLength(1);
+    });
+    await expect(staleDescription).resolves.toBe(false);
+    await expect(staleNegotiation).resolves.toBe(false);
+    await expect(staleError).resolves.toBe(false);
+    await expect(stalePublication).resolves.toBe(false);
+
+    const lateParticipantId = crypto.randomUUID();
+    const late = await openVoiceSocket(roomName, "native-stop-late");
+    const ready = nextJsonMessage(late);
+    late.send(
+      JSON.stringify({
+        op: 100,
+        d: {
+          participant_id: lateParticipantId,
+          voice_token: await issueVoiceToken(
+            lateParticipantId,
+            roomName,
+            "native-stop-late",
+          ),
+        },
+      }),
+    );
+    await expect(ready).resolves.toMatchObject({ op: 101, d: { tracks: [] } });
+
+    publisher.close();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(
+      callsPaths.filter((pathname) =>
+        pathname.endsWith("/sessions/native-stop-race-session/tracks/close"),
+      ),
+    ).toHaveLength(1);
+    observer.close();
+    late.close();
+  });
+
+  it("keeps only the latest overlapping native screen publication", async () => {
+    const roomName = crypto.randomUUID();
+    const participantId = crypto.randomUUID();
+    const trackName = `screen-video-${participantId}`;
+    const delayedFirstSession = createDeferred<void>();
+    const callsPaths: string[] = [];
+    let sessionRequestCount = 0;
+    await mockCallsApi(roomName, async (request) => {
+      const pathname = new URL(request.url).pathname;
+      callsPaths.push(pathname);
+      if (pathname.endsWith("/sessions/new")) {
+        sessionRequestCount += 1;
+        if (sessionRequestCount === 1) {
+          await delayedFirstSession.promise;
+          return Response.json({ sessionId: "native-first-session" });
+        }
+        return Response.json({ sessionId: "native-latest-session" });
+      }
+      if (pathname.endsWith("/tracks/new")) {
+        const sessionId = pathname.includes("native-first-session")
+          ? "native-first-session"
+          : "native-latest-session";
+        return Response.json({
+          sessionDescription: {
+            type: "answer",
+            sdp: `answer-${sessionId}`,
+          },
+          tracks: [{ location: "local", trackName, mid: "0" }],
+        });
+      }
+      if (pathname.endsWith("/tracks/close")) return Response.json({});
+      throw new Error(`Unexpected Calls request: ${request.url}`);
+    });
+
+    const publisher = await openVoiceSocket(roomName, "native-overlap");
+    await identifyVoiceSocket(
+      publisher,
+      participantId,
+      roomName,
+      "native-overlap",
+    );
+    const observer = await openVoiceSocket(roomName, "native-overlap-observer");
+    await identifyVoiceSocket(
+      observer,
+      crypto.randomUUID(),
+      roomName,
+      "native-overlap-observer",
+    );
+
+    sendNativeScreenSelect(publisher, participantId, "native-first-request");
+    await vi.waitFor(() => expect(sessionRequestCount).toBe(1));
+
+    const latestMessages = nextMessagesWithOpcodes(publisher, [4, 10]);
+    sendNativeScreenSelect(publisher, participantId, "native-latest-request");
+    const messages = await latestMessages;
+    expect(messages.get(4)).toMatchObject({
+      d: {
+        request_id: "native-latest-request",
+        session_id: "native-latest-session",
+      },
+    });
+    expect(messages.get(10)).toMatchObject({
+      d: {
+        request_id: "native-latest-request",
+        session_id: "native-latest-session",
+      },
+    });
+    expect(await hasMessageWithOpcode(observer, 12)).toBe(false);
+
+    const staleDescription = hasMessageWithOpcode(publisher, 4, 250);
+    const staleNegotiation = hasMessageWithOpcode(publisher, 10, 250);
+    delayedFirstSession.resolve(undefined);
+    await vi.waitFor(() => {
+      expect(
+        callsPaths.filter((pathname) =>
+          pathname.endsWith("/sessions/native-first-session/tracks/close"),
+        ),
+      ).toHaveLength(1);
+    });
+    await expect(staleDescription).resolves.toBe(false);
+    await expect(staleNegotiation).resolves.toBe(false);
+    expect(
+      callsPaths.filter((pathname) =>
+        pathname.endsWith("/sessions/native-first-session/tracks/new"),
+      ),
+    ).toHaveLength(0);
+
+    const published = nextMessageWithOpcode(observer, 12);
+    publisher.send(
+      JSON.stringify({ op: 102, d: { track_names: [trackName] } }),
+    );
+    await expect(published).resolves.toMatchObject({
+      d: {
+        tracks: [
+          {
+            track_name: trackName,
+            session_id: "native-latest-session",
+          },
+        ],
+      },
+    });
+
+    publisher.close();
+    await vi.waitFor(() => {
+      expect(
+        callsPaths.filter((pathname) =>
+          pathname.endsWith("/sessions/native-latest-session/tracks/close"),
+        ),
+      ).toHaveLength(1);
+    });
+    expect(
+      callsPaths.filter((pathname) =>
+        pathname.endsWith("/sessions/native-first-session/tracks/close"),
+      ),
+    ).toHaveLength(1);
+    observer.close();
+  });
+
+  it("closes an in-flight native screen publication when the publisher disconnects", async () => {
+    const roomName = crypto.randomUUID();
+    const participantId = crypto.randomUUID();
+    const trackName = `screen-video-${participantId}`;
+    const delayedTracksResponse = createDeferred<void>();
+    const callsPaths: string[] = [];
+    await mockCallsApi(roomName, async (request) => {
+      const pathname = new URL(request.url).pathname;
+      callsPaths.push(pathname);
+      if (pathname.endsWith("/sessions/new")) {
+        return Response.json({ sessionId: "native-disconnect-race-session" });
+      }
+      if (pathname.endsWith("/tracks/new")) {
+        await delayedTracksResponse.promise;
+        return Response.json({
+          sessionDescription: {
+            type: "answer",
+            sdp: "disconnected-answer",
+          },
+          tracks: [{ location: "local", trackName, mid: "0" }],
+        });
+      }
+      if (pathname.endsWith("/tracks/close")) return Response.json({});
+      throw new Error(`Unexpected Calls request: ${request.url}`);
+    });
+
+    const publisher = await openVoiceSocket(roomName, "native-disconnect-race");
+    await identifyVoiceSocket(
+      publisher,
+      participantId,
+      roomName,
+      "native-disconnect-race",
+    );
+    const observer = await openVoiceSocket(
+      roomName,
+      "native-disconnect-observer",
+    );
+    await identifyVoiceSocket(
+      observer,
+      crypto.randomUUID(),
+      roomName,
+      "native-disconnect-observer",
+    );
+
+    sendNativeScreenSelect(publisher, participantId, "native-disconnect-race");
+    await vi.waitFor(() => {
+      expect(
+        callsPaths.filter((pathname) => pathname.endsWith("/tracks/new")),
+      ).toHaveLength(1);
+    });
+
+    const disconnected = nextMessageWithOpcode(observer, 11);
+    const staleDescription = hasMessageWithOpcode(publisher, 4, 250);
+    const staleNegotiation = hasMessageWithOpcode(publisher, 10, 250);
+    const stalePublication = hasMessageWithOpcode(observer, 12, 250);
+    publisher.close();
+    await expect(disconnected).resolves.toMatchObject({
+      d: { participant_id: participantId },
+    });
+
+    delayedTracksResponse.resolve(undefined);
+    await vi.waitFor(() => {
+      expect(
+        callsPaths.filter((pathname) =>
+          pathname.endsWith(
+            "/sessions/native-disconnect-race-session/tracks/close",
+          ),
+        ),
+      ).toHaveLength(1);
+    });
+    await expect(staleDescription).resolves.toBe(false);
+    await expect(staleNegotiation).resolves.toBe(false);
+    await expect(stalePublication).resolves.toBe(false);
+
+    const lateParticipantId = crypto.randomUUID();
+    const late = await openVoiceSocket(roomName, "native-disconnect-late");
+    const ready = nextJsonMessage(late);
+    late.send(
+      JSON.stringify({
+        op: 100,
+        d: {
+          participant_id: lateParticipantId,
+          voice_token: await issueVoiceToken(
+            lateParticipantId,
+            roomName,
+            "native-disconnect-late",
+          ),
+        },
+      }),
+    );
+    await expect(ready).resolves.toMatchObject({ op: 101, d: { tracks: [] } });
+    expect(
+      callsPaths.filter((pathname) =>
+        pathname.endsWith(
+          "/sessions/native-disconnect-race-session/tracks/close",
+        ),
+      ),
+    ).toHaveLength(1);
+    observer.close();
+    late.close();
+  });
+
+  it("replays PartyTracks and ready native screen descriptors without transfer state", async () => {
+    const roomName = crypto.randomUUID();
+    const participantId = crypto.randomUUID();
+    const partyTracksCapability = await issuePartyTracksSessionCapability(
+      participantId,
+      roomName,
+      "partytracks-replay-session",
+    );
+    await mockCallsApi(roomName, async (request) => {
+      const url = new URL(request.url);
+      if (url.pathname.endsWith("/sessions/new")) {
+        return Response.json({ sessionId: "native-replay-session" });
+      }
+      if (url.pathname.endsWith("/tracks/new")) {
+        return Response.json({
+          sessionDescription: { type: "answer", sdp: "native-answer" },
+          tracks: [
+            {
+              location: "local",
+              trackName: `screen-video-${participantId}`,
+              mid: "0",
+            },
+          ],
+        });
+      }
+      if (url.pathname.endsWith("/tracks/close")) return Response.json({});
+      throw new Error(`Unexpected Calls request: ${request.url}`);
+    });
+    const publisher = await openVoiceSocket(roomName);
+    await identifyVoiceSocket(publisher, participantId, roomName);
+    publisher.send(
+      JSON.stringify({
+        op: 12,
+        d: {
+          tracks: [
+            {
+              participant_id: participantId,
+              track_name: `cam-audio-${participantId}`,
+              sfu_track_name: "opaque-replay-audio",
+              session_id: partyTracksCapability,
+              kind: "audio",
+            },
+          ],
+        },
+      }),
+    );
+    publisher.send(
+      JSON.stringify({
+        op: 1,
+        d: {
+          sdp: "native-offer",
+          push_prefix: "screen",
+          request_id: "native-replay-request",
+          push_tracks: [
+            {
+              track_name: `screen-video-${participantId}`,
+              kind: "video",
+              mid: "0",
+            },
+          ],
+          pull_tracks: [],
+        },
+      }),
+    );
+    await nextMessageWithOpcode(publisher, 4);
+    await nextMessageWithOpcode(publisher, 10);
+    publisher.send(
+      JSON.stringify({
+        op: 102,
+        d: { track_names: [`screen-video-${participantId}`] },
+      }),
+    );
+
+    const lateParticipantId = crypto.randomUUID();
+    const late = await openVoiceSocket(roomName, "native-replay-observer");
+    const ready = nextJsonMessage(late);
+    late.send(
+      JSON.stringify({
+        op: 100,
+        d: {
+          participant_id: lateParticipantId,
+          voice_token: await issueVoiceToken(
+            lateParticipantId,
+            roomName,
+            "native-replay-observer",
+          ),
+        },
+      }),
+    );
+    const readyMessage = await ready;
+    expect(readyMessage).toMatchObject({
+      op: 101,
+      d: {
+        tracks: expect.arrayContaining([
+          expect.objectContaining({
+            participant_id: participantId,
+            track_name: `cam-audio-${participantId}`,
+            sfu_track_name: "opaque-replay-audio",
+            session_id: partyTracksCapability,
+            kind: "audio",
+          }),
+          expect.objectContaining({
+            participant_id: participantId,
+            track_name: `screen-video-${participantId}`,
+            session_id: "native-replay-session",
+            kind: "video",
+          }),
+        ]),
+      },
+    });
+    expect(readyMessage.d).not.toHaveProperty("sfu_session_transferred");
+    expect(readyMessage.d).not.toHaveProperty("pull_session_id");
+    publisher.close();
+    late.close();
+  });
 
   it("limits public-demo sockets to temporary demo chat events", async () => {
     const roomName = crypto.randomUUID();
@@ -2834,7 +2780,7 @@ describe("VoiceRoom lifecycle", () => {
           publisherId,
         ),
       ][0];
-      expect(row?.speaking).toBe(0);
+      expect(row).toBeUndefined();
     });
 
     observer.close();
@@ -2843,6 +2789,12 @@ describe("VoiceRoom lifecycle", () => {
   it("ignores stale authenticated state and broadcast opcodes after reconnect", async () => {
     const roomName = crypto.randomUUID();
     const participantId = crypto.randomUUID();
+    const trackName = `cam-audio-${participantId}`;
+    const capability = await issuePartyTracksSessionCapability(
+      participantId,
+      roomName,
+      "current-partytracks-session",
+    );
     const oldSocket = await openVoiceSocket(roomName);
     await identifyVoiceSocket(oldSocket, participantId, roomName);
     const currentSocket = await openVoiceSocket(roomName);
@@ -2855,31 +2807,33 @@ describe("VoiceRoom lifecycle", () => {
       "observer-user",
     );
 
-    const room = env.VOICE_ROOM.get(env.VOICE_ROOM.idFromName(roomName));
-    await runInDurableObject(room, (_instance, state) => {
-      state.storage.sql.exec(
-        "UPDATE participants SET pull_session_id = ? WHERE id = ?",
-        "current-pull",
-        participantId,
-      );
-      state.storage.sql.exec(
-        "INSERT INTO tracks (track_name, participant_id, session_id, mid, kind, is_pending) VALUES (?, ?, ?, ?, ?, 1)",
-        "stale-track",
-        participantId,
-        "current-push",
-        "0",
-        "audio",
-      );
+    const publication = nextMessageWithOpcode(observer, 12);
+    currentSocket.send(
+      JSON.stringify({
+        op: 12,
+        d: {
+          tracks: [
+            {
+              participant_id: participantId,
+              track_name: trackName,
+              sfu_track_name: "current-opaque-track",
+              session_id: capability,
+              kind: "audio",
+            },
+          ],
+        },
+      }),
+    );
+    await expect(publication).resolves.toMatchObject({
+      op: 12,
+      d: { tracks: [{ track_name: trackName }] },
     });
 
     const staleHeartbeat = hasMessageWithOpcode(oldSocket, 6, 150);
     oldSocket.send(JSON.stringify({ op: 3, d: {} }));
     await expect(staleHeartbeat).resolves.toBe(false);
 
-    oldSocket.send(JSON.stringify({ op: 105, d: {} }));
-    oldSocket.send(
-      JSON.stringify({ op: 102, d: { track_names: ["stale-track"] } }),
-    );
+    oldSocket.send(JSON.stringify({ op: 13, d: { track_names: [trackName] } }));
     oldSocket.send(
       JSON.stringify({
         op: 106,
@@ -2892,22 +2846,21 @@ describe("VoiceRoom lifecycle", () => {
       }),
     );
 
+    await expect(hasMessageWithOpcode(observer, 13, 150)).resolves.toBe(false);
     await expect(hasMessageWithOpcode(observer, 106, 150)).resolves.toBe(false);
+    const room = env.VOICE_ROOM.get(env.VOICE_ROOM.idFromName(roomName));
     await runInDurableObject(room, (_instance, state) => {
-      const participant = [
-        ...state.storage.sql.exec(
-          "SELECT pull_session_id FROM participants WHERE id = ?",
-          participantId,
-        ),
-      ][0];
       const track = [
         ...state.storage.sql.exec(
-          "SELECT is_pending FROM tracks WHERE track_name = ?",
-          "stale-track",
+          "SELECT session_id, sfu_track_name, native_screen_pending FROM tracks WHERE track_name = ?",
+          trackName,
         ),
       ][0];
-      expect(participant?.pull_session_id).toBe("current-pull");
-      expect(track?.is_pending).toBe(1);
+      expect(track).toMatchObject({
+        session_id: capability,
+        sfu_track_name: "current-opaque-track",
+        native_screen_pending: 0,
+      });
     });
 
     oldSocket.close();

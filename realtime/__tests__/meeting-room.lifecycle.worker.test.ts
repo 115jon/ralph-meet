@@ -91,7 +91,7 @@ async function openMeetingSocket(
   }
 
   socket.accept();
-  await nextJsonMessage(socket);
+  await nextMessageWithOpcode(socket, 8);
   return socket;
 }
 
@@ -115,7 +115,7 @@ async function identifyMeetingSocket(
     supports_voice_state_deltas?: boolean;
   } = {},
 ) {
-  const response = nextJsonMessage(socket);
+  const response = nextMessageWithOpcode(socket, 2);
   socket.send(
     JSON.stringify({
       op: 0,
@@ -263,7 +263,9 @@ describe("MeetingRoom lifecycle", () => {
       supports_voice_state_deltas: true,
     });
 
+    const capableJoin = nextMessageWithOpcode(capable, 15);
     const legacy = await openMeetingSocket(roomName, "profile-legacy");
+    const legacyJoin = nextMessageWithOpcode(legacy, 15);
     await identifyMeetingSocket(legacy, {
       name: "Legacy Name",
       username: "legacy-user",
@@ -271,10 +273,6 @@ describe("MeetingRoom lifecycle", () => {
       avatar_url: "https://example.com/legacy.png",
       avatar_display: "frame:legacy",
     });
-    await nextMessageWithOpcode(capable, 15);
-
-    const capableJoin = nextMessageWithOpcode(capable, 15);
-    const legacyJoin = nextMessageWithOpcode(legacy, 15);
     const sender = await openMeetingSocket(roomName, "profile-sender");
     const senderReady = await identifyMeetingSocket(sender, {
       name: "Sender Name",
@@ -356,12 +354,10 @@ describe("MeetingRoom lifecycle", () => {
     const capableReady = await identifyMeetingSocket(capable, {
       supports_voice_state_deltas: true,
     });
-    const legacy = await openMeetingSocket(roomName, "replay-legacy");
-    const legacyReady = await identifyMeetingSocket(legacy);
-    await nextMessageWithOpcode(capable, 15);
-
     const capableSenderJoin = nextMessageWithOpcode(capable, 15);
+    const legacy = await openMeetingSocket(roomName, "replay-legacy");
     const legacySenderJoin = nextMessageWithOpcode(legacy, 15);
+    const legacyReady = await identifyMeetingSocket(legacy);
     const sender = await openMeetingSocket(roomName, "replay-sender");
     const senderReady = await identifyMeetingSocket(sender, {
       name: "Replay Sender",
@@ -1567,7 +1563,7 @@ describe("MeetingRoom lifecycle", () => {
   it("binds Identify to the admitted subject instead of clerk_user_id", async () => {
     const roomName = crypto.randomUUID();
     const socket = await openMeetingSocket(roomName);
-    const ready = nextJsonMessage(socket);
+    const ready = nextMessageWithOpcode(socket, 2);
 
     socket.send(
       JSON.stringify({

@@ -125,6 +125,7 @@ const enum Op {
   CallDecline = 38,
   CallEnd = 39,
   RefreshVoiceCredentials = 40,
+  MediaReady = 41,
 }
 
 const enum CloseCode {
@@ -168,8 +169,6 @@ interface VoiceState {
   spatial_audio_high_fidelity?: boolean;
   suppress: boolean;
   status?: "online" | "idle" | "dnd" | "offline";
-  push_session_id?: string;
-  pull_session_id?: string;
   tracks: TrackInfo[];
 }
 
@@ -2050,8 +2049,6 @@ export class MeetingRoom extends DurableObject<Env> {
       spatial_audio_high_fidelity: data.spatial_audio_high_fidelity,
       suppress: data.suppress,
       status: data.status,
-      push_session_id: undefined,
-      pull_session_id: undefined,
       tracks: [...data.tracks],
     };
   }
@@ -2472,6 +2469,15 @@ export class MeetingRoom extends DurableObject<Env> {
           : null,
         this.generateVoiceToken(participantId, admission.subject),
       ]);
+
+      this.sendTo(ws, {
+        op: Op.MediaReady,
+        d: {
+          participant_id: participantId,
+          ice_servers: iceServers,
+          voice_token: voiceToken,
+        },
+      });
 
       // Resolve actual profile from Clerk if possible
       let resolvedName = d.name;

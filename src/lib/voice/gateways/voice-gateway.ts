@@ -13,32 +13,20 @@ export interface VoiceGatewayEvents extends BaseGatewayEvents {
   "voice-ready": {
     speaking?: Record<string, number>;
     tracks?: TrackInfo[];
-    sfu_session_transferred?: boolean;
   };
-  "tracks-ready": { tracks: TrackInfo[] };
-  "track-offered": {
-    track_name: string;
-    session_id: string;
-    kind: "audio" | "video";
-    participant_id: string;
-  };
-  "ice-candidate": {
-    session_id: string;
-    candidate: string;
-    sdpMid: string;
-    sdpMLineIndex: number;
-  };
+  "track-offered": TrackInfo;
   "session-description": SessionDescriptionPayload;
   "negotiation-done": NegotiationDonePayload;
   speaking: { participantId: string; speaking: number };
   "client-disconnect": ClientDisconnectPayload;
-  "stop-tracks": { track_names: string[] };
+  "stop-tracks": { track_names: string[]; tracks?: TrackInfo[] };
   "app-event": Record<string, unknown>;
   error: {
     message: string;
     code?: number;
     request_id?: string;
-    operation?: "push" | "pull";
+    operation?: "push";
+    push_prefix?: "screen";
   };
 }
 
@@ -187,7 +175,7 @@ export class VoiceGateway extends BaseGateway<VoiceGatewayEvents> {
   protected handleMessage(msg: ServerMessage) {
     switch (msg.op) {
       case VoiceOpcode.Hello: {
-        const hello = msg.d as any;
+        const hello = msg.d;
         this.log.info(`Hello received, interval=${hello.heartbeat_interval}ms`);
         this.heartbeat.start(hello.heartbeat_interval);
         this.helloReceived = true;
@@ -205,55 +193,39 @@ export class VoiceGateway extends BaseGateway<VoiceGatewayEvents> {
         this.reconnectAttempt = 0;
         this.flushQueue();
 
-        const vr = msg.d as any;
+        const vr = msg.d;
         this.emit("voice-ready", {
           speaking: vr.speaking,
           tracks: vr.tracks,
-          sfu_session_transferred: vr.sfu_session_transferred,
         });
 
         if (vr.speaking) {
           Object.entries(vr.speaking).forEach(([pId, speaking]) => {
             this.emit("speaking", {
               participantId: pId,
-              speaking: speaking as number,
+              speaking,
             });
           });
         }
         break;
       }
 
-      case VoiceOpcode.TracksReady: {
-        const tr = msg.d as any;
-        this.emit("tracks-ready", { tracks: tr.tracks });
-        break;
-      }
-
       case VoiceOpcode.SessionDescription: {
-        const sd = msg.d as any;
-        this.emit("session-description", sd);
+        this.emit("session-description", msg.d);
         break;
       }
 
       case VoiceOpcode.NegotiationDone: {
-        const nd = msg.d as any;
-        this.emit("negotiation-done", {
-          session_id: nd.session_id,
-          request_id: nd.request_id,
-          operation: nd.operation,
-          push_prefix: nd.push_prefix,
-        });
+        this.emit("negotiation-done", msg.d);
         break;
       }
 
       case VoiceOpcode.Video: {
-        const v = msg.d as any;
+        const v = msg.d;
         if (Array.isArray(v.tracks)) {
           for (const track of v.tracks) {
             this.emit("track-offered", {
-              track_name: track.track_name,
-              session_id: track.session_id,
-              kind: track.kind,
+              ...track,
               participant_id: track.participant_id || v.participant_id,
             });
           }
@@ -262,18 +234,19 @@ export class VoiceGateway extends BaseGateway<VoiceGatewayEvents> {
       }
 
       case VoiceOpcode.Error: {
-        const err = msg.d as any;
+        const err = msg.d;
         this.emit("error", {
           message: err.message,
           code: err.code,
           request_id: err.request_id,
           operation: err.operation,
+          push_prefix: err.push_prefix,
         });
         break;
       }
 
       case VoiceOpcode.Speaking: {
-        const speak = msg.d as any;
+        const speak = msg.d;
         this.emit("speaking", {
           participantId: speak.participant_id,
           speaking: speak.speaking,
@@ -290,8 +263,11 @@ export class VoiceGateway extends BaseGateway<VoiceGatewayEvents> {
       }
 
       case VoiceOpcode.StopTracks: {
-        const st = msg.d as any;
-        this.emit("stop-tracks", { track_names: st.track_names });
+        const st = msg.d;
+        this.emit("stop-tracks", {
+          track_names: st.track_names,
+          tracks: st.tracks,
+        });
         break;
       }
 
@@ -335,7 +311,7 @@ export class VoiceGateway extends BaseGateway<VoiceGatewayEvents> {
       return false;
     }
 
-    return this.send({ op: VoiceOpcode.VoiceAppEvent, d: payload } as any);
+    return this.send({ op: VoiceOpcode.VoiceAppEvent, d: payload });
   }
 
   private resetSocketIdentityState() {

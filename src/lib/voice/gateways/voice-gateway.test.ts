@@ -466,7 +466,7 @@ describe("VoiceGateway", () => {
     gateway.disconnect();
   });
 
-  it("forwards whether the SFU session was transferred on VoiceReady", async () => {
+  it("forwards PartyTracks descriptors on VoiceReady without legacy transfer state", async () => {
     mocks.fetchSocketProtocols.mockResolvedValue([
       "ralph.realtime.v1",
       "ralph.ticket.test",
@@ -485,16 +485,80 @@ describe("VoiceGateway", () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     const socket = TestWebSocket.instances[0]!;
+    const track = {
+      participant_id: "remote-participant",
+      track_name: "cam-audio-remote-participant",
+      sfu_track_name: "opaque-partytracks-audio",
+      session_id: "partytracks-capability",
+      kind: "audio",
+    };
     socket.onmessage?.({
       data: JSON.stringify({
         op: VoiceOpcode.VoiceReady,
-        d: { sfu_session_transferred: false, tracks: [] },
+        d: {
+          participant_id: "participant-1",
+          tracks: [track],
+          speaking: { "remote-participant": 1 },
+        },
       }),
     } as MessageEvent);
 
-    expect(onReady).toHaveBeenCalledWith(
-      expect.objectContaining({ sfu_session_transferred: false }),
+    expect(onReady).toHaveBeenCalledWith({
+      tracks: [track],
+      speaking: { "remote-participant": 1 },
+    });
+    expect(onReady.mock.calls[0]?.[0]).not.toHaveProperty(
+      "sfu_session_transferred",
     );
+    gateway.disconnect();
+  });
+
+  it("preserves PartyTracks metadata on offered and stopped tracks", async () => {
+    mocks.fetchSocketProtocols.mockResolvedValue([
+      "ralph.realtime.v1",
+      "ralph.ticket.test",
+    ]);
+    const gateway = new VoiceGateway();
+    const onOffered = vi.fn();
+    const onStopped = vi.fn();
+    gateway.on("track-offered", onOffered);
+    gateway.on("stop-tracks", onStopped);
+
+    gateway.connectVoice(
+      "participant-1",
+      "voice-token",
+      "voice-server-channel",
+      (path) => `ws://meet.test${path}`,
+      { channelId: "channel", serverId: "server" },
+    );
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const track = {
+      participant_id: "participant-remote",
+      track_name: "cam-audio-participant-remote",
+      sfu_track_name: "opaque-audio",
+      session_id: "signed-session-capability",
+      kind: "audio",
+    };
+    const socket = TestWebSocket.instances[0]!;
+    socket.onmessage?.({
+      data: JSON.stringify({
+        op: VoiceOpcode.Video,
+        d: { participant_id: "participant-remote", tracks: [track] },
+      }),
+    } as MessageEvent);
+    socket.onmessage?.({
+      data: JSON.stringify({
+        op: VoiceOpcode.StopTracks,
+        d: { track_names: [track.track_name], tracks: [track] },
+      }),
+    } as MessageEvent);
+
+    expect(onOffered).toHaveBeenCalledWith(track);
+    expect(onStopped).toHaveBeenCalledWith({
+      track_names: [track.track_name],
+      tracks: [track],
+    });
     gateway.disconnect();
   });
 

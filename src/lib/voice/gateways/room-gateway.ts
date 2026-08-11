@@ -11,6 +11,11 @@ import type { SharedSpatialAudioState } from "@/lib/voice/spatial-audio";
 import { BaseGateway, type BaseGatewayEvents } from "./base-gateway";
 
 export interface RoomGatewayEvents extends BaseGatewayEvents {
+  "media-ready": {
+    participantId: string;
+    iceServers: IceServer[];
+    voiceToken: string;
+  };
   ready: {
     participantId: string;
     sessionId: string;
@@ -190,6 +195,16 @@ export class RoomGateway extends BaseGateway<RoomGatewayEvents> {
             true,
           );
         }
+        break;
+      }
+
+      case VoiceOpcode.MediaReady: {
+        const ready = msg.d;
+        this.emit("media-ready", {
+          participantId: ready.participant_id,
+          iceServers: ready.ice_servers,
+          voiceToken: ready.voice_token,
+        });
         break;
       }
 
