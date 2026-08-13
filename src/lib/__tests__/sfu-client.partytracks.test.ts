@@ -252,6 +252,63 @@ describe("SFUClient PartyTracks facade", () => {
     client.disconnect("component-unmount");
   });
 
+  it("re-announces a preserved publication before replay pulls after VoiceGW reconnect", async () => {
+    const transport = new TestPartyTracksTransport();
+    const client = new SFUClient("test-room", {
+      createPartyTracksTransport: vi.fn(() => transport),
+    });
+    vi.spyOn(client.voiceGW, "connectVoice").mockImplementation(() => {});
+    const send = vi
+      .spyOn(client.voiceGW, "send")
+      .mockImplementation((message) => {
+        if (message.op === VoiceOpcode.Video) {
+          transport.operationOrder.push("announce:local");
+        }
+        return true;
+      });
+    const microphone = new MockMediaStreamTrack(
+      "audio",
+    ) as unknown as MediaStreamTrack;
+    const stream = new MockMediaStream([microphone]) as unknown as MediaStream;
+    const localMetadata: TrackInfo = {
+      participant_id: "local-participant",
+      track_name: "cam-audio-local-participant",
+      sfu_track_name: "opaque-local-audio",
+      session_id: "local-session-capability",
+      kind: "audio",
+    };
+    const remoteOffer: TrackInfo = {
+      participant_id: "remote-participant",
+      track_name: "cam-audio-remote-participant",
+      sfu_track_name: "opaque-remote-audio",
+      session_id: "remote-session-capability",
+      kind: "audio",
+    };
+
+    emitMediaReady(client);
+    await client.publishTracks(stream, "cam");
+    transport.publicationMetadata
+      .get(localMetadata.track_name)
+      ?.next(localMetadata);
+    transport.operationOrder.length = 0;
+    send.mockClear();
+
+    client.voiceGW.emit("disconnected", undefined as never);
+    client.voiceGW.emit("voice-ready", { tracks: [remoteOffer] });
+
+    expect(transport.operationOrder).toEqual([
+      "announce:local",
+      "pull:cam-audio-remote-participant",
+    ]);
+    expect(send).toHaveBeenCalledOnce();
+    expect(send).toHaveBeenCalledWith({
+      op: VoiceOpcode.Video,
+      d: { tracks: [localMetadata] },
+    });
+    expect(transport.push).toHaveBeenCalledOnce();
+    client.disconnect("component-unmount");
+  });
+
   it("disconnects idempotently and disposes both public media lifecycles safely", async () => {
     const transport = new TestPartyTracksTransport();
     const client = new SFUClient("test-room", {

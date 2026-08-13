@@ -371,8 +371,12 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
       this.emit("voice-ready", { speaking: event.speaking ?? {} });
       // Register local senders before replay pulls enqueue negotiation on the
       // shared PartyTracks session.
-      if (this.partyTracksMedia && !this.partyTracksMedia.hasPublications) {
-        this.emit("voice-reconnected", undefined as never);
+      if (this.partyTracksMedia) {
+        if (this.partyTracksMedia.hasPublications) {
+          this.partyTracksMedia.reannouncePublications();
+        } else {
+          this.emit("voice-reconnected", undefined as never);
+        }
       }
 
       if (this.partyTracksMedia) {

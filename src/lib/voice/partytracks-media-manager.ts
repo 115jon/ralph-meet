@@ -241,6 +241,15 @@ export class PartyTracksMediaManager {
     return this.publications.size > 0;
   }
 
+  reannouncePublications(): void {
+    if (this.disposed) return;
+    for (const publication of this.publications.values()) {
+      if (publication.latestMetadata) {
+        this.callbacks.onPublicationMetadata(publication.latestMetadata);
+      }
+    }
+  }
+
   get hasRemotePulls(): boolean {
     return this.pulls.size > 0;
   }
