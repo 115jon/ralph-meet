@@ -192,6 +192,7 @@ interface WsAttachment {
   admission?: {
     accessMode: "authenticated" | "public-demo";
     connectionGeneration: string;
+    participantId: string;
     subject: string;
   };
   id: string;
@@ -652,6 +653,7 @@ export class MeetingRoom extends DurableObject<Env> {
         admission: {
           accessMode: admission.accessMode,
           connectionGeneration: admission.connectionGeneration,
+          participantId: admission.participantId,
           subject: admission.subject,
         },
       });
@@ -2443,7 +2445,7 @@ export class MeetingRoom extends DurableObject<Env> {
         });
         return;
       }
-      const participantId = crypto.randomUUID();
+      const participantId = admission.participantId;
       const admittedUserId =
         admission.accessMode === "authenticated"
           ? admission.subject

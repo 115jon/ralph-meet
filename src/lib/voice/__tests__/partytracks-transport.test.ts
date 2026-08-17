@@ -52,6 +52,23 @@ class FakePartyTracks implements PartyTracksClient {
 }
 
 describe("PartyTracksTransport", () => {
+  it("omits PartyTracks iceServers when bootstrap has none", () => {
+    const fake = new FakePartyTracks();
+    const factory = vi.fn((_config: PartyTracksConfig) => fake);
+
+    new PartyTracksTransport(
+      {
+        roomSlug: "room-one",
+        participantId: "participant-one",
+        voiceToken: "voice-token",
+      },
+      { factory, resolveApiUrl: (path) => path },
+    );
+
+    expect(factory).toHaveBeenCalledWith(
+      expect.not.objectContaining({ iceServers: expect.anything() }),
+    );
+  });
   it("uses one PartyTracks session for microphone publication and remote pulls", () => {
     const fake = new FakePartyTracks();
     const factory = vi.fn(() => fake);

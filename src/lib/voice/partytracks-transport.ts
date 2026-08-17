@@ -31,7 +31,7 @@ export interface PartyTracksTransportCredentials {
   roomSlug: string;
   participantId: string;
   voiceToken: string;
-  iceServers: IceServer[];
+  iceServers?: IceServer[];
 }
 
 export interface RalphPublishedTrack {
@@ -93,7 +93,7 @@ export class PartyTracksTransport {
       Authorization: `Bearer ${credentials.voiceToken}`,
       "X-Voice-Session-Id": credentials.participantId,
     });
-    this.iceServers = [...credentials.iceServers];
+    this.iceServers = [...(credentials.iceServers ?? [])];
     const resolveApiUrl = options.resolveApiUrl ?? apiUrl;
     const prefix = resolveApiUrl(
       `/api/channels/${encodeURIComponent(credentials.roomSlug)}/partytracks`,
@@ -102,7 +102,7 @@ export class PartyTracksTransport {
     this.client = factory({
       prefix,
       headers: this.headers,
-      iceServers: this.iceServers,
+      ...(credentials.iceServers ? { iceServers: this.iceServers } : undefined),
     });
     this.peerConnection$ = this.client.peerConnection$;
     this.session$ = this.client.session$;

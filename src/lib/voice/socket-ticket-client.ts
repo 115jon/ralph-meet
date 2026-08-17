@@ -17,12 +17,23 @@ export type SocketTicketRequest = {
 };
 
 type SocketTicketResponse = {
+  media_bootstrap?: unknown;
   ticket?: unknown;
 };
 
-export async function fetchSocketTicket(
+export type MediaBootstrap = {
+  participantId: string;
+  voiceToken: string;
+};
+
+export type SocketTicketBundle = {
+  mediaBootstrap?: MediaBootstrap;
+  protocols: string[];
+};
+
+async function requestSocketTicket(
   request: SocketTicketRequest,
-): Promise<string> {
+): Promise<SocketTicketResponse> {
   const token = getDesktopToken() ?? getStoredKovaAuthSessionToken();
   const headers = new Headers({ "Content-Type": "application/json" });
   if (token) headers.set("Authorization", `Bearer ${token}`);
@@ -41,12 +52,46 @@ export async function fetchSocketTicket(
     throw new Error(`Socket ticket request failed (${response.status})`);
   }
 
-  const data = (await response.json()) as SocketTicketResponse;
+  return (await response.json()) as SocketTicketResponse;
+}
+
+function requireTicket(data: SocketTicketResponse): string {
   if (typeof data.ticket !== "string" || data.ticket.length === 0) {
     throw new Error("Socket ticket response was invalid");
   }
 
   return data.ticket;
+}
+
+export async function fetchSocketTicket(
+  request: SocketTicketRequest,
+): Promise<string> {
+  return requireTicket(await requestSocketTicket(request));
+}
+
+export async function fetchSocketTicketBundle(
+  request: SocketTicketRequest,
+): Promise<SocketTicketBundle> {
+  const data = await requestSocketTicket(request);
+  const protocols = buildSocketTicketProtocols(requireTicket(data));
+  if (data.media_bootstrap === undefined) return { protocols };
+  if (
+    data.media_bootstrap === null ||
+    typeof data.media_bootstrap !== "object" ||
+    !("participant_id" in data.media_bootstrap) ||
+    typeof data.media_bootstrap.participant_id !== "string" ||
+    !("voice_token" in data.media_bootstrap) ||
+    typeof data.media_bootstrap.voice_token !== "string"
+  ) {
+    throw new Error("Socket ticket media bootstrap was invalid");
+  }
+  return {
+    mediaBootstrap: {
+      participantId: data.media_bootstrap.participant_id,
+      voiceToken: data.media_bootstrap.voice_token,
+    },
+    protocols,
+  };
 }
 
 export async function fetchSocketProtocols(

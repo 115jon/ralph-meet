@@ -13,6 +13,7 @@ export interface RealtimeAdmissionContext {
   connectionGeneration: string;
   expiresAt: number;
   nonceDigest: string;
+  participantId: string;
   roomSlug: string;
   serverId?: string;
   subject: string;
@@ -50,6 +51,7 @@ export async function createRealtimeAdmissionContext(
     connectionGeneration: crypto.randomUUID(),
     expiresAt: claims.expiresAt,
     nonceDigest: await digestNonce(claims.nonce),
+    participantId: claims.nonce,
     roomSlug: claims.roomSlug,
     ...(claims.serverId ? { serverId: claims.serverId } : {}),
     subject: claims.subject,
@@ -78,6 +80,7 @@ export function appendRealtimeAdmissionHeaders(
   );
   next.set(`${ADMISSION_HEADER_PREFIX}expires-at`, String(context.expiresAt));
   next.set(`${ADMISSION_HEADER_PREFIX}nonce-digest`, context.nonceDigest);
+  next.set(`${ADMISSION_HEADER_PREFIX}participant-id`, context.participantId);
   next.set(`${ADMISSION_HEADER_PREFIX}room-slug`, context.roomSlug);
   if (context.serverId) {
     next.set(`${ADMISSION_HEADER_PREFIX}server-id`, context.serverId);
@@ -105,6 +108,7 @@ export function getRealtimeAdmissionFromHeaders(
   );
   const expiresAtRaw = headers.get(`${ADMISSION_HEADER_PREFIX}expires-at`);
   const nonceDigest = headers.get(`${ADMISSION_HEADER_PREFIX}nonce-digest`);
+  const participantId = headers.get(`${ADMISSION_HEADER_PREFIX}participant-id`);
   const roomSlug = headers.get(`${ADMISSION_HEADER_PREFIX}room-slug`);
   const serverId = headers.get(`${ADMISSION_HEADER_PREFIX}server-id`);
   const subject = headers.get(`${ADMISSION_HEADER_PREFIX}subject`);
@@ -117,6 +121,7 @@ export function getRealtimeAdmissionFromHeaders(
   if (
     !connectionGeneration ||
     !nonceDigest ||
+    !participantId ||
     !roomSlug ||
     !subject ||
     !Number.isFinite(expiresAt)
@@ -129,6 +134,7 @@ export function getRealtimeAdmissionFromHeaders(
     connectionGeneration,
     expiresAt,
     nonceDigest,
+    participantId,
     roomSlug,
     ...(serverId ? { serverId } : {}),
     subject,

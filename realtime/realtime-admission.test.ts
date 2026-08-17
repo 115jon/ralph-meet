@@ -46,6 +46,17 @@ describe("realtime admission", () => {
     expect(getRealtimeAdmissionFromHeaders(headers)).toEqual(context);
   });
 
+  it("reserves the signed ticket nonce as the participant identity", async () => {
+    const nonce = crypto.randomUUID();
+    const context = await createRealtimeAdmissionContext({
+      ...claims,
+      audience: "room",
+      nonce,
+    });
+
+    expect((context as { participantId?: string }).participantId).toBe(nonce);
+  });
+
   it("strips forged admission headers from incoming requests", () => {
     const headers = stripRealtimeAdmissionHeaders(
       new Headers({

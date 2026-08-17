@@ -37,6 +37,14 @@ function emitMediaReady(
   });
 }
 
+function emitMediaBootstrap(
+  client: SFUClient,
+  participantId: string,
+  voiceToken: string,
+): void {
+  client.roomGW.emit("media-bootstrap", { participantId, voiceToken });
+}
+
 class TestPartyTracksTransport implements PartyTracksClientTransport {
   readonly peerConnection$ = new Subject<RTCPeerConnection>();
   readonly peerConnectionState$ = new Subject<RTCPeerConnectionState>();
@@ -80,6 +88,186 @@ class TestPartyTracksTransport implements PartyTracksClientTransport {
 }
 
 describe("SFUClient PartyTracks facade", () => {
+  it("releases an early pending publication as soon as media bootstrap arrives", async () => {
+    const transport = new TestPartyTracksTransport();
+    const createPartyTracksTransport = vi.fn(() => transport);
+    const client = new SFUClient("test-room", { createPartyTracksTransport });
+    vi.spyOn(client.roomGW, "connectRoom").mockImplementation(() => {});
+    vi.spyOn(client.voiceGW, "prepareVoice").mockImplementation(() => {});
+    client.connect("Local participant");
+    const microphone = new MockMediaStreamTrack(
+      "audio",
+    ) as unknown as MediaStreamTrack;
+    const publication = client.publishTracks(
+      new MockMediaStream([microphone]) as unknown as MediaStream,
+      "cam",
+    );
+    void publication.catch(() => {});
+
+    expect(createPartyTracksTransport).not.toHaveBeenCalled();
+    emitMediaBootstrap(client, "reserved-participant", "bootstrap-token");
+    await Promise.resolve();
+    expect(createPartyTracksTransport).toHaveBeenCalledOnce();
+    await publication;
+
+    expect(transport.push).toHaveBeenCalledOnce();
+    client.disconnect("component-unmount");
+  });
+
+  it("enriches same-generation bootstrap credentials without recreating media", async () => {
+    const transport = new TestPartyTracksTransport();
+    const createPartyTracksTransport = vi.fn(() => transport);
+    const client = new SFUClient("test-room", { createPartyTracksTransport });
+
+    emitMediaBootstrap(client, "reserved-participant", "bootstrap-token");
+    await Promise.resolve();
+    expect(createPartyTracksTransport).toHaveBeenCalledOnce();
+    client.roomGW.emit("ready", {
+      participantId: "reserved-participant",
+      sessionId: "reserved-participant",
+      iceServers: FIRST_ICE_SERVERS,
+      voiceToken: "ready-token",
+      tracksToQueue: [],
+      participants: [],
+    });
+
+    expect(createPartyTracksTransport).toHaveBeenCalledOnce();
+    expect(transport.updateVoiceToken).toHaveBeenCalledWith("ready-token");
+    expect(transport.updateIceServers).toHaveBeenCalledWith(FIRST_ICE_SERVERS);
+    client.disconnect("component-unmount");
+  });
+
+  it("queues early publication metadata through VoiceGW exactly once", async () => {
+    const transport = new TestPartyTracksTransport();
+    const client = new SFUClient("test-room", {
+      createPartyTracksTransport: () => transport,
+    });
+    const send = vi.spyOn(client.voiceGW, "send");
+    const microphone = new MockMediaStreamTrack(
+      "audio",
+    ) as unknown as MediaStreamTrack;
+    const publication = client.publishTracks(
+      new MockMediaStream([microphone]) as unknown as MediaStream,
+      "cam",
+    );
+    void publication.catch(() => {});
+
+    emitMediaBootstrap(client, "reserved-participant", "bootstrap-token");
+    await Promise.resolve();
+    expect(transport.push).toHaveBeenCalledOnce();
+    await publication;
+    transport.publicationMetadata.get("cam-audio-reserved-participant")!.next({
+      participant_id: "reserved-participant",
+      track_name: "cam-audio-reserved-participant",
+      sfu_track_name: "party-track",
+      session_id: "party-session",
+      kind: "audio",
+    });
+    client.roomGW.emit("ready", {
+      participantId: "reserved-participant",
+      sessionId: "reserved-participant",
+      iceServers: FIRST_ICE_SERVERS,
+      voiceToken: "ready-token",
+      tracksToQueue: [],
+      participants: [],
+    });
+
+    expect(
+      send.mock.calls.filter(([message]) => message.op === VoiceOpcode.Video),
+    ).toHaveLength(1);
+    client.disconnect("component-unmount");
+  });
+
+  it("replaces stale bootstrap media once and disposes it on abort", async () => {
+    const transports: TestPartyTracksTransport[] = [];
+    const client = new SFUClient("test-room", {
+      createPartyTracksTransport: vi.fn(() => {
+        const transport = new TestPartyTracksTransport();
+        transports.push(transport);
+        return transport;
+      }),
+    });
+
+    emitMediaBootstrap(client, "participant-a", "token-a");
+    emitMediaBootstrap(client, "participant-b", "token-b");
+    await Promise.resolve();
+
+    expect(transports).toHaveLength(2);
+    expect(transports[0]?.dispose).toHaveBeenCalledOnce();
+    expect(transports[1]?.dispose).not.toHaveBeenCalled();
+    client.disconnect("component-unmount");
+    expect(transports[1]?.dispose).toHaveBeenCalledOnce();
+  });
+
+  it("rejects an early publication when bootstrap is aborted", async () => {
+    const client = new SFUClient("test-room");
+    vi.spyOn(client.roomGW, "connectRoom").mockImplementation(() => {});
+    vi.spyOn(client.voiceGW, "prepareVoice").mockImplementation(() => {});
+    client.connect("Local participant");
+    const microphone = new MockMediaStreamTrack(
+      "audio",
+    ) as unknown as MediaStreamTrack;
+    const publication = client.publishTracks(
+      new MockMediaStream([microphone]) as unknown as MediaStream,
+      "cam",
+    );
+    void publication.catch(() => {});
+
+    client.disconnect("component-unmount");
+
+    await expect(publication).rejects.toThrow("SFU client disconnected");
+  });
+
+  it("preserves the existing MediaReady path when bootstrap is absent", async () => {
+    const transport = new TestPartyTracksTransport();
+    const createPartyTracksTransport = vi.fn(() => transport);
+    const client = new SFUClient("test-room", { createPartyTracksTransport });
+
+    emitMediaReady(client);
+    await Promise.resolve();
+
+    expect(createPartyTracksTransport).toHaveBeenCalledOnce();
+    client.disconnect("component-unmount");
+  });
+
+  it("keeps an established resume identity until fallback admission or a new join", () => {
+    const transports: TestPartyTracksTransport[] = [];
+    const client = new SFUClient("test-room", {
+      createPartyTracksTransport: vi.fn(() => {
+        const transport = new TestPartyTracksTransport();
+        transports.push(transport);
+        return transport;
+      }),
+    });
+
+    client.roomGW.emit("ready", {
+      participantId: "established",
+      sessionId: "established",
+      iceServers: FIRST_ICE_SERVERS,
+      voiceToken: "established-token",
+      tracksToQueue: [],
+      participants: [],
+    });
+    emitMediaBootstrap(client, "speculative-reconnect", "speculative-token");
+    expect(transports).toHaveLength(1);
+    expect(client.getParticipantId()).toBe("established");
+
+    client.roomGW.emit("media-ready", {
+      participantId: "fallback-admission",
+      iceServers: SECOND_ICE_SERVERS,
+      voiceToken: "fallback-token",
+    });
+    expect(transports).toHaveLength(2);
+    expect(transports[0]?.dispose).toHaveBeenCalledOnce();
+    expect(client.getParticipantId()).toBe("fallback-admission");
+
+    client.disconnect("component-unmount");
+    client.connect("New join");
+    emitMediaBootstrap(client, "new-join", "new-join-token");
+    expect(transports).toHaveLength(3);
+    expect(client.getParticipantId()).toBe("new-join");
+    client.disconnect("component-unmount");
+  });
   it("starts RoomGW and VoiceGW preparation in the same connect turn", () => {
     const client = new SFUClient("test-room");
     const calls: string[] = [];

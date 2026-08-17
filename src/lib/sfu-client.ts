@@ -86,6 +86,7 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
   private readonly nativeScreenShare: NativeScreenShareTransport;
   private roomSlug: string;
   private participantId: string | null = null;
+  private roomParticipantEstablished = false;
   private voiceToken: string | null = null;
   private iceServers: IceServer[] = [];
   private connectArgs: ConnectArguments | null = null;
@@ -99,6 +100,9 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
   private voiceReadyPromise: Promise<void> = Promise.resolve();
   private voiceReadyResolve: (() => void) | null = null;
   private voiceReadyReject: ((reason?: unknown) => void) | null = null;
+  private partyTracksReadyPromise: Promise<void> = Promise.resolve();
+  private partyTracksReadyResolve: (() => void) | null = null;
+  private partyTracksReadyReject: ((reason?: unknown) => void) | null = null;
   private nativeScreenReconnectRequired = false;
   private nativeScreenResetPromise: Promise<void> = Promise.resolve();
   private remoteSpeakingUntil = new Map<string, number>();
@@ -254,12 +258,30 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
   }
 
   private wireRoomEvents(): void {
+    this.roomGW.on("media-bootstrap", (event) => {
+      if (this.isLeaving) return;
+      if (
+        this.roomParticipantEstablished &&
+        this.participantId !== event.participantId
+      ) {
+        return;
+      }
+      if (this.isNewParticipantGeneration(event.participantId)) {
+        this.resetVoiceReadinessForParticipantChange();
+        this.resetMediaSessionsForParticipantChange();
+      }
+      this.participantId = event.participantId;
+      this.voiceToken = event.voiceToken;
+      this.ensurePartyTracksMedia(event.participantId, event.voiceToken);
+    });
+
     this.roomGW.on("media-ready", (event) => {
       if (this.isNewParticipantGeneration(event.participantId)) {
         this.resetVoiceReadinessForParticipantChange();
         this.resetMediaSessionsForParticipantChange();
       }
       this.participantId = event.participantId;
+      this.roomParticipantEstablished = true;
       this.applyIceServers(event.iceServers);
       this.voiceToken = event.voiceToken;
       this.ensurePartyTracksMedia(
@@ -284,6 +306,7 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
       }
 
       this.participantId = event.participantId;
+      this.roomParticipantEstablished = true;
       this.vad.refreshSpeakingState(true);
       this.applyIceServers(event.iceServers);
       this.voiceToken = event.voiceToken;
@@ -491,6 +514,26 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
     this.createVoiceReadinessBarrier();
   }
 
+  private createPartyTracksReadinessBarrier(): void {
+    this.partyTracksReadyPromise = new Promise<void>((resolve, reject) => {
+      this.partyTracksReadyResolve = resolve;
+      this.partyTracksReadyReject = reject;
+    });
+    void this.partyTracksReadyPromise.catch(() => undefined);
+  }
+
+  private resolvePartyTracksReadiness(): void {
+    this.partyTracksReadyResolve?.();
+    this.partyTracksReadyResolve = null;
+    this.partyTracksReadyReject = null;
+  }
+
+  private rejectPartyTracksReadiness(reason: Error): void {
+    this.partyTracksReadyReject?.(reason);
+    this.partyTracksReadyResolve = null;
+    this.partyTracksReadyReject = null;
+  }
+
   private resetNativeScreenForReconnect(): void {
     if (this.isLeaving || !this.nativeScreenShare.active) return;
     this.nativeScreenReconnectRequired = true;
@@ -502,6 +545,8 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
   }
 
   private resetMediaSessionsForParticipantChange(): void {
+    this.rejectPartyTracksReadiness(new Error("PARTICIPANT_CHANGED"));
+    this.createPartyTracksReadinessBarrier();
     this.resetNativeScreenForReconnect();
     this.disposePartyTracksMedia();
   }
@@ -528,7 +573,7 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
   private ensurePartyTracksMedia(
     participantId: string,
     voiceToken: string,
-    iceServers: IceServer[],
+    iceServers?: IceServer[],
   ): void {
     if (
       this.partyTracksMedia &&
@@ -536,7 +581,7 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
       this.partyTracksParticipantId === participantId
     ) {
       this.partyTracksTransport.updateVoiceToken(voiceToken);
-      this.partyTracksTransport.updateIceServers(iceServers);
+      if (iceServers) this.partyTracksTransport.updateIceServers(iceServers);
       return;
     }
 
@@ -602,6 +647,7 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
         },
       },
     );
+    this.resolvePartyTracksReadiness();
   }
 
   private disposePartyTracksMedia(): void {
@@ -701,6 +747,10 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
       | null,
     options?: { channelId?: string; serverId?: string },
   ): void {
+    if (this.isLeaving) {
+      this.participantId = null;
+      this.roomParticipantEstablished = false;
+    }
     this.isLeaving = false;
     this.resetLatencyTimeline();
     this.connectArgs = {
@@ -713,6 +763,7 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
       ...options,
     };
     this.createVoiceReadinessBarrier();
+    this.createPartyTracksReadinessBarrier();
     this.roomGW.connectRoom({
       name,
       username,
@@ -761,6 +812,7 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
     this.isLeaving = true;
     this.clearCredentialRefreshTimer();
     this.rejectVoiceReadiness(new Error("SFU client disconnected"));
+    this.rejectPartyTracksReadiness(new Error("SFU client disconnected"));
     this.roomGW.send({ op: VoiceOpcode.ClientDisconnect, d: {} });
     this.voiceGW.send({ op: VoiceOpcode.ClientDisconnect, d: {} });
     this.roomGW.disconnect();
@@ -920,7 +972,7 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
       trackCount: stream.getTracks().length,
       kinds: stream.getTracks().map((track) => track.kind),
     });
-    if (!this.partyTracksMedia) await this.voiceReadyPromise;
+    if (!this.partyTracksMedia) await this.partyTracksReadyPromise;
     if (!this.partyTracksMedia) {
       throw new Error("PartyTracks media is unavailable");
     }

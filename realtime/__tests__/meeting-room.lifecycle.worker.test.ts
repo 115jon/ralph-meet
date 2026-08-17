@@ -15,6 +15,7 @@ async function createAdmissionHeaders(
   roomName: string,
   audience: "global" | "room",
   subject = "user-test",
+  nonce = crypto.randomUUID(),
 ) {
   const roomSlug = audience === "global" ? "global-gateway" : roomName;
   const ticket = await issueSocketTicket(
@@ -22,7 +23,7 @@ async function createAdmissionHeaders(
       accessMode: "authenticated",
       audience,
       expiresAt: Date.now() + 60_000,
-      nonce: crypto.randomUUID(),
+      nonce,
       roomSlug,
       subject,
     },
@@ -72,13 +73,14 @@ async function createVoiceAdmissionHeaders(roomName: string) {
 async function openMeetingSocket(
   roomName = crypto.randomUUID(),
   subject = "user-test",
+  nonce = crypto.randomUUID(),
 ): Promise<WebSocket> {
   const roomId = env.MEETING_ROOM.idFromName(roomName);
   const room = env.MEETING_ROOM.get(roomId);
   const response = await room.fetch(
     `https://internal/api/channels/${roomName}/ws?v=1`,
     {
-      headers: await createAdmissionHeaders(roomName, "room", subject),
+      headers: await createAdmissionHeaders(roomName, "room", subject, nonce),
     },
   );
 
@@ -94,6 +96,33 @@ async function openMeetingSocket(
   await nextMessageWithOpcode(socket, 8);
   return socket;
 }
+
+it("reuses the room ticket nonce for MediaReady and Ready", async () => {
+  const roomName = crypto.randomUUID();
+  const reservedParticipantId = crypto.randomUUID();
+  const socket = await openMeetingSocket(
+    roomName,
+    "reserved-user",
+    reservedParticipantId,
+  );
+
+  socket.send(
+    JSON.stringify({
+      op: 0,
+      d: { name: "Reserved User" },
+    }),
+  );
+  const mediaReady = (await nextMessageWithOpcode(socket, 41)).d as {
+    participant_id: string;
+  };
+  const ready = (await nextMessageWithOpcode(socket, 2)).d as {
+    participant_id: string;
+  };
+
+  expect(mediaReady.participant_id).toBe(reservedParticipantId);
+  expect(ready.participant_id).toBe(reservedParticipantId);
+  socket.close(1000, "test complete");
+});
 
 async function nextJsonMessage(
   socket: WebSocket,

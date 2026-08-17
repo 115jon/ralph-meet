@@ -43,13 +43,16 @@ vi.mock("@/lib/rate-limit", () => ({
 }));
 
 import { verifySocketTicket } from "@/lib/voice/socket-ticket";
+import { verifyVoiceToken } from "../../../../realtime/voice-token";
 import { socketTicketOptions, socketTicketPost } from "../voice/socket-ticket";
 
 const ticketSecret = "test-realtime-ticket-secret";
+const callsSecret = "test-calls-secret";
 
 describe("socket ticket route", () => {
   beforeEach(() => {
     mocks.env = {
+      CALLS_APP_SECRET: callsSecret,
       REALTIME_TICKET_SECRET: ticketSecret,
     };
     mocks.requireAuth.mockReset();
@@ -92,11 +95,13 @@ describe("socket ticket route", () => {
     });
     const body = (await response.json()) as {
       expires_at: number;
+      media_bootstrap?: unknown;
       ticket: string;
     };
 
     expect(response.status).toBe(200);
     expect(response.headers.get("Cache-Control")).toBe("no-store");
+    expect(body.media_bootstrap).toBeUndefined();
     await expect(
       verifySocketTicket(body.ticket, ticketSecret, {
         accessMode: "authenticated",
@@ -107,6 +112,80 @@ describe("socket ticket route", () => {
     ).resolves.toMatchObject({
       ok: true,
       claims: { subject: "user-123" },
+    });
+  });
+
+  it("returns a room-only media bootstrap bound to the signed ticket nonce", async () => {
+    const first = vi.fn().mockResolvedValue({ channel_type: "voice" });
+    mocks.getDB.mockReturnValue({
+      prepare: vi.fn(() => ({ bind: vi.fn(() => ({ first })) })),
+    });
+
+    const response = await socketTicketPost({
+      request: new Request("https://meet.test/api/voice/socket-ticket", {
+        method: "POST",
+        body: JSON.stringify({
+          audience: "room",
+          channelId: "channel-1",
+          roomSlug: "voice-server-1-channel-1",
+          serverId: "server-1",
+        }),
+      }),
+    });
+    const body = (await response.json()) as {
+      expires_at: number;
+      media_bootstrap?: {
+        participant_id: string;
+        voice_token: string;
+      };
+      ticket: string;
+    };
+
+    expect(response.status).toBe(200);
+    expect(body.media_bootstrap).toBeDefined();
+    const verification = await verifySocketTicket(body.ticket, ticketSecret, {
+      accessMode: "authenticated",
+      audience: "room",
+      now: body.expires_at - 1,
+      roomSlug: "voice-server-1-channel-1",
+    });
+    expect(verification).toMatchObject({ ok: true });
+    if (!verification.ok || !body.media_bootstrap) {
+      throw new Error("Expected a verified room bootstrap");
+    }
+    expect(body.media_bootstrap.participant_id).toBe(verification.claims.nonce);
+    await expect(
+      verifyVoiceToken({
+        token: body.media_bootstrap.voice_token,
+        participantId: body.media_bootstrap.participant_id,
+        roomSlug: verification.claims.roomSlug,
+        secret: callsSecret,
+      }),
+    ).resolves.toMatchObject({ ok: true, subject: "user-123" });
+  });
+
+  it("fails closed when a room bootstrap cannot be signed", async () => {
+    mocks.env = { REALTIME_TICKET_SECRET: ticketSecret };
+    const first = vi.fn().mockResolvedValue({ channel_type: "voice" });
+    mocks.getDB.mockReturnValue({
+      prepare: vi.fn(() => ({ bind: vi.fn(() => ({ first })) })),
+    });
+
+    const response = await socketTicketPost({
+      request: new Request("https://meet.test/api/voice/socket-ticket", {
+        method: "POST",
+        body: JSON.stringify({
+          audience: "room",
+          channelId: "channel-1",
+          roomSlug: "voice-server-1-channel-1",
+          serverId: "server-1",
+        }),
+      }),
+    });
+
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toMatchObject({
+      code: "CALLS_APP_SECRET_MISSING",
     });
   });
 
@@ -144,10 +223,12 @@ describe("socket ticket route", () => {
     });
     const body = (await response.json()) as {
       expires_at: number;
+      media_bootstrap?: unknown;
       ticket: string;
     };
 
     expect(response.status).toBe(200);
+    expect(body.media_bootstrap).toBeUndefined();
     await expect(
       verifySocketTicket(body.ticket, ticketSecret, {
         accessMode: "authenticated",
@@ -186,6 +267,7 @@ describe("socket ticket route", () => {
 
   it("uses a stable anonymous subject for configured public-demo rooms", async () => {
     mocks.env = {
+      CALLS_APP_SECRET: callsSecret,
       REALTIME_TICKET_SECRET: ticketSecret,
     };
     const createRequest = (cookie?: string) =>

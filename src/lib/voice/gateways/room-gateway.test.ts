@@ -3,10 +3,12 @@ import { VoiceOpcode } from "@/lib/types";
 
 const mocks = vi.hoisted(() => ({
   fetchSocketProtocols: vi.fn(),
+  fetchSocketTicketBundle: vi.fn(),
 }));
 
 vi.mock("@/lib/voice/socket-ticket-client", () => ({
   fetchSocketProtocols: mocks.fetchSocketProtocols,
+  fetchSocketTicketBundle: mocks.fetchSocketTicketBundle,
 }));
 
 import { RoomGateway } from "./room-gateway";
@@ -50,14 +52,116 @@ function sentMessages(socket: TestWebSocket) {
   );
 }
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((next) => {
+    resolve = next;
+  });
+  return { promise, resolve };
+}
+
 describe("RoomGateway", () => {
   beforeEach(() => {
     TestWebSocket.instances = [];
+    mocks.fetchSocketProtocols.mockReset();
+    mocks.fetchSocketTicketBundle.mockReset();
     mocks.fetchSocketProtocols.mockResolvedValue([
       "ralph.realtime.v1",
       "ralph.ticket.test",
     ]);
+    mocks.fetchSocketTicketBundle.mockResolvedValue({
+      protocols: ["ralph.realtime.v1", "ralph.ticket.test"],
+    });
     vi.stubGlobal("WebSocket", TestWebSocket);
+  });
+
+  it("emits media bootstrap before constructing the room WebSocket", async () => {
+    const ticket = deferred<{
+      mediaBootstrap: { participantId: string; voiceToken: string };
+      protocols: string[];
+    }>();
+    mocks.fetchSocketTicketBundle.mockReturnValue(ticket.promise);
+    const gateway = new RoomGateway();
+    const constructionCounts: number[] = [];
+    const onBootstrap = vi.fn(() => {
+      constructionCounts.push(TestWebSocket.instances.length);
+    });
+    gateway.on("media-bootstrap", onBootstrap);
+
+    gateway.connectRoom({
+      name: "Test User",
+      clerkUserId: "user-1",
+      roomSlug: "voice-server-channel",
+      wsUrlGenerator: (path) => `ws://meet.test${path}`,
+    });
+    expect(TestWebSocket.instances).toHaveLength(0);
+    ticket.resolve({
+      mediaBootstrap: {
+        participantId: "reserved-participant",
+        voiceToken: "bootstrap-token",
+      },
+      protocols: ["ralph.realtime.v1", "ralph.ticket.test"],
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(onBootstrap).toHaveBeenCalledWith({
+      participantId: "reserved-participant",
+      voiceToken: "bootstrap-token",
+    });
+    expect(constructionCounts).toEqual([0]);
+    expect(TestWebSocket.instances).toHaveLength(1);
+    gateway.disconnect();
+  });
+
+  it("suppresses bootstrap from a stale ticket fetch generation", async () => {
+    const first = deferred<{
+      mediaBootstrap: { participantId: string; voiceToken: string };
+      protocols: string[];
+    }>();
+    const second = deferred<{
+      mediaBootstrap: { participantId: string; voiceToken: string };
+      protocols: string[];
+    }>();
+    mocks.fetchSocketTicketBundle
+      .mockReturnValueOnce(first.promise)
+      .mockReturnValueOnce(second.promise);
+    const gateway = new RoomGateway();
+    const onBootstrap = vi.fn();
+    gateway.on("media-bootstrap", onBootstrap);
+
+    gateway.connectRoom({
+      name: "First",
+      roomSlug: "voice-first",
+      wsUrlGenerator: (path) => `ws://meet.test${path}`,
+    });
+    gateway.connectRoom({
+      name: "Second",
+      roomSlug: "voice-second",
+      wsUrlGenerator: (path) => `ws://meet.test${path}`,
+    });
+    first.resolve({
+      mediaBootstrap: { participantId: "stale", voiceToken: "stale-token" },
+      protocols: ["ralph.realtime.v1", "ralph.ticket.stale"],
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(onBootstrap).not.toHaveBeenCalled();
+
+    second.resolve({
+      mediaBootstrap: { participantId: "current", voiceToken: "fresh-token" },
+      protocols: ["ralph.realtime.v1", "ralph.ticket.current"],
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(onBootstrap).toHaveBeenCalledOnce();
+    expect(onBootstrap).toHaveBeenCalledWith({
+      participantId: "current",
+      voiceToken: "fresh-token",
+    });
+    expect(mocks.fetchSocketTicketBundle).toHaveBeenCalledTimes(2);
+    expect(TestWebSocket.instances).toHaveLength(1);
+    expect(TestWebSocket.instances[0]?.url).toBe(
+      "ws://meet.test/api/channels/voice-second/ws?v=1",
+    );
+    gateway.disconnect();
   });
 
   it("advertises voice-state delta support on initial and fallback Identify", async () => {
