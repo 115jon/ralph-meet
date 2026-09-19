@@ -67,6 +67,21 @@ next-env.d.ts
 .agents/
 AGENTS.md
 
+# local agent / skill scratch — not product source
+.opencode/
+.commandcode/
+.impeccable/
+skills-lock.json
+
+# Windows accidental device-name file from shell redirects
+NUL
+
+# generated image scratch
+/tmp/
+
+# Silero VAD wasm/onnx blobs (same class as /public/mediapipe/)
+/public/vad/
+
 # tauri / desktop
 desktop/dist
 desktop/src-tauri/target/
