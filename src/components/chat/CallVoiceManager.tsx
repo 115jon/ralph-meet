@@ -90,6 +90,7 @@ function ActiveCallSession({
       focusedId: voice.focusedId,
       isMicOn: voice.isMicOn,
       isDeafened: voice.isDeafened,
+      isPreviewHidden: voice.isPreviewHidden,
       spatialAudioState: voice.spatialAudioState,
     });
   }, [
@@ -113,6 +114,7 @@ function ActiveCallSession({
     voice.focusedId,
     voice.isMicOn,
     voice.isDeafened,
+    voice.isPreviewHidden,
     voice.spatialAudioState,
   ]);
 
@@ -127,6 +129,7 @@ function ActiveCallSession({
       onToggleStreamAudio: voice.onToggleStreamAudio,
       onToggleWatch: voice.onToggleWatch,
       setFocusedId: voice.setFocusedId,
+      togglePreviewHidden: voice.togglePreviewHidden,
       updateSharedSpatialAudioState: voice.updateSharedSpatialAudioState,
     });
   }, [
@@ -138,6 +141,7 @@ function ActiveCallSession({
     voice.onToggleStreamAudio,
     voice.onToggleWatch,
     voice.setFocusedId,
+    voice.togglePreviewHidden,
     voice.updateSharedSpatialAudioState,
   ]);
 

@@ -91,6 +91,18 @@ describe("ParticipantCard — preview-paused placeholder (Req 5.2)", () => {
     // The placeholder is local-only (isScreen && item.isLocal && isPreviewHidden).
     expect(markup).not.toContain("Preview paused");
   });
+
+  it("keeps the preview toggle above the tile activation layer", () => {
+    const markup = renderCard(makeLocalScreenItem(), {
+      isPreviewHidden: false,
+      togglePreviewHidden: () => {},
+    });
+
+    expect(markup).toMatch(
+      /aria-label="Open participant tile for You"[^>]*class="[^"]*z-10/,
+    );
+    expect(markup).toMatch(/data-preview-toggle="true"[^>]*class="[^"]*z-50/);
+  });
 });
 
 describe("togglePreviewHidden resume flow (Req 5.3)", () => {

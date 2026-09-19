@@ -1,7 +1,7 @@
 import { Slider } from "@/components/ContextMenu/ContextMenuItems";
 import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
 import { cn } from "@/lib/utils";
-import { EyeOff, Headphones, MicOff, Volume2 } from "lucide-react";
+import { Eye, EyeOff, Headphones, MicOff, Volume2 } from "lucide-react";
 
 import { extractDominantColor } from "@/lib/color-utils";
 import { getAuthAssetUrl } from "@/lib/platform";
@@ -127,7 +127,10 @@ export const VoiceGrid = React.memo(
         hasLiveAudioTrack(focusedItem.stream);
 
       return (
-        <div className="w-full h-full flex flex-col items-center justify-center bg-rm-bg-primary overflow-hidden relative group/stage cursor-pointer hover:ring-2 hover:ring-rm-text/20 transition-all">
+        <div
+          data-focused-stage="true"
+          className="relative flex h-full w-full flex-col items-center justify-center overflow-hidden bg-rm-bg-primary group/stage cursor-pointer transition-shadow hover:ring-2 hover:ring-rm-text/20"
+        >
           <StickerReactionsOverlay sfu={voiceActions?.sfu} />
           <button
             type="button"
@@ -215,6 +218,42 @@ export const VoiceGrid = React.memo(
               </div>
             </div>
           )}
+
+          {isFocusedScreen &&
+            focusedItem.isLocal &&
+            voiceActions?.togglePreviewHidden && (
+              <div
+                data-preview-toggle="true"
+                className="pointer-events-none absolute top-24 left-4 z-50 opacity-0 transition-opacity group-hover/stage:pointer-events-auto group-hover/stage:opacity-100 group-focus-within/stage:pointer-events-auto group-focus-within/stage:opacity-100 md:left-6"
+              >
+                <button
+                  type="button"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    voiceActions.togglePreviewHidden?.();
+                  }}
+                  title={
+                    isPreviewHidden
+                      ? "Resume preview"
+                      : "Pause preview (saves resources)"
+                  }
+                  aria-label={
+                    isPreviewHidden ? "Resume preview" : "Pause preview"
+                  }
+                  className="flex items-center gap-1.5 rounded-lg border border-white/15 bg-black/55 px-2.5 py-1.5 text-[10px] font-bold text-white/70 shadow-xl backdrop-blur-md transition-colors hover:border-white/30 hover:text-white active:scale-[0.96]"
+                >
+                  {isPreviewHidden ? (
+                    <>
+                      <Eye size={12} /> <span>Resume</span>
+                    </>
+                  ) : (
+                    <>
+                      <EyeOff size={12} /> <span>Pause</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            )}
 
           {shouldRenderStreamMenu && renderedContextMenu && (
             <Suspense fallback={null}>

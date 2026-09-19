@@ -138,7 +138,7 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
             setContextMenu({ x: e.clientX, y: e.clientY, isMini: false });
           }}
           aria-label={`Open participant tile for ${item.name}`}
-          className="absolute inset-0 z-[35] rounded-2xl outline-none"
+          className="absolute inset-0 z-10 rounded-2xl outline-none"
         />
         <StickerReactionsOverlay
           sfu={voiceActions?.sfu}
@@ -153,7 +153,7 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
         {/* Background Effect */}
         {item.avatar && (
           <div
-            className="absolute inset-0 z-0 transition-colors duration-500"
+            className="pointer-events-none absolute inset-0 z-0 transition-colors duration-500"
             style={{
               backgroundColor:
                 (isCamera || isScreen) && shouldRenderVideo
@@ -167,8 +167,8 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
         {shouldRenderVideo && (
           <div
             className={cn(
-              "absolute inset-0 z-10 transition-opacity duration-500",
-              !(isCamera || isScreen) && "opacity-0 pointer-events-none",
+              "pointer-events-none absolute inset-0 z-10 transition-opacity duration-500",
+              !(isCamera || isScreen) && "opacity-0",
             )}
           >
             <VideoPlayer
@@ -188,7 +188,7 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
         )}
 
         {shouldRenderThumbnailPoster && (
-          <div className="absolute inset-0 z-10">
+          <div className="pointer-events-none absolute inset-0 z-10">
             <img
               src={streamThumbnails[item.userId]}
               alt={`${item.name} stream thumbnail`}
@@ -206,7 +206,7 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
 
         {/* Preview Paused Placeholder (local screen share hidden for performance) */}
         {isPreviewHidden && (
-          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-black/70 backdrop-blur-sm gap-2">
+          <div className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 bg-black/70 backdrop-blur-sm">
             <EyeOff size={22} className="text-white/50" />
             <span className="text-[10px] font-bold text-white/40 uppercase tracking-widest">
               Preview paused
@@ -259,7 +259,7 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
           !shouldShowWatchPrompt &&
           !isPreviewHidden &&
           !shouldRenderThumbnailPoster && (
-            <div className="absolute inset-0 z-30 flex items-center justify-center p-4">
+            <div className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center p-4">
               {item.avatar ? (
                 <div className="h-20 w-20 overflow-visible rounded-full border-4 border-black/20 drop-shadow-2xl sm:h-28 sm:w-28">
                   <AvatarImage
@@ -313,13 +313,13 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
         )}
 
         {shouldShowWatchers && (
-          <div className="absolute right-2 top-2 z-40 max-w-[75%]">
+          <div className="pointer-events-none absolute right-2 top-2 z-40 max-w-[75%]">
             <StreamWatcherList watchers={streamWatchers} />
           </div>
         )}
 
         {/* Status Indicators & Labels */}
-        <div className="absolute bottom-2 left-2 z-30 flex items-center gap-2">
+        <div className="pointer-events-none absolute bottom-2 left-2 z-30 flex items-center gap-2">
           {isScreen ? (
             <div className="bg-rm-bg-primary/60 backdrop-blur-md px-2.5 py-1 rounded-lg border border-rm-border shadow-lg">
               <span className="text-[10px] font-bold text-rm-text truncate max-w-[120px]">
@@ -367,8 +367,12 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
 
         {/* Hide/Show Preview toggle — only on local screen tile */}
         {isScreen && item.isLocal && voiceActions?.togglePreviewHidden && (
-          <div className="absolute top-2 left-2 z-40 opacity-0 group-hover:opacity-100 transition-opacity">
+          <div
+            data-preview-toggle="true"
+            className="pointer-events-none absolute top-2 left-2 z-50 opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100"
+          >
             <button
+              type="button"
               onClick={(e) => {
                 e.stopPropagation();
                 voiceActions.togglePreviewHidden?.();
@@ -378,7 +382,8 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
                   ? "Resume preview"
                   : "Pause preview (saves resources)"
               }
-              className="flex items-center gap-1.5 bg-rm-bg-primary/70 backdrop-blur-md border border-rm-border px-2 py-1 rounded-lg text-[9px] font-bold text-rm-text-muted hover:text-rm-text transition-all shadow-lg"
+              aria-label={isPreviewHidden ? "Resume preview" : "Pause preview"}
+              className="flex items-center gap-1.5 rounded-lg border border-rm-border bg-rm-bg-primary/70 px-2 py-1 text-[9px] font-bold text-rm-text-muted shadow-lg backdrop-blur-md transition-colors hover:text-rm-text active:scale-[0.96]"
             >
               {isPreviewHidden ? (
                 <>
@@ -395,7 +400,7 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
 
         {/* Right status (Ellipsis Bottom Right) */}
         {!isTray && (
-          <div className="absolute bottom-2 right-2 z-40 opacity-0 group-hover:opacity-100 transition-opacity">
+          <div className="pointer-events-none absolute bottom-2 right-2 z-50 opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100">
             <IconButton
               icon={MoreHorizontal}
               size="xs"
@@ -408,7 +413,7 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
           </div>
         )}
         {isTray && (
-          <div className="absolute top-2 right-2 z-30 opacity-0 group-hover:opacity-100 transition-opacity">
+          <div className="pointer-events-none absolute top-2 right-2 z-30 opacity-0 transition-opacity group-hover:opacity-100">
             <div className="bg-rm-bg-primary/60 backdrop-blur-md p-1 rounded-lg border border-rm-border">
               <ChevronDown size={10} className="text-rm-text-muted" />
             </div>

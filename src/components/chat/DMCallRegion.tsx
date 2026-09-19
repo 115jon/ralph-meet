@@ -466,6 +466,8 @@ export function DMCallRegion({ channelId }: { channelId: string }) {
                 isDeafened: isDeafened,
                 onToggleDeafen: callVoice.toggleDeafen || (() => {}),
                 onChangeSource: () => setIsScreenModalOpen(true),
+                togglePreviewHidden: callVoice.togglePreviewHidden || undefined,
+                isPreviewHidden: callVoice.isPreviewHidden,
                 sfu: null,
               }}
             />

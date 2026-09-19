@@ -7,7 +7,7 @@ export const StreamLoadingIndicator = ({
 }) => (
   <div
     className={cn(
-      "absolute inset-0 z-30 flex items-center justify-center bg-[#111214]",
+      "pointer-events-none absolute inset-0 z-30 flex items-center justify-center bg-[#111214]",
       className,
     )}
   >

@@ -58,6 +58,8 @@ export interface CallVoiceState {
   isMicOn: boolean;
   /** Whether the local user is deafened */
   isDeafened: boolean;
+  /** Whether the local screen-share preview is hidden */
+  isPreviewHidden: boolean;
 
   // ── Callbacks (set by CallVoiceManager) ──────────────────────────────
   handleLeave: (() => void | Promise<void>) | null;
@@ -68,6 +70,7 @@ export interface CallVoiceState {
   onToggleStreamAudio: (() => void) | null;
   onToggleWatch: ((streamId: string) => void) | null;
   setFocusedId: ((id: string | null) => void) | null;
+  togglePreviewHidden: (() => void | Promise<void>) | null;
   updateSharedSpatialAudioState:
     | ((state: SharedSpatialAudioState) => void)
     | null;
@@ -99,6 +102,7 @@ const initialState = {
   spatialAudioState: null as SharedSpatialAudioState | null,
   isMicOn: true,
   isDeafened: false,
+  isPreviewHidden: false,
   handleLeave: null as (() => void) | null,
   toggleMic: null as (() => void) | null,
   toggleDeafen: null as (() => void) | null,
@@ -107,6 +111,7 @@ const initialState = {
   onToggleStreamAudio: null as (() => void) | null,
   onToggleWatch: null as ((streamId: string) => void) | null,
   setFocusedId: null as ((id: string | null) => void) | null,
+  togglePreviewHidden: null as (() => void | Promise<void>) | null,
   updateSharedSpatialAudioState: null as
     | ((state: SharedSpatialAudioState) => void)
     | null,
