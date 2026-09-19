@@ -1,5 +1,9 @@
 import type { VoiceSessionStreamState } from "@/components/chat/VoiceChannelView";
-import { getDesktopToken } from "@/lib/desktop-auth";
+import {
+  getDesktopAuthHandoffToken,
+  getDesktopToken,
+  subscribeDesktopTokenChanges,
+} from "@/lib/desktop-auth";
 import { isTauri } from "@/lib/platform";
 import { useChatActions, useChatStore } from "@/stores/chat-store";
 import { useCallStore } from "@/stores/useCallStore";
@@ -215,8 +219,8 @@ export function useChatPageLogic() {
     uiRef.current = ui;
   }, [ui]);
 
-  const [desktopReady, setDesktopReady] = useState(
-    !isTauri() || !!getDesktopToken(),
+  const [authReady, setAuthReady] = useState(
+    () => !!getDesktopAuthHandoffToken(),
   );
 
   const getRestorableChannelId = useCallback(
@@ -236,23 +240,31 @@ export function useChatPageLogic() {
   );
 
   useEffect(() => {
-    if (!isTauri() || desktopReady) return;
+    if (authReady) return;
+
     const check = () => {
-      if (getDesktopToken()) setDesktopReady(true);
+      if (getDesktopAuthHandoffToken() || (isTauri() && getDesktopToken())) {
+        setAuthReady(true);
+      }
     };
+    check();
     const interval = setInterval(check, 200);
-    return () => clearInterval(interval);
-  }, [desktopReady]);
+    const unsubscribe = subscribeDesktopTokenChanges(check);
+    return () => {
+      clearInterval(interval);
+      unsubscribe();
+    };
+  }, [authReady]);
 
   useEffect(() => {
-    if (!desktopReady) return;
+    if (!authReady) return;
     bootstrapChat({
       expectedUserId: user?.id,
       deferNonCritical: slug[0] !== "@me",
     }).then(() => {
       setDmChannelsLoaded(true);
     });
-  }, [desktopReady, bootstrapChat, slug, user?.id]);
+  }, [authReady, bootstrapChat, slug, user?.id]);
 
   useEffect(() => {
     resetReadStateTracking(user?.id ?? null);

@@ -207,15 +207,12 @@ export function useKovaAuthTokenSync(
   isLoaded: boolean,
   isSignedIn: boolean,
 ): { tokenReady: boolean } {
-  const isTauri = isTauriRuntime();
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const [tokenReady, setTokenReady] = useState(() =>
-    isTauri ? !!getDesktopToken() : true,
+  const [tokenReady, setTokenReady] = useState(
+    () => !!getDesktopAuthHandoffToken(),
   );
 
   const sync = useCallback(async () => {
-    if (!isTauri) return;
-
     try {
       const token = await getToken();
       if (DEBUG_DESKTOP_AUTH) {
@@ -231,13 +228,6 @@ export function useKovaAuthTokenSync(
           setDesktopAuthSession(token);
         }
         setTokenReady(true);
-      } else if (isSignedIn) {
-        setTokenReady(!!getDesktopAuthHandoffToken());
-      } else if (isLoaded) {
-        // A desktop deep-link session is bearer-token based. The Ralph Auth
-        // provider may still report signed-out because it has no browser cookie,
-        // so passive sync must not erase a valid token received from the OS link.
-        setTokenReady(!!getDesktopAuthHandoffToken());
       } else {
         setTokenReady(!!getDesktopAuthHandoffToken());
       }
@@ -245,18 +235,14 @@ export function useKovaAuthTokenSync(
       log.warn("Token sync failed", error);
       setTokenReady(!!getDesktopAuthHandoffToken());
     }
-  }, [getToken, isLoaded, isSignedIn, isTauri]);
+  }, [getToken, isLoaded, isSignedIn]);
 
   useEffect(() => {
-    if (!isTauri) return;
-
     registerTokenRefresher(getToken);
     return () => registerTokenRefresher(() => Promise.resolve(null));
-  }, [getToken, isTauri]);
+  }, [getToken]);
 
   useEffect(() => {
-    if (!isTauri) return;
-
     const timeout = setTimeout(() => void sync(), 0);
     intervalRef.current = setInterval(() => void sync(), 50_000);
 
@@ -267,7 +253,7 @@ export function useKovaAuthTokenSync(
         intervalRef.current = null;
       }
     };
-  }, [sync, isTauri]);
+  }, [sync]);
 
   return { tokenReady };
 }

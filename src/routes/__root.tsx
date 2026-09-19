@@ -112,7 +112,6 @@ function RootComponent() {
     // Auth handoff storage is intentionally read after the stable server snapshot.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setSessionToken(getDesktopAuthHandoffToken() ?? undefined);
-    if (!isTauri()) return;
     return subscribeDesktopTokenChanges((token) => {
       setSessionToken(token ?? undefined);
     });
@@ -134,16 +133,15 @@ function RootComponent() {
       initialSessionToken={sessionToken}
       onSessionTokenChange={(token: string | null) => {
         setSessionToken(token ?? undefined);
-        if (!isTauri()) return;
-
         if (DEBUG_DESKTOP_AUTH) {
           authLog.info("KovaAuthProvider session token changed", {
             hasToken: !!token,
             tokenLength: token?.length ?? 0,
           });
         }
-        if (token && !getDesktopAuthHandoffToken())
+        if (token && !getDesktopAuthHandoffToken()) {
           setDesktopAuthSession(token);
+        }
       }}
     >
       <KovaMeetTokenBridge />
