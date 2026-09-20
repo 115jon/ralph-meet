@@ -11,7 +11,9 @@ import {
 import { getDisplayInitial } from "@/lib/display-name";
 import { useContextMenu } from "@/hooks/useContextMenu";
 import { useCustomEmojiLookup } from "@/hooks/useCustomEmojiLookup";
+import { useShiftPressed } from "@/hooks/useShiftPressed";
 import { useUserResolution } from "@/hooks/useUserResolution";
+import { isMessageListScrolling } from "./message-list-scroll";
 import { getAttachmentUrl } from "@/lib/attachment-url";
 import {
   useClientDateFormatter,
@@ -345,7 +347,8 @@ const MessageItem = memo(
     const [toolbarQuickReactions, setToolbarQuickReactions] = useState<
       EmojiRecentItem[]
     >([]);
-    const [isShiftPressed, setIsShiftPressed] = useState(false);
+    const isShiftPressed = useShiftPressed();
+    const [interactive, setInteractive] = useState(false);
     const [authorNameEl, setAuthorNameEl] = useState<HTMLElement | null>(null);
     const rootRef = useRef<HTMLDivElement>(null);
     const visibilityReportedRef = useRef(false);
@@ -413,32 +416,19 @@ const MessageItem = memo(
         window.removeEventListener(`edit-message-${message.id}`, handler);
     }, [message.id, message.content, previewOnly]);
 
-    useEffect(() => {
-      if (previewOnly) return;
-
-      const updateShiftState = (event: KeyboardEvent) => {
-        setIsShiftPressed(event.shiftKey);
-      };
-      const resetShiftState = () => setIsShiftPressed(false);
-
-      window.addEventListener("keydown", updateShiftState);
-      window.addEventListener("keyup", updateShiftState);
-      window.addEventListener("blur", resetShiftState);
-      return () => {
-        window.removeEventListener("keydown", updateShiftState);
-        window.removeEventListener("keyup", updateShiftState);
-        window.removeEventListener("blur", resetShiftState);
-      };
-    }, [previewOnly]);
-
     const onHeightChangeRef = useRef(onHeightChange);
     useEffect(() => {
       onHeightChangeRef.current = onHeightChange;
     }, [onHeightChange]);
 
+    const hasDynamicMedia =
+      (message.attachments?.length ?? 0) > 0 ||
+      (message.embeds?.length ?? 0) > 0;
+
     useEffect(() => {
       const el = rootRef.current;
-      if (!el || !onHeightChange) return;
+      if (!el || !onHeightChange || !hasDynamicMedia) return;
+      if (isMessageListScrolling()) return;
 
       let previousHeight = el.clientHeight;
 
@@ -454,10 +444,11 @@ const MessageItem = memo(
       return () => {
         observer.disconnect();
       };
-    }, [onHeightChange]);
+    }, [hasDynamicMedia, onHeightChange]);
 
     useEffect(() => {
       if (!onVisible || visibilityReportedRef.current) return;
+      if (isMessageListScrolling()) return;
 
       const el = rootRef.current;
       if (!el) return;
@@ -945,12 +936,14 @@ const MessageItem = memo(
         ref={rootRef}
         id={id}
         className={cn(
-          "group relative flex flex-col transition-all duration-100",
+          "group relative flex flex-col transition-colors duration-100",
           !previewOnly && "hover:bg-rm-bg-hover",
           showHeader && !previewOnly && "mt-4",
           message.pending && "opacity-50",
         )}
         onContextMenu={previewOnly ? undefined : handleContextMenu}
+        onMouseEnter={previewOnly ? undefined : () => setInteractive(true)}
+        onFocusCapture={previewOnly ? undefined : () => setInteractive(true)}
       >
         {/* Reply connector */}
         {message.reply_to && !hideReplyConnector && (
@@ -1341,13 +1334,15 @@ const MessageItem = memo(
                           setShowReactionEmojiPicker((current) => !current);
                         }}
                       />
-                      <EmojiPicker
-                        open={showReactionEmojiPicker}
-                        placement="right"
-                        onSelect={handleEmojiPickerSelect}
-                        onClose={closeInlineEmojiPicker}
-                        markerRef={reactionEmojiBtnRef}
-                      />
+                      {showReactionEmojiPicker && (
+                        <EmojiPicker
+                          open={showReactionEmojiPicker}
+                          placement="right"
+                          onSelect={handleEmojiPickerSelect}
+                          onClose={closeInlineEmojiPicker}
+                          markerRef={reactionEmojiBtnRef}
+                        />
+                      )}
                     </div>
                   )}
                 </div>
@@ -1369,7 +1364,7 @@ const MessageItem = memo(
           </div>
 
           {/* Hover action toolbar */}
-          {!previewOnly && !message.pending && !editing && (
+          {!previewOnly && interactive && !message.pending && !editing && (
             <TooltipProvider delayDuration={120}>
               <div
                 className={cn(
@@ -1454,13 +1449,15 @@ const MessageItem = memo(
                           setShowEmojiPicker((current) => !current);
                         }}
                       />
-                      <EmojiPicker
-                        open={showEmojiPicker}
-                        placement="left"
-                        onSelect={handleEmojiPickerSelect}
-                        onClose={closeToolbarEmojiPicker}
-                        markerRef={emojiBtnRef}
-                      />
+                      {showEmojiPicker && (
+                        <EmojiPicker
+                          open={showEmojiPicker}
+                          placement="left"
+                          onSelect={handleEmojiPickerSelect}
+                          onClose={closeToolbarEmojiPicker}
+                          markerRef={emojiBtnRef}
+                        />
+                      )}
                     </div>
                     {isOwnMessage && (
                       <IconButton
@@ -1518,13 +1515,15 @@ const MessageItem = memo(
                           setShowEmojiPicker((current) => !current);
                         }}
                       />
-                      <EmojiPicker
-                        open={showEmojiPicker}
-                        placement="left"
-                        onSelect={handleEmojiPickerSelect}
-                        onClose={closeToolbarEmojiPicker}
-                        markerRef={emojiBtnRef}
-                      />
+                      {showEmojiPicker && (
+                        <EmojiPicker
+                          open={showEmojiPicker}
+                          placement="left"
+                          onSelect={handleEmojiPickerSelect}
+                          onClose={closeToolbarEmojiPicker}
+                          markerRef={emojiBtnRef}
+                        />
+                      )}
                     </div>
                     <IconButton
                       icon={isOwnMessage ? Edit2 : CornerUpLeft}
@@ -1581,7 +1580,7 @@ const MessageItem = memo(
 
         {!previewOnly && confirmation}
 
-        {!previewOnly && (
+        {!previewOnly && showReactionDetails && (
           <ReactionDetailsModal
             message={message}
             open={showReactionDetails}
@@ -1593,22 +1592,20 @@ const MessageItem = memo(
           />
         )}
 
-        {!previewOnly && (
+        {!previewOnly && contextEmojiPickerAnchor && (
           <>
-            {contextEmojiPickerAnchor && (
-              <span
-                ref={contextEmojiPickerAnchorRef}
-                aria-hidden="true"
-                className="fixed h-0 w-0"
-                style={{
-                  left: contextEmojiPickerAnchor.x,
-                  top: contextEmojiPickerAnchor.y,
-                  pointerEvents: "none",
-                }}
-              />
-            )}
+            <span
+              ref={contextEmojiPickerAnchorRef}
+              aria-hidden="true"
+              className="fixed h-0 w-0"
+              style={{
+                left: contextEmojiPickerAnchor.x,
+                top: contextEmojiPickerAnchor.y,
+                pointerEvents: "none",
+              }}
+            />
             <EmojiPicker
-              open={contextEmojiPickerAnchor !== null}
+              open
               placement="bottom-end"
               markerRef={contextEmojiPickerAnchorRef}
               onSelect={handleEmojiPickerSelect}
@@ -1617,7 +1614,7 @@ const MessageItem = memo(
           </>
         )}
 
-        {!previewOnly && (
+        {!previewOnly && showShareModal && (
           <MessageShareModal
             open={showShareModal}
             message={message}
@@ -1635,7 +1632,7 @@ const MessageItem = memo(
           />
         )}
 
-        {!previewOnly && (
+        {!previewOnly && showDeleteModal && (
           <DeleteMessageModal
             open={showDeleteModal}
             message={message}

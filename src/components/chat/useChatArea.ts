@@ -46,7 +46,6 @@ export function useChatArea({
       activeServerId: s.activeServerId,
       activeChannelId: s.activeChannelId,
       onlineUsers: s.onlineUsers,
-      scrollPositions: s.scrollPositions,
       jumpAnchors: s.jumpAnchors,
       readStates: s.readStates,
     })),
@@ -246,6 +245,10 @@ export function useChatArea({
   const isAtBottomRef = useRef(true);
   const isUnmountingRef = useRef(false);
   const lastStartIndexRef = useRef<number | null>(null);
+  const lastPersistedScrollIdRef = useRef<string | null>(null);
+  const scrollPersistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
   const isDocumentHiddenRef = useRef(
     typeof document !== "undefined"
       ? !document.hasFocus() || document.hidden
@@ -342,6 +345,33 @@ export function useChatArea({
     };
   }, []);
 
+  useEffect(() => {
+    lastPersistedScrollIdRef.current = null;
+    lastStartIndexRef.current = null;
+    return () => {
+      if (scrollPersistTimerRef.current != null) {
+        clearTimeout(scrollPersistTimerRef.current);
+        scrollPersistTimerRef.current = null;
+      }
+    };
+  }, [channelId]);
+
+  const flushScrollPosition = useCallback(() => {
+    if (scrollPersistTimerRef.current != null) {
+      clearTimeout(scrollPersistTimerRef.current);
+      scrollPersistTimerRef.current = null;
+    }
+    if (isUnmountingRef.current || !channelId) return;
+    if (isDetached && useChatStore.getState().jumpAnchors[channelId]) return;
+    if (isAtBottomRef.current) return;
+    const startIndex = lastStartIndexRef.current;
+    if (startIndex == null) return;
+    const msg = useChatStore.getState().messages[startIndex];
+    if (!msg || msg.id === lastPersistedScrollIdRef.current) return;
+    lastPersistedScrollIdRef.current = msg.id;
+    dispatch({ type: "SET_SCROLL_POSITION", channelId, messageId: msg.id });
+  }, [channelId, dispatch, isDetached]);
+
   const handleAtBottom = useCallback(
     (isAtBottom: boolean) => {
       if (isUnmountingRef.current) return;
@@ -350,7 +380,9 @@ export function useChatArea({
 
       // Only lock scroll position in detached mode with an active jump anchor.
       // Scroll-up detached mode (no jump anchor) saves positions normally.
-      const hasJumpAnchor = !!(channelId && state.jumpAnchors[channelId]);
+      const hasJumpAnchor = !!(
+        channelId && useChatStore.getState().jumpAnchors[channelId]
+      );
       const lockPosition = isDetached && hasJumpAnchor;
 
       debugChatScroll("handleAtBottom", {
@@ -363,6 +395,10 @@ export function useChatArea({
       });
 
       if (isAtBottom && channelId && !isDetached) {
+        if (scrollPersistTimerRef.current != null) {
+          clearTimeout(scrollPersistTimerRef.current);
+          scrollPersistTimerRef.current = null;
+        }
         // Don't mark as read while tab is hidden — keep readState stale
         // so the separator/banner can identify unreads correctly.
         if (!isDocumentHiddenRef.current) {
@@ -370,6 +406,7 @@ export function useChatArea({
           // Clear the banner but keep the separator line
           setLocalState({ unreadCount: 0, unreadSince: null });
         }
+        lastPersistedScrollIdRef.current = "BOTTOM";
         dispatch({
           type: "SET_SCROLL_POSITION",
           channelId,
@@ -378,8 +415,10 @@ export function useChatArea({
         dispatch({ type: "CLEAR_JUMP_ANCHOR", channelId });
       } else if (!isAtBottom && channelId && !lockPosition) {
         if (lastStartIndexRef.current !== null) {
-          const msg = state.messages[lastStartIndexRef.current];
+          const msg =
+            useChatStore.getState().messages[lastStartIndexRef.current];
           if (msg) {
+            lastPersistedScrollIdRef.current = msg.id;
             dispatch({
               type: "SET_SCROLL_POSITION",
               channelId,
@@ -389,15 +428,7 @@ export function useChatArea({
         }
       }
     },
-    [
-      channelId,
-      isDetached,
-      markChannelRead,
-      hasUnreadMessages,
-      dispatch,
-      state.messages,
-      state.jumpAnchors,
-    ],
+    [channelId, isDetached, markChannelRead, hasUnreadMessages, dispatch],
   );
 
   const handleScrollRangeChange = useCallback(
@@ -407,8 +438,10 @@ export function useChatArea({
       if (isUnmountingRef.current) return;
       if (!channelId) return;
       // Only lock in detached mode with a jump anchor
-      const hasJumpAnchor = !!(channelId && state.jumpAnchors[channelId]);
-      const msg = state.messages[startIndex];
+      const hasJumpAnchor = !!(
+        channelId && useChatStore.getState().jumpAnchors[channelId]
+      );
+      const msg = useChatStore.getState().messages[startIndex];
 
       debugChatScroll("handleScrollRangeChange", {
         channelId,
@@ -422,11 +455,15 @@ export function useChatArea({
       if (isDetached && hasJumpAnchor) return;
       if (isAtBottomRef.current) return;
 
-      if (msg) {
-        dispatch({ type: "SET_SCROLL_POSITION", channelId, messageId: msg.id });
+      if (scrollPersistTimerRef.current != null) {
+        clearTimeout(scrollPersistTimerRef.current);
       }
+      scrollPersistTimerRef.current = setTimeout(() => {
+        scrollPersistTimerRef.current = null;
+        flushScrollPosition();
+      }, 120);
     },
-    [channelId, isDetached, state.messages, state.jumpAnchors, dispatch],
+    [channelId, flushScrollPosition, isDetached],
   );
 
   const handleLoadMore = useCallback(async () => {

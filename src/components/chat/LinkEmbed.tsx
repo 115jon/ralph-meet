@@ -3566,7 +3566,16 @@ const VideoEmbed = memo(({ embed }: { embed: EmbedInfo }) => {
             <img
               src={embed.thumbnail.url}
               alt="Video thumbnail"
-              className="w-full h-auto object-cover max-h-[400px]"
+              width={embed.thumbnail.width}
+              height={embed.thumbnail.height}
+              className="w-full object-cover max-h-[400px]"
+              style={
+                embed.thumbnail.width && embed.thumbnail.height
+                  ? {
+                      aspectRatio: `${embed.thumbnail.width} / ${embed.thumbnail.height}`,
+                    }
+                  : { minHeight: 180 }
+              }
               data-media-element="true"
               data-media-url={embed.thumbnail.url}
               data-media-download-url={getAuthAssetUrl(embed.thumbnail.url)}
@@ -3650,7 +3659,16 @@ const RichEmbed = memo(
                   <img
                     src={embed.thumbnail.url}
                     alt="Media"
-                    className="w-full h-auto object-cover max-h-[300px]"
+                    width={embed.thumbnail.width}
+                    height={embed.thumbnail.height}
+                    className="w-full object-cover max-h-[300px]"
+                    style={
+                      embed.thumbnail.width && embed.thumbnail.height
+                        ? {
+                            aspectRatio: `${embed.thumbnail.width} / ${embed.thumbnail.height}`,
+                          }
+                        : { minHeight: 160 }
+                    }
                     data-media-element="true"
                     data-media-url={embed.thumbnail.url}
                     data-media-download-url={getAuthAssetUrl(
@@ -4842,7 +4860,16 @@ const LinkEmbed_ = memo(({ embed }: { embed: EmbedInfo }) => {
           <img
             src={thumbnailSrc}
             alt="Thumbnail"
-            className="w-full h-auto rounded-md object-cover max-h-[300px]"
+            width={embed.thumbnail?.width}
+            height={embed.thumbnail?.height}
+            className="w-full rounded-md object-cover max-h-[300px]"
+            style={
+              embed.thumbnail?.width && embed.thumbnail?.height
+                ? {
+                    aspectRatio: `${embed.thumbnail.width} / ${embed.thumbnail.height}`,
+                  }
+                : { minHeight: 160 }
+            }
             referrerPolicy="no-referrer"
             data-media-element="true"
             data-media-url={embed.thumbnail?.url || embed.url}

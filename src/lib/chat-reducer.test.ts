@@ -371,3 +371,38 @@ describe("chatReducer voice channel profiles", () => {
     );
   });
 });
+
+describe("chatReducer scroll positions", () => {
+  it("returns the same state when the saved message id did not change", () => {
+    const state = chatReducer(initialState, {
+      type: "SET_SCROLL_POSITION",
+      channelId: "channel-1",
+      messageId: "msg-1",
+    });
+
+    const next = chatReducer(state, {
+      type: "SET_SCROLL_POSITION",
+      channelId: "channel-1",
+      messageId: "msg-1",
+    });
+
+    expect(next).toBe(state);
+  });
+
+  it("updates when the saved message id changes", () => {
+    const state = chatReducer(initialState, {
+      type: "SET_SCROLL_POSITION",
+      channelId: "channel-1",
+      messageId: "msg-1",
+    });
+
+    const next = chatReducer(state, {
+      type: "SET_SCROLL_POSITION",
+      channelId: "channel-1",
+      messageId: "msg-2",
+    });
+
+    expect(next).not.toBe(state);
+    expect(next.scrollPositions["channel-1"]).toBe("msg-2");
+  });
+});

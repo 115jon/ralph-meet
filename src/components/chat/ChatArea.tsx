@@ -197,6 +197,17 @@ export default function ChatArea({
     return state.members || [];
   }, [isDM, state.user, state.dmChannels, channelId, state.members]);
 
+  const welcomeContent = useMemo(
+    () => (
+      <MemoizedChatWelcomeContent
+        isDM={!!isDM}
+        channelName={channelName}
+        channelId={channelId}
+      />
+    ),
+    [channelId, channelName, isDM],
+  );
+
   if (!channelId) {
     return <EmptyChatArea onMenuClick={onMenuClick} />;
   }
@@ -341,13 +352,7 @@ export default function ChatArea({
               onJump={handleJumpToMessage}
               onBan={canBan ? handleBan : undefined}
               onThread={handleThread}
-              welcomeContent={
-                <MemoizedChatWelcomeContent
-                  isDM={!!isDM}
-                  channelName={channelName}
-                  channelId={channelId}
-                />
-              }
+              welcomeContent={welcomeContent}
               onAtBottom={handleAtBottom}
               onScrollRangeChange={handleScrollRangeChange}
               onMessageVisible={handleMessageVisible}

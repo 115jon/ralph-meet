@@ -14,15 +14,23 @@ vi.mock("virtua", async () => {
   return {
     Virtualizer: forwardRef<
       unknown,
-      { children: ReactNode; keepMounted?: number[] }
-    >(({ children, keepMounted = [] }, ref) => {
+      {
+        children: ReactNode | ((item: unknown, index: number) => ReactNode);
+        data?: ArrayLike<unknown>;
+        keepMounted?: number[];
+      }
+    >(({ children, data, keepMounted = [] }, ref) => {
       useImperativeHandle(ref, () => ({ scrollToIndex: () => {} }), []);
+      const content =
+        typeof children === "function"
+          ? Array.from(data ?? []).map((item, index) => children(item, index))
+          : children;
       return (
         <div
           data-testid="virtualizer"
           data-keep-mounted={keepMounted.join(",")}
         >
-          {children}
+          {content}
         </div>
       );
     }),
@@ -89,7 +97,7 @@ describe("VirtualMessageList media pinning", () => {
     const virtualizer = screen.getByTestId("virtualizer");
     expect(virtualizer).toHaveAttribute("data-keep-mounted", "");
     fireEvent.click(screen.getByRole("button", { name: "Play media" }));
-    expect(virtualizer).toHaveAttribute("data-keep-mounted", "1");
+    expect(virtualizer).toHaveAttribute("data-keep-mounted", "0");
     fireEvent.click(screen.getByRole("button", { name: "Stop media" }));
     expect(virtualizer).toHaveAttribute("data-keep-mounted", "");
   });
@@ -114,7 +122,7 @@ describe("VirtualMessageList media pinning", () => {
 
     const virtualizer = screen.getByTestId("virtualizer");
     fireEvent.click(screen.getByTestId("play-message-2"));
-    expect(virtualizer).toHaveAttribute("data-keep-mounted", "2");
+    expect(virtualizer).toHaveAttribute("data-keep-mounted", "1");
 
     rerender(
       <VirtualMessageList
@@ -129,7 +137,7 @@ describe("VirtualMessageList media pinning", () => {
         onJump={() => {}}
       />,
     );
-    expect(virtualizer).toHaveAttribute("data-keep-mounted", "3");
+    expect(virtualizer).toHaveAttribute("data-keep-mounted", "2");
 
     rerender(
       <VirtualMessageList
@@ -144,7 +152,7 @@ describe("VirtualMessageList media pinning", () => {
         onJump={() => {}}
       />,
     );
-    expect(virtualizer).toHaveAttribute("data-keep-mounted", "1");
+    expect(virtualizer).toHaveAttribute("data-keep-mounted", "0");
 
     fireEvent.click(screen.getByTestId("stop-message-2"));
     expect(virtualizer).toHaveAttribute("data-keep-mounted", "");
