@@ -179,6 +179,7 @@ export default function GifPickerModal({
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [_isSuggesting, setIsSuggesting] = useState(false);
   const [isSuggestionListOpen, setIsSuggestionListOpen] = useState(false);
+  const [isSearchFocused, setIsSearchFocused] = useState(false);
   const [activeSuggestionIndex, setActiveSuggestionIndex] = useState(-1);
   const [categories, setCategories] = useState<GifPickerCategory[]>([]);
   const [categoriesLoading, setCategoriesLoading] = useState(true);
@@ -344,6 +345,9 @@ export default function GifPickerModal({
   }, []);
   const scrollRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const searchFieldRef = useRef<HTMLDivElement>(null);
+  const skipSuggestionOpenRef = useRef(false);
+  const allowSearchFocusRef = useRef(true);
   const loadingMoreRef = useRef(false);
   const loadMoreBlockedUntilRef = useRef(0);
   const [cache] = useState(
@@ -755,7 +759,11 @@ export default function GifPickerModal({
           ).slice(0, 8);
           setSuggestions(combined);
           setActiveSuggestionIndex(-1);
-          setIsSuggestionListOpen(combined.length > 0);
+          setIsSuggestionListOpen(
+            combined.length > 0 &&
+              !skipSuggestionOpenRef.current &&
+              document.activeElement === searchInputRef.current,
+          );
         }
       } catch (err: any) {
         if (!cancelled && err.name !== "AbortError") {
@@ -995,12 +1003,37 @@ export default function GifPickerModal({
   );
 
   const suggestionsVisible =
+    isSearchFocused &&
     isSuggestionListOpen &&
     suggestions.length > 0 &&
     searchValue.trim().length >= 2;
 
+  const focusResultsPane = useCallback(() => {
+    scrollRef.current?.focus({ preventScroll: true });
+  }, []);
+
+  const commitProgrammaticSearch = useCallback(
+    (nextQuery: string) => {
+      skipSuggestionOpenRef.current = true;
+      allowSearchFocusRef.current = false;
+      setMode("search");
+      setQuery(nextQuery);
+      setSearchValue(nextQuery);
+      setIsSuggestionListOpen(false);
+      setActiveSuggestionIndex(-1);
+      setIsSearchFocused(false);
+      window.requestAnimationFrame(() => {
+        focusResultsPane();
+        window.requestAnimationFrame(focusResultsPane);
+      });
+    },
+    [focusResultsPane],
+  );
+
   const selectSuggestion = useCallback(
     (suggestion: string) => {
+      skipSuggestionOpenRef.current = true;
+      allowSearchFocusRef.current = true;
       setSearchValue(suggestion);
       setQuery(suggestion);
       setMode("search");
@@ -1059,13 +1092,31 @@ export default function GifPickerModal({
     [activeSuggestionIndex, selectSuggestion, suggestions, suggestionsVisible],
   );
 
+  useEffect(() => {
+    if (!open) return undefined;
+
+    const closeSuggestionsOnOutsidePointer = (event: PointerEvent) => {
+      const target = event.target as Node | null;
+      if (!target) return;
+      if (searchFieldRef.current?.contains(target)) return;
+      setIsSuggestionListOpen(false);
+      setActiveSuggestionIndex(-1);
+      if (document.activeElement === searchInputRef.current) {
+        focusResultsPane();
+      }
+    };
+
+    document.addEventListener("pointerdown", closeSuggestionsOnOutsidePointer);
+    return () =>
+      document.removeEventListener(
+        "pointerdown",
+        closeSuggestionsOnOutsidePointer,
+      );
+  }, [focusResultsPane, open]);
+
   const handleCategorySearch = (category: GifPickerCategory) => {
     browseModeRef.current = "categories";
-    setMode("search");
-    setQuery(category.query);
-    setSearchValue(category.query);
-    setIsSuggestionListOpen(false);
-    setActiveSuggestionIndex(-1);
+    commitProgrammaticSearch(category.query);
   };
 
   const openFavorites = () => {
@@ -1501,19 +1552,45 @@ export default function GifPickerModal({
                         <ArrowLeft className="h-5 w-5" />
                       </button>
                     ) : null}
-                    <div className="relative flex-1">
+                    <div ref={searchFieldRef} className="relative flex-1">
                       <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-rm-text-muted" />
                       <input
                         ref={searchInputRef}
                         value={searchValue}
-                        onChange={(event) => setSearchValue(event.target.value)}
+                        onChange={(event) => {
+                          skipSuggestionOpenRef.current = false;
+                          allowSearchFocusRef.current = true;
+                          setSearchValue(event.target.value);
+                        }}
+                        onPointerDown={() => {
+                          skipSuggestionOpenRef.current = false;
+                          allowSearchFocusRef.current = true;
+                        }}
                         onFocus={() => {
+                          if (!allowSearchFocusRef.current) {
+                            focusResultsPane();
+                            return;
+                          }
+                          setIsSearchFocused(true);
                           if (
+                            !skipSuggestionOpenRef.current &&
                             suggestions.length > 0 &&
                             searchValue.trim().length >= 2
                           ) {
                             setIsSuggestionListOpen(true);
                           }
+                        }}
+                        onBlur={() => {
+                          window.setTimeout(() => {
+                            if (
+                              document.activeElement === searchInputRef.current
+                            ) {
+                              return;
+                            }
+                            setIsSearchFocused(false);
+                            setIsSuggestionListOpen(false);
+                            setActiveSuggestionIndex(-1);
+                          }, 0);
                         }}
                         onKeyDown={handleSearchInputKeyDown}
                         placeholder={getGifProviderSearchPlaceholder(provider)}
@@ -1625,8 +1702,9 @@ export default function GifPickerModal({
 
               <div
                 ref={scrollRef}
+                tabIndex={-1}
                 onScroll={() => void handleScroll()}
-                className="custom-scrollbar min-h-0 flex-1 overflow-y-auto px-4 py-3"
+                className="custom-scrollbar min-h-0 flex-1 overflow-y-auto px-4 py-3 outline-none"
               >
                 {mode === "categories" &&
                   searchValue.trim() === "" &&
@@ -1656,10 +1734,8 @@ export default function GifPickerModal({
                             <button
                               type="button"
                               onClick={() => {
-                                setSearchValue(q);
-                                setQuery(q);
-                                setMode("search");
                                 saveQueryToHistory(q);
+                                commitProgrammaticSearch(q);
                               }}
                               className="text-left hover:underline text-rm-text"
                               style={{ color: "var(--rm-text-primary)" }}
