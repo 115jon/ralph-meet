@@ -85,7 +85,34 @@ vi.mock("@/stores/useSoundSettingsStore", () => ({
 describe("useChatArea lifecycle", () => {
   beforeEach(() => {
     mocks.loadMessages.mockClear();
+    mocks.actions.refreshMessageEmbeds.mockClear();
     mocks.state.notifications = [];
+    mocks.state.messagesByChannelId = {};
+    mocks.state.messagesLoadedByChannelId = {};
+    mocks.state.messageHasMoreBeforeByChannelId = {};
+  });
+
+  it("does not bulk-refresh embeds when opening a channel from cached messages", async () => {
+    mocks.state.messagesByChannelId = {
+      "channel-1": [
+        {
+          id: "msg-1",
+          channel_id: "channel-1",
+          embeds: [{ url: "https://www.instagram.com/p/example" }],
+        },
+      ],
+    };
+    mocks.state.messagesLoadedByChannelId = { "channel-1": true };
+    mocks.state.messageHasMoreBeforeByChannelId = { "channel-1": false };
+    mocks.actions.refreshMessageEmbeds.mockClear();
+    mocks.loadMessages.mockClear();
+
+    renderHook(() => useChatArea({ channelId: "channel-1" }));
+
+    await waitFor(() => {
+      expect(mocks.loadMessages).not.toHaveBeenCalled();
+    });
+    expect(mocks.actions.refreshMessageEmbeds).not.toHaveBeenCalled();
   });
 
   it("does not reload channel history when notifications update", async () => {

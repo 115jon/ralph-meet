@@ -9,6 +9,7 @@
 import { ServiceError } from "@/lib/service-error";
 import { getAttachmentUrl } from "@/lib/attachment-url";
 import type { AvatarDisplay } from "@/lib/avatar-display";
+import { cacheGet, cacheSet } from "@/lib/cache";
 import { hydrateSocialEmbeds } from "@/lib/share-embed-refresh";
 import type { EmbedInfo } from "@/lib/types";
 import type { D1Database } from "@cloudflare/workers-types";
@@ -781,6 +782,32 @@ function parseStoredEmbeds(value: unknown): EmbedInfo[] {
   }
 }
 
+const SOCIAL_EMBED_REFRESH_TTL = 20 * 60;
+
+function socialEmbedRefreshCacheKey(url: string): string {
+  return `v1:embed-refresh:${url}`;
+}
+
+async function wereSocialEmbedsRecentlyRefreshed(
+  embeds: EmbedInfo[],
+): Promise<boolean> {
+  if (embeds.length === 0) return true;
+  const hits = await Promise.all(
+    embeds.map((embed) => cacheGet(socialEmbedRefreshCacheKey(embed.url))),
+  );
+  return hits.every((hit) => hit !== null);
+}
+
+function markSocialEmbedsRefreshed(embeds: EmbedInfo[]): void {
+  for (const embed of embeds) {
+    cacheSet(
+      socialEmbedRefreshCacheKey(embed.url),
+      true,
+      SOCIAL_EMBED_REFRESH_TTL,
+    ).catch(() => undefined);
+  }
+}
+
 export async function refreshMessageEmbeds(
   db: D1Database,
   channelId: string,
@@ -802,8 +829,10 @@ export async function refreshMessageEmbeds(
     (results ?? []).map(async (row: Record<string, unknown>) => {
       const embeds = parseStoredEmbeds(row.embeds);
       if (embeds.length === 0) return null;
+      if (await wereSocialEmbedsRecentlyRefreshed(embeds)) return null;
 
       const refreshedEmbeds = await hydrateSocialEmbeds(embeds);
+      markSocialEmbedsRefreshed(embeds);
       if (refreshedEmbeds === embeds) return null;
 
       const capturedChannelId = String(row.channel_id ?? channelId);

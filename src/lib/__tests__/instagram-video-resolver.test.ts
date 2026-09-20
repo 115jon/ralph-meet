@@ -302,4 +302,39 @@ describe("resolveInstagramVideoMetadata", () => {
     expect(result?.authorUrl).toBe("https://www.instagram.com/tasyiu");
     expect(hoisted.cacheSetMock).toHaveBeenCalledOnce();
   });
+
+  it("coalesces concurrent metadata fetches for the same Instagram post", async () => {
+    workerEnv.INSTAGRAM_SESSIONID = "sessionid";
+    workerEnv.INSTAGRAM_CSRFTOKEN = "csrftoken";
+    hoisted.cacheGetMock.mockResolvedValue(null);
+
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    hoisted.fetchInstagramOEmbedMetadataMock.mockImplementation(async () => {
+      await gate;
+      return {
+        mediaId: "123",
+        thumbnailUrl: "https://scontent-ord5-1.cdninstagram.com/thumb.jpg",
+        title: "reel",
+      };
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("not found", { status: 404 })),
+    );
+
+    const url = "https://www.instagram.com/reel/DZK623pN9P2/";
+    const first = resolveInstagramVideoMetadata(url);
+    const second = resolveInstagramVideoMetadata(url);
+
+    await vi.waitFor(() => {
+      expect(hoisted.fetchInstagramOEmbedMetadataMock).toHaveBeenCalled();
+    });
+    expect(hoisted.fetchInstagramOEmbedMetadataMock).toHaveBeenCalledTimes(1);
+
+    release();
+    await Promise.allSettled([first, second]);
+  });
 });

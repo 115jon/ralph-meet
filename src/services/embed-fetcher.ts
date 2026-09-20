@@ -2,9 +2,13 @@ import type { EmbedInfo } from "@/lib/types";
 import { safeFetch, readTextCapped, readJsonCapped } from "@/lib/safe-fetch";
 import { resolveInstagramVideoMetadata } from "@/lib/instagram-video-resolver";
 import {
-  fetchInstagramOEmbedMetadata,
   fetchTikTokProxyMetadata,
+  lookupInstagramOEmbed,
 } from "@/lib/share-preview-proxy";
+import {
+  isTwitterUnavailablePayload,
+  isUnavailableSocialStatus,
+} from "@/lib/social-embed-availability";
 import { clog } from "@/lib/console-logger";
 
 const log = clog("EmbedFetcher");
@@ -35,6 +39,26 @@ function nextEmbedId(url: string): string {
     hash = Math.imul(hash, 16777619);
   }
   return `embed_${(hash >>> 0).toString(36)}`;
+}
+
+function buildUnavailableEmbed(
+  url: string,
+  provider: { name: string; url: string },
+  options?: { color?: string; footerIcon?: string },
+): EmbedInfo {
+  return {
+    id: nextEmbedId(url),
+    url,
+    type: "rich",
+    unavailable: true,
+    provider,
+    footer: {
+      text: provider.name,
+      iconURL: options?.footerIcon,
+    },
+    color: options?.color,
+    fields: [],
+  };
 }
 
 export async function extractAndProcessEmbeds(
@@ -390,6 +414,8 @@ function extractLargestYouTubeFormatDimensions(
 async function fetchTwitterData(url: string): Promise<EmbedInfo | null> {
   const parsed = new URL(url);
   let fallbackTweet: any | null = null;
+  let sawUnavailable = false;
+  let sawTransient = false;
 
   // APIs that return JSON — documented FxTwitter v2 first, legacy + Vx fallbacks.
   const apis = buildTwitterApiUrls(parsed);
@@ -404,28 +430,54 @@ async function fetchTwitterData(url: string): Promise<EmbedInfo | null> {
         `API response status: ${res.status}, content-type: ${res.headers.get("content-type")}`,
       );
 
-      if (!res.ok) {
-        const errBody = await readTextCapped(res).catch(() => "");
+      const contentType = res.headers.get("content-type") || "";
+      const data = contentType.includes("json")
+        ? ((await readJsonCapped(res).catch(() => null)) as unknown)
+        : null;
+
+      if (
+        isUnavailableSocialStatus(res.status) ||
+        isTwitterUnavailablePayload(data)
+      ) {
+        sawUnavailable = true;
         twitterLog.info(
-          `API ${res.status} body (first 200): ${errBody.substring(0, 200)}`,
+          `API ${res.status} marked tweet unavailable: ${JSON.stringify(data)?.slice(0, 200)}`,
         );
         continue;
       }
 
-      const contentType = res.headers.get("content-type") || "";
+      if (!res.ok) {
+        sawTransient = true;
+        const errBody =
+          typeof data === "string"
+            ? data
+            : await readTextCapped(res).catch(() => "");
+        twitterLog.info(
+          `API ${res.status} body (first 200): ${String(errBody).substring(0, 200)}`,
+        );
+        continue;
+      }
+
       if (!contentType.includes("json")) {
+        sawTransient = true;
         twitterLog.info(`API returned non-JSON content-type: ${contentType}`);
         continue;
       }
 
-      const data = (await readJsonCapped(res)) as any;
+      const payload = data as any;
       // v2 returns { status }, legacy fxtwitter returns { tweet }, vxtwitter returns a bare object.
-      const tweet = data.status || data.tweet || data;
+      const tweet = payload?.status || payload?.tweet || payload;
 
-      if (tweet) {
+      if (tweet && !isTwitterUnavailablePayload(tweet)) {
         fallbackTweet = mergeTweetMetadata(fallbackTweet, tweet);
+      } else if (
+        isTwitterUnavailablePayload(payload) ||
+        isTwitterUnavailablePayload(tweet)
+      ) {
+        sawUnavailable = true;
       }
     } catch (e) {
+      sawTransient = true;
       twitterLog.error(`API ${apiUrl} failed:`, e);
     }
   }
@@ -549,6 +601,14 @@ async function fetchTwitterData(url: string): Promise<EmbedInfo | null> {
     }
   } catch (e) {
     twitterLog.error("OG fallback failed:", e);
+  }
+
+  if (sawUnavailable && !sawTransient) {
+    return buildUnavailableEmbed(
+      url,
+      { name: "X", url: "https://x.com" },
+      { color: "#1D9BF0", footerIcon: X_ICON_URL },
+    );
   }
 
   return null;
@@ -1306,10 +1366,19 @@ function readPositiveNumber(...values: Array<unknown>): number | undefined {
 }
 
 async function fetchInstagramData(url: string): Promise<EmbedInfo | null> {
-  const [data, videoData] = await Promise.all([
-    fetchInstagramOEmbedMetadata(url),
-    resolveInstagramVideoMetadata(url),
-  ]);
+  const oembedLookup = await lookupInstagramOEmbed(url).catch(() => ({
+    status: 0,
+    metadata: null,
+  }));
+  let videoData: Awaited<ReturnType<typeof resolveInstagramVideoMetadata>> =
+    null;
+  let videoError: Error | null = null;
+  try {
+    videoData = await resolveInstagramVideoMetadata(url);
+  } catch (error) {
+    videoError = error instanceof Error ? error : new Error(String(error));
+  }
+  const data = oembedLookup.metadata;
 
   const media = videoData?.media?.length ? videoData.media : undefined;
   const firstVideo = media?.find((entry) => entry.type === "video");
@@ -1347,6 +1416,19 @@ async function fetchInstagramData(url: string): Promise<EmbedInfo | null> {
   const rawTitle = videoData?.title ?? data?.title;
 
   if (!rawTitle && !thumbnailUrl && !media?.length && !videoData?.videoUrl) {
+    const secretsMissing = videoError?.message.includes(
+      "session secrets are not configured",
+    );
+    if (!secretsMissing && isUnavailableSocialStatus(oembedLookup.status)) {
+      return buildUnavailableEmbed(
+        url,
+        {
+          name: data?.providerName || "Instagram",
+          url: data?.providerUrl || "https://www.instagram.com",
+        },
+        { color: "#E1306C" },
+      );
+    }
     return null;
   }
 
@@ -1408,7 +1490,16 @@ async function fetchTikTokDataRefreshed(
   const res = oembedResult.status === "fulfilled" ? oembedResult.value : null;
   const proxyData =
     proxyResult.status === "fulfilled" ? proxyResult.value : null;
-  if (!res?.ok && !proxyData) return null;
+  if (!res?.ok && !proxyData) {
+    if (res && isUnavailableSocialStatus(res.status)) {
+      return buildUnavailableEmbed(
+        url,
+        { name: "TikTok", url: "https://www.tiktok.com" },
+        { color: "#FF0050" },
+      );
+    }
+    return null;
+  }
 
   const data = res?.ok ? ((await readJsonCapped(res)) as any) : {};
   const videoIdMatch =

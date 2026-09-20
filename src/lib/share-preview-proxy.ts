@@ -802,9 +802,10 @@ export async function fetchTikTokProxyMetadata(
   return tikwmMetadata ?? playerMetadata;
 }
 
-export async function fetchInstagramOEmbedMetadata(
-  url: string,
-): Promise<InstagramOEmbedMetadata | null> {
+export async function lookupInstagramOEmbed(url: string): Promise<{
+  status: number;
+  metadata: InstagramOEmbedMetadata | null;
+}> {
   const canonicalUrl = canonicalizeInstagramUrl(url);
   const apiUrl = `https://www.instagram.com/api/v1/oembed/?url=${encodeURIComponent(canonicalUrl)}&omitscript=true`;
   const response = await safeFetch(apiUrl, {
@@ -816,24 +817,35 @@ export async function fetchInstagramOEmbedMetadata(
   });
 
   if (!response.ok || !response.headers.get("Content-Type")?.includes("json")) {
-    return null;
+    return { status: response.status, metadata: null };
   }
 
   const payload = (await readJsonCapped(response)) as any;
-  if (!payload || typeof payload !== "object") return null;
+  if (!payload || typeof payload !== "object") {
+    return { status: response.status, metadata: null };
+  }
 
   return {
-    mediaId:
-      typeof payload.media_id === "string" ? payload.media_id : undefined,
-    title: payload.title,
-    authorName: payload.author_name,
-    authorUrl: payload.author_url,
-    providerName: payload.provider_name,
-    providerUrl: payload.provider_url,
-    thumbnailUrl: payload.thumbnail_url,
-    thumbnailWidth: payload.thumbnail_width,
-    thumbnailHeight: payload.thumbnail_height,
+    status: response.status,
+    metadata: {
+      mediaId:
+        typeof payload.media_id === "string" ? payload.media_id : undefined,
+      title: payload.title,
+      authorName: payload.author_name,
+      authorUrl: payload.author_url,
+      providerName: payload.provider_name,
+      providerUrl: payload.provider_url,
+      thumbnailUrl: payload.thumbnail_url,
+      thumbnailWidth: payload.thumbnail_width,
+      thumbnailHeight: payload.thumbnail_height,
+    },
   };
+}
+
+export async function fetchInstagramOEmbedMetadata(
+  url: string,
+): Promise<InstagramOEmbedMetadata | null> {
+  return (await lookupInstagramOEmbed(url)).metadata;
 }
 
 export async function fetchInstagramVideoMetadata(

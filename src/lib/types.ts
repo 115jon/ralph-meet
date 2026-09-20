@@ -638,6 +638,7 @@ export interface EmbedInfo {
   id: string;
   url: string;
   type: "video" | "rich" | "link" | "image";
+  unavailable?: boolean;
   rawTitle?: string;
   rawDescription?: string;
   author?: EmbedAuthor;

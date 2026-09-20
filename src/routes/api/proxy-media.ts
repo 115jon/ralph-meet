@@ -305,6 +305,19 @@ function isLikelyTikTokImageRequest(rawUrl: string): boolean {
   }
 }
 
+function instagramMediaFamilyKey(rawUrl: string): string | null {
+  try {
+    const parsed = new URL(rawUrl);
+    if (!parsed.hostname.toLowerCase().endsWith(".cdninstagram.com")) {
+      return null;
+    }
+    const parts = parsed.pathname.split("/").filter(Boolean);
+    return parts[1] ?? parts[0] ?? null;
+  } catch {
+    return null;
+  }
+}
+
 function normalizeRefreshableMediaLooseKey(rawUrl: string): string {
   try {
     const parsed = new URL(rawUrl);
@@ -394,10 +407,25 @@ export function pickRefreshedMediaUrls(
   }
 
   if (shouldPreferImageCandidates) {
+    const requestFamily = instagramMediaFamilyKey(requestUrl);
+    const familyMatches: string[] = [];
+    const otherImages: string[] = [];
     for (const candidate of candidates) {
-      if (candidate.type === "image") {
-        pushUniqueUrl(results, seen, candidate.url);
+      if (candidate.type !== "image") continue;
+      if (
+        requestFamily &&
+        instagramMediaFamilyKey(candidate.url) === requestFamily
+      ) {
+        familyMatches.push(candidate.url);
+      } else {
+        otherImages.push(candidate.url);
       }
+    }
+    for (const url of familyMatches) {
+      pushUniqueUrl(results, seen, url);
+    }
+    for (const url of otherImages) {
+      pushUniqueUrl(results, seen, url);
     }
     for (const candidate of candidates) {
       pushUniqueUrl(results, seen, candidate.thumbnailUrl);
@@ -652,6 +680,10 @@ function collectInstagramRefreshCandidates(
 
   if (metadata.thumbnailUrl) {
     push("image", metadata.thumbnailUrl);
+  }
+
+  if (metadata.authorAvatarUrl) {
+    push("image", metadata.authorAvatarUrl);
   }
 
   if (metadata.audio?.url) {

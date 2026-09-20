@@ -59,7 +59,6 @@ export function useChatArea({
     unpinMessage,
     pinMessage,
     loadPins,
-    refreshMessageEmbeds,
     markChannelRead,
     markNotificationsRead,
     dispatch,
@@ -1022,12 +1021,6 @@ export function useChatArea({
       }).then((result) => {
         if (requestController.signal.aborted) return;
         applyLoadedMessages(result);
-        if (result.messages.some((message) => message.embeds?.length)) {
-          void refreshMessageEmbeds(
-            channelId,
-            result.messages.map((message) => message.id),
-          );
-        }
       });
     }
     prevChannelRef.current = channelId;
@@ -1038,7 +1031,6 @@ export function useChatArea({
     loadMessagesAround,
     markChannelRead,
     markNotificationsForMessage,
-    refreshMessageEmbeds,
   ]);
 
   useEffect(() => {
