@@ -1038,7 +1038,7 @@ export function useVoiceChannel({
   const initialMediaTokenRef = useRef(0);
   const pendingInitialMediaRef = useRef<{
     stream: MediaStream;
-    processor: LocalAudioProcessorHandle;
+    processor: LocalAudioProcessorHandle | null;
     token: number;
   } | null>(null);
   const [localMediaOwner] = useState<LocalMediaOwner>(() =>
@@ -1243,6 +1243,7 @@ export function useVoiceChannel({
     (
       sfu: SFUClient | null,
       processorOverride?: LocalAudioProcessorHandle | null,
+      fallbackStream?: MediaStream | null,
     ) => {
       if (!sfu) return;
 
@@ -1256,10 +1257,19 @@ export function useVoiceChannel({
       if (!isMicOnRef.current) return;
 
       const processor = processorOverride ?? publishedAudioProcessorRef.current;
-      if (!processor) return;
-
-      const monitorStream = processor.createMonitorStream();
-      if (monitorStream.getAudioTracks().length === 0) {
+      const monitorStream = processor
+        ? processor.createMonitorStream()
+        : fallbackStream
+          ? new MediaStream(
+              fallbackStream
+                .getAudioTracks()
+                .filter((track) => track.readyState === "live")
+                .map((track) =>
+                  typeof track.clone === "function" ? track.clone() : track,
+                ),
+            )
+          : null;
+      if (!monitorStream || monitorStream.getAudioTracks().length === 0) {
         disposeVoiceActivityStream(monitorStream);
         return;
       }
@@ -1515,6 +1525,14 @@ export function useVoiceChannel({
     sfuRef.current = sfu;
     setSfuInstance(sfu);
 
+    const resolveSpeakingUserId = (participantId: string): string => {
+      const isLocal =
+        participantId === myIdRef.current ||
+        participantId === sfu.getParticipantId();
+      if (isLocal && user?.id && mode !== "room") return user.id;
+      return uuidToClerkRef.current.get(participantId) || participantId;
+    };
+
     const rememberParticipant = (participant: VoiceState) => {
       participantsRef.current.set(participant.id, participant);
       const participantUserId =
@@ -1697,6 +1715,20 @@ export function useVoiceChannel({
         if (user?.id && mode !== "room") {
           uuidToClerkRef.current.set(participantId, user.id);
           sfu.setClerkMapping(participantId, user.id);
+          voiceDispatch({
+            type: "SET_SPEAKING",
+            payload: (previous: Record<string, boolean>) => {
+              const wasSpeaking = Boolean(
+                previous[participantId] || previous[user.id],
+              );
+              if (!wasSpeaking && !(participantId in previous)) return previous;
+              const next = { ...previous };
+              delete next[participantId];
+              if (wasSpeaking) next[user.id] = true;
+              else delete next[user.id];
+              return next;
+            },
+          });
         }
 
         syncParticipants(participants);
@@ -2260,8 +2292,7 @@ export function useVoiceChannel({
     });
 
     onSfu("speaking", ({ participantId, speaking }) => {
-      const clerkId =
-        uuidToClerkRef.current.get(participantId) || participantId;
+      const clerkId = resolveSpeakingUserId(participantId);
       speakingByParticipantRef.current[participantId] = speaking > 0;
       const hasMappedSpeakingParticipant = Array.from(
         uuidToClerkRef.current.entries(),
@@ -2297,19 +2328,28 @@ export function useVoiceChannel({
       for (const [participantId, flags] of Object.entries(speaking ?? {})) {
         if (flags <= 0) continue;
         speakingByParticipantRef.current[participantId] = true;
-        const clerkId =
-          uuidToClerkRef.current.get(participantId) || participantId;
+        const clerkId = resolveSpeakingUserId(participantId);
         nextSpeakingUsers[clerkId] = true;
       }
-      const localParticipantId = myIdRef.current;
+      const localParticipantId = myIdRef.current || sfu.getParticipantId();
       const localUserId = localParticipantId
-        ? uuidToClerkRef.current.get(localParticipantId) || localParticipantId
-        : null;
+        ? resolveSpeakingUserId(localParticipantId)
+        : user?.id && mode !== "room"
+          ? user.id
+          : null;
       voiceDispatch({
         type: "SET_SPEAKING",
         payload: (previous: Record<string, boolean>) => {
-          if (localUserId && previous[localUserId]) {
-            return { ...nextSpeakingUsers, [localUserId]: true };
+          const localWasSpeaking = Boolean(
+            (localUserId && previous[localUserId]) ||
+            (localParticipantId && previous[localParticipantId]),
+          );
+          if (localUserId && localWasSpeaking) {
+            const next = { ...nextSpeakingUsers, [localUserId]: true };
+            if (localParticipantId && localParticipantId !== localUserId) {
+              delete next[localParticipantId];
+            }
+            return next;
           }
           return nextSpeakingUsers;
         },
@@ -2317,8 +2357,7 @@ export function useVoiceChannel({
     });
 
     onSfu("vad-speaking", ({ participantId, isSpeaking }) => {
-      const clerkId =
-        uuidToClerkRef.current.get(participantId) || participantId;
+      const clerkId = resolveSpeakingUserId(participantId);
       speakingByParticipantRef.current[participantId] = isSpeaking;
       const hasMappedSpeakingParticipant = Array.from(
         uuidToClerkRef.current.entries(),
@@ -2353,14 +2392,20 @@ export function useVoiceChannel({
           pendingInitialMediaRef.current?.stream ?? localStreamRef.current;
         if (!stream) return;
         const getPublishedAudioStream = (
-          _source: MediaStream,
+          source: MediaStream,
         ): MediaStream | null => {
           const publicationStream =
             publishedAudioProcessorRef.current?.publicationStream ??
-            pendingInitialMediaRef.current?.processor.publicationStream;
-          return publicationStream &&
+            pendingInitialMediaRef.current?.processor?.publicationStream;
+          if (
+            publicationStream &&
             publicationStream.getAudioTracks().length > 0
-            ? publicationStream
+          ) {
+            return publicationStream;
+          }
+          const rawAudioTracks = source.getAudioTracks();
+          return rawAudioTracks.length > 0
+            ? new MediaStream(rawAudioTracks)
             : null;
         };
         const reconcileCurrentAudio = async (): Promise<{
@@ -2863,36 +2908,64 @@ export function useVoiceChannel({
         }
 
         let streamToPublish: MediaStream | null = null;
-        if (newStream.getAudioTracks().length > 0) {
-          try {
-            nextAudioProcessor = await createLocalAudioProcessor(
-              newStream,
-              audioProcessingSettings,
-            );
-          } catch (error) {
-            failedAudioProcessingModeRef.current =
-              resolveLocalAudioProcessingMode(audioProcessingSettings);
-            devicesLog.warn(
-              "Failed to create gated outbound audio processor",
-              error,
-            );
-            nextAudioProcessor = null;
-          }
-
-          if (!nextAudioProcessor) {
-            devicesLog.warn(
-              "Outbound audio processor unavailable; preserving the previous publication",
-            );
-            await abortStaleSwap(null);
-            return;
-          }
+        let pendingProcessorUpgrade: Promise<LocalAudioProcessorHandle | null> | null =
+          null;
+        const applyProcessorMode = (
+          processor: LocalAudioProcessorHandle,
+        ): void => {
           const requestedAudioProcessingMode = resolveLocalAudioProcessingMode(
             audioProcessingSettings,
           );
-          if (nextAudioProcessor.mode !== requestedAudioProcessingMode) {
+          if (processor.mode !== requestedAudioProcessingMode) {
             failedAudioProcessingModeRef.current = requestedAudioProcessingMode;
           }
-          streamToPublish = nextAudioProcessor.publicationStream;
+        };
+        if (newStream.getAudioTracks().length > 0) {
+          const replacingExistingAudio = !!oldStream?.getAudioTracks()[0];
+          if (replacingExistingAudio) {
+            try {
+              nextAudioProcessor = await createLocalAudioProcessor(
+                newStream,
+                audioProcessingSettings,
+              );
+            } catch (error) {
+              failedAudioProcessingModeRef.current =
+                resolveLocalAudioProcessingMode(audioProcessingSettings);
+              devicesLog.warn(
+                "Failed to create gated outbound audio processor",
+                error,
+              );
+              nextAudioProcessor = null;
+            }
+
+            if (!nextAudioProcessor) {
+              devicesLog.warn(
+                "Outbound audio processor unavailable; preserving the previous publication",
+              );
+              await abortStaleSwap(null);
+              return;
+            }
+            applyProcessorMode(nextAudioProcessor);
+            streamToPublish = nextAudioProcessor.publicationStream;
+          } else {
+            pendingProcessorUpgrade = createLocalAudioProcessor(
+              newStream,
+              audioProcessingSettings,
+            ).then(
+              (processor) => processor,
+              (error: unknown) => {
+                failedAudioProcessingModeRef.current =
+                  resolveLocalAudioProcessingMode(audioProcessingSettings);
+                devicesLog.warn(
+                  "Failed to create gated outbound audio processor",
+                  error,
+                );
+                return null;
+              },
+            );
+            nextAudioProcessor = null;
+            streamToPublish = new MediaStream(newStream.getAudioTracks());
+          }
 
           if (!isCurrent()) {
             await abortStaleSwap(nextAudioProcessor);
@@ -2949,8 +3022,10 @@ export function useVoiceChannel({
             if (nextAudioProcessor) {
               sfu.vad.setGateController(nextAudioProcessor.gateController);
               restartVadMonitoring(sfu, nextAudioProcessor);
+            } else {
+              restartVadMonitoring(sfu, null, newStream);
             }
-            if (isInitialMediaSync && nextAudioProcessor) {
+            if (isInitialMediaSync) {
               pendingInitialMediaRef.current = {
                 stream: newStream,
                 processor: nextAudioProcessor,
@@ -2958,6 +3033,41 @@ export function useVoiceChannel({
               };
             }
             await sfu.publishTracks(new MediaStream([newAudio]), "cam");
+            if (pendingProcessorUpgrade) {
+              const upgraded = await pendingProcessorUpgrade;
+              if (!isCurrent()) {
+                await abortStaleSwap(upgraded);
+                return;
+              }
+              if (upgraded) {
+                applyProcessorMode(upgraded);
+                const processed =
+                  upgraded.publicationStream.getAudioTracks()[0];
+                const microphoneTrackName =
+                  sfu.getMicrophoneTrackName() ??
+                  (myIdRef.current
+                    ? `cam-audio-${myIdRef.current}`
+                    : "cam-audio-self");
+                if (!processed) {
+                  upgraded.destroy();
+                } else {
+                  const replaced = await sfu.replaceTrack(
+                    microphoneTrackName,
+                    processed,
+                  );
+                  if (!replaced) {
+                    upgraded.destroy();
+                  } else {
+                    nextAudioProcessor = upgraded;
+                    sfu.vad.setGateController(upgraded.gateController);
+                    restartVadMonitoring(sfu, upgraded);
+                    if (pendingInitialMediaRef.current?.stream === newStream) {
+                      pendingInitialMediaRef.current.processor = upgraded;
+                    }
+                  }
+                }
+              }
+            }
           }
           if (oldAudio) {
             replacedAudioTrack = sfu.getPublishedTrack(
@@ -3171,7 +3281,7 @@ export function useVoiceChannel({
             pendingInitialMedia &&
             pendingInitialMedia.stream === pendingInitialCaptureStream
           ) {
-            pendingInitialMedia.processor.destroy();
+            pendingInitialMedia.processor?.destroy();
             pendingInitialMedia.stream
               .getTracks()
               .forEach((track) => track.stop());
@@ -3214,7 +3324,7 @@ export function useVoiceChannel({
       cancelPendingLocalStreamAcquisition(localMediaOwner);
       const pendingInitialMedia = pendingInitialMediaRef.current;
       if (pendingInitialMedia) {
-        pendingInitialMedia.processor.destroy();
+        pendingInitialMedia.processor?.destroy();
         pendingInitialMedia.stream.getTracks().forEach((track) => track.stop());
         pendingInitialMediaRef.current = null;
         if (initialMediaSyncRef.current.token === pendingInitialMedia.token) {
@@ -3633,6 +3743,10 @@ export function useVoiceChannel({
       publishedAudioProcessorRef.current = null;
       localStreamRef.current?.getTracks().forEach((track) => track.stop());
       localStreamRef.current = null;
+      screenStreamRef.current?.getTracks().forEach((track) => track.stop());
+      screenStreamRef.current = null;
+      myIdRef.current = "";
+      speakingByParticipantRef.current = {};
       cancelPendingLocalStreamAcquisition(localMediaOwner);
       releaseLocalStream(localMediaOwner);
       setSfuInstance(null);
@@ -3688,10 +3802,14 @@ export function useVoiceChannel({
       t.onended = null;
       t.stop();
     });
+    localStreamRef.current = null;
     screenStreamRef.current?.getTracks().forEach((t) => {
       t.onended = null;
       t.stop();
     });
+    screenStreamRef.current = null;
+    myIdRef.current = "";
+    speakingByParticipantRef.current = {};
     releaseLocalStream(localMediaOwner);
 
     // Clear stale participant references

@@ -15,6 +15,8 @@ export interface AudioSentinelOptions {
   intervalMs?: number;
   /** How many consecutive polling ticks with 0 delta before triggering a stall (default 5) */
   stallThresholdTicks?: number;
+  /** Fired once when inbound audio RTP bytes are first observed. */
+  onFirstRtp?: () => void;
 }
 
 export class AudioSentinel {
@@ -22,6 +24,7 @@ export class AudioSentinel {
   private prevBytesReceived: number | null = null;
   private consecutiveZeroDeltas = 0;
   private isStalled = false;
+  private hasSeenFirstRtp = false;
 
   constructor(private options: AudioSentinelOptions) {}
 
@@ -30,6 +33,7 @@ export class AudioSentinel {
     this.prevBytesReceived = null;
     this.consecutiveZeroDeltas = 0;
     this.isStalled = false;
+    this.hasSeenFirstRtp = false;
 
     const interval = this.options.intervalMs ?? 1000;
     const threshold = this.options.stallThresholdTicks ?? 5;
@@ -72,6 +76,11 @@ export class AudioSentinel {
           // No audio track is being pulled yet.
           this.prevBytesReceived = null;
           return;
+        }
+
+        if (!this.hasSeenFirstRtp && currentBytes > 0) {
+          this.hasSeenFirstRtp = true;
+          this.options.onFirstRtp?.();
         }
 
         if (this.prevBytesReceived !== null) {
@@ -125,6 +134,7 @@ export class AudioSentinel {
     this.prevBytesReceived = null;
     this.consecutiveZeroDeltas = 0;
     this.isStalled = false;
+    this.hasSeenFirstRtp = false;
     log.info("AudioSentinel stopped.");
   }
 
@@ -151,6 +161,8 @@ export interface OutboundAudioSentinelOptions {
   onStall: (diagnostics: OutboundAudioStallDiagnostics) => void;
   /** Callback fired when outbound RTP resumes after a stall. */
   onRecover?: () => void;
+  /** Fired once when outbound audio RTP bytes are first observed. */
+  onFirstRtp?: () => void;
   intervalMs?: number;
   stallThresholdTicks?: number;
 }
@@ -174,6 +186,7 @@ export class OutboundAudioSentinel {
   private checkInFlightGeneration: number | null = null;
   private observedPc: RTCPeerConnection | null = null;
   private observedTrack: MediaStreamTrack | null = null;
+  private hasSeenFirstRtp = false;
 
   constructor(private options: OutboundAudioSentinelOptions) {}
 
@@ -211,6 +224,7 @@ export class OutboundAudioSentinel {
     this.isStalled = false;
     this.observedPc = null;
     this.observedTrack = null;
+    this.hasSeenFirstRtp = false;
   }
 
   private isConnected(pc: RTCPeerConnection) {
@@ -280,6 +294,11 @@ export class OutboundAudioSentinel {
         this.previousPacketsSent = null;
         this.consecutiveZeroDeltas = 0;
         return;
+      }
+
+      if (!this.hasSeenFirstRtp && currentBytes > 0) {
+        this.hasSeenFirstRtp = true;
+        this.options.onFirstRtp?.();
       }
 
       if (this.previousBytesSent === null) {

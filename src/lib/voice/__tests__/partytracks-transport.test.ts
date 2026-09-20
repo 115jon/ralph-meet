@@ -32,8 +32,12 @@ class FakePartyTracks implements PartyTracksClient {
     sessionId?: string;
     mid?: string | null;
   }>[] = [];
+  peerConnection: RTCPeerConnection | null = null;
+  pushPeerConnection: RTCPeerConnection | null = null;
+  pullPeerConnection: RTCPeerConnection | null = null;
 
   push(sourceTrack$: Observable<MediaStreamTrack>) {
+    this.pushPeerConnection = this.peerConnection;
     this.pushSources.push(sourceTrack$);
     return this.pushedMetadata$;
   }
@@ -46,6 +50,7 @@ class FakePartyTracks implements PartyTracksClient {
       mid?: string | null;
     }>,
   ) {
+    this.pullPeerConnection = this.peerConnection;
     this.pullMetadata.push(trackMetadata$);
     return this.pulledTrack$;
   }
@@ -108,6 +113,50 @@ describe("PartyTracksTransport", () => {
     expect(fake.pushSources).toHaveLength(1);
     expect(fake.pullMetadata).toHaveLength(1);
     expect(transport.peerConnection$).toBe(fake.peerConnection$);
+  });
+
+  it("push and pull share the same RTCPeerConnection object", () => {
+    const fake = new FakePartyTracks();
+    const peerConnection = { id: "shared-pc" } as unknown as RTCPeerConnection;
+    fake.peerConnection = peerConnection;
+    const factory = vi.fn(() => fake);
+    const transport = new PartyTracksTransport(
+      {
+        roomSlug: "room-one",
+        participantId: "participant-one",
+        voiceToken: "voice-token",
+        iceServers: [],
+      },
+      { factory, resolveApiUrl: (path) => path },
+    );
+    const seen: RTCPeerConnection[] = [];
+    transport.peerConnection$.subscribe((pc) => seen.push(pc));
+
+    transport
+      .push(of(mediaTrack("audio", "microphone")), {
+        participantId: "participant-one",
+        trackName: "cam-audio-participant-one",
+        kind: "audio",
+      })
+      .subscribe();
+    transport
+      .pull(
+        of({
+          participant_id: "participant-two",
+          track_name: "cam-audio-participant-two",
+          sfu_track_name: "party-track-two",
+          session_id: "party-session-two",
+          kind: "audio",
+        }),
+      )
+      .subscribe();
+    fake.peerConnection$.next(peerConnection);
+
+    expect(factory).toHaveBeenCalledOnce();
+    expect(fake.pushPeerConnection).toBe(peerConnection);
+    expect(fake.pullPeerConnection).toBe(peerConnection);
+    expect(fake.pushPeerConnection).toBe(fake.pullPeerConnection);
+    expect(seen).toEqual([peerConnection]);
   });
 
   it("keeps Ralph track aliases while translating PartyTracks metadata", () => {

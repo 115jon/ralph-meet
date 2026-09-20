@@ -42,6 +42,10 @@ export type SFUDisconnectReason =
 
 export interface PartyTracksClientTransport extends PartyTracksMediaTransport {
   readonly peerConnection$: Observable<RTCPeerConnection>;
+  readonly session$?: Observable<{
+    peerConnection: RTCPeerConnection;
+    sessionId: string;
+  }>;
   updateVoiceToken(voiceToken: string): void;
   updateIceServers(iceServers: IceServer[]): void;
   dispose(): void;
@@ -95,6 +99,7 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
   private partyTracksParticipantId: string | null = null;
   private partyTracksPeerConnection: RTCPeerConnection | null = null;
   private partyTracksPeerConnectionSubscription: Subscription | null = null;
+  private partyTracksSessionSubscription: Subscription | null = null;
   private isLeaving = false;
   private credentialRefreshTimer: ReturnType<typeof setTimeout> | null = null;
   private voiceReadyPromise: Promise<void> = Promise.resolve();
@@ -202,6 +207,7 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
         this.emit("audio-stalled", true);
       },
       onRecover: () => this.emit("audio-stalled", false),
+      onFirstRtp: () => this.markLatency("inboundRtpAt"),
     });
 
     this.outboundAudioSentinel = new OutboundAudioSentinel({
@@ -219,6 +225,7 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
         this.emit("outbound-audio-stalled", true);
       },
       onRecover: () => this.emit("outbound-audio-stalled", false),
+      onFirstRtp: () => this.markLatency("outboundRtpAt"),
     });
 
     this.wireRoomEvents();
@@ -307,7 +314,6 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
 
       this.participantId = event.participantId;
       this.roomParticipantEstablished = true;
-      this.vad.refreshSpeakingState(true);
       this.applyIceServers(event.iceServers);
       this.voiceToken = event.voiceToken;
       this.ensurePartyTracksMedia(
@@ -326,6 +332,7 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
         participants: event.participants,
         spatialAudioState: event.spatialAudioState,
       });
+      this.vad.refreshSpeakingState(true);
       this.connectVoice();
     });
 
@@ -603,6 +610,10 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
         this.audioSentinel.start();
         this.outboundAudioSentinel.start();
       });
+    this.partyTracksSessionSubscription =
+      transport.session$?.subscribe(({ sessionId }) => {
+        this.markLatency("partyTracksSessionCreatedAt", { sessionId });
+      }) ?? null;
     this.partyTracksMedia = new PartyTracksMediaManager(
       transport,
       participantId,
@@ -645,6 +656,12 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
           sfuLog.error("PartyTracks media error", error);
           this.emit("error", { message });
         },
+        onPushStarted: (trackName, kind) => {
+          this.markLatency("pushOfferAt", { trackName, kind });
+        },
+        onPullStarted: (trackName) => {
+          this.markLatency("pullRequestedAt", { trackName });
+        },
       },
     );
     this.resolvePartyTracksReadiness();
@@ -653,6 +670,8 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
   private disposePartyTracksMedia(): void {
     this.partyTracksPeerConnectionSubscription?.unsubscribe();
     this.partyTracksPeerConnectionSubscription = null;
+    this.partyTracksSessionSubscription?.unsubscribe();
+    this.partyTracksSessionSubscription = null;
     this.partyTracksPeerConnection = null;
     this.partyTracksMedia?.dispose();
     this.partyTracksTransport?.dispose();
@@ -961,6 +980,10 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
 
   public getPublishedTrack(trackName: string): MediaStreamTrack | null {
     return this.partyTracksMedia?.getPublishedTrack(trackName) ?? null;
+  }
+
+  public getMicrophoneTrackName(): string | null {
+    return this.participantId ? `cam-audio-${this.participantId}` : null;
   }
 
   public async publishTracks(

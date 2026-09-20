@@ -23,6 +23,8 @@ export interface PartyTracksMediaManagerCallbacks {
   onRemoteTrack(event: PartyTracksRemoteTrackEvent): void;
   onConnectionState?(state: RTCPeerConnectionState): void;
   onError?(error: unknown): void;
+  onPushStarted?(trackName: string, kind: "audio" | "video"): void;
+  onPullStarted?(trackName: string): void;
 }
 
 interface Publication {
@@ -100,6 +102,7 @@ export class PartyTracksMediaManager {
         subscription: new Subscription(),
       };
       this.publications.set(trackName, publication);
+      this.callbacks.onPushStarted?.(trackName, track.kind);
       publication.subscription = this.transport
         .push(source$, {
           participantId: this.participantId,
@@ -275,6 +278,7 @@ export class PartyTracksMediaManager {
       subscription: new Subscription(),
     };
     this.pulls.set(track.track_name, pull);
+    this.callbacks.onPullStarted?.(track.track_name);
     pull.subscription = this.transport.pull(metadata$).subscribe({
       next: (remoteTrack) => {
         const currentMetadata = this.offers.get(track.track_name) ?? track;

@@ -81,6 +81,30 @@ describe("OutboundAudioSentinel", () => {
     sentinel.stop();
   });
 
+  it("reports first outbound RTP once when bytes are observed", async () => {
+    vi.useFakeTimers();
+    const onFirstRtp = vi.fn();
+    const getStats = vi
+      .fn<() => Promise<RTCStatsReport>>()
+      .mockResolvedValue(stats(40));
+    const connection = createPeerConnection(getStats);
+    const track = createTrack();
+    const sentinel = new OutboundAudioSentinel({
+      pc: () => connection.pc,
+      track: () => track,
+      onStall: vi.fn(),
+      onFirstRtp,
+      intervalMs: 10,
+      stallThresholdTicks: 5,
+    });
+
+    sentinel.start();
+    await vi.advanceTimersByTimeAsync(30);
+
+    expect(onFirstRtp).toHaveBeenCalledOnce();
+    sentinel.stop();
+  });
+
   it("ignores disabled tracks and disconnected peer connections", async () => {
     vi.useFakeTimers();
     const onStall = vi.fn();

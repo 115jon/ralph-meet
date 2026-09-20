@@ -134,6 +134,37 @@ describe("PartyTracksMediaManager", () => {
     );
   });
 
+  it("notifies when push and pull start on the shared transport", () => {
+    const transport = new TestTransport();
+    const onPushStarted = vi.fn();
+    const onPullStarted = vi.fn();
+    const manager = new PartyTracksMediaManager(transport, "publisher", {
+      onPublicationMetadata: vi.fn(),
+      onPublicationStopped: vi.fn(),
+      onRemoteTrack: vi.fn(),
+      onPushStarted,
+      onPullStarted,
+    });
+
+    manager.publishStream(
+      mediaStream(mediaTrack("audio", "microphone")),
+      "cam",
+    );
+    manager.offerTracks([
+      {
+        participant_id: "remote",
+        track_name: "cam-audio-remote",
+        sfu_track_name: "opaque-remote",
+        session_id: "session-capability",
+        kind: "audio",
+      },
+    ]);
+
+    expect(onPushStarted).toHaveBeenCalledWith("cam-audio-publisher", "audio");
+    expect(onPullStarted).toHaveBeenCalledWith("cam-audio-remote");
+    manager.dispose();
+  });
+
   it("replaces publications without a second push and tears down local and remote tracks", () => {
     const transport = new TestTransport();
     const onPublicationStopped = vi.fn();
