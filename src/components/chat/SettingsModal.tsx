@@ -38,7 +38,7 @@ import {
   useSyncExternalStore,
 } from "react";
 
-import { useKovaAuth, useUser } from "@kova/react";
+import { useAuth, useUser } from "@kova/react";
 
 import SettingsAccountTab from "./SettingsAccountTab";
 import SettingsAccountOverviewTab from "./SettingsAccountOverviewTab";
@@ -149,7 +149,7 @@ export default function SettingsModal({
   initialProfileEditorOpen = false,
 }: SettingsModalProps) {
   const { isLoaded: isUserLoaded } = useUser();
-  const { clearSessionToken } = useKovaAuth();
+  const { signOut } = useAuth();
   const chatUser = useChatStore((s) => s.user);
 
   const [activeTab, setActiveTab] = useState<Tab>(() =>
@@ -180,18 +180,12 @@ export default function SettingsModal({
 
   const handleSignOut = () => {
     markAuthLogoutIntent();
-
-    // Use app-local logout. The SDK's signOut() revokes the server session and
-    // invalidates other clients such as the desktop app.
-    clearSessionToken();
-
-    if (typeof window !== "undefined" && window.__TAURI_INTERNALS__) {
-      clearDesktopAuthSession();
-    }
-
-    if (typeof window !== "undefined") {
-      window.location.replace("/sign-in");
-    }
+    clearDesktopAuthSession();
+    void signOut("/sign-in").finally(() => {
+      if (typeof window !== "undefined") {
+        window.location.replace("/sign-in");
+      }
+    });
   };
 
   const isDesktopApp = isDesktop();

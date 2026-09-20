@@ -7,10 +7,15 @@ import {
   setStoredKovaAuthSessionToken,
 } from "@/lib/desktop-auth";
 import {
+  buildNativeSdkBounceUrl,
   getSignInRenderState,
   shouldCompletePostSignInRedirect,
 } from "@/lib/native-auth-handoff";
 import { buildAuthRouteUrl } from "@/lib/auth-route-urls";
+import {
+  getKovaAuthUrl,
+  KOVA_AUTH_PUBLISHABLE_KEY,
+} from "@/lib/kova-auth-config";
 import { isTauri } from "@/lib/platform";
 import { SignIn, useAuth } from "@kova/react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
@@ -120,7 +125,20 @@ function WebSignInPage() {
       }
 
       if (isNativeHandoff) {
-        // The auth provider owns native callbacks and appends a short-lived code.
+        if (!KOVA_AUTH_PUBLISHABLE_KEY) {
+          log.error("Missing VITE_KOVA_AUTH_PUBLISHABLE_KEY");
+          return;
+        }
+        didRedirectRef.current = true;
+        const bounceUrl = buildNativeSdkBounceUrl(
+          getKovaAuthUrl(),
+          KOVA_AUTH_PUBLISHABLE_KEY,
+          afterSignInUrl,
+        );
+        log.info("Launching native SDK bounce", {
+          protocol: safeProtocol(afterSignInUrl),
+        });
+        window.location.replace(bounceUrl);
         return;
       }
 

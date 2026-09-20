@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 
 vi.mock("@kova/react", () => ({
   useUser: () => ({ isLoaded: true, user: null }),
-  useKovaAuth: () => ({ clearSessionToken: vi.fn() }),
+  useAuth: () => ({ signOut: vi.fn(() => Promise.resolve()) }),
 }));
 
 vi.mock("@/lib/platform", async () => {

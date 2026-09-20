@@ -1,12 +1,25 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  buildNativeSdkBounceUrl,
   getSignInRenderState,
   isSupportedNativeAuthUrl,
   shouldCompletePostSignInRedirect,
 } from "@/lib/native-auth-handoff";
 
 describe("native auth handoff decisions", () => {
+  it("builds the Kova SDK bounce URL for already-signed-in native handoff", () => {
+    expect(
+      buildNativeSdkBounceUrl(
+        "https://auth.example/",
+        "pk_live_1",
+        "ralphmeet://auth",
+      ),
+    ).toBe(
+      "https://auth.example/api/hosted/oauth-complete?mode=sdk&pk=pk_live_1&redirect_uri=ralphmeet%3A%2F%2Fauth",
+    );
+  });
+
   it("accepts only native auth callbacks carrying a short-lived code", () => {
     expect(isSupportedNativeAuthUrl("ralphmeet://auth")).toBe(true);
     expect(isSupportedNativeAuthUrl("ralphmeet://auth/?kova_auth_code=x")).toBe(

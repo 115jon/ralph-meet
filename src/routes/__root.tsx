@@ -4,7 +4,9 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { useExternalLinkHandler } from "@/hooks/useExternalLinkHandler";
 import {
   DEBUG_DESKTOP_AUTH,
+  clearDesktopAuthSession,
   getDesktopAuthHandoffToken,
+  markAuthLogoutIntent,
   setDesktopAuthSession,
   subscribeDesktopTokenChanges,
   useKovaAuthTokenSync,
@@ -20,7 +22,7 @@ import {
   createRootRoute,
   useNavigate,
 } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { clog } from "@/lib/console-logger";
 import appCss from "../styles.css?url";
 
@@ -107,6 +109,7 @@ function RootComponent() {
   // Intercept external link clicks on desktop → open in system browser
   useExternalLinkHandler();
   const [sessionToken, setSessionToken] = useState<string | undefined>();
+  const seenSessionTokenRef = useRef(false);
 
   useEffect(() => {
     // Auth handoff storage is intentionally read after the stable server snapshot.
@@ -139,8 +142,17 @@ function RootComponent() {
             tokenLength: token?.length ?? 0,
           });
         }
-        if (token && !getDesktopAuthHandoffToken()) {
-          setDesktopAuthSession(token);
+        if (token) {
+          seenSessionTokenRef.current = true;
+          if (!getDesktopAuthHandoffToken()) {
+            setDesktopAuthSession(token);
+          }
+          return;
+        }
+        if (seenSessionTokenRef.current) {
+          seenSessionTokenRef.current = false;
+          markAuthLogoutIntent();
+          clearDesktopAuthSession();
         }
       }}
     >
