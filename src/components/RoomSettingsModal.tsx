@@ -59,6 +59,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "./ui/select";
+import { shouldIgnoreSelectDismiss } from "./ui/select-dismiss";
 import { VideoPlayer } from "./voice/VideoPlayer";
 import { AudioCompatibilityHint } from "./chat/AudioCompatibilityHint";
 
@@ -419,8 +420,10 @@ export default function RoomSettingsModal({
           showCloseButton={false}
           className="fixed inset-0 z-50 m-0 flex min-h-0 h-full w-full items-center justify-center bg-black/60 p-4 backdrop-blur-sm outline-none animate-in fade-in duration-200 data-[state=closed]:animate-out data-[state=closed]:fade-out"
           aria-labelledby="room-settings-title"
-          onClick={(event) => {
-            if (event.target === event.currentTarget) onClose();
+          onPointerDown={(event) => {
+            if (event.target !== event.currentTarget) return;
+            if (shouldIgnoreSelectDismiss(event.target)) return;
+            onClose();
           }}
         >
           <div className="relative m-0 flex min-h-0 h-full w-full flex-col overflow-hidden bg-rm-bg-primary p-0 shadow-2xl pointer-events-auto outline-none animate-in slide-in-from-bottom-full md:h-full md:max-h-[640px] md:max-w-[860px] md:flex-row md:rounded-xl md:border border-rm-border md:slide-in-from-bottom-0 md:fade-in duration-300 md:duration-200">

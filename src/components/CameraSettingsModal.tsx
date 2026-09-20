@@ -7,6 +7,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { shouldIgnoreSelectDismiss } from "@/components/ui/select-dismiss";
 import { createCameraBackgroundEffect } from "@/lib/camera-background-effects";
 import {
   CAMERA_BACKGROUND_ACCEPT,
@@ -368,10 +369,10 @@ export const CameraSettingsModal: React.FC<CameraSettingsModalProps> = ({
             "animate-in fade-in duration-200 data-[state=closed]:pointer-events-none data-[state=closed]:opacity-0 data-[state=closed]:animate-out data-[state=closed]:fade-out",
           )}
           data-state={isOpen ? "open" : "closed"}
-          onClick={(event) => {
-            if (event.target === event.currentTarget) {
-              onClose();
-            }
+          onPointerDown={(event) => {
+            if (event.target !== event.currentTarget) return;
+            if (shouldIgnoreSelectDismiss(event.target)) return;
+            onClose();
           }}
           role="presentation"
         >

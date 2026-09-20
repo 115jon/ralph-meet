@@ -7,6 +7,7 @@ import { Dialog as DialogPrimitive } from "radix-ui";
 import { useDialogBackButton } from "@/hooks/useBackButton";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { shouldIgnoreSelectDismiss } from "@/components/ui/select-dismiss";
 
 type DialogRootContextValue = {
   id: string;
@@ -158,7 +159,16 @@ const DialogSurface = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Content>,
   DialogContentProps
 >(function DialogSurface(
-  { className, children, showCloseButton = true, onCloseAutoFocus, ...props },
+  {
+    className,
+    children,
+    showCloseButton = true,
+    onCloseAutoFocus,
+    onPointerDownOutside,
+    onFocusOutside,
+    onInteractOutside,
+    ...props
+  },
   ref,
 ) {
   const rootContext = React.useContext(DialogRootContext);
@@ -166,6 +176,15 @@ const DialogSurface = React.forwardRef<
   const hasDescription = containsDialogPrimitive(children, DialogDescription);
   const hasDescribedBy = props["aria-describedby"] !== undefined;
   const accessibleLabel = props["aria-label"] ?? "Dialog";
+  const ignoreSelectDismiss = (
+    event: { target: EventTarget | null; preventDefault: () => void },
+    handler?: (event: typeof event) => void,
+  ) => {
+    handler?.(event);
+    if (shouldIgnoreSelectDismiss(event.target)) {
+      event.preventDefault();
+    }
+  };
   const handleCloseAutoFocus = (
     event: Parameters<
       NonNullable<
@@ -191,6 +210,13 @@ const DialogSurface = React.forwardRef<
       ref={ref}
       className={cn("min-h-0", className)}
       onCloseAutoFocus={handleCloseAutoFocus}
+      onPointerDownOutside={(event) =>
+        ignoreSelectDismiss(event, onPointerDownOutside)
+      }
+      onFocusOutside={(event) => ignoreSelectDismiss(event, onFocusOutside)}
+      onInteractOutside={(event) =>
+        ignoreSelectDismiss(event, onInteractOutside)
+      }
       {...props}
     >
       {!hasTitle && (

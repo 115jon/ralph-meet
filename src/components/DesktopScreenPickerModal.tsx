@@ -21,6 +21,7 @@ import {
   QUALITY_PRESETS,
   SourceGrid,
 } from "./DesktopScreenPickerUI";
+import { shouldIgnoreSelectDismiss } from "@/components/ui/select-dismiss";
 
 export interface DesktopScreenPickerModalProps {
   isOpen: boolean;
@@ -536,10 +537,10 @@ export const DesktopScreenPickerModal: React.FC<
         <div
           className="fixed inset-0 z-90 flex items-center justify-center bg-black/80 backdrop-blur-sm animate-in fade-in duration-200 data-[state=closed]:pointer-events-none data-[state=closed]:opacity-0"
           data-state={isOpen ? "open" : "closed"}
-          onClick={(event) => {
-            if (event.target === event.currentTarget) {
-              onClose();
-            }
+          onPointerDown={(event) => {
+            if (event.target !== event.currentTarget) return;
+            if (shouldIgnoreSelectDismiss(event.target)) return;
+            onClose();
           }}
           role="presentation"
         >
@@ -548,6 +549,21 @@ export const DesktopScreenPickerModal: React.FC<
             className="relative m-0 flex w-full max-w-[860px] flex-col overflow-hidden rounded-2xl border border-rm-border bg-rm-bg-primary p-0 shadow-2xl outline-none animate-in zoom-in-95 slide-in-from-bottom-4 duration-300"
             aria-labelledby="screen-picker-title"
             aria-busy={!invokeReady || state.loading || state.previewLoading}
+            onPointerDownOutside={(event) => {
+              if (shouldIgnoreSelectDismiss(event.target)) {
+                event.preventDefault();
+              }
+            }}
+            onFocusOutside={(event) => {
+              if (shouldIgnoreSelectDismiss(event.target)) {
+                event.preventDefault();
+              }
+            }}
+            onInteractOutside={(event) => {
+              if (shouldIgnoreSelectDismiss(event.target)) {
+                event.preventDefault();
+              }
+            }}
           >
             <DesktopScreenPickerTabBar
               tab={state.tab}
