@@ -1,5 +1,9 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { RateLimiter, SOUNDBOARD_MEDIA_RATE_LIMIT } from "./rate-limiter";
+import {
+  PROXY_MEDIA_RATE_LIMIT,
+  RateLimiter,
+  SOUNDBOARD_MEDIA_RATE_LIMIT,
+} from "./rate-limiter";
 
 describe("RateLimiter", () => {
   let limiter: RateLimiter;
@@ -57,6 +61,28 @@ describe("RateLimiter", () => {
       "/api/channels/xyz789/messages",
     );
     expect(result.allowed).toBe(false);
+  });
+
+  it("lets a channel reload proxy embed media without the default API cap", () => {
+    for (let i = 0; i < 61; i += 1) {
+      expect(limiter.check("1.2.3.4", "GET", "/api/proxy-media").allowed).toBe(
+        true,
+      );
+    }
+
+    expect(limiter.check("1.2.3.4", "GET", "/api/servers").allowed).toBe(true);
+  });
+
+  it("still bounds proxy-media reads", () => {
+    for (let i = 0; i < PROXY_MEDIA_RATE_LIMIT.limit; i += 1) {
+      expect(limiter.check("1.2.3.4", "GET", "/api/proxy-media").allowed).toBe(
+        true,
+      );
+    }
+
+    const result = limiter.check("1.2.3.4", "GET", "/api/proxy-media");
+    expect(result.allowed).toBe(false);
+    expect(result.remaining).toBe(0);
   });
 
   it("returns correct remaining count", () => {
