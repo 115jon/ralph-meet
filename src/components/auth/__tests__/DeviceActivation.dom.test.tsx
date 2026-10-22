@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
   getDeviceRequest: vi.fn(),
   approveDeviceRequest: vi.fn(),
   denyDeviceRequest: vi.fn(),
+  releaseDeviceRequest: vi.fn(),
   markAuthLogoutIntent: vi.fn(),
   auth: { isLoaded: true, isSignedIn: true },
 }));
@@ -30,6 +31,7 @@ vi.mock("@kova/react", () => ({
     getDeviceRequest: mocks.getDeviceRequest,
     approveDeviceRequest: mocks.approveDeviceRequest,
     denyDeviceRequest: mocks.denyDeviceRequest,
+    releaseDeviceRequest: mocks.releaseDeviceRequest,
   }),
 }));
 
@@ -49,7 +51,11 @@ vi.mock("@/components/ThemeAwareSplashLogo", () => ({
   ThemeAwareSplashLogo: () => <span data-testid="logo" />,
 }));
 
-import { DeviceActivation, outcomeForError } from "../DeviceActivation";
+import {
+  DeviceActivation,
+  OUTCOME_COPY,
+  outcomeForError,
+} from "../DeviceActivation";
 
 const REQUEST = {
   userCode: "ABCD-EFGH",
@@ -69,6 +75,11 @@ beforeEach(() => {
   mocks.getDeviceRequest.mockReset();
   mocks.approveDeviceRequest.mockReset();
   mocks.denyDeviceRequest.mockReset();
+  mocks.releaseDeviceRequest.mockReset();
+  mocks.releaseDeviceRequest.mockResolvedValue({
+    ok: true,
+    status: "released",
+  });
   mocks.navigate.mockReset();
   mocks.signOut.mockClear();
   mocks.markAuthLogoutIntent.mockClear();
@@ -251,22 +262,146 @@ describe("DeviceActivation", () => {
     expect(screen.getByRole("button", { name: "Approve" })).toBeEnabled();
   });
 
-  it("'Not you?' signs out and returns here through sign-in", async () => {
-    mocks.getDeviceRequest.mockResolvedValue({ ok: true, request: REQUEST });
-    render(<DeviceActivation initialCode="ABCD-EFGH" />);
-    const other = await screen.findByRole("button", { name: /Not you?/ });
-    await act(async () => {
-      fireEvent.click(other);
+  describe("'Not you?'", () => {
+    const SIGN_IN_BACK_HERE =
+      "/sign-in?redirect_url=%2Factivate%3Fcode%3DABCD-EFGH";
+
+    async function clickNotYou(code = "abcd-efgh") {
+      mocks.getDeviceRequest.mockResolvedValue({ ok: true, request: REQUEST });
+      render(<DeviceActivation initialCode={code} />);
+      const other = await screen.findByRole("button", { name: /Not you?/ });
+      await act(async () => {
+        fireEvent.click(other);
+      });
+    }
+
+    it("releases the claim with the current session, then signs out", async () => {
+      await clickNotYou();
+      expect(mocks.releaseDeviceRequest).toHaveBeenCalledWith("ABCD-EFGH");
+      expect(mocks.markAuthLogoutIntent).toHaveBeenCalled();
+      expect(mocks.signOut).toHaveBeenCalledTimes(1);
+      const [release] = mocks.releaseDeviceRequest.mock.invocationCallOrder;
+      const [signOut] = mocks.signOut.mock.invocationCallOrder;
+      expect(release).toBeLessThan(signOut!);
     });
-    expect(mocks.markAuthLogoutIntent).toHaveBeenCalled();
-    expect(mocks.signOut).toHaveBeenCalled();
-    await waitFor(() =>
-      expect(mocks.navigate).toHaveBeenCalledWith({
-        to: "/sign-in",
-        search: { redirect_url: "/activate?code=ABCD-EFGH" },
-        replace: true,
-      }),
+
+    it("signs out straight to sign-in with an encoded return to this code", async () => {
+      await clickNotYou();
+      expect(mocks.signOut).toHaveBeenCalledWith(SIGN_IN_BACK_HERE);
+      await waitFor(() =>
+        expect(mocks.navigate).toHaveBeenCalledWith({
+          to: "/sign-in",
+          search: { redirect_url: "/activate?code=ABCD-EFGH" },
+          replace: true,
+        }),
+      );
+    });
+
+    it("lands on that URL even though the SDK hard-navigates after sign-out", async () => {
+      // The SDK ends signOut with `location.href = callbackURL ??
+      // afterSignOutUrl` ("/sign-in", no query) — the original bug.
+      window.history.replaceState(null, "", "/activate?code=ABCD-EFGH");
+      mocks.signOut.mockImplementationOnce(async (callbackURL?: string) => {
+        window.history.replaceState(null, "", callbackURL ?? "/sign-in");
+      });
+      await clickNotYou();
+      expect(window.location.pathname + window.location.search).toBe(
+        SIGN_IN_BACK_HERE,
+      );
+      expect(
+        new URLSearchParams(window.location.search).get("redirect_url"),
+      ).toBe("/activate?code=ABCD-EFGH");
+    });
+
+    it("treats not_claimed as nothing to release", async () => {
+      mocks.releaseDeviceRequest.mockResolvedValue({
+        ok: false,
+        error: "not_claimed",
+        status: 409,
+        message: "x",
+      });
+      await clickNotYou();
+      expect(mocks.signOut).toHaveBeenCalledWith(SIGN_IN_BACK_HERE);
+    });
+
+    it.each([
+      [
+        "an error",
+        () =>
+          mocks.releaseDeviceRequest.mockResolvedValue({
+            ok: false,
+            error: "network_error",
+            status: 0,
+            message: "x",
+          }),
+      ],
+      [
+        "a throw",
+        () => mocks.releaseDeviceRequest.mockRejectedValue(new Error("boom")),
+      ],
+    ])(
+      "still signs out after %s, then shows Code in use with a restart hint",
+      async (_label, arrange) => {
+        arrange();
+        mocks.signOut.mockImplementationOnce(async () => {
+          mocks.auth.isSignedIn = false;
+        });
+        await clickNotYou();
+        expect(mocks.signOut).toHaveBeenCalledWith(
+          "/activate?code=ABCD-EFGH&release=failed",
+        );
+        const heading = await screen.findByRole("heading", {
+          name: "Code in use",
+        });
+        expect(
+          screen.getByText(OUTCOME_COPY.release_failed.body),
+        ).toBeInTheDocument();
+        expect(OUTCOME_COPY.release_failed.body).toMatch(
+          /Start sign-in again on your device/,
+        );
+        expect(screen.getByRole("status")).toHaveTextContent("Code in use");
+        await waitFor(() => expect(document.activeElement).toBe(heading));
+        expect(mocks.navigate).toHaveBeenCalledWith({
+          to: "/activate",
+          search: { code: "ABCD-EFGH", release: "failed" },
+          replace: true,
+        });
+        expect(mocks.navigate).not.toHaveBeenCalledWith(
+          expect.objectContaining({ to: "/sign-in" }),
+        );
+      },
     );
+
+    it("shows the failed-release page signed out instead of bouncing to sign-in", () => {
+      mocks.auth.isSignedIn = false;
+      render(<DeviceActivation initialCode="ABCD-EFGH" releaseFailed />);
+      expect(
+        screen.getByRole("heading", { name: "Code in use" }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("link", { name: "Enter a different code" }),
+      ).toHaveAttribute("href", "/activate");
+      expect(mocks.navigate).not.toHaveBeenCalled();
+      expect(mocks.getDeviceRequest).not.toHaveBeenCalled();
+    });
+
+    it("doesn't release on 'Sign in again' (nothing was claimed)", async () => {
+      mocks.getDeviceRequest.mockResolvedValue({
+        ok: false,
+        error: "mfa_required",
+        status: 403,
+        message: "x",
+      });
+      render(<DeviceActivation initialCode="ABCD-EFGH" />);
+      const again = await screen.findByRole("button", {
+        name: "Sign in again",
+      });
+      await act(async () => {
+        fireEvent.click(again);
+      });
+      expect(mocks.releaseDeviceRequest).not.toHaveBeenCalled();
+      expect(mocks.signOut).toHaveBeenCalledWith(SIGN_IN_BACK_HERE);
+    });
   });
 
   it("treats a lost session as a sign-in, never as an error page", () => {

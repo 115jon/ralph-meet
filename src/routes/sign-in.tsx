@@ -8,7 +8,11 @@ import {
   getStoredKovaAuthSessionToken,
   setStoredKovaAuthSessionToken,
 } from "@/lib/desktop-auth";
-import { buildAuthRouteUrl } from "@/lib/auth-route-urls";
+import {
+  buildAuthRouteUrl,
+  redirectOrigins,
+  sanitizeRedirectUrl,
+} from "@/lib/auth-route-urls";
 import { isTauri } from "@/lib/platform";
 import { SignIn, useAuth } from "@kova/react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
@@ -55,7 +59,7 @@ function WebSignInPage() {
   const { redirect_url, kova_auth_code, ralph_auth_code } = Route.useSearch();
   const { getToken, isLoaded, isSignedIn } = useAuth();
   const navigate = useNavigate();
-  const afterSignInUrl = redirect_url || "/chat";
+  const afterSignInUrl = sanitizeRedirectUrl(redirect_url, redirectOrigins());
   const signUpUrl = buildAuthRouteUrl("/sign-up", { redirect_url });
   const oauthCallbackUrl = buildWebOauthCallbackUrl(afterSignInUrl);
   const hasAuthTransferCode = !!(kova_auth_code || ralph_auth_code);
@@ -91,10 +95,12 @@ function WebSignInPage() {
           tokenLength: token?.length ?? 0,
         });
         if (token) setStoredKovaAuthSessionToken(token);
+        // `href`, not `to`: the router treats `to` as a bare path, so
+        // "/activate?code=…" passed as `to` silently goes nowhere.
         void navigate({
-          to: afterSignInUrl as any,
+          href: afterSignInUrl,
           replace: true,
-        } as any).catch((error) => {
+        }).catch((error) => {
           log.warn(
             "Router navigation failed; falling back to hard redirect",
             error,
