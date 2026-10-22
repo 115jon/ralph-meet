@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.1.0](https://github.com/115jon/ralph-meet/compare/v3.0.0...v3.1.0) (2026-10-22)
+
+
+### Features
+
+* **auth:** ✨ approve desktop sign-ins at /activate on dithered pages ([8a5e337](https://github.com/115jon/ralph-meet/commit/8a5e337a05a22aa6ad7974f715f0a8fecc0f3347))
+* **auth:** approve desktop sign-ins at /activate on dithered pages ([1572756](https://github.com/115jon/ralph-meet/commit/1572756defb1f48b8f88419f9e615139d58e3985))
+
 ## [3.0.0](https://github.com/115jon/ralph-meet/compare/v2.0.2...v3.0.0) (2026-10-22)
 
 
