@@ -1,5 +1,14 @@
 # Changelog
 
+## [3.1.1](https://github.com/115jon/ralph-meet/compare/v3.1.0...v3.1.1) (2026-10-22)
+
+
+### Bug Fixes
+
+* **auth:** 🐛 keep desktop sessions across publishable key changes ([d737745](https://github.com/115jon/ralph-meet/commit/d737745a822bb86c9497a40bb5c1975bf3c62a03))
+* **auth:** 🐛 release the code and return to /activate on not you ([823554c](https://github.com/115jon/ralph-meet/commit/823554c3abfaf44fd69e0956021384b884b207b7))
+* **security:** 🐛 only follow same-origin redirects after sign-in ([c32da65](https://github.com/115jon/ralph-meet/commit/c32da65f98af5c941fa63011dfd36d1a4a6f7cbc))
+
 ## [3.1.0](https://github.com/115jon/ralph-meet/compare/v3.0.0...v3.1.0) (2026-10-22)
 
 

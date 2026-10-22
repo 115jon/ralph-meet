@@ -10,6 +10,11 @@
  *
  * Signed-out visitors are sent to /sign-in with a path-only, same-origin
  * `redirect_url` back here (see activateReturnPath).
+ *
+ * "Not you?" releases this account's claim on the code (so the next account
+ * can look it up), then signs out straight to that same sign-in URL. If the
+ * release fails it still signs out, but lands on a "Code in use" page that
+ * asks for a fresh code from the device (`?release=failed`).
  */
 
 import { ThemeAwareSplashLogo } from "@/components/ThemeAwareSplashLogo";
@@ -20,7 +25,9 @@ import {
   initials,
   isCompleteDeviceCode,
   prettyPlatform,
+  releaseFailedPath,
   spelledDeviceCode,
+  switchAccountSignInUrl,
   waitPhrase,
 } from "@/lib/device-code-format";
 import { getKovaAuthUrl } from "@/lib/kova-auth-config";
@@ -48,6 +55,7 @@ type Outcome =
   | "invalid"
   | "used"
   | "claimed"
+  | "release_failed"
   | "rate_limited"
   | "mfa_required"
   | "network"
@@ -94,6 +102,11 @@ export const OUTCOME_COPY: Record<Outcome, Copy> = {
   claimed: {
     title: "Code in use",
     body: "Another account is already reviewing this code. If that wasn't you, start sign-in again on your device.",
+    action: "enter",
+  },
+  release_failed: {
+    title: "Code in use",
+    body: "We couldn't free this code from the account you signed out of, so another account can't use it. Start sign-in again on your device to get a new code.",
     action: "enter",
   },
   rate_limited: {
@@ -278,9 +291,12 @@ export interface ActivationDeps {
 
 export function DeviceActivation({
   initialCode,
+  releaseFailed = false,
   deps,
 }: {
   initialCode?: string;
+  /** Landed here from a "Not you?" whose release failed (`?release=failed`). */
+  releaseFailed?: boolean;
   deps?: ActivationDeps;
 }) {
   const navigate = useNavigate();
@@ -289,20 +305,30 @@ export function DeviceActivation({
   const realApproval = useDeviceApproval();
   const { isLoaded, isSignedIn, signOut } = deps?.auth ?? realAuth;
   const user = deps ? deps.user : realUser.user;
-  const { isReady, getDeviceRequest, approveDeviceRequest, denyDeviceRequest } =
-    deps?.approval ?? realApproval;
+  const {
+    isReady,
+    getDeviceRequest,
+    approveDeviceRequest,
+    denyDeviceRequest,
+    releaseDeviceRequest,
+  } = deps?.approval ?? realApproval;
   const formatted = formatDeviceCode(initialCode);
   const complete = isCompleteDeviceCode(formatted);
 
   const [view, setView] = useState<View>(() =>
-    complete
-      ? { kind: "loading", code: formatted }
-      : {
-          kind: "enter",
-          code: formatted,
-          error: initialCode && !complete ? "format" : undefined,
-        },
+    releaseFailed
+      ? { kind: "outcome", code: formatted, outcome: "release_failed" }
+      : complete
+        ? { kind: "loading", code: formatted }
+        : {
+            kind: "enter",
+            code: formatted,
+            error: initialCode && !complete ? "format" : undefined,
+          },
   );
+  // The failed-release page is shown signed out; everything else needs a session.
+  const showsSignedOut =
+    view.kind === "outcome" && view.outcome === "release_failed";
   const [busy, setBusy] = useState<"approve" | "deny" | "switch" | null>(null);
   const [inlineError, setInlineError] = useState("");
   const [lookupNonce, setLookupNonce] = useState(0);
@@ -320,10 +346,12 @@ export function DeviceActivation({
     });
   }, [navigate, returnPath]);
 
-  // Signed out → sign in and come back here.
+  // Signed out → sign in and come back here. Not while "Not you?" is
+  // switching: it picks the destination itself once the release settles.
+  const switching = busy === "switch";
   useEffect(() => {
-    if (isLoaded && !isSignedIn) goSignIn();
-  }, [isLoaded, isSignedIn, goSignIn]);
+    if (isLoaded && !isSignedIn && !showsSignedOut && !switching) goSignIn();
+  }, [isLoaded, isSignedIn, showsSignedOut, switching, goSignIn]);
 
   // Look the code up (and claim it) once the session is usable.
   useEffect(() => {
@@ -417,9 +445,43 @@ export function DeviceActivation({
   async function switchAccount() {
     if (busy) return;
     setBusy("switch");
+    const code = view.code;
+    // Only a reviewed code is claimed by this account. Release it with the
+    // current session, before signing out, so the next account can claim it.
+    const released = view.kind === "review" ? await releaseClaim(code) : true;
+    const target = released
+      ? switchAccountSignInUrl(code)
+      : releaseFailedPath(code);
     markAuthLogoutIntent();
-    await signOut().catch(() => {});
-    goSignIn();
+    // The SDK hard-navigates to this URL once signed out. Passing it here is
+    // what keeps its afterSignOutUrl ("/sign-in", no query) from winning.
+    await signOut(target).catch(() => {});
+    // Normally the page is already unloading; this covers a signOut that
+    // didn't navigate.
+    if (released) {
+      goSignIn();
+      return;
+    }
+    setView({ kind: "outcome", code, outcome: "release_failed" });
+    setStatus(
+      `${OUTCOME_COPY.release_failed.title}. ${OUTCOME_COPY.release_failed.body}`,
+    );
+    setBusy(null);
+    void navigate({
+      to: "/activate",
+      search: { code, release: "failed" } as never,
+      replace: true,
+    });
+  }
+
+  /** Best effort; `not_claimed` means there was nothing to release. */
+  async function releaseClaim(code: string): Promise<boolean> {
+    try {
+      const result = await releaseDeviceRequest(code);
+      return result.ok || result.error === "not_claimed";
+    } catch {
+      return false;
+    }
   }
 
   function submitCode(event: FormEvent<HTMLFormElement>) {
@@ -440,7 +502,7 @@ export function DeviceActivation({
     setLookupNonce((n) => n + 1);
   }
 
-  if (!isLoaded || !isSignedIn) return null;
+  if (!showsSignedOut && (!isLoaded || !isSignedIn)) return null;
 
   const live = (
     <p className="sr-only" id={statusId} role="status" aria-live="polite">

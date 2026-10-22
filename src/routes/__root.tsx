@@ -4,10 +4,8 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { useExternalLinkHandler } from "@/hooks/useExternalLinkHandler";
 import {
   DEBUG_DESKTOP_AUTH,
-  clearDesktopAuthSession,
   getDesktopAuthHandoffToken,
-  markAuthLogoutIntent,
-  setDesktopAuthSession,
+  handleKovaSessionTokenChange,
   subscribeDesktopTokenChanges,
   useKovaAuthTokenSync,
 } from "@/lib/desktop-auth";
@@ -108,7 +106,7 @@ function RootComponent() {
   // Intercept external link clicks on desktop → open in system browser
   useExternalLinkHandler();
   const [sessionToken, setSessionToken] = useState<string | undefined>();
-  const seenSessionTokenRef = useRef(false);
+  const sessionTokenStateRef = useRef({ seenSessionToken: false });
 
   useEffect(() => {
     // Auth handoff storage is intentionally read after the stable server snapshot.
@@ -141,18 +139,7 @@ function RootComponent() {
             tokenLength: token?.length ?? 0,
           });
         }
-        if (token) {
-          seenSessionTokenRef.current = true;
-          if (!getDesktopAuthHandoffToken()) {
-            setDesktopAuthSession(token);
-          }
-          return;
-        }
-        if (seenSessionTokenRef.current) {
-          seenSessionTokenRef.current = false;
-          markAuthLogoutIntent();
-          clearDesktopAuthSession();
-        }
+        handleKovaSessionTokenChange(token, sessionTokenStateRef.current);
       }}
     >
       <KovaMeetTokenBridge />

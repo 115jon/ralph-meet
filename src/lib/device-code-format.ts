@@ -1,3 +1,5 @@
+import { buildAuthRouteUrl } from "@/lib/auth-route-urls";
+
 /**
  * Device user-code helpers, matching Kova's hosted /device page exactly:
  * Crockford-ish alphabet (no 0/O/1/I), 8 characters shown as XXXX-XXXX.
@@ -37,6 +39,27 @@ export function activateReturnPath(code: string): string {
   return isCompleteDeviceCode(formatted)
     ? `/activate?code=${formatted}`
     : "/activate";
+}
+
+/**
+ * Where "Not you?" sends the browser after signing out:
+ * "/sign-in?redirect_url=%2Factivate%3Fcode%3DXXXX-XXXX". It is passed to the
+ * SDK's signOut as the callback so its afterSignOutUrl ("/sign-in", no query)
+ * can't replace it. Built from the formatted code, so always a same-origin path.
+ */
+export function switchAccountSignInUrl(code: string): string {
+  return buildAuthRouteUrl("/sign-in", {
+    redirect_url: activateReturnPath(code),
+  });
+}
+
+/** Where a failed release lands: /activate, signed out, showing "Code in use". */
+export function releaseFailedPath(code: string): string {
+  const formatted = formatDeviceCode(code);
+  const params = new URLSearchParams();
+  if (isCompleteDeviceCode(formatted)) params.set("code", formatted);
+  params.set("release", "failed");
+  return `/activate?${params.toString()}`;
 }
 
 /** "a minute" / "3 minutes", rounded up; undefined when unknown. */

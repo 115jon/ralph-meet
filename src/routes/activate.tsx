@@ -5,6 +5,8 @@ import { createFileRoute } from "@tanstack/react-router";
 
 type ActivateSearch = {
   code?: string;
+  /** Set by "Not you?" when it couldn't release the code before signing out. */
+  release?: "failed";
 };
 
 /**
@@ -14,7 +16,10 @@ type ActivateSearch = {
 export const Route = createFileRoute("/activate")({
   validateSearch: (search: Record<string, unknown>): ActivateSearch => {
     const code = typeof search.code === "string" ? search.code : undefined;
-    return code ? { code } : {};
+    return {
+      ...(code ? { code } : {}),
+      ...(search.release === "failed" ? { release: "failed" as const } : {}),
+    };
   },
   component: ActivatePage,
   head: () => ({
@@ -27,11 +32,15 @@ export const Route = createFileRoute("/activate")({
 });
 
 function ActivatePage() {
-  const { code } = Route.useSearch();
+  const { code, release } = Route.useSearch();
   const key = formatDeviceCode(code) || "none";
   return (
     <AuthSplitLayout>
-      <DeviceActivation key={key} initialCode={code} />
+      <DeviceActivation
+        key={key}
+        initialCode={code}
+        releaseFailed={release === "failed"}
+      />
     </AuthSplitLayout>
   );
 }

@@ -5,7 +5,9 @@ import {
   initials,
   isCompleteDeviceCode,
   prettyPlatform,
+  releaseFailedPath,
   spelledDeviceCode,
+  switchAccountSignInUrl,
   waitPhrase,
 } from "../device-code-format";
 
@@ -52,5 +54,28 @@ describe("device code formatting (matches Kova's hosted page)", () => {
     expect(prettyPlatform(null)).toBeUndefined();
     expect(initials("Ada King Lovelace", "a@x")).toBe("AL");
     expect(initials("", "zed@example.com")).toBe("Z");
+  });
+});
+
+describe("Not you? destinations", () => {
+  it("signs in and returns to the formatted code, encoded, path-only", () => {
+    expect(switchAccountSignInUrl("abcd efgh")).toBe(
+      "/sign-in?redirect_url=%2Factivate%3Fcode%3DABCD-EFGH",
+    );
+    const url = new URL(switchAccountSignInUrl("ABCD-EFGH"), "https://x.test");
+    expect(url.searchParams.get("redirect_url")).toBe(
+      "/activate?code=ABCD-EFGH",
+    );
+    // Anything that isn't a code collapses to the bare page.
+    expect(switchAccountSignInUrl("//10.0.0.1/")).toBe(
+      "/sign-in?redirect_url=%2Factivate",
+    );
+  });
+
+  it("marks a failed release on the activate page", () => {
+    expect(releaseFailedPath("abcdefgh")).toBe(
+      "/activate?code=ABCD-EFGH&release=failed",
+    );
+    expect(releaseFailedPath("")).toBe("/activate?release=failed");
   });
 });

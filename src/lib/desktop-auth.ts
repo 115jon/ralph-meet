@@ -27,8 +27,38 @@ function legacyRalphSessionStorageKey(): string | null {
     : null;
 }
 
+/** `kova-auth:<pk>:session-token` or `ralph-auth:<pk>:session-token`, any pk. */
+const SESSION_TOKEN_STORAGE_KEY =
+  /^(?:kova-auth|ralph-auth):[^:]+:session-token$/;
+
 function isTauriRuntime(): boolean {
   return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+}
+
+/**
+ * Session-token keys left under a different publishable key (the pk moved
+ * from pk_dev_* to pk_live_* in 3.1.0) or under the pre-Kova `ralph-auth:`
+ * prefix. Kova scopes sessions by app, not by key, so these stay valid.
+ * The current pk's legacy `ralph-auth:` key comes first.
+ */
+function otherSessionStorageKeys(currentKey: string): string[] {
+  const legacyKey = legacyRalphSessionStorageKey();
+  const keys: string[] = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i);
+    if (!key || key === currentKey || key === legacyKey) continue;
+    if (SESSION_TOKEN_STORAGE_KEY.test(key)) keys.push(key);
+  }
+  keys.sort();
+  return legacyKey && localStorage.getItem(legacyKey) !== null
+    ? [legacyKey, ...keys]
+    : keys;
+}
+
+function removeOtherSessionTokens(currentKey: string) {
+  for (const key of otherSessionStorageKeys(currentKey)) {
+    localStorage.removeItem(key);
+  }
 }
 
 export function getStoredKovaAuthSessionToken(): string | null {
@@ -37,17 +67,25 @@ export function getStoredKovaAuthSessionToken(): string | null {
   }
 
   const currentKey = kovaSessionStorageKey();
-  const currentToken = currentKey ? localStorage.getItem(currentKey) : null;
+  if (!currentKey) return null;
+  const currentToken = localStorage.getItem(currentKey);
   if (currentToken) return currentToken;
 
-  const legacyKey = legacyRalphSessionStorageKey();
-  const legacyToken = legacyKey ? localStorage.getItem(legacyKey) : null;
-  if (legacyToken && currentKey) {
-    localStorage.setItem(currentKey, legacyToken);
-    if (legacyKey) localStorage.removeItem(legacyKey);
-    notifyDesktopTokenChanged(legacyToken);
+  // Nothing under this pk: adopt a session another key left behind and move
+  // it under the current key, so the SDK (which only reads its own pk's key)
+  // and every later read find it.
+  for (const key of otherSessionStorageKeys(currentKey)) {
+    const token = localStorage.getItem(key);
+    if (!token) continue;
+    if (DEBUG_DESKTOP_AUTH) {
+      log.info("Adopting session token from another storage key", { key });
+    }
+    localStorage.setItem(currentKey, token);
+    removeOtherSessionTokens(currentKey);
+    notifyDesktopTokenChanged(token);
+    return token;
   }
-  return legacyToken;
+  return null;
 }
 
 export function setStoredKovaAuthSessionToken(token: string) {
@@ -61,8 +99,7 @@ export function setStoredKovaAuthSessionToken(token: string) {
     return;
   }
   localStorage.setItem(currentKey, token);
-  const legacyKey = legacyRalphSessionStorageKey();
-  if (legacyKey) localStorage.removeItem(legacyKey);
+  removeOtherSessionTokens(currentKey);
   notifyDesktopTokenChanged(token);
 }
 
@@ -76,9 +113,10 @@ export function clearStoredKovaAuthSessionToken() {
     return;
   }
   const currentKey = kovaSessionStorageKey();
-  const legacyKey = legacyRalphSessionStorageKey();
-  if (currentKey) localStorage.removeItem(currentKey);
-  if (legacyKey) localStorage.removeItem(legacyKey);
+  if (!currentKey) return;
+  localStorage.removeItem(currentKey);
+  // Every pk's key, or signing out would let the next read adopt one again.
+  removeOtherSessionTokens(currentKey);
   notifyDesktopTokenChanged(null);
 }
 
@@ -160,6 +198,38 @@ export function clearDesktopAuthSession() {
   clearStoredKovaAuthSessionToken();
 }
 
+/**
+ * Record a session token the SDK produced. On desktop it always lands in
+ * `desktop_auth_token` too: that key doesn't depend on the publishable key,
+ * so a pk change can't orphan the session. (The SDK writes its pk-scoped key
+ * before reporting the token, so checking the handoff token here would always
+ * find it and skip the desktop key.) On the web, only fill an empty slot.
+ */
+export function rememberKovaSessionToken(token: string) {
+  const missing = isTauriRuntime()
+    ? !getDesktopToken()
+    : !getDesktopAuthHandoffToken();
+  if (missing) setDesktopAuthSession(token);
+}
+
+/** KovaAuthProvider's onSessionTokenChange, minus the React state. */
+export function handleKovaSessionTokenChange(
+  token: string | null,
+  state: { seenSessionToken: boolean },
+) {
+  if (token) {
+    state.seenSessionToken = true;
+    rememberKovaSessionToken(token);
+    return;
+  }
+  // The SDK only reports null from signOut(); a key change never does.
+  if (state.seenSessionToken) {
+    state.seenSessionToken = false;
+    markAuthLogoutIntent();
+    clearDesktopAuthSession();
+  }
+}
+
 export function markAuthLogoutIntent() {
   if (typeof window === "undefined") return;
   window.sessionStorage.setItem(LOGOUT_INTENT_KEY, String(Date.now()));
@@ -224,9 +294,7 @@ export function useKovaAuthTokenSync(
         });
       }
       if (token) {
-        if (!getDesktopAuthHandoffToken()) {
-          setDesktopAuthSession(token);
-        }
+        rememberKovaSessionToken(token);
         setTokenReady(true);
       } else {
         setTokenReady(!!getDesktopAuthHandoffToken());

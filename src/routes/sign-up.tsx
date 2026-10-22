@@ -4,6 +4,8 @@ import DesktopLogin from "@/components/DesktopLogin";
 import {
   buildAuthRouteUrl,
   buildPostAuthSignInUrl,
+  redirectOrigins,
+  sanitizeRedirectUrl,
 } from "@/lib/auth-route-urls";
 import { isTauri } from "@/lib/platform";
 import { SignUp } from "@kova/react";
@@ -44,7 +46,10 @@ function SignUpPage() {
 
 function WebSignUpPage() {
   const { redirect_url, native_handoff } = Route.useSearch();
-  const afterSignUpTarget = redirect_url || "/chat";
+  const afterSignUpTarget = sanitizeRedirectUrl(
+    redirect_url,
+    redirectOrigins(),
+  );
   const afterSignUpUrl = buildPostAuthSignInUrl(
     afterSignUpTarget,
     native_handoff,
