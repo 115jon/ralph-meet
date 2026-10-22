@@ -9,6 +9,7 @@
 //   Everything else                 → TanStack Start handler
 // ============================================================================
 
+import { DEFAULT_KOVA_AUTH_URL } from "./src/lib/site-defaults";
 import {
   createStartHandler,
   defaultStreamHandler,
@@ -110,11 +111,23 @@ function withDesktopCors(request: Request, response: Response): Response {
   }
 }
 
-const DOCUMENT_CONTENT_SECURITY_POLICY =
-  "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' https: data: blob:; media-src 'self' https: blob:; connect-src 'self' https: wss: ws: https://auth.115jon.site https://api.github.com https://cloudflareinsights.com; worker-src 'self' blob:; frame-src 'self' https:";
+function buildDocumentContentSecurityPolicy(authOrigin: string): string {
+  return (
+    "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' https: data: blob:; media-src 'self' https: blob:; connect-src 'self' https: wss: ws: " +
+    authOrigin +
+    " https://api.github.com https://cloudflareinsights.com; worker-src 'self' blob:; frame-src 'self' https:"
+  );
+}
+
+function resolveAuthOrigin(env: Env): string {
+  try {
+    return new URL(env.KOVA_AUTH_URL || DEFAULT_KOVA_AUTH_URL).origin;
+  } catch {
+    return DEFAULT_KOVA_AUTH_URL;
+  }
+}
 
 const DOCUMENT_SECURITY_HEADERS = {
-  "Content-Security-Policy": DOCUMENT_CONTENT_SECURITY_POLICY,
   "X-Frame-Options": "DENY",
   "X-Content-Type-Options": "nosniff",
   "Referrer-Policy": "strict-origin-when-cross-origin",
@@ -125,6 +138,7 @@ const DOCUMENT_SECURITY_HEADERS = {
 function withDocumentSecurityHeaders(
   request: Request,
   response: Response,
+  env: Env,
 ): Response {
   const contentType = response.headers
     .get("Content-Type")
@@ -145,6 +159,10 @@ function withDocumentSecurityHeaders(
   for (const [name, value] of Object.entries(DOCUMENT_SECURITY_HEADERS)) {
     headers.set(name, value);
   }
+  headers.set(
+    "Content-Security-Policy",
+    buildDocumentContentSecurityPolicy(resolveAuthOrigin(env)),
+  );
   if (new URL(request.url).protocol === "https:") {
     headers.set(
       "Strict-Transport-Security",
@@ -172,6 +190,7 @@ interface Env {
   CACHE: KVNamespace;
   BACKGROUND_TASKS?: Queue<BackgroundTaskEnvelope>;
   REALTIME_ALLOWED_ORIGINS?: string;
+  KOVA_AUTH_URL?: string;
   REALTIME_TICKET_SECRET?: string;
   [key: string]: unknown;
 }
@@ -451,7 +470,7 @@ export default {
     if (url.pathname.startsWith("/api/")) {
       return withDesktopCors(request, response);
     }
-    return withDocumentSecurityHeaders(request, response);
+    return withDocumentSecurityHeaders(request, response, env);
   },
 
   async scheduled(

@@ -1,6 +1,11 @@
 import { getRequestHeader } from "@tanstack/react-start/server";
 import { env } from "cloudflare:workers";
 
+import {
+  DEFAULT_KOVA_AUTH_PUBLISHABLE_KEY,
+  DEFAULT_KOVA_AUTH_URL,
+} from "@/lib/site-defaults";
+
 export interface KovaAuthUser {
   id: string;
   name?: string | null;
@@ -32,13 +37,12 @@ export async function getKovaAuthSession(
     KOVA_AUTH_URL?: string;
     VITE_KOVA_AUTH_PUBLISHABLE_KEY?: string;
   };
-  const authUrl = (authEnv.KOVA_AUTH_URL ?? "https://auth.115jon.site").replace(
+  const authUrl = (authEnv.KOVA_AUTH_URL ?? DEFAULT_KOVA_AUTH_URL).replace(
     /\/$/,
     "",
   );
   const publishableKey =
-    authEnv.VITE_KOVA_AUTH_PUBLISHABLE_KEY ??
-    "pk_dev_fhygLR-eApZ4HvSfu-v-LEGFp7WAsgkLRhlveveNzhk";
+    authEnv.VITE_KOVA_AUTH_PUBLISHABLE_KEY ?? DEFAULT_KOVA_AUTH_PUBLISHABLE_KEY;
   const reqHeaders = new Headers();
   const authHeader =
     headers?.get("authorization") ?? getRequestHeader("authorization");

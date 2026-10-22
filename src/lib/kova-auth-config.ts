@@ -1,12 +1,14 @@
-export const KOVA_AUTH_URL =
-  import.meta.env.VITE_KOVA_AUTH_URL ?? "https://auth.115jon.site";
+import {
+  DEFAULT_KOVA_AUTH_PUBLISHABLE_KEY,
+  DEFAULT_KOVA_AUTH_URL,
+} from "@/lib/site-defaults";
 
-const DEV_KOVA_MEET_PUBLISHABLE_KEY =
-  "pk_dev_fhygLR-eApZ4HvSfu-v-LEGFp7WAsgkLRhlveveNzhk";
+export const KOVA_AUTH_URL =
+  import.meta.env.VITE_KOVA_AUTH_URL ?? DEFAULT_KOVA_AUTH_URL;
 
 export const KOVA_AUTH_PUBLISHABLE_KEY =
   import.meta.env.VITE_KOVA_AUTH_PUBLISHABLE_KEY ??
-  DEV_KOVA_MEET_PUBLISHABLE_KEY;
+  DEFAULT_KOVA_AUTH_PUBLISHABLE_KEY;
 
 export function getKovaAuthConfig() {
   return KOVA_AUTH_PUBLISHABLE_KEY

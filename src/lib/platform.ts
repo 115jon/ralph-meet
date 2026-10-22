@@ -7,6 +7,10 @@
 // ============================================================================
 import { getDesktopToken, getStoredKovaAuthSessionToken } from "./desktop-auth";
 import { clog } from "@/lib/console-logger";
+import {
+  DEFAULT_ABUSE_EMAIL,
+  DEFAULT_PUBLIC_WEB_URL,
+} from "@/lib/site-defaults";
 import type { PresencePlatform } from "@/lib/presence-platform";
 
 const log = clog("platform");
@@ -110,13 +114,13 @@ export function getApiBaseUrl(): string {
   if (envUrl) return envUrl;
 
   // Production Tauri build — point to the deployed Cloudflare Workers backend
-  return "https://meet.115jon.site";
+  return DEFAULT_PUBLIC_WEB_URL;
 }
 
 /**
  * Returns a resolvable public origin for the API that can be accessed by the system OS (out of Tauri context).
  * - Local Dev: `http://localhost:5173` on desktop/web, deployed backend on mobile unless overridden
- * - Production: Custom env URL or `https://meet.115jon.site`
+ * - Production: Custom env URL or the default public web URL
  */
 export function getPublicApiUrl(): string {
   const envUrl =
@@ -132,12 +136,12 @@ export function getPublicApiUrl(): string {
 
   if (isDev) {
     if (isMobile()) {
-      return "https://meet.115jon.site";
+      return DEFAULT_PUBLIC_WEB_URL;
     }
     return "http://localhost:5173";
   }
 
-  return "https://meet.115jon.site";
+  return DEFAULT_PUBLIC_WEB_URL;
 }
 
 /**
@@ -152,7 +156,21 @@ export function getPublicWebUrl(): string {
       ? import.meta.env.VITE_PUBLIC_WEB_URL
       : undefined;
 
-  return (envUrl || "https://meet.115jon.site").replace(/\/$/, "");
+  return (envUrl || DEFAULT_PUBLIC_WEB_URL).replace(/\/$/, "");
+}
+
+/** User-Agent for server-side fetches that identify Ralph Meet to third parties. */
+export function getBotUserAgent(): string {
+  return `Mozilla/5.0 (compatible; RalphMeetBot/1.0; +${getPublicWebUrl()})`;
+}
+
+/** Contact address shown for reporting abuse of shared content. */
+export function getAbuseEmail(): string {
+  const envEmail =
+    typeof import.meta !== "undefined" && typeof import.meta.env !== "undefined"
+      ? import.meta.env.VITE_ABUSE_EMAIL
+      : undefined;
+  return envEmail || DEFAULT_ABUSE_EMAIL;
 }
 
 /**

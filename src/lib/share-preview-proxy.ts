@@ -1,3 +1,4 @@
+import { getBotUserAgent, getPublicWebUrl } from "@/lib/platform";
 import type { MessageShare } from "@/services/message-share.service";
 import type { EmbedAudio, EmbedMedia } from "@/lib/types";
 import { clog } from "@/lib/console-logger";
@@ -11,8 +12,7 @@ const TIKTOK_PROXY_API_BASE_URLS = [
 ];
 
 const TIKTOK_PROXY_REQUEST_HEADERS = {
-  "User-Agent":
-    "Mozilla/5.0 (compatible; RalphMeetBot/1.0; +https://meet.115jon.site)",
+  "User-Agent": getBotUserAgent(),
   Accept: "application/json",
   "Accept-Language": "en-US,en;q=0.9",
   Origin: "https://www.tikwm.com",
@@ -20,15 +20,13 @@ const TIKTOK_PROXY_REQUEST_HEADERS = {
 } as const;
 
 const TIKTOK_PLAYER_REQUEST_HEADERS = {
-  "User-Agent":
-    "Mozilla/5.0 (compatible; RalphMeetBot/1.0; +https://meet.115jon.site)",
+  "User-Agent": getBotUserAgent(),
   Accept: "application/json,text/plain,*/*",
   "Accept-Language": "en-US,en;q=0.9",
 } as const;
 
 const TIKTOK_PAGE_RESOLVE_HEADERS = {
-  "User-Agent":
-    "Mozilla/5.0 (compatible; RalphMeetBot/1.0; +https://meet.115jon.site)",
+  "User-Agent": getBotUserAgent(),
   Accept: "text/html,*/*;q=0.8",
   "Accept-Language": "en-US,en;q=0.9",
 } as const;
@@ -810,8 +808,7 @@ export async function lookupInstagramOEmbed(url: string): Promise<{
   const apiUrl = `https://www.instagram.com/api/v1/oembed/?url=${encodeURIComponent(canonicalUrl)}&omitscript=true`;
   const response = await safeFetch(apiUrl, {
     headers: {
-      "User-Agent":
-        "Mozilla/5.0 (compatible; RalphMeetBot/1.0; +https://meet.115jon.site)",
+      "User-Agent": getBotUserAgent(),
       Accept: "application/json",
     },
   });
@@ -853,12 +850,11 @@ export async function fetchInstagramVideoMetadata(
 ): Promise<InstagramVideoMetadata | null> {
   const canonicalUrl = canonicalizeInstagramUrl(url);
   const response = await safeFetch(
-    `https://meet.115jon.site/api/instagram-video?videoUrl=${encodeURIComponent(canonicalUrl)}`,
+    `${getPublicWebUrl()}/api/instagram-video?videoUrl=${encodeURIComponent(canonicalUrl)}`,
     {
       headers: {
         Accept: "application/json",
-        "User-Agent":
-          "Mozilla/5.0 (compatible; RalphMeetBot/1.0; +https://meet.115jon.site)",
+        "User-Agent": getBotUserAgent(),
       },
     },
   );
@@ -970,8 +966,7 @@ export async function proxyImage(url: string): Promise<Response | null> {
   const upstream = await safeFetch(parsed.toString(), {
     redirect: "follow",
     headers: {
-      "User-Agent":
-        "Mozilla/5.0 (compatible; RalphMeetBot/1.0; +https://meet.115jon.site)",
+      "User-Agent": getBotUserAgent(),
       Accept:
         "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
       Referer: "https://www.tiktok.com/",
