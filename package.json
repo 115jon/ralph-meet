@@ -39,7 +39,7 @@
     "@fontsource/permanent-marker": "^5.2.7",
     "@fontsource/press-start-2p": "^5.2.7",
     "@fontsource/unifrakturmaguntia": "^5.2.8",
-    "@kova/react": "https://github.com/115jon/kova/releases/download/kova-react-v1.1.0/115jon-kova-react-1.1.0.tgz",
+    "@kova/react": "https://github.com/115jon/kova/releases/download/kova-react-v1.2.0/115jon-kova-react-1.2.0.tgz",
     "@mediapipe/tasks-vision": "^0.10.35",
     "@ricky0123/vad-web": "^0.0.30",
     "@sapphi-red/web-noise-suppressor": "^0.3.5",

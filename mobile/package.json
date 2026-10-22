@@ -21,7 +21,7 @@
     "vite": "^7.0.0"
   },
   "dependencies": {
-    "@kova/react": "https://github.com/115jon/kova/releases/download/kova-react-v1.1.0/115jon-kova-react-1.1.0.tgz",
+    "@kova/react": "https://github.com/115jon/kova/releases/download/kova-react-v1.2.0/115jon-kova-react-1.2.0.tgz",
     "@tauri-apps/api": "^2.10.1",
     "@tauri-apps/plugin-deep-link": "^2.4.9",
     "@tauri-apps/plugin-notification": "^2.3.3",
