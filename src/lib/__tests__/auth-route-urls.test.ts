@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import * as authRouteUrls from "../auth-route-urls";
-import { buildAuthRouteUrl, buildPostAuthSignInUrl } from "../auth-route-urls";
+import {
+  buildAuthRouteUrl,
+  buildPostAuthSignInUrl,
+  sanitizeRedirectUrl,
+} from "../auth-route-urls";
 
 describe("auth route URL helpers", () => {
   it("omits search params when no redirect context is present", () => {
@@ -21,5 +25,37 @@ describe("auth route URL helpers", () => {
 
   it("no longer builds deep-link desktop sign-in URLs", () => {
     expect("buildDesktopSignInUrl" in authRouteUrls).toBe(false);
+  });
+});
+
+describe("sanitizeRedirectUrl", () => {
+  const origins = ["https://meet.115jon.site"];
+
+  it("keeps same-origin paths, including query strings", () => {
+    expect(sanitizeRedirectUrl("/activate?code=ABCD-EFGH", origins)).toBe(
+      "/activate?code=ABCD-EFGH",
+    );
+  });
+
+  it("falls back to /chat when there is no redirect", () => {
+    expect(sanitizeRedirectUrl(undefined, origins)).toBe("/chat");
+    expect(sanitizeRedirectUrl("", origins)).toBe("/chat");
+  });
+
+  it.each([
+    "//evil.example/path",
+    "https://evil.example/",
+    "javascript:alert(1)",
+    "ralphmeet://auth",
+    "/\\evil.example",
+    "/chat\u0000",
+  ])("rejects %s", (value) => {
+    expect(sanitizeRedirectUrl(value, origins)).toBe("/chat");
+  });
+
+  it("allows absolute URLs on an allowed origin", () => {
+    expect(
+      sanitizeRedirectUrl("https://meet.115jon.site/chat?x=1", origins),
+    ).toBe("https://meet.115jon.site/chat?x=1");
   });
 });
