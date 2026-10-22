@@ -13,7 +13,6 @@ import {
 } from "@/lib/desktop-auth";
 import { getKovaAuthConfig } from "@/lib/kova-auth-config";
 import { isDesktop, isTauri } from "@/lib/platform";
-import { isSupportedNativeAuthUrl } from "@/lib/native-auth-handoff";
 import { KovaAuthProvider, useAuth } from "@kova/react";
 import {
   HeadContent,
@@ -190,24 +189,10 @@ function DesktopDeepLinkBridge() {
         return;
       }
 
-      deepLinkLog.info("Parsed deep link", {
-        protocol: safeProtocol(url),
-        hasAuthCode: !!extractAuthCode(url),
-      });
+      deepLinkLog.info("Parsed deep link", { protocol: safeProtocol(url) });
 
-      const authCode = extractAuthCode(url);
-      if (authCode) {
-        deepLinkLog.info("Deep link contained auth code fallback", {
-          codeLength: authCode.length,
-        });
-        void navigate({
-          to: "/chat",
-          search: { kova_auth_code: authCode },
-          replace: true,
-        } as any);
-        return;
-      }
-
+      // Auth no longer uses deep links (desktop signs in with a device code);
+      // invites are the only ralphmeet:// links handled here.
       const inviteCode = extractInviteCode(url);
       if (inviteCode) {
         deepLinkLog.info("Deep link contained invite code");
@@ -218,7 +203,7 @@ function DesktopDeepLinkBridge() {
         return;
       }
 
-      deepLinkLog.warn("Deep link did not contain an auth code or invite");
+      deepLinkLog.warn("Deep link did not contain an invite");
     };
 
     async function listenForDeepLinks() {
@@ -305,23 +290,6 @@ function safeProtocol(value: string): string | null {
   } catch {
     return null;
   }
-}
-
-function extractSearchParam(url: string, key: string): string | null {
-  try {
-    return new URL(url).searchParams.get(key);
-  } catch {
-    return null;
-  }
-}
-
-function extractAuthCode(url: string): string | null {
-  if (!isSupportedNativeAuthUrl(url)) return null;
-  return (
-    extractSearchParam(url, "kova_auth_code") ??
-    extractSearchParam(url, "ralph_auth_code") ??
-    extractSearchParam(url, "code")
-  );
 }
 
 function extractInviteCode(url: string): string | null {

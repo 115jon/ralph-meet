@@ -1,5 +1,10 @@
 export type AuthRouteSearch = {
   redirect_url?: string;
+  /**
+   * @deprecated Leftover from the deep-link desktop sign-in. Desktop now uses
+   * device-code sign-in; this is only passed through by /sign-up until that
+   * route drops it.
+   */
   native_handoff?: string;
 };
 
@@ -29,14 +34,4 @@ export function buildPostAuthSignInUrl(
     redirect_url: redirectUrl,
     native_handoff: nativeHandoff,
   });
-}
-
-export function buildDesktopSignInUrl(publicWebUrl: string): string {
-  return new URL(
-    buildAuthRouteUrl("/sign-in", {
-      redirect_url: "ralphmeet://auth",
-      native_handoff: "1",
-    }),
-    publicWebUrl,
-  ).toString();
 }

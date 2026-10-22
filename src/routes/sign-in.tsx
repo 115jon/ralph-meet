@@ -6,16 +6,7 @@ import {
   getStoredKovaAuthSessionToken,
   setStoredKovaAuthSessionToken,
 } from "@/lib/desktop-auth";
-import {
-  buildNativeSdkBounceUrl,
-  getSignInRenderState,
-  shouldCompletePostSignInRedirect,
-} from "@/lib/native-auth-handoff";
 import { buildAuthRouteUrl } from "@/lib/auth-route-urls";
-import {
-  getKovaAuthUrl,
-  KOVA_AUTH_PUBLISHABLE_KEY,
-} from "@/lib/kova-auth-config";
 import { isTauri } from "@/lib/platform";
 import { SignIn, useAuth } from "@kova/react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
@@ -29,7 +20,6 @@ type SignInSearch = {
   redirect_url?: string;
   kova_auth_code?: string;
   ralph_auth_code?: string;
-  native_handoff?: string;
 };
 
 export const Route = createFileRoute("/sign-in")({
@@ -38,7 +28,6 @@ export const Route = createFileRoute("/sign-in")({
       redirect_url: search.redirect_url as string | undefined,
       kova_auth_code: search.kova_auth_code as string | undefined,
       ralph_auth_code: search.ralph_auth_code as string | undefined,
-      native_handoff: search.native_handoff as string | undefined,
     };
   },
   component: SignInPage,
@@ -62,32 +51,22 @@ function SignInPage() {
 }
 
 function WebSignInPage() {
-  const { redirect_url, kova_auth_code, ralph_auth_code, native_handoff } =
-    Route.useSearch();
+  const { redirect_url, kova_auth_code, ralph_auth_code } = Route.useSearch();
   const { getToken, isLoaded, isSignedIn } = useAuth();
   const navigate = useNavigate();
   const afterSignInUrl = redirect_url || "/chat";
-  const signUpUrl = buildAuthRouteUrl("/sign-up", {
-    redirect_url,
-    native_handoff,
-  });
-  const oauthCallbackUrl = isNativeDeepLink(afterSignInUrl)
-    ? afterSignInUrl
-    : buildWebOauthCallbackUrl(afterSignInUrl);
-  const isNativeHandoff =
-    isNativeDeepLink(afterSignInUrl) || native_handoff === "1";
+  const signUpUrl = buildAuthRouteUrl("/sign-up", { redirect_url });
+  const oauthCallbackUrl = buildWebOauthCallbackUrl(afterSignInUrl);
   const hasAuthTransferCode = !!(kova_auth_code || ralph_auth_code);
   const [suppressStoredBrowserToken] = useState(() => {
-    if (isNativeHandoff || !consumeAuthLogoutIntent()) return false;
+    if (!consumeAuthLogoutIntent()) return false;
     clearStoredKovaAuthSessionToken();
     return true;
   });
-  const storedBrowserToken =
-    isNativeHandoff || suppressStoredBrowserToken
-      ? null
-      : getStoredKovaAuthSessionToken();
+  const storedBrowserToken = suppressStoredBrowserToken
+    ? null
+    : getStoredKovaAuthSessionToken();
   const didRedirectRef = useRef(false);
-  const [nativeCookieHandoffChecked] = useState(isNativeHandoff);
 
   useEffect(() => {
     let cancelled = false;
@@ -124,24 +103,6 @@ function WebSignInPage() {
         return;
       }
 
-      if (isNativeHandoff) {
-        if (!KOVA_AUTH_PUBLISHABLE_KEY) {
-          log.error("Missing VITE_KOVA_AUTH_PUBLISHABLE_KEY");
-          return;
-        }
-        didRedirectRef.current = true;
-        const bounceUrl = buildNativeSdkBounceUrl(
-          getKovaAuthUrl(),
-          KOVA_AUTH_PUBLISHABLE_KEY,
-          afterSignInUrl,
-        );
-        log.info("Launching native SDK bounce", {
-          protocol: safeProtocol(afterSignInUrl),
-        });
-        window.location.replace(bounceUrl);
-        return;
-      }
-
       const target = afterSignInUrl;
       if (!cancelled) {
         if (didRedirectRef.current) return;
@@ -154,14 +115,7 @@ function WebSignInPage() {
       }
     }
 
-    if (
-      shouldCompletePostSignInRedirect({
-        isNativeHandoff,
-        isLoaded,
-        isSignedIn,
-        hasStoredBrowserToken: !!storedBrowserToken,
-      })
-    ) {
+    if (storedBrowserToken || (isLoaded && isSignedIn)) {
       void completeRedirect();
     }
 
@@ -172,25 +126,12 @@ function WebSignInPage() {
     afterSignInUrl,
     getToken,
     isLoaded,
-    isNativeHandoff,
     isSignedIn,
     navigate,
     storedBrowserToken,
   ]);
 
-  const signInRenderState = getSignInRenderState({
-    isNativeHandoff,
-    nativeCookieHandoffChecked,
-    isLoaded,
-    isSignedIn,
-    hasAuthTransferCode,
-  });
-
-  if (signInRenderState === "native-preparing") {
-    return <NativeRedirectPreparing />;
-  }
-
-  if (signInRenderState === "splash") {
+  if (!isLoaded || isSignedIn || hasAuthTransferCode) {
     return <SplashScreen />;
   }
 
@@ -236,32 +177,6 @@ function WebSignInPage() {
   );
 }
 
-function NativeRedirectPreparing() {
-  return (
-    <div className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden bg-[var(--rm-bg-primary)] px-6 text-center">
-      <div className="pointer-events-none absolute inset-0 flex items-center justify-center overflow-hidden">
-        <div className="absolute h-[560px] w-[560px] rounded-full bg-rm-accent/10 blur-[120px]" />
-        <div className="absolute bottom-[-15%] right-[-10%] h-[520px] w-[520px] rounded-full bg-primary/5 blur-[120px]" />
-      </div>
-
-      <main className="relative z-10 flex w-full max-w-[420px] flex-col items-center gap-5 rounded-[2rem] border border-white/10 bg-white/[0.03] p-8 shadow-2xl shadow-black/30 backdrop-blur">
-        <div className="flex h-16 w-16 animate-pulse items-center justify-center rounded-2xl bg-rm-accent-dim ring-1 ring-rm-border">
-          <Radio className="h-7 w-7 text-rm-accent" />
-        </div>
-        <div className="space-y-2">
-          <h1 className="text-2xl font-extrabold tracking-tight text-white">
-            Preparing Ralph Meet
-          </h1>
-          <p className="text-sm leading-6 text-[var(--rm-text-secondary)]">
-            We are attaching your signed-in Ralph Auth session before opening
-            the desktop app.
-          </p>
-        </div>
-      </main>
-    </div>
-  );
-}
-
 function isRouterPath(value: string): value is `/${string}` {
   return value.startsWith("/") && !value.startsWith("//");
 }
@@ -270,14 +185,6 @@ function buildWebOauthCallbackUrl(afterSignInUrl: string): string {
   const params = new URLSearchParams();
   params.set("redirect_url", afterSignInUrl);
   return `/sign-in?${params.toString()}`;
-}
-
-function isNativeDeepLink(value: string): boolean {
-  try {
-    return new URL(value).protocol === "ralphmeet:";
-  } catch {
-    return false;
-  }
 }
 
 async function ensureAppSessionToken(
