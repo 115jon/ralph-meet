@@ -1,6 +1,6 @@
 import { clog } from "@/lib/console-logger";
 import { cn } from "@/lib/utils";
-import { AlertCircle } from "lucide-react";
+import { Icon } from "@/components/ui/icon";
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { GifProviderBranding } from "./GifProviderBranding";
 import { useVideoPlayer } from "./useVideoPlayer";
@@ -269,7 +269,7 @@ const VideoAttachmentSurface = memo(function VideoAttachmentSurface({
 
       {mediaError && !showPosterFallback ? (
         <div className="absolute inset-0 z-20 flex min-h-[160px] flex-col items-center justify-center gap-3 bg-black/85 p-5 text-center text-white">
-          <AlertCircle className="h-8 w-8 text-amber-300" />
+          <Icon name="alert" size="2xl" className="text-amber-300" />
           <div>
             <p className="text-sm font-bold">
               This video cannot be played here

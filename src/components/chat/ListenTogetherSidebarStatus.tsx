@@ -1,4 +1,4 @@
-import { Music2 } from "lucide-react";
+import { Icon } from "@/components/ui/icon";
 
 import {
   formatListenTogetherDuration,
@@ -29,13 +29,13 @@ export function ListenTogetherSidebarStatus({
           />
         ) : (
           <div className="flex h-full w-full items-center justify-center text-emerald-400">
-            <Music2 className="h-3.5 w-3.5" />
+            <Icon name="music" size="sm" />
           </div>
         )}
       </div>
       <div className="min-w-0 flex-1">
         <div className="flex min-w-0 items-center gap-1.5">
-          <Music2 className="h-3 w-3 shrink-0 text-emerald-400" />
+          <Icon name="music" size="xs" className="shrink-0 text-emerald-400" />
           <span className="truncate text-ui-xs font-semibold text-rm-text-secondary">
             {track.title}
           </span>

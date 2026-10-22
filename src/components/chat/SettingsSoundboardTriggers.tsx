@@ -22,7 +22,7 @@ import {
 } from "@/lib/voice/soundboard-catalog";
 import type { Server } from "@/lib/types";
 import { setSoundboardMasterVolume } from "@/lib/voice/soundboard";
-import { Globe2, Pencil, Play, Trash2, Volume2 } from "lucide-react";
+import { Icon } from "@/components/ui/icon";
 import { useEffect, useRef, useState } from "react";
 import { useShallow } from "zustand/shallow";
 import { useSoundSettingsStore } from "@/stores/useSoundSettingsStore";
@@ -37,7 +37,7 @@ interface Props {
 }
 
 function ServerIcon({ server }: { server?: Server }) {
-  if (!server) return <Globe2 className="h-4 w-4" />;
+  if (!server) return <Icon name="globe" size="sm" />;
   if (server.icon_url) {
     return (
       <img
@@ -120,9 +120,9 @@ function TriggerRow({
         <IconButton
           type="button"
           aria-label={`Preview ${actionLabel} sound`}
-          icon={Play}
+          icon="play"
           variant="muted"
-          iconSize={15}
+          iconSize="sm"
           onClick={onPreview}
           disabled={!sound}
         />
@@ -130,17 +130,17 @@ function TriggerRow({
           ref={changeButtonRef}
           type="button"
           aria-label={`Change ${actionLabel} sound`}
-          icon={Pencil}
+          icon="edit"
           variant="muted"
-          iconSize={15}
+          iconSize="sm"
           onClick={onChange}
         />
         <IconButton
           type="button"
           aria-label={`Clear ${actionLabel} sound`}
-          icon={Trash2}
+          icon="trash"
           variant="destructive"
-          iconSize={15}
+          iconSize="sm"
           onClick={onClear}
           disabled={!sound}
         />
@@ -254,7 +254,7 @@ export function SettingsSoundboardTriggers({ userId, servers }: Props) {
   return (
     <section className="space-y-5">
       <div className="flex items-center gap-2">
-        <Volume2 size={16} className="text-rm-accent-ink" />
+        <Icon name="voiceChannel" size="sm" className="text-rm-accent-ink" />
         <h3 className="text-ui-xs font-medium text-rm-text-muted">
           Soundboard Triggers
         </h3>

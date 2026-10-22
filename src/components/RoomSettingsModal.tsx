@@ -26,21 +26,7 @@ import type {
   CustomCameraBackground,
 } from "@/stores/useVoiceSettingsStore";
 import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
-import {
-  Ban,
-  Check,
-  Lock,
-  Mic,
-  Monitor,
-  Music,
-  Sparkles,
-  Speaker,
-  Trash2,
-  Upload,
-  Volume2,
-  X,
-  Zap,
-} from "lucide-react";
+import { Icon } from "@/components/ui/icon";
 import { useTheme } from "next-themes";
 import {
   useCallback,
@@ -445,7 +431,7 @@ export default function RoomSettingsModal({
                   className="md:hidden p-1 rounded-full bg-rm-bg-surface text-rm-text flex items-center justify-center hover:bg-rm-bg-hover active:scale-[0.96] transition-ui"
                   aria-label="Close room settings"
                 >
-                  <X size={18} />
+                  <Icon name="close" size="md" />
                 </button>
               </div>
 
@@ -489,7 +475,7 @@ export default function RoomSettingsModal({
                   className="flex h-8 w-8 items-center justify-center rounded-full border border-rm-border text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text transition-ui"
                   aria-label="Close room settings"
                 >
-                  <X size={16} />
+                  <Icon name="close" size="sm" />
                 </button>
                 <span className="text-ui-2xs font-bold text-rm-text-muted">
                   ESC
@@ -515,7 +501,11 @@ export default function RoomSettingsModal({
                       {/* Hardware */}
                       <section className="space-y-5">
                         <div className="flex items-center gap-2">
-                          <Volume2 size={14} className="text-rm-accent" />
+                          <Icon
+                            name="voiceChannel"
+                            size="sm"
+                            className="text-rm-accent"
+                          />
                           <h3 className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted">
                             Hardware
                           </h3>
@@ -645,7 +635,11 @@ export default function RoomSettingsModal({
                       {/* Volume */}
                       <section className="space-y-5">
                         <div className="flex items-center gap-2">
-                          <Volume2 size={14} className="text-emerald-400" />
+                          <Icon
+                            name="voiceChannel"
+                            size="sm"
+                            className="text-emerald-400"
+                          />
                           <h3 className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted">
                             Volume
                           </h3>
@@ -712,7 +706,11 @@ export default function RoomSettingsModal({
 
                       <section className="space-y-5">
                         <div className="flex items-center gap-2">
-                          <Sparkles size={14} className="text-sky-300" />
+                          <Icon
+                            name="sparkle"
+                            size="sm"
+                            className="text-sky-300"
+                          />
                           <h3 className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted">
                             Noise Suppression
                           </h3>
@@ -725,8 +723,9 @@ export default function RoomSettingsModal({
                       {/* Processing */}
                       <section className="space-y-5">
                         <div className="flex items-center gap-2">
-                          <Zap
-                            size={14}
+                          <Icon
+                            name="zap"
+                            size="sm"
                             className="text-amber-600 dark:text-amber-400"
                           />
                           <h3 className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted">
@@ -747,7 +746,7 @@ export default function RoomSettingsModal({
                                   </AudioCompatibilityHint>
                                 </>
                               ),
-                              icon: <Mic size={16} />,
+                              icon: <Icon name="mic" size="sm" />,
                             },
                             {
                               id: "echoCancellation",
@@ -762,13 +761,13 @@ export default function RoomSettingsModal({
                                   </AudioCompatibilityHint>
                                 </>
                               ),
-                              icon: <Speaker size={16} />,
+                              icon: <Icon name="speaker" size="sm" />,
                             },
                             {
                               id: "autoSensitivity",
                               label: "Input Sensitivity",
                               desc: "Auto-detect the best input level.",
-                              icon: <Volume2 size={16} />,
+                              icon: <Icon name="voiceChannel" size="sm" />,
                             },
                             {
                               id: "streamHighFidelity",
@@ -782,7 +781,7 @@ export default function RoomSettingsModal({
                                   </AudioCompatibilityHint>
                                 </>
                               ),
-                              icon: <Music size={16} />,
+                              icon: <Icon name="music" size="sm" />,
                             },
                           ].map((opt) => (
                             <div
@@ -952,7 +951,11 @@ export default function RoomSettingsModal({
                                   </span>
                                 </div>
                                 {isSelected && (
-                                  <Check size={12} className="text-primary" />
+                                  <Icon
+                                    name="check"
+                                    size="xs"
+                                    className="text-primary"
+                                  />
                                 )}
                               </div>
                               <p className="text-ui-2xs leading-tight text-rm-text-muted">
@@ -978,7 +981,7 @@ export default function RoomSettingsModal({
                               disabled={isUploadingBackground}
                               className="flex items-center gap-1.5 rounded-lg border border-rm-border bg-rm-bg-surface/40 px-2.5 py-1.5 text-ui-2xs font-bold text-rm-text-muted transition-colors hover:text-rm-text"
                             >
-                              <Upload size={12} />{" "}
+                              <Icon name="upload" size="xs" />{" "}
                               {isUploadingBackground
                                 ? "Uploading"
                                 : "Upload Image"}
@@ -1041,7 +1044,7 @@ export default function RoomSettingsModal({
                             >
                               {option.id === "none" ? (
                                 <div className="mb-2 flex h-16 w-full items-center justify-center rounded-lg bg-rm-bg-elevated/40 text-rm-text-muted/60 transition-ui">
-                                  <Ban size={20} />
+                                  <Icon name="ban" size="lg" />
                                 </div>
                               ) : (
                                 <div className="relative mb-2 flex h-16 w-full items-center justify-center overflow-hidden rounded-lg bg-rm-bg-elevated/40 transition-ui">
@@ -1050,8 +1053,9 @@ export default function RoomSettingsModal({
                                     className="absolute inset-0 bg-gradient-to-tr from-primary/30 via-rm-accent/25 to-rm-accent/40 filter blur-[8px]"
                                   />
                                   <div className="absolute inset-0 bg-black/15" />
-                                  <Sparkles
-                                    size={20}
+                                  <Icon
+                                    name="sparkle"
+                                    size="lg"
                                     className="relative z-10 text-white/80"
                                   />
                                 </div>
@@ -1066,7 +1070,7 @@ export default function RoomSettingsModal({
                               </span>
                               {isSelected && (
                                 <div className="absolute top-2 right-2 rounded-full bg-primary p-0.5 text-primary-foreground">
-                                  <Check size={10} />
+                                  <Icon name="check" size="xs" />
                                 </div>
                               )}
                             </button>
@@ -1131,7 +1135,7 @@ export default function RoomSettingsModal({
                                 </button>
                                 {isSelected && (
                                   <div className="absolute top-3 right-8 rounded-full bg-primary p-0.5 text-primary-foreground">
-                                    <Check size={10} />
+                                    <Icon name="check" size="xs" />
                                   </div>
                                 )}
                                 <button
@@ -1142,7 +1146,7 @@ export default function RoomSettingsModal({
                                   className="absolute right-2 top-2 rounded-md bg-black/60 p-1 text-white/80 opacity-0 transition-opacity hover:text-white group-hover:opacity-100"
                                   aria-label={`Remove ${background.name}`}
                                 >
-                                  <Trash2 size={12} />
+                                  <Icon name="trash" size="xs" />
                                 </button>
                               </div>
                             );
@@ -1159,8 +1163,9 @@ export default function RoomSettingsModal({
                                 className="group relative flex flex-col rounded-xl border border-primary/20 bg-gradient-to-br from-primary/10 via-rm-accent/10 to-rm-accent/5 p-2.5 text-left outline-none transition-ui hover:border-primary/50 hover:from-primary/15 hover:to-rm-accent/15"
                               >
                                 <div className="mb-2 flex h-16 w-full flex-col items-center justify-center rounded-lg bg-gradient-to-tr from-primary/20 to-rm-accent/20 text-primary transition-ui">
-                                  <Lock
-                                    size={18}
+                                  <Icon
+                                    name="lock"
+                                    size="md"
                                     className="text-rm-accent transition-transform"
                                   />
                                 </div>
@@ -1286,7 +1291,7 @@ export default function RoomSettingsModal({
                     <div className="mt-8 bg-rm-bg-elevated/40 border border-rm-border rounded-xl p-5">
                       <div className="flex items-start gap-3">
                         <div className="p-2.5 rounded-lg bg-primary/10 text-primary border border-primary/20">
-                          <Monitor size={20} />
+                          <Icon name="monitor" size="lg" />
                         </div>
                         <div>
                           <h4 className="text-sm font-bold text-rm-text mb-1">

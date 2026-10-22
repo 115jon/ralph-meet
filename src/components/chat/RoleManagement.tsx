@@ -3,7 +3,7 @@ import { PERMISSIONS } from "@/lib/permissions";
 import type { Role } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useEffect, useReducer } from "react";
-import { Loader2, Plus, Settings2, Shield, Trash2 } from "./Icons";
+import { Icon } from "@/components/ui/icon";
 import InlineEmojiText from "./InlineEmojiText";
 
 interface RoleManagementProps {
@@ -247,7 +247,11 @@ export default function RoleManagement({ serverId }: RoleManagementProps) {
   if (state.loading) {
     return (
       <div className="flex justify-center p-8">
-        <Loader2 className="h-6 w-6 animate-spin text-rm-text-muted" />
+        <Icon
+          name="loader"
+          size="xl"
+          className="animate-spin text-rm-text-muted"
+        />
       </div>
     );
   }
@@ -264,7 +268,7 @@ export default function RoleManagement({ serverId }: RoleManagementProps) {
             onClick={startCreate}
             className="p-1 hover:bg-rm-bg-hover rounded transition-colors text-rm-text-secondary hover:text-rm-text"
           >
-            <Plus className="h-4 w-4" />
+            <Icon name="add" size="sm" />
           </button>
         </div>
         <div className="min-h-0 overflow-y-auto p-2 space-y-1">
@@ -302,7 +306,7 @@ export default function RoleManagement({ serverId }: RoleManagementProps) {
           <>
             <div className="p-4 border-b border-rm-border flex justify-between items-center">
               <h3 className="font-bold text-rm-text flex items-center gap-2">
-                <Shield className="h-4 w-4" /> Edit Role
+                <Icon name="shield" size="sm" /> Edit Role
                 {state.selectedRole?.is_default && (
                   <span className="text-ui-2xs bg-rm-bg-elevated px-1.5 py-0.5 rounded uppercase tracking-widest text-rm-text-muted">
                     Default
@@ -316,7 +320,7 @@ export default function RoleManagement({ serverId }: RoleManagementProps) {
                       onClick={() => handleDelete(state.selectedRole!.id)}
                       className="p-1.5 text-rm-text-muted hover:text-destructive hover:bg-destructive/10 rounded transition-colors"
                     >
-                      <Trash2 className="h-4 w-4" />
+                      <Icon name="trash" size="sm" />
                     </button>
                   )}
                 <button
@@ -327,7 +331,7 @@ export default function RoleManagement({ serverId }: RoleManagementProps) {
                   className="bg-primary hover:bg-primary/90 text-primary-foreground px-3 py-1.5 rounded text-sm font-medium transition-colors disabled:opacity-50 flex items-center gap-2"
                 >
                   {state.editState.saving && (
-                    <Loader2 className="h-3 w-3 animate-spin" />
+                    <Icon name="loader" size="xs" className="animate-spin" />
                   )}
                   Save
                 </button>
@@ -465,7 +469,7 @@ export default function RoleManagement({ serverId }: RoleManagementProps) {
           </>
         ) : (
           <div className="flex-1 flex flex-col items-center justify-center text-rm-text-muted">
-            <Settings2 className="h-12 w-12 mb-4 opacity-20" />
+            <Icon name="sliders" size="3xl" className="mb-4 opacity-20" />
             <p className="text-sm font-medium">Select a role to edit</p>
           </div>
         )}

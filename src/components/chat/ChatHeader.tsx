@@ -9,8 +9,8 @@ import {
 import { cn } from "@/lib/utils";
 import { useChatStore } from "@/stores/chat-store";
 import { useCallStore } from "@/stores/useCallStore";
-import { ArrowLeft, ChevronRight, Phone, Search } from "lucide-react";
-import { AtSign, Hash, Pin, Users, X } from "./Icons";
+import { Icon, type IconName } from "@/components/ui/icon";
+import { getChannelIcon } from "@/lib/channel-icon";
 import InlineEmojiText from "./InlineEmojiText";
 import { NotificationBell } from "./NotificationBell";
 
@@ -53,6 +53,15 @@ export function ChatHeader({
   dmUsername,
   channelId,
 }: ChatHeaderProps) {
+  const channel = useChatStore((s) =>
+    channelId ? s.channels.find((c) => c.id === channelId) : undefined,
+  );
+  const channelIcon: IconName = isDM
+    ? "mention"
+    : channel
+      ? getChannelIcon(channel)
+      : "textChannel";
+
   // Determine if the local user is actively in the call SFU on this channel
   const voiceChannelStates = useChatStore((s) => s.voiceChannelStates);
   const callChannelId = useCallStore((s) => s.channelId);
@@ -83,7 +92,7 @@ export function ChatHeader({
       <div className="flex items-center gap-1 group">
         <IconButton
           aria-label="Servers"
-          icon={ArrowLeft}
+          icon="back"
           variant="muted"
           size="sm"
           className="h-10 w-10 md:hidden"
@@ -95,15 +104,19 @@ export function ChatHeader({
           className="group/mobiletext flex min-w-0 max-w-[min(45vw,180px)] items-center gap-1.5 text-left transition-opacity hover:opacity-80 md:hidden"
           onClick={onMembersClick}
         >
-          {isDM ? (
-            <AtSign className="h-[22px] w-[22px] text-rm-text-muted shrink-0" />
-          ) : (
-            <Hash className="h-[22px] w-[22px] text-rm-text-muted shrink-0" />
-          )}
+          <Icon
+            name={channelIcon}
+            size="lg"
+            className="text-rm-text-muted shrink-0"
+          />
           <div className="flex flex-col min-w-0">
             <div className="flex items-center gap-0.5 text-ui-md font-semibold text-rm-text leading-none truncate">
               <InlineEmojiText text={channelName} className="truncate" />
-              <ChevronRight className="h-[14px] w-[14px] text-rm-text-muted shrink-0" />
+              <Icon
+                name="chevronRight"
+                size="xs"
+                className="text-rm-text-muted shrink-0"
+              />
             </div>
             {!isDM && (
               <span className="text-ui-2xs text-rm-text-muted font-medium flex items-center gap-1 mt-0.5 leading-none">
@@ -124,11 +137,11 @@ export function ChatHeader({
           onClick={onToggleChannelDetails}
           title="View channel details"
         >
-          {isDM ? (
-            <AtSign className="h-5 w-5 text-rm-text-muted transition-colors group-hover/chname:text-rm-text-secondary shrink-0" />
-          ) : (
-            <Hash className="h-5 w-5 text-rm-text-muted transition-colors group-hover/chname:text-rm-text-secondary shrink-0" />
-          )}
+          <Icon
+            name={channelIcon}
+            size="lg"
+            className="text-rm-text-muted transition-colors group-hover/chname:text-rm-text-secondary shrink-0"
+          />
           {isDM && dmUsername ? (
             <Tooltip>
               <TooltipTrigger asChild>
@@ -153,9 +166,11 @@ export function ChatHeader({
               <InlineEmojiText text={channelName} />
             </h2>
           )}
-          <ChevronRight
+          <Icon
+            name="chevronRight"
+            size="xs"
             className={cn(
-              "h-3.5 w-3.5 transition-ui shrink-0",
+              "transition-ui shrink-0",
               showChannelDetails
                 ? "rotate-90 text-rm-text"
                 : "text-rm-text-muted group-hover/chname:text-rm-text-secondary",
@@ -173,7 +188,7 @@ export function ChatHeader({
                   aria-label={
                     hasExistingCall ? "Join Call" : "Start Voice Call"
                   }
-                  icon={Phone}
+                  icon="call"
                   variant="muted"
                   size="sm"
                   onClick={onCall}
@@ -196,13 +211,7 @@ export function ChatHeader({
             onClick={handleTogglePins}
             ref={pinButtonRef}
           >
-            <Pin
-              strokeWidth={1.75}
-              className={cn(
-                "size-[18px] transition-transform duration-150 ease-(--rm-ease-out)",
-                showPins && "rotate-45",
-              )}
-            />
+            <Icon name="pin" state={showPins ? "active" : "idle"} size="lg" />
             {pinnedCount > 0 && (
               <span className="absolute -top-0.5 -right-0.5 badge-count bg-primary text-primary-foreground">
                 {pinnedCount}
@@ -212,7 +221,8 @@ export function ChatHeader({
           <NotificationBell />
           {onMembersClick && (
             <IconButton
-              icon={Users}
+              icon="members"
+              iconState={showMembers ? "active" : "idle"}
               variant="muted"
               size="sm"
               aria-label="Members"
@@ -231,12 +241,12 @@ export function ChatHeader({
             onClick={onOpenSearch}
             title={`Search ${channelName}`}
           >
-            <Search className="h-3.5 w-3.5 shrink-0" />
+            <Icon name="search" size="sm" className="shrink-0" />
             <span className="max-w-[110px] truncate">Search</span>
           </button>
           <IconButton
             aria-label="Search"
-            icon={Search}
+            icon="search"
             variant="muted"
             size="sm"
             className="h-10 w-10 md:hidden"
@@ -246,7 +256,7 @@ export function ChatHeader({
         {onClose && (
           <IconButton
             aria-label="Close Chat"
-            icon={X}
+            icon="close"
             variant="muted"
             size="sm"
             className="ml-1"

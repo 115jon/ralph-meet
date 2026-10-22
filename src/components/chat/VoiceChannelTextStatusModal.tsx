@@ -9,7 +9,7 @@ import {
   normalizeVoiceChannelStatusText,
 } from "@/lib/voice-channel-status";
 import { useChatActions } from "@/stores/chat-store";
-import { MessageSquareText, Smile, X } from "lucide-react";
+import { Icon } from "@/components/ui/icon";
 import { useEffect, useMemo, useState, useRef } from "react";
 
 import EmojiPicker from "./EmojiPicker";
@@ -107,7 +107,7 @@ export default function VoiceChannelTextStatusModal({
             >
               <div className="relative rounded-t-xl border-b border-rm-border bg-gradient-to-b from-primary/10 to-transparent px-6 pb-7 pt-6">
                 <IconButton
-                  icon={X}
+                  icon="close"
                   size="md"
                   shape="circle"
                   type="button"
@@ -118,7 +118,7 @@ export default function VoiceChannelTextStatusModal({
 
                 <div className="mx-auto mb-6 flex h-28 w-28 items-center justify-center rounded-full border border-rm-border bg-rm-bg-surface shadow-[0_18px_40px_rgba(0,0,0,0.22)]">
                   <div className="flex h-20 w-20 items-center justify-center rounded-full bg-rm-bg-hover text-rm-accent-ink">
-                    <MessageSquareText className="h-9 w-9" />
+                    <Icon name="chat" size="2xl" />
                   </div>
                 </div>
 
@@ -161,8 +161,8 @@ export default function VoiceChannelTextStatusModal({
                   />
                   <IconButton
                     ref={emojiBtnRef}
-                    icon={Smile}
-                    iconSize={16}
+                    icon="emoji"
+                    iconSize="sm"
                     variant="muted"
                     shape="circle"
                     type="button"

@@ -7,7 +7,7 @@ import {
   type AvatarCropRect,
 } from "@/lib/avatar-display";
 import { cn } from "@/lib/utils";
-import { Camera, Check, Image as ImageIcon, RotateCcw, X } from "lucide-react";
+import { Icon } from "@/components/ui/icon";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type React from "react";
@@ -320,7 +320,7 @@ export function AvatarFrameEditor({
         <div className="flex items-center justify-between border-b border-rm-border px-4 py-3">
           <div className="flex min-w-0 items-center gap-3">
             <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
-              <Camera size={16} />
+              <Icon name="photo" size="sm" />
             </div>
             <div className="min-w-0">
               <h2
@@ -340,7 +340,7 @@ export function AvatarFrameEditor({
             className="flex h-8 w-8 items-center justify-center rounded-md text-rm-text-muted transition-colors hover:bg-rm-bg-hover hover:text-rm-text"
             aria-label="Close avatar framing"
           >
-            <X size={16} />
+            <Icon name="close" size="sm" />
           </button>
         </div>
 
@@ -377,7 +377,7 @@ export function AvatarFrameEditor({
 
         <div className="space-y-4 border-t border-rm-border bg-rm-bg-surface px-4 py-4">
           <div className="flex items-center gap-3">
-            <ImageIcon size={14} className="text-rm-text-muted" />
+            <Icon name="image" size="sm" className="text-rm-text-muted" />
             <input
               type="range"
               min={MIN_ZOOM}
@@ -390,7 +390,7 @@ export function AvatarFrameEditor({
               className="h-2 flex-1 accent-primary"
               aria-label="Avatar zoom"
             />
-            <ImageIcon size={20} className="text-rm-text-secondary" />
+            <Icon name="image" size="lg" className="text-rm-text-secondary" />
           </div>
 
           <div className="flex items-center justify-between gap-3">
@@ -400,7 +400,7 @@ export function AvatarFrameEditor({
               className="border-rm-border bg-rm-bg-elevated text-rm-text hover:bg-rm-bg-hover"
               onClick={reset}
             >
-              <RotateCcw size={14} />
+              <Icon name="reset" size="sm" />
               Reset
             </Button>
             {currentDisplay && (
@@ -438,7 +438,7 @@ export function AvatarFrameEditor({
             )}
             onClick={handleConfirm}
           >
-            <Check size={16} />
+            <Icon name="check" size="sm" />
             Apply
           </Button>
         </div>

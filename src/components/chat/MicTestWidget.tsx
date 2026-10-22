@@ -10,7 +10,7 @@ import {
   getVoiceActivityLevelPercent,
   getVoiceActivityThreshold,
 } from "@/lib/voice/vad";
-import { Mic2, Square } from "lucide-react";
+import { Icon } from "@/components/ui/icon";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 const log = clog("MicTest");
@@ -362,7 +362,11 @@ export function MicTestWidget({
         }`}
       >
         <span className="flex items-center gap-1.5">
-          {isPlaybackActive ? <Square size={12} /> : <Mic2 size={12} />}
+          {isPlaybackActive ? (
+            <Icon name="stop" size="xs" />
+          ) : (
+            <Icon name="mic" size="xs" />
+          )}
           {isPlaybackActive ? "Stop testing" : "Mic Test"}
         </span>
       </button>

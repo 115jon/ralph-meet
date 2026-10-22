@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 import AttachmentList from "./AttachmentList";
 import { InputMentionOverlay } from "./InputMentionOverlay";
 import { MessageInputPlaceholder } from "./MessageInputPlaceholder";
-import { Plus } from "./Icons";
+import { Icon } from "@/components/ui/icon";
 
 import {
   useMessageInput,
@@ -141,7 +141,7 @@ export default function MessageInput({
             onClick={() => fileInputRef.current?.click()}
             className="mr-3 mt-0.5 rounded-full text-rm-text-muted pointer-fine:hover:text-rm-text"
           >
-            <Plus className="size-4" strokeWidth={2.5} />
+            <Icon name="add" size="sm" />
           </Button>
 
           <div className="relative flex-1 min-h-[32px] overflow-hidden">

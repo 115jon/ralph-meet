@@ -5,7 +5,6 @@ import { Dialog, DialogPortal, DialogSurface } from "@/components/ui/dialog";
 import { IconButton } from "@/components/ui/IconButton";
 import { VOICE_SWITCH_CONFIRM_KEY } from "@/components/chat/voice-confirmation-preferences";
 import { cn } from "@/lib/utils";
-import { X } from "lucide-react";
 import { useCallback, useState } from "react";
 
 // ── LocalStorage key for "Don't ask again" ─────────────────────────────────
@@ -83,9 +82,9 @@ export function VoiceSwitchModal({
                 You sure?
               </h2>
               <IconButton
-                icon={X}
+                icon="close"
                 size="xs"
-                iconSize={16}
+                iconSize="sm"
                 onClick={onCancel}
                 aria-label="Close"
               />

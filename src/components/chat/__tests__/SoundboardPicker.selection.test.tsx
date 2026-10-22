@@ -776,10 +776,9 @@ describe("SoundboardPicker selection mode", () => {
     const playButton = await screen.findByRole("button", {
       name: "Play Server clip",
     });
-    const deleteButton =
-      playButton.parentElement?.querySelector(
-        "svg.lucide-trash-2",
-      )?.parentElement;
+    const deleteButton = playButton.parentElement?.querySelector(
+      "svg[data-icon='trash']",
+    )?.parentElement;
     expect(deleteButton).not.toBeNull();
     fireEvent.click(deleteButton as HTMLElement);
 
@@ -804,7 +803,7 @@ describe("SoundboardPicker selection mode", () => {
       name: "Play Server clip",
     });
     const deleteButton = playButton.parentElement?.querySelector(
-      "svg.lucide-trash-2",
+      "svg[data-icon='trash']",
     )?.parentElement as HTMLButtonElement | null;
     expect(deleteButton).not.toBeNull();
     deleteButton?.focus();

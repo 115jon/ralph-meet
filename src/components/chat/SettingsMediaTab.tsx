@@ -7,7 +7,7 @@ import { apiPatch } from "@/lib/api-client";
 import { useMediaSafetySettingsStore } from "@/stores/useMediaSafetySettingsStore";
 import { useChatStore } from "@/stores/chat-store";
 import { useUser } from "@kova/react";
-import { Shield, Sparkles, UserRound } from "lucide-react";
+import { Icon } from "@/components/ui/icon";
 import { useEffect, useState } from "react";
 
 const FILTER_ACCENT_STYLES: Record<
@@ -132,7 +132,7 @@ export default function SettingsMediaTab() {
       <div className="space-y-12">
         <section className="space-y-6">
           <div className="flex items-center gap-2">
-            <Shield size={16} className="text-emerald-400" />
+            <Icon name="shield" size="sm" className="text-emerald-400" />
             <h3 className="text-ui-xs font-medium text-rm-text-muted">
               Content Filtering
             </h3>
@@ -242,7 +242,7 @@ export default function SettingsMediaTab() {
 
         <section className="space-y-6">
           <div className="flex items-center gap-2">
-            <Sparkles size={16} className="text-sky-400" />
+            <Icon name="sparkle" size="sm" className="text-sky-400" />
             <h3 className="text-ui-xs font-medium text-rm-text-muted">
               How It Applies
             </h3>
@@ -251,7 +251,7 @@ export default function SettingsMediaTab() {
           <div className="grid gap-3 md:grid-cols-2">
             <div className="rounded-xl border border-rm-border bg-rm-bg-surface p-4">
               <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl border border-sky-500/20 bg-sky-500/10 text-sky-400">
-                <Sparkles size={18} />
+                <Icon name="sparkle" size="md" />
               </div>
               <h4 className="text-sm font-bold text-rm-text">
                 Search + Trending
@@ -265,7 +265,7 @@ export default function SettingsMediaTab() {
 
             <div className="rounded-xl border border-rm-border bg-rm-bg-surface p-4">
               <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-rm-accent-tint text-rm-accent-ink">
-                <UserRound size={18} />
+                <Icon name="account" size="md" />
               </div>
               <h4 className="text-sm font-bold text-rm-text">
                 Account-aware Requests

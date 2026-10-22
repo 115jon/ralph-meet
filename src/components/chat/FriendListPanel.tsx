@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils";
 import { UserStatusDot } from "./UserStatusDot";
 import React from "react";
 import { AvatarImage } from "./AvatarImage";
-import { Ban, Check, MessageSquare, UserPlus, Users, X } from "./Icons";
+import { Icon } from "@/components/ui/icon";
 import { UserDisplayName } from "./UserDisplayName";
 
 type Tab = "online" | "all" | "pending" | "blocked";
@@ -72,7 +72,7 @@ export function FriendListPanel({
             dispatch({ type: "SET_ADD_FRIEND_MODE", value: !addFriendMode })
           }
         >
-          <UserPlus className="mr-1 inline h-3 w-3" />
+          <Icon name="invite" size="xs" className="mr-1 inline" />
           Add
         </button>
       </div>
@@ -122,11 +122,11 @@ export function FriendListPanel({
           {!loading && filteredFriends.length === 0 && (
             <div className="flex flex-col items-center gap-2 py-8 text-center text-rm-text-muted/40">
               {tab === "pending" ? (
-                <UserPlus className="h-6 w-6 opacity-20" />
+                <Icon name="invite" size="xl" className="opacity-20" />
               ) : tab === "blocked" ? (
-                <Ban className="h-6 w-6 opacity-20" />
+                <Icon name="ban" size="xl" className="opacity-20" />
               ) : (
-                <Users className="h-6 w-6 opacity-20" />
+                <Icon name="members" size="xl" className="opacity-20" />
               )}
               <span className="text-xs">
                 {tab === "online"
@@ -213,7 +213,7 @@ export function FriendListPanel({
                             handleOpenDm(rel.user.id);
                           }}
                         >
-                          <MessageSquare className="h-3.5 w-3.5" />
+                          <Icon name="chat" size="sm" />
                         </button>
                       )}
                       {rel.type === 2 && (
@@ -225,7 +225,7 @@ export function FriendListPanel({
                             handleAcceptFriend(rel.user.id);
                           }}
                         >
-                          <Check className="h-3.5 w-3.5" />
+                          <Icon name="check" size="sm" />
                         </button>
                       )}
                       <button
@@ -242,7 +242,7 @@ export function FriendListPanel({
                           handleRemoveFriend(rel.user.id);
                         }}
                       >
-                        <X className="h-3.5 w-3.5" />
+                        <Icon name="close" size="sm" />
                       </button>
                     </div>
                   </div>

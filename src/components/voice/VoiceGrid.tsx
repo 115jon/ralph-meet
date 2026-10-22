@@ -2,7 +2,7 @@ import { Slider } from "@/components/ContextMenu/ContextMenuItems";
 import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
 import { cn } from "@/lib/utils";
 import { PRESS } from "@/components/ui/interaction";
-import { Eye, EyeOff, Headphones, MicOff, Volume2 } from "lucide-react";
+import { Icon } from "@/components/ui/icon";
 
 import { extractDominantColor } from "@/lib/color-utils";
 import { getAuthAssetUrl } from "@/lib/platform";
@@ -184,7 +184,7 @@ export const VoiceGrid = React.memo(
               className="relative z-10 flex h-full w-full items-center justify-center bg-black/75 pointer-events-none"
             >
               <div className="flex flex-col items-center gap-3 text-center">
-                <EyeOff size={28} className="text-white/60" />
+                <Icon name="eyeOff" size="xl" className="text-white/60" />
                 <span className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-white/60">
                   Preview paused
                 </span>
@@ -248,11 +248,11 @@ export const VoiceGrid = React.memo(
                 >
                   {isPreviewHidden ? (
                     <>
-                      <Eye size={12} /> <span>Resume</span>
+                      <Icon name="eye" size="xs" /> <span>Resume</span>
                     </>
                   ) : (
                     <>
-                      <EyeOff size={12} /> <span>Pause</span>
+                      <Icon name="eyeOff" size="xs" /> <span>Pause</span>
                     </>
                   )}
                 </button>
@@ -278,8 +278,9 @@ export const VoiceGrid = React.memo(
               <div className="rounded-lg border border-rm-border bg-rm-bg-primary/90 shadow-lg">
                 <div className="flex items-center justify-between px-4 pt-3">
                   <div className="flex items-center gap-2 text-rm-text">
-                    <Volume2
-                      size={13}
+                    <Icon
+                      name="voiceChannel"
+                      size="xs"
                       className="text-rm-text-muted shrink-0"
                     />
                     <span className="text-ui-2xs font-semibold uppercase tracking-[0.08em]">
@@ -308,14 +309,18 @@ export const VoiceGrid = React.memo(
             <div className="bg-rm-bg-primary/85 px-3 py-1.5 rounded-md border border-rm-border flex items-center gap-3 shadow-md">
               <div className="flex items-center gap-1.5">
                 {focusedItem.isDeafened && (
-                  <Headphones
-                    size={12}
+                  <Icon
+                    name="deafen"
+                    state="off"
+                    size="xs"
                     className="text-rm-text-muted shrink-0"
                   />
                 )}
                 {focusedItem.isMuted && (
-                  <MicOff
-                    size={12}
+                  <Icon
+                    name="mic"
+                    state="off"
+                    size="xs"
                     className={
                       focusedItem.serverMute
                         ? "text-destructive shrink-0"

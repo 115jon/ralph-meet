@@ -26,24 +26,7 @@ import { useCallStore } from "@/stores/useCallStore";
 import type { ViewerContext } from "@/stores/useImageViewerStore";
 import { useImageViewerActions } from "@/stores/useImageViewerStore";
 import { UserStatusDot } from "./UserStatusDot";
-import {
-  ArrowLeft,
-  Bell,
-  ChevronRight,
-  Download,
-  ExternalLink,
-  Hash,
-  Image,
-  ImageOff,
-  Link2,
-  MessageCircle,
-  RefreshCw,
-  Search,
-  Settings,
-  TriangleAlert,
-  UserPlus,
-  WifiOff,
-} from "lucide-react";
+import { Icon } from "@/components/ui/icon";
 import {
   type CSSProperties,
   useCallback,
@@ -53,16 +36,6 @@ import {
   useState,
 } from "react";
 import ContextMenu from "./ContextMenu";
-import {
-  AlertTriangle,
-  AtSign,
-  Copy,
-  Crown,
-  MessageSquare,
-  Phone,
-  Pin,
-  User as UserIcon,
-} from "./Icons";
 import InlineEmojiText from "./InlineEmojiText";
 import { MarkdownRenderer } from "./MarkdownRenderer";
 import MobileProfileSheet from "./MobileProfileSheet";
@@ -492,12 +465,12 @@ export default function MemberList({
       openMenu(e, [
         {
           label: "Profile",
-          icon: <UserIcon className="h-4 w-4" />,
+          icon: <Icon name="account" size="sm" />,
           onClick: () => setProfileUser(member.user),
         },
         {
           label: "Message",
-          icon: <MessageSquare className="h-4 w-4" />,
+          icon: <Icon name="chat" size="sm" />,
           onClick: async () => {
             const channelId = await openDm(member.user.id);
             if (channelId) {
@@ -509,7 +482,7 @@ export default function MemberList({
           ? [
               {
                 label: "Start a Call",
-                icon: <Phone className="h-4 w-4" />,
+                icon: <Icon name="call" size="sm" />,
                 onClick: async () => {
                   const channelId =
                     dmForUser?.id ?? (await openDm(member.user.id));
@@ -536,7 +509,7 @@ export default function MemberList({
           : []),
         {
           label: "Copy ID",
-          icon: <Copy className="h-4 w-4" />,
+          icon: <Icon name="copy" size="sm" />,
           onClick: () => navigator.clipboard.writeText(member.user.id),
           divider: !!onBan && member.user.id !== currentUserId,
         },
@@ -544,7 +517,7 @@ export default function MemberList({
           ? [
               {
                 label: "Ban",
-                icon: <AlertTriangle className="h-4 w-4" />,
+                icon: <Icon name="ban" size="sm" />,
                 onClick: () => onBan(member.user.id, member.user.username),
                 variant: "danger" as const,
               },
@@ -772,7 +745,7 @@ function MobileHeader({
         onClick={onClose}
         className="p-1 -ml-1 text-rm-text-muted hover:text-rm-text transition-colors"
       >
-        <ArrowLeft size={24} />
+        <Icon name="back" size="xl" />
       </ButtonBase>
       <div className="flex items-center gap-5 text-rm-text-muted">
         <ButtonBase
@@ -782,16 +755,16 @@ function MobileHeader({
             onClose?.();
           }}
         >
-          <Search size={22} />
+          <Icon name="search" size="xl" />
         </ButtonBase>
         <ButtonBase className="hover:text-rm-text transition-colors">
-          <Bell size={22} />
+          <Icon name="bell" size="xl" />
         </ButtonBase>
         <ButtonBase
           className="hover:text-rm-text transition-colors"
           onClick={onOpenSettings}
         >
-          <Settings size={22} />
+          <Icon name="settings" size="xl" />
         </ButtonBase>
       </div>
     </div>
@@ -811,9 +784,17 @@ function DesktopHeader({
     <div className="hidden lg:flex items-center justify-between px-4 py-3 border-b border-rm-border bg-transparent shrink-0">
       <div className="flex items-center gap-2 min-w-0">
         {isDM ? (
-          <AtSign className="h-[18px] w-[18px] text-rm-text-muted shrink-0" />
+          <Icon
+            name="mention"
+            size="md"
+            className="text-rm-text-muted shrink-0"
+          />
         ) : (
-          <Hash className="h-[18px] w-[18px] text-rm-text-muted shrink-0" />
+          <Icon
+            name="textChannel"
+            size="md"
+            className="text-rm-text-muted shrink-0"
+          />
         )}
         <h2 className="text-ui-base font-semibold text-rm-text-primary truncate">
           <InlineEmojiText
@@ -827,7 +808,7 @@ function DesktopHeader({
             onClick={onToggleDetails}
             className="p-1.5 text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover rounded-lg transition-colors shrink-0"
           >
-            <ArrowLeft size={18} />
+            <Icon name="back" size="md" />
           </ButtonBase>
         </TooltipTrigger>
         <TooltipContent side="top" sideOffset={10}>
@@ -872,9 +853,17 @@ function MemberListTabs({
       <div className="lg:hidden mb-6 shrink-0">
         <div className="flex items-center gap-2 mb-1">
           {isDM ? (
-            <AtSign className="h-[24px] w-[24px] text-rm-text-muted shrink-0" />
+            <Icon
+              name="mention"
+              size="xl"
+              className="text-rm-text-muted shrink-0"
+            />
           ) : (
-            <Hash className="h-[24px] w-[24px] text-rm-text-muted shrink-0" />
+            <Icon
+              name="textChannel"
+              size="xl"
+              className="text-rm-text-muted shrink-0"
+            />
           )}
           <h1 className="text-ui-xl font-semibold text-rm-text-primary leading-none truncate">
             <InlineEmojiText
@@ -994,13 +983,18 @@ function MobileInviteButton({
       >
         <div className="flex items-center gap-3">
           <div className="p-2 bg-primary rounded-full text-primary-foreground border border-rm-border/50">
-            <UserPlus size={18} fill="currentColor" className="opacity-90" />
+            <Icon
+              name="invite"
+              state="active"
+              size="md"
+              className="opacity-90"
+            />
           </div>
           <span className="font-semibold text-ui-md text-rm-text-primary">
             Invite Members
           </span>
         </div>
-        <ChevronRight size={20} className="text-rm-text-muted" />
+        <Icon name="chevronRight" size="sm" className="text-rm-text-muted" />
       </ButtonBase>
     </div>
   );
@@ -1185,7 +1179,10 @@ function MediaTabContent({
   if (error) return <TabErrorState message={error} onRetry={onRetry} />;
   if (items.length === 0)
     return (
-      <TabEmptyState icon={<Image size={40} />} label="No media shared yet" />
+      <TabEmptyState
+        icon={<Icon name="image" size="3xl" />}
+        label="No media shared yet"
+      />
     );
 
   return (
@@ -1264,7 +1261,10 @@ function PinsTabContent({
   if (loading) return <TabSpinnerState />;
   if (!messages || messages.length === 0) {
     return (
-      <TabEmptyState icon={<Pin size={40} />} label="No pinned messages" />
+      <TabEmptyState
+        icon={<Icon name="pin" size="3xl" />}
+        label="No pinned messages"
+      />
     );
   }
   return (
@@ -1302,7 +1302,7 @@ function PinsTabContent({
               </div>
               {msg.attachments && msg.attachments.length > 0 && (
                 <div className="mt-2 flex items-center gap-1.5 text-ui-2xs text-rm-text-muted">
-                  <Image size={12} />
+                  <Icon name="image" size="xs" />
                   <span>
                     {msg.attachments.length} attachment
                     {msg.attachments.length > 1 ? "s" : ""}
@@ -1336,7 +1336,7 @@ function ThreadsTabContent({
   if (threads.length === 0)
     return (
       <TabEmptyState
-        icon={<MessageCircle size={40} />}
+        icon={<Icon name="chat" size="3xl" />}
         label="No threads in this channel"
       />
     );
@@ -1372,7 +1372,7 @@ function ThreadsTabContent({
               </div>
               <div className="flex items-center gap-3 text-ui-2xs text-rm-text-muted">
                 <div className="flex items-center gap-1">
-                  <MessageCircle size={12} />
+                  <Icon name="chat" size="xs" />
                   <span className="font-semibold">{thread.reply_count}</span>
                   <span>{thread.reply_count === 1 ? "reply" : "replies"}</span>
                 </div>
@@ -1406,7 +1406,10 @@ function LinksTabContent({
   if (error) return <TabErrorState message={error} onRetry={onRetry} />;
   if (items.length === 0)
     return (
-      <TabEmptyState icon={<Link2 size={40} />} label="No links shared yet" />
+      <TabEmptyState
+        icon={<Icon name="link" size="3xl" />}
+        label="No links shared yet"
+      />
     );
   return (
     <div className="space-y-2.5">
@@ -1438,7 +1441,7 @@ function LinksTabContent({
                 <>
                   <span className="text-rm-text-muted/30">&middot;</span>
                   <span className="text-ui-2xs text-rm-text-muted flex items-center gap-0.5 shrink-0">
-                    <Hash size={10} className="opacity-60" />
+                    <Icon name="textChannel" size="xs" className="opacity-60" />
                     <InlineEmojiText text={channelName} />
                   </span>
                 </>
@@ -1455,7 +1458,7 @@ function LinksTabContent({
                 rel="noopener noreferrer"
                 className="flex items-center gap-2 text-ui-sm text-primary hover:underline truncate mt-1"
               >
-                <ExternalLink size={12} className="shrink-0" />
+                <Icon name="externalLink" size="xs" className="shrink-0" />
                 <span className="truncate">{url}</span>
               </a>
             ))}
@@ -1487,10 +1490,10 @@ function FilesTabContent({
   if (loading) return <TabSpinnerState />;
   if (error) return <TabErrorState message={error} onRetry={onRetry} />;
   if (items.length === 0) {
-    const { Icon: EmptyIcon } = getFileIcon("file.txt");
+    const { icon: emptyIcon } = getFileIcon("file.txt");
     return (
       <TabEmptyState
-        icon={<EmptyIcon size={40} />}
+        icon={<Icon name={emptyIcon} size="3xl" />}
         label="No files shared yet"
       />
     );
@@ -1498,7 +1501,7 @@ function FilesTabContent({
   return (
     <div className="space-y-2">
       {items.map((item) => {
-        const { Icon: FileTypeIcon, colorClass } = getFileIcon(
+        const { icon: fileTypeIcon, colorClass } = getFileIcon(
           item.filename,
           item.content_type,
         );
@@ -1530,7 +1533,7 @@ function FilesTabContent({
                 colorClass,
               )}
             >
-              <FileTypeIcon size={22} />
+              <Icon name={fileTypeIcon} size="xl" />
             </div>
             <div className="flex-1 min-w-0">
               <div className="text-ui-sm font-bold text-rm-text-primary truncate">
@@ -1566,7 +1569,11 @@ function FilesTabContent({
                   <>
                     <span className="text-rm-text-muted/30">&middot;</span>
                     <span className="text-ui-2xs text-rm-text-muted flex items-center gap-0.5 shrink-0">
-                      <Hash size={10} className="opacity-60" />
+                      <Icon
+                        name="textChannel"
+                        size="xs"
+                        className="opacity-60"
+                      />
                       <InlineEmojiText text={channelName} />
                     </span>
                   </>
@@ -1581,7 +1588,7 @@ function FilesTabContent({
                   onClick={(e) => e.stopPropagation()}
                   className="relative z-20 shrink-0 rounded-lg p-2 text-rm-text-muted opacity-0 transition-ui hover:bg-primary/10 hover:text-primary group-hover:opacity-100"
                 >
-                  <Download size={16} />
+                  <Icon name="download" size="sm" />
                 </a>
               </TooltipTrigger>
               <TooltipContent side="top" sideOffset={10}>
@@ -1664,7 +1671,7 @@ function MediaGridImage({
   if (error) {
     return (
       <div className="w-full h-full flex items-center justify-center bg-rm-bg-elevated">
-        <ImageOff size={20} className="text-rm-text-muted/30" />
+        <Icon name="imageBroken" size="lg" className="text-rm-text-muted/30" />
       </div>
     );
   }
@@ -1762,10 +1769,10 @@ function TabErrorState({
       {/* Error graphic */}
       <div className="relative">
         <div className="h-20 w-20 rounded-2xl bg-destructive/10 flex items-center justify-center border border-destructive/20">
-          <WifiOff size={32} className="text-destructive/60" />
+          <Icon name="offline" size="2xl" className="text-destructive/60" />
         </div>
         <div className="absolute -bottom-1 -right-1 h-7 w-7 rounded-full bg-destructive/20 flex items-center justify-center border border-destructive/30">
-          <TriangleAlert size={14} className="text-destructive" />
+          <Icon name="warning" size="sm" className="text-destructive" />
         </div>
       </div>
 
@@ -1782,7 +1789,7 @@ function TabErrorState({
         onClick={onRetry}
         className="flex items-center gap-2 px-4 py-2 bg-rm-bg-elevated hover:bg-rm-bg-hover border border-rm-border rounded-xl text-ui-sm font-bold text-rm-text-primary transition-colors"
       >
-        <RefreshCw size={14} />
+        <Icon name="refresh" size="sm" />
         Retry
       </ButtonBase>
     </div>
@@ -2000,13 +2007,13 @@ function MemberItem({
                   platforms={platforms}
                   status={member.user.status}
                   className="shrink-0"
-                  iconClassName="h-3.5 w-3.5"
+                  iconSize="sm"
                 />
                 {isAdmin ? (
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <span className="flex shrink-0 items-center">
-                        <Crown className="h-3 w-3 fill-primary/20 text-primary" />
+                        <Icon name="crown" size="xs" className="text-primary" />
                       </span>
                     </TooltipTrigger>
                     <TooltipContent side="top" sideOffset={8}>

@@ -6,7 +6,7 @@ import { APP_THEMES, type AppTheme } from "@/lib/theme-preferences";
 import { restartDesktopApp } from "@/lib/desktop-restart";
 import { cn } from "@/lib/utils";
 import { useDesktopSettingsStore } from "@/stores/useDesktopSettingsStore";
-import { Cpu, Eye, RefreshCw } from "lucide-react";
+import { Icon } from "@/components/ui/icon";
 import { useEffect, useMemo, useState } from "react";
 import { clog } from "@/lib/console-logger";
 import { HomeIcon } from "./HomeIcon";
@@ -121,7 +121,7 @@ function ThemeSwatch({
       <div className={cn("absolute inset-0", choice.previewClass)} />
       {choice.id === "system" && (
         <div className="absolute inset-0 z-10 flex items-center justify-center text-white/55 backdrop-blur-[2px]">
-          <RefreshCw size={24} strokeWidth={2.5} />
+          <Icon name="refresh" size="xl" />
         </div>
       )}
       {(choice.id === "miku-light" || choice.id === "miku-dark") && (
@@ -256,7 +256,7 @@ export default function SettingsAppearanceTab({
                 onOpenPreview?.();
               }}
             >
-              <Eye size={16} aria-hidden="true" />
+              <Icon name="eye" size="sm" />
               Preview Theme
             </Button>
           </div>
@@ -335,7 +335,7 @@ export default function SettingsAppearanceTab({
 
         <section className="overflow-hidden rounded-xl border border-rm-border bg-rm-bg-surface">
           <SettingsToggleRow
-            icon={<RefreshCw size={20} />}
+            icon={<Icon name="refresh" size="lg" />}
             label="Sync theme across my devices"
             description="Store your chosen theme on your account and apply it when you sign in on another device."
             checked={preferences.themeSyncEnabled}
@@ -352,7 +352,7 @@ export default function SettingsAppearanceTab({
             </h2>
             <div className="mt-3 overflow-hidden rounded-xl border border-rm-border bg-rm-bg-surface">
               <SettingsToggleRow
-                icon={<Cpu size={20} />}
+                icon={<Icon name="cpu" size="lg" />}
                 label="Enable hardware acceleration"
                 description="Uses your GPU to make Ralph Meet run more smoothly. Turn this off if you're experiencing visual glitches or poor performance."
                 checked={hardwareAcceleration}

@@ -1,6 +1,6 @@
 import type { ScreenShareOptions } from "@/lib/screen-share-types";
 import type { ScreenShareSourceState } from "@/lib/screen-share-types";
-import { Monitor, MonitorX, Share2 } from "lucide-react";
+import { Icon } from "@/components/ui/icon";
 import React from "react";
 import { Divider, MenuItem, SubMenuItem } from "./ContextMenuItems";
 
@@ -74,7 +74,9 @@ export const LocalMenu: React.FC<LocalMenuProps> = ({
             onToggleScreenShare?.();
             onClose();
           }}
-          rightElement={<MonitorX size={18} className="text-destructive" />}
+          rightElement={
+            <Icon name="streamOff" size="sm" className="text-destructive" />
+          }
         />
         <MenuItem
           label="Change Stream"
@@ -83,7 +85,9 @@ export const LocalMenu: React.FC<LocalMenuProps> = ({
             onChangeSource?.();
             onClose();
           }}
-          rightElement={<Share2 size={18} className="text-rm-text-muted" />}
+          rightElement={
+            <Icon name="screenShare" size="sm" className="text-rm-text-muted" />
+          }
         />
 
         <SubMenuItem
@@ -133,7 +137,7 @@ export const LocalMenu: React.FC<LocalMenuProps> = ({
                 onClose();
               }}
               rightElement={
-                <Monitor size={16} className="text-rm-text-muted" />
+                <Icon name="monitor" size="sm" className="text-rm-text-muted" />
               }
             />
           </>

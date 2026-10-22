@@ -1,6 +1,6 @@
 import { getAuthAssetUrl } from "@/lib/platform";
 import { cn } from "@/lib/utils";
-import { MonitorPlay, ScreenShare } from "lucide-react";
+import { Icon } from "@/components/ui/icon";
 
 interface VoiceStreamHoverCardProps {
   displayName: string;
@@ -33,7 +33,7 @@ function PlaceholderStreamPreview({
       </div>
       <div className="relative z-10 flex max-w-[14rem] flex-col items-center gap-3 text-center">
         <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-primary/20 bg-primary/10 text-primary shadow-lg shadow-primary/10">
-          <MonitorPlay className="h-7 w-7" />
+          <Icon name="stream" size="xl" />
         </div>
         <div>
           <p className="text-sm font-semibold text-rm-text">
@@ -145,7 +145,7 @@ export function VoiceStreamHoverCard({
             : "cursor-default border-rm-border bg-rm-bg-elevated/70 text-rm-text-muted",
         )}
       >
-        <ScreenShare className="h-4 w-4" />
+        <Icon name="screenShare" size="sm" />
         <span>{ctaLabel}</span>
       </button>
     </div>

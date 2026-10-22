@@ -70,25 +70,7 @@ import type { User } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useChatStore } from "@/stores/chat-store";
 import { useUser } from "@kova/react";
-import {
-  AlertTriangle,
-  ChevronDown,
-  ChevronsRight,
-  Crop,
-  Loader2,
-  Moon,
-  Paintbrush,
-  Pencil,
-  Pipette,
-  Plus,
-  ShoppingBag,
-  Sparkles,
-  Sun,
-  Trash2,
-  Upload,
-  UserRoundCheck,
-  X,
-} from "lucide-react";
+import { Icon } from "@/components/ui/icon";
 import { clog } from "@/lib/console-logger";
 import {
   useCallback,
@@ -945,9 +927,9 @@ function ColorField({
                   }
                 >
                   {eyeDropperPending ? (
-                    <Loader2 size={14} className="animate-spin" />
+                    <Icon name="loader" size="sm" className="animate-spin" />
                   ) : (
-                    <Pipette size={14} />
+                    <Icon name="eyedropper" size="sm" />
                   )}
                 </button>
               </div>
@@ -1087,7 +1069,7 @@ function ColorField({
                 </div>
               </div>
               <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-white/18 bg-black/18 text-white/86 backdrop-blur-md transition group-hover:bg-black/24">
-                <Pipette size={14} />
+                <Icon name="eyedropper" size="sm" />
               </div>
             </div>
           </button>
@@ -1294,7 +1276,7 @@ function DisplayNameStyleDialog({
               className="text-rm-text-secondary pointer-fine:hover:text-rm-text"
               aria-label="Close display name style dialog"
             >
-              <X size={16} />
+              <Icon name="close" size="sm" />
             </Button>
           </div>
 
@@ -1674,7 +1656,7 @@ function DisplayNameStyleDialog({
                           Message
                         </div>
                         <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--rm-profile-custom-card-bg-strong)] text-[color:var(--rm-profile-custom-muted)]">
-                          <Plus size={14} />
+                          <Icon name="add" size="sm" />
                         </div>
                       </div>
                     </div>
@@ -1809,7 +1791,7 @@ function DisplayNameStyleDialog({
                   aria-label="Show dark preview"
                   aria-pressed={previewMode === "dark"}
                 >
-                  <Moon size={15} />
+                  <Icon name="moon" size="sm" />
                 </button>
                 <button
                   type="button"
@@ -1823,7 +1805,7 @@ function DisplayNameStyleDialog({
                   aria-label="Show light preview"
                   aria-pressed={previewMode === "light"}
                 >
-                  <Sun size={15} />
+                  <Icon name="sun" size="sm" />
                 </button>
               </div>
             </div>
@@ -1834,7 +1816,7 @@ function DisplayNameStyleDialog({
                 variant="secondary"
                 onClick={() => setDraftStyle(createRandomDisplayNameStyle())}
               >
-                <Sparkles size={15} aria-hidden="true" />
+                <Icon name="sparkle" size="sm" />
                 Surprise Me
               </Button>
               <div className="flex items-center gap-3">
@@ -1847,7 +1829,7 @@ function DisplayNameStyleDialog({
                       onClose();
                     }}
                   >
-                    <Trash2 size={15} aria-hidden="true" />
+                    <Icon name="trash" size="sm" />
                     Clear style
                   </Button>
                 ) : null}
@@ -2974,9 +2956,9 @@ export default function SettingsAccountTab({
           <div className="flex items-start gap-3">
             <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-rm-accent/15 text-rm-accent">
               {authUserLoaded ? (
-                <AlertTriangle size={18} />
+                <Icon name="warning" size="md" />
               ) : (
-                <Loader2 size={18} className="animate-spin" />
+                <Icon name="loader" size="md" className="animate-spin" />
               )}
             </div>
             <div>
@@ -3016,7 +2998,7 @@ export default function SettingsAccountTab({
               className="pointer-events-auto h-10 w-10 rounded-full border border-rm-border bg-rm-bg-floating/92 text-rm-text-muted shadow-[0_14px_34px_rgba(0,0,0,0.26)] backdrop-blur-md hover:bg-rm-bg-hover hover:text-rm-text"
               aria-label="Close profile editor"
             >
-              <X size={18} />
+              <Icon name="close" size="sm" />
             </Button>
           </div>
         ) : null
@@ -3062,7 +3044,7 @@ export default function SettingsAccountTab({
         >
           {asModal && error ? (
             <div className="m-4 mb-0 flex items-center gap-2 rounded-2xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-              <AlertTriangle size={14} />
+              <Icon name="warning" size="sm" />
               <span>{error}</span>
             </div>
           ) : null}
@@ -3106,7 +3088,11 @@ export default function SettingsAccountTab({
                     className="inline-flex items-center gap-1.5 rounded-lg border border-rm-border bg-rm-bg-surface px-2 py-1 text-ui-sm font-semibold text-rm-text transition hover:bg-rm-bg-hover"
                   >
                     <span>Main Profile</span>
-                    <ChevronDown size={13} className="text-rm-text-muted" />
+                    <Icon
+                      name="chevronDown"
+                      size="xs"
+                      className="text-rm-text-muted"
+                    />
                   </button>
                   <Tooltip>
                     <TooltipTrigger asChild>
@@ -3120,7 +3106,7 @@ export default function SettingsAccountTab({
                           asModal ? "Hide styles" : "View profile variants"
                         }
                       >
-                        <ChevronsRight size={16} />
+                        <Icon name="chevronsRight" size="sm" />
                       </button>
                     </TooltipTrigger>
                     <TooltipContent side="top" sideOffset={8}>
@@ -3145,13 +3131,13 @@ export default function SettingsAccountTab({
                             label="Browse nameplates"
                             onClick={() => handleOpenCollectibles("nameplate")}
                           >
-                            <Sparkles size={12} />
+                            <Icon name="sparkle" size="xs" />
                           </AccountActionIconButton>
                           <AccountActionIconButton
                             label="Upload nameplate"
                             onClick={() => nameplateInputRef.current?.click()}
                           >
-                            <Upload size={12} />
+                            <Icon name="upload" size="xs" />
                           </AccountActionIconButton>
                           <AccountActionIconButton
                             label="Remove nameplate"
@@ -3163,7 +3149,7 @@ export default function SettingsAccountTab({
                             }
                             className="text-destructive hover:bg-destructive/12 hover:text-destructive"
                           >
-                            <Trash2 size={12} />
+                            <Icon name="trash" size="xs" />
                           </AccountActionIconButton>
                         </>
                       }
@@ -3246,7 +3232,7 @@ export default function SettingsAccountTab({
                               onClick={handleEditAvatarFrame}
                               disabled={!currentAvatarSrc}
                             >
-                              <Crop size={12} />
+                              <Icon name="crop" size="xs" />
                             </AccountActionIconButton>
                           }
                         >
@@ -3345,7 +3331,7 @@ export default function SettingsAccountTab({
                                 handleOpenCollectibles("avatar_decoration")
                               }
                             >
-                              <Sparkles size={12} />
+                              <Icon name="sparkle" size="xs" />
                             </AccountActionIconButton>
                             <AccountActionIconButton
                               label="Remove decoration"
@@ -3355,7 +3341,7 @@ export default function SettingsAccountTab({
                               disabled={!currentAvatarDecoration}
                               className="text-destructive hover:bg-destructive/12 hover:text-destructive"
                             >
-                              <Trash2 size={12} />
+                              <Icon name="trash" size="xs" />
                             </AccountActionIconButton>
                           </>
                         }
@@ -3437,9 +3423,9 @@ export default function SettingsAccountTab({
                           }}
                         >
                           {hasDisplayNameStyle ? (
-                            <Trash2 size={14} />
+                            <Icon name="trash" size="sm" />
                           ) : (
-                            <Plus size={14} />
+                            <Icon name="add" size="sm" />
                           )}
                         </AccountActionIconButton>
                       }
@@ -3610,7 +3596,7 @@ export default function SettingsAccountTab({
                                 />
                                 <div className="absolute inset-0 bg-black/0 transition group-hover/theme-banner:bg-black/10" />
                                 <div className="absolute bottom-2 right-2 flex h-7 w-7 items-center justify-center rounded-md border border-white/16 bg-black/20 text-white/88 opacity-0 shadow-[0_10px_22px_rgba(0,0,0,0.24)] backdrop-blur-sm transition group-hover/theme-banner:opacity-100">
-                                  <Pipette size={12} />
+                                  <Icon name="eyedropper" size="xs" />
                                 </div>
                               </button>
                             )}
@@ -3621,7 +3607,7 @@ export default function SettingsAccountTab({
                               label="Upload banner"
                               onClick={() => bannerInputRef.current?.click()}
                             >
-                              <Upload size={12} />
+                              <Icon name="upload" size="xs" />
                             </AccountActionIconButton>
                             <AccountActionIconButton
                               label="Remove banner"
@@ -3633,7 +3619,7 @@ export default function SettingsAccountTab({
                               disabled={!currentBannerUrl && !bannerFile}
                               className="text-destructive hover:bg-destructive/12 hover:text-destructive"
                             >
-                              <Trash2 size={12} />
+                              <Icon name="trash" size="xs" />
                             </AccountActionIconButton>
                           </div>
                         </div>
@@ -3656,7 +3642,7 @@ export default function SettingsAccountTab({
                               disabled={!currentProfileEffect}
                               className="text-destructive hover:bg-destructive/12 hover:text-destructive"
                             >
-                              <Trash2 size={12} />
+                              <Icon name="trash" size="xs" />
                             </AccountActionIconButton>
                           }
                         >
@@ -3697,7 +3683,7 @@ export default function SettingsAccountTab({
                                   />
                                 ) : (
                                   <div className="absolute inset-0 z-10 flex items-center justify-center text-rm-text-muted">
-                                    <Plus size={22} strokeWidth={2.5} />
+                                    <Icon name="add" size="xl" />
                                   </div>
                                 )}
                                 <div className="absolute inset-0 bg-[linear-gradient(180deg,_rgba(255,255,255,0.12)_0%,_rgba(255,255,255,0.04)_42%,_rgba(0,0,0,0.16)_100%)]" />
@@ -3719,7 +3705,7 @@ export default function SettingsAccountTab({
                               disabled={!currentProfileFrame}
                               className="text-destructive hover:bg-destructive/12 hover:text-destructive"
                             >
-                              <Trash2 size={12} />
+                              <Icon name="trash" size="xs" />
                             </AccountActionIconButton>
                           }
                         >
@@ -3763,7 +3749,7 @@ export default function SettingsAccountTab({
                                   </>
                                 ) : (
                                   <div className="absolute inset-0 z-10 flex items-center justify-center text-rm-text-muted">
-                                    <Plus size={22} strokeWidth={2.5} />
+                                    <Icon name="add" size="xl" />
                                   </div>
                                 )}
                                 <div className="absolute inset-0 bg-[linear-gradient(180deg,_rgba(255,255,255,0.12)_0%,_rgba(255,255,255,0.04)_42%,_rgba(0,0,0,0.16)_100%)]" />
@@ -3814,7 +3800,7 @@ export default function SettingsAccountTab({
                       aria-label="Show styles"
                     >
                       <span className="rotate-180">
-                        <ChevronsRight size={16} />
+                        <Icon name="chevronsRight" size="sm" />
                       </span>
                     </button>
                   </TooltipTrigger>
@@ -3876,7 +3862,7 @@ export default function SettingsAccountTab({
                         ref={profileBannerActionRef}
                         className="absolute right-4 top-4 z-20 flex h-9 w-9 items-center justify-center rounded-full border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] text-[color:var(--rm-profile-custom-text)] opacity-0 shadow-[0_14px_28px_rgba(0,0,0,0.24)] backdrop-blur-sm transition group-hover/preview-banner:opacity-100"
                       >
-                        <Pencil size={15} />
+                        <Icon name="edit" size="sm" />
                       </span>
                     </button>
                     {profileMenuAnchor === "preview" ? (
@@ -3974,7 +3960,7 @@ export default function SettingsAccountTab({
                             <span className="absolute inset-0 rounded-full bg-black/0 transition group-hover/preview-avatar:bg-black/36" />
                             <span className="absolute inset-0 z-10 flex items-center justify-center opacity-0 transition group-hover/preview-avatar:opacity-100">
                               <span className="flex h-10 w-10 items-center justify-center rounded-full border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] text-[color:var(--rm-profile-custom-text)] shadow-[0_14px_28px_rgba(0,0,0,0.24)] backdrop-blur-sm">
-                                <Pencil size={16} />
+                                <Icon name="edit" size="sm" />
                               </span>
                             </span>
                           </button>
@@ -4086,7 +4072,7 @@ export default function SettingsAccountTab({
                                       className="pointer-events-none flex h-7 w-7 items-center justify-center rounded-full border border-transparent text-[color:var(--rm-profile-custom-muted)] opacity-0 transition hover:border-[color:var(--rm-profile-custom-card-border)] hover:bg-[var(--rm-profile-custom-card-bg-strong)] hover:text-[color:var(--rm-profile-custom-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35 group-hover/preview-status:pointer-events-auto group-hover/preview-status:opacity-100 group-focus-within/preview-status:pointer-events-auto group-focus-within/preview-status:opacity-100"
                                       aria-label="Edit custom status"
                                     >
-                                      <Pencil size={14} />
+                                      <Icon name="edit" size="sm" />
                                     </button>
                                   </TooltipTrigger>
                                   <TooltipContent side="top" sideOffset={8}>
@@ -4104,7 +4090,7 @@ export default function SettingsAccountTab({
                                       className="pointer-events-none flex h-7 w-7 items-center justify-center rounded-full border border-transparent text-[color:var(--rm-profile-custom-muted)] opacity-0 transition hover:border-[color:var(--rm-profile-custom-card-border)] hover:bg-[var(--rm-profile-custom-card-bg-strong)] hover:text-[color:var(--rm-profile-custom-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35 group-hover/preview-status:pointer-events-auto group-hover/preview-status:opacity-100 group-focus-within/preview-status:pointer-events-auto group-focus-within/preview-status:opacity-100"
                                       aria-label="Clear custom status"
                                     >
-                                      <Trash2 size={14} />
+                                      <Icon name="trash" size="sm" />
                                     </button>
                                   </TooltipTrigger>
                                   <TooltipContent side="top" sideOffset={8}>
@@ -4122,8 +4108,9 @@ export default function SettingsAccountTab({
                                   aria-label="Add custom status"
                                   onClick={handleOpenCustomStatusEditor}
                                 >
-                                  <Plus
-                                    size={14}
+                                  <Icon
+                                    name="add"
+                                    size="sm"
                                     className="shrink-0 text-[color:var(--rm-profile-custom-muted)]"
                                   />
                                   <span className="min-w-0 truncate text-ui-sm italic font-medium text-[color:var(--rm-profile-custom-text)]">
@@ -4224,7 +4211,7 @@ export default function SettingsAccountTab({
                               }
                             >
                               <span className="pointer-events-none absolute right-3 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] text-[color:var(--rm-profile-custom-text)] opacity-0 shadow-[0_12px_24px_rgba(0,0,0,0.2)] transition group-hover/preview-display-name:opacity-100 group-focus-within/preview-display-name:opacity-100">
-                                <Paintbrush size={14} />
+                                <Icon name="paintBrush" size="sm" />
                               </span>
                               <ProfileDisplayName
                                 text={currentDisplayName}
@@ -4306,7 +4293,7 @@ export default function SettingsAccountTab({
                         className="h-9 w-9 rounded-xl border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] text-[color:var(--rm-profile-custom-muted)] shadow-[0_12px_24px_rgba(0,0,0,0.22)] hover:bg-[var(--rm-profile-custom-card-bg)] hover:text-[color:var(--rm-profile-custom-text)]"
                         aria-label="Open profile shop"
                       >
-                        <ShoppingBag size={16} />
+                        <Icon name="shop" size="sm" />
                       </Button>
                     </div>
 
@@ -4408,7 +4395,7 @@ export default function SettingsAccountTab({
                     className="inline-flex items-center gap-2 rounded-xl border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] px-3 py-2 text-[14px] font-semibold text-[color:var(--rm-profile-custom-text)] transition hover:bg-[var(--rm-profile-custom-card-bg)]"
                     style={previewThemeStyle}
                   >
-                    <Plus size={15} />
+                    <Icon name="add" size="sm" />
                     Add Widget
                   </button>
                 </div>
@@ -4464,7 +4451,7 @@ export default function SettingsAccountTab({
                             className="flex h-8 w-8 items-center justify-center rounded-lg border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] text-[color:var(--rm-profile-custom-muted)] transition hover:bg-[var(--rm-profile-custom-card-bg)] hover:text-[color:var(--rm-profile-custom-text)]"
                             aria-label={`Remove rotating game slot ${item}`}
                           >
-                            <Trash2 size={14} />
+                            <Icon name="trash" size="sm" />
                           </button>
                         </div>
                       ))}
@@ -4472,7 +4459,7 @@ export default function SettingsAccountTab({
                   </ProfilePreviewWidgetCard>
                   {error ? (
                     <div className="flex items-center gap-2 rounded-2xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive shadow-[0_16px_32px_rgba(0,0,0,0.18)]">
-                      <AlertTriangle size={14} />
+                      <Icon name="warning" size="sm" />
                       <span>{error}</span>
                     </div>
                   ) : null}
@@ -4487,9 +4474,9 @@ export default function SettingsAccountTab({
               <div className="flex items-start gap-3">
                 <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-amber-500/15 text-amber-300">
                   {claimLoading ? (
-                    <Loader2 size={18} className="animate-spin" />
+                    <Icon name="loader" size="md" className="animate-spin" />
                   ) : (
-                    <UserRoundCheck size={18} />
+                    <Icon name="userCheck" size="md" />
                   )}
                 </div>
                 <div className="min-w-0 flex-1">
@@ -4502,7 +4489,7 @@ export default function SettingsAccountTab({
                   </p>
                   {claimError ? (
                     <div className="mt-3 flex items-center gap-2 rounded-xl border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-                      <AlertTriangle size={14} />
+                      <Icon name="warning" size="sm" />
                       {claimError}
                     </div>
                   ) : null}
@@ -4546,7 +4533,11 @@ export default function SettingsAccountTab({
                             className="bg-amber-500 text-black hover:bg-amber-400"
                           >
                             {claimingId === candidate.id ? (
-                              <Loader2 size={16} className="animate-spin" />
+                              <Icon
+                                name="loader"
+                                size="sm"
+                                className="animate-spin"
+                              />
                             ) : (
                               "Claim"
                             )}
@@ -4581,7 +4572,7 @@ export default function SettingsAccountTab({
                 </Button>
                 <Button onClick={handleSaveProfile} disabled={saving}>
                   {saving ? (
-                    <Loader2 size={16} className="animate-spin" />
+                    <Icon name="loader" size="sm" className="animate-spin" />
                   ) : (
                     "Save Changes"
                   )}
@@ -4614,7 +4605,7 @@ export default function SettingsAccountTab({
               </Button>
               <Button onClick={handleSaveProfile} disabled={saving}>
                 {saving ? (
-                  <Loader2 size={16} className="animate-spin" />
+                  <Icon name="loader" size="sm" className="animate-spin" />
                 ) : (
                   "Save Changes"
                 )}

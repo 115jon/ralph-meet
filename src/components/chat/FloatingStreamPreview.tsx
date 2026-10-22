@@ -4,7 +4,7 @@ import { IconButton } from "@/components/ui/IconButton";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { VideoPlayer } from "@/components/voice/VideoPlayer";
 import { cn } from "@/lib/utils";
-import { ArrowLeft, MonitorX, Settings2 } from "lucide-react";
+import { Icon } from "@/components/ui/icon";
 import { useEffect, useRef, useState } from "react";
 import InlineEmojiText from "./InlineEmojiText";
 
@@ -229,7 +229,7 @@ export default function FloatingStreamPreview({
             onClick={onNavigateToVoiceChannel}
             className="absolute left-3 top-3 z-20 flex max-w-[70%] items-center gap-1.5 rounded-md bg-black/40 px-2.5 py-1 text-ui-base font-semibold tracking-tight text-white/90 transition hover:text-white hover:underline"
           >
-            <ArrowLeft size={14} className="shrink-0" />
+            <Icon name="back" size="sm" className="shrink-0" />
             <InlineEmojiText text={channelName} className="truncate" />
           </button>
 
@@ -240,7 +240,7 @@ export default function FloatingStreamPreview({
           <div className="absolute bottom-3 right-3 z-20 flex items-center gap-2">
             <IconButton
               data-stream-preview-interactive="true"
-              icon={Settings2}
+              icon="sliders"
               size="xs"
               tooltip="Stream Settings"
               aria-label="Open stream settings"
@@ -254,7 +254,7 @@ export default function FloatingStreamPreview({
             />
             <IconButton
               data-stream-preview-interactive="true"
-              icon={MonitorX}
+              icon="streamOff"
               size="xs"
               tooltip={primaryActionTooltip}
               aria-label={primaryActionAriaLabel}

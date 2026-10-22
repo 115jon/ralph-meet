@@ -1,4 +1,4 @@
-import { ImageIcon } from "lucide-react";
+import { Icon } from "@/components/ui/icon";
 import InlineEmojiText from "./InlineEmojiText";
 
 type ReplyPreviewContentProps = {
@@ -29,7 +29,7 @@ export function ReplyPreviewContent({
   if (attachmentsCount > 0) {
     return (
       <span className="inline-flex items-center gap-1 italic text-rm-text-muted align-baseline">
-        <ImageIcon className="h-3.5 w-3.5 shrink-0" />
+        <Icon name="image" size="sm" className="shrink-0" />
         <span>Click to see attachment</span>
       </span>
     );

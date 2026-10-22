@@ -12,7 +12,7 @@ import { cn } from "@/lib/utils";
 import { useChatActions, useChatStore } from "@/stores/chat-store";
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { AvatarImage } from "./AvatarImage";
-import { Bell, Hash, X } from "./Icons";
+import { Icon } from "@/components/ui/icon";
 import InlineEmojiText from "./InlineEmojiText";
 
 // ── Notification Bell — toolbar icon + dropdown ─────────────────────────────
@@ -119,7 +119,7 @@ export const NotificationBell = memo(function NotificationBell() {
         title="Notifications"
         onClick={toggle}
       >
-        <Bell strokeWidth={1.75} className="size-[18px]" />
+        <Icon name="bell" state={open ? "active" : "idle"} size="lg" />
         {unreadCount > 0 && (
           <span className="badge-count absolute -top-1 -right-1 ring-2 ring-rm-bg-primary animate-in zoom-in-90 duration-200">
             {unreadCount > 99 ? "99+" : unreadCount}
@@ -168,7 +168,7 @@ export const NotificationBell = memo(function NotificationBell() {
                 )}
                 <IconButton
                   aria-label="Close notifications"
-                  icon={X}
+                  icon="close"
                   size="xs"
                   className="md:h-5 md:w-5"
                   onClick={() => setOpen(false)}
@@ -180,7 +180,11 @@ export const NotificationBell = memo(function NotificationBell() {
             <div className="flex-1 overflow-y-auto custom-scrollbar pb-6 md:pb-0">
               {notifications.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-12 gap-2">
-                  <Bell className="h-8 w-8 text-rm-text-muted opacity-40" />
+                  <Icon
+                    name="bell"
+                    size="2xl"
+                    className="text-rm-text-muted opacity-40"
+                  />
                   <p className="text-ui-xs font-medium text-rm-text-muted">
                     No notifications yet
                   </p>
@@ -265,7 +269,11 @@ const NotificationRow = memo(function NotificationRow({
         {/* Channel + server context (skip for DMs — sender name is already shown above) */}
         {notification.type !== "dm" && (
           <div className="flex items-center gap-1 mt-0.5">
-            <Hash className="h-2.5 w-2.5 text-rm-text-muted opacity-60" />
+            <Icon
+              name="textChannel"
+              size="xs"
+              className="text-rm-text-muted opacity-60"
+            />
             <span className="text-ui-2xs text-rm-text-muted truncate">
               <InlineEmojiText
                 text={`${notification.channel_name ?? "channel"}${

@@ -3,7 +3,7 @@ import { isDesktop } from "@/lib/platform";
 import { clog } from "@/lib/console-logger";
 import type { StartScreenShareOptions } from "@/lib/screen-share-types";
 import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
-import { Loader2, Monitor } from "lucide-react";
+import { Icon } from "@/components/ui/icon";
 import React, {
   useCallback,
   useEffect,
@@ -580,14 +580,15 @@ export const DesktopScreenPickerModal: React.FC<
                 />
               ) : state.loading || state.previewLoading ? (
                 <div className="flex h-[300px] items-center justify-center">
-                  <Loader2
-                    size={32}
+                  <Icon
+                    name="loader"
+                    size="2xl"
                     className="animate-spin text-rm-text-muted"
                   />
                 </div>
               ) : filteredSources.length === 0 ? (
                 <div className="flex h-[300px] flex-col items-center justify-center gap-2 text-rm-text-muted">
-                  <Monitor size={40} className="opacity-30" />
+                  <Icon name="monitor" size="3xl" className="opacity-30" />
                   <p className="text-sm">
                     No{" "}
                     {state.tab === "applications" ? "applications" : "screens"}{" "}

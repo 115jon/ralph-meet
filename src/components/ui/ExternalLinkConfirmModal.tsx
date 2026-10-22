@@ -7,7 +7,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { IconButton } from "@/components/ui/IconButton";
-import { X } from "lucide-react";
 
 export interface PendingExternalLink {
   url: string;
@@ -38,7 +37,7 @@ export function ExternalLinkConfirmModal({
         <section>
           <DialogClose asChild>
             <IconButton
-              icon={X}
+              icon="close"
               type="button"
               aria-label="Close external link confirmation"
               className="absolute right-4 top-4"

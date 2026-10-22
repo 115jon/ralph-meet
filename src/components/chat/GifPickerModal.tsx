@@ -42,17 +42,7 @@ import {
 } from "@/stores/useGifFavoritesStore";
 import { useMediaSafetySettingsStore } from "@/stores/useMediaSafetySettingsStore";
 import { useUser } from "@kova/react";
-import {
-  ArrowLeft,
-  Maximize2,
-  Minimize2,
-  Search,
-  Star,
-  TrendingUp,
-  X,
-  Volume2,
-  VolumeX,
-} from "lucide-react";
+import { Icon } from "@/components/ui/icon";
 import { useTheme } from "next-themes";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -1479,9 +1469,9 @@ export default function GifPickerModal({
                       title={expanded ? "Shrink" : "Expand"}
                     >
                       {expanded ? (
-                        <Minimize2 className="h-4 w-4" />
+                        <Icon name="minimize" size="sm" />
                       ) : (
-                        <Maximize2 className="h-4 w-4" />
+                        <Icon name="maximize" size="sm" />
                       )}
                     </button>
                   )}
@@ -1491,7 +1481,7 @@ export default function GifPickerModal({
                     className="rounded-lg p-2 text-rm-text-muted hover:bg-destructive/10 hover:text-destructive transition"
                     aria-label="Close GIF picker"
                   >
-                    <X className="h-4 w-4" />
+                    <Icon name="close" size="sm" />
                   </button>
                 </div>
               </div>
@@ -1533,7 +1523,7 @@ export default function GifPickerModal({
                     className="rounded-lg p-2 text-rm-text-muted transition hover:bg-rm-bg-hover hover:text-rm-text"
                     aria-label="Back"
                   >
-                    <ArrowLeft className="h-5 w-5" />
+                    <Icon name="back" size="lg" />
                   </button>
                   <h3 className="truncate text-sm font-semibold text-rm-text">
                     Favorite {mediaLabel}
@@ -1549,11 +1539,15 @@ export default function GifPickerModal({
                         className="rounded-lg p-2 text-rm-text-muted transition hover:bg-rm-bg-hover hover:text-rm-text shrink-0"
                         aria-label="Back"
                       >
-                        <ArrowLeft className="h-5 w-5" />
+                        <Icon name="back" size="lg" />
                       </button>
                     ) : null}
                     <div ref={searchFieldRef} className="relative flex-1">
-                      <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-rm-text-muted" />
+                      <Icon
+                        name="search"
+                        size="sm"
+                        className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-rm-text-muted"
+                      />
                       <input
                         ref={searchInputRef}
                         value={searchValue}
@@ -1635,7 +1629,11 @@ export default function GifPickerModal({
                               )}
                             >
                               <span className="flex min-w-0 items-center gap-2">
-                                <Search className="h-3.5 w-3.5 shrink-0" />
+                                <Icon
+                                  name="search"
+                                  size="sm"
+                                  className="shrink-0"
+                                />
                                 <span className="truncate">{suggestion}</span>
                               </span>
                               {activeSuggestionIndex === index && (
@@ -1655,7 +1653,7 @@ export default function GifPickerModal({
                       aria-label="View Favorites"
                       title="View Favorites"
                     >
-                      <Star className="h-5 w-5" />
+                      <Icon name="star" size="lg" />
                     </button>
                     {mediaType === "gifs" && (
                       <div className="relative shrink-0">
@@ -1751,7 +1749,7 @@ export default function GifPickerModal({
                               className="rounded-full p-0.5 hover:bg-rm-bg-active text-rm-text-muted hover:text-rm-text transition"
                               aria-label={`Remove ${q} from history`}
                             >
-                              <X className="h-3.5 w-3.5" />
+                              <Icon name="close" size="sm" />
                             </button>
                           </div>
                         ))}
@@ -1787,7 +1785,7 @@ export default function GifPickerModal({
                         className="absolute right-3 top-3 rounded-full border border-white/12 p-2 text-white backdrop-blur-sm"
                         style={shortcutCardBadgeStyle}
                       >
-                        <Star className="h-4.5 w-4.5" />
+                        <Icon name="star" size="md" />
                       </div>
                       <div className="absolute inset-0 flex flex-col items-center justify-center text-white">
                         <span className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-white/75">
@@ -1821,7 +1819,7 @@ export default function GifPickerModal({
                         className="absolute right-3 top-3 rounded-full border border-white/12 p-2 text-white backdrop-blur-sm"
                         style={shortcutCardBadgeStyle}
                       >
-                        <TrendingUp className="h-4.5 w-4.5" />
+                        <Icon name="trendUp" size="md" />
                       </div>
                       <div className="absolute inset-0 flex flex-col items-center justify-center text-white">
                         <span className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-white/75">
@@ -2046,9 +2044,9 @@ const ClipVideoPlayer = memo(function ClipVideoPlayer({
         title={isMuted ? "Unmute" : "Mute"}
       >
         {isMuted ? (
-          <VolumeX className="h-4 w-4" />
+          <Icon name="speakerOff" size="sm" />
         ) : (
-          <Volume2 className="h-4 w-4" />
+          <Icon name="voiceChannel" size="sm" />
         )}
       </button>
     </div>
@@ -2198,9 +2196,11 @@ function FavoritesEmptyState({ mediaLabel = "GIFs" }: { mediaLabel?: string }) {
       aria-live="polite"
     >
       <div className="relative flex min-h-40 items-center justify-center rounded-xl bg-rm-bg-surface border border-rm-border px-5 py-6 text-center text-ui-base font-medium leading-7 text-rm-text shadow-sm dark:shadow-none">
-        <Star
-          className="absolute right-4 top-3 h-7 w-7 fill-amber-400 text-amber-400"
-          aria-hidden="true"
+        <Icon
+          name="star"
+          state="active"
+          size="xl"
+          className="absolute right-4 top-3 text-amber-400"
         />
         <p>
           Click the star in the corner of a {singleLabel.toLowerCase()} to

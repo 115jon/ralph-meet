@@ -5,8 +5,7 @@ import { GIF_FAVORITE_ADDED_EVENT } from "@/stores/useGifFavoritesStore";
 import { useEffect, useRef, useState } from "react";
 import GifPickerModal from "./GifPickerModal";
 import EmojiPicker from "./EmojiPicker";
-import { Gif, Smile, Sticker } from "./Icons";
-import { Send } from "lucide-react";
+import { Icon } from "@/components/ui/icon";
 
 export function InputControls({
   showEmoji,
@@ -101,7 +100,7 @@ export function InputControls({
           )}
           onClick={() => openGifPicker("gifs")}
         >
-          <Gif className="size-5" />
+          <Icon name="gif" size="lg" />
         </Button>
       </div>
       <Button
@@ -118,7 +117,7 @@ export function InputControls({
           "hidden md:flex",
         )}
       >
-        <Sticker className="size-5" />
+        <Icon name="sticker" size="lg" />
       </Button>
       <div className="relative">
         <Button
@@ -138,7 +137,7 @@ export function InputControls({
           }
           className={mediaButtonClassName(showEmoji)}
         >
-          <Smile className="size-5" />
+          <Icon name="emoji" size="lg" />
         </Button>
         <EmojiPicker
           open={showEmoji}
@@ -171,7 +170,7 @@ export function InputControls({
           aria-label="Send message"
           onClick={onSend}
         >
-          <Send className="ml-0.5 size-4" />
+          <Icon name="send" size="sm" className="ml-0.5" />
         </Button>
       </div>
     </div>

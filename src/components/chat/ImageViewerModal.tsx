@@ -19,7 +19,7 @@ import {
   useImageViewerStore,
 } from "@/stores/useImageViewerStore";
 import { useMediaSafetySettingsStore } from "@/stores/useMediaSafetySettingsStore";
-import { Copy, Download, ExternalLink, X } from "lucide-react";
+import { Icon } from "@/components/ui/icon";
 import React, { useCallback, useEffect, useMemo, useRef } from "react";
 import { ImageViewerContent } from "./ImageViewerContent";
 import { ImageViewerNavigation } from "./ImageViewerNavigation";
@@ -249,7 +249,7 @@ export const ImageViewerModal: React.FC = () => {
     return [
       {
         label: "Save Image",
-        rightIcon: <Download className="h-4 w-4" />,
+        rightIcon: <Icon name="download" size="sm" />,
         onClick: () => {
           void saveMedia({
             url: getPublicMediaUrl(mediaUrl),
@@ -261,14 +261,14 @@ export const ImageViewerModal: React.FC = () => {
       },
       {
         label: "Copy Media Link",
-        rightIcon: <Copy className="h-4 w-4" />,
+        rightIcon: <Icon name="copy" size="sm" />,
         onClick: () => {
           void copyMediaLink(getPublicMediaUrl(mediaUrl));
         },
       },
       {
         label: "Open Media Link",
-        rightIcon: <ExternalLink className="h-4 w-4" />,
+        rightIcon: <Icon name="externalLink" size="sm" />,
         onClick: () => requestOpenExternalLink(getPublicMediaUrl(mediaUrl)),
       },
     ];
@@ -555,7 +555,7 @@ export const ImageViewerModal: React.FC = () => {
                 onClick={close}
                 className="p-2 text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover rounded-lg transition-ui outline-none"
               >
-                <X size={18} />
+                <Icon name="close" size="md" />
               </button>
             </div>
           )}

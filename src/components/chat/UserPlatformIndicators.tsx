@@ -10,18 +10,18 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Globe, Monitor, Smartphone } from "lucide-react";
+import { Icon, type IconName, type IconSize } from "@/components/ui/icon";
 import type { CSSProperties } from "react";
 
 const PLATFORM_ORDER: PresencePlatform[] = ["desktop", "mobile", "web"];
 
 const PLATFORM_META: Record<
   PresencePlatform,
-  { icon: typeof Monitor; label: string }
+  { icon: IconName; label: string }
 > = {
-  desktop: { icon: Monitor, label: "Desktop" },
-  mobile: { icon: Smartphone, label: "Mobile" },
-  web: { icon: Globe, label: "Web" },
+  desktop: { icon: "monitor", label: "Desktop" },
+  mobile: { icon: "mobile", label: "Mobile" },
+  web: { icon: "globe", label: "Web" },
 };
 
 interface UserPlatformIndicatorsProps {
@@ -30,6 +30,7 @@ interface UserPlatformIndicatorsProps {
   status?: User["status"] | null;
   className?: string;
   iconClassName?: string;
+  iconSize?: IconSize;
   variant?: "default" | "nameplate";
   color?: string | null;
   offlineColor?: string | null;
@@ -42,6 +43,7 @@ export function UserPlatformIndicators({
   status,
   className,
   iconClassName,
+  iconSize = "sm",
   variant: _variant = "default",
   color,
   offlineColor,
@@ -80,15 +82,14 @@ export function UserPlatformIndicators({
         .join(", ")}`}
     >
       {resolvedPlatforms.map((platform) => {
-        const Icon = PLATFORM_META[platform].icon;
-
         return (
           <Tooltip key={platform}>
             <TooltipTrigger asChild>
               <span className="flex items-center justify-center">
                 <Icon
-                  className={cn("h-3.5 w-3.5", iconClassName)}
-                  aria-hidden="true"
+                  name={PLATFORM_META[platform].icon}
+                  size={iconSize}
+                  className={iconClassName}
                 />
               </span>
             </TooltipTrigger>

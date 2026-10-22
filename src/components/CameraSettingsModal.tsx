@@ -25,7 +25,7 @@ import {
   type CustomCameraBackground,
   useVoiceSettingsStore,
 } from "@/stores/useVoiceSettingsStore";
-import { Ban, Check, Sparkles, Trash2, Upload, X } from "lucide-react";
+import { Icon } from "@/components/ui/icon";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { VideoPlayer } from "./voice/VideoPlayer";
 
@@ -398,7 +398,7 @@ export const CameraSettingsModal: React.FC<CameraSettingsModalProps> = ({
                 className="p-1 rounded-full text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text transition-ui"
                 aria-label="Close camera settings"
               >
-                <X size={18} />
+                <Icon name="close" size="md" />
               </button>
             </div>
 
@@ -458,7 +458,7 @@ export const CameraSettingsModal: React.FC<CameraSettingsModalProps> = ({
                     disabled={isUploadingBackground}
                     className="flex items-center gap-1.5 rounded-lg border border-rm-border bg-rm-bg-surface/40 px-2.5 py-1.5 text-ui-2xs font-bold text-rm-text-muted transition-colors hover:text-rm-text"
                   >
-                    <Upload size={12} />{" "}
+                    <Icon name="upload" size="xs" />{" "}
                     {isUploadingBackground ? "Uploading" : "Upload Image"}
                   </button>
                   <input
@@ -488,7 +488,7 @@ export const CameraSettingsModal: React.FC<CameraSettingsModalProps> = ({
                       >
                         {option.id === "none" ? (
                           <div className="mb-2 flex h-16 w-full items-center justify-center rounded-lg bg-rm-bg-elevated/40 text-rm-text-muted/60 transition-ui">
-                            <Ban size={20} />
+                            <Icon name="ban" size="lg" />
                           </div>
                         ) : (
                           <div className="relative mb-2 flex h-16 w-full items-center justify-center overflow-hidden rounded-lg bg-rm-bg-elevated/40 transition-ui">
@@ -497,8 +497,9 @@ export const CameraSettingsModal: React.FC<CameraSettingsModalProps> = ({
                               className="absolute inset-0 bg-linear-to-tr from-primary/30 via-rm-accent/25 to-transparent filter blur-[8px]"
                             />
                             <div className="absolute inset-0 bg-black/15" />
-                            <Sparkles
-                              size={20}
+                            <Icon
+                              name="sparkle"
+                              size="lg"
                               className="relative z-10 text-white/80"
                             />
                           </div>
@@ -513,7 +514,7 @@ export const CameraSettingsModal: React.FC<CameraSettingsModalProps> = ({
                         </span>
                         {isSelected && (
                           <div className="absolute top-2 right-2 rounded-full bg-primary p-0.5 text-primary-foreground">
-                            <Check size={10} />
+                            <Icon name="check" size="xs" />
                           </div>
                         )}
                       </button>
@@ -566,7 +567,7 @@ export const CameraSettingsModal: React.FC<CameraSettingsModalProps> = ({
                           </button>
                           {isSelected && (
                             <div className="absolute top-3 right-8 rounded-full bg-primary p-0.5 text-primary-foreground">
-                              <Check size={10} />
+                              <Icon name="check" size="xs" />
                             </div>
                           )}
                           <button
@@ -575,7 +576,7 @@ export const CameraSettingsModal: React.FC<CameraSettingsModalProps> = ({
                             className="absolute right-2 top-2 rounded-md bg-black/60 p-1 text-white/80 opacity-0 transition-opacity hover:text-white group-hover:opacity-100"
                             aria-label={`Remove ${background.name}`}
                           >
-                            <Trash2 size={12} />
+                            <Icon name="trash" size="xs" />
                           </button>
                         </div>
                       );

@@ -6,7 +6,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { AppWindow, Check, Monitor, Music, Tv } from "lucide-react";
+import { Icon } from "@/components/ui/icon";
 
 export interface ScreenSource {
   id: string;
@@ -49,7 +49,7 @@ export function DeviceGrid({
   if (devices.length === 0) {
     return (
       <div className="flex h-[300px] flex-col items-center justify-center gap-2 text-rm-text-muted">
-        <Tv size={40} className="opacity-30" />
+        <Icon name="tv" size="3xl" className="opacity-30" />
         <p className="text-sm">No capture devices found</p>
         <p className="text-xs text-rm-text-muted/50">
           Connect a capture card or webcam to share
@@ -71,8 +71,9 @@ export function DeviceGrid({
           )}
         >
           <div className="flex aspect-video w-full items-center justify-center bg-rm-bg-elevated/30">
-            <Tv
-              size={32}
+            <Icon
+              name="tv"
+              size="2xl"
               className={cn(
                 "transition-colors",
                 selectedId === device.deviceId
@@ -95,7 +96,11 @@ export function DeviceGrid({
           </div>
           {selectedId === device.deviceId && (
             <div className="absolute right-2 top-2 rounded-full bg-primary p-1 shadow-lg">
-              <Check size={12} className="text-primary-foreground" />
+              <Icon
+                name="check"
+                size="xs"
+                className="text-primary-foreground"
+              />
             </div>
           )}
         </button>
@@ -145,15 +150,27 @@ export function SourceGrid({
               ) : (
                 <div className="flex h-full items-center justify-center">
                   {source.kind === "monitor" ? (
-                    <Monitor size={24} className="text-rm-text-muted/30" />
+                    <Icon
+                      name="monitor"
+                      size="xl"
+                      className="text-rm-text-muted/30"
+                    />
                   ) : (
-                    <AppWindow size={24} className="text-rm-text-muted/30" />
+                    <Icon
+                      name="window"
+                      size="xl"
+                      className="text-rm-text-muted/30"
+                    />
                   )}
                 </div>
               )}
               {selectedId === source.id && (
                 <div className="absolute right-2 top-2 rounded-full bg-primary p-1 shadow-lg">
-                  <Check size={12} className="text-primary-foreground" />
+                  <Icon
+                    name="check"
+                    size="xs"
+                    className="text-primary-foreground"
+                  />
                 </div>
               )}
             </div>
@@ -166,9 +183,17 @@ export function SourceGrid({
                   draggable={false}
                 />
               ) : source.kind === "monitor" ? (
-                <Monitor size={14} className="shrink-0 text-rm-text-muted" />
+                <Icon
+                  name="monitor"
+                  size="sm"
+                  className="shrink-0 text-rm-text-muted"
+                />
               ) : (
-                <AppWindow size={14} className="shrink-0 text-rm-text-muted" />
+                <Icon
+                  name="window"
+                  size="sm"
+                  className="shrink-0 text-rm-text-muted"
+                />
               )}
               <span
                 className={cn(
@@ -199,11 +224,11 @@ export function DesktopScreenPickerTabBar({
         [
           {
             key: "applications" as Tab,
-            icon: AppWindow,
+            icon: "window",
             label: "Applications",
           },
-          { key: "screens" as Tab, icon: Monitor, label: "Entire Screen" },
-          { key: "devices" as Tab, icon: Tv, label: "Devices" },
+          { key: "screens" as Tab, icon: "monitor", label: "Entire Screen" },
+          { key: "devices" as Tab, icon: "tv", label: "Devices" },
         ] as const
       ).map((t) => (
         <button
@@ -216,7 +241,7 @@ export function DesktopScreenPickerTabBar({
               : "text-rm-text-muted hover:text-rm-text",
           )}
         >
-          <t.icon size={16} />
+          <Icon name={t.icon} size="sm" />
           {t.label}
         </button>
       ))}
@@ -294,7 +319,7 @@ export function DesktopScreenPickerBottomBar({
               : "border-rm-border bg-rm-bg-elevated text-rm-text-muted hover:text-rm-text",
           )}
         >
-          <Music size={14} />
+          <Icon name="music" size="sm" />
           Audio
         </button>
       </div>

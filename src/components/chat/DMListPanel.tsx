@@ -6,7 +6,7 @@ import { useChatStore } from "@/stores/chat-store";
 import { useMemo } from "react";
 import { DitherField } from "@/components/ui/DitherField";
 import { AvatarImage } from "./AvatarImage";
-import { MessageSquare } from "./Icons";
+import { Icon } from "@/components/ui/icon";
 import { UserDisplayName } from "./UserDisplayName";
 
 interface DMListPanelProps {
@@ -62,7 +62,7 @@ export function DMListPanel({
               tone="quiet"
               seed={7}
             />
-            <MessageSquare className="h-5 w-5 text-rm-text-muted" />
+            <Icon name="chat" size="lg" className="text-rm-text-muted" />
             <span className="text-ui-sm font-medium text-rm-text">
               No DMs yet
             </span>

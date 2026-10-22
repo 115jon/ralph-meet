@@ -3,7 +3,7 @@ import { apiDelete, apiGet, apiPut } from "@/lib/api-client";
 import { PERMISSIONS } from "@/lib/permissions";
 import type { Role, User } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { Check, Loader2, Plus, Slash, Trash2, X } from "lucide-react";
+import { Icon } from "@/components/ui/icon";
 import { useCallback, useEffect, useState } from "react";
 import { AvatarImage } from "./AvatarImage";
 import InlineEmojiText from "./InlineEmojiText";
@@ -134,9 +134,9 @@ function PermissionsSidebar({
           className="p-1 hover:bg-rm-bg-hover rounded transition-colors text-rm-text-secondary hover:text-rm-text relative z-10"
         >
           {isAddingTarget ? (
-            <X className="h-4 w-4" />
+            <Icon name="close" size="sm" />
           ) : (
-            <Plus className="h-4 w-4" />
+            <Icon name="add" size="sm" />
           )}
         </ButtonBase>
       </div>
@@ -268,8 +268,10 @@ function PermissionsSidebar({
                   className="truncate flex-1"
                 />
                 {!isDefault && (
-                  <Trash2
-                    className="h-3 w-3 opacity-0 group-hover:opacity-100 hover:text-destructive shrink-0"
+                  <Icon
+                    name="trash"
+                    size="xs"
+                    className="opacity-0 group-hover:opacity-100 hover:text-destructive shrink-0"
                     onClick={(e) => {
                       e.stopPropagation();
                       handleDeleteOverride(o.target_id);
@@ -316,7 +318,11 @@ function PermissionsEditor({
               <InlineEmojiText text={selectedOverride.name ?? ""} />
             </span>
             {savingTarget === selectedOverride.target_id && (
-              <Loader2 className="h-4 w-4 animate-spin text-rm-text-muted" />
+              <Icon
+                name="loader"
+                size="sm"
+                className="animate-spin text-rm-text-muted"
+              />
             )}
           </div>
 
@@ -352,7 +358,7 @@ function PermissionsEditor({
                           : "hover:bg-rm-white/10 text-rm-text-muted",
                       )}
                     >
-                      <X className="h-4 w-4" />
+                      <Icon name="close" size="sm" />
                     </ButtonBase>
                     <ButtonBase
                       onClick={() =>
@@ -365,7 +371,7 @@ function PermissionsEditor({
                           : "hover:bg-rm-white/10 text-rm-text-muted",
                       )}
                     >
-                      <Slash className="h-4 w-4" />
+                      <Icon name="neutral" size="sm" />
                     </ButtonBase>
                     <ButtonBase
                       onClick={() => handleUpdatePermission(perm.mask, "allow")}
@@ -376,7 +382,7 @@ function PermissionsEditor({
                           : "hover:bg-rm-white/10 text-rm-text-muted",
                       )}
                     >
-                      <Check className="h-4 w-4" />
+                      <Icon name="check" size="sm" />
                     </ButtonBase>
                   </div>
                 </div>
@@ -602,7 +608,11 @@ export default function ChannelPermissionsTab({
   if (state.loading) {
     return (
       <div className="flex justify-center p-8">
-        <Loader2 className="h-6 w-6 animate-spin text-rm-text-muted" />
+        <Icon
+          name="loader"
+          size="xl"
+          className="animate-spin text-rm-text-muted"
+        />
       </div>
     );
   }

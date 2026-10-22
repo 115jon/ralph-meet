@@ -42,36 +42,8 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import {
-  Bell,
-  CalendarPlus,
-  CheckCheck,
-  ChevronDown,
-  ChevronRight,
-  Copy,
-  CopyPlus,
-  Edit2,
-  EyeOff,
-  FolderPlus,
-  Gamepad2,
-  Gem,
-  GripVertical,
-  Hash,
-  HeadphoneOff,
-  LayoutGrid,
-  Link,
-  Loader2,
-  MicOff,
-  Plus,
-  PlusCircle,
-  Settings,
-  Shield,
-  Sparkles,
-  Trash2,
-  UserPlus,
-  Volume2,
-  VolumeX,
-} from "lucide-react";
+import { Icon } from "@/components/ui/icon";
+import { getChannelIcon } from "@/lib/channel-icon";
 
 import {
   lazy,
@@ -326,7 +298,7 @@ function VoiceChannelMediaDisplay({
                   onChange();
                 }}
               >
-                <Edit2 className="h-3.5 w-3.5" />
+                <Icon name="edit" size="sm" />
               </button>
             </TooltipTrigger>
             <TooltipContent side="top" sideOffset={8}>
@@ -347,9 +319,9 @@ function VoiceChannelMediaDisplay({
                 }}
               >
                 {isRemoving ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  <Icon name="loader" size="sm" className="animate-spin" />
                 ) : (
-                  <Trash2 className="h-3.5 w-3.5" />
+                  <Icon name="trash" size="sm" />
                 )}
               </button>
             </TooltipTrigger>
@@ -491,18 +463,20 @@ function SortableChannelItem({
         />
         {/* Drag handle */}
         {isDraggable && (
-          <GripVertical
-            className="relative z-20 h-3 w-3 shrink-0 cursor-grab opacity-0 transition-opacity active:cursor-grabbing group-hover:opacity-40 hover:!opacity-80"
+          <Icon
+            name="dragHandle"
+            size="xs"
+            className="relative z-20 shrink-0 cursor-grab opacity-0 transition-opacity active:cursor-grabbing group-hover:opacity-40 hover:!opacity-80"
             {...attributes}
             {...listeners}
           />
         )}
 
-        {isVoice ? (
-          <Volume2 className="h-4 w-4 shrink-0 opacity-60" />
-        ) : (
-          <Hash className="h-4 w-4 shrink-0 opacity-60" />
-        )}
+        <Icon
+          name={getChannelIcon(channel)}
+          size="md"
+          className="shrink-0 opacity-60"
+        />
 
         <InlineEmojiText
           text={channel.name}
@@ -542,7 +516,7 @@ function SortableChannelItem({
                       onEditChannel(channel);
                     }}
                   >
-                    <Settings className="h-3.5 w-3.5" />
+                    <Icon name="settings" size="sm" />
                   </button>
                 </TooltipTrigger>
                 <TooltipContent side="top" sideOffset={8}>
@@ -561,7 +535,7 @@ function SortableChannelItem({
                     onInviteToChannel(channel);
                   }}
                 >
-                  <UserPlus className="h-3.5 w-3.5" />
+                  <Icon name="invite" size="sm" />
                 </button>
               </TooltipTrigger>
               <TooltipContent side="top" sideOffset={8}>
@@ -606,7 +580,11 @@ function SortableChannelItem({
                       text={textStatus || "Set a channel status"}
                     />
                   </span>
-                  <Edit2 className="h-3 w-3 shrink-0 text-rm-text-muted transition-colors group-hover/text:text-rm-text" />
+                  <Icon
+                    name="edit"
+                    size="xs"
+                    className="shrink-0 text-rm-text-muted transition-colors group-hover/text:text-rm-text"
+                  />
                 </button>
               </TooltipTrigger>
               <TooltipContent side="top" sideOffset={8}>
@@ -637,7 +615,7 @@ function SortableChannelItem({
                     }}
                   >
                     <div className="mb-2 inline-flex h-9 w-9 items-center justify-center rounded-md bg-rm-bg-hover text-rm-text-muted transition-colors group-hover/vibe:bg-rm-bg-active group-hover/vibe:text-rm-text">
-                      <Sparkles className="h-4 w-4" />
+                      <Icon name="sparkle" size="sm" />
                     </div>
                     <span className="text-ui-sm font-semibold text-rm-text">
                       Set the vibe
@@ -1052,7 +1030,11 @@ export default function ChannelSidebar({
                 </span>
               </div>
             </div>
-            <ChevronDown className="absolute right-3 bottom-3 h-4 w-4 text-rm-text/75 dark:text-white/60 group-hover/banner:opacity-100 transition-opacity z-10" />
+            <Icon
+              name="chevronDown"
+              size="xs"
+              className="absolute right-3 bottom-3 text-rm-text/75 dark:text-white/60 group-hover/banner:opacity-100 transition-opacity z-10"
+            />
           </button>
         ) : (
           <button
@@ -1070,7 +1052,11 @@ export default function ChannelSidebar({
                 text={serverName}
                 className="truncate text-ui-base"
               />
-              <ChevronDown className="ml-1 h-4 w-4 shrink-0 text-rm-text-muted" />
+              <Icon
+                name="chevronDown"
+                size="xs"
+                className="ml-1 shrink-0 text-rm-text-muted"
+              />
             </div>
           </button>
         )}
@@ -1254,20 +1240,20 @@ function useSidebarContextMenus({
         // ── Mark As Read ───────────────────────────────────────────────
         {
           label: "Mark As Read",
-          icon: <CheckCheck className="h-4 w-4" />,
+          icon: <Icon name="markRead" size="sm" />,
           onClick: () => markChannelRead(channel.id),
           divider: true,
         },
         // ── Invite / Link ──────────────────────────────────────────────
         {
           label: "Invite to Channel",
-          icon: <UserPlus className="h-4 w-4" />,
+          icon: <Icon name="invite" size="sm" />,
           onClick: () =>
             uiDispatch({ type: "SET_INVITE_CHANNEL", value: channel.id }),
         },
         {
           label: "Copy Link",
-          icon: <Link className="h-4 w-4" />,
+          icon: <Icon name="link" size="sm" />,
           onClick: () => {
             const path = `/channels/${serverId ?? ""}/${channel.id}`;
             navigator.clipboard.writeText(`${window.location.origin}${path}`);
@@ -1277,8 +1263,8 @@ function useSidebarContextMenus({
         // ── Notifications (placeholders — need backend) ────────────────
         {
           label: "Mute Channel",
-          icon: <VolumeX className="h-4 w-4" />,
-          rightIcon: <ChevronRight className="h-3.5 w-3.5" />,
+          icon: <Icon name="speakerOff" size="sm" />,
+          rightIcon: <Icon name="chevronRight" size="xs" />,
           onClick: () => {
             /* needs backend: per-user per-channel mute */
           },
@@ -1287,8 +1273,8 @@ function useSidebarContextMenus({
         {
           label: "Notification Settings",
           subtitle: "All Messages",
-          icon: <Bell className="h-4 w-4" />,
-          rightIcon: <ChevronRight className="h-3.5 w-3.5" />,
+          icon: <Icon name="bell" size="sm" />,
+          rightIcon: <Icon name="chevronRight" size="xs" />,
           onClick: () => {
             /* needs backend: per-user per-channel notification prefs */
           },
@@ -1300,7 +1286,7 @@ function useSidebarContextMenus({
           ? [
               {
                 label: "Edit Channel",
-                icon: <Settings className="h-4 w-4" />,
+                icon: <Icon name="settings" size="sm" />,
                 onClick: () =>
                   uiDispatch({
                     type: "SET_CHANNEL_SETTINGS",
@@ -1309,7 +1295,7 @@ function useSidebarContextMenus({
               },
               {
                 label: "Duplicate Channel",
-                icon: <CopyPlus className="h-4 w-4" />,
+                icon: <Icon name="copy" size="sm" />,
                 onClick: () => {
                   if (serverId) {
                     createChannel(
@@ -1327,7 +1313,7 @@ function useSidebarContextMenus({
           ? [
               {
                 label: "Create Text Channel",
-                icon: <PlusCircle className="h-4 w-4" />,
+                icon: <Icon name="add" size="sm" />,
                 onClick: () =>
                   uiDispatch({
                     type: "SET_CREATE_CHANNEL",
@@ -1340,7 +1326,7 @@ function useSidebarContextMenus({
           ? [
               {
                 label: "Delete Channel",
-                icon: <Trash2 className="h-4 w-4" />,
+                icon: <Icon name="trash" size="sm" />,
                 onClick: () => {
                   if (confirm(`Delete channel "${channel.name}"?`)) {
                     deleteChannel(channel.id);
@@ -1354,7 +1340,7 @@ function useSidebarContextMenus({
         // ── Copy Channel ID ────────────────────────────────────────────
         {
           label: "Copy Channel ID",
-          icon: <Copy className="h-4 w-4" />,
+          icon: <Icon name="copy" size="sm" />,
           rightIcon: (
             <span className="text-ui-2xs font-bold bg-rm-bg-surface border border-rm-border rounded px-1 py-0.5 leading-none">
               ID
@@ -1384,7 +1370,7 @@ function useSidebarContextMenus({
           ? [
               {
                 label: "Create Channel",
-                icon: <Plus className="h-4 w-4" />,
+                icon: <Icon name="add" size="sm" />,
                 onClick: () =>
                   uiDispatch({
                     type: "SET_CREATE_CHANNEL",
@@ -1395,14 +1381,14 @@ function useSidebarContextMenus({
           : []),
         {
           label: "Copy ID",
-          icon: <Copy className="h-4 w-4" />,
+          icon: <Icon name="copy" size="sm" />,
           onClick: () => navigator.clipboard.writeText(group.id!),
         },
         ...(canManageChannels
           ? [
               {
                 label: "Delete Category",
-                icon: <Trash2 className="h-4 w-4" />,
+                icon: <Icon name="trash" size="sm" />,
                 onClick: () => {
                   if (serverId && group.id) {
                     if (confirm(`Delete category "${group.name}"?`)) {
@@ -1446,7 +1432,7 @@ function useSidebarContextMenus({
         },
         {
           label: "Copy ID",
-          icon: <Copy className="h-4 w-4" />,
+          icon: <Icon name="copy" size="sm" />,
           onClick: () => serverId && navigator.clipboard.writeText(serverId),
         },
       ]);
@@ -1459,12 +1445,12 @@ function useSidebarContextMenus({
       openMenu(e as unknown as React.MouseEvent, [
         {
           label: "Server Boost",
-          icon: <Gem className="h-4 w-4" />,
+          icon: <Icon name="gem" size="sm" />,
           onClick: () => {},
         },
         {
           label: "Invite to Server",
-          icon: <UserPlus className="h-4 w-4" />,
+          icon: <Icon name="invite" size="sm" />,
           divider: canManageChannels,
           variant: "default",
           onClick: () => onInviteClick?.(),
@@ -1473,12 +1459,12 @@ function useSidebarContextMenus({
           ? [
               {
                 label: "Server Settings",
-                icon: <Settings className="h-4 w-4" />,
+                icon: <Icon name="settings" size="sm" />,
                 onClick: () => onSettingsClick?.(),
               },
               {
                 label: "Create Channel",
-                icon: <PlusCircle className="h-4 w-4" />,
+                icon: <Icon name="add" size="sm" />,
                 onClick: () =>
                   uiDispatch({
                     type: "SET_CREATE_CHANNEL",
@@ -1487,18 +1473,18 @@ function useSidebarContextMenus({
               },
               {
                 label: "Create Category",
-                icon: <FolderPlus className="h-4 w-4" />,
+                icon: <Icon name="folderAdd" size="sm" />,
                 onClick: () =>
                   uiDispatch({ type: "SET_CREATE_CATEGORY", value: true }),
               },
               {
                 label: "Create Event",
-                icon: <CalendarPlus className="h-4 w-4" />,
+                icon: <Icon name="event" size="sm" />,
                 onClick: () => {},
               },
               {
                 label: "App Directory",
-                icon: <LayoutGrid className="h-4 w-4" />,
+                icon: <Icon name="grid" size="sm" />,
                 divider: true,
                 onClick: () => {},
               },
@@ -1506,23 +1492,23 @@ function useSidebarContextMenus({
           : []),
         {
           label: "Notification Settings",
-          icon: <Bell className="h-4 w-4" />,
+          icon: <Icon name="bell" size="sm" />,
           onClick: () => {},
         },
         {
           label: "Privacy Settings",
-          icon: <Shield className="h-4 w-4" />,
+          icon: <Icon name="shield" size="sm" />,
           divider: true,
           onClick: () => {},
         },
         {
           label: "Edit Per-server Profile",
-          icon: <Edit2 className="h-4 w-4" />,
+          icon: <Icon name="edit" size="sm" />,
           onClick: () => {},
         },
         {
           label: "Hide Muted Channels",
-          icon: <EyeOff className="h-4 w-4" />,
+          icon: <Icon name="eyeOff" size="sm" />,
           onClick: () => {},
         },
       ]);
@@ -1768,14 +1754,23 @@ function VoiceChannelMemberRow({
               LIVE
             </div>
           )}
-          {activity && <Gamepad2 className="h-3.5 w-3.5 text-primary" />}
+          {activity && (
+            <Icon name="activities" size="sm" className="text-primary" />
+          )}
           <div className="flex items-center gap-1 opacity-60">
-            {member.self_video && <Shield className="h-3.5 w-3.5" />}
+            {member.self_video && (
+              <Icon name="camera" state="active" size="sm" />
+            )}
             {member.self_mute && (
               <Tooltip>
                 <TooltipTrigger asChild>
                   <span aria-label="Self-muted">
-                    <MicOff className="h-3.5 w-3.5 text-rm-danger" />
+                    <Icon
+                      name="mic"
+                      state="off"
+                      size="sm"
+                      className="text-rm-danger-ink"
+                    />
                   </span>
                 </TooltipTrigger>
                 <TooltipContent side="top" sideOffset={6}>
@@ -1787,7 +1782,12 @@ function VoiceChannelMemberRow({
               <Tooltip>
                 <TooltipTrigger asChild>
                   <span aria-label="Self-deafened">
-                    <HeadphoneOff className="h-3.5 w-3.5 text-rm-danger" />
+                    <Icon
+                      name="deafen"
+                      state="off"
+                      size="sm"
+                      className="text-rm-danger-ink"
+                    />
                   </span>
                 </TooltipTrigger>
                 <TooltipContent side="top" sideOffset={6}>
@@ -1799,7 +1799,11 @@ function VoiceChannelMemberRow({
               <Tooltip>
                 <TooltipTrigger asChild>
                   <span aria-label="Muted by you">
-                    <VolumeX className="h-3.5 w-3.5 text-rm-danger" />
+                    <Icon
+                      name="speakerOff"
+                      size="sm"
+                      className="text-rm-danger-ink"
+                    />
                   </span>
                 </TooltipTrigger>
                 <TooltipContent side="top" sideOffset={6}>
@@ -1924,9 +1928,11 @@ function ChannelCategoryGroup({
           aria-label={`${isCollapsed ? "Expand" : "Collapse"} ${group.name}`}
           onClick={() => group.id && toggleCategory(group.id)}
         >
-          <ChevronDown
+          <Icon
+            name="chevronDown"
+            size="xs"
             className={cn(
-              "h-3 w-3 shrink-0 transition-transform duration-200",
+              "shrink-0 transition-transform duration-200",
               isCollapsed && "-rotate-90",
             )}
           />
@@ -1948,7 +1954,7 @@ function ChannelCategoryGroup({
               })
             }
           >
-            <Plus className="h-4 w-4" />
+            <Icon name="add" size="sm" />
           </button>
         )}
       </div>

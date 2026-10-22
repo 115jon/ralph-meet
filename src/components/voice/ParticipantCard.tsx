@@ -4,18 +4,10 @@ import { PRESS } from "@/components/ui/interaction";
 import { extractDominantColor } from "@/lib/color-utils";
 import { getAuthAssetUrl } from "@/lib/platform";
 import { cn } from "@/lib/utils";
-import { Eye, EyeOff, Phone } from "lucide-react";
+import { Icon } from "@/components/ui/icon";
 import React, { lazy, Suspense, useEffect, useState } from "react";
 import { AvatarImage } from "@/components/chat/AvatarImage";
 import InlineEmojiText from "@/components/chat/InlineEmojiText";
-import {
-  Camera,
-  ChevronDown,
-  Headphones,
-  MicOff,
-  Monitor,
-  MoreHorizontal,
-} from "../chat/Icons";
 import { QualityMonitor } from "./QualityMonitor";
 import { StreamWatcherList } from "./StreamWatcherList";
 import { StreamLoadingIndicator } from "./StreamLoadingIndicator";
@@ -202,14 +194,19 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
 
         {shouldShowFocusedStreamOverlay && (
           <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/30 pointer-events-none animate-in fade-in duration-300">
-            <Monitor size={32} className="text-white" fill="currentColor" />
+            <Icon
+              name="screenShare"
+              state="active"
+              size="2xl"
+              className="text-white"
+            />
           </div>
         )}
 
         {/* Preview Paused Placeholder (local screen share hidden for performance) */}
         {isPreviewHidden && (
           <div className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 bg-black/70 backdrop-blur-sm">
-            <EyeOff size={22} className="text-white/50" />
+            <Icon name="eyeOff" size="xl" className="text-white/50" />
             <span className="text-ui-2xs font-semibold text-white/60 uppercase tracking-[0.08em]">
               Preview paused
             </span>
@@ -231,9 +228,10 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
             )}
             <div className="relative z-10 flex flex-col items-center justify-center p-1 sm:p-2 w-full h-full overflow-hidden">
               <div className="shrink border border-rm-border rounded-xl bg-rm-bg-elevated/60 p-2 sm:w-8 sm:h-8 text-rm-text-muted shadow-lg backdrop-blur-md flex items-center justify-center transition-transform duration-200">
-                <Monitor
-                  className="w-3 h-3 sm:w-4 sm:h-4 text-rm-text-muted shrink-0"
-                  strokeWidth={2}
+                <Icon
+                  name="monitor"
+                  size="xs"
+                  className="sm:w-4 sm:h-4 text-rm-text-muted shrink-0"
                 />
               </div>
 
@@ -283,22 +281,25 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
               {isTray && isFocused && (
                 <div className="absolute inset-0 flex items-center justify-center bg-black/70 animate-in fade-in duration-300">
                   {isScreen ? (
-                    <Monitor
-                      size={32}
+                    <Icon
+                      name="screenShare"
+                      state="active"
+                      size="2xl"
                       className="text-white"
-                      fill="currentColor"
                     />
                   ) : isCamera ? (
-                    <Camera
-                      size={32}
+                    <Icon
+                      name="camera"
+                      state="active"
+                      size="2xl"
                       className="text-white"
-                      fill="currentColor"
                     />
                   ) : (
-                    <Phone
-                      size={32}
+                    <Icon
+                      name="call"
+                      state="active"
+                      size="2xl"
                       className="text-white"
-                      fill="currentColor"
                     />
                   )}
                 </div>
@@ -333,14 +334,18 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
             <div className="bg-rm-bg-primary/85 px-2 py-1 rounded-md border border-rm-border flex items-center gap-2">
               <div className="flex items-center gap-1">
                 {item.isDeafened && (
-                  <Headphones
-                    size={10}
+                  <Icon
+                    name="deafen"
+                    state="off"
+                    size="xs"
                     className="text-rm-text-muted shrink-0"
                   />
                 )}
                 {item.isMuted && (
-                  <MicOff
-                    size={10}
+                  <Icon
+                    name="mic"
+                    state="off"
+                    size="xs"
                     className={
                       item.serverMute
                         ? "text-destructive shrink-0"
@@ -393,11 +398,11 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
             >
               {isPreviewHidden ? (
                 <>
-                  <Eye size={11} /> <span>Resume</span>
+                  <Icon name="eye" size="xs" /> <span>Resume</span>
                 </>
               ) : (
                 <>
-                  <EyeOff size={11} /> <span>Pause</span>
+                  <Icon name="eyeOff" size="xs" /> <span>Pause</span>
                 </>
               )}
             </button>
@@ -409,7 +414,7 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
           <div className="pointer-events-none absolute bottom-2 right-2 z-50 opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100">
             <IconButton
               aria-label="More options"
-              icon={MoreHorizontal}
+              icon="more"
               size="xs"
               className="rounded-md bg-rm-bg-primary/60 backdrop-blur-md border border-rm-border"
               onClick={(e) => {
@@ -422,7 +427,11 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
         {isTray && (
           <div className="pointer-events-none absolute top-2 right-2 z-30 opacity-0 transition-opacity group-hover:opacity-100">
             <div className="bg-rm-bg-primary/60 backdrop-blur-md p-1 rounded-lg border border-rm-border">
-              <ChevronDown size={10} className="text-rm-text-muted" />
+              <Icon
+                name="chevronDown"
+                size="xs"
+                className="text-rm-text-muted"
+              />
             </div>
           </div>
         )}

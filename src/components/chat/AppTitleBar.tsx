@@ -1,10 +1,9 @@
 import { getAuthAssetUrl } from "@/lib/platform";
 import { cn } from "@/lib/utils";
-import { ShoppingBag } from "lucide-react";
+import { Icon } from "@/components/ui/icon";
 import { useChatStore } from "@/stores/chat-store";
 import { getAppTitleBarModel } from "./AppTitleBarModel";
 import { HomeIcon } from "./HomeIcon";
-import { Users } from "./Icons";
 import { useShallow } from "zustand/shallow";
 import InlineEmojiText from "./InlineEmojiText";
 
@@ -44,9 +43,9 @@ export function AppTitleBarContent({ className }: { className?: string }) {
             className="h-full w-full object-cover"
           />
         ) : model.kind === "friends" ? (
-          <Users className="h-3.5 w-3.5" aria-hidden="true" />
+          <Icon name="members" size="sm" />
         ) : model.kind === "shop" ? (
-          <ShoppingBag className="h-3.5 w-3.5" aria-hidden="true" />
+          <Icon name="shop" size="sm" />
         ) : (
           <HomeIcon className="h-4 w-4" />
         )}

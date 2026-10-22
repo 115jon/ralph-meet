@@ -1,4 +1,4 @@
-import { MonitorX } from "lucide-react";
+import { Icon } from "@/components/ui/icon";
 import React from "react";
 import { Divider, MenuItem, Slider, SubMenuItem } from "./ContextMenuItems";
 
@@ -77,7 +77,9 @@ export const RemoteMenu: React.FC<RemoteMenuProps> = ({
           boldLabel
           onMouseEnter={clearSubmenu}
           onClick={stopWatching}
-          rightElement={<MonitorX size={18} className="text-rm-text-muted" />}
+          rightElement={
+            <Icon name="stream" size="sm" className="text-rm-text-muted" />
+          }
         />
         <Divider />
         <MenuItem
@@ -98,7 +100,9 @@ export const RemoteMenu: React.FC<RemoteMenuProps> = ({
           boldLabel
           onMouseEnter={clearSubmenu}
           onClick={stopWatching}
-          rightElement={<MonitorX size={18} className="text-rm-text-muted" />}
+          rightElement={
+            <Icon name="streamOff" size="sm" className="text-rm-text-muted" />
+          }
         />
 
         <Divider />

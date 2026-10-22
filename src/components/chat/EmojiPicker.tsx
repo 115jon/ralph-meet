@@ -28,16 +28,7 @@ import { cn } from "@/lib/utils";
 import { Dialog, DialogPortal, DialogSurface } from "@/components/ui/dialog";
 import { primeCustomEmojiCache } from "@/hooks/useCustomEmojiLookup";
 import { useMounted } from "@/hooks/useMounted";
-import {
-  AlertCircle,
-  ChevronDown,
-  ChevronLeft,
-  Clock3,
-  Loader2,
-  Search,
-  Sparkles,
-  WandSparkles,
-} from "lucide-react";
+import { Icon } from "@/components/ui/icon";
 import {
   type ReactNode,
   useCallback,
@@ -252,14 +243,14 @@ function CustomEmojiCard({
           />
         ) : isPending ? (
           <div className="flex flex-col items-center gap-1 text-rm-text-muted">
-            <Loader2 className="h-4 w-4 animate-spin" />
+            <Icon name="loader" size="sm" className="animate-spin" />
             <span className="text-ui-2xs font-semibold uppercase tracking-[0.08em]">
               Generating
             </span>
           </div>
         ) : (
           <div className="flex flex-col items-center gap-1 text-destructive">
-            <AlertCircle className="h-4 w-4" />
+            <Icon name="alert" size="sm" />
             <span className="text-ui-2xs font-semibold uppercase tracking-[0.08em]">
               Failed
             </span>
@@ -315,9 +306,11 @@ function SectionHeader({
           </div>
         </div>
       </div>
-      <ChevronDown
+      <Icon
+        name="chevronDown"
+        size="xs"
         className={cn(
-          "h-4 w-4 shrink-0 text-rm-text-muted transition-transform",
+          "shrink-0 text-rm-text-muted transition-transform",
           isCollapsed && "-rotate-90",
         )}
       />
@@ -809,7 +802,11 @@ export default function EmojiPicker({
                           <>
                             <div className="flex items-center gap-2">
                               <div className="relative min-w-0 flex-1">
-                                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-rm-text-muted" />
+                                <Icon
+                                  name="search"
+                                  size="sm"
+                                  className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-rm-text-muted"
+                                />
                                 <input
                                   ref={searchInputRef}
                                   id={searchInputId}
@@ -919,7 +916,7 @@ export default function EmojiPicker({
                                     }}
                                     className="inline-flex h-11 items-center gap-2 rounded-2xl border border-rm-border bg-primary/20 px-3 text-sm font-semibold text-rm-text shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] transition-transform active:scale-[0.98]"
                                   >
-                                    <WandSparkles className="h-4 w-4" />
+                                    <Icon name="magic" size="sm" />
                                     <span className="hidden sm:inline">
                                       Create
                                     </span>
@@ -933,7 +930,11 @@ export default function EmojiPicker({
 
                             {hasPendingGeneratedEmojis ? (
                               <div className="mt-3 flex items-center gap-2 rounded-2xl border border-amber-400/15 bg-amber-400/8 px-3 py-2 text-ui-2xs font-semibold text-amber-800 dark:text-amber-100">
-                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                <Icon
+                                  name="loader"
+                                  size="sm"
+                                  className="animate-spin"
+                                />
                                 Your creations are still generating. This list
                                 refreshes automatically.
                               </div>
@@ -951,7 +952,7 @@ export default function EmojiPicker({
                                 }}
                                 className="inline-flex h-10 items-center gap-2 rounded-2xl border border-rm-border bg-rm-bg-hover px-3 text-sm font-semibold text-rm-text transition-colors hover:bg-rm-bg-active"
                               >
-                                <ChevronLeft className="h-4 w-4" />
+                                <Icon name="chevronLeft" size="xs" />
                                 Back
                               </button>
                               <div className="text-right">
@@ -1032,9 +1033,13 @@ export default function EmojiPicker({
                                 className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-2xl bg-primary text-sm font-semibold text-white hover:opacity-90 active:scale-[0.96] transition-ui disabled:cursor-not-allowed disabled:opacity-55"
                               >
                                 {isGenerating ? (
-                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                  <Icon
+                                    name="loader"
+                                    size="sm"
+                                    className="animate-spin"
+                                  />
                                 ) : (
-                                  <Sparkles className="h-4 w-4" />
+                                  <Icon name="sparkle" size="sm" />
                                 )}
                                 {isGenerating
                                   ? "Starting generation..."
@@ -1073,7 +1078,11 @@ export default function EmojiPicker({
                                           className="h-6 w-6"
                                         />
                                       ) : (
-                                        <Sparkles className="h-5 w-5 text-primary" />
+                                        <Icon
+                                          name="sparkle"
+                                          size="lg"
+                                          className="text-primary"
+                                        />
                                       )}
                                     </button>
                                   </TooltipTrigger>
@@ -1140,7 +1149,11 @@ export default function EmojiPicker({
                                     <section>
                                       <SectionHeader
                                         icon={
-                                          <Sparkles className="h-4 w-4 text-primary" />
+                                          <Icon
+                                            name="sparkle"
+                                            size="sm"
+                                            className="text-primary"
+                                          />
                                         }
                                         title="Your Creations"
                                         count={customSearchResults.length}
@@ -1164,7 +1177,11 @@ export default function EmojiPicker({
                                     <section>
                                       <SectionHeader
                                         icon={
-                                          <Search className="h-4 w-4 text-rm-text" />
+                                          <Icon
+                                            name="search"
+                                            size="sm"
+                                            className="text-rm-text"
+                                          />
                                         }
                                         title="Emoji"
                                         count={nativeSearchResults.length}
@@ -1197,7 +1214,11 @@ export default function EmojiPicker({
                                   >
                                     <SectionHeader
                                       icon={
-                                        <Clock3 className="h-4 w-4 text-rm-text" />
+                                        <Icon
+                                          name="clock"
+                                          size="sm"
+                                          className="text-rm-text"
+                                        />
                                       }
                                       title="Recently Used"
                                       count={recents.length}
@@ -1255,7 +1276,11 @@ export default function EmojiPicker({
                                             className="h-5 w-5"
                                           />
                                         ) : (
-                                          <Sparkles className="h-4 w-4 text-primary" />
+                                          <Icon
+                                            name="sparkle"
+                                            size="sm"
+                                            className="text-primary"
+                                          />
                                         )
                                       }
                                       title="Your Creations"
@@ -1295,7 +1320,11 @@ export default function EmojiPicker({
                                       ) : (
                                         <div className="rounded-3xl border border-dashed border-rm-border bg-rm-bg-surface/10 px-5 py-10 text-center">
                                           <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/20">
-                                            <Sparkles className="h-5 w-5 text-primary" />
+                                            <Icon
+                                              name="sparkle"
+                                              size="lg"
+                                              className="text-primary"
+                                            />
                                           </div>
                                           <div className="text-sm font-semibold text-rm-text">
                                             No custom emoji yet
@@ -1362,7 +1391,11 @@ export default function EmojiPicker({
                             <section>
                               <SectionHeader
                                 icon={
-                                  <Sparkles className="h-4 w-4 text-primary" />
+                                  <Icon
+                                    name="sparkle"
+                                    size="sm"
+                                    className="text-primary"
+                                  />
                                 }
                                 title="Your Creations"
                                 count={generatedEmojis.length}

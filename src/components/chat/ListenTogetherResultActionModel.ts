@@ -2,8 +2,8 @@ import type {
   ListenTogetherSearchResult,
   ListenTogetherSearchTrackResult,
 } from "@/lib/listen-together";
-import { Copy, ExternalLink, ListPlus, Play, SkipForward } from "lucide-react";
-import { createElement, type ComponentType } from "react";
+import { Icon, type IconName } from "@/components/ui/icon";
+import { createElement } from "react";
 import type { ContextMenuItem } from "./ContextMenu";
 
 export type ListenTogetherResultActionId =
@@ -17,7 +17,7 @@ export type ListenTogetherResultActionId =
 export interface ListenTogetherResultAction {
   id: ListenTogetherResultActionId;
   label: string;
-  icon: ComponentType<{ className?: string }>;
+  icon: IconName;
 }
 
 export function getListenTogetherResultActions(
@@ -25,11 +25,11 @@ export function getListenTogetherResultActions(
 ): ListenTogetherResultAction[] {
   if (result.kind === "track") {
     return [
-      { id: "play-now", label: "Play now", icon: Play },
-      { id: "play-next", label: "Play next", icon: SkipForward },
-      { id: "append", label: "Add to queue", icon: ListPlus },
-      { id: "open-source", label: "Open source URL", icon: ExternalLink },
-      { id: "copy-url", label: "Copy URL", icon: Copy },
+      { id: "play-now", label: "Play now", icon: "play" },
+      { id: "play-next", label: "Play next", icon: "skip" },
+      { id: "append", label: "Add to queue", icon: "queueAdd" },
+      { id: "open-source", label: "Open source URL", icon: "externalLink" },
+      { id: "copy-url", label: "Copy URL", icon: "copy" },
     ];
   }
 
@@ -37,10 +37,10 @@ export function getListenTogetherResultActions(
     {
       id: "queue-collection",
       label: "Add collection to queue",
-      icon: ListPlus,
+      icon: "queueAdd",
     },
-    { id: "open-source", label: "Open source URL", icon: ExternalLink },
-    { id: "copy-url", label: "Copy URL", icon: Copy },
+    { id: "open-source", label: "Open source URL", icon: "externalLink" },
+    { id: "copy-url", label: "Copy URL", icon: "copy" },
   ];
 }
 
@@ -59,7 +59,7 @@ export function getListenTogetherContextMenuItems(
   return actions.map((action) => ({
     key: action.id,
     label: action.label,
-    icon: createElement(action.icon, { className: "h-4 w-4" }),
+    icon: createElement(Icon, { name: action.icon, size: "sm" }),
     onClick: () => onAction(action.id),
   }));
 }

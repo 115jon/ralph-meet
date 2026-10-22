@@ -18,16 +18,7 @@ import { resolveProfileTheme } from "@/lib/profile-customization";
 import type { User } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useChatActions, useChatStore } from "@/stores/chat-store";
-import {
-  Ban,
-  Check,
-  Copy,
-  Loader2,
-  MessageSquare,
-  UserMinus,
-  UserPlus,
-  X,
-} from "lucide-react";
+import { Icon } from "@/components/ui/icon";
 import { useCallback, useEffect, useState } from "react";
 
 interface Props {
@@ -244,7 +235,7 @@ export default function UserProfileModal({ open, user, onClose }: Props) {
                   className="pointer-events-auto h-10 w-10 rounded-full border border-rm-border bg-rm-bg-floating/92 text-rm-text-muted shadow-[0_14px_34px_rgba(0,0,0,0.26)] backdrop-blur-md hover:bg-rm-bg-hover hover:text-rm-text"
                   aria-label="Close profile preview"
                 >
-                  <X size={18} />
+                  <Icon name="close" size="sm" />
                 </Button>
               </div>
 
@@ -377,7 +368,7 @@ export default function UserProfileModal({ open, user, onClose }: Props) {
                                 className="h-10 rounded-xl bg-[var(--rm-profile-custom-button-bg)] px-4 text-[color:var(--rm-profile-custom-button-text)] shadow-[0_14px_28px_var(--rm-profile-custom-button-shadow)] hover:opacity-95"
                                 style={profileThemeStyle}
                               >
-                                <MessageSquare size={16} />
+                                <Icon name="chat" size="sm" />
                                 Message
                               </Button>
                               <Button
@@ -387,7 +378,7 @@ export default function UserProfileModal({ open, user, onClose }: Props) {
                                 className="h-10 rounded-xl border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] px-3 text-[color:var(--rm-profile-custom-text)] shadow-[0_12px_24px_rgba(0,0,0,0.22)] hover:bg-[var(--rm-profile-custom-card-bg)]"
                                 style={profileThemeStyle}
                               >
-                                <Copy size={15} />
+                                <Icon name="copy" size="sm" />
                                 Copy ID
                               </Button>
                             </div>
@@ -470,12 +461,13 @@ export default function UserProfileModal({ open, user, onClose }: Props) {
                                   className="w-full rounded-xl border border-destructive/25 bg-destructive/12 text-destructive hover:bg-rm-badge hover:text-white"
                                 >
                                   {loading ? (
-                                    <Loader2
-                                      size={16}
+                                    <Icon
+                                      name="loader"
+                                      size="sm"
                                       className="animate-spin"
                                     />
                                   ) : (
-                                    <UserMinus size={16} />
+                                    <Icon name="userRemove" size="sm" />
                                   )}
                                   Remove Friend
                                 </Button>
@@ -491,12 +483,13 @@ export default function UserProfileModal({ open, user, onClose }: Props) {
                                     style={profileThemeStyle}
                                   >
                                     {loading ? (
-                                      <Loader2
-                                        size={16}
+                                      <Icon
+                                        name="loader"
+                                        size="sm"
                                         className="animate-spin"
                                       />
                                     ) : (
-                                      <Check size={16} />
+                                      <Icon name="check" size="sm" />
                                     )}
                                     Accept
                                   </Button>
@@ -544,12 +537,13 @@ export default function UserProfileModal({ open, user, onClose }: Props) {
                                   style={profileThemeStyle}
                                 >
                                   {loading ? (
-                                    <Loader2
-                                      size={16}
+                                    <Icon
+                                      name="loader"
+                                      size="sm"
                                       className="animate-spin"
                                     />
                                   ) : (
-                                    <UserPlus size={16} />
+                                    <Icon name="invite" size="sm" />
                                   )}
                                   Add Friend
                                 </Button>
@@ -562,7 +556,7 @@ export default function UserProfileModal({ open, user, onClose }: Props) {
                                   className="rounded-xl border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] text-[color:var(--rm-profile-custom-text)] hover:bg-[var(--rm-profile-custom-card-bg)]"
                                   style={profileThemeStyle}
                                 >
-                                  <MessageSquare size={15} />
+                                  <Icon name="chat" size="sm" />
                                   Message
                                 </Button>
                                 <Button
@@ -571,7 +565,7 @@ export default function UserProfileModal({ open, user, onClose }: Props) {
                                   className="rounded-xl border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] text-[color:var(--rm-profile-custom-text)] hover:bg-[var(--rm-profile-custom-card-bg)]"
                                   style={profileThemeStyle}
                                 >
-                                  <Copy size={15} />
+                                  <Icon name="copy" size="sm" />
                                   Copy ID
                                 </Button>
                               </div>
@@ -585,7 +579,7 @@ export default function UserProfileModal({ open, user, onClose }: Props) {
                                   }
                                   className="w-full rounded-xl border border-destructive/25 bg-destructive/12 text-destructive hover:bg-rm-badge hover:text-white"
                                 >
-                                  <Ban size={15} />
+                                  <Icon name="ban" size="sm" />
                                   Block User
                                 </Button>
                               ) : null}

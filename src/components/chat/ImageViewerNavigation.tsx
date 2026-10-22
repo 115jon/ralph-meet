@@ -1,4 +1,4 @@
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { Icon } from "@/components/ui/icon";
 
 interface ImageViewerNavigationProps {
   onPrev: () => void;
@@ -18,8 +18,8 @@ export function ImageViewerNavigation({
         }}
         className="absolute left-1 md:left-4 p-2 md:p-4 text-rm-text-muted/40 hover:text-rm-text hover:bg-rm-bg-hover rounded-full transition-ui z-40 outline-none"
       >
-        <ChevronLeft size={32} className="md:hidden" strokeWidth={1.5} />
-        <ChevronLeft size={48} className="hidden md:block" strokeWidth={1.5} />
+        <Icon name="chevronLeft" size="2xl" className="md:hidden" />
+        <Icon name="chevronLeft" size="3xl" className="hidden md:block" />
       </button>
       <button
         onClick={(e) => {
@@ -28,8 +28,8 @@ export function ImageViewerNavigation({
         }}
         className="absolute right-1 md:right-4 p-2 md:p-4 text-rm-text-muted/40 hover:text-rm-text hover:bg-rm-bg-hover rounded-full transition-ui z-40 outline-none"
       >
-        <ChevronRight size={32} className="md:hidden" strokeWidth={1.5} />
-        <ChevronRight size={48} className="hidden md:block" strokeWidth={1.5} />
+        <Icon name="chevronRight" size="2xl" className="md:hidden" />
+        <Icon name="chevronRight" size="3xl" className="hidden md:block" />
       </button>
     </>
   );

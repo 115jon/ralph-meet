@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { apiUpload } from "@/lib/api-client";
 import { useChatActions } from "@/stores/chat-store";
 import { useCallback, useEffect, useReducer, useRef } from "react";
-import { Plus, X } from "./Icons";
+import { Icon } from "@/components/ui/icon";
 import { cn } from "@/lib/utils";
 interface Props {
   open: boolean;
@@ -192,8 +192,8 @@ export default function CreateServerModal({ open, onClose }: Props) {
             </div>
             {/* Close */}
             <IconButton
-              icon={X}
-              iconSize={16}
+              icon="close"
+              iconSize="sm"
               onClick={onClose}
               aria-label="Close"
               className="absolute right-4 top-4"
@@ -230,7 +230,11 @@ export default function CreateServerModal({ open, onClose }: Props) {
                   </>
                 ) : (
                   <div className="flex flex-col items-center gap-0.5">
-                    <Plus className="h-5 w-5 text-rm-text-muted/40 transition-colors group-hover:text-primary" />
+                    <Icon
+                      name="add"
+                      size="lg"
+                      className="text-rm-text-muted/40 transition-colors group-hover:text-primary"
+                    />
                     <span className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted/40 group-hover:text-primary">
                       Icon
                     </span>

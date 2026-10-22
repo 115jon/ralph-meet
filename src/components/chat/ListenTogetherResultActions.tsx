@@ -1,6 +1,6 @@
 import { useMounted } from "@/hooks/useMounted";
 import { cn } from "@/lib/utils";
-import { MoreHorizontal, X } from "lucide-react";
+import { Icon } from "@/components/ui/icon";
 import { useEffect, useId, useRef } from "react";
 import { createPortal } from "react-dom";
 import type {
@@ -22,7 +22,7 @@ export function ListenTogetherResultActionTrigger({
       onClick={onClick}
       className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-rm-text-muted transition-colors hover:bg-rm-bg-active hover:text-rm-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
     >
-      <MoreHorizontal className="h-4 w-4" />
+      <Icon name="more" size="sm" />
     </button>
   );
 }
@@ -121,7 +121,7 @@ export function ListenTogetherMobileActionSheet({
             onClick={onClose}
             className="inline-flex h-10 w-10 items-center justify-center rounded-xl text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
           >
-            <X className="h-4 w-4" />
+            <Icon name="close" size="sm" />
           </button>
         </div>
         <div className="grid gap-1 p-2">
@@ -138,7 +138,7 @@ export function ListenTogetherMobileActionSheet({
                 action.id === "play-now" && "text-primary",
               )}
             >
-              <action.icon className="h-4 w-4" />
+              <Icon name={action.icon} size="sm" />
               {action.label}
             </button>
           ))}

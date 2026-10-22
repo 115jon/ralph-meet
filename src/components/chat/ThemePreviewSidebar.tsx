@@ -1,6 +1,6 @@
 import { cn } from "@/lib/utils";
 import { type AppTheme } from "@/lib/theme-preferences";
-import { ChevronLeft, Eye, X } from "lucide-react";
+import { Icon } from "@/components/ui/icon";
 import { useAppearanceTheme } from "./useAppearanceTheme";
 
 const THEME_OPTIONS: Array<{
@@ -63,7 +63,7 @@ export default function ThemePreviewSidebar({
     >
       <header className="flex items-center gap-3 border-b border-rm-border px-4 py-4">
         <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-rm-bg-elevated text-rm-text-muted">
-          <Eye size={18} />
+          <Icon name="eye" size="md" />
         </div>
         <div className="min-w-0 flex-1">
           <h2 className="text-lg font-bold text-rm-text">Preview Theme</h2>
@@ -76,7 +76,7 @@ export default function ThemePreviewSidebar({
           onClick={onClose}
           className="flex h-8 w-8 items-center justify-center rounded-full bg-rm-bg-elevated text-rm-text-muted transition-colors hover:bg-rm-bg-hover hover:text-rm-text"
         >
-          <X size={16} />
+          <Icon name="close" size="sm" />
         </button>
       </header>
 
@@ -119,7 +119,7 @@ export default function ThemePreviewSidebar({
           onClick={onBackToSettings}
           className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-rm-border bg-rm-bg-elevated px-4 py-2.5 text-sm font-bold text-rm-text transition-colors hover:bg-rm-bg-hover"
         >
-          <ChevronLeft size={16} />
+          <Icon name="chevronLeft" size="xs" />
           Back to Settings
         </button>
       </div>

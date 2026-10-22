@@ -15,7 +15,7 @@ import { cn } from "@/lib/utils";
 import { useChatStore } from "@/stores/chat-store";
 import { useEffect, useId, useMemo, useState } from "react";
 import { AvatarImage } from "./AvatarImage";
-import { Check, Copy, Hash, Search, X } from "./Icons";
+import { Icon } from "@/components/ui/icon";
 import InlineEmojiText from "./InlineEmojiText";
 
 interface ChannelInviteModalProps {
@@ -145,7 +145,7 @@ export default function ChannelInviteModal({
           <div className="px-6 pt-5 pb-3">
             <DialogClose asChild>
               <IconButton
-                icon={X}
+                icon="close"
                 type="button"
                 className="absolute right-4 top-4"
                 aria-label="Close invite modal"
@@ -160,7 +160,7 @@ export default function ChannelInviteModal({
               />
             </DialogTitle>
             <DialogDescription className="mt-0.5 flex items-center gap-1 text-sm text-rm-text-muted">
-              Recipients will land in <Hash className="h-3 w-3" />
+              Recipients will land in <Icon name="textChannel" size="xs" />
               <InlineEmojiText text={channel.name} />
             </DialogDescription>
           </div>
@@ -171,7 +171,11 @@ export default function ChannelInviteModal({
               <label htmlFor={friendSearchInputId} className="sr-only">
                 Search friends
               </label>
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-rm-text-muted" />
+              <Icon
+                name="search"
+                size="sm"
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-rm-text-muted"
+              />
               <Input
                 id={friendSearchInputId}
                 type="text"
@@ -270,11 +274,11 @@ export default function ChannelInviteModal({
               >
                 {state.copied ? (
                   <>
-                    <Check className="h-3.5 w-3.5" /> Copied
+                    <Icon name="check" size="sm" /> Copied
                   </>
                 ) : (
                   <>
-                    <Copy className="h-3.5 w-3.5" /> Copy
+                    <Icon name="copy" size="sm" /> Copy
                   </>
                 )}
               </Button>

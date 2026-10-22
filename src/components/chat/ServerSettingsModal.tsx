@@ -6,17 +6,7 @@ import { cn } from "@/lib/utils";
 import { useChatStore } from "@/stores/chat-store";
 import { useCallback, useReducer, useRef, useState } from "react";
 import AuditLogTab from "./AuditLogTab";
-import {
-  AlertTriangle,
-  ClipboardList,
-  Link,
-  Loader2,
-  Plus,
-  Settings2,
-  Shield,
-  Trash2,
-  X,
-} from "./Icons";
+import { Icon } from "@/components/ui/icon";
 import InvitesTab from "./InvitesTab";
 import RoleManagement from "./RoleManagement";
 
@@ -71,7 +61,7 @@ function SettingsSidebar({
             : "text-rm-text-secondary hover:bg-rm-bg-hover hover:text-rm-text bg-rm-bg-elevated/50 md:bg-transparent",
         )}
       >
-        <Settings2 className="h-4 w-4" /> Overview
+        <Icon name="sliders" size="sm" /> Overview
       </button>
 
       {canManageRoles && (
@@ -85,7 +75,7 @@ function SettingsSidebar({
               : "text-rm-text-secondary hover:bg-rm-bg-hover hover:text-rm-text bg-rm-bg-elevated/50 md:bg-transparent",
           )}
         >
-          <Shield className="h-4 w-4" /> Roles
+          <Icon name="shield" size="sm" /> Roles
         </button>
       )}
 
@@ -103,7 +93,7 @@ function SettingsSidebar({
               : "text-rm-text-secondary hover:bg-rm-bg-hover hover:text-rm-text bg-rm-bg-elevated/50 md:bg-transparent",
           )}
         >
-          <AlertTriangle className="h-4 w-4" /> Bans
+          <Icon name="ban" size="sm" /> Bans
         </button>
       )}
 
@@ -118,7 +108,7 @@ function SettingsSidebar({
               : "text-rm-text-secondary hover:bg-rm-bg-hover hover:text-rm-text bg-rm-bg-elevated/50 md:bg-transparent",
           )}
         >
-          <Link className="h-4 w-4" /> Invites
+          <Icon name="link" size="sm" /> Invites
         </button>
       )}
 
@@ -133,7 +123,7 @@ function SettingsSidebar({
               : "text-rm-text-secondary hover:bg-rm-bg-hover hover:text-rm-text bg-rm-bg-elevated/50 md:bg-transparent",
           )}
         >
-          <ClipboardList className="h-4 w-4" /> Audit Log
+          <Icon name="auditLog" size="sm" /> Audit Log
         </button>
       )}
 
@@ -153,7 +143,8 @@ function BansTab({ bansLoading, bans, handleUnban }: any) {
       </h2>
       {bansLoading ? (
         <div className="flex items-center gap-2 text-rm-text-muted">
-          <Loader2 className="h-4 w-4 animate-spin" /> Loading bans…
+          <Icon name="loader" size="sm" className="animate-spin" /> Loading
+          bans…
         </div>
       ) : bans.length === 0 ? (
         <p className="text-rm-text-muted text-sm">No banned users.</p>
@@ -186,7 +177,7 @@ function BansTab({ bansLoading, bans, handleUnban }: any) {
                 onClick={() => handleUnban(ban.user_id)}
                 className="flex items-center gap-1.5 rounded-lg border border-rm-border px-3 py-1.5 text-xs font-semibold text-rm-text-secondary transition-ui hover:border-destructive/30 hover:bg-destructive/10 hover:text-destructive"
               >
-                <Trash2 className="h-3 w-3" /> Unban
+                <Icon name="trash" size="xs" /> Unban
               </button>
             </div>
           ))}
@@ -267,7 +258,11 @@ function OverviewTab({
                   </>
                 ) : (
                   <div className="flex flex-col items-center gap-0.5">
-                    <Plus className="h-5 w-5 text-rm-text-muted/40 transition-colors group-hover:text-primary" />
+                    <Icon
+                      name="add"
+                      size="lg"
+                      className="text-rm-text-muted/40 transition-colors group-hover:text-primary"
+                    />
                     <span className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted/40 group-hover:text-primary">
                       Icon
                     </span>
@@ -398,7 +393,9 @@ function OverviewTab({
             disabled={saving || (!name.trim() && !iconFile && !removeIcon)}
             className="flex max-w-fit items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/20 transition-ui hover:brightness-110 disabled:opacity-40"
           >
-            {saving && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+            {saving && (
+              <Icon name="loader" size="sm" className="animate-spin" />
+            )}
             {saving ? "Saving..." : "Save Changes"}
           </button>
         )}
@@ -409,7 +406,7 @@ function OverviewTab({
           <div className="my-8 h-px bg-rm-border" />
           <div className="space-y-4 rounded-xl border border-destructive/20 bg-destructive/5 p-5">
             <h3 className="text-ui-2xs font-semibold uppercase tracking-[0.08em] flex items-center gap-2 text-destructive">
-              <AlertTriangle className="h-4 w-4" />
+              <Icon name="warning" size="sm" />
               Danger Zone
             </h3>
             <p className="text-sm text-rm-text-secondary mb-2">
@@ -715,7 +712,7 @@ export default function ServerSettingsModal({
                 className="p-1 rounded-full bg-rm-bg-surface text-rm-text flex items-center justify-center hover:bg-rm-bg-hover active:scale-[0.96] transition-ui"
                 aria-label="Close server settings"
               >
-                <X size={18} />
+                <Icon name="close" size="md" />
               </button>
             </div>
 
@@ -738,7 +735,7 @@ export default function ServerSettingsModal({
                   className="flex h-9 w-9 items-center justify-center rounded-full border border-rm-border text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text transition-ui group"
                   aria-label="Close server settings"
                 >
-                  <X size={18} />
+                  <Icon name="close" size="md" />
                 </button>
                 <span className="text-ui-2xs font-bold text-rm-text-muted group-hover:text-rm-text-secondary">
                   ESC

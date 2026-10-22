@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 import { sanitizeChannelName } from "@/lib/validations";
 import { useChatActions } from "@/stores/chat-store";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Hash, Volume2, X } from "./Icons";
+import { Icon } from "@/components/ui/icon";
 interface Props {
   open: boolean;
   serverId: string;
@@ -108,7 +108,7 @@ export default function CreateChannelModal({
           >
             {/* Close */}
             <IconButton
-              icon={X}
+              icon="close"
               type="button"
               onClick={onClose}
               className="absolute right-4 top-4"
@@ -117,9 +117,17 @@ export default function CreateChannelModal({
 
             <h2 className="mb-1 text-center text-ui-lg font-semibold text-rm-text flex items-center justify-center gap-2">
               {type === "text" ? (
-                <Hash className="text-rm-text/40" />
+                <Icon
+                  name="textChannel"
+                  size="xl"
+                  className="text-rm-text/40"
+                />
               ) : (
-                <Volume2 className="text-rm-text/40" />
+                <Icon
+                  name="voiceChannel"
+                  size="xl"
+                  className="text-rm-text/40"
+                />
               )}
               Create Channel
             </h2>
@@ -153,8 +161,9 @@ export default function CreateChannelModal({
                       onChange={() => setType("text")}
                     />
                     <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
-                      <Hash
-                        size={24}
+                      <Icon
+                        name="textChannel"
+                        size="xl"
                         className="text-primary transition-transform"
                       />
                     </div>
@@ -194,8 +203,9 @@ export default function CreateChannelModal({
                       onChange={() => setType("voice")}
                     />
                     <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
-                      <Volume2
-                        size={24}
+                      <Icon
+                        name="voiceChannel"
+                        size="xl"
                         className="text-primary transition-transform"
                       />
                     </div>
@@ -232,9 +242,9 @@ export default function CreateChannelModal({
                 <div className="relative">
                   <div className="absolute left-4 top-1/2 -translate-y-1/2 text-rm-text-muted">
                     {type === "text" ? (
-                      <Hash size={16} />
+                      <Icon name="textChannel" size="sm" />
                     ) : (
-                      <Volume2 size={16} />
+                      <Icon name="voiceChannel" size="sm" />
                     )}
                   </div>
                   <Input

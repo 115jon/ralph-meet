@@ -6,22 +6,7 @@ import { handleVoiceCameraToggle } from "@/lib/voice/camera-toggle";
 import type { ActivityType } from "@/stores/useActivityStore";
 import { CameraSettingsModal } from "../CameraSettingsModal";
 import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
-import {
-  Gamepad2,
-  Headphones,
-  Maximize2,
-  MessageSquare,
-  Mic,
-  MicOff,
-  Minimize,
-  Monitor,
-  MonitorX,
-  Phone,
-  Sticker,
-  Video,
-  VideoOff,
-  X,
-} from "../chat/Icons";
+import { Icon } from "@/components/ui/icon";
 
 const GifPickerModal = lazy(() => import("@/components/chat/GifPickerModal"));
 
@@ -44,7 +29,6 @@ const DOCK_OPEN = "bg-rm-tint-3 text-rm-text";
 const DOCK_MUTED = "bg-rm-danger-tint text-rm-danger-ink";
 const DOCK_LIVE = "bg-primary text-primary-foreground [--hover-o:0.12]";
 const DOCK_LEAVE = "bg-rm-danger text-rm-on-danger [--hover-o:0.12]";
-const DOCK_STROKE = 1.75;
 
 interface VoiceControlsProps {
   hasMicrophone: boolean;
@@ -67,7 +51,6 @@ interface VoiceControlsProps {
   toggleFs: () => void;
   showMembers: boolean;
   setShowMembers: (val: boolean) => void;
-  ChevronUp: React.ElementType;
   variant?: "default" | "call";
   hideExtraControls?: boolean;
   isChatHidden?: boolean;
@@ -98,7 +81,6 @@ export function VoiceControls({
   toggleFs,
   showMembers,
   setShowMembers,
-  ChevronUp,
   variant = "default",
   hideExtraControls = false,
   isChatHidden,
@@ -152,10 +134,10 @@ export function VoiceControls({
                 className={cn(DOCK_BTN, DOCK_REST)}
                 title={isChatHidden ? "Show Chat" : "Hide Chat"}
               >
-                <MessageSquare
-                  size={20}
-                  strokeWidth={DOCK_STROKE}
-                  className={cn(!isChatHidden && "fill-rm-text/20")}
+                <Icon
+                  name="chat"
+                  state={isChatHidden ? "idle" : "active"}
+                  size="xl"
                 />
               </button>
             </div>
@@ -180,11 +162,7 @@ export function VoiceControls({
               aria-pressed={isMicMuted}
               className={cn(DOCK_BTN, isMicMuted ? DOCK_MUTED : DOCK_REST)}
             >
-              {isMicMuted ? (
-                <MicOff size={20} strokeWidth={DOCK_STROKE} />
-              ) : (
-                <Mic size={20} strokeWidth={DOCK_STROKE} />
-              )}
+              <Icon name="mic" state={isMicMuted ? "off" : "idle"} size="xl" />
             </button>
 
             <button
@@ -194,7 +172,11 @@ export function VoiceControls({
               aria-pressed={isDeafened}
               className={cn(DOCK_BTN, isDeafened ? DOCK_MUTED : DOCK_REST)}
             >
-              <Headphones size={20} strokeWidth={DOCK_STROKE} />
+              <Icon
+                name="deafen"
+                state={isDeafened ? "off" : "idle"}
+                size="xl"
+              />
             </button>
 
             <button
@@ -220,9 +202,9 @@ export function VoiceControls({
               className={cn(DOCK_BTN, isCameraOn ? DOCK_LIVE : DOCK_REST)}
             >
               {isCameraOn ? (
-                <Video size={20} strokeWidth={DOCK_STROKE} />
+                <Icon name="camera" state="active" size="xl" />
               ) : (
-                <VideoOff size={20} strokeWidth={DOCK_STROKE} />
+                <Icon name="cameraOff" size="xl" />
               )}
             </button>
 
@@ -238,11 +220,11 @@ export function VoiceControls({
               aria-pressed={isScreenSharing}
               className={cn(DOCK_BTN, isScreenSharing ? DOCK_LIVE : DOCK_REST)}
             >
-              {isScreenSharing ? (
-                <X size={20} strokeWidth={DOCK_STROKE} />
-              ) : (
-                <Monitor size={20} strokeWidth={DOCK_STROKE} />
-              )}
+              <Icon
+                name="screenShare"
+                state={isScreenSharing ? "active" : "idle"}
+                size="xl"
+              />
             </button>
             <div aria-hidden className={cn(DOCK_DIVIDER, "hidden md:block")} />
             <button
@@ -251,7 +233,7 @@ export function VoiceControls({
               onClick={onOpenActivities}
               className={cn(DOCK_BTN, DOCK_REST)}
             >
-              <Gamepad2 size={20} strokeWidth={DOCK_STROKE} />
+              <Icon name="activities" size="xl" />
             </button>
 
             {/* GIF/Sticker Reactions — only visible when SFU is connected */}
@@ -268,7 +250,11 @@ export function VoiceControls({
                     isStickerOpen ? DOCK_OPEN : DOCK_REST,
                   )}
                 >
-                  <Sticker size={20} strokeWidth={DOCK_STROKE} />
+                  <Icon
+                    name="sticker"
+                    state={isStickerOpen ? "active" : "idle"}
+                    size="xl"
+                  />
                 </button>
               </div>
             )}
@@ -293,7 +279,7 @@ export function VoiceControls({
               }
               className={cn(DOCK_BTN, DOCK_LEAVE)}
             >
-              <div className="relative w-5 h-5 flex items-center justify-center">
+              <div className="relative size-6 flex items-center justify-center">
                 <div
                   className={cn(
                     "absolute inset-0 transition-[opacity,transform] duration-200 ease-out flex items-center justify-center",
@@ -302,7 +288,7 @@ export function VoiceControls({
                       : "opacity-0 scale-75 rotate-45",
                   )}
                 >
-                  <MonitorX size={20} strokeWidth={DOCK_STROKE} />
+                  <Icon name="streamOff" size="xl" />
                 </div>
                 <div
                   className={cn(
@@ -312,7 +298,7 @@ export function VoiceControls({
                       : "opacity-0 scale-75 rotate-45",
                   )}
                 >
-                  <X size={20} strokeWidth={DOCK_STROKE} />
+                  <Icon name="close" size="xl" />
                 </div>
                 <div
                   className={cn(
@@ -322,7 +308,7 @@ export function VoiceControls({
                       : "opacity-0 scale-75 -rotate-45",
                   )}
                 >
-                  <Phone size={20} strokeWidth={DOCK_STROKE} />
+                  <Icon name="disconnect" size="xl" />
                 </div>
               </div>
             </button>
@@ -342,9 +328,9 @@ export function VoiceControls({
               title={isFullscreen ? "Exit Fullscreen" : "Fullscreen"}
             >
               {isFullscreen ? (
-                <Minimize size={20} strokeWidth={DOCK_STROKE} />
+                <Icon name="minimize" size="xl" />
               ) : (
-                <Maximize2 size={20} strokeWidth={DOCK_STROKE} />
+                <Icon name="maximize" size="xl" />
               )}
             </button>
             {!isCall && (
@@ -355,13 +341,13 @@ export function VoiceControls({
                 className={cn(DOCK_BTN, showMembers ? DOCK_OPEN : DOCK_REST)}
                 title={showMembers ? "Hide Members" : "Show Members"}
               >
-                <ChevronUp
+                <Icon
+                  name="chevronUp"
+                  size="xl"
                   className={cn(
                     "transition-transform",
                     !showMembers && "rotate-180",
                   )}
-                  size={20}
-                  strokeWidth={DOCK_STROKE}
                 />
               </button>
             )}

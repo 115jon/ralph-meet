@@ -4,7 +4,7 @@ import { DitherField } from "@/components/ui/DitherField";
 import InlineEmojiText from "@/components/chat/InlineEmojiText";
 import { getAuthAssetUrl } from "@/lib/platform";
 import { AvatarImage } from "../chat/AvatarImage";
-import { Menu, MessageSquare, Volume2 } from "../chat/Icons";
+import { Icon } from "@/components/ui/icon";
 
 interface VoiceLandingProps {
   channelName: string;
@@ -40,14 +40,14 @@ export function VoiceLanding({
           {onMenuClick && (
             <IconButton
               aria-label="Open sidebar"
-              icon={Menu}
+              icon="menu"
               variant="muted"
               size="sm"
               className="md:hidden"
               onClick={onMenuClick}
             />
           )}
-          <Volume2 size={18} />
+          <Icon name="voiceChannel" size="md" />
           <InlineEmojiText
             text={channelName}
             className="text-ui-sm font-semibold text-rm-text"
@@ -56,7 +56,7 @@ export function VoiceLanding({
         {!showTextChat && (
           <IconButton
             aria-label="Show chat"
-            icon={MessageSquare}
+            icon="chat"
             variant="muted"
             size="sm"
             onClick={onToggleTextChat}

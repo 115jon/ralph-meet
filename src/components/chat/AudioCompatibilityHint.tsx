@@ -3,7 +3,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Info } from "lucide-react";
+import { Icon } from "@/components/ui/icon";
 import type { ReactNode } from "react";
 
 export function AudioCompatibilityHint({ children }: { children: ReactNode }) {
@@ -15,7 +15,7 @@ export function AudioCompatibilityHint({ children }: { children: ReactNode }) {
           className="ml-1 inline-flex cursor-help align-[-2px] text-rm-text-muted/80 hover:text-rm-text"
           tabIndex={0}
         >
-          <Info size={13} aria-hidden="true" />
+          <Icon name="info" size="xs" />
         </span>
       </TooltipTrigger>
       <TooltipContent side="top" sideOffset={6}>

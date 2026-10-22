@@ -2,7 +2,7 @@ import { HomeIcon } from "@/components/chat/HomeIcon";
 import { isWindows } from "@/lib/platform";
 import { UserButton, useAuth } from "@kova/react";
 import { useNavigate } from "@tanstack/react-router";
-import { ArrowRight, Download, MessageSquare } from "lucide-react";
+import { Icon } from "@/components/ui/icon";
 import {
   motion,
   useInView,
@@ -225,7 +225,7 @@ function HomePageHero({ createRoom }: { createRoom: () => void }) {
                 href="/chat"
                 className={`flex items-center gap-2 rounded-full border border-rm-border bg-rm-bg-elevated/80 px-6 py-3 text-sm font-semibold text-rm-text transition-colors hover:bg-rm-bg-elevated active:scale-[0.98] font-[family-name:var(--font-family-body)] ${focusRing}`}
               >
-                <MessageSquare className="h-4 w-4" />
+                <Icon name="chat" size="sm" />
                 Open chat
               </a>
             ) : isWindowsUser ? (
@@ -233,7 +233,7 @@ function HomePageHero({ createRoom }: { createRoom: () => void }) {
                 href={latestRelease.downloadUrl}
                 className={`flex items-center gap-2 rounded-full border border-rm-border bg-rm-bg-elevated/80 px-6 py-3 text-sm font-semibold text-rm-text transition-colors hover:bg-rm-bg-elevated active:scale-[0.98] font-[family-name:var(--font-family-body)] ${focusRing}`}
               >
-                <Download className="h-4 w-4" />
+                <Icon name="download" size="sm" />
                 Download
               </a>
             ) : null}
@@ -422,7 +422,7 @@ function HomePageCTA({
             className={`flex items-center justify-center gap-2 rounded-lg bg-rm-accent px-6 py-3 font-semibold text-white transition-colors hover:bg-rm-accent-hover disabled:cursor-not-allowed disabled:opacity-50 font-[family-name:var(--font-family-body)] ${focusRing}`}
           >
             <span>Join room</span>
-            <ArrowRight className="h-4 w-4" />
+            <Icon name="arrowRight" size="sm" />
           </button>
         </motion.form>
       </div>

@@ -15,17 +15,7 @@ import {
   getWarpRushRingRenderState,
 } from "@/lib/warp-rush";
 import { cn } from "@/lib/utils";
-import {
-  AlertTriangle,
-  Gauge,
-  Move3D,
-  Rocket,
-  RotateCcw,
-  Trophy,
-  Users,
-  Wind,
-  Zap,
-} from "lucide-react";
+import { Icon } from "@/components/ui/icon";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
@@ -1142,7 +1132,7 @@ export function WarpRushActivityStage({
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2 text-ui-2xs uppercase tracking-[0.28em] text-cyan-200/74">
-                    <Rocket size={14} />
+                    <Icon name="activities" size="sm" />
                     Warp Rush 3D
                   </div>
                   <h2 className="mt-2 text-2xl font-black leading-none text-white sm:text-[2rem]">
@@ -1185,7 +1175,7 @@ export function WarpRushActivityStage({
                 </div>
                 <div className="rounded-2xl border border-white/8 bg-white/[0.04] px-3 py-3">
                   <div className="flex items-center gap-1.5 text-ui-2xs uppercase tracking-[0.22em] text-slate-500">
-                    <Wind size={12} />
+                    <Icon name="noiseSuppression" size="xs" />
                     Draft
                   </div>
                   <div
@@ -1201,7 +1191,7 @@ export function WarpRushActivityStage({
                 </div>
                 <div className="rounded-2xl border border-white/8 bg-white/[0.04] px-3 py-3">
                   <div className="flex items-center gap-1.5 text-ui-2xs uppercase tracking-[0.22em] text-slate-500">
-                    <Users size={12} />
+                    <Icon name="members" size="xs" />
                     Rival
                   </div>
                   <div className="mt-2 text-sm font-bold text-slate-100">
@@ -1223,7 +1213,7 @@ export function WarpRushActivityStage({
           <div className="pointer-events-auto w-full max-w-[340px] rounded-3xl border border-cyan-300/15 bg-slate-950/44 p-4 shadow-[0_22px_90px_rgba(2,6,23,0.4)] backdrop-blur-2xl sm:p-5">
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-2 text-ui-2xs uppercase tracking-[0.24em] text-cyan-200/80">
-                <Trophy size={14} />
+                <Icon name="trophy" size="sm" />
                 Session board
               </div>
               <div className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-ui-2xs uppercase tracking-[0.18em] text-slate-300">
@@ -1298,7 +1288,7 @@ export function WarpRushActivityStage({
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div className="pointer-events-auto flex max-w-full flex-wrap items-center gap-2 rounded-3xl border border-cyan-300/15 bg-slate-950/44 px-3 py-3 backdrop-blur-2xl sm:px-4">
             <div className="flex items-center gap-2 pr-1 text-ui-2xs uppercase tracking-[0.24em] text-cyan-200/78">
-              <Move3D size={14} />
+              <Icon name="spatial" size="sm" />
               Controls
             </div>
             <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-sm text-slate-200">
@@ -1318,7 +1308,7 @@ export function WarpRushActivityStage({
           <div className="pointer-events-auto w-full max-w-[640px] rounded-3xl border border-cyan-300/15 bg-slate-950/44 p-3 shadow-[0_22px_90px_rgba(2,6,23,0.36)] backdrop-blur-2xl sm:p-4">
             <div className="flex flex-wrap items-center gap-2">
               <div className="mr-1 flex items-center gap-2 text-ui-2xs uppercase tracking-[0.24em] text-cyan-200/78">
-                <Zap size={14} />
+                <Icon name="zap" size="sm" />
                 Load
               </div>
               {PRESET_ORDER.map((option) => (
@@ -1340,7 +1330,7 @@ export function WarpRushActivityStage({
 
             <div className="mt-3 flex flex-wrap items-center gap-2">
               <div className="mr-1 flex items-center gap-2 text-ui-2xs uppercase tracking-[0.24em] text-fuchsia-200/78">
-                <Gauge size={14} />
+                <Icon name="gauge" size="sm" />
                 Scale
               </div>
               {RENDER_SCALES.map((option) => (
@@ -1397,7 +1387,7 @@ export function WarpRushActivityStage({
         <div className="absolute inset-0 z-20 flex items-center justify-center bg-slate-950/55 px-4 backdrop-blur-sm">
           <div className="max-w-md rounded-3xl border border-amber-300/30 bg-slate-950/86 p-6 text-center shadow-[0_24px_120px_rgba(2,6,23,0.8)]">
             <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-amber-400/10 text-amber-200">
-              <AlertTriangle size={28} />
+              <Icon name="warning" size="xl" />
             </div>
             <h3 className="mt-4 text-3xl font-black text-white">Hull breach</h3>
             <p className="mt-3 text-sm leading-6 text-slate-300">
@@ -1436,7 +1426,7 @@ export function WarpRushActivityStage({
               onClick={() => restartRef.current()}
               className="mt-6 inline-flex items-center gap-2 rounded-full border border-cyan-200/35 bg-cyan-300/20 px-5 py-3 text-sm font-bold text-white transition-colors hover:bg-cyan-300/28"
             >
-              <RotateCcw size={16} />
+              <Icon name="reset" size="sm" />
               Restart run
             </button>
           </div>

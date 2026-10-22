@@ -2,15 +2,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { apiDelete, apiGet } from "@/lib/api-client";
 import { cn } from "@/lib/utils";
-import {
-  Check,
-  Copy,
-  ExternalLink,
-  Eye,
-  Loader2,
-  RefreshCw,
-  Trash2,
-} from "lucide-react";
+import { Icon } from "@/components/ui/icon";
 import { useEffect, useState } from "react";
 import InlineEmojiText from "./InlineEmojiText";
 
@@ -147,9 +139,10 @@ export default function SettingsSharesTab() {
           onClick={loadShares}
           disabled={loading}
         >
-          <RefreshCw
-            aria-hidden="true"
-            className={cn("size-3.5", loading && "animate-spin")}
+          <Icon
+            name="refresh"
+            size="sm"
+            className={cn(loading && "animate-spin")}
           />
           Refresh
         </Button>
@@ -182,7 +175,7 @@ export default function SettingsSharesTab() {
 
       {loading ? (
         <div className="flex items-center gap-2 text-sm text-rm-text-muted">
-          <Loader2 className="h-4 w-4 animate-spin" />
+          <Icon name="loader" size="sm" className="animate-spin" />
           Loading shares...
         </div>
       ) : error ? (
@@ -235,7 +228,7 @@ export default function SettingsSharesTab() {
                   <span>Created {formatDate(share.created_at)}</span>
                   <span>Expires {formatDate(share.expires_at)}</span>
                   <span className="inline-flex items-center gap-1">
-                    <Eye className="h-3 w-3" />
+                    <Icon name="eye" size="xs" />
                     {share.view_count} views
                   </span>
                 </div>
@@ -248,16 +241,16 @@ export default function SettingsSharesTab() {
                     disabled={!active}
                   >
                     {copiedId === share.id ? (
-                      <Check aria-hidden="true" className="size-3.5" />
+                      <Icon name="check" size="sm" />
                     ) : (
-                      <Copy aria-hidden="true" className="size-3.5" />
+                      <Icon name="copy" size="sm" />
                     )}
                     {copiedId === share.id ? "Copied" : "Copy"}
                   </Button>
                   {active && (
                     <Button asChild variant="secondary" size="sm">
                       <a href={url} target="_blank" rel="noreferrer">
-                        <ExternalLink aria-hidden="true" className="size-3.5" />
+                        <Icon name="externalLink" size="sm" />
                         Open
                       </a>
                     </Button>
@@ -270,12 +263,13 @@ export default function SettingsSharesTab() {
                       disabled={revokingId === share.id}
                     >
                       {revokingId === share.id ? (
-                        <Loader2
-                          aria-hidden="true"
-                          className="size-3.5 animate-spin"
+                        <Icon
+                          name="loader"
+                          size="sm"
+                          className="animate-spin"
                         />
                       ) : (
-                        <Trash2 aria-hidden="true" className="size-3.5" />
+                        <Icon name="trash" size="sm" />
                       )}
                       Revoke
                     </Button>

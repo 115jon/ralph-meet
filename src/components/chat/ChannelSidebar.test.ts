@@ -159,9 +159,13 @@ describe("ChannelSidebar voice member identities", () => {
       }),
     );
 
-    expect(container.querySelector("svg.lucide-mic-off")).not.toBeNull();
-    expect(container.querySelector("svg.lucide-headphone-off")).not.toBeNull();
-    expect(container.querySelector("svg.lucide-volume-x")).not.toBeNull();
+    expect(container.querySelector("svg[data-icon='micOff']")).not.toBeNull();
+    expect(
+      container.querySelector("svg[data-icon='deafenOff']"),
+    ).not.toBeNull();
+    expect(
+      container.querySelector("svg[data-icon='speakerOff']"),
+    ).not.toBeNull();
     expect(
       container.querySelector(
         '[data-slot="tooltip-trigger"][aria-label="Self-muted"]',

@@ -22,14 +22,7 @@ import {
   getOSName,
   useDesktopSettingsStore,
 } from "@/stores/useDesktopSettingsStore";
-import {
-  ChevronLeft,
-  LogOut,
-  Search,
-  User as UserIcon,
-  X,
-  Zap,
-} from "lucide-react";
+import { Icon } from "@/components/ui/icon";
 import {
   useCallback,
   useDeferredValue,
@@ -392,7 +385,7 @@ export default function SettingsModal({
                   <h2 className="text-lg font-bold text-rm-text">Settings</h2>
                   <IconButton
                     aria-label="Close settings"
-                    icon={X}
+                    icon="close"
                     size="sm"
                     shape="circle"
                     onClick={onClose}
@@ -453,7 +446,11 @@ export default function SettingsModal({
                       </div>
                     </div>
                     <div className="relative mt-3">
-                      <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-rm-text-muted" />
+                      <Icon
+                        name="search"
+                        size="sm"
+                        className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-rm-text-muted"
+                      />
                       <Input
                         value={searchQuery}
                         onChange={(event) => setSearchQuery(event.target.value)}
@@ -501,7 +498,7 @@ export default function SettingsModal({
                     className="w-full justify-between px-2.5 has-[>svg]:px-2.5"
                   >
                     <span>Log Out</span>
-                    <LogOut size={16} aria-hidden="true" />
+                    <Icon name="logout" size="sm" />
                   </Button>
                 </div>
               </div>
@@ -531,7 +528,7 @@ export default function SettingsModal({
                 >
                   <IconButton
                     aria-label="Show settings menu"
-                    icon={ChevronLeft}
+                    icon="chevronLeft"
                     size="sm"
                     shape="circle"
                     onClick={() => setShowMobileMenu(true)}
@@ -545,7 +542,7 @@ export default function SettingsModal({
                 <div className="hidden md:flex absolute right-10 top-14 z-20 flex-col items-center gap-1.5">
                   <IconButton
                     aria-label="Close settings"
-                    icon={X}
+                    icon="close"
                     size="sm"
                     onClick={onClose}
                   />
@@ -597,7 +594,7 @@ export default function SettingsModal({
 
                         <div className="bg-rm-bg-surface rounded-xl border border-rm-border p-6 flex flex-col items-center justify-center min-h-[300px] text-center">
                           <div className="w-16 h-16 rounded-full bg-rm-accent-tint flex items-center justify-center text-rm-accent-ink mb-4">
-                            <UserIcon size={32} />
+                            <Icon name="account" size="2xl" />
                           </div>
                           <h2 className="text-lg font-bold text-rm-text mb-2">
                             Server Profiles are coming soon
@@ -621,7 +618,7 @@ export default function SettingsModal({
 
                         <div className="bg-rm-bg-surface rounded-xl border border-rm-border p-6 flex flex-col items-center justify-center min-h-[300px] text-center">
                           <div className="w-16 h-16 rounded-full bg-rm-accent-tint flex items-center justify-center text-rm-accent-ink mb-4">
-                            <Zap size={32} />
+                            <Icon name="zap" size="2xl" />
                           </div>
                           <h2 className="text-lg font-bold text-rm-text mb-2">
                             These settings are coming soon

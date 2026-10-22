@@ -23,14 +23,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { useShallow } from "zustand/shallow";
-import {
-  Check,
-  ChevronRight,
-  Headphones,
-  Mic,
-  Settings,
-  Volume2,
-} from "./Icons";
+import { Icon } from "@/components/ui/icon";
 
 interface AudioDeviceMenuProps {
   mode: "input" | "output";
@@ -203,7 +196,7 @@ export function AudioDeviceMenu({
     }
   };
 
-  const ModeIcon = mode === "input" ? Mic : Headphones;
+  const modeIcon = mode === "input" ? "mic" : "headphones";
   const deviceLabel = mode === "input" ? "Input Device" : "Output Device";
 
   if (!mounted) return null;
@@ -220,7 +213,7 @@ export function AudioDeviceMenu({
           {/* Header */}
           <div className="px-3 py-2 border-b border-rm-border rounded-t-xl">
             <div className="flex items-center gap-2">
-              <ModeIcon size={12} className="text-rm-text-muted" />
+              <Icon name={modeIcon} size="xs" className="text-rm-text-muted" />
               <span className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted">
                 {mode === "input" ? "Input" : "Output"} Settings
               </span>
@@ -244,7 +237,11 @@ export function AudioDeviceMenu({
                 )}
               >
                 <span className="flex items-center gap-2 min-w-0 flex-1">
-                  <ModeIcon size={14} className="opacity-60 shrink-0" />
+                  <Icon
+                    name={modeIcon}
+                    size="sm"
+                    className="opacity-60 shrink-0"
+                  />
                   <span className="flex flex-col min-w-0">
                     <span className="leading-tight">{deviceLabel}</span>
                     <span className="text-ui-2xs text-rm-text-muted/60 font-normal truncate leading-tight">
@@ -253,8 +250,9 @@ export function AudioDeviceMenu({
                     </span>
                   </span>
                 </span>
-                <ChevronRight
-                  size={12}
+                <Icon
+                  name="chevronRight"
+                  size="xs"
                   className="transition-transform duration-200 shrink-0"
                 />
               </button>
@@ -267,7 +265,7 @@ export function AudioDeviceMenu({
             <div className="px-3 py-2">
               <div className="flex items-center justify-between mb-2.5">
                 <span className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted flex items-center gap-1.5">
-                  <Volume2 size={11} className="opacity-60" />
+                  <Icon name="voiceChannel" size="xs" className="opacity-60" />
                   {mode === "input" ? "Input Volume" : "Output Volume"}
                 </span>
                 <span className="text-ui-2xs font-bold text-primary tabular-nums">
@@ -313,7 +311,7 @@ export function AudioDeviceMenu({
               }}
               className="w-full text-left px-3 py-2 text-ui-xs font-medium text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover rounded-lg transition-colors flex items-center gap-2"
             >
-              <Settings size={14} className="opacity-60" />
+              <Icon name="settings" size="sm" className="opacity-60" />
               Voice Settings
             </button>
           </div>
@@ -353,11 +351,7 @@ export function AudioDeviceMenu({
                       )}
                     >
                       {isSelected && (
-                        <Check
-                          size={8}
-                          className="text-white"
-                          strokeWidth={3}
-                        />
+                        <Icon name="check" size="xs" className="text-white" />
                       )}
                     </div>
                     <span className="truncate">{device.label}</span>

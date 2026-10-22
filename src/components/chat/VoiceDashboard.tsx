@@ -32,22 +32,7 @@ import {
 import { createPortal } from "react-dom";
 import { FloatingListenTogetherPlayer } from "./FloatingListenTogetherPlayer";
 import { FloatingSoundboardManager } from "./FloatingSoundboardManager";
-import { AppWindow, AudioWaveform } from "lucide-react";
-import {
-  Gamepad2,
-  Monitor,
-  MoreHorizontal,
-  Phone,
-  Radio,
-  Share2,
-  SignalHigh,
-  Sparkles,
-  Sticker,
-  Video,
-  VideoOff,
-  Volume2,
-  XCircle,
-} from "./Icons";
+import { Icon } from "@/components/ui/icon";
 import { NoiseReductionPanel } from "./NoiseReductionPanel";
 import { SpatialAudioPanel } from "./SpatialAudioPanel";
 
@@ -369,7 +354,7 @@ export function VoiceDashboard({
                         "flex size-8 shrink-0 items-center justify-center rounded-md bg-rm-tint-1 text-rm-success-ink outline-none",
                       )}
                     >
-                      <SignalHigh size={18} className="animate-pulse" />
+                      <Icon name="signal" size="md" className="animate-pulse" />
                     </button>
                   </TooltipTrigger>
                   <TooltipContent side="top" sideOffset={12}>
@@ -433,7 +418,7 @@ export function VoiceDashboard({
                             "bg-rm-accent-tint text-rm-accent-ink",
                         )}
                       >
-                        <Sparkles size={18} />
+                        <Icon name="sparkle" size="md" />
                       </button>
                     </TooltipTrigger>
                     <TooltipContent side="top" sideOffset={12}>
@@ -499,8 +484,9 @@ export function VoiceDashboard({
                         aria-haspopup="dialog"
                       >
                         <span className="relative flex items-center justify-center">
-                          <AudioWaveform
-                            size={18}
+                          <Icon
+                            name="speaking"
+                            size="md"
                             className="group-hover:animate-wiggle"
                           />
                           {!settings.noiseReductionEnabled && (
@@ -528,10 +514,10 @@ export function VoiceDashboard({
                       "pointer-fine:hover:text-rm-danger-ink",
                     )}
                   >
-                    <Phone
-                      size={20}
-                      strokeWidth={1.75}
-                      className="rotate-[135deg] group-hover:animate-wiggle"
+                    <Icon
+                      name="disconnect"
+                      size="lg"
+                      className="group-hover:animate-wiggle"
                     />
                   </button>
                 </TooltipTrigger>
@@ -592,11 +578,11 @@ export function VoiceDashboard({
                       draggable={false}
                     />
                   ) : streamSourceKind === "window" ? (
-                    <AppWindow size={18} />
+                    <Icon name="window" size="md" />
                   ) : streamSourceKind === "device" ? (
-                    <Video size={18} />
+                    <Icon name="camera" size="md" />
                   ) : (
-                    <Monitor size={18} />
+                    <Icon name="monitor" size="md" />
                   )}
                 </div>
                 <div className="flex-1 min-w-0">
@@ -633,7 +619,7 @@ export function VoiceDashboard({
                   onClick={onStopStreaming}
                   className="flex-1"
                 >
-                  <XCircle /> Stop Streaming
+                  <Icon name="streamOff" size="sm" /> Stop Streaming
                 </Button>
                 <div className="relative">
                   <Button
@@ -645,7 +631,7 @@ export function VoiceDashboard({
                     aria-expanded={isStreamMenuOpen}
                     className={cn(isStreamMenuOpen && "bg-rm-tint-3")}
                   >
-                    <MoreHorizontal />
+                    <Icon name="more" size="sm" />
                   </Button>
 
                   {shouldRenderStreamMenu && (
@@ -677,7 +663,7 @@ export function VoiceDashboard({
                           }}
                           className="w-full text-left px-3 py-2 text-xs font-medium text-rm-accent-ink hover:bg-rm-accent-tint rounded-lg transition-colors flex items-center gap-2"
                         >
-                          <Share2 size={14} /> Change Source
+                          <Icon name="screenShare" size="sm" /> Change Source
                         </button>
                         <div className="h-[1px] bg-rm-border my-1" />
                         <button
@@ -694,7 +680,7 @@ export function VoiceDashboard({
                           )}
                         >
                           <span className="flex items-center gap-2">
-                            <Volume2 size={14} /> Stream Audio
+                            <Icon name="voiceChannel" size="sm" /> Stream Audio
                           </span>
                           <div
                             className={cn(
@@ -727,7 +713,8 @@ export function VoiceDashboard({
                           )}
                         >
                           <span className="flex items-center gap-2">
-                            <Monitor size={14} /> Always Show Stream Preview
+                            <Icon name="monitor" size="sm" /> Always Show Stream
+                            Preview
                           </span>
                           <div
                             className={cn(
@@ -763,8 +750,9 @@ export function VoiceDashboard({
                                   )}
                                 >
                                   <div className="flex items-center gap-2">
-                                    <Monitor
-                                      size={12}
+                                    <Icon
+                                      name="monitor"
+                                      size="xs"
                                       className={cn(
                                         "transition-opacity",
                                         screenQuality === q
@@ -822,10 +810,16 @@ export function VoiceDashboard({
                     )}
                   >
                     {isCameraActive ? (
-                      <Video size={18} className="group-hover:animate-wiggle" />
+                      <Icon
+                        name="camera"
+                        state="active"
+                        size="md"
+                        className="group-hover:animate-wiggle"
+                      />
                     ) : (
-                      <VideoOff
-                        size={18}
+                      <Icon
+                        name="cameraOff"
+                        size="md"
                         className="group-hover:animate-wiggle"
                       />
                     )}
@@ -864,7 +858,12 @@ export function VoiceDashboard({
                       isScreenSharing ? ACTION_LIVE : ACTION_REST,
                     )}
                   >
-                    <Monitor size={18} className="group-hover:animate-wiggle" />
+                    <Icon
+                      name="screenShare"
+                      state={isScreenSharing ? "active" : "idle"}
+                      size="md"
+                      className="group-hover:animate-wiggle"
+                    />
                   </button>
                 </TooltipTrigger>
                 <TooltipContent side="top" sideOffset={12}>
@@ -885,8 +884,9 @@ export function VoiceDashboard({
                     aria-label="Start an Activity"
                     className={cn(ACTION_BTN, "flex-1", ACTION_REST)}
                   >
-                    <Gamepad2
-                      size={18}
+                    <Icon
+                      name="activities"
+                      size="md"
                       className="group-hover:animate-wiggle"
                     />
                   </button>
@@ -912,7 +912,12 @@ export function VoiceDashboard({
                         isSoundboardPickerOpen ? ACTION_OPEN : ACTION_REST,
                       )}
                     >
-                      <Radio size={18} className="group-hover:animate-wiggle" />
+                      <Icon
+                        name="soundboard"
+                        state={isSoundboardPickerOpen ? "active" : "idle"}
+                        size="md"
+                        className="group-hover:animate-wiggle"
+                      />
                     </button>
                   </TooltipTrigger>
                   <TooltipContent side="top" sideOffset={12}>
@@ -954,8 +959,10 @@ export function VoiceDashboard({
                           isStickerPickerOpen ? ACTION_OPEN : ACTION_REST,
                         )}
                       >
-                        <Sticker
-                          size={18}
+                        <Icon
+                          name="sticker"
+                          state={isStickerPickerOpen ? "active" : "idle"}
+                          size="md"
                           className="group-hover:animate-wiggle"
                         />
                       </button>

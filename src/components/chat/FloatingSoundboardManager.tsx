@@ -2,7 +2,7 @@ import { useMounted } from "@/hooks/useMounted";
 import { createPortal } from "react-dom";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { MouseEvent, PointerEvent } from "react";
-import { AudioWaveform, ChevronDown } from "lucide-react";
+import { Icon } from "@/components/ui/icon";
 
 import type { SFUClient } from "@/lib/sfu-client";
 import { getSoundboardServerKey } from "@/lib/voice/soundboard";
@@ -195,7 +195,7 @@ export function FloatingSoundboardManager({
             onClickCapture={handleDragHandleClick}
             className="flex min-h-11 items-center gap-2 rounded-xl border border-rm-border bg-rm-bg-floating/95 px-3 text-sm font-bold text-rm-text shadow-[0_18px_44px_rgba(0,0,0,0.42)] backdrop-blur-xl transition-[background-color,color,transform] duration-200 hover:bg-rm-bg-hover hover:text-rm-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 active:scale-[0.96]"
           >
-            <AudioWaveform className="h-4 w-4 text-primary" />
+            <Icon name="speaking" size="sm" className="text-primary" />
             Soundboard
           </button>
         ) : (
@@ -215,10 +215,18 @@ export function FloatingSoundboardManager({
               className="flex min-h-11 w-full items-center justify-between gap-3 border-b border-rm-border/70 px-3 py-2.5 text-left transition-[background-color,color] duration-200 hover:bg-rm-bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/40"
             >
               <span className="flex min-w-0 items-center gap-2 text-sm font-bold">
-                <AudioWaveform className="h-4 w-4 shrink-0 text-primary" />
+                <Icon
+                  name="speaking"
+                  size="sm"
+                  className="shrink-0 text-primary"
+                />
                 Soundboard
               </span>
-              <ChevronDown className="h-4 w-4 shrink-0 text-rm-text-muted" />
+              <Icon
+                name="chevronDown"
+                size="sm"
+                className="shrink-0 text-rm-text-muted"
+              />
             </button>
             <div className="max-h-[min(360px,calc(100vh-112px))] space-y-2 overflow-y-auto p-2.5">
               {scopedPlaybacks.map((playback) => (

@@ -1,7 +1,7 @@
 import { apiGet, apiPost } from "@/lib/api-client";
 import InlineEmojiText from "@/components/chat/InlineEmojiText";
 import { useNavigate, useParams } from "@tanstack/react-router";
-import { Check, Link2, Loader2, Users, X } from "lucide-react";
+import { Icon } from "@/components/ui/icon";
 import { useCallback, useEffect, useState } from "react";
 
 interface InvitePreview {
@@ -83,7 +83,11 @@ export default function InviteClient() {
         {/* Loading */}
         {status === "loading" && (
           <div className="flex flex-col items-center gap-4 rounded-2xl bg-rm-bg-secondary/80 p-10 shadow-2xl ring-1 ring-white/[0.06] backdrop-blur-xl">
-            <Loader2 className="h-8 w-8 animate-spin text-rm-accent" />
+            <Icon
+              name="loader"
+              size="2xl"
+              className="animate-spin text-rm-accent"
+            />
             <p className="text-sm text-rm-text-muted">Loading invite...</p>
           </div>
         )}
@@ -93,7 +97,7 @@ export default function InviteClient() {
           <div className="flex flex-col items-center gap-6 rounded-2xl bg-rm-bg-secondary/80 p-8 shadow-2xl ring-1 ring-white/[0.06] backdrop-blur-xl">
             {/* Invite badge */}
             <div className="flex items-center gap-2 rounded-full bg-rm-accent-dim px-3 py-1 ring-1 ring-rm-accent/20">
-              <Link2 className="h-3.5 w-3.5 text-rm-accent" />
+              <Icon name="link" size="sm" className="text-rm-accent" />
               <span className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-accent">
                 Invite
               </span>
@@ -123,7 +127,7 @@ export default function InviteClient() {
                   <InlineEmojiText text={invite.server.name} />
                 </h2>
                 <div className="flex items-center gap-1.5 text-sm text-rm-text-muted">
-                  <Users className="h-3.5 w-3.5" />
+                  <Icon name="members" size="sm" />
                   <span>
                     {invite.server.member_count.toLocaleString()}{" "}
                     {invite.server.member_count === 1 ? "member" : "members"}
@@ -164,7 +168,11 @@ export default function InviteClient() {
         {status === "joining" && (
           <div className="flex flex-col items-center gap-4 rounded-2xl bg-rm-bg-secondary/80 p-10 shadow-2xl ring-1 ring-white/[0.06] backdrop-blur-xl">
             <div className="relative">
-              <Loader2 className="h-8 w-8 animate-spin text-rm-accent" />
+              <Icon
+                name="loader"
+                size="2xl"
+                className="animate-spin text-rm-accent"
+              />
             </div>
             <p className="text-sm font-medium text-rm-text">
               Joining <InlineEmojiText text={invite?.server.name ?? ""} />
@@ -177,7 +185,7 @@ export default function InviteClient() {
         {status === "success" && (
           <div className="flex flex-col items-center gap-4 rounded-2xl bg-rm-bg-secondary/80 p-10 shadow-2xl ring-1 ring-white/[0.06] backdrop-blur-xl">
             <div className="flex h-14 w-14 items-center justify-center rounded-full bg-emerald-500/15 ring-1 ring-emerald-400/30">
-              <Check className="h-7 w-7 text-emerald-400" />
+              <Icon name="check" size="xl" className="text-emerald-400" />
             </div>
             <div className="text-center">
               <h2 className="text-lg font-bold text-rm-text">
@@ -194,7 +202,7 @@ export default function InviteClient() {
         {status === "error" && (
           <div className="flex flex-col items-center gap-5 rounded-2xl bg-rm-bg-secondary/80 p-10 shadow-2xl ring-1 ring-white/[0.06] backdrop-blur-xl">
             <div className="flex h-14 w-14 items-center justify-center rounded-full bg-destructive/15 ring-1 ring-destructive/30">
-              <X className="h-7 w-7 text-destructive" />
+              <Icon name="close" size="xl" className="text-destructive" />
             </div>
             <div className="text-center">
               <h2 className="text-lg font-bold text-rm-text">Invite Invalid</h2>

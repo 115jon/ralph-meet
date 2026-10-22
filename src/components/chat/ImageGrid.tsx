@@ -9,7 +9,7 @@ import { useMediaSafetySettingsStore } from "@/stores/useMediaSafetySettingsStor
 import type { ViewerContext } from "@/stores/useImageViewerStore";
 import { useImageViewerActions } from "@/stores/useImageViewerStore";
 import type { AvatarDisplay } from "@/lib/avatar-display";
-import { Trash2 } from "lucide-react";
+import { Icon } from "@/components/ui/icon";
 import { GifFavoriteButton } from "./GifFavoriteButton";
 import { GifProviderBranding } from "./GifProviderBranding";
 import SensitiveMediaFrame from "./SensitiveMediaFrame";
@@ -35,7 +35,7 @@ const DeleteButton: React.FC<DeleteButtonProps> = ({ id, onDelete }) => {
         className="p-1.5 bg-black/50 hover:bg-rm-badge text-white/80 hover:text-white rounded-lg transition-[background-color,color] backdrop-blur-sm shadow-sm"
         aria-label="Delete image"
       >
-        <Trash2 size={14} />
+        <Icon name="trash" size="sm" />
       </button>
     </div>
   );

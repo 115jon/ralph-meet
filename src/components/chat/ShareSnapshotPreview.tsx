@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 import { extractCustomEmojiIds } from "@/lib/emoji";
 import { useCustomEmojiLookup } from "@/hooks/useCustomEmojiLookup";
 import { useMediaSafetySettingsStore } from "@/stores/useMediaSafetySettingsStore";
-import { ImageIcon, MessageSquare, Paperclip } from "lucide-react";
+import { Icon } from "@/components/ui/icon";
 import { GifProviderBranding } from "./GifProviderBranding";
 import { LinkEmbed } from "./LinkEmbed";
 import { MarkdownRenderer } from "./MarkdownRenderer";
@@ -229,9 +229,9 @@ export default function ShareSnapshotPreview({
       {omittedAttachmentCount > 0 && (
         <div className="mt-3 flex items-center gap-2 rounded-lg border border-rm-border bg-rm-bg-elevated px-3 py-2 text-sm text-rm-text-muted">
           {imageAttachments.length > 0 || videoAttachments.length > 0 ? (
-            <Paperclip className="h-4 w-4 shrink-0" />
+            <Icon name="paperclip" size="sm" className="shrink-0" />
           ) : (
-            <ImageIcon className="h-4 w-4 shrink-0" />
+            <Icon name="image" size="sm" className="shrink-0" />
           )}
           <span>
             {omittedAttachmentCount} attachment
@@ -261,7 +261,7 @@ export default function ShareSnapshotPreview({
           ))}
           {replyCount > 0 && (
             <span className="inline-flex items-center gap-1.5 rounded-lg border border-rm-border bg-rm-bg-elevated px-2 py-1 text-xs font-bold text-rm-text-secondary">
-              <MessageSquare className="h-3 w-3" />
+              <Icon name="chat" size="xs" />
               {replyCount}
             </span>
           )}

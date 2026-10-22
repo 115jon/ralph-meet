@@ -4,7 +4,6 @@ import type { Message } from "@/lib/types";
 import { IconButton } from "@/components/ui/IconButton";
 import { cn } from "@/lib/utils";
 import { AvatarImage } from "./AvatarImage";
-import { X } from "./Icons";
 import { ReplyPreviewContent } from "./ReplyPreviewContent";
 import { UserDisplayName } from "./UserDisplayName";
 
@@ -57,7 +56,7 @@ export function ReplyIndicator({
       <IconButton
         type="button"
         aria-label="Cancel reply"
-        icon={X}
+        icon="close"
         variant="muted"
         size="xs"
         onClick={onCancelReply}

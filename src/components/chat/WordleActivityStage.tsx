@@ -12,7 +12,7 @@ import {
   isValidWordleGuess,
   shouldShowCompletionResult,
 } from "@/lib/wordle-game";
-import { BarChart3, Delete, Lightbulb, Settings, X } from "lucide-react";
+import { Icon } from "@/components/ui/icon";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 interface WordleActivityStageProps {
@@ -473,7 +473,7 @@ function HowToPlayModal({
               aria-label="Close how to play"
               className="absolute right-3 top-3 flex h-10 w-10 items-center justify-center rounded-full text-rm-text-secondary transition-colors hover:bg-rm-bg-hover hover:text-rm-text"
             >
-              <X size={28} strokeWidth={2} />
+              <Icon name="close" size="xl" />
             </button>
             <h2
               id="wordle-how-to-play-title"
@@ -1166,7 +1166,7 @@ function WordleActivityStageContent({
           }}
           className="absolute right-5 top-5 flex items-center gap-2 text-base"
         >
-          Back to puzzle <X size={18} />
+          Back to puzzle <Icon name="close" size="md" />
         </button>
         <div className="w-full max-w-[380px] text-center">
           <div className="mx-auto flex w-[102px] flex-col items-center rounded-xl border-2 border-current p-3">
@@ -1262,7 +1262,7 @@ function WordleActivityStageContent({
             title="Hints"
             className="flex h-10 w-10 items-center justify-center rounded-full transition-colors hover:bg-rm-bg-hover"
           >
-            <Lightbulb size={26} />
+            <Icon name="lightbulb" size="xl" />
           </button>
           <button
             type="button"
@@ -1271,7 +1271,7 @@ function WordleActivityStageContent({
             title="Stats"
             className="flex h-10 w-10 items-center justify-center rounded-full transition-colors hover:bg-rm-bg-hover"
           >
-            <BarChart3 size={28} />
+            <Icon name="stats" size="xl" />
           </button>
           <button
             ref={settingsTriggerRef}
@@ -1281,7 +1281,7 @@ function WordleActivityStageContent({
             title="Settings"
             className="flex h-10 w-10 items-center justify-center rounded-full transition-colors hover:bg-rm-bg-hover"
           >
-            <Settings size={30} />
+            <Icon name="settings" size="2xl" />
           </button>
         </div>
       </div>
@@ -1444,7 +1444,7 @@ function WordleActivityStageContent({
                       theme.key,
                     )}
                   >
-                    <Delete size={20} />
+                    <Icon name="backspace" size="lg" />
                   </button>
                 )}
               </div>
@@ -1475,7 +1475,7 @@ function WordleActivityStageContent({
               aria-label="Dismiss hint notice"
               className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-rm-text-secondary transition-colors hover:bg-rm-bg-hover hover:text-rm-text"
             >
-              <X size={18} />
+              <Icon name="close" size="md" />
             </button>
           </div>
         </aside>
@@ -1531,7 +1531,7 @@ function WordleActivityStageContent({
                   aria-label="Close hints"
                   className="flex h-10 w-10 items-center justify-center rounded-full transition-colors hover:bg-rm-bg-hover"
                 >
-                  <X size={26} />
+                  <Icon name="close" size="xl" />
                 </button>
               </div>
               <div className="space-y-3 text-sm">
@@ -1663,7 +1663,7 @@ function WordleActivityStageContent({
                   onClick={closeSettings}
                   aria-label="Close settings"
                 >
-                  <X size={28} />
+                  <Icon name="close" size="xl" />
                 </button>
               </div>
               {SETTING_ROWS.map(([key, label, description]) => (

@@ -11,7 +11,8 @@ import { useClientDateFormatter } from "@/lib/client-date-format";
 import type { Channel } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { sanitizeChannelName } from "@/lib/validations";
-import { Hash, Loader2, Settings2, Shield, Volume2, X } from "lucide-react";
+import { Icon } from "@/components/ui/icon";
+import { getChannelIcon } from "@/lib/channel-icon";
 import { useEffect, useRef, useState } from "react";
 import ChannelPermissionsTab from "./ChannelPermissionsTab";
 import InlineEmojiText from "./InlineEmojiText";
@@ -121,7 +122,7 @@ export default function ChannelSettingsModal({
     }
   };
 
-  const ChannelTypeIcon = channel.channel_type === "voice" ? Volume2 : Hash;
+  const channelIcon = getChannelIcon(channel);
 
   return (
     <Dialog open={open} onOpenChange={(nextOpen) => !nextOpen && onClose()}>
@@ -157,14 +158,18 @@ export default function ChannelSettingsModal({
               style={{ paddingTop: "calc(16px + var(--safe-area-top, 0px))" }}
             >
               <h2 className="text-ui-sm font-bold tracking-widest text-rm-text-muted truncate">
-                <ChannelTypeIcon className="inline h-3 w-3 mr-1 -mt-0.5 opacity-60" />
+                <Icon
+                  name={channelIcon}
+                  size="xs"
+                  className="inline mr-1 -mt-0.5 opacity-60"
+                />
                 <InlineEmojiText text={channel.name} />
               </h2>
               <button
                 onClick={onClose}
                 className="p-1 rounded-full bg-rm-bg-surface text-rm-text flex items-center justify-center hover:bg-rm-bg-hover active:scale-[0.96] transition-ui"
               >
-                <X size={18} />
+                <Icon name="close" size="md" />
               </button>
             </div>
 
@@ -175,7 +180,11 @@ export default function ChannelSettingsModal({
                   className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted truncate block w-[180px]"
                   title={channel.name}
                 >
-                  <ChannelTypeIcon className="inline h-3 w-3 mr-1 -mt-0.5 opacity-60" />
+                  <Icon
+                    name={channelIcon}
+                    size="xs"
+                    className="inline mr-1 -mt-0.5 opacity-60"
+                  />
                   <InlineEmojiText text={channel.name} />
                 </h2>
               </div>
@@ -188,7 +197,7 @@ export default function ChannelSettingsModal({
                     : "text-rm-text-secondary hover:bg-rm-bg-hover hover:text-rm-text bg-rm-bg-elevated/50 md:bg-transparent",
                 )}
               >
-                <Settings2 className="h-4 w-4" /> Overview
+                <Icon name="sliders" size="sm" /> Overview
               </button>
 
               <button
@@ -200,7 +209,7 @@ export default function ChannelSettingsModal({
                     : "text-rm-text-secondary hover:bg-rm-bg-hover hover:text-rm-text bg-rm-bg-elevated/50 md:bg-transparent",
                 )}
               >
-                <Shield className="h-4 w-4" /> Permissions
+                <Icon name="shield" size="sm" /> Permissions
               </button>
             </div>
 
@@ -212,7 +221,7 @@ export default function ChannelSettingsModal({
                   onClick={onClose}
                   className="flex h-9 w-9 items-center justify-center rounded-full border border-rm-border text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text transition-ui group"
                 >
-                  <X size={18} />
+                  <Icon name="close" size="md" />
                 </button>
                 <span className="text-ui-2xs font-bold text-rm-text-muted group-hover:text-rm-text-secondary">
                   ESC
@@ -250,7 +259,11 @@ export default function ChannelSettingsModal({
                           Channel Type
                         </span>
                         <div className="inline-flex items-center gap-2 rounded-lg border border-rm-border bg-rm-bg-surface px-3 py-2 text-sm font-medium text-rm-text-secondary">
-                          <ChannelTypeIcon className="h-4 w-4 opacity-60" />
+                          <Icon
+                            name={channelIcon}
+                            size="sm"
+                            className="opacity-60"
+                          />
                           {channel.channel_type === "voice"
                             ? "Voice Channel"
                             : "Text Channel"}
@@ -277,7 +290,11 @@ export default function ChannelSettingsModal({
                         {channel.channel_type === "text" &&
                           previewName !== name && (
                             <p className="text-ui-xs text-rm-text-muted flex items-center gap-1.5">
-                              <Hash className="h-3 w-3 opacity-40" />
+                              <Icon
+                                name="textChannel"
+                                size="xs"
+                                className="opacity-40"
+                              />
                               Preview:{" "}
                               <span className="font-medium text-rm-text-secondary">
                                 <InlineEmojiText text={previewName || "—"} />
@@ -367,7 +384,11 @@ export default function ChannelSettingsModal({
                         )}
                       >
                         {saving && (
-                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          <Icon
+                            name="loader"
+                            size="sm"
+                            className="animate-spin"
+                          />
                         )}
                         {successFlash
                           ? "✓ Saved!"

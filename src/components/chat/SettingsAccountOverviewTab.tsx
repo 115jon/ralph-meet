@@ -7,15 +7,7 @@ import { getAuthAssetUrl } from "@/lib/platform";
 import { DisplayNameSchema, UsernameSchema } from "@/lib/validations";
 import { useChatStore } from "@/stores/chat-store";
 import { useUser } from "@kova/react";
-import {
-  Check,
-  CheckCircle2,
-  Loader2,
-  Pencil,
-  Shield,
-  Sparkles,
-  X,
-} from "lucide-react";
+import { Icon } from "@/components/ui/icon";
 import { useEffect, useRef, useState } from "react";
 
 const USERNAME_CHECK_DELAY_MS = 400;
@@ -225,7 +217,11 @@ function InlineProfileRow({
                 }
                 aria-label={`Save ${label.toLowerCase()}`}
               >
-                {saving ? <Loader2 className="animate-spin" /> : <Check />}
+                {saving ? (
+                  <Icon name="loader" size="sm" className="animate-spin" />
+                ) : (
+                  <Icon name="check" size="sm" />
+                )}
               </Button>
               <Button
                 type="button"
@@ -235,7 +231,7 @@ function InlineProfileRow({
                 disabled={saving}
                 aria-label={`Cancel ${label.toLowerCase()} edit`}
               >
-                <X />
+                <Icon name="close" size="sm" />
               </Button>
             </div>
           </div>
@@ -274,7 +270,7 @@ function InlineProfileRow({
         aria-label={`Edit ${label.toLowerCase()}`}
         className="shrink-0"
       >
-        <Pencil size={15} aria-hidden="true" />
+        <Icon name="edit" size="sm" />
         Edit
       </Button>
     </div>
@@ -439,7 +435,7 @@ export default function SettingsAccountOverviewTab({
             disabled={identitySaving}
             className="shrink-0"
           >
-            <Sparkles size={16} aria-hidden="true" />
+            <Icon name="sparkle" size="sm" />
             Edit profile
           </Button>
         </div>
@@ -475,7 +471,7 @@ export default function SettingsAccountOverviewTab({
           <section className="rounded-xl border border-rm-border bg-rm-bg-primary/40 p-5">
             <div className="mb-4 flex items-center gap-3">
               <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-rm-tint-1 text-rm-success-ink">
-                <CheckCircle2 size={18} />
+                <Icon name="success" size="md" />
               </div>
               <div>
                 <h3 className="text-sm font-semibold text-rm-text">
@@ -494,7 +490,7 @@ export default function SettingsAccountOverviewTab({
           <section className="rounded-xl border border-rm-border bg-rm-bg-primary/40 p-5">
             <div className="mb-4 flex items-center gap-3">
               <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-rm-tint-1 text-rm-text-secondary">
-                <Shield size={18} />
+                <Icon name="shield" size="md" />
               </div>
               <div>
                 <h3 className="text-sm font-semibold text-rm-text">Security</h3>

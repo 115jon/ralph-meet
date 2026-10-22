@@ -17,13 +17,7 @@ import type { VoiceInputProfile } from "@/lib/voice/input-profiles";
 import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
 import { useChatStore } from "@/stores/chat-store";
 import { useUser } from "@kova/react";
-import {
-  AudioWaveform,
-  Check,
-  ExternalLink,
-  Headphones,
-  Mic,
-} from "lucide-react";
+import { Icon } from "@/components/ui/icon";
 import { useEffect, useMemo } from "react";
 import type { ReactNode } from "react";
 import { useShallow } from "zustand/shallow";
@@ -220,24 +214,24 @@ export default function SettingsVoiceTab() {
       {
         value: "default",
         label: defaultAudioInput?.label || "Default microphone",
-        icon: <Mic size={16} />,
+        icon: <Icon name="mic" size="sm" />,
       },
       ...filteredAudioInputs.map((device) => ({
         value: device.deviceId,
         label: device.label || `Microphone ${device.deviceId.slice(0, 5)}`,
-        icon: <Mic size={16} />,
+        icon: <Icon name="mic" size="sm" />,
       })),
     ],
     output: [
       {
         value: "default",
         label: defaultAudioOutput?.label || "Default speaker",
-        icon: <Headphones size={16} />,
+        icon: <Icon name="headphones" size="sm" />,
       },
       ...filteredAudioOutputs.map((device) => ({
         value: device.deviceId,
         label: device.label || `Speaker ${device.deviceId.slice(0, 5)}`,
-        icon: <Headphones size={16} />,
+        icon: <Icon name="headphones" size="sm" />,
       })),
     ],
   };
@@ -256,7 +250,7 @@ export default function SettingsVoiceTab() {
           <div className="grid gap-5 md:grid-cols-2">
             <div className="space-y-2">
               <label className="flex items-center gap-2 text-sm font-semibold text-rm-text">
-                <Mic size={16} className="text-rm-text-muted" />
+                <Icon name="mic" size="sm" className="text-rm-text-muted" />
                 Microphone
               </label>
               <Select
@@ -300,7 +294,11 @@ export default function SettingsVoiceTab() {
             </div>
             <div className="space-y-2">
               <label className="flex items-center gap-2 text-sm font-semibold text-rm-text">
-                <Headphones size={16} className="text-rm-text-muted" />
+                <Icon
+                  name="headphones"
+                  size="sm"
+                  className="text-rm-text-muted"
+                />
                 Speaker
               </label>
               <Select
@@ -391,9 +389,7 @@ export default function SettingsVoiceTab() {
                       : "border-rm-field-edge"
                   }`}
                 >
-                  {selectedProfile === value && (
-                    <Check size={12} strokeWidth={3} />
-                  )}
+                  {selectedProfile === value && <Icon name="check" size="xs" />}
                 </span>
                 <span>
                   <span className="block text-sm font-medium text-rm-text">
@@ -439,7 +435,8 @@ export default function SettingsVoiceTab() {
                       rel="noreferrer"
                       className="text-rm-accent-ink underline-offset-[3px] pointer-fine:hover:underline"
                     >
-                      RNNoise <ExternalLink size={11} className="inline" />
+                      RNNoise{" "}
+                      <Icon name="externalLink" size="xs" className="inline" />
                     </a>
                     .{" "}
                     <AudioCompatibilityHint>
@@ -469,13 +466,13 @@ export default function SettingsVoiceTab() {
                       {
                         value: "none",
                         label: "None",
-                        icon: <AudioWaveform size={16} />,
+                        icon: <Icon name="speaking" size="sm" />,
                       },
                       {
                         value: "rnnoise",
                         label:
                           NOISE_REDUCTION_PROVIDER_LABELS.rnnoise ?? "RNNoise",
-                        icon: <AudioWaveform size={16} />,
+                        icon: <Icon name="speaking" size="sm" />,
                       },
                     ].map((option) => (
                       <SelectItem

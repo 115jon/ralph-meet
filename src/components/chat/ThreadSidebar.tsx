@@ -1,7 +1,7 @@
 import { apiGet, apiPost } from "@/lib/api-client";
 import type { Message } from "@/lib/types";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Loader2, X } from "./Icons";
+import { Icon } from "@/components/ui/icon";
 import MessageItem from "./MessageItem";
 
 interface Props {
@@ -183,7 +183,7 @@ export default function ThreadSidebar({
           onClick={onClose}
           className="rounded-lg p-1.5 text-rm-text-muted transition-colors hover:bg-rm-bg-hover hover:text-rm-text outline-none"
         >
-          <X className="h-4 w-4" />
+          <Icon name="close" size="sm" />
         </button>
       </div>
 
@@ -191,7 +191,11 @@ export default function ThreadSidebar({
       <div className="flex-1 overflow-y-auto custom-scrollbar p-4">
         {loading ? (
           <div className="flex h-full items-center justify-center">
-            <Loader2 className="h-5 w-5 animate-spin text-rm-text-muted" />
+            <Icon
+              name="loader"
+              size="lg"
+              className="animate-spin text-rm-text-muted"
+            />
           </div>
         ) : error ? (
           <div className="flex h-full items-center justify-center text-sm text-destructive">

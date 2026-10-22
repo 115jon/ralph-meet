@@ -1,7 +1,7 @@
 import type { SFUClient } from "@/lib/sfu-client";
 import { cn } from "@/lib/utils";
 import { type ActivityType, useActivityStore } from "@/stores/useActivityStore";
-import { ChevronLeft, Gamepad2, X } from "lucide-react";
+import { Icon } from "@/components/ui/icon";
 import { useMemo, useState } from "react";
 
 type Tab = "menu" | "activities";
@@ -110,7 +110,7 @@ export function VoiceAppsModal({
                 onClick={() => setTab("menu")}
                 className="rounded-md p-1 -ml-1 text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text transition-colors"
               >
-                <ChevronLeft size={20} />
+                <Icon name="chevronLeft" size="lg" />
               </button>
             )}
             <h2 className="text-sm font-bold text-rm-text">
@@ -121,7 +121,7 @@ export function VoiceAppsModal({
             onClick={handleClose}
             className="rounded-md p-1.5 -mr-1.5 text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text transition-colors"
           >
-            <X size={20} />
+            <Icon name="close" size="lg" />
           </button>
         </div>
 
@@ -133,7 +133,7 @@ export function VoiceAppsModal({
                 className="flex flex-col items-start gap-2 rounded-xl border border-rm-border bg-rm-bg-surface p-4 text-left transition-ui hover:bg-rm-bg-hover hover:border-primary/50 group"
               >
                 <div className="rounded-lg bg-primary/10 p-2 text-primary transition-transform">
-                  <Gamepad2 size={24} />
+                  <Icon name="activities" size="xl" />
                 </div>
                 <div>
                   <div className="font-bold text-rm-text">Activities</div>

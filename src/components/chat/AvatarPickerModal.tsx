@@ -4,7 +4,7 @@ import { getApiBaseUrl, getAuthAssetUrl } from "@/lib/platform";
 import { buildProxyMediaUrl } from "@/lib/proxy-media-url";
 import { cn } from "@/lib/utils";
 import type { GifPickerItem } from "@/lib/gif-picker";
-import { ImagePlus, Loader2, Sparkles, Trash2, Upload, X } from "lucide-react";
+import { Icon } from "@/components/ui/icon";
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 
 const GifPickerModal = lazy(() => import("@/components/chat/GifPickerModal"));
@@ -191,7 +191,7 @@ export function AvatarPickerModal({
                 className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-rm-text-muted transition-[background-color,color,transform] hover:bg-rm-bg-hover hover:text-rm-text active:scale-[0.96]"
                 aria-label={closeLabel}
               >
-                <X className="h-5 w-5" />
+                <Icon name="close" size="lg" />
               </button>
             </header>
 
@@ -203,7 +203,11 @@ export function AvatarPickerModal({
                   disabled={Boolean(busyId)}
                   className="group flex min-h-[150px] flex-col items-center justify-center rounded-xl border border-rm-border bg-rm-bg-surface px-4 py-5 transition-[background-color,border-color,transform] hover:border-primary/45 hover:bg-rm-bg-hover active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  <ImagePlus className="mb-4 h-8 w-8 text-rm-text-muted transition-colors group-hover:text-rm-text" />
+                  <Icon
+                    name="image"
+                    size="2xl"
+                    className="mb-4 text-rm-text-muted transition-colors group-hover:text-rm-text"
+                  />
                   <span className="text-base font-bold">Upload Image</span>
                   <span className="mt-1 text-xs text-rm-text-muted">
                     Choose an image from your device
@@ -220,7 +224,7 @@ export function AvatarPickerModal({
                   <div className="absolute bottom-5 right-9 h-10 w-10 rounded-xl bg-rm-bg-hover" />
                   <div className="relative z-10 mt-auto">
                     <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-xl bg-rm-bg-hover text-rm-text">
-                      <Sparkles className="h-4 w-4" />
+                      <Icon name="sparkle" size="sm" />
                     </div>
                     <span className="block text-base font-bold">
                       Choose GIF
@@ -260,7 +264,11 @@ export function AvatarPickerModal({
                       </p>
                     </div>
                     {loading ? (
-                      <Loader2 className="h-4 w-4 animate-spin text-rm-text-muted" />
+                      <Icon
+                        name="loader"
+                        size="sm"
+                        className="animate-spin text-rm-text-muted"
+                      />
                     ) : null}
                   </div>
 
@@ -286,9 +294,13 @@ export function AvatarPickerModal({
                               />
                               <span className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/55 text-white opacity-0 transition-opacity group-hover/recent:opacity-100">
                                 {isBusy ? (
-                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                  <Icon
+                                    name="loader"
+                                    size="sm"
+                                    className="animate-spin"
+                                  />
                                 ) : (
-                                  <Upload className="h-4 w-4" />
+                                  <Icon name="upload" size="sm" />
                                 )}
                               </span>
                             </button>
@@ -305,7 +317,7 @@ export function AvatarPickerModal({
                                   : "Delete recent avatar"
                               }
                             >
-                              <Trash2 className="h-3 w-3" />
+                              <Icon name="trash" size="xs" />
                             </button>
                           </div>
                         );

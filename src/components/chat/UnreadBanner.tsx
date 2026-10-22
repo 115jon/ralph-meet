@@ -6,7 +6,7 @@
  */
 
 import { Button } from "@/components/ui/button";
-import { Check } from "./Icons";
+import { Icon } from "@/components/ui/icon";
 
 interface UnreadBannerProps {
   count: number;
@@ -40,7 +40,7 @@ export function UnreadBanner({
         className="text-ui-sm text-primary-foreground [--hover-o:0.15]"
       >
         Mark As Read
-        <Check className="size-3.5" strokeWidth={2.5} />
+        <Icon name="check" size="xs" />
       </Button>
     </div>
   );

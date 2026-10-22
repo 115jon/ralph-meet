@@ -4,7 +4,7 @@ import { IconButton } from "@/components/ui/IconButton";
 import { Input } from "@/components/ui/input";
 import { useChatActions } from "@/stores/chat-store";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Tag, X } from "./Icons";
+import { Icon } from "@/components/ui/icon";
 import { cn as _cn } from "@/lib/utils";
 
 interface Props {
@@ -64,14 +64,14 @@ export default function CreateCategoryModal({
           >
             {/* Close */}
             <IconButton
-              icon={X}
+              icon="close"
               onClick={onClose}
               className="absolute right-4 top-4"
               aria-label="Close create category modal"
             />
 
             <h2 className="mb-1 text-center text-ui-lg font-semibold text-rm-text flex items-center justify-center gap-2">
-              <Tag className="text-rm-text/40" />
+              <Icon name="tag" size="xl" className="text-rm-text/40" />
               Create Category
             </h2>
             <p className="mb-6 text-center text-sm font-medium text-rm-text-muted">

@@ -7,11 +7,10 @@ import { getDownloadUrl } from "@/lib/platform";
 import { useClientDateFormatter } from "@/lib/client-date-format";
 import type { Message } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { Download, Loader2 } from "lucide-react";
+import { Icon } from "@/components/ui/icon";
 
 import React from "react";
 import { AvatarImage } from "./AvatarImage";
-import { Pin, X } from "./Icons";
 import { ImageGrid } from "./ImageGrid";
 import { MarkdownRenderer } from "./MarkdownRenderer";
 import VideoAttachment from "./VideoAttachment";
@@ -56,21 +55,25 @@ export const PinnedMessagesSidebar: React.FC<PinnedMessagesSidebarProps> = ({
         className="flex min-h-16 flex-none items-center gap-3 border-b border-rm-border bg-transparent px-6 pb-2 backdrop-blur-md"
         style={{ paddingTop: "max(0px, var(--safe-area-top, 0px))" }}
       >
-        <Pin size={20} className="text-rm-text-muted rotate-45" />
+        <Icon name="pin" size="lg" className="text-rm-text-muted" />
         <h2 className="font-bold text-lg text-rm-text">Pinned Messages</h2>
         <div className="flex-1" />
         <button
           onClick={onClose}
           className="w-8 h-8 flex items-center justify-center rounded-full bg-rm-bg-elevated hover:bg-rm-bg-hover text-rm-text-muted hover:text-rm-text transition-ui outline-none"
         >
-          <X size={16} />
+          <Icon name="close" size="sm" />
         </button>
       </header>
 
       <div className="flex-1 overflow-y-auto bg-transparent p-4 pb-[max(16px,var(--safe-area-bottom,0px))] custom-scrollbar">
         {isLoading ? (
           <div className="py-12 flex flex-col items-center justify-center gap-3 text-rm-text-muted">
-            <Loader2 className="w-8 h-8 animate-spin text-primary/50" />
+            <Icon
+              name="loader"
+              size="2xl"
+              className="animate-spin text-primary/50"
+            />
             <span className="text-ui-2xs font-semibold uppercase tracking-[0.08em]">
               Loading Pins...
             </span>
@@ -78,9 +81,10 @@ export const PinnedMessagesSidebar: React.FC<PinnedMessagesSidebarProps> = ({
         ) : messages.length === 0 ? (
           <div className="py-12 flex flex-col items-center justify-center gap-4 text-center px-4">
             <div className="w-16 h-16 rounded-3xl bg-rm-bg-elevated/40 flex items-center justify-center border border-rm-border shadow-xl rotate-12">
-              <Pin
-                size={32}
-                className="opacity-10 rotate-45 text-rm-text-muted"
+              <Icon
+                name="pin"
+                size="2xl"
+                className="opacity-10 text-rm-text-muted"
               />
             </div>
             <div>
@@ -220,7 +224,7 @@ const PinnedMessageItem = ({
 
                 {/* Other files */}
                 {otherAttachments.map((att) => {
-                  const { Icon: TypeIcon, colorClass } = getFileIcon(
+                  const { icon: typeIcon, colorClass } = getFileIcon(
                     att.filename,
                     att.content_type ?? undefined,
                   );
@@ -237,7 +241,7 @@ const PinnedMessageItem = ({
                           colorClass,
                         )}
                       >
-                        <TypeIcon size={18} />
+                        <Icon name={typeIcon} size="md" />
                       </div>
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-ui-xs font-bold text-primary group-hover/file:underline">
@@ -247,7 +251,11 @@ const PinnedMessageItem = ({
                           {formatFileSize(att.size_bytes)}
                         </p>
                       </div>
-                      <Download className="h-4 w-4 shrink-0 text-rm-text-muted transition-colors group-hover/file:text-rm-text-secondary" />
+                      <Icon
+                        name="download"
+                        size="sm"
+                        className="shrink-0 text-rm-text-muted transition-colors group-hover/file:text-rm-text-secondary"
+                      />
                     </a>
                   );
                 })}
@@ -272,7 +280,7 @@ const PinnedMessageItem = ({
               className="p-1.5 hover:bg-destructive/10 text-rm-text-muted hover:text-destructive transition-ui rounded-lg outline-none"
               title="Unpin (Shift-click to bypass confirmation)"
             >
-              <X size={18} />
+              <Icon name="close" size="md" />
             </button>
           )}
         </div>

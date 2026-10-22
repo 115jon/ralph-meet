@@ -1,5 +1,5 @@
 import { Dialog, DialogPortal, DialogSurface } from "@/components/ui/dialog";
-import { X } from "../chat/Icons";
+import { Icon } from "@/components/ui/icon";
 import { cn } from "@/lib/utils";
 
 interface AudioInteractionModalProps {
@@ -41,7 +41,7 @@ export function AudioInteractionModal({
               onClick={onClose}
               className="absolute top-4 right-4 rounded-md text-rm-text-muted hover:text-rm-text transition-colors"
             >
-              <X size={18} />
+              <Icon name="close" size="md" />
             </button>
 
             <div className="space-y-4">

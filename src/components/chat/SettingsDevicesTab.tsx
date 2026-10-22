@@ -1,7 +1,7 @@
 import { IconButton } from "@/components/ui/IconButton";
 import { apiDelete, apiGet } from "@/lib/api-client";
 import { useClientReferenceTime } from "@/lib/client-date-format";
-import { Loader2, Monitor, Smartphone, X } from "lucide-react";
+import { Icon } from "@/components/ui/icon";
 import { useCallback, useEffect, useState } from "react";
 
 function normalizeTimestamp(value: unknown): number | null {
@@ -41,7 +41,7 @@ function DeviceRow({
   onRevoke: (id: string) => void;
   now: number | null;
 }) {
-  const Icon = session.activity?.isMobile ? Smartphone : Monitor;
+  const deviceIcon = session.activity?.isMobile ? "mobile" : "monitor";
 
   const browserName =
     session.activity?.browserName ||
@@ -72,7 +72,7 @@ function DeviceRow({
     <div className="group flex flex-col sm:flex-row sm:items-center justify-between p-4 px-5 gap-4">
       <div className="flex items-center gap-4 min-w-0">
         <div className="w-[42px] h-[42px] rounded-full border border-rm-border flex items-center justify-center bg-rm-bg-elevated text-rm-text shrink-0">
-          <Icon size={22} />
+          <Icon name={deviceIcon} size="xl" />
         </div>
         <div className="flex-1 min-w-0 flex flex-col gap-0.5">
           <h4 className="text-ui-sm font-bold text-rm-text truncate">
@@ -87,7 +87,7 @@ function DeviceRow({
       {!session.isCurrent && (
         <IconButton
           aria-label="Revoke session"
-          icon={X}
+          icon="close"
           variant="destructive"
           size="sm"
           shape="circle"
@@ -162,7 +162,11 @@ export default function SettingsDevicesTab() {
 
       {sessionsLoading && !sessions.length ? (
         <div className="flex flex-col items-center justify-center py-12">
-          <Loader2 size={32} className="animate-spin text-rm-text-muted mb-4" />
+          <Icon
+            name="loader"
+            size="2xl"
+            className="animate-spin text-rm-text-muted mb-4"
+          />
           <p className="text-rm-text-muted font-medium">Loading devices...</p>
         </div>
       ) : (

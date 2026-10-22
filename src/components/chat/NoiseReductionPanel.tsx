@@ -5,7 +5,7 @@ import {
   isNoiseReductionProviderSupported,
 } from "@/lib/voice/noise-reduction";
 import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
-import { AudioWaveform, ShieldCheck } from "lucide-react";
+import { Icon } from "@/components/ui/icon";
 import { useShallow } from "zustand/shallow";
 
 interface NoiseReductionPanelProps {
@@ -43,7 +43,7 @@ export function NoiseReductionPanel({
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0 space-y-2">
           <div className="flex items-center gap-2">
-            <AudioWaveform size={16} className="text-sky-300" />
+            <Icon name="speaking" size="sm" className="text-sky-300" />
             <span className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted">
               Noise Suppression
             </span>
@@ -91,7 +91,7 @@ export function NoiseReductionPanel({
 
       <div className="mt-4 flex items-center justify-between rounded-lg border border-rm-border bg-rm-bg-elevated/30 px-3 py-2">
         <div className="text-ui-2xs font-semibold uppercase tracking-[0.08em] flex items-center gap-2 text-rm-text-muted">
-          <ShieldCheck size={12} className="text-emerald-400" />
+          <Icon name="privacy" size="xs" className="text-emerald-400" />
           Powered By
         </div>
         <div className="text-sm font-semibold tracking-tight text-rm-text">

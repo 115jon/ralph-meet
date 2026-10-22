@@ -3,17 +3,7 @@ import InlineEmojiText from "@/components/chat/InlineEmojiText";
 import type { AppTheme } from "@/lib/theme-preferences";
 import type { Channel, Server, User } from "@/lib/types";
 import { Command } from "cmdk";
-import {
-  Hash,
-  MessageSquare,
-  Mic,
-  MicOff,
-  Moon,
-  Server as ServerIcon,
-  Sun,
-  Volume2,
-  VolumeX,
-} from "lucide-react";
+import { Icon } from "@/components/ui/icon";
 
 export function CommandMenuServersGroup({
   servers,
@@ -48,7 +38,11 @@ export function CommandMenuServersGroup({
             )}
           </div>
           <InlineEmojiText text={server.name} />
-          <ServerIcon className="ml-auto h-3.5 w-3.5 text-[var(--rm-text-ghost)]" />
+          <Icon
+            name="server"
+            size="sm"
+            className="ml-auto text-[var(--rm-text-ghost)]"
+          />
         </Command.Item>
       ))}
     </Command.Group>
@@ -78,7 +72,11 @@ export function CommandMenuTextChannelsGroup({
           onSelect={() => navigateToChannel(channel.server_id!, channel.id)}
           className="flex cursor-pointer items-center gap-3 rounded-md px-3 py-2 text-sm text-[var(--rm-text-secondary)] aria-selected:bg-[var(--rm-bg-hover)] aria-selected:text-[var(--rm-text-primary)] transition-colors"
         >
-          <Hash className="h-4 w-4 shrink-0 text-[var(--rm-text-muted)]" />
+          <Icon
+            name="textChannel"
+            size="sm"
+            className="shrink-0 text-[var(--rm-text-muted)]"
+          />
           <InlineEmojiText text={channel.name} />
           <span className="ml-auto text-xs text-[var(--rm-text-ghost)]">
             <InlineEmojiText text={serverMap.get(channel.server_id!) ?? ""} />
@@ -112,7 +110,11 @@ export function CommandMenuVoiceChannelsGroup({
           onSelect={() => navigateToChannel(channel.server_id!, channel.id)}
           className="flex cursor-pointer items-center gap-3 rounded-md px-3 py-2 text-sm text-[var(--rm-text-secondary)] aria-selected:bg-[var(--rm-bg-hover)] aria-selected:text-[var(--rm-text-primary)] transition-colors"
         >
-          <Volume2 className="h-4 w-4 shrink-0 text-[var(--rm-text-muted)]" />
+          <Icon
+            name="voiceChannel"
+            size="sm"
+            className="shrink-0 text-[var(--rm-text-muted)]"
+          />
           <InlineEmojiText text={channel.name} />
           <span className="ml-auto text-xs text-[var(--rm-text-ghost)]">
             <InlineEmojiText text={serverMap.get(channel.server_id!) ?? ""} />
@@ -157,7 +159,11 @@ export function CommandMenuDMsGroup({
                   className="h-full w-full object-cover"
                 />
               ) : (
-                <MessageSquare className="h-3 w-3 text-[var(--rm-text-muted)]" />
+                <Icon
+                  name="chat"
+                  size="xs"
+                  className="text-[var(--rm-text-muted)]"
+                />
               )}
             </div>
             <InlineEmojiText text={displayName} />
@@ -199,9 +205,18 @@ export function CommandMenuActionsGroup({
         className="flex cursor-pointer items-center gap-3 rounded-md px-3 py-2 text-sm text-[var(--rm-text-secondary)] aria-selected:bg-[var(--rm-bg-hover)] aria-selected:text-[var(--rm-text-primary)] transition-colors"
       >
         {isMuted ? (
-          <MicOff className="h-4 w-4 shrink-0 text-[var(--destructive)]" />
+          <Icon
+            name="mic"
+            state="off"
+            size="sm"
+            className="shrink-0 text-[var(--destructive)]"
+          />
         ) : (
-          <Mic className="h-4 w-4 shrink-0 text-[var(--rm-text-muted)]" />
+          <Icon
+            name="mic"
+            size="sm"
+            className="shrink-0 text-[var(--rm-text-muted)]"
+          />
         )}
         <span>{isMuted ? "Unmute Microphone" : "Mute Microphone"}</span>
       </Command.Item>
@@ -215,9 +230,17 @@ export function CommandMenuActionsGroup({
         className="flex cursor-pointer items-center gap-3 rounded-md px-3 py-2 text-sm text-[var(--rm-text-secondary)] aria-selected:bg-[var(--rm-bg-hover)] aria-selected:text-[var(--rm-text-primary)] transition-colors"
       >
         {isDeafened ? (
-          <VolumeX className="h-4 w-4 shrink-0 text-[var(--destructive)]" />
+          <Icon
+            name="speakerOff"
+            size="sm"
+            className="shrink-0 text-[var(--destructive)]"
+          />
         ) : (
-          <Volume2 className="h-4 w-4 shrink-0 text-[var(--rm-text-muted)]" />
+          <Icon
+            name="voiceChannel"
+            size="sm"
+            className="shrink-0 text-[var(--rm-text-muted)]"
+          />
         )}
         <span>{isDeafened ? "Undeafen" : "Deafen"}</span>
       </Command.Item>
@@ -231,9 +254,17 @@ export function CommandMenuActionsGroup({
         className="flex cursor-pointer items-center gap-3 rounded-md px-3 py-2 text-sm text-[var(--rm-text-secondary)] aria-selected:bg-[var(--rm-bg-hover)] aria-selected:text-[var(--rm-text-primary)] transition-colors"
       >
         {theme === "dark" ? (
-          <Sun className="h-4 w-4 shrink-0 text-[var(--rm-text-muted)]" />
+          <Icon
+            name="sun"
+            size="sm"
+            className="shrink-0 text-[var(--rm-text-muted)]"
+          />
         ) : (
-          <Moon className="h-4 w-4 shrink-0 text-[var(--rm-text-muted)]" />
+          <Icon
+            name="moon"
+            size="sm"
+            className="shrink-0 text-[var(--rm-text-muted)]"
+          />
         )}
         <span>Switch to {theme === "dark" ? "Light" : "Dark"} Mode</span>
       </Command.Item>

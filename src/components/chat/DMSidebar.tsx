@@ -4,12 +4,11 @@ import { cn } from "@/lib/utils";
 import { useChatActions, useChatStore } from "@/stores/chat-store";
 import { useCallStore } from "@/stores/useCallStore";
 
-import { ShoppingBag } from "lucide-react";
+import { Icon } from "@/components/ui/icon";
 import { useReducer } from "react";
 import { useShallow } from "zustand/shallow";
 import ContextMenu from "./ContextMenu";
 import { DMListPanel } from "./DMListPanel";
-import { Copy, Phone, Trash2, User as UserIcon, Users } from "./Icons";
 import UserProfilePopover from "./UserProfilePopover";
 
 interface Props {
@@ -92,14 +91,14 @@ export default function DMSidebar({
     openMenu(e, [
       {
         label: "Profile",
-        icon: <UserIcon className="h-4 w-4" />,
+        icon: <Icon name="account" size="sm" />,
         onClick: () => setProfileUser(dm.recipient),
       },
       ...(!hideCallOption
         ? [
             {
               label: "Start a Call",
-              icon: <Phone className="h-4 w-4" />,
+              icon: <Icon name="call" size="sm" />,
               onClick: () => {
                 onSelectDm(dm.id);
                 window.dispatchEvent(
@@ -118,12 +117,12 @@ export default function DMSidebar({
         : []),
       {
         label: "Copy ID",
-        icon: <Copy className="h-4 w-4" />,
+        icon: <Icon name="copy" size="sm" />,
         onClick: () => navigator.clipboard.writeText(dm.id),
       },
       {
         label: "Close DM",
-        icon: <Trash2 className="h-4 w-4" />,
+        icon: <Icon name="trash" size="sm" />,
         onClick: () => alert("Close DM not implemented yet"),
         variant: "danger",
       },
@@ -162,7 +161,7 @@ export default function DMSidebar({
           )}
           onClick={onShowFriends}
         >
-          <Users className="h-5 w-5 shrink-0" />
+          <Icon name="members" size="lg" className="shrink-0" />
           <span className="text-ui-sm font-medium">Friends</span>
           {pendingCount > 0 && (
             <span className="badge-count ml-auto">{pendingCount}</span>
@@ -180,7 +179,7 @@ export default function DMSidebar({
           )}
           onClick={onShowShop}
         >
-          <ShoppingBag className="h-5 w-5 shrink-0" />
+          <Icon name="shop" size="lg" className="shrink-0" />
           <span className="text-ui-sm font-medium">Shop</span>
         </button>
       </div>

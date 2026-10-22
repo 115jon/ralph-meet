@@ -58,24 +58,7 @@ import type { ContextMenuItem } from "./ContextMenu";
 import ContextMenu from "./ContextMenu";
 import EmojiPicker from "./EmojiPicker";
 import EmojiToken from "./EmojiToken";
-import {
-  ChevronRight,
-  Copy,
-  CornerUpLeft,
-  Download,
-  Edit2,
-  Forward,
-  Link,
-  MailOpen,
-  MessageSquare,
-  MoreHorizontal,
-  Pin,
-  Share2,
-  Smile,
-  Trash2,
-  User as UserIcon,
-  X,
-} from "./Icons";
+import { Icon } from "@/components/ui/icon";
 import { ImageGrid } from "./ImageGrid";
 import { GifFavoriteButton } from "./GifFavoriteButton";
 import { LinkEmbed } from "./LinkEmbed";
@@ -652,7 +635,7 @@ const MessageItem = memo(
             className={cn(MENU_ITEM, MENU_ITEM_DEFAULT, "justify-between")}
           >
             <span>View More</span>
-            <Smile aria-hidden className={cn("h-4 w-4", MENU_ICON)} />
+            <Icon name="react" size="sm" className={MENU_ICON} />
           </button>
         </div>
       );
@@ -662,7 +645,7 @@ const MessageItem = memo(
           key: "add-reaction",
           label: "Add Reaction",
           onClick: () => undefined,
-          rightIcon: <ChevronRight className="h-4 w-4" />,
+          rightIcon: <Icon name="chevronRight" size="xs" />,
           submenu: reactionSubmenu,
           closeOnClick: false,
           divider: true,
@@ -671,14 +654,14 @@ const MessageItem = memo(
           ? [
               {
                 label: "Edit Message",
-                rightIcon: <Edit2 className="h-4 w-4" />,
+                rightIcon: <Icon name="edit" size="sm" />,
                 onClick: startEditing,
               },
             ]
           : []),
         {
           label: "Reply",
-          rightIcon: <MessageSquare className="h-4 w-4" />,
+          rightIcon: <Icon name="reply" size="sm" />,
           onClick: () => onReply?.(message),
         },
         ...(onThread
@@ -688,7 +671,7 @@ const MessageItem = memo(
                   (message.reply_count ?? 0) > 0
                     ? "View Thread"
                     : "Create Thread",
-                rightIcon: <MessageSquare className="h-4 w-4" />,
+                rightIcon: <Icon name="thread" size="sm" />,
                 onClick: () => onThread(message.id),
               },
             ]
@@ -697,7 +680,7 @@ const MessageItem = memo(
           ? [
               {
                 label: message.is_pinned ? "Unpin Message" : "Pin Message",
-                rightIcon: <Pin className="h-4 w-4" />,
+                rightIcon: <Icon name="pin" size="sm" />,
                 onClick: () => handlePinToggle(isShiftPressed),
                 divider: true,
               },
@@ -705,19 +688,19 @@ const MessageItem = memo(
           : []),
         {
           label: "Copy Text",
-          rightIcon: <Copy className="h-4 w-4" />,
+          rightIcon: <Icon name="copy" size="sm" />,
           onClick: () => navigator.clipboard.writeText(message.content),
         },
         ...(hoveredUrl
           ? [
               {
                 label: "Copy Link",
-                rightIcon: <Link className="h-4 w-4" />,
+                rightIcon: <Icon name="link" size="sm" />,
                 onClick: () => navigator.clipboard.writeText(hoveredUrl),
               },
               {
                 label: "Open Link",
-                rightIcon: <Share2 className="h-4 w-4" />,
+                rightIcon: <Icon name="externalLink" size="sm" />,
                 onClick: () => {
                   requestOpenExternalLink(hoveredUrl);
                 },
@@ -728,14 +711,14 @@ const MessageItem = memo(
           ? [
               {
                 label: "Share Message",
-                rightIcon: <Share2 className="h-4 w-4" />,
+                rightIcon: <Icon name="share" size="sm" />,
                 onClick: () => setShowShareModal(true),
               },
             ]
           : []),
         {
           label: "Profile",
-          rightIcon: <UserIcon className="h-4 w-4" />,
+          rightIcon: <Icon name="account" size="sm" />,
           onClick: () =>
             message.author && setProfileUser(message.author as any),
         },
@@ -754,7 +737,7 @@ const MessageItem = memo(
       if (isOwnMessage || canDeleteMessages) {
         items.push({
           label: "Delete Message",
-          rightIcon: <Trash2 className="h-4 w-4" />,
+          rightIcon: <Icon name="trash" size="sm" />,
           onClick: () => handleDelete(isShiftPressed),
           variant: "danger",
         });
@@ -763,7 +746,7 @@ const MessageItem = memo(
       if (!isOwnMessage && onBan) {
         items.push({
           label: "Ban User",
-          rightIcon: <Trash2 className="h-4 w-4" />,
+          rightIcon: <Icon name="trash" size="sm" />,
           onClick: () => onBan(message.author_id, authorInfo.username),
           variant: "danger",
         });
@@ -780,7 +763,7 @@ const MessageItem = memo(
         items.push(
           {
             label: "Save Image",
-            rightIcon: <Download className="h-4 w-4" />,
+            rightIcon: <Icon name="download" size="sm" />,
             onClick: () => {
               void saveMedia({
                 url: publicMediaUrl,
@@ -792,14 +775,14 @@ const MessageItem = memo(
           },
           {
             label: "Copy Media Link",
-            rightIcon: <Copy className="h-4 w-4" />,
+            rightIcon: <Icon name="copy" size="sm" />,
             onClick: () => {
               void copyMediaLink(publicMediaUrl);
             },
           },
           {
             label: "Open Media Link",
-            rightIcon: <Share2 className="h-4 w-4" />,
+            rightIcon: <Icon name="externalLink" size="sm" />,
             onClick: () => requestOpenExternalLink(publicMediaUrl),
           },
         );
@@ -1048,7 +1031,7 @@ const MessageItem = memo(
                 </span>
                 {message.is_pinned && (
                   <div className="flex items-center gap-1 rounded-sm border border-primary/20 bg-primary/10 px-1.5 py-0.5 text-ui-2xs font-semibold tracking-[0.04em] text-primary">
-                    <Pin className="h-2.5 w-2.5 fill-current" />
+                    <Icon name="pin" state="active" size="xs" />
                     PINNED
                   </div>
                 )}
@@ -1217,7 +1200,7 @@ const MessageItem = memo(
             {fileAttachments.length > 0 && (
               <div className="mt-2 flex flex-col gap-2 max-w-sm">
                 {fileAttachments.map((att) => {
-                  const { Icon: TypeIcon, colorClass } = getFileIcon(
+                  const { icon: typeIcon, colorClass } = getFileIcon(
                     att.filename,
                     att.content_type ?? undefined,
                   );
@@ -1234,7 +1217,7 @@ const MessageItem = memo(
                           colorClass,
                         )}
                       >
-                        <TypeIcon size={20} />
+                        <Icon name={typeIcon} size="lg" />
                       </div>
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-ui-sm font-medium text-primary group-hover/file:underline">
@@ -1244,7 +1227,11 @@ const MessageItem = memo(
                           {formatFileSize(att.size_bytes)}
                         </p>
                       </div>
-                      <Download className="h-4 w-4 shrink-0 text-rm-text-muted transition-colors group-hover/file:text-rm-text-secondary" />
+                      <Icon
+                        name="download"
+                        size="sm"
+                        className="shrink-0 text-rm-text-muted transition-colors group-hover/file:text-rm-text-secondary"
+                      />
                     </a>
                   );
                 })}
@@ -1322,7 +1309,7 @@ const MessageItem = memo(
                     <div className="relative">
                       <IconButton
                         ref={reactionEmojiBtnRef}
-                        icon={Smile}
+                        icon="react"
                         size="sm"
                         tooltip="Add Reaction"
                         aria-label="Add another reaction"
@@ -1363,7 +1350,7 @@ const MessageItem = memo(
                 disabled={previewOnly}
                 className="mt-2 gap-1.5 bg-rm-accent-tint text-rm-accent-ink"
               >
-                <MessageSquare className="size-3" />
+                <Icon name="thread" size="xs" />
                 {message.reply_count}{" "}
                 {message.reply_count === 1 ? "Reply" : "Replies"}
               </Button>
@@ -1383,34 +1370,31 @@ const MessageItem = memo(
                 {isShiftPressed ? (
                   <>
                     <IconButton
-                      icon={Copy}
+                      icon="copy"
                       size="sm"
                       tooltip="Copy Message ID"
                       onClick={copyMessageId}
                     />
                     <IconButton
-                      icon={Link}
+                      icon="link"
                       size="sm"
                       tooltip="Copy Message Link"
                       onClick={copyMessageLink}
                     />
                     <IconButton
-                      icon={MailOpen}
+                      icon="markUnread"
                       size="sm"
                       tooltip="Mark Unread"
                       onClick={handleMarkUnread}
                     />
                     {canPin && (
                       <IconButton
-                        icon={Pin}
+                        icon="pin"
                         size="sm"
                         tooltip={
                           message.is_pinned ? "Unpin Message" : "Pin Message"
                         }
-                        iconClassName={cn(
-                          "rotate-45",
-                          message.is_pinned && "fill-current",
-                        )}
+                        iconState={message.is_pinned ? "active" : "idle"}
                         className={
                           message.is_pinned ? "text-rm-accent-ink" : undefined
                         }
@@ -1421,7 +1405,7 @@ const MessageItem = memo(
                     )}
                     {onThread && (
                       <IconButton
-                        icon={MessageSquare}
+                        icon="thread"
                         size="sm"
                         tooltip={
                           (message.reply_count ?? 0) > 0
@@ -1432,7 +1416,7 @@ const MessageItem = memo(
                       />
                     )}
                     <IconButton
-                      icon={CornerUpLeft}
+                      icon="reply"
                       size="sm"
                       tooltip="Reply"
                       onClick={() => onReply?.(message)}
@@ -1440,7 +1424,7 @@ const MessageItem = memo(
                     <div className="relative">
                       <IconButton
                         ref={emojiBtnRef}
-                        icon={Smile}
+                        icon="react"
                         size="sm"
                         tooltip="Add Reaction"
                         aria-haspopup="dialog"
@@ -1468,14 +1452,14 @@ const MessageItem = memo(
                     </div>
                     {isOwnMessage && (
                       <IconButton
-                        icon={Edit2}
+                        icon="edit"
                         size="sm"
                         tooltip="Edit Message"
                         onClick={startEditing}
                       />
                     )}
                     <IconButton
-                      icon={Forward}
+                      icon="forward"
                       size="sm"
                       tooltip="Forward"
                       aria-disabled="true"
@@ -1484,7 +1468,7 @@ const MessageItem = memo(
                     />
                     {(isOwnMessage || canDeleteMessages) && (
                       <IconButton
-                        icon={Trash2}
+                        icon="trash"
                         size="sm"
                         variant="destructive"
                         tooltip="Delete Message"
@@ -1506,7 +1490,7 @@ const MessageItem = memo(
                     <div className="relative">
                       <IconButton
                         ref={emojiBtnRef}
-                        icon={Smile}
+                        icon="react"
                         size="sm"
                         tooltip="Add Reaction"
                         aria-haspopup="dialog"
@@ -1533,7 +1517,7 @@ const MessageItem = memo(
                       )}
                     </div>
                     <IconButton
-                      icon={isOwnMessage ? Edit2 : CornerUpLeft}
+                      icon={isOwnMessage ? "edit" : "reply"}
                       size="sm"
                       tooltip={isOwnMessage ? "Edit Message" : "Reply"}
                       onClick={
@@ -1541,7 +1525,7 @@ const MessageItem = memo(
                       }
                     />
                     <IconButton
-                      icon={Forward}
+                      icon="forward"
                       size="sm"
                       tooltip="Forward"
                       aria-disabled="true"
@@ -1549,7 +1533,7 @@ const MessageItem = memo(
                       onClick={() => undefined}
                     />
                     <IconButton
-                      icon={MoreHorizontal}
+                      icon="more"
                       size="sm"
                       tooltip="More"
                       onClick={handleContextMenu}
@@ -1716,7 +1700,7 @@ function DeleteMessageModal({
                 </p>
               </div>
               <IconButton
-                icon={X}
+                icon="close"
                 size="sm"
                 shape="circle"
                 tooltip="Close"

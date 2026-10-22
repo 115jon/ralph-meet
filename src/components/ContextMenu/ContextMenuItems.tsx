@@ -10,7 +10,7 @@ import {
   MENU_SEPARATOR,
 } from "@/components/ui/menu";
 import InlineEmojiText from "@/components/chat/InlineEmojiText";
-import { Check, ChevronRight } from "lucide-react";
+import { Icon, type IconName } from "@/components/ui/icon";
 import React, { memo, useCallback, useEffect, useRef } from "react";
 
 export const Divider = memo(() => <div className={MENU_SEPARATOR} />);
@@ -19,7 +19,7 @@ Divider.displayName = "Divider";
 export interface MenuItemProps {
   label: string;
 
-  icon?: any;
+  icon?: IconName;
   onClick?: () => void;
   onMouseEnter?: () => void;
   onArrowLeft?: () => void;
@@ -27,7 +27,7 @@ export interface MenuItemProps {
   checked?: boolean;
   checkVariant?: "default" | "danger";
 
-  CheckIcon?: any;
+  checkIcon?: IconName;
   hasSubmenu?: boolean;
   description?: string;
   boldLabel?: boolean;
@@ -47,13 +47,13 @@ function getSiblingMenuItems(element: HTMLElement): HTMLElement[] {
 export const MenuItem = memo(
   ({
     label,
-    icon: Icon,
+    icon,
     onClick,
     onMouseEnter,
     danger,
     checked,
     checkVariant = "default",
-    CheckIcon = Check,
+    checkIcon = "check",
     hasSubmenu,
     description,
     boldLabel,
@@ -112,10 +112,10 @@ export const MenuItem = memo(
         )}
       >
         <div className="flex items-center gap-2.5 overflow-hidden">
-          {Icon && (
+          {icon && (
             <Icon
-              aria-hidden
-              size={14}
+              name={icon}
+              size="sm"
               className={danger ? "shrink-0" : MENU_ICON}
             />
           )}
@@ -148,13 +148,13 @@ export const MenuItem = memo(
                   : "border-rm-field-edge",
               )}
             >
-              {checked && <CheckIcon aria-hidden size={12} />}
+              {checked && <Icon name={checkIcon} size="xs" />}
             </div>
           )}
           {hasSubmenu && (
-            <ChevronRight
-              aria-hidden
-              size={14}
+            <Icon
+              name="chevronRight"
+              size="xs"
               className="text-rm-text-muted"
             />
           )}

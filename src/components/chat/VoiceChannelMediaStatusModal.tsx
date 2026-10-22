@@ -8,7 +8,7 @@ import type {
 } from "@/lib/types";
 import { voiceChannelStatusMediaFromGifItem } from "@/lib/voice-channel-status";
 import { useChatActions } from "@/stores/chat-store";
-import { Loader2, Sparkles, Upload, X } from "lucide-react";
+import { Icon } from "@/components/ui/icon";
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 
@@ -359,7 +359,7 @@ export default function VoiceChannelMediaStatusModal({
                   className="flex h-10 w-10 items-center justify-center rounded-full text-rm-text-muted transition-colors hover:bg-rm-bg-hover hover:text-rm-text"
                   aria-label="Close media status editor"
                 >
-                  <X className="h-5 w-5" />
+                  <Icon name="close" size="lg" />
                 </button>
               </div>
 
@@ -372,9 +372,17 @@ export default function VoiceChannelMediaStatusModal({
                     className="group flex min-h-[138px] flex-col items-center justify-center rounded-2xl border border-rm-border bg-rm-bg-surface px-4 py-5 text-center transition-colors hover:bg-rm-bg-hover disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {uploading ? (
-                      <Loader2 className="mb-4 h-8 w-8 animate-spin text-rm-text" />
+                      <Icon
+                        name="loader"
+                        size="2xl"
+                        className="mb-4 animate-spin text-rm-text"
+                      />
                     ) : (
-                      <Upload className="mb-4 h-8 w-8 text-rm-text-muted group-hover:text-rm-text" />
+                      <Icon
+                        name="upload"
+                        size="2xl"
+                        className="mb-4 text-rm-text-muted group-hover:text-rm-text"
+                      />
                     )}
                     <span className="text-ui-lg font-bold text-rm-text">
                       Server Uploads
@@ -394,7 +402,7 @@ export default function VoiceChannelMediaStatusModal({
                     <div className="absolute bottom-3 right-10 h-8 w-8 rounded-xl bg-rm-bg-hover" />
                     <div className="relative z-10 flex h-full flex-col justify-end">
                       <div className="mb-3 inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-rm-bg-hover text-rm-text">
-                        <Sparkles className="h-5 w-5" />
+                        <Icon name="sparkle" size="lg" />
                       </div>
                       <span className="text-ui-lg font-bold text-rm-text">
                         Choose GIF

@@ -5,17 +5,7 @@ import { isDesktop } from "@/lib/platform";
 import { useDesktopSettingsStore } from "@/stores/useDesktopSettingsStore";
 import { useSoundSettingsStore } from "@/stores/useSoundSettingsStore";
 import { useUser } from "@kova/react";
-import {
-  Bell,
-  BellRing,
-  Headphones,
-  Laptop,
-  Mic,
-  MonitorUp,
-  Volume2,
-  VolumeX,
-  Zap,
-} from "lucide-react";
+import { Icon } from "@/components/ui/icon";
 import { useEffect, useId } from "react";
 import { useShallow } from "zustand/shallow";
 import { SettingsSwitch } from "./SettingsSwitch";
@@ -60,7 +50,7 @@ export default function SettingsNotificationsTab() {
         {isDesktopApp && (
           <section className="space-y-6">
             <div className="flex items-center gap-2">
-              <Laptop size={16} className="text-sky-400" />
+              <Icon name="laptop" size="sm" className="text-sky-400" />
               <h3 className="text-ui-xs font-medium text-rm-text-muted">
                 Desktop Notifications
               </h3>
@@ -70,7 +60,7 @@ export default function SettingsNotificationsTab() {
               <SettingsToggleRow
                 icon={
                   <div className="w-10 h-10 shrink-0 rounded-xl border border-sky-500/20 bg-sky-500/10 flex items-center justify-center text-sky-400">
-                    <BellRing size={18} />
+                    <Icon name="bellRinging" size="md" />
                   </div>
                 }
                 rawIcon
@@ -91,7 +81,11 @@ export default function SettingsNotificationsTab() {
         {/* Master Sound Toggle */}
         <section className="space-y-6">
           <div className="flex items-center gap-2">
-            <Volume2 size={16} className="text-rm-accent-ink" />
+            <Icon
+              name="voiceChannel"
+              size="sm"
+              className="text-rm-accent-ink"
+            />
             <h3 className="text-ui-xs font-medium text-rm-text-muted">
               Sound Effects
             </h3>
@@ -102,9 +96,9 @@ export default function SettingsNotificationsTab() {
               <div className="flex items-start gap-4">
                 <div className="w-10 h-10 shrink-0 rounded-xl bg-rm-accent-tint flex items-center justify-center text-rm-accent-ink">
                   {soundSettings.soundsEnabled ? (
-                    <Volume2 size={20} />
+                    <Icon name="voiceChannel" size="lg" />
                   ) : (
-                    <VolumeX size={20} />
+                    <Icon name="speakerOff" size="lg" />
                   )}
                 </div>
                 <div>
@@ -176,7 +170,7 @@ export default function SettingsNotificationsTab() {
                   id: "notifications" as const,
                   label: "Notification Sounds",
                   desc: "Play a chime when you receive a mention, reply, or DM",
-                  icon: <BellRing size={18} />,
+                  icon: <Icon name="bellRinging" size="md" />,
                   color: "text-destructive",
                   bgColor: "bg-destructive/10 border-destructive/20",
                 },
@@ -184,7 +178,7 @@ export default function SettingsNotificationsTab() {
                   id: "voiceJoinLeave" as const,
                   label: "Voice Join / Leave",
                   desc: "Play a tone when someone joins or leaves your voice channel",
-                  icon: <Headphones size={18} />,
+                  icon: <Icon name="headphones" size="md" />,
                   color: "text-emerald-400",
                   bgColor: "bg-emerald-500/10 border-emerald-500/20",
                 },
@@ -192,7 +186,7 @@ export default function SettingsNotificationsTab() {
                   id: "selfConnectDisconnect" as const,
                   label: "Connect / Disconnect",
                   desc: "Play a chime when you join or leave a voice channel",
-                  icon: <Zap size={18} />,
+                  icon: <Icon name="zap" size="md" />,
                   color: "text-amber-600 dark:text-amber-400",
                   bgColor: "bg-amber-500/10 border-amber-500/20",
                 },
@@ -200,7 +194,7 @@ export default function SettingsNotificationsTab() {
                   id: "muteDeafen" as const,
                   label: "Mute / Deafen",
                   desc: "Play a click when you toggle mute or deafen",
-                  icon: <Mic size={18} />,
+                  icon: <Icon name="mic" size="md" />,
                   color: "text-rm-accent",
                   bgColor: "bg-rm-accent/10 border-rm-accent/20",
                 },
@@ -208,7 +202,7 @@ export default function SettingsNotificationsTab() {
                   id: "screenShare" as const,
                   label: "Screen Share",
                   desc: "Play a tone when starting or stopping a screen share",
-                  icon: <MonitorUp size={18} />,
+                  icon: <Icon name="screenShare" size="md" />,
                   color: "text-sky-400",
                   bgColor: "bg-sky-500/10 border-sky-500/20",
                 },
@@ -216,7 +210,7 @@ export default function SettingsNotificationsTab() {
                   id: "streamWatcherActivity" as const,
                   label: "Stream Viewer Activity",
                   desc: "Play unique sounds when someone starts or stops watching your stream",
-                  icon: <Bell size={18} />,
+                  icon: <Icon name="bell" size="md" />,
                   color: "text-fuchsia-400",
                   bgColor: "bg-fuchsia-500/10 border-fuchsia-500/20",
                 },
@@ -248,7 +242,7 @@ export default function SettingsNotificationsTab() {
           {/* Test Sound Button */}
           <div className="flex justify-end mt-4">
             <Button variant="secondary" onClick={() => playNotification()}>
-              <Bell size={14} aria-hidden="true" />
+              <Icon name="bell" size="sm" />
               Test Notification Sound
             </Button>
           </div>

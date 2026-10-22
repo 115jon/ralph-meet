@@ -5,7 +5,7 @@ import type { ServerAuditLog } from "@/lib/types";
 import { useClientDateFormatter } from "@/lib/client-date-format";
 import { useEffect, useReducer } from "react";
 import { AvatarImage } from "./AvatarImage";
-import { Loader2 } from "./Icons";
+import { Icon } from "@/components/ui/icon";
 import InlineEmojiText from "./InlineEmojiText";
 
 interface AuditLogTabProps {
@@ -106,7 +106,7 @@ export default function AuditLogTab({ serverId }: AuditLogTabProps) {
   if (state.loading) {
     return (
       <div className="flex flex-col items-center justify-center p-12 text-rm-text-muted">
-        <Loader2 className="h-8 w-8 animate-spin mb-4" />
+        <Icon name="loader" size="2xl" className="animate-spin mb-4" />
         <p>Loading audit logs...</p>
       </div>
     );

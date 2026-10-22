@@ -1,7 +1,7 @@
 import { useChatActions, useChatStore } from "@/stores/chat-store";
 import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
 import { Command } from "cmdk";
-import { Search } from "lucide-react";
+import { Icon } from "@/components/ui/icon";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useShallow } from "zustand/shallow";
 import { useAppearanceTheme } from "./chat/useAppearanceTheme";
@@ -160,7 +160,11 @@ export default function CommandMenu() {
         >
           {/* Search input */}
           <div className="flex items-center gap-2 border-b border-rm-border px-4">
-            <Search className="h-4 w-4 shrink-0 text-rm-text-muted" />
+            <Icon
+              name="search"
+              size="sm"
+              className="shrink-0 text-rm-text-muted"
+            />
             <Command.Input
               ref={inputRef}
               value={search}

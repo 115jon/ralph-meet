@@ -4,7 +4,7 @@ import { getAuthAssetUrl } from "@/lib/platform";
 import { useChatStore } from "@/stores/chat-store";
 import { memo, useMemo } from "react";
 import { AvatarImage } from "./AvatarImage";
-import { Hash } from "./Icons";
+import { Icon } from "@/components/ui/icon";
 import InlineEmojiText from "./InlineEmojiText";
 
 export const ChatWelcomeContent = memo(function ChatWelcomeContent({
@@ -81,9 +81,10 @@ export const ChatWelcomeContent = memo(function ChatWelcomeContent({
         <>
           <div className="relative mb-5 flex h-[72px] w-[72px] items-center justify-center overflow-hidden rounded-xl border border-rm-border shadow-sm">
             <DitherField cell={4} intensity={0.6} seed={11} />
-            <Hash
-              className="relative z-10 h-9 w-9 text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.5)]"
-              strokeWidth={2.25}
+            <Icon
+              name="textChannel"
+              size="2xl"
+              className="relative z-10 text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.5)]"
             />
           </div>
           <h3 className="mb-2 font-display text-display text-rm-text-primary text-balance">

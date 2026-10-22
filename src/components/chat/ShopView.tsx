@@ -1,7 +1,7 @@
 import { AvatarImage } from "@/components/chat/AvatarImage";
 import InlineEmojiText from "@/components/chat/InlineEmojiText";
 import { HomeIcon } from "@/components/chat/HomeIcon";
-import { Menu } from "@/components/chat/Icons";
+import { Icon, type IconName } from "@/components/ui/icon";
 import { ProfileCollectiblesLayer } from "@/components/chat/ProfileCollectiblesLayer";
 import { ProfileFrameLayer } from "@/components/chat/ProfileFrameLayer";
 import { Dialog, DialogPortal, DialogSurface } from "@/components/ui/dialog";
@@ -43,17 +43,6 @@ import { getDisplayInitial, getDisplayName } from "@/lib/display-name";
 import { getAuthAssetUrl } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 import { useChatActions, useChatStore } from "@/stores/chat-store";
-import {
-  BadgeCheck,
-  Gem,
-  LayoutGrid,
-  Loader2,
-  Palette,
-  Search,
-  ShoppingBag,
-  Sparkles,
-  X,
-} from "lucide-react";
 import {
   type ComponentPropsWithoutRef,
   type ReactNode,
@@ -168,13 +157,13 @@ const SHOP_RAIL_SHELL_CLASS =
 const SHOP_RAIL_CORE_CLASS =
   "relative overflow-visible rounded-[calc(var(--radius-3xl)-0.375rem)] border border-white/5 bg-rm-bg-surface/92 p-3 sm:p-3.5";
 
-function pageIcon(page: ShopPage) {
-  if (page === "featured") return Sparkles;
-  if (page === "all") return ShoppingBag;
-  if (page === "frames") return LayoutGrid;
-  if (page === "badges") return BadgeCheck;
-  if (page === "orbs") return Gem;
-  return Palette;
+function pageIcon(page: ShopPage): IconName {
+  if (page === "featured") return "sparkle";
+  if (page === "all") return "shop";
+  if (page === "frames") return "grid";
+  if (page === "badges") return "verified";
+  if (page === "orbs") return "gem";
+  return "appearance";
 }
 
 const SHOP_GRID_COMPONENTS: GridComponents<ShopGridContext> = {
@@ -1184,7 +1173,7 @@ function CollectibleDetailModal({
                     </div>
                     {isEquipped ? (
                       <span className="inline-flex items-center gap-1 rounded-full border border-primary/20 bg-primary/10 px-2.5 py-1 text-ui-2xs font-semibold text-primary">
-                        <BadgeCheck className="h-3.5 w-3.5" />
+                        <Icon name="verified" size="sm" />
                         Applied
                       </span>
                     ) : null}
@@ -1199,9 +1188,9 @@ function CollectibleDetailModal({
                     className="h-11 rounded-2xl bg-primary text-primary-foreground shadow-[0_16px_40px_var(--rm-glow)] transition-transform duration-200 hover:-translate-y-0.5 hover:bg-primary/90"
                   >
                     {isApplying ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <Icon name="loader" size="sm" className="animate-spin" />
                     ) : (
-                      <Gem className="h-4 w-4" />
+                      <Icon name="gem" size="sm" />
                     )}
                     {redeemButtonLabel(item)}
                   </Button>
@@ -1217,9 +1206,9 @@ function CollectibleDetailModal({
                     )}
                   >
                     {isApplying ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <Icon name="loader" size="sm" className="animate-spin" />
                     ) : (
-                      <Sparkles className="h-4 w-4" />
+                      <Icon name="sparkle" size="sm" />
                     )}
                     {isEquipped ? "Equipped" : "Equip now"}
                   </Button>
@@ -1256,7 +1245,7 @@ function CollectibleDetailModal({
                     className="flex h-10 w-10 items-center justify-center rounded-full border border-rm-border bg-rm-bg-floating/82 text-rm-text-muted transition-colors hover:bg-rm-bg-hover hover:text-rm-text"
                     aria-label="Close collectible preview"
                   >
-                    <X className="h-4.5 w-4.5" />
+                    <Icon name="close" size="md" />
                   </button>
                 </div>
 
@@ -1456,7 +1445,7 @@ function ShopCard({
             )}
           >
             {isApplying ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
+              <Icon name="loader" size="sm" className="animate-spin" />
             ) : isEquipped ? (
               "Equipped"
             ) : (
@@ -1757,7 +1746,7 @@ export default function ShopView({ onMenuClick }: ShopViewProps) {
       className={cn(SHOP_PANEL_CLASS, "border-dashed px-6 py-12 text-center")}
     >
       <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full border border-rm-border bg-rm-bg-hover text-rm-text-muted">
-        <ShoppingBag className="h-5 w-5" />
+        <Icon name="shop" size="lg" />
       </div>
       <h3 className="text-lg font-semibold tracking-[-0.03em] text-rm-text">
         Nothing matched this filter.
@@ -1857,7 +1846,7 @@ export default function ShopView({ onMenuClick }: ShopViewProps) {
   const catalogMeta = catalog
     ? `${catalogSummary} / Source ${catalog.source}`
     : "Syncing catalog";
-  const ActivePageIcon = pageIcon(activePage);
+  const activePageIcon = pageIcon(activePage);
   const showCollectionSelect =
     activePage === "featured" && featuredCollectionOptions.length > 0;
   const selectPage = (page: ShopPage) => {
@@ -1884,10 +1873,10 @@ export default function ShopView({ onMenuClick }: ShopViewProps) {
                   className="shrink-0 border-none bg-transparent p-1 text-rm-text-muted transition-colors hover:text-rm-text lg:hidden"
                   onClick={onMenuClick}
                 >
-                  <Menu className="h-5 w-5" />
+                  <Icon name="menu" size="lg" />
                 </button>
                 <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-primary/15 bg-primary/10 text-primary">
-                  <ActivePageIcon className="h-4 w-4" />
+                  <Icon name={activePageIcon} size="sm" />
                 </span>
                 <div className="min-w-0">
                   <p className="truncate text-sm font-semibold tracking-[-0.03em] text-rm-text">
@@ -1914,7 +1903,11 @@ export default function ShopView({ onMenuClick }: ShopViewProps) {
                 )}
               >
                 <span className={SHOP_FIELD_LABEL_CLASS}>
-                  <ActivePageIcon className="h-3 w-3 text-primary/75" />
+                  <Icon
+                    name={activePageIcon}
+                    size="xs"
+                    className="text-primary/75"
+                  />
                   Category
                 </span>
                 <Select
@@ -1948,7 +1941,11 @@ export default function ShopView({ onMenuClick }: ShopViewProps) {
               {showCollectionSelect ? (
                 <label className="w-full min-w-0 md:col-span-3">
                   <span className={SHOP_FIELD_LABEL_CLASS}>
-                    <Sparkles className="h-3 w-3 text-primary/75" />
+                    <Icon
+                      name="sparkle"
+                      size="xs"
+                      className="text-primary/75"
+                    />
                     Collection
                   </span>
                   <Select
@@ -1992,11 +1989,15 @@ export default function ShopView({ onMenuClick }: ShopViewProps) {
                 )}
               >
                 <span className={SHOP_FIELD_LABEL_CLASS}>
-                  <Search className="h-3 w-3 text-primary/75" />
+                  <Icon name="search" size="xs" className="text-primary/75" />
                   Search
                 </span>
                 <div className="relative">
-                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-rm-text-muted" />
+                  <Icon
+                    name="search"
+                    size="sm"
+                    className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-rm-text-muted"
+                  />
                   <Input
                     value={query}
                     onChange={(event) => setQuery(event.target.value)}

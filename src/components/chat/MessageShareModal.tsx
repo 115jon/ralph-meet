@@ -6,7 +6,7 @@ import type { Message } from "@/lib/types";
 import { isPlayableVideo } from "@/lib/media";
 import { getAuthAssetUrl, getMediaUrl } from "@/lib/platform";
 import { cn } from "@/lib/utils";
-import { Check, Copy, ExternalLink, Share2, X } from "lucide-react";
+import { Icon } from "@/components/ui/icon";
 import { useEffect, useState } from "react";
 import ShareSnapshotPreview from "./ShareSnapshotPreview";
 
@@ -105,7 +105,7 @@ export default function MessageShareModal({
             <div className="flex shrink-0 items-center justify-between border-b border-rm-border px-5 py-4">
               <div className="flex items-center gap-3">
                 <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-rm-accent-tint text-rm-accent-ink">
-                  <Share2 className="h-4 w-4" />
+                  <Icon name="share" size="sm" />
                 </div>
                 <div>
                   <h2
@@ -120,8 +120,8 @@ export default function MessageShareModal({
                 </div>
               </div>
               <IconButton
-                icon={X}
-                iconSize={16}
+                icon="close"
+                iconSize="sm"
                 shape="circle"
                 onClick={onClose}
                 aria-label="Close"
@@ -213,9 +213,9 @@ export default function MessageShareModal({
                     />
                     <Button onClick={copyLink} className="h-9">
                       {copyState === "copied" ? (
-                        <Check className="h-4 w-4" />
+                        <Icon name="check" size="sm" />
                       ) : (
-                        <Copy className="h-4 w-4" />
+                        <Icon name="copy" size="sm" />
                       )}
                       {copyState === "copied" ? "Copied" : "Copy"}
                     </Button>
@@ -240,7 +240,7 @@ export default function MessageShareModal({
                   )}
                   <Button asChild variant="secondary">
                     <a href={shareUrl} target="_blank" rel="noreferrer">
-                      <ExternalLink className="h-4 w-4" />
+                      <Icon name="externalLink" size="sm" />
                       Open
                     </a>
                   </Button>
@@ -251,7 +251,7 @@ export default function MessageShareModal({
                   disabled={creating}
                   loading={creating}
                 >
-                  <Share2 className="h-4 w-4" />
+                  <Icon name="share" size="sm" />
                   Create Link
                 </Button>
               )}

@@ -22,7 +22,6 @@ import { VoiceControls } from "../voice/VoiceControls";
 import { VoiceGrid } from "../voice/VoiceGrid";
 import { VoiceHeader } from "../voice/VoiceHeader";
 import { VoiceLanding } from "../voice/VoiceLanding";
-import { ChevronUp } from "./Icons";
 
 const UnifiedScreenShareModal = lazy(() =>
   import("@/components/UnifiedScreenShareModal").then((mod) => ({
@@ -650,7 +649,6 @@ export default function VoiceChannelView({
             toggleFs={toggleFs}
             showMembers={showMembers}
             setShowMembers={setShowMembers}
-            ChevronUp={ChevronUp}
             onOpenActivities={onOpenActivities}
             settingsUserId={settingsUserId}
             sfu={sfu}

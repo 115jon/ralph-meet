@@ -44,15 +44,7 @@ import {
   formatListenTogetherDuration,
   useListenTogetherPlaybackState,
 } from "./listen-together-playback";
-import {
-  Headphones,
-  Link2,
-  ListMusic,
-  Loader2,
-  Play,
-  Search,
-  Trash2,
-} from "lucide-react";
+import { Icon } from "@/components/ui/icon";
 import {
   useCallback,
   useDeferredValue,
@@ -158,7 +150,7 @@ export const listenTogetherQueueRowRenderer = {
             />
           ) : (
             <div className="flex h-full w-full items-center justify-center text-rm-text-muted">
-              <Headphones className="h-4 w-4" />
+              <Icon name="headphones" size="sm" />
             </div>
           )}
         </div>
@@ -221,7 +213,7 @@ export const listenTogetherQueueRowRenderer = {
               className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-rm-text-muted transition-colors hover:bg-rm-bg-active hover:text-rm-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
               aria-label={`Play ${entry.track.title}`}
             >
-              <Play className="h-3.5 w-3.5" />
+              <Icon name="play" size="sm" />
             </button>
           )}
           <button
@@ -236,7 +228,7 @@ export const listenTogetherQueueRowRenderer = {
             className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-rm-text-muted transition-colors hover:bg-destructive/10 hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-destructive/30"
             aria-label={`Remove ${entry.track.title}`}
           >
-            <Trash2 className="h-3.5 w-3.5" />
+            <Icon name="trash" size="sm" />
           </button>
         </div>
       </div>
@@ -906,7 +898,7 @@ export function ListenTogetherPanel({
         <div className="border-b border-rm-border px-4 py-4 sm:px-5">
           <div className="flex items-center justify-between gap-3">
             <div className="text-ui-2xs font-semibold uppercase tracking-[0.08em] flex items-center gap-2 text-rm-text-muted">
-              <Headphones className="h-4 w-4 text-primary" />
+              <Icon name="headphones" size="sm" className="text-primary" />
               Add to queue
             </div>
             <span className="text-ui-2xs text-rm-text-muted">
@@ -931,9 +923,17 @@ export function ListenTogetherPanel({
             >
               <div className="relative flex-1">
                 {isResolveMode ? (
-                  <Link2 className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-rm-text-muted" />
+                  <Icon
+                    name="link"
+                    size="sm"
+                    className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-rm-text-muted"
+                  />
                 ) : (
-                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-rm-text-muted" />
+                  <Icon
+                    name="search"
+                    size="sm"
+                    className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-rm-text-muted"
+                  />
                 )}
                 <input
                   ref={searchInputRef}
@@ -962,7 +962,7 @@ export function ListenTogetherPanel({
                   className="inline-flex h-11 items-center justify-center rounded-2xl border border-primary/30 bg-primary/15 px-4 text-sm font-semibold text-primary transition-transform hover:bg-primary/20 active:scale-[0.96] disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {isSearching ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <Icon name="loader" size="sm" className="animate-spin" />
                   ) : (
                     "Search"
                   )}
@@ -1011,7 +1011,7 @@ export function ListenTogetherPanel({
         <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-5">
           {isResolving ? (
             <div className="flex flex-col items-center justify-center gap-3 py-12 text-rm-text-muted">
-              <Loader2 className="h-5 w-5 animate-spin" />
+              <Icon name="loader" size="lg" className="animate-spin" />
               <span className="text-sm">Resolving link preview...</span>
             </div>
           ) : resolvedPreview ? (
@@ -1035,7 +1035,7 @@ export function ListenTogetherPanel({
                     />
                   ) : (
                     <div className="flex h-full w-full items-center justify-center text-rm-text-muted">
-                      <Headphones className="h-5 w-5" />
+                      <Icon name="headphones" size="lg" />
                     </div>
                   )}
                 </div>
@@ -1091,7 +1091,7 @@ export function ListenTogetherPanel({
                             />
                           ) : (
                             <div className="flex h-full w-full items-center justify-center text-rm-text-muted">
-                              <Headphones className="h-4 w-4" />
+                              <Icon name="headphones" size="sm" />
                             </div>
                           )}
                         </div>
@@ -1115,7 +1115,7 @@ export function ListenTogetherPanel({
             </div>
           ) : isSearching ? (
             <div className="flex items-center justify-center py-12 text-rm-text-muted">
-              <Loader2 className="h-5 w-5 animate-spin" />
+              <Icon name="loader" size="lg" className="animate-spin" />
             </div>
           ) : isSearchFocused && !trimmedInput && queryHistory.length > 0 ? (
             <div className="space-y-2">
@@ -1134,7 +1134,11 @@ export function ListenTogetherPanel({
                   }}
                   className="flex min-h-11 w-full items-center gap-3 rounded-2xl border border-rm-border bg-rm-bg-hover/35 px-3 text-left text-sm text-rm-text transition-colors hover:bg-rm-bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
                 >
-                  <Search className="h-4 w-4 shrink-0 text-rm-text-muted" />
+                  <Icon
+                    name="search"
+                    size="sm"
+                    className="shrink-0 text-rm-text-muted"
+                  />
                   <span className="truncate">{query}</span>
                 </button>
               ))}
@@ -1184,7 +1188,7 @@ export function ListenTogetherPanel({
                         />
                       ) : (
                         <div className="flex h-full w-full items-center justify-center text-rm-text-muted">
-                          <Headphones className="h-5 w-5" />
+                          <Icon name="headphones" size="lg" />
                         </div>
                       )}
                     </div>
@@ -1299,7 +1303,7 @@ export function ListenTogetherPanel({
         <div className="shrink-0 rounded-3xl border border-rm-border bg-rm-bg-surface/35 p-4 sm:p-5">
           <div className="mb-4 flex items-center justify-between gap-3">
             <div className="text-ui-2xs font-semibold uppercase tracking-[0.08em] flex items-center gap-2 text-rm-text-muted">
-              <Headphones className="h-4 w-4 text-primary" />
+              <Icon name="headphones" size="sm" className="text-primary" />
               Now playing
             </div>
             <span className="inline-flex items-center gap-1.5 text-ui-2xs text-rm-text-muted">
@@ -1338,7 +1342,7 @@ export function ListenTogetherPanel({
                     : "text-rm-text-muted hover:text-rm-text",
                 )}
               >
-                <ListMusic className="h-3.5 w-3.5" />
+                <Icon name="playlist" size="sm" />
                 Queue
                 <span className="tabular-nums text-ui-2xs text-rm-text-muted">
                   {snapshot?.queue?.length ?? 0}
@@ -1414,7 +1418,7 @@ export function ListenTogetherPanel({
                         />
                       ) : (
                         <div className="flex h-full w-full items-center justify-center text-rm-text-muted">
-                          <Headphones className="h-4 w-4" />
+                          <Icon name="headphones" size="sm" />
                         </div>
                       )}
                     </div>
@@ -1449,7 +1453,7 @@ export function ListenTogetherPanel({
                       }
                       className="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-xl border border-rm-border bg-rm-bg-elevated/60 px-3 text-xs font-bold text-rm-text transition-colors hover:bg-rm-bg-active focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
                     >
-                      <ListMusic className="h-3.5 w-3.5" />
+                      <Icon name="playlist" size="sm" />
                       Requeue
                     </button>
                   </div>

@@ -14,13 +14,7 @@ import {
 } from "@/lib/client-date-format";
 import { cn } from "@/lib/utils";
 import { Dialog, DialogPortal, DialogSurface } from "@/components/ui/dialog";
-import {
-  ImagePlus,
-  LockKeyhole,
-  MessageCircle,
-  Send,
-  Sparkles,
-} from "lucide-react";
+import { Icon } from "@/components/ui/icon";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 interface DemoChatGif {
@@ -168,7 +162,7 @@ export function DemoRoomChatPanel({
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-rm-accent-dim text-rm-accent ring-1 ring-rm-accent/20">
-              <MessageCircle className="h-4 w-4" />
+              <Icon name="chat" size="sm" />
             </div>
             <div>
               <h2 className="text-sm font-bold text-rm-text">Temporary Chat</h2>
@@ -177,7 +171,11 @@ export function DemoRoomChatPanel({
               </p>
             </div>
           </div>
-          <Sparkles className="h-4 w-4 text-rm-accent opacity-80" />
+          <Icon
+            name="sparkle"
+            size="sm"
+            className="text-rm-accent opacity-80"
+          />
         </div>
       </div>
 
@@ -228,7 +226,7 @@ export function DemoRoomChatPanel({
         className="relative border-t border-rm-border p-3"
       >
         <div className="mb-2 flex items-center gap-2 rounded-xl border border-amber-500/25 dark:border-amber-400/20 bg-amber-500/5 dark:bg-amber-400/10 px-3 py-2 text-ui-2xs font-semibold text-amber-800 dark:text-amber-100/90">
-          <LockKeyhole className="h-3.5 w-3.5 shrink-0" />
+          <Icon name="lock" size="sm" className="shrink-0" />
           Messages and GIFs here are demo-only and expire after{" "}
           {DEMO_CHAT_TTL_MINUTES} minutes.
         </div>
@@ -240,7 +238,7 @@ export function DemoRoomChatPanel({
             title="Uploads are in the full app"
             aria-label="Uploads are in the full app"
           >
-            <ImagePlus className="h-4 w-4" />
+            <Icon name="image" size="sm" />
           </button>
           <textarea
             value={value}
@@ -272,7 +270,7 @@ export function DemoRoomChatPanel({
             className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40"
             aria-label="Send message"
           >
-            <Send className="h-4 w-4" />
+            <Icon name="send" size="sm" />
           </button>
         </div>
         <div className="mt-1 flex justify-end px-2 text-ui-2xs font-semibold text-rm-text-muted/70">
@@ -308,7 +306,7 @@ export function DemoUploadBlockerModal({
           <div className="w-full max-w-md overflow-hidden rounded-3xl border border-rm-border bg-rm-bg-elevated shadow-2xl">
             <div className="bg-linear-to-br from-primary/15 via-rm-accent/10 to-transparent px-6 pt-6">
               <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/15 text-primary ring-1 ring-primary/25">
-                <LockKeyhole className="h-5 w-5" />
+                <Icon name="lock" size="lg" />
               </div>
               <h2
                 id="demo-upload-blocker-title"

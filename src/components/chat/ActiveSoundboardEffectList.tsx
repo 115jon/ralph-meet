@@ -13,7 +13,7 @@ import {
 } from "@/lib/voice/soundboard";
 import { useVoiceSoundboardStore } from "@/stores/useVoiceSoundboardStore";
 import { useUserResolution } from "@/hooks/useUserResolution";
-import { Pause, Play, Square, Volume2 } from "lucide-react";
+import { Icon } from "@/components/ui/icon";
 import { useMemo } from "react";
 import {
   Tooltip,
@@ -195,7 +195,11 @@ export function SoundboardPlaybackRow({
                   aria-label={playback.paused ? "Resume" : "Pause"}
                   className="flex items-center gap-1 rounded px-2 py-1 text-rm-text-muted hover:bg-rm-bg-active hover:text-rm-text"
                 >
-                  {playback.paused ? <Play size={12} /> : <Pause size={12} />}
+                  {playback.paused ? (
+                    <Icon name="play" size="xs" />
+                  ) : (
+                    <Icon name="pause" size="xs" />
+                  )}
                 </button>
               </TooltipTrigger>
               <TooltipContent side="top">
@@ -211,7 +215,7 @@ export function SoundboardPlaybackRow({
                 aria-label="Stop"
                 className="flex items-center gap-1 rounded px-2 py-1 text-rm-text-muted hover:bg-destructive/20 hover:text-destructive"
               >
-                <Square size={11} />
+                <Icon name="stop" size="xs" />
               </button>
             </TooltipTrigger>
             <TooltipContent side="top">Stop</TooltipContent>
@@ -220,7 +224,11 @@ export function SoundboardPlaybackRow({
       </div>
       {variant === "floating" && (
         <div className="mt-2 flex items-center gap-2 pl-8">
-          <Volume2 className="h-3 w-3 shrink-0 text-rm-text-muted" />
+          <Icon
+            name="voiceChannel"
+            size="xs"
+            className="shrink-0 text-rm-text-muted"
+          />
           <label className="sr-only" htmlFor={volumeControlId}>
             Volume for {playback.name}
           </label>

@@ -6,7 +6,7 @@ import { AvatarImage } from "@/components/chat/AvatarImage";
 import InlineEmojiText from "@/components/chat/InlineEmojiText";
 import { getAuthAssetUrl } from "@/lib/platform";
 import { cn } from "@/lib/utils";
-import { Menu, MessageSquare, Volume2 } from "../chat/Icons";
+import { Icon } from "@/components/ui/icon";
 import { QualityMonitor } from "./QualityMonitor";
 
 function getFocusedItemLabel(
@@ -66,7 +66,7 @@ export function VoiceHeader({
         {onMenuClick && (
           <IconButton
             aria-label="Open sidebar"
-            icon={Menu}
+            icon="menu"
             size="sm"
             className={cn(
               "md:hidden",
@@ -83,7 +83,7 @@ export function VoiceHeader({
             focusedItem ? "text-white/80" : "text-rm-text-muted",
           )}
         >
-          <Volume2 size={18} />
+          <Icon name="voiceChannel" size="md" />
           <InlineEmojiText
             text={channelName}
             className={cn(
@@ -199,7 +199,7 @@ export function VoiceHeader({
         )}
         {!showTextChat && (
           <IconButton
-            icon={MessageSquare}
+            icon="chat"
             size="sm"
             shape="circle"
             tooltip="Chat"

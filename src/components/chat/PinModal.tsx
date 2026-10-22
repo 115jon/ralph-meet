@@ -5,7 +5,6 @@ import { Dialog, DialogPortal, DialogSurface } from "@/components/ui/dialog";
 import { IconButton } from "@/components/ui/IconButton";
 import type { Message } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { X } from "lucide-react";
 
 import { isPlayableVideo } from "@/lib/media";
 import React from "react";
@@ -90,7 +89,7 @@ export const PinModal: React.FC<PinModalProps> = ({
                   {isPin ? "Pin It. Pin It Good." : "Unpin Message"}
                 </h2>
                 <IconButton
-                  icon={X}
+                  icon="close"
                   onClick={onClose}
                   aria-label="Close"
                   className="-mr-1.5 -mt-1"

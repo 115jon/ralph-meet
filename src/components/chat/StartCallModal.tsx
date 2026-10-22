@@ -4,7 +4,6 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogPortal, DialogSurface } from "@/components/ui/dialog";
 import { IconButton } from "@/components/ui/IconButton";
 import { START_CALL_CONFIRM_KEY } from "@/components/chat/voice-confirmation-preferences";
-import { X } from "lucide-react";
 import { useCallback, useState } from "react";
 import { cn } from "@/lib/utils";
 
@@ -75,9 +74,9 @@ export function StartCallModal({
                 Ready to start a call?
               </h2>
               <IconButton
-                icon={X}
+                icon="close"
                 size="xs"
-                iconSize={16}
+                iconSize="sm"
                 type="button"
                 onClick={onCancel}
                 aria-label="Close"

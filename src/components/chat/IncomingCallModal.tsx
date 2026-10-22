@@ -24,7 +24,7 @@ import {
 } from "@/lib/voice/audio-pipeline";
 import { useChatStore } from "@/stores/chat-store";
 import { useCallStore } from "@/stores/useCallStore";
-import { Phone, X } from "lucide-react";
+import { Icon } from "@/components/ui/icon";
 import { useEffect, useState } from "react";
 import { AvatarImage } from "./AvatarImage";
 import InlineEmojiText from "./InlineEmojiText";
@@ -158,7 +158,7 @@ export function IncomingCallModal() {
                         aria-label="Dismiss"
                         className="w-16"
                       >
-                        <X className="size-5" />
+                        <Icon name="close" size="lg" />
                       </Button>
                     </DialogClose>
                   </TooltipTrigger>
@@ -175,7 +175,7 @@ export function IncomingCallModal() {
                       aria-label="Join Call"
                       className="w-16 bg-emerald-600 text-white"
                     >
-                      <Phone className="size-5" />
+                      <Icon name="call" size="lg" />
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent side="bottom">Join Call</TooltipContent>

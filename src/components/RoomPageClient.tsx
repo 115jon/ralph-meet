@@ -17,23 +17,7 @@ import { cn } from "@/lib/utils";
 import { getConnectionStatusBadge } from "@/lib/voice/connection-status-label";
 import { getAvailableStreamQualities } from "@/lib/voice/utils";
 import { useNavigate, useParams } from "@tanstack/react-router";
-import {
-  Camera,
-  CameraOff,
-  Check,
-  ChevronUp,
-  Copy,
-  Headphones,
-  LogOut,
-  Maximize2,
-  Mic,
-  MicOff,
-  Minimize,
-  Monitor,
-  Radio,
-  Settings,
-  X,
-} from "lucide-react";
+import { Icon } from "@/components/ui/icon";
 import {
   lazy,
   Suspense,
@@ -116,7 +100,7 @@ export default function RoomPageClient() {
         <div className="z-10 w-full max-w-sm">
           <div className="mb-6 flex flex-col items-center gap-3">
             <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-rm-accent-dim shadow-[0_0_40px_var(--rm-accent-dim)] ring-1 ring-rm-border">
-              <Radio className="h-8 w-8 text-rm-accent" />
+              <Icon name="soundboard" size="2xl" className="text-rm-accent" />
             </div>
             <h1 className="text-2xl font-semibold text-rm-text">
               Join Meeting
@@ -225,11 +209,11 @@ function ControlsBar({
               !hasMicrophone && "cursor-not-allowed",
             )}
           >
-            {!isMicOn || !hasMicrophone ? (
-              <MicOff className="h-5 w-5 text-destructive-foreground" />
-            ) : (
-              <Mic className="h-5 w-5" />
-            )}
+            <Icon
+              name="mic"
+              state={!isMicOn || !hasMicrophone ? "off" : "idle"}
+              size="lg"
+            />
           </button>
 
           <button
@@ -243,12 +227,7 @@ function ControlsBar({
                 : "text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text",
             )}
           >
-            <Headphones
-              className={cn(
-                "h-5 w-5",
-                isDeafened && "text-destructive-foreground",
-              )}
-            />
+            <Icon name="deafen" state={isDeafened ? "off" : "idle"} size="lg" />
           </button>
 
           <button
@@ -271,9 +250,9 @@ function ControlsBar({
             )}
           >
             {isCameraOn ? (
-              <Camera className="h-5 w-5" />
+              <Icon name="camera" state="active" size="lg" />
             ) : (
-              <CameraOff className="h-5 w-5" />
+              <Icon name="cameraOff" size="lg" />
             )}
           </button>
 
@@ -293,11 +272,11 @@ function ControlsBar({
                 : "text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text",
             )}
           >
-            {isScreenSharing ? (
-              <X className="h-5 w-5 text-primary-foreground" />
-            ) : (
-              <Monitor className="h-5 w-5" />
-            )}
+            <Icon
+              name="screenShare"
+              state={isScreenSharing ? "active" : "idle"}
+              size="lg"
+            />
           </button>
 
           <div className="w-px h-6 bg-rm-border mx-1" />
@@ -308,7 +287,7 @@ function ControlsBar({
             onClick={handleLeave}
             className="w-12 h-10 flex items-center justify-center bg-destructive text-destructive-foreground rounded-xl shadow-lg hover:brightness-110 active:scale-[0.96] transition-ui shrink-0"
           >
-            <LogOut className="h-5 w-5 text-destructive-foreground" />
+            <Icon name="disconnect" size="lg" />
           </button>
         </div>
       </div>
@@ -320,9 +299,9 @@ function ControlsBar({
           title={isFullscreen ? "Exit Fullscreen" : "Fullscreen"}
         >
           {isFullscreen ? (
-            <Minimize className="h-5 w-5" />
+            <Icon name="minimize" size="lg" />
           ) : (
-            <Maximize2 className="h-5 w-5" />
+            <Icon name="maximize" size="lg" />
           )}
         </button>
         <button
@@ -331,7 +310,7 @@ function ControlsBar({
           className="p-2 text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover rounded-xl transition-ui outline-none"
           title="Settings"
         >
-          <Settings className="h-5 w-5" />
+          <Icon name="settings" size="lg" />
         </button>
         {focusedId && (
           <button
@@ -345,9 +324,11 @@ function ControlsBar({
             )}
             title={showMembers ? "Hide Members" : "Show Members"}
           >
-            <ChevronUp
+            <Icon
+              name="chevronUp"
+              size="lg"
               className={cn(
-                "h-5 w-5 transition-transform",
+                "transition-transform",
                 !showMembers && "rotate-180",
               )}
             />
@@ -395,7 +376,7 @@ function RoomHeader({
       }}
     >
       <div className="flex items-center gap-3 pointer-events-auto">
-        <Radio className="h-4 w-4 text-rm-accent" />
+        <Icon name="soundboard" size="sm" className="text-rm-accent" />
         <span className="text-sm font-bold text-rm-text tracking-tight">
           {slug}
         </span>
@@ -419,9 +400,9 @@ function RoomHeader({
           }
         >
           {copyState === "copied" ? (
-            <Check className="h-3.5 w-3.5" />
+            <Icon name="check" size="sm" />
           ) : (
-            <Copy className="h-3.5 w-3.5" />
+            <Icon name="copy" size="sm" />
           )}
         </button>
         <div className="h-4 w-px bg-rm-border" />
@@ -620,7 +601,7 @@ function RoomVoiceView({
     return (
       <div className="flex min-h-full flex-col items-center justify-center bg-rm-bg-primary gap-4">
         <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-rm-accent-dim ring-1 ring-rm-border animate-pulse">
-          <Radio className="h-8 w-8 text-rm-accent" />
+          <Icon name="soundboard" size="2xl" className="text-rm-accent" />
         </div>
         <span className="text-sm font-semibold text-rm-text-muted">
           Connecting to {slug}…
@@ -662,7 +643,7 @@ function RoomVoiceView({
         {audioStalled && isMicOn && (
           <div className="z-50 bg-destructive text-destructive-foreground px-4 py-3 flex items-center justify-between text-sm font-medium shadow-md shrink-0">
             <div className="flex items-center gap-2">
-              <MicOff className="h-4 w-4 shrink-0" />
+              <Icon name="mic" state="off" size="sm" className="shrink-0" />
               <span>
                 We can't hear you! Your microphone isn't detecting any sound.
               </span>

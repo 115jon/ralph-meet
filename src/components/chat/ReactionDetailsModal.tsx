@@ -8,7 +8,6 @@ import type { Message, Reaction } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useEffect, useState } from "react";
 import EmojiToken from "./EmojiToken";
-import { X } from "./Icons";
 import InlineEmojiText from "./InlineEmojiText";
 
 type CustomEmojiMap = Record<string, { image_url?: string | null }>;
@@ -57,8 +56,8 @@ function ReactionUserRow({
       </div>
       {canManageReactions && (
         <IconButton
-          icon={X}
-          iconSize={16}
+          icon="close"
+          iconSize="sm"
           variant="destructive"
           type="button"
           onClick={onRemove}
@@ -156,7 +155,7 @@ export default function ReactionDetailsModal({
                 Reactions
               </h2>
               <IconButton
-                icon={X}
+                icon="close"
                 type="button"
                 onClick={onClose}
                 aria-label="Close reactions"

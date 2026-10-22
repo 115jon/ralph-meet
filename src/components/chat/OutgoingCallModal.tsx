@@ -6,7 +6,7 @@ import { useChatStore } from "@/stores/chat-store";
 import { useCallStore } from "@/stores/useCallStore";
 import { disposePrewarmedAudioContext } from "@/lib/voice/audio-pipeline";
 import { Button } from "@/components/ui/button";
-import { PhoneOff } from "lucide-react";
+import { Icon } from "@/components/ui/icon";
 import { AvatarImage } from "./AvatarImage";
 import InlineEmojiText from "./InlineEmojiText";
 
@@ -88,7 +88,7 @@ export function OutgoingCallModal() {
           title="Cancel Call"
           aria-label="Cancel Call"
         >
-          <PhoneOff className="size-6" />
+          <Icon name="disconnect" size="xl" />
         </Button>
       </div>
     </div>

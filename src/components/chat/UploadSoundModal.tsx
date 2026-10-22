@@ -1,5 +1,5 @@
 import { useId, useState, useRef, Suspense, lazy } from "react";
-import { Upload, X, Smile } from "lucide-react";
+import { Icon } from "@/components/ui/icon";
 import { cn as _cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogPortal, DialogSurface } from "@/components/ui/dialog";
@@ -88,7 +88,7 @@ export function UploadSoundModal({
             className="w-[480px] max-w-[90vw] rounded-xl border border-rm-border bg-rm-bg-surface dark:bg-rm-bg-elevated shadow-[var(--rm-shadow-3)] p-6 relative animate-in fade-in zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out data-[state=closed]:zoom-out-95"
           >
             <IconButton
-              icon={X}
+              icon="close"
               type="button"
               onClick={onClose}
               className="absolute top-4 right-4"
@@ -121,7 +121,7 @@ export function UploadSoundModal({
                     className="flex items-center justify-between border border-rm-border bg-rm-bg-hover rounded-xl p-1 pl-3 cursor-pointer hover:border-primary/50 transition-colors"
                   >
                     <div className="flex items-center gap-2 text-rm-text-muted truncate pr-2">
-                      <Upload size={16} />
+                      <Icon name="upload" size="sm" />
                       <span className="text-sm truncate">
                         {file ? file.name : "Choose a file"}
                       </span>
@@ -185,7 +185,7 @@ export function UploadSoundModal({
                       />
                     ) : (
                       <>
-                        <Smile size={18} />
+                        <Icon name="emoji" size="md" />
                         <span>Click to select</span>
                       </>
                     )}

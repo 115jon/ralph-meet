@@ -12,7 +12,7 @@ import type { Invite } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useChatStore } from "@/stores/chat-store";
 import { useCallback, useEffect, useReducer, useRef } from "react";
-import { Check, Copy, Hash, Link, Loader2, Plus, X } from "./Icons";
+import { Icon } from "@/components/ui/icon";
 import InlineEmojiText from "./InlineEmojiText";
 
 interface InvitesTabProps {
@@ -283,7 +283,7 @@ export default function InvitesTab({ serverId, serverName }: InvitesTabProps) {
             onClick={() => dispatch({ type: "TOGGLE_SHOW_CREATE" })}
             className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/20 transition-ui hover:brightness-110"
           >
-            <Plus className="h-3.5 w-3.5" />
+            <Icon name="add" size="sm" />
             Create invite link
           </button>
         </div>
@@ -440,7 +440,9 @@ export default function InvitesTab({ serverId, serverName }: InvitesTabProps) {
               disabled={state.creating}
               className="flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition-ui hover:brightness-110 disabled:opacity-40"
             >
-              {state.creating && <Loader2 className="h-3 w-3 animate-spin" />}
+              {state.creating && (
+                <Icon name="loader" size="xs" className="animate-spin" />
+              )}
               {state.creating ? "Creating..." : "Create"}
             </button>
             <button
@@ -466,11 +468,12 @@ export default function InvitesTab({ serverId, serverName }: InvitesTabProps) {
       {/* Table */}
       {state.loading ? (
         <div className="flex items-center gap-2 text-rm-text-muted py-8">
-          <Loader2 className="h-4 w-4 animate-spin" /> Loading invites…
+          <Icon name="loader" size="sm" className="animate-spin" /> Loading
+          invites…
         </div>
       ) : state.invites.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-12 text-center">
-          <Link className="h-10 w-10 mb-3 text-rm-text-muted/30" />
+          <Icon name="link" size="3xl" className="mb-3 text-rm-text-muted/30" />
           <p className="text-sm text-rm-text-muted">No active invites</p>
           <p className="text-xs text-rm-text-muted/60 mt-1">
             Create an invite link to let others join{" "}
@@ -518,7 +521,7 @@ export default function InvitesTab({ serverId, serverName }: InvitesTabProps) {
                     </p>
                     {invite.channel_name && (
                       <p className="flex items-center gap-0.5 text-ui-2xs text-rm-text-muted truncate">
-                        <Hash className="h-2.5 w-2.5" />
+                        <Icon name="textChannel" size="xs" />
                         {invite.channel_name}
                       </p>
                     )}
@@ -532,9 +535,13 @@ export default function InvitesTab({ serverId, serverName }: InvitesTabProps) {
                 >
                   <span className="font-mono">{invite.code}</span>
                   {state.copied === invite.code ? (
-                    <Check className="h-3 w-3 text-primary" />
+                    <Icon name="check" size="xs" className="text-primary" />
                   ) : (
-                    <Copy className="h-3 w-3 opacity-0 group-hover:opacity-60 transition-opacity" />
+                    <Icon
+                      name="copy"
+                      size="xs"
+                      className="opacity-0 group-hover:opacity-60 transition-opacity"
+                    />
                   )}
                 </button>
 
@@ -557,7 +564,7 @@ export default function InvitesTab({ serverId, serverName }: InvitesTabProps) {
                   className="flex h-7 w-7 items-center justify-center rounded-md text-rm-text-muted hover:bg-destructive/10 hover:text-destructive transition-ui"
                   title="Revoke invite"
                 >
-                  <X className="h-3.5 w-3.5" />
+                  <Icon name="close" size="sm" />
                 </button>
               </div>
             );

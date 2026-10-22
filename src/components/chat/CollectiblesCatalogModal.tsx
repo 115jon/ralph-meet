@@ -33,7 +33,7 @@ import type {
   CollectibleKind,
   CollectiblesCatalog,
 } from "@/lib/collectibles-catalog";
-import { Check, Loader2, RefreshCw, Search, Sparkles, X } from "lucide-react";
+import { Icon } from "@/components/ui/icon";
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 
@@ -544,11 +544,11 @@ function CatalogItemCard({
           disabled={Boolean(applyingId)}
         >
           {applyingId === item.id ? (
-            <Loader2 size={14} className="animate-spin" />
+            <Icon name="loader" size="sm" className="animate-spin" />
           ) : isSelected ? (
-            <Check size={14} />
+            <Icon name="check" size="sm" />
           ) : (
-            <Sparkles size={14} />
+            <Icon name="sparkle" size="sm" />
           )}
           {isSelected ? "Applied" : "Apply"}
         </Button>
@@ -692,7 +692,7 @@ export function CollectiblesCatalogModal({
       <section className="flex max-h-[88vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-rm-border bg-rm-bg-primary shadow-2xl">
         <header className="flex items-center gap-3 border-b border-rm-border px-4 py-3">
           <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/15 text-primary">
-            <Sparkles size={18} />
+            <Icon name="sparkle" size="md" />
           </div>
           <div className="min-w-0 flex-1">
             <h2 className="truncate text-base font-bold text-rm-text">
@@ -712,9 +712,9 @@ export function CollectiblesCatalogModal({
             disabled={refreshing}
           >
             {refreshing ? (
-              <Loader2 size={16} className="animate-spin" />
+              <Icon name="loader" size="sm" className="animate-spin" />
             ) : (
-              <RefreshCw size={16} />
+              <Icon name="refresh" size="sm" />
             )}
           </Button>
           <button
@@ -723,7 +723,7 @@ export function CollectiblesCatalogModal({
             className="flex h-9 w-9 items-center justify-center rounded-lg text-rm-text-muted transition-colors hover:bg-rm-bg-hover hover:text-rm-text"
             aria-label="Close collectibles catalog"
           >
-            <X size={18} />
+            <Icon name="close" size="md" />
           </button>
         </header>
 
@@ -752,8 +752,9 @@ export function CollectiblesCatalogModal({
               ))}
             </div>
             <div className="relative flex-1">
-              <Search
-                size={15}
+              <Icon
+                name="search"
+                size="sm"
                 className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-rm-text-muted"
               />
               <Input
@@ -772,9 +773,9 @@ export function CollectiblesCatalogModal({
                 disabled={Boolean(applyingId)}
               >
                 {applyingId === `clear:${activeKind}` ? (
-                  <Loader2 size={15} className="animate-spin" />
+                  <Icon name="loader" size="sm" className="animate-spin" />
                 ) : (
-                  <X size={15} />
+                  <Icon name="close" size="sm" />
                 )}
                 Remove
               </Button>
@@ -790,7 +791,7 @@ export function CollectiblesCatalogModal({
         <div className="min-h-0 flex-1 overflow-y-auto p-4 custom-scrollbar">
           {loading ? (
             <div className="flex h-56 items-center justify-center text-rm-text-muted">
-              <Loader2 size={24} className="animate-spin" />
+              <Icon name="loader" size="xl" className="animate-spin" />
             </div>
           ) : filteredItems.length === 0 ? (
             <div className="flex h-56 items-center justify-center text-sm text-rm-text-muted">

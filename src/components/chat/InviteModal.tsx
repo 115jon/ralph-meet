@@ -19,7 +19,7 @@ import { apiPost } from "@/lib/api-client";
 import { getWebOrigin } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 import { useEffect, useState } from "react";
-import { Check, Copy, X } from "./Icons";
+import { Icon } from "@/components/ui/icon";
 import InlineEmojiText from "./InlineEmojiText";
 interface InviteModalProps {
   open: boolean;
@@ -88,8 +88,8 @@ export default function InviteModal({
         <div>
           <DialogClose asChild>
             <IconButton
-              icon={X}
-              iconSize={16}
+              icon="close"
+              iconSize="sm"
               type="button"
               className="absolute right-4 top-4"
               aria-label="Close invite modal"
@@ -198,11 +198,11 @@ export default function InviteModal({
                 >
                   {state.copied ? (
                     <>
-                      <Check className="h-3.5 w-3.5" /> Copied
+                      <Icon name="check" size="sm" /> Copied
                     </>
                   ) : (
                     <>
-                      <Copy className="h-3.5 w-3.5" /> Copy
+                      <Icon name="copy" size="sm" /> Copy
                     </>
                   )}
                 </Button>

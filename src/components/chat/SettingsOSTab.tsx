@@ -5,14 +5,7 @@ import {
   getOSName,
   useDesktopSettingsStore,
 } from "@/stores/useDesktopSettingsStore";
-import {
-  Monitor,
-  Power,
-  X,
-  RefreshCw,
-  CheckCircle2,
-  AlertTriangle,
-} from "lucide-react";
+import { Icon } from "@/components/ui/icon";
 import { useAppUpdater } from "@/hooks/useAppUpdater";
 
 export default function SettingsOSTab() {
@@ -41,7 +34,7 @@ export default function SettingsOSTab() {
       label: "Open Ralph Meet on Startup",
       description:
         "Save yourself a few clicks and let Ralph Meet greet you when your computer starts.",
-      icon: <Power size={18} />,
+      icon: <Icon name="power" size="md" />,
       color: "text-emerald-400",
       bgColor: "bg-emerald-500/10 border-emerald-500/20",
       checked: desktopSettings.openOnStartup,
@@ -54,7 +47,7 @@ export default function SettingsOSTab() {
       label: "Start Minimized",
       description:
         "When launched on startup, Ralph Meet runs in the background so it stays out of your way.",
-      icon: <Monitor size={18} />,
+      icon: <Icon name="monitor" size="md" />,
       color: "text-violet-400",
       bgColor: "bg-violet-500/10 border-violet-500/20",
       checked: desktopSettings.startMinimized,
@@ -67,7 +60,7 @@ export default function SettingsOSTab() {
       label: "Close Button Minimizes to Tray",
       description:
         "Hitting ✕ will make Ralph Meet sit back and relax in your system tray when you close the app.",
-      icon: <X size={18} />,
+      icon: <Icon name="close" size="md" />,
       color: "text-sky-400",
       bgColor: "bg-sky-500/10 border-sky-500/20",
       checked: desktopSettings.closeToTray,
@@ -121,12 +114,17 @@ export default function SettingsOSTab() {
           <div className="flex items-start gap-3.5">
             <div className="w-10 h-10 rounded-lg bg-rm-accent-tint flex items-center justify-center text-rm-accent-ink shrink-0">
               {status === "error" ? (
-                <AlertTriangle size={18} className="text-rm-danger-ink" />
+                <Icon name="warning" size="md" className="text-rm-danger-ink" />
               ) : status === "up-to-date" ? (
-                <CheckCircle2 size={18} className="text-rm-success-ink" />
+                <Icon
+                  name="success"
+                  size="md"
+                  className="text-rm-success-ink"
+                />
               ) : (
-                <RefreshCw
-                  size={18}
+                <Icon
+                  name="refresh"
+                  size="md"
                   className={
                     status === "checking" ||
                     status === "downloading" ||

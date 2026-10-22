@@ -11,7 +11,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
-import { Hash, Loader2, Search, X } from "./Icons";
+import { Icon } from "@/components/ui/icon";
 
 interface SearchResult {
   id: string;
@@ -248,7 +248,11 @@ export default function SearchPanel({
           <label htmlFor={searchInputId} className="sr-only">
             Search messages
           </label>
-          <Search className="h-4 w-4 shrink-0 text-rm-text-muted" />
+          <Icon
+            name="search"
+            size="sm"
+            className="shrink-0 text-rm-text-muted"
+          />
           <input
             ref={inputRef}
             id={searchInputId}
@@ -265,7 +269,7 @@ export default function SearchPanel({
               className="flex size-10 shrink-0 items-center justify-center rounded-lg text-rm-text-muted transition-colors outline-none hover:text-rm-text focus-visible:ring-2 focus-visible:ring-primary/60"
               aria-label="Close search panel"
             >
-              <X className="h-4 w-4" />
+              <Icon name="close" size="sm" />
             </button>
           </SheetClose>
         </div>
@@ -274,7 +278,7 @@ export default function SearchPanel({
           <div className="p-3">
             {loading && (
               <div className="flex items-center justify-center gap-2 py-6 text-primary/60">
-                <Loader2 className="h-4 w-4 animate-spin" />
+                <Icon name="loader" size="sm" className="animate-spin" />
                 <span className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-primary">
                   Searching...
                 </span>
@@ -282,7 +286,11 @@ export default function SearchPanel({
             )}
             {!loading && searched && results.length === 0 && (
               <div className="flex flex-col items-center gap-2 py-8 text-center">
-                <Search className="h-6 w-6 text-rm-text-muted/40" />
+                <Icon
+                  name="search"
+                  size="xl"
+                  className="text-rm-text-muted/40"
+                />
                 <span className="text-xs text-rm-text-muted font-bold">
                   No results found
                 </span>
@@ -293,7 +301,11 @@ export default function SearchPanel({
             )}
             {!loading && !searched && (
               <div className="flex flex-col items-center gap-2 py-8 text-center">
-                <Search className="h-6 w-6 text-rm-text-muted/40" />
+                <Icon
+                  name="search"
+                  size="xl"
+                  className="text-rm-text-muted/40"
+                />
                 <span className="text-xs text-rm-text-muted font-bold">
                   Search for messages
                 </span>
@@ -360,7 +372,7 @@ const SearchResultItem = ({
     >
       <div className="mb-1 flex items-center gap-2 text-ui-2xs">
         <span className="flex items-center gap-0.5 text-primary font-bold">
-          <Hash className="h-3 w-3" />
+          <Icon name="textChannel" size="xs" />
           {msg.channel_name}
         </span>
         <span className="font-bold text-rm-text-muted">

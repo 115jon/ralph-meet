@@ -12,16 +12,7 @@ import type { SFUClient } from "@/lib/sfu-client";
 import { cn } from "@/lib/utils";
 import type { ListenTogetherPlaybackState } from "./listen-together-playback";
 import { formatListenTogetherDuration } from "./listen-together-playback";
-import {
-  Headphones,
-  ListMusic,
-  Pause,
-  Play,
-  ShieldCheck,
-  SkipForward,
-  Trash2,
-  Volume2,
-} from "lucide-react";
+import { Icon } from "@/components/ui/icon";
 import { LISTEN_TOGETHER_LOUDNESS_PRESET_OPTIONS } from "@/lib/voice/listen-together-audio";
 import { useEffect, useRef } from "react";
 
@@ -142,7 +133,7 @@ export function ListenTogetherNowPlayingCard({
     />
   ) : (
     <div className="flex h-full w-full items-center justify-center text-rm-text-muted">
-      <Headphones className={variant === "mini" ? "h-4 w-4" : "h-5 w-5"} />
+      <Icon name="headphones" size={variant === "mini" ? "sm" : "lg"} />
     </div>
   );
 
@@ -399,7 +390,7 @@ export function ListenTogetherNowPlayingCard({
                 className="inline-flex items-center gap-2 rounded-full border border-white/6 bg-rm-bg-hover/75 px-3 py-1.5 text-ui-2xs font-semibold text-rm-text-muted transition-colors hover:bg-rm-bg-active hover:text-rm-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 max-md:h-8 max-md:w-8 max-md:justify-center max-md:gap-0 max-md:px-0"
                 aria-label="Open listen together queue"
               >
-                <ListMusic className="h-3.5 w-3.5" />
+                <Icon name="playlist" size="sm" />
                 <span className="max-md:hidden">
                   {queueCount > 0 ? `Queue ${queueCount}` : "Open queue"}
                 </span>
@@ -427,9 +418,9 @@ export function ListenTogetherNowPlayingCard({
                 }
               >
                 {isPaused ? (
-                  <Play className="h-3.5 w-3.5" />
+                  <Icon name="play" size="sm" />
                 ) : (
-                  <Pause className="h-3.5 w-3.5" />
+                  <Icon name="pause" size="sm" />
                 )}
               </button>
               <button
@@ -445,7 +436,7 @@ export function ListenTogetherNowPlayingCard({
                 className={iconButtonClass}
                 aria-label="Skip current track"
               >
-                <SkipForward className="h-3.5 w-3.5" />
+                <Icon name="skip" size="sm" />
               </button>
             </div>
           </div>
@@ -554,9 +545,9 @@ export function ListenTogetherNowPlayingCard({
             }
           >
             {isPaused ? (
-              <Play className="h-4 w-4" />
+              <Icon name="play" size="sm" />
             ) : (
-              <Pause className="h-4 w-4" />
+              <Icon name="pause" size="sm" />
             )}
           </button>
           <button
@@ -571,7 +562,7 @@ export function ListenTogetherNowPlayingCard({
             disabled={!canControl}
             className="inline-flex h-11 items-center gap-2 rounded-full border border-rm-border bg-rm-bg-elevated/60 px-4 text-xs font-bold text-rm-text transition-transform hover:bg-rm-bg-active active:scale-[0.96] disabled:cursor-not-allowed disabled:opacity-50"
           >
-            <SkipForward className="h-3.5 w-3.5" />
+            <Icon name="skip" size="sm" />
             Skip
           </button>
           <button
@@ -587,12 +578,16 @@ export function ListenTogetherNowPlayingCard({
             className="ml-auto inline-flex h-11 w-11 items-center justify-center rounded-full border border-destructive/20 bg-destructive/10 text-destructive transition-transform hover:bg-destructive/15 active:scale-[0.96] disabled:cursor-not-allowed disabled:opacity-50 sm:ml-2"
             aria-label="Remove current track"
           >
-            <Trash2 className="h-3.5 w-3.5" />
+            <Icon name="trash" size="sm" />
           </button>
         </div>
 
         <div className="flex min-h-11 items-center gap-3 border-t border-rm-border pt-3">
-          <Volume2 className="h-4 w-4 shrink-0 text-rm-text-muted" />
+          <Icon
+            name="voiceChannel"
+            size="sm"
+            className="shrink-0 text-rm-text-muted"
+          />
           <label className="sr-only" htmlFor="listen-together-volume">
             Your volume
           </label>
@@ -615,7 +610,7 @@ export function ListenTogetherNowPlayingCard({
           </span>
           <details className="relative shrink-0">
             <summary className="flex h-10 w-10 cursor-pointer list-none items-center justify-center rounded-full text-rm-text-muted outline-none transition-colors hover:bg-rm-bg-hover hover:text-rm-text focus-visible:ring-2 focus-visible:ring-primary/30 [&::-webkit-details-marker]:hidden">
-              <ShieldCheck className="h-4 w-4" />
+              <Icon name="privacy" size="sm" />
               <span className="sr-only">Audio options</span>
             </summary>
             <div className="absolute bottom-12 right-0 z-20 w-56 rounded-2xl border border-rm-border bg-rm-bg-floating p-3 shadow-[0_18px_40px_rgba(0,0,0,0.35)]">

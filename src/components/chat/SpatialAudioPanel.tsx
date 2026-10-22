@@ -13,7 +13,7 @@ import {
 } from "@/lib/voice/spatial-audio";
 import type { SpatialPlacementMode } from "@/stores/useVoiceSettingsStore";
 import { DndContext, type DragEndEvent, useDraggable } from "@dnd-kit/core";
-import { AlertTriangle, Minus, Move, Plus, RotateCcw } from "lucide-react";
+import { Icon } from "@/components/ui/icon";
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
@@ -367,7 +367,7 @@ export function SpatialAudioPanel({
         {blocked && (
           <div className="mb-4 flex items-center justify-between gap-3 rounded-lg border border-amber-400/30 bg-amber-500/10 p-3">
             <div className="flex items-center gap-2 text-xs text-amber-200">
-              <AlertTriangle size={16} />
+              <Icon name="warning" size="sm" />
               High Fidelity Audio is required to hear spatial audio.
             </div>
             <Button size="sm" onClick={onOpenVoiceSettings}>
@@ -400,7 +400,7 @@ export function SpatialAudioPanel({
             }
             className="flex items-center gap-2 rounded-lg bg-rm-bg-elevated px-3 py-2 text-xs font-bold text-rm-text-muted hover:text-rm-text"
           >
-            <RotateCcw size={14} /> Reset
+            <Icon name="reset" size="sm" /> Reset
           </button>
         </div>
 
@@ -506,7 +506,7 @@ export function SpatialAudioPanel({
                 }
                 className="flex h-8 w-8 items-center justify-center text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text"
               >
-                <Minus size={14} />
+                <Icon name="minus" size="sm" />
               </button>
               <button
                 type="button"
@@ -527,12 +527,13 @@ export function SpatialAudioPanel({
                 }
                 className="flex h-8 w-8 items-center justify-center text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text"
               >
-                <Plus size={14} />
+                <Icon name="add" size="sm" />
               </button>
             </div>
             {state.placementMode === "manual" && (
               <div className="absolute bottom-3 left-3 flex items-center gap-2 rounded-md bg-rm-bg-hover/80 backdrop-blur-sm px-2 py-1 text-ui-2xs font-bold text-rm-text-muted">
-                <Move size={13} /> Drag members to reposition everyone
+                <Icon name="move" size="xs" /> Drag members to reposition
+                everyone
               </div>
             )}
           </div>

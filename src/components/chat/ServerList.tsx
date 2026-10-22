@@ -5,7 +5,7 @@ import type { VoiceChannelMember } from "@/lib/chat-reducer";
 import type { Channel, Server, User } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useMemo, useState } from "react";
-import { Volume2 } from "lucide-react";
+import { Icon } from "@/components/ui/icon";
 import {
   Tooltip,
   TooltipContent,
@@ -16,7 +16,6 @@ import ContextMenu from "./ContextMenu";
 import { AvatarImage } from "./AvatarImage";
 import CreateServerModal from "./CreateServerModal";
 import { HomeIcon } from "./HomeIcon";
-import { Check, Copy, Plus, Trash2 } from "./Icons";
 import InlineEmojiText from "./InlineEmojiText";
 
 const EMPTY_CHANNELS: Channel[] = [];
@@ -140,18 +139,18 @@ export default function ServerList({
     openMenu(event, [
       {
         label: "Mark as Read",
-        icon: <Check className="h-4 w-4" />,
+        icon: <Icon name="check" size="sm" />,
         onClick: () => onMarkServerRead?.(server.id),
         disabled: !hasUnread,
       },
       {
         label: "Copy ID",
-        icon: <Copy className="h-4 w-4" />,
+        icon: <Icon name="copy" size="sm" />,
         onClick: () => navigator.clipboard.writeText(server.id),
       },
       {
         label: "Leave Server",
-        icon: <Trash2 className="h-4 w-4" />,
+        icon: <Icon name="trash" size="sm" />,
         onClick: () => alert("Leave server not implemented yet"),
         variant: "danger",
       },
@@ -385,7 +384,7 @@ export default function ServerList({
                             : "border-rm-border bg-rm-bg-elevated text-rm-text-secondary",
                         )}
                       >
-                        <Volume2 className="h-3 w-3" />
+                        <Icon name="voiceChannel" size="xs" />
                       </div>
                     )}
 
@@ -438,7 +437,11 @@ export default function ServerList({
                             >
                               <div className="min-w-0">
                                 <div className="flex items-center gap-2">
-                                  <Volume2 className="h-3.5 w-3.5 shrink-0 text-rm-text-secondary" />
+                                  <Icon
+                                    name="voiceChannel"
+                                    size="sm"
+                                    className="shrink-0 text-rm-text-secondary"
+                                  />
                                   <span className="truncate text-xs font-semibold">
                                     <InlineEmojiText
                                       text={channel.channelName}
@@ -523,7 +526,7 @@ export default function ServerList({
           onClick={() => setShowCreate(true)}
           aria-label="Create server"
         >
-          <Plus className="h-6 w-6" />
+          <Icon name="add" size="xl" />
         </button>
 
         <CreateServerModal

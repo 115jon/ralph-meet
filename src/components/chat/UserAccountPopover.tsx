@@ -12,14 +12,7 @@ import {
   UserStatusDot,
   type UserStatus,
 } from "@/components/chat/UserStatusDot";
-import {
-  ChevronLeft,
-  ChevronRight,
-  Copy,
-  Edit2,
-  Plus,
-  User as UserIcon,
-} from "lucide-react";
+import { Icon } from "@/components/ui/icon";
 import {
   useEffect,
   useRef,
@@ -317,8 +310,9 @@ export default function UserAccountPopover({
                     aria-label="Edit custom status"
                     onClick={() => setIsEditingCustomStatus(true)}
                   >
-                    <Plus
-                      size={14}
+                    <Icon
+                      name="add"
+                      size="sm"
                       className="shrink-0 text-[color:var(--rm-profile-custom-muted)]"
                     />
                     <span className="truncate text-ui-sm italic font-medium text-[color:var(--rm-profile-custom-text)]">
@@ -376,7 +370,7 @@ export default function UserAccountPopover({
                         onClick={() => setShowStatusMenu(false)}
                         className="mr-2 flex items-center justify-center rounded-lg p-1 text-[color:var(--rm-profile-custom-muted)] transition-colors hover:bg-[var(--rm-profile-custom-card-bg)] hover:text-[color:var(--rm-profile-custom-text)]"
                       >
-                        <ChevronLeft size={16} />
+                        <Icon name="chevronLeft" size="xs" />
                       </button>
                       <span className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-[color:var(--rm-profile-custom-muted)]">
                         Status
@@ -412,7 +406,7 @@ export default function UserAccountPopover({
                   <>
                     <div className={ACTION_CARD_CLASS}>
                       <ActionRow
-                        icon={<Edit2 className="h-4 w-4" />}
+                        icon={<Icon name="edit" size="sm" />}
                         label="Edit Profile"
                         onClick={() => {
                           onClose();
@@ -428,19 +422,19 @@ export default function UserAccountPopover({
                         }
                         label={currentStatusLabel}
                         onClick={() => setShowStatusMenu(true)}
-                        trailing={<ChevronRight size={16} />}
+                        trailing={<Icon name="chevronRight" size="xs" />}
                       />
                     </div>
 
                     <div className={ACTION_CARD_CLASS}>
                       <ActionRow
-                        icon={<UserIcon className="h-4 w-4" />}
+                        icon={<Icon name="account" size="sm" />}
                         label="Switch Accounts"
                         disabled
-                        trailing={<ChevronRight size={16} />}
+                        trailing={<Icon name="chevronRight" size="xs" />}
                       />
                       <ActionRow
-                        icon={<Copy className="h-4 w-4" />}
+                        icon={<Icon name="copy" size="sm" />}
                         label="Copy User ID"
                         onClick={() => {
                           navigator.clipboard.writeText(user.id);

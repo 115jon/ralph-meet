@@ -1,9 +1,8 @@
 import { Dialog, DialogPortal, DialogSurface } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
-import { Check, Info, Music, Zap } from "lucide-react";
+import { Icon } from "@/components/ui/icon";
 import React, { useState } from "react";
-import { Monitor } from "./chat/Icons";
 
 interface ScreenShareModalProps {
   isOpen: boolean;
@@ -109,7 +108,7 @@ export const ScreenShareModal: React.FC<ScreenShareModalProps> = ({
             <div className="p-6 pb-2">
               <div className="mb-1 flex items-center gap-3">
                 <div className="rounded-lg bg-primary/10 p-2 text-primary">
-                  <Monitor size={24} />
+                  <Icon name="monitor" size="xl" />
                 </div>
                 <h2
                   id="screen-share-title"
@@ -156,7 +155,7 @@ export const ScreenShareModal: React.FC<ScreenShareModalProps> = ({
                         </span>
                       </div>
                       {selectedQuality === q.id && (
-                        <Check size={14} className="text-primary" />
+                        <Icon name="check" size="sm" className="text-primary" />
                       )}
                     </div>
                     <p className="line-clamp-1 text-ui-2xs leading-tight text-rm-text-muted group-hover:text-rm-text-secondary">
@@ -165,9 +164,10 @@ export const ScreenShareModal: React.FC<ScreenShareModalProps> = ({
 
                     {q.id.includes("60") && (
                       <div className="absolute -right-1 -top-1 p-1">
-                        <Zap
-                          size={10}
-                          className="fill-warning text-warning opacity-50"
+                        <Icon
+                          name="zap"
+                          size="xs"
+                          className="text-warning opacity-50"
                         />
                       </div>
                     )}
@@ -195,7 +195,7 @@ export const ScreenShareModal: React.FC<ScreenShareModalProps> = ({
                           : "bg-rm-bg-elevated/40 text-rm-text-muted/20",
                       )}
                     >
-                      <Music size={18} />
+                      <Icon name="music" size="md" />
                     </div>
                     <div>
                       <div className="text-xs font-bold text-rm-text">
@@ -223,7 +223,11 @@ export const ScreenShareModal: React.FC<ScreenShareModalProps> = ({
                 </button>
 
                 <div className="flex gap-3 rounded-xl border border-warning/10 bg-warning/5 p-3">
-                  <Info size={16} className="shrink-0 text-warning" />
+                  <Icon
+                    name="info"
+                    size="sm"
+                    className="shrink-0 text-warning"
+                  />
                   <p className="text-ui-2xs leading-relaxed italic text-warning/60">
                     Pro Tip: Use{" "}
                     <span className="font-bold text-warning">

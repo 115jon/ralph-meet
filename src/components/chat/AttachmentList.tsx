@@ -2,7 +2,7 @@ import { cn } from "@/lib/utils";
 import { getFileIcon } from "@/lib/file-icons";
 import { isPlayableVideo } from "@/lib/media";
 import { getAuthAssetUrl } from "@/lib/platform";
-import { AlertTriangle, Loader2, Trash2, X } from "./Icons";
+import { Icon } from "@/components/ui/icon";
 import { UploadedFileInfo } from "./MessageInput";
 
 interface PendingUpload {
@@ -89,7 +89,7 @@ export default function AttachmentList({
             </div>
           ) : (
             (() => {
-              const { Icon: TypeIcon, colorClass } = getFileIcon(
+              const { icon: typeIcon, colorClass } = getFileIcon(
                 att.filename,
                 att.content_type,
               );
@@ -98,7 +98,7 @@ export default function AttachmentList({
                   <div
                     className={`p-2 rounded-lg mb-2 ${colorClass} bg-rm-bg-surface`}
                   >
-                    <TypeIcon size={24} />
+                    <Icon name={typeIcon} size="xl" />
                   </div>
                   <span className="text-ui-2xs text-rm-text font-medium text-center line-clamp-2 px-1">
                     {att.filename}
@@ -117,7 +117,7 @@ export default function AttachmentList({
                 : "bg-black/50 text-white/80 hover:bg-black/65 hover:text-white",
             )}
           >
-            <AlertTriangle size={10} />
+            <Icon name="warning" size="xs" />
             {att.is_nsfw ? "Sensitive" : "Normal"}
           </button>
           <div className="absolute top-1 right-1 opacity-0 group-hover/item:opacity-100 transition-opacity z-10">
@@ -126,7 +126,7 @@ export default function AttachmentList({
               onClick={() => onRemove(att.id)}
               className="p-1.5 bg-black/50 hover:bg-destructive text-rm-text rounded-lg transition-ui backdrop-blur-sm shadow-sm"
             >
-              <Trash2 size={14} />
+              <Icon name="trash" size="sm" />
             </button>
           </div>
         </div>
@@ -145,17 +145,24 @@ export default function AttachmentList({
           ) : (
             <div className="absolute inset-0 flex items-center justify-center opacity-10">
               {(() => {
-                const { Icon: PendingIcon } = getFileIcon(
+                const { icon: pendingIcon } = getFileIcon(
                   p.file.name,
                   p.file.type,
                 );
-                return <PendingIcon size={48} className="text-rm-text" />;
+                return (
+                  <Icon
+                    name={pendingIcon}
+                    size="3xl"
+                    className="text-rm-text"
+                  />
+                );
               })()}
             </div>
           )}
           <div className="z-10 flex flex-col items-center p-3 w-full bg-rm-bg-floating/40 backdrop-blur-sm h-full justify-center">
-            <Loader2
-              size={24}
+            <Icon
+              name="loader"
+              size="xl"
               className="text-primary animate-spin mb-2 drop-shadow-[0_0_8px_var(--rm-glow)]"
             />
             <span className="text-ui-2xs text-rm-text-secondary font-medium truncate w-full text-center px-1 mb-1">
@@ -168,7 +175,7 @@ export default function AttachmentList({
               onClick={() => onCancel(p.tempId)}
               className="p-1.5 bg-black/50 hover:bg-destructive text-rm-text/80 hover:text-rm-text rounded-lg transition-ui backdrop-blur-sm shadow-sm"
             >
-              <X size={14} />
+              <Icon name="close" size="sm" />
             </button>
           </div>
           <div className="absolute inset-0 bg-gradient-to-tr from-rm-bg-active/20 to-transparent pointer-events-none" />

@@ -4,19 +4,7 @@ import { getWebOrigin } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 import { formatRelative } from "date-fns";
 import { enUS } from "date-fns/locale";
-import {
-  ChevronRight,
-  Copy,
-  Download,
-  FileDigit,
-  Info,
-  Link as LinkIcon,
-  MessageSquare,
-  MoreHorizontal,
-  X,
-  ZoomIn,
-  ZoomOut,
-} from "lucide-react";
+import { Icon } from "@/components/ui/icon";
 import { useEffect, useRef } from "react";
 import { AvatarImage } from "./AvatarImage";
 import { UserDisplayName } from "./UserDisplayName";
@@ -185,7 +173,7 @@ export function ImageViewerToolbar({
                 aria-label="Zoom out"
                 title="Zoom Out"
               >
-                <ZoomOut size={18} />
+                <Icon name="zoomOut" size="md" />
               </button>
               <button
                 type="button"
@@ -194,7 +182,7 @@ export function ImageViewerToolbar({
                 aria-label="Zoom in"
                 title="Zoom In"
               >
-                <ZoomIn size={18} />
+                <Icon name="zoomIn" size="md" />
               </button>
             </>
           )}
@@ -208,7 +196,7 @@ export function ImageViewerToolbar({
                 aria-label="Jump to message"
                 title="Jump to Message"
               >
-                <MessageSquare size={18} />
+                <Icon name="chat" size="md" />
               </button>
             )}
 
@@ -221,7 +209,7 @@ export function ImageViewerToolbar({
             aria-label="Download attachment"
             title="Download"
           >
-            <Download size={18} />
+            <Icon name="download" size="md" />
           </a>
 
           {/* More Dropdown */}
@@ -242,7 +230,7 @@ export function ImageViewerToolbar({
               aria-haspopup="menu"
               aria-label="More attachment actions"
             >
-              <MoreHorizontal size={18} />
+              <Icon name="more" size="md" />
             </button>
             {showMore && (
               <div className="absolute top-full right-0 z-70 mt-2 w-[min(16rem,calc(100vw-1rem))] max-w-[calc(100vw-1rem)] overflow-visible rounded-lg border border-rm-border bg-rm-bg-elevated py-1 shadow-2xl animate-in slide-in-from-top-2 fade-in duration-200 md:w-64">
@@ -253,8 +241,9 @@ export function ImageViewerToolbar({
                     className="w-full px-3 py-2 text-left text-sm text-rm-text-secondary hover:bg-primary hover:text-primary-foreground flex items-center justify-between group outline-none"
                   >
                     Copy Image
-                    <Copy
-                      size={14}
+                    <Icon
+                      name="copy"
+                      size="sm"
                       className="opacity-50 group-hover:opacity-100"
                     />
                   </button>
@@ -265,8 +254,9 @@ export function ImageViewerToolbar({
                   className="w-full px-3 py-2 text-left text-sm text-rm-text-secondary hover:bg-primary hover:text-primary-foreground flex items-center justify-between group outline-none"
                 >
                   Copy Link
-                  <LinkIcon
-                    size={14}
+                  <Icon
+                    name="link"
+                    size="sm"
                     className="opacity-50 group-hover:opacity-100"
                   />
                 </button>
@@ -287,8 +277,9 @@ export function ImageViewerToolbar({
                   )}
                 >
                   View Details
-                  <ChevronRight
-                    size={14}
+                  <Icon
+                    name="chevronRight"
+                    size="xs"
                     className={cn(
                       "transition-transform duration-200",
                       showDetails
@@ -305,8 +296,9 @@ export function ImageViewerToolbar({
                   className="w-full px-3 py-2 text-left text-sm text-destructive hover:bg-destructive hover:text-destructive-foreground flex items-center justify-between group outline-none transition-colors"
                 >
                   Copy Attachment ID
-                  <FileDigit
-                    size={14}
+                  <Icon
+                    name="copyId"
+                    size="sm"
                     className="opacity-50 group-hover:opacity-100"
                   />
                 </button>
@@ -317,7 +309,7 @@ export function ImageViewerToolbar({
                     aria-label="Image details panel"
                   >
                     <h3 className="text-rm-text font-semibold mb-3 text-sm flex items-center gap-2">
-                      <Info size={14} className="text-primary" />
+                      <Icon name="info" size="sm" className="text-primary" />
                       {isAnimatedMedia
                         ? "GIF Details"
                         : isVideo
@@ -377,7 +369,7 @@ export function ImageViewerToolbar({
             className="p-2 text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover rounded-lg transition-ui outline-none"
             aria-label="Close media viewer"
           >
-            <X size={18} />
+            <Icon name="close" size="md" />
           </button>
         </div>
       </div>

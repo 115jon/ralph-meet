@@ -1,6 +1,6 @@
 import { DitherField } from "@/components/ui/DitherField";
 import { IconButton } from "@/components/ui/IconButton";
-import { Menu, MessageSquare } from "./Icons";
+import { Icon } from "@/components/ui/icon";
 
 export function EmptyChatArea({ onMenuClick }: { onMenuClick: () => void }) {
   return (
@@ -9,10 +9,10 @@ export function EmptyChatArea({ onMenuClick }: { onMenuClick: () => void }) {
         <IconButton
           type="button"
           aria-label="Open navigation"
-          icon={Menu}
+          icon="menu"
           variant="muted"
           size="sm"
-          iconSize={20}
+          iconSize="lg"
           className="md:hidden"
           onClick={onMenuClick}
         />
@@ -32,7 +32,7 @@ export function EmptyChatArea({ onMenuClick }: { onMenuClick: () => void }) {
         />
         <div className="relative z-10 flex flex-col items-center gap-3 px-6 text-center">
           <div className="flex h-12 w-12 items-center justify-center rounded-lg border border-rm-border bg-rm-bg-elevated text-rm-text-muted shadow-sm">
-            <MessageSquare className="h-6 w-6" />
+            <Icon name="chat" size="xl" />
           </div>
           <span className="font-display text-display text-rm-text text-balance">
             No channel selected

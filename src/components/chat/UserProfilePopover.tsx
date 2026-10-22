@@ -23,17 +23,7 @@ import { cn } from "@/lib/utils";
 import { UserStatusDot, type UserStatus } from "./UserStatusDot";
 import InlineEmojiText from "./InlineEmojiText";
 import { useChatStore } from "@/stores/chat-store";
-import {
-  Check,
-  FilePlus,
-  MoreHorizontal,
-  Pencil,
-  Plus,
-  Smile,
-  Swords,
-  UserCheck,
-  X,
-} from "lucide-react";
+import { Icon } from "@/components/ui/icon";
 import {
   useCallback,
   useEffect,
@@ -147,16 +137,16 @@ function PopoverBanner({
       <div className="absolute right-3 top-3 z-20 flex items-center gap-2">
         {canManageRoles ? (
           <TooltipIconButton label="Mod View">
-            <Swords size={16} />
+            <Icon name="sword" size="sm" />
           </TooltipIconButton>
         ) : null}
         {!isMe ? (
           <TooltipIconButton label="Friends">
-            <UserCheck size={16} />
+            <Icon name="userCheck" size="sm" />
           </TooltipIconButton>
         ) : null}
         <TooltipIconButton label="More Options">
-          <MoreHorizontal size={16} />
+          <Icon name="more" size="sm" />
         </TooltipIconButton>
       </div>
     </div>
@@ -358,8 +348,9 @@ function RoleAssignmentDropdown({
                     className="flex-1 truncate"
                   />
                   {hasRole ? (
-                    <Check
-                      size={14}
+                    <Icon
+                      name="check"
+                      size="sm"
                       className="text-[color:var(--rm-profile-custom-accent)]"
                     />
                   ) : null}
@@ -423,7 +414,7 @@ function PopoverRoles({
                 }}
                 className="rounded p-0.5 text-[color:var(--rm-profile-custom-muted)] opacity-0 transition-ui hover:bg-black/8 hover:text-[color:var(--rm-profile-custom-text)] group-hover:opacity-100"
               >
-                <X size={12} />
+                <Icon name="close" size="xs" />
               </ButtonBase>
             ) : null}
           </div>
@@ -436,7 +427,7 @@ function PopoverRoles({
                 onClick={handleToggleAssignRoles}
                 className="flex h-6 w-6 items-center justify-center rounded text-[color:var(--rm-profile-custom-muted)] transition-colors hover:bg-[var(--rm-profile-custom-card-bg)] hover:text-[color:var(--rm-profile-custom-text)]"
               >
-                <Plus size={14} />
+                <Icon name="add" size="sm" />
               </ButtonBase>
             </TooltipTrigger>
             <TooltipContent side="top" sideOffset={8}>
@@ -910,14 +901,14 @@ export default function UserProfilePopover({
                         platforms={resolvedPlatforms}
                         status={resolvedStatus}
                         className="shrink-0"
-                        iconClassName="h-4 w-4"
+                        iconSize="sm"
                         color="var(--rm-profile-custom-muted)"
                         offlineColor="var(--rm-profile-custom-ghost)"
                       />
 
                       {!isMe ? (
                         <ButtonBase className="text-[color:var(--rm-profile-custom-muted)] transition-colors hover:text-[color:var(--rm-profile-custom-text)]">
-                          <FilePlus size={16} />
+                          <Icon name="fileAdd" size="sm" />
                         </ButtonBase>
                       ) : null}
                     </div>
@@ -988,8 +979,9 @@ export default function UserProfilePopover({
                       className="w-full bg-transparent text-xs font-medium text-[color:var(--rm-profile-custom-text)] outline-none placeholder:text-[color:var(--rm-profile-custom-muted)]"
                       placeholder={`Message @${resolvedUsername}`}
                     />
-                    <Smile
-                      size={16}
+                    <Icon
+                      name="emoji"
+                      size="sm"
                       className="ml-2 shrink-0 cursor-pointer text-[color:var(--rm-profile-custom-muted)] transition-colors hover:text-[color:var(--rm-profile-custom-text)]"
                     />
                   </div>
@@ -1001,7 +993,7 @@ export default function UserProfilePopover({
                     onClick={handleOpenProfileEditor}
                     className="flex w-full items-center justify-center gap-2 rounded-lg border border-primary/28 bg-primary/18 px-4 py-3 text-sm font-semibold text-[color:var(--rm-profile-custom-text)] shadow-[0_18px_36px_rgba(0,0,0,0.22)] transition hover:bg-primary/24 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35"
                   >
-                    <Pencil size={15} />
+                    <Icon name="edit" size="sm" />
                     Edit Profile
                   </button>
                 </div>

@@ -22,7 +22,7 @@ import { useChatStore } from "@/stores/chat-store";
 import { useCallStore } from "@/stores/useCallStore";
 import { useCallVoiceStore } from "@/stores/useCallVoiceStore";
 import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
-import { ChevronUp, HeadphoneOff, MicOff, Phone, Video, X } from "lucide-react";
+import { Icon } from "@/components/ui/icon";
 import {
   lazy,
   Suspense,
@@ -565,9 +565,19 @@ export function DMCallRegion({ channelId }: { channelId: string }) {
                       {(item.isMuted || item.isDeafened) && (
                         <div className="absolute -bottom-1 -right-1 z-20 flex h-8 w-8 items-center justify-center rounded-full bg-zinc-900 border-2 border-black">
                           {item.isDeafened ? (
-                            <HeadphoneOff className="h-4 w-4 text-destructive" />
+                            <Icon
+                              name="deafen"
+                              state="off"
+                              size="sm"
+                              className="text-destructive"
+                            />
                           ) : (
-                            <MicOff className="h-4 w-4 text-destructive" />
+                            <Icon
+                              name="mic"
+                              state="off"
+                              size="sm"
+                              className="text-destructive"
+                            />
                           )}
                         </div>
                       )}
@@ -645,7 +655,6 @@ export function DMCallRegion({ channelId }: { channelId: string }) {
               toggleFs={() => setIsExpanded(!isExpanded)}
               showMembers={showMembers}
               setShowMembers={setShowMembers}
-              ChevronUp={ChevronUp}
               variant="call"
               hideExtraControls={!hasVideoFeed}
               isChatHidden={isChatHidden}
@@ -670,7 +679,7 @@ export function DMCallRegion({ channelId }: { channelId: string }) {
                       aria-label="Cancel Call"
                       className={LOBBY_BTN}
                     >
-                      <X className="size-5" strokeWidth={1.75} />
+                      <Icon name="close" size="lg" />
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent side="top" sideOffset={8}>
@@ -688,7 +697,7 @@ export function DMCallRegion({ channelId }: { channelId: string }) {
                         aria-label="Join with Video"
                         className={cn(LOBBY_BTN, LOBBY_ACCEPT)}
                       >
-                        <Video className="size-5" strokeWidth={1.75} />
+                        <Icon name="camera" size="lg" />
                       </Button>
                     </TooltipTrigger>
                     <TooltipContent side="top" sideOffset={8}>
@@ -706,10 +715,7 @@ export function DMCallRegion({ channelId }: { channelId: string }) {
                         aria-label="Join Voice"
                         className={cn(LOBBY_BTN, LOBBY_ACCEPT)}
                       >
-                        <Phone
-                          className="size-5 fill-current"
-                          strokeWidth={1.75}
-                        />
+                        <Icon name="call" state="active" size="lg" />
                       </Button>
                     </TooltipTrigger>
                     <TooltipContent side="top" sideOffset={8}>
@@ -727,7 +733,7 @@ export function DMCallRegion({ channelId }: { channelId: string }) {
                           aria-label="Decline"
                           className={LOBBY_BTN}
                         >
-                          <X className="size-5" strokeWidth={1.75} />
+                          <Icon name="close" size="lg" />
                         </Button>
                       </TooltipTrigger>
                       <TooltipContent side="top" sideOffset={8}>

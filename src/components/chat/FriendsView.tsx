@@ -16,16 +16,7 @@ import { useCallback, useEffect, useReducer } from "react";
 import { useShallow } from "zustand/shallow";
 import ContextMenu from "./ContextMenu";
 import { AvatarImage } from "./AvatarImage";
-import {
-  Ban,
-  Check,
-  Menu,
-  MessageSquare,
-  Phone,
-  UserPlus,
-  Users,
-  X,
-} from "./Icons";
+import { Icon } from "@/components/ui/icon";
 import { UserDisplayName } from "./UserDisplayName";
 import UserProfilePopover from "./UserProfilePopover";
 
@@ -184,19 +175,19 @@ export default function FriendsView({ onMenuClick, onSelectDm }: Props) {
     openMenu(e, [
       {
         label: "Profile",
-        icon: <Users className="h-4 w-4" />,
+        icon: <Icon name="members" size="sm" />,
         onClick: () => setProfileUser(friend),
       },
       {
         label: "Message",
-        icon: <MessageSquare className="h-4 w-4" />,
+        icon: <Icon name="chat" size="sm" />,
         onClick: () => handleOpenDm(friend.id),
       },
       ...(!hideCallOption
         ? [
             {
               label: "Start a Call",
-              icon: <Phone className="h-4 w-4" />,
+              icon: <Icon name="call" size="sm" />,
               onClick: async () => {
                 const channelId = dmForUser?.id ?? (await openDm(friend.id));
                 if (channelId) {
@@ -217,7 +208,7 @@ export default function FriendsView({ onMenuClick, onSelectDm }: Props) {
         : []),
       {
         label: "Remove Friend",
-        icon: <X className="h-4 w-4" />,
+        icon: <Icon name="close" size="sm" />,
         onClick: () => handleRemoveFriend(friend.id),
         variant: "danger",
       },
@@ -239,7 +230,7 @@ export default function FriendsView({ onMenuClick, onSelectDm }: Props) {
       {/* Header */}
       <header className="h-12 flex shrink-0 items-center gap-3 border-b border-rm-border bg-rm-bg-primary px-4 z-10">
         <IconButton
-          icon={Menu}
+          icon="menu"
           variant="muted"
           size="sm"
           className="md:hidden"
@@ -247,7 +238,7 @@ export default function FriendsView({ onMenuClick, onSelectDm }: Props) {
           onClick={onMenuClick}
         />
 
-        <Users aria-hidden className="h-5 w-5 text-rm-text-muted" />
+        <Icon name="members" size="lg" className="text-rm-text-muted" />
         <span className="text-ui-sm font-semibold text-rm-text">Friends</span>
 
         <div aria-hidden className="h-5 w-px bg-rm-border mx-1" />
@@ -278,7 +269,7 @@ export default function FriendsView({ onMenuClick, onSelectDm }: Props) {
             dispatch({ type: "SET_ADD_FRIEND_MODE", value: !addFriendMode })
           }
         >
-          <UserPlus aria-hidden />
+          <Icon name="invite" size="sm" />
           Add Friend
         </Button>
       </header>
@@ -350,11 +341,23 @@ export default function FriendsView({ onMenuClick, onSelectDm }: Props) {
               <div className="relative mb-4 flex h-16 w-16 items-center justify-center overflow-hidden rounded-lg border border-rm-border shadow-sm">
                 <DitherField cell={4} intensity={0.55} seed={3} />
                 {tab === "pending" ? (
-                  <UserPlus className="relative z-10 h-7 w-7 text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.5)]" />
+                  <Icon
+                    name="invite"
+                    size="xl"
+                    className="relative z-10 text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.5)]"
+                  />
                 ) : tab === "blocked" ? (
-                  <Ban className="relative z-10 h-7 w-7 text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.5)]" />
+                  <Icon
+                    name="ban"
+                    size="xl"
+                    className="relative z-10 text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.5)]"
+                  />
                 ) : (
-                  <Users className="relative z-10 h-7 w-7 text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.5)]" />
+                  <Icon
+                    name="members"
+                    size="xl"
+                    className="relative z-10 text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.5)]"
+                  />
                 )}
               </div>
               <span className="text-ui-lg font-semibold text-rm-text text-balance">
@@ -448,8 +451,8 @@ export default function FriendsView({ onMenuClick, onSelectDm }: Props) {
                     <div className="relative z-20 flex gap-1 opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100 pointer-coarse:opacity-100">
                       {rel.type === 0 && (
                         <IconButton
-                          icon={MessageSquare}
-                          iconSize={16}
+                          icon="chat"
+                          iconSize="sm"
                           size="sm"
                           shape="circle"
                           title="Message"
@@ -462,8 +465,8 @@ export default function FriendsView({ onMenuClick, onSelectDm }: Props) {
                       )}
                       {rel.type === 2 && (
                         <IconButton
-                          icon={Check}
-                          iconSize={16}
+                          icon="check"
+                          iconSize="sm"
                           size="sm"
                           shape="circle"
                           className="text-rm-success-ink"
@@ -476,8 +479,8 @@ export default function FriendsView({ onMenuClick, onSelectDm }: Props) {
                         />
                       )}
                       <IconButton
-                        icon={X}
-                        iconSize={16}
+                        icon="close"
+                        iconSize="sm"
                         size="sm"
                         shape="circle"
                         variant="destructive"

@@ -14,17 +14,7 @@ import { cn } from "@/lib/utils";
 import { UserStatusDot } from "./UserStatusDot";
 import InlineEmojiText from "./InlineEmojiText";
 import { useChatActions, useChatStore } from "@/stores/chat-store";
-import {
-  ArrowLeft,
-  Ban,
-  Calendar,
-  MessageSquare,
-  Phone,
-  Settings,
-  UserMinus,
-  UserPlus,
-  Video,
-} from "lucide-react";
+import { Icon } from "@/components/ui/icon";
 
 import { useEffect, useState } from "react";
 import { useShallow } from "zustand/shallow";
@@ -104,7 +94,7 @@ function ProfileBanner({
           aria-label="Close profile"
           className="p-1.5 bg-black/30 hover:bg-black/50 rounded-full text-white backdrop-blur-sm transition-colors"
         >
-          <ArrowLeft size={20} />
+          <Icon name="back" size="lg" />
         </ButtonBase>
         <div className="flex items-center gap-2">
           {!isMe && (
@@ -112,14 +102,14 @@ function ProfileBanner({
               aria-label="Add friend"
               className="p-1.5 bg-black/30 hover:bg-black/50 rounded-full text-white backdrop-blur-sm transition-colors"
             >
-              <UserPlus size={18} />
+              <Icon name="invite" size="md" />
             </ButtonBase>
           )}
           <ButtonBase
             aria-label="Profile settings"
             className="p-1.5 bg-black/30 hover:bg-black/50 rounded-full text-white backdrop-blur-sm transition-colors"
           >
-            <Settings size={18} />
+            <Icon name="settings" size="md" />
           </ButtonBase>
         </div>
       </div>
@@ -186,7 +176,7 @@ function ProfileHeader({
             userId={user.id}
             platforms={user.presence_platforms}
             status={user.status}
-            iconClassName="h-4 w-4"
+            iconSize="sm"
             color="var(--rm-profile-custom-muted)"
             offlineColor="var(--rm-profile-custom-ghost)"
           />
@@ -239,11 +229,11 @@ function ProfileActions({
             onClick={onOpenProfileEditor}
             className="w-full py-3 rounded-2xl bg-[var(--rm-profile-custom-button-bg)] hover:brightness-110 text-[color:var(--rm-profile-custom-button-text)] font-bold text-ui-base transition-[filter] flex items-center justify-center gap-2"
           >
-            <Settings size={18} />
+            <Icon name="settings" size="md" />
             Edit Main Profile
           </ButtonBase>
           <ButtonBase className="w-full py-3 rounded-2xl bg-[var(--rm-profile-custom-accent-muted)] hover:bg-[var(--rm-profile-custom-card-bg)] text-[color:var(--rm-profile-custom-text)] font-bold text-ui-base transition-colors flex items-center justify-center gap-2">
-            <Settings size={18} />
+            <Icon name="settings" size="md" />
             Edit Per-server Profile
           </ButtonBase>
         </div>
@@ -254,8 +244,9 @@ function ProfileActions({
             className="flex flex-col items-center gap-2"
           >
             <div className="h-14 w-14 rounded-full bg-[var(--rm-profile-custom-card-bg-strong)] border border-[color:var(--rm-profile-custom-card-border)] flex items-center justify-center hover:bg-[var(--rm-profile-custom-card-bg)] transition-colors">
-              <MessageSquare
-                size={24}
+              <Icon
+                name="chat"
+                size="xl"
                 className="text-[color:var(--rm-profile-custom-text)]"
               />
             </div>
@@ -265,8 +256,9 @@ function ProfileActions({
           </ButtonBase>
           <ButtonBase className="flex flex-col items-center gap-2">
             <div className="h-14 w-14 rounded-full bg-[var(--rm-profile-custom-card-bg-strong)] border border-[color:var(--rm-profile-custom-card-border)] flex items-center justify-center hover:bg-[var(--rm-profile-custom-card-bg)] transition-colors">
-              <Phone
-                size={24}
+              <Icon
+                name="call"
+                size="xl"
                 className="text-[color:var(--rm-profile-custom-text)]"
               />
             </div>
@@ -276,8 +268,9 @@ function ProfileActions({
           </ButtonBase>
           <ButtonBase className="flex flex-col items-center gap-2">
             <div className="h-14 w-14 rounded-full bg-[var(--rm-profile-custom-card-bg-strong)] border border-[color:var(--rm-profile-custom-card-border)] flex items-center justify-center hover:bg-[var(--rm-profile-custom-card-bg)] transition-colors">
-              <Video
-                size={24}
+              <Icon
+                name="camera"
+                size="xl"
                 className="text-[color:var(--rm-profile-custom-text)]"
               />
             </div>
@@ -336,8 +329,9 @@ function ProfileCards({
         </h3>
         <div className="flex items-center gap-3 text-ui-sm text-[color:var(--rm-profile-custom-muted)]">
           <div className="flex items-center gap-2">
-            <Calendar
-              size={16}
+            <Icon
+              name="calendar"
+              size="sm"
               className="text-[color:var(--rm-profile-custom-muted)]"
             />
             <span>{profileReferenceDate.value}</span>
@@ -382,8 +376,9 @@ function ProfileCards({
                 disabled
                 className="w-full flex items-center gap-4 px-2 py-3 rounded-xl opacity-60 cursor-not-allowed"
               >
-                <Settings
-                  size={22}
+                <Icon
+                  name="settings"
+                  size="xl"
                   className="text-[color:var(--rm-profile-custom-muted)] shrink-0"
                 />
                 <span className="text-ui-base font-medium text-[color:var(--rm-profile-custom-text)]">
@@ -399,7 +394,11 @@ function ProfileCards({
                 }}
                 className="w-full flex items-center gap-4 px-2 py-3 rounded-xl hover:bg-[var(--rm-profile-custom-card-bg)] transition-colors"
               >
-                <UserMinus size={22} className="text-destructive shrink-0" />
+                <Icon
+                  name="userRemove"
+                  size="xl"
+                  className="text-destructive shrink-0"
+                />
                 <span className="text-ui-base font-medium text-destructive">
                   Kick
                 </span>
@@ -413,7 +412,11 @@ function ProfileCards({
                 }}
                 className="w-full flex items-center gap-4 px-2 py-3 rounded-xl hover:bg-[var(--rm-profile-custom-card-bg)] transition-colors"
               >
-                <Ban size={22} className="text-destructive shrink-0" />
+                <Icon
+                  name="ban"
+                  size="xl"
+                  className="text-destructive shrink-0"
+                />
                 <span className="text-ui-base font-medium text-destructive">
                   Ban
                 </span>

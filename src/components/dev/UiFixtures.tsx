@@ -25,7 +25,7 @@ import type { ChatMember, VoiceChannelMember } from "@/lib/chat-reducer";
 import type { Category, Channel, Message, Server, User } from "@/lib/types";
 import { useChatStore } from "@/stores/chat-store";
 import { useSearch } from "@tanstack/react-router";
-import { Check, ChevronUp, Copy, Trash2 } from "lucide-react";
+import { Icon } from "@/components/ui/icon";
 import { useTheme } from "next-themes";
 import { useEffect, useState } from "react";
 
@@ -628,7 +628,6 @@ function VoiceRoom({ live = false }: { live?: boolean }) {
                   toggleFs={() => {}}
                   showMembers={false}
                   setShowMembers={() => {}}
-                  ChevronUp={ChevronUp}
                 />
               </div>
             </div>
@@ -688,26 +687,26 @@ function Menus() {
         items={[
           {
             label: "Mark As Read",
-            icon: <Check className="h-4 w-4" />,
+            icon: <Icon name="check" size="sm" />,
             onClick: () => {},
             divider: true,
           },
           {
             label: "Copy Link",
-            icon: <Copy className="h-4 w-4" />,
+            icon: <Icon name="copy" size="sm" />,
             onClick: () => {},
           },
           {
             label: "Notification Settings",
             subtitle: "All Messages",
-            icon: <Check className="h-4 w-4" />,
+            icon: <Icon name="check" size="sm" />,
             onClick: () => {},
             disabled: true,
             divider: true,
           },
           {
             label: "Delete Channel",
-            icon: <Trash2 className="h-4 w-4" />,
+            icon: <Icon name="trash" size="sm" />,
             onClick: () => {},
             variant: "danger",
           },

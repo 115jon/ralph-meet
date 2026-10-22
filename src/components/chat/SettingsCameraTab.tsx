@@ -31,7 +31,7 @@ import type {
 } from "@/stores/useVoiceSettingsStore";
 import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
 import { useUser } from "@kova/react";
-import { Ban, Check, Sparkles, Trash2, Upload } from "lucide-react";
+import { Icon } from "@/components/ui/icon";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { useShallow } from "zustand/shallow";
 import { VideoPlayer } from "../voice/VideoPlayer";
@@ -458,9 +458,9 @@ export default function SettingsCameraTab() {
                       </span>
                     </div>
                     {isSelected && (
-                      <Check
-                        size={12}
-                        aria-hidden="true"
+                      <Icon
+                        name="check"
+                        size="xs"
                         className="text-rm-accent-ink"
                       />
                     )}
@@ -489,7 +489,7 @@ export default function SettingsCameraTab() {
               onClick={() => fileInputRef.current?.click()}
               disabled={isUploadingBackground}
             >
-              <Upload size={12} aria-hidden="true" />
+              <Icon name="upload" size="sm" />
               {isUploadingBackground ? "Uploading" : "Upload Image"}
             </Button>
             <input
@@ -533,14 +533,15 @@ export default function SettingsCameraTab() {
                 >
                   {option.id === "none" ? (
                     <div className="mb-2 flex h-16 w-full items-center justify-center rounded-lg bg-rm-tint-1 text-rm-text-muted">
-                      <Ban size={20} />
+                      <Icon name="ban" size="lg" />
                     </div>
                   ) : (
                     <div className="relative mb-2 flex h-16 w-full items-center justify-center overflow-hidden rounded-lg bg-rm-bg-elevated/40 transition-ui">
                       <div className="absolute inset-0 bg-gradient-to-tr from-primary/30 via-rm-accent/25 to-rm-accent/40 filter blur-[8px]" />
                       <div className="absolute inset-0 bg-black/15" />
-                      <Sparkles
-                        size={20}
+                      <Icon
+                        name="sparkle"
+                        size="lg"
                         className="relative z-10 text-white/80"
                       />
                     </div>
@@ -555,7 +556,7 @@ export default function SettingsCameraTab() {
                   </span>
                   {isSelected && (
                     <div className="absolute top-2 right-2 rounded-full bg-primary p-0.5 text-primary-foreground">
-                      <Check size={10} />
+                      <Icon name="check" size="xs" />
                     </div>
                   )}
                 </button>
@@ -616,7 +617,7 @@ export default function SettingsCameraTab() {
                   </button>
                   {isSelected && (
                     <div className="absolute top-3 right-8 rounded-full bg-primary p-0.5 text-primary-foreground">
-                      <Check size={10} />
+                      <Icon name="check" size="xs" />
                     </div>
                   )}
                   <button
@@ -624,7 +625,7 @@ export default function SettingsCameraTab() {
                     className="absolute right-2 top-2 rounded-md bg-black/60 p-1 text-white/80 opacity-0 transition-opacity pointer-fine:hover:text-white group-hover:opacity-100 focus-visible:opacity-100 pointer-coarse:opacity-100"
                     aria-label={`Remove ${background.name}`}
                   >
-                    <Trash2 size={12} />
+                    <Icon name="trash" size="xs" />
                   </button>
                 </div>
               );

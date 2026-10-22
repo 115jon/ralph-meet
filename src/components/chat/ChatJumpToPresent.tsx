@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button";
-import { ChevronDown } from "./Icons";
+import { Icon } from "@/components/ui/icon";
 
 export function ChatJumpToPresent({ isDetached, onJumpToPresent }: any) {
   if (!isDetached) return null;
@@ -11,7 +11,7 @@ export function ChatJumpToPresent({ isDetached, onJumpToPresent }: any) {
         className="gap-1.5 rounded-full shadow-[var(--rm-shadow-1)]"
       >
         <span>Jump to Present</span>
-        <ChevronDown className="size-4" strokeWidth={2.5} />
+        <Icon name="chevronDown" size="xs" />
       </Button>
     </div>
   );
