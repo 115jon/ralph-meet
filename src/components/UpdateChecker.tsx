@@ -137,13 +137,13 @@ export function UpdateChecker() {
           </div>
           <div className="flex gap-2 mt-2.5">
             <button
-              className="rounded-lg bg-rm-accent px-3.5 py-1.5 text-[13px] font-semibold text-white transition-all hover:bg-rm-accent-hover active:scale-[0.97]"
+              className="rounded-lg bg-rm-accent px-3.5 py-1.5 text-ui-sm font-semibold text-white transition-ui hover:bg-rm-accent-hover active:scale-[0.96]"
               onClick={downloadAndInstall}
             >
               Update now
             </button>
             <button
-              className="rounded-lg bg-rm-bg-hover px-3.5 py-1.5 text-[13px] font-semibold text-rm-text-secondary transition-colors hover:bg-rm-bg-active"
+              className="rounded-lg bg-rm-bg-hover px-3.5 py-1.5 text-ui-sm font-semibold text-rm-text-secondary transition-colors hover:bg-rm-bg-active"
               onClick={() => setDismissed(true)}
             >
               Later
@@ -159,7 +159,7 @@ export function UpdateChecker() {
           </p>
           <div className="h-1 rounded-full bg-rm-bg-active overflow-hidden mt-1">
             <div
-              className="h-full rounded-full bg-rm-accent transition-[width] duration-300"
+              className="h-full rounded-full bg-rm-accent transition-[width] duration-200"
               style={{ width: `${progress}%` }}
             />
           </div>
@@ -181,13 +181,13 @@ export function UpdateChecker() {
           <p className="text-sm font-semibold text-rm-text">Update failed</p>
           <div className="flex gap-2 mt-1">
             <button
-              className="rounded-lg bg-rm-accent px-3.5 py-1.5 text-[13px] font-semibold text-white transition-all hover:bg-rm-accent-hover active:scale-[0.97]"
+              className="rounded-lg bg-rm-accent px-3.5 py-1.5 text-ui-sm font-semibold text-white transition-ui hover:bg-rm-accent-hover active:scale-[0.96]"
               onClick={checkForUpdate}
             >
               Retry
             </button>
             <button
-              className="rounded-lg bg-rm-bg-hover px-3.5 py-1.5 text-[13px] font-semibold text-rm-text-secondary transition-colors hover:bg-rm-bg-active"
+              className="rounded-lg bg-rm-bg-hover px-3.5 py-1.5 text-ui-sm font-semibold text-rm-text-secondary transition-colors hover:bg-rm-bg-active"
               onClick={() => setDismissed(true)}
             >
               Dismiss

@@ -1,4 +1,4 @@
-import { ThemeAwareSplashLogo } from "@/components/ThemeAwareSplashLogo";
+import { LoadingScreen } from "@/components/ui/LoadingScreen";
 import { useChatStore } from "@/stores/chat-store";
 import { useCallback, useEffect, useReducer } from "react";
 
@@ -33,13 +33,10 @@ const RECONNECT_TIPS = [
 ];
 
 /**
- * Full-screen overlay — Discord-style splash/reconnection screen.
- *
- * Shows on initial load while the WebSocket gateway is connecting,
- * and again whenever it disconnects and starts reconnecting.
- * Displays the logo with a breathing animation, an indeterminate
- * loading bar, status text, and rotating tip messages.
- * Fades out when connection is established.
+ * Full-screen overlay shown on initial load while the WebSocket gateway is
+ * connecting, and again whenever it disconnects and starts reconnecting.
+ * Same composition as the splash: dithered field, logo, accent progress
+ * line, status and a rotating tip. Fades out when connection is established.
  */
 export function ConnectionOverlay() {
   const connected = useChatStore((s) => s.connected);
@@ -126,49 +123,25 @@ export function ConnectionOverlay() {
     return `Still reconnecting — attempt ${reconnectAttempt}`;
   };
 
-  // Determine the correct animation class.
-  // We skip the fade-in animation on the initial connection (!hasConnected)
-  // because the pendingComponent (SplashScreen) was already solid; starting from opacity: 0 causes a flash.
+  // Skip the fade-in on the initial connection (!hasConnected): the pending
+  // SplashScreen was already solid, so starting from opacity 0 would flash.
   const animationClass = state.fadeOut
-    ? "animate-[conn-fade-out_1.2s_ease-in_forwards]"
+    ? "rm-loading-exit"
     : state.hasConnected
-      ? "animate-[conn-fade-in_0.3s_ease-out]"
+      ? "animate-in fade-in duration-300"
       : "";
 
   return (
-    <div
-      className={`fixed inset-0 z-100 flex flex-col items-center justify-center bg-rm-bg-primary font-sans select-none overflow-hidden ${animationClass}`}
+    <LoadingScreen
+      logoAlt=""
+      logoTestId="connection-overlay-logo"
+      className={`fixed inset-0 z-100 ${animationClass}`}
     >
-      {/* Radial glow */}
-      <div
-        className="absolute top-[45%] left-1/2 w-[320px] h-[320px] rounded-full pointer-events-none animate-[conn-glow_3s_ease-in-out_infinite]"
-        style={{
-          background:
-            "radial-gradient(circle, var(--rm-glow) 0%, transparent 70%)",
-          transform: "translate(-50%, -50%)",
-        }}
-      />
-
-      {/* Logo with breathing animation */}
-      <div className="w-24 h-24 z-10 flex items-center justify-center animate-[conn-breathe_2.8s_ease-in-out_infinite]">
-        <ThemeAwareSplashLogo
-          alt=""
-          data-testid="connection-overlay-logo"
-          className="h-full w-full object-contain"
-        />
-      </div>
-
-      {/* Loading bar */}
-      <div className="mt-9 w-[200px] h-1 rounded-full bg-rm-bg-active overflow-hidden relative z-10">
-        <div className="absolute top-0 h-full rounded-full bg-linear-to-r from-[#5865f2] to-[#7c8af4] animate-[conn-bar_1.8s_cubic-bezier(0.4,0,0.2,1)_infinite]" />
-      </div>
-
-      {/* Status text */}
       <p
         role="status"
         aria-live="polite"
         aria-atomic="true"
-        className="mt-5 text-sm font-semibold tracking-[0.01em] z-10 text-rm-text-secondary"
+        className="text-ui-base font-medium text-rm-text"
       >
         {getStatusText()}
       </p>
@@ -176,7 +149,7 @@ export function ConnectionOverlay() {
       {/* Rotating tip; keep its space reserved during fade-out to avoid shifting the stack. */}
       <p
         aria-hidden="true"
-        className={`mt-2 min-h-5 text-[13px] font-normal tracking-[0.01em] z-10 text-rm-text-muted transition-opacity duration-400 ${
+        className={`mt-1 min-h-5 text-ui-sm text-rm-text-muted transition-opacity duration-300 ${
           state.fadeOut
             ? "invisible opacity-0"
             : state.tipVisible
@@ -186,32 +159,6 @@ export function ConnectionOverlay() {
       >
         {tips[state.tipIndex]}
       </p>
-
-      {/* Keyframe definitions */}
-      <style>{`
-        @keyframes conn-fade-in {
-          from { opacity: 0; }
-          to { opacity: 1; }
-        }
-        @keyframes conn-fade-out {
-          0% { opacity: 1; }
-          60% { opacity: 1; }
-          100% { opacity: 0; pointer-events: none; }
-        }
-        @keyframes conn-breathe {
-          0%, 100% { transform: scale(1); opacity: 0.95; }
-          50% { transform: scale(1.06); opacity: 1; }
-        }
-        @keyframes conn-bar {
-          0% { left: -40%; width: 40%; }
-          50% { left: 30%; width: 50%; }
-          100% { left: 110%; width: 30%; }
-        }
-        @keyframes conn-glow {
-          0%, 100% { opacity: 0.25; transform: translate(-50%, -50%) scale(1); }
-          50% { opacity: 0.45; transform: translate(-50%, -50%) scale(1.1); }
-        }
-      `}</style>
-    </div>
+    </LoadingScreen>
   );
 }

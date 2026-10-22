@@ -1,4 +1,5 @@
 import { IconButton } from "@/components/ui/IconButton";
+import { DitherField } from "@/components/ui/DitherField";
 import InlineEmojiText from "@/components/chat/InlineEmojiText";
 import { getAuthAssetUrl } from "@/lib/platform";
 import { AvatarImage } from "../chat/AvatarImage";
@@ -22,12 +23,18 @@ export function VoiceLanding({
   onMenuClick,
 }: VoiceLandingProps) {
   return (
-    <div className="flex-1 flex flex-col relative overflow-hidden">
-      <div className="absolute inset-0 bg-gradient-to-br from-primary/10 via-primary/5 to-rm-bg-primary/60" />
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--rm-glow)_0%,_transparent_70%)]" />
-      <div className="absolute bottom-0 left-0 right-0 h-1/3 bg-gradient-to-t from-rm-bg-primary/80 to-transparent" />
+    <div className="flex-1 flex flex-col relative overflow-hidden bg-rm-bg-primary">
+      <DitherField
+        cell={6}
+        intensity={0.34}
+        contrast={1.1}
+        opacity={0.85}
+        fade="bottom"
+        tone="quiet"
+        seed={2}
+      />
 
-      <div className="relative z-10 h-14 flex items-center px-4 md:px-5 shrink-0 justify-between">
+      <div className="relative z-10 flex h-12 shrink-0 items-center justify-between px-4 md:px-5">
         <div className="flex items-center gap-2 text-rm-text-muted">
           {onMenuClick && (
             <IconButton
@@ -41,7 +48,7 @@ export function VoiceLanding({
           <Volume2 size={18} />
           <InlineEmojiText
             text={channelName}
-            className="text-sm font-bold text-rm-text tracking-tight"
+            className="text-ui-sm font-semibold text-rm-text"
           />
         </div>
         {!showTextChat && (
@@ -54,22 +61,25 @@ export function VoiceLanding({
         )}
       </div>
 
-      <div className="relative z-10 flex-1 flex flex-col items-center justify-center gap-4 px-6">
-        <h2 className="text-2xl font-bold text-rm-text/90 tracking-tight">
+      <div className="relative z-10 flex flex-1 flex-col items-center justify-center gap-3 px-6 pb-12 text-center">
+        <h2 className="font-display text-display-lg text-rm-text text-balance">
           <InlineEmojiText text={channelName} />
         </h2>
-        <p className="text-sm text-rm-text-muted font-medium">
+        <p className="text-ui-base text-rm-text-secondary">
           {vcMembers.length === 0
             ? "No one is currently in voice"
             : `${vcMembers.length} ${vcMembers.length === 1 ? "person" : "people"} in voice`}
         </p>
 
         {vcMembers.length > 0 && (
-          <div className="flex items-center gap-2 mt-2">
-            {vcMembers.slice(0, 5).map((m) => (
+          <div className="mt-1 flex items-center">
+            {vcMembers.slice(0, 5).map((m, index) => (
               <div
                 key={m.clerk_user_id}
-                className="w-8 h-8 rounded-full bg-rm-bg-elevated overflow-visible ring-1 ring-rm-border"
+                className={
+                  "h-9 w-9 overflow-visible rounded-full bg-rm-bg-elevated ring-2 ring-rm-bg-primary" +
+                  (index > 0 ? " -ml-2" : "")
+                }
               >
                 {m.avatar_url ? (
                   <AvatarImage
@@ -78,14 +88,14 @@ export function VoiceLanding({
                     display={m.avatar_display}
                   />
                 ) : (
-                  <div className="w-full h-full flex items-center justify-center text-xs font-bold text-rm-text-muted">
+                  <div className="flex h-full w-full items-center justify-center rounded-full text-ui-xs font-semibold text-rm-text-muted">
                     {m.name?.[0]?.toUpperCase() || "?"}
                   </div>
                 )}
               </div>
             ))}
             {vcMembers.length > 5 && (
-              <div className="w-8 h-8 rounded-full bg-rm-bg-elevated flex items-center justify-center text-xs font-bold text-rm-text-muted ring-1 ring-rm-border">
+              <div className="-ml-2 flex h-9 w-9 items-center justify-center rounded-full bg-rm-bg-elevated text-ui-xs font-semibold text-rm-text-muted ring-2 ring-rm-bg-primary">
                 +{vcMembers.length - 5}
               </div>
             )}
@@ -93,8 +103,9 @@ export function VoiceLanding({
         )}
 
         <button
+          type="button"
           onClick={handleJoin}
-          className="mt-4 px-8 py-2.5 bg-primary text-primary-foreground font-bold text-sm rounded-md hover:bg-primary/90 transition-all hover:shadow-[0_0_30px_var(--rm-glow)] active:scale-95 outline-none"
+          className="mt-3 h-10 rounded-md bg-primary px-6 text-ui-base font-semibold text-primary-foreground shadow-md transition-ui hover:bg-primary/90 enabled:active:scale-[0.96] outline-none"
         >
           Join Voice
         </button>

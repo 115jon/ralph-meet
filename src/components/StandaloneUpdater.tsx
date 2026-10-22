@@ -1,4 +1,4 @@
-import { ThemeAwareSplashLogo } from "@/components/ThemeAwareSplashLogo";
+import { LoadingScreen } from "@/components/ui/LoadingScreen";
 import { fetchDesktopUpdate, installDesktopUpdate } from "@/lib/desktop-update";
 import { restartDesktopApp } from "@/lib/desktop-restart";
 import { useDesktopSettingsStore } from "@/stores/useDesktopSettingsStore";
@@ -199,70 +199,26 @@ export function StandaloneUpdater() {
     };
   }, []);
 
+  const indeterminate = status === "checking" || status === "installing";
+
   return (
-    <div
-      className="w-screen h-screen flex flex-col justify-center items-center bg-rm-bg-primary relative overflow-hidden"
+    <LoadingScreen
+      className="h-screen w-screen"
       style={{ WebkitAppRegion: "drag" } as any}
+      progress={indeterminate ? undefined : progress}
     >
-      {/* Radial glow */}
-      <div
-        className="absolute top-[45%] left-1/2 w-[320px] h-[320px] rounded-full pointer-events-none animate-[conn-glow_3s_ease-in-out_infinite]"
-        style={{
-          background:
-            "radial-gradient(circle, var(--rm-glow, rgba(88, 101, 242, 0.4)) 0%, transparent 70%)",
-          transform: "translate(-50%, -50%)",
-        }}
-      />
-
-      {/* Logo with breathing animation */}
-      <div className="w-24 h-24 z-10 flex items-center justify-center animate-[conn-breathe_2.8s_ease-in-out_infinite]">
-        <ThemeAwareSplashLogo
-          alt="Ralph Meet"
-          className="h-full w-full object-contain"
-        />
-      </div>
-
-      {/* Loading bar */}
-      <div className="mt-9 w-[200px] h-1.5 rounded-full bg-rm-bg-active overflow-hidden relative z-10">
-        {status === "checking" || status === "installing" ? (
-          <div className="absolute top-0 h-full rounded-full bg-rm-accent animate-[conn-bar_1.8s_cubic-bezier(0.4,0,0.2,1)_infinite]" />
-        ) : (
-          <div
-            className="h-full rounded-full bg-rm-accent transition-all duration-200 ease-out"
-            style={{ width: `${progress}%` }}
-          />
-        )}
-      </div>
-
-      {/* Status text */}
-      <p className="mt-5 text-[13px] font-semibold tracking-[0.01em] z-10 text-rm-text-secondary">
+      <p className="text-ui-sm font-medium text-rm-text-secondary">
         {getStandaloneUpdaterStatusText(status, progress)}
       </p>
       {status === "error" && (
         <button
-          className="mt-4 rounded-lg bg-rm-accent px-3.5 py-1.5 text-[13px] font-semibold text-white transition-all hover:bg-rm-accent-hover active:scale-[0.97]"
+          className="mt-4 rounded-md bg-rm-accent px-3.5 py-1.5 text-ui-sm font-semibold text-white transition-ui hover:bg-rm-accent-hover enabled:active:scale-[0.96]"
+          style={{ WebkitAppRegion: "no-drag" } as any}
           onClick={() => window.location.reload()}
         >
           Retry startup
         </button>
       )}
-
-      {/* Keyframe definitions */}
-      <style>{`
-        @keyframes conn-breathe {
-          0%, 100% { transform: scale(1); opacity: 0.95; }
-          50% { transform: scale(1.06); opacity: 1; }
-        }
-        @keyframes conn-bar {
-          0% { left: -40%; width: 40%; }
-          50% { left: 30%; width: 50%; }
-          100% { left: 110%; width: 30%; }
-        }
-        @keyframes conn-glow {
-          0%, 100% { opacity: 0.25; transform: translate(-50%, -50%) scale(1); }
-          50% { opacity: 0.45; transform: translate(-50%, -50%) scale(1.1); }
-        }
-      `}</style>
-    </div>
+    </LoadingScreen>
   );
 }

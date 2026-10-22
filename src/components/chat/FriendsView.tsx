@@ -3,6 +3,7 @@ import { ButtonBase } from "@/components/ui/button-base";
 import { useContextMenu } from "@/hooks/useContextMenu";
 import { apiDelete, apiPost, apiPut } from "@/lib/api-client";
 import { getAuthAssetUrl } from "@/lib/platform";
+import { DitherField } from "@/components/ui/DitherField";
 import { cn } from "@/lib/utils";
 import { UserStatusDot } from "./UserStatusDot";
 import { useChatActions, useChatStore } from "@/stores/chat-store";
@@ -231,7 +232,7 @@ export default function FriendsView({ onMenuClick, onSelectDm }: Props) {
   return (
     <div className="flex flex-1 flex-col bg-rm-bg-primary relative overflow-hidden">
       {/* Header */}
-      <header className="h-12 flex shrink-0 items-center gap-3 border-b border-rm-border bg-rm-bg-primary/60 px-4 z-10 backdrop-blur-md">
+      <header className="h-12 flex shrink-0 items-center gap-3 border-b border-rm-border bg-rm-bg-primary px-4 z-10">
         <ButtonBase
           className="cursor-pointer border-none bg-transparent p-1 text-rm-text-muted transition-colors hover:text-rm-text md:hidden"
           onClick={onMenuClick}
@@ -249,7 +250,7 @@ export default function FriendsView({ onMenuClick, onSelectDm }: Props) {
           <ButtonBase
             key={t}
             className={cn(
-              "relative cursor-pointer rounded-md border-none px-3 py-1 text-[13px] font-medium transition-colors outline-none",
+              "relative h-7 cursor-pointer rounded-md border-none px-2.5 text-ui-sm font-medium transition-ui outline-none enabled:active:scale-[0.96]",
               tab === t
                 ? "bg-rm-bg-elevated text-rm-text"
                 : "text-rm-text-muted hover:bg-rm-bg-elevated/50 hover:text-rm-text-secondary",
@@ -258,16 +259,14 @@ export default function FriendsView({ onMenuClick, onSelectDm }: Props) {
           >
             {t.charAt(0).toUpperCase() + t.slice(1)}
             {t === "pending" && pendingCount > 0 && (
-              <span className="ml-1.5 inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-bold text-white">
-                {pendingCount}
-              </span>
+              <span className="badge-count ml-1.5">{pendingCount}</span>
             )}
           </ButtonBase>
         ))}
 
         <ButtonBase
           className={cn(
-            "ml-auto cursor-pointer rounded-md border-none px-3 py-1.5 text-[13px] font-medium transition-colors outline-none",
+            "ml-auto h-8 cursor-pointer rounded-md border-none px-3 text-ui-sm font-medium transition-ui outline-none enabled:active:scale-[0.96]",
             addFriendMode
               ? "bg-primary/20 text-primary"
               : "text-primary hover:bg-primary/10",
@@ -290,7 +289,7 @@ export default function FriendsView({ onMenuClick, onSelectDm }: Props) {
           </p>
           <div className="flex gap-2 max-w-lg">
             <input
-              className="flex-1 rounded-lg border border-rm-border bg-rm-bg-surface px-4 py-2 text-sm text-rm-text outline-none transition-all placeholder:text-rm-text-muted/30 focus:border-primary/30 focus:ring-2 focus:ring-primary/20"
+              className="flex-1 rounded-lg border border-rm-border bg-rm-bg-surface px-4 py-2 text-sm text-rm-text outline-none transition-ui placeholder:text-rm-text-muted/30 focus:border-primary/30 focus:ring-2 focus:ring-primary/20"
               aria-label="Friend username"
               placeholder="Enter a username"
               value={addUsername}
@@ -315,7 +314,7 @@ export default function FriendsView({ onMenuClick, onSelectDm }: Props) {
 
       {/* Friend count label */}
       <div className="px-6 py-3 border-b border-rm-border/50">
-        <span className="text-[11px] font-bold uppercase tracking-widest text-rm-text-muted">
+        <span className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted">
           {tab === "online"
             ? "Online"
             : tab === "all"
@@ -338,15 +337,18 @@ export default function FriendsView({ onMenuClick, onSelectDm }: Props) {
           )}
 
           {!loading && filteredFriends.length === 0 && (
-            <div className="flex flex-col items-center gap-3 py-16 text-center">
-              {tab === "pending" ? (
-                <UserPlus className="h-12 w-12 text-rm-text-muted/20" />
-              ) : tab === "blocked" ? (
-                <Ban className="h-12 w-12 text-rm-text-muted/20" />
-              ) : (
-                <Users className="h-12 w-12 text-rm-text-muted/20" />
-              )}
-              <span className="text-base font-semibold text-rm-text-muted/60">
+            <div className="mx-auto mt-16 flex w-full max-w-[360px] flex-col items-center gap-1 text-center">
+              <div className="relative mb-4 flex h-16 w-16 items-center justify-center overflow-hidden rounded-lg border border-rm-border shadow-sm">
+                <DitherField cell={4} intensity={0.55} seed={3} />
+                {tab === "pending" ? (
+                  <UserPlus className="relative z-10 h-7 w-7 text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.5)]" />
+                ) : tab === "blocked" ? (
+                  <Ban className="relative z-10 h-7 w-7 text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.5)]" />
+                ) : (
+                  <Users className="relative z-10 h-7 w-7 text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.5)]" />
+                )}
+              </div>
+              <span className="text-ui-lg font-semibold text-rm-text text-balance">
                 {tab === "online"
                   ? "No friends online"
                   : tab === "all"
@@ -356,7 +358,7 @@ export default function FriendsView({ onMenuClick, onSelectDm }: Props) {
                       : "No blocked users"}
               </span>
               {tab === "all" && (
-                <span className="text-xs text-rm-text-muted/40">
+                <span className="text-ui-sm text-rm-text-muted text-pretty">
                   Add friends using the button above to get started
                 </span>
               )}
@@ -393,7 +395,7 @@ export default function FriendsView({ onMenuClick, onSelectDm }: Props) {
                       }}
                       aria-label={`View ${displayName}'s profile`}
                     >
-                      <div className="flex h-10 w-10 items-center justify-center overflow-visible rounded-full bg-primary text-sm font-bold text-primary-foreground ring-1 ring-white/10 group-hover:ring-white/20 transition-all relative">
+                      <div className="flex h-10 w-10 items-center justify-center overflow-visible rounded-full bg-primary text-sm font-bold text-primary-foreground ring-1 ring-white/10 group-hover:ring-white/20 transition-ui relative">
                         {rel.user.avatar_url ? (
                           <AvatarImage
                             src={getAuthAssetUrl(rel.user.avatar_url)}
@@ -460,7 +462,7 @@ export default function FriendsView({ onMenuClick, onSelectDm }: Props) {
                         </ButtonBase>
                       )}
                       <ButtonBase
-                        className="cursor-pointer rounded-full p-2 text-rm-text-muted/40 transition-colors hover:bg-rose-500/10 hover:text-rose-400 outline-none"
+                        className="cursor-pointer rounded-full p-2 text-rm-text-muted/40 transition-colors hover:bg-destructive/10 hover:text-destructive outline-none"
                         title={
                           rel.type === 0
                             ? "Remove Friend"
