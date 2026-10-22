@@ -175,7 +175,7 @@ export default function ChannelInviteModal({
                 onChange={(e) =>
                   setState((prev) => ({ ...prev, search: e.target.value }))
                 }
-                className="w-full rounded-lg border border-rm-border bg-rm-bg-surface py-2 pl-9 pr-3 text-sm text-rm-text outline-none placeholder:text-rm-text-muted/40 focus:border-primary/30 focus:ring-2 focus:ring-primary/20 transition-all"
+                className="w-full rounded-lg border border-rm-border bg-rm-bg-surface py-2 pl-9 pr-3 text-sm text-rm-text outline-none placeholder:text-rm-text-muted/40 focus:border-primary/30 focus:ring-2 focus:ring-primary/20 transition-ui"
               />
             </div>
           </div>
@@ -228,7 +228,7 @@ export default function ChannelInviteModal({
                       onClick={() => handleInviteUser(rel.user.id)}
                       disabled={isInvited}
                       className={cn(
-                        "rounded-md px-3 py-1.5 text-xs font-semibold transition-all",
+                        "rounded-md px-3 py-1.5 text-xs font-semibold transition-ui",
                         isInvited
                           ? "bg-rm-bg-surface text-rm-text-muted border border-rm-border cursor-default"
                           : "bg-primary text-primary-foreground hover:brightness-110",
@@ -263,7 +263,7 @@ export default function ChannelInviteModal({
                 onClick={copyLink}
                 disabled={state.loading || !state.inviteCode}
                 className={cn(
-                  "flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-semibold transition-all",
+                  "flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-semibold transition-ui",
                   state.copied
                     ? "bg-primary/20 text-primary border border-primary/30"
                     : "bg-primary text-primary-foreground hover:brightness-110",
@@ -283,7 +283,7 @@ export default function ChannelInviteModal({
               </button>
             </div>
             {state.inviteCode && (
-              <p className="mt-2 text-[11px] text-rm-text-muted/60">
+              <p className="mt-2 text-ui-2xs text-rm-text-muted/60">
                 Your invite link expires in 7 days.
               </p>
             )}

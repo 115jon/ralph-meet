@@ -170,7 +170,7 @@ export function SoundboardPlaybackRow({
                 display={authorInfo.avatarDisplay}
               />
             ) : (
-              <span className="text-[10px] text-rm-text-muted font-bold uppercase">
+              <span className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted">
                 {getDisplayInitial({ name: authorInfo.displayName })}
               </span>
             )}
@@ -180,7 +180,7 @@ export function SoundboardPlaybackRow({
               text={playback.name}
               className="truncate text-xs font-bold"
             />
-            <span className="text-[10px] font-normal text-rm-text-muted truncate">
+            <span className="text-ui-2xs font-normal text-rm-text-muted truncate">
               <InlineEmojiText text={authorInfo.displayName} />
             </span>
           </div>
@@ -198,10 +198,7 @@ export function SoundboardPlaybackRow({
                   {playback.paused ? <Play size={12} /> : <Pause size={12} />}
                 </button>
               </TooltipTrigger>
-              <TooltipContent
-                side="top"
-                className="border border-rm-border bg-rm-bg-floating text-rm-text shadow-lg"
-              >
+              <TooltipContent side="top">
                 {playback.paused ? "Resume" : "Pause"}
               </TooltipContent>
             </Tooltip>
@@ -212,17 +209,12 @@ export function SoundboardPlaybackRow({
                 type="button"
                 onClick={handleStop}
                 aria-label="Stop"
-                className="flex items-center gap-1 rounded px-2 py-1 text-rm-text-muted hover:bg-red-500/20 hover:text-red-400"
+                className="flex items-center gap-1 rounded px-2 py-1 text-rm-text-muted hover:bg-destructive/20 hover:text-destructive"
               >
                 <Square size={11} />
               </button>
             </TooltipTrigger>
-            <TooltipContent
-              side="top"
-              className="border border-rm-border bg-rm-bg-floating text-rm-text shadow-lg"
-            >
-              Stop
-            </TooltipContent>
+            <TooltipContent side="top">Stop</TooltipContent>
           </Tooltip>
         </div>
       </div>
@@ -244,7 +236,7 @@ export function SoundboardPlaybackRow({
             }
             className="h-4 min-w-0 flex-1 cursor-pointer accent-primary"
           />
-          <span className="w-8 text-right text-[10px] tabular-nums text-rm-text-muted">
+          <span className="w-8 text-right text-ui-2xs tabular-nums text-rm-text-muted">
             {Math.round(playback.volume * 100)}%
           </span>
         </div>

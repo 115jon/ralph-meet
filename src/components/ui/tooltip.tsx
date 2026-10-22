@@ -36,9 +36,15 @@ const TooltipTrigger = React.memo(function TooltipTrigger({
   return <TooltipPrimitive.Trigger data-slot="tooltip-trigger" {...props} />;
 });
 
+/**
+ * One tooltip for the whole app: floating surface, 13px/500, 8px radius,
+ * low elevation, 100ms ease-out from its trigger edge; once one tooltip is
+ * open, neighbours open instantly (Radix `instant-open`). Callers should not
+ * restyle it.
+ */
 const TooltipContent = React.memo(function TooltipContent({
   className,
-  sideOffset = 0,
+  sideOffset = 6,
   children,
   ...props
 }: React.ComponentProps<typeof TooltipPrimitive.Content>) {
@@ -48,17 +54,13 @@ const TooltipContent = React.memo(function TooltipContent({
         data-slot="tooltip-content"
         sideOffset={sideOffset}
         className={cn(
-          "border border-rm-border bg-rm-bg-floating text-rm-text shadow-lg animate-in fade-in-0 zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 z-80 w-fit origin-(--radix-tooltip-content-transform-origin) rounded-md px-3 py-1.5 text-xs text-balance pointer-events-none",
+          "z-80 w-fit max-w-[280px] origin-(--radix-tooltip-content-transform-origin) rounded-md border border-rm-border bg-rm-bg-floating px-2.5 py-1.5 text-ui-sm font-medium text-rm-text shadow-md text-balance pointer-events-none",
+          "animate-in fade-in-0 zoom-in-[0.97] duration-100 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-[0.97] data-[side=bottom]:slide-in-from-top-1 data-[side=left]:slide-in-from-right-1 data-[side=right]:slide-in-from-left-1 data-[side=top]:slide-in-from-bottom-1 data-[state=instant-open]:animate-none",
           className,
         )}
         {...props}
       >
         {children}
-        <TooltipPrimitive.Arrow
-          className="fill-rm-bg-floating z-80"
-          width={11}
-          height={5}
-        />
       </TooltipPrimitive.Content>
     </TooltipPrimitive.Portal>
   );

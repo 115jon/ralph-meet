@@ -97,7 +97,7 @@ function DraggableAvatar({
       {...attributes}
     >
       {isSelf && (
-        <span className="absolute bottom-full left-1/2 mb-1 -translate-x-1/2 text-[11px] font-black text-rm-text">
+        <span className="absolute bottom-full left-1/2 mb-1 -translate-x-1/2 text-ui-2xs font-bold text-rm-text">
           You
         </span>
       )}
@@ -110,14 +110,14 @@ function DraggableAvatar({
               display={participant.avatarDisplay ?? null}
             />
           ) : (
-            <span className="flex h-full w-full items-center justify-center text-xs font-black text-rm-text">
+            <span className="flex h-full w-full items-center justify-center text-xs font-bold text-rm-text">
               {participant.name[0]?.toUpperCase()}
             </span>
           )}
         </span>
       )}
       {inactive && (
-        <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-amber-500 text-[10px] font-black text-black">
+        <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-amber-500 text-ui-2xs font-bold text-black">
           !
         </span>
       )}
@@ -348,7 +348,9 @@ export function SpatialAudioPanel({
       >
         <div className="mb-4 flex items-start justify-between gap-4">
           <div>
-            <h3 className="text-sm font-black text-rm-text">Spatial Audio</h3>
+            <h3 className="text-sm font-semibold text-rm-text">
+              Spatial Audio
+            </h3>
             <p className="mt-1 text-xs text-rm-text-muted">
               Shared room placement for everyone in this voice session.
             </p>
@@ -383,7 +385,7 @@ export function SpatialAudioPanel({
               commit({ enabled: nextEnabled });
             }}
             className={cn(
-              "rounded-lg px-3 py-2 text-xs font-black transition-colors",
+              "rounded-lg px-3 py-2 text-xs font-bold transition-colors",
               state.enabled && localSpatialEnabled && localHighFidelity
                 ? "bg-primary text-primary-foreground"
                 : "bg-rm-bg-elevated text-rm-text-muted hover:text-rm-text",
@@ -469,7 +471,7 @@ export function SpatialAudioPanel({
                 transformOrigin: "50% 58%",
               }}
             >
-              <div className="absolute left-4 top-4 rounded-md border border-rm-border bg-rm-bg-hover/80 backdrop-blur-sm px-2 py-1 text-[11px] font-bold text-rm-text-muted">
+              <div className="absolute left-4 top-4 rounded-md border border-rm-border bg-rm-bg-hover/80 backdrop-blur-sm px-2 py-1 text-ui-2xs font-bold text-rm-text-muted">
                 {state.roomSize} m² room
               </div>
               {participants.map((participant) => {
@@ -510,7 +512,7 @@ export function SpatialAudioPanel({
                 type="button"
                 title="Reset view"
                 onClick={() => setView({ zoom: 1, panX: 0, panY: 0 })}
-                className="border-x border-rm-border px-2 text-[11px] font-black text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text"
+                className="border-x border-rm-border px-2 text-ui-2xs font-bold text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text"
               >
                 {Math.round(totalZoom * 100)}%
               </button>
@@ -529,7 +531,7 @@ export function SpatialAudioPanel({
               </button>
             </div>
             {state.placementMode === "manual" && (
-              <div className="absolute bottom-3 left-3 flex items-center gap-2 rounded-md bg-rm-bg-hover/80 backdrop-blur-sm px-2 py-1 text-[11px] font-bold text-rm-text-muted">
+              <div className="absolute bottom-3 left-3 flex items-center gap-2 rounded-md bg-rm-bg-hover/80 backdrop-blur-sm px-2 py-1 text-ui-2xs font-bold text-rm-text-muted">
                 <Move size={13} /> Drag members to reposition everyone
               </div>
             )}

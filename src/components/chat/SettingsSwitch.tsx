@@ -16,14 +16,17 @@ export function SettingsSwitch({
       aria-label={ariaLabel}
       aria-pressed={checked}
       className={cn(
-        "shrink-0 w-[50px] h-[28px] rounded-[16px] relative transition-colors duration-200 ease-in-out focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/50",
-        checked ? "bg-primary" : "bg-[#2b2d31]",
+        "relative h-7 w-12 shrink-0 rounded-full border border-transparent transition-[background-color,border-color] duration-150 ease-out enabled:active:scale-[0.98]",
+        checked
+          ? "bg-primary"
+          : "bg-rm-bg-active border-rm-border hover:bg-rm-text-ghost/40",
       )}
     >
-      <div
+      <span
+        aria-hidden="true"
         className={cn(
-          "absolute top-[2px] left-[2px] h-[24px] w-[24px] bg-white rounded-full transition-transform duration-200 ease-in-out shadow-sm",
-          checked ? "translate-x-[22px]" : "translate-x-0",
+          "absolute left-0.5 top-0.5 h-[22px] w-[22px] rounded-full bg-white shadow-sm transition-transform duration-150 ease-out",
+          checked ? "translate-x-5" : "translate-x-0",
         )}
       />
     </button>

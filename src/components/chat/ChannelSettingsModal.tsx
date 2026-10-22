@@ -156,13 +156,13 @@ export default function ChannelSettingsModal({
               className="w-full flex justify-between items-center pb-3 px-4 md:hidden bg-rm-server-bar shrink-0 border-b border-rm-border/50"
               style={{ paddingTop: "calc(16px + var(--safe-area-top, 0px))" }}
             >
-              <h2 className="text-[13px] font-bold tracking-widest text-rm-text-muted truncate">
+              <h2 className="text-ui-sm font-bold tracking-widest text-rm-text-muted truncate">
                 <ChannelTypeIcon className="inline h-3 w-3 mr-1 -mt-0.5 opacity-60" />
                 <InlineEmojiText text={channel.name} />
               </h2>
               <button
                 onClick={onClose}
-                className="p-1 rounded-full bg-rm-bg-surface text-rm-text flex items-center justify-center hover:bg-rm-bg-hover active:scale-95 transition-all"
+                className="p-1 rounded-full bg-rm-bg-surface text-rm-text flex items-center justify-center hover:bg-rm-bg-hover active:scale-[0.96] transition-ui"
               >
                 <X size={18} />
               </button>
@@ -172,7 +172,7 @@ export default function ChannelSettingsModal({
             <div className="w-full min-h-0 md:w-[218px] flex flex-row md:flex-col shrink-0 bg-rm-server-bar pt-2 md:pt-[60px] pb-2 px-4 overflow-x-auto md:overflow-y-auto md:overflow-x-hidden custom-scrollbar border-b md:border-b-0 md:border-r border-rm-border/50 gap-2 md:gap-0">
               <div className="hidden md:block mb-2 px-2">
                 <h2
-                  className="text-[11px] font-bold uppercase tracking-widest text-rm-text-muted truncate block w-[180px]"
+                  className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted truncate block w-[180px]"
                   title={channel.name}
                 >
                   <ChannelTypeIcon className="inline h-3 w-3 mr-1 -mt-0.5 opacity-60" />
@@ -182,7 +182,7 @@ export default function ChannelSettingsModal({
               <button
                 onClick={() => setActiveTab("overview")}
                 className={cn(
-                  "w-auto md:w-full shrink-0 text-left px-4 md:px-3 py-2 rounded-full md:rounded-lg text-[13px] md:text-sm font-bold md:font-medium transition-colors flex items-center gap-2 mb-0 md:mb-1",
+                  "w-auto md:w-full shrink-0 text-left px-4 md:px-3 py-2 rounded-full md:rounded-lg text-ui-sm md:text-sm font-bold md:font-medium transition-colors flex items-center gap-2 mb-0 md:mb-1",
                   activeTab === "overview"
                     ? "bg-primary text-primary-foreground md:bg-primary/10 md:text-primary"
                     : "text-rm-text-secondary hover:bg-rm-bg-hover hover:text-rm-text bg-rm-bg-elevated/50 md:bg-transparent",
@@ -194,7 +194,7 @@ export default function ChannelSettingsModal({
               <button
                 onClick={() => setActiveTab("permissions")}
                 className={cn(
-                  "w-auto md:w-full shrink-0 text-left px-4 md:px-3 py-2 rounded-full md:rounded-lg text-[13px] md:text-sm font-bold md:font-medium transition-colors flex items-center gap-2 mb-0 md:mb-1",
+                  "w-auto md:w-full shrink-0 text-left px-4 md:px-3 py-2 rounded-full md:rounded-lg text-ui-sm md:text-sm font-bold md:font-medium transition-colors flex items-center gap-2 mb-0 md:mb-1",
                   activeTab === "permissions"
                     ? "bg-primary text-primary-foreground md:bg-primary/10 md:text-primary"
                     : "text-rm-text-secondary hover:bg-rm-bg-hover hover:text-rm-text bg-rm-bg-elevated/50 md:bg-transparent",
@@ -210,18 +210,18 @@ export default function ChannelSettingsModal({
               <div className="absolute right-6 top-6 z-50 flex flex-col items-center gap-1 hidden md:flex">
                 <button
                   onClick={onClose}
-                  className="flex h-9 w-9 items-center justify-center rounded-full border border-rm-border text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text transition-all group"
+                  className="flex h-9 w-9 items-center justify-center rounded-full border border-rm-border text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text transition-ui group"
                 >
                   <X size={18} />
                 </button>
-                <span className="text-[11px] font-bold text-rm-text-muted group-hover:text-rm-text-secondary">
+                <span className="text-ui-2xs font-bold text-rm-text-muted group-hover:text-rm-text-secondary">
                   ESC
                 </span>
               </div>
 
               <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar px-[20px] md:px-[40px] py-[40px] md:py-[60px]">
                 {activeTab === "permissions" ? (
-                  <div className="animate-in fade-in slide-in-from-right-4 duration-300 w-full h-full">
+                  <div className="animate-in fade-in duration-150 w-full h-full">
                     <h2
                       id="channel-settings-title"
                       className="mb-6 text-xl font-bold text-rm-text"
@@ -235,7 +235,7 @@ export default function ChannelSettingsModal({
                     />
                   </div>
                 ) : (
-                  <div className="animate-in fade-in slide-in-from-right-4 duration-300 w-full">
+                  <div className="animate-in fade-in duration-150 w-full">
                     <h2
                       id="channel-settings-title"
                       className="mb-6 text-xl font-bold text-rm-text"
@@ -246,7 +246,7 @@ export default function ChannelSettingsModal({
                     <div className="space-y-8 max-w-xl">
                       {/* Channel Type Badge */}
                       <div className="space-y-2">
-                        <span className="text-[11px] font-bold uppercase tracking-widest text-rm-text-muted block">
+                        <span className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted block">
                           Channel Type
                         </span>
                         <div className="inline-flex items-center gap-2 rounded-lg border border-rm-border bg-rm-bg-surface px-3 py-2 text-sm font-medium text-rm-text-secondary">
@@ -261,7 +261,7 @@ export default function ChannelSettingsModal({
                       <div className="space-y-3">
                         <label
                           htmlFor="channel-name-setting"
-                          className="text-[11px] font-bold uppercase tracking-widest text-rm-text-muted block"
+                          className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted block"
                         >
                           Channel Name
                         </label>
@@ -270,13 +270,13 @@ export default function ChannelSettingsModal({
                           id="channel-name-setting"
                           value={name}
                           onChange={(e) => setName(e.target.value)}
-                          className="w-full max-w-sm rounded-lg border border-rm-border bg-rm-bg-surface px-4 py-2.5 text-[15px] text-rm-text outline-none transition-all placeholder:text-rm-text-muted/40 focus:border-primary/40 focus:ring-2 focus:ring-primary/20"
+                          className="w-full max-w-sm rounded-lg border border-rm-border bg-rm-bg-surface px-4 py-2.5 text-ui-base text-rm-text outline-none transition-ui placeholder:text-rm-text-muted/40 focus:border-primary/40 focus:ring-2 focus:ring-primary/20"
                           placeholder="channel-name"
                         />
                         {/* Live preview for text channels */}
                         {channel.channel_type === "text" &&
                           previewName !== name && (
-                            <p className="text-[12px] text-rm-text-muted flex items-center gap-1.5">
+                            <p className="text-ui-xs text-rm-text-muted flex items-center gap-1.5">
                               <Hash className="h-3 w-3 opacity-40" />
                               Preview:{" "}
                               <span className="font-medium text-rm-text-secondary">
@@ -290,7 +290,7 @@ export default function ChannelSettingsModal({
                       <div className="space-y-3">
                         <label
                           htmlFor="channel-description-setting"
-                          className="text-[11px] font-bold uppercase tracking-widest text-rm-text-muted block"
+                          className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted block"
                         >
                           Channel Topic
                         </label>
@@ -301,17 +301,17 @@ export default function ChannelSettingsModal({
                             setDescription(e.target.value.slice(0, 1024))
                           }
                           rows={3}
-                          className="w-full rounded-lg border border-rm-border bg-rm-bg-surface px-4 py-2.5 text-[15px] text-rm-text outline-none transition-all placeholder:text-rm-text-muted/40 focus:border-primary/40 focus:ring-2 focus:ring-primary/20 resize-none"
+                          className="w-full rounded-lg border border-rm-border bg-rm-bg-surface px-4 py-2.5 text-ui-base text-rm-text outline-none transition-ui placeholder:text-rm-text-muted/40 focus:border-primary/40 focus:ring-2 focus:ring-primary/20 resize-none"
                           placeholder="Let everyone know what this channel is about"
                         />
-                        <p className="text-[11px] text-rm-text-muted text-right">
+                        <p className="text-ui-2xs text-rm-text-muted text-right">
                           {description.length} / 1024
                         </p>
                       </div>
 
                       {/* Error */}
                       <div className="space-y-3">
-                        <span className="text-[11px] font-bold uppercase tracking-widest text-rm-text-muted block">
+                        <span className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted block">
                           Public Sharing
                         </span>
                         <Select
@@ -330,7 +330,7 @@ export default function ChannelSettingsModal({
                         >
                           <SelectTrigger
                             aria-label="Public sharing"
-                            className="w-full max-w-sm rounded-lg border-rm-border bg-rm-bg-surface px-4 py-2.5 text-[15px] text-rm-text outline-none transition-all focus:border-primary/40 focus:ring-2 focus:ring-primary/20"
+                            className="w-full max-w-sm rounded-lg border-rm-border bg-rm-bg-surface px-4 py-2.5 text-ui-base text-rm-text outline-none transition-ui focus:border-primary/40 focus:ring-2 focus:ring-primary/20"
                           >
                             <SelectValue placeholder="Public sharing" />
                           </SelectTrigger>
@@ -350,7 +350,7 @@ export default function ChannelSettingsModal({
 
                       {/* Error */}
                       {error && (
-                        <div className="rounded-lg border border-red-500/20 bg-red-500/5 px-4 py-3 text-sm text-red-800 dark:text-red-400">
+                        <div className="rounded-lg border border-destructive/20 bg-destructive/5 px-4 py-3 text-sm text-destructive">
                           {error}
                         </div>
                       )}
@@ -360,7 +360,7 @@ export default function ChannelSettingsModal({
                         onClick={handleSave}
                         disabled={!hasChanges || saving}
                         className={cn(
-                          "flex max-w-fit items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-semibold shadow-lg transition-all hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed",
+                          "flex max-w-fit items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-semibold shadow-lg transition-ui hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed",
                           successFlash
                             ? "bg-green-500 text-white shadow-green-500/20"
                             : "bg-primary text-primary-foreground shadow-primary/20",
@@ -378,7 +378,7 @@ export default function ChannelSettingsModal({
 
                       {/* Channel Info */}
                       <div className="pt-4 border-t border-rm-border/50">
-                        <p className="text-[11px] text-rm-text-muted">
+                        <p className="text-ui-2xs text-rm-text-muted">
                           Created{" "}
                           {formatDate(channel.created_at, {
                             year: "numeric",

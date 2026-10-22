@@ -193,7 +193,7 @@ const VideoAttachmentSurface = memo(function VideoAttachmentSurface({
 
   const durationBadge =
     shouldShowDurationBadge && durationBadgeLabel ? (
-      <div className="absolute bottom-2 left-2 z-20 rounded-md bg-black/78 px-1.5 py-1 text-[12px] leading-none font-medium text-white shadow-sm [font-variant-numeric:tabular-nums]">
+      <div className="absolute bottom-2 left-2 z-20 rounded-md bg-black/78 px-1.5 py-1 text-ui-xs leading-none font-medium text-white shadow-sm [font-variant-numeric:tabular-nums]">
         {durationBadgeLabel}
       </div>
     ) : null;
@@ -532,7 +532,7 @@ const VideoAttachment = memo(function VideoAttachment({
       {showControlsOverlay && (
         <div
           className={cn(
-            "absolute bottom-0 left-0 right-0 transition-all duration-200 z-10",
+            "absolute bottom-0 left-0 right-0 transition-ui z-10",
             controlsVisible
               ? "opacity-100 translate-y-0"
               : "opacity-0 translate-y-1 pointer-events-none",

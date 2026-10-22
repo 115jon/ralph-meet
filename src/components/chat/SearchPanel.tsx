@@ -253,7 +253,7 @@ export default function SearchPanel({
             ref={inputRef}
             id={searchInputId}
             type="text"
-            className="flex-1 bg-transparent text-[15px] font-medium text-rm-text outline-none placeholder:text-rm-text-muted max-md:text-[16px]"
+            className="flex-1 bg-transparent text-ui-base font-medium text-rm-text outline-none placeholder:text-rm-text-muted max-md:text-ui-md"
             placeholder="Search messages…"
             value={query}
             onChange={handleInput}
@@ -275,7 +275,7 @@ export default function SearchPanel({
             {loading && (
               <div className="flex items-center justify-center gap-2 py-6 text-primary/60">
                 <Loader2 className="h-4 w-4 animate-spin" />
-                <span className="text-[11px] font-black uppercase tracking-widest text-primary">
+                <span className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-primary">
                   Searching...
                 </span>
               </div>
@@ -286,7 +286,7 @@ export default function SearchPanel({
                 <span className="text-xs text-rm-text-muted font-bold">
                   No results found
                 </span>
-                <span className="text-[11px] text-rm-text-muted/40">
+                <span className="text-ui-2xs text-rm-text-muted/40">
                   Try a different search term
                 </span>
               </div>
@@ -297,14 +297,14 @@ export default function SearchPanel({
                 <span className="text-xs text-rm-text-muted font-bold">
                   Search for messages
                 </span>
-                <span className="text-[11px] text-rm-text-muted/40">
+                <span className="text-ui-2xs text-rm-text-muted/40">
                   Type at least 2 characters to search
                 </span>
               </div>
             )}
             {!loading && results.length > 0 && (
               <>
-                <div className="mb-2 px-1 text-[10px] font-semibold uppercase tracking-widest text-rm-text-muted/40">
+                <div className="text-ui-2xs font-semibold uppercase tracking-[0.08em] mb-2 px-1 text-rm-text-muted/40">
                   {total} result{total !== 1 ? "s" : ""}
                 </div>
                 {results.map((msg) => (
@@ -348,7 +348,7 @@ const SearchResultItem = ({
   return (
     <button
       type="button"
-      className="mb-1 w-full cursor-pointer rounded-xl border-none bg-transparent p-3 text-left transition-all hover:bg-rm-bg-hover group/item outline-none"
+      className="mb-1 w-full cursor-pointer rounded-xl border-none bg-transparent p-3 text-left transition-ui hover:bg-rm-bg-hover group/item outline-none"
       onClick={() => {
         if (onJump) {
           onJump(msg.channel_id, msg.id);
@@ -358,7 +358,7 @@ const SearchResultItem = ({
         onClose();
       }}
     >
-      <div className="mb-1 flex items-center gap-2 text-[11px]">
+      <div className="mb-1 flex items-center gap-2 text-ui-2xs">
         <span className="flex items-center gap-0.5 text-primary font-bold">
           <Hash className="h-3 w-3" />
           {msg.channel_name}
@@ -374,7 +374,7 @@ const SearchResultItem = ({
           })}
         </span>
       </div>
-      <div className="text-[13px] leading-relaxed text-rm-text-secondary">
+      <div className="text-ui-sm leading-relaxed text-rm-text-secondary">
         {highlightMatch(msg.content, query)}
       </div>
     </button>

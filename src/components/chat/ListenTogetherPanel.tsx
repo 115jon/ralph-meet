@@ -142,7 +142,7 @@ export const listenTogetherQueueRowRenderer = {
           isCurrent ? "rounded-2xl bg-primary/10" : "hover:bg-rm-bg-hover/45",
         )}
       >
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center text-xs font-black tabular-nums text-rm-text-muted">
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center text-xs font-bold tabular-nums text-rm-text-muted">
           {isCurrent ? (
             <span className="h-2 w-2 rounded-full bg-primary" />
           ) : (
@@ -163,10 +163,10 @@ export const listenTogetherQueueRowRenderer = {
           )}
         </div>
         <div className="min-w-0">
-          <div className="truncate text-[13px] font-bold text-rm-text sm:text-sm">
+          <div className="truncate text-ui-sm font-bold text-rm-text sm:text-sm">
             {entry.track.title}
           </div>
-          <div className="mt-1 flex min-w-0 items-center gap-1.5 truncate text-[11px] text-rm-text-muted sm:gap-2 sm:text-xs">
+          <div className="mt-1 flex min-w-0 items-center gap-1.5 truncate text-ui-2xs text-rm-text-muted sm:gap-2 sm:text-xs">
             <span className="truncate">
               {entry.track.artist || entry.track.sourceLabel}
             </span>
@@ -181,7 +181,7 @@ export const listenTogetherQueueRowRenderer = {
               </>
             )}
           </div>
-          <div className="mt-1 flex min-w-0 items-center gap-1.5 text-[10px] text-rm-text-muted/75 sm:text-[11px]">
+          <div className="mt-1 flex min-w-0 items-center gap-1.5 text-ui-2xs text-rm-text-muted/75 sm:text-ui-2xs">
             <div className="h-4 w-4 shrink-0 overflow-hidden rounded-full bg-rm-bg-hover">
               {entry.requester.avatarUrl ? (
                 <AvatarImage
@@ -190,7 +190,7 @@ export const listenTogetherQueueRowRenderer = {
                   display={entry.requester.avatarDisplay}
                 />
               ) : (
-                <div className="flex h-full w-full items-center justify-center text-[8px] font-black text-rm-text-muted">
+                <div className="flex h-full w-full items-center justify-center text-ui-2xs font-bold text-rm-text-muted">
                   {entry.requester.displayName.charAt(0).toUpperCase()}
                 </div>
               )}
@@ -233,7 +233,7 @@ export const listenTogetherQueueRowRenderer = {
                 entryId: entry.entryId,
               })
             }
-            className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-rm-text-muted transition-colors hover:bg-red-500/10 hover:text-red-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400/30"
+            className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-rm-text-muted transition-colors hover:bg-destructive/10 hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-destructive/30"
             aria-label={`Remove ${entry.track.title}`}
           >
             <Trash2 className="h-3.5 w-3.5" />
@@ -902,14 +902,14 @@ export function ListenTogetherPanel({
       }
       className="flex h-full min-h-0 flex-col gap-3 overflow-y-auto p-3 sm:gap-4 sm:p-4 lg:grid lg:grid-cols-[minmax(280px,var(--listen-together-left-pane))_8px_minmax(0,1fr)] lg:overflow-hidden"
     >
-      <section className="flex min-h-[280px] min-w-0 flex-col overflow-hidden rounded-[26px] border border-rm-border bg-rm-bg-surface/35 lg:min-h-0">
+      <section className="flex min-h-[280px] min-w-0 flex-col overflow-hidden rounded-3xl border border-rm-border bg-rm-bg-surface/35 lg:min-h-0">
         <div className="border-b border-rm-border px-4 py-4 sm:px-5">
           <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.18em] text-rm-text-muted">
+            <div className="text-ui-2xs font-semibold uppercase tracking-[0.08em] flex items-center gap-2 text-rm-text-muted">
               <Headphones className="h-4 w-4 text-primary" />
               Add to queue
             </div>
-            <span className="text-[11px] text-rm-text-muted">
+            <span className="text-ui-2xs text-rm-text-muted">
               YouTube · Spotify
             </span>
           </div>
@@ -959,7 +959,7 @@ export function ListenTogetherPanel({
                 <button
                   type="submit"
                   disabled={!trimmedInput || !voiceSessionHeaders}
-                  className="inline-flex h-11 items-center justify-center rounded-2xl border border-primary/30 bg-primary/15 px-4 text-sm font-black text-primary transition-transform hover:bg-primary/20 active:scale-[0.96] disabled:cursor-not-allowed disabled:opacity-50"
+                  className="inline-flex h-11 items-center justify-center rounded-2xl border border-primary/30 bg-primary/15 px-4 text-sm font-semibold text-primary transition-transform hover:bg-primary/20 active:scale-[0.96] disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {isSearching ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
@@ -1001,7 +1001,7 @@ export function ListenTogetherPanel({
               </div>
             )}
             {error && (
-              <div className="rounded-2xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs text-red-300">
+              <div className="rounded-2xl border border-destructive/20 bg-destructive/10 px-3 py-2 text-xs text-destructive">
                 {error.message}
               </div>
             )}
@@ -1017,7 +1017,7 @@ export function ListenTogetherPanel({
           ) : resolvedPreview ? (
             <div className="space-y-3">
               <div
-                className="flex cursor-pointer gap-3 rounded-[22px] border border-primary/25 bg-primary/10 p-3 shadow-[0_12px_30px_oklch(0_0_0_/_0.12)] transition-colors hover:border-primary/45 hover:bg-primary/15"
+                className="flex cursor-pointer gap-3 rounded-2xl border border-primary/25 bg-primary/10 p-3 shadow-[0_12px_30px_oklch(0_0_0_/_0.12)] transition-colors hover:border-primary/45 hover:bg-primary/15"
                 title="Double-click to play now"
                 onDoubleClick={playResolvedPreview}
               >
@@ -1099,12 +1099,12 @@ export function ListenTogetherPanel({
                           <div className="truncate text-xs font-bold text-rm-text">
                             {track.title}
                           </div>
-                          <div className="truncate text-[11px] text-rm-text-muted">
+                          <div className="truncate text-ui-2xs text-rm-text-muted">
                             {track.artist || track.sourceLabel}
                           </div>
                         </div>
                         {track.kind === "music" && (
-                          <span className="shrink-0 text-[11px] tabular-nums text-rm-text-muted">
+                          <span className="shrink-0 text-ui-2xs tabular-nums text-rm-text-muted">
                             {formatListenTogetherDuration(track.durationMs)}
                           </span>
                         )}
@@ -1119,7 +1119,7 @@ export function ListenTogetherPanel({
             </div>
           ) : isSearchFocused && !trimmedInput && queryHistory.length > 0 ? (
             <div className="space-y-2">
-              <div className="px-1 text-[11px] font-black uppercase tracking-[0.16em] text-rm-text-muted">
+              <div className="text-ui-2xs font-semibold uppercase tracking-[0.08em] px-1 text-rm-text-muted">
                 Recent searches
               </div>
               {queryHistory.map((query) => (
@@ -1140,7 +1140,7 @@ export function ListenTogetherPanel({
               ))}
             </div>
           ) : searchResults.length === 0 ? (
-            <div className="rounded-[22px] border border-dashed border-rm-border bg-rm-bg-hover/30 px-4 py-10 text-center text-sm text-rm-text-muted">
+            <div className="rounded-2xl border border-dashed border-rm-border bg-rm-bg-hover/30 px-4 py-10 text-center text-sm text-rm-text-muted">
               {deferredSearchQuery
                 ? "No results yet for that search."
                 : "Search tracks or collections, or paste a YouTube or Spotify link to queue music together."}
@@ -1169,7 +1169,7 @@ export function ListenTogetherPanel({
                         : undefined
                     }
                     className={cn(
-                      "flex gap-3 rounded-[22px] border border-rm-border bg-rm-bg-hover/40 p-3 transition-colors",
+                      "flex gap-3 rounded-2xl border border-rm-border bg-rm-bg-hover/40 p-3 transition-colors",
                       isTrack &&
                         "cursor-pointer select-none hover:border-primary/25 hover:bg-rm-bg-active/55",
                     )}
@@ -1296,13 +1296,13 @@ export function ListenTogetherPanel({
       </button>
 
       <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden border-t border-rm-border pt-4 lg:border-l lg:border-t-0 lg:pl-5 lg:pt-0">
-        <div className="shrink-0 rounded-[26px] border border-rm-border bg-rm-bg-surface/35 p-4 sm:p-5">
+        <div className="shrink-0 rounded-3xl border border-rm-border bg-rm-bg-surface/35 p-4 sm:p-5">
           <div className="mb-4 flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.18em] text-rm-text-muted">
+            <div className="text-ui-2xs font-semibold uppercase tracking-[0.08em] flex items-center gap-2 text-rm-text-muted">
               <Headphones className="h-4 w-4 text-primary" />
               Now playing
             </div>
-            <span className="inline-flex items-center gap-1.5 text-[11px] text-rm-text-muted">
+            <span className="inline-flex items-center gap-1.5 text-ui-2xs text-rm-text-muted">
               <span className="h-1.5 w-1.5 rounded-full bg-primary" />
               {roomSyncLabel}
             </span>
@@ -1340,7 +1340,7 @@ export function ListenTogetherPanel({
               >
                 <ListMusic className="h-3.5 w-3.5" />
                 Queue
-                <span className="tabular-nums text-[10px] text-rm-text-muted">
+                <span className="tabular-nums text-ui-2xs text-rm-text-muted">
                   {snapshot?.queue?.length ?? 0}
                 </span>
               </button>
@@ -1361,7 +1361,7 @@ export function ListenTogetherPanel({
                 )}
               >
                 Recently played
-                <span className="tabular-nums text-[10px] text-rm-text-muted">
+                <span className="tabular-nums text-ui-2xs text-rm-text-muted">
                   {snapshot?.recentlyPlayed?.length ?? 0}
                 </span>
               </button>
@@ -1394,7 +1394,7 @@ export function ListenTogetherPanel({
                   ))}
                 </div>
               ) : (
-                <div className="rounded-[22px] border border-dashed border-rm-border bg-rm-bg-hover/30 px-4 py-10 text-center text-sm text-rm-text-muted">
+                <div className="rounded-2xl border border-dashed border-rm-border bg-rm-bg-hover/30 px-4 py-10 text-center text-sm text-rm-text-muted">
                   Nothing is queued yet.
                 </div>
               )
@@ -1430,7 +1430,7 @@ export function ListenTogetherPanel({
                           .filter(Boolean)
                           .join(" • ")}
                       </div>
-                      <div className="mt-1 truncate text-[11px] text-rm-text-muted/75">
+                      <div className="mt-1 truncate text-ui-2xs text-rm-text-muted/75">
                         Played{" "}
                         {formatDate(historyEntry.playedAt, {
                           hour: "numeric",
@@ -1456,7 +1456,7 @@ export function ListenTogetherPanel({
                 ))}
               </div>
             ) : (
-              <div className="rounded-[22px] border border-dashed border-rm-border bg-rm-bg-hover/30 px-4 py-10 text-center text-sm text-rm-text-muted">
+              <div className="rounded-2xl border border-dashed border-rm-border bg-rm-bg-hover/30 px-4 py-10 text-center text-sm text-rm-text-muted">
                 Nothing has played in this room yet.
               </div>
             )}

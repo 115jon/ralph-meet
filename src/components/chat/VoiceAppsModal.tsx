@@ -130,9 +130,9 @@ export function VoiceAppsModal({
             <div className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
               <button
                 onClick={() => setTab("activities")}
-                className="flex flex-col items-start gap-2 rounded-xl border border-rm-border bg-rm-bg-surface p-4 text-left transition-all hover:bg-rm-bg-hover hover:border-primary/50 group"
+                className="flex flex-col items-start gap-2 rounded-xl border border-rm-border bg-rm-bg-surface p-4 text-left transition-ui hover:bg-rm-bg-hover hover:border-primary/50 group"
               >
-                <div className="rounded-lg bg-primary/10 p-2 text-primary group-hover:scale-110 transition-transform">
+                <div className="rounded-lg bg-primary/10 p-2 text-primary transition-transform">
                   <Gamepad2 size={24} />
                 </div>
                 <div>
@@ -156,7 +156,7 @@ export function VoiceAppsModal({
                   <WordleLogo />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <div className="text-sm font-black text-rm-text">
+                  <div className="text-sm font-semibold text-rm-text">
                     Daily Wordle
                   </div>
                   <div className="mt-1 text-xs leading-5 text-rm-text-muted">
@@ -173,9 +173,9 @@ export function VoiceAppsModal({
                   <WarpRushLogo />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2 text-sm font-black text-rm-text">
+                  <div className="flex items-center gap-2 text-sm font-semibold text-rm-text">
                     Warp Rush 3D
-                    <span className="rounded-full border border-cyan-300/40 bg-cyan-400/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.18em] text-cyan-100">
+                    <span className="rounded-full border border-cyan-300/40 bg-cyan-400/10 px-2 py-0.5 text-ui-2xs font-semibold uppercase tracking-[0.08em] text-cyan-100">
                       GPU Stress
                     </span>
                   </div>

@@ -18,16 +18,16 @@ export function ProfilePreviewWidgetCard({
   return (
     <section
       className={cn(
-        "rounded-[24px] border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg)] p-4 shadow-[0_16px_40px_rgba(0,0,0,0.22)]",
+        "rounded-3xl border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg)] p-4 shadow-[0_16px_40px_rgba(0,0,0,0.22)]",
         className,
       )}
     >
       <div className="mb-4">
-        <div className="text-[13px] font-semibold text-[color:var(--rm-profile-custom-text)]">
+        <div className="text-ui-sm font-semibold text-[color:var(--rm-profile-custom-text)]">
           {title}
         </div>
         {subtitle ? (
-          <div className="mt-1 text-[12px] text-[color:var(--rm-profile-custom-muted)]">
+          <div className="mt-1 text-ui-xs text-[color:var(--rm-profile-custom-muted)]">
             {subtitle}
           </div>
         ) : null}

@@ -24,17 +24,15 @@ const ICON_SIZE: Record<IconButtonSize, number> = {
 };
 
 const VARIANT_CLASSES: Record<IconButtonVariant, string> = {
-  ghost:
-    "text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover transition-all",
-  muted:
-    "text-rm-text-muted/60 hover:text-rm-text hover:bg-rm-bg-hover transition-all",
-  active: "text-rm-text bg-rm-bg-active transition-all",
+  ghost: "text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover",
+  muted: "text-rm-text-muted/70 hover:text-rm-text hover:bg-rm-bg-hover",
+  active: "text-rm-text bg-rm-bg-active",
   destructive:
-    "text-rm-text-muted hover:text-destructive hover:bg-destructive/10 transition-all",
+    "text-rm-text-muted hover:text-destructive hover:bg-destructive/10",
 };
 
 const SHAPE_CLASSES = {
-  square: "rounded-lg",
+  square: "rounded-md",
   circle: "rounded-full",
 } as const;
 
@@ -84,7 +82,7 @@ export const IconButton = React.forwardRef<HTMLButtonElement, IconButtonProps>(
         ref={ref}
         type={type ?? "button"}
         className={cn(
-          "inline-flex shrink-0 items-center justify-center outline-none",
+          "inline-flex shrink-0 items-center justify-center outline-none transition-ui enabled:active:scale-[0.96]",
           SIZE_CLASSES[size],
           VARIANT_CLASSES[variant],
           SHAPE_CLASSES[shape],
@@ -101,11 +99,7 @@ export const IconButton = React.forwardRef<HTMLButtonElement, IconButtonProps>(
       return (
         <Tooltip>
           <TooltipTrigger asChild>{button}</TooltipTrigger>
-          <TooltipContent
-            side={tooltipSide}
-            sideOffset={8}
-            className="bg-rm-bg-floating border-none text-rm-text-primary text-[13px] font-bold shadow-xl px-3 py-2 rounded-lg"
-          >
+          <TooltipContent side={tooltipSide}>
             <p>{tooltip}</p>
           </TooltipContent>
         </Tooltip>

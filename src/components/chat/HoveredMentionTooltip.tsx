@@ -23,7 +23,7 @@ export function HoveredMentionTooltip({
       }}
     >
       <div className="flex items-center gap-2 rounded-lg bg-rm-bg-elevated border border-rm-border px-3 py-1.5 shadow-xl min-w-max">
-        <div className="relative flex h-5 w-5 shrink-0 items-center justify-center overflow-visible rounded-full bg-rm-bg-surface text-[8px] font-bold text-rm-text-muted border border-rm-border">
+        <div className="relative flex h-5 w-5 shrink-0 items-center justify-center overflow-visible rounded-full bg-rm-bg-surface text-ui-2xs font-bold text-rm-text-muted border border-rm-border">
           {hoveredMember.user.avatar_url ? (
             <AvatarImage
               src={getAuthAssetUrl(hoveredMember.user.avatar_url)}

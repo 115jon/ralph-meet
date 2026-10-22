@@ -295,7 +295,7 @@ export function VoiceDetailsPanel({
           >
             {/* Header */}
             <div className="px-4 pt-4 pb-2">
-              <h3 className="text-[15px] font-bold text-rm-text tracking-tight">
+              <h3 className="text-ui-base font-bold text-rm-text tracking-tight">
                 Voice Details
               </h3>
             </div>
@@ -335,8 +335,8 @@ export function VoiceDetailsPanel({
             </div>
 
             {/* Footer */}
-            <div className="px-4 py-3 border-t border-rm-border flex items-center gap-3 text-[12px] font-medium">
-              <span className="flex items-center gap-1.5 text-[#23a559]">
+            <div className="px-4 py-3 border-t border-rm-border flex items-center gap-3 text-ui-xs font-medium">
+              <span className="flex items-center gap-1.5 text-rm-success">
                 <LockIcon />
                 End-to-end encrypted
               </span>
@@ -359,7 +359,7 @@ export function VoiceDetailsPanel({
                   </button>
                 </>
               ) : (
-                <span className="text-rm-text-muted/70 text-[11px]">
+                <span className="text-rm-text-muted/70 text-ui-2xs">
                   {connectionSnapshot.connectionState === "connected"
                     ? "Connected · gathering live metrics…"
                     : `${formatConnectionStateLabel(connectionSnapshot.connectionState)}…`}
@@ -399,7 +399,7 @@ function TabButton({
     <button
       type="button"
       onClick={() => onSelect(id)}
-      className={`pb-2 text-[13px] font-semibold border-b-2 transition-colors outline-none ${
+      className={`pb-2 text-ui-sm font-semibold border-b-2 transition-colors outline-none ${
         isActive
           ? "text-rm-text-link border-rm-text-link"
           : "text-rm-text-muted border-transparent hover:text-rm-text hover:border-rm-text-muted/30"
@@ -460,16 +460,16 @@ function ConnectionTab({
               key={card.label}
               className="rounded-lg border border-rm-border bg-rm-bg-surface/70 px-3 py-2"
             >
-              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-rm-text-muted/70">
+              <p className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted/70">
                 {card.label}
               </p>
-              <p className="mt-1 text-[12px] font-bold text-rm-text">
+              <p className="mt-1 text-ui-xs font-bold text-rm-text">
                 {card.value}
               </p>
             </div>
           ))}
         </div>
-        <div className="rounded-lg border border-rm-border bg-rm-bg-surface/50 px-3 py-4 text-center text-[12px] text-rm-text-muted">
+        <div className="rounded-lg border border-rm-border bg-rm-bg-surface/50 px-3 py-4 text-center text-ui-xs text-rm-text-muted">
           {connectionState === "connected"
             ? "Connected to voice. Gathering latency and packet metrics…"
             : "Connecting to the voice transport…"}
@@ -486,10 +486,10 @@ function ConnectionTab({
             key={card.label}
             className="rounded-lg border border-rm-border bg-rm-bg-surface/70 px-3 py-2"
           >
-            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-rm-text-muted/70">
+            <p className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted/70">
               {card.label}
             </p>
-            <p className="mt-1 text-[12px] font-bold text-rm-text">
+            <p className="mt-1 text-ui-xs font-bold text-rm-text">
               {card.value}
             </p>
           </div>
@@ -500,7 +500,7 @@ function ConnectionTab({
       <div className="bg-rm-bg-surface rounded-lg p-2 border border-rm-border">
         <Suspense
           fallback={
-            <div className="h-[80px] w-full flex items-center justify-center text-[10px] text-rm-text-muted">
+            <div className="h-[80px] w-full flex items-center justify-center text-ui-2xs text-rm-text-muted">
               Loading chart...
             </div>
           }
@@ -509,8 +509,16 @@ function ConnectionTab({
             <AreaChart data={chartData} margin={CHART_MARGIN}>
               <defs>
                 <linearGradient id="pingGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#23a559" stopOpacity={0.3} />
-                  <stop offset="100%" stopColor="#23a559" stopOpacity={0.02} />
+                  <stop
+                    offset="0%"
+                    stopColor="var(--rm-success)"
+                    stopOpacity={0.3}
+                  />
+                  <stop
+                    offset="100%"
+                    stopColor="var(--rm-success)"
+                    stopOpacity={0.02}
+                  />
                 </linearGradient>
               </defs>
               <XAxis
@@ -537,11 +545,15 @@ function ConnectionTab({
               <Area
                 type="monotone"
                 dataKey="ping"
-                stroke="#23a559"
+                stroke="var(--rm-success)"
                 strokeWidth={1.5}
                 fill="url(#pingGradient)"
                 dot={false}
-                activeDot={{ r: 3, fill: "#23a559", stroke: "#23a559" }}
+                activeDot={{
+                  r: 3,
+                  fill: "var(--rm-success)",
+                  stroke: "var(--rm-success)",
+                }}
                 isAnimationActive={false}
               />
             </AreaChart>
@@ -551,10 +563,10 @@ function ConnectionTab({
 
       {/* Server + Stats */}
       <div className="space-y-1.5">
-        <p className="text-[12px] font-mono text-rm-text-muted tracking-tight">
+        <p className="text-ui-xs font-mono text-rm-text-muted tracking-tight">
           {stats.serverIdentifier}
         </p>
-        <div className="text-[13px] text-rm-text space-y-0.5">
+        <div className="text-ui-sm text-rm-text space-y-0.5">
           <p>
             <span className="font-semibold">Average ping:</span>{" "}
             <span className="font-bold text-rm-text">{stats.avgPing} ms</span>
@@ -579,7 +591,7 @@ function ConnectionTab({
       </div>
 
       {/* Info Blurb */}
-      <div className="text-[11px] text-rm-text-muted leading-relaxed bg-rm-bg-surface/50 rounded-lg p-2.5 border border-rm-border">
+      <div className="text-ui-2xs text-rm-text-muted leading-relaxed bg-rm-bg-surface/50 rounded-lg p-2.5 border border-rm-border">
         You may notice delayed audio at 250 ms or higher. You may sound robotic
         if your packet loss rate is over 10%. If the problem persists,
         disconnect and try again.
@@ -594,19 +606,19 @@ function PrivacyTab() {
   return (
     <div className="py-4 space-y-3">
       <div className="flex items-center gap-3">
-        <div className="w-10 h-10 rounded-full bg-[#23a559]/10 flex items-center justify-center">
-          <LockIcon className="text-[#23a559]" size={20} />
+        <div className="w-10 h-10 rounded-full bg-rm-success/10 flex items-center justify-center">
+          <LockIcon className="text-rm-success" size={20} />
         </div>
         <div>
           <p className="text-[14px] font-bold text-rm-text">
             End-to-End Encrypted
           </p>
-          <p className="text-[12px] text-rm-text-muted">
+          <p className="text-ui-xs text-rm-text-muted">
             Your voice connection is secured with DTLS-SRTP encryption.
           </p>
         </div>
       </div>
-      <div className="text-[11px] text-rm-text-muted leading-relaxed bg-rm-bg-surface/50 rounded-lg p-2.5 border border-rm-border">
+      <div className="text-ui-2xs text-rm-text-muted leading-relaxed bg-rm-bg-surface/50 rounded-lg p-2.5 border border-rm-border">
         Audio and video data is encrypted in transit using DTLS-SRTP. Only
         participants in this voice channel can hear or see your media.
       </div>

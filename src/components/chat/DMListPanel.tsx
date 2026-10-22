@@ -4,6 +4,7 @@ import { cn } from "@/lib/utils";
 import { UserStatusDot } from "./UserStatusDot";
 import { useChatStore } from "@/stores/chat-store";
 import { useMemo } from "react";
+import { DitherField } from "@/components/ui/DitherField";
 import { AvatarImage } from "./AvatarImage";
 import { MessageSquare } from "./Icons";
 import { UserDisplayName } from "./UserDisplayName";
@@ -51,10 +52,21 @@ export function DMListPanel({
     <div className="flex-1 overflow-y-auto custom-scrollbar">
       <div className="space-y-0.5 p-2">
         {dmChannels.length === 0 && (
-          <div className="flex flex-col items-center gap-2 py-8 text-center">
-            <MessageSquare className="h-6 w-6 text-rm-text-muted/40" />
-            <span className="text-xs text-rm-text-muted">No DMs yet</span>
-            <span className="text-[11px] text-rm-text-muted/40">
+          <div className="relative mx-1 mt-1 flex flex-col items-center gap-1 overflow-hidden rounded-lg border border-rm-border px-4 pb-5 pt-[80px] text-center">
+            <DitherField
+              className="inset-x-0 top-0 bottom-auto h-[72px]"
+              cell={4}
+              intensity={0.5}
+              opacity={0.9}
+              fade="bottom"
+              tone="quiet"
+              seed={7}
+            />
+            <MessageSquare className="h-5 w-5 text-rm-text-muted" />
+            <span className="text-ui-sm font-medium text-rm-text">
+              No DMs yet
+            </span>
+            <span className="text-ui-xs text-rm-text-muted">
               Open a DM from the friends list
             </span>
           </div>
@@ -72,7 +84,7 @@ export function DMListPanel({
             <div
               key={dm.id}
               className={cn(
-                "group relative flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left transition-all",
+                "group relative flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left transition-ui",
                 activeChannelId === dm.id
                   ? "bg-rm-bg-elevated text-rm-text shadow-sm"
                   : "text-rm-text-muted hover:bg-rm-bg-elevated/50 hover:text-rm-text-secondary",
@@ -87,12 +99,12 @@ export function DMListPanel({
               />
               {/* Pill indicator — small dot only when unread */}
               {dmIsUnread && (
-                <div className="absolute left-[-4px] top-1/2 w-1 h-2 -translate-y-1/2 rounded-r-full bg-rm-text transition-all duration-300" />
+                <div className="absolute left-[-4px] top-1/2 w-1 h-2 -translate-y-1/2 rounded-r-full bg-rm-text transition-ui" />
               )}
               <div className="relative shrink-0">
                 <button
                   type="button"
-                  className="relative z-20 flex h-8 w-8 cursor-pointer items-center justify-center overflow-visible rounded-full border-0 bg-primary p-0 text-xs font-bold text-primary-foreground ring-1 ring-white/10 outline-none hover:ring-white/30"
+                  className="relative z-20 flex h-8 w-8 cursor-pointer items-center justify-center overflow-visible rounded-full border-0 bg-primary p-0 text-xs font-bold text-primary-foreground ring-1 ring-rm-border outline-none hover:ring-rm-border-strong"
                   onClick={(e) => {
                     e.stopPropagation();
                     dispatch({
@@ -124,14 +136,14 @@ export function DMListPanel({
                   user={dm.recipient}
                   fallback={dm.name ?? "Unknown"}
                   className={cn(
-                    "block truncate text-[13px] font-medium leading-tight transition-colors",
+                    "block truncate text-ui-sm font-medium leading-tight transition-colors",
                     activeChannelId === dm.id
                       ? "text-rm-text"
                       : "text-rm-text-secondary",
                     dmIsUnread && "font-semibold text-rm-text",
                   )}
                 />
-                <span className="block truncate text-[11px] text-rm-text-muted leading-tight">
+                <span className="block truncate text-ui-2xs text-rm-text-muted leading-tight">
                   {dm.recipient?.status === "online"
                     ? "Online"
                     : dm.recipient?.status === "idle"
@@ -143,7 +155,7 @@ export function DMListPanel({
               </div>
               {/* DM unread count badge */}
               {dmNotifCount > 0 && activeChannelId !== dm.id && (
-                <div className="flex h-4 min-w-4 shrink-0 items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-bold text-white leading-none">
+                <div className="badge-count shrink-0">
                   {dmNotifCount > 99 ? "99+" : dmNotifCount}
                 </div>
               )}

@@ -130,7 +130,7 @@ export default function DMSidebar({
   };
 
   return (
-    <div className="flex w-full shrink-0 flex-1 flex-col overflow-hidden border-r border-rm-border bg-rm-sidebar backdrop-blur-xl font-sans">
+    <div className="flex w-full shrink-0 flex-1 flex-col overflow-hidden border-r border-rm-border bg-rm-sidebar font-sans">
       {/* Header */}
       <div
         className="shrink-0 border-b border-rm-border px-3"
@@ -138,7 +138,7 @@ export default function DMSidebar({
       >
         {/* Search placeholder */}
         <button
-          className="mb-2 mt-1 flex w-full items-center gap-2 rounded-md bg-rm-bg-surface px-3 py-1.5 text-xs text-rm-text-muted/40 transition-colors hover:bg-rm-bg-elevated cursor-pointer outline-none border-none"
+          className="mb-2 mt-1 flex h-8 w-full items-center gap-2 rounded-md border border-rm-border bg-rm-bg-surface px-3 text-ui-sm text-rm-text-muted transition-ui hover:border-rm-border-strong hover:bg-rm-bg-elevated cursor-pointer outline-none"
           onClick={() =>
             window.dispatchEvent(new CustomEvent("open-command-menu"))
           }
@@ -151,19 +151,17 @@ export default function DMSidebar({
       <div className="px-2 pt-2">
         <button
           className={cn(
-            "group flex w-full cursor-pointer items-center gap-2.5 rounded-md border-none px-2.5 py-2 text-left transition-all outline-none",
+            "group flex w-full cursor-pointer items-center gap-2.5 rounded-md border-none px-2.5 py-1.5 text-left transition-ui outline-none enabled:active:scale-[0.98]",
             isFriendsActive
-              ? "bg-rm-bg-elevated text-rm-text shadow-sm"
+              ? "bg-rm-bg-active text-rm-text"
               : "text-rm-text-muted hover:bg-rm-bg-elevated/50 hover:text-rm-text-secondary",
           )}
           onClick={onShowFriends}
         >
           <Users className="h-5 w-5 shrink-0" />
-          <span className="text-[13px] font-medium">Friends</span>
+          <span className="text-ui-sm font-medium">Friends</span>
           {pendingCount > 0 && (
-            <span className="ml-auto flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-bold text-white">
-              {pendingCount}
-            </span>
+            <span className="badge-count ml-auto">{pendingCount}</span>
           )}
         </button>
       </div>
@@ -171,21 +169,21 @@ export default function DMSidebar({
       <div className="px-2 pt-2">
         <button
           className={cn(
-            "group flex w-full cursor-pointer items-center gap-2.5 rounded-md border-none px-2.5 py-2 text-left transition-all outline-none",
+            "group flex w-full cursor-pointer items-center gap-2.5 rounded-md border-none px-2.5 py-1.5 text-left transition-ui outline-none enabled:active:scale-[0.98]",
             isShopActive
-              ? "bg-rm-bg-elevated text-rm-text shadow-sm"
+              ? "bg-rm-bg-active text-rm-text"
               : "text-rm-text-muted hover:bg-rm-bg-elevated/50 hover:text-rm-text-secondary",
           )}
           onClick={onShowShop}
         >
           <ShoppingBag className="h-5 w-5 shrink-0" />
-          <span className="text-[13px] font-medium">Shop</span>
+          <span className="text-ui-sm font-medium">Shop</span>
         </button>
       </div>
 
       {/* DM section header */}
       <div className="flex items-center justify-between px-4 pt-4 pb-1">
-        <span className="text-[10px] font-bold uppercase tracking-widest text-rm-text-muted/60">
+        <span className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted">
           Direct Messages
         </span>
       </div>

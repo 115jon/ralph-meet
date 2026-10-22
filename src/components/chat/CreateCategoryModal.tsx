@@ -78,7 +78,7 @@ export default function CreateCategoryModal({
             <div className="space-y-3">
               <label
                 htmlFor="category-name"
-                className="text-[11px] font-bold uppercase tracking-widest text-rm-text-muted/40"
+                className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted/40"
               >
                 Category Name
               </label>
@@ -89,7 +89,7 @@ export default function CreateCategoryModal({
                 onChange={(e) => setName(e.target.value.toUpperCase())}
                 onKeyDown={(e) => e.key === "Enter" && handleCreate()}
                 placeholder="NEW CATEGORY"
-                className="w-full rounded-xl border border-rm-border bg-rm-bg-surface px-4 py-3 text-rm-text outline-none transition-all placeholder:text-rm-text-muted/20 focus:border-primary/30 focus:ring-2 focus:ring-primary/20 uppercase"
+                className="w-full rounded-xl border border-rm-border bg-rm-bg-surface px-4 py-3 text-rm-text outline-none transition-ui placeholder:text-rm-text-muted/20 focus:border-primary/30 focus:ring-2 focus:ring-primary/20 uppercase"
               />
             </div>
 
@@ -103,7 +103,7 @@ export default function CreateCategoryModal({
               <button
                 onClick={handleCreate}
                 disabled={!name.trim() || creating}
-                className="flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/20 transition-all hover:brightness-110 disabled:opacity-40"
+                className="flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/20 transition-ui hover:brightness-110 disabled:opacity-40"
               >
                 {creating && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
                 {creating ? "Creating…" : "Create Category"}

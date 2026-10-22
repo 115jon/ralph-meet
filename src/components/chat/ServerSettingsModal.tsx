@@ -55,7 +55,7 @@ function SettingsSidebar({
     <div className="w-full min-h-0 md:w-[218px] flex flex-row md:flex-col shrink-0 bg-rm-server-bar pt-2 md:pt-[60px] pb-2 px-4 overflow-x-auto md:overflow-y-auto md:overflow-x-hidden custom-scrollbar border-b md:border-b-0 md:border-r border-rm-border/50 gap-2 md:gap-0">
       <div className="hidden md:block mb-2 px-2">
         <h2
-          className="text-[11px] font-bold uppercase tracking-widest text-rm-text-muted truncate block w-[180px]"
+          className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted truncate block w-[180px]"
           title={initialServerName}
         >
           {initialServerName}
@@ -65,7 +65,7 @@ function SettingsSidebar({
         type="button"
         onClick={() => setActiveTab("overview")}
         className={cn(
-          "w-auto md:w-full shrink-0 text-left px-4 md:px-3 py-2 rounded-full md:rounded-lg text-[13px] md:text-sm font-bold md:font-medium transition-colors flex items-center gap-2 mb-0 md:mb-1",
+          "w-auto md:w-full shrink-0 text-left px-4 md:px-3 py-2 rounded-full md:rounded-lg text-ui-sm md:text-sm font-bold md:font-medium transition-colors flex items-center gap-2 mb-0 md:mb-1",
           activeTab === "overview"
             ? "bg-primary text-primary-foreground md:bg-primary/10 md:text-primary"
             : "text-rm-text-secondary hover:bg-rm-bg-hover hover:text-rm-text bg-rm-bg-elevated/50 md:bg-transparent",
@@ -79,7 +79,7 @@ function SettingsSidebar({
           type="button"
           onClick={() => setActiveTab("roles")}
           className={cn(
-            "w-auto md:w-full shrink-0 text-left px-4 md:px-3 py-2 rounded-full md:rounded-lg text-[13px] md:text-sm font-bold md:font-medium transition-colors flex items-center gap-2 mb-0 md:mb-1",
+            "w-auto md:w-full shrink-0 text-left px-4 md:px-3 py-2 rounded-full md:rounded-lg text-ui-sm md:text-sm font-bold md:font-medium transition-colors flex items-center gap-2 mb-0 md:mb-1",
             activeTab === "roles"
               ? "bg-primary text-primary-foreground md:bg-primary/10 md:text-primary"
               : "text-rm-text-secondary hover:bg-rm-bg-hover hover:text-rm-text bg-rm-bg-elevated/50 md:bg-transparent",
@@ -97,7 +97,7 @@ function SettingsSidebar({
             fetchBans();
           }}
           className={cn(
-            "w-auto md:w-full shrink-0 text-left px-4 md:px-3 py-2 rounded-full md:rounded-lg text-[13px] md:text-sm font-bold md:font-medium transition-colors flex items-center gap-2 mb-0 md:mb-1",
+            "w-auto md:w-full shrink-0 text-left px-4 md:px-3 py-2 rounded-full md:rounded-lg text-ui-sm md:text-sm font-bold md:font-medium transition-colors flex items-center gap-2 mb-0 md:mb-1",
             activeTab === "bans"
               ? "bg-primary text-primary-foreground md:bg-primary/10 md:text-primary"
               : "text-rm-text-secondary hover:bg-rm-bg-hover hover:text-rm-text bg-rm-bg-elevated/50 md:bg-transparent",
@@ -112,7 +112,7 @@ function SettingsSidebar({
           type="button"
           onClick={() => setActiveTab("invites")}
           className={cn(
-            "w-auto md:w-full shrink-0 text-left px-4 md:px-3 py-2 rounded-full md:rounded-lg text-[13px] md:text-sm font-bold md:font-medium transition-colors flex items-center gap-2 mb-0 md:mb-1",
+            "w-auto md:w-full shrink-0 text-left px-4 md:px-3 py-2 rounded-full md:rounded-lg text-ui-sm md:text-sm font-bold md:font-medium transition-colors flex items-center gap-2 mb-0 md:mb-1",
             activeTab === "invites"
               ? "bg-primary text-primary-foreground md:bg-primary/10 md:text-primary"
               : "text-rm-text-secondary hover:bg-rm-bg-hover hover:text-rm-text bg-rm-bg-elevated/50 md:bg-transparent",
@@ -127,7 +127,7 @@ function SettingsSidebar({
           type="button"
           onClick={() => setActiveTab("audit")}
           className={cn(
-            "w-auto md:w-full shrink-0 text-left px-4 md:px-3 py-2 rounded-full md:rounded-lg text-[13px] md:text-sm font-bold md:font-medium transition-colors flex items-center gap-2 mb-0 md:mb-1",
+            "w-auto md:w-full shrink-0 text-left px-4 md:px-3 py-2 rounded-full md:rounded-lg text-ui-sm md:text-sm font-bold md:font-medium transition-colors flex items-center gap-2 mb-0 md:mb-1",
             activeTab === "audit"
               ? "bg-primary text-primary-foreground md:bg-primary/10 md:text-primary"
               : "text-rm-text-secondary hover:bg-rm-bg-hover hover:text-rm-text bg-rm-bg-elevated/50 md:bg-transparent",
@@ -144,7 +144,7 @@ function SettingsSidebar({
 
 function BansTab({ bansLoading, bans, handleUnban }: any) {
   return (
-    <div className="animate-in fade-in slide-in-from-right-4 duration-300 w-full">
+    <div className="animate-in fade-in duration-150 w-full">
       <h2
         id="server-settings-title"
         className="mb-6 text-xl font-bold text-rm-text"
@@ -176,7 +176,7 @@ function BansTab({ bansLoading, bans, handleUnban }: any) {
                     Reason: {ban.reason}
                   </p>
                 )}
-                <p className="text-[10px] text-rm-text-muted">
+                <p className="text-ui-2xs text-rm-text-muted">
                   Banned by {ban.banned_by_username ?? "Unknown"} •{" "}
                   {new Date(ban.created_at).toLocaleDateString()}
                 </p>
@@ -184,7 +184,7 @@ function BansTab({ bansLoading, bans, handleUnban }: any) {
               <button
                 type="button"
                 onClick={() => handleUnban(ban.user_id)}
-                className="flex items-center gap-1.5 rounded-lg border border-rm-border px-3 py-1.5 text-xs font-semibold text-rm-text-secondary transition-all hover:border-destructive/30 hover:bg-destructive/10 hover:text-destructive"
+                className="flex items-center gap-1.5 rounded-lg border border-rm-border px-3 py-1.5 text-xs font-semibold text-rm-text-secondary transition-ui hover:border-destructive/30 hover:bg-destructive/10 hover:text-destructive"
               >
                 <Trash2 className="h-3 w-3" /> Unban
               </button>
@@ -227,7 +227,7 @@ function OverviewTab({
   setAllowShareIndexing,
 }: any) {
   return (
-    <div className="animate-in fade-in slide-in-from-right-4 duration-300 w-full">
+    <div className="animate-in fade-in duration-150 w-full">
       <h2
         id="server-settings-title"
         className="mb-6 text-xl font-bold text-rm-text"
@@ -238,14 +238,14 @@ function OverviewTab({
       <div className="space-y-8 max-w-xl">
         {isAdmin && (
           <div className="space-y-3">
-            <span className="text-[11px] font-bold uppercase tracking-widest text-rm-text-muted block">
+            <span className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted block">
               Server Icon
             </span>
             <div className="flex items-center gap-5">
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
-                className="group relative flex h-24 w-24 shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-full border-2 border-dashed border-rm-border bg-rm-bg-surface transition-all hover:border-primary/50 hover:bg-rm-bg-elevated"
+                className="group relative flex h-24 w-24 shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-full border-2 border-dashed border-rm-border bg-rm-bg-surface transition-ui hover:border-primary/50 hover:bg-rm-bg-elevated"
                 aria-label={
                   iconPreview || (currentIconUrl && !removeIcon)
                     ? "Change server icon"
@@ -260,7 +260,7 @@ function OverviewTab({
                       className="h-full w-full object-cover"
                     />
                     <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 transition-opacity group-hover:opacity-100">
-                      <span className="text-[10px] font-bold uppercase text-white">
+                      <span className="text-ui-2xs font-bold uppercase text-white">
                         Change
                       </span>
                     </div>
@@ -268,7 +268,7 @@ function OverviewTab({
                 ) : (
                   <div className="flex flex-col items-center gap-0.5">
                     <Plus className="h-5 w-5 text-rm-text-muted/40 transition-colors group-hover:text-primary" />
-                    <span className="text-[9px] font-bold uppercase tracking-wider text-rm-text-muted/40 group-hover:text-primary">
+                    <span className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted/40 group-hover:text-primary">
                       Icon
                     </span>
                   </div>
@@ -301,7 +301,7 @@ function OverviewTab({
                 }}
               />
               <div className="flex flex-col gap-2">
-                <p className="text-[12px] text-rm-text-muted leading-relaxed">
+                <p className="text-ui-xs text-rm-text-muted leading-relaxed">
                   Recommended size: 512×512. Supports PNG, JPG, GIF, and WebP.
                 </p>
                 {(iconPreview || currentIconUrl) && (
@@ -315,7 +315,7 @@ function OverviewTab({
                         setIconPreview(null);
                       }
                     }}
-                    className="w-fit text-xs font-bold uppercase tracking-wider text-rm-text-muted hover:text-destructive transition-colors"
+                    className="text-ui-2xs font-semibold uppercase tracking-[0.08em] w-fit text-rm-text-muted hover:text-destructive transition-colors"
                   >
                     Remove Icon
                   </button>
@@ -323,7 +323,7 @@ function OverviewTab({
               </div>
             </div>
             {iconError && (
-              <p className="text-xs font-medium text-red-800 dark:text-red-400">
+              <p className="text-xs font-medium text-destructive">
                 {iconError}
               </p>
             )}
@@ -333,7 +333,7 @@ function OverviewTab({
         <div className="space-y-3">
           <label
             htmlFor="server-name-setting"
-            className="text-[11px] font-bold uppercase tracking-widest text-rm-text-muted block"
+            className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted block"
           >
             Server Name
           </label>
@@ -342,16 +342,16 @@ function OverviewTab({
             value={name}
             onChange={(e) => setName(e.target.value)}
             disabled={!isAdmin}
-            className="w-full max-w-sm rounded-lg border border-rm-border bg-rm-bg-surface px-4 py-2.5 text-[15px] text-rm-text outline-none transition-all placeholder:text-rm-text-muted/40 focus:border-primary/40 focus:ring-2 focus:ring-primary/20 disabled:opacity-40"
+            className="w-full max-w-sm rounded-lg border border-rm-border bg-rm-bg-surface px-4 py-2.5 text-ui-base text-rm-text outline-none transition-ui placeholder:text-rm-text-muted/40 focus:border-primary/40 focus:ring-2 focus:ring-primary/20 disabled:opacity-40"
           />
         </div>
         {isAdmin && (
           <div className="space-y-4 rounded-xl border border-rm-border bg-rm-bg-surface p-4">
             <div>
-              <h3 className="text-[11px] font-bold uppercase tracking-widest text-rm-text-muted">
+              <h3 className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted">
                 Public Sharing
               </h3>
-              <p className="mt-1 text-[12px] leading-5 text-rm-text-muted">
+              <p className="mt-1 text-ui-xs leading-5 text-rm-text-muted">
                 Controls whether messages in this server can be snapshot-shared
                 to public no-account links.
               </p>
@@ -396,7 +396,7 @@ function OverviewTab({
             type="button"
             onClick={handleSave}
             disabled={saving || (!name.trim() && !iconFile && !removeIcon)}
-            className="flex max-w-fit items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/20 transition-all hover:brightness-110 disabled:opacity-40"
+            className="flex max-w-fit items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/20 transition-ui hover:brightness-110 disabled:opacity-40"
           >
             {saving && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
             {saving ? "Saving..." : "Save Changes"}
@@ -408,7 +408,7 @@ function OverviewTab({
         <>
           <div className="my-8 h-px bg-rm-border" />
           <div className="space-y-4 rounded-xl border border-destructive/20 bg-destructive/5 p-5">
-            <h3 className="flex items-center gap-2 text-[12px] font-bold uppercase tracking-widest text-destructive">
+            <h3 className="text-ui-2xs font-semibold uppercase tracking-[0.08em] flex items-center gap-2 text-destructive">
               <AlertTriangle className="h-4 w-4" />
               Danger Zone
             </h3>
@@ -420,7 +420,7 @@ function OverviewTab({
               <button
                 type="button"
                 onClick={() => setConfirmDelete(true)}
-                className="rounded-xl bg-destructive px-5 py-2.5 text-sm font-semibold text-destructive-foreground transition-all hover:brightness-110"
+                className="rounded-xl bg-destructive px-5 py-2.5 text-sm font-semibold text-destructive-foreground transition-ui hover:brightness-110"
               >
                 Delete Server
               </button>
@@ -445,7 +445,7 @@ function OverviewTab({
                     type="button"
                     onClick={handleDelete}
                     disabled={deleteText !== initialServerName}
-                    className="rounded-xl bg-destructive px-5 py-2 text-sm font-semibold text-destructive-foreground transition-all hover:brightness-110 disabled:opacity-40"
+                    className="rounded-xl bg-destructive px-5 py-2 text-sm font-semibold text-destructive-foreground transition-ui hover:brightness-110 disabled:opacity-40"
                   >
                     Delete Forever
                   </button>
@@ -706,13 +706,13 @@ export default function ServerSettingsModal({
               className="w-full flex justify-between items-center pb-3 px-4 md:hidden bg-rm-server-bar shrink-0 border-b border-rm-border/50"
               style={{ paddingTop: "calc(16px + var(--safe-area-top, 0px))" }}
             >
-              <h2 className="text-[13px] font-bold tracking-widest text-rm-text-muted truncate">
+              <h2 className="text-ui-sm font-bold tracking-widest text-rm-text-muted truncate">
                 {initialServerName}
               </h2>
               <button
                 type="button"
                 onClick={onClose}
-                className="p-1 rounded-full bg-rm-bg-surface text-rm-text flex items-center justify-center hover:bg-rm-bg-hover active:scale-95 transition-all"
+                className="p-1 rounded-full bg-rm-bg-surface text-rm-text flex items-center justify-center hover:bg-rm-bg-hover active:scale-[0.96] transition-ui"
                 aria-label="Close server settings"
               >
                 <X size={18} />
@@ -735,12 +735,12 @@ export default function ServerSettingsModal({
                 <button
                   type="button"
                   onClick={onClose}
-                  className="flex h-9 w-9 items-center justify-center rounded-full border border-rm-border text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text transition-all group"
+                  className="flex h-9 w-9 items-center justify-center rounded-full border border-rm-border text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text transition-ui group"
                   aria-label="Close server settings"
                 >
                   <X size={18} />
                 </button>
-                <span className="text-[11px] font-bold text-rm-text-muted group-hover:text-rm-text-secondary">
+                <span className="text-ui-2xs font-bold text-rm-text-muted group-hover:text-rm-text-secondary">
                   ESC
                 </span>
               </div>
@@ -752,7 +752,7 @@ export default function ServerSettingsModal({
                 }}
               >
                 {activeTab === "roles" ? (
-                  <div className="animate-in fade-in slide-in-from-right-4 duration-300">
+                  <div className="animate-in fade-in duration-150">
                     <h2
                       id="server-settings-title"
                       className="mb-6 text-xl font-bold text-rm-text"

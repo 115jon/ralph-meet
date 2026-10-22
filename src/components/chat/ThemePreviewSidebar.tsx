@@ -90,7 +90,7 @@ export default function ThemePreviewSidebar({
                 type="button"
                 onClick={() => void setAppearanceTheme(option.id)}
                 className={cn(
-                  "rounded-2xl border p-2 text-left transition-all",
+                  "rounded-2xl border p-2 text-left transition-ui",
                   active
                     ? "border-primary bg-primary/5 ring-1 ring-primary"
                     : "border-rm-border bg-rm-bg-elevated/40 hover:bg-rm-bg-hover",

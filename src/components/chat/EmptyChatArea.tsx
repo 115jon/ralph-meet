@@ -1,27 +1,43 @@
+import { DitherField } from "@/components/ui/DitherField";
 import { Menu, MessageSquare } from "./Icons";
 
 export function EmptyChatArea({ onMenuClick }: { onMenuClick: () => void }) {
   return (
     <div className="flex flex-1 flex-col bg-rm-bg-primary relative overflow-hidden">
-      <header className="h-12 flex shrink-0 items-center gap-2 border-b border-rm-border bg-rm-bg-primary/60 px-4 z-10 backdrop-blur-md">
+      <header className="h-12 flex shrink-0 items-center gap-2 border-b border-rm-border bg-rm-bg-primary px-4 z-10">
         <button
-          className="cursor-pointer border-none bg-transparent p-1 text-rm-text-muted transition-colors hover:text-rm-text md:hidden"
+          type="button"
+          aria-label="Open navigation"
+          className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-md border-none bg-transparent text-rm-text-muted transition-ui hover:bg-rm-bg-hover hover:text-rm-text md:hidden"
           onClick={onMenuClick}
         >
           <Menu className="h-5 w-5" />
         </button>
-        <span className="text-sm font-medium text-rm-text-muted">
+        <span className="text-ui-sm font-medium text-rm-text-muted">
           Select a channel
         </span>
       </header>
-      <div className="flex flex-1 flex-col items-center justify-center gap-3">
-        <MessageSquare className="h-12 w-12 text-rm-text-muted border-rm-border" />
-        <span className="text-base font-semibold text-rm-text-muted">
-          No channel selected
-        </span>
-        <span className="text-xs text-rm-text-muted opacity-70">
-          Pick a server and channel to start chatting
-        </span>
+      <div className="relative flex flex-1 flex-col items-center justify-center">
+        <DitherField
+          className="inset-x-0 top-0 bottom-auto h-[42%] min-h-[160px]"
+          cell={6}
+          intensity={0.5}
+          opacity={0.85}
+          fade="bottom"
+          tone="quiet"
+          seed={5}
+        />
+        <div className="relative z-10 flex flex-col items-center gap-3 px-6 text-center">
+          <div className="flex h-12 w-12 items-center justify-center rounded-lg border border-rm-border bg-rm-bg-elevated text-rm-text-muted shadow-sm">
+            <MessageSquare className="h-6 w-6" />
+          </div>
+          <span className="font-display text-display text-rm-text text-balance">
+            No channel selected
+          </span>
+          <span className="text-ui-sm text-rm-text-muted">
+            Pick a server and channel to start chatting
+          </span>
+        </div>
       </div>
     </div>
   );

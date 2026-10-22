@@ -354,7 +354,7 @@ export default function SettingsAccountOverviewTab({
 
   if (!user) {
     return (
-      <div className="animate-in fade-in slide-in-from-right-4 duration-300">
+      <div className="animate-in fade-in duration-150">
         <h1 className="mb-2 hidden text-2xl font-bold text-rm-text md:block">
           Account
         </h1>
@@ -402,7 +402,7 @@ export default function SettingsAccountOverviewTab({
   };
 
   return (
-    <div className="animate-in fade-in slide-in-from-right-4 duration-300">
+    <div className="animate-in fade-in duration-150">
       <h1 className="mb-2 hidden text-2xl font-bold text-rm-text md:block">
         Account
       </h1>
@@ -410,7 +410,7 @@ export default function SettingsAccountOverviewTab({
         Manage your identity, security, and profile appearance from one place.
       </p>
 
-      <section className="overflow-hidden rounded-[26px] border border-rm-border bg-rm-bg-surface shadow-[0_24px_70px_rgba(0,0,0,0.18)]">
+      <section className="overflow-hidden rounded-3xl border border-rm-border bg-rm-bg-surface shadow-[0_24px_70px_rgba(0,0,0,0.18)]">
         <div className="flex flex-col gap-4 border-b border-rm-border/70 bg-[radial-gradient(circle_at_top,_rgba(92,112,255,0.16),_transparent_48%),linear-gradient(180deg,_rgba(255,255,255,0.02),_rgba(255,255,255,0))] px-5 py-5 md:flex-row md:items-center md:justify-between md:px-8">
           <div className="flex min-w-0 items-center gap-4">
             <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-full border border-white/10 bg-rm-bg-elevated">

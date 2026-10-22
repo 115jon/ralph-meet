@@ -1,3 +1,4 @@
+import { DitherField } from "@/components/ui/DitherField";
 import { getAuthAssetUrl } from "@/lib/platform";
 import { useChatStore } from "@/stores/chat-store";
 import { memo, useMemo } from "react";
@@ -24,24 +25,24 @@ export const ChatWelcomeContent = memo(function ChatWelcomeContent({
   if (!channelId) return null;
 
   return (
-    <div className="flex flex-col items-start px-4 text-left">
+    <div className="flex flex-col items-start px-4 pt-2 text-left">
       {isDM ? (
         <>
-          <div className="mb-6 flex overflow-hidden rounded-full ring-2 ring-rm-border shadow-2xl transition-transform duration-500 hover:scale-105">
+          <div className="mb-5 flex overflow-hidden rounded-full ring-1 ring-rm-border shadow-md">
             {dmRecipient?.avatar_url ? (
               <AvatarImage
                 src={getAuthAssetUrl(dmRecipient.avatar_url)}
                 alt=""
                 display={dmRecipient.avatar_display}
-                className="h-24 w-24"
+                className="h-20 w-20"
               />
             ) : (
-              <div className="flex h-24 w-24 items-center justify-center bg-rm-accent text-3xl font-bold text-primary-foreground">
+              <div className="flex h-20 w-20 items-center justify-center bg-rm-accent text-ui-2xl font-semibold text-primary-foreground">
                 {channelName?.[0]?.toUpperCase() ?? "?"}
               </div>
             )}
           </div>
-          <h1 className="mb-0 text-3xl font-black tracking-tight text-rm-text-primary">
+          <h1 className="mb-0 font-display text-display text-rm-text-primary text-balance">
             <InlineEmojiText
               text={
                 dmRecipient?.display_name ??
@@ -50,12 +51,12 @@ export const ChatWelcomeContent = memo(function ChatWelcomeContent({
               }
             />
           </h1>
-          <h2 className="mb-4 text-xl font-bold text-rm-text-muted tracking-tight">
+          <h2 className="mb-3 text-ui-md font-medium text-rm-text-muted">
             @{dmRecipient?.username ?? channelName.toLowerCase()}
           </h2>
-          <p className="max-w-md text-[14px] font-medium leading-relaxed text-rm-text-muted">
+          <p className="max-w-[60ch] text-ui-base text-rm-text-muted text-pretty">
             This is the absolute beginning of your direct message history with{" "}
-            <span className="text-rm-text-secondary font-semibold">
+            <span className="font-semibold text-rm-text-secondary">
               <InlineEmojiText
                 text={
                   dmRecipient?.display_name ??
@@ -66,31 +67,41 @@ export const ChatWelcomeContent = memo(function ChatWelcomeContent({
             </span>
             . Be kind, be bold, and let the conversation flow.
           </p>
-          <div className="flex gap-3 mt-6">
-            <button className="rounded-lg bg-rm-bg-hover border border-rm-border px-4 py-2 text-[12px] font-bold text-rm-text transition-all hover:bg-rm-bg-active active:scale-95">
+          <div className="mt-5 flex gap-2">
+            <button
+              type="button"
+              className="h-8 rounded-md border border-rm-border bg-rm-bg-elevated px-3 text-ui-sm font-medium text-rm-text transition-ui hover:bg-rm-bg-hover enabled:active:scale-[0.96]"
+            >
               View Profile
             </button>
-            <button className="rounded-lg bg-rose-500/10 border border-rose-500/20 px-4 py-2 text-[12px] font-bold text-rose-400 transition-all hover:bg-rose-500/20 active:scale-95">
+            <button
+              type="button"
+              className="h-8 rounded-md border border-destructive/30 bg-destructive/10 px-3 text-ui-sm font-medium text-destructive transition-ui hover:bg-destructive/15 enabled:active:scale-[0.96]"
+            >
               Block User
             </button>
           </div>
         </>
       ) : (
         <>
-          <div className="mb-6 flex h-20 w-20 rotate-6 items-center justify-center rounded-3xl border border-rm-accent/20 bg-rm-accent-dim shadow-2xl transition-transform duration-500 hover:rotate-0">
-            <Hash className="h-10 w-10 text-rm-accent opacity-80" />
+          <div className="relative mb-5 flex h-[72px] w-[72px] items-center justify-center overflow-hidden rounded-xl border border-rm-border shadow-sm">
+            <DitherField cell={4} intensity={0.6} seed={11} />
+            <Hash
+              className="relative z-10 h-9 w-9 text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.5)]"
+              strokeWidth={2.25}
+            />
           </div>
-          <h3 className="mb-2 text-3xl font-semibold tracking-tight text-rm-text-primary">
+          <h3 className="mb-2 font-display text-display text-rm-text-primary text-balance">
             <InlineEmojiText text={`Welcome to #${channelName}`} />
           </h3>
-          <p className="max-w-lg text-sm font-medium leading-relaxed text-rm-text-muted">
+          <p className="max-w-[60ch] text-ui-base text-rm-text-muted text-pretty">
             <InlineEmojiText
               text={`This is the absolute beginning of the #${channelName} channel. Start a conversation, forge new paths, and let your frequencies align.`}
             />
           </p>
         </>
       )}
-      <div className="mt-8 h-px w-full bg-gradient-to-r from-rm-border to-transparent" />
+      <div className="mt-6 h-px w-full bg-gradient-to-r from-rm-border to-transparent" />
     </div>
   );
 });

@@ -57,8 +57,8 @@ interface StreamingStatsPanelProps {
 /** Shared text styling for the connection-state / mode label. */
 function labelClass(emphasized: boolean): string {
   return cn(
-    "text-[10px] font-black uppercase tracking-widest",
-    emphasized ? "text-white/60" : "text-rm-text-muted/40",
+    "text-ui-2xs font-semibold uppercase tracking-[0.08em]",
+    emphasized ? "text-white/70" : "text-rm-text-muted",
   );
 }
 
@@ -148,7 +148,7 @@ function StreamingStatsContent({
     mode.tone === "hook"
       ? "text-emerald-400"
       : mode.tone === "unavailable"
-        ? "text-rose-400"
+        ? "text-destructive"
         : "text-amber-600 dark:text-amber-400";
 
   const mutedClass = emphasized ? "text-white/60" : "text-rm-text-muted/70";
@@ -158,13 +158,13 @@ function StreamingStatsContent({
   return (
     <div
       className={cn(
-        "flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider",
+        "text-ui-2xs font-semibold uppercase tracking-[0.08em] flex items-center gap-2",
         className,
       )}
       title={`Capture ${mode.text}${backend ? ` (${backend})` : ""} · encoder ${data.encoder_backend}`}
     >
       {/* Capture mode (Req 8.2) */}
-      <span className={cn("font-black", toneClass)}>{mode.text}</span>
+      <span className={cn("font-bold", toneClass)}>{mode.text}</span>
 
       {/* Graphics_API_Backend — only while mode is hook (Req 8.3) */}
       {backend && (

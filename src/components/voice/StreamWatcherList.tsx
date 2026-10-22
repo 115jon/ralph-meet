@@ -70,7 +70,7 @@ export function StreamWatcherList({
                 display={watcher.avatarDisplay}
               />
             ) : (
-              <div className="flex h-full w-full items-center justify-center text-[10px] font-black text-rm-text">
+              <div className="flex h-full w-full items-center justify-center text-ui-2xs font-bold text-rm-text">
                 {watcher.name[0]?.toUpperCase() ?? "?"}
               </div>
             )}
@@ -79,7 +79,7 @@ export function StreamWatcherList({
         {overflowCount > 0 && (
           <div
             className={cn(
-              "flex items-center justify-center rounded-full border text-[9px] font-black",
+              "flex items-center justify-center rounded-full border text-ui-2xs font-bold",
               isInline
                 ? "h-6 w-6 border-white/20 bg-white/10 text-white"
                 : "h-6 w-6 border-rm-border bg-rm-bg-elevated text-rm-text",
@@ -93,8 +93,8 @@ export function StreamWatcherList({
       <div className="min-w-0">
         <div
           className={cn(
-            "font-black uppercase tracking-[0.18em]",
-            isInline ? "text-[8px] text-white/55" : "text-[9px] text-primary",
+            "font-bold uppercase tracking-[0.18em]",
+            isInline ? "text-ui-2xs text-white/55" : "text-ui-2xs text-primary",
           )}
         >
           {viewerLabel}
@@ -102,7 +102,7 @@ export function StreamWatcherList({
         <div
           className={cn(
             "truncate font-semibold",
-            isInline ? "text-[11px] text-white" : "text-[11px] text-rm-text",
+            isInline ? "text-ui-2xs text-white" : "text-ui-2xs text-rm-text",
           )}
         >
           <InlineEmojiText text={namesLabel} />

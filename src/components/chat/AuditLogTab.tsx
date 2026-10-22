@@ -133,7 +133,7 @@ export default function AuditLogTab({ serverId }: AuditLogTabProps) {
   }
 
   return (
-    <div className="animate-in fade-in slide-in-from-right-4 duration-300 w-full pb-8">
+    <div className="animate-in fade-in duration-150 w-full pb-8">
       <h2
         id="server-settings-title"
         className="mb-6 text-xl font-bold text-rm-text"
@@ -170,7 +170,7 @@ export default function AuditLogTab({ serverId }: AuditLogTabProps) {
                 </div>
 
                 {/* Card Content */}
-                <div className="flex-1 min-w-0 rounded-xl border border-rm-border bg-rm-bg-surface p-4 shadow shadow-black/5 transition-all hover:border-primary/30">
+                <div className="flex-1 min-w-0 rounded-xl border border-rm-border bg-rm-bg-surface p-4 shadow shadow-black/5 transition-ui hover:border-primary/30">
                   <div className="flex justify-between items-start mb-2">
                     <div className="flex gap-2 items-center">
                       <span className="font-semibold text-sm text-rm-text">
@@ -196,7 +196,7 @@ export default function AuditLogTab({ serverId }: AuditLogTabProps) {
                     {log.target_id && (
                       <>
                         <span>•</span>
-                        <span className="font-mono bg-rm-bg-hover px-1.5 py-0.5 rounded text-[10px]">
+                        <span className="font-mono bg-rm-bg-hover px-1.5 py-0.5 rounded text-ui-2xs">
                           Target: {log.target_id}
                         </span>
                       </>
@@ -211,7 +211,7 @@ export default function AuditLogTab({ serverId }: AuditLogTabProps) {
 
                   {log.changes && Object.keys(log.changes).length > 0 && (
                     <div className="mt-3 bg-rm-bg-hover/50 rounded-lg p-3 border border-rm-border/50">
-                      <span className="text-[10px] font-bold uppercase tracking-widest text-rm-text-muted mb-1 block">
+                      <span className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted mb-1 block">
                         Changes
                       </span>
                       <div className="space-y-1">

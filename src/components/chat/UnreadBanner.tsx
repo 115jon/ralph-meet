@@ -5,6 +5,8 @@
  * Uses the app's primary color. Includes a "Mark As Read" button.
  */
 
+import { Check } from "./Icons";
+
 interface UnreadBannerProps {
   count: number;
   since: string; // ISO timestamp of the first unread message
@@ -22,7 +24,7 @@ export function UnreadBanner({
   });
 
   return (
-    <div className="flex items-center justify-between mx-2 mt-1 px-4 py-1.5 bg-primary text-primary-foreground text-sm font-medium rounded-lg shrink-0 z-10">
+    <div className="z-10 mx-2 mt-1 flex h-8 shrink-0 items-center justify-between rounded-md bg-primary px-3 text-ui-sm font-medium text-primary-foreground">
       <span>
         {count} new message{count !== 1 ? "s" : ""} since {timeStr}
       </span>
@@ -32,21 +34,10 @@ export function UnreadBanner({
           e.stopPropagation();
           onMarkAsRead();
         }}
-        className="flex items-center gap-1.5 text-sm font-semibold px-2 py-0.5 rounded hover:bg-white/15 transition-colors"
+        className="flex h-6 items-center gap-1 rounded-sm px-1.5 text-ui-sm font-semibold transition-colors hover:bg-white/15 enabled:active:scale-[0.96]"
       >
         Mark As Read
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          viewBox="0 0 24 24"
-          fill="currentColor"
-          className="w-4 h-4"
-        >
-          <path
-            fillRule="evenodd"
-            d="M2.25 12c0-5.385 4.365-9.75 9.75-9.75s9.75 4.365 9.75 9.75-4.365 9.75-9.75 9.75S2.25 17.385 2.25 12zm13.36-1.814a.75.75 0 10-1.22-.872l-3.236 4.53L9.53 12.22a.75.75 0 00-1.06 1.06l2.25 2.25a.75.75 0 001.14-.094l3.75-5.25z"
-            clipRule="evenodd"
-          />
-        </svg>
+        <Check className="h-3.5 w-3.5" strokeWidth={2.5} />
       </button>
     </div>
   );

@@ -200,7 +200,7 @@ function CatalogPreview({
 
         {/* 1. Profile Card (angled/skewed on the right) */}
         {effectItem && (
-          <div className="absolute top-2.5 -right-1 w-[62px] h-[100px] overflow-hidden rounded-[6px] border border-white/8 bg-[#10131a] shadow-[0_8px_24px_rgba(0,0,0,0.5)] origin-top-right rotate-[4deg]">
+          <div className="absolute top-2.5 -right-1 w-[62px] h-[100px] overflow-hidden rounded-sm border border-white/8 bg-[#10131a] shadow-[0_8px_24px_rgba(0,0,0,0.5)] origin-top-right rotate-[4deg]">
             {/* Banner */}
             <div className="absolute left-0 right-0 top-0 h-5 bg-white/5 border-b border-white/8" />
             <div className="absolute inset-0 bg-[linear-gradient(180deg,_transparent,_rgba(17,20,27,0.96)_34%,_rgba(11,13,18,0.98))]" />
@@ -262,7 +262,7 @@ function CatalogPreview({
         {nameplateUrl && (
           <div
             className={cn(
-              "absolute rounded-[4px] border border-white/8 overflow-hidden px-1 shadow-[0_6px_16px_rgba(0,0,0,0.4)] flex items-center gap-1 bg-[#0e1014]",
+              "absolute rounded-xs border border-white/8 overflow-hidden px-1 shadow-[0_6px_16px_rgba(0,0,0,0.4)] flex items-center gap-1 bg-[#0e1014]",
               effectItem
                 ? "left-2.5 bottom-3.5 w-[70px] h-[20px]"
                 : "bottom-3 w-[90px] h-[24px] gap-1.5",
@@ -336,7 +336,7 @@ function CatalogPreview({
           </div>
 
           {/* Row 2 (Highlighted Preview Row with Nameplate) */}
-          <div className="relative flex w-full h-[32px] items-center gap-2.5 rounded-[6px] border border-white/5 overflow-hidden px-2 shadow-[0_6px_16px_rgba(0,0,0,0.3)]">
+          <div className="relative flex w-full h-[32px] items-center gap-2.5 rounded-sm border border-white/5 overflow-hidden px-2 shadow-[0_6px_16px_rgba(0,0,0,0.3)]">
             {playAnimation && item.animatedUrl ? (
               <video
                 src={item.animatedUrl}
@@ -366,7 +366,7 @@ function CatalogPreview({
                     display={previewDisplay}
                   />
                 ) : (
-                  <div className="flex h-full w-full items-center justify-center rounded-full text-[8px] font-bold text-white/70">
+                  <div className="flex h-full w-full items-center justify-center rounded-full text-ui-2xs font-bold text-white/70">
                     {getDisplayInitial({ name: displayName })}
                   </div>
                 )
@@ -527,7 +527,7 @@ function CatalogItemCard({
             {item.categoryName}
           </div>
           {price && (
-            <div className="mt-1 text-[11px] font-semibold text-rm-text-secondary">
+            <div className="mt-1 text-ui-2xs font-semibold text-rm-text-secondary">
               {price}
             </div>
           )}

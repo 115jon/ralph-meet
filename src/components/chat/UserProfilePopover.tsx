@@ -66,9 +66,7 @@ const DESKTOP_MAX_SURFACE_HEIGHT = 640;
 const POPOVER_ACTION_BUTTON_CLASS =
   "flex h-8 w-8 items-center justify-center rounded-full border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] text-[color:var(--rm-profile-custom-muted)] shadow-[0_10px_24px_rgba(0,0,0,0.28)] backdrop-blur-sm transition-colors hover:bg-[var(--rm-profile-custom-card-bg)] hover:text-[color:var(--rm-profile-custom-text)]";
 const SECTION_TITLE_CLASS =
-  "mb-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-[color:var(--rm-profile-custom-muted)]";
-const PROFILE_TOOLTIP_CLASS =
-  "rounded-lg border-none bg-rm-bg-floating px-3 py-2 text-[12px] font-bold text-rm-text-primary shadow-xl";
+  "text-ui-2xs font-semibold uppercase tracking-[0.08em] mb-2 text-[color:var(--rm-profile-custom-muted)]";
 
 const INITIAL_STATE = {
   isAssigningRoles: false,
@@ -113,11 +111,7 @@ function TooltipIconButton({
           {children}
         </ButtonBase>
       </TooltipTrigger>
-      <TooltipContent
-        side="top"
-        sideOffset={10}
-        className={PROFILE_TOOLTIP_CLASS}
-      >
+      <TooltipContent side="top" sideOffset={10}>
         {label}
       </TooltipContent>
     </Tooltip>
@@ -242,24 +236,20 @@ function PopoverMutuals({
                           display={friend.avatar_display}
                         />
                       ) : (
-                        <span className="text-[9px] font-bold text-[color:var(--rm-profile-custom-muted)]">
+                        <span className="text-ui-2xs font-bold text-[color:var(--rm-profile-custom-muted)]">
                           {getDisplayInitial(friend)}
                         </span>
                       )}
                     </div>
                   </TooltipTrigger>
-                  <TooltipContent
-                    side="top"
-                    sideOffset={8}
-                    className={PROFILE_TOOLTIP_CLASS}
-                  >
+                  <TooltipContent side="top" sideOffset={8}>
                     {friendDisplayName}
                   </TooltipContent>
                 </Tooltip>
               );
             })}
           </div>
-          <span className="text-[11px] font-semibold text-[color:var(--rm-profile-custom-muted)]">
+          <span className="text-ui-2xs font-semibold text-[color:var(--rm-profile-custom-muted)]">
             {mutualFriends.count} Mutual Friend
             {mutualFriends.count === 1 ? "" : "s"}
           </span>
@@ -280,23 +270,19 @@ function PopoverMutuals({
                         className="h-full w-full object-cover"
                       />
                     ) : (
-                      <span className="text-[9px] font-bold text-[color:var(--rm-profile-custom-muted)]">
+                      <span className="text-ui-2xs font-bold text-[color:var(--rm-profile-custom-muted)]">
                         {server.name[0]?.toUpperCase()}
                       </span>
                     )}
                   </div>
                 </TooltipTrigger>
-                <TooltipContent
-                  side="top"
-                  sideOffset={8}
-                  className={PROFILE_TOOLTIP_CLASS}
-                >
+                <TooltipContent side="top" sideOffset={8}>
                   <InlineEmojiText text={server.name} />
                 </TooltipContent>
               </Tooltip>
             ))}
           </div>
-          <span className="text-[11px] font-semibold text-[color:var(--rm-profile-custom-muted)]">
+          <span className="text-ui-2xs font-semibold text-[color:var(--rm-profile-custom-muted)]">
             {mutualServers.count} Mutual Server
             {mutualServers.count === 1 ? "" : "s"}
           </span>
@@ -418,7 +404,7 @@ function PopoverRoles({
         {customRoles.map((role) => (
           <div
             key={role.id}
-            className="group flex items-center gap-1.5 rounded border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg)] py-0.5 pl-2 pr-1 text-[11px] font-medium"
+            className="group flex items-center gap-1.5 rounded border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg)] py-0.5 pl-2 pr-1 text-ui-2xs font-medium"
           >
             <div
               className="h-3 w-3 shrink-0 rounded-full"
@@ -435,7 +421,7 @@ function PopoverRoles({
                     optimisticRoles?.map((currentRole) => currentRole.id) || [];
                   assignRole(role.id, currentRoles);
                 }}
-                className="rounded p-0.5 text-[color:var(--rm-profile-custom-muted)] opacity-0 transition-all hover:bg-black/8 hover:text-[color:var(--rm-profile-custom-text)] group-hover:opacity-100"
+                className="rounded p-0.5 text-[color:var(--rm-profile-custom-muted)] opacity-0 transition-ui hover:bg-black/8 hover:text-[color:var(--rm-profile-custom-text)] group-hover:opacity-100"
               >
                 <X size={12} />
               </ButtonBase>
@@ -453,11 +439,7 @@ function PopoverRoles({
                 <Plus size={14} />
               </ButtonBase>
             </TooltipTrigger>
-            <TooltipContent
-              side="top"
-              sideOffset={8}
-              className={PROFILE_TOOLTIP_CLASS}
-            >
+            <TooltipContent side="top" sideOffset={8}>
               Manage Roles
             </TooltipContent>
           </Tooltip>
@@ -975,7 +957,7 @@ export default function UserProfilePopover({
                 </div>
 
                 {resolvedUser.bio?.trim() ? (
-                  <div className="mt-4 rounded-[18px] border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)]/92 px-4 py-3 text-sm leading-6 text-[color:var(--rm-profile-custom-text)] shadow-[0_16px_32px_rgba(0,0,0,0.18)] backdrop-blur-sm">
+                  <div className="mt-4 rounded-xl border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)]/92 px-4 py-3 text-sm leading-6 text-[color:var(--rm-profile-custom-text)] shadow-[0_16px_32px_rgba(0,0,0,0.18)] backdrop-blur-sm">
                     {resolvedUser.bio.trim()}
                   </div>
                 ) : null}
@@ -999,7 +981,7 @@ export default function UserProfilePopover({
 
               {!isMe ? (
                 <div className="relative z-20 mt-1 px-4 pb-4">
-                  <div className="group flex items-center justify-between rounded-[16px] border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] px-3 py-2.5 transition-colors hover:border-white/25 focus-within:border-white/30">
+                  <div className="group flex items-center justify-between rounded-xl border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] px-3 py-2.5 transition-colors hover:border-white/25 focus-within:border-white/30">
                     <input
                       type="text"
                       aria-label={`Message ${resolvedUsername}`}
@@ -1017,7 +999,7 @@ export default function UserProfilePopover({
                   <button
                     type="button"
                     onClick={handleOpenProfileEditor}
-                    className="flex w-full items-center justify-center gap-2 rounded-[14px] border border-primary/28 bg-primary/18 px-4 py-3 text-sm font-semibold text-[color:var(--rm-profile-custom-text)] shadow-[0_18px_36px_rgba(0,0,0,0.22)] transition hover:bg-primary/24 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35"
+                    className="flex w-full items-center justify-center gap-2 rounded-lg border border-primary/28 bg-primary/18 px-4 py-3 text-sm font-semibold text-[color:var(--rm-profile-custom-text)] shadow-[0_18px_36px_rgba(0,0,0,0.22)] transition hover:bg-primary/24 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35"
                   >
                     <Pencil size={15} />
                     Edit Profile

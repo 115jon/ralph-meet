@@ -44,7 +44,14 @@ import {
   UserPlus,
   WifiOff,
 } from "lucide-react";
-import { useCallback, useEffect, useId, useRef, useState } from "react";
+import {
+  type CSSProperties,
+  useCallback,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+} from "react";
 import ContextMenu from "./ContextMenu";
 import {
   AlertTriangle,
@@ -572,7 +579,7 @@ export default function MemberList({
       <div
         data-testid="members-list"
         className={cn(
-          "fixed inset-y-0 right-0 z-20 flex h-full w-full shrink-0 flex-col overflow-hidden bg-rm-bg-primary shadow-2xl animate-in slide-in-from-right-full transition-all duration-300",
+          "fixed inset-y-0 right-0 z-20 flex h-full w-full shrink-0 flex-col overflow-hidden bg-rm-bg-primary shadow-2xl animate-in slide-in-from-right-full duration-300 ease-drawer",
           // Desktop: static sidebar, width depends on details mode
           showDetails
             ? "lg:static lg:z-auto lg:w-[360px] lg:bg-rm-bg-sidebar lg:shadow-none lg:animate-none"
@@ -808,7 +815,7 @@ function DesktopHeader({
         ) : (
           <Hash className="h-[18px] w-[18px] text-rm-text-muted shrink-0" />
         )}
-        <h2 className="text-[15px] font-bold text-rm-text-primary truncate">
+        <h2 className="text-ui-base font-semibold text-rm-text-primary truncate">
           <InlineEmojiText
             text={channelName || (isDM ? "details" : "general")}
           />
@@ -823,11 +830,7 @@ function DesktopHeader({
             <ArrowLeft size={18} />
           </ButtonBase>
         </TooltipTrigger>
-        <TooltipContent
-          side="top"
-          sideOffset={10}
-          className="rounded-lg border-none bg-rm-bg-floating px-3 py-2 text-[12px] font-bold text-rm-text-primary shadow-xl"
-        >
+        <TooltipContent side="top" sideOffset={10}>
           Close details
         </TooltipContent>
       </Tooltip>
@@ -873,18 +876,18 @@ function MemberListTabs({
           ) : (
             <Hash className="h-[24px] w-[24px] text-rm-text-muted shrink-0" />
           )}
-          <h1 className="text-[26px] font-extrabold text-rm-text-primary tracking-tight leading-none truncate">
+          <h1 className="text-ui-xl font-semibold text-rm-text-primary leading-none truncate">
             <InlineEmojiText
               text={channelName || (isDM ? "details" : "general")}
             />
           </h1>
         </div>
-        <p className="text-[13px] font-medium text-rm-text-muted mb-6 ml-8">
+        <p className="text-ui-sm font-medium text-rm-text-muted mb-6 ml-8">
           {isDM ? "Direct Message" : "Text Channel"}
         </p>
 
         {renderTabs(
-          "flex gap-6 overflow-x-auto custom-scrollbar no-scrollbar text-[15px] font-semibold text-rm-text-muted border-b border-rm-border pb-2.5",
+          "flex gap-6 overflow-x-auto custom-scrollbar no-scrollbar text-ui-base font-semibold text-rm-text-muted border-b border-rm-border pb-2.5",
           "mobile",
         )}
       </div>
@@ -892,7 +895,7 @@ function MemberListTabs({
       {showDetails && (
         <div className="hidden lg:block mb-4 shrink-0 px-2">
           {renderTabs(
-            "flex gap-4 overflow-x-auto custom-scrollbar no-scrollbar text-[13px] font-semibold text-rm-text-muted border-b border-rm-border pb-2",
+            "flex gap-4 overflow-x-auto custom-scrollbar no-scrollbar text-ui-sm font-semibold text-rm-text-muted border-b border-rm-border pb-2",
             "desktop",
           )}
         </div>
@@ -983,7 +986,7 @@ function MobileInviteButton({
   return (
     <div className="lg:hidden mb-6 shrink-0 pt-2">
       <ButtonBase
-        className="w-full flex items-center justify-between bg-rm-bg-elevated hover:bg-rm-bg-hover text-rm-text p-4 rounded-xl transition-colors ring-1 ring-rm-border shadow-sm"
+        className="w-full flex items-center justify-between bg-rm-bg-elevated hover:bg-rm-bg-hover text-rm-text p-4 rounded-lg transition-ui ring-1 ring-rm-border enabled:active:scale-[0.98]"
         onClick={() => {
           onInviteClick?.();
           onClose?.();
@@ -993,7 +996,7 @@ function MobileInviteButton({
           <div className="p-2 bg-primary rounded-full text-primary-foreground border border-rm-border/50">
             <UserPlus size={18} fill="currentColor" className="opacity-90" />
           </div>
-          <span className="font-bold text-[16px] text-rm-text-primary">
+          <span className="font-semibold text-ui-md text-rm-text-primary">
             Invite Members
           </span>
         </div>
@@ -1035,9 +1038,9 @@ function MembersTabContent({
     <>
       {groups.map((group) => (
         <div key={group.name}>
-          <div className="flex items-center px-2 py-[10px] text-[11px] font-bold text-rm-text-muted">
+          <div className="text-ui-2xs font-semibold uppercase tracking-[0.08em] flex items-center px-2 pb-1 pt-4 text-rm-text-muted">
             <InlineEmojiText text={group.name} className="uppercase" />
-            <span className="ml-[6px] text-[11px] font-semibold tracking-[-0.02em]">
+            <span className="ml-1.5 text-ui-2xs font-medium tabular-nums tracking-normal">
               {group.members.length}
             </span>
           </div>
@@ -1061,9 +1064,9 @@ function MembersTabContent({
 
       {sortedOffline.length > 0 && (
         <div>
-          <div className="flex items-center px-2 py-[10px] text-[11px] font-bold text-rm-text-muted">
+          <div className="text-ui-2xs font-semibold uppercase tracking-[0.08em] flex items-center px-2 pb-1 pt-4 text-rm-text-muted">
             <span className="uppercase">Offline</span>
-            <span className="ml-[6px] text-[11px] font-semibold tracking-[-0.02em]">
+            <span className="ml-1.5 text-ui-2xs font-medium tabular-nums tracking-normal">
               {sortedOffline.length}
             </span>
           </div>
@@ -1194,7 +1197,7 @@ function MediaTabContent({
           <ButtonBase
             key={item.id}
             onClick={() => handleMediaClick(idx)}
-            className="aspect-square rounded-xl overflow-hidden bg-rm-bg-elevated border border-rm-border/20 hover:border-primary/40 transition-all group relative"
+            className="aspect-square rounded-xl overflow-hidden bg-rm-bg-elevated border border-rm-border/20 hover:border-primary/40 transition-ui group relative"
           >
             <div className="absolute top-1.5 right-1.5 z-10">
               <div className="h-6 w-6 rounded-full overflow-visible border-2 border-black/30 shadow-md bg-rm-bg-elevated">
@@ -1205,7 +1208,7 @@ function MediaTabContent({
                     display={item.author.avatar_display}
                   />
                 ) : (
-                  <div className="h-full w-full flex items-center justify-center bg-primary text-[9px] font-bold text-primary-foreground">
+                  <div className="h-full w-full flex items-center justify-center bg-primary text-ui-2xs font-bold text-primary-foreground">
                     {getDisplayInitial(item.author)}
                   </div>
                 )}
@@ -1237,7 +1240,7 @@ function MediaTabContent({
               }
             />
             <div className="absolute inset-0 bg-linear-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-2">
-              <span className="text-[10px] font-bold text-white truncate">
+              <span className="text-ui-2xs font-bold text-white truncate">
                 {item.filename}
               </span>
             </div>
@@ -1276,7 +1279,7 @@ function PinsTabContent({
               onClick={() => onJumpToMessage(msg.id)}
             >
               <div className="flex items-center gap-2 mb-1.5">
-                <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[9px] font-bold text-primary overflow-visible">
+                <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-ui-2xs font-bold text-primary overflow-visible">
                   {msg.author?.avatar_url ? (
                     <AvatarImage
                       src={getAuthAssetUrl(msg.author.avatar_url)}
@@ -1287,18 +1290,18 @@ function PinsTabContent({
                     getDisplayInitial(msg.author)
                   )}
                 </div>
-                <span className="text-[12px] font-bold text-rm-text-primary truncate">
+                <span className="text-ui-xs font-bold text-rm-text-primary truncate">
                   <InlineEmojiText text={displayName} />
                 </span>
-                <span className="text-[10px] text-rm-text-muted ml-auto shrink-0">
+                <span className="text-ui-2xs text-rm-text-muted ml-auto shrink-0">
                   {formatRelativeTime(msg.created_at)}
                 </span>
               </div>
-              <div className="text-[13px] text-rm-text-secondary line-clamp-2 leading-relaxed">
+              <div className="text-ui-sm text-rm-text-secondary line-clamp-2 leading-relaxed">
                 <MarkdownRenderer content={msg.content.slice(0, 200)} />
               </div>
               {msg.attachments && msg.attachments.length > 0 && (
-                <div className="mt-2 flex items-center gap-1.5 text-[10px] text-rm-text-muted">
+                <div className="mt-2 flex items-center gap-1.5 text-ui-2xs text-rm-text-muted">
                   <Image size={12} />
                   <span>
                     {msg.attachments.length} attachment
@@ -1349,7 +1352,7 @@ function ThreadsTabContent({
               onClick={() => onOpenThread(thread.id)}
             >
               <div className="flex items-center gap-2 mb-1.5">
-                <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[9px] font-bold text-primary overflow-visible">
+                <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-ui-2xs font-bold text-primary overflow-visible">
                   {thread.author.avatar_url ? (
                     <AvatarImage
                       src={getAuthAssetUrl(thread.author.avatar_url)}
@@ -1360,20 +1363,20 @@ function ThreadsTabContent({
                     getDisplayInitial(thread.author)
                   )}
                 </div>
-                <span className="text-[12px] font-bold text-rm-text-primary truncate">
+                <span className="text-ui-xs font-bold text-rm-text-primary truncate">
                   <InlineEmojiText text={displayName} />
                 </span>
               </div>
-              <div className="text-[13px] text-rm-text-secondary line-clamp-2 leading-relaxed mb-2">
+              <div className="text-ui-sm text-rm-text-secondary line-clamp-2 leading-relaxed mb-2">
                 <InlineEmojiText text={thread.content} />
               </div>
-              <div className="flex items-center gap-3 text-[11px] text-rm-text-muted">
+              <div className="flex items-center gap-3 text-ui-2xs text-rm-text-muted">
                 <div className="flex items-center gap-1">
                   <MessageCircle size={12} />
                   <span className="font-semibold">{thread.reply_count}</span>
                   <span>{thread.reply_count === 1 ? "reply" : "replies"}</span>
                 </div>
-                <span className="text-[10px]">
+                <span className="text-ui-2xs">
                   {formatRelativeTime(thread.last_reply_at)}
                 </span>
               </div>
@@ -1417,7 +1420,7 @@ function LinksTabContent({
             className="bg-rm-bg-elevated border border-rm-border/30 rounded-xl p-3.5 transition-colors hover:bg-rm-bg-hover"
           >
             <div className="flex items-center gap-2 mb-2">
-              <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[9px] font-bold text-primary overflow-visible">
+              <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-ui-2xs font-bold text-primary overflow-visible">
                 {item.author.avatar_url ? (
                   <AvatarImage
                     src={getAuthAssetUrl(item.author.avatar_url)}
@@ -1428,19 +1431,19 @@ function LinksTabContent({
                   getDisplayInitial(item.author)
                 )}
               </div>
-              <span className="text-[12px] font-bold text-rm-text-primary truncate">
+              <span className="text-ui-xs font-bold text-rm-text-primary truncate">
                 <InlineEmojiText text={displayName} />
               </span>
               {channelName && (
                 <>
                   <span className="text-rm-text-muted/30">&middot;</span>
-                  <span className="text-[11px] text-rm-text-muted flex items-center gap-0.5 shrink-0">
+                  <span className="text-ui-2xs text-rm-text-muted flex items-center gap-0.5 shrink-0">
                     <Hash size={10} className="opacity-60" />
                     <InlineEmojiText text={channelName} />
                   </span>
                 </>
               )}
-              <span className="text-[10px] text-rm-text-muted ml-auto shrink-0">
+              <span className="text-ui-2xs text-rm-text-muted ml-auto shrink-0">
                 {formatRelativeTime(item.created_at)}
               </span>
             </div>
@@ -1450,7 +1453,7 @@ function LinksTabContent({
                 href={url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center gap-2 text-[13px] text-primary hover:underline truncate mt-1"
+                className="flex items-center gap-2 text-ui-sm text-primary hover:underline truncate mt-1"
               >
                 <ExternalLink size={12} className="shrink-0" />
                 <span className="truncate">{url}</span>
@@ -1530,15 +1533,15 @@ function FilesTabContent({
               <FileTypeIcon size={22} />
             </div>
             <div className="flex-1 min-w-0">
-              <div className="text-[13px] font-bold text-rm-text-primary truncate">
+              <div className="text-ui-sm font-bold text-rm-text-primary truncate">
                 {item.filename}
               </div>
               <div className="flex items-center gap-2 mt-0.5">
-                <span className="text-[11px] text-rm-text-muted">
+                <span className="text-ui-2xs text-rm-text-muted">
                   {formatFileSize(item.size_bytes)}
                 </span>
                 <span className="text-rm-text-muted/30">&middot;</span>
-                <span className="text-[11px] text-rm-text-muted">
+                <span className="text-ui-2xs text-rm-text-muted">
                   {uploadDate}
                 </span>
               </div>
@@ -1556,13 +1559,13 @@ function FilesTabContent({
                     </div>
                   )}
                 </div>
-                <span className="text-[11px] font-medium text-rm-text-muted truncate">
+                <span className="text-ui-2xs font-medium text-rm-text-muted truncate">
                   <InlineEmojiText text={displayName} />
                 </span>
                 {channelName && (
                   <>
                     <span className="text-rm-text-muted/30">&middot;</span>
-                    <span className="text-[11px] text-rm-text-muted flex items-center gap-0.5 shrink-0">
+                    <span className="text-ui-2xs text-rm-text-muted flex items-center gap-0.5 shrink-0">
                       <Hash size={10} className="opacity-60" />
                       <InlineEmojiText text={channelName} />
                     </span>
@@ -1576,16 +1579,12 @@ function FilesTabContent({
                   href={getDownloadUrl(item.url)}
                   download={item.filename}
                   onClick={(e) => e.stopPropagation()}
-                  className="relative z-20 shrink-0 rounded-lg p-2 text-rm-text-muted opacity-0 transition-all hover:bg-primary/10 hover:text-primary group-hover:opacity-100"
+                  className="relative z-20 shrink-0 rounded-lg p-2 text-rm-text-muted opacity-0 transition-ui hover:bg-primary/10 hover:text-primary group-hover:opacity-100"
                 >
                   <Download size={16} />
                 </a>
               </TooltipTrigger>
-              <TooltipContent
-                side="top"
-                sideOffset={10}
-                className="rounded-lg border-none bg-rm-bg-floating px-3 py-2 text-[12px] font-bold text-rm-text-primary shadow-xl"
-              >
+              <TooltipContent side="top" sideOffset={10}>
                 Download
               </TooltipContent>
             </Tooltip>
@@ -1603,7 +1602,7 @@ function TabSpinnerState() {
   return (
     <div className="flex flex-col items-center justify-center py-16 gap-3">
       <div className="h-6 w-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-      <span className="text-[12px] font-bold text-rm-text-muted">
+      <span className="text-ui-xs font-bold text-rm-text-muted">
         Loading...
       </span>
     </div>
@@ -1683,7 +1682,7 @@ function MediaGridImage({
             src={getAuthAssetUrl(posterSrc)}
             alt={alt}
             className={cn(
-              "w-full h-full object-cover transition-all duration-300 group-hover:scale-105",
+              "w-full h-full object-cover transition-ui",
               loaded ? "opacity-100" : "opacity-0",
             )}
             loading="lazy"
@@ -1712,7 +1711,7 @@ function MediaGridImage({
           preload="metadata"
           aria-label={alt}
           className={cn(
-            "w-full h-full object-cover transition-all duration-300 group-hover:scale-105",
+            "w-full h-full object-cover transition-ui",
             loaded ? "opacity-100" : "opacity-0",
           )}
           onLoadedData={() => setLoaded(true)}
@@ -1739,7 +1738,7 @@ function MediaGridImage({
         src={src}
         alt={alt}
         className={cn(
-          "w-full h-full object-cover transition-all duration-300 group-hover:scale-105",
+          "w-full h-full object-cover transition-ui",
           loaded ? "opacity-100" : "opacity-0",
         )}
         loading="lazy"
@@ -1774,14 +1773,14 @@ function TabErrorState({
         <p className="text-[14px] font-bold text-rm-text-primary">
           Failed to load
         </p>
-        <p className="text-[12px] text-rm-text-muted max-w-[200px] leading-relaxed">
+        <p className="text-ui-xs text-rm-text-muted max-w-[200px] leading-relaxed">
           {message}
         </p>
       </div>
 
       <ButtonBase
         onClick={onRetry}
-        className="flex items-center gap-2 px-4 py-2 bg-rm-bg-elevated hover:bg-rm-bg-hover border border-rm-border rounded-xl text-[13px] font-bold text-rm-text-primary transition-colors"
+        className="flex items-center gap-2 px-4 py-2 bg-rm-bg-elevated hover:bg-rm-bg-hover border border-rm-border rounded-xl text-ui-sm font-bold text-rm-text-primary transition-colors"
       >
         <RefreshCw size={14} />
         Retry
@@ -1800,7 +1799,7 @@ function TabEmptyState({
   return (
     <div className="flex flex-col items-center justify-center py-16 gap-4 text-rm-text-muted">
       <div className="opacity-20">{icon}</div>
-      <span className="text-[13px] font-bold">{label}</span>
+      <span className="text-ui-sm font-medium">{label}</span>
     </div>
   );
 }
@@ -1827,6 +1826,11 @@ function MemberItem({
   const hasNameplate = nameplatePresentation.hasNameplate;
   const nameplateTheme = nameplatePresentation.theme;
   const highestRole = getHighestRole(member.roles);
+  // Role colour for the name; light themes darken it in CSS (.rm-role-name).
+  const roleNameColor =
+    !hasNameplate && isOnline && !member.user.display_name_style
+      ? highestRole?.color || undefined
+      : undefined;
   const isAdmin = Boolean(
     (highestRole?.permissions ?? 0) & PERMISSIONS.ADMINISTRATOR,
   );
@@ -1894,13 +1898,13 @@ function MemberItem({
       ref={buttonRef}
       className={cn(
         "group relative flex w-full cursor-pointer items-center gap-3 overflow-hidden border-0 bg-transparent p-0 text-left transition-colors lg:gap-2.5",
-        "bg-rm-bg-elevated px-3.5 py-3 mb-2 rounded-2xl", // mobile
+        "bg-rm-bg-elevated px-3.5 py-3 mb-2 rounded-lg", // mobile
         hasNameplate
           ? "border border-transparent"
           : "border border-rm-border/30",
         hasNameplate && "isolate",
         hasNameplate
-          ? "lg:bg-transparent lg:px-2 lg:py-1.5 lg:mb-0 lg:rounded-md lg:border-transparent lg:hover:bg-white/8"
+          ? "lg:bg-transparent lg:px-2 lg:py-1.5 lg:mb-0 lg:rounded-md lg:border-transparent lg:hover:bg-rm-bg-hover"
           : "lg:bg-transparent lg:px-2 lg:py-1.5 lg:mb-0 lg:rounded-md lg:border-transparent lg:hover:bg-rm-bg-hover", // desktop
         !isOnline && "opacity-60 grayscale hover:opacity-100 hover:grayscale-0",
       )}
@@ -1928,7 +1932,7 @@ function MemberItem({
         </>
       )}
       <div className="relative z-10">
-        <div className="flex h-10 w-10 lg:h-8 lg:w-8 shrink-0 items-center justify-center overflow-visible rounded-full bg-primary text-xs font-bold text-primary-foreground border border-rm-border transition-all group-hover:ring-2 group-hover:ring-primary/20">
+        <div className="flex h-10 w-10 lg:h-8 lg:w-8 shrink-0 items-center justify-center overflow-visible rounded-full bg-primary text-xs font-bold text-primary-foreground border border-rm-border transition-ui group-hover:ring-2 group-hover:ring-primary/20">
           {member.user.avatar_url ? (
             <AvatarImage
               src={getAuthAssetUrl(member.user.avatar_url)}
@@ -1968,17 +1972,21 @@ function MemberItem({
                   user={member.user}
                   text={displayName}
                   className={cn(
-                    "block min-w-0 truncate text-[15px] lg:text-[13px] font-bold lg:font-medium leading-[1.1] transition-colors",
+                    "block min-w-0 truncate text-ui-base lg:text-ui-sm font-semibold lg:font-medium leading-[1.2] transition-colors",
                     hasNameplate
                       ? "text-rm-text-primary"
                       : !isOnline
                         ? "text-rm-text-secondary"
                         : "group-hover:text-rm-text",
+                    roleNameColor && "rm-role-name",
                   )}
                   minContrastRatio={hasNameplate ? 2.8 : undefined}
                   style={
-                    !hasNameplate && isOnline && !member.user.display_name_style
-                      ? { color: highestRole?.color || undefined }
+                    roleNameColor
+                      ? ({
+                          color: roleNameColor,
+                          "--rm-role-color": roleNameColor,
+                        } as CSSProperties)
                       : undefined
                   }
                 />
@@ -2001,11 +2009,7 @@ function MemberItem({
                         <Crown className="h-3 w-3 fill-primary/20 text-primary" />
                       </span>
                     </TooltipTrigger>
-                    <TooltipContent
-                      side="top"
-                      sideOffset={8}
-                      className="rounded-lg border-none bg-rm-bg-floating px-3 py-2 text-[12px] font-bold text-rm-text-primary shadow-xl"
-                    >
+                    <TooltipContent side="top" sideOffset={8}>
                       Administrator
                     </TooltipContent>
                   </Tooltip>
@@ -2016,7 +2020,7 @@ function MemberItem({
             {member.user.custom_status && (
               <div
                 className={cn(
-                  "mt-0.5 truncate text-[11px] font-medium italic",
+                  "mt-0.5 truncate text-ui-2xs font-medium italic",
                   hasNameplate
                     ? "text-rm-text-secondary"
                     : "text-rm-text-muted",

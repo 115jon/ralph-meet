@@ -421,7 +421,7 @@ export function DMCallRegion({ channelId }: { channelId: string }) {
   return (
     <div
       className={cn(
-        "shrink-0 w-full flex flex-col relative overflow-hidden group transition-colors duration-300",
+        "shrink-0 w-full flex flex-col relative overflow-hidden group transition-colors duration-200",
         // Force hardware acceleration to prevent Chromium's diagonal tearing bug
         "bg-black transform-gpu will-change-transform",
         isExpanded
@@ -518,9 +518,9 @@ export function DMCallRegion({ channelId }: { channelId: string }) {
 
                       <div
                         className={cn(
-                          "relative h-full w-full rounded-full overflow-visible border-2 transition-all transform-gpu will-change-transform z-10 bg-zinc-900",
+                          "relative h-full w-full rounded-full overflow-visible border-2 transition-ui transform-gpu will-change-transform z-10 bg-zinc-900",
                           item.isSpeaking
-                            ? "border-primary shadow-[0_0_20px_var(--rm-glow)]"
+                            ? "border-primary shadow-[0_6px_18px_-6px_var(--rm-glow)]"
                             : "border-transparent",
                           isLobby &&
                             item.isReconnecting &&
@@ -559,9 +559,9 @@ export function DMCallRegion({ channelId }: { channelId: string }) {
                       {(item.isMuted || item.isDeafened) && (
                         <div className="absolute -bottom-1 -right-1 z-20 flex h-8 w-8 items-center justify-center rounded-full bg-zinc-900 border-2 border-black">
                           {item.isDeafened ? (
-                            <HeadphoneOff className="h-4 w-4 text-red-500" />
+                            <HeadphoneOff className="h-4 w-4 text-destructive" />
                           ) : (
-                            <MicOff className="h-4 w-4 text-red-500" />
+                            <MicOff className="h-4 w-4 text-destructive" />
                           )}
                         </div>
                       )}
@@ -572,17 +572,17 @@ export function DMCallRegion({ channelId }: { channelId: string }) {
                         <InlineEmojiText text={item.name} />
                       </p>
                       {item.isLocal && (
-                        <p className="text-[11px] font-medium text-white/50">
+                        <p className="text-ui-2xs font-medium text-white/50">
                           You
                         </p>
                       )}
                       {isLobby && !item.isLocal && isRingingOutgoing && (
-                        <p className="text-[11px] font-medium text-white/50 animate-pulse">
+                        <p className="text-ui-2xs font-medium text-white/50 animate-pulse">
                           Calling...
                         </p>
                       )}
                       {isLobby && !item.isLocal && isRingingIncoming && (
-                        <p className="text-[11px] font-medium text-white/50 animate-pulse">
+                        <p className="text-ui-2xs font-medium text-white/50 animate-pulse">
                           is calling...
                         </p>
                       )}
@@ -591,7 +591,7 @@ export function DMCallRegion({ channelId }: { channelId: string }) {
                         isActive &&
                         !isRingingOutgoing &&
                         !isRingingIncoming && (
-                          <p className="text-[11px] font-medium text-white/50">
+                          <p className="text-ui-2xs font-medium text-white/50">
                             {item.isReconnecting
                               ? "Reconnecting"
                               : item.isInVoice
@@ -611,7 +611,7 @@ export function DMCallRegion({ channelId }: { channelId: string }) {
       {/* Controls Container */}
       <div
         className={cn(
-          "pt-4 pb-4 px-6 flex items-center justify-center transition-all duration-300",
+          "pt-4 pb-4 px-6 flex items-center justify-center transition-ui",
           isFullscreenView
             ? "pointer-events-none bg-linear-to-t from-black/80 to-transparent pt-12 absolute bottom-0 left-0 right-0 z-50 opacity-0 group-hover:opacity-100"
             : "relative pb-6",
@@ -659,16 +659,12 @@ export function DMCallRegion({ channelId }: { channelId: string }) {
                   <TooltipTrigger asChild>
                     <button
                       onClick={handleCancelCall}
-                      className="flex items-center justify-center w-14 h-12 rounded-2xl bg-red-500 hover:bg-red-600 text-white transition-all shadow-lg"
+                      className="flex items-center justify-center w-14 h-12 rounded-2xl bg-destructive hover:bg-destructive/90 text-white transition-ui shadow-lg"
                     >
                       <X className="h-6 w-6" />
                     </button>
                   </TooltipTrigger>
-                  <TooltipContent
-                    side="top"
-                    className="bg-rm-bg-floating border-none text-rm-text-primary text-[13px] font-bold shadow-xl px-3 py-2 rounded-lg"
-                    sideOffset={8}
-                  >
+                  <TooltipContent side="top" sideOffset={8}>
                     <p>Cancel Call</p>
                   </TooltipContent>
                 </Tooltip>
@@ -679,16 +675,12 @@ export function DMCallRegion({ channelId }: { channelId: string }) {
                     <TooltipTrigger asChild>
                       <button
                         onClick={handleAcceptWithVideo}
-                        className="flex items-center justify-center w-14 h-12 rounded-2xl bg-green-600 hover:bg-green-500 text-white transition-all shadow-lg cursor-pointer"
+                        className="flex items-center justify-center w-14 h-12 rounded-2xl bg-green-600 hover:bg-green-500 text-white transition-ui shadow-lg cursor-pointer"
                       >
                         <Video className="h-6 w-6" />
                       </button>
                     </TooltipTrigger>
-                    <TooltipContent
-                      side="top"
-                      className="bg-rm-bg-floating border-none text-rm-text-primary text-[13px] font-bold shadow-xl px-3 py-2 rounded-lg"
-                      sideOffset={8}
-                    >
+                    <TooltipContent side="top" sideOffset={8}>
                       <p>Join with Video</p>
                     </TooltipContent>
                   </Tooltip>
@@ -699,16 +691,12 @@ export function DMCallRegion({ channelId }: { channelId: string }) {
                         onClick={(event) =>
                           handleAccept(getEventEpochMs(event))
                         }
-                        className="flex items-center justify-center w-14 h-12 rounded-2xl bg-green-600 hover:bg-green-500 text-white transition-all shadow-lg cursor-pointer"
+                        className="flex items-center justify-center w-14 h-12 rounded-2xl bg-green-600 hover:bg-green-500 text-white transition-ui shadow-lg cursor-pointer"
                       >
                         <Phone className="h-5 w-5 fill-current" />
                       </button>
                     </TooltipTrigger>
-                    <TooltipContent
-                      side="top"
-                      className="bg-rm-bg-floating border-none text-rm-text-primary text-[13px] font-bold shadow-xl px-3 py-2 rounded-lg"
-                      sideOffset={8}
-                    >
+                    <TooltipContent side="top" sideOffset={8}>
                       <p>Join Voice</p>
                     </TooltipContent>
                   </Tooltip>
@@ -718,16 +706,12 @@ export function DMCallRegion({ channelId }: { channelId: string }) {
                       <TooltipTrigger asChild>
                         <button
                           onClick={handleDecline}
-                          className="flex items-center justify-center w-14 h-12 rounded-2xl bg-red-500 hover:bg-red-600 text-white transition-all shadow-lg cursor-pointer"
+                          className="flex items-center justify-center w-14 h-12 rounded-2xl bg-destructive hover:bg-destructive/90 text-white transition-ui shadow-lg cursor-pointer"
                         >
                           <X className="h-6 w-6" />
                         </button>
                       </TooltipTrigger>
-                      <TooltipContent
-                        side="top"
-                        className="bg-rm-bg-floating border-none text-rm-text-primary text-[13px] font-bold shadow-xl px-3 py-2 rounded-lg"
-                        sideOffset={8}
-                      >
+                      <TooltipContent side="top" sideOffset={8}>
                         <p>Decline</p>
                       </TooltipContent>
                     </Tooltip>

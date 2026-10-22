@@ -173,13 +173,13 @@ export function AvatarPickerModal({
         <div className="fixed inset-0 z-60 flex items-center justify-center overflow-y-auto p-4">
           <DialogSurface
             showCloseButton={false}
-            className="relative my-auto w-full max-w-[520px] overflow-hidden rounded-[22px] border border-rm-border bg-rm-bg-primary text-rm-text shadow-[0_28px_90px_rgba(0,0,0,0.55)] outline-none animate-in fade-in zoom-in-95 duration-200 data-[state=closed]:animate-out data-[state=closed]:fade-out data-[state=closed]:zoom-out-95"
+            className="relative my-auto w-full max-w-[520px] overflow-hidden rounded-2xl border border-rm-border bg-rm-bg-primary text-rm-text shadow-[0_28px_90px_rgba(0,0,0,0.55)] outline-none animate-in fade-in zoom-in-95 duration-200 data-[state=closed]:animate-out data-[state=closed]:fade-out data-[state=closed]:zoom-out-95"
           >
             <header className="flex items-start justify-between gap-4 border-b border-rm-border px-6 py-5">
               <div>
                 <h2
                   id="avatar-picker-title"
-                  className="text-[24px] font-black tracking-tight"
+                  className="text-[24px] font-semibold tracking-tight"
                 >
                   {title}
                 </h2>
@@ -201,7 +201,7 @@ export function AvatarPickerModal({
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
                   disabled={Boolean(busyId)}
-                  className="group flex min-h-[150px] flex-col items-center justify-center rounded-[18px] border border-rm-border bg-rm-bg-surface px-4 py-5 transition-[background-color,border-color,transform] hover:border-primary/45 hover:bg-rm-bg-hover active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
+                  className="group flex min-h-[150px] flex-col items-center justify-center rounded-xl border border-rm-border bg-rm-bg-surface px-4 py-5 transition-[background-color,border-color,transform] hover:border-primary/45 hover:bg-rm-bg-hover active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   <ImagePlus className="mb-4 h-8 w-8 text-rm-text-muted transition-colors group-hover:text-rm-text" />
                   <span className="text-base font-bold">Upload Image</span>
@@ -214,9 +214,9 @@ export function AvatarPickerModal({
                   type="button"
                   onClick={() => setShowGifPicker(true)}
                   disabled={Boolean(busyId)}
-                  className="group relative flex min-h-[150px] overflow-hidden rounded-[18px] border border-rm-border bg-rm-bg-surface px-4 py-5 text-left transition-[background-color,border-color,transform] hover:border-primary/45 hover:bg-rm-bg-hover active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
+                  className="group relative flex min-h-[150px] overflow-hidden rounded-xl border border-rm-border bg-rm-bg-surface px-4 py-5 text-left transition-[background-color,border-color,transform] hover:border-primary/45 hover:bg-rm-bg-hover active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  <div className="absolute right-3 top-3 h-16 w-16 rounded-2xl bg-primary/10 transition-transform duration-300 group-hover:rotate-6 group-hover:scale-110" />
+                  <div className="absolute right-3 top-3 h-16 w-16 rounded-2xl bg-primary/10 transition-transform duration-200 group-hover:rotate-6" />
                   <div className="absolute bottom-5 right-9 h-10 w-10 rounded-xl bg-rm-bg-hover" />
                   <div className="relative z-10 mt-auto">
                     <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-xl bg-rm-bg-hover text-rm-text">
@@ -275,7 +275,7 @@ export function AvatarPickerModal({
                               type="button"
                               onClick={() => onSelectRecent?.(item)}
                               disabled={Boolean(busyId)}
-                              className="relative h-[58px] w-[58px] cursor-pointer overflow-hidden rounded-full border border-rm-border bg-rm-bg-elevated outline-none transition-[transform,box-shadow] hover:scale-105 hover:shadow-[0_0_0_4px_rgba(88,101,242,0.28),0_12px_24px_rgba(0,0,0,0.28)] focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-60"
+                              className="relative h-[58px] w-[58px] cursor-pointer overflow-hidden rounded-full border border-rm-border bg-rm-bg-elevated outline-none transition-[transform,box-shadow] hover:shadow-[0_0_0_4px_rgba(88,101,242,0.28),0_12px_24px_rgba(0,0,0,0.28)] focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-60"
                               aria-label={`Use ${displayName}'s recent avatar`}
                             >
                               <img
@@ -297,7 +297,7 @@ export function AvatarPickerModal({
                               onClick={() => void handleDelete(item)}
                               disabled={isCurrent || Boolean(busyId)}
                               className={cn(
-                                "absolute -right-1 -top-1 flex h-6 w-6 items-center justify-center rounded-full border border-rm-border bg-rm-bg-floating text-rm-text-muted opacity-0 shadow-lg transition-[opacity,background-color,color,transform] hover:bg-rose-500 hover:text-white group-hover/recent:opacity-100 focus-visible:opacity-100 active:scale-[0.96] disabled:cursor-not-allowed disabled:opacity-35",
+                                "absolute -right-1 -top-1 flex h-6 w-6 items-center justify-center rounded-full border border-rm-border bg-rm-bg-floating text-rm-text-muted opacity-0 shadow-lg transition-[opacity,background-color,color,transform] hover:bg-rm-badge hover:text-white group-hover/recent:opacity-100 focus-visible:opacity-100 active:scale-[0.96] disabled:cursor-not-allowed disabled:opacity-35",
                               )}
                               aria-label={
                                 isCurrent

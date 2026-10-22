@@ -51,9 +51,9 @@ const PROFILE_SURFACE_RATIO = 450 / 880;
 const MOBILE_MAX_SURFACE_HEIGHT = 600;
 const DESKTOP_MAX_SURFACE_HEIGHT = 620;
 const ACTION_CARD_CLASS =
-  "rounded-[18px] border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] p-2 shadow-[0_18px_38px_rgba(0,0,0,0.24)] backdrop-blur-md";
+  "rounded-xl border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] p-2 shadow-[0_18px_38px_rgba(0,0,0,0.24)] backdrop-blur-md";
 const ACTION_ROW_CLASS =
-  "group/item flex w-full items-center gap-3 rounded-[12px] px-3 py-2.5 text-[14px] font-medium text-[color:var(--rm-profile-custom-text)] transition-colors hover:bg-[var(--rm-profile-custom-card-bg)] outline-none";
+  "group/item flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-[14px] font-medium text-[color:var(--rm-profile-custom-text)] transition-colors hover:bg-[var(--rm-profile-custom-card-bg)] outline-none";
 
 function ActionRow({
   icon,
@@ -321,7 +321,7 @@ export default function UserAccountPopover({
                       size={14}
                       className="shrink-0 text-[color:var(--rm-profile-custom-muted)]"
                     />
-                    <span className="truncate text-[13px] italic font-medium text-[color:var(--rm-profile-custom-text)]">
+                    <span className="truncate text-ui-sm italic font-medium text-[color:var(--rm-profile-custom-text)]">
                       {user.custom_status || "Today I learned..."}
                     </span>
                   </button>
@@ -330,7 +330,7 @@ export default function UserAccountPopover({
                     <div className="absolute -inset-x-2 -bottom-2 -top-2 z-50 flex items-center rounded-2xl border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] p-1 shadow-[0_18px_40px_rgba(0,0,0,0.28)] backdrop-blur-xl animate-in fade-in zoom-in-95">
                       <input
                         type="text"
-                        className="flex-1 rounded-xl bg-white/10 px-3 py-2 text-[13px] text-[color:var(--rm-profile-custom-text)] outline-none placeholder:text-[color:var(--rm-profile-custom-muted)]"
+                        className="flex-1 rounded-xl bg-white/10 px-3 py-2 text-ui-sm text-[color:var(--rm-profile-custom-text)] outline-none placeholder:text-[color:var(--rm-profile-custom-muted)]"
                         aria-label="Custom status"
                         value={customStatusInput}
                         onChange={(event) =>
@@ -361,7 +361,7 @@ export default function UserAccountPopover({
                   backgroundColor={profileTheme.backgroundColor}
                   readableFallbackColor={profileTheme.textColor}
                 />
-                <p className="mt-1 text-[13px] text-[color:var(--rm-profile-custom-muted)]">
+                <p className="mt-1 text-ui-sm text-[color:var(--rm-profile-custom-muted)]">
                   @{user.username}
                 </p>
               </div>
@@ -378,7 +378,7 @@ export default function UserAccountPopover({
                       >
                         <ChevronLeft size={16} />
                       </button>
-                      <span className="text-xs font-bold uppercase tracking-[0.18em] text-[color:var(--rm-profile-custom-muted)]">
+                      <span className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-[color:var(--rm-profile-custom-muted)]">
                         Status
                       </span>
                     </div>

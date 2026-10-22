@@ -4,6 +4,7 @@ import { cn } from "@/lib/utils";
 import AttachmentList from "./AttachmentList";
 import { InputMentionOverlay } from "./InputMentionOverlay";
 import { MessageInputPlaceholder } from "./MessageInputPlaceholder";
+import { Plus } from "./Icons";
 
 import {
   useMessageInput,
@@ -88,7 +89,7 @@ export default function MessageInput({
       className="z-10 px-2 md:px-4 pt-0 relative"
       style={{ paddingBottom: "calc(16px + var(--safe-area-bottom, 0px))" }}
     >
-      <div className="group flex flex-col rounded-xl bg-rm-bg-elevated shadow-sm transition-all duration-300 border border-white/5 relative">
+      <div className="rm-composer group relative flex flex-col rounded-lg border border-rm-border bg-rm-bg-elevated transition-[border-color,box-shadow] focus-within:border-rm-border-strong">
         {shouldRenderReply && replyTo && (
           <ReplyIndicator
             replyTo={replyTo}
@@ -118,7 +119,7 @@ export default function MessageInput({
           onCancel={cancelUpload}
         />
 
-        <div className="flex items-start px-4 py-2.5">
+        <div className="flex items-start px-3 py-2.5">
           <input
             type="file"
             multiple
@@ -133,12 +134,11 @@ export default function MessageInput({
 
           <button
             type="button"
+            aria-label="Add attachment"
             onClick={() => fileInputRef.current?.click()}
-            className="group/plus mr-4 mt-[3px] flex h-6 w-6 shrink-0 items-center justify-center transition-all"
+            className="mr-3 mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-rm-bg-hover text-rm-text-muted transition-ui hover:bg-rm-bg-active hover:text-rm-text enabled:active:scale-[0.96]"
           >
-            <div className="flex h-6 w-6 items-center justify-center rounded-full text-[20px] font-medium text-rm-text-muted transition-colors group-hover/plus:text-rm-text pb-0.5 bg-rm-bg-primary/50 group-hover/plus:bg-rm-text-muted/20">
-              +
-            </div>
+            <Plus className="h-4 w-4" strokeWidth={2.5} />
           </button>
 
           <div className="relative flex-1 min-h-[32px] overflow-hidden">
@@ -150,7 +150,7 @@ export default function MessageInput({
                 <MessageInputPlaceholder
                   channelName={channelName}
                   replyDisplayName={replyDisplayName}
-                  className="py-1 text-[15px] font-medium leading-normal text-rm-text-muted/60 max-md:text-[16px]"
+                  className="py-1 text-ui-base font-normal leading-[1.375] text-rm-text-muted/60 max-md:text-ui-md"
                 />
               </div>
             )}
@@ -158,7 +158,7 @@ export default function MessageInput({
             <div
               ref={twinRef}
               aria-hidden="true"
-              className="absolute inset-0 z-0 whitespace-pre-wrap wrap-break-word py-1 text-[15px] font-medium leading-normal text-rm-text overflow-y-hidden pointer-events-none custom-scrollbar max-md:text-[16px]"
+              className="absolute inset-0 z-0 whitespace-pre-wrap wrap-break-word py-1 text-ui-base font-normal leading-[1.375] text-rm-text overflow-y-hidden pointer-events-none custom-scrollbar max-md:text-ui-md"
             >
               <InputMentionOverlay
                 text={value}
@@ -190,10 +190,10 @@ export default function MessageInput({
               onClick={enforceAtomicMentions}
               placeholder=""
               className={cn(
-                "custom-scrollbar relative z-10 w-full resize-none overflow-y-auto bg-transparent py-1 text-[15px] font-medium leading-normal text-transparent outline-none placeholder:text-rm-text-muted/60 selection:bg-primary/30 selection:text-transparent max-md:text-[16px]",
+                "custom-scrollbar relative z-10 w-full resize-none overflow-y-auto bg-transparent py-1 text-ui-base font-normal leading-[1.375] text-transparent outline-none placeholder:text-rm-text-muted/60 selection:bg-primary/30 selection:text-transparent max-md:text-ui-md",
               )}
               style={{
-                caretColor: "rgba(226, 232, 240, 0.9)",
+                caretColor: "var(--rm-accent)",
               }}
               data-gramm="false"
               autoComplete="off"

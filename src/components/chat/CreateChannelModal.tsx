@@ -130,14 +130,14 @@ export default function CreateChannelModal({
               <fieldset className="space-y-2">
                 <legend
                   id="channel-type-label"
-                  className="px-1 text-[11px] font-bold uppercase tracking-widest text-rm-text-muted/40"
+                  className="text-ui-2xs font-semibold uppercase tracking-[0.08em] px-1 text-rm-text-muted/40"
                 >
                   Channel Type
                 </legend>
                 <div className="space-y-2" aria-labelledby="channel-type-label">
                   <label
                     className={cn(
-                      "flex items-center gap-4 p-3 rounded-xl border cursor-pointer transition-all group outline-none focus:ring-2 focus:ring-primary/20",
+                      "flex items-center gap-4 p-3 rounded-xl border cursor-pointer transition-ui group outline-none focus:ring-2 focus:ring-primary/20",
                       type === "text"
                         ? "bg-rm-bg-active border-primary/50"
                         : "border-rm-border bg-rm-bg-surface/40 hover:bg-rm-bg-hover",
@@ -153,7 +153,7 @@ export default function CreateChannelModal({
                     <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
                       <Hash
                         size={24}
-                        className="text-primary group-hover:scale-110 transition-transform"
+                        className="text-primary transition-transform"
                       />
                     </div>
                     <div className="flex-1">
@@ -164,7 +164,7 @@ export default function CreateChannelModal({
                     </div>
                     <div
                       className={cn(
-                        "ml-auto w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all",
+                        "ml-auto w-5 h-5 rounded-full border-2 flex items-center justify-center transition-ui",
                         type === "text"
                           ? "border-primary"
                           : "border-rm-border group-hover:border-rm-text-muted/20",
@@ -178,7 +178,7 @@ export default function CreateChannelModal({
 
                   <label
                     className={cn(
-                      "flex items-center gap-4 p-3 rounded-xl border cursor-pointer transition-all group outline-none focus:ring-2 focus:ring-primary/20",
+                      "flex items-center gap-4 p-3 rounded-xl border cursor-pointer transition-ui group outline-none focus:ring-2 focus:ring-primary/20",
                       type === "voice"
                         ? "bg-rm-bg-active border-primary/50"
                         : "border-rm-border bg-rm-bg-surface/40 hover:bg-rm-bg-hover",
@@ -194,7 +194,7 @@ export default function CreateChannelModal({
                     <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
                       <Volume2
                         size={24}
-                        className="text-primary group-hover:scale-110 transition-transform"
+                        className="text-primary transition-transform"
                       />
                     </div>
                     <div className="flex-1">
@@ -205,7 +205,7 @@ export default function CreateChannelModal({
                     </div>
                     <div
                       className={cn(
-                        "ml-auto w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all",
+                        "ml-auto w-5 h-5 rounded-full border-2 flex items-center justify-center transition-ui",
                         type === "voice"
                           ? "border-primary"
                           : "border-rm-border group-hover:border-rm-text-muted/20",
@@ -223,7 +223,7 @@ export default function CreateChannelModal({
               <div className="space-y-1.5">
                 <label
                   htmlFor="channel-name"
-                  className="text-[11px] font-bold uppercase tracking-widest text-rm-text-muted/40 px-1"
+                  className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted/40 px-1"
                 >
                   Channel Name
                 </label>
@@ -248,7 +248,7 @@ export default function CreateChannelModal({
                     placeholder={
                       type === "text" ? "new-channel" : "General Voice"
                     }
-                    className="w-full rounded-xl border border-rm-border bg-rm-bg-surface pl-10 pr-4 py-3 text-rm-text outline-none transition-all placeholder:text-rm-text-muted/20 focus:border-primary/30 focus:ring-2 focus:ring-primary/20"
+                    className="w-full rounded-xl border border-rm-border bg-rm-bg-surface pl-10 pr-4 py-3 text-rm-text outline-none transition-ui placeholder:text-rm-text-muted/20 focus:border-primary/30 focus:ring-2 focus:ring-primary/20"
                   />
                 </div>
                 {error && (
@@ -269,7 +269,7 @@ export default function CreateChannelModal({
               <button
                 onClick={handleCreate}
                 disabled={!name.trim() || creating}
-                className="flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/20 transition-all hover:brightness-110 disabled:opacity-40"
+                className="flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/20 transition-ui hover:brightness-110 disabled:opacity-40"
               >
                 {creating && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
                 {creating ? "Creating…" : "Create Channel"}

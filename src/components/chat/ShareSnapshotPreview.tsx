@@ -140,7 +140,7 @@ export default function ShareSnapshotPreview({
       </div>
 
       {hasContent ? (
-        <div className="whitespace-pre-wrap text-[15px] font-medium leading-[1.25] text-rm-text">
+        <div className="whitespace-pre-wrap text-ui-base font-medium leading-[1.25] text-rm-text">
           <MarkdownRenderer content={content} />
         </div>
       ) : (
@@ -253,7 +253,7 @@ export default function ShareSnapshotPreview({
                   value={reaction.emoji}
                   customEmojiMap={reactionEmojiMap}
                   className="h-4 w-4"
-                  fallbackClassName="max-w-[84px] truncate text-[11px]"
+                  fallbackClassName="max-w-[84px] truncate text-ui-2xs"
                 />
                 <span>{reaction.count}</span>
               </span>

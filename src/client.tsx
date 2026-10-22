@@ -1,5 +1,8 @@
 async function bootstrap() {
-  if (import.meta.env.DEV) {
+  if (
+    import.meta.env.DEV &&
+    !window.location.pathname.startsWith("/ui-fixtures")
+  ) {
     const { scan } = await import("react-scan");
     scan({ enabled: true });
   }

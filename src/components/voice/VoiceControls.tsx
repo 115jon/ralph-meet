@@ -92,8 +92,7 @@ export function VoiceControls({
   const settings = useVoiceSettingsStore((s) => s.getSettings(settingsUserId));
 
   const isCall = variant === "call";
-  const pillBgClass =
-    "bg-rm-bg-surface/80 border-rm-border backdrop-blur-md shadow-2xl";
+  const pillBgClass = "bg-rm-bg-surface border-rm-border shadow-md";
   const btnBaseClass =
     "text-rm-text bg-transparent hover:bg-rm-bg-hover hover:text-rm-text transition-colors";
   const btnFilledClass =
@@ -128,7 +127,7 @@ export function VoiceControls({
           {isCall && !isFullscreen && (
             <div
               className={cn(
-                "flex items-center p-1 rounded-2xl border",
+                "flex items-center p-1 rounded-xl border",
                 pillBgClass,
               )}
             >
@@ -136,7 +135,7 @@ export function VoiceControls({
                 type="button"
                 onClick={toggleChatHidden}
                 className={cn(
-                  "w-10 h-10 md:w-12 md:h-10 rounded-xl flex items-center justify-center transition-all outline-none",
+                  "w-10 h-10 md:w-12 md:h-10 rounded-lg flex items-center justify-center transition-ui outline-none enabled:active:scale-[0.96]",
                   btnBaseClass,
                 )}
                 title={isChatHidden ? "Show Chat" : "Hide Chat"}
@@ -155,7 +154,7 @@ export function VoiceControls({
         >
           <div
             className={cn(
-              "flex items-center gap-0.5 md:gap-1 p-1 rounded-2xl border shrink-0",
+              "flex items-center gap-0.5 md:gap-1 p-1 rounded-xl border shrink-0",
               pillBgClass,
             )}
           >
@@ -171,7 +170,7 @@ export function VoiceControls({
               disabled={!hasMicrophone}
               onClick={toggleMic}
               className={cn(
-                "w-12 h-10 md:w-12 md:h-10 rounded-xl flex items-center justify-center transition-all outline-none",
+                "w-12 h-10 md:w-12 md:h-10 rounded-lg flex items-center justify-center transition-ui outline-none enabled:active:scale-[0.96]",
                 !isMicOn || !hasMicrophone
                   ? "bg-destructive text-destructive-foreground shadow-lg shadow-destructive/20"
                   : btnFilledClass,
@@ -190,7 +189,7 @@ export function VoiceControls({
               title={isDeafened ? "Undeafen" : "Deafen"}
               onClick={toggleDeafen}
               className={cn(
-                "w-12 h-10 md:w-12 md:h-10 rounded-xl flex items-center justify-center transition-all outline-none",
+                "w-12 h-10 md:w-12 md:h-10 rounded-lg flex items-center justify-center transition-ui outline-none enabled:active:scale-[0.96]",
                 isDeafened
                   ? "bg-destructive text-destructive-foreground"
                   : btnFilledClass,
@@ -222,7 +221,7 @@ export function VoiceControls({
                 });
               }}
               className={cn(
-                "w-12 h-10 md:w-12 md:h-10 rounded-xl flex items-center justify-center transition-all outline-none",
+                "w-12 h-10 md:w-12 md:h-10 rounded-lg flex items-center justify-center transition-ui outline-none enabled:active:scale-[0.96]",
                 isCameraOn
                   ? "bg-primary text-primary-foreground shadow-lg shadow-primary/20"
                   : btnFilledClass,
@@ -242,7 +241,7 @@ export function VoiceControls({
                 else setIsScreenModalOpen(true);
               }}
               className={cn(
-                "w-12 h-10 md:w-12 md:h-10 rounded-xl flex items-center justify-center transition-all outline-none",
+                "w-12 h-10 md:w-12 md:h-10 rounded-lg flex items-center justify-center transition-ui outline-none enabled:active:scale-[0.96]",
                 isScreenSharing
                   ? "bg-primary text-primary-foreground"
                   : btnFilledClass,
@@ -260,7 +259,7 @@ export function VoiceControls({
               title="Activities"
               onClick={onOpenActivities}
               className={cn(
-                "w-12 h-10 md:w-12 md:h-10 rounded-xl flex items-center justify-center transition-all outline-none",
+                "w-12 h-10 md:w-12 md:h-10 rounded-lg flex items-center justify-center transition-ui outline-none enabled:active:scale-[0.96]",
                 btnFilledClass,
               )}
             >
@@ -276,9 +275,9 @@ export function VoiceControls({
                   title="GIF & Sticker Reactions"
                   onClick={() => setIsStickerOpen((v) => !v)}
                   className={cn(
-                    "w-12 h-10 md:w-12 md:h-10 rounded-xl flex items-center justify-center transition-all outline-none",
+                    "w-12 h-10 md:w-12 md:h-10 rounded-lg flex items-center justify-center transition-ui outline-none enabled:active:scale-[0.96]",
                     isStickerOpen
-                      ? "bg-[#5865f2]/20 text-[#5865f2]"
+                      ? "bg-primary/15 text-primary"
                       : btnFilledClass,
                   )}
                 >
@@ -305,12 +304,12 @@ export function VoiceControls({
                     ? () => setFocusedId(null)
                     : handleLeave
               }
-              className="w-12 h-10 md:w-12 md:h-10 flex items-center justify-center bg-destructive text-destructive-foreground rounded-xl shadow-lg hover:brightness-110 active:scale-95 transition-all shrink-0 ml-1 md:ml-0"
+              className="w-12 h-10 md:w-12 md:h-10 flex items-center justify-center bg-destructive text-destructive-foreground rounded-lg shadow-md hover:brightness-110 enabled:active:scale-[0.96] transition-ui shrink-0 ml-1 md:ml-0"
             >
               <div className="relative w-5 h-5 flex items-center justify-center">
                 <div
                   className={cn(
-                    "absolute inset-0 transition-all duration-300 ease-in-out flex items-center justify-center",
+                    "absolute inset-0 transition-[opacity,transform] duration-200 ease-out flex items-center justify-center",
                     focusedItem?.isStreaming
                       ? "opacity-100 scale-100 rotate-0"
                       : "opacity-0 scale-75 rotate-45",
@@ -320,7 +319,7 @@ export function VoiceControls({
                 </div>
                 <div
                   className={cn(
-                    "absolute inset-0 transition-all duration-300 ease-in-out flex items-center justify-center",
+                    "absolute inset-0 transition-[opacity,transform] duration-200 ease-out flex items-center justify-center",
                     activeActivity
                       ? "opacity-100 scale-100 rotate-0"
                       : "opacity-0 scale-75 rotate-45",
@@ -330,7 +329,7 @@ export function VoiceControls({
                 </div>
                 <div
                   className={cn(
-                    "absolute inset-0 transition-all duration-300 ease-in-out flex items-center justify-center",
+                    "absolute inset-0 transition-[opacity,transform] duration-200 ease-out flex items-center justify-center",
                     !focusedItem?.isStreaming && !activeActivity
                       ? "opacity-100 scale-100 rotate-0"
                       : "opacity-0 scale-75 -rotate-45",
@@ -350,7 +349,7 @@ export function VoiceControls({
         >
           <div
             className={cn(
-              "flex items-center gap-0.5 md:gap-1 p-1 rounded-2xl border",
+              "flex items-center gap-0.5 md:gap-1 p-1 rounded-xl border",
               pillBgClass,
             )}
           >
@@ -358,7 +357,7 @@ export function VoiceControls({
               type="button"
               onClick={toggleFs}
               className={cn(
-                "w-10 h-10 md:w-12 md:h-10 flex items-center justify-center rounded-xl transition-all outline-none",
+                "w-10 h-10 md:w-12 md:h-10 flex items-center justify-center rounded-lg transition-ui outline-none enabled:active:scale-[0.96]",
                 btnBaseClass,
               )}
               title={isFullscreen ? "Exit Fullscreen" : "Fullscreen"}
@@ -370,7 +369,7 @@ export function VoiceControls({
                 type="button"
                 onClick={() => setShowMembers(!showMembers)}
                 className={cn(
-                  "w-10 h-10 md:w-12 md:h-10 flex items-center justify-center rounded-xl transition-all outline-none",
+                  "w-10 h-10 md:w-12 md:h-10 flex items-center justify-center rounded-lg transition-ui outline-none enabled:active:scale-[0.96]",
                   showMembers ? "text-rm-text bg-rm-bg-active" : btnBaseClass,
                 )}
                 title={showMembers ? "Hide Members" : "Show Members"}

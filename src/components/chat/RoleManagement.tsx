@@ -257,7 +257,7 @@ export default function RoleManagement({ serverId }: RoleManagementProps) {
       {/* Role List Sidebar */}
       <div className="w-48 bg-rm-bg-secondary border-r border-rm-border flex flex-col">
         <div className="p-3 border-b border-rm-border flex justify-between items-center">
-          <span className="text-xs font-bold uppercase tracking-widest text-rm-text-muted">
+          <span className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted">
             Roles
           </span>
           <button
@@ -304,7 +304,7 @@ export default function RoleManagement({ serverId }: RoleManagementProps) {
               <h3 className="font-bold text-rm-text flex items-center gap-2">
                 <Shield className="h-4 w-4" /> Edit Role
                 {state.selectedRole?.is_default && (
-                  <span className="text-[10px] bg-rm-bg-elevated px-1.5 py-0.5 rounded uppercase tracking-widest text-rm-text-muted">
+                  <span className="text-ui-2xs bg-rm-bg-elevated px-1.5 py-0.5 rounded uppercase tracking-widest text-rm-text-muted">
                     Default
                   </span>
                 )}
@@ -345,7 +345,7 @@ export default function RoleManagement({ serverId }: RoleManagementProps) {
                 <div className="space-y-1.5">
                   <label
                     htmlFor="role-name"
-                    className="text-xs font-bold uppercase tracking-widest text-rm-text-muted"
+                    className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted"
                   >
                     Role Name
                   </label>
@@ -366,7 +366,7 @@ export default function RoleManagement({ serverId }: RoleManagementProps) {
                 <div className="space-y-1.5">
                   <label
                     htmlFor="role-color"
-                    className="text-xs font-bold uppercase tracking-widest text-rm-text-muted"
+                    className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted"
                   >
                     Role Color
                   </label>

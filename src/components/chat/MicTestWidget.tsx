@@ -357,7 +357,7 @@ export function MicTestWidget({
         }}
         className={`shrink-0 rounded-lg border px-4 py-2 text-sm font-semibold transition-colors active:scale-[0.96] ${
           isPlaybackActive
-            ? "border-red-500/30 bg-red-500/10 text-red-300 hover:bg-red-500/20"
+            ? "border-destructive/30 bg-destructive/10 text-destructive hover:bg-destructive/20"
             : "border-rm-accent bg-rm-accent text-white hover:bg-rm-accent/90"
         }`}
       >

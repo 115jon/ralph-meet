@@ -92,11 +92,7 @@ export function UserPlatformIndicators({
                 />
               </span>
             </TooltipTrigger>
-            <TooltipContent
-              side="top"
-              sideOffset={8}
-              className="rounded-lg border-none bg-rm-bg-floating px-3 py-2 text-[12px] font-bold text-rm-text-primary shadow-xl"
-            >
+            <TooltipContent side="top" sideOffset={8}>
               {PLATFORM_META[platform].label}
             </TooltipContent>
           </Tooltip>

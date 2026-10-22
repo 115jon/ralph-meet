@@ -69,7 +69,7 @@ export function InputControls({
   const mediaButtonClassName = (isActive: boolean, hiddenClassName = "") =>
     cn(
       hiddenClassName,
-      "flex h-8 w-8 items-center justify-center rounded-lg transition-all hover:scale-105 hover:bg-rm-bg-hover",
+      "flex h-8 w-8 items-center justify-center rounded-md transition-ui hover:bg-rm-bg-hover enabled:active:scale-[0.96]",
       isActive
         ? "bg-rm-bg-hover text-primary shadow-sm dark:shadow-none"
         : "text-rm-text-muted hover:text-primary",
@@ -79,7 +79,7 @@ export function InputControls({
     gifPickerMediaType === "stickers" ? stickerBtnRef : gifBtnRef;
 
   return (
-    <div className="ml-2 mt-[4px] flex items-center gap-2 text-rm-text-muted md:gap-4">
+    <div className="ml-2 mt-0.5 flex items-center gap-0.5 text-rm-text-muted md:gap-1">
       <div className="relative">
         {showFavoriteNotice && (
           <div className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 -translate-x-1/2 whitespace-nowrap rounded-lg border border-yellow-500/30 dark:border-yellow-300/20 bg-rm-bg-floating px-3 py-1.5 text-xs font-bold text-yellow-800 dark:text-yellow-200 shadow-2xl animate-in fade-in slide-in-from-bottom-1">
@@ -92,7 +92,7 @@ export function InputControls({
           aria-label="Open GIF picker"
           title={showFavoriteNotice ? "Added to Favorites" : "GIFs"}
           className={cn(
-            "flex h-8 w-8 items-center justify-center rounded-lg transition-all hover:scale-105 hover:bg-rm-bg-hover hover:text-primary",
+            "flex h-8 w-8 items-center justify-center rounded-md transition-ui hover:bg-rm-bg-hover enabled:active:scale-[0.96] hover:text-primary",
             activeMediaButton === "gifs" &&
               "bg-rm-bg-hover text-primary shadow-sm dark:shadow-none",
             showFavoriteNotice &&
@@ -129,7 +129,7 @@ export function InputControls({
               }),
             )
           }
-          className="flex h-8 w-8 items-center justify-center rounded-lg transition-all hover:bg-rm-bg-hover hover:text-primary"
+          className="flex h-8 w-8 items-center justify-center rounded-md transition-ui hover:bg-rm-bg-hover enabled:active:scale-[0.96] hover:text-primary"
         >
           <Smile className="h-5 w-5" />
         </button>
@@ -152,7 +152,7 @@ export function InputControls({
       ) : null}
       <div
         className={cn(
-          "flex items-center overflow-hidden transition-all duration-300 ease-out md:hidden",
+          "flex items-center overflow-hidden transition-ui ease-out md:hidden",
           canSend
             ? "w-8 opacity-100"
             : "w-0 opacity-0 -ml-2 pointer-events-none",
@@ -162,7 +162,7 @@ export function InputControls({
           type="button"
           aria-label="Send message"
           onClick={onSend}
-          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-all hover:scale-105 bg-primary/10 text-primary hover:bg-primary/20"
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md transition-ui bg-primary text-primary-foreground hover:bg-primary/90 enabled:active:scale-[0.96]"
         >
           <Send className="h-4 w-4 ml-0.5" />
         </button>

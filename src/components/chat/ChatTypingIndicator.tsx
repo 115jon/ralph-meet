@@ -10,9 +10,9 @@ export function ChatTypingIndicator({
       role="status"
       aria-live="polite"
       aria-atomic="true"
-      className="pointer-events-none absolute bottom-full mb-2 left-6 z-20 flex items-center gap-2.5 px-3 py-1.5 rounded-xl bg-rm-bg-elevated/90 backdrop-blur-md border border-rm-border shadow-[0_8px_32px_rgba(0,0,0,0.4)] animate-in fade-in slide-in-from-bottom-1 duration-300"
+      className="pointer-events-none absolute bottom-full left-5 z-20 mb-1.5 flex h-7 items-center gap-2 rounded-md border border-rm-border bg-rm-bg-elevated px-2.5 shadow-sm animate-in fade-in slide-in-from-bottom-1 duration-150"
     >
-      <div role="presentation" className="flex gap-1 pb-0.5">
+      <div role="presentation" className="flex gap-1">
         <span
           aria-hidden="true"
           className="h-1 w-1 rounded-full bg-rm-accent animate-[pulse_900ms_cubic-bezier(0.16,1,0.3,1)_infinite] [animation-delay:-300ms]"
@@ -26,8 +26,8 @@ export function ChatTypingIndicator({
           className="h-1 w-1 rounded-full bg-rm-accent animate-[pulse_900ms_cubic-bezier(0.16,1,0.3,1)_infinite]"
         />
       </div>
-      <p className="text-[11px] font-bold tracking-tight text-rm-text-muted leading-none">
-        <span className="text-rm-accent">
+      <p className="text-ui-xs leading-none text-rm-text-muted">
+        <span className="font-semibold text-rm-text">
           {typingUsers.length <= 3
             ? typingUsers.join(", ")
             : `${typingUsers.length} people`}

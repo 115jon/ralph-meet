@@ -341,22 +341,18 @@ export function VoiceDashboard({
                       type="button"
                       ref={signalBtnRef}
                       onClick={() => setIsVoiceDetailsOpen(!isVoiceDetailsOpen)}
-                      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#23a559]/10 text-[#23a559] hover:bg-[#23a559]/20 transition-colors outline-none"
+                      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-rm-success/10 text-rm-success hover:bg-rm-success/20 transition-colors outline-none"
                     >
                       <SignalHigh size={18} className="animate-pulse" />
                     </button>
                   </TooltipTrigger>
-                  <TooltipContent
-                    side="top"
-                    sideOffset={12}
-                    className="bg-rm-bg-floating border-none text-rm-text-primary text-[13px] font-bold shadow-xl px-3 py-2 rounded-lg"
-                  >
+                  <TooltipContent side="top" sideOffset={12}>
                     <p className="flex items-center gap-1.5">
                       {stats ? (
                         `Latency: ${stats.ping} ms`
                       ) : (
                         <>
-                          <span className="inline-block w-1.5 h-1.5 rounded-full bg-[#23a559] animate-pulse" />
+                          <span className="inline-block w-1.5 h-1.5 rounded-full bg-rm-success animate-pulse" />
                           Connectingâ€¦
                         </>
                       )}
@@ -379,10 +375,10 @@ export function VoiceDashboard({
               aria-label="Open voice channel details"
             >
               <div className="flex flex-col min-w-0">
-                <span className="text-[14px] font-bold tracking-tight text-[#23a559] leading-tight">
+                <span className="text-[14px] font-bold tracking-tight text-rm-success leading-tight">
                   Voice Connected
                 </span>
-                <span className="text-[12px] font-medium text-rm-text-muted/80 truncate max-w-[140px] group-hover/voice-status:text-rm-text-muted">
+                <span className="text-ui-xs font-medium text-rm-text-muted/80 truncate max-w-[140px] group-hover/voice-status:text-rm-text-muted">
                   <InlineEmojiText
                     text={`${voiceChannelName || "General"} / ${serverName}`}
                   />
@@ -399,7 +395,7 @@ export function VoiceDashboard({
                         ref={spatialBtnRef}
                         onClick={() => setIsSpatialOpen((value) => !value)}
                         className={cn(
-                          "flex h-8 w-8 items-center justify-center rounded-lg p-1.5 text-rm-text-muted/60 hover:bg-rm-bg-hover hover:text-rm-text transition-all relative z-10 outline-none group",
+                          "flex h-8 w-8 items-center justify-center rounded-lg p-1.5 text-rm-text-muted/60 hover:bg-rm-bg-hover hover:text-rm-text transition-ui relative z-10 outline-none group",
                           spatialAudioState.enabled &&
                             settings.spatialAudioEnabled &&
                             settings.streamHighFidelity &&
@@ -409,11 +405,7 @@ export function VoiceDashboard({
                         <Sparkles size={18} />
                       </button>
                     </TooltipTrigger>
-                    <TooltipContent
-                      side="top"
-                      sideOffset={12}
-                      className="bg-rm-bg-floating border-none text-rm-text-primary text-[13px] font-bold shadow-xl px-3 py-2 rounded-lg"
-                    >
+                    <TooltipContent side="top" sideOffset={12}>
                       <p>Spatial Audio</p>
                     </TooltipContent>
                   </Tooltip>
@@ -467,7 +459,7 @@ export function VoiceDashboard({
                           setIsNoiseReductionOpen((value) => !value)
                         }
                         className={cn(
-                          "flex h-8 w-8 items-center justify-center rounded-lg p-1.5 text-rm-text-muted/60 hover:bg-rm-bg-hover hover:text-rm-text transition-all relative z-10 outline-none group",
+                          "flex h-8 w-8 items-center justify-center rounded-lg p-1.5 text-rm-text-muted/60 hover:bg-rm-bg-hover hover:text-rm-text transition-ui relative z-10 outline-none group",
                           settings.noiseReductionEnabled &&
                             "bg-sky-500/10 text-sky-300",
                         )}
@@ -487,11 +479,7 @@ export function VoiceDashboard({
                         </span>
                       </button>
                     </TooltipTrigger>
-                    <TooltipContent
-                      side="top"
-                      sideOffset={12}
-                      className="bg-rm-bg-floating border-none text-rm-text-primary text-[13px] font-bold shadow-xl px-3 py-2 rounded-lg"
-                    >
+                    <TooltipContent side="top" sideOffset={12}>
                       <p>Noise Suppression</p>
                     </TooltipContent>
                   </Tooltip>
@@ -502,7 +490,7 @@ export function VoiceDashboard({
                   <button
                     type="button"
                     onClick={() => onVoiceDisconnect?.()}
-                    className="flex h-8 w-8 items-center justify-center rounded-lg p-1.5 text-rm-text-muted/60 hover:bg-rm-bg-hover hover:text-rm-text transition-all relative z-10 outline-none group"
+                    className="flex h-8 w-8 items-center justify-center rounded-lg p-1.5 text-rm-text-muted/60 hover:bg-rm-bg-hover hover:text-rm-text transition-ui relative z-10 outline-none group"
                   >
                     <Phone
                       size={20}
@@ -511,11 +499,7 @@ export function VoiceDashboard({
                     />
                   </button>
                 </TooltipTrigger>
-                <TooltipContent
-                  side="top"
-                  sideOffset={12}
-                  className="bg-rm-bg-floating border-none text-rm-text-primary text-[13px] font-bold shadow-xl px-3 py-2 rounded-lg"
-                >
+                <TooltipContent side="top" sideOffset={12}>
                   <p>Disconnect</p>
                 </TooltipContent>
               </Tooltip>
@@ -581,22 +565,22 @@ export function VoiceDashboard({
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex flex-wrap items-center gap-1.5">
-                    <span className="text-[11px] font-black text-rm-text uppercase tracking-wider">
+                    <span className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text">
                       {streamSourceLabel}
                     </span>
-                    <span className="bg-primary text-[8px] font-black px-1 rounded text-primary-foreground shadow-sm uppercase leading-tight">
+                    <span className="bg-primary text-ui-2xs font-bold px-1 rounded text-primary-foreground shadow-sm uppercase leading-tight">
                       Live
                     </span>
                     {streamQualityBadge && (
-                      <span className="rounded bg-rm-bg-floating/80 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wide text-rm-text-muted">
+                      <span className="rounded bg-rm-bg-floating/80 px-1.5 py-0.5 text-ui-2xs font-bold uppercase tracking-wide text-rm-text-muted">
                         {streamQualityBadge}
                       </span>
                     )}
                   </div>
-                  <p className="truncate text-[12px] font-bold text-rm-text">
+                  <p className="truncate text-ui-xs font-bold text-rm-text">
                     {streamSourceTitle}
                   </p>
-                  <p className="truncate text-[10px] text-rm-text-muted">
+                  <p className="truncate text-ui-2xs text-rm-text-muted">
                     {streamSourceSubtitle}
                   </p>
                 </div>
@@ -610,7 +594,7 @@ export function VoiceDashboard({
                 <button
                   type="button"
                   onClick={onStopStreaming}
-                  className="flex-1 py-1.5 bg-primary hover:bg-primary/90 text-primary-foreground rounded font-bold text-[10px] transition-all flex items-center justify-center gap-1.5 shadow-lg shadow-primary/20"
+                  className="flex-1 py-1.5 bg-primary hover:bg-primary/90 text-primary-foreground rounded font-bold text-ui-2xs transition-ui flex items-center justify-center gap-1.5 shadow-lg shadow-primary/20"
                 >
                   <XCircle size={10} /> Stop Streaming
                 </button>
@@ -619,7 +603,7 @@ export function VoiceDashboard({
                     type="button"
                     onClick={() => setIsStreamMenuOpen(!isStreamMenuOpen)}
                     className={cn(
-                      "p-1.5 h-full rounded transition-all outline-none",
+                      "p-1.5 h-full rounded transition-ui outline-none",
                       isStreamMenuOpen
                         ? "bg-rm-bg-elevated text-rm-text"
                         : "bg-rm-bg-elevated/50 text-rm-text-muted hover:bg-rm-bg-elevated",
@@ -645,7 +629,7 @@ export function VoiceDashboard({
                         )}
                       >
                         <div className="px-3 py-1.5 border-b border-rm-border mb-1">
-                          <p className="text-[10px] font-bold text-rm-text-muted uppercase tracking-widest">
+                          <p className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted">
                             Stream Settings
                           </p>
                         </div>
@@ -722,7 +706,7 @@ export function VoiceDashboard({
                           <>
                             <div className="h-[1px] bg-rm-border my-1" />
                             <div className="px-3 py-1.5">
-                              <p className="text-[9px] font-bold text-rm-text-muted/40 uppercase tracking-widest">
+                              <p className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted/40">
                                 Quality
                               </p>
                             </div>
@@ -736,7 +720,7 @@ export function VoiceDashboard({
                                     setIsStreamMenuOpen(false);
                                   }}
                                   className={cn(
-                                    "w-full text-left px-3 py-1.5 text-[11px] font-medium rounded-md transition-all flex items-center justify-between group/q outline-none",
+                                    "w-full text-left px-3 py-1.5 text-ui-2xs font-medium rounded-md transition-ui flex items-center justify-between group/q outline-none",
                                     screenQuality === q
                                       ? "bg-primary/10 text-primary"
                                       : "text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text",
@@ -788,7 +772,7 @@ export function VoiceDashboard({
                     }}
                     disabled={!hasCamera}
                     className={cn(
-                      "flex flex-1 h-8 items-center justify-center rounded-[8px] transition-colors outline-none border border-transparent group",
+                      "flex flex-1 h-8 items-center justify-center rounded-md transition-colors outline-none border border-transparent group",
                       isCameraActive
                         ? "bg-rm-bg-active text-rm-text"
                         : "bg-rm-bg-hover border-rm-border text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-active",
@@ -805,11 +789,7 @@ export function VoiceDashboard({
                     )}
                   </button>
                 </TooltipTrigger>
-                <TooltipContent
-                  side="top"
-                  sideOffset={12}
-                  className="bg-rm-bg-floating border-none text-rm-text-primary text-[13px] font-bold shadow-xl px-3 py-2 rounded-lg"
-                >
+                <TooltipContent side="top" sideOffset={12}>
                   <p>
                     {!hasCamera
                       ? "No camera detected"
@@ -833,20 +813,16 @@ export function VoiceDashboard({
                       }
                     }}
                     className={cn(
-                      "flex flex-1 h-8 items-center justify-center rounded-[8px] transition-colors outline-none border border-transparent group",
+                      "flex flex-1 h-8 items-center justify-center rounded-md transition-colors outline-none border border-transparent group",
                       isScreenSharing
-                        ? "bg-[#23a559] text-white hover:bg-[#1f8b4c]"
+                        ? "bg-rm-success text-white hover:bg-[#1f8b4c]"
                         : "bg-rm-bg-hover border-rm-border text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-active",
                     )}
                   >
                     <Monitor size={18} className="group-hover:animate-wiggle" />
                   </button>
                 </TooltipTrigger>
-                <TooltipContent
-                  side="top"
-                  sideOffset={12}
-                  className="bg-rm-bg-floating border-none text-rm-text-primary text-[13px] font-bold shadow-xl px-3 py-2 rounded-lg"
-                >
+                <TooltipContent side="top" sideOffset={12}>
                   <p>
                     {isScreenSharing ? "Stop Streaming" : "Share Your Screen"}
                   </p>
@@ -861,7 +837,7 @@ export function VoiceDashboard({
                     onClick={() => {
                       onOpenActivities?.();
                     }}
-                    className="flex flex-1 h-8 items-center justify-center rounded-[8px] transition-colors outline-none bg-rm-bg-hover border border-rm-border text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-active group"
+                    className="flex flex-1 h-8 items-center justify-center rounded-md transition-colors outline-none bg-rm-bg-hover border border-rm-border text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-active group"
                   >
                     <Gamepad2
                       size={18}
@@ -869,11 +845,7 @@ export function VoiceDashboard({
                     />
                   </button>
                 </TooltipTrigger>
-                <TooltipContent
-                  side="top"
-                  sideOffset={12}
-                  className="bg-rm-bg-floating border-none text-rm-text-primary text-[13px] font-bold shadow-xl px-3 py-2 rounded-lg"
-                >
+                <TooltipContent side="top" sideOffset={12}>
                   <p>Start an Activity</p>
                 </TooltipContent>
               </Tooltip>
@@ -887,20 +859,16 @@ export function VoiceDashboard({
                       ref={soundboardBtnRef}
                       onClick={toggleSoundboardPicker}
                       className={cn(
-                        "flex w-full h-8 items-center justify-center rounded-[8px] transition-colors outline-none border group",
+                        "flex w-full h-8 items-center justify-center rounded-md transition-colors outline-none border group",
                         isSoundboardPickerOpen
-                          ? "bg-[#5865f2]/20 border-[#5865f2]/40 text-[#5865f2]"
+                          ? "bg-rm-accent/20 border-rm-accent/40 text-rm-accent"
                           : "bg-rm-bg-hover border-rm-border text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-active",
                       )}
                     >
                       <Radio size={18} className="group-hover:animate-wiggle" />
                     </button>
                   </TooltipTrigger>
-                  <TooltipContent
-                    side="top"
-                    sideOffset={12}
-                    className="bg-rm-bg-floating border-none text-rm-text-primary text-[13px] font-bold shadow-xl px-3 py-2 rounded-lg"
-                  >
+                  <TooltipContent side="top" sideOffset={12}>
                     <p>Open Soundboard</p>
                   </TooltipContent>
                 </Tooltip>
@@ -932,9 +900,9 @@ export function VoiceDashboard({
                         ref={stickerBtnRef}
                         onClick={() => setIsStickerPickerOpen((v) => !v)}
                         className={cn(
-                          "flex w-full h-8 items-center justify-center rounded-[8px] transition-colors outline-none border group",
+                          "flex w-full h-8 items-center justify-center rounded-md transition-colors outline-none border group",
                           isStickerPickerOpen
-                            ? "bg-[#5865f2]/20 border-[#5865f2]/40 text-[#5865f2]"
+                            ? "bg-rm-accent/20 border-rm-accent/40 text-rm-accent"
                             : "bg-rm-bg-hover border-rm-border text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-active",
                         )}
                       >
@@ -945,11 +913,7 @@ export function VoiceDashboard({
                       </button>
                     </div>
                   </TooltipTrigger>
-                  <TooltipContent
-                    side="top"
-                    sideOffset={12}
-                    className="bg-rm-bg-floating border-none text-rm-text-primary text-[13px] font-bold shadow-xl px-3 py-2 rounded-lg"
-                  >
+                  <TooltipContent side="top" sideOffset={12}>
                     <p>GIF &amp; Sticker Reactions</p>
                   </TooltipContent>
                 </Tooltip>

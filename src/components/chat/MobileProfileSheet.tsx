@@ -168,7 +168,7 @@ function ProfileHeader({
       </div>
 
       <div className="px-5 mt-3">
-        <div className="text-[28px] font-extrabold leading-tight">
+        <div className="text-[28px] font-semibold leading-tight">
           <ProfileDisplayName
             text={displayName}
             displayNameStyle={user.display_name_style}
@@ -180,7 +180,7 @@ function ProfileHeader({
         <p className="text-[14px] text-[color:var(--rm-profile-custom-muted)] font-medium">
           @{user.username.toLowerCase()}
         </p>
-        <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-[color:var(--rm-profile-custom-muted)]">
+        <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-ui-sm text-[color:var(--rm-profile-custom-muted)]">
           {user.pronouns?.trim() ? <span>{user.pronouns.trim()}</span> : null}
           <UserPlatformIndicators
             userId={user.id}
@@ -193,13 +193,13 @@ function ProfileHeader({
         </div>
 
         {user.custom_status && (
-          <p className="text-[13px] text-[color:var(--rm-profile-custom-muted)] mt-1 italic">
+          <p className="text-ui-sm text-[color:var(--rm-profile-custom-muted)] mt-1 italic">
             {user.custom_status}
           </p>
         )}
 
         {!isMe && (mutualFriends.count > 0 || mutualServers.count > 0) && (
-          <div className="flex items-center gap-2 mt-2 text-[13px] text-[color:var(--rm-profile-custom-muted)] font-medium">
+          <div className="flex items-center gap-2 mt-2 text-ui-sm text-[color:var(--rm-profile-custom-muted)] font-medium">
             {mutualFriends.count > 0 && (
               <span>
                 {mutualFriends.count} Mutual Friend
@@ -237,12 +237,12 @@ function ProfileActions({
         <div className="space-y-2.5">
           <ButtonBase
             onClick={onOpenProfileEditor}
-            className="w-full py-3 rounded-2xl bg-[var(--rm-profile-custom-button-bg)] hover:brightness-110 text-[color:var(--rm-profile-custom-button-text)] font-bold text-[15px] transition-[filter] flex items-center justify-center gap-2"
+            className="w-full py-3 rounded-2xl bg-[var(--rm-profile-custom-button-bg)] hover:brightness-110 text-[color:var(--rm-profile-custom-button-text)] font-bold text-ui-base transition-[filter] flex items-center justify-center gap-2"
           >
             <Settings size={18} />
             Edit Main Profile
           </ButtonBase>
-          <ButtonBase className="w-full py-3 rounded-2xl bg-[var(--rm-profile-custom-accent-muted)] hover:bg-[var(--rm-profile-custom-card-bg)] text-[color:var(--rm-profile-custom-text)] font-bold text-[15px] transition-colors flex items-center justify-center gap-2">
+          <ButtonBase className="w-full py-3 rounded-2xl bg-[var(--rm-profile-custom-accent-muted)] hover:bg-[var(--rm-profile-custom-card-bg)] text-[color:var(--rm-profile-custom-text)] font-bold text-ui-base transition-colors flex items-center justify-center gap-2">
             <Settings size={18} />
             Edit Per-server Profile
           </ButtonBase>
@@ -259,7 +259,7 @@ function ProfileActions({
                 className="text-[color:var(--rm-profile-custom-text)]"
               />
             </div>
-            <span className="text-[12px] font-semibold text-[color:var(--rm-profile-custom-muted)]">
+            <span className="text-ui-xs font-semibold text-[color:var(--rm-profile-custom-muted)]">
               Message
             </span>
           </ButtonBase>
@@ -270,7 +270,7 @@ function ProfileActions({
                 className="text-[color:var(--rm-profile-custom-text)]"
               />
             </div>
-            <span className="text-[12px] font-semibold text-[color:var(--rm-profile-custom-muted)]">
+            <span className="text-ui-xs font-semibold text-[color:var(--rm-profile-custom-muted)]">
               Voice Call
             </span>
           </ButtonBase>
@@ -281,7 +281,7 @@ function ProfileActions({
                 className="text-[color:var(--rm-profile-custom-text)]"
               />
             </div>
-            <span className="text-[12px] font-semibold text-[color:var(--rm-profile-custom-muted)]">
+            <span className="text-ui-xs font-semibold text-[color:var(--rm-profile-custom-muted)]">
               Video Call
             </span>
           </ButtonBase>
@@ -321,7 +321,7 @@ function ProfileCards({
     <div className="px-5 mt-6 space-y-3 pb-10">
       {user.bio?.trim() && (
         <div className="bg-[var(--rm-profile-custom-card-bg-strong)] rounded-2xl border border-[color:var(--rm-profile-custom-card-border)] p-4">
-          <h3 className="text-[13px] font-bold text-[color:var(--rm-profile-custom-text)] uppercase tracking-wide mb-2">
+          <h3 className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-[color:var(--rm-profile-custom-text)] mb-2">
             Bio
           </h3>
           <p className="text-[14px] text-[color:var(--rm-profile-custom-muted)] leading-relaxed">
@@ -331,10 +331,10 @@ function ProfileCards({
       )}
 
       <div className="bg-[var(--rm-profile-custom-card-bg-strong)] rounded-2xl border border-[color:var(--rm-profile-custom-card-border)] p-4">
-        <h3 className="text-[13px] font-bold text-[color:var(--rm-profile-custom-text)] uppercase tracking-wide mb-3">
+        <h3 className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-[color:var(--rm-profile-custom-text)] mb-3">
           {profileReferenceDate.label}
         </h3>
-        <div className="flex items-center gap-3 text-[13px] text-[color:var(--rm-profile-custom-muted)]">
+        <div className="flex items-center gap-3 text-ui-sm text-[color:var(--rm-profile-custom-muted)]">
           <div className="flex items-center gap-2">
             <Calendar
               size={16}
@@ -347,14 +347,14 @@ function ProfileCards({
 
       {visibleMemberRoles.length > 0 && (
         <div className="bg-[var(--rm-profile-custom-card-bg-strong)] rounded-2xl border border-[color:var(--rm-profile-custom-card-border)] p-4">
-          <h3 className="text-[13px] font-bold text-[color:var(--rm-profile-custom-text)] uppercase tracking-wide mb-3">
+          <h3 className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-[color:var(--rm-profile-custom-text)] mb-3">
             Roles
           </h3>
           <div className="flex flex-wrap gap-2">
             {visibleMemberRoles.map((role) => (
               <div
                 key={role.id}
-                className="flex items-center gap-1.5 rounded-full bg-[var(--rm-profile-custom-card-bg)] pl-2 pr-3 py-1 border border-[color:var(--rm-profile-custom-card-border)] text-[12px] font-medium"
+                className="flex items-center gap-1.5 rounded-full bg-[var(--rm-profile-custom-card-bg)] pl-2 pr-3 py-1 border border-[color:var(--rm-profile-custom-card-border)] text-ui-xs font-medium"
               >
                 <div
                   className="h-3 w-3 rounded-full shrink-0"
@@ -373,7 +373,7 @@ function ProfileCards({
 
       {hasModActions && (
         <div className="bg-[var(--rm-profile-custom-card-bg-strong)] rounded-2xl border border-[color:var(--rm-profile-custom-card-border)] p-4">
-          <h3 className="text-[13px] font-bold text-[color:var(--rm-profile-custom-text)] uppercase tracking-wide mb-3">
+          <h3 className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-[color:var(--rm-profile-custom-text)] mb-3">
             Moderator Actions
           </h3>
           <div className="space-y-0.5">
@@ -386,7 +386,7 @@ function ProfileCards({
                   size={22}
                   className="text-[color:var(--rm-profile-custom-muted)] shrink-0"
                 />
-                <span className="text-[15px] font-medium text-[color:var(--rm-profile-custom-text)]">
+                <span className="text-ui-base font-medium text-[color:var(--rm-profile-custom-text)]">
                   Manage
                 </span>
               </ButtonBase>
@@ -400,7 +400,7 @@ function ProfileCards({
                 className="w-full flex items-center gap-4 px-2 py-3 rounded-xl hover:bg-[var(--rm-profile-custom-card-bg)] transition-colors"
               >
                 <UserMinus size={22} className="text-destructive shrink-0" />
-                <span className="text-[15px] font-medium text-destructive">
+                <span className="text-ui-base font-medium text-destructive">
                   Kick
                 </span>
               </ButtonBase>
@@ -414,7 +414,7 @@ function ProfileCards({
                 className="w-full flex items-center gap-4 px-2 py-3 rounded-xl hover:bg-[var(--rm-profile-custom-card-bg)] transition-colors"
               >
                 <Ban size={22} className="text-destructive shrink-0" />
-                <span className="text-[15px] font-medium text-destructive">
+                <span className="text-ui-base font-medium text-destructive">
                   Ban
                 </span>
               </ButtonBase>
@@ -425,7 +425,7 @@ function ProfileCards({
 
       <div className="bg-[var(--rm-profile-custom-card-bg-strong)] rounded-2xl border border-[color:var(--rm-profile-custom-card-border)] p-4">
         <div className="flex items-center justify-between">
-          <span className="text-[13px] font-medium text-[color:var(--rm-profile-custom-muted)]">
+          <span className="text-ui-sm font-medium text-[color:var(--rm-profile-custom-muted)]">
             Note (only visible to you)
           </span>
         </div>

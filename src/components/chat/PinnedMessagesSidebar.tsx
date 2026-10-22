@@ -61,7 +61,7 @@ export const PinnedMessagesSidebar: React.FC<PinnedMessagesSidebarProps> = ({
         <div className="flex-1" />
         <button
           onClick={onClose}
-          className="w-8 h-8 flex items-center justify-center rounded-full bg-rm-bg-elevated hover:bg-rm-bg-hover text-rm-text-muted hover:text-rm-text transition-all outline-none"
+          className="w-8 h-8 flex items-center justify-center rounded-full bg-rm-bg-elevated hover:bg-rm-bg-hover text-rm-text-muted hover:text-rm-text transition-ui outline-none"
         >
           <X size={16} />
         </button>
@@ -71,7 +71,7 @@ export const PinnedMessagesSidebar: React.FC<PinnedMessagesSidebarProps> = ({
         {isLoading ? (
           <div className="py-12 flex flex-col items-center justify-center gap-3 text-rm-text-muted">
             <Loader2 className="w-8 h-8 animate-spin text-primary/50" />
-            <span className="text-xs font-bold uppercase tracking-widest">
+            <span className="text-ui-2xs font-semibold uppercase tracking-[0.08em]">
               Loading Pins...
             </span>
           </div>
@@ -87,7 +87,7 @@ export const PinnedMessagesSidebar: React.FC<PinnedMessagesSidebarProps> = ({
               <p className="text-rm-text-secondary font-bold mb-1">
                 No pinned messages
               </p>
-              <p className="text-[11px] text-rm-text-muted leading-relaxed">
+              <p className="text-ui-2xs text-rm-text-muted leading-relaxed">
                 Pin important messages to see them here.
               </p>
             </div>
@@ -139,10 +139,10 @@ const PinnedMessageItem = ({
   }
 
   return (
-    <div className="group p-5 rounded-2xl border border-rm-border bg-rm-bg-elevated/40 hover:bg-rm-bg-elevated/80 transition-all relative overflow-hidden flex flex-col gap-4">
+    <div className="group p-5 rounded-2xl border border-rm-border bg-rm-bg-elevated/40 hover:bg-rm-bg-elevated/80 transition-ui relative overflow-hidden flex flex-col gap-4">
       <div className="flex items-start justify-between gap-4">
         <div className="flex gap-4 min-w-0">
-          <div className="mt-0.5 flex h-12 w-12 shrink-0 items-center justify-center overflow-visible rounded-full bg-primary/10 text-base font-bold text-primary border border-rm-border transition-transform group-hover:scale-105 duration-300">
+          <div className="mt-0.5 flex h-12 w-12 shrink-0 items-center justify-center overflow-visible rounded-full bg-primary/10 text-base font-bold text-primary border border-rm-border transition-transform duration-200">
             {authorInfo.avatarUrl ? (
               <AvatarImage
                 src={getAuthAssetUrl(authorInfo.avatarUrl)}
@@ -158,10 +158,10 @@ const PinnedMessageItem = ({
           </div>
           <div className="flex flex-col min-w-0 pt-0.5">
             <div className="flex items-center gap-2 mb-1">
-              <span className="font-bold text-[15px] text-rm-text truncate">
+              <span className="font-bold text-ui-base text-rm-text truncate">
                 {authorInfo.displayName}
               </span>
-              <span className="text-[11px] text-rm-text-muted font-medium shrink-0">
+              <span className="text-ui-2xs text-rm-text-muted font-medium shrink-0">
                 {formatDate(msg.created_at, {
                   year: "numeric",
                   month: "numeric",
@@ -175,7 +175,7 @@ const PinnedMessageItem = ({
                 <MarkdownRenderer content={msg.content} />
                 {msg.updated_at && (
                   <span
-                    className="ml-1.5 text-[10px] text-rm-text-muted font-medium"
+                    className="ml-1.5 text-ui-2xs text-rm-text-muted font-medium"
                     title={`Edited ${formatDate(msg.updated_at, {
                       year: "numeric",
                       month: "numeric",
@@ -229,7 +229,7 @@ const PinnedMessageItem = ({
                       key={att.id}
                       href={getDownloadUrl(att.url || `/api/${att.file_key}`)}
                       download={att.filename}
-                      className="flex items-center gap-3 rounded-xl border border-rm-border bg-rm-bg-primary/20 px-4 py-3 transition-all hover:border-rm-border hover:bg-rm-bg-hover group/file max-w-[280px]"
+                      className="flex items-center gap-3 rounded-xl border border-rm-border bg-rm-bg-primary/20 px-4 py-3 transition-ui hover:border-rm-border hover:bg-rm-bg-hover group/file max-w-[280px]"
                     >
                       <div
                         className={cn(
@@ -240,10 +240,10 @@ const PinnedMessageItem = ({
                         <TypeIcon size={18} />
                       </div>
                       <div className="min-w-0 flex-1">
-                        <p className="truncate text-[12px] font-bold text-primary group-hover/file:underline">
+                        <p className="truncate text-ui-xs font-bold text-primary group-hover/file:underline">
                           {att.filename}
                         </p>
-                        <p className="text-[10px] text-rm-text-muted font-medium uppercase tracking-tighter">
+                        <p className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted">
                           {formatFileSize(att.size_bytes)}
                         </p>
                       </div>
@@ -256,10 +256,10 @@ const PinnedMessageItem = ({
           </div>
         </div>
 
-        <div className="flex items-center gap-1.5 shrink-0 opacity-0 group-hover:opacity-100 transition-all duration-200 -translate-y-1 group-hover:translate-y-0">
+        <div className="flex items-center gap-1.5 shrink-0 opacity-0 group-hover:opacity-100 transition-ui -translate-y-1 group-hover:translate-y-0">
           <button
             onClick={() => onJumpToMessage(msg.id)}
-            className="px-4 py-1.5 bg-primary hover:brightness-110 text-primary-foreground font-bold text-[11px] rounded-lg transition-all shadow-lg shadow-primary/10"
+            className="px-4 py-1.5 bg-primary hover:brightness-110 text-primary-foreground font-bold text-ui-2xs rounded-lg transition-ui shadow-lg shadow-primary/10"
           >
             Jump
           </button>
@@ -269,7 +269,7 @@ const PinnedMessageItem = ({
                 e.stopPropagation();
                 onUnpin(msg.id, e.shiftKey);
               }}
-              className="p-1.5 hover:bg-destructive/10 text-rm-text-muted hover:text-destructive transition-all rounded-lg outline-none"
+              className="p-1.5 hover:bg-destructive/10 text-rm-text-muted hover:text-destructive transition-ui rounded-lg outline-none"
               title="Unpin (Shift-click to bypass confirmation)"
             >
               <X size={18} />

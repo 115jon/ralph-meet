@@ -33,7 +33,7 @@ export default function AttachmentList({
   return (
     <div
       className={cn(
-        "flex flex-wrap gap-3 border-rm-border bg-rm-bg-elevated rounded-t-2xl transition-all duration-300 ease-out overflow-hidden",
+        "flex flex-wrap gap-3 border-rm-border bg-rm-bg-elevated rounded-t-2xl transition-ui ease-out overflow-hidden",
         hasFiles
           ? "p-4 border-b max-h-[400px] opacity-100 translate-y-0"
           : "max-h-0 p-0 border-b-0 opacity-0 translate-y-2 pointer-events-none",
@@ -100,7 +100,7 @@ export default function AttachmentList({
                   >
                     <TypeIcon size={24} />
                   </div>
-                  <span className="text-[10px] text-rm-text font-medium text-center line-clamp-2 px-1">
+                  <span className="text-ui-2xs text-rm-text font-medium text-center line-clamp-2 px-1">
                     {att.filename}
                   </span>
                 </div>
@@ -111,7 +111,7 @@ export default function AttachmentList({
             type="button"
             onClick={() => onToggleSensitive(att.id)}
             className={cn(
-              "absolute bottom-1 left-1 inline-flex items-center gap-1 rounded-full px-2 py-1 text-[9px] font-black uppercase tracking-[0.14em] backdrop-blur-sm transition",
+              "absolute bottom-1 left-1 inline-flex items-center gap-1 rounded-full px-2 py-1 text-ui-2xs font-bold uppercase tracking-[0.14em] backdrop-blur-sm transition",
               att.is_nsfw
                 ? "bg-amber-500/85 text-black hover:bg-amber-400"
                 : "bg-black/50 text-white/80 hover:bg-black/65 hover:text-white",
@@ -124,7 +124,7 @@ export default function AttachmentList({
             <button
               type="button"
               onClick={() => onRemove(att.id)}
-              className="p-1.5 bg-black/50 hover:bg-destructive text-rm-text rounded-lg transition-all backdrop-blur-sm shadow-sm"
+              className="p-1.5 bg-black/50 hover:bg-destructive text-rm-text rounded-lg transition-ui backdrop-blur-sm shadow-sm"
             >
               <Trash2 size={14} />
             </button>
@@ -158,7 +158,7 @@ export default function AttachmentList({
               size={24}
               className="text-primary animate-spin mb-2 drop-shadow-[0_0_8px_var(--rm-glow)]"
             />
-            <span className="text-[10px] text-rm-text-secondary font-medium truncate w-full text-center px-1 mb-1">
+            <span className="text-ui-2xs text-rm-text-secondary font-medium truncate w-full text-center px-1 mb-1">
               {p.file.name}
             </span>
           </div>
@@ -166,7 +166,7 @@ export default function AttachmentList({
             <button
               type="button"
               onClick={() => onCancel(p.tempId)}
-              className="p-1.5 bg-black/50 hover:bg-destructive text-rm-text/80 hover:text-rm-text rounded-lg transition-all backdrop-blur-sm shadow-sm"
+              className="p-1.5 bg-black/50 hover:bg-destructive text-rm-text/80 hover:text-rm-text rounded-lg transition-ui backdrop-blur-sm shadow-sm"
             >
               <X size={14} />
             </button>

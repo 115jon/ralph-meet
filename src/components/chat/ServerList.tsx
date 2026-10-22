@@ -216,23 +216,23 @@ export default function ServerList({
         <div className="group relative flex w-full justify-center">
           <button
             className={cn(
-              "relative flex h-12 w-12 cursor-pointer items-center justify-center rounded-[24px] bg-rm-bg-elevated text-rm-text-primary transition-all duration-300 hover:rounded-[16px] hover:bg-primary hover:text-primary-foreground",
+              "relative flex h-12 w-12 cursor-pointer items-center justify-center rounded-full bg-rm-rail-item text-rm-text-primary transition-ui enabled:active:scale-[0.96] hover:rounded-xl hover:bg-primary hover:text-primary-foreground",
               activeServerId === "@me" &&
-                "rounded-[16px] bg-primary text-primary-foreground shadow-[0_0_20px_var(--rm-glow)]",
+                "rounded-xl bg-primary text-primary-foreground shadow-[0_6px_18px_-6px_var(--rm-glow)]",
             )}
             onClick={() => onSelect("@me")}
             aria-label="Direct messages"
           >
             <HomeIcon className="h-7 w-7" />
             {homeBadgeCount > 0 && (
-              <div className="pointer-events-none absolute -bottom-1 -right-1 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-bold text-white ring-[3px] ring-rm-bg-floating animate-in zoom-in duration-200">
+              <div className="pointer-events-none absolute -bottom-1 -right-1 badge-count ring-[3px] ring-rm-bg-floating animate-in zoom-in duration-200">
                 {homeBadgeCount > 99 ? "99+" : homeBadgeCount}
               </div>
             )}
           </button>
           <div
             className={cn(
-              "absolute left-0 top-1/2 w-1 -translate-y-1/2 rounded-r-full bg-rm-text transition-all duration-300",
+              "absolute left-0 top-1/2 w-1 -translate-y-1/2 rounded-r-full bg-rm-text transition-ui",
               activeServerId === "@me" ? "h-10" : "h-0 group-hover:h-5",
             )}
           />
@@ -240,7 +240,7 @@ export default function ServerList({
 
         {hasDmSection && (
           <>
-            <div className="mx-auto h-[2px] w-8 rounded-full bg-rm-border" />
+            <div className="mx-auto h-0.5 w-8 rounded-full bg-rm-border" />
 
             {visibleDms.map((dm) => {
               const isActiveDm =
@@ -254,10 +254,10 @@ export default function ServerList({
                 >
                   <button
                     className={cn(
-                      "relative flex h-12 w-12 cursor-pointer items-center justify-center rounded-full transition-all duration-300",
+                      "relative flex h-12 w-12 cursor-pointer items-center justify-center rounded-full transition-ui enabled:active:scale-[0.96]",
                       isActiveDm
-                        ? "ring-2 ring-primary shadow-[0_0_20px_var(--rm-glow)]"
-                        : "ring-1 ring-white/10 hover:ring-white/30",
+                        ? "ring-2 ring-primary shadow-[0_6px_18px_-6px_var(--rm-glow)]"
+                        : "ring-1 ring-rm-border hover:ring-rm-border-strong",
                     )}
                     onClick={() => onSelectDm?.(dm.channelId)}
                   >
@@ -268,15 +268,15 @@ export default function ServerList({
                         display={dm.recipient.avatar_display}
                       />
                     ) : (
-                      <div className="flex h-full w-full items-center justify-center rounded-[inherit] bg-rm-bg-elevated text-sm font-bold text-rm-text">
+                      <div className="flex h-full w-full items-center justify-center rounded-[inherit] bg-rm-rail-item text-sm font-bold text-rm-text">
                         {getDisplayInitial(dm.recipient)}
                       </div>
                     )}
-                    <div className="pointer-events-none fixed left-[80px] z-150 hidden whitespace-nowrap rounded border border-rm-border bg-rm-bg-floating px-2 py-1 text-xs font-medium text-rm-text opacity-0 shadow-xl transition-opacity group-hover:opacity-100 md:block">
+                    <div className="pointer-events-none fixed left-[80px] z-150 hidden whitespace-nowrap rounded-md border border-rm-border bg-rm-bg-floating px-2.5 py-1.5 text-ui-sm font-medium text-rm-text opacity-0 shadow-md transition-opacity group-hover:opacity-100 md:block">
                       <InlineEmojiText text={displayName} />
                     </div>
                     {(dm.unreadCount ?? 1) > 0 && (
-                      <div className="pointer-events-none absolute -bottom-1 -right-1 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-bold text-white ring-[3px] ring-rm-bg-floating">
+                      <div className="pointer-events-none absolute -bottom-1 -right-1 badge-count ring-[3px] ring-rm-bg-floating">
                         {(dm.unreadCount ?? 1) > 99
                           ? "99+"
                           : (dm.unreadCount ?? 1)}
@@ -285,7 +285,7 @@ export default function ServerList({
                   </button>
                   <div
                     className={cn(
-                      "absolute left-0 top-1/2 w-1 -translate-y-1/2 rounded-r-full bg-rm-text transition-all duration-300",
+                      "absolute left-0 top-1/2 w-1 -translate-y-1/2 rounded-r-full bg-rm-text transition-ui",
                       isActiveDm ? "h-10" : "h-2 group-hover:h-5",
                     )}
                   />
@@ -295,7 +295,7 @@ export default function ServerList({
 
             {overflowCount > 0 && (
               <button
-                className="flex h-10 w-10 cursor-pointer items-center justify-center rounded-full bg-rm-bg-elevated text-[11px] font-bold text-rm-text-muted transition-all hover:bg-rm-bg-hover hover:text-rm-text"
+                className="flex h-10 w-10 cursor-pointer items-center justify-center rounded-full bg-rm-bg-elevated text-ui-2xs font-bold text-rm-text-muted transition-ui hover:bg-rm-bg-hover hover:text-rm-text"
                 onClick={() => setDmExpanded(true)}
               >
                 +{overflowCount}
@@ -304,7 +304,7 @@ export default function ServerList({
 
             {dmExpanded && unreadDms.length > MAX_VISIBLE_DMS && (
               <button
-                className="flex h-6 w-10 cursor-pointer items-center justify-center rounded-full bg-rm-bg-elevated text-[10px] font-medium text-rm-text-muted transition-all hover:bg-rm-bg-hover hover:text-rm-text"
+                className="flex h-6 w-10 cursor-pointer items-center justify-center rounded-full bg-rm-bg-elevated text-ui-2xs font-medium text-rm-text-muted transition-ui hover:bg-rm-bg-hover hover:text-rm-text"
                 onClick={() => setDmExpanded(false)}
               >
                 Less
@@ -313,7 +313,7 @@ export default function ServerList({
           </>
         )}
 
-        <div className="mx-auto h-[2px] w-8 rounded-full bg-rm-border" />
+        <div className="mx-auto h-0.5 w-8 rounded-full bg-rm-border" />
 
         {servers.map((server) => {
           const isActive = activeServerId === server.id;
@@ -348,10 +348,10 @@ export default function ServerList({
                 <TooltipTrigger asChild>
                   <button
                     className={cn(
-                      "relative flex h-12 w-12 cursor-pointer items-center justify-center rounded-[24px] font-bold transition-all duration-300 hover:rounded-[16px]",
+                      "relative flex h-12 w-12 cursor-pointer items-center justify-center rounded-full font-bold transition-ui enabled:active:scale-[0.96] hover:rounded-xl",
                       isActive
-                        ? "bg-primary text-primary-foreground shadow-[0_0_20px_var(--rm-glow)]"
-                        : "bg-rm-bg-elevated text-rm-text hover:bg-primary hover:text-primary-foreground",
+                        ? "bg-primary text-primary-foreground shadow-[0_6px_18px_-6px_var(--rm-glow)]"
+                        : "bg-rm-rail-item text-rm-text hover:bg-primary hover:text-primary-foreground",
                     )}
                     onClick={() => onSelect(server.id)}
                     onContextMenu={(event) =>
@@ -379,7 +379,7 @@ export default function ServerList({
                           isInLocalVoiceServer ? "true" : "false"
                         }
                         className={cn(
-                          "pointer-events-none absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full border text-[10px] shadow-[0_4px_12px_rgba(0,0,0,0.28)] ring-[3px] ring-rm-bg-floating transition-colors",
+                          "pointer-events-none absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full border text-ui-2xs shadow-[0_4px_12px_rgba(0,0,0,0.28)] ring-[3px] ring-rm-bg-floating transition-colors",
                           isInLocalVoiceServer
                             ? "border-primary/40 bg-primary text-primary-foreground"
                             : "border-rm-border bg-rm-bg-elevated text-rm-text-secondary",
@@ -390,7 +390,7 @@ export default function ServerList({
                     )}
 
                     {mentionCount > 0 && (
-                      <div className="pointer-events-none absolute -bottom-1 -right-1 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-bold text-white ring-[3px] ring-rm-bg-floating animate-in zoom-in duration-200">
+                      <div className="pointer-events-none absolute -bottom-1 -right-1 badge-count ring-[3px] ring-rm-bg-floating animate-in zoom-in duration-200">
                         {mentionCount > 99 ? "99+" : mentionCount}
                       </div>
                     )}
@@ -404,10 +404,8 @@ export default function ServerList({
                   sideOffset={14}
                   data-server-tooltip={voiceSummary ? "voice" : "label"}
                   className={cn(
-                    "border-rm-border bg-rm-bg-floating text-rm-text shadow-2xl",
-                    voiceSummary
-                      ? "w-[248px] max-w-[calc(100vw-112px)] rounded-2xl px-0 py-0"
-                      : "rounded-lg px-2 py-1 text-xs font-medium",
+                    voiceSummary &&
+                      "w-[248px] max-w-[calc(100vw-112px)] rounded-lg px-0 py-0 shadow-lg",
                   )}
                 >
                   {voiceSummary ? (
@@ -415,7 +413,7 @@ export default function ServerList({
                       <p className="truncate text-sm font-semibold">
                         <InlineEmojiText text={server.name} />
                       </p>
-                      <p className="mt-1 text-[11px] font-medium text-rm-text-muted">
+                      <p className="mt-1 text-ui-2xs font-medium text-rm-text-muted">
                         {formatVoiceSummary(
                           voiceSummary.totalMembers,
                           voiceSummary.activeChannels.length,
@@ -447,7 +445,7 @@ export default function ServerList({
                                     />
                                   </span>
                                 </div>
-                                <p className="mt-1 text-[11px] text-rm-text-muted">
+                                <p className="mt-1 text-ui-2xs text-rm-text-muted">
                                   {channel.members.length === 1
                                     ? "1 person"
                                     : `${channel.members.length} people`}
@@ -464,7 +462,7 @@ export default function ServerList({
                                     <div
                                       key={`${channel.channelId}-${member.clerk_user_id}`}
                                       className={cn(
-                                        "flex h-7 w-7 items-center justify-center overflow-hidden rounded-full border border-rm-bg-floating bg-rm-bg-secondary text-[10px] font-semibold text-rm-text",
+                                        "flex h-7 w-7 items-center justify-center overflow-hidden rounded-full border border-rm-bg-floating bg-rm-bg-secondary text-ui-2xs font-semibold text-rm-text",
                                         index > 0 && "-ml-2",
                                       )}
                                     >
@@ -484,7 +482,7 @@ export default function ServerList({
                                 })}
 
                                 {hiddenMemberCount > 0 && (
-                                  <div className="-ml-2 flex h-7 w-7 items-center justify-center rounded-full border border-rm-bg-floating bg-rm-bg-secondary text-[10px] font-semibold text-rm-text-secondary">
+                                  <div className="-ml-2 flex h-7 w-7 items-center justify-center rounded-full border border-rm-bg-floating bg-rm-bg-secondary text-ui-2xs font-semibold text-rm-text-secondary">
                                     +{hiddenMemberCount}
                                   </div>
                                 )}
@@ -494,7 +492,7 @@ export default function ServerList({
                         })}
 
                         {hiddenVoiceChannelCount > 0 && (
-                          <p className="text-[11px] font-medium text-rm-text-muted">
+                          <p className="text-ui-2xs font-medium text-rm-text-muted">
                             {formatMoreChannels(hiddenVoiceChannelCount)}
                           </p>
                         )}
@@ -508,7 +506,7 @@ export default function ServerList({
 
               <div
                 className={cn(
-                  "absolute left-0 top-1/2 w-1 -translate-y-1/2 rounded-r-full bg-rm-text transition-all duration-300",
+                  "absolute left-0 top-1/2 w-1 -translate-y-1/2 rounded-r-full bg-rm-text transition-ui",
                   isActive
                     ? "h-10"
                     : hasUnread
@@ -521,7 +519,7 @@ export default function ServerList({
         })}
 
         <button
-          className="group relative flex h-12 w-12 cursor-pointer items-center justify-center rounded-[24px] bg-rm-bg-elevated text-rm-text-primary transition-all duration-300 hover:rounded-[16px] hover:bg-primary hover:text-primary-foreground"
+          className="group relative flex h-12 w-12 cursor-pointer items-center justify-center rounded-full bg-rm-rail-item text-rm-text-primary transition-ui enabled:active:scale-[0.96] hover:rounded-xl hover:bg-primary hover:text-primary-foreground"
           onClick={() => setShowCreate(true)}
           aria-label="Create server"
         >

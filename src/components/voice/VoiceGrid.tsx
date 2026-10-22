@@ -129,13 +129,13 @@ export const VoiceGrid = React.memo(
       return (
         <div
           data-focused-stage="true"
-          className="relative flex h-full w-full flex-col items-center justify-center overflow-hidden bg-rm-bg-primary group/stage cursor-pointer transition-shadow hover:ring-2 hover:ring-rm-text/20"
+          className="relative flex h-full w-full flex-col items-center justify-center overflow-hidden bg-rm-bg-primary group/stage cursor-pointer transition-shadow hover:ring-1 hover:ring-rm-border-strong"
         >
           <StickerReactionsOverlay sfu={voiceActions?.sfu} />
           <button
             type="button"
             data-focused-bg="true"
-            className="absolute inset-0 z-0 border-0 p-0 transition-colors duration-500"
+            className="absolute inset-0 z-0 border-0 p-0 transition-colors duration-200"
             style={{
               backgroundColor:
                 isStreaming || focusedThumbnailPoster
@@ -184,7 +184,7 @@ export const VoiceGrid = React.memo(
             >
               <div className="flex flex-col items-center gap-3 text-center">
                 <EyeOff size={28} className="text-white/60" />
-                <span className="text-xs font-bold uppercase tracking-[0.24em] text-white/45">
+                <span className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-white/60">
                   Preview paused
                 </span>
               </div>
@@ -194,9 +194,9 @@ export const VoiceGrid = React.memo(
               data-focused-visual="true"
               className="w-full h-full flex items-center justify-center relative overflow-hidden z-10 pointer-events-none"
             >
-              <div className="flex flex-col items-center justify-center animate-in fade-in zoom-in-95 duration-700 relative z-10 w-full h-full p-8 md:p-16">
+              <div className="flex flex-col items-center justify-center animate-in fade-in zoom-in-95 duration-300 relative z-10 w-full h-full p-8 md:p-16">
                 <div className="relative aspect-video w-full max-w-[600px] md:max-w-[800px] lg:max-w-[1000px] flex items-center justify-center">
-                  <div className="w-full h-full shadow-[0_30px_100px_rgba(0,0,0,0.6)] rounded-3xl md:rounded-[2.5rem] flex items-center justify-center overflow-hidden bg-black/20 backdrop-blur-3xl transition-all duration-500">
+                  <div className="w-full h-full shadow-2xl rounded-2xl flex items-center justify-center overflow-hidden bg-rm-bg-elevated/40 transition-ui">
                     {focusedItem.avatar ? (
                       <img
                         src={getAuthAssetUrl(focusedItem.avatar)}
@@ -204,7 +204,7 @@ export const VoiceGrid = React.memo(
                         className="w-full h-full object-contain drop-shadow-2xl"
                       />
                     ) : (
-                      <span className="text-8xl md:text-9xl font-black text-white">
+                      <span className="text-8xl md:text-9xl font-bold text-white">
                         {focusedItem.name[0]?.toUpperCase()}
                       </span>
                     )}
@@ -240,7 +240,7 @@ export const VoiceGrid = React.memo(
                   aria-label={
                     isPreviewHidden ? "Resume preview" : "Pause preview"
                   }
-                  className="flex items-center gap-1.5 rounded-lg border border-white/15 bg-black/55 px-2.5 py-1.5 text-[10px] font-bold text-white/70 shadow-xl backdrop-blur-md transition-colors hover:border-white/30 hover:text-white active:scale-[0.96]"
+                  className="flex items-center gap-1.5 rounded-lg border border-white/15 bg-black/55 px-2.5 py-1.5 text-ui-2xs font-bold text-white/70 shadow-xl backdrop-blur-md transition-colors hover:border-white/30 hover:text-white active:scale-[0.96]"
                 >
                   {isPreviewHidden ? (
                     <>
@@ -271,18 +271,18 @@ export const VoiceGrid = React.memo(
 
           {showFocusedVolume && (
             <div className="absolute bottom-6 right-6 z-20 w-full max-w-sm animate-in fade-in slide-in-from-bottom-2 duration-300">
-              <div className="rounded-xl border border-rm-border bg-rm-bg-primary/60 shadow-xl backdrop-blur-md">
+              <div className="rounded-lg border border-rm-border bg-rm-bg-primary/90 shadow-lg">
                 <div className="flex items-center justify-between px-4 pt-3">
                   <div className="flex items-center gap-2 text-rm-text">
                     <Volume2
                       size={13}
                       className="text-rm-text-muted shrink-0"
                     />
-                    <span className="text-[11px] font-bold uppercase tracking-wide">
+                    <span className="text-ui-2xs font-semibold uppercase tracking-[0.08em]">
                       {isFocusedScreen ? "Stream Volume" : "User Volume"}
                     </span>
                   </div>
-                  <span className="text-[11px] font-bold tabular-nums text-rm-text-muted">
+                  <span className="text-ui-2xs font-bold tabular-nums text-rm-text-muted">
                     {focusedPeerVolume}%
                   </span>
                 </div>
@@ -301,7 +301,7 @@ export const VoiceGrid = React.memo(
           )}
 
           <div className="absolute bottom-6 left-6 z-20 pointer-events-none animate-in fade-in slide-in-from-bottom-2 duration-300">
-            <div className="bg-rm-bg-primary/60 backdrop-blur-md px-3 py-1.5 rounded-lg border border-rm-border flex items-center gap-3 shadow-xl">
+            <div className="bg-rm-bg-primary/85 px-3 py-1.5 rounded-md border border-rm-border flex items-center gap-3 shadow-md">
               <div className="flex items-center gap-1.5">
                 {focusedItem.isDeafened && (
                   <Headphones
@@ -325,7 +325,7 @@ export const VoiceGrid = React.memo(
 
               {(focusedItem.type === "screen" ||
                 focusedItem.type === "camera") && (
-                <span className="bg-rm-bg-surface/60 px-1.5 rounded-[3px] text-[8px] font-black text-rm-text uppercase tracking-tighter border border-rm-border tabular-nums">
+                <span className="bg-rm-bg-surface/60 px-1.5 rounded-xs text-ui-2xs font-bold text-rm-text uppercase tracking-tighter border border-rm-border tabular-nums">
                   <QualityMonitor
                     track={focusedItem.stream?.getVideoTracks()[0]}
                     signaledQuality={

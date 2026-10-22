@@ -24,11 +24,11 @@ export function ReplyIndicator({
       )}
     >
       <div className="flex items-center gap-2 overflow-hidden">
-        <span className="whitespace-nowrap text-[10px] font-semibold uppercase tracking-widest text-primary">
+        <span className="text-ui-2xs font-semibold uppercase tracking-[0.08em] whitespace-nowrap text-primary">
           Replying to
         </span>
         <div className="flex items-center gap-1.5 overflow-hidden">
-          <div className="flex h-4 w-4 shrink-0 items-center justify-center overflow-visible rounded-full bg-rm-bg-surface text-[8px] font-bold text-rm-text-muted border border-rm-border">
+          <div className="flex h-4 w-4 shrink-0 items-center justify-center overflow-visible rounded-full bg-rm-bg-surface text-ui-2xs font-bold text-rm-text-muted border border-rm-border">
             {replyTo.author?.avatar_url ? (
               <AvatarImage
                 src={getAuthAssetUrl(replyTo.author.avatar_url)}
@@ -41,10 +41,10 @@ export function ReplyIndicator({
           </div>
           <UserDisplayName
             user={replyTo.author}
-            className="block whitespace-nowrap text-[12px] font-bold text-primary"
+            className="block whitespace-nowrap text-ui-xs font-bold text-primary"
           />
         </div>
-        <span className="truncate text-[12px] font-medium text-rm-text-muted ml-1">
+        <span className="truncate text-ui-xs font-medium text-rm-text-muted ml-1">
           <ReplyPreviewContent
             content={replyTo.content}
             attachmentsCount={
@@ -56,7 +56,7 @@ export function ReplyIndicator({
       <button
         type="button"
         onClick={onCancelReply}
-        className="rounded-lg p-1 text-rm-text-muted transition-all hover:bg-rm-bg-hover hover:text-rm-text-secondary"
+        className="rounded-lg p-1 text-rm-text-muted transition-ui hover:bg-rm-bg-hover hover:text-rm-text-secondary"
       >
         <X className="h-3.5 w-3.5" />
       </button>

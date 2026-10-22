@@ -395,7 +395,7 @@ export const CameraSettingsModal: React.FC<CameraSettingsModalProps> = ({
               <button
                 type="button"
                 onClick={onClose}
-                className="p-1 rounded-full text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text transition-all"
+                className="p-1 rounded-full text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text transition-ui"
                 aria-label="Close camera settings"
               >
                 <X size={18} />
@@ -417,7 +417,7 @@ export const CameraSettingsModal: React.FC<CameraSettingsModalProps> = ({
 
               {/* Camera dropdown selection */}
               <div className="space-y-2">
-                <p className="ml-1 text-[10px] font-bold uppercase tracking-wider text-rm-text-muted">
+                <p className="text-ui-2xs font-semibold uppercase tracking-[0.08em] ml-1 text-rm-text-muted">
                   Camera
                 </p>
                 <Select value={selectedDeviceId} onValueChange={selectDevice}>
@@ -449,14 +449,14 @@ export const CameraSettingsModal: React.FC<CameraSettingsModalProps> = ({
               {/* Background selection */}
               <div className="space-y-3">
                 <div className="flex items-center justify-between gap-3 px-1">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-rm-text-muted">
+                  <p className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted">
                     Video Background
                   </p>
                   <button
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
                     disabled={isUploadingBackground}
-                    className="flex items-center gap-1.5 rounded-lg border border-rm-border bg-rm-bg-surface/40 px-2.5 py-1.5 text-[10px] font-black text-rm-text-muted transition-colors hover:text-rm-text"
+                    className="flex items-center gap-1.5 rounded-lg border border-rm-border bg-rm-bg-surface/40 px-2.5 py-1.5 text-ui-2xs font-bold text-rm-text-muted transition-colors hover:text-rm-text"
                   >
                     <Upload size={12} />{" "}
                     {isUploadingBackground ? "Uploading" : "Upload Image"}
@@ -480,18 +480,18 @@ export const CameraSettingsModal: React.FC<CameraSettingsModalProps> = ({
                         key={option.id}
                         onClick={() => selectBackground(option.value)}
                         className={cn(
-                          "group relative flex flex-col rounded-xl border p-2.5 text-left outline-none transition-all",
+                          "group relative flex flex-col rounded-xl border p-2.5 text-left outline-none transition-ui",
                           isSelected
                             ? "border-primary bg-primary/5 ring-1 ring-primary"
                             : "border-rm-border bg-rm-bg-surface/40 hover:border-rm-text/20 hover:bg-rm-bg-surface/60",
                         )}
                       >
                         {option.id === "none" ? (
-                          <div className="mb-2 flex h-16 w-full items-center justify-center rounded-lg bg-rm-bg-elevated/40 text-rm-text-muted/60 transition-all group-hover:scale-[1.02]">
+                          <div className="mb-2 flex h-16 w-full items-center justify-center rounded-lg bg-rm-bg-elevated/40 text-rm-text-muted/60 transition-ui">
                             <Ban size={20} />
                           </div>
                         ) : (
-                          <div className="relative mb-2 flex h-16 w-full items-center justify-center overflow-hidden rounded-lg bg-rm-bg-elevated/40 transition-all group-hover:scale-[1.02]">
+                          <div className="relative mb-2 flex h-16 w-full items-center justify-center overflow-hidden rounded-lg bg-rm-bg-elevated/40 transition-ui">
                             <div
                               data-rm-preserve-blur="true"
                               className="absolute inset-0 bg-linear-to-tr from-primary/30 via-rm-accent/25 to-transparent filter blur-[8px]"
@@ -528,7 +528,7 @@ export const CameraSettingsModal: React.FC<CameraSettingsModalProps> = ({
                         <div
                           key={background.id}
                           className={cn(
-                            "group relative overflow-hidden rounded-xl border bg-rm-bg-surface/40 outline-none transition-all",
+                            "group relative overflow-hidden rounded-xl border bg-rm-bg-surface/40 outline-none transition-ui",
                             isSelected
                               ? "border-primary ring-1 ring-primary"
                               : "border-rm-border hover:border-rm-text/20",
@@ -626,7 +626,7 @@ export const CameraSettingsModal: React.FC<CameraSettingsModalProps> = ({
                     )}
                   />
                 </button>
-                <span className="text-[11px] font-medium text-rm-text-secondary select-none">
+                <span className="text-ui-2xs font-medium text-rm-text-secondary select-none">
                   Always preview video
                 </span>
               </div>
@@ -642,7 +642,7 @@ export const CameraSettingsModal: React.FC<CameraSettingsModalProps> = ({
                 <button
                   type="button"
                   onClick={handlePrimary}
-                  className="flex items-center gap-2 rounded-xl bg-primary px-5 py-2 text-xs font-bold text-primary-foreground shadow-xl shadow-primary/20 transition-all hover:brightness-110 active:scale-95"
+                  className="flex items-center gap-2 rounded-xl bg-primary px-5 py-2 text-xs font-bold text-primary-foreground shadow-xl shadow-primary/20 transition-ui hover:brightness-110 active:scale-[0.96]"
                 >
                   <span>{isCameraActive ? "Done" : "Turn On Camera"}</span>
                 </button>

@@ -1023,7 +1023,7 @@ export default function ChatPage() {
     if (!activeServerId) {
       return (
         <div className="flex h-full flex-col border-r border-rm-border bg-rm-sidebar">
-          <div className="p-4 text-[13px] text-white/40">
+          <div className="p-4 text-[13px] text-rm-text-muted">
             Select a server to get started
           </div>
         </div>
@@ -1194,7 +1194,7 @@ export default function ChatPage() {
                     "pointer-events-none h-20 w-px rounded-full transition-all duration-150",
                     isChannelSidebarResizing
                       ? "bg-primary shadow-[0_0_18px_rgba(255,255,255,0.12)]"
-                      : "bg-white/10 group-hover:h-28 group-hover:bg-white/25 group-focus-visible:h-28 group-focus-visible:bg-primary/70",
+                      : "bg-rm-border-strong group-hover:h-28 group-hover:bg-rm-text-ghost group-focus-visible:h-28 group-focus-visible:bg-primary/70",
                   )}
                 />
               </button>
@@ -1354,7 +1354,7 @@ export default function ChatPage() {
                   <button
                     type="button"
                     className={cn(
-                      "absolute inset-0 z-20 bg-black/45 backdrop-blur-[2px] cursor-default",
+                      "absolute inset-0 z-20 bg-rm-scrim cursor-default",
                       showVoiceTextChat
                         ? "animate-in fade-in duration-200"
                         : "animate-out fade-out duration-200",
@@ -1364,7 +1364,7 @@ export default function ChatPage() {
                   />
                   <div
                     className={cn(
-                      "absolute inset-y-0 right-0 z-30 flex w-full max-w-[420px] sm:w-[420px] flex-col border-l border-white/10 bg-rm-bg-primary shadow-[-20px_0_40px_rgba(0,0,0,0.4)]",
+                      "absolute inset-y-0 right-0 z-30 flex w-full max-w-[420px] sm:w-[420px] flex-col border-l border-rm-border bg-rm-bg-primary shadow-2xl",
                       showVoiceTextChat
                         ? "animate-in fade-in slide-in-from-right duration-200"
                         : "animate-out fade-out slide-out-to-right duration-200",

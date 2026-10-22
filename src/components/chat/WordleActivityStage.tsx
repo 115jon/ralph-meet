@@ -1460,7 +1460,7 @@ function WordleActivityStageContent({
         >
           <div className="flex items-start justify-between gap-3">
             <div>
-              <div className="inline-flex items-center rounded-full bg-rm-accent px-2.5 py-1 text-[11px] font-black uppercase tracking-wide text-white">
+              <div className="inline-flex items-center rounded-full bg-rm-accent px-2.5 py-1 text-ui-2xs font-semibold uppercase tracking-[0.08em] text-white">
                 ★ New
               </div>
               <h2 className="mt-2 text-sm font-black">Want a hint?</h2>

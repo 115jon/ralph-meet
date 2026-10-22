@@ -9,6 +9,7 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as UiFixturesRouteImport } from './routes/ui-fixtures'
 import { Route as SignUpRouteImport } from './routes/sign-up'
 import { Route as SignInRouteImport } from './routes/sign-in'
 import { Route as ChatRouteImport } from './routes/chat'
@@ -101,6 +102,11 @@ import { Route as ApiChannelsIdMessagesUploadRouteImport } from './routes/api/ch
 import { Route as ApiChannelsIdMessagesGifRouteImport } from './routes/api/channels/$id/messages/gif'
 import { Route as ApiServersIdMembersUserIdRolesRouteImport } from './routes/api/servers/$id/members/$userId/roles'
 
+const UiFixturesRoute = UiFixturesRouteImport.update({
+  id: '/ui-fixtures',
+  path: '/ui-fixtures',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SignUpRoute = SignUpRouteImport.update({
   id: '/sign-up',
   path: '/sign-up',
@@ -579,6 +585,7 @@ export interface FileRoutesByFullPath {
   '/chat': typeof ChatRouteWithChildren
   '/sign-in': typeof SignInRoute
   '/sign-up': typeof SignUpRoute
+  '/ui-fixtures': typeof UiFixturesRoute
   '/api/account-claims': typeof ApiAccountClaimsRoute
   '/api/avatar-upload': typeof ApiAvatarUploadRoute
   '/api/camera-backgrounds': typeof ApiCameraBackgroundsRouteWithChildren
@@ -672,6 +679,7 @@ export interface FileRoutesByTo {
   '/chat': typeof ChatRouteWithChildren
   '/sign-in': typeof SignInRoute
   '/sign-up': typeof SignUpRoute
+  '/ui-fixtures': typeof UiFixturesRoute
   '/api/account-claims': typeof ApiAccountClaimsRoute
   '/api/avatar-upload': typeof ApiAvatarUploadRoute
   '/api/camera-backgrounds': typeof ApiCameraBackgroundsRouteWithChildren
@@ -766,6 +774,7 @@ export interface FileRoutesById {
   '/chat': typeof ChatRouteWithChildren
   '/sign-in': typeof SignInRoute
   '/sign-up': typeof SignUpRoute
+  '/ui-fixtures': typeof UiFixturesRoute
   '/api/account-claims': typeof ApiAccountClaimsRoute
   '/api/avatar-upload': typeof ApiAvatarUploadRoute
   '/api/camera-backgrounds': typeof ApiCameraBackgroundsRouteWithChildren
@@ -861,6 +870,7 @@ export interface FileRouteTypes {
     | '/chat'
     | '/sign-in'
     | '/sign-up'
+    | '/ui-fixtures'
     | '/api/account-claims'
     | '/api/avatar-upload'
     | '/api/camera-backgrounds'
@@ -954,6 +964,7 @@ export interface FileRouteTypes {
     | '/chat'
     | '/sign-in'
     | '/sign-up'
+    | '/ui-fixtures'
     | '/api/account-claims'
     | '/api/avatar-upload'
     | '/api/camera-backgrounds'
@@ -1047,6 +1058,7 @@ export interface FileRouteTypes {
     | '/chat'
     | '/sign-in'
     | '/sign-up'
+    | '/ui-fixtures'
     | '/api/account-claims'
     | '/api/avatar-upload'
     | '/api/camera-backgrounds'
@@ -1141,6 +1153,7 @@ export interface RootRouteChildren {
   ChatRoute: typeof ChatRouteWithChildren
   SignInRoute: typeof SignInRoute
   SignUpRoute: typeof SignUpRoute
+  UiFixturesRoute: typeof UiFixturesRoute
   ApiAccountClaimsRoute: typeof ApiAccountClaimsRoute
   ApiAvatarUploadRoute: typeof ApiAvatarUploadRoute
   ApiCameraBackgroundsRoute: typeof ApiCameraBackgroundsRouteWithChildren
@@ -1193,6 +1206,13 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/ui-fixtures': {
+      id: '/ui-fixtures'
+      path: '/ui-fixtures'
+      fullPath: '/ui-fixtures'
+      preLoaderRoute: typeof UiFixturesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/sign-up': {
       id: '/sign-up'
       path: '/sign-up'
@@ -2071,6 +2091,7 @@ const rootRouteChildren: RootRouteChildren = {
   ChatRoute: ChatRouteWithChildren,
   SignInRoute: SignInRoute,
   SignUpRoute: SignUpRoute,
+  UiFixturesRoute: UiFixturesRoute,
   ApiAccountClaimsRoute: ApiAccountClaimsRoute,
   ApiAvatarUploadRoute: ApiAvatarUploadRoute,
   ApiCameraBackgroundsRoute: ApiCameraBackgroundsRouteWithChildren,

@@ -221,7 +221,7 @@ export function AudioDeviceMenu({
           <div className="px-3 py-2 border-b border-rm-border rounded-t-xl">
             <div className="flex items-center gap-2">
               <ModeIcon size={12} className="text-rm-text-muted" />
-              <span className="text-[10px] font-bold text-rm-text-muted uppercase tracking-widest">
+              <span className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted">
                 {mode === "input" ? "Input" : "Output"} Settings
               </span>
             </div>
@@ -237,7 +237,7 @@ export function AudioDeviceMenu({
                 ref={deviceRowRef}
                 onClick={() => setShowDeviceSubmenu(!showDeviceSubmenu)}
                 className={cn(
-                  "w-full text-left px-3 py-2 text-[12px] font-medium rounded-lg transition-colors flex items-center justify-between group",
+                  "w-full text-left px-3 py-2 text-ui-xs font-medium rounded-lg transition-colors flex items-center justify-between group",
                   showDeviceSubmenu
                     ? "bg-rm-accent/10 text-rm-accent"
                     : "text-rm-text hover:bg-rm-bg-hover",
@@ -247,7 +247,7 @@ export function AudioDeviceMenu({
                   <ModeIcon size={14} className="opacity-60 shrink-0" />
                   <span className="flex flex-col min-w-0">
                     <span className="leading-tight">{deviceLabel}</span>
-                    <span className="text-[10px] text-rm-text-muted/60 font-normal truncate leading-tight">
+                    <span className="text-ui-2xs text-rm-text-muted/60 font-normal truncate leading-tight">
                       {devices.find((d) => d.deviceId === currentDeviceId)
                         ?.label ?? "Default"}
                     </span>
@@ -266,17 +266,17 @@ export function AudioDeviceMenu({
             {/* Volume Slider */}
             <div className="px-3 py-2">
               <div className="flex items-center justify-between mb-2.5">
-                <span className="text-[10px] font-bold text-rm-text-muted uppercase tracking-wider flex items-center gap-1.5">
+                <span className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted flex items-center gap-1.5">
                   <Volume2 size={11} className="opacity-60" />
                   {mode === "input" ? "Input Volume" : "Output Volume"}
                 </span>
-                <span className="text-[10px] font-black text-primary tabular-nums">
+                <span className="text-ui-2xs font-bold text-primary tabular-nums">
                   {volume}%
                 </span>
               </div>
               <div className="group/slider relative h-1.5 rounded-full bg-rm-bg-primary">
                 <div
-                  className="absolute left-0 top-0 h-full rounded-full bg-primary transition-all"
+                  className="absolute left-0 top-0 h-full rounded-full bg-primary transition-ui"
                   style={{
                     width: `${Math.min(100, (volume / (mode === "output" ? 200 : 100)) * 100)}%`,
                   }}
@@ -311,7 +311,7 @@ export function AudioDeviceMenu({
                 onClose();
                 onOpenVoiceSettings();
               }}
-              className="w-full text-left px-3 py-2 text-[12px] font-medium text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover rounded-lg transition-colors flex items-center gap-2"
+              className="w-full text-left px-3 py-2 text-ui-xs font-medium text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover rounded-lg transition-colors flex items-center gap-2"
             >
               <Settings size={14} className="opacity-60" />
               Voice Settings
@@ -338,7 +338,7 @@ export function AudioDeviceMenu({
                     key={device.deviceId}
                     onClick={() => handleDeviceSelect(device.deviceId)}
                     className={cn(
-                      "w-full text-left px-3 py-2 text-[11px] font-medium rounded-lg transition-all flex items-center gap-2",
+                      "w-full text-left px-3 py-2 text-ui-2xs font-medium rounded-lg transition-ui flex items-center gap-2",
                       isSelected
                         ? "bg-rm-accent/10 text-rm-accent"
                         : "text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text",

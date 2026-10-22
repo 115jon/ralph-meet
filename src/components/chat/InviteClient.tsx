@@ -94,7 +94,7 @@ export default function InviteClient() {
             {/* Invite badge */}
             <div className="flex items-center gap-2 rounded-full bg-rm-accent-dim px-3 py-1 ring-1 ring-rm-accent/20">
               <Link2 className="h-3.5 w-3.5 text-rm-accent" />
-              <span className="text-xs font-semibold text-rm-accent uppercase tracking-wider">
+              <span className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-accent">
                 Invite
               </span>
             </div>
@@ -145,7 +145,7 @@ export default function InviteClient() {
             {/* Accept Button */}
             <button
               onClick={joinServer}
-              className="w-full rounded-xl bg-rm-accent px-6 py-3.5 text-sm font-semibold text-white shadow-lg shadow-rm-accent/20 transition-all duration-200 hover:bg-rm-accent-hover hover:shadow-rm-accent/30 active:scale-[0.98] cursor-pointer"
+              className="w-full rounded-xl bg-rm-accent px-6 py-3.5 text-sm font-semibold text-white shadow-lg shadow-rm-accent/20 transition-ui hover:bg-rm-accent-hover hover:shadow-rm-accent/30 active:scale-[0.98] cursor-pointer"
             >
               Accept Invite
             </button>
@@ -193,8 +193,8 @@ export default function InviteClient() {
         {/* Error */}
         {status === "error" && (
           <div className="flex flex-col items-center gap-5 rounded-2xl bg-rm-bg-secondary/80 p-10 shadow-2xl ring-1 ring-white/[0.06] backdrop-blur-xl">
-            <div className="flex h-14 w-14 items-center justify-center rounded-full bg-red-500/15 ring-1 ring-red-400/30">
-              <X className="h-7 w-7 text-red-400" />
+            <div className="flex h-14 w-14 items-center justify-center rounded-full bg-destructive/15 ring-1 ring-destructive/30">
+              <X className="h-7 w-7 text-destructive" />
             </div>
             <div className="text-center">
               <h2 className="text-lg font-bold text-rm-text">Invite Invalid</h2>

@@ -166,9 +166,9 @@ export default function CommandMenu() {
               value={search}
               onValueChange={setSearch}
               placeholder="Where would you like to go?"
-              className="flex h-12 w-full bg-transparent text-[15px] text-rm-text placeholder:text-rm-text-muted outline-none"
+              className="flex h-12 w-full bg-transparent text-ui-base text-rm-text placeholder:text-rm-text-muted outline-none"
             />
-            <kbd className="hidden sm:inline-flex h-5 items-center gap-0.5 rounded border border-rm-text-ghost px-1.5 font-mono text-[10px] font-medium text-rm-text-muted">
+            <kbd className="hidden sm:inline-flex h-5 items-center gap-0.5 rounded border border-rm-text-ghost px-1.5 font-mono text-ui-2xs font-medium text-rm-text-muted">
               ESC
             </kbd>
           </div>
@@ -210,18 +210,18 @@ export default function CommandMenu() {
 
           {/* Footer hint */}
           <div className="flex items-center justify-between border-t border-rm-border px-4 py-2">
-            <span className="text-[11px] text-rm-text-ghost">
+            <span className="text-ui-2xs text-rm-text-ghost">
               Quick Switcher
             </span>
             <div className="flex items-center gap-1">
-              <kbd className="inline-flex h-4 items-center rounded border border-rm-text-ghost px-1 font-mono text-[9px] text-rm-text-ghost">
+              <kbd className="inline-flex h-4 items-center rounded border border-rm-text-ghost px-1 font-mono text-ui-2xs text-rm-text-ghost">
                 ↑↓
               </kbd>
-              <span className="text-[10px] text-rm-text-ghost">navigate</span>
-              <kbd className="ml-2 inline-flex h-4 items-center rounded border border-rm-text-ghost px-1 font-mono text-[9px] text-rm-text-ghost">
+              <span className="text-ui-2xs text-rm-text-ghost">navigate</span>
+              <kbd className="ml-2 inline-flex h-4 items-center rounded border border-rm-text-ghost px-1 font-mono text-ui-2xs text-rm-text-ghost">
                 ↵
               </kbd>
-              <span className="text-[10px] text-rm-text-ghost">select</span>
+              <span className="text-ui-2xs text-rm-text-ghost">select</span>
             </div>
           </div>
         </Command>

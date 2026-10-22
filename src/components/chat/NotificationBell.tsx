@@ -106,7 +106,7 @@ export const NotificationBell = memo(function NotificationBell() {
       <button
         type="button"
         ref={buttonRef}
-        className="group relative flex h-6 w-6 cursor-pointer items-center justify-center transition-all hover:bg-rm-bg-hover rounded-md"
+        className="group relative flex h-8 w-8 cursor-pointer items-center justify-center rounded-md transition-ui hover:bg-rm-bg-hover enabled:active:scale-[0.96]"
         title="Notifications"
         onClick={toggle}
       >
@@ -119,7 +119,7 @@ export const NotificationBell = memo(function NotificationBell() {
           )}
         />
         {unreadCount > 0 && (
-          <span className="absolute -top-1 -right-1 flex h-3.5 min-w-[14px] items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] font-bold text-white leading-none animate-in zoom-in duration-200">
+          <span className="badge-count absolute -top-1 -right-1 ring-2 ring-rm-bg-primary animate-in zoom-in-90 duration-200">
             {unreadCount > 99 ? "99+" : unreadCount}
           </span>
         )}
@@ -140,7 +140,7 @@ export const NotificationBell = memo(function NotificationBell() {
 
           <div
             ref={panelRef}
-            className="relative w-full h-[85vh] md:h-auto max-h-[85vh] md:max-h-full flex flex-col rounded-t-[20px] md:rounded-lg border border-rm-border bg-rm-bg-surface shadow-2xl animate-in slide-in-from-bottom-full md:slide-in-from-top-1 md:fade-in duration-300 md:duration-200 pointer-events-auto mt-auto md:mt-0"
+            className="relative w-full h-[85vh] md:h-auto max-h-[85vh] md:max-h-full flex flex-col rounded-t-2xl md:rounded-lg border border-rm-border bg-rm-bg-surface shadow-2xl animate-in slide-in-from-bottom-full md:slide-in-from-top-1 md:fade-in duration-300 md:duration-200 pointer-events-auto mt-auto md:mt-0"
           >
             {/* Mobile drag handle */}
             <div className="w-full flex justify-center pt-3 pb-1 md:hidden">
@@ -149,14 +149,14 @@ export const NotificationBell = memo(function NotificationBell() {
 
             {/* Header */}
             <div className="flex items-center justify-between px-4 md:px-3 py-3 md:py-2.5 border-b border-rm-border">
-              <h3 className="text-[15px] md:text-[13px] font-bold text-rm-text-primary tracking-tight">
+              <h3 className="text-ui-base md:text-ui-sm font-bold text-rm-text-primary tracking-tight">
                 Inbox
               </h3>
               <div className="flex items-center gap-3 md:gap-2">
                 {unreadCount > 0 && (
                   <button
                     type="button"
-                    className="text-[11px] font-semibold text-rm-accent hover:opacity-80 transition-colors"
+                    className="text-ui-2xs font-semibold text-rm-accent hover:opacity-80 transition-colors"
                     onClick={handleMarkAllRead}
                   >
                     Mark all read
@@ -176,7 +176,7 @@ export const NotificationBell = memo(function NotificationBell() {
               {notifications.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-12 gap-2">
                   <Bell className="h-8 w-8 text-rm-text-muted opacity-40" />
-                  <p className="text-[12px] font-medium text-rm-text-muted">
+                  <p className="text-ui-xs font-medium text-rm-text-muted">
                     No notifications yet
                   </p>
                 </div>
@@ -239,7 +239,7 @@ const NotificationRow = memo(function NotificationRow({
             />
           </div>
         ) : (
-          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-rm-accent/20 text-[11px] font-bold text-rm-accent">
+          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-rm-accent/20 text-ui-2xs font-bold text-rm-accent">
             {getDisplayInitial({
               display_name: authorInfo.displayName,
               username: authorInfo.username,
@@ -250,7 +250,7 @@ const NotificationRow = memo(function NotificationRow({
 
       {/* Content */}
       <div className="flex-1 min-w-0">
-        <p className="text-[12px] leading-tight">
+        <p className="text-ui-xs leading-tight">
           <span className="font-semibold text-rm-text-primary">
             <InlineEmojiText text={authorInfo.displayName} />
           </span>{" "}
@@ -261,7 +261,7 @@ const NotificationRow = memo(function NotificationRow({
         {notification.type !== "dm" && (
           <div className="flex items-center gap-1 mt-0.5">
             <Hash className="h-2.5 w-2.5 text-rm-text-muted opacity-60" />
-            <span className="text-[10px] text-rm-text-muted truncate">
+            <span className="text-ui-2xs text-rm-text-muted truncate">
               <InlineEmojiText
                 text={`${notification.channel_name ?? "channel"}${
                   notification.server_name
@@ -275,13 +275,13 @@ const NotificationRow = memo(function NotificationRow({
 
         {/* Message snippet */}
         {notification.content && (
-          <p className="mt-1 text-[11px] text-rm-text-muted/80 line-clamp-2 leading-relaxed">
+          <p className="mt-1 text-ui-2xs text-rm-text-muted/80 line-clamp-2 leading-relaxed">
             <InlineEmojiText text={notification.content} />
           </p>
         )}
 
         {/* Timestamp */}
-        <span className="text-[10px] text-rm-text-muted/50 mt-1 block">
+        <span className="text-ui-2xs text-rm-text-muted/50 mt-1 block">
           {timeAgo}
         </span>
       </div>

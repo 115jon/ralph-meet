@@ -118,7 +118,7 @@ export default function RoomPageClient() {
             <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-rm-accent-dim shadow-[0_0_40px_var(--rm-accent-dim)] ring-1 ring-rm-border">
               <Radio className="h-8 w-8 text-rm-accent" />
             </div>
-            <h1 className="text-2xl font-extrabold text-rm-text">
+            <h1 className="text-2xl font-semibold text-rm-text">
               Join Meeting
             </h1>
             <p className="text-center text-sm text-rm-text-muted">
@@ -149,7 +149,7 @@ export default function RoomPageClient() {
                   setGuestState({ ...guestState, name: e.target.value })
                 }
                 placeholder="Enter your name"
-                className="w-full rounded-xl border border-rm-border bg-rm-bg-elevated px-4 py-3 text-rm-text outline-none transition-all placeholder:text-rm-text-muted/40 focus:border-rm-accent/30 focus:ring-2 focus:ring-rm-accent/20"
+                className="w-full rounded-xl border border-rm-border bg-rm-bg-elevated px-4 py-3 text-rm-text outline-none transition-ui placeholder:text-rm-text-muted/40 focus:border-rm-accent/30 focus:ring-2 focus:ring-rm-accent/20"
                 autoComplete="off"
                 required
               />
@@ -157,7 +157,7 @@ export default function RoomPageClient() {
             <button
               type="submit"
               disabled={!guestState.name.trim()}
-              className="w-full rounded-xl bg-rm-accent py-3 text-base font-bold text-primary-foreground shadow-lg shadow-rm-accent/20 transition-all duration-300 hover:-translate-y-0.5 hover:bg-rm-accent-hover hover:shadow-xl disabled:opacity-40 cursor-pointer"
+              className="w-full rounded-xl bg-rm-accent py-3 text-base font-bold text-primary-foreground shadow-lg shadow-rm-accent/20 transition-ui hover:-translate-y-0.5 hover:bg-rm-accent-hover hover:shadow-xl disabled:opacity-40 cursor-pointer"
             >
               Join Room
             </button>
@@ -218,7 +218,7 @@ function ControlsBar({
             disabled={!hasMicrophone}
             onClick={toggleMic}
             className={cn(
-              "w-12 h-10 rounded-xl flex items-center justify-center transition-all outline-none",
+              "w-12 h-10 rounded-xl flex items-center justify-center transition-ui outline-none",
               !isMicOn || !hasMicrophone
                 ? "bg-destructive text-destructive-foreground shadow-lg shadow-destructive/20"
                 : "text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text",
@@ -237,7 +237,7 @@ function ControlsBar({
             title={isDeafened ? "Undeafen" : "Deafen"}
             onClick={toggleDeafen}
             className={cn(
-              "w-12 h-10 rounded-xl flex items-center justify-center transition-all outline-none",
+              "w-12 h-10 rounded-xl flex items-center justify-center transition-ui outline-none",
               isDeafened
                 ? "bg-destructive text-destructive-foreground"
                 : "text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text",
@@ -263,7 +263,7 @@ function ControlsBar({
             disabled={!hasCamera}
             onClick={toggleCamera}
             className={cn(
-              "w-12 h-10 rounded-xl flex items-center justify-center transition-all outline-none",
+              "w-12 h-10 rounded-xl flex items-center justify-center transition-ui outline-none",
               isCameraOn
                 ? "bg-rm-text text-rm-bg-surface shadow-lg"
                 : "text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text",
@@ -287,7 +287,7 @@ function ControlsBar({
               else setIsScreenModalOpen(true);
             }}
             className={cn(
-              "w-12 h-10 rounded-xl flex items-center justify-center transition-all outline-none",
+              "w-12 h-10 rounded-xl flex items-center justify-center transition-ui outline-none",
               isScreenSharing
                 ? "bg-primary text-primary-foreground"
                 : "text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text",
@@ -306,7 +306,7 @@ function ControlsBar({
             type="button"
             title="Leave"
             onClick={handleLeave}
-            className="w-12 h-10 flex items-center justify-center bg-destructive text-destructive-foreground rounded-xl shadow-lg hover:brightness-110 active:scale-95 transition-all shrink-0"
+            className="w-12 h-10 flex items-center justify-center bg-destructive text-destructive-foreground rounded-xl shadow-lg hover:brightness-110 active:scale-[0.96] transition-ui shrink-0"
           >
             <LogOut className="h-5 w-5 text-destructive-foreground" />
           </button>
@@ -316,7 +316,7 @@ function ControlsBar({
         <button
           type="button"
           onClick={toggleFs}
-          className="p-2 text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover rounded-xl transition-all outline-none"
+          className="p-2 text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover rounded-xl transition-ui outline-none"
           title={isFullscreen ? "Exit Fullscreen" : "Fullscreen"}
         >
           {isFullscreen ? (
@@ -328,7 +328,7 @@ function ControlsBar({
         <button
           type="button"
           onClick={() => setIsSettingsOpen(true)}
-          className="p-2 text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover rounded-xl transition-all outline-none"
+          className="p-2 text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover rounded-xl transition-ui outline-none"
           title="Settings"
         >
           <Settings className="h-5 w-5" />
@@ -338,7 +338,7 @@ function ControlsBar({
             type="button"
             onClick={() => setShowMembers(!showMembers)}
             className={cn(
-              "p-2 rounded-xl transition-all outline-none",
+              "p-2 rounded-xl transition-ui outline-none",
               showMembers
                 ? "text-rm-text bg-rm-bg-active"
                 : "text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover",
@@ -433,7 +433,7 @@ function RoomHeader({
         <div className="h-4 w-px bg-rm-border" />
         <span
           className={cn(
-            "inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] font-bold",
+            "inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-ui-2xs font-bold",
             connectionBadge.tone === "good" &&
               "border-emerald-400/20 bg-emerald-400/10 text-emerald-300",
             connectionBadge.tone === "pending" &&
@@ -640,7 +640,7 @@ function RoomVoiceView({
       {isFileDragging && (
         <div className="pointer-events-none absolute inset-4 z-20 flex items-center justify-center rounded-3xl border border-dashed border-primary/50 bg-rm-bg-primary/70 backdrop-blur-sm">
           <div className="rounded-2xl border border-rm-border bg-rm-bg-elevated px-5 py-4 text-center shadow-2xl">
-            <p className="text-sm font-black text-rm-text">
+            <p className="text-sm font-semibold text-rm-text">
               Uploads unlock in the full app
             </p>
             <p className="mt-1 text-xs font-medium text-rm-text-muted">
@@ -670,7 +670,7 @@ function RoomVoiceView({
             <button
               type="button"
               onClick={() => setIsSettingsOpen(true)}
-              className="bg-destructive-foreground text-destructive px-3 py-1.5 rounded-md text-xs font-bold hover:brightness-110 active:scale-95 transition-all outline-none"
+              className="bg-destructive-foreground text-destructive px-3 py-1.5 rounded-md text-xs font-bold hover:brightness-110 active:scale-[0.96] transition-ui outline-none"
             >
               Check Settings
             </button>
@@ -708,7 +708,7 @@ function RoomVoiceView({
                   <div
                     key={item.id}
                     className={cn(
-                      "w-44 sm:w-52 aspect-video shrink-0 transition-all duration-300 py-2",
+                      "w-44 sm:w-52 aspect-video shrink-0 transition-ui py-2",
                       focusedId === item.id
                         ? ""
                         : "opacity-70 hover:opacity-100",

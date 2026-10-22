@@ -194,7 +194,7 @@ export default function ThreadSidebar({
             <Loader2 className="h-5 w-5 animate-spin text-rm-text-muted" />
           </div>
         ) : error ? (
-          <div className="flex h-full items-center justify-center text-sm text-red-400">
+          <div className="flex h-full items-center justify-center text-sm text-destructive">
             {error}
           </div>
         ) : (
@@ -223,7 +223,7 @@ export default function ThreadSidebar({
             {replies.length > 0 && (
               <div className="my-2 flex items-center gap-2 px-2">
                 <div className="h-px flex-1 bg-rm-border" />
-                <span className="text-[10px] font-bold uppercase tracking-wider text-rm-text-muted">
+                <span className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted">
                   {replies.length} {replies.length === 1 ? "Reply" : "Replies"}
                 </span>
                 <div className="h-px flex-1 bg-rm-border" />
@@ -296,7 +296,7 @@ function ThreadReplyInput({
       className="border-t border-rm-border px-3 pt-2.5"
       style={{ paddingBottom: "max(10px, var(--safe-area-bottom, 0px))" }}
     >
-      <div className="flex items-center gap-2 rounded-xl border border-rm-border bg-rm-bg-surface px-3 py-2 focus-within:border-primary/30 focus-within:ring-2 focus-within:ring-primary/20 transition-all">
+      <div className="flex items-center gap-2 rounded-xl border border-rm-border bg-rm-bg-surface px-3 py-2 focus-within:border-primary/30 focus-within:ring-2 focus-within:ring-primary/20 transition-ui">
         <input
           value={value}
           onChange={(e) => setValue(e.target.value)}
@@ -313,7 +313,7 @@ function ThreadReplyInput({
         <button
           onClick={handleSubmit}
           disabled={!value.trim() || sending}
-          className="shrink-0 rounded-lg bg-primary px-3 py-1 text-xs font-bold text-primary-foreground transition-all hover:brightness-110 disabled:opacity-30"
+          className="shrink-0 rounded-lg bg-primary px-3 py-1 text-xs font-bold text-primary-foreground transition-ui hover:brightness-110 disabled:opacity-30"
         >
           {sending ? "…" : "Send"}
         </button>

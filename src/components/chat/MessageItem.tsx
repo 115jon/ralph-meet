@@ -188,9 +188,6 @@ function buildMessageLink(
   return `${window.location.origin}/chat/${serverSegment}/${encodeURIComponent(channelId)}?message=${encodeURIComponent(messageId)}`;
 }
 
-const MESSAGE_TOOLBAR_TOOLTIP_CLASS =
-  "bg-rm-bg-floating border-none text-rm-text-primary text-[13px] font-bold shadow-xl px-3 py-2 rounded-lg";
-
 function ToolbarSeparator() {
   return <div className="my-auto h-4 w-px shrink-0 bg-rm-border" />;
 }
@@ -210,7 +207,7 @@ function ToolbarEmojiButton({
         <button
           type="button"
           onClick={() => onClick(item)}
-          className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-rm-text-muted transition-all hover:bg-rm-bg-hover hover:text-primary"
+          className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-rm-text-muted transition-ui hover:bg-rm-bg-hover hover:text-primary"
           aria-label={`React with ${item.label}`}
         >
           <EmojiToken
@@ -221,11 +218,7 @@ function ToolbarEmojiButton({
           />
         </button>
       </TooltipTrigger>
-      <TooltipContent
-        side="top"
-        sideOffset={8}
-        className={MESSAGE_TOOLBAR_TOOLTIP_CLASS}
-      >
+      <TooltipContent side="top" sideOffset={8}>
         <p>{item.label}</p>
       </TooltipContent>
     </Tooltip>
@@ -631,7 +624,7 @@ const MessageItem = memo(
                 event.stopPropagation();
                 handleQuickReaction(item);
               }}
-              className="group flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-[13px] font-semibold text-rm-text-secondary transition-all hover:bg-primary hover:text-white"
+              className="group flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-ui-sm font-semibold text-rm-text-secondary transition-ui hover:bg-primary hover:text-primary-foreground"
             >
               <span className="truncate">{item.label}</span>
               <EmojiToken
@@ -647,7 +640,7 @@ const MessageItem = memo(
             type="button"
             role="menuitem"
             onClick={openReactionPickerFromMenu}
-            className="group flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-[13px] font-semibold text-rm-text-secondary transition-all hover:bg-primary hover:text-white"
+            className="group flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-ui-sm font-semibold text-rm-text-secondary transition-ui hover:bg-primary hover:text-primary-foreground"
           >
             <span>View More</span>
             <Smile className="h-4 w-4 opacity-50 transition-opacity group-hover:opacity-90" />
@@ -740,7 +733,7 @@ const MessageItem = memo(
         {
           label: "Copy ID",
           rightIcon: (
-            <span className="rounded-md bg-rm-bg-surface px-1 py-0.5 text-[10px] font-black uppercase tracking-[0.08em] text-rm-text-muted">
+            <span className="rounded-md bg-rm-bg-surface px-1 py-0.5 text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted">
               ID
             </span>
           ),
@@ -816,7 +809,7 @@ const MessageItem = memo(
                     event.stopPropagation();
                     handleQuickReaction(item);
                   }}
-                  className="flex h-11 w-11 items-center justify-center rounded-xl bg-rm-bg-surface text-rm-text transition-all hover:bg-primary hover:text-white"
+                  className="flex h-11 w-11 items-center justify-center rounded-xl bg-rm-bg-surface text-rm-text transition-ui hover:bg-primary hover:text-primary-foreground"
                   title={item.label}
                   aria-label={`React with ${item.label}`}
                 >
@@ -954,7 +947,7 @@ const MessageItem = memo(
             aria-label={`Reply to ${replyInfo.displayName}: ${getReplyPreviewText(message.reply_to.content, message.reply_to.attachment_count ?? message.reply_to.attachments?.length ?? 0)}`}
           >
             <div className="mt-2 h-4 w-8 shrink-0 rounded-tl-lg border-l-2 border-t-2 border-rm-border group-hover/reply:border-rm-text-muted transition-colors" />
-            <div className="flex h-4 w-4 shrink-0 items-center justify-center overflow-visible rounded-full bg-rm-bg-elevated text-[9px] font-bold text-rm-text-muted relative">
+            <div className="flex h-4 w-4 shrink-0 items-center justify-center overflow-visible rounded-full bg-rm-bg-elevated text-ui-2xs font-bold text-rm-text-muted relative">
               {replyInfo.avatarUrl ? (
                 <AvatarImage
                   src={getAuthAssetUrl(replyInfo.avatarUrl)}
@@ -971,9 +964,9 @@ const MessageItem = memo(
             <ProfileDisplayName
               text={replyInfo.displayName}
               displayNameStyle={replyInfo.displayNameStyle}
-              className="block max-w-[150px] truncate text-[12px] font-bold text-rm-text-muted"
+              className="block max-w-[150px] truncate text-ui-xs font-semibold text-rm-text-muted"
             />
-            <span className="min-w-0 flex-1 truncate text-[12px] font-medium italic text-rm-text-muted">
+            <span className="min-w-0 flex-1 truncate text-ui-xs font-medium italic text-rm-text-muted">
               <ReplyPreviewContent
                 content={message.reply_to.content}
                 attachmentsCount={
@@ -996,7 +989,7 @@ const MessageItem = memo(
           {showHeader ? (
             <button
               type="button"
-              className="mt-0.5 flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center overflow-visible rounded-full border-0 bg-primary/10 p-0 text-sm font-bold text-primary transition-all hover:opacity-80 relative"
+              className="mt-0.5 flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center overflow-visible rounded-full border-0 bg-primary/10 p-0 text-sm font-semibold text-primary transition-opacity hover:opacity-80 relative"
               onClick={() => setShowProfile(true)}
               aria-label={`View ${authorInfo.displayName}'s profile`}
             >
@@ -1015,7 +1008,7 @@ const MessageItem = memo(
             </button>
           ) : (
             <div className="flex w-10 shrink-0 items-start justify-center pt-1 opacity-0 group-hover:opacity-100 transition-opacity">
-              <span className="select-none text-[10.5px] font-medium text-rm-text-muted">
+              <span className="select-none text-ui-2xs font-medium text-rm-text-muted">
                 {formatMessageTime(message.created_at, formatClientDate)}
               </span>
             </div>
@@ -1028,16 +1021,16 @@ const MessageItem = memo(
                 <button
                   type="button"
                   ref={setAuthorNameEl}
-                  className="cursor-pointer border-0 bg-transparent p-0 text-[15px] font-bold text-rm-text transition-colors hover:underline outline-none"
+                  className="cursor-pointer border-0 bg-transparent p-0 text-ui-base font-semibold text-rm-text transition-colors hover:underline outline-none"
                   onClick={() => setShowProfile(true)}
                 >
                   <ProfileDisplayName
                     text={authorInfo.displayName}
                     displayNameStyle={authorInfo.displayNameStyle}
-                    className="block max-w-full text-[15px] font-bold text-rm-text"
+                    className="block max-w-full text-ui-base font-semibold text-rm-text"
                   />
                 </button>
-                <span className="text-[11.5px] font-medium text-rm-text-muted ml-0.5 mt-0.5">
+                <span className="text-ui-xs text-rm-text-muted ml-0.5 mt-0.5">
                   {formatMessageDate(
                     message.created_at,
                     formatClientDate,
@@ -1045,7 +1038,7 @@ const MessageItem = memo(
                   )}
                 </span>
                 {message.is_pinned && (
-                  <div className="flex items-center gap-1 rounded border border-primary/20 bg-primary/10 px-1.5 py-0.5 text-[10px] font-bold text-primary">
+                  <div className="flex items-center gap-1 rounded-sm border border-primary/20 bg-primary/10 px-1.5 py-0.5 text-ui-2xs font-semibold tracking-[0.04em] text-primary">
                     <Pin className="h-2.5 w-2.5 fill-current" />
                     PINNED
                   </div>
@@ -1062,9 +1055,9 @@ const MessageItem = memo(
                   onChange={(e) => setEditInput(e.target.value)}
                   onKeyDown={handleEditKeyDown}
                   aria-label="Edit message"
-                  className="w-full bg-rm-bg-elevated border border-primary/50 rounded-lg p-3 text-rm-text text-[15px] outline-none min-h-[60px] resize-none font-medium focus:border-primary transition-colors"
+                  className="w-full bg-rm-bg-elevated border border-primary/50 rounded-lg p-3 text-rm-text text-ui-base outline-none min-h-[60px] resize-none font-medium focus:border-primary transition-colors"
                 />
-                <div className="mt-1 text-[11px] text-rm-text-muted flex gap-2">
+                <div className="mt-1 text-ui-2xs text-rm-text-muted flex gap-2">
                   <span>
                     escape to{" "}
                     <button
@@ -1089,11 +1082,11 @@ const MessageItem = memo(
                 </div>
               </div>
             ) : (
-              <div className="whitespace-pre-wrap text-[15px] font-medium leading-[1.25] text-rm-text">
+              <div className="whitespace-pre-wrap text-ui-base text-rm-text">
                 <MarkdownRenderer content={message.content} />
                 {message.updated_at && (
                   <span
-                    className="ml-1 text-[10px] text-rm-text-muted"
+                    className="ml-1 text-ui-2xs text-rm-text-muted"
                     title={`Edited ${formatMessageDate(
                       message.updated_at,
                       formatClientDate,
@@ -1220,21 +1213,21 @@ const MessageItem = memo(
                       key={att.id}
                       href={getDownloadUrl(getAttachmentSourceUrl(att))}
                       download={att.filename}
-                      className="flex items-center gap-3 rounded-xl border border-rm-border bg-rm-bg-elevated px-4 py-3 transition-all hover:border-rm-text-muted/20 hover:bg-rm-bg-hover group/file"
+                      className="flex items-center gap-3 rounded-lg border border-rm-border bg-rm-bg-elevated px-3 py-2.5 transition-ui hover:border-rm-text-muted/20 hover:bg-rm-bg-hover group/file"
                     >
                       <div
                         className={cn(
-                          "flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-rm-bg-surface border border-rm-border/30",
+                          "flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-rm-bg-surface border border-rm-border",
                           colorClass,
                         )}
                       >
                         <TypeIcon size={20} />
                       </div>
                       <div className="min-w-0 flex-1">
-                        <p className="truncate text-[13px] font-semibold text-primary/80 group-hover/file:underline group-hover/file:text-primary">
+                        <p className="truncate text-ui-sm font-medium text-primary group-hover/file:underline">
                           {att.filename}
                         </p>
-                        <p className="text-[11px] text-rm-text-muted">
+                        <p className="text-ui-2xs text-rm-text-muted">
                           {formatFileSize(att.size_bytes)}
                         </p>
                       </div>
@@ -1265,10 +1258,10 @@ const MessageItem = memo(
                             aria-pressed={hasReacted}
                             aria-label={`${hasReacted ? "Remove" : "Add"} ${getReactionEmojiLabel(reaction.emoji)} reaction`}
                             className={cn(
-                              "flex min-h-9 cursor-pointer items-center gap-2 rounded-md border px-3 py-1 text-xs font-bold transition-[background-color,border-color,color,box-shadow,transform] active:scale-[0.96]",
+                              "flex h-7 cursor-pointer items-center gap-1.5 rounded-md border px-2 text-ui-xs font-semibold transition-ui enabled:active:scale-[0.96]",
                               previewOnly && "cursor-default",
                               hasReacted
-                                ? "border-primary/40 bg-primary/10 text-primary shadow-[0_0_10px_var(--rm-glow)]"
+                                ? "border-primary/40 bg-primary/10 text-primary shadow-[0_4px_12px_-4px_var(--rm-glow)]"
                                 : "border-rm-border bg-rm-bg-elevated/50 text-rm-text-muted hover:border-rm-text-muted/20 hover:bg-rm-bg-hover hover:text-rm-text-secondary",
                             )}
                             onClick={
@@ -1281,10 +1274,10 @@ const MessageItem = memo(
                               value={reaction.emoji}
                               customEmojiMap={reactionEmojiMap}
                               size="reaction"
-                              className="h-6 w-6"
+                              className="h-5 w-5"
                               fallbackClassName="max-w-[84px] truncate text-xs"
                             />
-                            <span className="tabular-nums text-xs opacity-70">
+                            <span className="tabular-nums text-ui-xs opacity-80">
                               {reaction.count}
                             </span>
                           </button>
@@ -1293,7 +1286,6 @@ const MessageItem = memo(
                           side="top"
                           sideOffset={8}
                           className={cn(
-                            MESSAGE_TOOLBAR_TOOLTIP_CLASS,
                             "pointer-events-auto hidden max-w-xs text-xs sm:block",
                           )}
                         >
@@ -1324,7 +1316,7 @@ const MessageItem = memo(
                         aria-haspopup="dialog"
                         aria-expanded={showReactionEmojiPicker}
                         className={cn(
-                          "border border-rm-border bg-rm-bg-elevated/60 text-rm-text-muted hover:border-primary/30 hover:bg-primary/10 hover:text-primary",
+                          "h-7 w-7 border border-rm-border bg-rm-bg-elevated/60 text-rm-text-muted hover:border-primary/30 hover:bg-primary/10 hover:text-primary",
                           showReactionEmojiPicker &&
                             "border-primary/40 bg-primary/10 text-primary",
                         )}
@@ -1354,7 +1346,7 @@ const MessageItem = memo(
               <button
                 onClick={previewOnly ? undefined : () => onThread?.(message.id)}
                 disabled={previewOnly}
-                className="mt-2 flex items-center gap-1.5 rounded-lg border border-primary/20 bg-primary/5 px-2.5 py-1 text-[12px] font-semibold text-primary transition-all hover:bg-primary/10 hover:border-primary/30 outline-none"
+                className="mt-2 flex items-center gap-1.5 rounded-md border border-primary/20 bg-primary/5 px-2.5 py-1 text-ui-xs font-semibold text-primary transition-ui hover:bg-primary/10 hover:border-primary/30 outline-none"
               >
                 <MessageSquare className="h-3 w-3" />
                 {message.reply_count}{" "}
@@ -1368,7 +1360,7 @@ const MessageItem = memo(
             <TooltipProvider delayDuration={120}>
               <div
                 className={cn(
-                  "pointer-events-none absolute -top-3 right-4 z-20 flex max-w-[calc(100vw-96px)] origin-bottom scale-95 items-center gap-0.5 overflow-x-auto rounded-lg border border-rm-border bg-rm-bg-elevated p-0.5 opacity-0 shadow-2xl transition-all group-hover:pointer-events-auto group-hover:scale-100 group-hover:opacity-100 focus-within:pointer-events-auto focus-within:scale-100 focus-within:opacity-100",
+                  "pointer-events-none absolute -top-4 right-4 z-20 flex max-w-[calc(100vw-96px)] origin-bottom-right scale-[0.97] items-center gap-0.5 overflow-x-auto rounded-md border border-rm-border bg-rm-bg-elevated p-0.5 opacity-0 shadow-md transition-[opacity,transform] duration-100 group-hover:pointer-events-auto group-hover:scale-100 group-hover:opacity-100 focus-within:pointer-events-auto focus-within:scale-100 focus-within:opacity-100",
                   showEmojiPicker &&
                     "pointer-events-auto scale-100 opacity-100",
                 )}
@@ -1674,7 +1666,7 @@ function DeleteMessageModal({
         <div
           data-state={open ? "open" : "closed"}
           className={cn(
-            "fixed inset-0 z-50 flex items-end justify-center bg-black/65 p-0 backdrop-blur-sm transition-opacity duration-200 md:items-center md:p-6",
+            "fixed inset-0 z-50 flex items-end justify-center bg-rm-scrim p-0 transition-opacity duration-200 md:items-center md:p-6",
             "animate-in fade-in data-[state=closed]:pointer-events-none data-[state=closed]:opacity-0 data-[state=closed]:animate-out data-[state=closed]:fade-out",
           )}
           onClick={(event) => {
@@ -1719,7 +1711,7 @@ function DeleteMessageModal({
             </div>
 
             <div className="min-h-0 flex-1 overflow-y-auto px-6 py-3 custom-scrollbar">
-              <div className="overflow-hidden rounded border border-rm-border bg-black/30 py-3">
+              <div className="overflow-hidden rounded-md border border-rm-border bg-rm-bg-secondary py-3">
                 <div
                   ref={previewRef}
                   aria-hidden="true"
@@ -1737,7 +1729,7 @@ function DeleteMessageModal({
             </div>
 
             <div className="shrink-0 border-t border-rm-border/60 px-6 pb-2 pt-4 text-sm leading-tight">
-              <p className="text-[12px] font-black uppercase text-emerald-400">
+              <p className="text-ui-xs font-bold uppercase text-emerald-400">
                 Protip:
               </p>
               <p className="mt-1 text-rm-text-secondary">

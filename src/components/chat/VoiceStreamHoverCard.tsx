@@ -18,10 +18,10 @@ function PlaceholderStreamPreview({
   isCurrentUser: boolean;
 }) {
   return (
-    <div className="relative flex h-full w-full items-center justify-center overflow-hidden rounded-[14px] border border-rm-border bg-[radial-gradient(circle_at_top,rgba(59,130,246,0.12),transparent_42%),linear-gradient(180deg,rgba(255,255,255,0.02),rgba(255,255,255,0))] px-5 py-4">
-      <div className="absolute inset-4 rounded-[18px] border border-rm-border bg-rm-bg-primary/70 shadow-inner shadow-black/10" />
+    <div className="relative flex h-full w-full items-center justify-center overflow-hidden rounded-lg border border-rm-border bg-[radial-gradient(circle_at_top,rgba(59,130,246,0.12),transparent_42%),linear-gradient(180deg,rgba(255,255,255,0.02),rgba(255,255,255,0))] px-5 py-4">
+      <div className="absolute inset-4 rounded-xl border border-rm-border bg-rm-bg-primary/70 shadow-inner shadow-black/10" />
       <div className="absolute inset-x-8 top-7 h-10 rounded-full border border-rm-border bg-rm-bg-elevated/70" />
-      <div className="absolute inset-x-12 top-11 bottom-11 rounded-[20px] border border-primary/15 bg-rm-bg-surface/85" />
+      <div className="absolute inset-x-12 top-11 bottom-11 rounded-2xl border border-primary/15 bg-rm-bg-surface/85" />
       <div className="absolute left-1/2 top-[3.25rem] h-12 w-12 -translate-x-1/2 rounded-2xl border border-primary/25 bg-primary/12 shadow-lg shadow-primary/10" />
       <div className="absolute left-1/2 top-[4.05rem] h-14 w-px -translate-x-1/2 bg-primary/25" />
       <div className="absolute inset-x-[30%] bottom-10 h-px bg-rm-border" />
@@ -39,7 +39,7 @@ function PlaceholderStreamPreview({
           <p className="text-sm font-semibold text-rm-text">
             {isCurrentUser ? "Your stream is live" : `${displayName} is live`}
           </p>
-          <p className="mt-1 text-[12px] leading-5 text-rm-text-muted">
+          <p className="mt-1 text-ui-xs leading-5 text-rm-text-muted">
             Preview syncing now. A fresh frame should appear in a moment.
           </p>
         </div>
@@ -71,16 +71,16 @@ export function VoiceStreamHoverCard({
   return (
     <div
       className={cn(
-        "w-[292px] rounded-[18px] border border-rm-border bg-rm-bg-floating p-3 text-rm-text shadow-xl backdrop-blur-xl",
+        "w-[292px] rounded-xl border border-rm-border bg-rm-bg-floating p-3 text-rm-text shadow-xl backdrop-blur-xl",
         className,
       )}
       data-stream-hover-card="true"
     >
       <div className="mb-2 flex items-center justify-between gap-3">
-        <span className="text-[13px] font-semibold text-rm-text-muted">
+        <span className="text-ui-sm font-semibold text-rm-text-muted">
           Streaming now
         </span>
-        <span className="rounded-full border border-destructive/25 bg-destructive/10 px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.18em] text-destructive">
+        <span className="rounded-full border border-destructive/25 bg-destructive/10 px-2 py-0.5 text-ui-2xs font-semibold uppercase tracking-[0.08em] text-destructive">
           LIVE
         </span>
       </div>
@@ -91,9 +91,9 @@ export function VoiceStreamHoverCard({
         disabled={!hasWatchAction}
         onClick={handleWatchStream}
         className={cn(
-          "group/stream-thumb relative block w-full overflow-hidden rounded-[16px] border border-rm-border bg-rm-bg-surface text-left shadow-lg transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35 focus-visible:ring-offset-2 focus-visible:ring-offset-rm-bg-floating",
+          "group/stream-thumb relative block w-full overflow-hidden rounded-xl border border-rm-border bg-rm-bg-surface text-left shadow-lg transition-ui focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35 focus-visible:ring-offset-2 focus-visible:ring-offset-rm-bg-floating",
           hasWatchAction &&
-            "cursor-pointer hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-xl active:translate-y-0 active:scale-[0.995]",
+            "cursor-pointer hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-xl active:translate-y-0 active:scale-[0.98]",
           !hasWatchAction && "cursor-default",
         )}
       >
@@ -103,7 +103,7 @@ export function VoiceStreamHoverCard({
               src={resolvedThumbnailUrl}
               alt={`${displayName} stream preview`}
               className={cn(
-                "h-full w-full object-cover transition-transform duration-300",
+                "h-full w-full object-cover transition-transform duration-200",
                 hasWatchAction && "group-hover/stream-thumb:scale-[1.015]",
               )}
             />
@@ -123,7 +123,7 @@ export function VoiceStreamHoverCard({
         <div className="pointer-events-none absolute inset-x-4 bottom-4 flex items-center justify-center">
           <div
             className={cn(
-              "rounded-full border border-rm-border bg-rm-bg-floating/90 px-3 py-1.5 text-[11px] font-black uppercase tracking-[0.18em] text-rm-text shadow-lg backdrop-blur-sm transition-all duration-200",
+              "rounded-full border border-rm-border bg-rm-bg-floating/90 px-3 py-1.5 text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text shadow-lg backdrop-blur-sm transition-ui",
               hasWatchAction
                 ? "opacity-0 group-hover/stream-thumb:-translate-y-0.5 group-hover/stream-thumb:opacity-100"
                 : "opacity-100",
@@ -139,9 +139,9 @@ export function VoiceStreamHoverCard({
         disabled={!hasWatchAction}
         onClick={handleWatchStream}
         className={cn(
-          "mt-3 flex h-10 w-full items-center justify-center gap-2 rounded-xl border text-sm font-bold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35 focus-visible:ring-offset-2 focus-visible:ring-offset-rm-bg-floating",
+          "mt-3 flex h-10 w-full items-center justify-center gap-2 rounded-xl border text-sm font-bold transition-ui focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35 focus-visible:ring-offset-2 focus-visible:ring-offset-rm-bg-floating",
           hasWatchAction
-            ? "border-primary/20 bg-primary text-primary-foreground shadow-lg shadow-primary/20 hover:bg-primary/90 active:scale-[0.99]"
+            ? "border-primary/20 bg-primary text-primary-foreground shadow-lg shadow-primary/20 hover:bg-primary/90 active:scale-[0.98]"
             : "cursor-default border-rm-border bg-rm-bg-elevated/70 text-rm-text-muted",
         )}
       >

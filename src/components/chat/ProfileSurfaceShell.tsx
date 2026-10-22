@@ -25,9 +25,9 @@ interface ProfileSurfaceShellProps extends React.HTMLAttributes<HTMLDivElement> 
 }
 
 const SURFACE_CLASSES: Record<ProfileSurfaceVariant, string> = {
-  card: "relative h-full w-full overflow-hidden rounded-[28px] border border-[color:var(--rm-profile-custom-card-border)] bg-rm-bg-elevated bg-[var(--rm-profile-custom-background)] shadow-[0_26px_64px_rgba(0,0,0,0.26)] backdrop-blur-[18px]",
+  card: "relative h-full w-full overflow-hidden rounded-3xl border border-[color:var(--rm-profile-custom-card-border)] bg-rm-bg-elevated bg-[var(--rm-profile-custom-background)] shadow-[0_26px_64px_rgba(0,0,0,0.26)] backdrop-blur-[18px]",
   popover:
-    "relative h-full w-full overflow-hidden rounded-[26px] border border-[color:var(--rm-profile-custom-card-border)] bg-rm-bg-elevated bg-[var(--rm-profile-custom-background)] shadow-[0_24px_72px_rgba(0,0,0,0.58)]",
+    "relative h-full w-full overflow-hidden rounded-3xl border border-[color:var(--rm-profile-custom-card-border)] bg-rm-bg-elevated bg-[var(--rm-profile-custom-background)] shadow-[0_24px_72px_rgba(0,0,0,0.58)]",
   sheet:
     "relative w-full overflow-hidden bg-rm-bg-primary bg-[var(--rm-profile-custom-background)]",
 };

@@ -48,7 +48,7 @@ export function FriendListPanel({
           <button
             key={t}
             className={cn(
-              "relative cursor-pointer rounded-md border-none px-2.5 py-1 text-[11px] font-semibold transition-colors outline-none",
+              "relative cursor-pointer rounded-md border-none px-2.5 py-1 text-ui-2xs font-semibold transition-colors outline-none",
               tab === t
                 ? "bg-rm-bg-elevated text-rm-text shadow-sm"
                 : "text-rm-text-muted hover:bg-rm-bg-elevated hover:text-rm-text-secondary",
@@ -57,15 +57,13 @@ export function FriendListPanel({
           >
             {t.charAt(0).toUpperCase() + t.slice(1)}
             {t === "pending" && pendingCount > 0 && (
-              <span className="ml-1 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[9px] font-bold text-destructive-foreground">
-                {pendingCount}
-              </span>
+              <span className="badge-count ml-1">{pendingCount}</span>
             )}
           </button>
         ))}
         <button
           className={cn(
-            "ml-auto cursor-pointer rounded-md border-none px-2.5 py-1 text-[11px] font-semibold transition-colors outline-none",
+            "ml-auto cursor-pointer rounded-md border-none px-2.5 py-1 text-ui-2xs font-semibold transition-colors outline-none",
             addFriendMode
               ? "bg-primary/20 text-primary"
               : "text-primary hover:bg-primary/10",
@@ -87,7 +85,7 @@ export function FriendListPanel({
           </p>
           <div className="flex gap-2">
             <input
-              className="flex-1 rounded-lg border border-rm-border bg-rm-bg-surface px-3 py-1.5 text-sm text-rm-text outline-none transition-all placeholder:text-rm-text-muted/20 focus:border-primary/30 focus:ring-2 focus:ring-primary/20"
+              className="flex-1 rounded-lg border border-rm-border bg-rm-bg-surface px-3 py-1.5 text-sm text-rm-text outline-none transition-ui placeholder:text-rm-text-muted/20 focus:border-primary/30 focus:ring-2 focus:ring-primary/20"
               aria-label="Friend username"
               placeholder="Enter a username"
               value={addUsername}
@@ -116,7 +114,7 @@ export function FriendListPanel({
           {loading && (
             <div className="flex items-center justify-center gap-2 py-4 text-primary/60">
               <span className="h-3 w-3 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-              <span className="text-[11px] font-black uppercase tracking-widest">
+              <span className="text-ui-2xs font-semibold uppercase tracking-[0.08em]">
                 Loading...
               </span>
             </div>
@@ -172,7 +170,7 @@ export function FriendListPanel({
                       }}
                       aria-label={`View ${displayName}'s profile`}
                     >
-                      <div className="flex h-8 w-8 shrink-0 items-center justify-center overflow-visible rounded-full bg-primary text-xs font-bold text-primary-foreground ring-1 ring-white/10 group-hover:ring-white/30 transition-all relative">
+                      <div className="flex h-8 w-8 shrink-0 items-center justify-center overflow-visible rounded-full bg-primary text-xs font-bold text-primary-foreground ring-1 ring-white/10 group-hover:ring-white/30 transition-ui relative">
                         {rel.user.avatar_url ? (
                           <AvatarImage
                             src={getAuthAssetUrl(rel.user.avatar_url)}
@@ -191,9 +189,9 @@ export function FriendListPanel({
                     <div className="min-w-0 flex-1">
                       <UserDisplayName
                         user={rel.user}
-                        className="block truncate text-[13px] font-medium text-rm-text-secondary"
+                        className="block truncate text-ui-sm font-medium text-rm-text-secondary"
                       />
-                      <span className="text-[10px] text-rm-text-muted">
+                      <span className="text-ui-2xs text-rm-text-muted">
                         {rel.type === 0
                           ? rel.user.status === "online"
                             ? "Online"

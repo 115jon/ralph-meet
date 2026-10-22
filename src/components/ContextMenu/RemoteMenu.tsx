@@ -320,7 +320,7 @@ export const RemoteMenu: React.FC<RemoteMenuProps> = ({
         onMouseEnter={clearSubmenu}
         onClick={handleCopyId}
         rightElement={
-          <span className="text-[10px] bg-rm-bg-active px-1 rounded text-rm-text-muted/40 font-bold shadow-sm">
+          <span className="text-ui-2xs bg-rm-bg-active px-1 rounded text-rm-text-muted/40 font-bold shadow-sm">
             ID
           </span>
         }

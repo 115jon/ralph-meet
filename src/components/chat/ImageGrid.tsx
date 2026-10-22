@@ -32,7 +32,7 @@ const DeleteButton: React.FC<DeleteButtonProps> = ({ id, onDelete }) => {
             onDelete(id);
           }
         }}
-        className="p-1.5 bg-black/50 hover:bg-rose-500 text-white/80 hover:text-white rounded-lg transition-[background-color,color] backdrop-blur-sm shadow-sm"
+        className="p-1.5 bg-black/50 hover:bg-rm-badge text-white/80 hover:text-white rounded-lg transition-[background-color,color] backdrop-blur-sm shadow-sm"
         aria-label="Delete image"
       >
         <Trash2 size={14} />
@@ -337,7 +337,7 @@ export const ImageGrid: React.FC<ImageGridProps> = ({
                   {onDelete && <DeleteButton id={att.id} onDelete={onDelete} />}
                   {isLastVisible && hasMore && (
                     <div className="absolute inset-0 bg-black/60 flex items-center justify-center backdrop-blur-[2px] pointer-events-none">
-                      <span className="text-2xl font-black text-white">
+                      <span className="text-2xl font-semibold text-white">
                         +{count - 10}
                       </span>
                     </div>
