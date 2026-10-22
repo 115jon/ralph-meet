@@ -111,8 +111,6 @@ const EMPTY_READ_STATES: Record<string, string> = {};
 const EMPTY_LAST_MESSAGE_AT: Record<string, string> = {};
 const EMPTY_VOICE_STATES: Record<string, VoiceChannelMember[]> = {};
 const EMPTY_MENTION_COUNTS: Record<string, number> = {};
-const CHANNEL_TOOLTIP_CONTENT_CLASS =
-  "bg-rm-bg-floating border-none text-rm-text-primary text-[13px] font-bold shadow-xl px-3 py-2 rounded-lg";
 const STREAM_PREVIEW_CARD_WIDTH = 292;
 const STREAM_PREVIEW_CARD_HEIGHT = 290;
 
@@ -288,7 +286,7 @@ function VoiceChannelMediaDisplay({
   readOnly?: boolean;
 }) {
   return (
-    <div className="group/media relative overflow-hidden rounded-[18px] border border-white/8 bg-black/30 shadow-[0_16px_34px_rgba(0,0,0,0.28)]">
+    <div className="group/media relative overflow-hidden rounded-xl border border-white/8 bg-black/30 shadow-[0_16px_34px_rgba(0,0,0,0.28)]">
       <div
         className="w-full overflow-hidden bg-black/25"
         style={{
@@ -303,13 +301,13 @@ function VoiceChannelMediaDisplay({
             muted
             playsInline
             aria-label="Voice channel media preview"
-            className="h-full w-full object-contain transition-transform duration-300 md:group-hover/media:scale-[1.02]"
+            className="h-full w-full object-contain transition-transform duration-200"
           />
         ) : (
           <img
             src={getAuthAssetUrl(media.preview_url)}
             alt={media.alt_text ?? "Voice channel status media"}
-            className="h-full w-full object-contain transition-transform duration-300 md:group-hover/media:scale-[1.02]"
+            className="h-full w-full object-contain transition-transform duration-200"
             loading="lazy"
           />
         )}
@@ -322,7 +320,7 @@ function VoiceChannelMediaDisplay({
               <button
                 type="button"
                 aria-label="Change media"
-                className="flex h-8 w-8 items-center justify-center rounded-full border border-white/12 bg-black/60 text-white/85 shadow-lg backdrop-blur-sm transition-all hover:border-white/30 hover:bg-black/75 hover:text-white md:translate-y-1 md:opacity-0 md:group-hover/media:translate-y-0 md:group-hover/media:opacity-100"
+                className="flex h-8 w-8 items-center justify-center rounded-full border border-white/12 bg-black/60 text-white/85 shadow-lg backdrop-blur-sm transition-ui hover:border-white/30 hover:bg-black/75 hover:text-white md:translate-y-1 md:opacity-0 md:group-hover/media:translate-y-0 md:group-hover/media:opacity-100"
                 onClick={(event) => {
                   event.stopPropagation();
                   onChange();
@@ -331,11 +329,7 @@ function VoiceChannelMediaDisplay({
                 <Edit2 className="h-3.5 w-3.5" />
               </button>
             </TooltipTrigger>
-            <TooltipContent
-              side="top"
-              sideOffset={8}
-              className={CHANNEL_TOOLTIP_CONTENT_CLASS}
-            >
+            <TooltipContent side="top" sideOffset={8}>
               Change media
             </TooltipContent>
           </Tooltip>
@@ -346,7 +340,7 @@ function VoiceChannelMediaDisplay({
                 type="button"
                 aria-label="Remove media"
                 disabled={isRemoving}
-                className="flex h-8 w-8 items-center justify-center rounded-full border border-white/12 bg-black/60 text-white/85 shadow-lg backdrop-blur-sm transition-all hover:border-red-400/50 hover:bg-red-500/20 hover:text-white disabled:cursor-not-allowed disabled:opacity-60 md:translate-y-1 md:opacity-0 md:group-hover/media:translate-y-0 md:group-hover/media:opacity-100"
+                className="flex h-8 w-8 items-center justify-center rounded-full border border-white/12 bg-black/60 text-white/85 shadow-lg backdrop-blur-sm transition-ui hover:border-destructive/50 hover:bg-destructive/20 hover:text-white disabled:cursor-not-allowed disabled:opacity-60 md:translate-y-1 md:opacity-0 md:group-hover/media:translate-y-0 md:group-hover/media:opacity-100"
                 onClick={(event) => {
                   event.stopPropagation();
                   onRemove();
@@ -359,11 +353,7 @@ function VoiceChannelMediaDisplay({
                 )}
               </button>
             </TooltipTrigger>
-            <TooltipContent
-              side="top"
-              sideOffset={8}
-              className={CHANNEL_TOOLTIP_CONTENT_CLASS}
-            >
+            <TooltipContent side="top" sideOffset={8}>
               Remove media
             </TooltipContent>
           </Tooltip>
@@ -485,10 +475,10 @@ function SortableChannelItem({
     <div ref={setNodeRef} style={style}>
       <div
         className={cn(
-          "group relative mb-[2px] mx-2 flex cursor-pointer items-center gap-1.5 rounded-[4px] px-2 py-1.5 transition-colors outline-none",
+          "group relative mb-0.5 mx-2 flex cursor-pointer items-center gap-1.5 rounded-md px-2 py-1.5 transition-colors outline-none",
           isActive
             ? "bg-rm-bg-active text-rm-text"
-            : "text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text-muted",
+            : "text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text-secondary",
           unread && !isActive && "text-rm-text font-semibold",
         )}
       >
@@ -497,7 +487,7 @@ function SortableChannelItem({
           onClick={() => onSelect(channel.id)}
           onContextMenu={(e) => onContextMenu(e, channel)}
           aria-label={`Open ${isVoice ? "voice" : "text"} channel ${channel.name}`}
-          className="absolute inset-0 z-10 rounded-[4px] outline-none"
+          className="absolute inset-0 z-10 rounded-md outline-none"
         />
         {/* Drag handle */}
         {isDraggable && (
@@ -516,20 +506,20 @@ function SortableChannelItem({
 
         <InlineEmojiText
           text={channel.name}
-          className="flex-1 truncate text-[15px] font-medium"
+          className="flex-1 truncate text-ui-base font-medium"
         />
 
         {/* Icons column */}
         <div className="flex items-center gap-1">
           {/* Mention count badge */}
           {mentionCount > 0 && (
-            <div className="flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-bold text-white leading-none">
+            <div className="badge-count">
               {mentionCount > 99 ? "99+" : mentionCount}
             </div>
           )}
           {/* Voice channel uptime — visible by default, hidden on hover */}
           {uptime && (
-            <span className="text-[11px] font-mono font-medium text-[#23a559] block group-hover:hidden translate-y-px">
+            <span className="text-ui-2xs font-medium tabular-nums text-rm-success block group-hover:hidden translate-y-px">
               {uptime}
             </span>
           )}
@@ -546,7 +536,7 @@ function SortableChannelItem({
                   <button
                     type="button"
                     aria-label="Channel settings"
-                    className="flex h-5 w-5 items-center justify-center rounded-md opacity-0 transition-opacity group-hover:opacity-60 hover:!opacity-100 hover:bg-black/10"
+                    className="flex h-5 w-5 items-center justify-center rounded-md opacity-0 transition-opacity group-hover:opacity-60 hover:!opacity-100 hover:bg-rm-bg-hover"
                     onClick={(e) => {
                       e.stopPropagation();
                       onEditChannel(channel);
@@ -555,11 +545,7 @@ function SortableChannelItem({
                     <Settings className="h-3.5 w-3.5" />
                   </button>
                 </TooltipTrigger>
-                <TooltipContent
-                  side="top"
-                  sideOffset={8}
-                  className={CHANNEL_TOOLTIP_CONTENT_CLASS}
-                >
+                <TooltipContent side="top" sideOffset={8}>
                   Channel settings
                 </TooltipContent>
               </Tooltip>
@@ -569,7 +555,7 @@ function SortableChannelItem({
                 <button
                   type="button"
                   aria-label="Invite to channel"
-                  className="flex h-5 w-5 items-center justify-center rounded-md opacity-0 transition-opacity group-hover:opacity-60 hover:!opacity-100 hover:bg-black/10"
+                  className="flex h-5 w-5 items-center justify-center rounded-md opacity-0 transition-opacity group-hover:opacity-60 hover:!opacity-100 hover:bg-rm-bg-hover"
                   onClick={(e) => {
                     e.stopPropagation();
                     onInviteToChannel(channel);
@@ -578,11 +564,7 @@ function SortableChannelItem({
                   <UserPlus className="h-3.5 w-3.5" />
                 </button>
               </TooltipTrigger>
-              <TooltipContent
-                side="top"
-                sideOffset={8}
-                className={CHANNEL_TOOLTIP_CONTENT_CLASS}
-              >
+              <TooltipContent side="top" sideOffset={8}>
                 Invite to channel
               </TooltipContent>
             </Tooltip>
@@ -606,7 +588,7 @@ function SortableChannelItem({
               <TooltipTrigger asChild>
                 <button
                   type="button"
-                  className="group/text inline-flex max-w-full items-center gap-1.5 rounded-lg px-1 py-0.5 text-left transition-colors hover:bg-white/6"
+                  className="group/text inline-flex max-w-full items-center gap-1.5 rounded-lg px-1 py-0.5 text-left transition-colors hover:bg-rm-bg-hover"
                   onClick={(event) => {
                     event.stopPropagation();
                     setIsVoiceTextStatusOpen(true);
@@ -614,7 +596,7 @@ function SortableChannelItem({
                 >
                   <span
                     className={cn(
-                      "truncate text-[12px] font-medium leading-4",
+                      "truncate text-ui-xs font-medium leading-4",
                       textStatus
                         ? "text-rm-text-secondary"
                         : "text-rm-text-muted",
@@ -627,11 +609,7 @@ function SortableChannelItem({
                   <Edit2 className="h-3 w-3 shrink-0 text-rm-text-muted transition-colors group-hover/text:text-rm-text" />
                 </button>
               </TooltipTrigger>
-              <TooltipContent
-                side="top"
-                sideOffset={8}
-                className={CHANNEL_TOOLTIP_CONTENT_CLASS}
-              >
+              <TooltipContent side="top" sideOffset={8}>
                 {textStatusLabel}
               </TooltipContent>
             </Tooltip>
@@ -652,28 +630,24 @@ function SortableChannelItem({
                 <TooltipTrigger asChild>
                   <button
                     type="button"
-                    className="group/vibe flex min-h-[96px] w-full flex-col items-start justify-center rounded-[18px] border border-dashed border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.04),rgba(255,255,255,0.02))] px-4 py-4 text-left text-rm-text-muted transition-colors hover:border-primary/35 hover:bg-rm-bg-hover hover:text-rm-text sm:min-h-[108px]"
+                    className="group/vibe flex min-h-[96px] w-full flex-col items-start justify-center rounded-lg border border-dashed border-rm-border-strong bg-rm-bg-hover/50 px-4 py-4 text-left text-rm-text-muted transition-colors hover:border-primary/35 hover:bg-rm-bg-hover hover:text-rm-text sm:min-h-[108px]"
                     onClick={(event) => {
                       event.stopPropagation();
                       setIsVoiceMediaStatusOpen(true);
                     }}
                   >
-                    <div className="mb-2 inline-flex h-9 w-9 items-center justify-center rounded-2xl bg-white/8 text-rm-text-muted transition-colors group-hover/vibe:bg-white/10 group-hover/vibe:text-rm-text">
+                    <div className="mb-2 inline-flex h-9 w-9 items-center justify-center rounded-md bg-rm-bg-hover text-rm-text-muted transition-colors group-hover/vibe:bg-rm-bg-active group-hover/vibe:text-rm-text">
                       <Sparkles className="h-4 w-4" />
                     </div>
-                    <span className="text-[13px] font-semibold text-rm-text">
+                    <span className="text-ui-sm font-semibold text-rm-text">
                       Set the vibe
                     </span>
-                    <span className="mt-1 text-[12px] leading-5 text-rm-text-muted">
+                    <span className="mt-1 text-ui-xs leading-5 text-rm-text-muted">
                       Add a GIF, still image, or short clip for this channel.
                     </span>
                   </button>
                 </TooltipTrigger>
-                <TooltipContent
-                  side="top"
-                  sideOffset={8}
-                  className={CHANNEL_TOOLTIP_CONTENT_CLASS}
-                >
+                <TooltipContent side="top" sideOffset={8}>
                   {mediaStatusLabel}
                 </TooltipContent>
               </Tooltip>
@@ -687,7 +661,7 @@ function SortableChannelItem({
         <>
           {textStatus && (
             <div className="mb-1 ml-7 mr-2">
-              <span className="inline-block max-w-full truncate px-1 py-0.5 text-[12px] font-medium leading-4 text-rm-text-secondary">
+              <span className="inline-block max-w-full truncate px-1 py-0.5 text-ui-xs font-medium leading-4 text-rm-text-secondary">
                 <InlineEmojiText text={textStatus} />
               </span>
             </div>
@@ -1073,7 +1047,7 @@ export default function ChannelSidebar({
                 <span className="font-black text-lg text-white/50">
                   {isMiku ? "01" : "🕸️"}
                 </span>
-                <span className="text-[10px] font-bold tracking-widest uppercase">
+                <span className="text-ui-2xs font-semibold uppercase tracking-[0.08em]">
                   {isMiku ? "初音ミク" : "SPIDER-MAN"}
                 </span>
               </div>
@@ -1083,7 +1057,7 @@ export default function ChannelSidebar({
         ) : (
           <button
             type="button"
-            className="flex cursor-pointer items-center justify-between px-4 font-bold text-rm-text shadow-sm transition-colors hover:bg-rm-bg-hover active:bg-rm-bg-active outline-none"
+            className="flex cursor-pointer items-center justify-between border-b border-rm-border px-4 font-semibold text-rm-text transition-colors hover:bg-rm-bg-hover active:bg-rm-bg-active outline-none"
             style={{
               height: "calc(48px + var(--safe-area-top, 0px))",
               paddingTop: "var(--safe-area-top, 0px)",
@@ -1094,15 +1068,15 @@ export default function ChannelSidebar({
             <div className="flex items-center min-w-0">
               <InlineEmojiText
                 text={serverName}
-                className="truncate text-[15px]"
+                className="truncate text-ui-base"
               />
-              <ChevronDown className="ml-1 h-3.5 w-3.5 opacity-90 dark:opacity-60 shrink-0 text-rm-text-primary" />
+              <ChevronDown className="ml-1 h-4 w-4 shrink-0 text-rm-text-muted" />
             </div>
           </button>
         )}
 
         {/* Channels List */}
-        <div className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-thin py-3 px-2">
+        <div className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-thin py-2 px-2">
           <DndContext
             sensors={sensors}
             collisionDetection={closestCenter}
@@ -1382,7 +1356,7 @@ function useSidebarContextMenus({
           label: "Copy Channel ID",
           icon: <Copy className="h-4 w-4" />,
           rightIcon: (
-            <span className="text-[9px] font-bold bg-rm-bg-surface border border-rm-border rounded px-1 py-0.5 leading-none">
+            <span className="text-ui-2xs font-bold bg-rm-bg-surface border border-rm-border rounded px-1 py-0.5 leading-none">
               ID
             </span>
           ),
@@ -1763,9 +1737,9 @@ function VoiceChannelMemberRow({
       >
         <div
           className={cn(
-            "relative h-[24px] w-[24px] shrink-0 rounded-full transition-transform active:scale-95",
+            "relative h-[24px] w-[24px] shrink-0 rounded-full transition-transform active:scale-[0.96]",
             isSpeaking
-              ? "ring-[3px] ring-primary shadow-[0_0_20px_var(--rm-glow)] ring-offset-2 ring-offset-rm-bg-secondary z-10"
+              ? "ring-[3px] ring-primary shadow-[0_6px_18px_-6px_var(--rm-glow)] ring-offset-2 ring-offset-rm-bg-secondary z-10"
               : "z-0",
           )}
         >
@@ -1777,7 +1751,7 @@ function VoiceChannelMemberRow({
                 display={resolvedAvatarDisplay}
               />
             ) : (
-              <div className="flex h-full w-full items-center justify-center bg-primary/10 text-[10px] font-bold text-primary">
+              <div className="flex h-full w-full items-center justify-center bg-primary/10 text-ui-2xs font-bold text-primary">
                 {resolvedIdentity.name[0]?.toUpperCase()}
               </div>
             )}
@@ -1790,7 +1764,7 @@ function VoiceChannelMemberRow({
         />
         <div className="ml-auto flex items-center gap-1">
           {shouldShowStreamState && (
-            <div className="flex items-center justify-center rounded-[3px] bg-[#ed4245] px-[4px] py-[2px] text-[9px] font-bold leading-none tracking-wider text-white">
+            <div className="flex items-center justify-center rounded-xs bg-[#ed4245] px-[4px] py-[2px] text-ui-2xs font-bold leading-none tracking-wider text-white">
               LIVE
             </div>
           )}
@@ -1804,11 +1778,7 @@ function VoiceChannelMemberRow({
                     <MicOff className="h-3.5 w-3.5 text-rm-danger" />
                   </span>
                 </TooltipTrigger>
-                <TooltipContent
-                  side="top"
-                  sideOffset={6}
-                  className={CHANNEL_TOOLTIP_CONTENT_CLASS}
-                >
+                <TooltipContent side="top" sideOffset={6}>
                   Self-muted
                 </TooltipContent>
               </Tooltip>
@@ -1820,11 +1790,7 @@ function VoiceChannelMemberRow({
                     <HeadphoneOff className="h-3.5 w-3.5 text-rm-danger" />
                   </span>
                 </TooltipTrigger>
-                <TooltipContent
-                  side="top"
-                  sideOffset={6}
-                  className={CHANNEL_TOOLTIP_CONTENT_CLASS}
-                >
+                <TooltipContent side="top" sideOffset={6}>
                   Self-deafened
                 </TooltipContent>
               </Tooltip>
@@ -1836,11 +1802,7 @@ function VoiceChannelMemberRow({
                     <VolumeX className="h-3.5 w-3.5 text-rm-danger" />
                   </span>
                 </TooltipTrigger>
-                <TooltipContent
-                  side="top"
-                  sideOffset={6}
-                  className={CHANNEL_TOOLTIP_CONTENT_CLASS}
-                >
+                <TooltipContent side="top" sideOffset={6}>
                   Muted by you
                 </TooltipContent>
               </Tooltip>
@@ -1949,10 +1911,10 @@ function ChannelCategoryGroup({
   const channelIds = group.channels.map((c) => c.id);
 
   return (
-    <div className="mb-4">
+    <div className="mb-3">
       {/* Category Header */}
       <div
-        className="group flex cursor-pointer items-center py-1 pr-2 transition-colors hover:text-rm-text text-rm-text-muted"
+        className="group flex cursor-pointer items-center py-1.5 pr-2 transition-colors hover:text-rm-text text-rm-text-muted"
         onContextMenu={(e) => handleCategoryContextMenu(e, group)}
       >
         <button
@@ -1968,7 +1930,7 @@ function ChannelCategoryGroup({
               isCollapsed && "-rotate-90",
             )}
           />
-          <span className="truncate text-[12px] font-bold tracking-wide uppercase leading-none pt-0.5">
+          <span className="text-ui-2xs font-semibold uppercase tracking-[0.08em] truncate leading-none pt-0.5">
             <InlineEmojiText text={group.name} />
           </span>
         </button>

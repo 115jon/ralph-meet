@@ -435,14 +435,14 @@ export default function RoomSettingsModal({
               <div className="flex w-full md:w-auto items-center justify-between px-2 mb-0 md:mb-6 md:mt-0 gap-4">
                 <h3
                   id="room-settings-title"
-                  className="text-[11px] font-bold uppercase tracking-wider text-rm-text-muted shrink-0"
+                  className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted shrink-0"
                 >
                   Room Settings
                 </h3>
                 <button
                   type="button"
                   onClick={onClose}
-                  className="md:hidden p-1 rounded-full bg-rm-bg-surface text-rm-text flex items-center justify-center hover:bg-rm-bg-hover active:scale-95 transition-all"
+                  className="md:hidden p-1 rounded-full bg-rm-bg-surface text-rm-text flex items-center justify-center hover:bg-rm-bg-hover active:scale-[0.96] transition-ui"
                   aria-label="Close room settings"
                 >
                   <X size={18} />
@@ -451,7 +451,7 @@ export default function RoomSettingsModal({
 
               {/* Audio & Video Subgroup */}
               <div className="flex flex-row md:flex-col gap-1 w-full mb-4 md:mb-6">
-                <span className="hidden md:inline text-[9px] font-bold text-rm-text-muted/50 uppercase tracking-widest px-2 mb-1">
+                <span className="text-ui-2xs font-semibold uppercase tracking-[0.08em] hidden md:inline text-rm-text-muted/50 px-2 mb-1">
                   Audio & Video
                 </span>
                 <TabBtn
@@ -468,7 +468,7 @@ export default function RoomSettingsModal({
 
               {/* Theme Subgroup */}
               <div className="flex flex-row md:flex-col gap-1 w-full">
-                <span className="hidden md:inline text-[9px] font-bold text-rm-text-muted/50 uppercase tracking-widest px-2 mb-1">
+                <span className="text-ui-2xs font-semibold uppercase tracking-[0.08em] hidden md:inline text-rm-text-muted/50 px-2 mb-1">
                   Theme
                 </span>
                 <TabBtn
@@ -486,12 +486,12 @@ export default function RoomSettingsModal({
                 <button
                   type="button"
                   onClick={onClose}
-                  className="flex h-8 w-8 items-center justify-center rounded-full border border-rm-border text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text transition-all"
+                  className="flex h-8 w-8 items-center justify-center rounded-full border border-rm-border text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text transition-ui"
                   aria-label="Close room settings"
                 >
                   <X size={16} />
                 </button>
-                <span className="text-[11px] font-bold text-rm-text-muted">
+                <span className="text-ui-2xs font-bold text-rm-text-muted">
                   ESC
                 </span>
               </div>
@@ -503,7 +503,7 @@ export default function RoomSettingsModal({
                 }}
               >
                 {activeTab === "voice" && (
-                  <div className="animate-in fade-in slide-in-from-right-4 duration-300">
+                  <div className="animate-in fade-in duration-150">
                     <h1 className="text-xl font-bold text-rm-text mb-1">
                       Voice Settings
                     </h1>
@@ -516,7 +516,7 @@ export default function RoomSettingsModal({
                       <section className="space-y-5">
                         <div className="flex items-center gap-2">
                           <Volume2 size={14} className="text-rm-accent" />
-                          <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-rm-text-muted">
+                          <h3 className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted">
                             Hardware
                           </h3>
                         </div>
@@ -524,7 +524,7 @@ export default function RoomSettingsModal({
                           <div className="space-y-2">
                             <Label
                               htmlFor="room-settings-input-device"
-                              className="text-[10px] font-bold uppercase tracking-wider text-rm-text-muted ml-1"
+                              className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted ml-1"
                             >
                               Input Device
                             </Label>
@@ -582,7 +582,7 @@ export default function RoomSettingsModal({
                           <div className="space-y-2">
                             <Label
                               htmlFor="room-settings-output-device"
-                              className="text-[10px] font-bold uppercase tracking-wider text-rm-text-muted ml-1"
+                              className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted ml-1"
                             >
                               Output Device
                             </Label>
@@ -646,7 +646,7 @@ export default function RoomSettingsModal({
                       <section className="space-y-5">
                         <div className="flex items-center gap-2">
                           <Volume2 size={14} className="text-emerald-400" />
-                          <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-rm-text-muted">
+                          <h3 className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted">
                             Volume
                           </h3>
                         </div>
@@ -654,11 +654,11 @@ export default function RoomSettingsModal({
                           <div className="flex justify-between items-end px-1">
                             <label
                               htmlFor="outputVolume"
-                              className="text-[10px] font-bold uppercase tracking-wider text-rm-text-muted"
+                              className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted"
                             >
                               Output Volume
                             </label>
-                            <span className="text-sm font-black text-rm-accent tabular-nums">
+                            <span className="text-sm font-bold text-rm-accent tabular-nums">
                               {vSettings.outputVolume}%
                             </span>
                           </div>
@@ -682,11 +682,11 @@ export default function RoomSettingsModal({
                             <div className="flex justify-between items-end px-1">
                               <label
                                 htmlFor="inputSensitivity"
-                                className="text-[10px] font-bold uppercase tracking-wider text-rm-text-muted"
+                                className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted"
                               >
                                 Input Sensitivity
                               </label>
-                              <span className="text-sm font-black text-amber-600 dark:text-amber-400 tabular-nums">
+                              <span className="text-sm font-bold text-amber-600 dark:text-amber-400 tabular-nums">
                                 {vSettings.sensitivity}dB
                               </span>
                             </div>
@@ -713,7 +713,7 @@ export default function RoomSettingsModal({
                       <section className="space-y-5">
                         <div className="flex items-center gap-2">
                           <Sparkles size={14} className="text-sky-300" />
-                          <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-rm-text-muted">
+                          <h3 className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted">
                             Noise Suppression
                           </h3>
                         </div>
@@ -729,7 +729,7 @@ export default function RoomSettingsModal({
                             size={14}
                             className="text-amber-600 dark:text-amber-400"
                           />
-                          <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-rm-text-muted">
+                          <h3 className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted">
                             Audio Processing
                           </h3>
                         </div>
@@ -787,17 +787,17 @@ export default function RoomSettingsModal({
                           ].map((opt) => (
                             <div
                               key={opt.id}
-                              className="group flex items-center justify-between p-3 rounded-xl bg-rm-bg-elevated/50 border border-rm-border hover:bg-rm-bg-hover transition-all"
+                              className="group flex items-center justify-between p-3 rounded-xl bg-rm-bg-elevated/50 border border-rm-border hover:bg-rm-bg-hover transition-ui"
                             >
                               <div className="flex items-center gap-3">
                                 <div className="w-8 h-8 rounded-lg bg-rm-bg-surface flex items-center justify-center text-rm-text-muted">
                                   {opt.icon}
                                 </div>
                                 <div>
-                                  <h4 className="text-[13px] font-bold text-rm-text">
+                                  <h4 className="text-ui-sm font-bold text-rm-text">
                                     {opt.label}
                                   </h4>
-                                  <p className="text-[11px] text-rm-text-muted">
+                                  <p className="text-ui-2xs text-rm-text-muted">
                                     {opt.desc}
                                   </p>
                                 </div>
@@ -833,7 +833,7 @@ export default function RoomSettingsModal({
                 )}
 
                 {activeTab === "camera" && (
-                  <div className="animate-in fade-in slide-in-from-right-4 duration-300 space-y-8">
+                  <div className="animate-in fade-in duration-150 space-y-8">
                     <div>
                       <h1 className="text-xl font-bold text-rm-text mb-1">
                         Camera Settings
@@ -858,7 +858,7 @@ export default function RoomSettingsModal({
                     {/* Camera dropdown selection */}
                     <div className="space-y-2 max-w-[480px]">
                       <div className="flex flex-col gap-2">
-                        <p className="ml-1 text-[10px] font-bold uppercase tracking-wider text-rm-text-muted">
+                        <p className="text-ui-2xs font-semibold uppercase tracking-[0.08em] ml-1 text-rm-text-muted">
                           Camera Device
                         </p>
                         <Select
@@ -908,7 +908,7 @@ export default function RoomSettingsModal({
 
                     {/* Camera Quality */}
                     <div className="space-y-3">
-                      <p className="ml-1 text-[10px] font-bold uppercase tracking-wider text-rm-text-muted">
+                      <p className="text-ui-2xs font-semibold uppercase tracking-[0.08em] ml-1 text-rm-text-muted">
                         Capture Quality
                       </p>
                       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 max-w-[480px]">
@@ -929,7 +929,7 @@ export default function RoomSettingsModal({
                                 )
                               }
                               className={cn(
-                                "group rounded-xl border p-3 text-left outline-none transition-all",
+                                "group rounded-xl border p-3 text-left outline-none transition-ui",
                                 isSelected
                                   ? "border-primary bg-primary/5 ring-1 ring-primary"
                                   : "border-rm-border bg-rm-bg-surface/40 hover:border-rm-text/20 hover:bg-rm-bg-surface/60",
@@ -947,7 +947,7 @@ export default function RoomSettingsModal({
                                   >
                                     {profile.label}
                                   </span>
-                                  <span className="rounded-md bg-rm-bg-elevated/40 px-1 py-0.5 text-[8px] font-black text-rm-text-muted">
+                                  <span className="rounded-md bg-rm-bg-elevated/40 px-1 py-0.5 text-ui-2xs font-bold text-rm-text-muted">
                                     {profile.fps} FPS
                                   </span>
                                 </div>
@@ -955,7 +955,7 @@ export default function RoomSettingsModal({
                                   <Check size={12} className="text-primary" />
                                 )}
                               </div>
-                              <p className="text-[9px] leading-tight text-rm-text-muted">
+                              <p className="text-ui-2xs leading-tight text-rm-text-muted">
                                 {profile.width}x{profile.height}
                               </p>
                             </button>
@@ -967,7 +967,7 @@ export default function RoomSettingsModal({
                     {/* Video Background */}
                     <div className="space-y-3">
                       <div className="flex items-center justify-between gap-3 px-1 max-w-[480px]">
-                        <p className="text-[10px] font-bold uppercase tracking-wider text-rm-text-muted">
+                        <p className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted">
                           Video Background
                         </p>
                         {!isUnauthenticated && (
@@ -976,7 +976,7 @@ export default function RoomSettingsModal({
                               type="button"
                               onClick={() => fileInputRef.current?.click()}
                               disabled={isUploadingBackground}
-                              className="flex items-center gap-1.5 rounded-lg border border-rm-border bg-rm-bg-surface/40 px-2.5 py-1.5 text-[10px] font-black text-rm-text-muted transition-colors hover:text-rm-text"
+                              className="flex items-center gap-1.5 rounded-lg border border-rm-border bg-rm-bg-surface/40 px-2.5 py-1.5 text-ui-2xs font-bold text-rm-text-muted transition-colors hover:text-rm-text"
                             >
                               <Upload size={12} />{" "}
                               {isUploadingBackground
@@ -1033,18 +1033,18 @@ export default function RoomSettingsModal({
                                 )
                               }
                               className={cn(
-                                "group relative flex flex-col rounded-xl border p-2.5 text-left outline-none transition-all",
+                                "group relative flex flex-col rounded-xl border p-2.5 text-left outline-none transition-ui",
                                 isSelected
                                   ? "border-primary bg-primary/5 ring-1 ring-primary"
                                   : "border-rm-border bg-rm-bg-surface/40 hover:border-rm-text/20 hover:bg-rm-bg-surface/60",
                               )}
                             >
                               {option.id === "none" ? (
-                                <div className="mb-2 flex h-16 w-full items-center justify-center rounded-lg bg-rm-bg-elevated/40 text-rm-text-muted/60 transition-all group-hover:scale-[1.02]">
+                                <div className="mb-2 flex h-16 w-full items-center justify-center rounded-lg bg-rm-bg-elevated/40 text-rm-text-muted/60 transition-ui">
                                   <Ban size={20} />
                                 </div>
                               ) : (
-                                <div className="relative mb-2 flex h-16 w-full items-center justify-center overflow-hidden rounded-lg bg-rm-bg-elevated/40 transition-all group-hover:scale-[1.02]">
+                                <div className="relative mb-2 flex h-16 w-full items-center justify-center overflow-hidden rounded-lg bg-rm-bg-elevated/40 transition-ui">
                                   <div
                                     data-rm-preserve-blur="true"
                                     className="absolute inset-0 bg-gradient-to-tr from-primary/30 via-rm-accent/25 to-rm-accent/40 filter blur-[8px]"
@@ -1085,7 +1085,7 @@ export default function RoomSettingsModal({
                               <div
                                 key={background.id}
                                 className={cn(
-                                  "group relative overflow-hidden rounded-xl border bg-rm-bg-surface/40 outline-none transition-all",
+                                  "group relative overflow-hidden rounded-xl border bg-rm-bg-surface/40 outline-none transition-ui",
                                   isSelected
                                     ? "border-primary ring-1 ring-primary"
                                     : "border-rm-border hover:border-rm-text/20",
@@ -1156,12 +1156,12 @@ export default function RoomSettingsModal({
                                 href="/sign-in"
                                 target="_blank"
                                 rel="noreferrer"
-                                className="group relative flex flex-col rounded-xl border border-primary/20 bg-gradient-to-br from-primary/10 via-rm-accent/10 to-rm-accent/5 p-2.5 text-left outline-none transition-all hover:border-primary/50 hover:from-primary/15 hover:to-rm-accent/15"
+                                className="group relative flex flex-col rounded-xl border border-primary/20 bg-gradient-to-br from-primary/10 via-rm-accent/10 to-rm-accent/5 p-2.5 text-left outline-none transition-ui hover:border-primary/50 hover:from-primary/15 hover:to-rm-accent/15"
                               >
-                                <div className="mb-2 flex h-16 w-full flex-col items-center justify-center rounded-lg bg-gradient-to-tr from-primary/20 to-rm-accent/20 text-primary transition-all group-hover:scale-[1.02]">
+                                <div className="mb-2 flex h-16 w-full flex-col items-center justify-center rounded-lg bg-gradient-to-tr from-primary/20 to-rm-accent/20 text-primary transition-ui">
                                   <Lock
                                     size={18}
-                                    className="text-rm-accent group-hover:scale-110 transition-transform"
+                                    className="text-rm-accent transition-transform"
                                   />
                                 </div>
                                 <span className="text-xs font-bold text-primary-foreground/90 group-hover:text-primary">
@@ -1169,11 +1169,7 @@ export default function RoomSettingsModal({
                                 </span>
                               </a>
                             </TooltipTrigger>
-                            <TooltipContent
-                              side="top"
-                              className="bg-rm-bg-floating border border-rm-border text-rm-text-primary text-[12px] font-bold shadow-xl px-3 py-2 rounded-lg"
-                              sideOffset={8}
-                            >
+                            <TooltipContent side="top" sideOffset={8}>
                               Sign in to upload custom backgrounds
                             </TooltipContent>
                           </Tooltip>
@@ -1192,12 +1188,12 @@ export default function RoomSettingsModal({
                     </div>
 
                     {/* Always Preview Video Toggle */}
-                    <div className="flex items-center justify-between p-3.5 rounded-xl bg-rm-bg-elevated/50 border border-rm-border hover:bg-rm-bg-hover transition-all max-w-[480px]">
+                    <div className="flex items-center justify-between p-3.5 rounded-xl bg-rm-bg-elevated/50 border border-rm-border hover:bg-rm-bg-hover transition-ui max-w-[480px]">
                       <div>
-                        <h4 className="text-[13px] font-bold text-rm-text">
+                        <h4 className="text-ui-sm font-bold text-rm-text">
                           Always Preview Video
                         </h4>
-                        <p className="text-[11px] text-rm-text-muted">
+                        <p className="text-ui-2xs text-rm-text-muted">
                           Show preview modal before starting video chat
                         </p>
                       </div>
@@ -1233,7 +1229,7 @@ export default function RoomSettingsModal({
                 )}
 
                 {activeTab === "appearance" && (
-                  <div className="animate-in fade-in slide-in-from-right-4 duration-300">
+                  <div className="animate-in fade-in duration-150">
                     <h1 className="text-xl font-bold text-rm-text mb-1">
                       Appearance
                     </h1>
@@ -1271,7 +1267,7 @@ export default function RoomSettingsModal({
                           key={t.id}
                           onClick={() => setTheme(t.id)}
                           className={cn(
-                            "rounded-xl border-2 p-1 transition-all",
+                            "rounded-xl border-2 p-1 transition-ui",
                             theme === t.id
                               ? "border-primary ring-2 ring-primary/20"
                               : "border-rm-border hover:border-rm-text-muted/30",
@@ -1328,7 +1324,7 @@ function TabBtn({
       type="button"
       onClick={onClick}
       className={cn(
-        "shrink-0 flex items-center md:justify-start justify-center rounded-full md:rounded-lg px-4 md:px-3 py-2 text-[13px] md:text-sm font-bold md:font-medium transition-colors w-full text-left",
+        "shrink-0 flex items-center md:justify-start justify-center rounded-full md:rounded-lg px-4 md:px-3 py-2 text-ui-sm md:text-sm font-bold md:font-medium transition-colors w-full text-left",
         active
           ? "bg-primary text-primary-foreground md:bg-primary/10 md:text-primary"
           : "text-rm-text-secondary hover:bg-rm-bg-hover hover:text-rm-text bg-rm-bg-elevated/50 md:bg-transparent",

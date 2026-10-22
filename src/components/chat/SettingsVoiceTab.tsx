@@ -243,7 +243,7 @@ export default function SettingsVoiceTab() {
   };
 
   return (
-    <div className="animate-in fade-in slide-in-from-right-4 duration-300">
+    <div className="animate-in fade-in duration-150">
       <h1 className="mb-2 hidden text-2xl font-bold text-rm-text md:block">
         Voice
       </h1>

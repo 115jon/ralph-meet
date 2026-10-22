@@ -88,7 +88,7 @@ describe("GifPickerModal recent queries rendering", () => {
       'class="fixed inset-0 transition-opacity duration-150 z-90"',
     );
     expect(markup).toContain(
-      "absolute z-10 flex min-h-0 flex-col overflow-hidden rounded-[26px]",
+      "absolute z-10 flex min-h-0 flex-col overflow-hidden rounded-3xl",
     );
   });
 });

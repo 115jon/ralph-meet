@@ -93,7 +93,7 @@ export function ListenTogetherNowPlayingCard({
       <TooltipProvider delayDuration={100}>
         <div
           className={cn(
-            "rounded-[22px] border border-dashed border-rm-border bg-rm-bg-hover/30 px-4 py-10 text-center text-sm text-rm-text-muted",
+            "rounded-2xl border border-dashed border-rm-border bg-rm-bg-hover/30 px-4 py-10 text-center text-sm text-rm-text-muted",
             className,
           )}
         >
@@ -153,15 +153,15 @@ export function ListenTogetherNowPlayingCard({
       display={currentEntry.requester.avatarDisplay}
     />
   ) : (
-    <div className="flex h-full w-full items-center justify-center text-[9px] font-black text-rm-text-muted">
+    <div className="flex h-full w-full items-center justify-center text-ui-2xs font-bold text-rm-text-muted">
       {currentEntry.requester.displayName.charAt(0).toUpperCase()}
     </div>
   );
   const titleTriggerClassName = cn(
     "block truncate rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-2 focus-visible:ring-offset-rm-bg-elevated",
     variant === "mini"
-      ? "text-[13px] font-bold leading-tight text-rm-text"
-      : "text-base font-black text-rm-text",
+      ? "text-ui-sm font-bold leading-tight text-rm-text"
+      : "text-base font-semibold text-rm-text",
   );
 
   const sendCommand = (payload: Record<string, unknown>) => {
@@ -310,12 +310,12 @@ export function ListenTogetherNowPlayingCard({
       <TooltipProvider delayDuration={100}>
         <div
           className={cn(
-            "rounded-[20px] border border-white/6 bg-rm-bg-elevated/70 px-3 py-3 shadow-[0_18px_40px_rgba(0,0,0,0.22),inset_0_1px_0_rgba(255,255,255,0.04)] backdrop-blur-sm max-md:rounded-[16px] max-md:bg-rm-bg-elevated max-md:px-2.5 max-md:py-2.5 max-md:shadow-[0_8px_20px_rgba(0,0,0,0.18)] max-md:backdrop-blur-none",
+            "rounded-2xl border border-white/6 bg-rm-bg-elevated/70 px-3 py-3 shadow-[0_18px_40px_rgba(0,0,0,0.22),inset_0_1px_0_rgba(255,255,255,0.04)] backdrop-blur-sm max-md:rounded-xl max-md:bg-rm-bg-elevated max-md:px-2.5 max-md:py-2.5 max-md:shadow-[0_8px_20px_rgba(0,0,0,0.18)] max-md:backdrop-blur-none",
             className,
           )}
         >
           <div className="flex items-start gap-3 max-md:items-center max-md:gap-2.5">
-            <div className="h-12 w-12 shrink-0 overflow-hidden rounded-[16px] bg-rm-bg-hover/70 ring-1 ring-white/5 max-md:h-10 max-md:w-10 max-md:rounded-[12px]">
+            <div className="h-12 w-12 shrink-0 overflow-hidden rounded-xl bg-rm-bg-hover/70 ring-1 ring-white/5 max-md:h-10 max-md:w-10 max-md:rounded-lg">
               {artwork}
             </div>
             <div className="min-w-0 flex-1">
@@ -335,20 +335,20 @@ export function ListenTogetherNowPlayingCard({
                       side="top"
                       align="start"
                       sideOffset={10}
-                      className="max-w-[280px] bg-rm-bg-floating text-rm-text-primary"
+                      className="max-w-[280px]"
                     >
                       <p className="break-words text-sm font-semibold">
                         {currentEntry.track.title}
                       </p>
                     </TooltipContent>
                   </Tooltip>
-                  <div className="mt-1 truncate text-[11px] text-rm-text-muted">
+                  <div className="mt-1 truncate text-ui-2xs text-rm-text-muted">
                     {subtitle}
                   </div>
                 </div>
                 <div
                   className={cn(
-                    "inline-flex shrink-0 rounded-full border px-2 py-0.5 text-[9px] font-black uppercase tracking-[0.18em]",
+                    "inline-flex shrink-0 rounded-full border px-2 py-0.5 text-ui-2xs font-bold uppercase tracking-[0.18em]",
                     syncBadge.className,
                     "max-md:hidden",
                   )}
@@ -356,7 +356,7 @@ export function ListenTogetherNowPlayingCard({
                   {syncBadge.label}
                 </div>
               </div>
-              <div className="mt-2 flex items-center gap-2 text-[11px] text-rm-text-muted max-md:hidden">
+              <div className="mt-2 flex items-center gap-2 text-ui-2xs text-rm-text-muted max-md:hidden">
                 <div className="h-5 w-5 shrink-0 overflow-hidden rounded-full bg-rm-bg-hover">
                   {requesterAvatar}
                 </div>
@@ -366,7 +366,7 @@ export function ListenTogetherNowPlayingCard({
           </div>
           <div className="mt-3 max-md:mt-2">
             <div className="flex items-center gap-2">
-              <span className="min-w-[34px] text-[10px] text-rm-text-muted/75 tabular-nums">
+              <span className="min-w-[34px] text-ui-2xs text-rm-text-muted/75 tabular-nums">
                 {formatListenTogetherDuration(effectiveSeekValue)}
               </span>
               <input
@@ -386,7 +386,7 @@ export function ListenTogetherNowPlayingCard({
                 onBlur={commitSeek}
                 className="h-1.5 min-w-0 flex-1 cursor-pointer accent-primary disabled:cursor-not-allowed"
               />
-              <span className="min-w-[34px] text-right text-[10px] text-rm-text-muted/75 tabular-nums">
+              <span className="min-w-[34px] text-right text-ui-2xs text-rm-text-muted/75 tabular-nums">
                 {formatListenTogetherDuration(durationMs)}
               </span>
             </div>
@@ -396,7 +396,7 @@ export function ListenTogetherNowPlayingCard({
               <button
                 type="button"
                 onClick={onOpenQueue}
-                className="inline-flex items-center gap-2 rounded-full border border-white/6 bg-rm-bg-hover/75 px-3 py-1.5 text-[11px] font-semibold text-rm-text-muted transition-colors hover:bg-rm-bg-active hover:text-rm-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 max-md:h-8 max-md:w-8 max-md:justify-center max-md:gap-0 max-md:px-0"
+                className="inline-flex items-center gap-2 rounded-full border border-white/6 bg-rm-bg-hover/75 px-3 py-1.5 text-ui-2xs font-semibold text-rm-text-muted transition-colors hover:bg-rm-bg-active hover:text-rm-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 max-md:h-8 max-md:w-8 max-md:justify-center max-md:gap-0 max-md:px-0"
                 aria-label="Open listen together queue"
               >
                 <ListMusic className="h-3.5 w-3.5" />
@@ -405,7 +405,7 @@ export function ListenTogetherNowPlayingCard({
                 </span>
               </button>
             ) : (
-              <div className="text-[11px] text-rm-text-muted">
+              <div className="text-ui-2xs text-rm-text-muted">
                 {currentEntry.track.sourceLabel}
               </div>
             )}
@@ -458,7 +458,7 @@ export function ListenTogetherNowPlayingCard({
     <TooltipProvider delayDuration={100}>
       <div className={cn("space-y-4", className)}>
         <div className="flex gap-4 sm:gap-5">
-          <div className="h-20 w-20 shrink-0 overflow-hidden rounded-[22px] bg-rm-bg-elevated/60 shadow-[0_14px_32px_rgba(0,0,0,0.2)] ring-1 ring-white/10 sm:h-24 sm:w-24 sm:rounded-[26px]">
+          <div className="h-20 w-20 shrink-0 overflow-hidden rounded-2xl bg-rm-bg-elevated/60 shadow-[0_14px_32px_rgba(0,0,0,0.2)] ring-1 ring-white/10 sm:h-24 sm:w-24 sm:rounded-3xl">
             {artwork}
           </div>
           <div className="min-w-0 flex-1 py-0.5">
@@ -478,7 +478,7 @@ export function ListenTogetherNowPlayingCard({
                     side="top"
                     align="start"
                     sideOffset={10}
-                    className="max-w-[320px] bg-rm-bg-floating text-rm-text-primary"
+                    className="max-w-[320px]"
                   >
                     <p className="break-words text-sm font-semibold">
                       {currentEntry.track.title}
@@ -490,7 +490,7 @@ export function ListenTogetherNowPlayingCard({
                 </div>
               </div>
               {queueCount > 0 && (
-                <span className="shrink-0 rounded-full bg-primary/10 px-2 py-1 text-[10px] font-bold tabular-nums text-primary">
+                <span className="shrink-0 rounded-full bg-primary/10 px-2 py-1 text-ui-2xs font-bold tabular-nums text-primary">
                   {queueCount} queued
                 </span>
               )}
@@ -522,14 +522,14 @@ export function ListenTogetherNowPlayingCard({
             onBlur={commitSeek}
             className="h-8 w-full cursor-pointer accent-primary disabled:cursor-not-allowed"
           />
-          <div className="flex items-center justify-between text-[11px] tabular-nums text-rm-text-muted">
+          <div className="flex items-center justify-between text-ui-2xs tabular-nums text-rm-text-muted">
             <span>{formatListenTogetherDuration(effectiveSeekValue)}</span>
             <span>{formatListenTogetherDuration(durationMs)}</span>
           </div>
         </div>
 
         {error && (
-          <div className="rounded-[18px] border border-destructive/20 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+          <div className="rounded-xl border border-destructive/20 bg-destructive/10 px-3 py-2 text-xs text-destructive">
             {error.message}
           </div>
         )}
@@ -622,7 +622,7 @@ export function ListenTogetherNowPlayingCard({
               <div className="mb-2 flex items-center justify-between gap-3">
                 <div>
                   <div className="text-xs font-bold text-rm-text">Loudness</div>
-                  <div className="text-[11px] text-rm-text-muted">
+                  <div className="text-ui-2xs text-rm-text-muted">
                     Smooth out big volume changes.
                   </div>
                 </div>
@@ -664,7 +664,7 @@ export function ListenTogetherNowPlayingCard({
                       aria-pressed={loudnessPreset === preset}
                       onClick={() => updateLoudnessSettings({ preset })}
                       className={cn(
-                        "min-w-0 flex-1 rounded-md px-2 py-1.5 text-[10px] font-bold transition-colors disabled:cursor-not-allowed disabled:opacity-45",
+                        "min-w-0 flex-1 rounded-md px-2 py-1.5 text-ui-2xs font-bold transition-colors disabled:cursor-not-allowed disabled:opacity-45",
                         loudnessPreset === preset
                           ? "bg-rm-bg-active text-rm-text shadow-sm"
                           : "text-rm-text-muted hover:text-rm-text",
@@ -679,7 +679,7 @@ export function ListenTogetherNowPlayingCard({
           </details>
         </div>
 
-        <div className="flex items-center justify-between gap-3 text-[11px] text-rm-text-muted">
+        <div className="flex items-center justify-between gap-3 text-ui-2xs text-rm-text-muted">
           <span className="truncate">{currentEntry.track.sourceLabel}</span>
           <button
             type="button"

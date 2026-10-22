@@ -126,7 +126,7 @@ function PermissionsSidebar({
   return (
     <div className="flex min-h-0 w-56 flex-col bg-rm-bg-secondary border-r border-rm-border relative z-10">
       <div className="p-3 border-b border-rm-border flex justify-between items-center">
-        <span className="text-xs font-bold uppercase tracking-widest text-rm-text-muted">
+        <span className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted">
           Roles/Members
         </span>
         <ButtonBase
@@ -145,7 +145,7 @@ function PermissionsSidebar({
         <div className="min-h-0 flex-1 overflow-y-auto p-2 bg-rm-bg-surface space-y-4">
           {availableRoles.length > 0 && (
             <div>
-              <span className="px-2 text-[10px] font-bold uppercase text-rm-text-muted">
+              <span className="text-ui-2xs font-semibold uppercase tracking-[0.08em] px-2 text-rm-text-muted">
                 Roles
               </span>
               <div className="space-y-1 mt-1">
@@ -175,7 +175,7 @@ function PermissionsSidebar({
 
           {availableMembers.length > 0 && (
             <div>
-              <span className="px-2 text-[10px] font-bold uppercase text-rm-text-muted">
+              <span className="text-ui-2xs font-semibold uppercase tracking-[0.08em] px-2 text-rm-text-muted">
                 Members
               </span>
               <div className="space-y-1 mt-1">
@@ -205,7 +205,7 @@ function PermissionsSidebar({
                             display={m.user.avatar_display}
                           />
                         ) : (
-                          <span className="text-[10px] text-rm-text uppercase font-bold">
+                          <span className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text">
                             {displayName[0]}
                           </span>
                         )}
@@ -257,7 +257,7 @@ function PermissionsSidebar({
                         display={o.avatar_display}
                       />
                     ) : (
-                      <span className="text-[10px] text-rm-text uppercase font-bold">
+                      <span className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text">
                         {(o.name || "?")[0]}
                       </span>
                     )}
@@ -348,7 +348,7 @@ function PermissionsEditor({
                       className={cn(
                         "w-10 h-8 rounded flex items-center justify-center transition-colors shadow-sm",
                         isDenied
-                          ? "bg-red-500 text-white"
+                          ? "bg-destructive text-white"
                           : "hover:bg-rm-white/10 text-rm-text-muted",
                       )}
                     >

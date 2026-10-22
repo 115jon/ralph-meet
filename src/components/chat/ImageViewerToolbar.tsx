@@ -165,7 +165,7 @@ export function ImageViewerToolbar({
             className="block truncate text-sm font-bold leading-none text-rm-text drop-shadow-md"
           />
           {formattedDate && (
-            <span className="truncate text-[10px] font-medium text-rm-text-muted drop-shadow-md">
+            <span className="truncate text-ui-2xs font-medium text-rm-text-muted drop-shadow-md">
               {formattedDate}
             </span>
           )}
@@ -181,7 +181,7 @@ export function ImageViewerToolbar({
               <button
                 type="button"
                 onClick={() => viewDispatch({ type: "ZOOM_OUT" })}
-                className="p-2 text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover rounded-lg transition-all outline-none"
+                className="p-2 text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover rounded-lg transition-ui outline-none"
                 aria-label="Zoom out"
                 title="Zoom Out"
               >
@@ -190,7 +190,7 @@ export function ImageViewerToolbar({
               <button
                 type="button"
                 onClick={() => viewDispatch({ type: "ZOOM_IN" })}
-                className="p-2 text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover rounded-lg transition-all outline-none"
+                className="p-2 text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover rounded-lg transition-ui outline-none"
                 aria-label="Zoom in"
                 title="Zoom In"
               >
@@ -204,7 +204,7 @@ export function ImageViewerToolbar({
               <button
                 type="button"
                 onClick={handleForward}
-                className="p-2 text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover rounded-lg transition-all outline-none"
+                className="p-2 text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover rounded-lg transition-ui outline-none"
                 aria-label="Jump to message"
                 title="Jump to Message"
               >
@@ -217,7 +217,7 @@ export function ImageViewerToolbar({
             download={currentImage.filename}
             target="_blank"
             rel="noopener noreferrer"
-            className="p-2 text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover rounded-lg transition-all outline-none"
+            className="p-2 text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover rounded-lg transition-ui outline-none"
             aria-label="Download attachment"
             title="Download"
           >
@@ -235,7 +235,7 @@ export function ImageViewerToolbar({
                 }));
               }}
               className={cn(
-                "p-2 text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover rounded-lg transition-all outline-none",
+                "p-2 text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover rounded-lg transition-ui outline-none",
                 showMore && "bg-primary text-primary-foreground",
               )}
               aria-expanded={showMore}
@@ -326,7 +326,7 @@ export function ImageViewerToolbar({
                     </h3>
                     <div className="space-y-4">
                       <div>
-                        <div className="text-[10px] font-bold text-rm-text-muted uppercase mb-1">
+                        <div className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted mb-1">
                           Filename
                         </div>
                         <div className="text-xs text-rm-text break-all bg-rm-bg-surface/40 p-2 rounded border border-rm-border font-mono">
@@ -335,7 +335,7 @@ export function ImageViewerToolbar({
                       </div>
                       <div className="grid grid-cols-2 gap-2">
                         <div>
-                          <div className="text-[10px] font-bold text-rm-text-muted uppercase mb-1">
+                          <div className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted mb-1">
                             Dimensions
                           </div>
                           <div className="text-sm text-rm-text font-medium">
@@ -345,7 +345,7 @@ export function ImageViewerToolbar({
                           </div>
                         </div>
                         <div>
-                          <div className="text-[10px] font-bold text-rm-text-muted uppercase mb-1">
+                          <div className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted mb-1">
                             Size
                           </div>
                           <div className="text-sm text-rm-text font-medium">
@@ -354,7 +354,7 @@ export function ImageViewerToolbar({
                         </div>
                       </div>
                       <div>
-                        <div className="text-[10px] font-bold text-rm-text-muted uppercase mb-1">
+                        <div className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted mb-1">
                           Type
                         </div>
                         <div className="text-xs text-rm-text-muted font-mono">
@@ -374,7 +374,7 @@ export function ImageViewerToolbar({
           <button
             type="button"
             onClick={close}
-            className="p-2 text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover rounded-lg transition-all outline-none"
+            className="p-2 text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover rounded-lg transition-ui outline-none"
             aria-label="Close media viewer"
           >
             <X size={18} />

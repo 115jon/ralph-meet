@@ -141,10 +141,10 @@ export function VoiceDebugScreen({
       if (btn) {
         const originalText = btn.innerText;
         btn.innerText = "✓ Copied";
-        btn.classList.add("text-[#23a559]", "bg-[#23a559]/10");
+        btn.classList.add("text-rm-success", "bg-rm-success/10");
         setTimeout(() => {
           btn.innerText = originalText;
-          btn.classList.remove("text-[#23a559]", "bg-[#23a559]/10");
+          btn.classList.remove("text-rm-success", "bg-rm-success/10");
         }, 2000);
       }
     } catch (err) {
@@ -156,7 +156,7 @@ export function VoiceDebugScreen({
     return (
       <div className="fixed inset-0 z-100 bg-[#111214] flex flex-col items-center justify-center gap-4">
         <div className="w-8 h-8 border-4 border-rm-accent/30 border-t-rm-accent rounded-full animate-spin" />
-        <p className="text-rm-text-muted text-[13px] font-medium animate-pulse">
+        <p className="text-rm-text-muted text-ui-sm font-medium animate-pulse">
           Gathering RTC metrics…
         </p>
       </div>
@@ -175,12 +175,12 @@ export function VoiceDebugScreen({
   const isConnected = sessionState === "connected";
 
   return (
-    <div className="fixed inset-0 z-100 bg-rm-bg-primary flex flex-col text-rm-text text-[13px] overflow-hidden">
+    <div className="fixed inset-0 z-100 bg-rm-bg-primary flex flex-col text-rm-text text-ui-sm overflow-hidden">
       {/* Top bar */}
       <div className="flex items-center justify-between px-3 sm:px-5 py-2.5 sm:py-3 border-b border-rm-border bg-rm-bg-surface gap-2">
         <div className="flex items-center gap-2 sm:gap-3 min-w-0">
           <div className="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full bg-rm-status-online animate-pulse shrink-0" />
-          <span className="font-bold text-[13px] sm:text-[15px] text-rm-text tracking-tight truncate">
+          <span className="font-bold text-ui-sm sm:text-ui-base text-rm-text tracking-tight truncate">
             <InlineEmojiText text={`RTC DEBUG: ${data.roomSlug}`} />
           </span>
         </div>
@@ -188,13 +188,13 @@ export function VoiceDebugScreen({
           <button
             id="copy-stats-btn"
             onClick={handleCopyStats}
-            className="px-2.5 sm:px-3 py-1.5 text-[11px] sm:text-[12px] font-semibold rounded-md border border-rm-border bg-rm-bg-surface hover:bg-rm-bg-hover text-rm-text-primary transition-all min-w-[80px]"
+            className="px-2.5 sm:px-3 py-1.5 text-ui-2xs sm:text-ui-xs font-semibold rounded-md border border-rm-border bg-rm-bg-surface hover:bg-rm-bg-hover text-rm-text-primary transition-ui min-w-[80px]"
           >
             Copy Diagnostics
           </button>
           <button
             onClick={onClose}
-            className="px-2.5 sm:px-3 py-1.5 text-[11px] sm:text-[12px] font-semibold rounded-md bg-rm-status-dnd/10 hover:bg-rm-status-dnd/20 text-rm-status-dnd transition-colors"
+            className="px-2.5 sm:px-3 py-1.5 text-ui-2xs sm:text-ui-xs font-semibold rounded-md bg-rm-status-dnd/10 hover:bg-rm-status-dnd/20 text-rm-status-dnd transition-colors"
           >
             ✕ Close
           </button>
@@ -208,10 +208,10 @@ export function VoiceDebugScreen({
           <div className="flex sm:hidden items-center gap-2 px-3 py-2 overflow-x-auto scrollbar-none">
             <InlineEmojiText
               text={channelName}
-              className="text-[12px] font-bold text-rm-text shrink-0"
+              className="text-ui-xs font-bold text-rm-text shrink-0"
             />
             <span
-              className={`text-[10px] font-semibold shrink-0 ${isConnected ? "text-rm-status-online" : "text-rm-status-idle"}`}
+              className={`text-ui-2xs font-semibold shrink-0 ${isConnected ? "text-rm-status-online" : "text-rm-status-idle"}`}
             >
               {isConnected ? "●" : "○"}
             </span>
@@ -257,14 +257,14 @@ export function VoiceDebugScreen({
                 className="text-[14px] font-bold text-rm-text"
               />
               <p
-                className={`text-[11px] font-semibold ${isConnected ? "text-rm-status-online" : "text-rm-status-idle"}`}
+                className={`text-ui-2xs font-semibold ${isConnected ? "text-rm-status-online" : "text-rm-status-idle"}`}
               >
                 {formatConnectionStateLabel(sessionState)}
               </p>
             </div>
 
             <div className="space-y-0.5">
-              <p className="text-[10px] font-bold text-rm-text-muted uppercase tracking-wider mb-1">
+              <p className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted mb-1">
                 RTC Debug: Default
               </p>
               <SidebarItem
@@ -283,7 +283,7 @@ export function VoiceDebugScreen({
 
             {inboundTrackNames.length > 0 && (
               <div className="space-y-0.5">
-                <p className="text-[10px] font-bold text-rm-text-muted uppercase tracking-wider mb-1">
+                <p className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted mb-1">
                   Inbound
                 </p>
                 {inboundTrackNames.map((name) => {
@@ -359,7 +359,7 @@ function SidebarItem({
   return (
     <button
       onClick={() => onSelect(id)}
-      className={`sm:w-full text-left px-2.5 sm:px-2 py-1 rounded text-[12px] font-medium transition-colors whitespace-nowrap shrink-0 ${
+      className={`sm:w-full text-left px-2.5 sm:px-2 py-1 rounded text-ui-xs font-medium transition-colors whitespace-nowrap shrink-0 ${
         isActive
           ? "bg-rm-bg-active text-rm-text"
           : "text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text"
@@ -400,7 +400,7 @@ function MiniChart({
 
   if (!data || data.length === 0) {
     return (
-      <div className="h-20 flex items-center justify-center text-[11px] text-rm-text-muted">
+      <div className="h-20 flex items-center justify-center text-ui-2xs text-rm-text-muted">
         No data
       </div>
     );
@@ -409,7 +409,7 @@ function MiniChart({
   return (
     <Suspense
       fallback={
-        <div className="h-20 w-full flex items-center justify-center text-[10px] text-rm-text-muted">
+        <div className="h-20 w-full flex items-center justify-center text-ui-2xs text-rm-text-muted">
           Loading chart...
         </div>
       }
@@ -460,8 +460,8 @@ function MiniChart({
 function StatRow({ label, value }: { label: string; value: string | number }) {
   return (
     <div className="flex items-center justify-between py-1.5 border-b border-rm-border">
-      <span className="text-rm-text-muted text-[13px]">{label}</span>
-      <span className="text-rm-text font-semibold tabular-nums text-[13px]">
+      <span className="text-rm-text-muted text-ui-sm">{label}</span>
+      <span className="text-rm-text font-semibold tabular-nums text-ui-sm">
         {value}
       </span>
     </div>
@@ -471,7 +471,7 @@ function StatRow({ label, value }: { label: string; value: string | number }) {
 function OverviewCard({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-xl border border-rm-border bg-rm-bg-surface px-3 py-3 shadow-sm">
-      <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-rm-text-muted/70">
+      <p className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted/70">
         {label}
       </p>
       <p className="mt-1 text-[14px] font-bold text-rm-text">{value}</p>
@@ -499,8 +499,8 @@ function ChartCard({
   return (
     <div className="space-y-1">
       <div className="flex items-baseline justify-between">
-        <span className="text-[13px] font-semibold text-rm-text">{title}</span>
-        <span className="text-[13px] font-semibold text-rm-text tabular-nums">
+        <span className="text-ui-sm font-semibold text-rm-text">{title}</span>
+        <span className="text-ui-sm font-semibold text-rm-text tabular-nums">
           {value}
         </span>
       </div>

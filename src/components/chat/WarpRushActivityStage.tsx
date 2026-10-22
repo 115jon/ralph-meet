@@ -1138,10 +1138,10 @@ export function WarpRushActivityStage({
       <div className="pointer-events-none absolute inset-0 z-10 flex flex-col justify-between gap-3 p-3 sm:p-4 md:p-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="pointer-events-auto flex w-full max-w-[440px] flex-col gap-3">
-            <div className="rounded-[28px] border border-cyan-300/15 bg-slate-950/48 p-4 shadow-[0_22px_90px_rgba(2,6,23,0.42)] backdrop-blur-2xl sm:p-5">
+            <div className="rounded-3xl border border-cyan-300/15 bg-slate-950/48 p-4 shadow-[0_22px_90px_rgba(2,6,23,0.42)] backdrop-blur-2xl sm:p-5">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2 text-[11px] uppercase tracking-[0.28em] text-cyan-200/74">
+                  <div className="flex items-center gap-2 text-ui-2xs uppercase tracking-[0.28em] text-cyan-200/74">
                     <Rocket size={14} />
                     Warp Rush 3D
                   </div>
@@ -1156,7 +1156,7 @@ export function WarpRushActivityStage({
                 </div>
                 <div
                   className={cn(
-                    "shrink-0 rounded-full border px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.24em]",
+                    "shrink-0 rounded-full border px-3 py-1.5 text-ui-2xs font-semibold uppercase tracking-[0.08em]",
                     softwareRendererLikely
                       ? "border-amber-300/35 bg-amber-400/10 text-amber-100"
                       : "border-emerald-300/30 bg-emerald-400/10 text-emerald-100",
@@ -1168,7 +1168,7 @@ export function WarpRushActivityStage({
 
               <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
                 <div className="rounded-2xl border border-white/8 bg-white/[0.04] px-3 py-3">
-                  <div className="text-[10px] uppercase tracking-[0.22em] text-slate-500">
+                  <div className="text-ui-2xs uppercase tracking-[0.22em] text-slate-500">
                     Score
                   </div>
                   <div className="mt-2 text-2xl font-black text-cyan-200">
@@ -1176,7 +1176,7 @@ export function WarpRushActivityStage({
                   </div>
                 </div>
                 <div className="rounded-2xl border border-white/8 bg-white/[0.04] px-3 py-3">
-                  <div className="text-[10px] uppercase tracking-[0.22em] text-slate-500">
+                  <div className="text-ui-2xs uppercase tracking-[0.22em] text-slate-500">
                     Best
                   </div>
                   <div className="mt-2 text-2xl font-black text-fuchsia-200">
@@ -1184,7 +1184,7 @@ export function WarpRushActivityStage({
                   </div>
                 </div>
                 <div className="rounded-2xl border border-white/8 bg-white/[0.04] px-3 py-3">
-                  <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-[0.22em] text-slate-500">
+                  <div className="flex items-center gap-1.5 text-ui-2xs uppercase tracking-[0.22em] text-slate-500">
                     <Wind size={12} />
                     Draft
                   </div>
@@ -1200,7 +1200,7 @@ export function WarpRushActivityStage({
                   </div>
                 </div>
                 <div className="rounded-2xl border border-white/8 bg-white/[0.04] px-3 py-3">
-                  <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-[0.22em] text-slate-500">
+                  <div className="flex items-center gap-1.5 text-ui-2xs uppercase tracking-[0.22em] text-slate-500">
                     <Users size={12} />
                     Rival
                   </div>
@@ -1220,13 +1220,13 @@ export function WarpRushActivityStage({
             )}
           </div>
 
-          <div className="pointer-events-auto w-full max-w-[340px] rounded-[28px] border border-cyan-300/15 bg-slate-950/44 p-4 shadow-[0_22px_90px_rgba(2,6,23,0.4)] backdrop-blur-2xl sm:p-5">
+          <div className="pointer-events-auto w-full max-w-[340px] rounded-3xl border border-cyan-300/15 bg-slate-950/44 p-4 shadow-[0_22px_90px_rgba(2,6,23,0.4)] backdrop-blur-2xl sm:p-5">
             <div className="flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2 text-[11px] uppercase tracking-[0.24em] text-cyan-200/80">
+              <div className="flex items-center gap-2 text-ui-2xs uppercase tracking-[0.24em] text-cyan-200/80">
                 <Trophy size={14} />
                 Session board
               </div>
-              <div className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-[10px] uppercase tracking-[0.18em] text-slate-300">
+              <div className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-ui-2xs uppercase tracking-[0.18em] text-slate-300">
                 {remotePilotCount > 0
                   ? `${remotePilotCount + 1} live`
                   : "Solo warm-up"}
@@ -1263,7 +1263,7 @@ export function WarpRushActivityStage({
                         <div className="truncate text-sm font-bold text-white">
                           {displayName}
                         </div>
-                        <div className="mt-1 flex items-center gap-2 text-[10px] uppercase tracking-[0.18em] text-slate-400">
+                        <div className="mt-1 flex items-center gap-2 text-ui-2xs uppercase tracking-[0.18em] text-slate-400">
                           <span>{PRESETS[entry.preset].label}</span>
                           <span>
                             {entry.crashed
@@ -1278,7 +1278,7 @@ export function WarpRushActivityStage({
                         <div className="text-lg font-black text-cyan-100">
                           {formatStat(entry.best)}
                         </div>
-                        <div className="text-[10px] uppercase tracking-[0.18em] text-slate-400">
+                        <div className="text-ui-2xs uppercase tracking-[0.18em] text-slate-400">
                           Peak
                         </div>
                       </div>
@@ -1296,8 +1296,8 @@ export function WarpRushActivityStage({
         </div>
 
         <div className="flex flex-wrap items-end justify-between gap-3">
-          <div className="pointer-events-auto flex max-w-full flex-wrap items-center gap-2 rounded-[24px] border border-cyan-300/15 bg-slate-950/44 px-3 py-3 backdrop-blur-2xl sm:px-4">
-            <div className="flex items-center gap-2 pr-1 text-[11px] uppercase tracking-[0.24em] text-cyan-200/78">
+          <div className="pointer-events-auto flex max-w-full flex-wrap items-center gap-2 rounded-3xl border border-cyan-300/15 bg-slate-950/44 px-3 py-3 backdrop-blur-2xl sm:px-4">
+            <div className="flex items-center gap-2 pr-1 text-ui-2xs uppercase tracking-[0.24em] text-cyan-200/78">
               <Move3D size={14} />
               Controls
             </div>
@@ -1315,9 +1315,9 @@ export function WarpRushActivityStage({
             </span>
           </div>
 
-          <div className="pointer-events-auto w-full max-w-[640px] rounded-[28px] border border-cyan-300/15 bg-slate-950/44 p-3 shadow-[0_22px_90px_rgba(2,6,23,0.36)] backdrop-blur-2xl sm:p-4">
+          <div className="pointer-events-auto w-full max-w-[640px] rounded-3xl border border-cyan-300/15 bg-slate-950/44 p-3 shadow-[0_22px_90px_rgba(2,6,23,0.36)] backdrop-blur-2xl sm:p-4">
             <div className="flex flex-wrap items-center gap-2">
-              <div className="mr-1 flex items-center gap-2 text-[11px] uppercase tracking-[0.24em] text-cyan-200/78">
+              <div className="mr-1 flex items-center gap-2 text-ui-2xs uppercase tracking-[0.24em] text-cyan-200/78">
                 <Zap size={14} />
                 Load
               </div>
@@ -1339,7 +1339,7 @@ export function WarpRushActivityStage({
             </div>
 
             <div className="mt-3 flex flex-wrap items-center gap-2">
-              <div className="mr-1 flex items-center gap-2 text-[11px] uppercase tracking-[0.24em] text-fuchsia-200/78">
+              <div className="mr-1 flex items-center gap-2 text-ui-2xs uppercase tracking-[0.24em] text-fuchsia-200/78">
                 <Gauge size={14} />
                 Scale
               </div>
@@ -1381,7 +1381,7 @@ export function WarpRushActivityStage({
               </div>
             </div>
 
-            <div className="mt-3 min-w-0 rounded-full border border-white/8 bg-black/25 px-3 py-2 text-[11px] text-slate-300">
+            <div className="mt-3 min-w-0 rounded-full border border-white/8 bg-black/25 px-3 py-2 text-ui-2xs text-slate-300">
               <span className="uppercase tracking-[0.18em] text-slate-500">
                 Renderer
               </span>
@@ -1395,7 +1395,7 @@ export function WarpRushActivityStage({
 
       {status === "crashed" && (
         <div className="absolute inset-0 z-20 flex items-center justify-center bg-slate-950/55 px-4 backdrop-blur-sm">
-          <div className="max-w-md rounded-[28px] border border-amber-300/30 bg-slate-950/86 p-6 text-center shadow-[0_24px_120px_rgba(2,6,23,0.8)]">
+          <div className="max-w-md rounded-3xl border border-amber-300/30 bg-slate-950/86 p-6 text-center shadow-[0_24px_120px_rgba(2,6,23,0.8)]">
             <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-amber-400/10 text-amber-200">
               <AlertTriangle size={28} />
             </div>
@@ -1407,7 +1407,7 @@ export function WarpRushActivityStage({
             </p>
             <div className="mt-5 flex items-center justify-center gap-6">
               <div>
-                <div className="text-[11px] uppercase tracking-[0.18em] text-slate-400">
+                <div className="text-ui-2xs uppercase tracking-[0.18em] text-slate-400">
                   Run
                 </div>
                 <div className="mt-1 text-3xl font-black text-cyan-200">
@@ -1415,7 +1415,7 @@ export function WarpRushActivityStage({
                 </div>
               </div>
               <div>
-                <div className="text-[11px] uppercase tracking-[0.18em] text-slate-400">
+                <div className="text-ui-2xs uppercase tracking-[0.18em] text-slate-400">
                   Best
                 </div>
                 <div className="mt-1 text-3xl font-black text-fuchsia-200">
@@ -1423,7 +1423,7 @@ export function WarpRushActivityStage({
                 </div>
               </div>
               <div>
-                <div className="text-[11px] uppercase tracking-[0.18em] text-slate-400">
+                <div className="text-ui-2xs uppercase tracking-[0.18em] text-slate-400">
                   Live FPS
                 </div>
                 <div className="mt-1 text-3xl font-black text-emerald-200">

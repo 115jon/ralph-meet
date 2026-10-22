@@ -47,7 +47,7 @@ function ServerIcon({ server }: { server?: Server }) {
     );
   }
   return (
-    <span className="flex h-5 w-5 items-center justify-center rounded-md bg-rm-bg-hover text-[10px] font-black text-rm-text-muted">
+    <span className="flex h-5 w-5 items-center justify-center rounded-md bg-rm-bg-hover text-ui-2xs font-bold text-rm-text-muted">
       {server.name.slice(0, 1).toUpperCase()}
     </span>
   );
@@ -93,14 +93,14 @@ function TriggerRow({
     <div className="flex items-center gap-3 border-b border-rm-border px-4 py-3 last:border-b-0">
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
-          <h4 className="text-[13px] font-bold text-rm-text">{label}</h4>
+          <h4 className="text-ui-sm font-bold text-rm-text">{label}</h4>
           {inherited && (
-            <span className="text-[10px] font-semibold uppercase tracking-wide text-rm-text-muted">
+            <span className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted">
               Inherited
             </span>
           )}
         </div>
-        <div className="mt-1 flex min-w-0 items-center gap-1.5 text-[12px] text-rm-text-muted">
+        <div className="mt-1 flex min-w-0 items-center gap-1.5 text-ui-xs text-rm-text-muted">
           {sound?.emoji && (
             <EmojiToken
               value={sound.emoji}
@@ -139,7 +139,7 @@ function TriggerRow({
           aria-label={`Clear ${actionLabel} sound`}
           onClick={onClear}
           disabled={!sound}
-          className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-rm-text-muted transition-colors hover:bg-red-500/10 hover:text-red-400 disabled:cursor-not-allowed disabled:opacity-35"
+          className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-rm-text-muted transition-colors hover:bg-destructive/10 hover:text-destructive disabled:cursor-not-allowed disabled:opacity-35"
         >
           <Trash2 size={15} />
         </button>
@@ -254,7 +254,7 @@ export function SettingsSoundboardTriggers({ userId, servers }: Props) {
     <section className="space-y-5">
       <div className="flex items-center gap-2">
         <Volume2 size={16} className="text-rm-accent" />
-        <h3 className="text-[11px] font-black uppercase tracking-[0.2em] text-rm-text-muted">
+        <h3 className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted">
           Soundboard Triggers
         </h3>
       </div>
@@ -262,14 +262,14 @@ export function SettingsSoundboardTriggers({ userId, servers }: Props) {
       <div className="space-y-3 rounded-xl border border-rm-border bg-rm-bg-surface p-4">
         <div className="flex items-center justify-between gap-4">
           <div>
-            <div className="text-[12px] font-bold text-rm-text">
+            <div className="text-ui-xs font-bold text-rm-text">
               Soundboard volume
             </div>
-            <div className="text-[11px] text-rm-text-muted">
+            <div className="text-ui-2xs text-rm-text-muted">
               Local playback volume for automatic sounds
             </div>
           </div>
-          <span className="text-sm font-black tabular-nums text-rm-accent">
+          <span className="text-sm font-bold tabular-nums text-rm-accent">
             {volumeDraft}%
           </span>
         </div>
@@ -290,7 +290,7 @@ export function SettingsSoundboardTriggers({ userId, servers }: Props) {
       </div>
 
       <div className="space-y-3">
-        <label className="text-[11px] font-bold uppercase tracking-wider text-rm-text-muted">
+        <label className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted">
           Server scope
         </label>
         <Select
@@ -373,7 +373,7 @@ export function SettingsSoundboardTriggers({ userId, servers }: Props) {
       </div>
 
       {selectedServer && (
-        <div className="flex items-center gap-2 text-[11px] text-rm-text-muted">
+        <div className="flex items-center gap-2 text-ui-2xs text-rm-text-muted">
           <ServerIcon server={selectedServer} />
           <InlineEmojiText
             text={`${selectedServer.name} overrides inherit from All Servers.`}

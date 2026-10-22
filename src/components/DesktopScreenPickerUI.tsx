@@ -64,7 +64,7 @@ export function DeviceGrid({
           key={device.deviceId}
           onClick={() => onSelect(device.deviceId)}
           className={cn(
-            "group relative flex flex-col overflow-hidden rounded-xl border-2 transition-all outline-none",
+            "group relative flex flex-col overflow-hidden rounded-xl border-2 transition-ui outline-none",
             selectedId === device.deviceId
               ? "border-primary ring-2 ring-primary/30 bg-primary/5"
               : "border-rm-border/50 hover:border-rm-text/30 bg-rm-bg-surface/20",
@@ -128,7 +128,7 @@ export function SourceGrid({
             onFocus={() => onPreview(source.id)}
             onMouseEnter={() => onPreview(source.id)}
             className={cn(
-              "group relative flex flex-col overflow-hidden rounded-xl border-2 transition-all hover:brightness-110 outline-none",
+              "group relative flex flex-col overflow-hidden rounded-xl border-2 transition-ui hover:brightness-110 outline-none",
               selectedId === source.id
                 ? "border-primary ring-2 ring-primary/30 bg-primary/5"
                 : "border-rm-border/50 hover:border-rm-text/30 bg-rm-bg-surface/20",
@@ -210,7 +210,7 @@ export function DesktopScreenPickerTabBar({
           key={t.key}
           onClick={() => setTab(t.key)}
           className={cn(
-            "flex flex-1 items-center justify-center gap-2 px-6 py-3.5 text-sm font-bold transition-all",
+            "flex flex-1 items-center justify-center gap-2 px-6 py-3.5 text-sm font-bold transition-ui",
             tab === t.key
               ? "border-b-2 border-primary text-primary"
               : "text-rm-text-muted hover:text-rm-text",
@@ -255,7 +255,7 @@ export function DesktopScreenPickerBottomBar({
           <div className="truncate text-sm font-bold text-rm-text max-w-[200px]">
             {displayName}
           </div>
-          <div className="flex items-center gap-1.5 text-[11px] text-rm-text-muted">
+          <div className="flex items-center gap-1.5 text-ui-2xs text-rm-text-muted">
             <span>{selectedQ?.label || "720p"}</span>
             <span className="opacity-40">·</span>
             <span>{selectedQ?.fps || 30} FPS</span>
@@ -288,7 +288,7 @@ export function DesktopScreenPickerBottomBar({
         <button
           onClick={toggleAudio}
           className={cn(
-            "flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-bold transition-all",
+            "flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-bold transition-ui",
             withAudio
               ? "border-primary/30 bg-primary/10 text-primary"
               : "border-rm-border bg-rm-bg-elevated text-rm-text-muted hover:text-rm-text",
@@ -311,7 +311,7 @@ export function DesktopScreenPickerBottomBar({
           onClick={onStart}
           disabled={!selectedId}
           className={cn(
-            "flex items-center gap-2 rounded-xl px-6 py-2 text-sm font-black shadow-xl transition-all active:scale-95",
+            "flex items-center gap-2 rounded-xl px-6 py-2 text-sm font-semibold shadow-xl transition-ui active:scale-[0.96]",
             selectedId
               ? "bg-primary text-primary-foreground shadow-primary/20 hover:brightness-110"
               : "bg-rm-bg-elevated text-rm-text-muted cursor-not-allowed",

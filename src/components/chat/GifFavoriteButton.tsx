@@ -49,7 +49,7 @@ export function GifFavoriteButton({ gif, className }: GifFavoriteButtonProps) {
               }
             }}
             className={cn(
-              "absolute left-2 top-2 z-30 flex h-8 w-8 items-center justify-center rounded-xl border border-black/10 bg-white/95 text-black shadow-lg transition-all duration-150 hover:scale-110 disabled:pointer-events-none disabled:opacity-70 dark:bg-black/70 dark:text-white",
+              "absolute left-2 top-2 z-30 flex h-8 w-8 items-center justify-center rounded-xl border border-black/10 bg-white/95 text-black shadow-lg transition-ui disabled:pointer-events-none disabled:opacity-70 dark:bg-black/70 dark:text-white",
               isFavorite && "scale-105",
               className,
             )}
@@ -59,7 +59,7 @@ export function GifFavoriteButton({ gif, className }: GifFavoriteButtonProps) {
             <svg
               viewBox="0 0 24 24"
               className={cn(
-                "h-4.5 w-4.5 transition-all duration-200",
+                "h-4.5 w-4.5 transition-ui",
                 isFavorite
                   ? "scale-110 fill-amber-500 text-amber-500 dark:fill-yellow-400 dark:text-yellow-400"
                   : "fill-transparent text-current hover:text-amber-500 dark:hover:text-yellow-400",
@@ -71,11 +71,7 @@ export function GifFavoriteButton({ gif, className }: GifFavoriteButtonProps) {
             </svg>
           </button>
         </TooltipTrigger>
-        <TooltipContent
-          side="right"
-          sideOffset={8}
-          className="bg-rm-bg-floating text-rm-text-primary"
-        >
+        <TooltipContent side="right" sideOffset={8}>
           {label}
         </TooltipContent>
       </Tooltip>

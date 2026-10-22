@@ -127,7 +127,7 @@ export default function MessageShareModal({
 
             <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-5 py-5 custom-scrollbar">
               <div>
-                <p className="mb-2 text-xs font-bold uppercase tracking-wider text-rm-text-muted">
+                <p className="text-ui-2xs font-semibold uppercase tracking-[0.08em] mb-2 text-rm-text-muted">
                   Snapshot Preview
                 </p>
                 <ShareSnapshotPreview
@@ -160,7 +160,7 @@ export default function MessageShareModal({
 
               {!shareUrl && (
                 <div>
-                  <p className="mb-2 text-xs font-bold uppercase tracking-wider text-rm-text-muted">
+                  <p className="text-ui-2xs font-semibold uppercase tracking-[0.08em] mb-2 text-rm-text-muted">
                     Link Expiry
                   </p>
                   <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -193,7 +193,7 @@ export default function MessageShareModal({
                 <div className="space-y-3">
                   <label
                     htmlFor="message-share-url"
-                    className="text-xs font-bold uppercase tracking-wider text-rm-text-muted"
+                    className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted"
                   >
                     Public Link
                   </label>

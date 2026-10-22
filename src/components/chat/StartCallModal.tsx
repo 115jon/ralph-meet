@@ -97,7 +97,7 @@ export function StartCallModal({
               {/* Checkbox */}
               <label className="flex items-center gap-2 select-none cursor-pointer group">
                 <span
-                  className={`flex h-[18px] w-[18px] items-center justify-center rounded-[4px] border transition-colors ${
+                  className={`flex h-[18px] w-[18px] items-center justify-center rounded-xs border transition-colors ${
                     dontAskAgain
                       ? "border-primary bg-primary"
                       : "border-rm-text-muted/40 bg-transparent group-hover:border-rm-text-muted/60"

@@ -113,7 +113,7 @@ export const ScreenShareModal: React.FC<ScreenShareModalProps> = ({
                 </div>
                 <h2
                   id="screen-share-title"
-                  className="text-xl font-black text-rm-text"
+                  className="text-xl font-semibold text-rm-text"
                 >
                   Share Your Screen
                 </h2>
@@ -133,7 +133,7 @@ export const ScreenShareModal: React.FC<ScreenShareModalProps> = ({
                     key={q.id}
                     onClick={() => setSelectedQuality(q.id)}
                     className={cn(
-                      "group relative overflow-hidden rounded-xl border p-3 text-left transition-all outline-none",
+                      "group relative overflow-hidden rounded-xl border p-3 text-left transition-ui outline-none",
                       selectedQuality === q.id
                         ? "border-primary/50 bg-primary/10 ring-1 ring-primary/50"
                         : "border-rm-border bg-rm-bg-surface/40 hover:border-rm-text/20 hover:bg-rm-bg-surface/60",
@@ -143,7 +143,7 @@ export const ScreenShareModal: React.FC<ScreenShareModalProps> = ({
                       <div className="flex items-center gap-2">
                         <span
                           className={cn(
-                            "text-sm font-black",
+                            "text-sm font-semibold",
                             selectedQuality === q.id
                               ? "text-primary"
                               : "text-rm-text",
@@ -151,7 +151,7 @@ export const ScreenShareModal: React.FC<ScreenShareModalProps> = ({
                         >
                           {q.label}
                         </span>
-                        <span className="rounded-md bg-rm-bg-elevated/40 px-1.5 py-0.5 text-[10px] font-black text-rm-text-muted group-hover:text-rm-text-secondary">
+                        <span className="rounded-md bg-rm-bg-elevated/40 px-1.5 py-0.5 text-ui-2xs font-bold text-rm-text-muted group-hover:text-rm-text-secondary">
                           {q.fps}
                         </span>
                       </div>
@@ -159,7 +159,7 @@ export const ScreenShareModal: React.FC<ScreenShareModalProps> = ({
                         <Check size={14} className="text-primary" />
                       )}
                     </div>
-                    <p className="line-clamp-1 text-[10px] leading-tight text-rm-text-muted group-hover:text-rm-text-secondary">
+                    <p className="line-clamp-1 text-ui-2xs leading-tight text-rm-text-muted group-hover:text-rm-text-secondary">
                       {q.desc}
                     </p>
 
@@ -177,14 +177,14 @@ export const ScreenShareModal: React.FC<ScreenShareModalProps> = ({
 
               {/* Options */}
               <div className="space-y-3">
-                <h3 className="px-1 text-[10px] font-black uppercase tracking-widest text-rm-text-muted/40">
+                <h3 className="text-ui-2xs font-semibold uppercase tracking-[0.08em] px-1 text-rm-text-muted/40">
                   Settings
                 </h3>
                 <button
                   type="button"
                   onClick={() => setWithAudio(!withAudio)}
                   aria-pressed={withAudio}
-                  className="group flex w-full items-center justify-between rounded-xl border border-rm-border bg-rm-bg-surface/40 p-3 text-left transition-all hover:border-rm-text/20 hover:bg-rm-bg-surface/60 outline-none focus:ring-2 focus:ring-primary/20"
+                  className="group flex w-full items-center justify-between rounded-xl border border-rm-border bg-rm-bg-surface/40 p-3 text-left transition-ui hover:border-rm-text/20 hover:bg-rm-bg-surface/60 outline-none focus:ring-2 focus:ring-primary/20"
                 >
                   <div className="flex items-center gap-3">
                     <div
@@ -201,7 +201,7 @@ export const ScreenShareModal: React.FC<ScreenShareModalProps> = ({
                       <div className="text-xs font-bold text-rm-text">
                         Share Audio
                       </div>
-                      <div className="text-[10px] text-rm-text-muted">
+                      <div className="text-ui-2xs text-rm-text-muted">
                         Monitor shares include system audio. App shares include
                         only that app's audio when supported.
                       </div>
@@ -215,7 +215,7 @@ export const ScreenShareModal: React.FC<ScreenShareModalProps> = ({
                   >
                     <div
                       className={cn(
-                        "absolute top-1 h-3 w-3 rounded-full bg-rm-text shadow-sm transition-all duration-200",
+                        "absolute top-1 h-3 w-3 rounded-full bg-rm-text shadow-sm transition-ui",
                         withAudio ? "left-6" : "left-1",
                       )}
                     />
@@ -224,7 +224,7 @@ export const ScreenShareModal: React.FC<ScreenShareModalProps> = ({
 
                 <div className="flex gap-3 rounded-xl border border-warning/10 bg-warning/5 p-3">
                   <Info size={16} className="shrink-0 text-warning" />
-                  <p className="text-[10px] leading-relaxed italic text-warning/60">
+                  <p className="text-ui-2xs leading-relaxed italic text-warning/60">
                     Pro Tip: Use{" "}
                     <span className="font-bold text-warning">
                       1080p / 30 FPS
@@ -253,7 +253,7 @@ export const ScreenShareModal: React.FC<ScreenShareModalProps> = ({
                   });
                   onStart({ quality: selectedQuality, withAudio });
                 }}
-                className="flex items-center gap-2 rounded-xl bg-primary px-8 py-2.5 text-sm font-black text-primary-foreground shadow-xl shadow-primary/20 transition-all active:scale-95 hover:brightness-110"
+                className="flex items-center gap-2 rounded-xl bg-primary px-8 py-2.5 text-sm font-semibold text-primary-foreground shadow-xl shadow-primary/20 transition-ui active:scale-[0.96] hover:brightness-110"
               >
                 <span>Go Live</span>
                 <div className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary-foreground/40" />

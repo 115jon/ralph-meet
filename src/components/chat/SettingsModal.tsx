@@ -131,9 +131,9 @@ function TabButton({
     <button
       onClick={onClick}
       className={cn(
-        "flex w-full items-center rounded-xl px-3 py-2.5 text-[14px] font-medium transition-colors",
+        "flex w-full items-center rounded-md px-3 py-2 text-sm font-medium transition-colors",
         active
-          ? "bg-rm-bg-elevated text-rm-text shadow-[inset_0_0_0_1px_rgba(255,255,255,0.04)]"
+          ? "bg-rm-bg-elevated text-rm-text shadow-[inset_0_0_0_1px_var(--rm-border)]"
           : "text-rm-text-muted hover:bg-rm-bg-elevated/60 hover:text-rm-text-secondary",
       )}
     >
@@ -338,9 +338,7 @@ export default function SettingsModal({
       onOpenChange={(nextOpen) => !nextOpen && handleModalCloseOrBack()}
     >
       <DialogPortal>
-        {!previewOpen && (
-          <DialogOverlay className="bg-black/60 backdrop-blur-sm" />
-        )}
+        {!previewOpen && <DialogOverlay className="bg-rm-scrim" />}
         <DialogSurface
           showCloseButton={false}
           className={cn(
@@ -375,7 +373,7 @@ export default function SettingsModal({
                 inert={isMobileViewport && !showMobileMenu ? true : undefined}
                 className={cn(
                   "w-full min-h-0 md:w-[248px] flex-col shrink-0 bg-rm-bg-sidebar pt-0 md:pt-4 pb-5 md:pl-4 pr-0 md:pr-2 overflow-y-auto overflow-x-hidden custom-scrollbar",
-                  "max-md:absolute max-md:inset-0 max-md:z-10 max-md:transition-transform max-md:duration-300 max-md:ease-out flex",
+                  "max-md:absolute max-md:inset-0 max-md:z-10 max-md:transition-transform max-md:duration-200 max-md:ease-out flex",
                   showMobileMenu
                     ? "max-md:translate-x-0"
                     : "max-md:-translate-x-full",
@@ -398,9 +396,9 @@ export default function SettingsModal({
                 </div>
 
                 <div className="space-y-4 px-2 md:px-0">
-                  <div className="rounded-[24px] border border-rm-border bg-rm-bg-primary/55 p-3 shadow-[0_18px_45px_rgba(0,0,0,0.18)]">
+                  <div className="rounded-xl border border-rm-border bg-rm-bg-primary/60 p-3 shadow-sm">
                     <div className="flex items-center gap-3">
-                      <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-full border border-white/10 bg-rm-bg-elevated">
+                      <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-full border border-rm-border bg-rm-bg-elevated">
                         {profileAvatarUrl ? (
                           <AvatarImage
                             src={profileAvatarUrl}
@@ -433,7 +431,7 @@ export default function SettingsModal({
                             <DialogSurface
                               showCloseButton={false}
                               aria-label="Edit profile"
-                              className="fixed inset-0 z-60 flex items-center justify-center overflow-hidden rounded-[30px] border border-rm-border bg-[#09090d] p-0 shadow-[0_36px_110px_rgba(0,0,0,0.52)] animate-in zoom-in-95 duration-200 data-[state=closed]:animate-out data-[state=closed]:zoom-out-95 md:inset-auto md:left-1/2 md:top-1/2 md:h-[min(860px,calc(100dvh-32px))] md:w-[min(1240px,calc(100vw-32px))] md:-translate-x-1/2 md:-translate-y-1/2 md:rounded-[32px]"
+                              className="fixed inset-0 z-60 flex items-center justify-center overflow-hidden rounded-2xl border border-rm-border bg-rm-bg-primary p-0 shadow-2xl animate-in fade-in zoom-in-95 duration-200 data-[state=closed]:animate-out data-[state=closed]:zoom-out-95 md:inset-auto md:left-1/2 md:top-1/2 md:h-[min(860px,calc(100dvh-32px))] md:w-[min(1240px,calc(100vw-32px))] md:-translate-x-1/2 md:-translate-y-1/2 md:rounded-2xl"
                               style={{
                                 width: "min(1240px, calc(100vw - 32px))",
                                 height: "min(860px, calc(100dvh - 32px))",
@@ -469,7 +467,7 @@ export default function SettingsModal({
                     ) : (
                       filteredTabGroups.map((group) => (
                         <div key={group.title}>
-                          <div className="mb-2 px-3 text-[11px] font-bold uppercase tracking-[0.18em] text-rm-text-muted">
+                          <div className="mb-2 px-3 text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted">
                             {group.title}
                           </div>
                           <div className="space-y-1">
@@ -494,7 +492,7 @@ export default function SettingsModal({
 
                   <button
                     onClick={handleSignOut}
-                    className="flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-[14px] font-medium text-rose-400/70 transition-colors hover:bg-rose-500/10 hover:text-rose-400 group"
+                    className="flex w-full items-center justify-between rounded-md px-3 py-2 text-sm font-medium text-destructive/80 transition-colors hover:bg-destructive/10 hover:text-destructive group"
                   >
                     <span>Log Out</span>
                     <LogOut
@@ -515,7 +513,7 @@ export default function SettingsModal({
                 inert={isMobileViewport && showMobileMenu ? true : undefined}
                 className={cn(
                   "flex-1 min-h-0 flex-col relative overflow-hidden bg-rm-bg-primary",
-                  "max-md:absolute max-md:inset-0 max-md:z-20 max-md:transition-transform max-md:duration-300 max-md:ease-out flex",
+                  "max-md:absolute max-md:inset-0 max-md:z-20 max-md:transition-transform max-md:duration-200 max-md:ease-out flex",
                   !showMobileMenu
                     ? "max-md:translate-x-0"
                     : "max-md:translate-x-full",
@@ -541,22 +539,22 @@ export default function SettingsModal({
                 </div>
 
                 {/* Close Button (Desktop Only) */}
-                <div className="hidden md:flex absolute right-[40px] top-[60px] z-20 flex-col items-center gap-2">
+                <div className="hidden md:flex absolute right-10 top-14 z-20 flex-col items-center gap-1.5">
                   <IconButton
                     icon={X}
                     shape="circle"
-                    className="h-9 w-9 border border-rm-border"
+                    className="h-9 w-9 border border-rm-border bg-rm-bg-elevated"
                     onClick={onClose}
                   />
-                  <span className="text-[13px] font-bold text-rm-text-muted group-hover:text-rm-text-secondary hidden md:block">
+                  <span className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted hidden md:block">
                     ESC
                   </span>
                 </div>
 
-                <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar pt-6 md:pt-8 pb-[60px]">
+                <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar pt-6 md:pt-8 pb-16">
                   <div
                     className={cn(
-                      "px-[16px] md:px-[36px] max-w-[940px] w-full mx-auto transition-opacity duration-150",
+                      "px-4 md:px-9 max-w-[940px] w-full mx-auto transition-opacity duration-150",
                     )}
                   >
                     {activeTab === "account" && (
@@ -582,11 +580,11 @@ export default function SettingsModal({
                     {activeTab === "shares" && <SettingsSharesTab />}
 
                     {activeTab === "profiles" && (
-                      <div className="animate-in fade-in slide-in-from-right-4 duration-300">
-                        <h1 className="text-2xl font-bold text-rm-text mb-2 hidden md:block">
+                      <div className="animate-in fade-in duration-150">
+                        <h1 className="text-ui-xl font-semibold text-rm-text mb-1.5 hidden md:block">
                           Profiles
                         </h1>
-                        <p className="text-sm text-rm-text-muted mb-6 md:mb-8">
+                        <p className="text-ui-sm text-rm-text-muted mb-6 md:mb-8">
                           You can use a different identity across all your
                           servers.
                         </p>
@@ -607,11 +605,11 @@ export default function SettingsModal({
                     )}
 
                     {activeTab === "accessibility" && (
-                      <div className="animate-in fade-in slide-in-from-right-4 duration-300">
-                        <h1 className="text-2xl font-bold text-rm-text mb-2 hidden md:block">
+                      <div className="animate-in fade-in duration-150">
+                        <h1 className="text-ui-xl font-semibold text-rm-text mb-1.5 hidden md:block">
                           Accessibility
                         </h1>
-                        <p className="text-sm text-rm-text-muted mb-6 md:mb-8">
+                        <p className="text-ui-sm text-rm-text-muted mb-6 md:mb-8">
                           Configure additional application preferences.
                         </p>
 

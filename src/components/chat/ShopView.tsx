@@ -150,13 +150,13 @@ const PAGE_COPY: Record<ShopPage, { label: string; description: string }> = {
 };
 
 const SHOP_PANEL_CLASS =
-  "rounded-[24px] border border-rm-border bg-rm-bg-surface/90 shadow-[0_24px_80px_rgba(0,0,0,0.18)]";
+  "rounded-3xl border border-rm-border bg-rm-bg-surface/90 shadow-[0_24px_80px_rgba(0,0,0,0.18)]";
 const SHOP_STATIC_GRID_CLASS =
   "grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(min(100%,17rem),1fr))]";
 const SHOP_FIELD_LABEL_CLASS =
-  "mb-1 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-rm-text-muted";
+  "text-ui-2xs font-semibold uppercase tracking-[0.08em] mb-1 flex items-center gap-1.5 text-rm-text-muted";
 const SHOP_META_PILL_CLASS =
-  "inline-flex items-center rounded-full border border-rm-border bg-rm-bg-surface/70 px-2.5 py-0.5 text-[11px] text-rm-text-muted backdrop-blur-sm";
+  "inline-flex items-center rounded-full border border-rm-border bg-rm-bg-surface/70 px-2.5 py-0.5 text-ui-2xs text-rm-text-muted backdrop-blur-sm";
 const SHOP_INPUT_CLASS =
   "h-10 rounded-2xl border-rm-border bg-rm-bg-surface/80 text-sm text-rm-text shadow-none placeholder:text-rm-text-muted focus-visible:border-primary/50 focus-visible:ring-primary/15";
 const SHOP_SELECT_TRIGGER_CLASS =
@@ -164,9 +164,9 @@ const SHOP_SELECT_TRIGGER_CLASS =
 const SHOP_SELECT_MENU_CLASS =
   "rounded-2xl border-rm-border bg-rm-bg-floating/95 p-1.5 shadow-2xl backdrop-blur-xl";
 const SHOP_RAIL_SHELL_CLASS =
-  "relative overflow-visible rounded-[2rem] border border-rm-border/80 bg-rm-bg-hover/25 p-1.5 shadow-[0_18px_45px_rgba(0,0,0,0.12)]";
+  "relative overflow-visible rounded-3xl border border-rm-border/80 bg-rm-bg-hover/25 p-1.5 shadow-[0_18px_45px_rgba(0,0,0,0.12)]";
 const SHOP_RAIL_CORE_CLASS =
-  "relative overflow-visible rounded-[calc(2rem-0.375rem)] border border-white/5 bg-rm-bg-surface/92 p-3 sm:p-3.5";
+  "relative overflow-visible rounded-[calc(var(--radius-3xl)-0.375rem)] border border-white/5 bg-rm-bg-surface/92 p-3 sm:p-3.5";
 
 function pageIcon(page: ShopPage) {
   if (page === "featured") return Sparkles;
@@ -222,7 +222,7 @@ const SHOP_GRID_COMPONENTS: GridComponents<ShopGridContext> = {
           "h-full w-full overflow-hidden p-3 sm:p-4",
         )}
       >
-        <div className="h-52 animate-pulse rounded-[18px] bg-rm-bg-hover sm:h-60 sm:rounded-[22px]" />
+        <div className="h-52 animate-pulse rounded-xl bg-rm-bg-hover sm:h-60 sm:rounded-2xl" />
         <div className="mt-3 h-5 w-2/3 animate-pulse rounded bg-rm-bg-hover sm:mt-4" />
         <div className="mt-2 h-4 w-1/2 animate-pulse rounded bg-rm-bg-hover" />
         <div className="mt-5 h-10 w-full animate-pulse rounded-full bg-rm-bg-hover" />
@@ -598,7 +598,7 @@ function ShopPreview({
       : null;
 
     return (
-      <div className="relative flex h-full items-center justify-center overflow-visible rounded-[22px] bg-rm-bg-floating p-3 select-none">
+      <div className="relative flex h-full items-center justify-center overflow-visible rounded-2xl bg-rm-bg-floating p-3 select-none">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.03),_transparent_55%)]" />
         <div className="pointer-events-none absolute right-[-8px] top-4 z-0 h-[190px] w-[114px] origin-top-right rotate-[4deg]">
           <ProfileFrameLayer display={frameDisplay} order="back" />
@@ -606,7 +606,7 @@ function ShopPreview({
 
         {/* 1. Profile Card (angled/skewed on the right) */}
         {effectItem && (
-          <div className="absolute top-4 -right-2 h-[190px] w-[114px] origin-top-right rotate-[4deg] overflow-hidden rounded-[12px] border border-rm-border bg-rm-bg-surface shadow-[0_16px_40px_rgba(0,0,0,0.5)]">
+          <div className="absolute top-4 -right-2 h-[190px] w-[114px] origin-top-right rotate-[4deg] overflow-hidden rounded-lg border border-rm-border bg-rm-bg-surface shadow-[0_16px_40px_rgba(0,0,0,0.5)]">
             {/* Banner */}
             <div className="absolute left-0 right-0 top-0 h-10 border-b border-rm-border bg-rm-bg-hover" />
             <div className="absolute inset-0 bg-[linear-gradient(180deg,_transparent,_rgba(17,20,27,0.96)_34%,_rgba(11,13,18,0.98))]" />
@@ -673,7 +673,7 @@ function ShopPreview({
         {nameplateUrl && (
           <div
             className={cn(
-              "absolute flex items-center overflow-hidden rounded-[8px] border border-rm-border bg-rm-bg-floating shadow-[0_8px_24px_rgba(0,0,0,0.4)]",
+              "absolute flex items-center overflow-hidden rounded-md border border-rm-border bg-rm-bg-floating shadow-[0_8px_24px_rgba(0,0,0,0.4)]",
               effectItem
                 ? "left-4 bottom-5 w-[120px] h-[34px] px-2.5 gap-2"
                 : "bottom-6 w-[160px] h-[40px] px-3 gap-2.5",
@@ -716,7 +716,7 @@ function ShopPreview({
 
   if (item.kind === "avatar_decoration") {
     return (
-      <div className="relative flex h-full items-center justify-center overflow-hidden rounded-[22px] bg-rm-bg-primary">
+      <div className="relative flex h-full items-center justify-center overflow-hidden rounded-2xl bg-rm-bg-primary">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(130,170,255,0.28),_transparent_45%),radial-gradient(circle_at_bottom,_rgba(255,110,180,0.22),_transparent_50%)]" />
         <div className="relative h-28 w-28 rounded-full bg-white/5 shadow-[0_0_0_1px_rgba(255,255,255,0.08)]">
           {avatarSrc ? (
@@ -733,7 +733,7 @@ function ShopPreview({
 
   if (item.kind === "nameplate") {
     return (
-      <div className="relative flex h-full flex-col justify-center overflow-hidden rounded-[22px] bg-rm-bg-floating p-4 font-sans select-none">
+      <div className="relative flex h-full flex-col justify-center overflow-hidden rounded-2xl bg-rm-bg-floating p-4 font-sans select-none">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.02),_transparent_60%)]" />
 
         <div className="mx-auto flex w-full max-w-[280px] flex-col gap-2.5">
@@ -754,7 +754,7 @@ function ShopPreview({
           </div>
 
           {/* Row 3 (Highlighted Preview Row with Nameplate) */}
-          <div className="relative flex w-full h-[40px] items-center gap-3 rounded-[8px] border border-white/5 overflow-hidden px-2.5 shadow-[0_8px_24px_rgba(0,0,0,0.3)]">
+          <div className="relative flex w-full h-[40px] items-center gap-3 rounded-md border border-white/5 overflow-hidden px-2.5 shadow-[0_8px_24px_rgba(0,0,0,0.3)]">
             {playAnimation && item.animatedUrl ? (
               <video
                 src={item.animatedUrl}
@@ -784,7 +784,7 @@ function ShopPreview({
                     display={previewDisplay}
                   />
                 ) : (
-                  <div className="flex h-full w-full items-center justify-center rounded-full text-[10px] font-bold text-rm-text-secondary">
+                  <div className="flex h-full w-full items-center justify-center rounded-full text-ui-2xs font-bold text-rm-text-secondary">
                     {getDisplayInitial({ name: displayName })}
                   </div>
                 )
@@ -821,11 +821,11 @@ function ShopPreview({
 
   if (item.kind === "profile_effect" || item.kind === "profile_frame") {
     return (
-      <div className="relative flex h-full items-center justify-center overflow-visible rounded-[22px] bg-rm-bg-primary p-3">
+      <div className="relative flex h-full items-center justify-center overflow-visible rounded-2xl bg-rm-bg-primary p-3">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.06),_transparent_45%)]" />
         <div className="relative h-full w-[114px]">
           <div
-            className="relative z-10 h-full w-full overflow-hidden rounded-[14px] border border-rm-border bg-rm-bg-surface shadow-[0_12px_36px_rgba(0,0,0,0.35)]"
+            className="relative z-10 h-full w-full overflow-hidden rounded-lg border border-rm-border bg-rm-bg-surface shadow-[0_12px_36px_rgba(0,0,0,0.35)]"
             style={{ aspectRatio: "450 / 880" }}
           >
             {/* Mock profile background banner / skeleton */}
@@ -895,7 +895,7 @@ function ShopPreview({
 
   // Fallback return
   return (
-    <div className="relative h-full overflow-hidden rounded-[22px] bg-rm-bg-primary">
+    <div className="relative h-full overflow-hidden rounded-2xl bg-rm-bg-primary">
       {item.previewUrl && (
         <img
           src={item.previewUrl}
@@ -938,7 +938,7 @@ function CollectionBanner({
       onClick={onClick}
       className={cn(
         SHOP_PANEL_CLASS,
-        "group relative w-full overflow-hidden text-left transition-transform duration-300 hover:-translate-y-1 sm:rounded-[26px]",
+        "group relative w-full overflow-hidden text-left transition-transform duration-200 hover:-translate-y-1 sm:rounded-3xl",
       )}
     >
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_left,var(--rm-accent-dim),transparent_34%)]" />
@@ -946,7 +946,7 @@ function CollectionBanner({
         <img
           src={section.category.bannerUrl}
           alt=""
-          className="absolute inset-0 h-full w-full object-cover object-center transition-transform duration-500 group-hover:scale-[1.015]"
+          className="absolute inset-0 h-full w-full object-cover object-center transition-transform duration-200"
           loading="lazy"
           decoding="async"
         />
@@ -954,11 +954,11 @@ function CollectionBanner({
       <div className="absolute inset-0 [background-image:var(--rm-profile-banner-overlay)]" />
       <div className="relative flex min-h-40 flex-col justify-between gap-5 p-5 sm:min-h-52 sm:gap-6 sm:p-8">
         <div className="max-w-lg">
-          <h3 className="text-balance text-[1.9rem] font-black tracking-[-0.05em] text-rm-text sm:text-4xl">
+          <h3 className="text-balance text-[1.9rem] font-semibold tracking-tight text-rm-text sm:text-4xl">
             {section.category.name}
           </h3>
         </div>
-        <span className="inline-flex w-fit items-center rounded-2xl bg-primary px-3.5 py-2 text-sm font-semibold text-primary-foreground transition-transform duration-300 group-hover:translate-x-1 sm:px-4">
+        <span className="inline-flex w-fit items-center rounded-2xl bg-primary px-3.5 py-2 text-sm font-semibold text-primary-foreground transition-transform duration-200 group-hover:translate-x-1 sm:px-4">
           {ctaLabel}
         </span>
       </div>
@@ -1032,7 +1032,7 @@ function CollectibleDetailModal({
           <DialogSurface
             showCloseButton={false}
             aria-labelledby={`collectible-detail-title-${item.id}`}
-            className="relative flex max-h-[92vh] w-full max-w-[1220px] flex-col overflow-hidden rounded-[2rem] border border-rm-border/80 bg-rm-bg-primary shadow-[0_30px_120px_rgba(0,0,0,0.45)] lg:min-h-[700px] lg:flex-row"
+            className="relative flex max-h-[92vh] w-full max-w-[1220px] flex-col overflow-hidden rounded-3xl border border-rm-border/80 bg-rm-bg-primary shadow-[0_30px_120px_rgba(0,0,0,0.45)] lg:min-h-[700px] lg:flex-row"
             onClick={(event) => event.stopPropagation()}
           >
             <aside className="relative flex w-full shrink-0 flex-col overflow-y-auto border-b border-rm-border bg-rm-bg-surface/95 p-4 custom-scrollbar sm:p-5 lg:w-[340px] lg:border-b-0 lg:border-r lg:p-6">
@@ -1041,7 +1041,7 @@ function CollectibleDetailModal({
                   <div className={cn(SHOP_RAIL_CORE_CLASS, "p-2.5")}>
                     <div
                       className={cn(
-                        "relative mx-auto w-full overflow-hidden rounded-[calc(2rem-0.5rem)] border border-white/8 bg-rm-bg-primary",
+                        "relative mx-auto w-full overflow-hidden rounded-[calc(var(--radius-3xl)-0.5rem)] border border-white/8 bg-rm-bg-primary",
                         detailStageClass(previewItem),
                       )}
                     >
@@ -1073,7 +1073,7 @@ function CollectibleDetailModal({
                   <div>
                     <h2
                       id={`collectible-detail-title-${item.id}`}
-                      className="text-balance text-[1.9rem] font-black tracking-[-0.05em] text-rm-text sm:text-[2.15rem]"
+                      className="text-balance text-[1.9rem] font-semibold tracking-tight text-rm-text sm:text-[2.15rem]"
                     >
                       {group.title}
                     </h2>
@@ -1103,10 +1103,10 @@ function CollectibleDetailModal({
                             type="button"
                             onClick={() => onSelectVariant(variant.id)}
                             className={cn(
-                              "h-8 w-8 rounded-[10px] border-2 transition-all duration-200",
+                              "h-8 w-8 rounded-md border-2 transition-ui",
                               selected
                                 ? "scale-105 border-primary shadow-[0_0_0_1px_rgba(255,255,255,0.06)]"
-                                : "border-transparent hover:scale-105 hover:border-rm-border-strong",
+                                : "border-transparent hover:border-rm-border-strong",
                             )}
                             style={{ background: swatch }}
                             aria-label={variantLabel(variant) ?? variant.name}
@@ -1130,14 +1130,14 @@ function CollectibleDetailModal({
                             type="button"
                             onClick={() => onSelectPreviewItem(candidate.id)}
                             className={cn(
-                              "w-[72px] shrink-0 rounded-[1.1rem] border p-1.5 text-left transition-all duration-200",
+                              "w-[72px] shrink-0 rounded-xl border p-1.5 text-left transition-ui",
                               selected
                                 ? "border-primary bg-primary/10 shadow-[0_14px_35px_rgba(0,0,0,0.22)]"
                                 : "border-rm-border bg-rm-bg-hover/55 hover:border-rm-border-strong hover:bg-rm-bg-hover",
                             )}
                             aria-label={`Preview ${candidate.name}`}
                           >
-                            <div className="h-[58px] overflow-hidden rounded-[0.95rem] bg-rm-bg-primary">
+                            <div className="h-[58px] overflow-hidden rounded-xl bg-rm-bg-primary">
                               <ShopPreview
                                 item={candidate}
                                 currentDisplay={currentDisplay}
@@ -1162,8 +1162,8 @@ function CollectibleDetailModal({
               </div>
 
               <div className="mt-5 space-y-3 pt-1">
-                <div className="rounded-[1.4rem] border border-rm-border bg-rm-bg-hover/70 px-4 py-3.5">
-                  <div className="flex items-center justify-between gap-3 text-[11px] uppercase tracking-[0.14em] text-rm-text-muted">
+                <div className="rounded-2xl border border-rm-border bg-rm-bg-hover/70 px-4 py-3.5">
+                  <div className="text-ui-2xs font-semibold uppercase tracking-[0.08em] flex items-center justify-between gap-3 text-rm-text-muted">
                     <span>
                       {isOrbsExclusive(item) ? "Using Orbs" : "Archive access"}
                     </span>
@@ -1183,7 +1183,7 @@ function CollectibleDetailModal({
                       </p>
                     </div>
                     {isEquipped ? (
-                      <span className="inline-flex items-center gap-1 rounded-full border border-primary/20 bg-primary/10 px-2.5 py-1 text-[11px] font-semibold text-primary">
+                      <span className="inline-flex items-center gap-1 rounded-full border border-primary/20 bg-primary/10 px-2.5 py-1 text-ui-2xs font-semibold text-primary">
                         <BadgeCheck className="h-3.5 w-3.5" />
                         Applied
                       </span>
@@ -1211,7 +1211,7 @@ function CollectibleDetailModal({
                     onClick={onEquip}
                     disabled={isApplying || isApplyingAny || isEquipped}
                     className={cn(
-                      "h-11 rounded-2xl border-rm-border bg-rm-bg-hover/70 text-rm-text transition-all duration-200 hover:bg-rm-bg-hover",
+                      "h-11 rounded-2xl border-rm-border bg-rm-bg-hover/70 text-rm-text transition-ui hover:bg-rm-bg-hover",
                       isEquipped &&
                         "border-primary/25 bg-primary/10 text-primary hover:bg-primary/10",
                     )}
@@ -1269,7 +1269,7 @@ function CollectibleDetailModal({
                   >
                     <div
                       className={cn(
-                        "relative mx-auto w-full overflow-hidden rounded-[calc(2rem-0.5rem)] border border-white/8 bg-rm-bg-floating/80",
+                        "relative mx-auto w-full overflow-hidden rounded-[calc(var(--radius-3xl)-0.5rem)] border border-white/8 bg-rm-bg-floating/80",
                         detailStageClass(previewItem),
                       )}
                     >
@@ -1348,19 +1348,19 @@ function ShopCard({
 
   return (
     <article
-      className="group relative flex h-full w-full min-w-0 flex-col overflow-hidden rounded-[20px] border border-rm-border bg-rm-bg-surface/95 shadow-[0_18px_60px_rgba(0,0,0,0.16)] transition-transform duration-300 hover:-translate-y-1 hover:border-primary/25 sm:rounded-[22px]"
+      className="group relative flex h-full w-full min-w-0 flex-col overflow-hidden rounded-2xl border border-rm-border bg-rm-bg-surface/95 shadow-[0_18px_60px_rgba(0,0,0,0.16)] transition-transform duration-200 hover:-translate-y-1 hover:border-primary/25 sm:rounded-2xl"
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
       <div className="absolute inset-x-0 top-0 z-10 flex items-start justify-between gap-2 p-3">
         <div className="flex flex-wrap gap-1.5">
           {showNew && (
-            <span className="rounded-full border border-rm-border bg-rm-bg-floating/75 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-rm-text">
+            <span className="rounded-full border border-rm-border bg-rm-bg-floating/75 px-2.5 py-1 text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text">
               New
             </span>
           )}
           {showOrbs && (
-            <span className="rounded-full border border-primary/20 bg-primary/12 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-primary">
+            <span className="rounded-full border border-primary/20 bg-primary/12 px-2.5 py-1 text-ui-2xs font-semibold uppercase tracking-[0.08em] text-primary">
               Orbs only
             </span>
           )}
@@ -1389,7 +1389,7 @@ function ShopCard({
             <h3 className="line-clamp-2 text-base font-semibold tracking-[-0.04em] text-rm-text sm:text-[1.05rem]">
               {group.title}
             </h3>
-            <p className="mt-1 line-clamp-1 text-[11px] font-medium uppercase tracking-[0.18em] text-rm-text-muted">
+            <p className="text-ui-2xs font-semibold uppercase tracking-[0.08em] mt-1 line-clamp-1 text-rm-text-muted">
               {group.categoryName}
               {variantLabel(item) ? ` / ${variantLabel(item)}` : ""}
             </p>
@@ -1410,10 +1410,10 @@ function ShopCard({
                     type="button"
                     onClick={() => onSelectVariant(variant.id)}
                     className={cn(
-                      "h-5 w-5 rounded-[6px] border-2 transition-transform duration-200",
+                      "h-5 w-5 rounded-sm border-2 transition-transform duration-200",
                       selected
                         ? "scale-105 border-white shadow-[0_0_0_1px_rgba(0,0,0,0.2)]"
-                        : "border-transparent hover:scale-105",
+                        : "border-transparent",
                     )}
                     style={{ background: swatch }}
                     aria-label={variantLabel(variant) ?? variant.name}
@@ -1449,7 +1449,7 @@ function ShopCard({
             onClick={onEquip}
             disabled={isApplying || isApplyingAny || isEquipped}
             className={cn(
-              "h-10 w-full rounded-full px-4 text-sm font-semibold transition-all duration-200 sm:w-auto",
+              "h-10 w-full rounded-full px-4 text-sm font-semibold transition-ui sm:w-auto",
               isEquipped
                 ? "cursor-default border-primary/25 bg-primary/10 text-primary hover:bg-primary/10"
                 : "bg-primary text-primary-foreground shadow-[0_10px_30px_var(--rm-glow)] hover:-translate-y-0.5 hover:bg-primary/90",
@@ -1477,10 +1477,10 @@ function LoadingCards() {
           key={index}
           className={cn(
             SHOP_PANEL_CLASS,
-            "overflow-hidden p-3 sm:rounded-[26px] sm:p-4",
+            "overflow-hidden p-3 sm:rounded-3xl sm:p-4",
           )}
         >
-          <div className="h-52 animate-pulse rounded-[18px] bg-rm-bg-hover sm:h-60 sm:rounded-[22px]" />
+          <div className="h-52 animate-pulse rounded-xl bg-rm-bg-hover sm:h-60 sm:rounded-2xl" />
           <div className="mt-3 h-5 w-2/3 animate-pulse rounded bg-rm-bg-hover sm:mt-4" />
           <div className="mt-2 h-4 w-1/2 animate-pulse rounded bg-rm-bg-hover" />
           <div className="mt-5 h-10 w-full animate-pulse rounded-full bg-rm-bg-hover" />
@@ -1894,7 +1894,7 @@ export default function ShopView({ onMenuClick }: ShopViewProps) {
                     {activeHeading}
                   </p>
                   {featuredFocus ? (
-                    <p className="truncate text-[11px] text-rm-text-muted">
+                    <p className="truncate text-ui-2xs text-rm-text-muted">
                       Focused on {featuredFocus}
                     </p>
                   ) : null}
@@ -2044,7 +2044,7 @@ export default function ShopView({ onMenuClick }: ShopViewProps) {
                   return (
                     <div className="space-y-6">
                       <div className="flex flex-col items-start justify-between gap-3 border-b border-rm-border pb-4 sm:flex-row sm:items-center">
-                        <h2 className="text-2xl font-black tracking-[-0.04em] text-rm-text sm:text-3xl">
+                        <h2 className="text-2xl font-semibold tracking-[-0.04em] text-rm-text sm:text-3xl">
                           {featuredFocus} Collection
                         </h2>
                         <Button
@@ -2066,7 +2066,7 @@ export default function ShopView({ onMenuClick }: ShopViewProps) {
                     <section
                       className={cn(
                         SHOP_PANEL_CLASS,
-                        "relative overflow-hidden sm:rounded-[28px]",
+                        "relative overflow-hidden sm:rounded-3xl",
                       )}
                     >
                       <div className="absolute inset-0 bg-[radial-gradient(circle_at_left,var(--rm-accent-dim),transparent_35%)]" />
@@ -2180,7 +2180,7 @@ export default function ShopView({ onMenuClick }: ShopViewProps) {
                     <div
                       className={cn(
                         SHOP_PANEL_CLASS,
-                        "relative mx-3 mt-4 overflow-hidden sm:mx-4 sm:mt-5 sm:rounded-[26px]",
+                        "relative mx-3 mt-4 overflow-hidden sm:mx-4 sm:mt-5 sm:rounded-3xl",
                       )}
                     >
                       <div className="absolute inset-0 bg-[radial-gradient(circle_at_left,var(--rm-accent-dim),transparent_30%)]" />
@@ -2193,7 +2193,7 @@ export default function ShopView({ onMenuClick }: ShopViewProps) {
                       />
                       <div className="absolute inset-0 [background-image:var(--rm-profile-banner-overlay)]" />
                       <div className="relative min-h-[180px] px-5 py-5 sm:min-h-[210px] sm:px-8 sm:py-8">
-                        <h3 className="max-w-2xl text-[1.9rem] font-black tracking-[-0.05em] text-rm-text sm:text-4xl">
+                        <h3 className="max-w-2xl text-[1.9rem] font-semibold tracking-tight text-rm-text sm:text-4xl">
                           {PAGE_COPY[activePage].label}
                         </h3>
                       </div>

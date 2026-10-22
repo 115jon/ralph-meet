@@ -96,7 +96,7 @@ export const MenuItem = memo(
         }}
         disabled={disabled}
         className={cn(
-          "group flex w-full shrink-0 items-center justify-between rounded-sm px-2 py-1.5 text-left transition-colors font-medium",
+          "group flex w-full shrink-0 items-center justify-between rounded-md px-2 py-1.5 text-left transition-colors font-medium",
           danger
             ? "text-destructive hover:bg-destructive hover:text-destructive-foreground"
             : "text-rm-text-secondary hover:bg-primary hover:text-primary-foreground",
@@ -125,7 +125,7 @@ export const MenuItem = memo(
               <InlineEmojiText text={label} />
             </span>
             {description && (
-              <span className="truncate text-[10px] leading-tight text-rm-text-muted group-hover:primary-foreground/60">
+              <span className="truncate text-ui-2xs leading-tight text-rm-text-muted group-hover:primary-foreground/60">
                 <InlineEmojiText text={description} />
               </span>
             )}
@@ -181,7 +181,7 @@ export const Slider = memo(
         <p className="mb-2 text-xs font-bold text-rm-text">{label}</p>
         <div className="group/slider relative h-1 rounded-full bg-rm-bg-primary">
           <div
-            className="absolute left-0 top-0 h-full rounded-full bg-primary transition-all"
+            className="absolute left-0 top-0 h-full rounded-full bg-primary transition-ui"
             style={{ width: `${Math.min(100, (value / max) * 100)}%` }}
           />
           <div
@@ -248,7 +248,7 @@ export const SubMenu = memo(
             )
             ?.focus();
         }}
-        className="absolute left-[calc(100%+4px)] top-0 z-80 flex max-h-[70vh] w-[200px] flex-col overflow-y-auto rounded-lg border border-rm-border bg-rm-bg-elevated p-1 shadow-2xl backdrop-blur-xl transition-all duration-200 animate-in fade-in slide-in-from-left-2 no-scrollbar"
+        className="absolute left-[calc(100%+4px)] top-0 z-80 flex max-h-[70vh] w-[200px] flex-col overflow-y-auto rounded-lg border border-rm-border bg-rm-bg-elevated p-1 shadow-lg overscroll-contain animate-in fade-in slide-in-from-left-1 no-scrollbar"
       >
         <div className="absolute top-0 bottom-0 -left-4 w-4" />
         {children}

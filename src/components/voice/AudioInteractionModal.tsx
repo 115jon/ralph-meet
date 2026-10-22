@@ -39,7 +39,7 @@ export function AudioInteractionModal({
             <button
               type="button"
               onClick={onClose}
-              className="absolute top-4 right-4 text-rm-text-muted/40 hover:text-rm-text transition-colors outline-none"
+              className="absolute top-4 right-4 rounded-md text-rm-text-muted hover:text-rm-text transition-colors"
             >
               <X size={18} />
             </button>
@@ -61,7 +61,7 @@ export function AudioInteractionModal({
               <button
                 type="button"
                 onClick={onInteract}
-                className="w-full py-3 bg-rm-accent hover:bg-rm-accent-hover text-white font-bold rounded-xl transition-all active:scale-[0.98] shadow-lg shadow-rm-accent/20 outline-none"
+                className="w-full py-3 bg-rm-accent hover:bg-rm-accent-hover text-white font-bold rounded-xl transition-ui active:scale-[0.98] shadow-lg shadow-rm-accent/20 outline-none"
               >
                 Okay
               </button>

@@ -78,7 +78,7 @@ export default function InviteModal({
   };
 
   const selectStyle =
-    "w-full rounded-xl border border-rm-border bg-rm-bg-surface px-3 py-2.5 text-sm text-rm-text outline-none transition-all focus:border-primary/30 focus:ring-2 focus:ring-primary/20";
+    "w-full rounded-xl border border-rm-border bg-rm-bg-surface px-3 py-2.5 text-sm text-rm-text outline-none transition-ui focus:border-primary/30 focus:ring-2 focus:ring-primary/20";
 
   return (
     <Dialog open={open} onOpenChange={(nextOpen) => !nextOpen && onClose()}>
@@ -110,7 +110,7 @@ export default function InviteModal({
               <div className="space-y-2">
                 <label
                   htmlFor="expire-after"
-                  className="text-[11px] font-bold uppercase tracking-widest text-rm-text-muted/40"
+                  className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted/40"
                 >
                   Expire after
                 </label>
@@ -142,7 +142,7 @@ export default function InviteModal({
               <div className="space-y-2">
                 <label
                   htmlFor="max-uses"
-                  className="text-[11px] font-bold uppercase tracking-widest text-rm-text-muted/40"
+                  className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted/40"
                 >
                   Max uses
                 </label>
@@ -173,7 +173,7 @@ export default function InviteModal({
                 </Select>
               </div>
               <button
-                className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/20 transition-all hover:brightness-110 disabled:opacity-40"
+                className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/20 transition-ui hover:brightness-110 disabled:opacity-40"
                 onClick={createInvite}
                 disabled={state.loading}
               >
@@ -196,7 +196,7 @@ export default function InviteModal({
                 <button
                   onClick={copyLink}
                   className={cn(
-                    "flex items-center gap-1.5 rounded-xl border px-3 py-2.5 text-sm font-medium transition-all",
+                    "flex items-center gap-1.5 rounded-xl border px-3 py-2.5 text-sm font-medium transition-ui",
                     state.copied
                       ? "border-primary/30 bg-primary/20 text-primary"
                       : "border-rm-border bg-rm-bg-elevated text-rm-text hover:bg-rm-bg-hover",

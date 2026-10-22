@@ -96,10 +96,10 @@ function VoiceStatusMediaTile({
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className="group block w-full overflow-hidden rounded-[18px] border border-rm-border bg-rm-bg-surface/50 p-1.5 shadow-[0_10px_30px_rgba(0,0,0,0.18)] transition-all hover:-translate-y-0.5 hover:border-primary/50 disabled:cursor-not-allowed disabled:opacity-60"
+      className="group block w-full overflow-hidden rounded-xl border border-rm-border bg-rm-bg-surface/50 p-1.5 shadow-[0_10px_30px_rgba(0,0,0,0.18)] transition-ui hover:-translate-y-0.5 hover:border-primary/50 disabled:cursor-not-allowed disabled:opacity-60"
     >
       <div
-        className="w-full overflow-hidden rounded-[14px] bg-rm-bg-hover"
+        className="w-full overflow-hidden rounded-lg bg-rm-bg-hover"
         style={{
           aspectRatio: `${Math.max(1, media.preview_width)} / ${Math.max(1, media.preview_height)}`,
         }}
@@ -107,7 +107,7 @@ function VoiceStatusMediaTile({
         {media.preview_content_type.startsWith("video/") ? (
           <video
             src={getMediaUrl(media.preview_url)}
-            className="h-full w-full object-contain transition-transform duration-300 group-hover:scale-[1.02]"
+            className="h-full w-full object-contain transition-transform duration-200"
             autoPlay
             loop
             muted
@@ -118,7 +118,7 @@ function VoiceStatusMediaTile({
           <img
             src={getAuthAssetUrl(media.preview_url)}
             alt={media.alt_text ?? "Recent voice channel status media"}
-            className="h-full w-full object-contain transition-transform duration-300 group-hover:scale-[1.02]"
+            className="h-full w-full object-contain transition-transform duration-200"
             loading="lazy"
           />
         )}
@@ -336,7 +336,7 @@ export default function VoiceChannelMediaStatusModal({
             <DialogSurface
               showCloseButton={false}
               className={cn(
-                "picker-panel relative m-0 w-full max-w-[520px] rounded-[22px] border p-0 shadow-2xl outline-none backdrop-blur-2xl",
+                "picker-panel relative m-0 w-full max-w-[520px] rounded-2xl border p-0 shadow-2xl outline-none backdrop-blur-2xl",
                 "animate-in fade-in zoom-in-95 duration-200 data-[state=closed]:animate-out data-[state=closed]:fade-out data-[state=closed]:zoom-out-95",
               )}
               aria-labelledby="voice-channel-media-status-title"
@@ -345,7 +345,7 @@ export default function VoiceChannelMediaStatusModal({
                 <div>
                   <h2
                     id="voice-channel-media-status-title"
-                    className="text-[32px] font-black tracking-tight text-rm-text"
+                    className="text-[32px] font-semibold tracking-tight text-rm-text"
                   >
                     Set the vibe
                   </h2>
@@ -369,14 +369,14 @@ export default function VoiceChannelMediaStatusModal({
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
                     disabled={isBusy}
-                    className="group flex min-h-[138px] flex-col items-center justify-center rounded-[20px] border border-rm-border bg-rm-bg-surface px-4 py-5 text-center transition-colors hover:bg-rm-bg-hover disabled:cursor-not-allowed disabled:opacity-60"
+                    className="group flex min-h-[138px] flex-col items-center justify-center rounded-2xl border border-rm-border bg-rm-bg-surface px-4 py-5 text-center transition-colors hover:bg-rm-bg-hover disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {uploading ? (
                       <Loader2 className="mb-4 h-8 w-8 animate-spin text-rm-text" />
                     ) : (
                       <Upload className="mb-4 h-8 w-8 text-rm-text-muted group-hover:text-rm-text" />
                     )}
-                    <span className="text-[18px] font-bold text-rm-text">
+                    <span className="text-ui-lg font-bold text-rm-text">
                       Server Uploads
                     </span>
                     <span className="mt-1 text-xs text-rm-text-muted">
@@ -388,7 +388,7 @@ export default function VoiceChannelMediaStatusModal({
                     type="button"
                     onClick={() => setShowGifPicker(true)}
                     disabled={isBusy}
-                    className="group relative min-h-[138px] overflow-hidden rounded-[20px] border border-rm-border bg-rm-bg-surface px-4 py-5 text-left transition-colors hover:bg-rm-bg-hover disabled:cursor-not-allowed disabled:opacity-60"
+                    className="group relative min-h-[138px] overflow-hidden rounded-2xl border border-rm-border bg-rm-bg-surface px-4 py-5 text-left transition-colors hover:bg-rm-bg-hover disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     <div className="absolute right-3 top-3 h-12 w-12 rounded-2xl bg-rm-bg-hover" />
                     <div className="absolute bottom-3 right-10 h-8 w-8 rounded-xl bg-rm-bg-hover" />
@@ -396,7 +396,7 @@ export default function VoiceChannelMediaStatusModal({
                       <div className="mb-3 inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-rm-bg-hover text-rm-text">
                         <Sparkles className="h-5 w-5" />
                       </div>
-                      <span className="text-[18px] font-bold text-rm-text">
+                      <span className="text-ui-lg font-bold text-rm-text">
                         Choose GIF
                       </span>
                       <span className="mt-1 text-xs text-rm-text-muted">
@@ -446,7 +446,7 @@ export default function VoiceChannelMediaStatusModal({
                 ) : null}
 
                 {error ? (
-                  <div className="rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-800 dark:text-red-200">
+                  <div className="rounded-2xl border border-destructive/20 bg-destructive/10 px-4 py-3 text-sm text-destructive">
                     {error}
                   </div>
                 ) : null}

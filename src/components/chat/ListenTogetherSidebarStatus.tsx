@@ -36,11 +36,11 @@ export function ListenTogetherSidebarStatus({
       <div className="min-w-0 flex-1">
         <div className="flex min-w-0 items-center gap-1.5">
           <Music2 className="h-3 w-3 shrink-0 text-emerald-400" />
-          <span className="truncate text-[12px] font-semibold text-rm-text-secondary">
+          <span className="truncate text-ui-xs font-semibold text-rm-text-secondary">
             {track.title}
           </span>
         </div>
-        <span className="mt-0.5 block text-[10px] tabular-nums text-emerald-400/80">
+        <span className="mt-0.5 block text-ui-2xs tabular-nums text-emerald-400/80">
           {formatListenTogetherDuration(playback.effectiveSeekValue)}
         </span>
       </div>

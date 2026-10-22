@@ -78,7 +78,7 @@ export default function SettingsOSTab() {
   ];
 
   return (
-    <div className="animate-in fade-in slide-in-from-right-4 duration-300">
+    <div className="animate-in fade-in duration-150">
       <h1 className="text-2xl font-bold text-rm-text mb-2">
         {osName} Settings
       </h1>
@@ -120,7 +120,7 @@ export default function SettingsOSTab() {
           <div className="flex items-start gap-3.5">
             <div className="w-10 h-10 rounded-lg border border-rm-accent/20 bg-rm-accent-dim flex items-center justify-center text-rm-accent shrink-0">
               {status === "error" ? (
-                <AlertTriangle size={18} className="text-rose-400" />
+                <AlertTriangle size={18} className="text-destructive" />
               ) : status === "up-to-date" ? (
                 <CheckCircle2 size={18} className="text-emerald-400" />
               ) : (
@@ -165,7 +165,7 @@ export default function SettingsOSTab() {
             {status === "available" ? (
               <button
                 onClick={applyUpdate}
-                className="rounded-lg bg-rm-accent px-4 py-2 text-[13px] font-semibold text-white transition-all hover:bg-rm-accent-hover active:scale-[0.97]"
+                className="rounded-lg bg-rm-accent px-4 py-2 text-ui-sm font-semibold text-white transition-ui hover:bg-rm-accent-hover active:scale-[0.96]"
               >
                 Install Update
               </button>
@@ -177,7 +177,7 @@ export default function SettingsOSTab() {
                   status === "downloading" ||
                   status === "installing"
                 }
-                className="rounded-lg bg-rm-bg-hover px-4 py-2 text-[13px] font-semibold text-rm-text-secondary transition-colors hover:bg-rm-bg-active disabled:opacity-50 disabled:cursor-not-allowed"
+                className="rounded-lg bg-rm-bg-hover px-4 py-2 text-ui-sm font-semibold text-rm-text-secondary transition-colors hover:bg-rm-bg-active disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {status === "checking" ? "Checking..." : "Check for Updates"}
               </button>
@@ -188,7 +188,7 @@ export default function SettingsOSTab() {
         {/* Display release notes if available */}
         {status === "available" && updateMeta?.notes && (
           <div className="mt-3 rounded-lg bg-rm-bg-elevated/20 border border-rm-border/60 p-3.5 animate-in fade-in duration-200">
-            <h4 className="text-xs font-bold uppercase tracking-wider text-rm-text-muted mb-1.5">
+            <h4 className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted mb-1.5">
               Release Notes
             </h4>
             <p className="text-xs text-rm-text-secondary leading-relaxed whitespace-pre-line max-h-32 overflow-y-auto custom-scrollbar">
@@ -202,7 +202,7 @@ export default function SettingsOSTab() {
           <div className="mt-3.5 flex flex-col gap-1.5">
             <div className="h-1 w-full rounded-full bg-rm-bg-hover overflow-hidden">
               <div
-                className="h-full rounded-full bg-rm-accent transition-[width] duration-300"
+                className="h-full rounded-full bg-rm-accent transition-[width] duration-200"
                 style={{
                   width: `${downloadProgress !== null ? Math.round(downloadProgress * 100) : 0}%`,
                 }}

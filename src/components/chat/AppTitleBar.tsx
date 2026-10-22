@@ -29,14 +29,14 @@ export function AppTitleBarContent({ className }: { className?: string }) {
   return (
     <div
       className={cn(
-        "flex min-w-0 items-center justify-center gap-1.5 text-[12px] font-bold tracking-wider text-rm-text-muted select-none",
+        "flex min-w-0 items-center justify-center gap-1.5 text-ui-xs font-bold tracking-wider text-rm-text-muted select-none",
         className,
       )}
       aria-label={
         model.label ? `Current location: ${model.label}` : "Current location"
       }
     >
-      <span className="flex h-4 w-4 shrink-0 items-center justify-center overflow-hidden rounded-full bg-rm-bg-elevated text-[9px] font-bold text-rm-text">
+      <span className="flex h-4 w-4 shrink-0 items-center justify-center overflow-hidden rounded-full bg-rm-bg-elevated text-ui-2xs font-bold text-rm-text">
         {model.kind === "server" && model.iconUrl ? (
           <img
             src={getAuthAssetUrl(model.iconUrl)}

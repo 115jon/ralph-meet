@@ -179,7 +179,7 @@ export default function CreateServerModal({ open, onClose }: Props) {
           <DialogSurface
             showCloseButton={false}
             className={cn(
-              "relative z-10 w-full sm:max-w-md h-[90vh] sm:h-auto animate-in slide-in-from-bottom-full sm:slide-in-from-bottom-0 sm:fade-in sm:zoom-in-95 rounded-t-[24px] sm:rounded-2xl border border-rm-border bg-rm-bg-primary p-6 shadow-2xl duration-300 sm:duration-200 pointer-events-auto flex flex-col",
+              "relative z-10 w-full sm:max-w-md h-[90vh] sm:h-auto animate-in slide-in-from-bottom-full sm:slide-in-from-bottom-0 sm:fade-in sm:zoom-in-95 rounded-t-3xl sm:rounded-2xl border border-rm-border bg-rm-bg-primary p-6 shadow-2xl duration-300 sm:duration-200 pointer-events-auto flex flex-col",
               "data-[state=closed]:animate-out data-[state=closed]:slide-out-to-bottom-full sm:data-[state=closed]:slide-out-to-bottom-0 sm:data-[state=closed]:fade-out sm:data-[state=closed]:zoom-out-95",
             )}
           >
@@ -209,7 +209,7 @@ export default function CreateServerModal({ open, onClose }: Props) {
                 onClick={() => fileInputRef.current?.click()}
                 onDrop={handleDrop}
                 onDragOver={(e) => e.preventDefault()}
-                className="group relative flex h-20 w-20 cursor-pointer items-center justify-center overflow-hidden rounded-full border-2 border-dashed border-rm-border bg-rm-bg-surface transition-all hover:border-primary/50 hover:bg-rm-bg-elevated"
+                className="group relative flex h-20 w-20 cursor-pointer items-center justify-center overflow-hidden rounded-full border-2 border-dashed border-rm-border bg-rm-bg-surface transition-ui hover:border-primary/50 hover:bg-rm-bg-elevated"
               >
                 {state.iconPreview ? (
                   <>
@@ -219,7 +219,7 @@ export default function CreateServerModal({ open, onClose }: Props) {
                       className="h-full w-full object-cover"
                     />
                     <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 transition-opacity group-hover:opacity-100">
-                      <span className="text-[10px] font-bold uppercase text-white">
+                      <span className="text-ui-2xs font-bold uppercase text-white">
                         Change
                       </span>
                     </div>
@@ -227,7 +227,7 @@ export default function CreateServerModal({ open, onClose }: Props) {
                 ) : (
                   <div className="flex flex-col items-center gap-0.5">
                     <Plus className="h-5 w-5 text-rm-text-muted/40 transition-colors group-hover:text-primary" />
-                    <span className="text-[9px] font-bold uppercase tracking-wider text-rm-text-muted/40 group-hover:text-primary">
+                    <span className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted/40 group-hover:text-primary">
                       Icon
                     </span>
                   </div>
@@ -248,7 +248,7 @@ export default function CreateServerModal({ open, onClose }: Props) {
             </div>
 
             {state.uploadError && (
-              <p className="mb-3 text-center text-xs font-medium text-red-800 dark:text-red-400">
+              <p className="mb-3 text-center text-xs font-medium text-destructive">
                 {state.uploadError}
               </p>
             )}
@@ -256,7 +256,7 @@ export default function CreateServerModal({ open, onClose }: Props) {
             <div className="space-y-3">
               <label
                 htmlFor="server-name"
-                className="text-[11px] font-bold uppercase tracking-widest text-rm-text-muted/40"
+                className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted/40"
               >
                 Server Name
               </label>
@@ -269,21 +269,21 @@ export default function CreateServerModal({ open, onClose }: Props) {
                 }
                 onKeyDown={(e) => e.key === "Enter" && handleCreate()}
                 placeholder="My Awesome Server"
-                className="w-full rounded-xl border border-rm-border bg-rm-bg-surface px-4 py-3 text-rm-text outline-none transition-all placeholder:text-rm-text-muted/20 focus:border-primary/30 focus:ring-2 focus:ring-primary/20"
+                className="w-full rounded-xl border border-rm-border bg-rm-bg-surface px-4 py-3 text-rm-text outline-none transition-ui placeholder:text-rm-text-muted/20 focus:border-primary/30 focus:ring-2 focus:ring-primary/20"
               />
             </div>
 
             <div className="mt-auto sm:mt-6 pt-4 sm:pt-0 pb-6 sm:pb-0 flex flex-col-reverse sm:flex-row justify-end gap-3 shrink-0">
               <button
                 onClick={onClose}
-                className="w-full sm:w-auto rounded-xl px-4 py-3 sm:py-2.5 text-[15px] sm:text-sm font-bold text-rm-text-muted transition-colors hover:text-rm-text hover:bg-rm-bg-hover outline-none"
+                className="w-full sm:w-auto rounded-xl px-4 py-3 sm:py-2.5 text-ui-base sm:text-sm font-bold text-rm-text-muted transition-colors hover:text-rm-text hover:bg-rm-bg-hover outline-none"
               >
                 Cancel
               </button>
               <button
                 onClick={handleCreate}
                 disabled={!state.name.trim() || state.creating}
-                className="w-full sm:w-auto flex justify-center items-center gap-2 rounded-xl bg-primary px-5 py-3 sm:py-2.5 text-[15px] sm:text-sm font-bold text-primary-foreground shadow-lg shadow-primary/20 transition-all hover:brightness-110 disabled:opacity-40"
+                className="w-full sm:w-auto flex justify-center items-center gap-2 rounded-xl bg-primary px-5 py-3 sm:py-2.5 text-ui-base sm:text-sm font-bold text-primary-foreground shadow-lg shadow-primary/20 transition-ui hover:brightness-110 disabled:opacity-40"
               >
                 {state.creating && (
                   <Loader2 className="h-4 w-4 sm:h-3.5 sm:w-3.5 animate-spin" />

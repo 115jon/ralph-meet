@@ -139,8 +139,6 @@ type CollectibleApplyUser = {
   updated_at: string | null;
 };
 
-const SETTINGS_TOOLTIP_CONTENT_CLASS =
-  "bg-rm-bg-floating border border-rm-border text-rm-text-primary text-[12px] font-bold shadow-xl px-3 py-2 rounded-lg";
 const SHOW_LEGACY_PREVIEW_IDENTITY = false;
 const COLOR_PICKER_HUE_GRADIENT =
   "linear-gradient(90deg, #FF0000 0%, #FFFF00 16.66%, #00FF00 33.33%, #00FFFF 50%, #0000FF 66.66%, #FF00FF 83.33%, #FF0000 100%)";
@@ -296,11 +294,7 @@ function AccountActionIconButton({
           {children}
         </Button>
       </TooltipTrigger>
-      <TooltipContent
-        side="top"
-        sideOffset={10}
-        className={SETTINGS_TOOLTIP_CONTENT_CLASS}
-      >
+      <TooltipContent side="top" sideOffset={10}>
         {label}
       </TooltipContent>
     </Tooltip>
@@ -316,7 +310,7 @@ function ProfileRailSection({
 }) {
   return (
     <section>
-      <div className="mb-2 text-[10px] font-semibold tracking-[0.08em] text-rm-text-muted/88">
+      <div className="mb-2 text-ui-2xs font-semibold tracking-[0.08em] text-rm-text-muted/88">
         {title}
       </div>
       {children}
@@ -338,7 +332,7 @@ function ProfileRailCard({
   return (
     <div
       className={cn(
-        "group/rail relative overflow-hidden rounded-[14px] border border-rm-border/80 bg-rm-bg-surface/70 shadow-[inset_0_1px_0_rgba(255,255,255,0.03),0_14px_28px_rgba(0,0,0,0.22)] transition duration-200 hover:border-rm-border hover:bg-rm-bg-elevated/80",
+        "group/rail relative overflow-hidden rounded-lg border border-rm-border/80 bg-rm-bg-surface/70 shadow-[inset_0_1px_0_rgba(255,255,255,0.03),0_14px_28px_rgba(0,0,0,0.22)] transition duration-200 hover:border-rm-border hover:bg-rm-bg-elevated/80",
         className,
       )}
       onPointerEnter={onHoverChange ? () => onHoverChange(true) : undefined}
@@ -447,7 +441,7 @@ function ProfileActionMenu({
         useBodyPortal
           ? "pointer-events-auto fixed z-80"
           : "absolute left-[calc(100%+8px)] top-1 z-[180] max-md:left-1/2 max-md:top-[calc(100%+8px)] max-md:-translate-x-1/2",
-        "min-w-[198px] rounded-[12px] border border-rm-border bg-rm-bg-floating p-1.5 shadow-[0_18px_44px_rgba(0,0,0,0.42)] animate-in fade-in zoom-in-95 duration-150",
+        "min-w-[198px] rounded-lg border border-rm-border bg-rm-bg-floating p-1.5 shadow-[0_18px_44px_rgba(0,0,0,0.42)] animate-in fade-in zoom-in-95 duration-150",
       )}
       style={useBodyPortal ? position : undefined}
     >
@@ -459,9 +453,9 @@ function ProfileActionMenu({
           tabIndex={-1}
           onClick={action.onClick}
           className={cn(
-            "flex w-full items-center rounded-lg px-3 py-2 text-left text-[13px] font-semibold transition-colors",
+            "flex w-full items-center rounded-lg px-3 py-2 text-left text-ui-sm font-semibold transition-colors",
             action.destructive
-              ? "text-rose-300 hover:bg-rose-500/12 hover:text-rose-200"
+              ? "text-destructive hover:bg-destructive/12 hover:text-destructive"
               : "text-rm-text hover:bg-rm-bg-hover",
           )}
         >
@@ -826,7 +820,7 @@ function ColorField({
             aria-modal="false"
             aria-label={`${label} color picker`}
             data-display-name-style-color-popover="true"
-            className="pointer-events-auto fixed z-80 w-[calc(100vw-1rem)] max-w-[320px] rounded-[24px] border border-rm-border bg-rm-bg-floating/96 p-4 text-rm-text shadow-[0_32px_80px_rgba(0,0,0,0.45)] backdrop-blur-xl"
+            className="pointer-events-auto fixed z-80 w-[calc(100vw-1rem)] max-w-[320px] rounded-3xl border border-rm-border bg-rm-bg-floating/96 p-4 text-rm-text shadow-[0_32px_80px_rgba(0,0,0,0.45)] backdrop-blur-xl"
             style={{
               left: popoverPosition?.left ?? 8,
               top: popoverPosition?.top ?? 8,
@@ -847,7 +841,7 @@ function ColorField({
               tabIndex={0}
               role="group"
               aria-roledescription="2D color picker"
-              className="relative h-[160px] cursor-crosshair overflow-hidden rounded-[18px] border border-rm-border"
+              className="relative h-[160px] cursor-crosshair overflow-hidden rounded-xl border border-rm-border"
               style={{ background: `hsl(${hsv.h} 100% 50%)` }}
               aria-label={`${label} saturation and brightness picker`}
               aria-describedby={saturationInstructionsId}
@@ -888,9 +882,9 @@ function ColorField({
             </div>
 
             <div className="mt-4">
-              <div className="flex items-center gap-2 rounded-[14px] border border-primary/35 bg-rm-bg-surface px-2.5 py-2 shadow-[0_0_0_1px_rgba(88,101,242,0.12)]">
+              <div className="flex items-center gap-2 rounded-lg border border-primary/35 bg-rm-bg-surface px-2.5 py-2 shadow-[0_0_0_1px_rgba(88,101,242,0.12)]">
                 <div
-                  className="h-8 w-8 shrink-0 rounded-[10px] border border-rm-border"
+                  className="h-8 w-8 shrink-0 rounded-md border border-rm-border"
                   aria-hidden="true"
                   style={getPickerSurfaceStyle({
                     fill: value,
@@ -899,7 +893,7 @@ function ColorField({
                     patternPosition: "0 0, 7px 7px",
                   })}
                 />
-                <span className="shrink-0 text-[18px] font-medium text-rm-text-muted">
+                <span className="shrink-0 text-ui-lg font-medium text-rm-text-muted">
                   #
                 </span>
                 <Input
@@ -924,7 +918,7 @@ function ColorField({
                       event.currentTarget.blur();
                     }
                   }}
-                  className="h-8 border-0 bg-transparent px-1 py-0 text-[15px] font-medium tracking-[0.04em] text-rm-text shadow-none placeholder:text-rm-text-muted focus-visible:ring-0"
+                  className="h-8 border-0 bg-transparent px-1 py-0 text-ui-base font-medium tracking-[0.04em] text-rm-text shadow-none placeholder:text-rm-text-muted focus-visible:ring-0"
                   placeholder={resolvedColor.slice(1)}
                   spellCheck={false}
                   aria-label={`${label} hex color value`}
@@ -935,7 +929,7 @@ function ColorField({
                   onClick={handleEyeDropperPick}
                   disabled={!supportsEyeDropper || eyeDropperPending}
                   className={cn(
-                    "flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] border border-rm-border bg-rm-bg-elevated text-rm-text-muted transition hover:bg-rm-bg-hover hover:text-rm-text",
+                    "flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-rm-border bg-rm-bg-elevated text-rm-text-muted transition hover:bg-rm-bg-hover hover:text-rm-text",
                     (!supportsEyeDropper || eyeDropperPending) &&
                       "cursor-not-allowed opacity-45",
                   )}
@@ -958,7 +952,7 @@ function ColorField({
               <div className="mt-2 flex items-center justify-between gap-3 px-1">
                 <div
                   id={eyedropperHintId}
-                  className="text-[11px] text-rm-text-muted"
+                  className="text-ui-2xs text-rm-text-muted"
                 >
                   {!value
                     ? "Using the app default until you pick a custom color."
@@ -973,7 +967,7 @@ function ColorField({
                     setDraft("");
                     onChange(null);
                   }}
-                  className="h-7 rounded-[10px] px-2.5 text-[11px] font-semibold text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text"
+                  className="h-7 rounded-md px-2.5 text-ui-2xs font-semibold text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text"
                   aria-label={`Use the default ${label.toLowerCase()}`}
                 >
                   Use default
@@ -992,7 +986,7 @@ function ColorField({
                   type="button"
                   onClick={() => setColorValue(preset)}
                   className={cn(
-                    "h-9 rounded-[12px] border transition duration-150 hover:-translate-y-[1px]",
+                    "h-9 rounded-lg border transition duration-150 hover:-translate-y-[1px]",
                     value === preset
                       ? "border-white/90 shadow-[0_0_0_1px_rgba(255,255,255,0.25)]"
                       : "border-white/10",
@@ -1034,14 +1028,14 @@ function ColorField({
             <div>
               <div
                 id={labelId}
-                className="text-[12px] font-semibold text-rm-text"
+                className="text-ui-xs font-semibold text-rm-text"
               >
                 {label}
               </div>
               {helperText ? (
                 <div
                   id={helperTextId}
-                  className="mt-1 text-[11px] text-rm-text-muted"
+                  className="mt-1 text-ui-2xs text-rm-text-muted"
                 >
                   {helperText}
                 </div>
@@ -1052,7 +1046,7 @@ function ColorField({
           <button
             type="button"
             onClick={toggleOpen}
-            className="group relative block h-[46px] w-full overflow-hidden rounded-[16px] border border-rm-border bg-rm-bg-surface shadow-[0_16px_30px_rgba(0,0,0,0.24)] transition hover:-translate-y-[1px] hover:border-white/14"
+            className="group relative block h-[46px] w-full overflow-hidden rounded-xl border border-rm-border bg-rm-bg-surface shadow-[0_16px_30px_rgba(0,0,0,0.24)] transition hover:-translate-y-[1px] hover:border-white/14"
             aria-labelledby={labelId}
             aria-describedby={helperText ? helperTextId : undefined}
             aria-expanded={open}
@@ -1072,13 +1066,13 @@ function ColorField({
             <div className="relative flex h-full items-center justify-between gap-3 px-4">
               <div className="min-w-0 text-left">
                 <div
-                  className="truncate text-[13px] font-semibold"
+                  className="truncate text-ui-sm font-semibold"
                   style={{ color: triggerTextColor }}
                 >
                   {value ?? "Auto"}
                 </div>
                 <div
-                  className="mt-0.5 text-[11px]"
+                  className="mt-0.5 text-ui-2xs"
                   style={{
                     color: value
                       ? `${triggerTextColor}CC`
@@ -1088,7 +1082,7 @@ function ColorField({
                   {value ? "Custom color" : "Using generated fallback"}
                 </div>
               </div>
-              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[12px] border border-white/18 bg-black/18 text-white/86 backdrop-blur-md transition group-hover:bg-black/24">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-white/18 bg-black/18 text-white/86 backdrop-blur-md transition group-hover:bg-black/24">
                 <Pipette size={14} />
               </div>
             </div>
@@ -1272,7 +1266,7 @@ function DisplayNameStyleDialog({
         aria-labelledby={dialogTitleId}
         aria-describedby={dialogDescriptionId}
         tabIndex={-1}
-        className="grid w-full max-w-[920px] max-h-[min(760px,calc(100dvh-1.5rem))] gap-0 overflow-hidden rounded-[30px] border border-rm-border bg-rm-bg-elevated text-rm-text shadow-[0_32px_96px_rgba(0,0,0,0.48)] outline-none lg:grid-cols-[minmax(0,308px)_minmax(0,1fr)]"
+        className="grid w-full max-w-[920px] max-h-[min(760px,calc(100dvh-1.5rem))] gap-0 overflow-hidden rounded-3xl border border-rm-border bg-rm-bg-elevated text-rm-text shadow-[0_32px_96px_rgba(0,0,0,0.48)] outline-none lg:grid-cols-[minmax(0,308px)_minmax(0,1fr)]"
       >
         <div className="overflow-y-auto border-b border-rm-border p-4 lg:border-b-0 lg:border-r lg:p-5">
           <div className="flex items-start justify-between gap-4">
@@ -1304,7 +1298,7 @@ function DisplayNameStyleDialog({
             <div>
               <h3
                 id={fontSectionId}
-                className="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-rm-text-muted"
+                className="text-ui-2xs font-semibold uppercase tracking-[0.08em] mb-2 text-rm-text-muted"
               >
                 Choose font
               </h3>
@@ -1325,7 +1319,7 @@ function DisplayNameStyleDialog({
                           }))
                         }
                         className={cn(
-                          "aspect-square min-w-0 rounded-[15px] border p-0 transition hover:-translate-y-[1px]",
+                          "aspect-square min-w-0 rounded-xl border p-0 transition hover:-translate-y-[1px]",
                           draftStyle.font === option.id
                             ? "border-primary bg-primary/10 shadow-[0_16px_32px_rgba(88,101,242,0.14)]"
                             : "border-rm-border bg-rm-bg-surface/70 hover:border-rm-border hover:bg-rm-bg-elevated/70",
@@ -1342,17 +1336,13 @@ function DisplayNameStyleDialog({
                           className={cn(
                             "flex h-full items-center justify-center overflow-hidden text-center font-bold leading-none",
                             option.id === "eight-bit"
-                              ? "text-[9px] tracking-[0.02em] sm:text-[10px]"
+                              ? "text-ui-2xs tracking-[0.02em] sm:text-ui-2xs"
                               : "text-[20px] sm:text-[21px]",
                           )}
                         />
                       </button>
                     </TooltipTrigger>
-                    <TooltipContent
-                      side="top"
-                      sideOffset={8}
-                      className={SETTINGS_TOOLTIP_CONTENT_CLASS}
-                    >
+                    <TooltipContent side="top" sideOffset={8}>
                       {option.label}
                     </TooltipContent>
                   </Tooltip>
@@ -1363,7 +1353,7 @@ function DisplayNameStyleDialog({
             <div>
               <h3
                 id={effectSectionId}
-                className="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-rm-text-muted"
+                className="text-ui-2xs font-semibold uppercase tracking-[0.08em] mb-2 text-rm-text-muted"
               >
                 Choose effect
               </h3>
@@ -1380,7 +1370,7 @@ function DisplayNameStyleDialog({
                       setDraftStyle((prev) => ({ ...prev, effect: option.id }))
                     }
                     className={cn(
-                      "aspect-square min-w-0 rounded-[15px] border p-0 transition hover:-translate-y-[1px]",
+                      "aspect-square min-w-0 rounded-xl border p-0 transition hover:-translate-y-[1px]",
                       draftStyle.effect === option.id
                         ? "border-primary bg-primary/10 shadow-[0_16px_32px_rgba(88,101,242,0.14)]"
                         : "border-rm-border bg-rm-bg-surface/70 hover:border-rm-border hover:bg-rm-bg-elevated/70",
@@ -1395,7 +1385,7 @@ function DisplayNameStyleDialog({
                         font: DEFAULT_DISPLAY_NAME_STYLE.font,
                         effect: option.id,
                       }}
-                      className="flex h-full items-center justify-center overflow-hidden px-2 text-center text-[13px] font-semibold sm:text-[14px]"
+                      className="flex h-full items-center justify-center overflow-hidden px-2 text-center text-ui-sm font-semibold sm:text-[14px]"
                     />
                   </button>
                 ))}
@@ -1405,12 +1395,12 @@ function DisplayNameStyleDialog({
             <div>
               <h3
                 id={colorSectionId}
-                className="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-rm-text-muted"
+                className="text-ui-2xs font-semibold uppercase tracking-[0.08em] mb-2 text-rm-text-muted"
               >
                 Choose colors
               </h3>
               <div
-                className="rounded-[18px] border border-rm-border bg-rm-bg-surface/60 p-2.5"
+                className="rounded-xl border border-rm-border bg-rm-bg-surface/60 p-2.5"
                 role="group"
                 aria-labelledby={colorSectionId}
               >
@@ -1454,14 +1444,14 @@ function DisplayNameStyleDialog({
                         >
                           <span
                             className={cn(
-                              "h-9 w-9 rounded-[12px] border border-white/10 shadow-[0_10px_24px_rgba(0,0,0,0.28)] transition group-hover:-translate-y-[1px]",
+                              "h-9 w-9 rounded-lg border border-white/10 shadow-[0_10px_24px_rgba(0,0,0,0.28)] transition group-hover:-translate-y-[1px]",
                               activeColorSlot === "primary"
                                 ? "ring-2 ring-primary/70 ring-offset-2 ring-offset-[color:var(--rm-bg-elevated)]"
                                 : "ring-1 ring-transparent",
                             )}
                             style={{ background: triggerBackground }}
                           />
-                          <span className="text-[9px] font-semibold uppercase tracking-[0.12em] text-rm-text-muted">
+                          <span className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted">
                             Base
                           </span>
                         </button>
@@ -1505,14 +1495,14 @@ function DisplayNameStyleDialog({
                         >
                           <span
                             className={cn(
-                              "h-9 w-9 rounded-[12px] border border-white/10 shadow-[0_10px_24px_rgba(0,0,0,0.28)] transition group-hover:-translate-y-[1px]",
+                              "h-9 w-9 rounded-lg border border-white/10 shadow-[0_10px_24px_rgba(0,0,0,0.28)] transition group-hover:-translate-y-[1px]",
                               activeColorSlot === "secondary"
                                 ? "ring-2 ring-primary/70 ring-offset-2 ring-offset-[color:var(--rm-bg-elevated)]"
                                 : "ring-1 ring-transparent",
                             )}
                             style={{ background: triggerBackground }}
                           />
-                          <span className="text-[9px] font-semibold uppercase tracking-[0.12em] text-rm-text-muted">
+                          <span className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted">
                             Glow
                           </span>
                         </button>
@@ -1532,7 +1522,7 @@ function DisplayNameStyleDialog({
                           type="button"
                           onClick={() => applyPresetColor(preset)}
                           className={cn(
-                            "aspect-square w-full rounded-[12px] border transition duration-150 hover:-translate-y-[1px]",
+                            "aspect-square w-full rounded-lg border transition duration-150 hover:-translate-y-[1px]",
                             (activeColorSlot === "primary"
                               ? draftStyle.primaryColor
                               : draftStyle.secondaryColor) === preset
@@ -1566,7 +1556,7 @@ function DisplayNameStyleDialog({
           </h3>
           <div className="flex-1 p-4 lg:p-5">
             <div
-              className="relative flex min-h-[100%] items-center justify-center overflow-hidden rounded-[26px] border border-[color:var(--rm-profile-custom-card-border)]"
+              className="relative flex min-h-[100%] items-center justify-center overflow-hidden rounded-3xl border border-[color:var(--rm-profile-custom-card-border)]"
               style={{
                 ...profileThemeStyle,
                 backgroundColor: previewSurfaceBackground,
@@ -1595,7 +1585,7 @@ function DisplayNameStyleDialog({
               />
               <div className="relative z-10 flex w-full max-w-[430px] flex-col items-center gap-4 px-4 py-6">
                 <div
-                  className="relative w-full max-w-[318px] overflow-hidden rounded-[28px] border border-[color:var(--rm-profile-custom-card-border)] shadow-[0_24px_60px_rgba(0,0,0,0.26)]"
+                  className="relative w-full max-w-[318px] overflow-hidden rounded-3xl border border-[color:var(--rm-profile-custom-card-border)] shadow-[0_24px_60px_rgba(0,0,0,0.26)]"
                   style={{
                     backgroundColor: previewSurfaceBackground,
                     backgroundImage: useActualProfileThemePreview
@@ -1670,16 +1660,16 @@ function DisplayNameStyleDialog({
                           backgroundColor={previewSurfaceBackground}
                           readableFallbackColor={previewSurfaceText}
                         />
-                        <div className="mt-1 text-[12px] text-[color:var(--rm-profile-custom-muted)]">
+                        <div className="mt-1 text-ui-xs text-[color:var(--rm-profile-custom-muted)]">
                           @{username}
                         </div>
                       </div>
 
                       <div className="mt-4 flex items-center gap-2">
-                        <div className="rounded-[12px] bg-[var(--rm-profile-custom-card-bg-strong)] px-3 py-1.5 text-[12px] font-medium text-[color:var(--rm-profile-custom-text)]">
+                        <div className="rounded-lg bg-[var(--rm-profile-custom-card-bg-strong)] px-3 py-1.5 text-ui-xs font-medium text-[color:var(--rm-profile-custom-text)]">
                           Message
                         </div>
-                        <div className="flex h-8 w-8 items-center justify-center rounded-[12px] bg-[var(--rm-profile-custom-card-bg-strong)] text-[color:var(--rm-profile-custom-muted)]">
+                        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--rm-profile-custom-card-bg-strong)] text-[color:var(--rm-profile-custom-muted)]">
                           <Plus size={14} />
                         </div>
                       </div>
@@ -1688,7 +1678,7 @@ function DisplayNameStyleDialog({
                 </div>
 
                 <div
-                  className="w-full max-w-[340px] rounded-[22px] border px-3.5 py-3 shadow-[0_18px_40px_rgba(0,0,0,0.18)]"
+                  className="w-full max-w-[340px] rounded-2xl border px-3.5 py-3 shadow-[0_18px_40px_rgba(0,0,0,0.18)]"
                   style={{
                     borderColor:
                       previewMode === "dark"
@@ -1710,7 +1700,7 @@ function DisplayNameStyleDialog({
                           display={avatarDisplay}
                         />
                       ) : (
-                        <div className="flex h-full w-full items-center justify-center bg-[var(--rm-profile-custom-button-bg)] text-[13px] font-bold text-[color:var(--rm-profile-custom-button-text)]">
+                        <div className="flex h-full w-full items-center justify-center bg-[var(--rm-profile-custom-button-bg)] text-ui-sm font-bold text-[color:var(--rm-profile-custom-button-text)]">
                           {displayName.charAt(0).toUpperCase()}
                         </div>
                       )}
@@ -1726,7 +1716,7 @@ function DisplayNameStyleDialog({
                         />
                         <span
                           className={cn(
-                            "text-[11px]",
+                            "text-ui-2xs",
                             previewMode === "dark"
                               ? "text-white/38"
                               : "text-black/38",
@@ -1737,7 +1727,7 @@ function DisplayNameStyleDialog({
                       </div>
                       <div
                         className={cn(
-                          "mt-1 text-[13px]",
+                          "mt-1 text-ui-sm",
                           previewMode === "dark"
                             ? "text-white/78"
                             : "text-black/72",
@@ -1749,7 +1739,7 @@ function DisplayNameStyleDialog({
                   </div>
                 </div>
 
-                <div className="relative w-full max-w-[340px] overflow-hidden rounded-[18px] border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] px-4 py-3 shadow-[0_18px_40px_rgba(0,0,0,0.18)]">
+                <div className="relative w-full max-w-[340px] overflow-hidden rounded-xl border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] px-4 py-3 shadow-[0_18px_40px_rgba(0,0,0,0.18)]">
                   {nameplateUrl ? (
                     <UserNameplateLayer
                       nameplateUrl={nameplateUrl}
@@ -1770,7 +1760,7 @@ function DisplayNameStyleDialog({
                           display={avatarDisplay}
                         />
                       ) : (
-                        <div className="flex h-full w-full items-center justify-center bg-[var(--rm-profile-custom-button-bg)] text-[13px] font-bold text-[color:var(--rm-profile-custom-button-text)]">
+                        <div className="flex h-full w-full items-center justify-center bg-[var(--rm-profile-custom-button-bg)] text-ui-sm font-bold text-[color:var(--rm-profile-custom-button-text)]">
                           {displayName.charAt(0).toUpperCase()}
                         </div>
                       )}
@@ -1791,7 +1781,7 @@ function DisplayNameStyleDialog({
 
           <div className="flex flex-col gap-3 border-t border-rm-border px-4 py-3 sm:gap-4 lg:px-5">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <p className="max-w-[34ch] text-[12px] leading-relaxed text-rm-text-muted">
+              <p className="max-w-[34ch] text-ui-xs leading-relaxed text-rm-text-muted">
                 Display name colors and effects can shift a little between light
                 and dark surfaces.
               </p>
@@ -2980,7 +2970,7 @@ export default function SettingsAccountTab({
 
   if (!user) {
     return (
-      <div className="animate-in fade-in slide-in-from-right-4 duration-300">
+      <div className="animate-in fade-in duration-150">
         <h1 className="text-2xl font-bold text-rm-text mb-6 hidden md:block">
           My Account
         </h1>
@@ -3014,7 +3004,7 @@ export default function SettingsAccountTab({
   return (
     <div
       className={cn(
-        "animate-in fade-in slide-in-from-right-4 duration-300",
+        "animate-in fade-in duration-150",
         asModal &&
           "relative flex h-full min-h-0 flex-col overflow-hidden bg-rm-bg-primary",
       )}
@@ -3093,7 +3083,7 @@ export default function SettingsAccountTab({
           >
             <aside
               className={cn(
-                "self-start transition-[opacity,transform,max-width] duration-300",
+                "self-start transition-[opacity,transform,max-width] duration-200",
                 asModal && "relative z-20 min-h-0",
                 !stylesCollapsed && "overflow-visible",
                 asModal &&
@@ -3106,7 +3096,7 @@ export default function SettingsAccountTab({
                   "bg-rm-bg-primary",
                   asModal
                     ? "overflow-visible border-b border-rm-border/80 lg:h-full lg:border-b-0 lg:border-r"
-                    : "overflow-hidden rounded-[22px] border border-rm-border",
+                    : "overflow-hidden rounded-2xl border border-rm-border",
                 )}
               >
                 <div
@@ -3117,7 +3107,7 @@ export default function SettingsAccountTab({
                 >
                   <button
                     type="button"
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-rm-border bg-rm-bg-surface px-2 py-1 text-[13px] font-semibold text-rm-text transition hover:bg-rm-bg-hover"
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-rm-border bg-rm-bg-surface px-2 py-1 text-ui-sm font-semibold text-rm-text transition hover:bg-rm-bg-hover"
                   >
                     <span>Main Profile</span>
                     <ChevronDown size={13} className="text-rm-text-muted" />
@@ -3137,11 +3127,7 @@ export default function SettingsAccountTab({
                         <ChevronsRight size={16} />
                       </button>
                     </TooltipTrigger>
-                    <TooltipContent
-                      side="top"
-                      sideOffset={8}
-                      className={SETTINGS_TOOLTIP_CONTENT_CLASS}
-                    >
+                    <TooltipContent side="top" sideOffset={8}>
                       {asModal ? "Hide styles" : "View profile variants"}
                     </TooltipContent>
                   </Tooltip>
@@ -3179,7 +3165,7 @@ export default function SettingsAccountTab({
                               !currentNameplateSelection &&
                               !nameplateFile
                             }
-                            className="text-rose-300 hover:bg-rose-500/12 hover:text-rose-100"
+                            className="text-destructive hover:bg-destructive/12 hover:text-destructive"
                           >
                             <Trash2 size={12} />
                           </AccountActionIconButton>
@@ -3187,12 +3173,12 @@ export default function SettingsAccountTab({
                       }
                     >
                       <div
-                        className="relative h-9 overflow-hidden rounded-[10px] border border-rm-border/70 bg-rm-bg-surface"
+                        className="relative h-9 overflow-hidden rounded-md border border-rm-border/70 bg-rm-bg-surface"
                         title={nameplateStatus}
                       >
                         {nameplateStaticPreviewUrl ? (
                           <>
-                            <div className="absolute inset-0 transition duration-300 group-hover/rail:opacity-0">
+                            <div className="absolute inset-0 transition duration-200 group-hover/rail:opacity-0">
                               <UserNameplateLayer
                                 nameplateUrl={nameplateStaticPreviewUrl}
                                 nameplateContentType={
@@ -3205,7 +3191,7 @@ export default function SettingsAccountTab({
                                 playVideo={false}
                               />
                             </div>
-                            <div className="absolute inset-0 opacity-0 transition duration-300 group-hover/rail:opacity-100">
+                            <div className="absolute inset-0 opacity-0 transition duration-200 group-hover/rail:opacity-100">
                               {isNameplatePreviewHovered &&
                               nameplateHoverPreviewUrl ? (
                                 <UserNameplateLayer
@@ -3231,21 +3217,21 @@ export default function SettingsAccountTab({
                                       }
                                     />
                                   ) : (
-                                    <div className="flex h-full w-full items-center justify-center text-[10px] font-bold text-white/80">
+                                    <div className="flex h-full w-full items-center justify-center text-ui-2xs font-bold text-white/80">
                                       {getDisplayInitial({
                                         name: currentDisplayName,
                                       })}
                                     </div>
                                   )}
                                 </div>
-                                <span className="max-w-[90px] truncate text-[11px] font-semibold text-white/88">
+                                <span className="max-w-[90px] truncate text-ui-2xs font-semibold text-white/88">
                                   {currentDisplayName}
                                 </span>
                               </div>
                             </div>
                           </>
                         ) : (
-                          <div className="flex h-full items-center justify-center text-[11px] text-rm-text-muted">
+                          <div className="flex h-full items-center justify-center text-ui-2xs text-rm-text-muted">
                             No nameplate selected
                           </div>
                         )}
@@ -3277,7 +3263,7 @@ export default function SettingsAccountTab({
                                 anchor === "rail" ? null : "rail",
                               );
                             }}
-                            className="group/avatar relative flex h-[64px] w-[64px] items-center justify-center rounded-[16px] border border-rm-border bg-rm-bg-surface/70 outline-none transition-[transform,box-shadow] hover:scale-[1.03] hover:shadow-[0_12px_26px_rgba(0,0,0,0.25)] focus-visible:ring-2 focus-visible:ring-primary"
+                            className="group/avatar relative flex h-[64px] w-[64px] items-center justify-center rounded-xl border border-rm-border bg-rm-bg-surface/70 outline-none transition-[transform,box-shadow] hover:shadow-[0_12px_26px_rgba(0,0,0,0.25)] focus-visible:ring-2 focus-visible:ring-primary"
                             aria-label="Open avatar actions"
                             aria-haspopup="true"
                             aria-expanded={avatarMenuOpen}
@@ -3371,17 +3357,17 @@ export default function SettingsAccountTab({
                                 handleRemoveCollectible("avatar_decoration")
                               }
                               disabled={!currentAvatarDecoration}
-                              className="text-rose-300 hover:bg-rose-500/12 hover:text-rose-100"
+                              className="text-destructive hover:bg-destructive/12 hover:text-destructive"
                             >
                               <Trash2 size={12} />
                             </AccountActionIconButton>
                           </>
                         }
                       >
-                        <div className="relative flex h-[64px] w-[64px] items-center justify-center overflow-hidden rounded-[16px] border border-rm-border bg-rm-bg-surface/70">
+                        <div className="relative flex h-[64px] w-[64px] items-center justify-center overflow-hidden rounded-xl border border-rm-border bg-rm-bg-surface/70">
                           {currentAvatarDecoration ? (
                             <>
-                              <div className="absolute inset-0 transition duration-300 group-hover/rail:opacity-0">
+                              <div className="absolute inset-0 transition duration-200 group-hover/rail:opacity-0">
                                 <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_rgba(255,255,255,0.08),_rgba(255,255,255,0)_56%)]" />
                                 <div className="absolute inset-0 flex items-center justify-center">
                                   <img
@@ -3396,7 +3382,7 @@ export default function SettingsAccountTab({
                                   />
                                 </div>
                               </div>
-                              <div className="absolute inset-0 opacity-0 transition duration-300 group-hover/rail:opacity-100">
+                              <div className="absolute inset-0 opacity-0 transition duration-200 group-hover/rail:opacity-100">
                                 <div className="absolute inset-0 flex items-center justify-center">
                                   <div className="relative h-[50px] w-[50px] overflow-visible rounded-full border border-rm-border bg-rm-bg-elevated/90 shadow-[0_12px_24px_rgba(0,0,0,0.3)]">
                                     {isAvatarDecorationPreviewHovered &&
@@ -3427,7 +3413,7 @@ export default function SettingsAccountTab({
                               </div>
                             </>
                           ) : (
-                            <div className="absolute inset-0 flex items-center justify-center text-[11px] font-semibold text-rm-text-muted">
+                            <div className="absolute inset-0 flex items-center justify-center text-ui-2xs font-semibold text-rm-text-muted">
                               None
                             </div>
                           )}
@@ -3465,7 +3451,7 @@ export default function SettingsAccountTab({
                       <button
                         type="button"
                         onClick={() => setDisplayNameStyleEditorOpen(true)}
-                        className="flex h-[48px] w-full items-center justify-center rounded-[14px] border border-rm-border bg-rm-bg-surface/60 px-4 pr-11 text-center outline-none transition-transform duration-200 hover:scale-[1.03] hover:bg-rm-bg-elevated/80 focus-visible:border-primary/60 focus-visible:shadow-[0_0_0_1px_rgba(88,101,242,0.4),0_12px_26px_rgba(0,0,0,0.2)]"
+                        className="flex h-[48px] w-full items-center justify-center rounded-lg border border-rm-border bg-rm-bg-surface/60 px-4 pr-11 text-center outline-none transition-transform duration-200 hover:bg-rm-bg-elevated/80 focus-visible:border-primary/60 focus-visible:shadow-[0_0_0_1px_rgba(88,101,242,0.4),0_12px_26px_rgba(0,0,0,0.2)]"
                         aria-label={
                           hasDisplayNameStyle
                             ? "Edit display name style"
@@ -3475,7 +3461,7 @@ export default function SettingsAccountTab({
                         <ProfileDisplayName
                           text={currentDisplayName}
                           displayNameStyle={displayNameStyle}
-                          className="block max-w-full truncate text-[15px] font-semibold leading-none tracking-[-0.04em] md:text-[16px]"
+                          className="block max-w-full truncate text-ui-base font-semibold leading-none tracking-[-0.04em] md:text-ui-md"
                         />
                       </button>
                     </ProfileRailCard>
@@ -3485,7 +3471,7 @@ export default function SettingsAccountTab({
                     <ProfileRailCard className="overflow-visible p-2.5">
                       <div className="grid grid-cols-2 gap-2.5">
                         <div className="relative aspect-square overflow-visible">
-                          <div className="absolute inset-0 overflow-hidden rounded-[16px] border border-rm-border/80 bg-rm-bg-surface shadow-[0_16px_32px_rgba(0,0,0,0.28)]">
+                          <div className="absolute inset-0 overflow-hidden rounded-xl border border-rm-border/80 bg-rm-bg-surface shadow-[0_16px_32px_rgba(0,0,0,0.28)]">
                             <div
                               className="absolute inset-0"
                               style={{
@@ -3517,7 +3503,7 @@ export default function SettingsAccountTab({
                                     type="button"
                                     onClick={toggleOpen}
                                     className={cn(
-                                      "flex h-7 w-7 items-center justify-center rounded-[10px] border-2 border-white bg-white/92 p-[3px] shadow-[0_10px_20px_rgba(0,0,0,0.24)] transition hover:scale-[1.03]",
+                                      "flex h-7 w-7 items-center justify-center rounded-md border-2 border-white bg-white/92 p-[3px] shadow-[0_10px_20px_rgba(0,0,0,0.24)] transition",
                                       open &&
                                         "shadow-[0_0_0_1px_rgba(255,255,255,0.38),0_12px_26px_rgba(0,0,0,0.28)]",
                                     )}
@@ -3525,7 +3511,7 @@ export default function SettingsAccountTab({
                                     aria-expanded={open}
                                   >
                                     <span
-                                      className="h-full w-full rounded-[8px] border border-black/10"
+                                      className="h-full w-full rounded-md border border-black/10"
                                       style={getPickerSurfaceStyle({
                                         fill: value,
                                         showEmptyPattern: !value,
@@ -3535,11 +3521,7 @@ export default function SettingsAccountTab({
                                     />
                                   </button>
                                 </TooltipTrigger>
-                                <TooltipContent
-                                  side="top"
-                                  sideOffset={8}
-                                  className={SETTINGS_TOOLTIP_CONTENT_CLASS}
-                                >
+                                <TooltipContent side="top" sideOffset={8}>
                                   Theme background
                                 </TooltipContent>
                               </Tooltip>
@@ -3565,7 +3547,7 @@ export default function SettingsAccountTab({
                                     type="button"
                                     onClick={toggleOpen}
                                     className={cn(
-                                      "flex h-7 w-7 items-center justify-center rounded-[10px] border-2 border-white bg-white/92 p-[3px] shadow-[0_10px_20px_rgba(0,0,0,0.24)] transition hover:scale-[1.03]",
+                                      "flex h-7 w-7 items-center justify-center rounded-md border-2 border-white bg-white/92 p-[3px] shadow-[0_10px_20px_rgba(0,0,0,0.24)] transition",
                                       open &&
                                         "shadow-[0_0_0_1px_rgba(255,255,255,0.38),0_12px_26px_rgba(0,0,0,0.28)]",
                                     )}
@@ -3573,7 +3555,7 @@ export default function SettingsAccountTab({
                                     aria-expanded={open}
                                   >
                                     <span
-                                      className="h-full w-full rounded-[8px] border border-black/10"
+                                      className="h-full w-full rounded-md border border-black/10"
                                       style={getPickerSurfaceStyle({
                                         fill: value,
                                         showEmptyPattern: !value,
@@ -3583,11 +3565,7 @@ export default function SettingsAccountTab({
                                     />
                                   </button>
                                 </TooltipTrigger>
-                                <TooltipContent
-                                  side="top"
-                                  sideOffset={8}
-                                  className={SETTINGS_TOOLTIP_CONTENT_CLASS}
-                                >
+                                <TooltipContent side="top" sideOffset={8}>
                                   Theme accent
                                 </TooltipContent>
                               </Tooltip>
@@ -3608,7 +3586,7 @@ export default function SettingsAccountTab({
                               <button
                                 type="button"
                                 onClick={toggleOpen}
-                                className="relative block h-full w-full overflow-hidden rounded-[16px] border border-rm-border/80 bg-rm-bg-surface shadow-[0_16px_32px_rgba(0,0,0,0.28)] transition hover:-translate-y-[1px]"
+                                className="relative block h-full w-full overflow-hidden rounded-xl border border-rm-border/80 bg-rm-bg-surface shadow-[0_16px_32px_rgba(0,0,0,0.28)] transition hover:-translate-y-[1px]"
                                 aria-label="Choose banner fallback color"
                                 aria-expanded={open}
                                 title={bannerStatus}
@@ -3635,7 +3613,7 @@ export default function SettingsAccountTab({
                                   }}
                                 />
                                 <div className="absolute inset-0 bg-black/0 transition group-hover/theme-banner:bg-black/10" />
-                                <div className="absolute bottom-2 right-2 flex h-7 w-7 items-center justify-center rounded-[10px] border border-white/16 bg-black/20 text-white/88 opacity-0 shadow-[0_10px_22px_rgba(0,0,0,0.24)] backdrop-blur-sm transition group-hover/theme-banner:opacity-100">
+                                <div className="absolute bottom-2 right-2 flex h-7 w-7 items-center justify-center rounded-md border border-white/16 bg-black/20 text-white/88 opacity-0 shadow-[0_10px_22px_rgba(0,0,0,0.24)] backdrop-blur-sm transition group-hover/theme-banner:opacity-100">
                                   <Pipette size={12} />
                                 </div>
                               </button>
@@ -3657,7 +3635,7 @@ export default function SettingsAccountTab({
                                 setBannerPreview(null);
                               }}
                               disabled={!currentBannerUrl && !bannerFile}
-                              className="text-rose-300 hover:bg-rose-500/12 hover:text-rose-100"
+                              className="text-destructive hover:bg-destructive/12 hover:text-destructive"
                             >
                               <Trash2 size={12} />
                             </AccountActionIconButton>
@@ -3680,7 +3658,7 @@ export default function SettingsAccountTab({
                                 handleRemoveCollectible("profile_effect")
                               }
                               disabled={!currentProfileEffect}
-                              className="text-rose-300 hover:bg-rose-500/12 hover:text-rose-100"
+                              className="text-destructive hover:bg-destructive/12 hover:text-destructive"
                             >
                               <Trash2 size={12} />
                             </AccountActionIconButton>
@@ -3693,12 +3671,12 @@ export default function SettingsAccountTab({
                               setProfileMenuAnchor(null);
                               handleOpenCollectibles("profile_effect");
                             }}
-                            className="group/profile-effect relative block h-[88px] w-full cursor-pointer overflow-hidden rounded-[12px] border border-rm-border/70 bg-rm-bg-surface text-left outline-none transition-[border-color,box-shadow] hover:border-rm-border hover:shadow-[0_18px_32px_rgba(0,0,0,0.24)] focus-visible:border-primary/60 focus-visible:shadow-[0_0_0_1px_rgba(88,101,242,0.4),0_18px_32px_rgba(0,0,0,0.24)]"
+                            className="group/profile-effect relative block h-[88px] w-full cursor-pointer overflow-hidden rounded-lg border border-rm-border/70 bg-rm-bg-surface text-left outline-none transition-[border-color,box-shadow] hover:border-rm-border hover:shadow-[0_18px_32px_rgba(0,0,0,0.24)] focus-visible:border-primary/60 focus-visible:shadow-[0_0_0_1px_rgba(88,101,242,0.4),0_18px_32px_rgba(0,0,0,0.24)]"
                             aria-label="Browse profile effects"
                           >
                             <div className="absolute inset-0 flex items-center justify-center px-3">
                               <div
-                                className="relative h-[74px] overflow-hidden rounded-[12px] border border-rm-border/70 bg-rm-bg-elevated shadow-[0_18px_34px_rgba(0,0,0,0.3)] transition-transform duration-200 group-hover/profile-effect:scale-[1.03]"
+                                className="relative h-[74px] overflow-hidden rounded-lg border border-rm-border/70 bg-rm-bg-elevated shadow-[0_18px_34px_rgba(0,0,0,0.3)] transition-transform duration-200"
                                 style={{ aspectRatio: "450 / 880" }}
                               >
                                 <div
@@ -3743,7 +3721,7 @@ export default function SettingsAccountTab({
                                 handleRemoveCollectible("profile_frame")
                               }
                               disabled={!currentProfileFrame}
-                              className="text-rose-300 hover:bg-rose-500/12 hover:text-rose-100"
+                              className="text-destructive hover:bg-destructive/12 hover:text-destructive"
                             >
                               <Trash2 size={12} />
                             </AccountActionIconButton>
@@ -3756,16 +3734,16 @@ export default function SettingsAccountTab({
                               setProfileMenuAnchor(null);
                               handleOpenCollectibles("profile_frame");
                             }}
-                            className="group/profile-frame relative block h-[88px] w-full cursor-pointer overflow-visible rounded-[12px] border border-rm-border/70 bg-rm-bg-surface text-left outline-none transition-[border-color,box-shadow] hover:border-rm-border hover:shadow-[0_18px_32px_rgba(0,0,0,0.24)] focus-visible:border-primary/60 focus-visible:shadow-[0_0_0_1px_rgba(88,101,242,0.4),0_18px_32px_rgba(0,0,0,0.24)]"
+                            className="group/profile-frame relative block h-[88px] w-full cursor-pointer overflow-visible rounded-lg border border-rm-border/70 bg-rm-bg-surface text-left outline-none transition-[border-color,box-shadow] hover:border-rm-border hover:shadow-[0_18px_32px_rgba(0,0,0,0.24)] focus-visible:border-primary/60 focus-visible:shadow-[0_0_0_1px_rgba(88,101,242,0.4),0_18px_32px_rgba(0,0,0,0.24)]"
                             aria-label="Browse profile frames"
                           >
                             <div className="absolute inset-0 flex items-center justify-center px-3 overflow-visible">
                               <div
-                                className="relative h-[74px] overflow-visible rounded-[12px] border border-rm-border/70 bg-rm-bg-elevated shadow-[0_18px_34px_rgba(0,0,0,0.3)] transition-transform duration-200 group-hover/profile-frame:scale-[1.03]"
+                                className="relative h-[74px] overflow-visible rounded-lg border border-rm-border/70 bg-rm-bg-elevated shadow-[0_18px_34px_rgba(0,0,0,0.3)] transition-transform duration-200"
                                 style={{ aspectRatio: "450 / 880" }}
                               >
                                 <div
-                                  className="absolute inset-0 overflow-hidden rounded-[12px]"
+                                  className="absolute inset-0 overflow-hidden rounded-lg"
                                   style={{
                                     ...previewThemeStyle,
                                     backgroundColor:
@@ -3835,7 +3813,7 @@ export default function SettingsAccountTab({
                       ref={profileBannerTriggerRef}
                       type="button"
                       onClick={() => setStylesCollapsed(false)}
-                      className="group absolute left-0 top-1/2 z-20 hidden -translate-x-[46%] -translate-y-1/2 rounded-r-2xl rounded-l-xl border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] px-3 py-3 text-[12px] font-semibold text-[color:var(--rm-profile-custom-text)] shadow-[0_18px_34px_rgba(0,0,0,0.28)] transition hover:-translate-x-[40%] lg:flex"
+                      className="group absolute left-0 top-1/2 z-20 hidden -translate-x-[46%] -translate-y-1/2 rounded-r-2xl rounded-l-xl border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] px-3 py-3 text-ui-xs font-semibold text-[color:var(--rm-profile-custom-text)] shadow-[0_18px_34px_rgba(0,0,0,0.28)] transition hover:-translate-x-[40%] lg:flex"
                       style={previewThemeStyle}
                       aria-label="Show styles"
                     >
@@ -3844,11 +3822,7 @@ export default function SettingsAccountTab({
                       </span>
                     </button>
                   </TooltipTrigger>
-                  <TooltipContent
-                    side="right"
-                    sideOffset={10}
-                    className={SETTINGS_TOOLTIP_CONTENT_CLASS}
-                  >
+                  <TooltipContent side="right" sideOffset={10}>
                     Show styles
                   </TooltipContent>
                 </Tooltip>
@@ -3983,7 +3957,7 @@ export default function SettingsAccountTab({
                                 anchor === "preview" ? null : "preview",
                               );
                             }}
-                            className="group/preview-avatar relative h-28 w-28 rounded-full border-[6px] border-rm-bg-elevated bg-[var(--rm-profile-custom-card-bg-strong)] shadow-[0_18px_46px_rgba(0,0,0,0.42)] transition-[transform,box-shadow] hover:scale-[1.02] hover:shadow-[0_20px_52px_rgba(0,0,0,0.48)] focus-visible:ring-2 focus-visible:ring-primary"
+                            className="group/preview-avatar relative h-28 w-28 rounded-full border-[6px] border-rm-bg-elevated bg-[var(--rm-profile-custom-card-bg-strong)] shadow-[0_18px_46px_rgba(0,0,0,0.42)] transition-[transform,box-shadow] hover:shadow-[0_20px_52px_rgba(0,0,0,0.48)] focus-visible:ring-2 focus-visible:ring-primary"
                             aria-label="Open avatar actions"
                             aria-haspopup="true"
                             aria-expanded={avatarMenuOpen}
@@ -4086,7 +4060,7 @@ export default function SettingsAccountTab({
                                     setIsCustomStatusEditing(false);
                                   }
                                 }}
-                                className="min-w-0 flex-1 rounded-full bg-white/10 px-3 py-2 text-[13px] text-[color:var(--rm-profile-custom-text)] outline-none placeholder:text-[color:var(--rm-profile-custom-muted)]"
+                                className="min-w-0 flex-1 rounded-full bg-white/10 px-3 py-2 text-ui-sm text-[color:var(--rm-profile-custom-text)] outline-none placeholder:text-[color:var(--rm-profile-custom-muted)]"
                                 aria-label="Custom status"
                                 placeholder="Support custom status!"
                                 maxLength={128}
@@ -4100,7 +4074,7 @@ export default function SettingsAccountTab({
                                 aria-label="Edit custom status"
                                 onClick={handleOpenCustomStatusEditor}
                               >
-                                <span className="block min-w-0 truncate text-[13px] italic font-medium text-[color:var(--rm-profile-custom-text)]">
+                                <span className="block min-w-0 truncate text-ui-sm italic font-medium text-[color:var(--rm-profile-custom-text)]">
                                   {visibleCustomStatus}
                                 </span>
                               </button>
@@ -4119,11 +4093,7 @@ export default function SettingsAccountTab({
                                       <Pencil size={14} />
                                     </button>
                                   </TooltipTrigger>
-                                  <TooltipContent
-                                    side="top"
-                                    sideOffset={8}
-                                    className={SETTINGS_TOOLTIP_CONTENT_CLASS}
-                                  >
+                                  <TooltipContent side="top" sideOffset={8}>
                                     Edit custom status
                                   </TooltipContent>
                                 </Tooltip>
@@ -4141,11 +4111,7 @@ export default function SettingsAccountTab({
                                       <Trash2 size={14} />
                                     </button>
                                   </TooltipTrigger>
-                                  <TooltipContent
-                                    side="top"
-                                    sideOffset={8}
-                                    className={SETTINGS_TOOLTIP_CONTENT_CLASS}
-                                  >
+                                  <TooltipContent side="top" sideOffset={8}>
                                     Clear custom status
                                   </TooltipContent>
                                 </Tooltip>
@@ -4164,16 +4130,12 @@ export default function SettingsAccountTab({
                                     size={14}
                                     className="shrink-0 text-[color:var(--rm-profile-custom-muted)]"
                                   />
-                                  <span className="min-w-0 truncate text-[13px] italic font-medium text-[color:var(--rm-profile-custom-text)]">
+                                  <span className="min-w-0 truncate text-ui-sm italic font-medium text-[color:var(--rm-profile-custom-text)]">
                                     Today I learned...
                                   </span>
                                 </button>
                               </TooltipTrigger>
-                              <TooltipContent
-                                side="top"
-                                sideOffset={8}
-                                className={SETTINGS_TOOLTIP_CONTENT_CLASS}
-                              >
+                              <TooltipContent side="top" sideOffset={8}>
                                 Add custom status
                               </TooltipContent>
                             </Tooltip>
@@ -4182,7 +4144,7 @@ export default function SettingsAccountTab({
                           {SHOW_LEGACY_PREVIEW_IDENTITY ? (
                             <>
                               {chatUser?.custom_status ? (
-                                <div className="mb-3 inline-flex max-w-[180px] items-center rounded-full border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] px-3.5 py-2 text-[12px] font-medium text-[color:var(--rm-profile-custom-text)] shadow-[0_14px_28px_rgba(0,0,0,0.22)] backdrop-blur-sm">
+                                <div className="mb-3 inline-flex max-w-[180px] items-center rounded-full border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] px-3.5 py-2 text-ui-xs font-medium text-[color:var(--rm-profile-custom-text)] shadow-[0_14px_28px_rgba(0,0,0,0.22)] backdrop-blur-sm">
                                   <span className="truncate">
                                     {chatUser.custom_status}
                                   </span>
@@ -4195,7 +4157,7 @@ export default function SettingsAccountTab({
                                 backgroundColor={previewTheme.backgroundColor}
                                 readableFallbackColor={previewTheme.textColor}
                               />
-                              <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-[color:var(--rm-profile-custom-muted)]">
+                              <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-ui-sm text-[color:var(--rm-profile-custom-muted)]">
                                 <span>@{currentUsername}</span>
                                 <span
                                   aria-hidden="true"
@@ -4235,11 +4197,11 @@ export default function SettingsAccountTab({
                                           event.currentTarget.blur();
                                         }
                                       }}
-                                      className="min-w-[88px] bg-transparent text-[13px] font-medium text-[color:var(--rm-profile-custom-text)] outline-none placeholder:text-[color:var(--rm-profile-custom-muted)]"
+                                      className="min-w-[88px] bg-transparent text-ui-sm font-medium text-[color:var(--rm-profile-custom-text)] outline-none placeholder:text-[color:var(--rm-profile-custom-muted)]"
                                       placeholder="Add pronouns"
                                     />
                                   ) : (
-                                    <span className="rounded-md border border-transparent px-1 py-0.5 text-[13px] font-medium text-[color:var(--rm-profile-custom-text)] transition group-hover/preview-pronouns:border-[color:var(--rm-profile-custom-card-border)] group-hover/preview-pronouns:bg-[var(--rm-profile-custom-card-bg-strong)]">
+                                    <span className="rounded-md border border-transparent px-1 py-0.5 text-ui-sm font-medium text-[color:var(--rm-profile-custom-text)] transition group-hover/preview-pronouns:border-[color:var(--rm-profile-custom-card-border)] group-hover/preview-pronouns:bg-[var(--rm-profile-custom-card-bg-strong)]">
                                       {currentPronouns || "Add pronouns"}
                                     </span>
                                   )}
@@ -4255,7 +4217,7 @@ export default function SettingsAccountTab({
                           <TooltipTrigger asChild>
                             <button
                               type="button"
-                              className="group/preview-display-name relative -mx-3 inline-flex max-w-full items-center rounded-[18px] border border-transparent px-3 py-2 pr-12 text-left transition hover:border-[color:var(--rm-profile-custom-card-border)] hover:bg-[var(--rm-profile-custom-card-bg-strong)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35"
+                              className="group/preview-display-name relative -mx-3 inline-flex max-w-full items-center rounded-xl border border-transparent px-3 py-2 pr-12 text-left transition hover:border-[color:var(--rm-profile-custom-card-border)] hover:bg-[var(--rm-profile-custom-card-bg-strong)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35"
                               aria-label={
                                 hasDisplayNameStyle
                                   ? "Edit display name style"
@@ -4277,17 +4239,13 @@ export default function SettingsAccountTab({
                               />
                             </button>
                           </TooltipTrigger>
-                          <TooltipContent
-                            side="top"
-                            sideOffset={8}
-                            className={SETTINGS_TOOLTIP_CONTENT_CLASS}
-                          >
+                          <TooltipContent side="top" sideOffset={8}>
                             {hasDisplayNameStyle
                               ? "Edit display name style"
                               : "Add display name style"}
                           </TooltipContent>
                         </Tooltip>
-                        <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-[color:var(--rm-profile-custom-muted)]">
+                        <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-ui-sm text-[color:var(--rm-profile-custom-muted)]">
                           <span>@{currentUsername}</span>
                           <span
                             aria-hidden="true"
@@ -4325,11 +4283,11 @@ export default function SettingsAccountTab({
                                     event.currentTarget.blur();
                                   }
                                 }}
-                                className="min-w-[88px] bg-transparent text-[13px] font-medium text-[color:var(--rm-profile-custom-text)] outline-none placeholder:text-[color:var(--rm-profile-custom-muted)]"
+                                className="min-w-[88px] bg-transparent text-ui-sm font-medium text-[color:var(--rm-profile-custom-text)] outline-none placeholder:text-[color:var(--rm-profile-custom-muted)]"
                                 placeholder="Add pronouns"
                               />
                             ) : (
-                              <span className="rounded-md border border-transparent px-1 py-0.5 text-[13px] font-medium text-[color:var(--rm-profile-custom-text)] transition group-hover/preview-pronouns:border-[color:var(--rm-profile-custom-card-border)] group-hover/preview-pronouns:bg-[var(--rm-profile-custom-card-bg)]">
+                              <span className="rounded-md border border-transparent px-1 py-0.5 text-ui-sm font-medium text-[color:var(--rm-profile-custom-text)] transition group-hover/preview-pronouns:border-[color:var(--rm-profile-custom-card-border)] group-hover/preview-pronouns:bg-[var(--rm-profile-custom-card-bg)]">
                                 {currentPronouns || "Add pronouns"}
                               </span>
                             )}
@@ -4360,7 +4318,7 @@ export default function SettingsAccountTab({
                       <button
                         type="button"
                         onClick={() => setActivePreviewField("bio")}
-                        className="group/preview-bio block w-full rounded-[18px] border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] px-4 py-3 text-left transition hover:border-[color:var(--rm-profile-custom-text)]/22 hover:bg-[var(--rm-profile-custom-card-bg)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35"
+                        className="group/preview-bio block w-full rounded-xl border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] px-4 py-3 text-left transition hover:border-[color:var(--rm-profile-custom-text)]/22 hover:bg-[var(--rm-profile-custom-card-bg)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35"
                       >
                         {activePreviewField === "bio" ? (
                           <div>
@@ -4384,16 +4342,16 @@ export default function SettingsAccountTab({
                               className="min-h-[74px] w-full resize-none bg-transparent text-[14px] leading-6 text-[color:var(--rm-profile-custom-text)] outline-none placeholder:text-[color:var(--rm-profile-custom-muted)]"
                               placeholder="Add a bio here"
                             />
-                            <div className="mt-2 text-right text-[11px] text-[color:var(--rm-profile-custom-muted)]">
+                            <div className="mt-2 text-right text-ui-2xs text-[color:var(--rm-profile-custom-muted)]">
                               {bio.trim().length}/190
                             </div>
                           </div>
                         ) : (
                           <div className="space-y-1">
-                            <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[color:var(--rm-profile-custom-muted)]">
+                            <div className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-[color:var(--rm-profile-custom-muted)]">
                               Bio
                             </div>
-                            <div className="rounded-[14px] border border-transparent px-0 py-0.5 text-[14px] leading-6 text-[color:var(--rm-profile-custom-text)] transition group-hover/preview-bio:border-[color:var(--rm-profile-custom-card-border)]">
+                            <div className="rounded-lg border border-transparent px-0 py-0.5 text-[14px] leading-6 text-[color:var(--rm-profile-custom-text)] transition group-hover/preview-bio:border-[color:var(--rm-profile-custom-card-border)]">
                               {currentBio || (
                                 <span className="text-[color:var(--rm-profile-custom-muted)]">
                                   Add a bio here
@@ -4405,7 +4363,7 @@ export default function SettingsAccountTab({
                       </button>
 
                       <div>
-                        <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[color:var(--rm-profile-custom-muted)]">
+                        <div className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-[color:var(--rm-profile-custom-muted)]">
                           {previewReferenceDate.label}
                         </div>
                         <div className="mt-2 text-[14px] text-[color:var(--rm-profile-custom-text)]">
@@ -4432,7 +4390,7 @@ export default function SettingsAccountTab({
                       key={tab}
                       type="button"
                       className={cn(
-                        "pb-2 text-[13px] font-semibold text-[color:var(--rm-profile-custom-muted)] transition",
+                        "pb-2 text-ui-sm font-semibold text-[color:var(--rm-profile-custom-muted)] transition",
                         tab === "Board" &&
                           "border-b-2 border-[color:var(--rm-profile-custom-text)] text-[color:var(--rm-profile-custom-text)]",
                       )}
@@ -4444,7 +4402,7 @@ export default function SettingsAccountTab({
 
                 <div className="mt-4 flex items-center justify-between">
                   <div
-                    className="text-[13px] font-medium text-[color:var(--rm-profile-custom-muted)]"
+                    className="text-ui-sm font-medium text-[color:var(--rm-profile-custom-muted)]"
                     style={previewThemeStyle}
                   >
                     Your Widgets
@@ -4471,15 +4429,15 @@ export default function SettingsAccountTab({
                     subtitle="Choose 1 game"
                   >
                     <div className="flex items-center gap-4">
-                      <div className="h-[84px] w-[84px] shrink-0 overflow-hidden rounded-[18px] border border-white/8 bg-[linear-gradient(135deg,_#d8dde7,_#64748b_70%,_#1f2937)]" />
+                      <div className="h-[84px] w-[84px] shrink-0 overflow-hidden rounded-xl border border-white/8 bg-[linear-gradient(135deg,_#d8dde7,_#64748b_70%,_#1f2937)]" />
                       <div className="min-w-0">
-                        <div className="truncate text-[16px] font-semibold text-[color:var(--rm-profile-custom-text)]">
+                        <div className="truncate text-ui-md font-semibold text-[color:var(--rm-profile-custom-text)]">
                           Your featured title goes here
                         </div>
-                        <div className="mt-2 text-[13px] italic text-[color:var(--rm-profile-custom-muted)]">
+                        <div className="mt-2 text-ui-sm italic text-[color:var(--rm-profile-custom-muted)]">
                           Let everyone know why this is your favorite.
                         </div>
-                        <div className="mt-3 inline-flex rounded-full border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg)] px-2 py-1 text-[11px] text-[color:var(--rm-profile-custom-muted)]">
+                        <div className="mt-3 inline-flex rounded-full border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg)] px-2 py-1 text-ui-2xs text-[color:var(--rm-profile-custom-muted)]">
                           + Tags
                         </div>
                       </div>
@@ -4494,14 +4452,14 @@ export default function SettingsAccountTab({
                       {[1, 2].map((item) => (
                         <div
                           key={item}
-                          className="flex items-center gap-3 rounded-[18px] border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg)] p-3"
+                          className="flex items-center gap-3 rounded-xl border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg)] p-3"
                         >
-                          <div className="h-[54px] w-[54px] shrink-0 overflow-hidden rounded-[14px] bg-[linear-gradient(135deg,_#f2c94c,_#f97316_72%,_#7c2d12)]" />
+                          <div className="h-[54px] w-[54px] shrink-0 overflow-hidden rounded-lg bg-[linear-gradient(135deg,_#f2c94c,_#f97316_72%,_#7c2d12)]" />
                           <div className="min-w-0 flex-1">
                             <div className="truncate text-[14px] font-semibold text-[color:var(--rm-profile-custom-text)]">
                               Rotating game slot {item}
                             </div>
-                            <div className="mt-1 text-[12px] text-[color:var(--rm-profile-custom-muted)]">
+                            <div className="mt-1 text-ui-xs text-[color:var(--rm-profile-custom-muted)]">
                               Add art, tags, and quick notes here.
                             </div>
                           </div>
@@ -4517,7 +4475,7 @@ export default function SettingsAccountTab({
                     </div>
                   </ProfilePreviewWidgetCard>
                   {error ? (
-                    <div className="flex items-center gap-2 rounded-[20px] border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive shadow-[0_16px_32px_rgba(0,0,0,0.18)]">
+                    <div className="flex items-center gap-2 rounded-2xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive shadow-[0_16px_32px_rgba(0,0,0,0.18)]">
                       <AlertTriangle size={14} />
                       <span>{error}</span>
                     </div>
@@ -4529,7 +4487,7 @@ export default function SettingsAccountTab({
 
           {!asModal &&
           (claimLoading || claimCandidates.length > 0 || claimError) ? (
-            <section className="mt-6 rounded-[32px] border border-amber-500/25 bg-amber-500/10 p-5 shadow-[0_20px_60px_rgba(0,0,0,0.20)]">
+            <section className="mt-6 rounded-3xl border border-amber-500/25 bg-amber-500/10 p-5 shadow-[0_20px_60px_rgba(0,0,0,0.20)]">
               <div className="flex items-start gap-3">
                 <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-amber-500/15 text-amber-300">
                   {claimLoading ? (
@@ -4607,7 +4565,7 @@ export default function SettingsAccountTab({
           ) : null}
 
           {!asModal && hasChanges ? (
-            <div className="mt-6 flex flex-col gap-3 rounded-[24px] border border-rm-border bg-rm-bg-elevated/92 p-4 shadow-[0_24px_80px_rgba(0,0,0,0.24)] sm:flex-row sm:items-center sm:justify-between">
+            <div className="mt-6 flex flex-col gap-3 rounded-3xl border border-rm-border bg-rm-bg-elevated/92 p-4 shadow-[0_24px_80px_rgba(0,0,0,0.24)] sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <p className="text-sm font-semibold text-rm-text">
                   Don&apos;t forget to save your changes.
@@ -4645,7 +4603,7 @@ export default function SettingsAccountTab({
 
       {asModal && hasChanges ? (
         <div className="pointer-events-none fixed inset-x-0 bottom-5 z-[120] flex justify-center px-4 md:bottom-6 animate-in fade-in slide-in-from-bottom-4 duration-300">
-          <div className="pointer-events-auto flex w-full max-w-[520px] flex-col gap-3 rounded-[24px] border border-rm-border bg-rm-bg-elevated/94 px-4 py-4 shadow-[0_24px_80px_rgba(0,0,0,0.45)] backdrop-blur-xl sm:flex-row sm:items-center sm:justify-between">
+          <div className="pointer-events-auto flex w-full max-w-[520px] flex-col gap-3 rounded-3xl border border-rm-border bg-rm-bg-elevated/94 px-4 py-4 shadow-[0_24px_80px_rgba(0,0,0,0.45)] backdrop-blur-xl sm:flex-row sm:items-center sm:justify-between">
             <div className="min-w-0">
               <p className="text-sm font-semibold text-rm-text">
                 Don&apos;t forget to save your changes.

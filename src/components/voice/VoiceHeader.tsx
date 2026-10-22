@@ -51,7 +51,7 @@ export function VoiceHeader({
   return (
     <div
       className={cn(
-        "absolute top-0 inset-x-0 h-24 flex items-start pt-4 justify-between px-4 md:px-6 z-10 transition-all duration-300 pointer-events-none",
+        "absolute top-0 inset-x-0 h-24 flex items-start pt-4 justify-between px-4 md:px-6 z-10 transition-ui pointer-events-none",
         focusedItem
           ? "bg-gradient-to-b from-black/80 via-black/40 to-transparent"
           : "bg-rm-bg-primary/20 h-16 items-center pt-0",
@@ -86,7 +86,7 @@ export function VoiceHeader({
           <InlineEmojiText
             text={channelName}
             className={cn(
-              "text-sm font-bold tracking-tight",
+              "text-ui-sm font-semibold",
               focusedItem ? "text-white" : "text-rm-text",
             )}
           />
@@ -136,7 +136,7 @@ export function VoiceHeader({
                   ) : (
                     <span
                       className={cn(
-                        "text-[10px] font-bold",
+                        "text-ui-2xs font-bold",
                         focusedItem ? "text-white" : "text-rm-text",
                       )}
                     >
@@ -180,7 +180,7 @@ export function VoiceHeader({
       >
         {focusedItem && focusedItem?.isStreaming && (
           <div className="flex items-center gap-1.5 bg-primary/10 backdrop-blur-md px-2.5 py-1 rounded-md border border-primary/20 mr-2 group/hw">
-            <span className="text-[10px] font-black text-primary uppercase tracking-tight tabular-nums">
+            <span className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-primary tabular-nums">
               <QualityMonitor
                 track={focusedItem.stream?.getVideoTracks()[0]}
                 signaledQuality={
@@ -191,7 +191,7 @@ export function VoiceHeader({
                 type={focusedItem.type === "screen" ? "screen" : "cam"}
               />
             </span>
-            <div className="bg-destructive px-1 rounded-[2px] text-[9px] font-black text-destructive-foreground uppercase animate-pulse">
+            <div className="bg-destructive px-1 rounded-[2px] text-ui-2xs font-bold text-destructive-foreground uppercase animate-pulse">
               LIVE
             </div>
           </div>

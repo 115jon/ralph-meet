@@ -81,7 +81,7 @@ export function OutgoingCallModal() {
         {/* Cancel button */}
         <button
           onClick={handleCancel}
-          className="flex h-14 w-14 items-center justify-center rounded-full bg-red-500 hover:bg-red-600 text-white transition-all hover:scale-110 shadow-lg shadow-red-500/30 mt-2"
+          className="flex h-14 w-14 items-center justify-center rounded-full bg-destructive hover:bg-destructive/90 text-white transition-ui shadow-lg mt-2"
           title="Cancel Call"
         >
           <PhoneOff className="h-6 w-6" />

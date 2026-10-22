@@ -118,16 +118,16 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
     <>
       <div
         className={cn(
-          "relative group rounded-2xl overflow-hidden bg-rm-bg-surface/40 backdrop-blur-xl transition-all duration-300 cursor-pointer aspect-video w-full h-full",
+          "relative group rounded-xl overflow-hidden bg-rm-bg-elevated/40 transition-[box-shadow,opacity] cursor-pointer aspect-video w-full h-full",
           isFocused && "ring-2 ring-rm-text/20 z-50",
           item.isSpeaking &&
-            "ring-[3px] ring-primary shadow-[0_0_20px_var(--rm-glow)] z-20",
+            "ring-2 ring-primary shadow-[0_6px_18px_-6px_var(--rm-glow)] z-20",
           item.isRinging &&
-            "ring-[3px] ring-primary/50 shadow-[0_0_20px_var(--rm-glow)] animate-pulse z-20",
+            "ring-2 ring-primary/50 shadow-[0_6px_18px_-6px_var(--rm-glow)] animate-pulse z-20",
           !isFocused &&
             !item.isSpeaking &&
             !item.isRinging &&
-            "ring-1 ring-rm-border hover:ring-rm-text/20",
+            "ring-1 ring-rm-border hover:ring-rm-border-strong",
         )}
       >
         <button
@@ -138,7 +138,7 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
             setContextMenu({ x: e.clientX, y: e.clientY, isMini: false });
           }}
           aria-label={`Open participant tile for ${item.name}`}
-          className="absolute inset-0 z-10 rounded-2xl outline-none"
+          className="absolute inset-0 z-10 rounded-xl outline-none"
         />
         <StickerReactionsOverlay
           sfu={voiceActions?.sfu}
@@ -153,7 +153,7 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
         {/* Background Effect */}
         {item.avatar && (
           <div
-            className="pointer-events-none absolute inset-0 z-0 transition-colors duration-500"
+            className="pointer-events-none absolute inset-0 z-0 transition-colors duration-200"
             style={{
               backgroundColor:
                 (isCamera || isScreen) && shouldRenderVideo
@@ -167,7 +167,7 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
         {shouldRenderVideo && (
           <div
             className={cn(
-              "pointer-events-none absolute inset-0 z-10 transition-opacity duration-500",
+              "pointer-events-none absolute inset-0 z-10 transition-opacity duration-200",
               !(isCamera || isScreen) && "opacity-0",
             )}
           >
@@ -177,7 +177,7 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
               muted={true} // Audio is handled by SFUClient AudioContext
               isLocal={item.isLocal && item.type === "camera"}
               className={cn(
-                "w-full h-full transition-all duration-500",
+                "w-full h-full transition-ui",
                 isScreen ? "object-contain" : "object-cover",
                 shouldShowWatchPrompt && "opacity-0",
               )}
@@ -192,7 +192,7 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
             <img
               src={streamThumbnails[item.userId]}
               alt={`${item.name} stream thumbnail`}
-              className="h-full w-full object-cover transition-opacity duration-300"
+              className="h-full w-full object-cover transition-opacity duration-200"
             />
             <div className="absolute inset-0 bg-linear-to-t from-black/30 via-black/5 to-transparent" />
           </div>
@@ -208,7 +208,7 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
         {isPreviewHidden && (
           <div className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 bg-black/70 backdrop-blur-sm">
             <EyeOff size={22} className="text-white/50" />
-            <span className="text-[10px] font-bold text-white/40 uppercase tracking-widest">
+            <span className="text-ui-2xs font-semibold text-white/60 uppercase tracking-[0.08em]">
               Preview paused
             </span>
           </div>
@@ -228,7 +228,7 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
               />
             )}
             <div className="relative z-10 flex flex-col items-center justify-center p-1 sm:p-2 w-full h-full overflow-hidden">
-              <div className="shrink border border-rm-border rounded-xl bg-rm-bg-elevated/60 p-2 sm:w-8 sm:h-8 text-rm-text-muted shadow-lg backdrop-blur-md flex items-center justify-center group-hover:scale-110 transition-transform duration-500">
+              <div className="shrink border border-rm-border rounded-xl bg-rm-bg-elevated/60 p-2 sm:w-8 sm:h-8 text-rm-text-muted shadow-lg backdrop-blur-md flex items-center justify-center transition-transform duration-200">
                 <Monitor
                   className="w-3 h-3 sm:w-4 sm:h-4 text-rm-text-muted shrink-0"
                   strokeWidth={2}
@@ -236,7 +236,7 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
               </div>
 
               <div className="shrink min-h-0 flex flex-col items-center justify-center mt-1 sm:mt-2">
-                <h3 className="text-[9px] sm:text-[11px] font-bold text-rm-text tracking-tight truncate w-full text-center px-1">
+                <h3 className="text-ui-2xs sm:text-ui-2xs font-bold text-rm-text tracking-tight truncate w-full text-center px-1">
                   <InlineEmojiText text={`${streamDisplayName}'s Stream`} />
                 </h3>
               </div>
@@ -246,7 +246,7 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
                   e.stopPropagation();
                   voiceActions?.onToggleWatch?.(item.userId);
                 }}
-                className="shrink-0 mt-1 sm:mt-2 px-2 py-1 sm:px-3 sm:py-1.5 bg-primary hover:bg-primary/90 text-primary-foreground rounded-[8px] text-[9px] sm:text-[10px] font-black uppercase tracking-wider transition-all shadow-xl shadow-primary/20 active:scale-95 hover:shadow-[0_0_20px_var(--rm-glow)] max-w-full truncate"
+                className="shrink-0 mt-1 sm:mt-2 px-2 py-1 sm:px-3 sm:py-1.5 bg-primary hover:bg-primary/90 text-primary-foreground rounded-md text-ui-2xs sm:text-ui-2xs font-semibold uppercase tracking-[0.08em] transition-ui shadow-xl shadow-primary/20 active:scale-[0.96] hover:shadow-[0_6px_18px_-6px_var(--rm-glow)] max-w-full truncate"
               >
                 Watch Stream
               </button>
@@ -261,7 +261,7 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
           !shouldRenderThumbnailPoster && (
             <div className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center p-4">
               {item.avatar ? (
-                <div className="h-20 w-20 overflow-visible rounded-full border-4 border-black/20 drop-shadow-2xl sm:h-28 sm:w-28">
+                <div className="h-20 w-20 overflow-visible rounded-full shadow-lg sm:h-28 sm:w-28">
                   <AvatarImage
                     src={getAuthAssetUrl(item.avatar)}
                     alt={item.name}
@@ -269,8 +269,8 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
                   />
                 </div>
               ) : (
-                <div className="w-20 h-20 sm:w-28 sm:h-28 flex items-center justify-center bg-black/40 rounded-full border-4 border-black/20 drop-shadow-2xl">
-                  <span className="text-3xl sm:text-5xl font-black text-white">
+                <div className="w-20 h-20 sm:w-28 sm:h-28 flex items-center justify-center bg-black/40 rounded-full shadow-lg">
+                  <span className="text-3xl sm:text-5xl font-bold text-white">
                     {item.name[0]?.toUpperCase()}
                   </span>
                 </div>
@@ -321,13 +321,13 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
         {/* Status Indicators & Labels */}
         <div className="pointer-events-none absolute bottom-2 left-2 z-30 flex items-center gap-2">
           {isScreen ? (
-            <div className="bg-rm-bg-primary/60 backdrop-blur-md px-2.5 py-1 rounded-lg border border-rm-border shadow-lg">
-              <span className="text-[10px] font-bold text-rm-text truncate max-w-[120px]">
+            <div className="bg-rm-bg-primary/85 px-2 py-1 rounded-md border border-rm-border shadow-lg">
+              <span className="text-ui-2xs font-semibold text-rm-text truncate max-w-[120px]">
                 <InlineEmojiText text={streamDisplayName} />
               </span>
             </div>
           ) : (
-            <div className="bg-rm-bg-primary/60 backdrop-blur-md px-2.5 py-1 rounded-lg border border-rm-border flex items-center gap-2 shadow-lg">
+            <div className="bg-rm-bg-primary/85 px-2 py-1 rounded-md border border-rm-border flex items-center gap-2 shadow-lg">
               <div className="flex items-center gap-1">
                 {item.isDeafened && (
                   <Headphones
@@ -347,11 +347,11 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
                 )}
               </div>
 
-              <span className="text-[10px] font-bold text-rm-text truncate max-w-[100px]">
+              <span className="text-ui-2xs font-semibold text-rm-text truncate max-w-[100px]">
                 <InlineEmojiText text={streamDisplayName} />
               </span>
               {isCamera && (
-                <span className="bg-rm-bg-surface/60 px-1.5 rounded-[3px] text-[8px] font-black text-rm-text uppercase tracking-tighter border border-rm-border tabular-nums">
+                <span className="bg-rm-bg-surface/60 px-1.5 rounded-xs text-ui-2xs font-bold text-rm-text uppercase tracking-tighter border border-rm-border tabular-nums">
                   <QualityMonitor
                     track={item.stream?.getVideoTracks()[0]}
                     signaledQuality={null}
@@ -383,7 +383,7 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
                   : "Pause preview (saves resources)"
               }
               aria-label={isPreviewHidden ? "Resume preview" : "Pause preview"}
-              className="flex items-center gap-1.5 rounded-lg border border-rm-border bg-rm-bg-primary/70 px-2 py-1 text-[9px] font-bold text-rm-text-muted shadow-lg backdrop-blur-md transition-colors hover:text-rm-text active:scale-[0.96]"
+              className="flex items-center gap-1.5 rounded-lg border border-rm-border bg-rm-bg-primary/70 px-2 py-1 text-ui-2xs font-bold text-rm-text-muted shadow-lg backdrop-blur-md transition-colors hover:text-rm-text active:scale-[0.96]"
             >
               {isPreviewHidden ? (
                 <>
@@ -404,7 +404,7 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
             <IconButton
               icon={MoreHorizontal}
               size="xs"
-              className="bg-rm-bg-primary/60 backdrop-blur-md border border-rm-border shadow-xl hover:scale-110 active:scale-95"
+              className="bg-rm-bg-primary/60 backdrop-blur-md border border-rm-border shadow-xl active:scale-[0.96]"
               onClick={(e) => {
                 e.stopPropagation();
                 setContextMenu({ x: e.clientX, y: e.clientY, isMini: true });

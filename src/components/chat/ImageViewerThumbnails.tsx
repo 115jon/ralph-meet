@@ -67,7 +67,7 @@ export function ImageViewerThumbnails({
                 "relative rounded-lg overflow-hidden shrink-0 group will-change-transform transition-[transform,opacity] duration-200 [transition-timing-function:cubic-bezier(0.16,1,0.3,1)]",
                 isSelected
                   ? "ring-2 ring-rm-accent opacity-100"
-                  : "opacity-50 hover:opacity-100 hover:scale-105",
+                  : "opacity-50 hover:opacity-100",
               )}
               style={{
                 height: thumbH,

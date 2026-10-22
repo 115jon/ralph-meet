@@ -110,7 +110,7 @@ function ThemeSwatch({
       onClick={onClick}
       aria-label={`Switch to ${choice.label} theme`}
       className={cn(
-        "relative h-20 w-[60px] shrink-0 overflow-hidden rounded-2xl transition-all",
+        "relative h-20 w-[60px] shrink-0 overflow-hidden rounded-2xl transition-ui",
         active
           ? "ring-2 ring-primary ring-offset-2 ring-offset-[var(--rm-bg-primary)]"
           : "border-2 border-rm-border/30 hover:border-rm-border/60",
@@ -141,7 +141,7 @@ function ThemeSwatch({
               className="absolute left-1/2 top-[-10px] h-14 w-14 max-w-none -translate-x-1/2 select-none drop-shadow-md"
             />
           </div>
-          <div className="absolute bottom-1 right-1 rounded-full bg-black/40 px-1.5 py-0.5 text-[9px] font-black text-white backdrop-blur-xs">
+          <div className="absolute bottom-1 right-1 rounded-full bg-black/40 px-1.5 py-0.5 text-ui-2xs font-bold text-white backdrop-blur-xs">
             {choice.badge}
           </div>
         </div>
@@ -153,7 +153,7 @@ function ThemeSwatch({
             alt=""
             className="h-8 w-8 select-none drop-shadow-md"
           />
-          <div className="absolute bottom-1 right-1 rounded-full bg-red-600 px-1 py-0.5 text-[8px] font-black text-white">
+          <div className="absolute bottom-1 right-1 rounded-full bg-destructive px-1 py-0.5 text-ui-2xs font-bold text-white">
             {choice.badge}
           </div>
         </div>
@@ -260,7 +260,7 @@ export default function SettingsAppearanceTab({
           </div>
 
           <div>
-            <h3 className="mb-3 px-1 text-[11px] font-bold uppercase tracking-widest text-rm-text-muted">
+            <h3 className="text-ui-2xs font-semibold uppercase tracking-[0.08em] mb-3 px-1 text-rm-text-muted">
               Default Themes
             </h3>
             <div className="flex flex-wrap gap-4 px-1">
@@ -271,7 +271,7 @@ export default function SettingsAppearanceTab({
                     active={visibleTheme === choice.id}
                     onClick={() => void setAppearanceTheme(choice.id)}
                   />
-                  <span className="mt-1.5 text-[11px] font-semibold text-rm-text-muted">
+                  <span className="mt-1.5 text-ui-2xs font-semibold text-rm-text-muted">
                     {choice.label}
                   </span>
                 </div>
@@ -302,13 +302,13 @@ export default function SettingsAppearanceTab({
               />
               <div className="relative flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                 <div className="min-w-0">
-                  <span className="mb-1.5 inline-block rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-rm-text-muted">
+                  <span className="mb-1.5 inline-block rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-ui-2xs font-bold uppercase tracking-wider text-rm-text-muted">
                     {group.eyebrow}
                   </span>
-                  <h3 className="text-[14px] font-extrabold tracking-wide text-rm-text">
+                  <h3 className="text-[14px] font-semibold tracking-wide text-rm-text">
                     {group.title}
                   </h3>
-                  <p className="mt-0.5 max-w-[260px] text-[11px] leading-relaxed text-rm-text-muted">
+                  <p className="mt-0.5 max-w-[260px] text-ui-2xs leading-relaxed text-rm-text-muted">
                     {group.description}
                   </p>
                 </div>
@@ -320,7 +320,7 @@ export default function SettingsAppearanceTab({
                         active={visibleTheme === choice.id}
                         onClick={() => void setAppearanceTheme(choice.id)}
                       />
-                      <span className="mt-1.5 text-[11px] font-semibold text-rm-text-muted">
+                      <span className="mt-1.5 text-ui-2xs font-semibold text-rm-text-muted">
                         {choice.label}
                       </span>
                     </div>
@@ -345,7 +345,7 @@ export default function SettingsAppearanceTab({
 
         {isDesktopApp && (
           <section className="border-t border-rm-border pt-6">
-            <h2 className="px-1 text-[12px] font-bold uppercase tracking-wider text-rm-text-muted">
+            <h2 className="text-ui-2xs font-semibold uppercase tracking-[0.08em] px-1 text-rm-text-muted">
               Advanced
             </h2>
             <div className="mt-3 overflow-hidden rounded-xl border border-rm-border bg-rm-bg-surface">
@@ -394,7 +394,7 @@ export default function SettingsAppearanceTab({
                 <button
                   type="button"
                   onClick={confirmHardwareAccelerationChange}
-                  className="rounded-lg bg-red-500 px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-red-400"
+                  className="rounded-lg bg-destructive px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-destructive/90"
                 >
                   Change and Restart
                 </button>

@@ -44,15 +44,15 @@ export function NoiseReductionPanel({
         <div className="min-w-0 space-y-2">
           <div className="flex items-center gap-2">
             <AudioWaveform size={16} className="text-sky-300" />
-            <span className="text-[11px] font-black uppercase tracking-[0.2em] text-rm-text-muted">
+            <span className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted">
               Noise Suppression
             </span>
           </div>
           <div className="space-y-1">
-            <h3 className="text-[15px] font-bold text-rm-text">
+            <h3 className="text-ui-base font-bold text-rm-text">
               Suppress background noise before your voice leaves the app
             </h3>
-            <p className="text-[12px] leading-relaxed text-rm-text-muted">
+            <p className="text-ui-xs leading-relaxed text-rm-text-muted">
               Enable live {providerLabel} noise suppression for your outbound
               voice. It updates in real time while you test and remains
               compatible with high-fidelity and spatial audio.
@@ -82,18 +82,18 @@ export function NoiseReductionPanel({
       </div>
 
       {!supported && (
-        <div className="mt-4 rounded-lg border border-amber-400/20 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-100/90">
+        <div className="mt-4 rounded-lg border border-amber-400/20 bg-amber-500/10 px-3 py-2 text-ui-2xs text-amber-100/90">
           This browser does not expose the AudioWorklet features needed for live
           provider-based noise suppression here yet.
         </div>
       )}
 
       <div className="mt-4 flex items-center justify-between rounded-lg border border-rm-border bg-rm-bg-elevated/30 px-3 py-2">
-        <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-rm-text-muted">
+        <div className="text-ui-2xs font-semibold uppercase tracking-[0.08em] flex items-center gap-2 text-rm-text-muted">
           <ShieldCheck size={12} className="text-emerald-400" />
           Powered By
         </div>
-        <div className="text-sm font-black tracking-tight text-rm-text">
+        <div className="text-sm font-semibold tracking-tight text-rm-text">
           {providerLabel}
         </div>
       </div>

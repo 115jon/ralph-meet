@@ -74,7 +74,7 @@ const EMPTY_MUTUAL_SERVERS: MutualServerSummary = { count: 0, items: [] };
 const STATUS_CLASS_NAMES: Record<string, string> = {
   online: "bg-emerald-500",
   idle: "bg-amber-500",
-  dnd: "bg-rose-500",
+  dnd: "bg-rm-badge",
   offline: "bg-rm-text-muted/40",
 };
 const STATUS_LABELS: Record<string, string> = {
@@ -86,11 +86,11 @@ const STATUS_LABELS: Record<string, string> = {
 
 function StatRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex items-center justify-between gap-4 rounded-[16px] border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] px-3 py-2.5">
-      <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[color:var(--rm-profile-custom-muted)]">
+    <div className="flex items-center justify-between gap-4 rounded-xl border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] px-3 py-2.5">
+      <span className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-[color:var(--rm-profile-custom-muted)]">
         {label}
       </span>
-      <span className="truncate text-right text-[13px] font-medium text-[color:var(--rm-profile-custom-text)]">
+      <span className="truncate text-right text-ui-sm font-medium text-[color:var(--rm-profile-custom-text)]">
         {value}
       </span>
     </div>
@@ -226,7 +226,7 @@ export default function UserProfileModal({ open, user, onClose }: Props) {
           <DialogSurface
             showCloseButton={false}
             className={cn(
-              "relative m-0 w-full overflow-hidden rounded-[30px] border border-rm-border bg-[#09090d] shadow-[0_36px_110px_rgba(0,0,0,0.52)] outline-none animate-in zoom-in-95 duration-200",
+              "relative m-0 w-full overflow-hidden rounded-3xl border border-rm-border bg-rm-bg-primary shadow-[0_36px_110px_rgba(0,0,0,0.52)] outline-none animate-in zoom-in-95 duration-200",
               "data-[state=closed]:animate-out data-[state=closed]:zoom-out-95",
             )}
             style={{
@@ -335,7 +335,7 @@ export default function UserProfileModal({ open, user, onClose }: Props) {
                             {customStatus ? (
                               <div className="relative ml-auto flex w-full min-w-0 max-w-[220px] justify-end pt-10">
                                 <div className="inline-flex max-w-full min-w-0 items-center rounded-full border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] px-3 py-1.5 text-left shadow-[0_12px_28px_rgba(0,0,0,0.22)] backdrop-blur-md">
-                                  <span className="truncate text-[13px] italic font-medium text-[color:var(--rm-profile-custom-text)]">
+                                  <span className="truncate text-ui-sm italic font-medium text-[color:var(--rm-profile-custom-text)]">
                                     {customStatus}
                                   </span>
                                 </div>
@@ -351,7 +351,7 @@ export default function UserProfileModal({ open, user, onClose }: Props) {
                               backgroundColor={profileTheme.backgroundColor}
                               readableFallbackColor={profileTheme.textColor}
                             />
-                            <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-[color:var(--rm-profile-custom-muted)]">
+                            <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-ui-sm text-[color:var(--rm-profile-custom-muted)]">
                               <span>@{resolvedUser.username}</span>
                               {pronouns ? (
                                 <>
@@ -361,7 +361,7 @@ export default function UserProfileModal({ open, user, onClose }: Props) {
                                   >
                                     •
                                   </span>
-                                  <span className="rounded-md border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg)] px-2 py-0.5 text-[13px] font-medium text-[color:var(--rm-profile-custom-text)]">
+                                  <span className="rounded-md border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg)] px-2 py-0.5 text-ui-sm font-medium text-[color:var(--rm-profile-custom-text)]">
                                     {pronouns}
                                   </span>
                                 </>
@@ -394,12 +394,12 @@ export default function UserProfileModal({ open, user, onClose }: Props) {
                           ) : null}
 
                           <div className="mt-5 space-y-5">
-                            <div className="rounded-[18px] border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] px-4 py-3">
+                            <div className="rounded-xl border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] px-4 py-3">
                               <div className="space-y-1">
-                                <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[color:var(--rm-profile-custom-muted)]">
+                                <div className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-[color:var(--rm-profile-custom-muted)]">
                                   Bio
                                 </div>
-                                <div className="rounded-[14px] border border-transparent px-0 py-0.5 text-[14px] leading-6 text-[color:var(--rm-profile-custom-text)]">
+                                <div className="rounded-lg border border-transparent px-0 py-0.5 text-[14px] leading-6 text-[color:var(--rm-profile-custom-text)]">
                                   {bio || (
                                     <span className="text-[color:var(--rm-profile-custom-muted)]">
                                       This profile hasn&apos;t added a bio yet.
@@ -410,7 +410,7 @@ export default function UserProfileModal({ open, user, onClose }: Props) {
                             </div>
 
                             <div>
-                              <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[color:var(--rm-profile-custom-muted)]">
+                              <div className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-[color:var(--rm-profile-custom-muted)]">
                                 {profileReferenceDate.label}
                               </div>
                               <div className="mt-2 text-[14px] text-[color:var(--rm-profile-custom-text)]">
@@ -433,7 +433,7 @@ export default function UserProfileModal({ open, user, onClose }: Props) {
                               key={tab}
                               type="button"
                               className={cn(
-                                "pb-2 text-[13px] font-semibold text-[color:var(--rm-profile-custom-muted)] transition",
+                                "pb-2 text-ui-sm font-semibold text-[color:var(--rm-profile-custom-muted)] transition",
                                 index === 0 &&
                                   "border-b-2 border-[color:var(--rm-profile-custom-text)] text-[color:var(--rm-profile-custom-text)]",
                               )}
@@ -446,7 +446,7 @@ export default function UserProfileModal({ open, user, onClose }: Props) {
 
                       <div className="mt-4 flex items-center justify-between">
                         <div
-                          className="text-[13px] font-medium text-[color:var(--rm-profile-custom-muted)]"
+                          className="text-ui-sm font-medium text-[color:var(--rm-profile-custom-muted)]"
                           style={profileThemeStyle}
                         >
                           {displayName}&apos;s widgets
@@ -467,7 +467,7 @@ export default function UserProfileModal({ open, user, onClose }: Props) {
                                   onClick={() =>
                                     void handleRelationshipAction("remove")
                                   }
-                                  className="w-full rounded-xl border border-rose-500/25 bg-rose-500/12 text-rose-300 hover:bg-rose-500 hover:text-white"
+                                  className="w-full rounded-xl border border-destructive/25 bg-destructive/12 text-destructive hover:bg-rm-badge hover:text-white"
                                 >
                                   {loading ? (
                                     <Loader2
@@ -583,7 +583,7 @@ export default function UserProfileModal({ open, user, onClose }: Props) {
                                   onClick={() =>
                                     void handleRelationshipAction("block")
                                   }
-                                  className="w-full rounded-xl border border-rose-500/25 bg-rose-500/12 text-rose-300 hover:bg-rose-500 hover:text-white"
+                                  className="w-full rounded-xl border border-destructive/25 bg-destructive/12 text-destructive hover:bg-rm-badge hover:text-white"
                                 >
                                   <Ban size={15} />
                                   Block User
@@ -600,10 +600,10 @@ export default function UserProfileModal({ open, user, onClose }: Props) {
                           <div className="space-y-4">
                             <div>
                               <div className="flex items-center justify-between gap-3">
-                                <span className="text-[12px] font-semibold uppercase tracking-[0.16em] text-[color:var(--rm-profile-custom-muted)]">
+                                <span className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-[color:var(--rm-profile-custom-muted)]">
                                   Friends
                                 </span>
-                                <span className="text-[13px] font-medium text-[color:var(--rm-profile-custom-text)]">
+                                <span className="text-ui-sm font-medium text-[color:var(--rm-profile-custom-text)]">
                                   {mutualFriends.count}
                                 </span>
                               </div>
@@ -624,18 +624,18 @@ export default function UserProfileModal({ open, user, onClose }: Props) {
                                             display={friend.avatar_display}
                                           />
                                         ) : (
-                                          <div className="flex h-full w-full items-center justify-center text-[10px] font-bold text-[color:var(--rm-profile-custom-text)]">
+                                          <div className="flex h-full w-full items-center justify-center text-ui-2xs font-bold text-[color:var(--rm-profile-custom-text)]">
                                             {getDisplayInitial(friend)}
                                           </div>
                                         )}
                                       </div>
-                                      <span className="max-w-[180px] truncate text-[13px] text-[color:var(--rm-profile-custom-text)]">
+                                      <span className="max-w-[180px] truncate text-ui-sm text-[color:var(--rm-profile-custom-text)]">
                                         {getDisplayName(friend)}
                                       </span>
                                     </div>
                                   ))
                                 ) : (
-                                  <div className="text-[13px] text-[color:var(--rm-profile-custom-muted)]">
+                                  <div className="text-ui-sm text-[color:var(--rm-profile-custom-muted)]">
                                     No shared friends yet.
                                   </div>
                                 )}
@@ -644,10 +644,10 @@ export default function UserProfileModal({ open, user, onClose }: Props) {
 
                             <div>
                               <div className="flex items-center justify-between gap-3">
-                                <span className="text-[12px] font-semibold uppercase tracking-[0.16em] text-[color:var(--rm-profile-custom-muted)]">
+                                <span className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-[color:var(--rm-profile-custom-muted)]">
                                   Servers
                                 </span>
-                                <span className="text-[13px] font-medium text-[color:var(--rm-profile-custom-text)]">
+                                <span className="text-ui-sm font-medium text-[color:var(--rm-profile-custom-text)]">
                                   {mutualServers.count}
                                 </span>
                               </div>
@@ -658,7 +658,7 @@ export default function UserProfileModal({ open, user, onClose }: Props) {
                                       key={server.id}
                                       className="flex min-w-0 items-center gap-2 rounded-full border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] py-1 pl-1 pr-3"
                                     >
-                                      <div className="relative flex h-7 w-7 items-center justify-center overflow-hidden rounded-full bg-[var(--rm-profile-custom-card-bg)] text-[10px] font-bold text-[color:var(--rm-profile-custom-text)]">
+                                      <div className="relative flex h-7 w-7 items-center justify-center overflow-hidden rounded-full bg-[var(--rm-profile-custom-card-bg)] text-ui-2xs font-bold text-[color:var(--rm-profile-custom-text)]">
                                         {server.icon_url ? (
                                           <img
                                             src={getAuthAssetUrl(
@@ -671,13 +671,13 @@ export default function UserProfileModal({ open, user, onClose }: Props) {
                                           server.name.charAt(0).toUpperCase()
                                         )}
                                       </div>
-                                      <span className="max-w-[180px] truncate text-[13px] text-[color:var(--rm-profile-custom-text)]">
+                                      <span className="max-w-[180px] truncate text-ui-sm text-[color:var(--rm-profile-custom-text)]">
                                         <InlineEmojiText text={server.name} />
                                       </span>
                                     </div>
                                   ))
                                 ) : (
-                                  <div className="text-[13px] text-[color:var(--rm-profile-custom-muted)]">
+                                  <div className="text-ui-sm text-[color:var(--rm-profile-custom-muted)]">
                                     No shared servers right now.
                                   </div>
                                 )}

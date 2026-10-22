@@ -45,7 +45,7 @@ export default function SettingsNotificationsTab() {
   }, [settingsUserId, setSoundCurrentUser]);
 
   return (
-    <div className="animate-in fade-in slide-in-from-right-4 duration-300">
+    <div className="animate-in fade-in duration-150">
       <h1 className="text-2xl font-bold text-rm-text mb-2 hidden md:block">
         Notifications & Sounds
       </h1>
@@ -58,7 +58,7 @@ export default function SettingsNotificationsTab() {
           <section className="space-y-6">
             <div className="flex items-center gap-2">
               <Laptop size={16} className="text-sky-400" />
-              <h3 className="text-[11px] font-black uppercase tracking-[0.2em] text-rm-text-muted">
+              <h3 className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted">
                 Desktop Notifications
               </h3>
             </div>
@@ -89,13 +89,13 @@ export default function SettingsNotificationsTab() {
         <section className="space-y-6">
           <div className="flex items-center gap-2">
             <Volume2 size={16} className="text-rm-accent" />
-            <h3 className="text-[11px] font-black uppercase tracking-[0.2em] text-rm-text-muted">
+            <h3 className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted">
               Sound Effects
             </h3>
           </div>
 
           <div className="flex flex-col bg-rm-bg-surface border border-rm-border rounded-xl p-0 overflow-hidden divide-y divide-rm-border">
-            <div className="group flex flex-col sm:flex-row sm:items-center justify-between p-4 hover:bg-rm-bg-elevated/40 transition-all gap-4 sm:gap-6 bg-rm-accent/5">
+            <div className="group flex flex-col sm:flex-row sm:items-center justify-between p-4 hover:bg-rm-bg-elevated/40 transition-ui gap-4 sm:gap-6 bg-rm-accent/5">
               <div className="flex items-start gap-4">
                 <div className="w-10 h-10 shrink-0 rounded-xl bg-rm-accent flex items-center justify-center text-white shadow-md shadow-rm-accent/20">
                   {soundSettings.soundsEnabled ? (
@@ -108,7 +108,7 @@ export default function SettingsNotificationsTab() {
                   <h4 className="text-[14px] font-bold text-rm-text">
                     Enable Sound Effects
                   </h4>
-                  <p className="text-[12px] text-rm-text-muted opacity-80">
+                  <p className="text-ui-xs text-rm-text-muted opacity-80">
                     Master switch for all in-app sounds
                   </p>
                 </div>
@@ -131,11 +131,11 @@ export default function SettingsNotificationsTab() {
                 <div className="flex justify-between items-end">
                   <label
                     htmlFor="sound-volume"
-                    className="text-[11px] font-bold uppercase tracking-wider text-rm-text-muted"
+                    className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted"
                   >
                     Master Volume
                   </label>
-                  <span className="text-sm font-black text-rm-accent tabular-nums">
+                  <span className="text-sm font-bold text-rm-accent tabular-nums">
                     {soundSettings.soundVolume}%
                   </span>
                 </div>
@@ -151,7 +151,7 @@ export default function SettingsNotificationsTab() {
                       settingsUserId ?? undefined,
                     )
                   }
-                  className="w-full h-1.5 bg-rm-bg-elevated rounded-full appearance-none cursor-pointer accent-rm-accent transition-all"
+                  className="w-full h-1.5 bg-rm-bg-elevated rounded-full appearance-none cursor-pointer accent-rm-accent transition-ui"
                 />
               </div>
             )}
@@ -165,8 +165,8 @@ export default function SettingsNotificationsTab() {
                   label: "Notification Sounds",
                   desc: "Play a chime when you receive a mention, reply, or DM",
                   icon: <BellRing size={18} />,
-                  color: "text-rose-400",
-                  bgColor: "bg-rose-500/10 border-rose-500/20",
+                  color: "text-destructive",
+                  bgColor: "bg-destructive/10 border-destructive/20",
                 },
                 {
                   id: "voiceJoinLeave" as const,
@@ -237,7 +237,7 @@ export default function SettingsNotificationsTab() {
           <div className="flex justify-end mt-4">
             <button
               onClick={() => playNotification()}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-rm-bg-elevated border border-rm-border text-rm-text-secondary hover:bg-rm-bg-hover hover:text-rm-text transition-all"
+              className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-rm-bg-elevated border border-rm-border text-rm-text-secondary hover:bg-rm-bg-hover hover:text-rm-text transition-ui"
             >
               <Bell size={14} />
               Test Notification Sound

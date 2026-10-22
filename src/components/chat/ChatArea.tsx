@@ -312,7 +312,7 @@ export default function ChatArea({
       )}
 
       <div className="flex flex-1 min-h-0 min-w-0 flex-row">
-        <div className="flex flex-1 flex-col min-w-0 min-h-0 bg-rm-bg-primary relative border-r border-white/5 chat-messages-container">
+        <div className="flex flex-1 flex-col min-w-0 min-h-0 bg-rm-bg-primary relative border-r border-rm-border chat-messages-container">
           <div className="flex flex-1 min-h-0 flex-col">
             {/* In-DM call region */}
             {isDM && channelId && <DMCallRegion channelId={channelId} />}
@@ -377,7 +377,7 @@ export default function ChatArea({
               />
             ) : (
               <div className="z-10 px-2 md:px-4 pb-2 md:pb-6 pt-0">
-                <div className="flex h-[44px] items-center justify-center rounded-xl bg-rm-bg-elevated text-[13px] font-medium text-rm-text-muted border border-white/5 opacity-80 select-none cursor-not-allowed mx-2 md:mx-0">
+                <div className="flex h-[44px] items-center justify-center rounded-xl bg-rm-bg-elevated text-ui-sm font-medium text-rm-text-muted border border-rm-border opacity-80 select-none cursor-not-allowed mx-2 md:mx-0">
                   You do not have permission to send messages in this channel.
                 </div>
               </div>
@@ -389,7 +389,7 @@ export default function ChatArea({
           <>
             {onMembersClick && (
               <div
-                className="lg:hidden fixed inset-0 z-20 bg-black/50 animate-in fade-in duration-300"
+                className="lg:hidden fixed inset-0 z-20 bg-rm-scrim animate-in fade-in duration-200"
                 onClick={onMembersClick}
                 aria-hidden="true"
               />

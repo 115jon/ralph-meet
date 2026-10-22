@@ -71,7 +71,7 @@ export function VideoDownloadButton({
   return (
     <div
       className={cn(
-        "absolute top-2 right-2 z-20 transition-all duration-200",
+        "absolute top-2 right-2 z-20 transition-ui",
         visible
           ? "opacity-100 translate-y-0"
           : "opacity-0 -translate-y-1 pointer-events-none",
@@ -84,7 +84,7 @@ export function VideoDownloadButton({
               href={getDownloadUrl(src)}
               download={filename}
               onClick={(e) => e.stopPropagation()}
-              className="flex items-center justify-center w-8 h-8 rounded-lg bg-black/50 backdrop-blur-sm text-white/80 hover:text-white hover:bg-black/70 transition-all border border-white/10"
+              className="flex items-center justify-center w-8 h-8 rounded-lg bg-black/50 backdrop-blur-sm text-white/80 hover:text-white hover:bg-black/70 transition-ui border border-white/10"
               aria-label="Download"
             >
               <DownloadIcon />
@@ -136,7 +136,7 @@ export function VideoProgressBar({
     <div
       ref={progressRef}
       className={cn(
-        "group/bar relative rounded-full cursor-pointer mb-2 transition-all",
+        "group/bar relative rounded-full cursor-pointer mb-2 transition-ui",
         dragging ? "h-2" : "h-1 hover:h-1.5",
       )}
     >
@@ -175,7 +175,7 @@ export function VideoProgressBar({
       />
       {dragging && (
         <div
-          className="absolute -top-8 -translate-x-1/2 px-2 py-0.5 rounded-md bg-rm-bg-elevated border border-rm-border shadow-lg text-[10px] font-mono font-bold text-rm-text tabular-nums whitespace-nowrap pointer-events-none"
+          className="absolute -top-8 -translate-x-1/2 px-2 py-0.5 rounded-md bg-rm-bg-elevated border border-rm-border shadow-lg text-ui-2xs font-mono font-bold text-rm-text tabular-nums whitespace-nowrap pointer-events-none"
           style={{ left: `${displayProgress}%` }}
         >
           {formatDuration(displayTime)}
@@ -286,7 +286,7 @@ export function VideoControlBar({
           {ended ? <PlayAgainIcon /> : playing ? <PauseIcon /> : <PlayIcon />}
         </ButtonBase>
 
-        <span className="text-[10px] font-medium tabular-nums text-white/60 ml-1">
+        <span className="text-ui-2xs font-medium tabular-nums text-white/60 ml-1">
           {formatDuration(displayTime)} / {formatDuration(duration)}
         </span>
 
@@ -319,7 +319,7 @@ export function VideoControlBar({
               from the icon to the slider remains interactive. */}
           <div
             className={cn(
-              "absolute bottom-full left-1/2 origin-bottom -translate-x-1/2 pb-2 transition-all duration-200",
+              "absolute bottom-full left-1/2 origin-bottom -translate-x-1/2 pb-2 transition-ui",
               volumePopoverOpen
                 ? "scale-100 opacity-100 pointer-events-auto"
                 : "scale-95 opacity-0 pointer-events-none",
@@ -386,7 +386,7 @@ export function BigPlayOverlay({ isViewer, ended }: BigPlayOverlayProps) {
     <div className="absolute inset-0 flex items-center justify-center">
       <div
         className={cn(
-          "rounded-full backdrop-blur-sm flex items-center justify-center transition-transform group-hover/video:scale-110",
+          "rounded-full backdrop-blur-sm flex items-center justify-center transition-transform",
           "w-14 h-14 bg-black/50 border border-white/10 shadow-2xl text-white",
           isViewer && "w-16 h-16",
         )}

@@ -74,7 +74,7 @@ export const PinModal: React.FC<PinModalProps> = ({
           <DialogSurface
             showCloseButton={false}
             className={cn(
-              "relative m-0 w-full max-w-[480px] overflow-hidden rounded-2xl border border-rm-border bg-rm-bg-primary p-0 shadow-2xl outline-none transition-all duration-200",
+              "relative m-0 w-full max-w-[480px] overflow-hidden rounded-2xl border border-rm-border bg-rm-bg-primary p-0 shadow-2xl outline-none transition-ui",
               "opacity-100 scale-100 translate-y-0 data-[state=closed]:opacity-0 data-[state=closed]:scale-95 data-[state=closed]:translate-y-4",
             )}
             aria-labelledby="pin-modal-title"
@@ -83,7 +83,7 @@ export const PinModal: React.FC<PinModalProps> = ({
               <div className="flex items-start justify-between mb-4">
                 <h2
                   id="pin-modal-title"
-                  className="text-xl font-black text-rm-text leading-tight"
+                  className="text-xl font-semibold text-rm-text leading-tight"
                 >
                   {isPin ? "Pin It. Pin It Good." : "Unpin Message"}
                 </h2>
@@ -125,7 +125,7 @@ export const PinModal: React.FC<PinModalProps> = ({
                         user={message.author}
                         className="block truncate text-[14px] font-bold text-rm-text"
                       />
-                      <span className="text-[10px] text-rm-text-muted font-medium">
+                      <span className="text-ui-2xs text-rm-text-muted font-medium">
                         {new Date(message.created_at).toLocaleTimeString([], {
                           hour: "2-digit",
                           minute: "2-digit",
@@ -135,7 +135,7 @@ export const PinModal: React.FC<PinModalProps> = ({
                     <div className="text-[14px] text-rm-text-secondary leading-relaxed wrap-break-word">
                       <MarkdownRenderer content={message.content} />
                       {message.updated_at && (
-                        <span className="ml-1 text-[10px] text-rm-text-muted">
+                        <span className="ml-1 text-ui-2xs text-rm-text-muted">
                           (edited)
                         </span>
                       )}
@@ -170,10 +170,10 @@ export const PinModal: React.FC<PinModalProps> = ({
 
               {!isPin && (
                 <div className="mb-6 px-1">
-                  <p className="text-[11px] font-black text-primary uppercase tracking-widest mb-1.5">
+                  <p className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-primary mb-1.5">
                     Protip:
                   </p>
-                  <p className="text-[12px] text-rm-text-muted leading-relaxed">
+                  <p className="text-ui-xs text-rm-text-muted leading-relaxed">
                     You can hold down{" "}
                     <span className="text-rm-text-secondary font-bold bg-rm-bg-elevated px-1.5 py-0.5 rounded">
                       shift
@@ -190,7 +190,7 @@ export const PinModal: React.FC<PinModalProps> = ({
               <div className="flex gap-3">
                 <button
                   onClick={onClose}
-                  className="flex-1 px-4 py-3 rounded-xl bg-rm-bg-elevated hover:bg-rm-bg-hover text-rm-text-secondary font-bold text-[14px] transition-all outline-none"
+                  className="flex-1 px-4 py-3 rounded-xl bg-rm-bg-elevated hover:bg-rm-bg-hover text-rm-text-secondary font-bold text-[14px] transition-ui outline-none"
                 >
                   Cancel
                 </button>
@@ -200,7 +200,7 @@ export const PinModal: React.FC<PinModalProps> = ({
                     onClose();
                   }}
                   className={cn(
-                    "flex-1 px-4 py-3 rounded-xl font-bold text-[14px] transition-all shadow-lg",
+                    "flex-1 px-4 py-3 rounded-xl font-bold text-[14px] transition-ui shadow-lg",
                     isPin
                       ? "bg-primary hover:brightness-110 text-primary-foreground shadow-primary/20"
                       : "bg-destructive hover:brightness-110 text-destructive-foreground shadow-destructive/20",

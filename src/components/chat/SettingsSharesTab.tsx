@@ -128,7 +128,7 @@ export default function SettingsSharesTab() {
   const visibleShares = filter === "current" ? currentShares : shares;
 
   return (
-    <div className="animate-in fade-in slide-in-from-right-4 duration-300">
+    <div className="animate-in fade-in duration-150">
       <div className="mb-6 flex flex-wrap items-start justify-between gap-3 md:mb-8">
         <div>
           <h1 className="mb-2 hidden text-2xl font-bold text-rm-text md:block">
@@ -215,7 +215,7 @@ export default function SettingsSharesTab() {
                   </div>
                   <span
                     className={cn(
-                      "rounded-md border px-2 py-1 text-[11px] font-bold uppercase",
+                      "rounded-md border px-2 py-1 text-ui-2xs font-bold uppercase",
                       active
                         ? "border-emerald-400/20 bg-emerald-400/10 text-emerald-300"
                         : "border-rm-border text-rm-text-muted",

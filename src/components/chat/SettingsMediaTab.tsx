@@ -34,9 +34,9 @@ const FILTER_ACCENT_STYLES: Record<
     ring: "ring-amber-500/25",
   },
   off: {
-    badge: "bg-rose-500/12 text-rose-300 border-rose-500/20",
-    border: "border-rose-500/25",
-    ring: "ring-rose-500/25",
+    badge: "bg-destructive/12 text-destructive border-destructive/20",
+    border: "border-destructive/25",
+    ring: "ring-destructive/25",
   },
 };
 
@@ -120,7 +120,7 @@ export default function SettingsMediaTab() {
   };
 
   return (
-    <div className="animate-in fade-in slide-in-from-right-4 duration-300">
+    <div className="animate-in fade-in duration-150">
       <h1 className="text-2xl font-bold text-rm-text mb-2 hidden md:block">
         Media & Content
       </h1>
@@ -133,7 +133,7 @@ export default function SettingsMediaTab() {
         <section className="space-y-6">
           <div className="flex items-center gap-2">
             <Shield size={16} className="text-emerald-400" />
-            <h3 className="text-[11px] font-black uppercase tracking-[0.2em] text-rm-text-muted">
+            <h3 className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted">
               Content Filtering
             </h3>
           </div>
@@ -153,7 +153,7 @@ export default function SettingsMediaTab() {
               </div>
               <div
                 className={cn(
-                  "inline-flex items-center rounded-full border px-3 py-1 text-[11px] font-black uppercase tracking-[0.18em]",
+                  "inline-flex items-center rounded-full border px-3 py-1 text-ui-2xs font-semibold uppercase tracking-[0.08em]",
                   FILTER_ACCENT_STYLES[mediaSafetySettings.contentFilter].badge,
                 )}
               >
@@ -181,7 +181,7 @@ export default function SettingsMediaTab() {
                     void handleFilterChange(option.value);
                   }}
                   className={cn(
-                    "w-full rounded-2xl border bg-rm-bg-surface p-4 text-left transition-all",
+                    "w-full rounded-2xl border bg-rm-bg-surface p-4 text-left transition-ui",
                     selected
                       ? cn(
                           "shadow-lg ring-1",
@@ -194,12 +194,12 @@ export default function SettingsMediaTab() {
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
-                        <span className="text-base font-black text-rm-text">
+                        <span className="text-base font-semibold text-rm-text">
                           {option.label}
                         </span>
                         <span
                           className={cn(
-                            "inline-flex rounded-full border px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.16em]",
+                            "inline-flex rounded-full border px-2.5 py-1 text-ui-2xs font-semibold uppercase tracking-[0.08em]",
                             FILTER_ACCENT_STYLES[option.value].badge,
                           )}
                         >
@@ -221,11 +221,11 @@ export default function SettingsMediaTab() {
                           : "border-rm-border bg-rm-bg-primary text-transparent",
                       )}
                     >
-                      <span className="text-[11px] leading-none">•</span>
+                      <span className="text-ui-2xs leading-none">•</span>
                     </div>
                   </div>
                   {savingFilter === option.value ? (
-                    <p className="mt-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-rm-text-muted">
+                    <p className="text-ui-2xs font-semibold uppercase tracking-[0.08em] mt-2 text-rm-text-muted">
                       Saving…
                     </p>
                   ) : null}
@@ -243,7 +243,7 @@ export default function SettingsMediaTab() {
         <section className="space-y-6">
           <div className="flex items-center gap-2">
             <Sparkles size={16} className="text-sky-400" />
-            <h3 className="text-[11px] font-black uppercase tracking-[0.2em] text-rm-text-muted">
+            <h3 className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted">
               How It Applies
             </h3>
           </div>

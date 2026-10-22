@@ -98,12 +98,12 @@ export default function VoiceChannelTextStatusModal({
             <DialogSurface
               showCloseButton={false}
               className={cn(
-                "picker-panel relative m-0 w-full max-w-[540px] rounded-[22px] border p-0 shadow-2xl outline-none backdrop-blur-2xl duration-200",
+                "picker-panel relative m-0 w-full max-w-[540px] rounded-2xl border p-0 shadow-2xl outline-none backdrop-blur-2xl duration-200",
                 "animate-in zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out data-[state=closed]:zoom-out-95",
               )}
               aria-labelledby="voice-channel-text-status-title"
             >
-              <div className="relative rounded-t-[22px] border-b border-rm-border bg-gradient-to-b from-primary/10 to-transparent px-6 pb-7 pt-6">
+              <div className="relative rounded-t-2xl border-b border-rm-border bg-gradient-to-b from-primary/10 to-transparent px-6 pb-7 pt-6">
                 <button
                   type="button"
                   onClick={onClose}
@@ -122,11 +122,11 @@ export default function VoiceChannelTextStatusModal({
                 <div className="text-center">
                   <h2
                     id="voice-channel-text-status-title"
-                    className="text-[22px] font-black tracking-tight text-rm-text sm:text-[26px]"
+                    className="text-[22px] font-semibold tracking-tight text-rm-text sm:text-[26px]"
                   >
                     What are we chatting about?
                   </h2>
-                  <p className="mt-2 text-sm text-rm-text-muted sm:text-[15px]">
+                  <p className="mt-2 text-sm text-rm-text-muted sm:text-ui-base">
                     Let others know what you&apos;re up to in the voice channel.
                   </p>
                 </div>
@@ -153,7 +153,7 @@ export default function VoiceChannelTextStatusModal({
                       )
                     }
                     placeholder={`Status for ${channel.name}`}
-                    className="picker-search-input h-11 w-full rounded-[12px] border px-4 pr-12 text-[15px] outline-none transition placeholder:text-rm-text-muted focus:border-primary/60"
+                    className="picker-search-input h-11 w-full rounded-lg border px-4 pr-12 text-ui-base outline-none transition placeholder:text-rm-text-muted focus:border-primary/60"
                     maxLength={MAX_VOICE_CHANNEL_STATUS_TEXT}
                   />
                   <button
@@ -191,13 +191,13 @@ export default function VoiceChannelTextStatusModal({
                   >
                     Clear
                   </button>
-                  <span className="text-[11px] font-bold text-rm-text-muted">
+                  <span className="text-ui-2xs font-bold text-rm-text-muted">
                     {normalizedText.length} / {MAX_VOICE_CHANNEL_STATUS_TEXT}
                   </span>
                 </div>
 
                 {error ? (
-                  <div className="mt-4 rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-800 dark:text-red-200">
+                  <div className="mt-4 rounded-2xl border border-destructive/20 bg-destructive/10 px-4 py-3 text-sm text-destructive">
                     {error}
                   </div>
                 ) : null}
@@ -207,7 +207,7 @@ export default function VoiceChannelTextStatusModal({
                 <button
                   type="button"
                   onClick={onClose}
-                  className="h-11 rounded-[10px] bg-rm-bg-hover text-sm font-semibold text-rm-text transition-colors hover:bg-rm-bg-active"
+                  className="h-11 rounded-md bg-rm-bg-hover text-sm font-semibold text-rm-text transition-colors hover:bg-rm-bg-active"
                 >
                   Cancel
                 </button>
@@ -215,7 +215,7 @@ export default function VoiceChannelTextStatusModal({
                   type="button"
                   onClick={handleSave}
                   disabled={!hasChanges || saving}
-                  className="inline-flex h-11 items-center justify-center gap-2 rounded-[10px] bg-primary text-sm font-semibold text-primary-foreground transition-opacity disabled:cursor-not-allowed disabled:opacity-50"
+                  className="inline-flex h-11 items-center justify-center gap-2 rounded-md bg-primary text-sm font-semibold text-primary-foreground transition-opacity disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
                   Set Status

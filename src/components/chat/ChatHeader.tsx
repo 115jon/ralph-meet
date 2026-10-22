@@ -72,7 +72,7 @@ export function ChatHeader({
 
   return (
     <header
-      className="relative z-20 flex shrink-0 items-center justify-between border-b border-rm-border bg-rm-bg-primary/60 px-2.5 backdrop-blur-md md:px-4"
+      className="relative z-20 flex shrink-0 items-center justify-between border-b border-rm-border bg-rm-bg-primary px-2.5 md:px-4"
       style={{
         height: "calc(48px + var(--safe-area-top, 0px))",
         paddingTop: "var(--safe-area-top, 0px)",
@@ -98,12 +98,12 @@ export function ChatHeader({
             <Hash className="h-[22px] w-[22px] text-rm-text-muted shrink-0" />
           )}
           <div className="flex flex-col min-w-0">
-            <div className="flex items-center gap-0.5 text-[17px] font-extrabold text-rm-text tracking-tight leading-none truncate">
+            <div className="flex items-center gap-0.5 text-ui-md font-semibold text-rm-text leading-none truncate">
               <InlineEmojiText text={channelName} className="truncate" />
               <ChevronRight className="h-[14px] w-[14px] text-rm-text-muted shrink-0" />
             </div>
             {!isDM && (
-              <span className="text-[11px] text-rm-text-muted font-semibold flex items-center gap-1 mt-0.5 leading-none">
+              <span className="text-ui-2xs text-rm-text-muted font-medium flex items-center gap-1 mt-0.5 leading-none">
                 <div className="w-1.5 h-1.5 rounded-full bg-rm-text-muted/60" />
                 {memberCount} Members
               </span>
@@ -113,7 +113,7 @@ export function ChatHeader({
 
         <button
           className={cn(
-            "hidden items-center gap-1.5 md:flex pl-1 group/chname transition-all cursor-pointer rounded-md px-2 py-1 -ml-2",
+            "hidden items-center gap-1.5 md:flex pl-1 group/chname transition-ui cursor-pointer rounded-md px-2 py-1 -ml-2",
             showChannelDetails ? "bg-rm-bg-hover" : "hover:bg-rm-bg-hover/60",
           )}
           onClick={onToggleChannelDetails}
@@ -129,24 +129,19 @@ export function ChatHeader({
               <TooltipTrigger asChild>
                 <h2
                   className={cn(
-                    "text-[15px] font-semibold text-rm-text-primary tracking-tight leading-none transition-all",
+                    "text-ui-base font-semibold text-rm-text-primary leading-none",
                     "group-hover/chname:underline underline-offset-2",
                   )}
                 >
                   <InlineEmojiText text={channelName} />
                 </h2>
               </TooltipTrigger>
-              <TooltipContent
-                side="bottom"
-                className="bg-rm-bg-floating border-none text-rm-text-primary text-[13px] font-medium shadow-xl px-3 py-2 rounded-lg"
-              >
-                @{dmUsername}
-              </TooltipContent>
+              <TooltipContent side="bottom">@{dmUsername}</TooltipContent>
             </Tooltip>
           ) : (
             <h2
               className={cn(
-                "text-[15px] font-semibold text-rm-text-primary tracking-tight leading-none transition-all",
+                "text-ui-base font-semibold text-rm-text-primary leading-none",
                 "group-hover/chname:underline underline-offset-2",
               )}
             >
@@ -155,7 +150,7 @@ export function ChatHeader({
           )}
           <ChevronRight
             className={cn(
-              "h-3.5 w-3.5 transition-all shrink-0",
+              "h-3.5 w-3.5 transition-ui shrink-0",
               showChannelDetails
                 ? "rotate-90 text-primary"
                 : "text-rm-text-muted/40 group-hover/chname:text-rm-text-muted",
@@ -164,8 +159,8 @@ export function ChatHeader({
         </button>
       </div>
 
-      <div className="flex items-center gap-1.5 text-rm-text-muted md:gap-4">
-        <div className="hidden md:flex items-center gap-2 md:gap-4 border-r border-rm-border pr-2 md:pr-4">
+      <div className="flex items-center gap-1 text-rm-text-muted md:gap-2">
+        <div className="hidden md:flex items-center gap-0.5 border-r border-rm-border pr-2">
           {isDM && onCall && !hideCallButton && (
             <Tooltip>
               <TooltipTrigger asChild>
@@ -177,44 +172,45 @@ export function ChatHeader({
                   title={hasExistingCall ? "Join Call" : "Start Voice Call"}
                 />
               </TooltipTrigger>
-              <TooltipContent
-                side="bottom"
-                sideOffset={8}
-                className="bg-rm-bg-floating border-none text-rm-text-primary text-[13px] font-bold shadow-xl px-3 py-2 rounded-lg"
-              >
+              <TooltipContent side="bottom" sideOffset={8}>
                 <p>{hasExistingCall ? "Join Call" : "Start Voice Call"}</p>
               </TooltipContent>
             </Tooltip>
           )}
           <button
-            className="group relative flex h-6 w-6 cursor-pointer items-center justify-center transition-all hover:bg-rm-bg-hover rounded-md"
+            type="button"
+            aria-label="Pinned messages"
+            aria-pressed={showPins}
+            className="group relative flex h-8 w-8 cursor-pointer items-center justify-center rounded-md transition-ui hover:bg-rm-bg-hover enabled:active:scale-[0.96]"
             title="Pinned Messages"
             onClick={handleTogglePins}
             ref={pinButtonRef}
           >
             <Pin
               className={cn(
-                "h-[14px] w-[14px] transition-colors",
+                "h-[18px] w-[18px] transition-colors",
                 showPins
                   ? "text-rm-accent rotate-45"
                   : "text-rm-text-muted group-hover:text-rm-text",
               )}
             />
             {pinnedCount > 0 && (
-              <span className="absolute -top-1 -right-1 flex h-3 w-3 items-center justify-center rounded-full bg-rm-accent text-[8px] font-bold text-white">
+              <span className="absolute -top-0.5 -right-0.5 badge-count bg-rm-accent">
                 {pinnedCount}
               </span>
             )}
           </button>
           <NotificationBell />
           {onMembersClick && (
-            <Users
+            <IconButton
+              icon={Users}
+              variant="muted"
+              size="sm"
+              aria-label="Members"
+              aria-pressed={showMembers}
               className={cn(
-                "h-[18px] w-[18px] cursor-pointer transition-all hover:text-rm-text",
-                showMembers ? "text-rm-accent" : "text-rm-text-muted",
+                showMembers && "text-rm-accent hover:text-rm-accent",
               )}
-              role="button"
-              tabIndex={0}
               onClick={onMembersClick}
             />
           )}
@@ -222,7 +218,7 @@ export function ChatHeader({
         <div className="flex items-center">
           <button
             type="button"
-            className="hidden md:inline-flex items-center gap-2 rounded-full border border-rm-border bg-rm-bg-elevated/70 px-3 py-1.5 text-[12px] font-medium text-rm-text-muted transition-colors hover:bg-rm-bg-hover hover:text-rm-text"
+            className="hidden md:inline-flex h-8 items-center gap-2 rounded-md border border-rm-border bg-rm-bg-elevated px-2.5 text-ui-sm font-medium text-rm-text-muted transition-ui hover:border-rm-border-strong hover:text-rm-text"
             onClick={onOpenSearch}
             title={`Search ${channelName}`}
           >
@@ -242,7 +238,7 @@ export function ChatHeader({
             icon={X}
             variant="muted"
             size="sm"
-            className="ml-2 rounded-full border border-rm-border bg-rm-bg-elevated/70 hover:bg-rm-bg-hover"
+            className="ml-1 rounded-md border border-rm-border bg-rm-bg-elevated hover:bg-rm-bg-hover"
             onClick={onClose}
             title="Close Chat"
           />

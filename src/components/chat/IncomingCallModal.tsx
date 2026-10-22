@@ -151,7 +151,7 @@ export function IncomingCallModal() {
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <DialogClose asChild>
-                      <button className="flex h-10 w-16 items-center justify-center rounded-md bg-red-600 hover:bg-red-500 text-white transition-colors">
+                      <button className="flex h-10 w-16 items-center justify-center rounded-md bg-destructive hover:bg-destructive/90 text-white transition-colors">
                         <X className="h-5 w-5" />
                       </button>
                     </DialogClose>

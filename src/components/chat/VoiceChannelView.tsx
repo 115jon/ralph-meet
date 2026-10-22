@@ -554,10 +554,10 @@ export default function VoiceChannelView({
                 fallback={
                   <div className="flex h-full w-full items-center justify-center bg-[radial-gradient(circle_at_top,rgba(34,211,238,0.18),rgba(2,6,23,0.98)_55%)] px-6 text-center text-rm-text">
                     <div>
-                      <div className="text-xs uppercase tracking-[0.28em] text-cyan-200/80">
+                      <div className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-cyan-200/80">
                         Loading Activity
                       </div>
-                      <div className="mt-3 text-2xl font-black">
+                      <div className="mt-3 text-2xl font-bold">
                         Preparing the stage...
                       </div>
                     </div>
@@ -594,7 +594,7 @@ export default function VoiceChannelView({
                   <div
                     key={item.id}
                     className={cn(
-                      "w-44 sm:w-52 aspect-video shrink-0 transition-all duration-300 py-2",
+                      "w-44 sm:w-52 aspect-video shrink-0 transition-ui py-2",
                       focusedId === item.id
                         ? ""
                         : "opacity-70 hover:opacity-100",

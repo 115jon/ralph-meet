@@ -172,7 +172,7 @@ export function DemoRoomChatPanel({
             </div>
             <div>
               <h2 className="text-sm font-bold text-rm-text">Temporary Chat</h2>
-              <p className="text-[11px] font-medium text-rm-text-muted">
+              <p className="text-ui-2xs font-medium text-rm-text-muted">
                 Messages and GIFs expire after {DEMO_CHAT_TTL_MINUTES} minutes.
               </p>
             </div>
@@ -206,7 +206,7 @@ export function DemoRoomChatPanel({
                   <InlineEmojiText text={message.author_name} />
                 </span>
                 <time
-                  className="shrink-0 text-[10px] font-medium text-rm-text-muted"
+                  className="shrink-0 text-ui-2xs font-medium text-rm-text-muted"
                   dateTime={formatDateTimeAttribute(message.created_at)}
                 >
                   {formatChatTime(message.created_at, formatDate)}
@@ -227,7 +227,7 @@ export function DemoRoomChatPanel({
         onSubmit={handleSubmit}
         className="relative border-t border-rm-border p-3"
       >
-        <div className="mb-2 flex items-center gap-2 rounded-xl border border-amber-500/25 dark:border-amber-400/20 bg-amber-500/5 dark:bg-amber-400/10 px-3 py-2 text-[11px] font-semibold text-amber-800 dark:text-amber-100/90">
+        <div className="mb-2 flex items-center gap-2 rounded-xl border border-amber-500/25 dark:border-amber-400/20 bg-amber-500/5 dark:bg-amber-400/10 px-3 py-2 text-ui-2xs font-semibold text-amber-800 dark:text-amber-100/90">
           <LockKeyhole className="h-3.5 w-3.5 shrink-0" />
           Messages and GIFs here are demo-only and expire after{" "}
           {DEMO_CHAT_TTL_MINUTES} minutes.
@@ -262,7 +262,7 @@ export function DemoRoomChatPanel({
           <button
             type="button"
             onClick={() => setShowGifPicker((current) => !current)}
-            className="flex h-9 shrink-0 items-center justify-center rounded-xl px-2 text-xs font-black tracking-wide text-rm-text-muted transition hover:bg-rm-bg-hover hover:text-primary"
+            className="flex h-9 shrink-0 items-center justify-center rounded-xl px-2 text-xs font-bold tracking-wide text-rm-text-muted transition hover:bg-rm-bg-hover hover:text-primary"
           >
             GIF
           </button>
@@ -275,7 +275,7 @@ export function DemoRoomChatPanel({
             <Send className="h-4 w-4" />
           </button>
         </div>
-        <div className="mt-1 flex justify-end px-2 text-[10px] font-semibold text-rm-text-muted/70">
+        <div className="mt-1 flex justify-end px-2 text-ui-2xs font-semibold text-rm-text-muted/70">
           {characterCounter.label}
         </div>
         <GifPickerModal
@@ -312,7 +312,7 @@ export function DemoUploadBlockerModal({
               </div>
               <h2
                 id="demo-upload-blocker-title"
-                className="text-xl font-black text-rm-text"
+                className="text-xl font-semibold text-rm-text"
               >
                 Uploads are in the full app
               </h2>

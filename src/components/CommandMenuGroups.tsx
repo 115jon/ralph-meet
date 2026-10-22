@@ -27,7 +27,7 @@ export function CommandMenuServersGroup({
   return (
     <Command.Group
       heading="Servers"
-      className="[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-xs [&_[cmdk-group-heading]]:font-semibold [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-wide [&_[cmdk-group-heading]]:text-[var(--rm-text-muted)]"
+      className="[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-ui-2xs [&_[cmdk-group-heading]]:font-semibold [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-[0.08em] [&_[cmdk-group-heading]]:text-[var(--rm-text-muted)]"
     >
       {servers.map((server) => (
         <Command.Item
@@ -36,7 +36,7 @@ export function CommandMenuServersGroup({
           onSelect={() => navigateToServer(server.id)}
           className="flex cursor-pointer items-center gap-3 rounded-md px-3 py-2 text-sm text-[var(--rm-text-secondary)] aria-selected:bg-[var(--rm-bg-hover)] aria-selected:text-[var(--rm-text-primary)] transition-colors"
         >
-          <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[var(--rm-bg-elevated)] text-[10px] font-bold overflow-hidden">
+          <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[var(--rm-bg-elevated)] text-ui-2xs font-bold overflow-hidden">
             {server.icon_url ? (
               <img
                 src={getAuthAssetUrl(server.icon_url)}
@@ -69,7 +69,7 @@ export function CommandMenuTextChannelsGroup({
   return (
     <Command.Group
       heading="Text Channels"
-      className="[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-xs [&_[cmdk-group-heading]]:font-semibold [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-wide [&_[cmdk-group-heading]]:text-[var(--rm-text-muted)]"
+      className="[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-ui-2xs [&_[cmdk-group-heading]]:font-semibold [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-[0.08em] [&_[cmdk-group-heading]]:text-[var(--rm-text-muted)]"
     >
       {channels.map((channel) => (
         <Command.Item
@@ -103,7 +103,7 @@ export function CommandMenuVoiceChannelsGroup({
   return (
     <Command.Group
       heading="Voice Channels"
-      className="[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-xs [&_[cmdk-group-heading]]:font-semibold [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-wide [&_[cmdk-group-heading]]:text-[var(--rm-text-muted)]"
+      className="[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-ui-2xs [&_[cmdk-group-heading]]:font-semibold [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-[0.08em] [&_[cmdk-group-heading]]:text-[var(--rm-text-muted)]"
     >
       {channels.map((channel) => (
         <Command.Item
@@ -135,7 +135,7 @@ export function CommandMenuDMsGroup({
   return (
     <Command.Group
       heading="Direct Messages"
-      className="[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-xs [&_[cmdk-group-heading]]:font-semibold [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-wide [&_[cmdk-group-heading]]:text-[var(--rm-text-muted)]"
+      className="[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-ui-2xs [&_[cmdk-group-heading]]:font-semibold [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-[0.08em] [&_[cmdk-group-heading]]:text-[var(--rm-text-muted)]"
     >
       {dmChannels.map((dm) => {
         const displayName =
@@ -188,7 +188,7 @@ export function CommandMenuActionsGroup({
   return (
     <Command.Group
       heading="Actions"
-      className="[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-xs [&_[cmdk-group-heading]]:font-semibold [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-wide [&_[cmdk-group-heading]]:text-[var(--rm-text-muted)]"
+      className="[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-ui-2xs [&_[cmdk-group-heading]]:font-semibold [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-[0.08em] [&_[cmdk-group-heading]]:text-[var(--rm-text-muted)]"
     >
       <Command.Item
         value="toggle mute microphone"

@@ -107,10 +107,9 @@ export function UploadSoundModal({
                 <div>
                   <label
                     htmlFor={fileInputId}
-                    className="block text-[13px] font-bold text-rm-text mb-2"
+                    className="block text-ui-sm font-bold text-rm-text mb-2"
                   >
-                    File{" "}
-                    <span className="text-red-500 dark:text-red-400">*</span>
+                    File <span className="text-destructive">*</span>
                   </label>
                   <label
                     htmlFor={fileInputId}
@@ -142,10 +141,9 @@ export function UploadSoundModal({
                 <div className="flex-1">
                   <label
                     htmlFor={soundNameInputId}
-                    className="block text-[13px] font-bold text-rm-text mb-2"
+                    className="block text-ui-sm font-bold text-rm-text mb-2"
                   >
-                    Sound Name{" "}
-                    <span className="text-red-500 dark:text-red-400">*</span>
+                    Sound Name <span className="text-destructive">*</span>
                   </label>
                   <input
                     id={soundNameInputId}
@@ -161,7 +159,7 @@ export function UploadSoundModal({
                 <div className="w-[160px] relative">
                   <label
                     htmlFor={emojiButtonId}
-                    className="block text-[13px] font-bold text-rm-text mb-2"
+                    className="block text-ui-sm font-bold text-rm-text mb-2"
                   >
                     Related Emoji
                   </label>
@@ -207,7 +205,7 @@ export function UploadSoundModal({
               <div>
                 <label
                   htmlFor={soundVolumeInputId}
-                  className="block text-[13px] font-bold text-rm-text mb-2"
+                  className="block text-ui-sm font-bold text-rm-text mb-2"
                 >
                   Sound Volume
                 </label>
@@ -241,7 +239,7 @@ export function UploadSoundModal({
                 type="button"
                 onClick={handleSubmit}
                 disabled={(!file && !isEditMode) || !soundName || isUploading}
-                className="flex-1 py-2.5 rounded-xl bg-primary hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed text-primary-foreground font-bold text-sm transition-all flex items-center justify-center gap-2"
+                className="flex-1 py-2.5 rounded-xl bg-primary hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed text-primary-foreground font-bold text-sm transition-ui flex items-center justify-center gap-2"
               >
                 {isUploading && <Loader2 size={16} className="animate-spin" />}
                 {isEditMode ? "Save" : "Upload"}

@@ -52,7 +52,7 @@ function CountdownTimer({ expiresAt }: { expiresAt: string }) {
   return (
     <span
       className={cn(
-        "font-mono text-[13px]",
+        "font-mono text-ui-sm",
         remaining === "Expired" ? "text-destructive" : "text-rm-text-muted",
       )}
     >
@@ -256,22 +256,22 @@ export default function InvitesTab({ serverId, serverName }: InvitesTabProps) {
   };
 
   const selectStyle =
-    "w-full rounded-lg border border-rm-border bg-rm-bg-surface px-3 py-2 text-sm text-rm-text outline-none transition-all focus:border-primary/30 focus:ring-2 focus:ring-primary/20";
+    "w-full rounded-lg border border-rm-border bg-rm-bg-surface px-3 py-2 text-sm text-rm-text outline-none transition-ui focus:border-primary/30 focus:ring-2 focus:ring-primary/20";
 
   return (
-    <div className="animate-in fade-in slide-in-from-right-4 duration-300 w-full">
+    <div className="animate-in fade-in duration-150 w-full">
       <h2 className="mb-6 text-xl font-bold text-rm-text">Invites</h2>
 
       {/* Header row */}
       <div className="mb-4 flex items-center justify-between">
-        <span className="text-[11px] font-bold uppercase tracking-widest text-rm-text-muted">
+        <span className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted">
           Active Invite Links
         </span>
         <div className="flex items-center gap-2">
           <button
             onClick={handleTogglePause}
             className={cn(
-              "rounded-lg border px-3 py-1.5 text-sm font-medium transition-all",
+              "rounded-lg border px-3 py-1.5 text-sm font-medium transition-ui",
               state.isPaused
                 ? "border-primary/30 bg-primary/10 text-primary hover:bg-primary/20"
                 : "border-rm-border text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text",
@@ -281,7 +281,7 @@ export default function InvitesTab({ serverId, serverName }: InvitesTabProps) {
           </button>
           <button
             onClick={() => dispatch({ type: "TOGGLE_SHOW_CREATE" })}
-            className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/20 transition-all hover:brightness-110"
+            className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/20 transition-ui hover:brightness-110"
           >
             <Plus className="h-3.5 w-3.5" />
             Create invite link
@@ -296,7 +296,7 @@ export default function InvitesTab({ serverId, serverName }: InvitesTabProps) {
             <div className="space-y-1.5">
               <label
                 htmlFor="inv-channel"
-                className="text-[10px] font-bold uppercase tracking-widest text-rm-text-muted"
+                className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted"
               >
                 Channel
               </label>
@@ -336,7 +336,7 @@ export default function InvitesTab({ serverId, serverName }: InvitesTabProps) {
             <div className="space-y-1.5">
               <label
                 htmlFor="inv-expiry"
-                className="text-[10px] font-bold uppercase tracking-widest text-rm-text-muted"
+                className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted"
               >
                 Expire After
               </label>
@@ -371,7 +371,7 @@ export default function InvitesTab({ serverId, serverName }: InvitesTabProps) {
             <div className="space-y-1.5">
               <label
                 htmlFor="inv-uses"
-                className="text-[10px] font-bold uppercase tracking-widest text-rm-text-muted"
+                className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted"
               >
                 Max Uses
               </label>
@@ -406,7 +406,7 @@ export default function InvitesTab({ serverId, serverName }: InvitesTabProps) {
             <div className="space-y-1.5">
               <label
                 htmlFor="inv-temp"
-                className="text-[10px] font-bold uppercase tracking-widest text-rm-text-muted"
+                className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted"
               >
                 Temporary Membership
               </label>
@@ -438,7 +438,7 @@ export default function InvitesTab({ serverId, serverName }: InvitesTabProps) {
             <button
               onClick={handleCreate}
               disabled={state.creating}
-              className="flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition-all hover:brightness-110 disabled:opacity-40"
+              className="flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition-ui hover:brightness-110 disabled:opacity-40"
             >
               {state.creating && <Loader2 className="h-3 w-3 animate-spin" />}
               {state.creating ? "Creating..." : "Create"}
@@ -480,7 +480,7 @@ export default function InvitesTab({ serverId, serverName }: InvitesTabProps) {
       ) : (
         <div className="overflow-hidden rounded-lg border border-rm-border">
           {/* Table header */}
-          <div className="grid grid-cols-[1fr_120px_60px_110px_40px] gap-2 border-b border-rm-border bg-rm-bg-surface/50 px-4 py-2.5 text-[11px] font-bold uppercase tracking-widest text-rm-text-muted">
+          <div className="grid grid-cols-[1fr_120px_60px_110px_40px] gap-2 border-b border-rm-border bg-rm-bg-surface/50 px-4 py-2.5 text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted">
             <span>Inviter</span>
             <span>Invite Code</span>
             <span>Uses</span>
@@ -517,7 +517,7 @@ export default function InvitesTab({ serverId, serverName }: InvitesTabProps) {
                       {inviterDisplayName}
                     </p>
                     {invite.channel_name && (
-                      <p className="flex items-center gap-0.5 text-[11px] text-rm-text-muted truncate">
+                      <p className="flex items-center gap-0.5 text-ui-2xs text-rm-text-muted truncate">
                         <Hash className="h-2.5 w-2.5" />
                         {invite.channel_name}
                       </p>
@@ -548,13 +548,13 @@ export default function InvitesTab({ serverId, serverName }: InvitesTabProps) {
                 {invite.expires_at ? (
                   <CountdownTimer expiresAt={invite.expires_at} />
                 ) : (
-                  <span className="text-[13px] text-rm-text-muted">Never</span>
+                  <span className="text-ui-sm text-rm-text-muted">Never</span>
                 )}
 
                 {/* Revoke */}
                 <button
                   onClick={() => handleRevoke(invite.code)}
-                  className="flex h-7 w-7 items-center justify-center rounded-md text-rm-text-muted hover:bg-destructive/10 hover:text-destructive transition-all"
+                  className="flex h-7 w-7 items-center justify-center rounded-md text-rm-text-muted hover:bg-destructive/10 hover:text-destructive transition-ui"
                   title="Revoke invite"
                 >
                   <X className="h-3.5 w-3.5" />

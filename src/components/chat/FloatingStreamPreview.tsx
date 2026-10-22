@@ -198,7 +198,7 @@ export default function FloatingStreamPreview({
         onPointerCancel={handlePointerUp}
         onContextMenu={handleContextMenu}
       >
-        <div className="group relative aspect-video overflow-hidden rounded-[14px] border border-white/10 bg-[#06070a]/95 shadow-[0_24px_80px_rgba(0,0,0,0.55)] backdrop-blur-xl">
+        <div className="group relative aspect-video overflow-hidden rounded-lg border border-rm-border bg-rm-bg-floating/95 shadow-2xl">
           {!isPreviewPaused && previewStream && (
             <VideoPlayer
               stream={previewStream}
@@ -210,7 +210,7 @@ export default function FloatingStreamPreview({
 
           {(isPreviewPaused || !previewStream) && (
             <div className="absolute inset-0 flex flex-col items-center justify-center bg-black px-8 text-center">
-              <p className="text-lg font-black tracking-tight text-white">
+              <p className="text-lg font-bold tracking-tight text-white">
                 {pausedTitle}
               </p>
               <p className="mt-2 text-sm font-medium text-white/70">
@@ -227,7 +227,7 @@ export default function FloatingStreamPreview({
             type="button"
             data-stream-preview-interactive="true"
             onClick={onNavigateToVoiceChannel}
-            className="absolute left-3 top-3 z-20 flex max-w-[70%] items-center gap-1.5 rounded-md bg-black/40 px-2.5 py-1 text-[15px] font-semibold tracking-tight text-white/90 transition hover:text-white hover:underline"
+            className="absolute left-3 top-3 z-20 flex max-w-[70%] items-center gap-1.5 rounded-md bg-black/40 px-2.5 py-1 text-ui-base font-semibold tracking-tight text-white/90 transition hover:text-white hover:underline"
           >
             <ArrowLeft size={14} className="shrink-0" />
             <InlineEmojiText text={channelName} className="truncate" />
