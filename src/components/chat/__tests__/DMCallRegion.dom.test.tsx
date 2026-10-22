@@ -166,7 +166,9 @@ describe("DMCallRegion preview actions", () => {
 
     await waitFor(() => expect(mocks.voiceGrid).toHaveBeenCalled());
 
-    const props = mocks.voiceGrid.mock.calls[0]?.[0] as {
+    const props = (
+      mocks.voiceGrid.mock.calls[0] as unknown[] | undefined
+    )?.[0] as {
       voiceActions?: VoiceActions;
     };
     expect(props.voiceActions?.isPreviewHidden).toBe(true);
