@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.2.0](https://github.com/115jon/ralph-meet/compare/v3.1.1...v3.2.0) (2026-10-22)
+
+
+### Features
+
+* **ui:** ✨ add design tokens, type scale and a visible focus ring ([72ba7b9](https://github.com/115jon/ralph-meet/commit/72ba7b9c19400e0093709e046e00422432039ae9))
+* **ui:** ✨ share one dithered loading screen and empty states ([c34691c](https://github.com/115jon/ralph-meet/commit/c34691c3db651991c98880328a66c2fc144d7b34))
+
 ## [3.1.1](https://github.com/115jon/ralph-meet/compare/v3.1.0...v3.1.1) (2026-10-22)
 
 
