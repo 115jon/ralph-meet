@@ -549,7 +549,9 @@ const gridItems: GridItem[] = [
   },
 ];
 
-function VoiceRoom() {
+/** `live`: mic muted, deafened, camera on and sharing, so every dock state
+ * (rest / muted tint / live accent / solid leave) is visible at once. */
+function VoiceRoom({ live = false }: { live?: boolean }) {
   const [focusedId, setFocusedId] = useState<string | null>(null);
   return (
     <div
@@ -609,14 +611,14 @@ function VoiceRoom() {
               <div className="flex-shrink-0 bg-rm-bg-surface border-t border-rm-border z-20 relative">
                 <VoiceControls
                   hasMicrophone
-                  isMicOn
+                  isMicOn={!live}
                   toggleMic={() => {}}
-                  isDeafened={false}
+                  isDeafened={live}
                   toggleDeafen={() => {}}
                   hasCamera
-                  isCameraOn={false}
+                  isCameraOn={live}
                   toggleCamera={() => {}}
-                  isScreenSharing={false}
+                  isScreenSharing={live}
                   toggleScreenShare={() => {}}
                   setIsScreenModalOpen={() => {}}
                   focusedItem={null}
@@ -803,6 +805,9 @@ export default function UiFixtures() {
       break;
     case "voice":
       content = <VoiceRoom />;
+      break;
+    case "voice-live":
+      content = <VoiceRoom live />;
       break;
     case "voice-landing":
       content = <VoiceLandingFixture />;

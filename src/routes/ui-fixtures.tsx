@@ -5,7 +5,8 @@
  *
  *   /ui-fixtures?surface=shell&theme=dark
  *
- * surfaces: shell | shell-empty | shell-dm | friends | voice | voice-landing
+ * surfaces: shell | shell-empty | shell-dm | friends | voice | voice-live
+ *           voice-landing
  *           settings | menus | splash | overlay | mobile
  */
 
