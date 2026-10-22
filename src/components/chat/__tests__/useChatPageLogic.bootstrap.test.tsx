@@ -33,6 +33,9 @@ const mocks = vi.hoisted(() => {
 
 vi.mock("@/lib/desktop-auth", () => ({
   getDesktopToken: vi.fn(() => null),
+  getDesktopAuthHandoffToken: vi.fn(() => "test-token"),
+  getStoredKovaAuthSessionToken: vi.fn(() => "test-token"),
+  subscribeDesktopTokenChanges: vi.fn(() => () => undefined),
 }));
 
 vi.mock("@/lib/platform", () => ({ isTauri: vi.fn(() => false) }));
@@ -65,6 +68,38 @@ describe("useChatPageLogic bootstrap", () => {
     }
 
     renderHook(() => useChatPageLogic(), { wrapper: Wrapper });
+
+    await waitFor(() => {
+      expect(mocks.actions.bootstrapChat).toHaveBeenCalledOnce();
+    });
+  });
+
+  it("does not bootstrap a fresh web session until a bearer token exists", async () => {
+    const {
+      getDesktopAuthHandoffToken,
+      getStoredKovaAuthSessionToken,
+      subscribeDesktopTokenChanges,
+    } = await import("@/lib/desktop-auth");
+    const tokenListeners: Array<(token: string | null) => void> = [];
+    vi.mocked(getDesktopAuthHandoffToken).mockReturnValue(null);
+    vi.mocked(getStoredKovaAuthSessionToken).mockReturnValue(null);
+    vi.mocked(subscribeDesktopTokenChanges).mockImplementation((listener) => {
+      tokenListeners.push(listener);
+      return () => undefined;
+    });
+
+    renderHook(() => useChatPageLogic());
+
+    await waitFor(() => {
+      expect(subscribeDesktopTokenChanges).toHaveBeenCalled();
+    });
+    expect(mocks.actions.bootstrapChat).not.toHaveBeenCalled();
+
+    vi.mocked(getDesktopAuthHandoffToken).mockReturnValue("fresh-token");
+    vi.mocked(getStoredKovaAuthSessionToken).mockReturnValue("fresh-token");
+    for (const listener of tokenListeners) {
+      listener("fresh-token");
+    }
 
     await waitFor(() => {
       expect(mocks.actions.bootstrapChat).toHaveBeenCalledOnce();

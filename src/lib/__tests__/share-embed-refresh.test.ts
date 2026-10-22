@@ -1,6 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { env } from "cloudflare:workers";
-import { hydrateInstagramEmbedsForShare } from "../share-embed-refresh";
+import {
+  hydrateInstagramEmbedsForShare,
+  hydrateSocialEmbeds,
+} from "../share-embed-refresh";
 import type { MessageShare } from "@/services/message-share.service";
 
 const workerEnv = env as unknown as Record<string, unknown>;
@@ -405,7 +408,7 @@ describe("hydrateInstagramEmbedsForShare", () => {
       durationSeconds: 64.2,
     });
     expect(hydrated.snapshot.embeds[0].thumbnail).toEqual({
-      url: "https://scontent-ord5-1.cdninstagram.com/thumb.jpg",
+      url: "https://scontent-ord5-1.cdninstagram.com/thumb-2.jpg",
       width: 640,
       height: 1137,
     });
@@ -684,26 +687,184 @@ describe("hydrateInstagramEmbedsForShare", () => {
     });
   });
 
-  it("leaves non-Instagram embeds unchanged", async () => {
-    const share = {
-      ...makeShare(),
-      snapshot: {
-        ...makeShare().snapshot,
-        embeds: [
-          {
-            id: "embed-x-1",
-            url: "https://x.com/example/status/123",
-            type: "rich" as const,
-            rawTitle: "example",
-            provider: { name: "X", url: "https://x.com" },
-            fields: [],
-          },
-        ],
+  it("replaces stale Instagram media URLs on a complete stored embed", async () => {
+    workerEnv.INSTAGRAM_SESSIONID = "sessionid";
+    workerEnv.INSTAGRAM_CSRFTOKEN = "csrftoken";
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request) => {
+        const url = input.toString();
+        if (url.startsWith("https://www.instagram.com/api/v1/oembed/")) {
+          return Response.json({
+            media_id: "3878972523924185684_71645946242",
+            thumbnail_url:
+              "https://scontent-ord5-2.cdninstagram.com/fresh-thumb.jpg",
+            title: "craziest work",
+            author_name: "example",
+            author_url: "https://www.instagram.com/example",
+            provider_name: "Instagram",
+            provider_url: "https://www.instagram.com",
+          });
+        }
+        if (
+          url.startsWith(
+            "https://i.instagram.com/api/v1/media/3878972523924185684/info/",
+          )
+        ) {
+          return Response.json({
+            items: [
+              {
+                video_versions: [
+                  {
+                    url: "https://scontent-ord5-2.cdninstagram.com/fresh-video.mp4?sig=9",
+                    width: 720,
+                    height: 1280,
+                  },
+                ],
+                image_versions2: {
+                  candidates: [
+                    {
+                      url: "https://scontent-ord5-2.cdninstagram.com/fresh-thumb.jpg",
+                      width: 640,
+                      height: 1137,
+                    },
+                  ],
+                },
+                caption: { text: "craziest work" },
+                video_duration: 128.4,
+                user: {
+                  username: "example",
+                  profile_pic_url:
+                    "https://scontent-ord5-2.cdninstagram.com/fresh-avatar.jpg",
+                  is_verified: false,
+                },
+              },
+            ],
+          });
+        }
+        throw new Error(`Unexpected fetch: ${url}`);
+      }),
+    );
+
+    const share = makeShare();
+    share.snapshot.embeds[0] = {
+      ...share.snapshot.embeds[0],
+      rawTitle: "craziest work",
+      author: {
+        name: "example",
+        url: "https://www.instagram.com/example",
+        iconURL: "https://scontent-ord5-1.cdninstagram.com/stale-avatar.jpg",
+        isVerified: false,
       },
+      thumbnail: {
+        url: "https://scontent-ord5-1.cdninstagram.com/stale-thumb.jpg",
+        width: 640,
+        height: 1137,
+      },
+      media: [
+        {
+          type: "video",
+          url: "https://scontent-ord5-1.cdninstagram.com/stale-video.mp4",
+          width: 720,
+          height: 1280,
+        },
+      ],
+      video: {
+        url: "https://scontent-ord5-1.cdninstagram.com/stale-video.mp4",
+        width: 720,
+        height: 1280,
+        kind: "direct",
+        contentType: "video/mp4",
+        durationSeconds: 128.4,
+      },
+      metrics: { likes: 1, comments: 1, views: 1 },
+      timestamp: "2026-05-24T12:00:00.000Z",
+      audio: { title: "track" },
     };
 
     const hydrated = await hydrateInstagramEmbedsForShare(share);
+    const embed = hydrated.snapshot.embeds[0];
 
-    expect(hydrated).toBe(share);
+    expect(embed.video?.url).toBe(
+      "https://scontent-ord5-2.cdninstagram.com/fresh-video.mp4?sig=9",
+    );
+    expect(embed.thumbnail?.url).toBe(
+      "https://scontent-ord5-2.cdninstagram.com/fresh-thumb.jpg",
+    );
+    expect(embed.author?.iconURL).toBe(
+      "https://scontent-ord5-2.cdninstagram.com/fresh-avatar.jpg",
+    );
+    expect(embed.media?.[0]?.url).toBe(
+      "https://scontent-ord5-2.cdninstagram.com/fresh-video.mp4?sig=9",
+    );
+  });
+
+  it("turns a stored social embed into a tombstone when the post is gone", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request) => {
+        const url = input.toString();
+        if (
+          url.startsWith("https://api.fxtwitter.com") ||
+          url.startsWith("https://api.vxtwitter.com") ||
+          url.startsWith("https://vxtwitter.com")
+        ) {
+          return new Response(
+            JSON.stringify({ code: 404, message: "NOT_FOUND" }),
+            {
+              status: 404,
+              headers: { "content-type": "application/json" },
+            },
+          );
+        }
+        return new Response("not found", { status: 404 });
+      }) as unknown as typeof fetch,
+    );
+
+    const [embed] = await hydrateSocialEmbeds([
+      {
+        id: "embed-x-deleted",
+        url: "https://x.com/example/status/2057892777069883519",
+        type: "rich",
+        provider: { name: "X", url: "https://x.com" },
+        media: [
+          {
+            type: "image",
+            url: "https://pbs.twimg.com/media/stale.jpg",
+          },
+        ],
+        fields: [],
+      },
+    ]);
+
+    expect(embed.unavailable).toBe(true);
+    expect(embed.media).toBeUndefined();
+    expect(embed.id).toBe("embed-x-deleted");
+  });
+
+  it("keeps stored X media when embed providers fail transiently", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("upstream unavailable", { status: 503 })),
+    );
+
+    const stored = {
+      id: "embed-x-1",
+      url: "https://x.com/example/status/123",
+      type: "rich" as const,
+      provider: { name: "X", url: "https://x.com" },
+      media: [
+        {
+          type: "image" as const,
+          url: "https://pbs.twimg.com/media/still-here.jpg",
+        },
+      ],
+      fields: [],
+    };
+
+    const [embed] = await hydrateSocialEmbeds([stored]);
+
+    expect(embed).toEqual(stored);
   });
 });

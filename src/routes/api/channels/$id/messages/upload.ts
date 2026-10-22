@@ -149,12 +149,13 @@ export const POST = async ({ request, params }: any) => {
   try {
     await db
       .prepare(
-        `INSERT INTO attachments (id, message_id, soundboard_server_id, filename, file_key, content_type, size_bytes, user_id, created_at, sound_name, sound_emoji, sound_volume)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO attachments (id, message_id, channel_id, soundboard_server_id, filename, file_key, content_type, size_bytes, user_id, created_at, sound_name, sound_emoji, sound_volume)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .bind(
         attachmentId,
         isSoundboardUpload ? null : normalizedMessageId,
+        isSoundboardUpload ? null : channelId,
         isSoundboardUpload ? serverId : null,
         file.name,
         key,

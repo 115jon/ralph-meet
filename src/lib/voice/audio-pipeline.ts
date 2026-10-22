@@ -76,6 +76,21 @@ export function prewarmAudioContext(): void {
 /** Callback to notify SFUClient of audio context state changes */
 export interface AudioPipelineCallbacks {
   onAudioResumed(): void;
+  onDirectAudioAttached?: (details: {
+    participantId: string;
+    trackName: string;
+  }) => void;
+  onAudioGraphConnected?: (details: {
+    participantId: string;
+    trackName: string;
+  }) => void;
+  onFirstAudible?: (details: { rms: number; preLimiterRms?: number }) => void;
+  onProbeSample?: (details: {
+    rms: number;
+    preLimiterRms?: number;
+    contextState: AudioContextState;
+    elapsedMs: number;
+  }) => void;
 }
 
 export class AudioPipeline {
@@ -83,6 +98,11 @@ export class AudioPipeline {
   private limiter: DynamicsCompressorNode | null = null;
   private masterGainNode: GainNode | null = null;
   private volumeLevels: Map<string, number> = new Map();
+  private trackVolumeLevels: Map<string, number> = new Map();
+  private masterVolumeLevel = 1;
+  private outputDeviceId = "default";
+  private directAudioElements: Map<string, Map<string, HTMLAudioElement>> =
+    new Map();
   private volumeGains: Map<string, Map<string, GainNode>> = new Map();
   private spatialPanners: Map<string, Map<string, StereoPannerNode>> =
     new Map();
@@ -110,6 +130,13 @@ export class AudioPipeline {
   > = new Map();
   /** Whether we've already installed the onstatechange listener */
   private stateChangeInstalled = false;
+  private preLimiterAnalyser: AnalyserNode | null = null;
+  private preLimiterAnalyserData: Uint8Array | null = null;
+  private outputAnalyser: AnalyserNode | null = null;
+  private outputAnalyserData: Uint8Array | null = null;
+  private firstAudibleReported = false;
+  private firstAudibleAttempts = 0;
+  private firstAudibleFrame: number | null = null;
 
   private readonly callbacks: AudioPipelineCallbacks;
 
@@ -123,8 +150,14 @@ export class AudioPipeline {
    */
   async resumeAudioContext(): Promise<void> {
     if (!this.volumeContext) {
-      // Reuse a prewarmed context from a user gesture (call accept/initiate)
-      this.volumeContext = takePrewarmedAudioContext() ?? new AudioContext();
+      // Direct remote sinks do not need an AudioContext. Only adopt a context
+      // that was explicitly prewarmed or created by an enhanced audio path.
+      const prewarmedContext = takePrewarmedAudioContext();
+      if (prewarmedContext) this.volumeContext = prewarmedContext;
+      else {
+        this.replayDirectAudioSinks();
+        return;
+      }
     }
     if (this.volumeContext.state === "suspended") {
       try {
@@ -137,6 +170,15 @@ export class AudioPipeline {
     }
     // Also resume the sound effects context so both are unlocked together
     resumeSoundContext().catch(() => {});
+    this.replayDirectAudioSinks();
+  }
+
+  private replayDirectAudioSinks(): void {
+    this.directAudioElements.forEach((elements) => {
+      elements.forEach((element) => {
+        void element.play().catch(() => {});
+      });
+    });
   }
 
   /**
@@ -151,18 +193,27 @@ export class AudioPipeline {
    * Clamped to prevent extreme amplification — the limiter catches any remaining peaks.
    */
   setParticipantVolume(participantId: string, level: number): void {
-    this.resumeAudioContext().catch(() => {});
     const clamped = Math.max(0, Math.min(level, 2.0));
     this.volumeLevels.set(participantId, clamped);
     const gains = this.volumeGains.get(participantId);
     if (gains) {
-      gains.forEach((gn) => {
+      gains.forEach((gn, trackName) => {
         gn.gain.setTargetAtTime(
-          clamped,
+          this.getTrackGain(participantId, trackName),
           this.volumeContext?.currentTime || 0,
           0.1,
         );
       });
+    }
+    const directElements = this.directAudioElements.get(participantId);
+    for (const trackName of [...(directElements?.keys() ?? [])]) {
+      const element = directElements?.get(trackName);
+      if (!element) continue;
+      if (this.getEffectiveDirectVolume(participantId, trackName) > 1) {
+        this.promoteDirectTrack(participantId, trackName);
+      } else {
+        element.volume = this.getDirectElementVolume(participantId, trackName);
+      }
     }
   }
 
@@ -174,8 +225,8 @@ export class AudioPipeline {
     trackName: string,
     level: number,
   ): void {
-    this.resumeAudioContext().catch(() => {});
     const clamped = Math.max(0, Math.min(level, 2.0));
+    this.trackVolumeLevels.set(`${participantId}::${trackName}`, clamped);
     const gains = this.volumeGains.get(participantId);
     const gn = gains?.get(trackName);
     if (gn) {
@@ -184,6 +235,14 @@ export class AudioPipeline {
         this.volumeContext?.currentTime || 0,
         0.1,
       );
+    }
+    const element = this.directAudioElements.get(participantId)?.get(trackName);
+    if (element) {
+      if (this.getEffectiveDirectVolume(participantId, trackName) > 1) {
+        this.promoteDirectTrack(participantId, trackName);
+      } else {
+        element.volume = this.getDirectElementVolume(participantId, trackName);
+      }
     }
   }
 
@@ -200,6 +259,14 @@ export class AudioPipeline {
 
   setParticipantPan(participantId: string, pan: number): void {
     const clamped = Math.max(-1, Math.min(pan, 1));
+    if (clamped !== 0) {
+      const directTrackNames = [
+        ...(this.directAudioElements.get(participantId)?.keys() ?? []),
+      ];
+      for (const trackName of directTrackNames) {
+        this.promoteDirectTrack(participantId, trackName);
+      }
+    }
     const panners = this.spatialPanners.get(participantId);
     if (!panners || !this.volumeContext) return;
     panners.forEach((node) => {
@@ -213,6 +280,12 @@ export class AudioPipeline {
 
   setTrackPan(participantId: string, trackName: string, pan: number): void {
     const clamped = Math.max(-1, Math.min(pan, 1));
+    if (
+      clamped !== 0 &&
+      this.directAudioElements.get(participantId)?.has(trackName)
+    ) {
+      this.promoteDirectTrack(participantId, trackName);
+    }
     const node = this.spatialPanners.get(participantId)?.get(trackName);
     if (!node || !this.volumeContext) return;
     node.pan.setTargetAtTime(
@@ -227,11 +300,132 @@ export class AudioPipeline {
     return this.volumeLevels.get(participantId) ?? 1.0;
   }
 
-  /**
-   * Applies AudioContext-based volume/gain control to an incoming track.
-   * Chain: Source → GainNode → Limiter → MasterGain → destination
-   * The limiter prevents clipping when multiple participants sum.
-   */
+  /** Attach an incoming remote audio track to the browser's direct media sink. */
+  attachRemoteAudioTrack(
+    participantId: string,
+    track: MediaStreamTrack,
+    trackName: string,
+  ): MediaStream {
+    if (track.kind !== "audio") return new MediaStream([track]);
+
+    this.removeTrackVolume(participantId, trackName);
+    const stream = new MediaStream([track]);
+    if (typeof document === "undefined") return stream;
+
+    const element = document.createElement("audio");
+    element.autoplay = true;
+    element.setAttribute("playsinline", "true");
+    element.preload = "auto";
+    element.srcObject = stream;
+    element.volume = this.getDirectElementVolume(participantId, trackName);
+    element.setAttribute("aria-hidden", "true");
+    element.style.display = "none";
+    document.body?.appendChild(element);
+
+    let participantElements = this.directAudioElements.get(participantId);
+    if (!participantElements) {
+      participantElements = new Map();
+      this.directAudioElements.set(participantId, participantElements);
+    }
+    participantElements.set(trackName, element);
+    if (typeof track.addEventListener === "function") {
+      track.addEventListener(
+        "ended",
+        () => {
+          if (
+            this.directAudioElements.get(participantId)?.get(trackName) ===
+            element
+          ) {
+            this.removeDirectAudioTrack(participantId, trackName);
+          }
+        },
+        { once: true },
+      );
+    }
+    if (this.getEffectiveDirectVolume(participantId, trackName) > 1) {
+      this.promoteDirectTrack(participantId, trackName);
+      return stream;
+    }
+    void this.applyDirectOutputDevice(element);
+    void element.play().catch(() => {});
+    this.callbacks.onDirectAudioAttached?.({ participantId, trackName });
+    audioLog.info("Remote audio direct sink attached", {
+      participantId,
+      trackName,
+      attachedAt: Date.now(),
+    });
+    return stream;
+  }
+
+  private getDirectElementVolume(
+    participantId: string,
+    trackName?: string,
+  ): number {
+    return Math.max(
+      0,
+      Math.min(this.getEffectiveDirectVolume(participantId, trackName), 1),
+    );
+  }
+
+  private getTrackGain(participantId: string, trackName: string): number {
+    return (
+      this.trackVolumeLevels.get(`${participantId}::${trackName}`) ??
+      this.getParticipantVolume(participantId)
+    );
+  }
+
+  private getEffectiveDirectVolume(
+    participantId: string,
+    trackName?: string,
+  ): number {
+    const gain = trackName
+      ? this.getTrackGain(participantId, trackName)
+      : this.getParticipantVolume(participantId);
+    return Math.max(0, gain * this.masterVolumeLevel);
+  }
+
+  private removeDirectAudioTrack(
+    participantId: string,
+    trackName: string,
+  ): void {
+    const elements = this.directAudioElements.get(participantId);
+    const element = elements?.get(trackName);
+    if (!element) return;
+    element.srcObject = null;
+    element.remove();
+    elements?.delete(trackName);
+    if (elements?.size === 0) this.directAudioElements.delete(participantId);
+  }
+
+  private promoteDirectTrack(participantId: string, trackName: string): void {
+    const element = this.directAudioElements.get(participantId)?.get(trackName);
+    const stream = element?.srcObject;
+    const track =
+      stream instanceof MediaStream ? stream.getAudioTracks()[0] : null;
+    if (!track) return;
+    this.removeDirectAudioTrack(participantId, trackName);
+    this.applyVolumeToTrack(participantId, track, trackName);
+  }
+
+  private async applyDirectOutputDevice(
+    element: HTMLAudioElement,
+  ): Promise<void> {
+    const sinkElement = element as HTMLAudioElement & {
+      setSinkId?: (id: string) => Promise<void>;
+    };
+    if (!sinkElement.setSinkId) return;
+    const sinkId =
+      this.outputDeviceId === "default" ||
+      this.outputDeviceId.startsWith("native:")
+        ? ""
+        : this.outputDeviceId;
+    try {
+      await sinkElement.setSinkId(sinkId);
+    } catch (err) {
+      audioLog.warn("Failed to set direct output device:", err);
+    }
+  }
+
   applyVolumeToTrack(
     participantId: string,
     track: MediaStreamTrack,
@@ -241,6 +435,8 @@ export class AudioPipeline {
       return new MediaStream([track]);
     }
 
+    this.removeDirectAudioTrack(participantId, trackName);
+
     if (!this.volumeContext) {
       // Reuse prewarmed context if available
       this.volumeContext = takePrewarmedAudioContext() ?? new AudioContext();
@@ -248,6 +444,7 @@ export class AudioPipeline {
 
     const ctx = this.volumeContext;
     ctx.resume().catch(() => {});
+    void this.setOutputDevice(this.outputDeviceId);
 
     // Create or reuse the shared limiter (one per AudioContext).
     // This is a DynamicsCompressorNode configured as a brick-wall limiter:
@@ -264,6 +461,7 @@ export class AudioPipeline {
       // Insert master gain between limiter and destination
       if (!this.masterGainNode) {
         this.masterGainNode = ctx.createGain();
+        this.masterGainNode.gain.value = this.masterVolumeLevel;
         this.masterGainNode.connect(ctx.destination);
       }
       lim.connect(this.masterGainNode);
@@ -301,10 +499,13 @@ export class AudioPipeline {
 
     const source = ctx.createMediaStreamSource(activatorStream);
     const gainNode = ctx.createGain();
+
+    if (!this.outputAnalyser) {
+      this.startFirstAudibleProbe(ctx, this.limiter!, this.masterGainNode!);
+    }
     const pannerNode = ctx.createStereoPanner();
 
-    const level = this.volumeLevels.get(participantId) ?? 1.0;
-    gainNode.gain.value = Math.max(0, Math.min(level, 2.0));
+    gainNode.gain.value = this.getTrackGain(participantId, trackName);
     source.connect(gainNode);
     gainNode.connect(pannerNode);
     pannerNode.connect(this.limiter);
@@ -365,6 +566,14 @@ export class AudioPipeline {
       );
       this.installContextStateListener();
     }
+
+    audioLog.info("Remote audio graph connected", {
+      participantId,
+      trackName,
+      contextState: ctx.state,
+      connectedAt: Date.now(),
+    });
+    this.callbacks.onAudioGraphConnected?.({ participantId, trackName });
 
     // Return the original stream; the AudioContext handles the audible output.
     return new MediaStream([track]);
@@ -470,14 +679,25 @@ export class AudioPipeline {
     if (activators) {
       activators.forEach((a) => {
         a.srcObject = null;
+        a.remove();
       });
       this.activatorElements.delete(participantId);
+    }
+    this.directAudioElements.get(participantId)?.forEach((element) => {
+      element.srcObject = null;
+      element.remove();
+    });
+    this.directAudioElements.delete(participantId);
+    for (const key of this.trackVolumeLevels.keys()) {
+      if (key.startsWith(`${participantId}::`))
+        this.trackVolumeLevels.delete(key);
     }
   }
 
   /** Clean up volume processing nodes for a single track of a participant. */
   removeTrackVolume(participantId: string, trackName: string): void {
     this.pendingTracks.delete(`${participantId}::${trackName}`);
+    this.removeDirectAudioTrack(participantId, trackName);
     const sources = this.volumeSources.get(participantId);
     if (sources) {
       const source = sources.get(trackName);
@@ -522,6 +742,22 @@ export class AudioPipeline {
    */
   setMasterVolume(level: number): void {
     const clamped = Math.max(0, Math.min(level, 2.0));
+    this.masterVolumeLevel = clamped;
+    for (const [participantId, elements] of this.directAudioElements) {
+      for (const trackName of [...elements.keys()]) {
+        const element = elements.get(trackName);
+        if (!element) continue;
+        if (this.getEffectiveDirectVolume(participantId, trackName) > 1) {
+          this.promoteDirectTrack(participantId, trackName);
+        } else {
+          element.volume = this.getDirectElementVolume(
+            participantId,
+            trackName,
+          );
+        }
+      }
+    }
+    if (!this.volumeContext && !this.masterGainNode) return;
     if (!this.volumeContext) {
       this.volumeContext = takePrewarmedAudioContext() ?? new AudioContext();
     }
@@ -547,16 +783,22 @@ export class AudioPipeline {
    * Falls back silently on browsers that don't support it.
    */
   async setOutputDevice(deviceId: string): Promise<void> {
-    if (!this.volumeContext) {
-      // Reuse prewarmed context (created during Accept/Call user gesture)
-      this.volumeContext = takePrewarmedAudioContext() ?? new AudioContext();
+    this.outputDeviceId = deviceId;
+    for (const elements of this.directAudioElements.values()) {
+      for (const element of elements.values()) {
+        await this.applyDirectOutputDevice(element);
+      }
     }
+
+    if (!this.volumeContext) return;
 
     // Ensure context is running (may still be suspended if created outside
     // a user gesture and the prewarmed context wasn't available)
     this.volumeContext.resume().catch(() => {});
 
-    const ctx = this.volumeContext as any;
+    const ctx = this.volumeContext as AudioContext & {
+      setSinkId?: (id: string) => Promise<void>;
+    };
     if (typeof ctx.setSinkId === "function") {
       try {
         const sinkId =
@@ -609,8 +851,144 @@ export class AudioPipeline {
     this.stereoPipelines.delete(stream);
   }
 
+  private startFirstAudibleProbe(
+    ctx: AudioContext,
+    preLimiter: DynamicsCompressorNode,
+    output: GainNode,
+  ): void {
+    if (this.outputAnalyser || this.callbacks.onFirstAudible === undefined) {
+      return;
+    }
+    if (typeof ctx.createAnalyser !== "function") {
+      audioLog.warn(
+        "First-audible probe unavailable: createAnalyser unsupported",
+      );
+      return;
+    }
+
+    const probeStartedAt = Date.now();
+    audioLog.info("First-audible probe starting", {
+      contextState: ctx.state,
+      masterGain: this.masterGainNode?.gain.value,
+      probeStartedAt,
+    });
+
+    try {
+      const analyser = ctx.createAnalyser();
+      const preLimiterAnalyser = ctx.createAnalyser();
+      analyser.fftSize = 256;
+      preLimiterAnalyser.fftSize = 256;
+      preLimiter.connect(preLimiterAnalyser);
+      const silentProbeSink = ctx.createGain();
+      silentProbeSink.gain.value = 0;
+      preLimiterAnalyser.connect(silentProbeSink);
+      silentProbeSink.connect(ctx.destination);
+      output.disconnect();
+      output.connect(analyser);
+      analyser.connect(ctx.destination);
+      this.preLimiterAnalyser = preLimiterAnalyser;
+      this.preLimiterAnalyserData = new Uint8Array(preLimiterAnalyser.fftSize);
+      this.outputAnalyser = analyser;
+      this.outputAnalyserData = new Uint8Array(analyser.fftSize);
+      this.firstAudibleAttempts = 0;
+      const sample = () => {
+        this.firstAudibleFrame = null;
+        this.firstAudibleAttempts += 1;
+        if (!this.outputAnalyser || !this.outputAnalyserData) return;
+        this.outputAnalyser.getByteTimeDomainData(
+          this.outputAnalyserData as Uint8Array<ArrayBuffer>,
+        );
+        if (this.preLimiterAnalyser && this.preLimiterAnalyserData) {
+          this.preLimiterAnalyser.getByteTimeDomainData(
+            this.preLimiterAnalyserData as Uint8Array<ArrayBuffer>,
+          );
+        }
+        let outputSum = 0;
+        let preLimiterSum = 0;
+        for (
+          let index = 0;
+          index < this.outputAnalyserData.length;
+          index += 1
+        ) {
+          const outputNormalized =
+            (this.outputAnalyserData[index]! - 128) / 128;
+          outputSum += outputNormalized * outputNormalized;
+          if (this.preLimiterAnalyserData) {
+            const preLimiterNormalized =
+              (this.preLimiterAnalyserData[index]! - 128) / 128;
+            preLimiterSum += preLimiterNormalized * preLimiterNormalized;
+          }
+        }
+        const rms = Math.sqrt(outputSum / this.outputAnalyserData.length);
+        const preLimiterRms = this.preLimiterAnalyserData
+          ? Math.sqrt(preLimiterSum / this.preLimiterAnalyserData.length)
+          : undefined;
+        if (
+          this.firstAudibleAttempts === 1 ||
+          this.firstAudibleAttempts % 30 === 0
+        ) {
+          this.callbacks.onProbeSample?.({
+            rms,
+            preLimiterRms,
+            contextState: ctx.state,
+            elapsedMs: Date.now() - probeStartedAt,
+          });
+        }
+        if (rms >= 0.003 && !this.firstAudibleReported) {
+          this.firstAudibleReported = true;
+          audioLog.info("First audible output detected", {
+            rms,
+            preLimiterRms,
+            contextState: ctx.state,
+            detectedAt: Date.now(),
+            masterGain: this.masterGainNode?.gain.value,
+          });
+          this.callbacks.onFirstAudible?.({ rms });
+          return;
+        }
+        if (!this.firstAudibleReported && ctx.state !== "closed") {
+          if (this.firstAudibleAttempts >= 300) {
+            audioLog.warn("First-audible probe timed out", {
+              contextState: ctx.state,
+              lastRms: rms,
+              masterGain: this.masterGainNode?.gain.value,
+            });
+            return;
+          }
+          this.firstAudibleFrame =
+            typeof requestAnimationFrame === "function"
+              ? requestAnimationFrame(sample)
+              : (setTimeout(sample, 16) as unknown as number);
+        }
+      };
+      sample();
+    } catch (error) {
+      audioLog.warn("Unable to start first-audible probe", error);
+    }
+  }
+
   /** Dispose all audio resources. */
   dispose(): void {
+    if (this.firstAudibleFrame !== null) {
+      if (typeof cancelAnimationFrame === "function") {
+        cancelAnimationFrame(this.firstAudibleFrame);
+      } else {
+        clearTimeout(this.firstAudibleFrame);
+      }
+      this.firstAudibleFrame = null;
+    }
+    if (this.preLimiterAnalyser) {
+      this.preLimiterAnalyser.disconnect();
+      this.preLimiterAnalyser = null;
+      this.preLimiterAnalyserData = null;
+    }
+    if (this.outputAnalyser) {
+      this.outputAnalyser.disconnect();
+      this.outputAnalyser = null;
+      this.outputAnalyserData = null;
+    }
+    this.firstAudibleReported = false;
+    this.firstAudibleAttempts = 0;
     this.stereoPipelines.forEach(({ source, destination }) => {
       source.disconnect();
       destination.disconnect();
@@ -627,12 +1005,21 @@ export class AudioPipeline {
     );
     this.volumeSources.clear();
     this.volumeLevels.clear();
+    this.trackVolumeLevels.clear();
     this.activatorElements.forEach((acts) =>
       acts.forEach((a) => {
         a.srcObject = null;
+        a.remove();
       }),
     );
     this.activatorElements.clear();
+    this.directAudioElements.forEach((elements) =>
+      elements.forEach((element) => {
+        element.srcObject = null;
+        element.remove();
+      }),
+    );
+    this.directAudioElements.clear();
     this.pendingTracks.clear();
     this.stateChangeInstalled = false;
     if (this.limiter) {

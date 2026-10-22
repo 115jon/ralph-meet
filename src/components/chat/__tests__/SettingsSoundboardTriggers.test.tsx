@@ -52,6 +52,8 @@ const servers = [
 
 describe("SettingsSoundboardTriggers", () => {
   beforeEach(() => {
+    HTMLElement.prototype.scrollIntoView = vi.fn();
+    HTMLElement.prototype.hasPointerCapture = vi.fn(() => false);
     useSoundSettingsStore.setState({
       currentUser: "user-1",
       userSettings: {},
@@ -129,7 +131,7 @@ describe("SettingsSoundboardTriggers", () => {
     render(<SettingsSoundboardTriggers userId="user-1" servers={servers} />);
 
     await user.click(
-      screen.getByRole("button", { name: /soundboard server scope/i }),
+      screen.getByRole("combobox", { name: /soundboard server scope/i }),
     );
     expect(screen.getByRole("option", { name: "Alpha" })).toBeVisible();
     await user.click(screen.getByRole("option", { name: "Alpha" }));

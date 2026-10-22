@@ -43,6 +43,22 @@ vi.mock("@/components/chat/VideoAttachment", async () => {
 
 import { LinkEmbed } from "../LinkEmbed";
 
+function makeUnavailableEmbed(): EmbedInfo {
+  return {
+    id: "embed_unavailable_dom",
+    url: "https://x.com/example/status/deleted",
+    type: "rich",
+    unavailable: true,
+    provider: { name: "X", url: "https://x.com" },
+    footer: { text: "X" },
+    author: {
+      name: "Example Author (@example)",
+      url: "https://twitter.com/example",
+    },
+    fields: [],
+  };
+}
+
 function makeQuotedEmbed(rawDescription: string): EmbedInfo {
   return {
     id: "embed_quote_long_text_dom",
@@ -217,6 +233,21 @@ describe("LinkEmbed DOM rendering", () => {
 
     expect(
       screen.queryByRole("button", { name: "Expand post text" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("renders a tombstone instead of broken media for unavailable social posts", () => {
+    render(<LinkEmbed embed={makeUnavailableEmbed()} />);
+
+    expect(
+      screen.getByText("This post is no longer available"),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "View original" })).toHaveAttribute(
+      "href",
+      "https://x.com/example/status/deleted",
+    );
+    expect(
+      screen.queryByRole("img", { name: /media/i }),
     ).not.toBeInTheDocument();
   });
 
@@ -1378,5 +1409,222 @@ describe("LinkEmbed DOM rendering", () => {
     ) as HTMLVideoElement | null;
     expect(video).not.toBeNull();
     expect(video?.getAttribute("poster")).toContain("full-frame-cover.webp");
+  });
+
+  it("refetches a complete Instagram reel on view and replaces stale video", async () => {
+    vi.stubGlobal(
+      "IntersectionObserver",
+      class {
+        private readonly callback: IntersectionObserverCallback;
+
+        constructor(callback: IntersectionObserverCallback) {
+          this.callback = callback;
+        }
+
+        observe = () => {
+          this.callback(
+            [{ isIntersecting: true } as IntersectionObserverEntry],
+            this as unknown as IntersectionObserver,
+          );
+        };
+
+        disconnect = vi.fn();
+        unobserve = vi.fn();
+        takeRecords = vi.fn(() => []);
+        root = null;
+        rootMargin = "";
+        thresholds = [];
+      } as unknown as typeof IntersectionObserver,
+    );
+
+    const freshVideoUrl =
+      "https://scontent-ord5-1.cdninstagram.com/fresh-reel.mp4?sig=2";
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request) => {
+        const url = input.toString();
+        if (!url.includes("/api/instagram-video?videoUrl=")) {
+          return new Response("not found", { status: 404 });
+        }
+
+        return Response.json({
+          videoUrl: freshVideoUrl,
+          thumbnailUrl:
+            "https://scontent-ord5-1.cdninstagram.com/fresh-thumb.jpg",
+          title: "reel",
+          durationSeconds: 12,
+          media: [
+            {
+              type: "video",
+              url: freshVideoUrl,
+              thumbnailUrl:
+                "https://scontent-ord5-1.cdninstagram.com/fresh-thumb.jpg",
+              width: 720,
+              height: 1280,
+              contentType: "video/mp4",
+            },
+          ],
+          authorAvatarUrl:
+            "https://scontent-ord5-1.cdninstagram.com/fresh-avatar.jpg",
+        });
+      }) as unknown as typeof fetch,
+    );
+
+    render(
+      <LinkEmbed
+        embed={{
+          id: "embed_instagram_complete_reel",
+          url: "https://www.instagram.com/reel/DZK623pN9P2/",
+          type: "rich",
+          provider: { name: "Instagram", url: "https://www.instagram.com" },
+          author: {
+            name: "_ind1ka",
+            url: "https://www.instagram.com/_ind1ka/",
+            iconURL:
+              "https://scontent-ord5-1.cdninstagram.com/stale-avatar.jpg",
+            isVerified: true,
+          },
+          rawDescription: "reel",
+          timestamp: "2026-06-08T17:48:57.000Z",
+          metrics: { likes: 12, comments: 3, views: 400 },
+          thumbnail: {
+            url: "https://scontent-ord5-1.cdninstagram.com/stale-thumb.jpg",
+            width: 720,
+            height: 1280,
+          },
+          video: {
+            url: "https://scontent-ord5-1.cdninstagram.com/stale-reel.mp4?sig=1",
+            width: 720,
+            height: 1280,
+            kind: "direct",
+            contentType: "video/mp4",
+          },
+          media: [
+            {
+              type: "video",
+              url: "https://scontent-ord5-1.cdninstagram.com/stale-reel.mp4?sig=1",
+              width: 720,
+              height: 1280,
+              contentType: "video/mp4",
+            },
+          ],
+          footer: { text: "Instagram" },
+          fields: [],
+        }}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(videoAttachmentMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          src: expect.stringContaining("fresh-reel.mp4"),
+        }),
+      );
+    });
+  });
+
+  it("does not replace a stored Instagram reel with an oembed preview image", async () => {
+    vi.stubGlobal(
+      "IntersectionObserver",
+      class {
+        private readonly callback: IntersectionObserverCallback;
+
+        constructor(callback: IntersectionObserverCallback) {
+          this.callback = callback;
+        }
+
+        observe = () => {
+          this.callback(
+            [{ isIntersecting: true } as IntersectionObserverEntry],
+            this as unknown as IntersectionObserver,
+          );
+        };
+
+        disconnect = vi.fn();
+        unobserve = vi.fn();
+        takeRecords = vi.fn(() => []);
+        root = null;
+        rootMargin = "";
+        thresholds = [];
+      } as unknown as typeof IntersectionObserver,
+    );
+
+    const fetchMock = vi.fn(async (input: string | URL | Request) => {
+      const url = input.toString();
+      if (!url.includes("/api/instagram-video?videoUrl=")) {
+        return new Response("not found", { status: 404 });
+      }
+
+      return Response.json({
+        videoUrl: null,
+        thumbnailUrl:
+          "https://scontent-ord5-2.cdninstagram.com/preview.jpg?stp=cmp1_dst-jpg_e35_s640x640_tt6",
+        title: "#wasian #prom",
+        durationSeconds: null,
+        media: [
+          {
+            type: "image",
+            url: "https://scontent-ord5-2.cdninstagram.com/preview.jpg?stp=cmp1_dst-jpg_e35_s640x640_tt6",
+            altText: "#wasian #prom",
+          },
+        ],
+        likeCount: 11000,
+        commentCount: 63,
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock as unknown as typeof fetch);
+
+    const { container } = render(
+      <LinkEmbed
+        embed={{
+          id: "embed_instagram_stored_reel",
+          url: "https://www.instagram.com/reel/DZK623pN9P2/",
+          type: "rich",
+          provider: { name: "Instagram", url: "https://www.instagram.com" },
+          author: {
+            name: "_ind1ka",
+            url: "https://www.instagram.com/_ind1ka/",
+            iconURL: "https://scontent-ord5-1.cdninstagram.com/avatar.jpg",
+            isVerified: true,
+          },
+          rawDescription: "#wasian #prom",
+          timestamp: "2026-06-04T05:00:00.000Z",
+          metrics: { likes: 11000, comments: 63, views: 132000 },
+          video: {
+            url: "https://scontent-ord5-1.cdninstagram.com/stored-reel.mp4?sig=1",
+            width: 720,
+            height: 1280,
+            kind: "direct",
+            contentType: "video/mp4",
+          },
+          media: [
+            {
+              type: "video",
+              url: "https://scontent-ord5-1.cdninstagram.com/stored-reel.mp4?sig=1",
+              width: 720,
+              height: 1280,
+              contentType: "video/mp4",
+            },
+          ],
+          footer: { text: "Instagram" },
+          fields: [],
+        }}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalled();
+    });
+    await waitFor(() => {
+      expect(container.querySelector("video.rm-custom-video")).not.toBeNull();
+    });
+    expect(videoAttachmentMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        src: expect.stringContaining("stored-reel.mp4"),
+      }),
+    );
+    expect(
+      screen.queryByRole("button", { name: /Open media/ }),
+    ).not.toBeInTheDocument();
   });
 });

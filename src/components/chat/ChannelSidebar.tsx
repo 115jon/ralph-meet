@@ -57,6 +57,7 @@ import {
   Gem,
   GripVertical,
   Hash,
+  HeadphoneOff,
   LayoutGrid,
   Link,
   Loader2,
@@ -97,10 +98,6 @@ import VoiceChannelMediaStatusModal from "./VoiceChannelMediaStatusModal";
 import VoiceChannelTextStatusModal from "./VoiceChannelTextStatusModal";
 import InlineEmojiText from "./InlineEmojiText";
 import { ListenTogetherSidebarStatus } from "./ListenTogetherSidebarStatus";
-import {
-  useDelayUnmount,
-  useDelayedUnmountValue,
-} from "@/hooks/useDelayUnmount";
 
 const StreamContextMenu = lazy(() =>
   import("../StreamContextMenu").then((mod) => ({
@@ -411,7 +408,6 @@ function SortableChannelItem({
     (channel.permissions != null &&
       hasPermission(channel.permissions, PERMISSIONS.MANAGE_CHANNELS));
   const [isVoiceTextStatusOpen, setIsVoiceTextStatusOpen] = useState(false);
-  const shouldRenderTextStatus = useDelayUnmount(isVoiceTextStatusOpen, 200);
   const [isVoiceMediaStatusOpen, setIsVoiceMediaStatusOpen] = useState(false);
   const [isRemovingVoiceMedia, setIsRemovingVoiceMedia] = useState(false);
   const {
@@ -624,7 +620,9 @@ function SortableChannelItem({
                         : "text-rm-text-muted",
                     )}
                   >
-                    {textStatus || "Set a channel status"}
+                    <InlineEmojiText
+                      text={textStatus || "Set a channel status"}
+                    />
                   </span>
                   <Edit2 className="h-3 w-3 shrink-0 text-rm-text-muted transition-colors group-hover/text:text-rm-text" />
                 </button>
@@ -690,7 +688,7 @@ function SortableChannelItem({
           {textStatus && (
             <div className="mb-1 ml-7 mr-2">
               <span className="inline-block max-w-full truncate px-1 py-0.5 text-[12px] font-medium leading-4 text-rm-text-secondary">
-                {textStatus}
+                <InlineEmojiText text={textStatus} />
               </span>
             </div>
           )}
@@ -741,22 +739,21 @@ function SortableChannelItem({
         </div>
       )}
 
-      {shouldRenderTextStatus ? (
+      <>
         <VoiceChannelTextStatusModal
+          open={isVoiceTextStatusOpen}
           channel={channel}
           voiceSessionId={localVoiceSessionId}
           onClose={() => setIsVoiceTextStatusOpen(false)}
-          isClosing={!isVoiceTextStatusOpen}
         />
-      ) : null}
 
-      {isVoiceMediaStatusOpen ? (
         <VoiceChannelMediaStatusModal
+          open={isVoiceMediaStatusOpen}
           channel={channel}
           voiceSessionId={localVoiceSessionId}
           onClose={() => setIsVoiceMediaStatusOpen(false)}
         />
-      ) : null}
+      </>
     </div>
   );
 }
@@ -907,20 +904,40 @@ export default function ChannelSidebar({
   const liveInviteChannel = inviteChannel
     ? (channels.find((channel) => channel.id === inviteChannel) ?? null)
     : null;
-  const shouldRenderCreateCategory = useDelayUnmount(showCreateCategory, 200);
-  const shouldRenderCreateChannel = useDelayUnmount(!!showCreateChannel, 200);
-  const {
-    shouldRender: shouldRenderChannelSettings,
-    value: renderedChannelSettings,
-  } = useDelayedUnmountValue(
-    liveChannelSettings,
-    200,
-    showChannelSettings != null,
-  );
-  const {
-    shouldRender: shouldRenderInviteChannel,
-    value: renderedInviteChannel,
-  } = useDelayedUnmountValue(liveInviteChannel, 200, inviteChannel != null);
+  const [retainedChannelSettings, setRetainedChannelSettings] =
+    useState<Channel | null>(liveChannelSettings);
+  const [retainedInviteChannel, setRetainedInviteChannel] =
+    useState<Channel | null>(liveInviteChannel);
+  const [retainedCreateChannel, setRetainedCreateChannel] = useState<{
+    categoryId: string | null;
+  } | null>(showCreateChannel);
+  useEffect(() => {
+    if (liveChannelSettings) {
+      // Retain the controlled dialog payload through Radix's exit state.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setRetainedChannelSettings(liveChannelSettings);
+    }
+  }, [liveChannelSettings]);
+  useEffect(() => {
+    if (liveInviteChannel) {
+      // Retain the controlled dialog payload through Radix's exit state.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setRetainedInviteChannel(liveInviteChannel);
+    }
+  }, [liveInviteChannel]);
+  useEffect(() => {
+    if (showCreateChannel) {
+      // Retain the category payload while the controlled dialog exits.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setRetainedCreateChannel(showCreateChannel);
+    }
+  }, [showCreateChannel]);
+  const shouldRenderCreateCategory = showCreateCategory;
+  const shouldRenderCreateChannel = !!showCreateChannel;
+  const shouldRenderChannelSettings = showChannelSettings != null;
+  const renderedChannelSettings = retainedChannelSettings;
+  const shouldRenderInviteChannel = inviteChannel != null;
+  const renderedInviteChannel = retainedInviteChannel;
   const { menu, openMenu, closeMenu } = useContextMenu();
   const voiceSettings = useVoiceSettingsStore((s) => s.getSettings(user?.id));
   const setIsMuted = useVoiceSettingsStore((s) => s.setIsMuted);
@@ -1033,7 +1050,7 @@ export default function ChannelSidebar({
   return (
     <TooltipProvider delayDuration={0}>
       <div
-        className="flex h-full flex-col bg-rm-bg-secondary select-none border-x border-rm-border rounded-tl-lg overflow-hidden"
+        className="flex h-full flex-col bg-rm-bg-secondary select-none border-x border-rm-border overflow-hidden"
         onContextMenu={handleSidebarContextMenu}
       >
         {/* Server Header */}
@@ -1048,7 +1065,7 @@ export default function ChannelSidebar({
               <h1 className="font-black text-[20px] tracking-wide leading-tight uppercase truncate max-w-full drop-shadow-md">
                 {serverName.split(" ").map((word, i) => (
                   <span key={i} className="block">
-                    {word}
+                    <InlineEmojiText text={word} />
                   </span>
                 ))}
               </h1>
@@ -1075,7 +1092,10 @@ export default function ChannelSidebar({
             onClick={handleServerHeaderClick}
           >
             <div className="flex items-center min-w-0">
-              <h1 className="truncate text-[15px]">{serverName}</h1>
+              <InlineEmojiText
+                text={serverName}
+                className="truncate text-[15px]"
+              />
               <ChevronDown className="ml-1 h-3.5 w-3.5 opacity-90 dark:opacity-60 shrink-0 text-rm-text-primary" />
             </div>
           </button>
@@ -1122,27 +1142,28 @@ export default function ChannelSidebar({
         </div>
 
         {/* Modals & Popovers */}
-        {shouldRenderCreateCategory && serverId && (
+        {serverId && (
           <CreateCategoryModal
+            open={shouldRenderCreateCategory}
             serverId={serverId}
             onClose={() =>
               uiDispatch({ type: "SET_CREATE_CATEGORY", value: false })
             }
-            isClosing={!showCreateCategory}
           />
         )}
-        {shouldRenderCreateChannel && serverId && (
+        {serverId && (
           <CreateChannelModal
+            open={shouldRenderCreateChannel}
             serverId={serverId}
-            defaultCategoryId={showCreateChannel?.categoryId}
+            defaultCategoryId={retainedCreateChannel?.categoryId}
             onClose={() =>
               uiDispatch({ type: "SET_CREATE_CHANNEL", value: null })
             }
-            isClosing={!showCreateChannel}
           />
         )}
-        {shouldRenderChannelSettings && serverId && renderedChannelSettings && (
+        {serverId && renderedChannelSettings && (
           <ChannelSettingsModal
+            open={shouldRenderChannelSettings}
             serverId={serverId}
             channel={renderedChannelSettings}
             onUpdated={(updates) =>
@@ -1154,18 +1175,17 @@ export default function ChannelSidebar({
             onClose={() =>
               uiDispatch({ type: "SET_CHANNEL_SETTINGS", value: null })
             }
-            isClosing={!showChannelSettings}
           />
         )}
-        {shouldRenderInviteChannel && serverId && renderedInviteChannel && (
+        {serverId && renderedInviteChannel && (
           <ChannelInviteModal
+            open={shouldRenderInviteChannel}
             serverId={serverId}
             serverName={serverName}
             channel={renderedInviteChannel}
             onClose={() =>
               uiDispatch({ type: "SET_INVITE_CHANNEL", value: null })
             }
-            isClosing={!inviteChannel}
           />
         )}
         {popoverUser && popoverAnchor && (
@@ -1597,6 +1617,10 @@ function VoiceChannelMemberRow({
   const isReconnecting =
     isVoiceMemberReconnecting(member) ||
     (isCurrentUser && !isCurrentClientVoiceConnected);
+  const isMutedByCurrentUser = useVoiceSettingsStore((state) => {
+    const settings = state.getSettings();
+    return settings.peerSettings[member.clerk_user_id]?.muted ?? false;
+  });
   const shouldShowStreamState = shouldShowVoiceMemberStreamState(member, {
     isCurrentUser,
     isCurrentClientVoiceConnected,
@@ -1774,7 +1798,52 @@ function VoiceChannelMemberRow({
           <div className="flex items-center gap-1 opacity-60">
             {member.self_video && <Shield className="h-3.5 w-3.5" />}
             {member.self_mute && (
-              <MicOff className="h-3.5 w-3.5 text-rm-danger" />
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span aria-label="Self-muted">
+                    <MicOff className="h-3.5 w-3.5 text-rm-danger" />
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent
+                  side="top"
+                  sideOffset={6}
+                  className={CHANNEL_TOOLTIP_CONTENT_CLASS}
+                >
+                  Self-muted
+                </TooltipContent>
+              </Tooltip>
+            )}
+            {member.self_deaf && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span aria-label="Self-deafened">
+                    <HeadphoneOff className="h-3.5 w-3.5 text-rm-danger" />
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent
+                  side="top"
+                  sideOffset={6}
+                  className={CHANNEL_TOOLTIP_CONTENT_CLASS}
+                >
+                  Self-deafened
+                </TooltipContent>
+              </Tooltip>
+            )}
+            {isMutedByCurrentUser && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span aria-label="Muted by you">
+                    <VolumeX className="h-3.5 w-3.5 text-rm-danger" />
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent
+                  side="top"
+                  sideOffset={6}
+                  className={CHANNEL_TOOLTIP_CONTENT_CLASS}
+                >
+                  Muted by you
+                </TooltipContent>
+              </Tooltip>
             )}
           </div>
         </div>
@@ -1782,7 +1851,7 @@ function VoiceChannelMemberRow({
 
       {shouldShowStreamState && streamPreviewPosition && (
         <div
-          className="fixed z-[140]"
+          className="fixed z-40"
           style={{
             left: streamPreviewPosition.left,
             top: streamPreviewPosition.top,
@@ -1900,7 +1969,7 @@ function ChannelCategoryGroup({
             )}
           />
           <span className="truncate text-[12px] font-bold tracking-wide uppercase leading-none pt-0.5">
-            {group.name}
+            <InlineEmojiText text={group.name} />
           </span>
         </button>
         {canManageChannels && (

@@ -15,7 +15,9 @@ export class MockRTCPeerConnection {
       direction: init?.direction || "sendrecv",
       sender: {
         track: typeof trackOrKind !== "string" ? trackOrKind : null,
-        replaceTrack: vi.fn(),
+        replaceTrack: vi.fn(async (track) => {
+          if (track) transceiver.sender.track = track;
+        }),
         getParameters: vi.fn(() => ({ encodings: init?.sendEncodings || [] })),
         setParameters: vi.fn().mockResolvedValue(undefined),
       },
@@ -28,9 +30,6 @@ export class MockRTCPeerConnection {
       setCodecPreferences: vi.fn(),
       stop: vi.fn(),
     };
-
-    // Add a dummy catch to the sender so replacing track mock rejection gets caught
-    transceiver.sender.replaceTrack.mockReturnValue({ catch: vi.fn() } as any);
 
     this.transceivers.push(transceiver);
     return transceiver;

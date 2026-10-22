@@ -2,13 +2,12 @@ import { clog } from "@/lib/console-logger";
 
 const vadLog = clog("VAD");
 // ============================================================================
-// VoiceActivityDetector — VAD analysis + noise gate for push transceivers
+// VoiceActivityDetector — RMS analysis + source gate controller
 // ============================================================================
 
 import { SpeakingFlags } from "../types";
 
 const DEBUG = typeof import.meta !== "undefined" && import.meta.env?.DEV;
-
 export function getVoiceActivityThreshold(
   autoSensitivity: boolean,
   sensitivity: number,
@@ -16,17 +15,58 @@ export function getVoiceActivityThreshold(
   if (autoSensitivity) return 3;
 
   const threshold = Math.pow(10, sensitivity / 20) * 100;
-  return Math.max(0.1, Math.min(50, threshold));
+  return Math.max(Number.EPSILON, Math.min(100, threshold));
+}
+
+/** Map the VAD RMS scale back to the manual sensitivity slider position. */
+export function getVoiceActivityLevelPercent(rms: number): number {
+  if (rms <= 0) return 0;
+  const decibels = 20 * Math.log10(rms / 100);
+  return Math.max(0, Math.min(100, decibels + 100));
+}
+
+/** Calculate RMS from Web Audio time-domain samples in the VAD's 0..100 scale. */
+export function calculateTimeDomainRms(
+  data: Float32Array | Uint8Array,
+): number {
+  if (data.length === 0) return 0;
+
+  if (data instanceof Float32Array) {
+    let mean = 0;
+    for (const sample of data) mean += sample;
+    mean /= data.length;
+
+    let sum = 0;
+    for (const sample of data) {
+      const centered = sample - mean;
+      sum += centered * centered;
+    }
+    return Math.sqrt(sum / data.length) * 100;
+  }
+
+  let sum = 0;
+  for (const sample of data) {
+    const normalized = (sample - 128) / 128;
+    sum += normalized * normalized;
+  }
+  return Math.sqrt(sum / data.length) * 100;
+}
+
+export interface VADGateController {
+  setGated(gated: boolean): void;
+  resume?(): void;
 }
 
 /** Callbacks from the VAD to the owning SFUClient */
 export interface VADCallbacks {
-  /** Emit speaking / vad-speaking events */
+  /** Emit speaking / voice-activity events */
   onSpeakingChange(isSpeaking: boolean, speakingFlags: number): void;
   /** Send speaking state over the voice WebSocket */
   sendSpeaking(flags: number): void;
-  /** Get the push audio transceiver for noise gating */
-  getAudioTransceiver(): RTCRtpTransceiver | undefined;
+  /** Retained for callers that also inspect the push transceiver. */
+  getAudioTransceiver?(): RTCRtpTransceiver | undefined;
+  /** Optional initial source gate. Replacements use setGateController(). */
+  getAudioGate?(): VADGateController | null;
   /** Get the current participant ID (null if not yet joined) */
   getParticipantId(): string | null;
   /** Fired when RMS stays exactly 0 for 5 seconds */
@@ -49,11 +89,12 @@ export class VoiceActivityDetector {
   private silenceStart: number = 0;
   private threshold = getVoiceActivityThreshold(true, -50);
   private silenceDelay: number = 300; // ms of silence before "stopped speaking"
-  private gateEnabled: boolean = false;
+  private gateEnabled: boolean = true;
   private isGated: boolean = false; // tracks whether gate is currently applied
+  private gateController: VADGateController | null = null;
+  private microphoneEnabled = true;
   private contextResumed: boolean = false; // avoid spamming resume()
   private lastRms: number = 0; // last computed RMS for live UI feedback
-  private gracePeriodEnd: number = 0; // Don't gate before this timestamp
   private pureSilenceStart: number = 0; // Timestamp when RMS hit exactly 0
   private isStalled: boolean = false; // True if RMS is exactly 0 for > 5s
 
@@ -61,19 +102,28 @@ export class VoiceActivityDetector {
 
   constructor(callbacks: VADCallbacks) {
     this.callbacks = callbacks;
+    this.gateController = callbacks.getAudioGate?.() ?? null;
+  }
+
+  /** Bind VAD gating to the currently published source gate. */
+  setGateController(controller: VADGateController | null): void {
+    this.gateController = controller;
+    const desiredGated = this.getDesiredGateState();
+    this.isGated = desiredGated;
+    if (controller) controller.setGated(desiredGated);
   }
 
   private vadTrack: MediaStreamTrack | null = null;
 
   /**
-   * Start VAD on a local audio stream.
+   * Start RMS-based voice activity monitoring on a local audio stream.
    */
-  start(stream: MediaStream): void {
+  start(stream: MediaStream): boolean {
     this.stop();
     const generation = ++this.lifecycleGeneration;
 
     const audioTrack = stream.getAudioTracks()[0];
-    if (!audioTrack) return;
+    if (!audioTrack) return false;
 
     try {
       const context = new AudioContext();
@@ -110,11 +160,14 @@ export class VoiceActivityDetector {
           )
             return;
           this.contextResumed = true;
+          if (this.gateEnabled && !this.microphoneSpeaking) {
+            this.applyGate(true);
+          }
         },
         () => {},
       );
 
-      const dataArray = new Uint8Array(this.analyser.frequencyBinCount);
+      const dataArray = new Float32Array(this.analyser.frequencyBinCount);
 
       // Listen for context state changes so we can apply the pending gate
       // when the context transitions to 'running' (user gesture on Firefox).
@@ -166,14 +219,15 @@ export class VoiceActivityDetector {
           this.contextResumed = true;
         }
 
-        this.analyser.getByteTimeDomainData(dataArray);
-
-        let sum = 0;
-        for (let i = 0; i < dataArray.length; i++) {
-          const val = (dataArray[i] - 128) / 128.0;
-          sum += val * val;
+        let rms: number;
+        if (typeof this.analyser.getFloatTimeDomainData === "function") {
+          this.analyser.getFloatTimeDomainData(dataArray);
+          rms = calculateTimeDomainRms(dataArray);
+        } else {
+          const byteData = new Uint8Array(dataArray.length);
+          this.analyser.getByteTimeDomainData(byteData);
+          rms = calculateTimeDomainRms(byteData);
         }
-        const rms = Math.sqrt(sum / dataArray.length) * 100;
         this.lastRms = rms;
         const now = Date.now();
 
@@ -208,6 +262,13 @@ export class VoiceActivityDetector {
           }
         } else {
           // Silence
+          if (
+            !this.microphoneSpeaking &&
+            this.gateEnabled &&
+            this.contextResumed
+          ) {
+            this.applyGate(true);
+          }
           if (this.microphoneSpeaking) {
             if (this.silenceStart === 0) {
               this.silenceStart = now;
@@ -223,13 +284,16 @@ export class VoiceActivityDetector {
       }, 50);
 
       if (DEBUG) vadLog.info("Started voice activity detection");
+      return true;
     } catch (err) {
+      this.stop();
       vadLog.error("Failed to start:", err);
+      return false;
     }
   }
 
   /** Reconcile speaking signaling after a participant ID becomes available. */
-  refreshSpeakingState(): void {
+  refreshSpeakingState(force = false): void {
     const flags =
       (this.microphoneSpeaking
         ? SpeakingFlags.MICROPHONE
@@ -247,6 +311,7 @@ export class VoiceActivityDetector {
     }
 
     const signalingChanged =
+      force ||
       this.lastSentParticipantId !== participantId ||
       this.lastSentFlags !== flags;
     if (
@@ -282,11 +347,14 @@ export class VoiceActivityDetector {
    * tracks after a period with no received media packets.
    */
   onTransceiverReady(): void {
-    this.isGated = false;
     // Only gate immediately if the VAD AudioContext is running — otherwise
     // we can't detect speech and the gate would stay ON permanently on
     // Firefox autoJoin (suspended context, no user gesture).
-    if (this.gateEnabled && !this.microphoneSpeaking && this.contextResumed) {
+    if (
+      this.gateEnabled &&
+      (!this.microphoneEnabled || !this.microphoneSpeaking) &&
+      this.contextResumed
+    ) {
       if (DEBUG) vadLog.info("Transceiver ready — applying initial gate");
       this.applyGate(true);
     }
@@ -297,6 +365,10 @@ export class VoiceActivityDetector {
    */
   stop(): void {
     this.lifecycleGeneration += 1;
+    if (this.gateEnabled) {
+      const desiredGated = !this.microphoneEnabled;
+      this.applyGate(desiredGated);
+    }
     if (this.timer) {
       clearInterval(this.timer);
       this.timer = null;
@@ -329,17 +401,13 @@ export class VoiceActivityDetector {
       this.callbacks.onAudioStalled?.(false);
     }
 
-    // Explicitly apply the mute gate to the tracked clone so the
-    // SFU actually receives DTX silence when the user hits "Mute"
-    this.applyGate(true);
-
     this.microphoneSpeaking = false;
     this.silenceStart = 0;
     this.refreshSpeakingState();
   }
 
   /**
-   * Update VAD threshold dynamically.
+   * Update the RMS threshold dynamically.
    */
   setThreshold(threshold: number): void {
     this.threshold = threshold;
@@ -350,6 +418,7 @@ export class VoiceActivityDetector {
    * Resume the VAD's AudioContext after a user gesture.
    */
   resumeContext(): void {
+    this.gateController?.resume?.();
     const context = this.audioContext;
     const generation = this.lifecycleGeneration;
     if (context && context.state === "suspended") {
@@ -369,8 +438,8 @@ export class VoiceActivityDetector {
   }
 
   /**
-   * Enable noise gate — when active, audio below the VAD threshold is muted
-   * on the push transceiver so others don't hear background noise.
+   * Enable noise gate — when active, audio below the RMS threshold is muted
+   * in the source gate so others don't hear background noise.
    *
    * IMPORTANT: We only activate the gate immediately if the VAD AudioContext
    * is confirmed running. On Firefox autoJoin (no user gesture), the context
@@ -387,7 +456,7 @@ export class VoiceActivityDetector {
   }
 
   /**
-   * Disable noise gate — all audio passes through regardless of VAD state.
+   * Disable noise gate — all source audio passes through regardless of RMS state.
    */
   disableNoiseGate(): void {
     this.gateEnabled = false;
@@ -395,23 +464,28 @@ export class VoiceActivityDetector {
     if (DEBUG) vadLog.info("Noise gate disabled");
   }
 
+  /** Reapply the current gate to a newly replaced published source. */
+  reapplyGate(): void {
+    if (this.gateEnabled) this.applyGate(this.getDesiredGateState());
+  }
+
+  /** Keep source PCM gating consistent with the user's microphone mute. */
+  setMicrophoneEnabled(enabled: boolean): void {
+    this.microphoneEnabled = enabled;
+    if (!enabled) this.microphoneSpeaking = false;
+    if (this.gateEnabled) this.applyGate(this.getDesiredGateState());
+  }
+
+  private getDesiredGateState(): boolean {
+    if (!this.microphoneEnabled) return true;
+    if (!this.contextResumed) return false;
+    return this.isGated;
+  }
+
   private applyGate(gated: boolean): void {
     if (this.isGated === gated) return;
-
-    const transceiver = this.callbacks.getAudioTransceiver();
-    if (!transceiver) {
-      if (DEBUG)
-        vadLog.info(
-          `Gate deferred: no transceiver (pid=${this.callbacks.getParticipantId()})`,
-        );
-      return;
-    }
-
-    // Do not set RTCRtpEncodingParameters.active=false here. That stops RTP
-    // entirely on Chromium, which can make Cloudflare Realtime consider a live
-    // audio track inactive and garbage-collect it. VAD now drives speaking state
-    // only; user mute still uses MediaStreamTrack.enabled.
     this.isGated = gated;
+    this.gateController?.setGated(gated);
     if (DEBUG)
       vadLog.info(
         `Audio gate ${gated ? "ON ■ (silence)" : "OFF ▶ (speaking)"}`,

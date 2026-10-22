@@ -180,6 +180,7 @@ CREATE TABLE IF NOT EXISTS read_states (
 CREATE TABLE IF NOT EXISTS attachments (
     id TEXT PRIMARY KEY,
     message_id TEXT REFERENCES messages(id) ON DELETE CASCADE,
+    channel_id TEXT REFERENCES channels(id) ON DELETE CASCADE,
     soundboard_server_id TEXT REFERENCES servers(id) ON DELETE CASCADE,
     sound_name TEXT,
     sound_emoji TEXT,

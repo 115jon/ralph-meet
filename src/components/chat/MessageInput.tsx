@@ -3,7 +3,6 @@ import type { Message } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import AttachmentList from "./AttachmentList";
 import { InputMentionOverlay } from "./InputMentionOverlay";
-import { useDelayUnmount } from "@/hooks/useDelayUnmount";
 import { MessageInputPlaceholder } from "./MessageInputPlaceholder";
 
 import {
@@ -82,7 +81,7 @@ export default function MessageInput({
   } = useMessageInput({ channelId, onSend, onTyping, replyTo, onCancelReply });
 
   const showReply = !!replyTo;
-  const shouldRenderReply = useDelayUnmount(showReply, 200);
+  const shouldRenderReply = showReply;
 
   return (
     <div

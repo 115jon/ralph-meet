@@ -4,6 +4,7 @@
     "files": [
       "desktop/src-tauri/tauri-fork/**",
       "desktop/src-tauri/vendor/**",
+      "public/vad/**",
       "mobile/src-tauri/vendored_crates/**"
     ]
   },

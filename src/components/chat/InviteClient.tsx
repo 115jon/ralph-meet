@@ -1,4 +1,5 @@
 import { apiGet, apiPost } from "@/lib/api-client";
+import InlineEmojiText from "@/components/chat/InlineEmojiText";
 import { useNavigate, useParams } from "@tanstack/react-router";
 import { Check, Link2, Loader2, Users, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
@@ -78,18 +79,6 @@ export default function InviteClient() {
 
   return (
     <div className="flex h-full items-center justify-center bg-rm-bg-primary px-4 select-none">
-      {/* Ambient glows */}
-      <div className="pointer-events-none absolute inset-0 overflow-hidden">
-        <div
-          className="absolute h-[500px] w-[500px] rounded-full bg-rm-accent/8 blur-[120px]"
-          style={{ top: "15%", left: "25%" }}
-        />
-        <div
-          className="absolute h-[400px] w-[400px] rounded-full bg-primary/5 blur-[100px]"
-          style={{ bottom: "20%", right: "20%" }}
-        />
-      </div>
-
       <div className="relative z-10 w-full max-w-[420px]">
         {/* Loading */}
         {status === "loading" && (
@@ -131,7 +120,7 @@ export default function InviteClient() {
               </div>
               <div className="min-w-0 flex-1">
                 <h2 className="truncate text-lg font-bold text-rm-text">
-                  {invite.server.name}
+                  <InlineEmojiText text={invite.server.name} />
                 </h2>
                 <div className="flex items-center gap-1.5 text-sm text-rm-text-muted">
                   <Users className="h-3.5 w-3.5" />
@@ -147,7 +136,9 @@ export default function InviteClient() {
             <p className="text-xs text-rm-text-muted">
               Invited by{" "}
               <span className="font-semibold text-rm-text-secondary">
-                {invite.inviter.display_name ?? invite.inviter.username}
+                <InlineEmojiText
+                  text={invite.inviter.display_name ?? invite.inviter.username}
+                />
               </span>
             </p>
 
@@ -176,7 +167,8 @@ export default function InviteClient() {
               <Loader2 className="h-8 w-8 animate-spin text-rm-accent" />
             </div>
             <p className="text-sm font-medium text-rm-text">
-              Joining {invite?.server.name}...
+              Joining <InlineEmojiText text={invite?.server.name ?? ""} />
+              ...
             </p>
           </div>
         )}
@@ -189,7 +181,7 @@ export default function InviteClient() {
             </div>
             <div className="text-center">
               <h2 className="text-lg font-bold text-rm-text">
-                Joined {invite?.server.name}!
+                Joined <InlineEmojiText text={invite?.server.name ?? ""} />!
               </h2>
               <p className="mt-1 text-sm text-rm-text-muted">
                 Redirecting to chat...

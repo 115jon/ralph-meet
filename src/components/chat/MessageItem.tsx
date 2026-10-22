@@ -1,6 +1,6 @@
 import { AvatarImage } from "@/components/chat/AvatarImage";
 import { ProfileDisplayName } from "@/components/chat/ProfileDisplayName";
-import { BaseModal } from "@/components/ui/BaseModal";
+import { Dialog, DialogPortal, DialogSurface } from "@/components/ui/dialog";
 import { IconButton } from "@/components/ui/IconButton";
 import {
   Tooltip,
@@ -11,8 +11,15 @@ import {
 import { getDisplayInitial } from "@/lib/display-name";
 import { useContextMenu } from "@/hooks/useContextMenu";
 import { useCustomEmojiLookup } from "@/hooks/useCustomEmojiLookup";
+import { useShiftPressed } from "@/hooks/useShiftPressed";
 import { useUserResolution } from "@/hooks/useUserResolution";
+import { isMessageListScrolling } from "./message-list-scroll";
 import { getAttachmentUrl } from "@/lib/attachment-url";
+import {
+  useClientDateFormatter,
+  useClientReferenceTime,
+  type ClientDateFormatter,
+} from "@/lib/client-date-format";
 import { extractCustomEmojiIds, type EmojiRecentItem } from "@/lib/emoji";
 import {
   formatReactionUserNames,
@@ -28,7 +35,6 @@ import { shouldBlurSensitiveAttachment } from "@/lib/media-safety";
 import { cn } from "@/lib/utils";
 import { useChatActions, useChatStore } from "@/stores/chat-store";
 import { useMediaSafetySettingsStore } from "@/stores/useMediaSafetySettingsStore";
-import { useDelayUnmount } from "@/hooks/useDelayUnmount";
 import { useExternalLinkConfirmation } from "@/hooks/useExternalLinkConfirmation";
 import {
   copyMediaLink,
@@ -99,34 +105,50 @@ interface Props {
   previewOnly?: boolean;
 }
 
-function formatTime(iso: string): string {
-  const d = new Date(iso);
-  return d.toLocaleTimeString([], {
+const MESSAGE_DAY_OPTIONS: Intl.DateTimeFormatOptions = {
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+};
+
+function formatMessageTime(
+  iso: string,
+  formatDate: ClientDateFormatter,
+): string {
+  return formatDate(iso, {
     hour: "numeric",
     minute: "2-digit",
     hour12: true,
   });
 }
 
-function formatDate(iso: string): string {
-  const d = new Date(iso);
-  const today = new Date();
-  const yesterday = new Date(today);
-  yesterday.setDate(today.getDate() - 1);
+export function formatMessageDate(
+  iso: string,
+  formatClientDate: ClientDateFormatter,
+  referenceTime: number | null,
+): string {
+  const messageDate = new Date(iso);
+  if (!Number.isFinite(messageDate.getTime())) {
+    return formatClientDate(iso, MESSAGE_DAY_OPTIONS);
+  }
 
-  if (d.toDateString() === today.toDateString()) {
-    return `Today at ${formatTime(iso)}`;
+  const messageDay = formatClientDate(messageDate, MESSAGE_DAY_OPTIONS);
+
+  if (referenceTime !== null) {
+    const today = formatClientDate(referenceTime, MESSAGE_DAY_OPTIONS);
+    const yesterdayDate = new Date(referenceTime);
+    yesterdayDate.setDate(yesterdayDate.getDate() - 1);
+    const yesterday = formatClientDate(yesterdayDate, MESSAGE_DAY_OPTIONS);
+
+    if (messageDay === today) {
+      return `Today at ${formatMessageTime(iso, formatClientDate)}`;
+    }
+    if (messageDay === yesterday) {
+      return `Yesterday at ${formatMessageTime(iso, formatClientDate)}`;
+    }
   }
-  if (d.toDateString() === yesterday.toDateString()) {
-    return `Yesterday at ${formatTime(iso)}`;
-  }
-  return (
-    d.toLocaleDateString([], {
-      month: "2-digit",
-      day: "2-digit",
-      year: "numeric",
-    }) + ` ${formatTime(iso)}`
-  );
+
+  return `${messageDay} ${formatMessageTime(iso, formatClientDate)}`;
 }
 
 function formatFileSize(bytes: number): string {
@@ -297,6 +319,8 @@ const MessageItem = memo(
     onHeightChange,
     previewOnly = false,
   }: Props) => {
+    const formatClientDate = useClientDateFormatter();
+    const referenceTime = useClientReferenceTime();
     const {
       addReaction,
       removeReaction,
@@ -318,14 +342,13 @@ const MessageItem = memo(
     const [showProfile, setShowProfile] = useState(false);
     const [editing, setEditing] = useState(false);
     const [showShareModal, setShowShareModal] = useState(false);
-    const shouldRenderShareModal = useDelayUnmount(showShareModal, 200);
     const [showDeleteModal, setShowDeleteModal] = useState(false);
-    const shouldRenderDeleteModal = useDelayUnmount(showDeleteModal, 200);
     const [editInput, setEditInput] = useState("");
-    const [toolbarQuickReactions, setToolbarQuickReactions] = useState(() =>
-      getQuickReactionItems(3),
-    );
-    const [isShiftPressed, setIsShiftPressed] = useState(false);
+    const [toolbarQuickReactions, setToolbarQuickReactions] = useState<
+      EmojiRecentItem[]
+    >([]);
+    const isShiftPressed = useShiftPressed();
+    const [interactive, setInteractive] = useState(false);
     const [authorNameEl, setAuthorNameEl] = useState<HTMLElement | null>(null);
     const rootRef = useRef<HTMLDivElement>(null);
     const visibilityReportedRef = useRef(false);
@@ -341,6 +364,12 @@ const MessageItem = memo(
       x: number;
       y: number;
     } | null>(null);
+
+    useEffect(() => {
+      // Load persisted reaction preferences only after the server snapshot exists.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setToolbarQuickReactions(getQuickReactionItems(3));
+    }, []);
 
     const authorInfo = useUserResolution(message.author_id, message.author);
     const replyInfo = useUserResolution(
@@ -387,32 +416,19 @@ const MessageItem = memo(
         window.removeEventListener(`edit-message-${message.id}`, handler);
     }, [message.id, message.content, previewOnly]);
 
-    useEffect(() => {
-      if (previewOnly) return;
-
-      const updateShiftState = (event: KeyboardEvent) => {
-        setIsShiftPressed(event.shiftKey);
-      };
-      const resetShiftState = () => setIsShiftPressed(false);
-
-      window.addEventListener("keydown", updateShiftState);
-      window.addEventListener("keyup", updateShiftState);
-      window.addEventListener("blur", resetShiftState);
-      return () => {
-        window.removeEventListener("keydown", updateShiftState);
-        window.removeEventListener("keyup", updateShiftState);
-        window.removeEventListener("blur", resetShiftState);
-      };
-    }, [previewOnly]);
-
     const onHeightChangeRef = useRef(onHeightChange);
     useEffect(() => {
       onHeightChangeRef.current = onHeightChange;
     }, [onHeightChange]);
 
+    const hasDynamicMedia =
+      (message.attachments?.length ?? 0) > 0 ||
+      (message.embeds?.length ?? 0) > 0;
+
     useEffect(() => {
       const el = rootRef.current;
-      if (!el || !onHeightChange) return;
+      if (!el || !onHeightChange || !hasDynamicMedia) return;
+      if (isMessageListScrolling()) return;
 
       let previousHeight = el.clientHeight;
 
@@ -428,10 +444,11 @@ const MessageItem = memo(
       return () => {
         observer.disconnect();
       };
-    }, [onHeightChange]);
+    }, [hasDynamicMedia, onHeightChange]);
 
     useEffect(() => {
       if (!onVisible || visibilityReportedRef.current) return;
+      if (isMessageListScrolling()) return;
 
       const el = rootRef.current;
       if (!el) return;
@@ -919,12 +936,14 @@ const MessageItem = memo(
         ref={rootRef}
         id={id}
         className={cn(
-          "group relative flex flex-col transition-all duration-100",
+          "group relative flex flex-col transition-colors duration-100",
           !previewOnly && "hover:bg-rm-bg-hover",
           showHeader && !previewOnly && "mt-4",
           message.pending && "opacity-50",
         )}
         onContextMenu={previewOnly ? undefined : handleContextMenu}
+        onMouseEnter={previewOnly ? undefined : () => setInteractive(true)}
+        onFocusCapture={previewOnly ? undefined : () => setInteractive(true)}
       >
         {/* Reply connector */}
         {message.reply_to && !hideReplyConnector && (
@@ -997,7 +1016,7 @@ const MessageItem = memo(
           ) : (
             <div className="flex w-10 shrink-0 items-start justify-center pt-1 opacity-0 group-hover:opacity-100 transition-opacity">
               <span className="select-none text-[10.5px] font-medium text-rm-text-muted">
-                {formatTime(message.created_at)}
+                {formatMessageTime(message.created_at, formatClientDate)}
               </span>
             </div>
           )}
@@ -1019,7 +1038,11 @@ const MessageItem = memo(
                   />
                 </button>
                 <span className="text-[11.5px] font-medium text-rm-text-muted ml-0.5 mt-0.5">
-                  {formatDate(message.created_at)}
+                  {formatMessageDate(
+                    message.created_at,
+                    formatClientDate,
+                    referenceTime,
+                  )}
                 </span>
                 {message.is_pinned && (
                   <div className="flex items-center gap-1 rounded border border-primary/20 bg-primary/10 px-1.5 py-0.5 text-[10px] font-bold text-primary">
@@ -1071,7 +1094,11 @@ const MessageItem = memo(
                 {message.updated_at && (
                   <span
                     className="ml-1 text-[10px] text-rm-text-muted"
-                    title={`Edited ${formatDate(message.updated_at)}`}
+                    title={`Edited ${formatMessageDate(
+                      message.updated_at,
+                      formatClientDate,
+                      referenceTime,
+                    )}`}
                   >
                     (edited)
                   </span>
@@ -1309,6 +1336,7 @@ const MessageItem = memo(
                       />
                       {showReactionEmojiPicker && (
                         <EmojiPicker
+                          open={showReactionEmojiPicker}
                           placement="right"
                           onSelect={handleEmojiPickerSelect}
                           onClose={closeInlineEmojiPicker}
@@ -1336,7 +1364,7 @@ const MessageItem = memo(
           </div>
 
           {/* Hover action toolbar */}
-          {!previewOnly && !message.pending && !editing && (
+          {!previewOnly && interactive && !message.pending && !editing && (
             <TooltipProvider delayDuration={120}>
               <div
                 className={cn(
@@ -1423,6 +1451,7 @@ const MessageItem = memo(
                       />
                       {showEmojiPicker && (
                         <EmojiPicker
+                          open={showEmojiPicker}
                           placement="left"
                           onSelect={handleEmojiPickerSelect}
                           onClose={closeToolbarEmojiPicker}
@@ -1488,6 +1517,7 @@ const MessageItem = memo(
                       />
                       {showEmojiPicker && (
                         <EmojiPicker
+                          open={showEmojiPicker}
                           placement="left"
                           onSelect={handleEmojiPickerSelect}
                           onClose={closeToolbarEmojiPicker}
@@ -1553,6 +1583,7 @@ const MessageItem = memo(
         {!previewOnly && showReactionDetails && (
           <ReactionDetailsModal
             message={message}
+            open={showReactionDetails}
             initialEmoji={reactionDetailsEmoji}
             canManageReactions={canDeleteMessages}
             customEmojiMap={reactionEmojiMap}
@@ -1561,7 +1592,7 @@ const MessageItem = memo(
           />
         )}
 
-        {!previewOnly && contextEmojiPickerAnchor ? (
+        {!previewOnly && contextEmojiPickerAnchor && (
           <>
             <span
               ref={contextEmojiPickerAnchorRef}
@@ -1574,16 +1605,18 @@ const MessageItem = memo(
               }}
             />
             <EmojiPicker
+              open
               placement="bottom-end"
               markerRef={contextEmojiPickerAnchorRef}
               onSelect={handleEmojiPickerSelect}
               onClose={() => setContextEmojiPickerAnchor(null)}
             />
           </>
-        ) : null}
+        )}
 
-        {!previewOnly && shouldRenderShareModal && (
+        {!previewOnly && showShareModal && (
           <MessageShareModal
+            open={showShareModal}
             message={message}
             onClose={() => setShowShareModal(false)}
             onCreateShare={createMessageShare}
@@ -1599,11 +1632,11 @@ const MessageItem = memo(
           />
         )}
 
-        {!previewOnly && shouldRenderDeleteModal && (
+        {!previewOnly && showDeleteModal && (
           <DeleteMessageModal
+            open={showDeleteModal}
             message={message}
             currentUserId={currentUserId}
-            isClosing={!showDeleteModal}
             onClose={() => setShowDeleteModal(false)}
             onConfirm={() => {
               performDelete();
@@ -1617,15 +1650,15 @@ const MessageItem = memo(
 );
 
 function DeleteMessageModal({
+  open,
   message,
   currentUserId,
-  isClosing,
   onClose,
   onConfirm,
 }: {
+  open: boolean;
   message: Message;
   currentUserId?: string;
-  isClosing?: boolean;
   onClose: () => void;
   onConfirm: () => void;
 }) {
@@ -1636,104 +1669,103 @@ function DeleteMessageModal({
   }, []);
 
   return (
-    <BaseModal onClose={onClose}>
-      <div
-        className={cn(
-          "fixed inset-0 z-[1100] flex items-end justify-center bg-black/65 p-0 backdrop-blur-sm md:items-center md:p-6",
-          isClosing
-            ? "animate-out fade-out duration-200"
-            : "animate-in fade-in duration-200",
-        )}
-        onClick={(event) => {
-          if (event.target === event.currentTarget) {
-            onClose();
-          }
-        }}
-        role="presentation"
-      >
-        <dialog
-          open
+    <Dialog open={open} onOpenChange={(nextOpen) => !nextOpen && onClose()}>
+      <DialogPortal>
+        <div
+          data-state={open ? "open" : "closed"}
           className={cn(
-            "relative m-0 flex max-h-[calc(100dvh-16px)] w-full max-w-[480px] flex-col overflow-hidden rounded-t-xl border border-rm-border bg-rm-bg-primary p-0 shadow-2xl outline-none md:max-h-[min(760px,calc(100dvh-48px))] md:rounded-xl",
-            isClosing
-              ? "animate-out fade-out zoom-out-95 duration-200"
-              : "animate-in fade-in zoom-in-95 duration-200",
+            "fixed inset-0 z-50 flex items-end justify-center bg-black/65 p-0 backdrop-blur-sm transition-opacity duration-200 md:items-center md:p-6",
+            "animate-in fade-in data-[state=closed]:pointer-events-none data-[state=closed]:opacity-0 data-[state=closed]:animate-out data-[state=closed]:fade-out",
           )}
-          aria-labelledby="delete-message-title"
-          aria-describedby="delete-message-description"
+          onClick={(event) => {
+            if (event.target === event.currentTarget) {
+              onClose();
+            }
+          }}
+          role="presentation"
         >
-          <div className="flex shrink-0 items-start justify-between px-6 pb-3 pt-6">
-            <div>
-              <h2
-                id="delete-message-title"
-                className="text-lg font-bold text-rm-text"
-              >
-                Delete Message
-              </h2>
-              <p
-                id="delete-message-description"
-                className="mt-1 text-sm text-rm-text-muted"
-              >
-                Are you sure you want to delete this message?
-              </p>
+          <DialogSurface
+            showCloseButton={false}
+            className={cn(
+              "relative m-0 flex max-h-[calc(100dvh-16px)] w-full max-w-[480px] flex-col overflow-hidden rounded-t-xl border border-rm-border bg-rm-bg-primary p-0 shadow-2xl outline-none md:max-h-[min(760px,calc(100dvh-48px))] md:rounded-xl",
+              "animate-in fade-in zoom-in-95 duration-200 data-[state=closed]:animate-out data-[state=closed]:fade-out data-[state=closed]:zoom-out-95",
+            )}
+            aria-labelledby="delete-message-title"
+            aria-describedby="delete-message-description"
+          >
+            <div className="flex shrink-0 items-start justify-between px-6 pb-3 pt-6">
+              <div>
+                <h2
+                  id="delete-message-title"
+                  className="text-lg font-bold text-rm-text"
+                >
+                  Delete Message
+                </h2>
+                <p
+                  id="delete-message-description"
+                  className="mt-1 text-sm text-rm-text-muted"
+                >
+                  Are you sure you want to delete this message?
+                </p>
+              </div>
+              <IconButton
+                icon={X}
+                size="sm"
+                shape="circle"
+                tooltip="Close"
+                onClick={onClose}
+                className="-mr-1 -mt-1"
+              />
             </div>
-            <IconButton
-              icon={X}
-              size="sm"
-              shape="circle"
-              tooltip="Close"
-              onClick={onClose}
-              className="-mr-1 -mt-1"
-            />
-          </div>
 
-          <div className="min-h-0 flex-1 overflow-y-auto px-6 py-3 custom-scrollbar">
-            <div className="overflow-hidden rounded border border-rm-border bg-black/30 py-3">
-              <div
-                ref={previewRef}
-                aria-hidden="true"
-                className="pointer-events-none select-none"
-              >
-                <MessageItem
-                  message={message}
-                  showHeader
-                  currentUserId={currentUserId}
-                  hideReplyConnector={false}
-                  previewOnly
-                />
+            <div className="min-h-0 flex-1 overflow-y-auto px-6 py-3 custom-scrollbar">
+              <div className="overflow-hidden rounded border border-rm-border bg-black/30 py-3">
+                <div
+                  ref={previewRef}
+                  aria-hidden="true"
+                  className="pointer-events-none select-none"
+                >
+                  <MessageItem
+                    message={message}
+                    showHeader
+                    currentUserId={currentUserId}
+                    hideReplyConnector={false}
+                    previewOnly
+                  />
+                </div>
               </div>
             </div>
-          </div>
 
-          <div className="shrink-0 border-t border-rm-border/60 px-6 pb-2 pt-4 text-sm leading-tight">
-            <p className="text-[12px] font-black uppercase text-emerald-400">
-              Protip:
-            </p>
-            <p className="mt-1 text-rm-text-secondary">
-              You can hold down Shift when clicking delete message to bypass
-              this confirmation entirely.
-            </p>
-          </div>
+            <div className="shrink-0 border-t border-rm-border/60 px-6 pb-2 pt-4 text-sm leading-tight">
+              <p className="text-[12px] font-black uppercase text-emerald-400">
+                Protip:
+              </p>
+              <p className="mt-1 text-rm-text-secondary">
+                You can hold down Shift when clicking delete message to bypass
+                this confirmation entirely.
+              </p>
+            </div>
 
-          <div className="grid shrink-0 grid-cols-2 gap-2 px-6 pb-6 pt-4">
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-lg border border-rm-border bg-rm-bg-elevated px-4 py-2.5 text-sm font-bold text-rm-text-secondary transition hover:bg-rm-bg-hover hover:text-rm-text"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={onConfirm}
-              className="rounded-lg bg-destructive px-4 py-2.5 text-sm font-bold text-white transition hover:brightness-110"
-            >
-              Delete
-            </button>
-          </div>
-        </dialog>
-      </div>
-    </BaseModal>
+            <div className="grid shrink-0 grid-cols-2 gap-2 px-6 pb-6 pt-4">
+              <button
+                type="button"
+                onClick={onClose}
+                className="rounded-lg border border-rm-border bg-rm-bg-elevated px-4 py-2.5 text-sm font-bold text-rm-text-secondary transition hover:bg-rm-bg-hover hover:text-rm-text"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={onConfirm}
+                className="rounded-lg bg-destructive px-4 py-2.5 text-sm font-bold text-white transition hover:brightness-110"
+              >
+                Delete
+              </button>
+            </div>
+          </DialogSurface>
+        </div>
+      </DialogPortal>
+    </Dialog>
   );
 }
 

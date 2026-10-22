@@ -12,6 +12,24 @@ interface FallbackUser {
   [key: string]: any;
 }
 
+interface MemberLike {
+  user: { id: string };
+}
+
+export function findCachedMember<T extends MemberLike>(
+  members: T[] | undefined,
+  membersByServerId: Record<string, T[]>,
+  userId: string,
+): T | undefined {
+  const active = members?.find((member) => member.user.id === userId);
+  if (active) return active;
+  for (const list of Object.values(membersByServerId)) {
+    const cached = list.find((member) => member.user.id === userId);
+    if (cached) return cached;
+  }
+  return undefined;
+}
+
 /**
  * Hook to resolve a user's real-time username, display_name and avatar_url from the client store.
  * Useful for keeping avatars fresh anywhere a user ID is referenced (e.g., messages,
@@ -28,16 +46,9 @@ export function useUserResolution(
     userId && s.user?.id === userId ? s.user : undefined,
   );
 
-  // Use a targeted selector so the component doesn't over-render when other members change
   const member = useChatStore((s) =>
-    userId ? s.members.find((m) => m.user.id === userId) : undefined,
-  );
-
-  const cachedMember = useChatStore((s) =>
     userId
-      ? Object.values(s.membersByServerId)
-          .flat()
-          .find((m) => m.user.id === userId)
+      ? findCachedMember(s.members, s.membersByServerId, userId)
       : undefined,
   );
 
@@ -52,12 +63,7 @@ export function useUserResolution(
   );
 
   const resolvedUser =
-    user ||
-    member?.user ||
-    cachedMember?.user ||
-    relationship?.user ||
-    dmRecipient ||
-    fallback;
+    user || member?.user || relationship?.user || dmRecipient || fallback;
 
   const username = resolvedUser?.username || fallback?.username || "Unknown";
   const displayName = getDisplayName(resolvedUser, username);

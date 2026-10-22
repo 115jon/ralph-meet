@@ -6,7 +6,6 @@ import GifPickerModal from "./GifPickerModal";
 import EmojiPicker from "./EmojiPicker";
 import { Gif, Smile, Sticker } from "./Icons";
 import { Send } from "lucide-react";
-import { useDelayUnmount } from "@/hooks/useDelayUnmount";
 
 export function InputControls({
   showEmoji,
@@ -32,9 +31,6 @@ export function InputControls({
   const gifBtnRef = useRef<HTMLButtonElement>(null);
   const stickerBtnRef = useRef<HTMLButtonElement>(null);
   const emojiBtnRef = useRef<HTMLButtonElement>(null);
-
-  const renderEmojiPicker = useDelayUnmount(showEmoji, 150);
-  const renderGifPicker = useDelayUnmount(showGifPicker, 150);
 
   useEffect(() => {
     const handleFavoriteAdded = () => {
@@ -137,24 +133,23 @@ export function InputControls({
         >
           <Smile className="h-5 w-5" />
         </button>
-        {renderEmojiPicker && (
-          <EmojiPicker
-            onSelect={handleEmojiSelect}
-            onClose={() => setLocalState({ showEmoji: false })}
-            markerRef={emojiBtnRef}
-            isClosing={!showEmoji}
-          />
-        )}
+        <EmojiPicker
+          open={showEmoji}
+          onSelect={handleEmojiSelect}
+          onClose={() => setLocalState({ showEmoji: false })}
+          markerRef={emojiBtnRef}
+          isClosing={!showEmoji}
+        />
       </div>
-      {renderGifPicker && (
+      {showGifPicker ? (
         <GifPickerModal
+          open
           onClose={() => setLocalState({ showGifPicker: false })}
           onSelect={handleGifSelect}
           defaultMediaType={gifPickerMediaType}
           markerRef={gifPickerMarkerRef}
-          isClosing={!showGifPicker}
         />
-      )}
+      ) : null}
       <div
         className={cn(
           "flex items-center overflow-hidden transition-all duration-300 ease-out md:hidden",

@@ -1,4 +1,11 @@
-import { CustomSelect } from "@/components/ui/CustomSelect";
+import InlineEmojiText from "@/components/chat/InlineEmojiText";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { createCameraBackgroundEffect } from "@/lib/camera-background-effects";
@@ -367,18 +374,39 @@ export default function SettingsCameraTab() {
           <Label className="text-[11px] font-bold uppercase tracking-wider text-rm-text-muted ml-1">
             Camera Device
           </Label>
-          <CustomSelect
+          <Select
             value={vSettings.videoDeviceId || "default"}
-            onChange={(val) => {
+            onValueChange={(val) => {
               const device = videoInputs.find((d) => d.deviceId === val);
               setDevice("video", val, settingsUserId ?? undefined, {
                 label: device?.label,
                 groupId: device?.groupId,
               });
             }}
-            options={dropdownOptions}
-            placeholder="Select camera device"
-          />
+          >
+            <SelectTrigger
+              aria-label="Select camera device"
+              className="w-full rounded-xl border-rm-border bg-rm-bg-elevated/50 px-4 py-3 text-rm-text hover:bg-rm-bg-elevated"
+            >
+              <SelectValue placeholder="Select camera device" />
+            </SelectTrigger>
+            <SelectContent
+              position="popper"
+              align="start"
+              className="rounded-xl border-rm-border bg-rm-bg-floating p-1.5 text-rm-text shadow-2xl"
+            >
+              {dropdownOptions.map((option) => (
+                <SelectItem
+                  key={option.value}
+                  value={option.value}
+                  textValue={option.label}
+                  className="text-rm-text-secondary hover:bg-rm-bg-elevated hover:text-rm-text focus:bg-rm-bg-elevated focus:text-rm-text"
+                >
+                  <InlineEmojiText text={option.label} />
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </section>
 
         <Separator className="bg-rm-border" />

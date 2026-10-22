@@ -6,11 +6,20 @@ import {
   type VoiceState,
   type VoiceStateDelta,
 } from "@/lib/types";
-import { fetchSocketProtocols } from "@/lib/voice/socket-ticket-client";
+import {
+  fetchSocketTicketBundle,
+  type MediaBootstrap,
+} from "@/lib/voice/socket-ticket-client";
 import type { SharedSpatialAudioState } from "@/lib/voice/spatial-audio";
 import { BaseGateway, type BaseGatewayEvents } from "./base-gateway";
 
 export interface RoomGatewayEvents extends BaseGatewayEvents {
+  "media-bootstrap": MediaBootstrap;
+  "media-ready": {
+    participantId: string;
+    iceServers: IceServer[];
+    voiceToken: string;
+  };
   ready: {
     participantId: string;
     sessionId: string;
@@ -75,38 +84,50 @@ export class RoomGateway extends BaseGateway<RoomGatewayEvents> {
 
   public connectRoom(options: ConnectOptions) {
     this.options = options;
-    void this.openRoomSocket(true);
-  }
-
-  private async openRoomSocket(resetReconnectAttempt: boolean) {
-    if (!this.options) return;
+    const requestGeneration = ++this.connectionRequestGeneration;
     if (this.connecting) {
       this.reconnectQueued = true;
       return;
     }
+    void this.openRoomSocket(true, requestGeneration);
+  }
+
+  private async openRoomSocket(
+    resetReconnectAttempt: boolean,
+    requestGeneration: number,
+  ) {
+    const options = this.options;
+    if (!options) return;
     this.connecting = true;
-    const requestGeneration = ++this.connectionRequestGeneration;
     try {
       const audience =
-        this.options.roomSlug === "global-gateway" ? "global" : "room";
-      const protocols = await fetchSocketProtocols({
+        options.roomSlug === "global-gateway" ? "global" : "room";
+      const bundle = await fetchSocketTicketBundle({
         audience,
-        channelId: this.options.channelId,
-        roomSlug: this.options.roomSlug,
-        serverId: this.options.serverId,
+        channelId: options.channelId,
+        roomSlug: options.roomSlug,
+        serverId: options.serverId,
       });
       if (
         this.isLeaving ||
         requestGeneration !== this.connectionRequestGeneration
       )
         return;
+      if (bundle.mediaBootstrap) {
+        this.emit("media-bootstrap", bundle.mediaBootstrap);
+      }
       const path =
         audience === "global"
           ? "/api/gateway"
-          : `/api/channels/${this.options.roomSlug}/ws?v=1`;
-      const url = this.options.wsUrlGenerator(path);
-      super.connect(url, resetReconnectAttempt, protocols);
+          : `/api/channels/${options.roomSlug}/ws?v=1`;
+      const url = options.wsUrlGenerator(path);
+      super.connect(url, resetReconnectAttempt, bundle.protocols);
     } catch (error) {
+      if (
+        this.isLeaving ||
+        requestGeneration !== this.connectionRequestGeneration
+      )
+        return;
       this.log.error("Failed to open room socket", error);
       this.emit("error", {
         message: "Could not open room socket",
@@ -116,11 +137,15 @@ export class RoomGateway extends BaseGateway<RoomGatewayEvents> {
       this.connecting = false;
       if (this.reconnectQueued && !this.isLeaving) {
         this.reconnectQueued = false;
-        void this.openRoomSocket(false);
+        void this.openRoomSocket(false, this.connectionRequestGeneration);
       } else {
         this.reconnectQueued = false;
       }
     }
+  }
+
+  public refreshProfile() {
+    this.send({ op: VoiceOpcode.ProfileRefresh, d: {} });
   }
 
   public disconnect() {
@@ -134,7 +159,12 @@ export class RoomGateway extends BaseGateway<RoomGatewayEvents> {
     if (this.options) {
       this.log.info("Attempting reconnect...");
       this.isIdentified = false;
-      void this.openRoomSocket(false);
+      const requestGeneration = ++this.connectionRequestGeneration;
+      if (this.connecting) {
+        this.reconnectQueued = true;
+        return;
+      }
+      void this.openRoomSocket(false, requestGeneration);
     }
   }
 
@@ -186,6 +216,16 @@ export class RoomGateway extends BaseGateway<RoomGatewayEvents> {
             true,
           );
         }
+        break;
+      }
+
+      case VoiceOpcode.MediaReady: {
+        const ready = msg.d;
+        this.emit("media-ready", {
+          participantId: ready.participant_id,
+          iceServers: ready.ice_servers,
+          voiceToken: ready.voice_token,
+        });
         break;
       }
 

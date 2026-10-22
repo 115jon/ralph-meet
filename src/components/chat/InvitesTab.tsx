@@ -1,11 +1,19 @@
 import { apiDelete, apiGet, apiPost } from "@/lib/api-client";
 import { getDisplayInitial, getDisplayName } from "@/lib/display-name";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { getAuthAssetUrl, getWebOrigin } from "@/lib/platform";
 import type { Invite } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useChatStore } from "@/stores/chat-store";
 import { useCallback, useEffect, useReducer, useRef } from "react";
 import { Check, Copy, Hash, Link, Loader2, Plus, X } from "./Icons";
+import InlineEmojiText from "./InlineEmojiText";
 
 interface InvitesTabProps {
   serverId: string;
@@ -292,25 +300,38 @@ export default function InvitesTab({ serverId, serverName }: InvitesTabProps) {
               >
                 Channel
               </label>
-              <select
-                id="inv-channel"
-                value={state.createChannelId}
-                onChange={(e) =>
+              <Select
+                value={state.createChannelId || "__server_default__"}
+                onValueChange={(value) =>
                   dispatch({
                     type: "SET_CREATE_FIELD",
                     field: "createChannelId",
-                    value: e.target.value,
+                    value: value === "__server_default__" ? "" : value,
                   })
                 }
-                className={selectStyle}
               >
-                <option value="">Server default</option>
-                {textChannels.map((ch) => (
-                  <option key={ch.id} value={ch.id}>
-                    #{ch.name}
-                  </option>
-                ))}
-              </select>
+                <SelectTrigger
+                  id="inv-channel"
+                  aria-label="Invite channel"
+                  className={selectStyle}
+                >
+                  <SelectValue placeholder="Server default" />
+                </SelectTrigger>
+                <SelectContent position="popper" align="start">
+                  <SelectItem value="__server_default__">
+                    Server default
+                  </SelectItem>
+                  {textChannels.map((channel) => (
+                    <SelectItem
+                      key={channel.id}
+                      value={channel.id}
+                      textValue={`#${channel.name}`}
+                    >
+                      <InlineEmojiText text={`#${channel.name}`} />
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-1.5">
               <label
@@ -319,26 +340,33 @@ export default function InvitesTab({ serverId, serverName }: InvitesTabProps) {
               >
                 Expire After
               </label>
-              <select
-                id="inv-expiry"
-                value={state.createMaxAge}
-                onChange={(e) =>
+              <Select
+                value={String(state.createMaxAge)}
+                onValueChange={(value) =>
                   dispatch({
                     type: "SET_CREATE_FIELD",
                     field: "createMaxAge",
-                    value: Number(e.target.value),
+                    value: Number(value),
                   })
                 }
-                className={selectStyle}
               >
-                <option value={1800}>30 minutes</option>
-                <option value={3600}>1 hour</option>
-                <option value={21600}>6 hours</option>
-                <option value={43200}>12 hours</option>
-                <option value={86400}>1 day</option>
-                <option value={604800}>7 days</option>
-                <option value={0}>Never</option>
-              </select>
+                <SelectTrigger
+                  id="inv-expiry"
+                  aria-label="Invite expiration"
+                  className={selectStyle}
+                >
+                  <SelectValue placeholder="Invite expiration" />
+                </SelectTrigger>
+                <SelectContent position="popper" align="start">
+                  <SelectItem value="1800">30 minutes</SelectItem>
+                  <SelectItem value="3600">1 hour</SelectItem>
+                  <SelectItem value="21600">6 hours</SelectItem>
+                  <SelectItem value="43200">12 hours</SelectItem>
+                  <SelectItem value="86400">1 day</SelectItem>
+                  <SelectItem value="604800">7 days</SelectItem>
+                  <SelectItem value="0">Never</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-1.5">
               <label
@@ -347,26 +375,33 @@ export default function InvitesTab({ serverId, serverName }: InvitesTabProps) {
               >
                 Max Uses
               </label>
-              <select
-                id="inv-uses"
-                value={state.createMaxUses}
-                onChange={(e) =>
+              <Select
+                value={String(state.createMaxUses)}
+                onValueChange={(value) =>
                   dispatch({
                     type: "SET_CREATE_FIELD",
                     field: "createMaxUses",
-                    value: Number(e.target.value),
+                    value: Number(value),
                   })
                 }
-                className={selectStyle}
               >
-                <option value={0}>No limit</option>
-                <option value={1}>1 use</option>
-                <option value={5}>5 uses</option>
-                <option value={10}>10 uses</option>
-                <option value={25}>25 uses</option>
-                <option value={50}>50 uses</option>
-                <option value={100}>100 uses</option>
-              </select>
+                <SelectTrigger
+                  id="inv-uses"
+                  aria-label="Maximum invite uses"
+                  className={selectStyle}
+                >
+                  <SelectValue placeholder="Maximum invite uses" />
+                </SelectTrigger>
+                <SelectContent position="popper" align="start">
+                  <SelectItem value="0">No limit</SelectItem>
+                  <SelectItem value="1">1 use</SelectItem>
+                  <SelectItem value="5">5 uses</SelectItem>
+                  <SelectItem value="10">10 uses</SelectItem>
+                  <SelectItem value="25">25 uses</SelectItem>
+                  <SelectItem value="50">50 uses</SelectItem>
+                  <SelectItem value="100">100 uses</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-1.5">
               <label
@@ -375,21 +410,28 @@ export default function InvitesTab({ serverId, serverName }: InvitesTabProps) {
               >
                 Temporary Membership
               </label>
-              <select
-                id="inv-temp"
+              <Select
                 value={state.createTemporary ? "1" : "0"}
-                onChange={(e) =>
+                onValueChange={(value) =>
                   dispatch({
                     type: "SET_CREATE_FIELD",
                     field: "createTemporary",
-                    value: e.target.value === "1",
+                    value: value === "1",
                   })
                 }
-                className={selectStyle}
               >
-                <option value="0">No</option>
-                <option value="1">Yes</option>
-              </select>
+                <SelectTrigger
+                  id="inv-temp"
+                  aria-label="Temporary membership"
+                  className={selectStyle}
+                >
+                  <SelectValue placeholder="Temporary membership" />
+                </SelectTrigger>
+                <SelectContent position="popper" align="start">
+                  <SelectItem value="0">No</SelectItem>
+                  <SelectItem value="1">Yes</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           </div>
           <div className="flex items-center gap-2 pt-1">
@@ -431,7 +473,8 @@ export default function InvitesTab({ serverId, serverName }: InvitesTabProps) {
           <Link className="h-10 w-10 mb-3 text-rm-text-muted/30" />
           <p className="text-sm text-rm-text-muted">No active invites</p>
           <p className="text-xs text-rm-text-muted/60 mt-1">
-            Create an invite link to let others join {serverName}
+            Create an invite link to let others join{" "}
+            <InlineEmojiText text={serverName} />
           </p>
         </div>
       ) : (

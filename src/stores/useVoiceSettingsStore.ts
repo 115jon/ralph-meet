@@ -2,6 +2,10 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { CameraQualityId } from "@/lib/camera-quality";
 import type { NoiseReductionProviderId } from "@/lib/voice/noise-reduction";
+import {
+  VOICE_INPUT_PROFILE_SETTINGS,
+  type VoiceInputProfile,
+} from "@/lib/voice/input-profiles";
 
 export type CameraBackgroundSetting =
   | { type: "none" }
@@ -57,6 +61,7 @@ export interface UserSettings {
   cameraQuality: CameraQualityId;
   cameraBackground: CameraBackgroundSetting;
   customCameraBackgrounds: CustomCameraBackground[];
+  inputProfile: VoiceInputProfile;
   noiseSuppression: boolean;
   noiseReductionEnabled: boolean;
   noiseReductionProvider: NoiseReductionProviderId;
@@ -128,6 +133,11 @@ interface VoiceSettingsState {
     updater: (s: UserSettings) => UserSettings,
     userId?: string,
   ) => void;
+  updateVoiceSettings: (
+    updater: (s: UserSettings) => UserSettings,
+    userId?: string,
+  ) => void;
+  setInputProfile: (profile: VoiceInputProfile, userId?: string) => void;
 }
 
 const defaultSettings: UserSettings = {
@@ -137,6 +147,7 @@ const defaultSettings: UserSettings = {
   cameraQuality: "720p30",
   cameraBackground: { type: "none" },
   customCameraBackgrounds: [],
+  inputProfile: "standard",
   noiseSuppression: true,
   noiseReductionEnabled: false,
   noiseReductionProvider: "rnnoise",
@@ -265,6 +276,39 @@ export const useVoiceSettingsStore = create<VoiceSettingsState>()(
           userSettings: {
             ...state.userSettings,
             [uid]: updater(state.userSettings[uid] || { ...defaultSettings }),
+          },
+        }));
+      },
+
+      updateVoiceSettings: (updater, userId) => {
+        const uid = userId ?? get().currentUser;
+        if (!uid) return;
+        const current = get().getSettings(uid);
+        set((state) => ({
+          userSettings: {
+            ...state.userSettings,
+            [uid]: {
+              ...updater(current),
+              inputProfile: "custom",
+            },
+          },
+        }));
+      },
+
+      setInputProfile: (profile, userId) => {
+        const uid = userId ?? get().currentUser;
+        if (!uid) return;
+        const current = get().getSettings(uid);
+        const preset =
+          profile === "custom" ? {} : VOICE_INPUT_PROFILE_SETTINGS[profile];
+        set((state) => ({
+          userSettings: {
+            ...state.userSettings,
+            [uid]: {
+              ...current,
+              ...preset,
+              inputProfile: profile,
+            },
           },
         }));
       },
@@ -574,19 +618,18 @@ export const useVoiceSettingsStore = create<VoiceSettingsState>()(
     }),
     {
       name: "voice-settings-storage",
-      version: 3,
+      version: 5,
       migrate: (persisted: any, version: number) => {
         const state = persisted as VoiceSettingsState;
         if (version === 0 || version === undefined) {
-          // Fix contradictory defaults: if streamHighFidelity is on,
-          // all audio processing must be off.
+          // High fidelity only disables browser capture processing. RNNoise
+          // and the local sensitivity gate run after capture and remain valid.
           if (state?.userSettings) {
             for (const uid of Object.keys(state.userSettings)) {
               const s = state.userSettings[uid];
               if (s?.streamHighFidelity) {
                 s.noiseSuppression = false;
                 s.echoCancellation = false;
-                s.autoSensitivity = false;
               }
             }
           }
@@ -601,6 +644,14 @@ export const useVoiceSettingsStore = create<VoiceSettingsState>()(
               if (!s) continue;
               s.noiseReductionEnabled ??= false;
               s.noiseReductionProvider ??= "rnnoise";
+            }
+          }
+        }
+        if (version === undefined || version < 5) {
+          if (state?.userSettings) {
+            for (const uid of Object.keys(state.userSettings)) {
+              const s = state.userSettings[uid];
+              if (s) s.inputProfile = "custom";
             }
           }
         }

@@ -3,10 +3,17 @@ import { createMockD1 } from "../../lib/__tests__/mock-d1";
 
 const hoisted = vi.hoisted(() => ({
   hydrateSocialEmbedsMock: vi.fn(),
+  cacheGetMock: vi.fn(),
+  cacheSetMock: vi.fn(),
 }));
 
 vi.mock("@/lib/share-embed-refresh", () => ({
   hydrateSocialEmbeds: hoisted.hydrateSocialEmbedsMock,
+}));
+
+vi.mock("@/lib/cache", () => ({
+  cacheGet: hoisted.cacheGetMock,
+  cacheSet: hoisted.cacheSetMock,
 }));
 
 import { listMessages, refreshMessageEmbeds } from "../message.service";
@@ -20,6 +27,10 @@ describe("listMessages embed hydration", () => {
   beforeEach(() => {
     db = createMockD1();
     hoisted.hydrateSocialEmbedsMock.mockReset();
+    hoisted.cacheGetMock.mockReset();
+    hoisted.cacheSetMock.mockReset();
+    hoisted.cacheGetMock.mockResolvedValue(null);
+    hoisted.cacheSetMock.mockResolvedValue(undefined);
   });
 
   it("returns stored embeds without awaiting social hydration", async () => {
@@ -131,5 +142,30 @@ describe("listMessages embed hydration", () => {
     await expect(
       refreshMessageEmbeds(db as any, CHANNEL_ID, ["msg_1"]),
     ).resolves.toEqual([]);
+  });
+
+  it("skips hydration when the embed was recently refreshed", async () => {
+    db.mockQuery("SELECT id, channel_id, embeds,", {
+      results: [
+        {
+          id: "msg_1",
+          channel_id: CHANNEL_ID,
+          embeds: JSON.stringify([
+            {
+              url: "https://www.instagram.com/reel/DZK623pN9P2/",
+              type: "rich",
+            },
+          ]),
+          content_revision: 4,
+        },
+      ],
+    });
+    hoisted.cacheGetMock.mockResolvedValue(true);
+
+    await expect(
+      refreshMessageEmbeds(db as any, CHANNEL_ID, ["msg_1"]),
+    ).resolves.toEqual([]);
+    expect(hoisted.hydrateSocialEmbedsMock).not.toHaveBeenCalled();
+    db.assertNotCalled(/UPDATE messages SET embeds/);
   });
 });

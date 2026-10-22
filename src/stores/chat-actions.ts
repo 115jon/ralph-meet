@@ -16,6 +16,28 @@ import type {
 import { useMediaSafetySettingsStore } from "./useMediaSafetySettingsStore";
 import { useSoundSettingsStore } from "./useSoundSettingsStore";
 
+function isAuthRequiredError(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error as { code?: unknown }).code === "AUTH_REQUIRED"
+  );
+}
+
+async function withAuthRequiredRetry<T>(
+  operation: () => Promise<T>,
+  delayMs = 250,
+): Promise<T> {
+  try {
+    return await operation();
+  } catch (error) {
+    if (!isAuthRequiredError(error)) throw error;
+    await new Promise((resolve) => setTimeout(resolve, delayMs));
+    return operation();
+  }
+}
+
 export interface ChatRestActions {
   sendMessage: (
     channelId: string,
@@ -496,7 +518,9 @@ export function createChatActions(
 
   const loadServers = async (generation = readStateGeneration) => {
     try {
-      const servers = await apiGet<Server[]>("/api/servers");
+      const servers = await withAuthRequiredRetry(() =>
+        apiGet<Server[]>("/api/servers"),
+      );
       // Guard: only dispatch if we got a valid array (API errors can return objects)
       if (generation === readStateGeneration && Array.isArray(servers)) {
         dispatch({ type: "SET_SERVERS", servers });
@@ -656,41 +680,43 @@ export function createChatActions(
     const loadGeneration = readStateGeneration;
     const userIdAtStart = expectedUserId ?? get().user?.id ?? null;
     try {
-      const profile = await apiGet<{
-        id: string;
-        username: string;
-        display_name: string | null;
-        avatar_url: string | null;
-        avatar_display?:
-          | import("@/lib/avatar-display").AvatarDisplay
-          | string
-          | null;
-        banner_url: string | null;
-        banner_content_type: string | null;
-        nameplate_url: string | null;
-        nameplate_content_type: string | null;
-        profile_accent_color: string | null;
-        profile_background_color: string | null;
-        profile_banner_color: string | null;
-        display_name_style?:
-          | import("@/lib/profile-customization").DisplayNameStyle
-          | string
-          | null;
-        theme_preference: string | null;
-        theme_sync_enabled: number;
-        media_content_filter: string;
-        updated_at?: string | null;
-        created_at?: string | null;
-        bio?: string | null;
-        pronouns?: string | null;
-        status?: string;
-        custom_status?: string;
-        sound_settings?: {
-          voiceJoinSoundboard?: unknown;
-          voiceLeaveSoundboard?: unknown;
-          soundboardVolume?: unknown;
-        };
-      }>("/api/users/me");
+      const profile = await withAuthRequiredRetry(() =>
+        apiGet<{
+          id: string;
+          username: string;
+          display_name: string | null;
+          avatar_url: string | null;
+          avatar_display?:
+            | import("@/lib/avatar-display").AvatarDisplay
+            | string
+            | null;
+          banner_url: string | null;
+          banner_content_type: string | null;
+          nameplate_url: string | null;
+          nameplate_content_type: string | null;
+          profile_accent_color: string | null;
+          profile_background_color: string | null;
+          profile_banner_color: string | null;
+          display_name_style?:
+            | import("@/lib/profile-customization").DisplayNameStyle
+            | string
+            | null;
+          theme_preference: string | null;
+          theme_sync_enabled: number;
+          media_content_filter: string;
+          updated_at?: string | null;
+          created_at?: string | null;
+          bio?: string | null;
+          pronouns?: string | null;
+          status?: string;
+          custom_status?: string;
+          sound_settings?: {
+            voiceJoinSoundboard?: unknown;
+            voiceLeaveSoundboard?: unknown;
+            soundboardVolume?: unknown;
+          };
+        }>("/api/users/me"),
+      );
       if (
         loadGeneration !== readStateGeneration ||
         (userIdAtStart !== null && profile.id !== userIdAtStart)
@@ -709,8 +735,8 @@ export function createChatActions(
           id: profile.id,
           username: profile.username || current?.username || "Guest",
           display_name: profile.display_name ?? undefined,
-          avatar_url: (profile.avatar_url || current?.avatar_url) ?? undefined,
-          avatar_display: profile.avatar_display ?? current?.avatar_display,
+          avatar_url: profile.avatar_url ?? undefined,
+          avatar_display: profile.avatar_display ?? undefined,
           banner_url: profile.banner_url ?? undefined,
           banner_content_type: profile.banner_content_type ?? undefined,
           nameplate_url: profile.nameplate_url ?? undefined,
@@ -779,10 +805,15 @@ export function createChatActions(
     const lastMessagesAtStart = { ...get().lastMessageAt };
     const mutationsAtStart = new Set(readStateMutations.keys());
     try {
-      const data = await apiGet<{
-        read_states: Array<{ channel_id: string; last_read_at: string }>;
-        last_messages: Array<{ channel_id: string; last_message_at: string }>;
-      }>("/api/read-states");
+      const data = await withAuthRequiredRetry(() =>
+        apiGet<{
+          read_states: Array<{ channel_id: string; last_read_at: string }>;
+          last_messages: Array<{
+            channel_id: string;
+            last_message_at: string;
+          }>;
+        }>("/api/read-states"),
+      );
       const readStates: Record<string, string> = {};
       for (const rs of data.read_states) {
         readStates[rs.channel_id] = normalizeTimestamp(rs.last_read_at);
@@ -1067,10 +1098,11 @@ export function createChatActions(
 
   const loadDmChannels = async (generation = readStateGeneration) => {
     try {
-      const data =
-        await apiGet<Array<{ id: string; name: string; recipient: User }>>(
+      const data = await withAuthRequiredRetry(() =>
+        apiGet<Array<{ id: string; name: string; recipient: User }>>(
           "/api/dms",
-        );
+        ),
+      );
       if (generation === readStateGeneration && Array.isArray(data)) {
         dispatch({ type: "SET_DM_CHANNELS", dmChannels: data });
         await syncDesktopNotifications();

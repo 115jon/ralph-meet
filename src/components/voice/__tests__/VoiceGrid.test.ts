@@ -3,7 +3,7 @@ import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { VoiceGrid } from "@/components/voice/VoiceGrid";
-import type { GridItem } from "@/components/voice/types";
+import type { GridItem, VoiceActions } from "@/components/voice/types";
 import type { StreamWatcherIdentity } from "@/lib/stream-watchers";
 import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
 
@@ -71,6 +71,7 @@ function render(
   focusedId: string | null,
   currentSettings?: any,
   watchersByStreamer?: Record<string, StreamWatcherIdentity[]>,
+  voiceActions: VoiceActions = {},
 ): string {
   return renderToStaticMarkup(
     React.createElement(VoiceGrid, {
@@ -81,7 +82,10 @@ function render(
       currentSettings: currentSettings ?? { peerSettings: {} },
       watchedStreams: { "user-2": true },
       streamThumbnails: {},
-      voiceActions: watchersByStreamer ? { watchersByStreamer } : {},
+      voiceActions: {
+        ...voiceActions,
+        ...(watchersByStreamer ? { watchersByStreamer } : {}),
+      },
     }),
   );
 }
@@ -212,5 +216,30 @@ describe("VoiceGrid focused stage", () => {
     expect(markup).toMatch(
       /data-focused-visual="true"[^>]*class="[^"]*pointer-events-none/,
     );
+  });
+
+  it("keeps the local preview toggle available in the focused stage", () => {
+    const markup = render(
+      [
+        makeFocusedScreenItem({
+          id: "local-screen-user-1",
+          userId: "user-1",
+          name: "You",
+          isLocal: true,
+          stream: null,
+        }),
+      ],
+      "local-screen-user-1",
+      undefined,
+      undefined,
+      {
+        isPreviewHidden: true,
+        togglePreviewHidden: () => {},
+      },
+    );
+
+    expect(markup).toContain('data-focused-stage="true"');
+    expect(markup).toContain('data-preview-toggle="true"');
+    expect(markup).toContain("Resume preview");
   });
 });

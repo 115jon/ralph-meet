@@ -32,7 +32,7 @@ const DeleteButton: React.FC<DeleteButtonProps> = ({ id, onDelete }) => {
             onDelete(id);
           }
         }}
-        className="p-1.5 bg-black/50 hover:bg-rose-500 text-white/80 hover:text-white rounded-lg transition-all backdrop-blur-sm shadow-sm"
+        className="p-1.5 bg-black/50 hover:bg-rose-500 text-white/80 hover:text-white rounded-lg transition-[background-color,color] backdrop-blur-sm shadow-sm"
         aria-label="Delete image"
       >
         <Trash2 size={14} />
@@ -169,6 +169,7 @@ export const ImageGrid: React.FC<ImageGridProps> = ({
                 alt={att.filename}
                 width={options.width}
                 height={options.height}
+                decoding="async"
                 className={cn(
                   options.imageClassName,
                   "pointer-events-none",
@@ -190,9 +191,9 @@ export const ImageGrid: React.FC<ImageGridProps> = ({
     const att = attachments[0];
     return renderTile(att, 0, {
       frameClassName:
-        "w-fit rounded-xl overflow-hidden border border-rm-border group/att relative shadow-xl hover:shadow-primary/5 transition-all",
+        "w-fit min-h-[200px] rounded-xl overflow-hidden border border-rm-border group/att relative shadow-xl hover:shadow-primary/5 transition-shadow",
       imageClassName:
-        "max-w-full max-h-[450px] w-auto h-auto object-contain transition-all",
+        "max-w-full max-h-[450px] min-h-[200px] w-auto object-contain transition-[filter]",
       width: 800,
       height: 450,
     });
@@ -211,7 +212,7 @@ export const ImageGrid: React.FC<ImageGridProps> = ({
             frameClassName:
               "h-full w-full overflow-hidden group/att relative bg-rm-bg-primary/50",
             imageClassName:
-              "w-full h-full object-cover transition-all duration-500",
+              "w-full h-full object-cover transition-[filter] duration-200",
             width: 300,
             height: 300,
           }),
@@ -234,7 +235,7 @@ export const ImageGrid: React.FC<ImageGridProps> = ({
               idx === 0 && "row-span-2",
             ),
             imageClassName:
-              "w-full h-full object-cover transition-all duration-500",
+              "w-full h-full object-cover transition-[filter] duration-200",
             width: idx === 0 ? 350 : 250,
             height: idx === 0 ? 350 : 175,
           });
@@ -254,7 +255,7 @@ export const ImageGrid: React.FC<ImageGridProps> = ({
             frameClassName:
               "h-full w-full overflow-hidden group/att relative bg-rm-bg-primary/50",
             imageClassName:
-              "w-full h-full object-cover transition-all duration-500",
+              "w-full h-full object-cover transition-[filter] duration-200",
             width: 250,
             height: 200,
           }),
@@ -274,7 +275,7 @@ export const ImageGrid: React.FC<ImageGridProps> = ({
               idx < 2 ? "col-span-3 aspect-video" : "col-span-2 aspect-square",
             ),
             imageClassName:
-              "w-full h-full object-cover transition-all duration-500",
+              "w-full h-full object-cover transition-[filter] duration-200",
             width: idx < 2 ? 300 : 200,
             height: idx < 2 ? 170 : 200,
           }),
@@ -324,8 +325,9 @@ export const ImageGrid: React.FC<ImageGridProps> = ({
                     alt={att.filename}
                     width={isFirst ? 550 : 180}
                     height={isFirst ? 250 : 180}
+                    decoding="async"
                     className={cn(
-                      "w-full h-full object-cover transition-all duration-500 pointer-events-none",
+                      "w-full h-full object-cover transition-[filter] duration-200 pointer-events-none",
                       interactive &&
                         "peer-hover:brightness-105 peer-focus-visible:brightness-105",
                     )}

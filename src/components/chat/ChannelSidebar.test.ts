@@ -120,6 +120,65 @@ describe("ChannelSidebar voice member identities", () => {
     expect(markup).toContain("0:05");
   });
 
+  it("renders self mute, self deafen, and local mute indicators with tooltip triggers", () => {
+    useChatStore.setState({
+      user: { id: "me", username: "me" },
+    });
+    useVoiceSettingsStore.getState().setCurrentUser("me");
+    useVoiceSettingsStore.getState().setPeerMuted("u1", true);
+
+    const { container } = render(
+      React.createElement(ChannelSidebar, {
+        channels: [
+          {
+            id: "vc-1",
+            server_id: "srv-1",
+            name: "Standup",
+            channel_type: "voice",
+            position: 0,
+            created_at: "2026-01-01T00:00:00Z",
+          },
+        ],
+        categories: [],
+        activeChannelId: null,
+        serverId: "srv-1",
+        serverName: "Server",
+        onSelect: () => {},
+        voiceChannelStates: {
+          "vc-1": [
+            {
+              clerk_user_id: "u1",
+              name: "Alice",
+              self_mute: true,
+              self_deaf: true,
+              self_video: false,
+              self_stream: false,
+            },
+          ],
+        },
+      }),
+    );
+
+    expect(container.querySelector("svg.lucide-mic-off")).not.toBeNull();
+    expect(container.querySelector("svg.lucide-headphone-off")).not.toBeNull();
+    expect(container.querySelector("svg.lucide-volume-x")).not.toBeNull();
+    expect(
+      container.querySelector(
+        '[data-slot="tooltip-trigger"][aria-label="Self-muted"]',
+      ),
+    ).not.toBeNull();
+    expect(
+      container.querySelector(
+        '[data-slot="tooltip-trigger"][aria-label="Self-deafened"]',
+      ),
+    ).not.toBeNull();
+    expect(
+      container.querySelector(
+        '[data-slot="tooltip-trigger"][aria-label="Muted by you"]',
+      ),
+    ).not.toBeNull();
+  });
+
   it("renders the latest display name for voice channel members", () => {
     useChatStore.setState({
       user: { id: "me", username: "me" },

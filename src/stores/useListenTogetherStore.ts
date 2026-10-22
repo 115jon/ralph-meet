@@ -4,7 +4,6 @@ import {
 } from "@/lib/listen-together";
 import {
   clampListenTogetherPaneRatio,
-  readListenTogetherPaneRatio,
   writeListenTogetherPaneRatio,
 } from "@/lib/listen-together-local";
 import { create } from "zustand";
@@ -86,20 +85,30 @@ function getListenTogetherVolumeStorageKey(roomSlug: string) {
 
 function readStoredListenTogetherVolume(roomSlug: string) {
   if (typeof window === "undefined") return DEFAULT_ROOM_STATE.localVolume;
-  const rawValue = localStorage.getItem(
-    getListenTogetherVolumeStorageKey(roomSlug),
-  );
-  const volume = rawValue ? Number(rawValue) : NaN;
-  if (!Number.isFinite(volume)) return DEFAULT_ROOM_STATE.localVolume;
-  return Math.max(0, Math.min(1, volume));
+
+  try {
+    const rawValue = window.localStorage.getItem(
+      getListenTogetherVolumeStorageKey(roomSlug),
+    );
+    const volume = rawValue ? Number(rawValue) : NaN;
+    if (!Number.isFinite(volume)) return DEFAULT_ROOM_STATE.localVolume;
+    return Math.max(0, Math.min(1, volume));
+  } catch {
+    return DEFAULT_ROOM_STATE.localVolume;
+  }
 }
 
 function writeStoredListenTogetherVolume(roomSlug: string, volume: number) {
   if (typeof window === "undefined") return;
-  localStorage.setItem(
-    getListenTogetherVolumeStorageKey(roomSlug),
-    volume.toString(),
-  );
+
+  try {
+    window.localStorage.setItem(
+      getListenTogetherVolumeStorageKey(roomSlug),
+      volume.toString(),
+    );
+  } catch {
+    // Storage can be unavailable in private or restricted browsing contexts.
+  }
 }
 
 function areListenTogetherSnapshotsEqual(
@@ -154,7 +163,7 @@ const LISTEN_TOGETHER_SEEK_CONFIRMATION_TOLERANCE_MS =
 export const useListenTogetherStore = create<ListenTogetherStoreState>()(
   (set) => ({
     rooms: {},
-    workspacePaneRatio: readListenTogetherPaneRatio(),
+    workspacePaneRatio: 0.38,
     ensureRoom: (roomSlug) =>
       set((state) => {
         if (!roomSlug || state.rooms[roomSlug]) return state;

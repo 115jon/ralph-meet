@@ -2390,6 +2390,9 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
     }
 
     case "SET_SCROLL_POSITION": {
+      if (state.scrollPositions[action.channelId] === action.messageId) {
+        return state;
+      }
       return {
         ...state,
         scrollPositions: {

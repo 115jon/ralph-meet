@@ -23,10 +23,16 @@ export const SOUNDBOARD_MEDIA_RATE_LIMIT: RateLimitConfig = {
   windowMs: 60_000,
 };
 
+export const PROXY_MEDIA_RATE_LIMIT: RateLimitConfig = {
+  limit: 480,
+  windowMs: 60_000,
+};
+
 const RATE_LIMITS: Record<string, RateLimitConfig> = {
   "POST:/api/channels/*/messages": { limit: 30, windowMs: 60_000 },
   "POST:/api/channels/*/messages/upload": { limit: 10, windowMs: 60_000 },
   "GET:/api/soundboard/uploads/*": SOUNDBOARD_MEDIA_RATE_LIMIT,
+  "GET:/api/proxy-media": PROXY_MEDIA_RATE_LIMIT,
   "POST:/api/channels/*/typing": { limit: 10, windowMs: 10_000 },
   "POST:/api/servers": { limit: 5, windowMs: 3_600_000 },
   "POST:/api/invites/*/join": { limit: 10, windowMs: 600_000 },

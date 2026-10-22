@@ -190,7 +190,7 @@ export default function FloatingStreamPreview({
     <TooltipProvider delayDuration={0}>
       <div
         ref={containerRef}
-        className="fixed z-[130] w-[min(360px,calc(100vw-24px))] touch-none select-none cursor-grab active:cursor-grabbing"
+        className="fixed z-40 w-[min(360px,calc(100vw-24px))] touch-none select-none cursor-grab active:cursor-grabbing"
         style={{ left: position.x, top: position.y }}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
@@ -234,7 +234,7 @@ export default function FloatingStreamPreview({
           </button>
 
           <div className="absolute bottom-3 left-3 z-20 max-w-[55%] rounded-md bg-black/40 px-2.5 py-1 text-sm font-bold tracking-tight text-white">
-            <span className="truncate">{displayName}</span>
+            <InlineEmojiText text={displayName} className="truncate" />
           </div>
 
           <div className="absolute bottom-3 right-3 z-20 flex items-center gap-2">

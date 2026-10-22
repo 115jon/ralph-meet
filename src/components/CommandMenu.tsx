@@ -130,7 +130,7 @@ export default function CommandMenu() {
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-200">
+    <div className="fixed inset-0 z-50">
       {/* Backdrop */}
       <div
         className="absolute inset-0 bg-black/60 backdrop-blur-[2px]"

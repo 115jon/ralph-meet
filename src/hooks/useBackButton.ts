@@ -11,9 +11,51 @@ const backHandlers: BackHandler[] = [];
 let hasRegisteredGlobalListener = false;
 let globalInvoke: typeof import("@tauri-apps/api/core").invoke | null = null;
 
-// For web history programmatic popping. A count is needed when multiple
-// instances clean up in the same task before their popstate events arrive.
-let programmaticPopPending = 0;
+// All active handlers share one browser history entry. Keeping one entry for
+// the stack avoids one handler's delayed cleanup consuming another handler's
+// entry during rapid dialog transitions.
+let ownsHistoryEntry = false;
+let programmaticPopPending = false;
+let historyCleanupTimeout: ReturnType<typeof setTimeout> | null = null;
+
+function ensureHistoryEntry() {
+  if (typeof window === "undefined" || isTauri() || ownsHistoryEntry) {
+    return;
+  }
+
+  window.history.pushState({ backHandlerOpen: true }, "");
+  ownsHistoryEntry = true;
+}
+
+function releaseHistoryEntry() {
+  if (
+    typeof window === "undefined" ||
+    isTauri() ||
+    !ownsHistoryEntry ||
+    historyCleanupTimeout !== null
+  ) {
+    return;
+  }
+
+  historyCleanupTimeout = setTimeout(() => {
+    historyCleanupTimeout = null;
+    if (backHandlers.length > 0 || !ownsHistoryEntry) return;
+
+    ownsHistoryEntry = false;
+    programmaticPopPending = true;
+    try {
+      window.history.go(-1);
+    } catch {
+      programmaticPopPending = false;
+    }
+  }, 10);
+}
+
+function cancelHistoryRelease() {
+  if (historyCleanupTimeout === null) return;
+  clearTimeout(historyCleanupTimeout);
+  historyCleanupTimeout = null;
+}
 
 function initGlobalBackListener() {
   if (typeof window === "undefined" || hasRegisteredGlobalListener) return;
@@ -22,11 +64,20 @@ function initGlobalBackListener() {
 
   // Web Browser Listener (handles browser back button or Android back button in PWA)
   window.addEventListener("popstate", () => {
-    if (programmaticPopPending > 0) {
-      programmaticPopPending--;
+    if (programmaticPopPending) {
+      programmaticPopPending = false;
       return;
     }
-    executeBackHandlers();
+
+    ownsHistoryEntry = false;
+    const handled = executeBackHandlers();
+    if (handled) {
+      // Allow React to remove a handler that closed before deciding whether
+      // another active handler needs a replacement entry.
+      setTimeout(() => {
+        if (backHandlers.length > 0) ensureHistoryEntry();
+      }, 0);
+    }
   });
 
   // Tauri Native Listener (handles Android back button in native Tauri app)
@@ -85,9 +136,6 @@ export function executeBackHandlers(): boolean {
 
 export function useBackButton(handler: BackHandler, active: boolean = true) {
   const handlerRef = useRef(handler);
-  const isPushedRef = useRef(false);
-  const statesToPopRef = useRef(0);
-  const popTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     handlerRef.current = handler;
@@ -96,29 +144,10 @@ export function useBackButton(handler: BackHandler, active: boolean = true) {
   useEffect(() => {
     if (!active) return;
 
-    // Reuse an entry whose manual cleanup has not run yet. This avoids a
-    // stale timer popping the newly pushed entry after a rapid toggle.
-    const hasPendingCleanup =
-      statesToPopRef.current > 0 || popTimeoutRef.current !== null;
-    if (popTimeoutRef.current !== null) {
-      clearTimeout(popTimeoutRef.current);
-      popTimeoutRef.current = null;
-    }
-    if (hasPendingCleanup) {
-      statesToPopRef.current = 0;
-      isPushedRef.current = true;
-    }
-
-    // Web: push state to intercept browser back
-    if (!hasPendingCleanup && typeof window !== "undefined" && !isTauri()) {
-      window.history.pushState({ backHandlerOpen: true }, "");
-      isPushedRef.current = true;
-    }
+    cancelHistoryRelease();
+    ensureHistoryEntry();
 
     const proxyHandler = () => {
-      if (isPushedRef.current) {
-        isPushedRef.current = false; // Popped by user action
-      }
       return handlerRef.current();
     };
 
@@ -127,28 +156,20 @@ export function useBackButton(handler: BackHandler, active: boolean = true) {
     return () => {
       cleanup();
 
-      // If closed manually (not via back button), we must pop history to keep it clean
-      if (isPushedRef.current && typeof window !== "undefined" && !isTauri()) {
-        isPushedRef.current = false;
-        statesToPopRef.current++;
-
-        if (popTimeoutRef.current !== null) {
-          clearTimeout(popTimeoutRef.current);
-        }
-        popTimeoutRef.current = setTimeout(() => {
-          popTimeoutRef.current = null;
-          if (statesToPopRef.current <= 0) return;
-
-          const count = statesToPopRef.current;
-          statesToPopRef.current = 0;
-          programmaticPopPending += 1;
-          try {
-            window.history.go(-count);
-          } catch {
-            programmaticPopPending = Math.max(0, programmaticPopPending - 1);
-          }
-        }, 10);
-      }
+      releaseHistoryEntry();
     };
   }, [active]);
+}
+
+/** Registers a dialog host above the screen's base back handler. */
+export function useDialogBackButton(
+  open: boolean,
+  onClose: () => void,
+  isTopmost?: () => boolean,
+) {
+  useBackButton(() => {
+    if (isTopmost && !isTopmost()) return false;
+    onClose();
+    return true;
+  }, open);
 }

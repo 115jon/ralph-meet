@@ -215,4 +215,67 @@ describe("proxy media stale TikTok cache handling", () => {
       { bypassCache: true },
     );
   });
+
+  it("refreshes stale Instagram author avatars from resolver metadata", async () => {
+    const sourceUrl = "https://www.instagram.com/p/DZ9DK2RgNSk/";
+    const staleAvatarUrl =
+      "https://scontent-ord5-3.cdninstagram.com/v/t51.82787-19/stale-avatar.jpg?oe=6A4A071B";
+    const freshAvatarUrl =
+      "https://scontent-ord5-1.cdninstagram.com/v/t51.82787-19/fresh-avatar.jpg?oe=6A53095B";
+
+    hoisted.cacheFetchMock.mockImplementation(
+      async (_key: string, _ttl: number, fetcher: () => Promise<unknown>) =>
+        fetcher(),
+    );
+    hoisted.fetchInstagramOEmbedMetadataMock.mockResolvedValue(null);
+    hoisted.resolveInstagramVideoMetadataMock.mockResolvedValue({
+      videoUrl: null,
+      thumbnailUrl:
+        "https://scontent-ord5-2.cdninstagram.com/v/t51.82787-15/photo.jpg",
+      title: "rukia!",
+      durationSeconds: null,
+      authorAvatarUrl: freshAvatarUrl,
+      media: [
+        {
+          type: "image",
+          url: "https://scontent-ord5-2.cdninstagram.com/v/t51.82787-15/photo.jpg",
+        },
+      ],
+    });
+
+    const upstreamFetchMock = vi.fn(async (input: string | URL | Request) => {
+      const url = input.toString();
+      if (url === staleAvatarUrl) {
+        return new Response("expired", {
+          status: 403,
+          headers: { "Content-Type": "text/html; charset=utf-8" },
+        });
+      }
+      if (url === freshAvatarUrl) {
+        return new Response("fresh-avatar", {
+          status: 200,
+          headers: {
+            "Content-Type": "image/jpeg",
+            "Content-Length": "12",
+          },
+        });
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+    vi.stubGlobal("fetch", upstreamFetchMock as unknown as typeof fetch);
+
+    const response = await proxyMedia(
+      new Request(
+        `https://meet.test/api/proxy-media?url=${encodeURIComponent(staleAvatarUrl)}&sourceUrl=${encodeURIComponent(sourceUrl)}`,
+      ),
+      true,
+    );
+
+    expect(response.status).toBe(200);
+    expect(
+      upstreamFetchMock.mock.calls.some(
+        (call) => String(call[0]) === freshAvatarUrl,
+      ),
+    ).toBe(true);
+  });
 });

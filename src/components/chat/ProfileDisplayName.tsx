@@ -8,6 +8,7 @@ import {
 } from "@/lib/profile-customization";
 import { cn } from "@/lib/utils";
 import { useCallback, useMemo, useState, type CSSProperties } from "react";
+import InlineEmojiText from "./InlineEmojiText";
 
 interface ProfileDisplayNameProps {
   text: string;
@@ -95,7 +96,7 @@ export function ProfileDisplayName({
   if (!resolvedStyle) {
     return (
       <span ref={handleSpanRef} className={className} style={style}>
-        {text}
+        <InlineEmojiText text={text} />
       </span>
     );
   }
@@ -110,7 +111,7 @@ export function ProfileDisplayName({
         ...style,
       }}
     >
-      {text}
+      <InlineEmojiText text={text} />
     </span>
   );
 }

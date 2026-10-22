@@ -1,4 +1,4 @@
-import { BaseModal } from "@/components/ui/BaseModal";
+import { Dialog, DialogPortal, DialogSurface } from "@/components/ui/dialog";
 import { apiDelete, apiGet, apiPatch, apiUpload } from "@/lib/api-client";
 import { getAuthAssetUrl } from "@/lib/platform";
 import { hasPermission, PERMISSIONS } from "@/lib/permissions";
@@ -21,6 +21,7 @@ import InvitesTab from "./InvitesTab";
 import RoleManagement from "./RoleManagement";
 
 interface ServerSettingsModalProps {
+  open: boolean;
   serverId: string;
   ownerId: string;
   serverName: string;
@@ -38,7 +39,6 @@ interface ServerSettingsModalProps {
     allow_share_indexing?: boolean;
   }) => void;
   onDeleted: () => void;
-  isClosing?: boolean;
 }
 
 function SettingsSidebar({
@@ -52,7 +52,7 @@ function SettingsSidebar({
   fetchBans,
 }: any) {
   return (
-    <div className="w-full md:w-[218px] flex flex-row md:flex-col shrink-0 bg-rm-server-bar pt-2 md:pt-[60px] pb-2 px-4 overflow-x-auto md:overflow-y-auto md:overflow-x-hidden custom-scrollbar border-b md:border-b-0 md:border-r border-rm-border/50 gap-2 md:gap-0">
+    <div className="w-full min-h-0 md:w-[218px] flex flex-row md:flex-col shrink-0 bg-rm-server-bar pt-2 md:pt-[60px] pb-2 px-4 overflow-x-auto md:overflow-y-auto md:overflow-x-hidden custom-scrollbar border-b md:border-b-0 md:border-r border-rm-border/50 gap-2 md:gap-0">
       <div className="hidden md:block mb-2 px-2">
         <h2
           className="text-[11px] font-bold uppercase tracking-widest text-rm-text-muted truncate block w-[180px]"
@@ -470,6 +470,7 @@ function OverviewTab({
 }
 
 export default function ServerSettingsModal({
+  open,
   serverId,
   ownerId,
   serverName: initialServerName,
@@ -481,7 +482,6 @@ export default function ServerSettingsModal({
   onClose,
   onUpdated,
   onDeleted,
-  isClosing,
 }: ServerSettingsModalProps) {
   const currentUserId = useChatStore((state) => state.user?.id);
   const [state, dispatch] = useReducer(
@@ -679,141 +679,140 @@ export default function ServerSettingsModal({
   };
 
   return (
-    <BaseModal onClose={onClose}>
-      <div
-        className={cn(
-          "fixed inset-0 z-1000 flex flex-col items-center justify-end md:justify-center p-0 md:p-8 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200 pointer-events-none",
-          isClosing && "animate-out fade-out",
-        )}
-        onClick={(event) => {
-          if (event.target === event.currentTarget) {
-            onClose();
-          }
-        }}
-        onKeyDown={(e) => {
-          if (e.key === "Escape") onClose();
-        }}
-        role="presentation"
-      >
-        <dialog
-          open
+    <Dialog open={open} onOpenChange={(nextOpen) => !nextOpen && onClose()}>
+      <DialogPortal>
+        <div
+          data-state={open ? "open" : "closed"}
           className={cn(
-            "relative m-0 flex h-full w-full flex-col overflow-hidden bg-rm-bg-primary p-0 shadow-2xl pointer-events-auto outline-none md:h-full md:max-h-[820px] md:max-w-[1040px] md:flex-row md:rounded-xl md:border border-rm-border animate-in slide-in-from-bottom-full md:slide-in-from-bottom-0 md:fade-in duration-300 md:duration-200",
-            isClosing &&
-              "animate-out slide-out-to-bottom-full md:slide-out-to-bottom-0 md:fade-out",
+            "fixed inset-0 z-50 flex flex-col items-center justify-end md:justify-center p-0 md:p-8 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200 pointer-events-none",
+            "data-[state=closed]:pointer-events-none data-[state=closed]:opacity-0 data-[state=closed]:animate-out data-[state=closed]:fade-out",
           )}
-          aria-label="Server settings"
+          onClick={(event) => {
+            if (event.target === event.currentTarget) {
+              onClose();
+            }
+          }}
+          role="presentation"
         >
-          <div
-            className="w-full flex justify-between items-center pb-3 px-4 md:hidden bg-rm-server-bar shrink-0 border-b border-rm-border/50"
-            style={{ paddingTop: "calc(16px + var(--safe-area-top, 0px))" }}
+          <DialogSurface
+            showCloseButton={false}
+            className={cn(
+              "relative m-0 flex min-h-0 h-full w-full flex-col overflow-hidden bg-rm-bg-primary p-0 shadow-2xl pointer-events-auto outline-none md:h-full md:max-h-[820px] md:max-w-[1040px] md:flex-row md:rounded-xl md:border border-rm-border animate-in slide-in-from-bottom-full md:slide-in-from-bottom-0 md:fade-in duration-300 md:duration-200",
+              "data-[state=closed]:pointer-events-none data-[state=closed]:opacity-0 data-[state=closed]:animate-out data-[state=closed]:slide-out-to-bottom-full md:data-[state=closed]:slide-out-to-bottom-0 md:data-[state=closed]:fade-out",
+            )}
+            aria-label="Server settings"
           >
-            <h2 className="text-[13px] font-bold tracking-widest text-rm-text-muted truncate">
-              {initialServerName}
-            </h2>
-            <button
-              type="button"
-              onClick={onClose}
-              className="p-1 rounded-full bg-rm-bg-surface text-rm-text flex items-center justify-center hover:bg-rm-bg-hover active:scale-95 transition-all"
-              aria-label="Close server settings"
+            <div
+              className="w-full flex justify-between items-center pb-3 px-4 md:hidden bg-rm-server-bar shrink-0 border-b border-rm-border/50"
+              style={{ paddingTop: "calc(16px + var(--safe-area-top, 0px))" }}
             >
-              <X size={18} />
-            </button>
-          </div>
-
-          <SettingsSidebar
-            initialServerName={initialServerName}
-            activeTab={activeTab}
-            setActiveTab={setActiveTab}
-            canManageRoles={canManageRoles}
-            canBan={canBan}
-            isAdmin={isAdmin}
-            canViewAuditLog={canViewAuditLog}
-            fetchBans={fetchBans}
-          />
-
-          <div className="flex-1 flex flex-col bg-rm-bg-primary relative overflow-hidden">
-            <div className="absolute right-6 top-6 z-50 flex-col items-center gap-1 hidden md:flex">
+              <h2 className="text-[13px] font-bold tracking-widest text-rm-text-muted truncate">
+                {initialServerName}
+              </h2>
               <button
                 type="button"
                 onClick={onClose}
-                className="flex h-9 w-9 items-center justify-center rounded-full border border-rm-border text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text transition-all group"
+                className="p-1 rounded-full bg-rm-bg-surface text-rm-text flex items-center justify-center hover:bg-rm-bg-hover active:scale-95 transition-all"
                 aria-label="Close server settings"
               >
                 <X size={18} />
               </button>
-              <span className="text-[11px] font-bold text-rm-text-muted group-hover:text-rm-text-secondary">
-                ESC
-              </span>
             </div>
 
-            <div
-              className="flex-1 overflow-y-auto custom-scrollbar px-[20px] md:px-[40px] pt-[20px] md:pt-[60px]"
-              style={{
-                paddingBottom: "calc(40px + var(--safe-area-bottom, 0px))",
-              }}
-            >
-              {activeTab === "roles" ? (
-                <div className="animate-in fade-in slide-in-from-right-4 duration-300">
-                  <h2
-                    id="server-settings-title"
-                    className="mb-6 text-xl font-bold text-rm-text"
-                  >
-                    Roles
-                  </h2>
-                  <RoleManagement serverId={serverId} />
-                </div>
-              ) : activeTab === "invites" ? (
-                <InvitesTab
-                  serverId={serverId}
-                  serverName={initialServerName}
-                />
-              ) : activeTab === "bans" ? (
-                <BansTab
-                  bansLoading={bansLoading}
-                  bans={bans}
-                  handleUnban={handleUnban}
-                />
-              ) : activeTab === "audit" ? (
-                <div className="w-full">
-                  <AuditLogTab serverId={serverId} />
-                </div>
-              ) : (
-                <OverviewTab
-                  isAdmin={isAdmin}
-                  isOwner={isOwner}
-                  initialServerName={initialServerName}
-                  name={name}
-                  setName={setName}
-                  saving={saving}
-                  handleSave={handleSave}
-                  confirmDelete={confirmDelete}
-                  setConfirmDelete={setConfirmDelete}
-                  deleteText={deleteText}
-                  setDeleteText={setDeleteText}
-                  handleDelete={handleDelete}
-                  iconFile={iconFile}
-                  setIconFile={setIconFile}
-                  iconPreview={iconPreview}
-                  setIconPreview={setIconPreview}
-                  iconError={iconError}
-                  setIconError={setIconError}
-                  removeIcon={removeIcon}
-                  setRemoveIcon={setRemoveIcon}
-                  currentIconUrl={currentIconUrl}
-                  fileInputRef={fileInputRef}
-                  allowPublicShares={allowPublicShares}
-                  setAllowPublicShares={setAllowPublicShares}
-                  showSourceInShares={showSourceInShares}
-                  setShowSourceInShares={setShowSourceInShares}
-                  allowShareIndexing={allowShareIndexing}
-                  setAllowShareIndexing={setAllowShareIndexing}
-                />
-              )}
+            <SettingsSidebar
+              initialServerName={initialServerName}
+              activeTab={activeTab}
+              setActiveTab={setActiveTab}
+              canManageRoles={canManageRoles}
+              canBan={canBan}
+              isAdmin={isAdmin}
+              canViewAuditLog={canViewAuditLog}
+              fetchBans={fetchBans}
+            />
+
+            <div className="flex-1 flex flex-col bg-rm-bg-primary relative overflow-hidden">
+              <div className="absolute right-6 top-6 z-50 flex-col items-center gap-1 hidden md:flex">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="flex h-9 w-9 items-center justify-center rounded-full border border-rm-border text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text transition-all group"
+                  aria-label="Close server settings"
+                >
+                  <X size={18} />
+                </button>
+                <span className="text-[11px] font-bold text-rm-text-muted group-hover:text-rm-text-secondary">
+                  ESC
+                </span>
+              </div>
+
+              <div
+                className="flex-1 min-h-0 overflow-y-auto custom-scrollbar px-[20px] md:px-[40px] pt-[20px] md:pt-[60px]"
+                style={{
+                  paddingBottom: "calc(40px + var(--safe-area-bottom, 0px))",
+                }}
+              >
+                {activeTab === "roles" ? (
+                  <div className="animate-in fade-in slide-in-from-right-4 duration-300">
+                    <h2
+                      id="server-settings-title"
+                      className="mb-6 text-xl font-bold text-rm-text"
+                    >
+                      Roles
+                    </h2>
+                    <RoleManagement serverId={serverId} />
+                  </div>
+                ) : activeTab === "invites" ? (
+                  <InvitesTab
+                    serverId={serverId}
+                    serverName={initialServerName}
+                  />
+                ) : activeTab === "bans" ? (
+                  <BansTab
+                    bansLoading={bansLoading}
+                    bans={bans}
+                    handleUnban={handleUnban}
+                  />
+                ) : activeTab === "audit" ? (
+                  <div className="w-full">
+                    <AuditLogTab serverId={serverId} />
+                  </div>
+                ) : (
+                  <OverviewTab
+                    isAdmin={isAdmin}
+                    isOwner={isOwner}
+                    initialServerName={initialServerName}
+                    name={name}
+                    setName={setName}
+                    saving={saving}
+                    handleSave={handleSave}
+                    confirmDelete={confirmDelete}
+                    setConfirmDelete={setConfirmDelete}
+                    deleteText={deleteText}
+                    setDeleteText={setDeleteText}
+                    handleDelete={handleDelete}
+                    iconFile={iconFile}
+                    setIconFile={setIconFile}
+                    iconPreview={iconPreview}
+                    setIconPreview={setIconPreview}
+                    iconError={iconError}
+                    setIconError={setIconError}
+                    removeIcon={removeIcon}
+                    setRemoveIcon={setRemoveIcon}
+                    currentIconUrl={currentIconUrl}
+                    fileInputRef={fileInputRef}
+                    allowPublicShares={allowPublicShares}
+                    setAllowPublicShares={setAllowPublicShares}
+                    showSourceInShares={showSourceInShares}
+                    setShowSourceInShares={setShowSourceInShares}
+                    allowShareIndexing={allowShareIndexing}
+                    setAllowShareIndexing={setAllowShareIndexing}
+                  />
+                )}
+              </div>
             </div>
-          </div>
-        </dialog>
-      </div>
-    </BaseModal>
+          </DialogSurface>
+        </div>
+      </DialogPortal>
+    </Dialog>
   );
 }

@@ -1,9 +1,23 @@
 import { cn } from "@/lib/utils";
 import { useTheme } from "next-themes";
 import { useEffect, useState } from "react";
-import { HomeDarkSvg, HomeLightSvg } from "./home-svgs";
 
-export function HomeIcon({ className }: { className?: string }) {
+const HOME_ICON_ASSETS = {
+  light: "/icons/home-light.svg",
+  dark: "/icons/home-dark.svg",
+} as const;
+
+type HomeIconProps = {
+  className?: string;
+  variant?: keyof typeof HOME_ICON_ASSETS;
+  showThemeOverlay?: boolean;
+};
+
+export function HomeIcon({
+  className,
+  variant,
+  showThemeOverlay = true,
+}: HomeIconProps) {
   const { resolvedTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
 
@@ -13,27 +27,37 @@ export function HomeIcon({ className }: { className?: string }) {
   }, []);
 
   const isMiku =
+    showThemeOverlay &&
     mounted &&
     (resolvedTheme === "miku-light" || resolvedTheme === "miku-dark");
   const isSpiderman =
+    showThemeOverlay &&
     mounted &&
     (resolvedTheme === "spiderman-light" || resolvedTheme === "spiderman-dark");
   const isLightMode =
     resolvedTheme === "light" ||
     resolvedTheme === "miku-light" ||
     resolvedTheme === "spiderman-light";
-  const SvgComponent = isLightMode ? HomeLightSvg : HomeDarkSvg;
+  const iconVariant = variant ?? (isLightMode ? "light" : "dark");
+  const iconAsset = HOME_ICON_ASSETS[iconVariant];
+  const shouldRenderAsset = mounted || variant !== undefined;
 
-  // Render the SVG component directly to allow fill="currentColor" to work.
   return (
     <div
       className={cn(
-        "relative flex items-center justify-center h-7 w-7 [&>svg]:h-full [&>svg]:w-full",
+        "relative flex h-7 w-7 items-center justify-center",
         className,
       )}
       suppressHydrationWarning
     >
-      {mounted ? <SvgComponent /> : null}
+      {shouldRenderAsset ? (
+        <img
+          aria-hidden="true"
+          alt=""
+          className="block h-full w-full object-contain"
+          src={iconAsset}
+        />
+      ) : null}
       {isMiku && (
         <img
           src="/themes/miku/miku-wig.svg"

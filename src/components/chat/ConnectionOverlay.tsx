@@ -137,7 +137,7 @@ export function ConnectionOverlay() {
 
   return (
     <div
-      className={`fixed inset-0 z-9999 flex flex-col items-center justify-center bg-rm-bg-primary font-sans select-none overflow-hidden ${animationClass}`}
+      className={`fixed inset-0 z-100 flex flex-col items-center justify-center bg-rm-bg-primary font-sans select-none overflow-hidden ${animationClass}`}
     >
       {/* Radial glow */}
       <div

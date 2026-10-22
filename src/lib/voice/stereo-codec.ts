@@ -78,10 +78,9 @@ export function createTrueStereoStream(rawStream: MediaStream): MediaStream {
  * Force Opus to use stereo and high bitrate in SDP.
  * Applied to all audio (mic + screen) for maximum quality.
  *
- * When prefix is 'screen', DTX is disabled and bitrate is raised to 192kbps.
- * Screen audio typically contains music/system sounds where DTX comfort-noise
- * packets cause audible micro-dropouts during quiet passages. Voice (cam)
- * keeps DTX=1 for bandwidth savings during silence.
+ * DTX is disabled for both voice and screen audio. The local sensitivity gate
+ * already supplies silence, and Opus comfort-noise packets are audible as a
+ * periodic tick on some receivers when voice DTX is enabled.
  */
 export function mungeStereoOpus(sdp: string, prefix?: string): string {
   const lines = sdp.split("\r\n");
@@ -104,7 +103,7 @@ export function mungeStereoOpus(sdp: string, prefix?: string): string {
   // Voice keeps DTX for bandwidth savings during silence.
   const isScreen = prefix === "screen";
   const bitrate = isScreen ? 192000 : 128000;
-  const dtx = isScreen ? 0 : 1;
+  const dtx = 0;
 
   return lines
     .map((line) => {

@@ -1,5 +1,6 @@
 import { getAuthAssetUrl } from "@/lib/platform";
 import { AvatarImage } from "./AvatarImage";
+import InlineEmojiText from "./InlineEmojiText";
 
 export function HoveredMentionTooltip({
   hoveredMember,
@@ -14,7 +15,7 @@ export function HoveredMentionTooltip({
 
   return (
     <div
-      className="fixed flex flex-col items-center animate-in fade-in zoom-in-95 duration-100 z-[100] pointer-events-none"
+      className="fixed flex flex-col items-center animate-in fade-in zoom-in-95 duration-100 z-80 pointer-events-none"
       style={{
         left: pos.left,
         top: pos.top - 4,
@@ -34,7 +35,7 @@ export function HoveredMentionTooltip({
           )}
         </div>
         <span className="text-xs font-semibold text-rm-text-primary">
-          {displayName}
+          <InlineEmojiText text={displayName} />
         </span>
       </div>
       <div className="h-1.5 w-3 -mt-[1px]">

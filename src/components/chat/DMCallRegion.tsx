@@ -32,6 +32,7 @@ import {
   type MouseEvent,
 } from "react";
 import { AvatarImage } from "./AvatarImage";
+import InlineEmojiText from "./InlineEmojiText";
 import { VoiceControls } from "../voice/VoiceControls";
 import { VoiceGrid } from "../voice/VoiceGrid";
 
@@ -424,7 +425,7 @@ export function DMCallRegion({ channelId }: { channelId: string }) {
         // Force hardware acceleration to prevent Chromium's diagonal tearing bug
         "bg-black transform-gpu will-change-transform",
         isExpanded
-          ? "fixed inset-0 z-200 border-none"
+          ? "fixed inset-0 z-50 border-none"
           : isChatHidden
             ? "flex-1 absolute inset-0 z-40 border-none"
             : "h-[300px] sm:h-[340px] border-b border-rm-border",
@@ -465,6 +466,8 @@ export function DMCallRegion({ channelId }: { channelId: string }) {
                 isDeafened: isDeafened,
                 onToggleDeafen: callVoice.toggleDeafen || (() => {}),
                 onChangeSource: () => setIsScreenModalOpen(true),
+                togglePreviewHidden: callVoice.togglePreviewHidden || undefined,
+                isPreviewHidden: callVoice.isPreviewHidden,
                 sfu: null,
               }}
             />
@@ -566,7 +569,7 @@ export function DMCallRegion({ channelId }: { channelId: string }) {
 
                     <div className="mt-4 text-center">
                       <p className="text-sm font-bold text-white">
-                        {item.name}
+                        <InlineEmojiText text={item.name} />
                       </p>
                       {item.isLocal && (
                         <p className="text-[11px] font-medium text-white/50">

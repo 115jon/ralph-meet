@@ -43,7 +43,6 @@ import {
 } from "react";
 import { useShallow } from "zustand/shallow";
 import { ChevronDown, Headphones, Mic, MicOff, Settings } from "./Icons";
-import { useDelayUnmount } from "@/hooks/useDelayUnmount";
 import { UserDisplayName } from "./UserDisplayName";
 import { UserNameplateLayer } from "./UserNameplateLayer";
 import { getUserNameplatePresentation } from "./user-nameplate-presentation";
@@ -292,8 +291,7 @@ export default function UserPanel({
   const micCaretRef = useRef<HTMLButtonElement>(null);
   const headphoneCaretRef = useRef<HTMLButtonElement>(null);
 
-  const shouldRenderMenu = useDelayUnmount(showMenu, 200);
-  const shouldRenderSettings = useDelayUnmount(showSettings, 200);
+  const shouldRenderMenu = showMenu;
 
   const settings = useVoiceSettingsStore(
     useShallow((s) => s.getSettings(user?.id)),
@@ -301,6 +299,7 @@ export default function UserPanel({
   const setIsMuted = useVoiceSettingsStore((s) => s.setIsMuted);
   const setIsDeafened = useVoiceSettingsStore((s) => s.setIsDeafened);
   const callActive = useCallStore((s) => s.status) === "active";
+  const hasVoiceDashboard = voiceConnected || callActive;
   const participantCapabilities = useMemo(() => {
     const vcMembers = voiceChannelId
       ? (useChatStore.getState().voiceChannelStates[voiceChannelId] ?? [])
@@ -409,10 +408,7 @@ export default function UserPanel({
 
   return (
     <TooltipProvider delayDuration={0}>
-      <div
-        className="mt-auto flex shrink-0 flex-col relative overflow-hidden bg-rm-bg-elevated border border-white/5 rounded-lg m-2 shadow-lg"
-        style={{ marginBottom: "calc(8px + var(--safe-area-bottom, 0px))" }}
-      >
+      <div className="mt-auto flex w-full shrink-0 flex-col relative overflow-hidden rounded-lg border border-rm-border bg-rm-bg-elevated">
         {/* VOICE CONNECTED dashboard (hidden when active call takes precedence) */}
         {voiceConnected && !callActive && (
           <div className="relative z-10">
@@ -481,17 +477,11 @@ export default function UserPanel({
         <div
           className={cn(
             "group/user-panel-row flex items-center gap-2 rounded-[12px] p-1.5 relative z-10 overflow-hidden",
+            hasVoiceDashboard && "rounded-t-none",
             !showIdentity && "gap-1.5",
             hasNameplate && "isolate",
-            (voiceConnected || callActive) && "border-t border-white/5",
+            hasVoiceDashboard && "border-t border-rm-border",
           )}
-          style={
-            hasNameplate && nameplateTheme
-              ? {
-                  boxShadow: `inset 0 1px 0 ${nameplateTheme.rowBorder}, 0 0 0 1px ${nameplateTheme.rowBorder}, 0 14px 28px ${nameplateTheme.rowGlow}`,
-                }
-              : undefined
-          }
         >
           {hasNameplate && (
             <>
@@ -859,23 +849,22 @@ export default function UserPanel({
           </Suspense>
         )}
         {/* Settings Modal */}
-        {shouldRenderSettings && (
-          <Suspense fallback={null}>
-            <SettingsModal
-              initialTab={settingsInitialTab}
-              onClose={() => {
-                setShowSettings(false);
-                setSettingsInitialTab("account"); // reset for next open
-              }}
-              isClosing={!showSettings}
-            />
-          </Suspense>
-        )}
-        {showProfileEditor && (
-          <Suspense fallback={null}>
-            <ProfileEditorModal onClose={() => setShowProfileEditor(false)} />
-          </Suspense>
-        )}
+        <Suspense fallback={null}>
+          <SettingsModal
+            open={showSettings}
+            initialTab={settingsInitialTab}
+            onClose={() => {
+              setShowSettings(false);
+              setSettingsInitialTab("account"); // reset for next open
+            }}
+          />
+        </Suspense>
+        <Suspense fallback={null}>
+          <ProfileEditorModal
+            open={showProfileEditor}
+            onClose={() => setShowProfileEditor(false)}
+          />
+        </Suspense>
       </div>
     </TooltipProvider>
   );

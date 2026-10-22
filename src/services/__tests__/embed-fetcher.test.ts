@@ -7,7 +7,10 @@ vi.mock("@/lib/instagram-video-resolver", () => ({
   resolveInstagramVideoMetadata: hoisted.resolveInstagramVideoMetadataMock,
 }));
 
-import { extractAndProcessEmbeds } from "../embed-fetcher";
+import {
+  extractAndProcessEmbeds,
+  extractAndProcessEmbedsWithStatus,
+} from "../embed-fetcher";
 
 const X_URL = "https://x.com/ausso52693/status/2057892777069883519";
 const VIDEO_URL =
@@ -1671,6 +1674,111 @@ describe("extractAndProcessEmbeds", () => {
       footer: {
         text: "Instagram",
       },
+    });
+  });
+
+  it("stores an unavailable tombstone for deleted X posts instead of dropping the embed", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (
+          url.startsWith("https://api.fxtwitter.com") ||
+          url.startsWith("https://api.vxtwitter.com")
+        ) {
+          return new Response(
+            JSON.stringify({ code: 404, message: "NOT_FOUND" }),
+            {
+              status: 404,
+              headers: { "content-type": "application/json" },
+            },
+          );
+        }
+        return new Response("not found", { status: 404 });
+      }) as unknown as typeof fetch,
+    );
+
+    const result = await extractAndProcessEmbedsWithStatus(X_URL);
+
+    expect(result.hadFailures).toBe(false);
+    expect(result.embeds).toHaveLength(1);
+    expect(result.embeds[0]).toMatchObject({
+      url: X_URL,
+      unavailable: true,
+      provider: { name: "X", url: "https://x.com" },
+    });
+    expect(result.embeds[0].media).toBeUndefined();
+    expect(result.embeds[0].thumbnail).toBeUndefined();
+  });
+
+  it("does not tombstone X posts when embed providers are only temporarily down", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        return new Response("upstream unavailable", { status: 503 });
+      }) as unknown as typeof fetch,
+    );
+
+    const result = await extractAndProcessEmbedsWithStatus(X_URL);
+
+    expect(result.hadFailures).toBe(true);
+    expect(result.embeds).toEqual([]);
+  });
+
+  it("stores an unavailable tombstone for deleted Instagram posts", async () => {
+    hoisted.resolveInstagramVideoMetadataMock.mockResolvedValue(null);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request) => {
+        const url = input.toString();
+        if (url.startsWith("https://www.instagram.com/api/v1/oembed/")) {
+          return new Response("No Media Match", { status: 404 });
+        }
+        return new Response("not found", { status: 404 });
+      }) as unknown as typeof fetch,
+    );
+
+    const result = await extractAndProcessEmbedsWithStatus(
+      "https://www.instagram.com/p/DELETEDPOST/",
+    );
+
+    expect(result.hadFailures).toBe(false);
+    expect(result.embeds).toHaveLength(1);
+    expect(result.embeds[0]).toMatchObject({
+      url: "https://www.instagram.com/p/DELETEDPOST/",
+      unavailable: true,
+      provider: { name: "Instagram", url: "https://www.instagram.com" },
+    });
+  });
+
+  it("stores an unavailable tombstone for deleted TikTok posts", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request) => {
+        const url = input.toString();
+        if (url.startsWith("https://www.tiktok.com/oembed")) {
+          return new Response("not found", { status: 404 });
+        }
+        if (url.includes("tiktok.com/player/api/v1/items")) {
+          return new Response("not found", { status: 404 });
+        }
+        if (url.startsWith("https://www.tikwm.com/api/")) {
+          return Response.json({ code: 404, msg: "Video not found" });
+        }
+        return new Response("not found", { status: 404 });
+      }) as unknown as typeof fetch,
+    );
+
+    const result = await extractAndProcessEmbedsWithStatus(
+      "https://www.tiktok.com/@gone/video/1111111111111111111",
+    );
+
+    expect(result.hadFailures).toBe(false);
+    expect(result.embeds).toHaveLength(1);
+    expect(result.embeds[0]).toMatchObject({
+      url: "https://www.tiktok.com/@gone/video/1111111111111111111",
+      unavailable: true,
+      provider: { name: "TikTok" },
     });
   });
 });

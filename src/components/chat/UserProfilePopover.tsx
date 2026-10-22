@@ -1,3 +1,4 @@
+import { useMounted } from "@/hooks/useMounted";
 import { ProfileAssetLayer } from "@/components/chat/ProfileAssetLayer";
 import { getProfileEffectStageHeight } from "@/components/chat/ProfileCollectiblesLayer";
 import { ProfileDisplayName } from "@/components/chat/ProfileDisplayName";
@@ -20,6 +21,7 @@ import { resolveProfileTheme } from "@/lib/profile-customization";
 import type { Role, User } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { UserStatusDot, type UserStatus } from "./UserStatusDot";
+import InlineEmojiText from "./InlineEmojiText";
 import { useChatStore } from "@/stores/chat-store";
 import {
   Check,
@@ -289,7 +291,7 @@ function PopoverMutuals({
                   sideOffset={8}
                   className={PROFILE_TOOLTIP_CLASS}
                 >
-                  {server.name}
+                  <InlineEmojiText text={server.name} />
                 </TooltipContent>
               </Tooltip>
             ))}
@@ -326,7 +328,7 @@ function RoleAssignmentDropdown({
   return (
     <div
       ref={dropdownRef}
-      className="absolute right-0 top-7 z-[1010] w-48 rounded-lg border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] p-1 shadow-xl animate-in fade-in zoom-in-95"
+      className="absolute right-0 top-7 z-70 w-48 rounded-lg border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] p-1 shadow-xl animate-in fade-in zoom-in-95"
     >
       {loadingRoles ? (
         <div className="p-3 text-center text-xs text-[color:var(--rm-profile-custom-muted)]">
@@ -365,7 +367,10 @@ function RoleAssignmentDropdown({
                     className="h-3 w-3 shrink-0 rounded-full"
                     style={{ backgroundColor: role.color || "#94a3b8" }}
                   />
-                  <span className="flex-1 truncate">{role.name}</span>
+                  <InlineEmojiText
+                    text={role.name}
+                    className="flex-1 truncate"
+                  />
                   {hasRole ? (
                     <Check
                       size={14}
@@ -420,7 +425,7 @@ function PopoverRoles({
               style={{ backgroundColor: role.color || "#94a3b8" }}
             />
             <span className="max-w-[120px] truncate py-0.5 pr-1 text-[color:var(--rm-profile-custom-muted)]">
-              {role.name}
+              <InlineEmojiText text={role.name} />
             </span>
             {canManageRoles ? (
               <ButtonBase
@@ -476,6 +481,7 @@ export default function UserProfilePopover({
   side = "bottom",
   align: _align = "start",
 }: Props) {
+  const mounted = useMounted();
   const state = useChatStore(
     useShallow((store) => ({
       members: store.members,
@@ -837,11 +843,13 @@ export default function UserProfilePopover({
     dropdownRef,
   };
 
+  if (!mounted) return null;
+
   return createPortal(
     <TooltipProvider delayDuration={0}>
       <div className="contents">
         <div
-          className="fixed inset-0 z-[999] cursor-default bg-black/50 md:bg-transparent backdrop-blur-sm md:pointer-events-none md:backdrop-blur-none animate-in fade-in duration-200"
+          className="fixed inset-0 z-40 cursor-default bg-black/50 md:bg-transparent backdrop-blur-sm md:pointer-events-none md:backdrop-blur-none animate-in fade-in duration-200"
           onClick={onClose}
           onKeyDown={(event) => {
             if (
@@ -860,7 +868,7 @@ export default function UserProfilePopover({
           ref={popoverRef}
           variant="popover"
           display={resolvedAvatarDisplay}
-          className="fixed z-[1000] animate-in fade-in zoom-in-95 duration-200 outline-none"
+          className="fixed z-60 animate-in fade-in zoom-in-95 duration-200 outline-none"
           style={{
             ...surfaceStyle,
             ...profileThemeStyle,

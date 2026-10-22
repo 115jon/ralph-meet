@@ -4,14 +4,15 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { useExternalLinkHandler } from "@/hooks/useExternalLinkHandler";
 import {
   DEBUG_DESKTOP_AUTH,
+  clearDesktopAuthSession,
   getDesktopAuthHandoffToken,
+  markAuthLogoutIntent,
   setDesktopAuthSession,
   subscribeDesktopTokenChanges,
   useKovaAuthTokenSync,
 } from "@/lib/desktop-auth";
 import { getKovaAuthConfig } from "@/lib/kova-auth-config";
 import { isDesktop, isTauri } from "@/lib/platform";
-import { isSupportedNativeAuthUrl } from "@/lib/native-auth-handoff";
 import { KovaAuthProvider, useAuth } from "@kova/react";
 import {
   HeadContent,
@@ -20,7 +21,7 @@ import {
   createRootRoute,
   useNavigate,
 } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { clog } from "@/lib/console-logger";
 import appCss from "../styles.css?url";
 
@@ -106,14 +107,13 @@ function RootDocument({ children }: { children: React.ReactNode }) {
 function RootComponent() {
   // Intercept external link clicks on desktop → open in system browser
   useExternalLinkHandler();
-  const [sessionToken, setSessionToken] = useState<string | undefined>(() =>
-    typeof window !== "undefined"
-      ? (getDesktopAuthHandoffToken() ?? undefined)
-      : undefined,
-  );
+  const [sessionToken, setSessionToken] = useState<string | undefined>();
+  const seenSessionTokenRef = useRef(false);
 
   useEffect(() => {
-    if (!isTauri()) return;
+    // Auth handoff storage is intentionally read after the stable server snapshot.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setSessionToken(getDesktopAuthHandoffToken() ?? undefined);
     return subscribeDesktopTokenChanges((token) => {
       setSessionToken(token ?? undefined);
     });
@@ -135,16 +135,24 @@ function RootComponent() {
       initialSessionToken={sessionToken}
       onSessionTokenChange={(token: string | null) => {
         setSessionToken(token ?? undefined);
-        if (!isTauri()) return;
-
         if (DEBUG_DESKTOP_AUTH) {
           authLog.info("KovaAuthProvider session token changed", {
             hasToken: !!token,
             tokenLength: token?.length ?? 0,
           });
         }
-        if (token && !getDesktopAuthHandoffToken())
-          setDesktopAuthSession(token);
+        if (token) {
+          seenSessionTokenRef.current = true;
+          if (!getDesktopAuthHandoffToken()) {
+            setDesktopAuthSession(token);
+          }
+          return;
+        }
+        if (seenSessionTokenRef.current) {
+          seenSessionTokenRef.current = false;
+          markAuthLogoutIntent();
+          clearDesktopAuthSession();
+        }
       }}
     >
       <KovaMeetTokenBridge />
@@ -181,24 +189,10 @@ function DesktopDeepLinkBridge() {
         return;
       }
 
-      deepLinkLog.info("Parsed deep link", {
-        protocol: safeProtocol(url),
-        hasAuthCode: !!extractAuthCode(url),
-      });
+      deepLinkLog.info("Parsed deep link", { protocol: safeProtocol(url) });
 
-      const authCode = extractAuthCode(url);
-      if (authCode) {
-        deepLinkLog.info("Deep link contained auth code fallback", {
-          codeLength: authCode.length,
-        });
-        void navigate({
-          to: "/chat",
-          search: { kova_auth_code: authCode },
-          replace: true,
-        } as any);
-        return;
-      }
-
+      // Auth no longer uses deep links (desktop signs in with a device code);
+      // invites are the only ralphmeet:// links handled here.
       const inviteCode = extractInviteCode(url);
       if (inviteCode) {
         deepLinkLog.info("Deep link contained invite code");
@@ -209,7 +203,7 @@ function DesktopDeepLinkBridge() {
         return;
       }
 
-      deepLinkLog.warn("Deep link did not contain an auth code or invite");
+      deepLinkLog.warn("Deep link did not contain an invite");
     };
 
     async function listenForDeepLinks() {
@@ -296,23 +290,6 @@ function safeProtocol(value: string): string | null {
   } catch {
     return null;
   }
-}
-
-function extractSearchParam(url: string, key: string): string | null {
-  try {
-    return new URL(url).searchParams.get(key);
-  } catch {
-    return null;
-  }
-}
-
-function extractAuthCode(url: string): string | null {
-  if (!isSupportedNativeAuthUrl(url)) return null;
-  return (
-    extractSearchParam(url, "kova_auth_code") ??
-    extractSearchParam(url, "ralph_auth_code") ??
-    extractSearchParam(url, "code")
-  );
 }
 
 function extractInviteCode(url: string): string | null {

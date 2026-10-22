@@ -1,8 +1,7 @@
 import { ProfileAssetLayer } from "@/components/chat/ProfileAssetLayer";
 import { AvatarImage } from "@/components/chat/AvatarImage";
 import { ProfileDisplayName } from "@/components/chat/ProfileDisplayName";
-import { ProfileSurfaceShell } from "@/components/chat/ProfileSurfaceShell";
-import { BaseModal } from "@/components/ui/BaseModal";
+import { Dialog, DialogPortal, DialogSurface } from "@/components/ui/dialog";
 import { ButtonBase } from "@/components/ui/button-base";
 import { UserPlatformIndicators } from "@/components/chat/UserPlatformIndicators";
 import { apiGet } from "@/lib/api-client";
@@ -13,6 +12,7 @@ import { resolveProfileTheme } from "@/lib/profile-customization";
 import type { Role, User } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { UserStatusDot } from "./UserStatusDot";
+import InlineEmojiText from "./InlineEmojiText";
 import { useChatActions, useChatStore } from "@/stores/chat-store";
 import {
   ArrowLeft,
@@ -30,13 +30,13 @@ import { useEffect, useState } from "react";
 import { useShallow } from "zustand/shallow";
 
 interface MobileProfileSheetProps {
+  open: boolean;
   user: User;
   roles?: Role[];
   onClose: () => void;
   onOpenProfileEditor: () => void;
   onBan?: (userId: string, username: string) => void;
   onKick?: (userId: string, username: string) => void;
-  isClosing?: boolean;
 }
 
 type MutualFriendSummary = {
@@ -363,7 +363,7 @@ function ProfileCards({
                   }}
                 />
                 <span className="text-[color:var(--rm-profile-custom-muted)]">
-                  {role.name}
+                  <InlineEmojiText text={role.name} />
                 </span>
               </div>
             ))}
@@ -435,13 +435,13 @@ function ProfileCards({
 }
 
 export default function MobileProfileSheet({
+  open,
   user,
   roles,
   onClose,
   onOpenProfileEditor,
   onBan,
   onKick,
-  isClosing,
 }: MobileProfileSheetProps) {
   const { chatUser, members, onlineUsers } = useChatStore(
     useShallow((s) => ({
@@ -515,57 +515,56 @@ export default function MobileProfileSheet({
   };
 
   return (
-    <BaseModal onClose={onClose} aria-label="User profile">
-      <ProfileSurfaceShell
-        display={resolvedUser.avatar_display}
-        variant="sheet"
-        className={cn(
-          "fixed inset-0 z-300 flex flex-col animate-in slide-in-from-bottom duration-300",
-          isClosing && "animate-out slide-out-to-bottom fade-out",
-        )}
-        style={profileThemeStyle}
-        outsideSurface={
+    <Dialog open={open} onOpenChange={(nextOpen) => !nextOpen && onClose()}>
+      <DialogPortal>
+        <DialogSurface
+          showCloseButton={false}
+          className={cn(
+            "fixed inset-0 z-50 flex flex-col animate-in slide-in-from-bottom duration-300",
+            "data-[state=closed]:animate-out data-[state=closed]:slide-out-to-bottom data-[state=closed]:fade-out",
+          )}
+          style={profileThemeStyle}
+        >
           <div className="pointer-events-none absolute inset-x-0 top-2 z-50 flex justify-center">
             <div className="h-1 w-10 rounded-full bg-[var(--rm-profile-custom-muted)]/45" />
           </div>
-        }
-      >
-        <ProfileBanner
-          bannerUrl={resolvedUser.banner_url}
-          bannerContentType={resolvedUser.banner_content_type}
-          onClose={onClose}
-          isMe={isMe}
-        />
-
-        <div className="flex-1 overflow-y-auto -mt-12 relative z-10">
-          <ProfileHeader
-            user={resolvedUser}
-            isOnline={isOnline}
-            mutualFriends={mutualFriends}
-            mutualServers={mutualServers}
-            isMe={isMe}
-          />
-
-          <ProfileActions
-            isMe={isMe}
-            handleMessage={handleMessage}
-            onOpenProfileEditor={onOpenProfileEditor}
-          />
-
-          <ProfileCards
-            user={resolvedUser}
-            memberRoles={memberRoles}
-            profileReferenceDate={profileReferenceDate}
-            hasModActions={hasModActions}
-            canManage={canManage}
-            canKick={canKick}
-            canBanPerm={canBanPerm}
-            onBan={onBan}
-            onKick={onKick}
+          <ProfileBanner
+            bannerUrl={resolvedUser.banner_url}
+            bannerContentType={resolvedUser.banner_content_type}
             onClose={onClose}
+            isMe={isMe}
           />
-        </div>
-      </ProfileSurfaceShell>
-    </BaseModal>
+
+          <div className="flex-1 overflow-y-auto -mt-12 relative z-10">
+            <ProfileHeader
+              user={resolvedUser}
+              isOnline={isOnline}
+              mutualFriends={mutualFriends}
+              mutualServers={mutualServers}
+              isMe={isMe}
+            />
+
+            <ProfileActions
+              isMe={isMe}
+              handleMessage={handleMessage}
+              onOpenProfileEditor={onOpenProfileEditor}
+            />
+
+            <ProfileCards
+              user={resolvedUser}
+              memberRoles={memberRoles}
+              profileReferenceDate={profileReferenceDate}
+              hasModActions={hasModActions}
+              canManage={canManage}
+              canKick={canKick}
+              canBanPerm={canBanPerm}
+              onBan={onBan}
+              onKick={onKick}
+              onClose={onClose}
+            />
+          </div>
+        </DialogSurface>
+      </DialogPortal>
+    </Dialog>
   );
 }

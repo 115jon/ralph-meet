@@ -14,7 +14,9 @@ import {
   startEarlyMic,
 } from "@/lib/local-media-manager";
 import {
+  createLocalAudioGate,
   createLocalAudioProcessor,
+  type LocalAudioGateController,
   type LocalAudioProcessorHandle,
 } from "@/lib/voice/noise-reduction";
 
@@ -35,17 +37,34 @@ const {
       setMasterVolume: vi.fn(),
       setOutputDevice: vi.fn(),
     };
+    activeGateController: LocalAudioGateController | null = null;
     readonly vad = {
+      setGateController: vi.fn(
+        (controller: LocalAudioGateController | null) => {
+          this.activeGateController = controller;
+        },
+      ),
+      enableNoiseGate: vi.fn(),
+      disableNoiseGate: vi.fn(),
       setThreshold: vi.fn(),
       start: vi.fn(),
       stop: vi.fn(),
+      triggerGate: vi.fn((gated: boolean) => {
+        this.activeGateController?.setGated(gated);
+      }),
     };
-    readonly roomGW = { sendVoiceState: vi.fn(), send: vi.fn() };
+    readonly roomGW = {
+      sendVoiceState: vi.fn(),
+      send: vi.fn(),
+      refreshProfile: vi.fn(),
+    };
     readonly voiceGW = {
       isReady: true,
       send: vi.fn(),
       sendAppEvent: vi.fn(() => true),
     };
+    participantId: string | null = null;
+    readonly getParticipantId = vi.fn((): string | null => this.participantId);
     readonly connect = vi.fn();
     readonly resumeAudioContext = vi.fn();
     readonly disconnect = vi.fn();
@@ -56,10 +75,76 @@ const {
     readonly setRemoteTrackSubscription = vi.fn();
     readonly setClerkMapping = vi.fn();
     readonly deleteClerkMapping = vi.fn();
-    readonly publishTracks = vi.fn();
-    readonly replaceTrack = vi.fn();
+    readonly publishedTracks = new Map<string, MediaStreamTrack>();
+    readonly publishTracks = vi.fn(
+      (stream: MediaStream, prefix: string): Promise<void> => {
+        if (prefix === "cam") {
+          for (const track of stream.getAudioTracks()) {
+            this.publishedTracks.set(
+              `cam-audio-self`,
+              track.clone ? track.clone() : track,
+            );
+          }
+        }
+        return Promise.resolve();
+      },
+    );
+    readonly replaceTrack = vi.fn(
+      (
+        trackName: string,
+        newTrack: MediaStreamTrack | null,
+      ): Promise<boolean> => {
+        if (newTrack) {
+          this.publishedTracks.set(
+            trackName,
+            newTrack.clone ? newTrack.clone() : newTrack,
+          );
+        } else {
+          this.publishedTracks.delete(trackName);
+        }
+        return Promise.resolve(true);
+      },
+    );
     readonly setPublishedTrackEnabled = vi.fn();
     readonly unpublishTrack = vi.fn();
+    readonly unpublishTrackIfCurrent = vi.fn(
+      async (
+        trackName: string,
+        expectedTrack: MediaStreamTrack,
+      ): Promise<boolean> => {
+        if (this.publishedTracks.get(trackName) !== expectedTrack) return false;
+        this.publishedTracks.delete(trackName);
+        return true;
+      },
+    );
+    readonly replaceTrackIfCurrent = vi.fn(
+      async (
+        trackName: string,
+        expectedTrack: MediaStreamTrack,
+        newTrack: MediaStreamTrack | null,
+      ): Promise<boolean> => {
+        if (this.publishedTracks.get(trackName) !== expectedTrack) return false;
+        if (newTrack) {
+          this.publishedTracks.set(
+            trackName,
+            newTrack.clone ? newTrack.clone() : newTrack,
+          );
+        } else {
+          this.publishedTracks.delete(trackName);
+        }
+        return true;
+      },
+    );
+    readonly getPublishedTrack = vi.fn(
+      (trackName: string): MediaStreamTrack | null =>
+        this.publishedTracks.get(trackName) ?? null,
+    );
+    readonly getMicrophoneTrackName = vi.fn((): string | null => {
+      for (const name of this.publishedTracks.keys()) {
+        if (name.startsWith("cam-audio-")) return name;
+      }
+      return "cam-audio-self";
+    });
 
     constructor() {
       sfuInstances.push(this);
@@ -106,6 +191,7 @@ const {
     autoSensitivity: true,
     sensitivity: -50,
     streamHighFidelity: false,
+    inputProfile: "standard",
     outputVolume: 100,
     outputDeviceId: "default",
     spatialAudioEnabled: false,
@@ -204,7 +290,9 @@ vi.mock("@/lib/voice-identity", () => ({
   })),
 }));
 vi.mock("@/lib/voice/noise-reduction", () => ({
+  createLocalAudioGate: vi.fn(),
   createLocalAudioProcessor: vi.fn(),
+  isNoiseReductionProviderSupported: vi.fn(() => false),
   resolveCaptureAudioProcessing: vi.fn(() => ({
     noiseSuppression: true,
     echoCancellation: true,
@@ -305,6 +393,8 @@ function createTrack(kind: "audio" | "video", deviceId: string) {
     readyState: "live" as MediaStreamTrackState,
     stop,
   } as unknown as MediaStreamTrack;
+  (track as { clone: () => MediaStreamTrack }).clone = () =>
+    createTrack(kind, `${deviceId}-clone`).track;
   return { stop, track };
 }
 
@@ -313,14 +403,22 @@ function createStream(tracks: MediaStreamTrack[] = []): MediaStream {
 }
 
 function createProcessor(
-  stream: MediaStream,
-  monitorStream = stream,
+  preGateStream: MediaStream,
+  publicationStream = preGateStream,
+  monitorStream = preGateStream,
+  gateController: LocalAudioGateController = {
+    resume: vi.fn(),
+    setGated: vi.fn(),
+  },
 ): LocalAudioProcessorHandle {
   return {
     createMonitorStream: () => monitorStream,
     destroy: vi.fn(),
+    gateController,
     mode: "passthrough",
-    processedStream: stream,
+    preGateStream,
+    publicationStream,
+    resume: vi.fn(),
   };
 }
 
@@ -347,6 +445,7 @@ function deferred<T>() {
 describe("useVoiceChannel SFU lifecycle", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(createLocalAudioGate).mockReset();
     vi.mocked(acquireLocalStream).mockReset();
     vi.mocked(cancelPendingLocalStreamAcquisition).mockReset();
     vi.mocked(createCameraBackgroundEffect).mockReset();
@@ -360,7 +459,12 @@ describe("useVoiceChannel SFU lifecycle", () => {
     settingsState.getSettings().videoDeviceId = "default";
     settingsState.getSettings().cameraQuality = "720p30";
     settingsState.getSettings().cameraBackground = "none";
+    settingsState.getSettings().autoSensitivity = true;
+    settingsState.getSettings().sensitivity = -50;
     vi.stubGlobal("MediaStream", TestMediaStream);
+    vi.mocked(createLocalAudioProcessor).mockImplementation(async (stream) =>
+      createProcessor(stream),
+    );
   });
 
   it("merges legacy full updates over cached optional profile fields", () => {
@@ -452,6 +556,66 @@ describe("useVoiceChannel SFU lifecycle", () => {
       }),
     );
     expect(sfu.disconnect).toHaveBeenCalledWith("user-leave");
+    hook.unmount();
+  });
+
+  it("republishes and restores speaking after leave then join", async () => {
+    authUser.current = { id: "user-1" };
+    const firstTrack = createTrack("audio", "first-join-audio");
+    const secondTrack = createTrack("audio", "second-join-audio");
+    vi.mocked(acquireLocalStream)
+      .mockResolvedValueOnce(createStream([firstTrack.track]))
+      .mockResolvedValueOnce(createStream([secondTrack.track]));
+
+    const hook = renderHook(() =>
+      useVoiceChannel({ channelId: "channel", serverId: "server" }),
+    );
+    await act(async () => {
+      await hook.result.current.handleJoin();
+    });
+    const firstSfu = sfuInstances[0];
+    if (!firstSfu) throw new Error("SFU was not created");
+    await act(async () => {
+      firstSfu.emit("joined", { participantId: "self", participants: [] });
+    });
+    await waitFor(() =>
+      expect(firstSfu.publishTracks).toHaveBeenCalledTimes(1),
+    );
+    await waitFor(() => expect(hook.result.current.joined).toBe(true));
+
+    await act(async () => {
+      hook.result.current.handleLeave();
+      await Promise.resolve();
+    });
+    await new Promise((resolve) => setTimeout(resolve, 120));
+    await waitFor(() => expect(hook.result.current.joined).toBe(false));
+
+    await act(async () => {
+      await hook.result.current.handleJoin();
+    });
+    const secondSfu = sfuInstances[1];
+    if (!secondSfu) throw new Error("Second SFU was not created");
+    await waitFor(() =>
+      expect(secondSfu.publishTracks).toHaveBeenCalledTimes(1),
+    );
+    const republished = secondSfu.publishTracks.mock.calls[0]?.[0] as
+      | MediaStream
+      | undefined;
+    expect(republished?.getAudioTracks()).toEqual([secondTrack.track]);
+
+    await act(async () => {
+      secondSfu.participantId = "self-2";
+      secondSfu.emit("vad-speaking", {
+        participantId: "self-2",
+        isSpeaking: true,
+      });
+      secondSfu.emit("joined", { participantId: "self-2", participants: [] });
+      secondSfu.emit("voice-ready", { speaking: {} });
+    });
+    await waitFor(() =>
+      expect(hook.result.current.speakingUsers["user-1"]).toBe(true),
+    );
+
     hook.unmount();
   });
 
@@ -569,6 +733,38 @@ describe("useVoiceChannel SFU lifecycle", () => {
     hook.unmount();
   });
 
+  it("refreshes the active SFU profile when the local gateway profile changes", async () => {
+    authUser.current = { id: "user-1" };
+    const hook = renderHook(() =>
+      useVoiceChannel({ channelId: "channel", serverId: "server" }),
+    );
+    await act(async () => {
+      await hook.result.current.handleJoin();
+    });
+    const sfu = sfuInstances[0];
+    if (!sfu) throw new Error("SFU was not created");
+
+    await act(async () => {
+      sfu.emit("joined", { participantId: "self", participants: [] });
+    });
+
+    window.dispatchEvent(
+      new CustomEvent("chat-gateway-event", {
+        detail: {
+          event: "USER_PROFILE_UPDATE",
+          data: {
+            user_id: "user-1",
+            avatar_url: "https://example.com/new.png",
+            avatar_display: null,
+          },
+        },
+      }),
+    );
+
+    expect(sfu.roomGW.refreshProfile).toHaveBeenCalledTimes(1);
+    hook.unmount();
+  });
+
   it("removes SFU handlers when a session is torn down and does not accumulate them on reconnect", async () => {
     const first = renderHook(() =>
       useVoiceChannel({ channelId: "channel", serverId: "server" }),
@@ -676,7 +872,10 @@ describe("useVoiceChannel SFU lifecycle", () => {
     );
 
     expect(sfu.publishTracks).toHaveBeenCalledTimes(1);
-    expect(sfu.replaceTrack).not.toHaveBeenCalled();
+    expect(sfu.replaceTrack).toHaveBeenCalledWith(
+      "cam-audio-self",
+      trackB.track,
+    );
     expect(settingsState.setDevice).toHaveBeenCalledTimes(1);
     expect(settingsState.setDevice).toHaveBeenCalledWith(
       "input",
@@ -684,9 +883,314 @@ describe("useVoiceChannel SFU lifecycle", () => {
       undefined,
       { label: "audio-actual-b", groupId: "group-actual-b" },
     );
-    expect(trackA.stop).not.toHaveBeenCalled();
+    expect(trackA.stop).toHaveBeenCalled();
     expect(processors[0]?.destroy).not.toHaveBeenCalled();
 
+    hook.unmount();
+  });
+
+  it("starts initial media preparation before the SFU joined event", async () => {
+    const audio = createTrack("audio", "early-audio");
+    vi.mocked(acquireLocalStream).mockResolvedValue(
+      createStream([audio.track]),
+    );
+
+    const hook = renderHook(() =>
+      useVoiceChannel({ channelId: "channel", serverId: "server" }),
+    );
+    await act(async () => {
+      await hook.result.current.handleJoin();
+    });
+
+    const sfu = sfuInstances[0];
+    if (!sfu) throw new Error("SFU was not created");
+
+    await waitFor(() => expect(sfu.publishTracks).toHaveBeenCalledOnce());
+    expect(hook.result.current.joined).toBe(false);
+
+    hook.unmount();
+  });
+
+  it("starts VAD before the initial publication finishes", async () => {
+    const audio = createTrack("audio", "vad-early-audio");
+    const acquisition = deferred<MediaStream>();
+    vi.mocked(acquireLocalStream).mockReturnValue(acquisition.promise);
+    const publication = deferred<void>();
+
+    const hook = renderHook(() =>
+      useVoiceChannel({ channelId: "channel", serverId: "server" }),
+    );
+    await act(async () => {
+      await hook.result.current.handleJoin();
+    });
+
+    const sfu = sfuInstances[0];
+    if (!sfu) throw new Error("SFU was not created");
+    sfu.publishTracks.mockImplementationOnce(() => publication.promise);
+    acquisition.resolve(createStream([audio.track]));
+
+    await waitFor(() => expect(sfu.vad.start).toHaveBeenCalledOnce());
+    publication.resolve();
+
+    hook.unmount();
+  });
+
+  it("publishes raw microphone before the outbound processor is ready", async () => {
+    const rawTrack = createTrack("audio", "live-raw-audio");
+    const publicationTrack = createTrack("audio", "live-processed-audio");
+    const rawStream = createStream([rawTrack.track]);
+    const publicationStream = createStream([publicationTrack.track]);
+    const processorReady = deferred<LocalAudioProcessorHandle>();
+    vi.mocked(acquireLocalStream).mockResolvedValue(rawStream);
+    vi.mocked(createLocalAudioProcessor).mockReturnValue(
+      processorReady.promise,
+    );
+
+    const hook = renderHook(() =>
+      useVoiceChannel({ channelId: "channel", serverId: "server" }),
+    );
+    await act(async () => {
+      await hook.result.current.handleJoin();
+    });
+    const sfu = sfuInstances[0];
+    if (!sfu) throw new Error("SFU was not created");
+
+    await waitFor(() => expect(sfu.publishTracks).toHaveBeenCalledOnce());
+    expect(createLocalAudioProcessor).toHaveBeenCalledWith(
+      rawStream,
+      expect.any(Object),
+    );
+    const initialPublication = sfu.publishTracks.mock.calls[0]?.[0] as
+      | MediaStream
+      | undefined;
+    expect(initialPublication?.getAudioTracks()).toEqual([rawTrack.track]);
+    expect(sfu.replaceTrack).not.toHaveBeenCalled();
+
+    await act(async () => {
+      processorReady.resolve(
+        createProcessor(rawStream, publicationStream, rawStream),
+      );
+    });
+
+    await waitFor(() =>
+      expect(sfu.replaceTrack).toHaveBeenCalledWith(
+        "cam-audio-self",
+        publicationTrack.track,
+      ),
+    );
+
+    hook.unmount();
+  });
+
+  it("keeps the raw microphone when the first outbound processor fails", async () => {
+    const rawTrack = createTrack("audio", "raw-fallback-audio");
+    vi.mocked(acquireLocalStream).mockResolvedValue(
+      createStream([rawTrack.track]),
+    );
+    vi.mocked(createLocalAudioProcessor).mockResolvedValue(null);
+
+    const hook = renderHook(() =>
+      useVoiceChannel({ channelId: "channel", serverId: "server" }),
+    );
+    await act(async () => {
+      await hook.result.current.handleJoin();
+    });
+    const sfu = sfuInstances[0];
+    if (!sfu) throw new Error("SFU was not created");
+
+    await waitFor(() => expect(sfu.publishTracks).toHaveBeenCalledOnce());
+    const initialPublication = sfu.publishTracks.mock.calls[0]?.[0] as
+      | MediaStream
+      | undefined;
+    expect(initialPublication?.getAudioTracks()).toEqual([rawTrack.track]);
+    expect(sfu.replaceTrack).not.toHaveBeenCalled();
+    expect(rawTrack.stop).not.toHaveBeenCalled();
+
+    hook.unmount();
+  });
+
+  it("commits pending processed audio when initial PartyTracks readiness reconciles it", async () => {
+    const rawTrack = createTrack("audio", "pending-raw-audio");
+    const preGateTrack = createTrack("audio", "pending-pre-gate-audio");
+    const publicationTrack = createTrack("audio", "pending-publication-audio");
+    const rawStream = createStream([rawTrack.track]);
+    const preGateStream = createStream([preGateTrack.track]);
+    const publicationStream = createStream([publicationTrack.track]);
+    const processor = createProcessor(
+      preGateStream,
+      publicationStream,
+      preGateStream,
+    );
+    vi.mocked(processor.destroy).mockImplementation(() => {
+      publicationTrack.track.stop();
+    });
+    const acquisition = deferred<MediaStream>();
+    vi.mocked(acquireLocalStream).mockReturnValue(acquisition.promise);
+    vi.mocked(createLocalAudioProcessor).mockResolvedValue(processor);
+
+    const hook = renderHook(() =>
+      useVoiceChannel({ channelId: "channel", serverId: "server" }),
+    );
+    await act(async () => {
+      await hook.result.current.handleJoin();
+    });
+    const sfu = sfuInstances[0];
+    if (!sfu) throw new Error("SFU was not created");
+
+    let partyTracksReady = false;
+    const voiceReadyBarrier = deferred<void>();
+    const legacyPublish = vi.fn();
+    const transportPush = vi.fn();
+    const transportSources = new Map<string, MediaStreamTrack>();
+    sfu.voiceGW.isReady = false;
+    sfu.publishTracks.mockImplementation(async (stream, prefix) => {
+      if (!partyTracksReady) await voiceReadyBarrier.promise;
+      if (!partyTracksReady) {
+        legacyPublish(stream, prefix);
+        return;
+      }
+
+      for (const track of stream.getTracks()) {
+        const trackName = `${prefix}-${track.kind}-self`;
+        if (!transportSources.has(trackName)) {
+          transportSources.set(trackName, track);
+          transportPush(trackName, track);
+        }
+        if (prefix === "cam") {
+          sfu.publishedTracks.set(
+            trackName,
+            track.clone ? track.clone() : track,
+          );
+        }
+      }
+    });
+
+    await act(async () => {
+      acquisition.resolve(rawStream);
+    });
+    await waitFor(() => expect(sfu.publishTracks).toHaveBeenCalledOnce());
+    expect(createLocalAudioProcessor).toHaveBeenCalledWith(
+      rawStream,
+      expect.any(Object),
+    );
+    expect(transportPush).not.toHaveBeenCalled();
+
+    await act(async () => {
+      sfu.emit("joined", { participantId: "self", participants: [] });
+      partyTracksReady = true;
+      sfu.voiceGW.isReady = true;
+      voiceReadyBarrier.resolve();
+      sfu.emit("voice-ready", { speaking: {} });
+      sfu.emit("voice-reconnected", undefined);
+    });
+
+    await waitFor(() => expect(sfu.publishTracks).toHaveBeenCalledTimes(2));
+    await waitFor(() =>
+      expect(settingsState.setDevice).toHaveBeenCalledWith(
+        "input",
+        "pending-raw-audio",
+        undefined,
+        {
+          label: "audio-pending-raw-audio",
+          groupId: "group-pending-raw-audio",
+        },
+      ),
+    );
+    expect(transportPush).toHaveBeenCalledOnce();
+    expect(transportSources.size).toBe(1);
+    expect(transportSources.get("cam-audio-self")).toBe(rawTrack.track);
+    expect(sfu.replaceTrack).toHaveBeenCalledWith(
+      "cam-audio-self",
+      publicationTrack.track,
+    );
+    expect(legacyPublish).not.toHaveBeenCalled();
+    expect(
+      sfu.voiceGW.send.mock.calls.some(
+        ([message]) =>
+          message.op === 1 || message.op === 105 || message.op === 107,
+      ),
+    ).toBe(false);
+    expect(sfu.vad.start).toHaveBeenLastCalledWith(preGateStream);
+    expect(processor.destroy).not.toHaveBeenCalled();
+    expect(rawTrack.stop).not.toHaveBeenCalled();
+    expect(publicationTrack.stop).not.toHaveBeenCalled();
+
+    hook.unmount();
+    expect(processor.destroy).toHaveBeenCalledOnce();
+    expect(rawTrack.stop).toHaveBeenCalledOnce();
+    expect(publicationTrack.stop).toHaveBeenCalledOnce();
+  });
+
+  it("stops pre-publication VAD when the initial publication fails", async () => {
+    const audio = createTrack("audio", "failed-publish-audio");
+    const acquisition = deferred<MediaStream>();
+    vi.mocked(acquireLocalStream).mockReturnValue(acquisition.promise);
+
+    const hook = renderHook(() =>
+      useVoiceChannel({ channelId: "channel", serverId: "server" }),
+    );
+    await act(async () => {
+      await hook.result.current.handleJoin();
+    });
+
+    const sfu = sfuInstances[0];
+    if (!sfu) throw new Error("SFU was not created");
+    sfu.publishTracks.mockRejectedValueOnce(
+      new Error("initial publish failed"),
+    );
+    acquisition.resolve(createStream([audio.track]));
+
+    await waitFor(() => expect(sfu.vad.start).toHaveBeenCalledOnce());
+    await waitFor(() => expect(sfu.vad.stop).toHaveBeenCalled());
+    expect(sfu.vad.setGateController).toHaveBeenCalledWith(null);
+
+    hook.unmount();
+  });
+
+  it("does not restart initial publication when mute changes while publishing", async () => {
+    const audio = createTrack("audio", "initial-audio");
+    vi.mocked(acquireLocalStream).mockResolvedValue(
+      createStream([audio.track]),
+    );
+    const publicationGate = deferred<void>();
+
+    const hook = renderHook(() =>
+      useVoiceChannel({ channelId: "channel", serverId: "server" }),
+    );
+    await act(async () => {
+      await hook.result.current.handleJoin();
+    });
+    const sfu = sfuInstances[0];
+    if (!sfu) throw new Error("SFU was not created");
+    const publishImplementation = sfu.publishTracks.getMockImplementation();
+    sfu.publishTracks.mockImplementation(async (stream, prefix) => {
+      await publishImplementation?.(stream, prefix);
+      await publicationGate.promise;
+    });
+
+    await act(async () => {
+      sfu.emit("joined", { participantId: "self", participants: [] });
+    });
+    await waitFor(() => expect(sfu.publishTracks).toHaveBeenCalledOnce());
+
+    settingsState.getSettings().isMuted = true;
+    await act(async () => {
+      hook.rerender();
+    });
+
+    expect(acquireLocalStream).toHaveBeenCalledOnce();
+    expect(sfu.publishTracks).toHaveBeenCalledOnce();
+
+    await act(async () => {
+      publicationGate.resolve();
+      await publicationGate.promise;
+    });
+    await waitFor(() =>
+      expect(sfu.setPublishedTrackEnabled).toHaveBeenCalledWith(
+        "cam-audio-self",
+        false,
+      ),
+    );
     hook.unmount();
   });
 
@@ -736,16 +1240,25 @@ describe("useVoiceChannel SFU lifecycle", () => {
     hook.unmount();
   });
 
-  it("uses the published processor monitor for initial and reconnect VAD", async () => {
+  it("uses pre-gate audio for VAD and publication audio for the SFU", async () => {
     const rawTrack = createTrack("audio", "raw-audio");
-    const processedTrack = createTrack("audio", "processed-audio");
-    const monitorTrack = createTrack("audio", "monitor-audio");
+    const preGateTrack = createTrack("audio", "pre-gate-audio");
+    const publicationTrack = createTrack("audio", "publication-audio");
     const rawStream = createStream([rawTrack.track]);
-    const processedStream = createStream([processedTrack.track]);
-    const monitorStream = createStream([monitorTrack.track]);
+    const preGateStream = createStream([preGateTrack.track]);
+    const publicationStream = createStream([publicationTrack.track]);
+    const processorGate: LocalAudioGateController = {
+      resume: vi.fn(),
+      setGated: vi.fn(),
+    };
     vi.mocked(acquireLocalStream).mockResolvedValue(rawStream);
     vi.mocked(createLocalAudioProcessor).mockResolvedValue(
-      createProcessor(processedStream, monitorStream),
+      createProcessor(
+        preGateStream,
+        publicationStream,
+        preGateStream,
+        processorGate,
+      ),
     );
 
     const hook = renderHook(() =>
@@ -760,27 +1273,46 @@ describe("useVoiceChannel SFU lifecycle", () => {
     await act(async () => {
       sfu.emit("joined", { participantId: "self", participants: [] });
     });
-    await waitFor(() => expect(sfu.vad.start).toHaveBeenCalledTimes(1));
-    expect(sfu.vad.start).toHaveBeenLastCalledWith(monitorStream);
+    await waitFor(() =>
+      expect(sfu.vad.start).toHaveBeenLastCalledWith(preGateStream),
+    );
     const initialAudioPublication = sfu.publishTracks.mock.calls.find(
       ([, prefix]) => prefix === "cam",
     )?.[0] as MediaStream | undefined;
-    expect(initialAudioPublication?.getAudioTracks()).toEqual([
-      processedTrack.track,
-    ]);
+    expect(initialAudioPublication?.getAudioTracks()).toEqual([rawTrack.track]);
+    expect(sfu.replaceTrack).toHaveBeenCalledWith(
+      "cam-audio-self",
+      publicationTrack.track,
+    );
+    expect(sfu.vad.setGateController).toHaveBeenCalledWith(processorGate);
+    expect(createLocalAudioGate).not.toHaveBeenCalled();
+    sfu.vad.triggerGate(true);
+    sfu.vad.triggerGate(false);
+    expect(processorGate.setGated).toHaveBeenLastCalledWith(false);
 
     sfu.vad.start.mockClear();
     await act(async () => {
       sfu.emit("voice-reconnected", undefined);
     });
     await waitFor(() => expect(sfu.vad.start).toHaveBeenCalledTimes(1));
-    expect(sfu.vad.start).toHaveBeenLastCalledWith(monitorStream);
+    expect(sfu.vad.start).toHaveBeenLastCalledWith(preGateStream);
     const reconnectAudioPublication = sfu.publishTracks.mock.calls.at(
       -1,
     )?.[0] as MediaStream | undefined;
     expect(reconnectAudioPublication?.getAudioTracks()).toEqual([
-      processedTrack.track,
+      publicationTrack.track,
     ]);
+
+    sfu.replaceTrack.mockClear();
+    settingsState.getSettings().autoSensitivity = false;
+    settingsState.getSettings().sensitivity = -20;
+    await act(async () => {
+      hook.rerender();
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(acquireLocalStream).toHaveBeenCalledTimes(1);
+    expect(sfu.replaceTrack).not.toHaveBeenCalled();
+    expect(sfu.vad.setThreshold).toHaveBeenLastCalledWith(10);
 
     settingsState.getSettings().isMuted = true;
     await act(async () => {
@@ -794,7 +1326,393 @@ describe("useVoiceChannel SFU lifecycle", () => {
       hook.rerender();
     });
     await waitFor(() => expect(sfu.vad.start).toHaveBeenCalledTimes(1));
-    expect(sfu.vad.start).toHaveBeenLastCalledWith(monitorStream);
+    expect(sfu.vad.start).toHaveBeenLastCalledWith(preGateStream);
+
+    hook.unmount();
+  });
+
+  it("disables sensitivity gating for the Studio profile", async () => {
+    const settings = settingsState.getSettings();
+    settings.noiseSuppression = false;
+    settings.noiseReductionEnabled = false;
+    settings.echoCancellation = false;
+    settings.autoSensitivity = false;
+    settings.streamHighFidelity = true;
+    settings.spatialAudioEnabled = false;
+    settings.inputProfile = "studio";
+    settings.sensitivity = 0;
+
+    const audio = createTrack("audio", "studio-audio");
+    vi.mocked(acquireLocalStream).mockResolvedValue(
+      createStream([audio.track]),
+    );
+
+    const hook = renderHook(() =>
+      useVoiceChannel({ channelId: "channel", serverId: "server" }),
+    );
+    await act(async () => {
+      await hook.result.current.handleJoin();
+    });
+    const sfu = sfuInstances[0];
+    if (!sfu) throw new Error("SFU was not created");
+
+    await act(async () => {
+      sfu.emit("joined", { participantId: "self", participants: [] });
+    });
+    await waitFor(() => expect(sfu.publishTracks).toHaveBeenCalledTimes(1));
+
+    expect(sfu.vad.disableNoiseGate).toHaveBeenCalled();
+    expect(sfu.vad.enableNoiseGate).not.toHaveBeenCalled();
+    expect(sfu.vad.setThreshold).toHaveBeenLastCalledWith(3);
+
+    hook.unmount();
+  });
+
+  it("keeps the active gate and processor when an audio replacement fails", async () => {
+    const initial = createTrack("audio", "initial-audio");
+    const replacement = createTrack("audio", "replacement-audio");
+    settingsState.getSettings().inputDeviceId = "initial-audio";
+    const processors: LocalAudioProcessorHandle[] = [];
+    vi.mocked(acquireLocalStream)
+      .mockResolvedValueOnce(createStream([initial.track]))
+      .mockResolvedValueOnce(createStream([replacement.track]));
+    vi.mocked(createLocalAudioProcessor).mockImplementation(async (stream) => {
+      const processor = createProcessor(stream);
+      processors.push(processor);
+      return processor;
+    });
+
+    const hook = renderHook(() =>
+      useVoiceChannel({ channelId: "channel", serverId: "server" }),
+    );
+    await act(async () => {
+      await hook.result.current.handleJoin();
+    });
+    const sfu = sfuInstances[0];
+    if (!sfu) throw new Error("SFU was not created");
+    await act(async () => {
+      sfu.emit("joined", { participantId: "self", participants: [] });
+    });
+    await waitFor(() => expect(sfu.publishTracks).toHaveBeenCalledTimes(1));
+    await waitFor(() =>
+      expect(sfu.setPublishedTrackEnabled).toHaveBeenCalledOnce(),
+    );
+    await waitFor(() =>
+      expect(sfu.vad.setGateController).toHaveBeenCalledTimes(2),
+    );
+
+    sfu.replaceTrack.mockResolvedValueOnce(false);
+    settingsState.getSettings().inputDeviceId = "device-b";
+    await act(async () => {
+      hook.rerender();
+    });
+    await waitFor(() => expect(processors).toHaveLength(2));
+    await waitFor(() => expect(sfu.replaceTrack).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(processors[1]?.destroy).toHaveBeenCalledOnce());
+
+    expect(processors[0]?.destroy).not.toHaveBeenCalled();
+    hook.unmount();
+  });
+
+  it("destroys a cancelled replacement gate without disturbing the active gate", async () => {
+    const initialAcquisition = deferred<MediaStream>();
+    const replacementAcquisition = deferred<MediaStream>();
+    const cancelledAcquisition = deferred<MediaStream>();
+    const acquisitions = [
+      initialAcquisition,
+      replacementAcquisition,
+      cancelledAcquisition,
+    ];
+    vi.mocked(acquireLocalStream).mockImplementation(() => {
+      const next = acquisitions.shift();
+      if (!next) throw new Error("unexpected acquisition");
+      return next.promise;
+    });
+    const processors: LocalAudioProcessorHandle[] = [];
+    vi.mocked(createLocalAudioProcessor).mockImplementation(async (stream) => {
+      const processor = createProcessor(stream);
+      processors.push(processor);
+      return processor;
+    });
+
+    const hook = renderHook(() =>
+      useVoiceChannel({ channelId: "channel", serverId: "server" }),
+    );
+    await act(async () => {
+      await hook.result.current.handleJoin();
+    });
+    const sfu = sfuInstances[0];
+    if (!sfu) throw new Error("SFU was not created");
+    await act(async () => {
+      sfu.emit("joined", { participantId: "self", participants: [] });
+      initialAcquisition.resolve(
+        createStream([createTrack("audio", "initial").track]),
+      );
+    });
+    await waitFor(() => expect(sfu.publishTracks).toHaveBeenCalledTimes(1));
+    const initialSenderTrack = sfu.getPublishedTrack("cam-audio-self");
+    expect(initialSenderTrack).toBeTruthy();
+    expect(initialSenderTrack).not.toBe(
+      processors[0]?.publicationStream.getAudioTracks()[0],
+    );
+
+    const replacementResult = deferred<boolean>();
+    sfu.replaceTrack.mockImplementationOnce(
+      (trackName: string, newTrack: MediaStreamTrack | null) => {
+        if (newTrack) {
+          sfu.publishedTracks.set(
+            trackName,
+            newTrack.clone ? newTrack.clone() : newTrack,
+          );
+        }
+        return replacementResult.promise;
+      },
+    );
+    settingsState.getSettings().inputDeviceId = "device-b";
+    await act(async () => {
+      hook.rerender();
+    });
+    await waitFor(() => expect(acquireLocalStream).toHaveBeenCalledTimes(2));
+    await act(async () => {
+      replacementAcquisition.resolve(
+        createStream([createTrack("audio", "replacement").track]),
+      );
+    });
+    await waitFor(() => expect(processors).toHaveLength(2));
+
+    settingsState.getSettings().inputDeviceId = "device-c";
+    await act(async () => {
+      hook.rerender();
+    });
+    await waitFor(() => expect(acquireLocalStream).toHaveBeenCalledTimes(3));
+    await act(async () => {
+      replacementResult.resolve(true);
+    });
+    await waitFor(() => expect(processors[1]?.destroy).toHaveBeenCalledOnce());
+
+    expect(processors[0]?.destroy).not.toHaveBeenCalled();
+    expect(sfu.replaceTrack).toHaveBeenCalledTimes(2);
+    expect(sfu.replaceTrackIfCurrent).toHaveBeenCalledOnce();
+    expect(sfu.replaceTrackIfCurrent.mock.calls[0]?.[2]).toBe(
+      processors[0]?.publicationStream.getAudioTracks()[0],
+    );
+    hook.unmount();
+  });
+
+  it("replaces a stalled microphone with a gated identity processor", async () => {
+    const rawTrack = createTrack("audio", "raw-audio");
+    const initialPreGateTrack = createTrack("audio", "initial-pre-gate");
+    const initialPublicationTrack = createTrack("audio", "initial-publication");
+    const recoveryPreGateTrack = createTrack("audio", "recovery-pre-gate");
+    const recoveryPublicationTrack = createTrack(
+      "audio",
+      "recovery-publication",
+    );
+    const rawStream = createStream([rawTrack.track]);
+    const initialPreGateStream = createStream([initialPreGateTrack.track]);
+    const initialPublicationStream = createStream([
+      initialPublicationTrack.track,
+    ]);
+    const recoveryPreGateStream = createStream([recoveryPreGateTrack.track]);
+    const recoveryPublicationStream = createStream([
+      recoveryPublicationTrack.track,
+    ]);
+    const recoveryGate: LocalAudioGateController = {
+      resume: vi.fn(),
+      setGated: vi.fn(),
+    };
+    const processors: LocalAudioProcessorHandle[] = [];
+    vi.mocked(acquireLocalStream).mockResolvedValue(rawStream);
+    vi.mocked(createLocalAudioProcessor).mockImplementation(async (_stream) => {
+      const processor =
+        processors.length === 0
+          ? createProcessor(
+              initialPreGateStream,
+              initialPublicationStream,
+              initialPreGateStream,
+            )
+          : createProcessor(
+              recoveryPreGateStream,
+              recoveryPublicationStream,
+              recoveryPreGateStream,
+              recoveryGate,
+            );
+      processors.push(processor);
+      return processor;
+    });
+
+    const hook = renderHook(() =>
+      useVoiceChannel({ channelId: "channel", serverId: "server" }),
+    );
+    await act(async () => {
+      await hook.result.current.handleJoin();
+    });
+    const sfu = sfuInstances[0];
+    if (!sfu) throw new Error("SFU was not created");
+
+    await act(async () => {
+      sfu.emit("joined", { participantId: "self", participants: [] });
+    });
+    await waitFor(() => expect(sfu.publishTracks).toHaveBeenCalledTimes(1));
+
+    rawTrack.track.enabled = false;
+    sfu.vad.start.mockClear();
+    await act(async () => {
+      sfu.emit("outbound-audio-stalled", true);
+    });
+
+    await waitFor(() =>
+      expect(sfu.replaceTrack).toHaveBeenCalledWith(
+        "cam-audio-self",
+        recoveryPublicationTrack.track,
+      ),
+    );
+    expect(rawTrack.track.enabled).toBe(true);
+    await waitFor(() => expect(sfu.vad.start).toHaveBeenCalledTimes(1));
+    expect(sfu.vad.start.mock.lastCall?.[0].getAudioTracks()).toEqual([
+      recoveryPreGateTrack.track,
+    ]);
+    expect(sfu.vad.setGateController).toHaveBeenLastCalledWith(recoveryGate);
+    expect(processors[0]?.destroy).toHaveBeenCalledOnce();
+
+    sfu.publishTracks.mockClear();
+    await act(async () => {
+      sfu.emit("voice-reconnected", undefined);
+    });
+    await waitFor(() => expect(sfu.publishTracks).toHaveBeenCalledTimes(1));
+    const reconnectStream = sfu.publishTracks.mock.calls[0]?.[0] as MediaStream;
+    expect(reconnectStream.getAudioTracks()).toEqual([
+      recoveryPublicationTrack.track,
+    ]);
+
+    hook.unmount();
+  });
+
+  it("reapplies mute state when raw-track recovery finishes asynchronously", async () => {
+    const rawTrack = createTrack("audio", "raw-audio");
+    const rawStream = createStream([rawTrack.track]);
+    vi.mocked(acquireLocalStream).mockResolvedValue(rawStream);
+    vi.mocked(createLocalAudioProcessor).mockResolvedValue(
+      createProcessor(rawStream),
+    );
+
+    const hook = renderHook(() =>
+      useVoiceChannel({ channelId: "channel", serverId: "server" }),
+    );
+    await act(async () => {
+      await hook.result.current.handleJoin();
+    });
+    const sfu = sfuInstances[0];
+    if (!sfu) throw new Error("SFU was not created");
+    await act(async () => {
+      sfu.emit("joined", { participantId: "self", participants: [] });
+    });
+    await waitFor(() => expect(sfu.publishTracks).toHaveBeenCalledTimes(1));
+
+    const replacement = deferred<boolean>();
+    sfu.replaceTrack.mockReturnValueOnce(replacement.promise);
+    sfu.setPublishedTrackEnabled.mockClear();
+    await act(async () => {
+      sfu.emit("outbound-audio-stalled", true);
+      settingsState.getSettings().isMuted = true;
+      hook.rerender();
+      replacement.resolve(true);
+    });
+
+    await waitFor(() =>
+      expect(sfu.setPublishedTrackEnabled).toHaveBeenLastCalledWith(
+        "cam-audio-self",
+        false,
+      ),
+    );
+    hook.unmount();
+  });
+
+  it("preserves local speaking state when a voice-ready snapshot omits self", async () => {
+    const rawTrack = createTrack("audio", "raw-audio");
+    const rawStream = createStream([rawTrack.track]);
+    vi.mocked(acquireLocalStream).mockResolvedValue(rawStream);
+    vi.mocked(createLocalAudioProcessor).mockResolvedValue(
+      createProcessor(rawStream),
+    );
+
+    const hook = renderHook(() =>
+      useVoiceChannel({ channelId: "channel", serverId: "server" }),
+    );
+    await act(async () => {
+      await hook.result.current.handleJoin();
+    });
+    const sfu = sfuInstances[0];
+    if (!sfu) throw new Error("SFU was not created");
+
+    await act(async () => {
+      sfu.emit("joined", { participantId: "self", participants: [] });
+    });
+    await waitFor(() => expect(sfu.vad.start).toHaveBeenCalledTimes(2));
+
+    await act(async () => {
+      sfu.emit("vad-speaking", { participantId: "self", isSpeaking: true });
+    });
+    await waitFor(() =>
+      expect(hook.result.current.speakingUsers.self).toBe(true),
+    );
+
+    await act(async () => {
+      sfu.emit("voice-ready", { speaking: {} });
+    });
+
+    expect(hook.result.current.speakingUsers.self).toBe(true);
+    hook.unmount();
+  });
+
+  it("clears mapped remote speaking state when disconnect reports speaking off", async () => {
+    const rawTrack = createTrack("audio", "raw-audio");
+    const rawStream = createStream([rawTrack.track]);
+    vi.mocked(acquireLocalStream).mockResolvedValue(rawStream);
+    vi.mocked(createLocalAudioProcessor).mockResolvedValue(
+      createProcessor(rawStream),
+    );
+
+    const hook = renderHook(() =>
+      useVoiceChannel({ channelId: "channel", serverId: "server" }),
+    );
+    await act(async () => {
+      await hook.result.current.handleJoin();
+    });
+    const sfu = sfuInstances[0];
+    if (!sfu) throw new Error("SFU was not created");
+
+    const remote = {
+      id: "remote-uuid",
+      clerk_user_id: "user-remote",
+      name: "Remote",
+      self_mute: false,
+      self_deaf: false,
+      self_stream: false,
+      self_video: false,
+      suppress: false,
+      tracks: [],
+    } as const;
+    const replacementRemote = { ...remote, id: "replacement-uuid" };
+    await act(async () => {
+      sfu.emit("joined", {
+        participantId: "self",
+        participants: [remote, replacementRemote],
+      });
+      sfu.emit("speaking", { participantId: remote.id, speaking: 1 });
+    });
+    expect(hook.result.current.speakingUsers[remote.clerk_user_id]).toBe(true);
+
+    await act(async () => {
+      sfu.emit("speaking", {
+        participantId: replacementRemote.id,
+        speaking: 0,
+      });
+      sfu.emit("speaking", { participantId: remote.id, speaking: 0 });
+    });
+    expect(hook.result.current.speakingUsers[remote.clerk_user_id]).toBe(
+      undefined,
+    );
 
     hook.unmount();
   });
@@ -1095,7 +2013,10 @@ describe("useVoiceChannel SFU lifecycle", () => {
     await waitFor(() =>
       expect(createCameraBackgroundEffect).toHaveBeenCalledTimes(2),
     );
-    await waitFor(() => expect(sfu.replaceTrack).toHaveBeenCalledTimes(3));
+    await waitFor(() => expect(sfu.replaceTrack).toHaveBeenCalledTimes(4));
+    expect(sfu.vad.start.mock.lastCall?.[0].getAudioTracks()).toEqual([
+      audioB.track,
+    ]);
 
     const effectA = createEffect(
       createTrack("video", "effect-a").track,

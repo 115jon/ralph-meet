@@ -9,6 +9,7 @@
 import { ServiceError } from "@/lib/service-error";
 import { getAttachmentUrl } from "@/lib/attachment-url";
 import type { AvatarDisplay } from "@/lib/avatar-display";
+import { cacheGet, cacheSet } from "@/lib/cache";
 import { hydrateSocialEmbeds } from "@/lib/share-embed-refresh";
 import type { EmbedInfo } from "@/lib/types";
 import type { D1Database } from "@cloudflare/workers-types";
@@ -781,6 +782,32 @@ function parseStoredEmbeds(value: unknown): EmbedInfo[] {
   }
 }
 
+const SOCIAL_EMBED_REFRESH_TTL = 20 * 60;
+
+function socialEmbedRefreshCacheKey(url: string): string {
+  return `v1:embed-refresh:${url}`;
+}
+
+async function wereSocialEmbedsRecentlyRefreshed(
+  embeds: EmbedInfo[],
+): Promise<boolean> {
+  if (embeds.length === 0) return true;
+  const hits = await Promise.all(
+    embeds.map((embed) => cacheGet(socialEmbedRefreshCacheKey(embed.url))),
+  );
+  return hits.every((hit) => hit !== null);
+}
+
+function markSocialEmbedsRefreshed(embeds: EmbedInfo[]): void {
+  for (const embed of embeds) {
+    cacheSet(
+      socialEmbedRefreshCacheKey(embed.url),
+      true,
+      SOCIAL_EMBED_REFRESH_TTL,
+    ).catch(() => undefined);
+  }
+}
+
 export async function refreshMessageEmbeds(
   db: D1Database,
   channelId: string,
@@ -802,8 +829,10 @@ export async function refreshMessageEmbeds(
     (results ?? []).map(async (row: Record<string, unknown>) => {
       const embeds = parseStoredEmbeds(row.embeds);
       if (embeds.length === 0) return null;
+      if (await wereSocialEmbedsRecentlyRefreshed(embeds)) return null;
 
       const refreshedEmbeds = await hydrateSocialEmbeds(embeds);
+      markSocialEmbedsRefreshed(embeds);
       if (refreshedEmbeds === embeds) return null;
 
       const capturedChannelId = String(row.channel_id ?? channelId);
@@ -1041,16 +1070,15 @@ export async function createMessage(
       ),
     );
     const placeholders = attIds.map(() => "?").join(",");
-    const attachmentKeyPrefix = `attachments/${channelId}/%`;
     await db
       .prepare(
         `UPDATE attachments SET message_id = ?, is_nsfw = 0
          WHERE id IN (${placeholders}) AND user_id = ?
            AND soundboard_server_id IS NULL
            AND message_id IS NULL
-           AND file_key LIKE ?`,
+           AND channel_id = ?`,
       )
-      .bind(messageId, ...attIds, userId, attachmentKeyPrefix)
+      .bind(messageId, ...attIds, userId, channelId)
       .run();
 
     if (sensitiveAttachmentIds.size > 0) {
@@ -1061,9 +1089,9 @@ export async function createMessage(
           `UPDATE attachments SET is_nsfw = 1
             WHERE message_id = ? AND user_id = ? AND id IN (${sensitivePlaceholders})
               AND soundboard_server_id IS NULL
-              AND file_key LIKE ?`,
+              AND channel_id = ?`,
         )
-        .bind(messageId, userId, ...sensitiveIds, attachmentKeyPrefix)
+        .bind(messageId, userId, ...sensitiveIds, channelId)
         .run();
     }
 
@@ -1073,9 +1101,9 @@ export async function createMessage(
          FROM attachments
          WHERE id IN (${placeholders}) AND message_id = ? AND user_id = ?
            AND soundboard_server_id IS NULL
-           AND file_key LIKE ?`,
+           AND channel_id = ?`,
       )
-      .bind(...attIds, messageId, userId, attachmentKeyPrefix)
+      .bind(...attIds, messageId, userId, channelId)
       .all();
 
     attachments = (attRows ?? []).map((r: Record<string, unknown>) => ({

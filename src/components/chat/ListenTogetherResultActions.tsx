@@ -1,3 +1,4 @@
+import { useMounted } from "@/hooks/useMounted";
 import { cn } from "@/lib/utils";
 import { MoreHorizontal, X } from "lucide-react";
 import { useEffect, useId, useRef } from "react";
@@ -37,6 +38,7 @@ export function ListenTogetherMobileActionSheet({
   onAction: (action: ListenTogetherResultActionId) => void;
   onClose: () => void;
 }) {
+  const mounted = useMounted();
   const titleId = useId();
   const dialogRef = useRef<HTMLDivElement>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
@@ -88,9 +90,11 @@ export function ListenTogetherMobileActionSheet({
     };
   }, []);
 
+  if (!mounted) return null;
+
   return createPortal(
     <div
-      className="fixed inset-0 z-[1100] flex items-end bg-black/55 p-3 lg:hidden"
+      className="fixed inset-0 z-50 flex items-end bg-black/55 p-3 lg:hidden"
       role="presentation"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) onClose();

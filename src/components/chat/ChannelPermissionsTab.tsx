@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 import { Check, Loader2, Plus, Slash, Trash2, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { AvatarImage } from "./AvatarImage";
+import InlineEmojiText from "./InlineEmojiText";
 import { ButtonBase } from "@/components/ui/button-base";
 
 interface Override {
@@ -123,7 +124,7 @@ function PermissionsSidebar({
   handleDeleteOverride: (id: string) => void;
 }) {
   return (
-    <div className="w-56 bg-rm-bg-secondary border-r border-rm-border flex flex-col relative z-10">
+    <div className="flex min-h-0 w-56 flex-col bg-rm-bg-secondary border-r border-rm-border relative z-10">
       <div className="p-3 border-b border-rm-border flex justify-between items-center">
         <span className="text-xs font-bold uppercase tracking-widest text-rm-text-muted">
           Roles/Members
@@ -141,7 +142,7 @@ function PermissionsSidebar({
       </div>
 
       {isAddingTarget ? (
-        <div className="flex-1 overflow-y-auto p-2 bg-rm-bg-surface space-y-4">
+        <div className="min-h-0 flex-1 overflow-y-auto p-2 bg-rm-bg-surface space-y-4">
           {availableRoles.length > 0 && (
             <div>
               <span className="px-2 text-[10px] font-bold uppercase text-rm-text-muted">
@@ -165,7 +166,7 @@ function PermissionsSidebar({
                       className="w-3 h-3 rounded-full shrink-0"
                       style={{ backgroundColor: role.color || "#94a3b8" }}
                     />
-                    <span className="truncate">{role.name}</span>
+                    <InlineEmojiText text={role.name} className="truncate" />
                   </ButtonBase>
                 ))}
               </div>
@@ -209,7 +210,10 @@ function PermissionsSidebar({
                           </span>
                         )}
                       </div>
-                      <span className="truncate">{displayName}</span>
+                      <InlineEmojiText
+                        text={displayName}
+                        className="truncate"
+                      />
                     </ButtonBase>
                   );
                 })}
@@ -223,7 +227,7 @@ function PermissionsSidebar({
           )}
         </div>
       ) : (
-        <div className="flex-1 overflow-y-auto p-2 space-y-1">
+        <div className="min-h-0 flex-1 overflow-y-auto p-2 space-y-1">
           {overrides.map((o) => {
             const roleInfo = roles.find((r) => r.id === o.target_id);
             const isDefault = roleInfo?.is_default;
@@ -259,7 +263,10 @@ function PermissionsSidebar({
                     )}
                   </div>
                 )}
-                <span className="truncate flex-1">{o.name}</span>
+                <InlineEmojiText
+                  text={o.name ?? ""}
+                  className="truncate flex-1"
+                />
                 {!isDefault && (
                   <Trash2
                     className="h-3 w-3 opacity-0 group-hover:opacity-100 hover:text-destructive shrink-0"
@@ -293,7 +300,7 @@ function PermissionsEditor({
   ) => void;
 }) {
   return (
-    <div className="flex-1 flex flex-col bg-rm-bg-primary overflow-hidden relative">
+    <div className="flex min-h-0 flex-1 flex-col bg-rm-bg-primary overflow-hidden relative">
       {selectedOverride ? (
         <>
           <div className="p-5 border-b border-rm-border flex items-center gap-3">
@@ -306,14 +313,14 @@ function PermissionsEditor({
                   }}
                 />
               ) : null}
-              {selectedOverride.name}
+              <InlineEmojiText text={selectedOverride.name ?? ""} />
             </span>
             {savingTarget === selectedOverride.target_id && (
               <Loader2 className="h-4 w-4 animate-spin text-rm-text-muted" />
             )}
           </div>
 
-          <div className="flex-1 overflow-y-auto px-6 py-4 space-y-3 relative z-0">
+          <div className="min-h-0 flex-1 overflow-y-auto px-6 py-4 space-y-3 relative z-0">
             {permissionList.map((perm) => {
               const isAllowed =
                 (selectedOverride.allow & perm.mask) === perm.mask;

@@ -1,7 +1,15 @@
-import { resolveInstagramVideoMetadata } from "@/lib/instagram-video-resolver";
-import { fetchTikTokProxyMetadata } from "@/lib/share-preview-proxy";
+import {
+  isInstagramWeakFallbackResult,
+  resolveInstagramVideoMetadata,
+} from "@/lib/instagram-video-resolver";
+import {
+  fetchTikTokProxyMetadata,
+  lookupInstagramOEmbed,
+} from "@/lib/share-preview-proxy";
+import { isUnavailableSocialStatus } from "@/lib/social-embed-availability";
 import type { MessageShare } from "@/services/message-share.service";
-import type { EmbedInfo } from "@/lib/types";
+import { extractAndProcessEmbedsWithStatus } from "@/services/embed-fetcher";
+import type { EmbedAuthor, EmbedInfo } from "@/lib/types";
 
 function isInstagramEmbed(embed: EmbedInfo): boolean {
   const provider = embed.provider?.name?.toLowerCase();
@@ -33,6 +41,68 @@ function isTikTokEmbed(embed: EmbedInfo): boolean {
   } catch {
     return false;
   }
+}
+
+function isXEmbed(embed: EmbedInfo): boolean {
+  const provider = embed.provider?.name?.toLowerCase();
+  if (provider === "x" || provider === "twitter") return true;
+
+  try {
+    return /(?:^|\.)(?:x|twitter|fxtwitter|fixupx|vxtwitter|fixvx)\.com$/i.test(
+      new URL(embed.url).hostname,
+    );
+  } catch {
+    return false;
+  }
+}
+
+function makeTombstone(embed: EmbedInfo, fresh?: EmbedInfo): EmbedInfo {
+  return {
+    ...embed,
+    unavailable: true,
+    media: undefined,
+    video: undefined,
+    thumbnail: undefined,
+    audio: undefined,
+    externalCard: undefined,
+    referencedTweet: undefined,
+    rawTitle: undefined,
+    rawDescription: undefined,
+    provider: fresh?.provider ?? embed.provider,
+    footer: fresh?.footer ?? embed.footer,
+  };
+}
+
+function mergeAuthor(
+  current: EmbedAuthor | undefined,
+  nextName?: string,
+  nextUrl?: string,
+  nextIcon?: string,
+  nextVerified?: boolean,
+): EmbedAuthor | undefined {
+  const name = nextName ?? current?.name;
+  if (!name) return current;
+
+  const url = nextUrl ?? current?.url;
+  const iconURL = nextIcon ?? current?.iconURL;
+  const isVerified = nextVerified ?? current?.isVerified;
+  if (
+    current &&
+    name === current.name &&
+    url === current.url &&
+    iconURL === current.iconURL &&
+    isVerified === current.isVerified
+  ) {
+    return current;
+  }
+
+  return {
+    ...current,
+    name,
+    url,
+    iconURL,
+    isVerified,
+  };
 }
 
 function buildTikTokVideoEmbed(videoUrl: string) {
@@ -67,39 +137,34 @@ export async function hydrateSocialEmbeds(
   const refreshedEmbeds = await Promise.all(
     embeds.map(async (embed) => {
       if (isInstagramEmbed(embed)) {
-        const hasDirectVideo =
-          !!embed.video?.url && embed.video.kind !== "player";
-        const needsVideo = !hasDirectVideo;
-        const needsThumbnail = !embed.thumbnail?.url;
-        const needsTitle = !embed.rawTitle;
-        const needsMedia = !embed.media?.length;
-        const needsAuthorAvatar = !embed.author?.iconURL;
-        const needsAuthorVerification = embed.author?.isVerified === undefined;
-        const needsMetrics =
-          !embed.metrics ||
-          (embed.metrics.likes === undefined &&
-            embed.metrics.comments === undefined &&
-            embed.metrics.views === undefined);
-        const needsTimestamp = !embed.timestamp;
-        const needsAudio = !embed.audio;
-
-        if (
-          !needsVideo &&
-          !needsThumbnail &&
-          !needsTitle &&
-          !needsMedia &&
-          !needsAuthorAvatar &&
-          !needsAuthorVerification &&
-          !needsMetrics &&
-          !needsTimestamp &&
-          !needsAudio
-        ) {
-          return embed;
-        }
-
         const resolved = await resolveInstagramVideoMetadata(embed.url).catch(
           () => null,
         );
+        const hasResolvedContent = Boolean(
+          resolved?.videoUrl ||
+          resolved?.thumbnailUrl ||
+          resolved?.media?.length ||
+          resolved?.title,
+        );
+        if (!hasResolvedContent) {
+          const lookup = await lookupInstagramOEmbed(embed.url).catch(() => ({
+            status: 0,
+            metadata: null,
+          }));
+          if (isUnavailableSocialStatus(lookup.status)) {
+            return makeTombstone(embed);
+          }
+          return embed;
+        }
+
+        const storedHasDirectMedia =
+          (embed.media?.length ?? 0) > 1 ||
+          Boolean(embed.media?.some((entry) => entry.type === "video")) ||
+          Boolean(embed.video?.url && embed.video.kind !== "player");
+        if (storedHasDirectMedia && isInstagramWeakFallbackResult(resolved)) {
+          return embed;
+        }
+
         const resolvedMedia = resolved?.media?.length
           ? resolved.media
           : embed.media;
@@ -108,69 +173,48 @@ export async function hydrateSocialEmbeds(
         );
         const firstMedia = resolvedMedia?.[0];
 
-        const nextVideo = hasDirectVideo
-          ? embed.video
-          : resolved?.videoUrl
-            ? {
-                ...buildInstagramVideoEmbed(resolved.videoUrl),
-                width: firstVideo?.width ?? 720,
-                height: firstVideo?.height ?? 1280,
-                durationSeconds: resolved.durationSeconds ?? undefined,
-              }
-            : embed.video;
+        const nextVideo = resolved?.videoUrl
+          ? {
+              ...buildInstagramVideoEmbed(resolved.videoUrl),
+              width: firstVideo?.width ?? embed.video?.width ?? 720,
+              height: firstVideo?.height ?? embed.video?.height ?? 1280,
+              durationSeconds:
+                resolved.durationSeconds ?? embed.video?.durationSeconds,
+            }
+          : embed.video;
 
-        const nextThumbnail = embed.thumbnail?.url
-          ? embed.thumbnail
-          : resolved?.thumbnailUrl
-            ? {
-                url: resolved.thumbnailUrl,
-                width:
-                  firstMedia?.type === "image"
-                    ? firstMedia.width
-                    : embed.thumbnail?.width,
-                height:
-                  firstMedia?.type === "image"
-                    ? firstMedia.height
-                    : embed.thumbnail?.height,
-              }
-            : embed.thumbnail;
+        const nextThumbnailWidth =
+          (firstMedia?.type === "image" ? firstMedia.width : undefined) ??
+          embed.thumbnail?.width;
+        const nextThumbnailHeight =
+          (firstMedia?.type === "image" ? firstMedia.height : undefined) ??
+          embed.thumbnail?.height;
+        const nextThumbnail = resolved?.thumbnailUrl
+          ? {
+              url: resolved.thumbnailUrl,
+              ...(nextThumbnailWidth !== undefined
+                ? { width: nextThumbnailWidth }
+                : {}),
+              ...(nextThumbnailHeight !== undefined
+                ? { height: nextThumbnailHeight }
+                : {}),
+            }
+          : embed.thumbnail;
 
-        const nextTitle = embed.rawTitle ?? resolved?.title ?? undefined;
-        const nextAuthorName =
-          embed.author?.name ?? resolved?.authorName ?? undefined;
-        const nextAuthorUrl =
-          embed.author?.url ?? resolved?.authorUrl ?? undefined;
-        const nextAuthorIcon =
-          embed.author?.iconURL ?? resolved?.authorAvatarUrl ?? undefined;
-        const nextAuthorVerified =
-          embed.author?.isVerified ?? resolved?.authorVerified ?? undefined;
-        const nextAuthor = nextAuthorName
-          ? embed.author
-            ? nextAuthorName !== embed.author.name ||
-              nextAuthorUrl !== embed.author.url ||
-              nextAuthorIcon !== embed.author.iconURL ||
-              nextAuthorVerified !== embed.author.isVerified
-              ? {
-                  ...embed.author,
-                  name: nextAuthorName,
-                  url: nextAuthorUrl,
-                  iconURL: nextAuthorIcon,
-                  isVerified: nextAuthorVerified,
-                }
-              : embed.author
-            : {
-                name: nextAuthorName,
-                url: nextAuthorUrl,
-                iconURL: nextAuthorIcon,
-                isVerified: nextAuthorVerified,
-              }
-          : embed.author;
+        const nextTitle = resolved?.title ?? embed.rawTitle ?? undefined;
+        const nextAuthor = mergeAuthor(
+          embed.author,
+          resolved?.authorName ?? undefined,
+          resolved?.authorUrl ?? undefined,
+          resolved?.authorAvatarUrl ?? undefined,
+          resolved?.authorVerified ?? undefined,
+        );
         const nextMetricsComments =
-          embed.metrics?.comments ?? resolved?.commentCount ?? undefined;
+          resolved?.commentCount ?? embed.metrics?.comments ?? undefined;
         const nextMetricsLikes =
-          embed.metrics?.likes ?? resolved?.likeCount ?? undefined;
+          resolved?.likeCount ?? embed.metrics?.likes ?? undefined;
         const nextMetricsViews =
-          embed.metrics?.views ?? resolved?.viewCount ?? undefined;
+          resolved?.viewCount ?? embed.metrics?.views ?? undefined;
         const nextMetrics =
           nextMetricsComments !== undefined ||
           nextMetricsLikes !== undefined ||
@@ -188,8 +232,8 @@ export async function hydrateSocialEmbeds(
                 }
             : embed.metrics;
         const nextTimestamp =
-          embed.timestamp ?? resolved?.timestamp ?? undefined;
-        const nextAudio = embed.audio ?? resolved?.audio ?? undefined;
+          resolved?.timestamp ?? embed.timestamp ?? undefined;
+        const nextAudio = resolved?.audio ?? embed.audio ?? undefined;
 
         if (
           nextVideo === embed.video &&
@@ -199,13 +243,15 @@ export async function hydrateSocialEmbeds(
           nextAuthor === embed.author &&
           nextMetrics === embed.metrics &&
           nextTimestamp === embed.timestamp &&
-          nextAudio === embed.audio
+          nextAudio === embed.audio &&
+          !embed.unavailable
         ) {
           return embed;
         }
 
         return {
           ...embed,
+          unavailable: undefined,
           rawTitle: nextTitle,
           thumbnail: nextThumbnail,
           media: resolvedMedia,
@@ -217,159 +263,139 @@ export async function hydrateSocialEmbeds(
         };
       }
 
-      if (!isTikTokEmbed(embed)) return embed;
+      if (isTikTokEmbed(embed)) {
+        const resolved = await fetchTikTokProxyMetadata(embed.url).catch(
+          () => null,
+        );
+        if (
+          !resolved ||
+          (!resolved.videoUrl &&
+            !resolved.coverUrl &&
+            !resolved.media?.length &&
+            !resolved.title)
+        ) {
+          const result = await extractAndProcessEmbedsWithStatus(embed.url);
+          if (result.embeds[0]?.unavailable) {
+            return makeTombstone(embed, result.embeds[0]);
+          }
+          return embed;
+        }
 
-      const hasDirectVideo =
-        !!embed.video?.url && embed.video.kind !== "player";
-      const needsVideo = !hasDirectVideo;
-      const needsThumbnail = !embed.thumbnail?.url;
-      const needsTitle = !embed.rawTitle;
-      const needsDescription = !embed.rawDescription;
-      const needsMedia = !embed.media?.length;
-      const needsAuthorName = !embed.author?.name;
-      const needsAuthorUrl = !embed.author?.url;
-      const needsAuthorAvatar = !embed.author?.iconURL;
-      const needsMetrics =
-        !embed.metrics ||
-        (embed.metrics.likes === undefined &&
-          embed.metrics.comments === undefined &&
-          embed.metrics.views === undefined);
-      const needsTimestamp = !embed.timestamp;
-      const needsAudio = !embed.audio;
-
-      if (
-        !needsVideo &&
-        !needsThumbnail &&
-        !needsTitle &&
-        !needsDescription &&
-        !needsMedia &&
-        !needsAuthorName &&
-        !needsAuthorUrl &&
-        !needsAuthorAvatar &&
-        !needsMetrics &&
-        !needsTimestamp &&
-        !needsAudio
-      ) {
-        return embed;
-      }
-
-      const resolved = await fetchTikTokProxyMetadata(embed.url).catch(
-        () => null,
-      );
-      if (!resolved) return embed;
-
-      const resolvedMedia = resolved.media?.length
-        ? resolved.media
-        : embed.media;
-      const firstVideo = resolvedMedia?.find((entry) => entry.type === "video");
-      const firstMedia = resolvedMedia?.[0];
-      const slideshowThumbnailUrl = firstVideo?.thumbnailUrl;
-      const nextVideo = hasDirectVideo
-        ? embed.video
-        : resolved.videoUrl
+        const resolvedMedia = resolved.media?.length
+          ? resolved.media
+          : embed.media;
+        const firstVideo = resolvedMedia?.find(
+          (entry) => entry.type === "video",
+        );
+        const firstMedia = resolvedMedia?.[0];
+        const slideshowThumbnailUrl = firstVideo?.thumbnailUrl;
+        const nextCoverUrl =
+          resolved.postType === "slideshow"
+            ? (slideshowThumbnailUrl ?? resolved.coverUrl)
+            : resolved.coverUrl;
+        const nextVideo = resolved.videoUrl
           ? {
               ...buildTikTokVideoEmbed(resolved.videoUrl),
               width: firstVideo?.width ?? 720,
               height: firstVideo?.height ?? 1280,
               durationSeconds:
-                embed.video?.durationSeconds ?? firstVideo?.durationSeconds,
+                firstVideo?.durationSeconds ?? embed.video?.durationSeconds,
             }
           : embed.video;
-      const nextThumbnail = embed.thumbnail?.url
-        ? embed.thumbnail
-        : (
-              resolved.postType === "slideshow"
-                ? (slideshowThumbnailUrl ?? resolved.coverUrl)
-                : resolved.coverUrl
-            )
+        const nextThumbnail = nextCoverUrl
           ? {
-              url: (resolved.postType === "slideshow"
-                ? (slideshowThumbnailUrl ?? resolved.coverUrl)
-                : resolved.coverUrl)!,
+              url: nextCoverUrl,
               width:
-                embed.thumbnail?.width ??
-                (firstMedia?.type === "image"
+                firstMedia?.type === "image"
                   ? firstMedia.width
-                  : firstVideo?.width) ??
-                720,
+                  : (firstVideo?.width ?? embed.thumbnail?.width ?? 720),
               height:
-                embed.thumbnail?.height ??
-                (firstMedia?.type === "image"
+                firstMedia?.type === "image"
                   ? firstMedia.height
-                  : firstVideo?.height) ??
-                1280,
+                  : (firstVideo?.height ?? embed.thumbnail?.height ?? 1280),
             }
           : embed.thumbnail;
-      const nextAuthorName =
-        embed.author?.name ?? resolved.authorName ?? undefined;
-      const nextAuthorUrl =
-        embed.author?.url ??
-        (resolved.authorHandle
-          ? `https://www.tiktok.com/@${resolved.authorHandle}`
-          : undefined);
-      const nextAuthorIcon =
-        embed.author?.iconURL ?? resolved.authorAvatarUrl ?? undefined;
-      const nextAuthor = nextAuthorName
-        ? {
-            ...embed.author,
-            name: nextAuthorName,
-            url: nextAuthorUrl,
-            iconURL: nextAuthorIcon,
-          }
-        : embed.author;
-      const nextMetricsComments =
-        embed.metrics?.comments ?? resolved.commentCount ?? undefined;
-      const nextMetricsLikes =
-        embed.metrics?.likes ?? resolved.likeCount ?? undefined;
-      const nextMetricsViews =
-        embed.metrics?.views ?? resolved.viewCount ?? undefined;
-      const nextMetrics =
-        nextMetricsComments !== undefined ||
-        nextMetricsLikes !== undefined ||
-        nextMetricsViews !== undefined ||
-        embed.metrics
-          ? nextMetricsComments === embed.metrics?.comments &&
-            nextMetricsLikes === embed.metrics?.likes &&
-            nextMetricsViews === embed.metrics?.views
-            ? embed.metrics
-            : {
-                ...embed.metrics,
-                comments: nextMetricsComments,
-                likes: nextMetricsLikes,
-                views: nextMetricsViews,
-              }
-          : embed.metrics;
-      const nextTimestamp = embed.timestamp ?? resolved.timestamp ?? undefined;
-      const nextAudio = embed.audio ?? resolved.audio ?? undefined;
-      const nextTitle = embed.rawTitle ?? resolved.title ?? undefined;
-      const nextDescription =
-        embed.rawDescription ?? resolved.title ?? undefined;
+        const nextAuthor = mergeAuthor(
+          embed.author,
+          resolved.authorName,
+          resolved.authorHandle
+            ? `https://www.tiktok.com/@${resolved.authorHandle}`
+            : undefined,
+          resolved.authorAvatarUrl,
+        );
+        const nextMetricsComments =
+          resolved.commentCount ?? embed.metrics?.comments ?? undefined;
+        const nextMetricsLikes =
+          resolved.likeCount ?? embed.metrics?.likes ?? undefined;
+        const nextMetricsViews =
+          resolved.viewCount ?? embed.metrics?.views ?? undefined;
+        const nextMetrics =
+          nextMetricsComments !== undefined ||
+          nextMetricsLikes !== undefined ||
+          nextMetricsViews !== undefined ||
+          embed.metrics
+            ? nextMetricsComments === embed.metrics?.comments &&
+              nextMetricsLikes === embed.metrics?.likes &&
+              nextMetricsViews === embed.metrics?.views
+              ? embed.metrics
+              : {
+                  ...embed.metrics,
+                  comments: nextMetricsComments,
+                  likes: nextMetricsLikes,
+                  views: nextMetricsViews,
+                }
+            : embed.metrics;
+        const nextTimestamp =
+          resolved.timestamp ?? embed.timestamp ?? undefined;
+        const nextAudio = resolved.audio ?? embed.audio ?? undefined;
+        const nextTitle = resolved.title ?? embed.rawTitle ?? undefined;
+        const nextDescription =
+          resolved.title ?? embed.rawDescription ?? undefined;
 
-      if (
-        nextVideo === embed.video &&
-        nextThumbnail === embed.thumbnail &&
-        nextTitle === embed.rawTitle &&
-        nextDescription === embed.rawDescription &&
-        resolvedMedia === embed.media &&
-        nextAuthor === embed.author &&
-        nextMetrics === embed.metrics &&
-        nextTimestamp === embed.timestamp &&
-        nextAudio === embed.audio
-      ) {
-        return embed;
+        if (
+          nextVideo === embed.video &&
+          nextThumbnail === embed.thumbnail &&
+          nextTitle === embed.rawTitle &&
+          nextDescription === embed.rawDescription &&
+          resolvedMedia === embed.media &&
+          nextAuthor === embed.author &&
+          nextMetrics === embed.metrics &&
+          nextTimestamp === embed.timestamp &&
+          nextAudio === embed.audio &&
+          !embed.unavailable
+        ) {
+          return embed;
+        }
+
+        return {
+          ...embed,
+          unavailable: undefined,
+          rawTitle: nextTitle,
+          rawDescription: nextDescription,
+          thumbnail: nextThumbnail,
+          media: resolvedMedia,
+          video: nextVideo,
+          author: nextAuthor,
+          metrics: nextMetrics,
+          timestamp: nextTimestamp,
+          audio: nextAudio,
+        };
       }
 
+      if (!isXEmbed(embed)) return embed;
+
+      const result = await extractAndProcessEmbedsWithStatus(embed.url);
+      const fresh = result.embeds[0];
+      if (fresh?.unavailable) {
+        return makeTombstone(embed, fresh);
+      }
+      if (!fresh || result.hadFailures) return embed;
+
       return {
-        ...embed,
-        rawTitle: nextTitle,
-        rawDescription: nextDescription,
-        thumbnail: nextThumbnail,
-        media: resolvedMedia,
-        video: nextVideo,
-        author: nextAuthor,
-        metrics: nextMetrics,
-        timestamp: nextTimestamp,
-        audio: nextAudio,
+        ...fresh,
+        id: embed.id,
+        url: embed.url,
+        unavailable: undefined,
       };
     }),
   );

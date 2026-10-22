@@ -54,6 +54,7 @@ export default function AttachmentList({
               src={att.previewUrl || getAuthAssetUrl(att.url)}
               alt={att.filename}
               title={att.filename}
+              data-rm-preserve-blur={att.is_nsfw ? "true" : undefined}
               className={cn(
                 "w-full h-full object-cover",
                 att.is_nsfw && "blur-sm saturate-75",
@@ -64,6 +65,7 @@ export default function AttachmentList({
               <video
                 src={att.previewUrl || getAuthAssetUrl(att.url)}
                 aria-label={att.filename}
+                data-rm-preserve-blur={att.is_nsfw ? "true" : undefined}
                 className={cn(
                   "w-full h-full object-cover",
                   att.is_nsfw && "blur-sm saturate-75",
@@ -138,7 +140,7 @@ export default function AttachmentList({
             <img
               src={p.previewUrl}
               alt="Upload preview"
-              className="absolute inset-0 w-full h-full object-cover opacity-40 blur-[1px]"
+              className="absolute inset-0 w-full h-full object-cover opacity-40"
             />
           ) : (
             <div className="absolute inset-0 flex items-center justify-center opacity-10">

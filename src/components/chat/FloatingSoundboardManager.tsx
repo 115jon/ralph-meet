@@ -1,3 +1,4 @@
+import { useMounted } from "@/hooks/useMounted";
 import { createPortal } from "react-dom";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { MouseEvent, PointerEvent } from "react";
@@ -22,18 +23,24 @@ export function FloatingSoundboardManager({
   localUserId,
   sfu,
 }: FloatingSoundboardManagerProps) {
+  const mounted = useMounted();
   const activePlaybacks = useVoiceSoundboardStore(
     (state) => state.activePlaybacks,
   );
   const serverKey = explicitServerKey ?? getSoundboardServerKey(serverId);
   const [collapsed, setCollapsed] = useState(false);
-  const [position, setPosition] = useState(() => {
-    if (typeof window === "undefined") return { x: 16, y: 16 };
-    return {
-      x: Math.max(16, window.innerWidth - 360 - 16),
-      y: 16,
-    };
-  });
+  const [position, setPosition] = useState({ x: 16, y: 16 });
+
+  useEffect(() => {
+    if (mounted) {
+      // Hydration must start from a stable position before reading the viewport.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setPosition({
+        x: Math.max(16, window.innerWidth - 360 - 16),
+        y: 16,
+      });
+    }
+  }, [mounted]);
   const containerRef = useRef<HTMLDivElement>(null);
   const toggleRef = useRef<HTMLButtonElement>(null);
   const dragStateRef = useRef<{
@@ -156,7 +163,7 @@ export function FloatingSoundboardManager({
     suppressHandleClickRef.current = false;
   };
 
-  if (scopedPlaybacks.length === 0 || typeof document === "undefined") {
+  if (!mounted || scopedPlaybacks.length === 0) {
     return null;
   }
 
@@ -166,7 +173,7 @@ export function FloatingSoundboardManager({
         ref={containerRef}
         data-testid="floating-soundboard-manager"
         aria-label="Soundboard manager"
-        className="fixed z-[130] w-[min(360px,calc(100vw-24px))] touch-none select-none"
+        className="fixed z-40 w-[min(360px,calc(100vw-24px))] touch-none select-none"
         style={{ left: position.x, top: position.y }}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}

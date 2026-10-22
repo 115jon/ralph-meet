@@ -14,16 +14,19 @@ import {
 } from "@/lib/listen-together";
 import type { SFUClient } from "@/lib/sfu-client";
 import { getAuthAssetUrl } from "@/lib/platform";
+import { useClientDateFormatter } from "@/lib/client-date-format";
 import { cn } from "@/lib/utils";
 import {
   addListenTogetherQueryHistory,
   clampListenTogetherPaneRatio,
+  readListenTogetherPaneRatio,
   readListenTogetherQueryHistory,
   writeListenTogetherQueryHistory,
 } from "@/lib/listen-together-local";
 import { useChatStore } from "@/stores/chat-store";
 import { useListenTogetherStore } from "@/stores/useListenTogetherStore";
 import ContextMenu from "./ContextMenu";
+import InlineEmojiText from "./InlineEmojiText";
 import { ListenTogetherNowPlayingCard } from "./ListenTogetherNowPlayingCard";
 import {
   getListenTogetherContextMenuItems,
@@ -36,6 +39,7 @@ import {
   ListenTogetherResultActionTrigger,
 } from "./ListenTogetherResultActions";
 import { useContextMenu } from "@/hooks/useContextMenu";
+import { useMediaQuery } from "@/hooks/useMediaQuery";
 import {
   formatListenTogetherDuration,
   useListenTogetherPlaybackState,
@@ -191,7 +195,10 @@ export const listenTogetherQueueRowRenderer = {
                 </div>
               )}
             </div>
-            <span className="truncate">{entry.requester.displayName}</span>
+            <InlineEmojiText
+              text={entry.requester.displayName}
+              className="truncate"
+            />
             {entry.importBatchLabel && (
               <>
                 <span aria-hidden="true">•</span>
@@ -284,20 +291,20 @@ export function ListenTogetherPanel({
   const [resolvedPreview, setResolvedPreview] =
     useState<ListenTogetherResolveResponse | null>(null);
   const [isSearchFocused, setIsSearchFocused] = useState(false);
-  const [queryHistory, setQueryHistory] = useState<string[]>(() =>
-    readListenTogetherQueryHistory(),
-  );
+  const [queryHistory, setQueryHistory] = useState<string[]>([]);
   const [activeRightTab, setActiveRightTab] = useState<
     "queue" | "recently-played"
   >("queue");
   const [mobileActionResult, setMobileActionResult] =
     useState<ListenTogetherSearchResult | null>(null);
-  const [isDesktop, setIsDesktop] = useState(() =>
-    typeof window !== "undefined" && typeof window.matchMedia === "function"
-      ? window.matchMedia("(min-width: 1024px)").matches
-      : false,
-  );
+  const isDesktop = useMediaQuery("(min-width: 1024px)");
+  const formatDate = useClientDateFormatter();
   const [isPaneDragging, setIsPaneDragging] = useState(false);
+
+  useEffect(() => {
+    setQueryHistory(readListenTogetherQueryHistory());
+    setWorkspacePaneRatio(readListenTogetherPaneRatio());
+  }, [setWorkspacePaneRatio]);
 
   const handleQueueCommandRejected = useCallback((message: string) => {
     setResolveFeedback(message);
@@ -340,15 +347,6 @@ export function ListenTogetherPanel({
       localUserId,
     ],
   );
-
-  useEffect(() => {
-    if (typeof window.matchMedia !== "function") return;
-    const mediaQuery = window.matchMedia("(min-width: 1024px)");
-    const update = () => setIsDesktop(mediaQuery.matches);
-    update();
-    mediaQuery.addEventListener?.("change", update);
-    return () => mediaQuery.removeEventListener?.("change", update);
-  }, []);
 
   useEffect(() => {
     if (!isDesktop) return;
@@ -1434,7 +1432,11 @@ export function ListenTogetherPanel({
                       </div>
                       <div className="mt-1 truncate text-[11px] text-rm-text-muted/75">
                         Played{" "}
-                        {new Date(historyEntry.playedAt).toLocaleTimeString()}
+                        {formatDate(historyEntry.playedAt, {
+                          hour: "numeric",
+                          minute: "2-digit",
+                          second: "2-digit",
+                        })}
                       </div>
                     </div>
                     <button

@@ -416,7 +416,7 @@ const RemoveEmbedsModal = memo(
     onConfirm: () => void;
     onCancel: () => void;
   }) => (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center">
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
       <button
         type="button"
         className="absolute inset-0 bg-black/60"
@@ -2689,7 +2689,10 @@ const XMediaGrid = memo(
     onMediaStop?: () => void;
   }) => {
     const attachments = useMemo(
-      () => mediaToAttachments(media, url, messageId),
+      () =>
+        mediaToAttachments(media, url, messageId, {
+          proxyAllMedia: true,
+        }),
       [media, messageId, url],
     );
     const visibleAttachments = attachments.slice(0, 4);
@@ -2885,6 +2888,7 @@ const XMediaTile = memo(
     const mediaUrl = getXAttachmentUrl(attachment);
     const isVideo = attachment.content_type?.startsWith("video/");
     const isGif = attachment.isGif === true;
+    const [imageError, setImageError] = useState(false);
     const gifWebpReady = isGif && gifWebpState === "ready";
     const rawMediaUrl = unwrapProxyMediaUrl(mediaUrl);
     const gifMediaUrl = isGif ? getFxTwitterGifWebpUrl(rawMediaUrl) : null;
@@ -2987,6 +2991,20 @@ const XMediaTile = memo(
           />
         </div>
       )
+    ) : imageError ? (
+      <div
+        role="img"
+        aria-label="Media unavailable"
+        className={
+          single
+            ? compact
+              ? `flex h-[180px] w-auto max-w-full items-center justify-center bg-rm-bg-surface px-4 text-center text-xs font-semibold text-rm-text-muted ${singleObjectPositionClass}`
+              : `flex h-[180px] max-h-[420px] w-auto max-w-full items-center justify-center bg-rm-bg-surface px-4 text-center text-xs font-semibold text-rm-text-muted ${singleObjectPositionClass}`
+            : "flex h-full min-h-[160px] w-full items-center justify-center bg-rm-bg-surface px-4 text-center text-xs font-semibold text-rm-text-muted"
+        }
+      >
+        Media unavailable
+      </div>
     ) : (
       <img
         src={mediaUrl}
@@ -3000,6 +3018,7 @@ const XMediaTile = memo(
         }
         loading="lazy"
         referrerPolicy="no-referrer"
+        onError={() => setImageError(true)}
       />
     );
 
@@ -3566,7 +3585,16 @@ const VideoEmbed = memo(({ embed }: { embed: EmbedInfo }) => {
             <img
               src={embed.thumbnail.url}
               alt="Video thumbnail"
-              className="w-full h-auto object-cover max-h-[400px]"
+              width={embed.thumbnail.width}
+              height={embed.thumbnail.height}
+              className="w-full object-cover max-h-[400px]"
+              style={
+                embed.thumbnail.width && embed.thumbnail.height
+                  ? {
+                      aspectRatio: `${embed.thumbnail.width} / ${embed.thumbnail.height}`,
+                    }
+                  : { minHeight: 180 }
+              }
               data-media-element="true"
               data-media-url={embed.thumbnail.url}
               data-media-download-url={getAuthAssetUrl(embed.thumbnail.url)}
@@ -3650,7 +3678,16 @@ const RichEmbed = memo(
                   <img
                     src={embed.thumbnail.url}
                     alt="Media"
-                    className="w-full h-auto object-cover max-h-[300px]"
+                    width={embed.thumbnail.width}
+                    height={embed.thumbnail.height}
+                    className="w-full object-cover max-h-[300px]"
+                    style={
+                      embed.thumbnail.width && embed.thumbnail.height
+                        ? {
+                            aspectRatio: `${embed.thumbnail.width} / ${embed.thumbnail.height}`,
+                          }
+                        : { minHeight: 160 }
+                    }
                     data-media-element="true"
                     data-media-url={embed.thumbnail.url}
                     data-media-download-url={getAuthAssetUrl(
@@ -3899,19 +3936,7 @@ function formatInstagramTimestamp(timestamp?: string): string | null {
 }
 
 function needsInstagramHydration(embed: EmbedInfo): boolean {
-  const hasMedia = Array.isArray(embed.media) && embed.media.length > 0;
-  const hasCounts =
-    embed.metrics?.likes !== undefined ||
-    embed.metrics?.comments !== undefined ||
-    embed.metrics?.views !== undefined;
-
-  return (
-    !hasMedia ||
-    !embed.author?.iconURL ||
-    embed.author?.isVerified === undefined ||
-    !hasCounts ||
-    !embed.timestamp
-  );
+  return Boolean(embed.url) && !embed.unavailable;
 }
 
 function getInstagramRenderableMedia(embed: EmbedInfo): EmbedMedia[] {
@@ -3947,6 +3972,42 @@ function getInstagramRenderableMedia(embed: EmbedInfo): EmbedMedia[] {
   return [];
 }
 
+function InstagramImage({
+  src,
+  alt,
+  loading,
+}: {
+  src: string;
+  alt: string;
+  loading: "eager" | "lazy";
+}) {
+  const [failed, setFailed] = useState(false);
+  if (failed) {
+    return (
+      <div
+        role="img"
+        aria-label="Media unavailable"
+        className="flex h-full min-h-[160px] w-full items-center justify-center bg-rm-bg-surface px-4 text-center text-xs font-semibold text-rm-text-muted"
+      >
+        Media unavailable
+      </div>
+    );
+  }
+
+  return (
+    <img
+      src={src}
+      alt={alt}
+      className="h-full w-full object-cover"
+      loading={loading}
+      referrerPolicy="no-referrer"
+      draggable={false}
+      onDragStart={(event) => event.preventDefault()}
+      onError={() => setFailed(true)}
+    />
+  );
+}
+
 function shouldRenderInstagramMediaAsVideo(item: EmbedMedia): boolean {
   if (item.type === "video" || item.isGif === true) {
     return true;
@@ -3964,37 +4025,80 @@ function shouldRenderInstagramMediaAsVideo(item: EmbedMedia): boolean {
   }
 }
 
+function isWeakInstagramHydrationPayload(
+  payload: InstagramHydrationPayload,
+): boolean {
+  const media = payload.media ?? [];
+  const hasVideo =
+    Boolean(payload.videoUrl) || media.some((entry) => entry.type === "video");
+  const hasMultipleMediaItems = media.length > 1;
+  return !hasVideo && !hasMultipleMediaItems;
+}
+
+function embedHasDirectInstagramMedia(embed: EmbedInfo): boolean {
+  return (
+    (embed.media?.length ?? 0) > 1 ||
+    Boolean(embed.media?.some((entry) => entry.type === "video")) ||
+    Boolean(embed.video?.url && embed.video.kind !== "player")
+  );
+}
+
 function hydrateInstagramEmbed(
   embed: EmbedInfo,
   payload: InstagramHydrationPayload | null,
 ): EmbedInfo {
   if (!payload) return embed;
 
+  if (
+    isWeakInstagramHydrationPayload(payload) &&
+    embedHasDirectInstagramMedia(embed)
+  ) {
+    return {
+      ...embed,
+      rawTitle: payload.title ?? embed.rawTitle ?? undefined,
+      author: embed.author
+        ? {
+            ...embed.author,
+            iconURL: payload.authorAvatarUrl ?? embed.author.iconURL,
+            isVerified: payload.authorVerified ?? embed.author.isVerified,
+          }
+        : embed.author,
+      metrics: {
+        ...embed.metrics,
+        likes: payload.likeCount ?? embed.metrics?.likes ?? undefined,
+        comments: payload.commentCount ?? embed.metrics?.comments ?? undefined,
+        views: payload.viewCount ?? embed.metrics?.views ?? undefined,
+      },
+      timestamp: payload.timestamp ?? embed.timestamp ?? undefined,
+      audio: payload.audio ?? embed.audio ?? undefined,
+    };
+  }
+
   const media = payload.media?.length ? payload.media : embed.media;
   const firstVideo = media?.find((entry) => entry.type === "video");
   const firstMedia = media?.[0];
   const nextThumbnailUrl =
-    embed.thumbnail?.url ??
     payload.thumbnailUrl ??
     firstVideo?.thumbnailUrl ??
-    firstMedia?.url;
+    (firstMedia?.type === "image" ? firstMedia.url : undefined) ??
+    embed.thumbnail?.url;
   const nextThumbnail = nextThumbnailUrl
     ? {
         url: nextThumbnailUrl,
         width:
-          embed.thumbnail?.width ??
-          (firstMedia?.type === "image" ? firstMedia.width : firstVideo?.width),
+          (firstMedia?.type === "image" ? firstMedia.width : undefined) ??
+          firstVideo?.width ??
+          embed.thumbnail?.width,
         height:
-          embed.thumbnail?.height ??
-          (firstMedia?.type === "image"
-            ? firstMedia.height
-            : firstVideo?.height),
+          (firstMedia?.type === "image" ? firstMedia.height : undefined) ??
+          firstVideo?.height ??
+          embed.thumbnail?.height,
       }
     : embed.thumbnail;
   const nextAuthorIcon =
-    embed.author?.iconURL ?? payload.authorAvatarUrl ?? undefined;
+    payload.authorAvatarUrl ?? embed.author?.iconURL ?? undefined;
   const nextAuthorVerified =
-    embed.author?.isVerified ?? payload.authorVerified ?? undefined;
+    payload.authorVerified ?? embed.author?.isVerified ?? undefined;
   const nextAuthor = embed.author
     ? {
         ...embed.author,
@@ -4005,34 +4109,33 @@ function hydrateInstagramEmbed(
 
   return {
     ...embed,
-    rawTitle: embed.rawTitle ?? payload.title ?? undefined,
+    rawTitle: payload.title ?? embed.rawTitle ?? undefined,
     thumbnail: nextThumbnail,
     media,
-    video:
-      embed.video?.url && embed.video.kind !== "player"
+    video: payload.videoUrl
+      ? {
+          url: payload.videoUrl,
+          width: firstVideo?.width ?? embed.video?.width ?? 720,
+          height: firstVideo?.height ?? embed.video?.height ?? 1280,
+          kind: "direct",
+          contentType: embed.video?.contentType ?? "video/mp4",
+          durationSeconds:
+            payload.durationSeconds ??
+            embed.video?.durationSeconds ??
+            undefined,
+        }
+      : embed.video?.url && embed.video.kind !== "player"
         ? embed.video
-        : payload.videoUrl
-          ? {
-              url: payload.videoUrl,
-              width: firstVideo?.width ?? embed.video?.width ?? 720,
-              height: firstVideo?.height ?? embed.video?.height ?? 1280,
-              kind: "direct",
-              contentType: embed.video?.contentType ?? "video/mp4",
-              durationSeconds:
-                embed.video?.durationSeconds ??
-                payload.durationSeconds ??
-                undefined,
-            }
-          : embed.video,
+        : embed.video,
     author: nextAuthor,
     metrics: {
       ...embed.metrics,
-      likes: embed.metrics?.likes ?? payload.likeCount ?? undefined,
-      comments: embed.metrics?.comments ?? payload.commentCount ?? undefined,
-      views: embed.metrics?.views ?? payload.viewCount ?? undefined,
+      likes: payload.likeCount ?? embed.metrics?.likes ?? undefined,
+      comments: payload.commentCount ?? embed.metrics?.comments ?? undefined,
+      views: payload.viewCount ?? embed.metrics?.views ?? undefined,
     },
-    timestamp: embed.timestamp ?? payload.timestamp ?? undefined,
-    audio: embed.audio ?? payload.audio ?? undefined,
+    timestamp: payload.timestamp ?? embed.timestamp ?? undefined,
+    audio: payload.audio ?? embed.audio ?? undefined,
     footer: {
       text: "Instagram",
       iconURL: INSTAGRAM_ICON_URL,
@@ -4124,6 +4227,7 @@ const InstagramEmbed = memo(
 
     useEffect(() => {
       if (!embed.url || fetchedRef.current || !needsHydration) return;
+      if (typeof IntersectionObserver === "undefined") return;
 
       const el = trackRef.current;
       if (!el) return;
@@ -4577,18 +4681,14 @@ const InstagramEmbed = memo(
                           aria-label={`Open media ${index + 1} of ${media.length}`}
                           data-instagram-image-index={index}
                         >
-                          <img
+                          <InstagramImage
                             src={imageSrc}
                             alt={
                               item.altText ||
                               displayEmbed.rawTitle ||
                               "Instagram post media"
                             }
-                            className="h-full w-full object-cover"
                             loading={index === 0 ? "eager" : "lazy"}
-                            referrerPolicy="no-referrer"
-                            draggable={false}
-                            onDragStart={preventNativeDrag}
                           />
                         </button>
                       )}
@@ -4842,7 +4942,16 @@ const LinkEmbed_ = memo(({ embed }: { embed: EmbedInfo }) => {
           <img
             src={thumbnailSrc}
             alt="Thumbnail"
-            className="w-full h-auto rounded-md object-cover max-h-[300px]"
+            width={embed.thumbnail?.width}
+            height={embed.thumbnail?.height}
+            className="w-full rounded-md object-cover max-h-[300px]"
+            style={
+              embed.thumbnail?.width && embed.thumbnail?.height
+                ? {
+                    aspectRatio: `${embed.thumbnail.width} / ${embed.thumbnail.height}`,
+                  }
+                : { minHeight: 160 }
+            }
             referrerPolicy="no-referrer"
             data-media-element="true"
             data-media-url={embed.thumbnail?.url || embed.url}
@@ -4850,6 +4959,34 @@ const LinkEmbed_ = memo(({ embed }: { embed: EmbedInfo }) => {
           />
         </a>
       )}
+    </BaseEmbed>
+  );
+});
+
+const UnavailableSocialEmbed = memo(({ embed }: { embed: EmbedInfo }) => {
+  return (
+    <BaseEmbed embed={embed} width={420}>
+      <div className="flex flex-col gap-2 py-1">
+        {embed.author?.name ? (
+          <div className="text-[14px] font-semibold text-rm-text-primary">
+            <EmbedInlineText
+              text={embed.author.name}
+              keyPrefix={`${embed.id}-unavailable-author`}
+            />
+          </div>
+        ) : null}
+        <p className="text-[14px] leading-relaxed text-rm-text-muted">
+          This post is no longer available
+        </p>
+        <a
+          href={embed.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="w-fit text-[13px] font-semibold text-[#00A8FC] hover:underline"
+        >
+          View original
+        </a>
+      </div>
     </BaseEmbed>
   );
 });
@@ -4907,7 +5044,9 @@ export const LinkEmbed = memo(
     let embedContent: React.ReactNode;
 
     // Provider-specific routing
-    if (providerName === "youtube" && embed.video?.url) {
+    if (embed.unavailable) {
+      embedContent = <UnavailableSocialEmbed embed={embed} />;
+    } else if (providerName === "youtube" && embed.video?.url) {
       embedContent = (
         <YouTubeEmbed
           embed={embed}

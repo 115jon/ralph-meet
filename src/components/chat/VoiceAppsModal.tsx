@@ -8,7 +8,6 @@ type Tab = "menu" | "activities";
 
 interface VoiceAppsModalProps {
   isOpen: boolean;
-  isClosing?: boolean;
   initialTab: Tab;
   onClose: () => void;
   sfu: SFUClient | null;
@@ -52,7 +51,6 @@ function WarpRushLogo() {
 
 export function VoiceAppsModal({
   isOpen,
-  isClosing,
   initialTab,
   onClose,
   sfu,
@@ -95,16 +93,14 @@ export function VoiceAppsModal({
   return (
     <div
       className={cn(
-        "fixed inset-0 z-[1000] flex items-center justify-center bg-black/55 p-4 backdrop-blur-sm duration-200",
-        isClosing ? "animate-out fade-out" : "animate-in fade-in",
+        "fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4 backdrop-blur-sm duration-200",
+        "animate-in fade-in",
       )}
     >
       <div
         className={cn(
-          "flex h-[85vh] sm:h-[600px] w-full max-w-xl flex-col overflow-hidden rounded-xl border border-rm-border bg-rm-bg-elevated shadow-2xl duration-200",
-          isClosing
-            ? "animate-out fade-out zoom-out-95"
-            : "animate-in zoom-in-95",
+          "flex min-h-0 h-[85vh] sm:h-[600px] w-full max-w-xl flex-col overflow-hidden rounded-xl border border-rm-border bg-rm-bg-elevated shadow-2xl duration-200",
+          "animate-in zoom-in-95",
         )}
       >
         <div className="flex shrink-0 items-center justify-between border-b border-rm-border px-4 py-3 bg-rm-bg-surface/50 backdrop-blur-md">
@@ -129,7 +125,7 @@ export function VoiceAppsModal({
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto">
+        <div className="min-h-0 flex-1 overflow-y-auto">
           {tab === "menu" && (
             <div className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
               <button

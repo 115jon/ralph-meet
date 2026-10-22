@@ -6,8 +6,8 @@ import { useChatStore } from "@/stores/chat-store";
 import { useCallStore } from "@/stores/useCallStore";
 import { disposePrewarmedAudioContext } from "@/lib/voice/audio-pipeline";
 import { PhoneOff } from "lucide-react";
-import { useDelayUnmount } from "@/hooks/useDelayUnmount";
 import { AvatarImage } from "./AvatarImage";
+import InlineEmojiText from "./InlineEmojiText";
 
 /**
  * Modal overlay shown to the caller while waiting for the callee to answer.
@@ -19,15 +19,8 @@ export function OutgoingCallModal() {
 
   const activeCallee = useUserResolution(remoteUser?.id, remoteUser);
 
-  const shouldRender = useDelayUnmount(
-    status === "ringing_outgoing" && !!remoteUser && !!callId,
-    200,
-  );
-  const _isClosing = !(
-    status === "ringing_outgoing" &&
-    !!remoteUser &&
-    !!callId
-  );
+  const shouldRender =
+    status === "ringing_outgoing" && !!remoteUser && !!callId;
 
   if (!shouldRender || !remoteUser || !callId) return null;
 
@@ -41,7 +34,7 @@ export function OutgoingCallModal() {
     : undefined;
 
   return (
-    <div className="fixed inset-0 z-100 flex items-center justify-center bg-black/70 backdrop-blur-md animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-md animate-in fade-in duration-200">
       <div className="flex flex-col items-center gap-6 p-8">
         {/* Pulsing animation around avatar */}
         <div className="relative">
@@ -65,7 +58,7 @@ export function OutgoingCallModal() {
         {/* Callee info */}
         <div className="text-center">
           <h2 className="text-xl font-bold text-white">
-            {activeCallee.displayName}
+            <InlineEmojiText text={activeCallee.displayName} />
           </h2>
           <p className="text-sm text-rm-text-muted mt-1">
             <span className="inline-flex items-center gap-1.5">

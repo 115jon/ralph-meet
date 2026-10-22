@@ -1,5 +1,6 @@
+import { useMounted } from "@/hooks/useMounted";
 import { cn } from "@/lib/utils";
-import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 export interface ContextMenuItem {
@@ -40,6 +41,7 @@ export default function ContextMenu({
   onClose,
   isClosing,
 }: ContextMenuProps) {
+  const mounted = useMounted();
   const menuRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const submenuRef = useRef<HTMLDivElement>(null);
@@ -51,7 +53,9 @@ export default function ContextMenu({
   const [submenuStyle, setSubmenuStyle] = useState<React.CSSProperties>({});
   const menuContextInitializedRef = useRef(false);
 
-  useLayoutEffect(() => {
+  useEffect(() => {
+    if (!mounted) return;
+
     previousFocusRef.current =
       document.activeElement instanceof HTMLElement
         ? document.activeElement
@@ -62,9 +66,11 @@ export default function ContextMenu({
         previousFocusRef.current.focus();
       }
     };
-  }, []);
+  }, [mounted]);
 
   useEffect(() => {
+    if (!mounted) return;
+
     // Close on click outside
     const handleClickOutside = (e: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
@@ -112,9 +118,10 @@ export default function ContextMenu({
       window.removeEventListener("keydown", handleKeyDown);
       window.removeEventListener("contextmenu", handleContextMenu);
     };
-  }, [x, y, onClose]);
+  }, [mounted, x, y, onClose]);
 
   useEffect(() => {
+    if (!mounted) return;
     if (!menuContextInitializedRef.current) {
       menuContextInitializedRef.current = true;
       return;
@@ -126,9 +133,10 @@ export default function ContextMenu({
       setActiveSubmenuKey(null);
     });
     return () => window.cancelAnimationFrame(frameId);
-  }, [items, x, y]);
+  }, [items, mounted, x, y]);
 
   useEffect(() => {
+    if (!mounted) return;
     const activeSubmenuAnchorRect = submenuAnchorRectRef.current;
     if (!activeSubmenuKey || !activeSubmenuAnchorRect) {
       return;
@@ -166,21 +174,22 @@ export default function ContextMenu({
       window.removeEventListener("resize", updateSubmenuPosition);
       window.cancelAnimationFrame(frameId);
     };
-  }, [activeSubmenuKey, coords.x, coords.y]);
+  }, [activeSubmenuKey, coords.x, coords.y, mounted]);
 
   useEffect(() => {
+    if (!mounted) return;
     getDirectMenuItems(menuRef.current)[0]?.focus();
-  }, []);
+  }, [mounted]);
 
   useEffect(() => {
-    if (!activeSubmenuKey) return;
+    if (!mounted || !activeSubmenuKey) return;
     const frameId = window.requestAnimationFrame(() => {
       submenuRef.current
         ?.querySelector<HTMLElement>('[role="menuitem"]:not([disabled])')
         ?.focus();
     });
     return () => window.cancelAnimationFrame(frameId);
-  }, [activeSubmenuKey]);
+  }, [activeSubmenuKey, mounted]);
 
   const closeSubmenu = () => {
     const parentItem = submenuTriggerRef.current;
@@ -247,11 +256,13 @@ export default function ContextMenu({
       )
     : undefined;
 
+  if (!mounted) return null;
+
   return createPortal(
     <div
       ref={menuRef}
       className={cn(
-        "fixed z-[1000] min-w-[220px] overflow-visible",
+        "fixed z-70 min-w-[220px] overflow-visible",
         isClosing
           ? "animate-out fade-out zoom-out-95 duration-150"
           : "animate-in fade-in zoom-in-95 duration-150",
@@ -395,7 +406,7 @@ export default function ContextMenu({
           ref={submenuRef}
           role="menu"
           aria-label={`${activeSubmenuItem.label} submenu`}
-          className="absolute z-[1001] w-[210px] overflow-hidden rounded-2xl border border-rm-border bg-rm-bg-elevated p-1.5 shadow-2xl backdrop-blur-xl"
+          className="absolute z-80 w-[210px] overflow-hidden rounded-2xl border border-rm-border bg-rm-bg-elevated p-1.5 shadow-2xl backdrop-blur-xl"
           style={submenuStyle}
         >
           {activeSubmenuItem.submenu}

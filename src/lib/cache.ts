@@ -26,6 +26,7 @@
 
 import { env } from "cloudflare:workers";
 import { clog } from "@/lib/console-logger";
+import { singleFlight } from "@/lib/single-flight";
 
 const log = clog("cache");
 
@@ -192,25 +193,28 @@ export async function cacheDelMany(keys: string[]): Promise<void> {
  * );
  * ```
  */
+const cacheFetchFlights = new Map<string, Promise<unknown>>();
+
 export async function cacheFetch<T>(
   key: string,
   ttl: number,
   fetcher: () => Promise<T>,
 ): Promise<T> {
-  // 1. Try cache
   const cached = await cacheGet<T>(key);
   if (cached !== null) {
     return cached;
   }
 
-  // 2. Cache miss → fetch from D1
-  const fresh = await fetcher();
+  return singleFlight(cacheFetchFlights, key, async () => {
+    const cachedAgain = await cacheGet<T>(key);
+    if (cachedAgain !== null) {
+      return cachedAgain;
+    }
 
-  // 3. Populate cache (fire-and-forget to avoid blocking the response)
-  // We don't await this — the response goes out immediately
-  cacheSet(key, fresh, ttl).catch(() => {});
-
-  return fresh;
+    const fresh = await fetcher();
+    cacheSet(key, fresh, ttl).catch(() => {});
+    return fresh;
+  }) as Promise<T>;
 }
 
 /**

@@ -6,8 +6,10 @@ import {
 } from "@/components/ui/tooltip";
 import { CameraSettingsModal } from "@/components/CameraSettingsModal";
 import { VoiceDetailsPanel } from "@/components/voice/VoiceDetailsPanel";
+import InlineEmojiText from "@/components/chat/InlineEmojiText";
 import { StreamWatcherList } from "@/components/voice/StreamWatcherList";
 import type { GridItem } from "@/components/voice/types";
+import { useMounted } from "@/hooks/useMounted";
 import { useVoiceStats } from "@/hooks/useVoiceStats";
 import type { SFUClient } from "@/lib/sfu-client";
 import type { ScreenShareSourceState } from "@/lib/screen-share-types";
@@ -26,7 +28,6 @@ import {
   Suspense,
 } from "react";
 import { createPortal } from "react-dom";
-import { useDelayUnmount } from "@/hooks/useDelayUnmount";
 import { FloatingListenTogetherPlayer } from "./FloatingListenTogetherPlayer";
 import { FloatingSoundboardManager } from "./FloatingSoundboardManager";
 import { AppWindow, AudioWaveform } from "lucide-react";
@@ -148,24 +149,21 @@ export function VoiceDashboard({
   onOpenSoundboard,
   showNoiseReductionShortcut = true,
 }: VoiceDashboardProps) {
+  const mounted = useMounted();
   const [isStreamMenuOpen, setIsStreamMenuOpen] = useState(false);
-  const shouldRenderStreamMenu = useDelayUnmount(isStreamMenuOpen, 200);
+  const shouldRenderStreamMenu = isStreamMenuOpen;
   const [isCameraModalOpen, setIsCameraModalOpen] = useState(false);
   const [isVoiceDetailsOpen, setIsVoiceDetailsOpen] = useState(false);
   const [isSpatialOpen, setIsSpatialOpen] = useState(false);
-  const shouldRenderSpatial = useDelayUnmount(isSpatialOpen, 200);
+  const shouldRenderSpatial = isSpatialOpen;
   const [isStickerPickerOpen, setIsStickerPickerOpen] = useState(false);
-  const shouldRenderStickerPicker = useDelayUnmount(isStickerPickerOpen, 200);
+  const shouldRenderStickerPicker = isStickerPickerOpen;
   const [isSoundboardPickerOpen, setIsSoundboardPickerOpen] = useState(false);
-  const shouldRenderSoundboardPicker = useDelayUnmount(
-    isSoundboardPickerOpen,
-    200,
-  );
   const [soundboardInitialView, setSoundboardInitialView] = useState<
     "soundboard" | "listenTogether"
   >("soundboard");
   const [isNoiseReductionOpen, setIsNoiseReductionOpen] = useState(false);
-  const shouldRenderNoiseReduction = useDelayUnmount(isNoiseReductionOpen, 200);
+  const shouldRenderNoiseReduction = isNoiseReductionOpen;
   const stickerBtnRef = useRef<HTMLButtonElement>(null);
   const soundboardBtnRef = useRef<HTMLButtonElement>(null);
   const noiseReductionBtnRef = useRef<HTMLButtonElement>(null);
@@ -182,6 +180,9 @@ export function VoiceDashboard({
   const spatialBtnRef = useRef<HTMLButtonElement>(null);
   const settings = useVoiceSettingsStore((s) =>
     s.getSettings(voiceSettingsUserId),
+  );
+  const updateVoiceSettings = useVoiceSettingsStore(
+    (s) => s.updateVoiceSettings,
   );
   const updateUserSettings = useVoiceSettingsStore((s) => s.updateUserSettings);
   const localStreamWatchers = localUserId
@@ -317,7 +318,7 @@ export function VoiceDashboard({
 
   return (
     <TooltipProvider delayDuration={0}>
-      <div className="animate-in slide-in-from-bottom-5 duration-300">
+      <div className="animate-in slide-in-from-bottom-5 duration-300 border-b-0 rounded-b-none">
         <FloatingListenTogetherPlayer
           sfu={sfu}
           roomSlug={roomSlug}
@@ -382,7 +383,9 @@ export function VoiceDashboard({
                   Voice Connected
                 </span>
                 <span className="text-[12px] font-medium text-rm-text-muted/80 truncate max-w-[140px] group-hover/voice-status:text-rm-text-muted">
-                  {voiceChannelName || "General"} / {serverName}
+                  <InlineEmojiText
+                    text={`${voiceChannelName || "General"} / ${serverName}`}
+                  />
                 </span>
               </div>
             </button>
@@ -427,7 +430,7 @@ export function VoiceDashboard({
                       localUserId={localUserId}
                       participantCapabilities={participantCapabilities}
                       onLocalSpatialEnabledChange={(enabled) => {
-                        updateUserSettings(
+                        updateVoiceSettings(
                           (current) => ({
                             ...current,
                             spatialAudioEnabled: enabled,
@@ -440,9 +443,6 @@ export function VoiceDashboard({
                             noiseSuppression: enabled
                               ? false
                               : current.noiseSuppression,
-                            autoSensitivity: enabled
-                              ? false
-                              : current.autoSensitivity,
                           }),
                           voiceSettingsUserId,
                         );
@@ -523,18 +523,19 @@ export function VoiceDashboard({
           </div>
 
           {shouldRenderNoiseReduction &&
+            mounted &&
             createPortal(
               <>
                 <button
                   type="button"
-                  className="fixed inset-0 z-[990]"
+                  className="fixed inset-0 z-20"
                   aria-label="Close noise suppression panel"
                   onClick={() => setIsNoiseReductionOpen(false)}
                 />
                 <div
                   ref={noiseReductionPanelRef}
                   className={cn(
-                    "fixed z-[1000] w-[min(340px,calc(100vw-1.5rem))]",
+                    "fixed z-30 w-[min(340px,calc(100vw-1.5rem))]",
                     noiseReductionPanelPosition.placement === "top"
                       ? !isNoiseReductionOpen
                         ? "origin-bottom animate-out fade-out slide-out-to-bottom-2 zoom-out-95 duration-200"
@@ -787,10 +788,10 @@ export function VoiceDashboard({
                     }}
                     disabled={!hasCamera}
                     className={cn(
-                      "flex flex-1 h-8 items-center justify-center rounded-[8px] transition-all outline-none border border-transparent group",
+                      "flex flex-1 h-8 items-center justify-center rounded-[8px] transition-colors outline-none border border-transparent group",
                       isCameraActive
-                        ? "bg-rm-bg-hover text-rm-text"
-                        : "bg-rm-bg-elevated/40 border-white/5 text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover",
+                        ? "bg-rm-bg-active text-rm-text"
+                        : "bg-rm-bg-hover border-rm-border text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-active",
                       !hasCamera && "opacity-20 cursor-not-allowed grayscale",
                     )}
                   >
@@ -832,10 +833,10 @@ export function VoiceDashboard({
                       }
                     }}
                     className={cn(
-                      "flex flex-1 h-8 items-center justify-center rounded-[8px] transition-all outline-none border border-transparent group",
+                      "flex flex-1 h-8 items-center justify-center rounded-[8px] transition-colors outline-none border border-transparent group",
                       isScreenSharing
                         ? "bg-[#23a559] text-white hover:bg-[#1f8b4c]"
-                        : "bg-rm-bg-elevated/40 border-white/5 text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover",
+                        : "bg-rm-bg-hover border-rm-border text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-active",
                     )}
                   >
                     <Monitor size={18} className="group-hover:animate-wiggle" />
@@ -860,7 +861,7 @@ export function VoiceDashboard({
                     onClick={() => {
                       onOpenActivities?.();
                     }}
-                    className="flex flex-1 h-8 items-center justify-center rounded-[8px] transition-all outline-none bg-rm-bg-elevated/40 border border-white/5 text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover group"
+                    className="flex flex-1 h-8 items-center justify-center rounded-[8px] transition-colors outline-none bg-rm-bg-hover border border-rm-border text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-active group"
                   >
                     <Gamepad2
                       size={18}
@@ -886,10 +887,10 @@ export function VoiceDashboard({
                       ref={soundboardBtnRef}
                       onClick={toggleSoundboardPicker}
                       className={cn(
-                        "flex w-full h-8 items-center justify-center rounded-[8px] transition-all outline-none border group",
+                        "flex w-full h-8 items-center justify-center rounded-[8px] transition-colors outline-none border group",
                         isSoundboardPickerOpen
                           ? "bg-[#5865f2]/20 border-[#5865f2]/40 text-[#5865f2]"
-                          : "bg-rm-bg-elevated/40 border-white/5 text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover",
+                          : "bg-rm-bg-hover border-rm-border text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-active",
                       )}
                     >
                       <Radio size={18} className="group-hover:animate-wiggle" />
@@ -903,23 +904,22 @@ export function VoiceDashboard({
                     <p>Open Soundboard</p>
                   </TooltipContent>
                 </Tooltip>
-                {shouldRenderSoundboardPicker && (
-                  <Suspense fallback={null}>
-                    <SoundboardPicker
-                      onClose={() => setIsSoundboardPickerOpen(false)}
-                      placement="top-start"
-                      markerRef={soundboardBtnRef}
-                      initialView={soundboardInitialView}
-                      sfu={sfu}
-                      serverId={serverId}
-                      channelId={voiceChannelId}
-                      roomSlug={roomSlug}
-                      voiceSessionId={voiceSessionId}
-                      isClosing={!isSoundboardPickerOpen}
-                      localUserId={localUserId}
-                    />
-                  </Suspense>
-                )}
+                <Suspense fallback={null}>
+                  <SoundboardPicker
+                    open={isSoundboardPickerOpen}
+                    onClose={() => setIsSoundboardPickerOpen(false)}
+                    placement="top-start"
+                    markerRef={soundboardBtnRef}
+                    initialView={soundboardInitialView}
+                    sfu={sfu}
+                    serverId={serverId}
+                    channelId={voiceChannelId}
+                    roomSlug={roomSlug}
+                    voiceSessionId={voiceSessionId}
+                    isClosing={!isSoundboardPickerOpen}
+                    localUserId={localUserId}
+                  />
+                </Suspense>
               </div>
 
               {/* GIF/Sticker Reactions — only shown when connected to voice */}
@@ -932,10 +932,10 @@ export function VoiceDashboard({
                         ref={stickerBtnRef}
                         onClick={() => setIsStickerPickerOpen((v) => !v)}
                         className={cn(
-                          "flex w-full h-8 items-center justify-center rounded-[8px] transition-all outline-none border group",
+                          "flex w-full h-8 items-center justify-center rounded-[8px] transition-colors outline-none border group",
                           isStickerPickerOpen
                             ? "bg-[#5865f2]/20 border-[#5865f2]/40 text-[#5865f2]"
-                            : "bg-rm-bg-elevated/40 border-white/5 text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover",
+                            : "bg-rm-bg-hover border-rm-border text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-active",
                         )}
                       >
                         <Sticker
@@ -967,16 +967,16 @@ export function VoiceDashboard({
         />
 
         {/* GIF Picker in voice reaction mode */}
-        {gifPickerVoiceMode && shouldRenderStickerPicker && (
+        {gifPickerVoiceMode && (
           <Suspense fallback={null}>
             <GifPickerModal
+              open={shouldRenderStickerPicker}
               onClose={() => setIsStickerPickerOpen(false)}
               onSelect={async () => {
                 /* no-op: voice mode handles send */
               }}
               voiceMode={gifPickerVoiceMode}
               markerRef={stickerBtnRef}
-              isClosing={!isStickerPickerOpen}
             />
           </Suspense>
         )}

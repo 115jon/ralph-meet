@@ -2,9 +2,11 @@ import { getDisplayInitial, getDisplayName } from "@/lib/display-name";
 import { getAuthAssetUrl } from "@/lib/platform";
 import { apiGet } from "@/lib/api-client";
 import type { ServerAuditLog } from "@/lib/types";
+import { useClientDateFormatter } from "@/lib/client-date-format";
 import { useEffect, useReducer } from "react";
 import { AvatarImage } from "./AvatarImage";
 import { Loader2 } from "./Icons";
+import InlineEmojiText from "./InlineEmojiText";
 
 interface AuditLogTabProps {
   serverId: string;
@@ -40,6 +42,7 @@ export default function AuditLogTab({ serverId }: AuditLogTabProps) {
     loading: true,
     error: null,
   });
+  const formatDate = useClientDateFormatter();
 
   useEffect(() => {
     let mounted = true;
@@ -171,7 +174,7 @@ export default function AuditLogTab({ serverId }: AuditLogTabProps) {
                   <div className="flex justify-between items-start mb-2">
                     <div className="flex gap-2 items-center">
                       <span className="font-semibold text-sm text-rm-text">
-                        {actorDisplayName}
+                        <InlineEmojiText text={actorDisplayName} />
                       </span>
                       <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-primary/10 text-primary uppercase tracking-wider">
                         {formatActionType(log.action_type)}
@@ -180,7 +183,16 @@ export default function AuditLogTab({ serverId }: AuditLogTabProps) {
                   </div>
 
                   <div className="text-xs text-rm-text-muted mb-3 flex items-center gap-2">
-                    <span>{new Date(log.created_at).toLocaleString()}</span>
+                    <span>
+                      {formatDate(log.created_at, {
+                        year: "numeric",
+                        month: "numeric",
+                        day: "numeric",
+                        hour: "numeric",
+                        minute: "numeric",
+                        second: "numeric",
+                      })}
+                    </span>
                     {log.target_id && (
                       <>
                         <span>•</span>
@@ -193,7 +205,7 @@ export default function AuditLogTab({ serverId }: AuditLogTabProps) {
 
                   {log.reason && (
                     <div className="mt-2 text-sm text-rm-text border-l-2 border-rm-border pl-3 italic">
-                      "{log.reason}"
+                      <InlineEmojiText text={`"${log.reason}"`} />
                     </div>
                   )}
 

@@ -572,7 +572,7 @@ export default function MemberList({
       <div
         data-testid="members-list"
         className={cn(
-          "fixed inset-y-0 right-0 z-100 flex h-full w-full shrink-0 flex-col overflow-hidden bg-rm-bg-primary shadow-2xl animate-in slide-in-from-right-full transition-all duration-300",
+          "fixed inset-y-0 right-0 z-20 flex h-full w-full shrink-0 flex-col overflow-hidden bg-rm-bg-primary shadow-2xl animate-in slide-in-from-right-full transition-all duration-300",
           // Desktop: static sidebar, width depends on details mode
           showDetails
             ? "lg:static lg:z-auto lg:w-[360px] lg:bg-rm-bg-sidebar lg:shadow-none lg:animate-none"
@@ -729,9 +729,9 @@ export default function MemberList({
 
         {state.mobileProfileUser && (
           <MobileProfileSheet
+            open={state.mobileProfileUser !== null}
             user={state.mobileProfileUser.user}
             roles={state.mobileProfileUser.roles}
-            isClosing={state.mobileProfileUserClosing}
             onClose={closeMobileProfile}
             onOpenProfileEditor={() =>
               closeMobileProfile(() => dispatchOpenProfileEditorEvent())
@@ -1036,7 +1036,7 @@ function MembersTabContent({
       {groups.map((group) => (
         <div key={group.name}>
           <div className="flex items-center px-2 py-[10px] text-[11px] font-bold text-rm-text-muted">
-            <span className="uppercase">{group.name}</span>
+            <InlineEmojiText text={group.name} className="uppercase" />
             <span className="ml-[6px] text-[11px] font-semibold tracking-[-0.02em]">
               {group.members.length}
             </span>
@@ -1288,7 +1288,7 @@ function PinsTabContent({
                   )}
                 </div>
                 <span className="text-[12px] font-bold text-rm-text-primary truncate">
-                  {displayName}
+                  <InlineEmojiText text={displayName} />
                 </span>
                 <span className="text-[10px] text-rm-text-muted ml-auto shrink-0">
                   {formatRelativeTime(msg.created_at)}
@@ -1361,11 +1361,11 @@ function ThreadsTabContent({
                   )}
                 </div>
                 <span className="text-[12px] font-bold text-rm-text-primary truncate">
-                  {displayName}
+                  <InlineEmojiText text={displayName} />
                 </span>
               </div>
               <div className="text-[13px] text-rm-text-secondary line-clamp-2 leading-relaxed mb-2">
-                {thread.content}
+                <InlineEmojiText text={thread.content} />
               </div>
               <div className="flex items-center gap-3 text-[11px] text-rm-text-muted">
                 <div className="flex items-center gap-1">
@@ -1429,7 +1429,7 @@ function LinksTabContent({
                 )}
               </div>
               <span className="text-[12px] font-bold text-rm-text-primary truncate">
-                {displayName}
+                <InlineEmojiText text={displayName} />
               </span>
               {channelName && (
                 <>
@@ -1557,7 +1557,7 @@ function FilesTabContent({
                   )}
                 </div>
                 <span className="text-[11px] font-medium text-rm-text-muted truncate">
-                  {displayName}
+                  <InlineEmojiText text={displayName} />
                 </span>
                 {channelName && (
                   <>

@@ -113,7 +113,6 @@ export default function RoomPageClient() {
   if (!guestState.submitted) {
     return (
       <div className="flex h-full items-center justify-center bg-rm-bg-primary px-6">
-        <div className="pointer-events-none absolute -top-48 left-1/2 h-[600px] w-[600px] -translate-x-1/2 rounded-full bg-[radial-gradient(circle,var(--rm-glow)_0%,transparent_70%)] opacity-50 blur-xl" />
         <div className="z-10 w-full max-w-sm">
           <div className="mb-6 flex flex-col items-center gap-3">
             <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-rm-accent-dim shadow-[0_0_40px_var(--rm-accent-dim)] ring-1 ring-rm-border">
@@ -385,7 +384,7 @@ function RoomHeader({
   return (
     <div
       className={cn(
-        "absolute top-0 inset-x-0 flex items-center justify-between px-6 z-100 pointer-events-none",
+        "absolute top-0 inset-x-0 flex items-center justify-between px-6 z-10 pointer-events-none",
         focusedId
           ? "bg-linear-to-b from-rm-bg-primary/80 to-transparent"
           : "bg-rm-bg-primary/20",
@@ -639,7 +638,7 @@ function RoomVoiceView({
       onDrop={handleDrop}
     >
       {isFileDragging && (
-        <div className="pointer-events-none absolute inset-4 z-[900] flex items-center justify-center rounded-3xl border border-dashed border-primary/50 bg-rm-bg-primary/70 backdrop-blur-sm">
+        <div className="pointer-events-none absolute inset-4 z-20 flex items-center justify-center rounded-3xl border border-dashed border-primary/50 bg-rm-bg-primary/70 backdrop-blur-sm">
           <div className="rounded-2xl border border-rm-border bg-rm-bg-elevated px-5 py-4 text-center shadow-2xl">
             <p className="text-sm font-black text-rm-text">
               Uploads unlock in the full app
@@ -771,29 +770,26 @@ function RoomVoiceView({
         />
       </Suspense>
 
-      {audioBlocked && (
-        <AudioInteractionModal
-          onInteract={() => {
-            sfu?.resumeAudioContext();
-            resumeSoundContext();
-            setAudioBlocked(false);
-          }}
-          onClose={() => setAudioBlocked(false)}
-        />
-      )}
+      <AudioInteractionModal
+        open={audioBlocked}
+        onInteract={() => {
+          sfu?.resumeAudioContext();
+          resumeSoundContext();
+          setAudioBlocked(false);
+        }}
+        onClose={() => setAudioBlocked(false)}
+      />
 
-      {isSettingsOpen && (
-        <RoomSettingsModal
-          onClose={() => setIsSettingsOpen(false)}
-          settingsUserId={settingsUserId}
-        />
-      )}
-      {showUploadBlocker && (
-        <DemoUploadBlockerModal
-          onClose={() => setShowUploadBlocker(false)}
-          onSignIn={onSignIn}
-        />
-      )}
+      <RoomSettingsModal
+        open={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+        settingsUserId={settingsUserId}
+      />
+      <DemoUploadBlockerModal
+        open={showUploadBlocker}
+        onClose={() => setShowUploadBlocker(false)}
+        onSignIn={onSignIn}
+      />
     </div>
   );
 }

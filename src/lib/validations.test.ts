@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { z } from "zod";
 import {
   AddReactionSchema,
   CreateServerSchema,
@@ -12,6 +13,10 @@ import {
 } from "./validations";
 
 describe("Zod Validation Schemas", () => {
+  it("disables runtime code generation for CSP compatibility", () => {
+    expect(z.config().jitless).toBe(true);
+  });
+
   // ── CreateServerSchema ───────────────────────────────────────────
   describe("CreateServerSchema", () => {
     it("accepts valid server name", () => {

@@ -1,3 +1,4 @@
+import { useMounted } from "@/hooks/useMounted";
 import { AvatarImage } from "@/components/chat/AvatarImage";
 import { Button } from "@/components/ui/button";
 import {
@@ -147,6 +148,7 @@ export function AvatarFrameEditor({
   onCancel,
   onConfirm,
 }: AvatarFrameEditorProps) {
+  const mounted = useMounted();
   const viewportRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<{
     pointerId: number;
@@ -299,9 +301,11 @@ export function AvatarFrameEditor({
     });
   };
 
+  if (!mounted) return null;
+
   return createPortal(
     <div
-      className="fixed inset-0 z-[1200] flex items-center justify-center overflow-y-auto bg-black/70 p-4 backdrop-blur-sm md:p-6"
+      className="pointer-events-auto fixed inset-0 z-70 flex items-center justify-center overflow-y-auto bg-black/70 p-4 backdrop-blur-sm md:p-6"
       onClick={(event) => {
         if (event.target === event.currentTarget) onCancel();
       }}

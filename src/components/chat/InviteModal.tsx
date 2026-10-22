@@ -1,21 +1,35 @@
-import { BaseModal } from "@/components/ui/BaseModal";
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { apiPost } from "@/lib/api-client";
 import { getWebOrigin } from "@/lib/platform";
 import { cn } from "@/lib/utils";
-import { useEffect as _useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { Check, Copy, Loader2, X } from "./Icons";
+import InlineEmojiText from "./InlineEmojiText";
 interface InviteModalProps {
+  open: boolean;
   serverId: string;
   serverName: string;
   onClose: () => void;
-  isClosing?: boolean;
 }
 
 export default function InviteModal({
+  open,
   serverId,
   serverName,
   onClose,
-  isClosing,
 }: InviteModalProps) {
   const [state, setState] = useState({
     inviteCode: "",
@@ -24,6 +38,17 @@ export default function InviteModal({
     expiresHours: 24,
     maxUses: 0,
   });
+
+  useEffect(() => {
+    if (!open) return;
+    // A reopened controlled dialog starts a fresh invite flow.
+    setState((previous) => ({
+      ...previous,
+      inviteCode: "",
+      loading: false,
+      copied: false,
+    }));
+  }, [open, serverId]);
 
   // Close on Escape
 
@@ -56,34 +81,29 @@ export default function InviteModal({
     "w-full rounded-xl border border-rm-border bg-rm-bg-surface px-3 py-2.5 text-sm text-rm-text outline-none transition-all focus:border-primary/30 focus:ring-2 focus:ring-primary/20";
 
   return (
-    <BaseModal onClose={onClose} aria-label="Invite members">
-      <div className="fixed inset-0 z-[200] flex items-center justify-center">
-        <button
-          type="button"
-          className={cn(
-            "absolute inset-0 border-0 bg-black/60 p-0 backdrop-blur-sm animate-in fade-in duration-200",
-            isClosing && "animate-out fade-out duration-200",
-          )}
-          onClick={onClose}
-          aria-label="Close invite modal"
-        />
+    <Dialog open={open} onOpenChange={(nextOpen) => !nextOpen && onClose()}>
+      <DialogContent
+        showCloseButton={false}
+        className="relative w-full max-w-[440px] animate-in fade-in zoom-in-95 rounded-2xl border border-rm-border bg-rm-bg-primary p-6 shadow-2xl duration-200"
+      >
+        <div>
+          <DialogClose asChild>
+            <button
+              type="button"
+              className="absolute right-4 top-4 rounded-lg p-1 text-rm-text-muted/40 transition-colors hover:text-rm-text outline-none"
+              aria-label="Close invite modal"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </DialogClose>
 
-        <div
-          className={cn(
-            "relative z-10 w-full max-w-[440px] animate-in fade-in zoom-in-95 rounded-2xl border border-rm-border bg-rm-bg-primary p-6 shadow-2xl duration-200",
-            isClosing && "animate-out fade-out zoom-out-95",
-          )}
-        >
-          <button
-            onClick={onClose}
-            className="absolute right-4 top-4 rounded-lg p-1 text-rm-text-muted/40 transition-colors hover:text-rm-text outline-none"
-          >
-            <X className="h-4 w-4" />
-          </button>
-
-          <h2 className="mb-6 text-base font-semibold text-rm-text">
-            Invite people to <span className="text-primary">{serverName}</span>
-          </h2>
+          <DialogTitle className="mb-6 text-base font-semibold text-rm-text">
+            Invite people to{" "}
+            <InlineEmojiText text={serverName} className="text-primary" />
+          </DialogTitle>
+          <DialogDescription className="sr-only">
+            Generate an invite link for this server.
+          </DialogDescription>
 
           {!state.inviteCode ? (
             <div className="space-y-4">
@@ -94,23 +114,30 @@ export default function InviteModal({
                 >
                   Expire after
                 </label>
-                <select
-                  id="expire-after"
-                  value={state.expiresHours}
-                  onChange={(e) =>
+                <Select
+                  value={String(state.expiresHours)}
+                  onValueChange={(value) =>
                     setState((prev) => ({
                       ...prev,
-                      expiresHours: Number(e.target.value),
+                      expiresHours: Number(value),
                     }))
                   }
-                  className={selectStyle}
                 >
-                  <option value={1}>1 hour</option>
-                  <option value={6}>6 hours</option>
-                  <option value={24}>24 hours</option>
-                  <option value={168}>7 days</option>
-                  <option value={0}>Never</option>
-                </select>
+                  <SelectTrigger
+                    id="expire-after"
+                    aria-label="Expire after"
+                    className={selectStyle}
+                  >
+                    <SelectValue placeholder="Expire after" />
+                  </SelectTrigger>
+                  <SelectContent position="popper" align="start">
+                    <SelectItem value="1">1 hour</SelectItem>
+                    <SelectItem value="6">6 hours</SelectItem>
+                    <SelectItem value="24">24 hours</SelectItem>
+                    <SelectItem value="168">7 days</SelectItem>
+                    <SelectItem value="0">Never</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
               <div className="space-y-2">
                 <label
@@ -119,24 +146,31 @@ export default function InviteModal({
                 >
                   Max uses
                 </label>
-                <select
-                  id="max-uses"
-                  value={state.maxUses}
-                  onChange={(e) =>
+                <Select
+                  value={String(state.maxUses)}
+                  onValueChange={(value) =>
                     setState((prev) => ({
                       ...prev,
-                      maxUses: Number(e.target.value),
+                      maxUses: Number(value),
                     }))
                   }
-                  className={selectStyle}
                 >
-                  <option value={0}>No limit</option>
-                  <option value={1}>1 use</option>
-                  <option value={5}>5 uses</option>
-                  <option value={10}>10 uses</option>
-                  <option value={25}>25 uses</option>
-                  <option value={100}>100 uses</option>
-                </select>
+                  <SelectTrigger
+                    id="max-uses"
+                    aria-label="Maximum uses"
+                    className={selectStyle}
+                  >
+                    <SelectValue placeholder="Maximum uses" />
+                  </SelectTrigger>
+                  <SelectContent position="popper" align="start">
+                    <SelectItem value="0">No limit</SelectItem>
+                    <SelectItem value="1">1 use</SelectItem>
+                    <SelectItem value="5">5 uses</SelectItem>
+                    <SelectItem value="10">10 uses</SelectItem>
+                    <SelectItem value="25">25 uses</SelectItem>
+                    <SelectItem value="100">100 uses</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
               <button
                 className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/20 transition-all hover:brightness-110 disabled:opacity-40"
@@ -193,7 +227,7 @@ export default function InviteModal({
             </div>
           )}
         </div>
-      </div>
-    </BaseModal>
+      </DialogContent>
+    </Dialog>
   );
 }

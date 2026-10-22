@@ -2,6 +2,7 @@ import { env } from "cloudflare:workers";
 
 import { cacheGet, cacheSet } from "@/lib/cache";
 import { fetchInstagramOEmbedMetadata } from "@/lib/share-preview-proxy";
+import { singleFlight } from "@/lib/single-flight";
 import type { EmbedAudio, EmbedMedia } from "@/lib/types";
 import { safeFetch, readTextCapped, readJsonCapped } from "@/lib/safe-fetch";
 
@@ -585,7 +586,7 @@ function hasResolvedInstagramMetadata(
   );
 }
 
-function isInstagramWeakFallbackResult(
+export function isInstagramWeakFallbackResult(
   result: InstagramVideoResult | null | undefined,
 ): boolean {
   if (!hasResolvedInstagramMetadata(result)) {
@@ -1041,6 +1042,11 @@ async function fetchInstagramMedia(
   );
 }
 
+const instagramMetadataFlights = new Map<
+  string,
+  Promise<InstagramVideoResult | null>
+>();
+
 export async function resolveInstagramVideoMetadata(
   rawUrl: string,
   options?: {
@@ -1051,27 +1057,32 @@ export async function resolveInstagramVideoMetadata(
   if (!canonicalUrl) return null;
 
   const cacheKey = `instagram-video:${canonicalUrl}`;
-  const hasSessionSecrets = Boolean(getInstagramSessionSecrets());
-  if (!options?.bypassCache) {
-    const cached = await cacheGet<InstagramVideoResult>(cacheKey);
-    if (
-      hasResolvedInstagramMetadata(cached) &&
-      (!hasSessionSecrets ||
-        (!isInstagramWeakFallbackResult(cached) &&
-          !isInstagramLegacyAuthorCacheResult(cached)))
-    ) {
-      return cached;
+  const load = async () => {
+    const hasSessionSecrets = Boolean(getInstagramSessionSecrets());
+    if (!options?.bypassCache) {
+      const cached = await cacheGet<InstagramVideoResult>(cacheKey);
+      if (
+        hasResolvedInstagramMetadata(cached) &&
+        (!hasSessionSecrets ||
+          (!isInstagramWeakFallbackResult(cached) &&
+            !isInstagramLegacyAuthorCacheResult(cached)))
+      ) {
+        return cached;
+      }
     }
-  }
 
-  const result = await fetchInstagramMedia(canonicalUrl);
-  if (hasResolvedInstagramMetadata(result)) {
-    const ttlSeconds =
-      hasSessionSecrets && isInstagramWeakFallbackResult(result)
-        ? INSTAGRAM_WEAK_FALLBACK_TTL
-        : getInstagramMetadataCacheTtl(result);
-    void cacheSet(cacheKey, result, ttlSeconds);
-  }
+    const result = await fetchInstagramMedia(canonicalUrl);
+    if (hasResolvedInstagramMetadata(result)) {
+      const ttlSeconds =
+        hasSessionSecrets && isInstagramWeakFallbackResult(result)
+          ? INSTAGRAM_WEAK_FALLBACK_TTL
+          : getInstagramMetadataCacheTtl(result);
+      void cacheSet(cacheKey, result, ttlSeconds);
+    }
 
-  return result;
+    return result;
+  };
+
+  if (options?.bypassCache) return load();
+  return singleFlight(instagramMetadataFlights, cacheKey, load);
 }

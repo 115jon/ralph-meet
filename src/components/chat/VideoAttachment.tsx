@@ -464,7 +464,7 @@ const VideoAttachment = memo(function VideoAttachment({
             ? "w-fit max-w-full rounded-xl overflow-hidden border border-rm-border bg-rm-bg-elevated shadow-lg"
             : "w-fit max-w-full overflow-visible border-none bg-transparent shadow-none",
         isFullscreen &&
-          "fixed! inset-0! z-9999! w-screen! h-screen! max-w-none! max-h-none! rounded-none! border-none! bg-black",
+          "fixed! inset-0! z-50! w-screen! h-screen! max-w-none! max-h-none! rounded-none! border-none! bg-black",
       )}
       style={
         isViewer || isFullscreen

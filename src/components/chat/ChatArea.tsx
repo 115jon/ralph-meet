@@ -1,6 +1,6 @@
 import { useBackButton } from "@/hooks/useBackButton";
 import type { Channel } from "@/lib/types";
-import { memo, useCallback, useMemo } from "react";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import ChannelSettingsModal from "./ChannelSettingsModal";
 import MemberList from "./MemberList";
 import MessageInput from "./MessageInput";
@@ -38,7 +38,6 @@ import { EmptyChatArea } from "./EmptyChatArea";
 // --- Main Component ---
 
 import { useChatArea } from "./useChatArea";
-import { useDelayUnmount } from "@/hooks/useDelayUnmount";
 
 const MemoizedChatWelcomeContent = memo(ChatWelcomeContent);
 
@@ -112,8 +111,27 @@ export default function ChatArea({
     handleInitialScrollSettled,
     handleMessageVisible,
   } = useChatArea({ channelId, jumpToMessageId, onJumped });
-
-  const shouldRenderPinModal = useDelayUnmount(pinModal.isOpen, 200);
+  const [renderedPinMessage, setRenderedPinMessage] = useState(
+    pinModal.message ?? null,
+  );
+  useEffect(() => {
+    if (pinModal.message) {
+      // Retain the confirmation payload while Radix runs the close animation.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setRenderedPinMessage(pinModal.message);
+    }
+  }, [pinModal.message]);
+  const pinMessage = pinModal.message ?? renderedPinMessage;
+  const [renderedChannelSettings, setRenderedChannelSettings] =
+    useState<Channel | null>(channelData ?? null);
+  useEffect(() => {
+    if (channelData) {
+      // Retain the channel payload while Radix runs the close animation.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setRenderedChannelSettings(channelData);
+    }
+  }, [channelData]);
+  const channelSettingsPayload = channelData ?? renderedChannelSettings;
 
   useBackButton(
     useCallback(() => {
@@ -179,6 +197,17 @@ export default function ChatArea({
     return state.members || [];
   }, [isDM, state.user, state.dmChannels, channelId, state.members]);
 
+  const welcomeContent = useMemo(
+    () => (
+      <MemoizedChatWelcomeContent
+        isDM={!!isDM}
+        channelName={channelName}
+        channelId={channelId}
+      />
+    ),
+    [channelId, channelName, isDM],
+  );
+
   if (!channelId) {
     return <EmptyChatArea onMenuClick={onMenuClick} />;
   }
@@ -216,17 +245,16 @@ export default function ChatArea({
         dmUsername={dmUsername}
       />
 
-      {shouldRenderPinModal && (
+      {pinMessage && (
         <PinModal
           isOpen={pinModal.isOpen}
-          isClosing={!pinModal.isOpen}
           onClose={() =>
             setLocalState({
-              pinModal: { isOpen: false, message: null, mode: "pin" },
+              pinModal: { ...pinModal, isOpen: false },
             })
           }
           onConfirm={confirmPinAction}
-          message={pinModal.message}
+          message={pinMessage}
           mode={pinModal.mode}
           channelName={channelName}
         />
@@ -324,13 +352,7 @@ export default function ChatArea({
               onJump={handleJumpToMessage}
               onBan={canBan ? handleBan : undefined}
               onThread={handleThread}
-              welcomeContent={
-                <MemoizedChatWelcomeContent
-                  isDM={!!isDM}
-                  channelName={channelName}
-                  channelId={channelId}
-                />
-              }
+              welcomeContent={welcomeContent}
               onAtBottom={handleAtBottom}
               onScrollRangeChange={handleScrollRangeChange}
               onMessageVisible={handleMessageVisible}
@@ -367,7 +389,7 @@ export default function ChatArea({
           <>
             {onMembersClick && (
               <div
-                className="lg:hidden fixed inset-0 z-99 bg-black/50 animate-in fade-in duration-300"
+                className="lg:hidden fixed inset-0 z-20 bg-black/50 animate-in fade-in duration-300"
                 onClick={onMembersClick}
                 aria-hidden="true"
               />
@@ -427,21 +449,20 @@ export default function ChatArea({
         )}
       </div>
 
-      {showChannelSettings &&
-        channelData &&
-        (serverId ?? state.activeServerId) && (
-          <ChannelSettingsModal
-            serverId={(serverId ?? state.activeServerId)!}
-            channel={channelData as Channel}
-            onUpdated={(updates) =>
-              dispatch({
-                type: "UPSERT_CHANNEL",
-                channel: { ...(channelData as Channel), ...updates },
-              })
-            }
-            onClose={() => setLocalState({ showChannelSettings: false })}
-          />
-        )}
+      {channelSettingsPayload && (serverId ?? state.activeServerId) && (
+        <ChannelSettingsModal
+          open={showChannelSettings}
+          serverId={(serverId ?? state.activeServerId)!}
+          channel={channelSettingsPayload}
+          onUpdated={(updates) =>
+            dispatch({
+              type: "UPSERT_CHANNEL",
+              channel: { ...channelSettingsPayload, ...updates },
+            })
+          }
+          onClose={() => setLocalState({ showChannelSettings: false })}
+        />
+      )}
     </div>
   );
 }

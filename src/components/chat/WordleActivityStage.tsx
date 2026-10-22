@@ -1,5 +1,5 @@
 import { apiUrl, getAuthAssetUrl } from "@/lib/platform";
-import { BaseModal } from "@/components/ui/BaseModal";
+import { Dialog, DialogPortal, DialogSurface } from "@/components/ui/dialog";
 import type { SFUClient } from "@/lib/sfu-client";
 import { cn } from "@/lib/utils";
 import { getNewYorkDateKey } from "@/lib/wordle";
@@ -13,7 +13,7 @@ import {
   shouldShowCompletionResult,
 } from "@/lib/wordle-game";
 import { BarChart3, Delete, Lightbulb, Settings, X } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 interface WordleActivityStageProps {
   sfu: SFUClient | null;
@@ -441,104 +441,111 @@ function ExampleRow({
 }
 
 function HowToPlayModal({
+  open,
   onClose,
   colors,
 }: {
+  open: boolean;
   onClose: () => void;
   colors: Record<"correct" | "present" | "absent", string>;
 }) {
   return (
-    <BaseModal onClose={onClose} aria-labelledby="wordle-how-to-play-title">
-      <div
-        className={cn(
-          "fixed inset-0 z-30 flex items-center justify-center p-4",
-          WORDLE_THEME.overlay,
-        )}
-      >
-        <section
+    <Dialog open={open} onOpenChange={(nextOpen) => !nextOpen && onClose()}>
+      <DialogPortal>
+        <div
           className={cn(
-            "relative max-h-[min(640px,calc(100vh-32px))] w-full max-w-[500px] overflow-y-auto rounded-lg border p-6 shadow-2xl sm:p-8",
-            WORDLE_THEME.modal,
+            "fixed inset-0 z-50 flex items-center justify-center p-4",
+            WORDLE_THEME.overlay,
           )}
         >
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close how to play"
-            className="absolute right-3 top-3 flex h-10 w-10 items-center justify-center rounded-full text-rm-text-secondary transition-colors hover:bg-rm-bg-hover hover:text-rm-text"
+          <DialogSurface
+            showCloseButton={false}
+            aria-labelledby="wordle-how-to-play-title"
+            aria-modal="true"
+            className={cn(
+              "relative max-h-[min(640px,calc(100vh-32px))] w-full max-w-[500px] overflow-y-auto rounded-lg border p-6 shadow-2xl sm:p-8",
+              WORDLE_THEME.modal,
+            )}
           >
-            <X size={28} strokeWidth={2} />
-          </button>
-          <h2
-            id="wordle-how-to-play-title"
-            className="pr-10 text-2xl font-black leading-tight"
-            style={{ fontFamily: "Georgia, serif" }}
-          >
-            How To Play
-          </h2>
-          <p className="mt-1 text-lg leading-snug">
-            Guess the Wordle in 6 tries.
-          </p>
-          <ul className="mt-4 list-disc space-y-1.5 pl-5 text-sm leading-snug sm:text-base">
-            <li>Each guess must be a valid 5-letter word.</li>
-            <li>
-              The color of the tiles will change to show how close your guess
-              was to the word.
-            </li>
-          </ul>
-
-          <h3 className="mt-5 text-sm font-black">Examples</h3>
-          <ExampleRow
-            letters="wordy"
-            highlightedIndex={0}
-            mark="correct"
-            colors={colors}
-            theme={WORDLE_THEME}
-          />
-          <p className="mt-1 text-sm">
-            <strong style={{ color: colors.correct }}>W</strong> is in the word
-            and in the correct spot.
-          </p>
-          <ExampleRow
-            letters="light"
-            highlightedIndex={1}
-            mark="present"
-            colors={colors}
-            theme={WORDLE_THEME}
-          />
-          <p className="mt-1 text-sm">
-            <strong style={{ color: colors.present }}>I</strong> is in the word
-            but in the wrong spot.
-          </p>
-          <ExampleRow
-            letters="rogue"
-            highlightedIndex={3}
-            mark="absent"
-            colors={colors}
-            theme={WORDLE_THEME}
-          />
-          <p className="mt-1 text-sm">
-            <strong style={{ color: colors.absent }}>U</strong> is not in the
-            word in any spot.
-          </p>
-
-          <div className={cn("my-5 border-t", WORDLE_THEME.border)} />
-          <p className="text-sm leading-snug sm:text-base">
-            A new puzzle is released daily at midnight. If you haven&apos;t
-            already, you can{" "}
-            <a
-              className={WORDLE_THEME.link}
-              href="https://www.nytimes.com/games/wordle/index.html"
-              target="_blank"
-              rel="noreferrer"
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Close how to play"
+              className="absolute right-3 top-3 flex h-10 w-10 items-center justify-center rounded-full text-rm-text-secondary transition-colors hover:bg-rm-bg-hover hover:text-rm-text"
             >
-              play Wordle
-            </a>{" "}
-            for a daily puzzle.
-          </p>
-        </section>
-      </div>
-    </BaseModal>
+              <X size={28} strokeWidth={2} />
+            </button>
+            <h2
+              id="wordle-how-to-play-title"
+              className="pr-10 text-2xl font-black leading-tight"
+              style={{ fontFamily: "Georgia, serif" }}
+            >
+              How To Play
+            </h2>
+            <p className="mt-1 text-lg leading-snug">
+              Guess the Wordle in 6 tries.
+            </p>
+            <ul className="mt-4 list-disc space-y-1.5 pl-5 text-sm leading-snug sm:text-base">
+              <li>Each guess must be a valid 5-letter word.</li>
+              <li>
+                The color of the tiles will change to show how close your guess
+                was to the word.
+              </li>
+            </ul>
+
+            <h3 className="mt-5 text-sm font-black">Examples</h3>
+            <ExampleRow
+              letters="wordy"
+              highlightedIndex={0}
+              mark="correct"
+              colors={colors}
+              theme={WORDLE_THEME}
+            />
+            <p className="mt-1 text-sm">
+              <strong style={{ color: colors.correct }}>W</strong> is in the
+              word and in the correct spot.
+            </p>
+            <ExampleRow
+              letters="light"
+              highlightedIndex={1}
+              mark="present"
+              colors={colors}
+              theme={WORDLE_THEME}
+            />
+            <p className="mt-1 text-sm">
+              <strong style={{ color: colors.present }}>I</strong> is in the
+              word but in the wrong spot.
+            </p>
+            <ExampleRow
+              letters="rogue"
+              highlightedIndex={3}
+              mark="absent"
+              colors={colors}
+              theme={WORDLE_THEME}
+            />
+            <p className="mt-1 text-sm">
+              <strong style={{ color: colors.absent }}>U</strong> is not in the
+              word in any spot.
+            </p>
+
+            <div className={cn("my-5 border-t", WORDLE_THEME.border)} />
+            <p className="text-sm leading-snug sm:text-base">
+              A new puzzle is released daily at midnight. If you haven&apos;t
+              already, you can{" "}
+              <a
+                className={WORDLE_THEME.link}
+                href="https://www.nytimes.com/games/wordle/index.html"
+                target="_blank"
+                rel="noreferrer"
+              >
+                play Wordle
+              </a>{" "}
+              for a daily puzzle.
+            </p>
+          </DialogSurface>
+        </div>
+      </DialogPortal>
+    </Dialog>
   );
 }
 
@@ -598,12 +605,30 @@ function WordleActivityStageContent({
   const [completedBoardOpen, setCompletedBoardOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [hintsOpen, setHintsOpen] = useState(false);
+  const hintsTriggerRef = useRef<HTMLButtonElement>(null);
+  const settingsTriggerRef = useRef<HTMLButtonElement>(null);
+  const previousHintsOpenRef = useRef(false);
+  const previousSettingsOpenRef = useRef(false);
   const [howToPlayOpen, setHowToPlayOpen] = useState(
     () => !readStoredFlag(HOW_TO_PLAY_SEEN_KEY),
   );
   const [hintNoticeOpen, setHintNoticeOpen] = useState(
     () => !readStoredFlag(HINT_NOTICE_SEEN_KEY),
   );
+
+  useEffect(() => {
+    if (previousHintsOpenRef.current && !hintsOpen) {
+      hintsTriggerRef.current?.focus();
+    }
+    previousHintsOpenRef.current = hintsOpen;
+  }, [hintsOpen]);
+
+  useEffect(() => {
+    if (previousSettingsOpenRef.current && !settingsOpen) {
+      settingsTriggerRef.current?.focus();
+    }
+    previousSettingsOpenRef.current = settingsOpen;
+  }, [settingsOpen]);
   const [answerRevealPending, setAnswerRevealPending] = useState(false);
   const [notice, setNotice] = useState<{
     message: string;
@@ -968,11 +993,21 @@ function WordleActivityStageContent({
     writeStoredFlag(HINT_NOTICE_SEEN_KEY);
   };
 
+  const closeHints = () => {
+    setHintsOpen(false);
+    hintsTriggerRef.current?.focus();
+  };
+
+  const closeSettings = () => {
+    setSettingsOpen(false);
+    settingsTriggerRef.current?.focus();
+  };
+
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
-        if (hintsOpen) setHintsOpen(false);
-        else if (settingsOpen) setSettingsOpen(false);
+        if (hintsOpen) closeHints();
+        else if (settingsOpen) closeSettings();
         return;
       }
       if (
@@ -1217,6 +1252,7 @@ function WordleActivityStageContent({
           )}
         >
           <button
+            ref={hintsTriggerRef}
             type="button"
             onClick={() => {
               dismissHintNotice();
@@ -1238,6 +1274,7 @@ function WordleActivityStageContent({
             <BarChart3 size={28} />
           </button>
           <button
+            ref={settingsTriggerRef}
             type="button"
             onClick={() => setSettingsOpen(true)}
             aria-label="Open Wordle settings"
@@ -1445,24 +1482,37 @@ function WordleActivityStageContent({
       )}
 
       {howToPlayOpen && (
-        <HowToPlayModal onClose={dismissHowToPlay} colors={colors} />
+        <HowToPlayModal
+          open={howToPlayOpen}
+          onClose={dismissHowToPlay}
+          colors={colors}
+        />
       )}
 
-      {hintsOpen && (
-        <BaseModal
-          onClose={() => {
-            setHintsOpen(false);
+      <Dialog
+        open={hintsOpen}
+        onOpenChange={(open) => {
+          if (!open) {
+            closeHints();
             setAnswerRevealPending(false);
-          }}
-          aria-labelledby="wordle-hints-title"
-        >
+          }
+        }}
+      >
+        <DialogPortal>
           <div
             className={cn(
-              "fixed inset-0 z-10 flex items-center justify-center p-4",
+              "fixed inset-0 z-50 flex items-center justify-center p-4",
               theme.overlay,
             )}
           >
-            <div
+            <DialogSurface
+              showCloseButton={false}
+              aria-labelledby="wordle-hints-title"
+              aria-modal="true"
+              onCloseAutoFocus={(event) => {
+                event.preventDefault();
+                hintsTriggerRef.current?.focus();
+              }}
               className={cn(
                 "w-full max-w-md rounded-2xl p-5 shadow-2xl",
                 theme.modal,
@@ -1477,7 +1527,7 @@ function WordleActivityStageContent({
                 </h2>
                 <button
                   type="button"
-                  onClick={() => setHintsOpen(false)}
+                  onClick={closeHints}
                   aria-label="Close hints"
                   className="flex h-10 w-10 items-center justify-center rounded-full transition-colors hover:bg-rm-bg-hover"
                 >
@@ -1572,23 +1622,30 @@ function WordleActivityStageContent({
                   Puzzle {puzzle.id ?? "----"} - {puzzle.print_date}
                 </div>
               </div>
-            </div>
+            </DialogSurface>
           </div>
-        </BaseModal>
-      )}
+        </DialogPortal>
+      </Dialog>
 
-      {settingsOpen && (
-        <BaseModal
-          onClose={() => setSettingsOpen(false)}
-          aria-labelledby="wordle-settings-title"
-        >
+      <Dialog
+        open={settingsOpen}
+        onOpenChange={(open) => !open && closeSettings()}
+      >
+        <DialogPortal>
           <div
             className={cn(
-              "fixed inset-0 z-10 flex items-center justify-center p-4",
+              "fixed inset-0 z-50 flex items-center justify-center p-4",
               theme.overlay,
             )}
           >
-            <div
+            <DialogSurface
+              showCloseButton={false}
+              aria-labelledby="wordle-settings-title"
+              aria-modal="true"
+              onCloseAutoFocus={(event) => {
+                event.preventDefault();
+                settingsTriggerRef.current?.focus();
+              }}
               className={cn(
                 "w-full max-w-[500px] rounded-2xl p-4 shadow-2xl",
                 theme.modal,
@@ -1603,7 +1660,7 @@ function WordleActivityStageContent({
                 </h2>
                 <button
                   type="button"
-                  onClick={() => setSettingsOpen(false)}
+                  onClick={closeSettings}
                   aria-label="Close settings"
                 >
                   <X size={28} />
@@ -1650,10 +1707,10 @@ function WordleActivityStageContent({
               <div className="pt-4 text-right text-sm">
                 #{puzzle.id ?? "----"}
               </div>
-            </div>
+            </DialogSurface>
           </div>
-        </BaseModal>
-      )}
+        </DialogPortal>
+      </Dialog>
     </div>
   );
 }

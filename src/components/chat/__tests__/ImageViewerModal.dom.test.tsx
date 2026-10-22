@@ -15,6 +15,7 @@ Object.defineProperty(globalThis, "localStorage", {
 
 vi.mock("@/hooks/useBackButton", () => ({
   useBackButton: () => {},
+  useDialogBackButton: () => {},
 }));
 
 vi.mock("@/components/chat/ImageViewerToolbar", () => ({

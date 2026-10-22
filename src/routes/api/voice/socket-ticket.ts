@@ -21,6 +21,7 @@ import {
   issueSocketTicket,
   type SocketTicketAudience,
 } from "@/lib/voice/socket-ticket";
+import { issueVoiceToken } from "../../../../realtime/voice-token";
 
 const SOCKET_TICKET_TTL_MS = 60_000;
 const DEMO_TICKET_RATE_LIMIT = { limit: 12, windowMs: 60 * 60 * 1000 };
@@ -42,6 +43,7 @@ export const socketTicketRequestBodySchema = z
 type SocketTicketRequestBody = z.infer<typeof socketTicketRequestBodySchema>;
 
 type SocketTicketEnv = CloudflareEnv & {
+  CALLS_APP_SECRET?: string;
   REALTIME_TICKET_SECRET?: string;
 };
 
@@ -96,12 +98,23 @@ const POST = async ({ request }: { request: Request }) => {
   if (admission instanceof Response) return noStore(admission);
 
   const expiresAt = Date.now() + SOCKET_TICKET_TTL_MS;
+  const nonce = crypto.randomUUID();
+  if (audience === "room" && !env.CALLS_APP_SECRET) {
+    return noStore(
+      apiError(
+        "Realtime media admission is not configured",
+        503,
+        "CALLS_APP_SECRET_MISSING",
+        request,
+      ),
+    );
+  }
   const ticket = await issueSocketTicket(
     {
       accessMode: admission.accessMode,
       audience,
       expiresAt,
-      nonce: crypto.randomUUID(),
+      nonce,
       roomSlug: admission.roomSlug,
       ...(admission.serverId ? { serverId: admission.serverId } : {}),
       subject: admission.subject,
@@ -109,10 +122,24 @@ const POST = async ({ request }: { request: Request }) => {
     config.ticketSecret,
   );
 
+  const mediaBootstrap =
+    audience === "room" && env.CALLS_APP_SECRET
+      ? {
+          participant_id: nonce,
+          voice_token: await issueVoiceToken({
+            participantId: nonce,
+            roomSlug: admission.roomSlug,
+            subject: admission.subject,
+            secret: env.CALLS_APP_SECRET,
+          }),
+        }
+      : undefined;
+
   const response = Response.json({
     access_mode: admission.accessMode,
     audience,
     expires_at: expiresAt,
+    ...(mediaBootstrap ? { media_bootstrap: mediaBootstrap } : {}),
     room_slug: admission.roomSlug,
     ticket,
   });

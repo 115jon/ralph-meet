@@ -14,6 +14,7 @@ import {
   type ChannelVisibilityOverride,
   type ChannelVisibilityRole,
 } from "../src/lib/channel-visibility";
+import { getDisplayName } from "../src/lib/display-name";
 import type {
   CallIdPayload,
   CallInitiatePayload,
@@ -124,6 +125,7 @@ const enum Op {
   CallDecline = 38,
   CallEnd = 39,
   RefreshVoiceCredentials = 40,
+  MediaReady = 41,
 }
 
 const enum CloseCode {
@@ -167,8 +169,6 @@ interface VoiceState {
   spatial_audio_high_fidelity?: boolean;
   suppress: boolean;
   status?: "online" | "idle" | "dnd" | "offline";
-  push_session_id?: string;
-  pull_session_id?: string;
   tracks: TrackInfo[];
 }
 
@@ -192,6 +192,7 @@ interface WsAttachment {
   admission?: {
     accessMode: "authenticated" | "public-demo";
     connectionGeneration: string;
+    participantId: string;
     subject: string;
   };
   id: string;
@@ -271,6 +272,14 @@ interface ProfileIdentity {
   display_name: string | null;
   avatar_url: string | null;
   avatar_display: string | null;
+}
+
+interface ProfileIdentityPatch {
+  name?: string;
+  username?: string;
+  display_name?: string | null;
+  avatar_url?: string | null;
+  avatar_display?: string | null;
 }
 
 /** A pending (ringing) or active call between two users */
@@ -644,6 +653,7 @@ export class MeetingRoom extends DurableObject<Env> {
         admission: {
           accessMode: admission.accessMode,
           connectionGeneration: admission.connectionGeneration,
+          participantId: admission.participantId,
           subject: admission.subject,
         },
       });
@@ -681,6 +691,22 @@ export class MeetingRoom extends DurableObject<Env> {
           op: Op.Dispatch,
           d: { event: body.event, data: body.data },
         };
+        if (
+          body.event === "USER_PROFILE_UPDATE" &&
+          this.isPlainObject(body.data) &&
+          typeof body.data.user_id === "string" &&
+          [
+            "name",
+            "username",
+            "display_name",
+            "avatar_url",
+            "avatar_display",
+          ].some((field) =>
+            Object.prototype.hasOwnProperty.call(body.data, field),
+          )
+        ) {
+          await this.applyPartialProfileIdentity(body.data.user_id, body.data);
+        }
         log.info(
           `Internal broadcast: event=${body.event}, type=${body.broadcast_all ? "all" : body.target_user_id ? "user" : "channel"}, recipient=${body.target_user_id || body.channel_id || "all"}`,
         );
@@ -2025,8 +2051,6 @@ export class MeetingRoom extends DurableObject<Env> {
       spatial_audio_high_fidelity: data.spatial_audio_high_fidelity,
       suppress: data.suppress,
       status: data.status,
-      push_session_id: undefined,
-      pull_session_id: undefined,
       tracks: [...data.tracks],
     };
   }
@@ -2276,6 +2300,67 @@ export class MeetingRoom extends DurableObject<Env> {
     session.avatar_display = identity.avatar_display;
   }
 
+  private async applyPartialProfileIdentity(
+    userId: string,
+    patch: ProfileIdentityPatch,
+  ) {
+    const currentIdentity = this.getCanonicalProfileIdentity(userId);
+    if (!currentIdentity) return;
+
+    const mergedIdentity: ProfileIdentity = {
+      ...currentIdentity,
+      ...(patch.name !== undefined ? { name: patch.name } : {}),
+      ...(patch.username !== undefined ? { username: patch.username } : {}),
+      ...(patch.display_name !== undefined
+        ? { display_name: patch.display_name }
+        : {}),
+      ...(patch.avatar_url !== undefined
+        ? { avatar_url: patch.avatar_url }
+        : {}),
+      ...(patch.avatar_display !== undefined
+        ? { avatar_display: patch.avatar_display }
+        : {}),
+    };
+    mergedIdentity.name = getDisplayName(
+      {
+        display_name: mergedIdentity.display_name,
+        username: mergedIdentity.username,
+        name: mergedIdentity.name,
+      },
+      mergedIdentity.name,
+    );
+    this.profileIdentities.set(userId, mergedIdentity);
+
+    for (const [sessionWs, session] of this.sessions) {
+      if (session.clerk_user_id !== userId) continue;
+      this.setSessionProfileIdentity(session, mergedIdentity);
+      this.persist(sessionWs, session);
+    }
+
+    let updatedResumableSession = false;
+    for (const session of this.resumableSessions.values()) {
+      if (session.clerk_user_id !== userId) continue;
+      this.setSessionProfileIdentity(session, mergedIdentity);
+      updatedResumableSession = true;
+    }
+    if (updatedResumableSession) this.persistResumableSessions();
+
+    const updatedChannelIds: string[] = [];
+    for (const [channelId, members] of this.voiceChannelMembers) {
+      const member = members.get(userId);
+      if (!member) continue;
+      members.set(userId, refreshVoiceMemberIdentity(member, mergedIdentity));
+      updatedChannelIds.push(channelId);
+    }
+    if (updatedChannelIds.length > 0) this.persistVoiceChannelMembers();
+
+    // ProfileUpdate is an SFU-room protocol message; global chat clients
+    // consume the existing USER_PROFILE_UPDATE dispatch below instead.
+    for (const channelId of updatedChannelIds) {
+      await this.broadcastVoiceChannelState(channelId, undefined, true);
+    }
+  }
+
   private async updateProfileIdentity(
     userId: string,
     identity: ProfileIdentity,
@@ -2360,7 +2445,7 @@ export class MeetingRoom extends DurableObject<Env> {
         });
         return;
       }
-      const participantId = crypto.randomUUID();
+      const participantId = admission.participantId;
       const admittedUserId =
         admission.accessMode === "authenticated"
           ? admission.subject
@@ -2386,6 +2471,15 @@ export class MeetingRoom extends DurableObject<Env> {
           : null,
         this.generateVoiceToken(participantId, admission.subject),
       ]);
+
+      this.sendTo(ws, {
+        op: Op.MediaReady,
+        d: {
+          participant_id: participantId,
+          ice_servers: iceServers,
+          voice_token: voiceToken,
+        },
+      });
 
       // Resolve actual profile from Clerk if possible
       let resolvedName = d.name;

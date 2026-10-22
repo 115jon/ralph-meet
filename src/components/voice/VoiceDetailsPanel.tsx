@@ -1,3 +1,4 @@
+import { useMounted } from "@/hooks/useMounted";
 import { useVoiceStats } from "@/hooks/useVoiceStats";
 import { clog } from "@/lib/console-logger";
 import type { SFUClient, VoiceConnectionStats } from "@/lib/sfu-client";
@@ -83,6 +84,7 @@ export function VoiceDetailsPanel({
   channelName,
   isClosing,
 }: VoiceDetailsPanelProps) {
+  const mounted = useMounted();
   const [activeTab, setActiveTab] = useState<TabId>("connection");
   const [copyFeedback, setCopyFeedback] = useState(false);
   const [showDebugScreen, setShowDebugScreen] = useState(false);
@@ -258,7 +260,7 @@ export function VoiceDetailsPanel({
   // A CSS transform on an ancestor breaks `position: fixed` — the fixed
   // element would be confined to the transformed box rather than the viewport.
   const debugPortal =
-    showDebugScreen && typeof document !== "undefined"
+    showDebugScreen && mounted
       ? createPortal(
           <VoiceDebugScreen
             sfu={sfu}
@@ -270,12 +272,12 @@ export function VoiceDetailsPanel({
       : null;
 
   const panelPortal =
-    isOpen && typeof document !== "undefined"
+    isOpen && mounted
       ? createPortal(
           <aside
             ref={panelRef}
             className={cn(
-              "fixed z-[1000] w-[min(320px,calc(100vw-24px))] overflow-hidden rounded-xl border border-rm-border bg-rm-bg-floating shadow-2xl",
+              "fixed z-30 w-[min(320px,calc(100vw-24px))] overflow-hidden rounded-xl border border-rm-border bg-rm-bg-floating shadow-2xl",
               panelPosition.placement === "top"
                 ? isClosing
                   ? "origin-bottom-left animate-out fade-out slide-out-to-bottom-2 zoom-out-95 duration-200"

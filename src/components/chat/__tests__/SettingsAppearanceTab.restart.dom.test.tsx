@@ -17,6 +17,7 @@ vi.mock("@/lib/platform", () => ({
 
 vi.mock("@/hooks/useBackButton", () => ({
   useBackButton: () => {},
+  useDialogBackButton: () => {},
 }));
 
 vi.mock("@/components/chat/useAppearanceTheme", () => ({

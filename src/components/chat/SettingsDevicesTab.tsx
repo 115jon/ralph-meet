@@ -1,7 +1,21 @@
 import { IconButton } from "@/components/ui/IconButton";
 import { apiDelete, apiGet } from "@/lib/api-client";
+import { useClientReferenceTime } from "@/lib/client-date-format";
 import { Loader2, Monitor, Smartphone, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
+
+function normalizeTimestamp(value: unknown): number | null {
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : null;
+  }
+  if (typeof value !== "string" || value.trim() === "") return null;
+
+  const numericValue = Number(value);
+  if (Number.isFinite(numericValue)) return numericValue;
+
+  const parsedValue = Date.parse(value);
+  return Number.isFinite(parsedValue) ? parsedValue : null;
+}
 
 function useDevicesState() {
   const [sessions, setSessions] = useState<any[]>([]);
@@ -25,7 +39,7 @@ function DeviceRow({
 }: {
   session: any;
   onRevoke: (id: string) => void;
-  now: number;
+  now: number | null;
 }) {
   const Icon = session.activity?.isMobile ? Smartphone : Monitor;
 
@@ -43,8 +57,9 @@ function DeviceRow({
       .join(", ") || "Unknown Location";
 
   let timeAgo = "Unknown time";
-  if (session.lastActiveAt) {
-    const minDiff = Math.floor((now - session.lastActiveAt) / 60000);
+  const lastActiveAt = normalizeTimestamp(session.lastActiveAt);
+  if (lastActiveAt !== null && now !== null) {
+    const minDiff = Math.floor((now - lastActiveAt) / 60000);
     if (minDiff < 1) timeAgo = "less than a minute ago";
     else if (minDiff < 60) timeAgo = `less than an hour ago`;
     else if (minDiff < 1440)
@@ -92,6 +107,7 @@ export default function SettingsDevicesTab() {
     sessionError,
     setSessionError,
   } = useDevicesState();
+  const referenceTime = useClientReferenceTime();
 
   const fetchSessions = useCallback(async () => {
     setSessionsLoading(true);
@@ -161,7 +177,7 @@ export default function SettingsDevicesTab() {
                     key={s.id}
                     session={s}
                     onRevoke={handleRevokeSession}
-                    now={Date.now()}
+                    now={referenceTime}
                   />
                 ))}
               </div>
@@ -179,7 +195,7 @@ export default function SettingsDevicesTab() {
                     key={s.id}
                     session={s}
                     onRevoke={handleRevokeSession}
-                    now={Date.now()}
+                    now={referenceTime}
                   />
                 ))}
               </div>

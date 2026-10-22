@@ -39,9 +39,11 @@ import {
 import { resolveVoiceIdentity } from "@/lib/voice-identity";
 import {
   createLocalAudioProcessor,
+  isNoiseReductionProviderSupported,
   resolveCaptureAudioProcessing,
   resolveLocalAudioProcessingMode,
   type LocalAudioProcessorHandle,
+  type LocalAudioProcessingMode,
   type VoiceAudioProcessingSettings,
 } from "@/lib/voice/noise-reduction";
 import {
@@ -133,43 +135,6 @@ export function mergeVoiceState(
 ): VoiceState | null {
   if (cached) return { ...cached, ...incoming };
   return "name" in incoming ? incoming : null;
-}
-
-function createMicrophoneStream(stream: MediaStream): MediaStream | null {
-  const audioTrack = stream.getAudioTracks()[0];
-  return audioTrack && audioTrack.readyState !== "ended"
-    ? new MediaStream([audioTrack])
-    : null;
-}
-
-interface VoiceActivityStream {
-  stream: MediaStream;
-  ownsTracks: boolean;
-}
-
-function createVoiceActivityStream(
-  rawStream: MediaStream,
-  processor: LocalAudioProcessorHandle | null,
-): VoiceActivityStream | null {
-  if (processor) {
-    try {
-      const monitorStream = processor.createMonitorStream();
-      if (
-        monitorStream
-          .getAudioTracks()
-          .some((track) => track.readyState !== "ended")
-      ) {
-        return { stream: monitorStream, ownsTracks: true };
-      }
-    } catch {
-      // Fall back to raw capture if a processor monitor is unavailable.
-    }
-  }
-
-  const microphoneStream = createMicrophoneStream(rawStream);
-  return microphoneStream
-    ? { stream: microphoneStream, ownsTracks: false }
-    : null;
 }
 
 function disposeVoiceActivityStream(stream: MediaStream | null): void {
@@ -1048,12 +1013,34 @@ export function useVoiceChannel({
   const publishedAudioProcessorRef = useRef<LocalAudioProcessorHandle | null>(
     null,
   );
+  const failedAudioProcessingModeRef = useRef<LocalAudioProcessingMode | null>(
+    null,
+  );
   const ownedVadMonitorStreamRef = useRef<MediaStream | null>(null);
   const rawCameraTrackRef = useRef<MediaStreamTrack | null>(null);
   const cameraBackgroundEffectRef = useRef<CameraBackgroundEffect | null>(null);
   const activeCameraBackgroundKeyRef = useRef("none");
   const activeCameraQualityRef = useRef<string | null>(null);
   const localMediaGenerationRef = useRef(0);
+  const initialMediaSyncRef = useRef<{
+    session: SFUClient | null;
+    inFlight: boolean;
+    deviceId: string;
+    requestKey: string;
+    token: number;
+  }>({
+    session: null,
+    inFlight: false,
+    deviceId: "",
+    requestKey: "",
+    token: 0,
+  });
+  const initialMediaTokenRef = useRef(0);
+  const pendingInitialMediaRef = useRef<{
+    stream: MediaStream;
+    processor: LocalAudioProcessorHandle | null;
+    token: number;
+  } | null>(null);
   const [localMediaOwner] = useState<LocalMediaOwner>(() =>
     createLocalMediaOwner(),
   );
@@ -1087,6 +1074,7 @@ export function useVoiceChannel({
 
   const myIdRef = useRef<string>("");
   const uuidToClerkRef = useRef<Map<string, string>>(new Map());
+  const speakingByParticipantRef = useRef<Record<string, boolean>>({});
   // Mirrors `currentScreenSource` for synchronous reads inside imperative
   // callbacks (toggleScreenShare) without adding it to their dependency arrays.
   // Lets a mid-share quality/audio change re-target the SAME source instead of
@@ -1119,6 +1107,7 @@ export function useVoiceChannel({
     outputVolume,
     outputDeviceId,
     spatialAudioEnabled,
+    inputProfile,
     alwaysShowStreamPreview,
   } = useVoiceSettingsStore(
     useShallow((s) => {
@@ -1143,11 +1132,15 @@ export function useVoiceChannel({
         sensitivity: st.sensitivity,
         streamHighFidelity: st.streamHighFidelity,
         spatialAudioEnabled: st.spatialAudioEnabled,
+        inputProfile: st.inputProfile,
         outputVolume: st.outputVolume,
         outputDeviceId: st.outputDeviceId,
         alwaysShowStreamPreview: !!st.alwaysShowStreamPreview,
       };
     }),
+  );
+  const noiseReductionSupported = isNoiseReductionProviderSupported(
+    noiseReductionProvider,
   );
   const audioProcessingSettings = useMemo<VoiceAudioProcessingSettings>(
     () => ({
@@ -1155,7 +1148,7 @@ export function useVoiceChannel({
       echoCancellation,
       autoSensitivity,
       streamHighFidelity,
-      noiseReductionEnabled,
+      noiseReductionEnabled: noiseReductionEnabled && noiseReductionSupported,
       noiseReductionProvider,
     }),
     [
@@ -1163,10 +1156,20 @@ export function useVoiceChannel({
       echoCancellation,
       noiseReductionEnabled,
       noiseReductionProvider,
+      noiseReductionSupported,
       noiseSuppression,
       streamHighFidelity,
     ],
   );
+  const audioProcessingSettingsRef = useRef(audioProcessingSettings);
+  useEffect(() => {
+    audioProcessingSettingsRef.current = audioProcessingSettings;
+  }, [audioProcessingSettings]);
+  const isStudioMode = inputProfile === "studio";
+
+  useEffect(() => {
+    failedAudioProcessingModeRef.current = null;
+  }, [audioProcessingSettings]);
 
   const setCurrentUser = useVoiceSettingsStore((s) => s.setCurrentUser);
   const setIsMuted = useVoiceSettingsStore((s) => s.setIsMuted);
@@ -1235,6 +1238,51 @@ export function useVoiceChannel({
   const isMicOn = !settingsMuted && hasMicrophone;
   const isMicOnRef = useRef(isMicOn);
   isMicOnRef.current = isMicOn;
+
+  const restartVadMonitoring = useCallback(
+    (
+      sfu: SFUClient | null,
+      processorOverride?: LocalAudioProcessorHandle | null,
+      fallbackStream?: MediaStream | null,
+    ) => {
+      if (!sfu) return;
+
+      if (isStudioMode) sfu.vad.disableNoiseGate();
+      else sfu.vad.enableNoiseGate();
+
+      sfu.vad.stop();
+      disposeVoiceActivityStream(ownedVadMonitorStreamRef.current);
+      ownedVadMonitorStreamRef.current = null;
+
+      if (!isMicOnRef.current) return;
+
+      const processor = processorOverride ?? publishedAudioProcessorRef.current;
+      const monitorStream = processor
+        ? processor.createMonitorStream()
+        : fallbackStream
+          ? new MediaStream(
+              fallbackStream
+                .getAudioTracks()
+                .filter((track) => track.readyState === "live")
+                .map((track) =>
+                  typeof track.clone === "function" ? track.clone() : track,
+                ),
+            )
+          : null;
+      if (!monitorStream || monitorStream.getAudioTracks().length === 0) {
+        disposeVoiceActivityStream(monitorStream);
+        return;
+      }
+
+      ownedVadMonitorStreamRef.current = monitorStream;
+      if (!sfu.vad.start(monitorStream)) {
+        disposeVoiceActivityStream(monitorStream);
+        ownedVadMonitorStreamRef.current = null;
+      }
+    },
+    [isStudioMode],
+  );
+
   const isDeafened = settingsDeafened;
   const isCameraOn = isCameraActive && hasCamera;
 
@@ -1319,11 +1367,23 @@ export function useVoiceChannel({
 
   useEffect(() => {
     const resume = () => {
-      sfuRef.current?.resumeAudioContext();
-      voiceDispatch({ type: "SET_AUDIO_BLOCKED", payload: false });
+      const sfu = sfuRef.current;
+      if (!sfu) return;
+      void Promise.all([
+        Promise.resolve(publishedAudioProcessorRef.current?.resume()),
+        Promise.resolve(sfu.resumeAudioContext()),
+      ]).then(() => {
+        sfu.vad.resumeContext();
+        const blocked = sfu.audio.isAudioSuspended();
+        voiceDispatch({ type: "SET_AUDIO_BLOCKED", payload: !!blocked });
+        if (!blocked) {
+          window.removeEventListener("click", resume);
+          window.removeEventListener("keydown", resume);
+        }
+      });
     };
-    window.addEventListener("click", resume, { once: true });
-    window.addEventListener("keydown", resume, { once: true });
+    window.addEventListener("click", resume);
+    window.addEventListener("keydown", resume);
 
     const sfu = sfuInstance;
     const unsubscribeAudioResumed = sfu?.on("audio-resumed", () =>
@@ -1439,7 +1499,6 @@ export function useVoiceChannel({
     }
     cancelAutomaticSoundboardCleanup(automaticSoundboardSessionId);
     resetAutomaticSoundboardSession(automaticSoundboardSessionId);
-
     vcLog.info("handleJoin invoked", {
       channelId,
       serverId,
@@ -1466,6 +1525,14 @@ export function useVoiceChannel({
     sfuRef.current = sfu;
     setSfuInstance(sfu);
 
+    const resolveSpeakingUserId = (participantId: string): string => {
+      const isLocal =
+        participantId === myIdRef.current ||
+        participantId === sfu.getParticipantId();
+      if (isLocal && user?.id && mode !== "room") return user.id;
+      return uuidToClerkRef.current.get(participantId) || participantId;
+    };
+
     const rememberParticipant = (participant: VoiceState) => {
       participantsRef.current.set(participant.id, participant);
       const participantUserId =
@@ -1473,6 +1540,39 @@ export function useVoiceChannel({
       if (participantUserId) {
         uuidToClerkRef.current.set(participant.id, participantUserId);
         sfu.setClerkMapping(participant.id, participantUserId);
+
+        if (participant.id !== participantUserId) {
+          voiceDispatch({
+            type: "SET_SPEAKING",
+            payload: (previous: Record<string, boolean>) => {
+              if (!(participant.id in previous)) return previous;
+              const next = { ...previous };
+              const wasSpeaking = next[participant.id];
+              delete next[participant.id];
+              if (wasSpeaking) next[participantUserId] = true;
+              return next;
+            },
+          });
+          voiceDispatch({
+            type: "UPDATE_REMOTE_STREAMS",
+            payload: (previous: RemoteStreamsByUser) => {
+              const aliased = previous[participant.id];
+              if (!aliased) return previous;
+              const next = { ...previous };
+              next[participantUserId] = {
+                ...aliased,
+                ...(next[participantUserId] ?? {}),
+              };
+              delete next[participant.id];
+              return next;
+            },
+          });
+          if (remoteAggregatorsRef.current[participant.id]) {
+            remoteAggregatorsRef.current[participantUserId] =
+              remoteAggregatorsRef.current[participant.id];
+            delete remoteAggregatorsRef.current[participant.id];
+          }
+        }
       }
     };
 
@@ -1493,9 +1593,58 @@ export function useVoiceChannel({
       const nextIds = new Set(participants.map((p) => p.id));
       for (const [participantId] of participantsRef.current) {
         if (!nextIds.has(participantId)) {
+          const clerkId =
+            uuidToClerkRef.current.get(participantId) || participantId;
+          const hasOtherClerkIdentity = Array.from(
+            uuidToClerkRef.current.entries(),
+          ).some(
+            ([otherId, otherClerkId]) =>
+              otherId !== participantId && otherClerkId === clerkId,
+          );
           participantsRef.current.delete(participantId);
           uuidToClerkRef.current.delete(participantId);
+          delete speakingByParticipantRef.current[participantId];
           sfu.deleteClerkMapping(participantId);
+          const hasOtherClerkSpeaking = Array.from(
+            uuidToClerkRef.current.entries(),
+          ).some(
+            ([otherId, otherClerkId]) =>
+              otherClerkId === clerkId &&
+              speakingByParticipantRef.current[otherId],
+          );
+          voiceDispatch({
+            type: "SET_SPEAKING",
+            payload: (previous: Record<string, boolean>) => {
+              const next = { ...previous };
+              delete next[participantId];
+              if (!hasOtherClerkSpeaking) delete next[clerkId];
+              return next;
+            },
+          });
+          voiceDispatch({
+            type: "UPDATE_REMOTE_STREAMS",
+            payload: (previous: RemoteStreamsByUser) => {
+              if (!(participantId in previous) && !(clerkId in previous)) {
+                return previous;
+              }
+              const next = { ...previous };
+              delete next[participantId];
+              if (!hasOtherClerkIdentity) {
+                delete next[clerkId];
+              } else if (next[clerkId]) {
+                next[clerkId] = Object.fromEntries(
+                  Object.entries(next[clerkId]).filter(
+                    ([trackName]) => !trackName.endsWith(participantId),
+                  ),
+                );
+              }
+              delete remoteAggregatorsRef.current[participantId];
+              if (!hasOtherClerkIdentity) {
+                delete remoteAggregatorsRef.current[clerkId];
+              }
+              return next;
+            },
+          });
         }
       }
       participants.forEach(rememberParticipant);
@@ -1509,7 +1658,18 @@ export function useVoiceChannel({
     const currentSettings = useVoiceSettingsStore
       .getState()
       .getSettings(settingsUserId);
-    const captureProcessing = resolveCaptureAudioProcessing(currentSettings);
+    const captureProcessing = resolveCaptureAudioProcessing({
+      noiseSuppression: currentSettings.noiseSuppression,
+      echoCancellation: currentSettings.echoCancellation,
+      autoSensitivity: currentSettings.autoSensitivity,
+      streamHighFidelity: currentSettings.streamHighFidelity,
+      noiseReductionEnabled:
+        currentSettings.noiseReductionEnabled &&
+        isNoiseReductionProviderSupported(
+          currentSettings.noiseReductionProvider,
+        ),
+      noiseReductionProvider: currentSettings.noiseReductionProvider,
+    });
     startEarlyMic(
       {
         deviceId: currentSettings.inputDeviceId,
@@ -1555,6 +1715,20 @@ export function useVoiceChannel({
         if (user?.id && mode !== "room") {
           uuidToClerkRef.current.set(participantId, user.id);
           sfu.setClerkMapping(participantId, user.id);
+          voiceDispatch({
+            type: "SET_SPEAKING",
+            payload: (previous: Record<string, boolean>) => {
+              const wasSpeaking = Boolean(
+                previous[participantId] || previous[user.id],
+              );
+              if (!wasSpeaking && !(participantId in previous)) return previous;
+              const next = { ...previous };
+              delete next[participantId];
+              if (wasSpeaking) next[user.id] = true;
+              else delete next[user.id];
+              return next;
+            },
+          });
         }
 
         syncParticipants(participants);
@@ -1645,6 +1819,121 @@ export function useVoiceChannel({
 
     onSfu("audio-stalled", (isStalled: boolean) => {
       voiceDispatch({ type: "SET_AUDIO_STALLED", payload: isStalled });
+    });
+
+    onSfu("outbound-audio-stalled", (isStalled: boolean) => {
+      if (!isStalled || !isMicOnRef.current) return;
+
+      const sfu = sfuRef.current;
+      const participantId = myIdRef.current;
+      const recoveryGeneration = localMediaGenerationRef.current;
+      const recoveryStream = localStreamRef.current;
+      const rawAudioTrack = recoveryStream?.getAudioTracks()[0];
+      if (
+        !sfu ||
+        !participantId ||
+        !rawAudioTrack ||
+        rawAudioTrack.readyState === "ended"
+      ) {
+        vcLog.warn(
+          "Outbound audio stalled but no live raw microphone track is available",
+        );
+        return;
+      }
+
+      rawAudioTrack.enabled = true;
+      vcLog.warn(
+        "Replacing stalled processed microphone track with gated identity audio",
+        {
+          processorMode:
+            publishedAudioProcessorRef.current?.mode ?? "passthrough",
+        },
+      );
+      const trackName = `cam-audio-${participantId}`;
+      void (async () => {
+        let recoveryProcessor: LocalAudioProcessorHandle | null = null;
+        try {
+          recoveryProcessor = await createLocalAudioProcessor(
+            new MediaStream([rawAudioTrack]),
+            {
+              ...audioProcessingSettingsRef.current,
+              noiseReductionEnabled: false,
+              streamHighFidelity: false,
+            },
+          );
+          const recoveryTrack =
+            recoveryProcessor?.publicationStream.getAudioTracks()[0];
+          if (!recoveryProcessor || !recoveryTrack) {
+            recoveryProcessor?.destroy();
+            sfu.outboundAudioSentinel?.resetMonitoring();
+            vcLog.warn(
+              "Failed to recover stalled outbound microphone audio; gated identity graph unavailable",
+            );
+            return;
+          }
+
+          const replaced = await sfu.replaceTrack(trackName, recoveryTrack);
+          if (replaced !== true) {
+            recoveryProcessor.destroy();
+            sfu.outboundAudioSentinel?.resetMonitoring();
+            return;
+          }
+          if (sfuRef.current !== sfu || myIdRef.current !== participantId) {
+            recoveryProcessor.destroy();
+            return;
+          }
+
+          const recoverySenderTrack = sfu.getPublishedTrack(trackName);
+          const recoveryIsStale =
+            localMediaGenerationRef.current !== recoveryGeneration ||
+            localStreamRef.current !== recoveryStream;
+          if (recoveryIsStale) {
+            const currentTrack =
+              publishedAudioProcessorRef.current?.publicationStream.getAudioTracks()[0];
+            if (
+              recoverySenderTrack &&
+              currentTrack &&
+              currentTrack.readyState !== "ended"
+            ) {
+              const restored = await sfu.replaceTrackIfCurrent(
+                trackName,
+                recoverySenderTrack,
+                currentTrack,
+              );
+              recoveryProcessor.destroy();
+              if (restored) {
+                sfu.setPublishedTrackEnabled(trackName, isMicOnRef.current);
+                restartVadMonitoring(sfu);
+              }
+              return;
+            }
+            if (recoverySenderTrack) {
+              void sfu.unpublishTrackIfCurrent(trackName, recoverySenderTrack);
+            }
+            recoveryProcessor.destroy();
+            return;
+          }
+
+          const previousProcessor = publishedAudioProcessorRef.current;
+          publishedAudioProcessorRef.current = recoveryProcessor;
+          recoveryProcessor = null;
+          failedAudioProcessingModeRef.current =
+            resolveLocalAudioProcessingMode(audioProcessingSettingsRef.current);
+          sfu.vad.setGateController(
+            publishedAudioProcessorRef.current.gateController,
+          );
+          sfu.setPublishedTrackEnabled(trackName, isMicOnRef.current);
+          previousProcessor?.destroy();
+          restartVadMonitoring(sfu);
+        } catch (error) {
+          recoveryProcessor?.destroy();
+          sfu.outboundAudioSentinel?.resetMonitoring();
+          vcLog.warn(
+            "Failed to recover stalled outbound microphone audio",
+            error,
+          );
+        }
+      })();
     });
 
     onSfu("app-event", (event) => {
@@ -1747,13 +2036,28 @@ export function useVoiceChannel({
     onSfu("participant-left", ({ participantId }) => {
       const clerkId =
         uuidToClerkRef.current.get(participantId) || participantId;
-      stopAutomaticJoinSoundboardPlaybacksByOwner(
-        clerkId,
-        getSoundboardServerKey(isCall ? "dm-call" : serverId),
+      const hasOtherClerkIdentity = Array.from(
+        uuidToClerkRef.current.entries(),
+      ).some(
+        ([otherId, otherClerkId]) =>
+          otherId !== participantId && otherClerkId === clerkId,
       );
+      if (!hasOtherClerkIdentity) {
+        stopAutomaticJoinSoundboardPlaybacksByOwner(
+          clerkId,
+          getSoundboardServerKey(isCall ? "dm-call" : serverId),
+        );
+      }
       participantsRef.current.delete(participantId);
       uuidToClerkRef.current.delete(participantId);
+      delete speakingByParticipantRef.current[participantId];
       sfu.deleteClerkMapping(participantId);
+      const hasOtherClerkSpeaking = Array.from(
+        uuidToClerkRef.current.entries(),
+      ).some(
+        ([otherId, otherClerkId]) =>
+          otherClerkId === clerkId && speakingByParticipantRef.current[otherId],
+      );
       voiceDispatch({
         type: "SET_PARTICIPANTS",
         payload: (prev: VoiceState[]) =>
@@ -1761,18 +2065,29 @@ export function useVoiceChannel({
       });
       voiceDispatch({
         type: "UPDATE_REMOTE_STREAMS",
-        payload: (prev: any) => {
+        payload: (prev: RemoteStreamsByUser) => {
           const next = { ...prev };
-          delete next[clerkId];
-          delete remoteAggregatorsRef.current[clerkId];
+          delete next[participantId];
+          delete remoteAggregatorsRef.current[participantId];
+          if (!hasOtherClerkIdentity) {
+            delete next[clerkId];
+            delete remoteAggregatorsRef.current[clerkId];
+          } else if (next[clerkId]) {
+            next[clerkId] = Object.fromEntries(
+              Object.entries(next[clerkId]).filter(
+                ([trackName]) => !trackName.endsWith(participantId),
+              ),
+            );
+          }
           return next;
         },
       });
       voiceDispatch({
         type: "SET_SPEAKING",
-        payload: (prev: any) => {
+        payload: (prev: Record<string, boolean>) => {
           const next = { ...prev };
-          delete next[clerkId];
+          delete next[participantId];
+          if (!hasOtherClerkSpeaking) delete next[clerkId];
           return next;
         },
       });
@@ -1809,6 +2124,7 @@ export function useVoiceChannel({
       };
 
       if (action === "remove") {
+        sfu.removeTrackVolume(participantId, trackInfo.track_name);
         voiceDispatch({
           type: "UPDATE_REMOTE_STREAMS",
           payload: (prev: RemoteStreamsByUser) =>
@@ -1828,7 +2144,7 @@ export function useVoiceChannel({
         payload: (prev: RemoteStreamsByUser) => {
           const nextStream = new MediaStream();
           if (track.kind === "audio") {
-            const processedStream = sfu.applyVolumeToTrack(
+            const processedStream = sfu.attachRemoteAudioTrack(
               participantId,
               track,
               trackInfo.track_name,
@@ -1885,6 +2201,11 @@ export function useVoiceChannel({
       // Ensure AudioContext is running — for calls the SFU is created via
       // autoJoin (outside a user gesture) so the context may be suspended.
       if (track.kind === "audio") {
+        vcLog.info("Remote audio track attached to voice channel", {
+          participantId,
+          trackName: trackInfo.track_name,
+          attachedAt: Date.now(),
+        });
         sfu.resumeAudioContext();
       }
 
@@ -1971,31 +2292,92 @@ export function useVoiceChannel({
     });
 
     onSfu("speaking", ({ participantId, speaking }) => {
-      const clerkId =
-        uuidToClerkRef.current.get(participantId) || participantId;
+      const clerkId = resolveSpeakingUserId(participantId);
+      speakingByParticipantRef.current[participantId] = speaking > 0;
+      const hasMappedSpeakingParticipant = Array.from(
+        uuidToClerkRef.current.entries(),
+      ).some(
+        ([mappedId, mappedClerkId]) =>
+          mappedClerkId === clerkId &&
+          speakingByParticipantRef.current[mappedId],
+      );
+      const nextSpeaking =
+        hasMappedSpeakingParticipant ||
+        (!uuidToClerkRef.current.has(participantId) && speaking > 0);
       voiceDispatch({
         type: "SET_SPEAKING",
-        payload: (prev: any) => ({ ...prev, [clerkId]: speaking > 0 }),
+        payload: (prev: Record<string, boolean>) => {
+          const next = { ...prev };
+          delete next[participantId];
+          if (nextSpeaking) next[clerkId] = true;
+          else delete next[clerkId];
+          return next;
+        },
       });
     });
 
     onSfu("voice-ready", ({ speaking }) => {
       const nextSpeakingUsers: Record<string, boolean> = {};
+      const speakingParticipantIds = new Set(Object.keys(speaking ?? {}));
+      for (const [participantId] of uuidToClerkRef.current.entries()) {
+        if (participantId !== myIdRef.current) {
+          speakingByParticipantRef.current[participantId] =
+            speakingParticipantIds.has(participantId);
+        }
+      }
       for (const [participantId, flags] of Object.entries(speaking ?? {})) {
         if (flags <= 0) continue;
-        const clerkId =
-          uuidToClerkRef.current.get(participantId) || participantId;
+        speakingByParticipantRef.current[participantId] = true;
+        const clerkId = resolveSpeakingUserId(participantId);
         nextSpeakingUsers[clerkId] = true;
       }
-      voiceDispatch({ type: "SET_SPEAKING", payload: nextSpeakingUsers });
+      const localParticipantId = myIdRef.current || sfu.getParticipantId();
+      const localUserId = localParticipantId
+        ? resolveSpeakingUserId(localParticipantId)
+        : user?.id && mode !== "room"
+          ? user.id
+          : null;
+      voiceDispatch({
+        type: "SET_SPEAKING",
+        payload: (previous: Record<string, boolean>) => {
+          const localWasSpeaking = Boolean(
+            (localUserId && previous[localUserId]) ||
+            (localParticipantId && previous[localParticipantId]),
+          );
+          if (localUserId && localWasSpeaking) {
+            const next = { ...nextSpeakingUsers, [localUserId]: true };
+            if (localParticipantId && localParticipantId !== localUserId) {
+              delete next[localParticipantId];
+            }
+            return next;
+          }
+          return nextSpeakingUsers;
+        },
+      });
     });
 
     onSfu("vad-speaking", ({ participantId, isSpeaking }) => {
-      const clerkId =
-        uuidToClerkRef.current.get(participantId) || participantId;
+      const clerkId = resolveSpeakingUserId(participantId);
+      speakingByParticipantRef.current[participantId] = isSpeaking;
+      const hasMappedSpeakingParticipant = Array.from(
+        uuidToClerkRef.current.entries(),
+      ).some(
+        ([mappedId, mappedClerkId]) =>
+          mappedClerkId === clerkId &&
+          speakingByParticipantRef.current[mappedId],
+      );
+      const nextSpeaking =
+        hasMappedSpeakingParticipant ||
+        (!uuidToClerkRef.current.has(participantId) && isSpeaking);
       voiceDispatch({
         type: "SET_SPEAKING",
-        payload: (prev: any) => ({ ...prev, [clerkId]: isSpeaking }),
+        payload: (prev: Record<string, boolean>) => {
+          const next = { ...prev };
+          delete next[participantId];
+          if (nextSpeaking) next[clerkId] = true;
+          else delete next[clerkId];
+          return next;
+        },
       });
     });
 
@@ -2006,75 +2388,158 @@ export function useVoiceChannel({
     onSfu("voice-reconnected", () => {
       void (async () => {
         vcLog.info("Voice reconnected — re-publishing local tracks");
-        const stream = localStreamRef.current;
+        let stream =
+          pendingInitialMediaRef.current?.stream ?? localStreamRef.current;
         if (!stream) return;
         const getPublishedAudioStream = (
           source: MediaStream,
         ): MediaStream | null => {
-          const processedStream =
-            publishedAudioProcessorRef.current?.processedStream;
-          if (processedStream && processedStream.getAudioTracks().length > 0) {
-            return processedStream;
+          const publicationStream =
+            publishedAudioProcessorRef.current?.publicationStream ??
+            pendingInitialMediaRef.current?.processor?.publicationStream;
+          if (
+            publicationStream &&
+            publicationStream.getAudioTracks().length > 0
+          ) {
+            return publicationStream;
           }
-          const audioTracks = source.getAudioTracks();
-          return audioTracks.length > 0 ? new MediaStream(audioTracks) : null;
+          const rawAudioTracks = source.getAudioTracks();
+          return rawAudioTracks.length > 0
+            ? new MediaStream(rawAudioTracks)
+            : null;
         };
-        const audioStream = getPublishedAudioStream(stream);
-        const mediaGeneration = localMediaGenerationRef.current;
+        const reconcileCurrentAudio = async (): Promise<{
+          stream: MediaStream;
+          audioStream: MediaStream;
+        } | null> => {
+          for (let attempt = 0; attempt < 3; attempt += 1) {
+            const currentStream =
+              pendingInitialMediaRef.current?.stream ?? localStreamRef.current;
+            const currentAudioStream = currentStream
+              ? getPublishedAudioStream(currentStream)
+              : null;
+            const currentTrack = currentAudioStream?.getAudioTracks()[0];
+            if (!currentStream || !currentAudioStream || !currentTrack) {
+              return null;
+            }
+
+            const generation = localMediaGenerationRef.current;
+            const replaced = await sfu.replaceTrack(
+              `cam-audio-${myIdRef.current}`,
+              currentTrack,
+            );
+            if (!replaced || sfuRef.current !== sfu) return null;
+            if (
+              generation === localMediaGenerationRef.current &&
+              currentStream === localStreamRef.current
+            ) {
+              return { stream: currentStream, audioStream: currentAudioStream };
+            }
+          }
+          return null;
+        };
+        const reconcileCurrentVideo = async (): Promise<boolean> => {
+          for (let attempt = 0; attempt < 3; attempt += 1) {
+            const currentStream =
+              pendingInitialMediaRef.current?.stream ?? localStreamRef.current;
+            const currentTrack = currentStream?.getVideoTracks()[0];
+            if (!currentStream || currentTrack?.readyState !== "live") {
+              return false;
+            }
+            const generation = localMediaGenerationRef.current;
+            const replaced = await sfu.replaceTrack(
+              `cam-video-${myIdRef.current}`,
+              currentTrack,
+            );
+            if (!replaced || sfuRef.current !== sfu) return false;
+            if (
+              generation === localMediaGenerationRef.current &&
+              currentStream === localStreamRef.current
+            ) {
+              return true;
+            }
+          }
+          return false;
+        };
+        const reconcileCurrentScreen = async (): Promise<boolean> => {
+          for (let attempt = 0; attempt < 3; attempt += 1) {
+            const currentStream = screenStreamRef.current;
+            const currentTracks =
+              currentStream
+                ?.getTracks()
+                .filter((track) => track.readyState === "live") ?? [];
+            if (currentTracks.length === 0) return true;
+            const generation = localMediaGenerationRef.current;
+            await sfu.publishTracks(new MediaStream(currentTracks), "screen");
+            if (sfuRef.current !== sfu) return false;
+            if (
+              generation === localMediaGenerationRef.current &&
+              currentStream === screenStreamRef.current
+            ) {
+              return true;
+            }
+          }
+          return false;
+        };
+        let audioStream = getPublishedAudioStream(stream);
+        let mediaGeneration = localMediaGenerationRef.current;
         if (audioStream) {
           await sfu.publishTracks(audioStream, "cam");
           if (sfuRef.current !== sfu) return;
-          sfu.setPublishedTrackEnabled(
-            `cam-audio-${myIdRef.current}`,
-            isMicOnRef.current,
-          );
-          const isCurrentMedia =
+          const pendingInitialMedia = pendingInitialMediaRef.current;
+          let isCurrentMedia =
             localMediaGenerationRef.current === mediaGeneration &&
-            localStreamRef.current === stream &&
+            (localStreamRef.current === stream ||
+              pendingInitialMedia?.stream === stream) &&
             sfuRef.current === sfu;
-          if (isCurrentMedia) {
-            const audioTrack = stream.getAudioTracks()[0];
-            const vadInput = createVoiceActivityStream(
-              stream,
-              publishedAudioProcessorRef.current,
-            );
+
+          if (isCurrentMedia && pendingInitialMedia?.stream === stream) {
+            localStreamRef.current = pendingInitialMedia.stream;
+            publishedAudioProcessorRef.current = pendingInitialMedia.processor;
+            pendingInitialMediaRef.current = null;
             if (
-              isMicOnRef.current &&
-              audioTrack &&
-              audioTrack.readyState !== "ended" &&
-              audioTrack.enabled &&
-              vadInput
+              initialMediaSyncRef.current.token === pendingInitialMedia.token
             ) {
-              sfu.vad.stop();
-              disposeVoiceActivityStream(ownedVadMonitorStreamRef.current);
-              ownedVadMonitorStreamRef.current = vadInput.ownsTracks
-                ? vadInput.stream
-                : null;
-              sfu.vad.start(vadInput.stream);
-            } else {
-              sfu.vad.stop();
-              if (vadInput?.ownsTracks) {
-                disposeVoiceActivityStream(vadInput.stream);
-              }
-              disposeVoiceActivityStream(ownedVadMonitorStreamRef.current);
-              ownedVadMonitorStreamRef.current = null;
+              initialMediaSyncRef.current.inFlight = false;
             }
-          } else if (!isMicOnRef.current) {
-            sfu.vad.stop();
-            disposeVoiceActivityStream(ownedVadMonitorStreamRef.current);
-            ownedVadMonitorStreamRef.current = null;
           }
-        }
-        if (!isMicOnRef.current && sfuRef.current === sfu) {
-          sfu.vad.stop();
-          disposeVoiceActivityStream(ownedVadMonitorStreamRef.current);
-          ownedVadMonitorStreamRef.current = null;
+
+          if (!isCurrentMedia) {
+            const reconciledAudio = await reconcileCurrentAudio();
+            if (reconciledAudio) {
+              stream = reconciledAudio.stream;
+              audioStream = reconciledAudio.audioStream;
+              mediaGeneration = localMediaGenerationRef.current;
+              isCurrentMedia = sfuRef.current === sfu;
+            }
+          }
+
+          if (isCurrentMedia) {
+            sfu.setPublishedTrackEnabled(
+              `cam-audio-${myIdRef.current}`,
+              isMicOnRef.current,
+            );
+          }
+          if (isCurrentMedia) {
+            sfu.vad.setGateController(
+              publishedAudioProcessorRef.current?.gateController ?? null,
+            );
+            restartVadMonitoring(sfu);
+          }
         }
         const currentStream = localStreamRef.current;
         if (!currentStream || sfuRef.current !== sfu) return;
         const videoTracks = currentStream.getVideoTracks();
         if (videoTracks.length > 0) {
+          const videoGeneration = localMediaGenerationRef.current;
           await sfu.publishTracks(new MediaStream(videoTracks), "cam");
+          if (sfuRef.current !== sfu) return;
+          if (
+            localMediaGenerationRef.current !== videoGeneration ||
+            localStreamRef.current !== currentStream
+          ) {
+            if (!(await reconcileCurrentVideo())) return;
+          }
         }
 
         const activeScreenTracks = !sfu.isNativeScreenShareActive
@@ -2084,10 +2549,19 @@ export function useVoiceChannel({
           : [];
         if (activeScreenTracks.length > 0) {
           vcLog.info("Voice reconnected — re-publishing active screen tracks");
+          const screenStreamAtStart = screenStreamRef.current;
+          const screenGeneration = localMediaGenerationRef.current;
           await sfu.publishTracks(
             new MediaStream(activeScreenTracks),
             "screen",
           );
+          if (sfuRef.current !== sfu) return;
+          if (
+            screenStreamRef.current !== screenStreamAtStart ||
+            localMediaGenerationRef.current !== screenGeneration
+          ) {
+            if (!(await reconcileCurrentScreen())) return;
+          }
         }
       })().catch((error) => {
         vcLog.warn("Voice reconnect publication failed", error);
@@ -2144,6 +2618,7 @@ export function useVoiceChannel({
     currentVoiceChannelStartedAt,
     joined,
     localMediaOwner,
+    restartVadMonitoring,
   ]);
 
   useEffect(() => {
@@ -2206,22 +2681,118 @@ export function useVoiceChannel({
   useEffect(() => {
     const generation = ++localMediaGenerationRef.current;
     const session = sfuRef.current;
-    if (!joined || !session) return;
+    if (!session) return;
+    const initialMediaRequestKey = JSON.stringify({
+      audioProcessingSettings,
+      cameraBackground: getCameraBackgroundEffectKey(
+        cameraBackground,
+        customCameraBackgrounds,
+      ),
+      cameraQuality,
+      inputDeviceGroupId,
+      inputDeviceId,
+      inputDeviceLabel,
+      isCameraActive,
+      videoDeviceGroupId,
+      videoDeviceId,
+      videoDeviceLabel,
+    });
+    if (initialMediaSyncRef.current.session !== session) {
+      initialMediaSyncRef.current = {
+        session,
+        inFlight: false,
+        deviceId: inputDeviceId,
+        requestKey: initialMediaRequestKey,
+        token: 0,
+      };
+    }
+    const hasActiveAudio =
+      localStreamRef.current?.getAudioTracks().length ||
+      publishedAudioProcessorRef.current;
+    if (
+      initialMediaSyncRef.current.inFlight &&
+      !hasActiveAudio &&
+      initialMediaSyncRef.current.requestKey === initialMediaRequestKey
+    ) {
+      return;
+    }
+    const isInitialMediaSync = !hasActiveAudio;
+    const initialMediaToken = isInitialMediaSync
+      ? ++initialMediaTokenRef.current
+      : 0;
+    if (isInitialMediaSync) {
+      initialMediaSyncRef.current.inFlight = true;
+      initialMediaSyncRef.current.deviceId = inputDeviceId;
+      initialMediaSyncRef.current.requestKey = initialMediaRequestKey;
+      initialMediaSyncRef.current.token = initialMediaToken;
+    }
+    const clearInitialMediaSync = () => {
+      if (
+        isInitialMediaSync &&
+        initialMediaSyncRef.current.token === initialMediaToken
+      ) {
+        initialMediaSyncRef.current.inFlight = false;
+      }
+    };
 
     const isCurrent = () =>
       localMediaGenerationRef.current === generation &&
       sfuRef.current === session;
-    const disposeStaleResources = (
-      audioProcessor: LocalAudioProcessorHandle | null,
-      cameraEffect: CameraBackgroundEffect | null = null,
-    ) => {
-      cameraEffect?.stop();
-      audioProcessor?.destroy();
-    };
-
     const swapDevices = async () => {
       const sfu = session;
       let nextAudioProcessor: LocalAudioProcessorHandle | null = null;
+      let acquiredStream: MediaStream | null = null;
+      let acquiredCameraEffect: CameraBackgroundEffect | null = null;
+      let replacedAudioTrack: MediaStreamTrack | null = null;
+      let previousAudioTrack: MediaStreamTrack | null = null;
+      let pendingInitialCaptureStream: MediaStream | null = null;
+      const disposeStaleResources = (
+        audioProcessor: LocalAudioProcessorHandle | null,
+        cameraEffect: CameraBackgroundEffect | null = null,
+      ) => {
+        cameraEffect?.stop();
+        audioProcessor?.destroy();
+        if (acquiredStream && acquiredStream !== localStreamRef.current) {
+          acquiredStream.getTracks().forEach((track) => track.stop());
+        }
+      };
+      const restorePreviousAudio = async () => {
+        if (!replacedAudioTrack) return;
+        const trackName = `cam-audio-${myIdRef.current}`;
+        if (!previousAudioTrack) {
+          await sfu.unpublishTrackIfCurrent(trackName, replacedAudioTrack);
+          replacedAudioTrack = null;
+          return;
+        }
+        try {
+          const restored = await sfu.replaceTrackIfCurrent(
+            trackName,
+            replacedAudioTrack,
+            previousAudioTrack,
+          );
+          if (restored) {
+            sfu.setPublishedTrackEnabled(
+              `cam-audio-${myIdRef.current}`,
+              isMicOnRef.current,
+            );
+          }
+        } catch (error) {
+          devicesLog.warn(
+            "Failed to restore microphone after an abandoned device swap",
+            error,
+          );
+        }
+        replacedAudioTrack = null;
+        previousAudioTrack = null;
+      };
+      const abortStaleSwap = async (
+        audioProcessor: LocalAudioProcessorHandle | null,
+        cameraEffect: CameraBackgroundEffect | null = null,
+      ) => {
+        await restorePreviousAudio();
+        disposeStaleResources(audioProcessor, cameraEffect);
+        clearInitialMediaSync();
+      };
       const oldStream = localStreamRef.current;
       const requestedCameraBackgroundKey = getCameraBackgroundEffectKey(
         cameraBackground,
@@ -2246,11 +2817,16 @@ export function useVoiceChannel({
           const desiredAudioProcessingMode = resolveLocalAudioProcessingMode(
             audioProcessingSettings,
           );
+          const effectiveAudioProcessingMode =
+            failedAudioProcessingModeRef.current === desiredAudioProcessingMode
+              ? "passthrough"
+              : desiredAudioProcessingMode;
           const audioProcessorMatches =
             (publishedAudioProcessorRef.current?.mode ?? "passthrough") ===
-            desiredAudioProcessingMode;
+            effectiveAudioProcessingMode;
           const audioMatch =
             currentAudioTrack &&
+            currentAudioTrack.readyState === "live" &&
             (() => {
               const s = currentAudioTrack.getSettings();
               const captureProcessing = resolveCaptureAudioProcessing(
@@ -2318,47 +2894,102 @@ export function useVoiceChannel({
             "Voice:Devices",
             localMediaOwner,
           );
-          if (!isCurrent()) return;
+          acquiredStream = newStream;
+          if (!isCurrent()) {
+            await abortStaleSwap(null);
+            return;
+          }
         } catch (err: any) {
           if (err.name !== "NotAllowedError") {
             devicesLog.warn("Failed to acquire stream:", err.name);
           }
+          clearInitialMediaSync();
           return;
         }
 
-        let streamToPublish = newStream;
+        let streamToPublish: MediaStream | null = null;
+        let pendingProcessorUpgrade: Promise<LocalAudioProcessorHandle | null> | null =
+          null;
+        const applyProcessorMode = (
+          processor: LocalAudioProcessorHandle,
+        ): void => {
+          const requestedAudioProcessingMode = resolveLocalAudioProcessingMode(
+            audioProcessingSettings,
+          );
+          if (processor.mode !== requestedAudioProcessingMode) {
+            failedAudioProcessingModeRef.current = requestedAudioProcessingMode;
+          }
+        };
         if (newStream.getAudioTracks().length > 0) {
-          try {
-            nextAudioProcessor = await createLocalAudioProcessor(
+          const replacingExistingAudio = !!oldStream?.getAudioTracks()[0];
+          if (replacingExistingAudio) {
+            try {
+              nextAudioProcessor = await createLocalAudioProcessor(
+                newStream,
+                audioProcessingSettings,
+              );
+            } catch (error) {
+              failedAudioProcessingModeRef.current =
+                resolveLocalAudioProcessingMode(audioProcessingSettings);
+              devicesLog.warn(
+                "Failed to create gated outbound audio processor",
+                error,
+              );
+              nextAudioProcessor = null;
+            }
+
+            if (!nextAudioProcessor) {
+              devicesLog.warn(
+                "Outbound audio processor unavailable; preserving the previous publication",
+              );
+              await abortStaleSwap(null);
+              return;
+            }
+            applyProcessorMode(nextAudioProcessor);
+            streamToPublish = nextAudioProcessor.publicationStream;
+          } else {
+            pendingProcessorUpgrade = createLocalAudioProcessor(
               newStream,
               audioProcessingSettings,
-            );
-            if (nextAudioProcessor) {
-              streamToPublish = nextAudioProcessor.processedStream;
-            }
-          } catch (error) {
-            devicesLog.warn(
-              "Failed to create outbound audio processor; publishing raw microphone",
-              error,
+            ).then(
+              (processor) => processor,
+              (error: unknown) => {
+                failedAudioProcessingModeRef.current =
+                  resolveLocalAudioProcessingMode(audioProcessingSettings);
+                devicesLog.warn(
+                  "Failed to create gated outbound audio processor",
+                  error,
+                );
+                return null;
+              },
             );
             nextAudioProcessor = null;
+            streamToPublish = new MediaStream(newStream.getAudioTracks());
           }
+
+          if (!isCurrent()) {
+            await abortStaleSwap(nextAudioProcessor);
+            return;
+          }
+        } else {
+          streamToPublish = newStream;
         }
 
         if (!isCurrent()) {
-          disposeStaleResources(nextAudioProcessor);
+          await abortStaleSwap(nextAudioProcessor);
           return;
         }
 
         const displayStream = new MediaStream(newStream.getAudioTracks());
+        pendingInitialCaptureStream = newStream;
         const rawAudioTrack = newStream.getAudioTracks()[0];
-        if (rawAudioTrack) rawAudioTrack.enabled = isMicOn;
+        if (rawAudioTrack) rawAudioTrack.enabled = isMicOnRef.current;
         const previousAudioProcessor = publishedAudioProcessorRef.current;
 
         const oldAudio = oldStream?.getAudioTracks()[0];
-        const newAudio = streamToPublish.getAudioTracks()[0];
+        const newAudio = streamToPublish?.getAudioTracks()[0];
         const previousPublishedAudio =
-          previousAudioProcessor?.processedStream.getAudioTracks()[0] ??
+          previousAudioProcessor?.publicationStream.getAudioTracks()[0] ??
           oldAudio;
         const audioNeedsUpdate =
           !!newAudio &&
@@ -2366,24 +2997,97 @@ export function useVoiceChannel({
             previousPublishedAudio.id !== newAudio.id);
         if (audioNeedsUpdate && newAudio) {
           if (!isCurrent()) {
-            disposeStaleResources(nextAudioProcessor);
+            await abortStaleSwap(nextAudioProcessor);
             return;
           }
-          newAudio.enabled = isMicOn;
           if (oldAudio) {
             if (!isCurrent()) {
-              disposeStaleResources(nextAudioProcessor);
+              await abortStaleSwap(nextAudioProcessor);
               return;
             }
-            await sfu.replaceTrack(`cam-audio-${myIdRef.current}`, newAudio);
+            const replaced = await sfu.replaceTrack(
+              `cam-audio-${myIdRef.current}`,
+              newAudio,
+            );
+            if (!replaced) {
+              nextAudioProcessor?.destroy();
+              nextAudioProcessor = null;
+              throw new Error("Audio transceiver is unavailable");
+            }
           } else {
             if (!isCurrent()) {
-              disposeStaleResources(nextAudioProcessor);
+              await abortStaleSwap(nextAudioProcessor);
               return;
             }
+            if (nextAudioProcessor) {
+              sfu.vad.setGateController(nextAudioProcessor.gateController);
+              restartVadMonitoring(sfu, nextAudioProcessor);
+            } else {
+              restartVadMonitoring(sfu, null, newStream);
+            }
+            if (isInitialMediaSync) {
+              pendingInitialMediaRef.current = {
+                stream: newStream,
+                processor: nextAudioProcessor,
+                token: initialMediaToken,
+              };
+            }
             await sfu.publishTracks(new MediaStream([newAudio]), "cam");
+            if (pendingProcessorUpgrade) {
+              const upgraded = await pendingProcessorUpgrade;
+              if (!isCurrent()) {
+                await abortStaleSwap(upgraded);
+                return;
+              }
+              if (upgraded) {
+                applyProcessorMode(upgraded);
+                const processed =
+                  upgraded.publicationStream.getAudioTracks()[0];
+                const microphoneTrackName =
+                  sfu.getMicrophoneTrackName() ??
+                  (myIdRef.current
+                    ? `cam-audio-${myIdRef.current}`
+                    : "cam-audio-self");
+                if (!processed) {
+                  upgraded.destroy();
+                } else {
+                  const replaced = await sfu.replaceTrack(
+                    microphoneTrackName,
+                    processed,
+                  );
+                  if (!replaced) {
+                    upgraded.destroy();
+                  } else {
+                    nextAudioProcessor = upgraded;
+                    sfu.vad.setGateController(upgraded.gateController);
+                    restartVadMonitoring(sfu, upgraded);
+                    if (pendingInitialMediaRef.current?.stream === newStream) {
+                      pendingInitialMediaRef.current.processor = upgraded;
+                    }
+                  }
+                }
+              }
+            }
           }
-          if (oldAudio && oldAudio !== newAudio) oldAudio.stop();
+          if (oldAudio) {
+            replacedAudioTrack = sfu.getPublishedTrack(
+              `cam-audio-${myIdRef.current}`,
+            );
+            previousAudioTrack = previousPublishedAudio ?? null;
+          } else {
+            replacedAudioTrack = sfu.getPublishedTrack(
+              `cam-audio-${myIdRef.current}`,
+            );
+          }
+          sfu.setPublishedTrackEnabled(
+            `cam-audio-${myIdRef.current}`,
+            isMicOnRef.current,
+          );
+          if (rawAudioTrack) rawAudioTrack.enabled = isMicOnRef.current;
+          if (!isCurrent()) {
+            await abortStaleSwap(nextAudioProcessor);
+            return;
+          }
         }
 
         const oldVideo = oldStream?.getVideoTracks()[0];
@@ -2393,7 +3097,7 @@ export function useVoiceChannel({
 
         if (rawVideo) {
           if (!isCurrent()) {
-            disposeStaleResources(nextAudioProcessor);
+            await abortStaleSwap(nextAudioProcessor);
             return;
           }
           if (requestedCameraBackgroundKey !== "none") {
@@ -2403,8 +3107,9 @@ export function useVoiceChannel({
                 cameraBackground,
                 customCameraBackgrounds,
               );
+              acquiredCameraEffect = effect;
               if (!isCurrent()) {
-                disposeStaleResources(nextAudioProcessor, effect);
+                await abortStaleSwap(nextAudioProcessor, effect);
                 return;
               }
               cameraBackgroundEffectRef.current?.stop();
@@ -2421,7 +3126,7 @@ export function useVoiceChannel({
                 error,
               );
               if (!isCurrent()) {
-                disposeStaleResources(nextAudioProcessor);
+                await abortStaleSwap(nextAudioProcessor);
                 return;
               }
               stopCameraBackgroundEffect(false);
@@ -2429,14 +3134,14 @@ export function useVoiceChannel({
             }
           } else {
             if (!isCurrent()) {
-              disposeStaleResources(nextAudioProcessor);
+              await abortStaleSwap(nextAudioProcessor);
               return;
             }
             stopCameraBackgroundEffect(false);
           }
 
           if (!isCurrent()) {
-            disposeStaleResources(nextAudioProcessor);
+            await abortStaleSwap(nextAudioProcessor);
             return;
           }
           rawCameraTrackRef.current = rawVideo;
@@ -2444,7 +3149,7 @@ export function useVoiceChannel({
           displayStream.addTrack(newVideo);
         } else {
           if (!isCurrent()) {
-            disposeStaleResources(nextAudioProcessor);
+            await abortStaleSwap(nextAudioProcessor);
             return;
           }
           stopCameraBackgroundEffect(true);
@@ -2452,29 +3157,33 @@ export function useVoiceChannel({
 
         if (newVideo && (!oldVideo || newVideo.id !== oldVideo.id)) {
           if (!isCurrent()) {
-            disposeStaleResources(nextAudioProcessor);
+            await abortStaleSwap(nextAudioProcessor);
             return;
           }
-          if (oldVideo && oldVideo !== newVideo) oldVideo.stop();
-          if (
-            previousRawVideo &&
-            previousRawVideo !== rawVideo &&
-            previousRawVideo !== oldVideo
-          )
-            previousRawVideo.stop();
           newVideo.enabled = isCameraActive;
           if (oldVideo) {
             if (!isCurrent()) {
-              disposeStaleResources(nextAudioProcessor);
+              await abortStaleSwap(nextAudioProcessor);
               return;
             }
-            sfu.replaceTrack(`cam-video-${myIdRef.current}`, newVideo);
+            if (
+              !(await sfu.replaceTrack(
+                `cam-video-${myIdRef.current}`,
+                newVideo,
+              ))
+            ) {
+              throw new Error("Video transceiver is unavailable");
+            }
           } else {
             if (!isCurrent()) {
-              disposeStaleResources(nextAudioProcessor);
+              await abortStaleSwap(nextAudioProcessor);
               return;
             }
             await sfu.publishTracks(new MediaStream([newVideo]), "cam");
+          }
+          if (!isCurrent()) {
+            await abortStaleSwap(nextAudioProcessor);
+            return;
           }
         } else if (
           previousRawVideo &&
@@ -2482,39 +3191,49 @@ export function useVoiceChannel({
           previousRawVideo !== oldVideo
         ) {
           if (!isCurrent()) {
-            disposeStaleResources(nextAudioProcessor);
+            await abortStaleSwap(nextAudioProcessor);
             return;
           }
-          previousRawVideo.stop();
         }
 
         if (!isCurrent()) {
-          disposeStaleResources(nextAudioProcessor);
+          await abortStaleSwap(nextAudioProcessor);
           return;
         }
+        const committedAudioProcessor = nextAudioProcessor;
         localStreamRef.current = displayStream;
-        publishedAudioProcessorRef.current = nextAudioProcessor;
+        publishedAudioProcessorRef.current = committedAudioProcessor;
+        if (pendingInitialMediaRef.current?.stream === newStream) {
+          pendingInitialMediaRef.current = null;
+        }
+        clearInitialMediaSync();
+        nextAudioProcessor = null;
+        if (audioNeedsUpdate) {
+          sfu.vad.setGateController(
+            committedAudioProcessor?.gateController ?? null,
+          );
+        }
         if (
           previousAudioProcessor &&
-          previousAudioProcessor !== nextAudioProcessor
+          previousAudioProcessor !== committedAudioProcessor
         ) {
-          if (!isCurrent()) return;
           previousAudioProcessor.destroy();
         }
 
-        if (audioNeedsUpdate && isMicOn) {
-          const vadInput = createVoiceActivityStream(
-            displayStream,
-            nextAudioProcessor,
-          );
-          sfu.vad.stop();
-          disposeVoiceActivityStream(ownedVadMonitorStreamRef.current);
-          ownedVadMonitorStreamRef.current = vadInput?.ownsTracks
-            ? vadInput.stream
-            : null;
-          if (vadInput) {
-            sfu.vad.start(vadInput.stream);
-          }
+        if (oldAudio && oldAudio !== newAudio) oldAudio.stop();
+        if (oldVideo && oldVideo !== newVideo) oldVideo.stop();
+        if (
+          previousRawVideo &&
+          previousRawVideo !== rawVideo &&
+          previousRawVideo !== oldVideo
+        ) {
+          previousRawVideo.stop();
+        }
+        replacedAudioTrack = null;
+        previousAudioTrack = null;
+
+        if (audioNeedsUpdate && oldAudio && isMicOnRef.current) {
+          restartVadMonitoring(sfu);
         }
 
         if (!isCurrent()) return;
@@ -2550,7 +3269,52 @@ export function useVoiceChannel({
           }
         }
       } catch (err) {
-        nextAudioProcessor?.destroy();
+        await restorePreviousAudio();
+        const pendingInitialMedia = pendingInitialMediaRef.current;
+        const retainPendingInitialMedia =
+          isInitialMediaSync &&
+          !sfu.voiceGW.isReady &&
+          pendingInitialMedia?.stream === pendingInitialCaptureStream;
+        if (!retainPendingInitialMedia) {
+          clearInitialMediaSync();
+          if (
+            pendingInitialMedia &&
+            pendingInitialMedia.stream === pendingInitialCaptureStream
+          ) {
+            pendingInitialMedia.processor?.destroy();
+            pendingInitialMedia.stream
+              .getTracks()
+              .forEach((track) => track.stop());
+            pendingInitialMediaRef.current = null;
+            if (
+              initialMediaSyncRef.current.token === pendingInitialMedia.token
+            ) {
+              initialMediaSyncRef.current.inFlight = false;
+            }
+          }
+        }
+        if (isInitialMediaSync) {
+          sfu.vad.stop();
+          sfu.vad.setGateController(null);
+        }
+        if (!retainPendingInitialMedia) nextAudioProcessor?.destroy();
+        acquiredCameraEffect?.stop();
+        if (cameraBackgroundEffectRef.current === acquiredCameraEffect) {
+          cameraBackgroundEffectRef.current = null;
+          activeCameraBackgroundKeyRef.current = "none";
+        }
+        if (
+          !retainPendingInitialMedia &&
+          acquiredStream &&
+          acquiredStream !== localStreamRef.current
+        ) {
+          const currentTracks = new Set(
+            localStreamRef.current?.getTracks() ?? [],
+          );
+          acquiredStream.getTracks().forEach((track) => {
+            if (!currentTracks.has(track)) track.stop();
+          });
+        }
         devicesLog.error("Failed to swap devices:", err);
       }
     };
@@ -2558,6 +3322,16 @@ export function useVoiceChannel({
     void swapDevices();
     return () => {
       cancelPendingLocalStreamAcquisition(localMediaOwner);
+      const pendingInitialMedia = pendingInitialMediaRef.current;
+      if (pendingInitialMedia) {
+        pendingInitialMedia.processor?.destroy();
+        pendingInitialMedia.stream.getTracks().forEach((track) => track.stop());
+        pendingInitialMediaRef.current = null;
+        if (initialMediaSyncRef.current.token === pendingInitialMedia.token) {
+          initialMediaSyncRef.current.inFlight = false;
+        }
+      }
+      clearInitialMediaSync();
       if (localMediaGenerationRef.current === generation) {
         localMediaGenerationRef.current += 1;
       }
@@ -2572,10 +3346,9 @@ export function useVoiceChannel({
     cameraQuality,
     cameraBackground,
     customCameraBackgrounds,
-    isMicOn,
     isCameraActive,
     hasMicrophone,
-    joined,
+    sfuInstance,
     isCall,
     noiseSuppression,
     noiseReductionEnabled,
@@ -2587,15 +3360,19 @@ export function useVoiceChannel({
     setDevice,
     stopCameraBackgroundEffect,
     localMediaOwner,
+    restartVadMonitoring,
   ]);
 
   useEffect(() => {
     if (!sfuRef.current) return;
 
     sfuRef.current.vad.setThreshold(
-      getVoiceActivityThreshold(autoSensitivity, sensitivity),
+      getVoiceActivityThreshold(
+        isStudioMode ? true : autoSensitivity,
+        sensitivity,
+      ),
     );
-  }, [autoSensitivity, sensitivity, sfuInstance]);
+  }, [autoSensitivity, isStudioMode, sensitivity, sfuInstance]);
 
   const setMasterVolume = useCallback((outputVolume: number) => {
     if (!sfuRef.current) return;
@@ -2619,7 +3396,10 @@ export function useVoiceChannel({
     setOutputDevice(outputDeviceId);
   }, [outputDeviceId, joined, setOutputDevice]);
 
+  const previousVoiceJoinStateRef = useRef(joined);
   useEffect(() => {
+    const joinedChanged = previousVoiceJoinStateRef.current !== joined;
+    previousVoiceJoinStateRef.current = joined;
     const stream = localStreamRef.current;
     if (!stream) return;
 
@@ -2627,32 +3407,14 @@ export function useVoiceChannel({
     if (audioTrack) {
       audioTrack.enabled = isMicOn;
     }
-    if (myIdRef.current) {
+    if (!joinedChanged && myIdRef.current) {
       sfuRef.current?.setPublishedTrackEnabled(
         `cam-audio-${myIdRef.current}`,
         isMicOn,
       );
     }
 
-    if (isMicOn) {
-      const vadInput = createVoiceActivityStream(
-        stream,
-        publishedAudioProcessorRef.current,
-      );
-      disposeVoiceActivityStream(ownedVadMonitorStreamRef.current);
-      ownedVadMonitorStreamRef.current = vadInput?.ownsTracks
-        ? vadInput.stream
-        : null;
-      if (vadInput) {
-        sfuRef.current?.vad.start(vadInput.stream);
-      } else {
-        sfuRef.current?.vad.stop();
-      }
-    } else {
-      sfuRef.current?.vad.stop();
-      disposeVoiceActivityStream(ownedVadMonitorStreamRef.current);
-      ownedVadMonitorStreamRef.current = null;
-    }
+    if (!joinedChanged) restartVadMonitoring(sfuRef.current);
 
     if (joined) {
       sfuRef.current?.roomGW.sendVoiceState({
@@ -2671,6 +3433,7 @@ export function useVoiceChannel({
     isStreamingAudio,
     joined,
     mode,
+    restartVadMonitoring,
   ]);
 
   useEffect(() => {
@@ -2706,6 +3469,49 @@ export function useVoiceChannel({
       disconnectBeaconSentRef.current = false;
     }
   }, [joined, channelId, serverId, mode]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !user?.id) return;
+
+    const handleProfileUpdate = (event: Event) => {
+      const detail = (
+        event as CustomEvent<{
+          event?: string;
+          data?: {
+            user_id?: string;
+            name?: string;
+            username?: string;
+            display_name?: string | null;
+            avatar_url?: string | null;
+            avatar_display?: string | null;
+          };
+        }>
+      ).detail;
+      const profile = detail?.data;
+      if (!joined || !profile || detail.event !== "USER_PROFILE_UPDATE") return;
+      if (profile.user_id !== user.id) return;
+
+      const identityFields = [
+        "name",
+        "username",
+        "display_name",
+        "avatar_url",
+        "avatar_display",
+      ] as const;
+      if (
+        !identityFields.some((field) =>
+          Object.prototype.hasOwnProperty.call(profile, field),
+        )
+      ) {
+        return;
+      }
+      sfuRef.current?.roomGW.refreshProfile();
+    };
+
+    window.addEventListener("chat-gateway-event", handleProfileUpdate);
+    return () =>
+      window.removeEventListener("chat-gateway-event", handleProfileUpdate);
+  }, [joined, user?.id]);
 
   useEffect(() => {
     if (mode !== "channel" || !channelId || !serverId) return;
@@ -2755,6 +3561,7 @@ export function useVoiceChannel({
         sfuRef.current = null;
         setSfuInstance(null);
         stopCameraBackgroundEffect(true);
+        activeSfu.vad.setGateController(null);
         disposeVoiceActivityStream(ownedVadMonitorStreamRef.current);
         ownedVadMonitorStreamRef.current = null;
         publishedAudioProcessorRef.current?.destroy();
@@ -2880,6 +3687,7 @@ export function useVoiceChannel({
           automaticLeaveTimersRef.current,
         );
         stopCameraBackgroundEffect(true);
+        activeSfu.vad.setGateController(null);
         publishedAudioProcessorRef.current?.destroy();
         publishedAudioProcessorRef.current = null;
         localStreamRef.current?.getTracks().forEach((t) => {
@@ -2930,6 +3738,17 @@ export function useVoiceChannel({
       sfuRef.current = null;
       cleanupSfuHandlers();
       activeSfu.disconnect("user-leave");
+      activeSfu.vad.setGateController(null);
+      publishedAudioProcessorRef.current?.destroy();
+      publishedAudioProcessorRef.current = null;
+      localStreamRef.current?.getTracks().forEach((track) => track.stop());
+      localStreamRef.current = null;
+      screenStreamRef.current?.getTracks().forEach((track) => track.stop());
+      screenStreamRef.current = null;
+      myIdRef.current = "";
+      speakingByParticipantRef.current = {};
+      cancelPendingLocalStreamAcquisition(localMediaOwner);
+      releaseLocalStream(localMediaOwner);
       setSfuInstance(null);
       hasAutoJoined.current = true;
       return;
@@ -2974,6 +3793,7 @@ export function useVoiceChannel({
       automaticLeaveTimersRef.current,
     );
     stopCameraBackgroundEffect(true);
+    activeSfu.vad.setGateController(null);
     disposeVoiceActivityStream(ownedVadMonitorStreamRef.current);
     ownedVadMonitorStreamRef.current = null;
     publishedAudioProcessorRef.current?.destroy();
@@ -2982,10 +3802,14 @@ export function useVoiceChannel({
       t.onended = null;
       t.stop();
     });
+    localStreamRef.current = null;
     screenStreamRef.current?.getTracks().forEach((t) => {
       t.onended = null;
       t.stop();
     });
+    screenStreamRef.current = null;
+    myIdRef.current = "";
+    speakingByParticipantRef.current = {};
     releaseLocalStream(localMediaOwner);
 
     // Clear stale participant references
@@ -3149,7 +3973,11 @@ export function useVoiceChannel({
         if (!isCurrent()) return;
         stream.getVideoTracks().forEach((t) => (t.enabled = true));
         if (!isCurrent()) return;
-        session.publishTracks(new MediaStream(stream.getVideoTracks()), "cam");
+        await session.publishTracks(
+          new MediaStream(stream.getVideoTracks()),
+          "cam",
+        );
+        if (!isCurrent()) return;
       } else {
         if (!isCurrent()) return;
         stopCameraBackgroundEffect(true);
@@ -3162,7 +3990,9 @@ export function useVoiceChannel({
         activeCameraQualityRef.current = null;
         if (myIdRef.current) {
           if (!isCurrent()) return;
-          session.replaceTrack(`cam-video-${myIdRef.current}`, null);
+          void session
+            .replaceTrack(`cam-video-${myIdRef.current}`, null)
+            .catch(() => {});
           if (!isCurrent()) return;
           session.unpublishTrack(`cam-video-${myIdRef.current}`);
         }
@@ -3426,6 +4256,7 @@ export function useVoiceChannel({
                 quality: targetQuality,
                 withAudio: targetAudio,
               });
+              if (!sfuRef.current.isNativeScreenShareActive) return;
               logScreenShare("Native hardware screen publisher connected", {
                 elapsedMs: elapsed(),
                 sourceId: effectiveOptions.sourceId,
@@ -3652,14 +4483,12 @@ export function useVoiceChannel({
           }
           if (screenStreamRef.current) {
             if (sfuRef.current && myIdRef.current) {
-              sfuRef.current.replaceTrack(
-                `screen-video-${myIdRef.current}`,
-                null,
-              );
-              sfuRef.current.replaceTrack(
-                `screen-audio-${myIdRef.current}`,
-                null,
-              );
+              void sfuRef.current
+                .replaceTrack(`screen-video-${myIdRef.current}`, null)
+                .catch(() => {});
+              void sfuRef.current
+                .replaceTrack(`screen-audio-${myIdRef.current}`, null)
+                .catch(() => {});
             }
             screenStreamRef.current.getTracks().forEach((t) => {
               t.onended = null;
@@ -4168,24 +4997,15 @@ export function useVoiceChannel({
         ([, cId]) => cId === m.clerk_user_id,
       )?.[0];
       const p = pId ? participantsRef.current.get(pId) : null;
-      const identity = resolveVoiceIdentity(
-        p
-          ? {
-              name: p.name,
-              username: p.username,
-              display_name: p.display_name,
-              avatar_url: p.avatar_url ?? null,
-              avatar_display: p.avatar_display ?? null,
-            }
-          : null,
-        {
-          name: m.name,
-          username: m.username,
-          display_name: m.display_name,
-          avatar_url: m.avatar_url ?? null,
-          avatar_display: m.avatar_display ?? null,
-        },
-      );
+      // Gateway presence is canonical once available; SFU data is only a
+      // fallback for participants not represented in the gateway state.
+      const identity = resolveVoiceIdentity({
+        name: m.name,
+        username: m.username,
+        display_name: m.display_name,
+        avatar_url: m.avatar_url ?? null,
+        avatar_display: m.avatar_display ?? null,
+      });
       remotes.push({
         clerkId: m.clerk_user_id,
         name: identity.name,

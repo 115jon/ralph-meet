@@ -1,4 +1,5 @@
 import GifPickerModal from "@/components/chat/GifPickerModal";
+import InlineEmojiText from "@/components/chat/InlineEmojiText";
 import { GifProviderBranding } from "@/components/chat/GifProviderBranding";
 import {
   DEMO_CHAT_MAX_CONTENT_LENGTH,
@@ -7,7 +8,12 @@ import {
 } from "@/lib/demo-chat-limits";
 import type { GifPickerItem, GifProvider } from "@/lib/gif-picker";
 import type { SFUClient } from "@/lib/sfu-client";
+import {
+  useClientDateFormatter,
+  type ClientDateFormatter,
+} from "@/lib/client-date-format";
 import { cn } from "@/lib/utils";
+import { Dialog, DialogPortal, DialogSurface } from "@/components/ui/dialog";
 import {
   ImagePlus,
   LockKeyhole,
@@ -33,8 +39,8 @@ interface DemoChatMessage {
   author_name: string;
   content: string;
   gif?: DemoChatGif;
-  created_at: number;
-  expires_at: number;
+  created_at: number | null;
+  expires_at: number | null;
 }
 
 interface DemoRoomChatPanelProps {
@@ -45,6 +51,7 @@ interface DemoRoomChatPanelProps {
 }
 
 interface DemoUploadBlockerModalProps {
+  open: boolean;
   onClose: () => void;
   onSignIn: () => void;
 }
@@ -61,6 +68,7 @@ export function DemoRoomChatPanel({
   const [value, setValue] = useState("");
   const [showGifPicker, setShowGifPicker] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const formatDate = useClientDateFormatter();
   const characterCounter = getDemoChatCharacterCounter(value);
 
   // `sfu.on(...)` returns the unsubscribe function from EventEmitter.on.
@@ -195,18 +203,18 @@ export function DemoRoomChatPanel({
             >
               <div className="mb-1 flex items-center justify-between gap-3">
                 <span className="truncate text-xs font-bold text-rm-text">
-                  {message.author_name}
+                  <InlineEmojiText text={message.author_name} />
                 </span>
                 <time
                   className="shrink-0 text-[10px] font-medium text-rm-text-muted"
-                  dateTime={new Date(message.created_at).toISOString()}
+                  dateTime={formatDateTimeAttribute(message.created_at)}
                 >
-                  {formatChatTime(message.created_at)}
+                  {formatChatTime(message.created_at, formatDate)}
                 </time>
               </div>
               {message.content && (
                 <p className="whitespace-pre-wrap wrap-break-word text-sm leading-relaxed text-rm-text/90">
-                  {message.content}
+                  <InlineEmojiText text={message.content} />
                 </p>
               )}
               {message.gif && <DemoChatGifPreview gif={message.gif} />}
@@ -270,70 +278,74 @@ export function DemoRoomChatPanel({
         <div className="mt-1 flex justify-end px-2 text-[10px] font-semibold text-rm-text-muted/70">
           {characterCounter.label}
         </div>
-        {showGifPicker && (
-          <GifPickerModal
-            onClose={() => setShowGifPicker(false)}
-            onSelect={handleGifSelect}
-            apiQuery="demo=1"
-            defaultProvider="klipy"
-            providers={DEMO_GIF_PROVIDERS}
-            skipAuth
-          />
-        )}
+        <GifPickerModal
+          open={showGifPicker}
+          onClose={() => setShowGifPicker(false)}
+          onSelect={handleGifSelect}
+          apiQuery="demo=1"
+          defaultProvider="klipy"
+          providers={DEMO_GIF_PROVIDERS}
+          skipAuth
+        />
       </form>
     </aside>
   );
 }
 
 export function DemoUploadBlockerModal({
+  open,
   onClose,
   onSignIn,
 }: DemoUploadBlockerModalProps) {
   return (
-    <dialog
-      open
-      className="fixed inset-0 z-[1000] m-0 flex items-center justify-center border-0 bg-black/65 p-4 backdrop-blur-sm"
-      aria-labelledby="demo-upload-blocker-title"
-    >
-      <div className="w-full max-w-md overflow-hidden rounded-3xl border border-rm-border bg-rm-bg-elevated shadow-2xl">
-        <div className="bg-linear-to-br from-primary/15 via-rm-accent/10 to-transparent px-6 pt-6">
-          <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/15 text-primary ring-1 ring-primary/25">
-            <LockKeyhole className="h-5 w-5" />
+    <Dialog open={open} onOpenChange={(nextOpen) => !nextOpen && onClose()}>
+      <DialogPortal>
+        <DialogSurface
+          showCloseButton={false}
+          className="fixed inset-0 z-50 m-0 flex items-center justify-center border-0 bg-black/65 p-4 backdrop-blur-sm"
+          aria-labelledby="demo-upload-blocker-title"
+        >
+          <div className="w-full max-w-md overflow-hidden rounded-3xl border border-rm-border bg-rm-bg-elevated shadow-2xl">
+            <div className="bg-linear-to-br from-primary/15 via-rm-accent/10 to-transparent px-6 pt-6">
+              <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/15 text-primary ring-1 ring-primary/25">
+                <LockKeyhole className="h-5 w-5" />
+              </div>
+              <h2
+                id="demo-upload-blocker-title"
+                className="text-xl font-black text-rm-text"
+              >
+                Uploads are in the full app
+              </h2>
+              <p className="mt-2 text-sm leading-relaxed text-rm-text-muted">
+                Sign in to Ralph Meet to upload images and files with persistent
+                chat, attachment storage, and the full server experience.
+              </p>
+            </div>
+            <div className="space-y-3 px-6 py-5">
+              <div className="rounded-2xl border border-emerald-400/20 bg-emerald-400/10 px-4 py-3 text-sm text-emerald-100/90">
+                You can try out our GIF implementation for a limited time.
+              </div>
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <button
+                  type="button"
+                  onClick={onSignIn}
+                  className="flex-1 rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-primary-foreground transition hover:brightness-110"
+                >
+                  Sign in for uploads
+                </button>
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="flex-1 rounded-xl border border-rm-border bg-rm-bg-surface px-4 py-2.5 text-sm font-bold text-rm-text-muted transition hover:bg-rm-bg-hover hover:text-rm-text"
+                >
+                  Stay in demo
+                </button>
+              </div>
+            </div>
           </div>
-          <h2
-            id="demo-upload-blocker-title"
-            className="text-xl font-black text-rm-text"
-          >
-            Uploads are in the full app
-          </h2>
-          <p className="mt-2 text-sm leading-relaxed text-rm-text-muted">
-            Sign in to Ralph Meet to upload images and files with persistent
-            chat, attachment storage, and the full server experience.
-          </p>
-        </div>
-        <div className="space-y-3 px-6 py-5">
-          <div className="rounded-2xl border border-emerald-400/20 bg-emerald-400/10 px-4 py-3 text-sm text-emerald-100/90">
-            You can try out our GIF implementation for a limited time.
-          </div>
-          <div className="flex flex-col gap-2 sm:flex-row">
-            <button
-              type="button"
-              onClick={onSignIn}
-              className="flex-1 rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-primary-foreground transition hover:brightness-110"
-            >
-              Sign in for uploads
-            </button>
-            <button
-              type="button"
-              onClick={onClose}
-              className="flex-1 rounded-xl border border-rm-border bg-rm-bg-surface px-4 py-2.5 text-sm font-bold text-rm-text-muted transition hover:bg-rm-bg-hover hover:text-rm-text"
-            >
-              Stay in demo
-            </button>
-          </div>
-        </div>
-      </div>
-    </dialog>
+        </DialogSurface>
+      </DialogPortal>
+    </Dialog>
   );
 }
 
@@ -370,15 +382,23 @@ function DemoChatGifPreview({ gif }: { gif: DemoChatGif }) {
   );
 }
 
-function parseDemoChatMessage(value: unknown): DemoChatMessage | null {
+function normalizeDemoTimestamp(value: unknown): number | null {
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : null;
+  }
+  if (typeof value !== "string" || value.trim() === "") return null;
+
+  const timestamp = Date.parse(value);
+  return Number.isFinite(timestamp) ? timestamp : null;
+}
+
+export function parseDemoChatMessage(value: unknown): DemoChatMessage | null {
   if (!value || typeof value !== "object") return null;
   const message = value as Record<string, unknown>;
   if (typeof message.id !== "string") return null;
   if (typeof message.participant_id !== "string") return null;
   if (typeof message.author_name !== "string") return null;
   if (typeof message.content !== "string") return null;
-  if (typeof message.created_at !== "number") return null;
-  if (typeof message.expires_at !== "number") return null;
 
   const gif = parseDemoChatGif(message.gif);
   return {
@@ -387,8 +407,8 @@ function parseDemoChatMessage(value: unknown): DemoChatMessage | null {
     author_name: message.author_name,
     content: message.content,
     ...(gif ? { gif } : {}),
-    created_at: message.created_at,
-    expires_at: message.expires_at,
+    created_at: normalizeDemoTimestamp(message.created_at),
+    expires_at: normalizeDemoTimestamp(message.expires_at),
   };
 }
 
@@ -423,8 +443,17 @@ function parseDemoChatGif(value: unknown): DemoChatGif | undefined {
   };
 }
 
-function formatChatTime(timestamp: number) {
-  return new Date(timestamp).toLocaleTimeString([], {
+function formatDateTimeAttribute(timestamp: number | null): string | undefined {
+  if (timestamp === null) return undefined;
+  const date = new Date(timestamp);
+  return Number.isFinite(date.getTime()) ? date.toISOString() : undefined;
+}
+
+function formatChatTime(
+  timestamp: number | null,
+  formatDate: ClientDateFormatter,
+): string {
+  return formatDate(timestamp ?? Number.NaN, {
     hour: "2-digit",
     minute: "2-digit",
   });

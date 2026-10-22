@@ -1,4 +1,6 @@
+import { useMounted } from "@/hooks/useMounted";
 import { AvatarImage } from "@/components/chat/AvatarImage";
+import InlineEmojiText from "@/components/chat/InlineEmojiText";
 import { HomeIcon } from "@/components/chat/HomeIcon";
 import { ProfileCollectiblesLayer } from "@/components/chat/ProfileCollectiblesLayer";
 import { ProfileFrameLayer } from "@/components/chat/ProfileFrameLayer";
@@ -519,7 +521,7 @@ function CatalogItemCard({
       <div className="space-y-3 p-3">
         <div className="min-h-[48px]">
           <div className="line-clamp-1 text-sm font-bold text-rm-text">
-            {item.name}
+            <InlineEmojiText text={item.name} />
           </div>
           <div className="line-clamp-1 text-xs text-rm-text-muted">
             {item.categoryName}
@@ -563,6 +565,7 @@ export function CollectiblesCatalogModal({
   onClose,
   onApplied,
 }: CollectiblesCatalogModalProps) {
+  const mounted = useMounted();
   const [catalog, setCatalog] = useState<CollectiblesCatalog | null>(() =>
     getCachedCollectiblesCatalog(),
   );
@@ -682,8 +685,10 @@ export function CollectiblesCatalogModal({
     }
   };
 
+  if (!mounted) return null;
+
   return createPortal(
-    <div className="fixed inset-0 z-[1200] flex items-center justify-center bg-black/70 p-3 backdrop-blur-sm">
+    <div className="pointer-events-auto fixed inset-0 z-70 flex items-center justify-center bg-black/70 p-3 backdrop-blur-sm">
       <section className="flex max-h-[88vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-rm-border bg-rm-bg-primary shadow-2xl">
         <header className="flex items-center gap-3 border-b border-rm-border px-4 py-3">
           <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/15 text-primary">

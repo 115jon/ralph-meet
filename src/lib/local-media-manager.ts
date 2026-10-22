@@ -60,6 +60,8 @@ interface LocalMediaState {
   streamPromise: Promise<MediaStream | null> | null;
   acquisitionGeneration: number;
   acquisitionOrder: number;
+  activeAudioRequestDeviceId?: string;
+  activeVideoRequestDeviceId?: string;
   activeVideoRequestKey: string | null;
 }
 
@@ -75,6 +77,8 @@ function getLocalMediaState(owner?: LocalMediaOwner): LocalMediaState {
       streamPromise: null,
       acquisitionGeneration: 0,
       acquisitionOrder: 0,
+      activeAudioRequestDeviceId: undefined,
+      activeVideoRequestDeviceId: undefined,
       activeVideoRequestKey: null,
     };
     localMediaStates.set(key, state);
@@ -269,18 +273,59 @@ export async function acquireLocalStream(
   const state = getLocalMediaState(owner);
   const log = clog(logPrefix);
   const generation = state.acquisitionGeneration;
+  let supersededActiveStream: MediaStream | null = null;
 
   // If we have an active stream that matches, return it immediately
   if (state.activeStream) {
+    const activeLookupOrder = state.acquisitionOrder;
+    const resolvedAudioId = await resolveStoredDeviceId(
+      "audioinput",
+      audio.deviceId,
+      audio.deviceLabel,
+      audio.groupId,
+      log,
+    );
+    const resolvedVideoId = videoConstraint
+      ? await resolveStoredDeviceId(
+          "videoinput",
+          videoConstraint.deviceId,
+          videoConstraint.deviceLabel,
+          videoConstraint.groupId,
+          log,
+        )
+      : undefined;
+    throwIfAcquisitionStale(state, generation, activeLookupOrder);
+    const resolvedAudio = { ...audio, deviceId: resolvedAudioId };
+    const resolvedVideo = videoConstraint
+      ? { ...videoConstraint, deviceId: resolvedVideoId }
+      : null;
+    const audioFellBackToDefault = Boolean(
+      audio.deviceId &&
+      audio.deviceId !== "default" &&
+      resolvedAudioId === "default",
+    );
+    const videoFellBackToDefault = Boolean(
+      videoConstraint?.deviceId &&
+      videoConstraint.deviceId !== "default" &&
+      resolvedVideoId === "default",
+    );
     const audioTrack = state.activeStream.getAudioTracks()[0];
     const videoTrack = state.activeStream.getVideoTracks()[0];
-    const audioOk = !audioTrack || audioConstraintsMatch(audioTrack, audio);
+    if (videoConstraint && !videoTrack) {
+      supersededActiveStream = state.activeStream;
+    }
+    const audioOk =
+      (!audioFellBackToDefault ||
+        state.activeAudioRequestDeviceId === audio.deviceId) &&
+      (!audioTrack || audioConstraintsMatch(audioTrack, resolvedAudio));
     const videoOk =
-      !videoConstraint ||
-      (videoTrack &&
+      !resolvedVideo ||
+      ((!videoFellBackToDefault ||
+        state.activeVideoRequestDeviceId === videoConstraint?.deviceId) &&
+        videoTrack &&
         videoConstraintsMatch(
           videoTrack,
-          videoConstraint,
+          resolvedVideo,
           state.activeVideoRequestKey,
         ));
     if (audioOk && videoOk) {
@@ -289,14 +334,28 @@ export async function acquireLocalStream(
     }
   }
 
+  let supersededSharedStream: MediaStream | null = null;
+
   // Await any in-flight promise first (shared across callers during join)
   if (state.streamPromise) {
     log.debug("Awaiting in-flight getUserMedia promise...");
     const existing = await state.streamPromise;
     throwIfAcquisitionStale(state, generation);
     if (existing) {
-      state.activeStream = existing;
-      return existing;
+      const existingAudio = existing.getAudioTracks()[0];
+      const existingVideo = existing.getVideoTracks()[0];
+      const audioMatches =
+        !!existingAudio && audioConstraintsMatch(existingAudio, audio);
+      const videoMatches =
+        !videoConstraint ||
+        (!!existingVideo &&
+          videoConstraintsMatch(existingVideo, videoConstraint, null));
+      if (audioMatches && videoMatches) {
+        state.activeStream = existing;
+        return existing;
+      }
+      log.debug("Shared stream does not match requested devices; reacquiring");
+      supersededSharedStream = existing;
     }
   }
 
@@ -380,6 +439,14 @@ export async function acquireLocalStream(
   throwIfAcquisitionStale(state, generation, requestOrder);
 
   state.activeStream = stream;
+  const streamsToStop = new Set<MediaStream>();
+  if (supersededActiveStream) streamsToStop.add(supersededActiveStream);
+  if (supersededSharedStream) streamsToStop.add(supersededSharedStream);
+  for (const supersededStream of streamsToStop) {
+    if (supersededStream !== stream) stopStreamTracks(supersededStream);
+  }
+  state.activeAudioRequestDeviceId = audio.deviceId;
+  state.activeVideoRequestDeviceId = videoConstraint?.deviceId;
   state.activeVideoRequestKey = videoRequestKey(resolvedVideo);
   state.streamPromise = null;
 
@@ -441,6 +508,8 @@ export function startEarlyMic(
 
       lmLog.info(`Early mic acquired: ${stream.getAudioTracks()[0]?.label}`);
       state.activeStream = stream;
+      state.activeAudioRequestDeviceId = audio.deviceId;
+      state.activeVideoRequestDeviceId = undefined;
       state.activeVideoRequestKey = null;
       if (state.streamPromise === promise) state.streamPromise = null;
       // Refresh labels now that the device lock is released
@@ -476,6 +545,8 @@ export function releaseLocalStream(owner?: LocalMediaOwner): void {
   state.acquisitionGeneration += 1;
   cancelPendingLocalStreamAcquisition(owner);
   state.activeStream = null;
+  state.activeAudioRequestDeviceId = undefined;
+  state.activeVideoRequestDeviceId = undefined;
   state.activeVideoRequestKey = null;
   state.streamPromise = null;
 }

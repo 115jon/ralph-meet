@@ -67,6 +67,8 @@ async function openExternalUrl(url: string): Promise<void> {
 
 export function useExternalLinkConfirmation() {
   const [pending, setPending] = useState<PendingExternalLink | null>(null);
+  const [renderedPending, setRenderedPending] =
+    useState<PendingExternalLink | null>(null);
   const [trustDomain, setTrustDomain] = useState(false);
 
   const requestOpen = useCallback((value: string) => {
@@ -85,7 +87,9 @@ export function useExternalLinkConfirmation() {
     }
 
     setTrustDomain(false);
-    setPending({ url: parsed.toString(), hostname });
+    const nextPending = { url: parsed.toString(), hostname };
+    setRenderedPending(nextPending);
+    setPending(nextPending);
   }, []);
 
   const closeConfirmation = useCallback(() => {
@@ -103,17 +107,17 @@ export function useExternalLinkConfirmation() {
   }, [closeConfirmation, pending, trustDomain]);
 
   const confirmation = useMemo(
-    () =>
-      pending ? (
-        <ExternalLinkConfirmModal
-          pending={pending}
-          trustDomain={trustDomain}
-          onTrustDomainChange={setTrustDomain}
-          onClose={closeConfirmation}
-          onConfirm={confirmOpen}
-        />
-      ) : null,
-    [closeConfirmation, confirmOpen, pending, trustDomain],
+    () => (
+      <ExternalLinkConfirmModal
+        open={pending !== null}
+        pending={renderedPending ?? { url: "", hostname: "" }}
+        trustDomain={trustDomain}
+        onTrustDomainChange={setTrustDomain}
+        onClose={closeConfirmation}
+        onConfirm={confirmOpen}
+      />
+    ),
+    [closeConfirmation, confirmOpen, pending, renderedPending, trustDomain],
   );
 
   return { requestOpen, confirmation };

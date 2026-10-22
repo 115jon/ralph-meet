@@ -1,3 +1,4 @@
+import { useMounted } from "@/hooks/useMounted";
 import { AvatarImage } from "@/components/chat/AvatarImage";
 import { ProfileDisplayName } from "@/components/chat/ProfileDisplayName";
 import { ProfileAssetLayer } from "@/components/chat/ProfileAssetLayer";
@@ -98,6 +99,7 @@ export default function UserAccountPopover({
   anchorEl,
   isClosing,
 }: Props & { isClosing?: boolean }) {
+  const mounted = useMounted();
   const currentUser = useChatStore((state) =>
     state.user?.id === user.id ? state.user : null,
   );
@@ -238,11 +240,13 @@ export default function UserAccountPopover({
     setIsEditingCustomStatus(false);
   };
 
+  if (!mounted) return null;
+
   return createPortal(
     <>
       <div
         className={cn(
-          "fixed inset-0 z-[999] cursor-default bg-transparent",
+          "fixed inset-0 z-40 cursor-default bg-transparent",
           isClosing && "pointer-events-none",
         )}
         onClick={onClose}
@@ -254,7 +258,7 @@ export default function UserAccountPopover({
         variant="popover"
         display={profileDisplay}
         className={cn(
-          "fixed z-[1000] animate-in fade-in zoom-in-95 duration-200 outline-none",
+          "fixed z-60 animate-in fade-in zoom-in-95 duration-200 outline-none",
           isClosing && "animate-out fade-out zoom-out-95",
         )}
         style={{

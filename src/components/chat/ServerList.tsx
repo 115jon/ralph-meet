@@ -5,7 +5,6 @@ import type { VoiceChannelMember } from "@/lib/chat-reducer";
 import type { Channel, Server, User } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useMemo, useState } from "react";
-import { useDelayUnmount } from "@/hooks/useDelayUnmount";
 import { Volume2 } from "lucide-react";
 import {
   Tooltip,
@@ -18,6 +17,7 @@ import { AvatarImage } from "./AvatarImage";
 import CreateServerModal from "./CreateServerModal";
 import { HomeIcon } from "./HomeIcon";
 import { Check, Copy, Plus, Trash2 } from "./Icons";
+import InlineEmojiText from "./InlineEmojiText";
 
 const EMPTY_CHANNELS: Channel[] = [];
 const EMPTY_CHANNELS_BY_SERVER: Record<string, Channel[]> = {};
@@ -125,7 +125,7 @@ export default function ServerList({
   onMarkAllRead: _onMarkAllRead,
 }: Props) {
   const [showCreate, setShowCreate] = useState(false);
-  const shouldRenderCreateServer = useDelayUnmount(showCreate, 200);
+  const shouldRenderCreateServer = showCreate;
   const [dmExpanded, setDmExpanded] = useState(false);
   const { menu, openMenu, closeMenu, shouldRender, isClosing } =
     useContextMenu();
@@ -207,7 +207,7 @@ export default function ServerList({
   return (
     <TooltipProvider delayDuration={80}>
       <div
-        className="relative z-100 flex h-full w-full flex-col items-center gap-2 overflow-y-auto bg-rm-bg-floating pt-3 no-scrollbar"
+        className="relative z-10 flex h-full w-full flex-col items-center gap-2 overflow-y-auto bg-rm-bg-floating pt-3 no-scrollbar"
         style={{
           paddingTop: "calc(12px + var(--safe-area-top, 0px))",
           paddingBottom: "calc(12px + var(--safe-area-bottom, 0px))",
@@ -273,7 +273,7 @@ export default function ServerList({
                       </div>
                     )}
                     <div className="pointer-events-none fixed left-[80px] z-150 hidden whitespace-nowrap rounded border border-rm-border bg-rm-bg-floating px-2 py-1 text-xs font-medium text-rm-text opacity-0 shadow-xl transition-opacity group-hover:opacity-100 md:block">
-                      {displayName}
+                      <InlineEmojiText text={displayName} />
                     </div>
                     {(dm.unreadCount ?? 1) > 0 && (
                       <div className="pointer-events-none absolute -bottom-1 -right-1 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-bold text-white ring-[3px] ring-rm-bg-floating">
@@ -413,7 +413,7 @@ export default function ServerList({
                   {voiceSummary ? (
                     <div className="p-3">
                       <p className="truncate text-sm font-semibold">
-                        {server.name}
+                        <InlineEmojiText text={server.name} />
                       </p>
                       <p className="mt-1 text-[11px] font-medium text-rm-text-muted">
                         {formatVoiceSummary(
@@ -442,7 +442,9 @@ export default function ServerList({
                                 <div className="flex items-center gap-2">
                                   <Volume2 className="h-3.5 w-3.5 shrink-0 text-rm-text-secondary" />
                                   <span className="truncate text-xs font-semibold">
-                                    {channel.channelName}
+                                    <InlineEmojiText
+                                      text={channel.channelName}
+                                    />
                                   </span>
                                 </div>
                                 <p className="mt-1 text-[11px] text-rm-text-muted">
@@ -499,7 +501,7 @@ export default function ServerList({
                       </div>
                     </div>
                   ) : (
-                    server.name
+                    <InlineEmojiText text={server.name} />
                   )}
                 </TooltipContent>
               </Tooltip>
@@ -526,12 +528,10 @@ export default function ServerList({
           <Plus className="h-6 w-6" />
         </button>
 
-        {shouldRenderCreateServer && (
-          <CreateServerModal
-            onClose={() => setShowCreate(false)}
-            isClosing={!showCreate}
-          />
-        )}
+        <CreateServerModal
+          open={shouldRenderCreateServer}
+          onClose={() => setShowCreate(false)}
+        />
 
         {shouldRender && (
           <ContextMenu

@@ -10,6 +10,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { useEffect, useState } from "react";
+import InlineEmojiText from "./InlineEmojiText";
 
 interface ShareListItem {
   id: string;
@@ -200,10 +201,16 @@ export default function SettingsSharesTab() {
                 <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0">
                     <p className="text-sm font-bold text-rm-text">
-                      {share.author.display_name ?? share.author.username}
+                      <InlineEmojiText
+                        text={
+                          share.author.display_name ?? share.author.username
+                        }
+                      />
                     </p>
                     <p className="mt-1 line-clamp-2 text-sm leading-5 text-rm-text-secondary">
-                      {share.content || "(attachment only)"}
+                      <InlineEmojiText
+                        text={share.content || "(attachment only)"}
+                      />
                     </p>
                   </div>
                   <span

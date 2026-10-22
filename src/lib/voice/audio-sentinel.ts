@@ -15,6 +15,8 @@ export interface AudioSentinelOptions {
   intervalMs?: number;
   /** How many consecutive polling ticks with 0 delta before triggering a stall (default 5) */
   stallThresholdTicks?: number;
+  /** Fired once when inbound audio RTP bytes are first observed. */
+  onFirstRtp?: () => void;
 }
 
 export class AudioSentinel {
@@ -22,6 +24,7 @@ export class AudioSentinel {
   private prevBytesReceived: number | null = null;
   private consecutiveZeroDeltas = 0;
   private isStalled = false;
+  private hasSeenFirstRtp = false;
 
   constructor(private options: AudioSentinelOptions) {}
 
@@ -30,6 +33,7 @@ export class AudioSentinel {
     this.prevBytesReceived = null;
     this.consecutiveZeroDeltas = 0;
     this.isStalled = false;
+    this.hasSeenFirstRtp = false;
 
     const interval = this.options.intervalMs ?? 1000;
     const threshold = this.options.stallThresholdTicks ?? 5;
@@ -72,6 +76,11 @@ export class AudioSentinel {
           // No audio track is being pulled yet.
           this.prevBytesReceived = null;
           return;
+        }
+
+        if (!this.hasSeenFirstRtp && currentBytes > 0) {
+          this.hasSeenFirstRtp = true;
+          this.options.onFirstRtp?.();
         }
 
         if (this.prevBytesReceived !== null) {
@@ -125,10 +134,227 @@ export class AudioSentinel {
     this.prevBytesReceived = null;
     this.consecutiveZeroDeltas = 0;
     this.isStalled = false;
+    this.hasSeenFirstRtp = false;
     log.info("AudioSentinel stopped.");
   }
 
   public getIsStalled() {
     return this.isStalled;
+  }
+}
+
+export interface OutboundAudioStallDiagnostics {
+  bytesSent: number;
+  packetsSent: number;
+  trackEnabled: boolean;
+  trackReadyState: MediaStreamTrackState;
+  connectionState: RTCPeerConnectionState;
+  iceConnectionState: RTCIceConnectionState;
+}
+
+export interface OutboundAudioSentinelOptions {
+  /** The cam push PeerConnection carrying the microphone track. */
+  pc: () => RTCPeerConnection | null;
+  /** The currently published microphone sender track. */
+  track: () => MediaStreamTrack | null;
+  /** Callback fired when enabled audio RTP stops increasing. */
+  onStall: (diagnostics: OutboundAudioStallDiagnostics) => void;
+  /** Callback fired when outbound RTP resumes after a stall. */
+  onRecover?: () => void;
+  /** Fired once when outbound audio RTP bytes are first observed. */
+  onFirstRtp?: () => void;
+  intervalMs?: number;
+  stallThresholdTicks?: number;
+}
+
+interface OutboundAudioStats {
+  type?: string;
+  kind?: string;
+  mediaType?: string;
+  bytesSent?: number;
+  packetsSent?: number;
+}
+
+/** Detects a live microphone sender that stopped producing outbound RTP. */
+export class OutboundAudioSentinel {
+  private timer: ReturnType<typeof setInterval> | null = null;
+  private previousBytesSent: number | null = null;
+  private previousPacketsSent: number | null = null;
+  private consecutiveZeroDeltas = 0;
+  private isStalled = false;
+  private lifecycleGeneration = 0;
+  private checkInFlightGeneration: number | null = null;
+  private observedPc: RTCPeerConnection | null = null;
+  private observedTrack: MediaStreamTrack | null = null;
+  private hasSeenFirstRtp = false;
+
+  constructor(private options: OutboundAudioSentinelOptions) {}
+
+  public start() {
+    if (this.timer) return;
+    this.lifecycleGeneration++;
+    this.reset();
+
+    const interval = this.options.intervalMs ?? 1000;
+    const threshold = this.options.stallThresholdTicks ?? 30;
+    log.info(
+      `OutboundAudioSentinel started (interval: ${interval}ms, threshold: ${threshold} ticks)`,
+    );
+    this.timer = setInterval(() => void this.check(), interval);
+  }
+
+  public stop() {
+    if (this.timer) {
+      clearInterval(this.timer);
+      this.timer = null;
+    }
+    this.lifecycleGeneration++;
+    this.reset();
+  }
+
+  public resetMonitoring() {
+    this.lifecycleGeneration++;
+    this.reset();
+  }
+
+  private reset() {
+    this.previousBytesSent = null;
+    this.previousPacketsSent = null;
+    this.consecutiveZeroDeltas = 0;
+    this.isStalled = false;
+    this.observedPc = null;
+    this.observedTrack = null;
+    this.hasSeenFirstRtp = false;
+  }
+
+  private isConnected(pc: RTCPeerConnection) {
+    return (
+      pc.connectionState === "connected" &&
+      (pc.iceConnectionState === "connected" ||
+        pc.iceConnectionState === "completed")
+    );
+  }
+
+  private async check() {
+    const generation = this.lifecycleGeneration;
+    if (this.checkInFlightGeneration === generation) return;
+    this.checkInFlightGeneration = generation;
+
+    try {
+      const pc = this.options.pc();
+      const track = this.options.track();
+      if (
+        !pc ||
+        !track ||
+        !this.isConnected(pc) ||
+        !track.enabled ||
+        track.readyState !== "live"
+      ) {
+        this.reset();
+        return;
+      }
+
+      if (
+        (this.observedPc && this.observedPc !== pc) ||
+        (this.observedTrack && this.observedTrack !== track)
+      ) {
+        this.reset();
+      }
+      this.observedPc = pc;
+      this.observedTrack = track;
+
+      const stats = await pc.getStats();
+      if (generation !== this.lifecycleGeneration) {
+        return;
+      }
+      if (this.options.pc() !== pc || this.options.track() !== track) {
+        this.reset();
+        return;
+      }
+      if (!track.enabled || track.readyState !== "live") {
+        this.reset();
+        return;
+      }
+      let currentBytes = 0;
+      let currentPackets = 0;
+      let foundAudio = false;
+      stats.forEach((rawReport) => {
+        const report = rawReport as unknown as OutboundAudioStats;
+        const isAudio =
+          report.type === "outbound-rtp" &&
+          (report.kind === "audio" || report.mediaType === "audio");
+        if (!isAudio || typeof report.bytesSent !== "number") return;
+        foundAudio = true;
+        currentBytes += report.bytesSent;
+        currentPackets += report.packetsSent ?? 0;
+      });
+
+      if (!foundAudio) {
+        this.previousBytesSent = null;
+        this.previousPacketsSent = null;
+        this.consecutiveZeroDeltas = 0;
+        return;
+      }
+
+      if (!this.hasSeenFirstRtp && currentBytes > 0) {
+        this.hasSeenFirstRtp = true;
+        this.options.onFirstRtp?.();
+      }
+
+      if (this.previousBytesSent === null) {
+        this.previousBytesSent = currentBytes;
+        this.previousPacketsSent = currentPackets;
+        return;
+      }
+
+      const delta = currentBytes - this.previousBytesSent;
+      const packetDelta =
+        this.previousPacketsSent === null
+          ? 0
+          : currentPackets - this.previousPacketsSent;
+      this.previousBytesSent = currentBytes;
+      this.previousPacketsSent = currentPackets;
+      if (delta < 0 || packetDelta < 0) {
+        this.previousBytesSent = currentBytes;
+        this.previousPacketsSent = currentPackets;
+        this.consecutiveZeroDeltas = 0;
+        return;
+      }
+
+      if (delta === 0 && packetDelta === 0) {
+        this.consecutiveZeroDeltas++;
+        if (
+          this.consecutiveZeroDeltas >=
+            (this.options.stallThresholdTicks ?? 30) &&
+          !this.isStalled
+        ) {
+          this.isStalled = true;
+          const diagnostics: OutboundAudioStallDiagnostics = {
+            bytesSent: currentBytes,
+            packetsSent: currentPackets,
+            trackEnabled: track.enabled,
+            trackReadyState: track.readyState,
+            connectionState: pc.connectionState,
+            iceConnectionState: pc.iceConnectionState,
+          };
+          log.error("Outbound audio RTP stall detected", diagnostics);
+          this.options.onStall(diagnostics);
+        }
+        return;
+      }
+
+      this.consecutiveZeroDeltas = 0;
+      if (this.isStalled) {
+        this.isStalled = false;
+        log.info("Outbound audio RTP recovered");
+        this.options.onRecover?.();
+      }
+    } catch (error) {
+      log.warn("Failed to get outbound audio stats:", error);
+    } finally {
+      if (this.checkInFlightGeneration === generation) {
+        this.checkInFlightGeneration = null;
+      }
+    }
   }
 }

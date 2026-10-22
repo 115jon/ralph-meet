@@ -46,6 +46,7 @@ function SensitiveMediaFrameContent({
       <div
         {...dataMediaProps}
         aria-hidden="true"
+        data-rm-preserve-blur="true"
         className={cn(
           "pointer-events-none select-none blur-2xl saturate-50 scale-[1.02]",
           mediaClassName,

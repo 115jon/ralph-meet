@@ -154,7 +154,7 @@ export function VoiceDebugScreen({
 
   if (!data) {
     return (
-      <div className="fixed inset-0 z-[9999] bg-[#111214] flex flex-col items-center justify-center gap-4">
+      <div className="fixed inset-0 z-100 bg-[#111214] flex flex-col items-center justify-center gap-4">
         <div className="w-8 h-8 border-4 border-rm-accent/30 border-t-rm-accent rounded-full animate-spin" />
         <p className="text-rm-text-muted text-[13px] font-medium animate-pulse">
           Gathering RTC metrics…
@@ -175,13 +175,13 @@ export function VoiceDebugScreen({
   const isConnected = sessionState === "connected";
 
   return (
-    <div className="fixed inset-0 z-[9999] bg-rm-bg-primary flex flex-col text-rm-text text-[13px] overflow-hidden">
+    <div className="fixed inset-0 z-100 bg-rm-bg-primary flex flex-col text-rm-text text-[13px] overflow-hidden">
       {/* Top bar */}
       <div className="flex items-center justify-between px-3 sm:px-5 py-2.5 sm:py-3 border-b border-rm-border bg-rm-bg-surface gap-2">
         <div className="flex items-center gap-2 sm:gap-3 min-w-0">
           <div className="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full bg-rm-status-online animate-pulse shrink-0" />
           <span className="font-bold text-[13px] sm:text-[15px] text-rm-text tracking-tight truncate">
-            RTC DEBUG: {data.roomSlug}
+            <InlineEmojiText text={`RTC DEBUG: ${data.roomSlug}`} />
           </span>
         </div>
         <div className="flex items-center gap-2 sm:gap-3 shrink-0">

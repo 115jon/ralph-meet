@@ -14,10 +14,6 @@ import {
   useChatPageLogic,
 } from "@/components/chat/useChatPageLogic";
 import {
-  useDelayUnmount,
-  useDelayedUnmountValue,
-} from "@/hooks/useDelayUnmount";
-import {
   shouldShowStartCallModal,
   shouldShowVoiceSwitchModal,
 } from "@/components/chat/voice-confirmation-preferences";
@@ -208,13 +204,33 @@ export default function ChatPage() {
 
   // ── Unified audio interaction modal ──────────────────────────────────────
   const [showAudioModal, setShowAudioModal] = useState(false);
-  const shouldRenderAudioModal = useDelayUnmount(showAudioModal, 200);
   const [voiceAppsModal, setVoiceAppsModal] = useState<null | "activities">(
     null,
   );
-  const shouldRenderVoiceAppsModal = useDelayUnmount(!!voiceAppsModal, 200);
-  const { shouldRender: shouldRenderProfileUser, value: renderedProfileUser } =
-    useDelayedUnmountValue(profileUser, 200);
+  const [renderedProfileUser, setRenderedProfileUser] = useState<User | null>(
+    profileUser,
+  );
+  const profileUserRef = useRef(profileUser);
+  const profilePayloadGenerationRef = useRef(0);
+  const previousViewerIdRef = useRef(user?.id);
+  useEffect(() => {
+    profileUserRef.current = profileUser;
+    profilePayloadGenerationRef.current += 1;
+    if (profileUser) {
+      // Keep the last payload mounted while Radix runs the close animation.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setRenderedProfileUser(profileUser);
+    }
+  }, [profileUser]);
+  useEffect(() => {
+    if (previousViewerIdRef.current === user?.id) return;
+
+    previousViewerIdRef.current = user?.id;
+    profilePayloadGenerationRef.current += 1;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setRenderedProfileUser(null);
+    if (profileUserRef.current) setProfileUser(null);
+  }, [setProfileUser, user?.id]);
   const [channelSidebarWidth, setChannelSidebarWidth] = useState(
     CHANNEL_SIDEBAR_DEFAULT_WIDTH_PX,
   );
@@ -248,21 +264,14 @@ export default function ChatPage() {
     pendingJump,
   } = ui;
 
-  const shouldRenderInviteModal = useDelayUnmount(
-    activeModal === "invite",
-    200,
-  );
-  const shouldRenderSettingsModal = useDelayUnmount(
-    activeModal === "settings",
-    200,
-  );
-  const shouldRenderVoiceTextChat = useDelayUnmount(showVoiceTextChat, 200);
-  const voiceTextChatVisible = showVoiceTextChat || shouldRenderVoiceTextChat;
+  const voiceTextChatVisible = showVoiceTextChat;
 
   const activeServer = useMemo(
     () => servers.find((s) => s.id === activeServerId),
     [servers, activeServerId],
   );
+  const profileModalUser = profileUser ?? renderedProfileUser;
+  const profileModalGeneration = profilePayloadGenerationRef.current;
   const activeChannel = useMemo(
     () => (isDmMode ? null : channels.find((c) => c.id === activeChannelId)),
     [isDmMode, channels, activeChannelId],
@@ -453,7 +462,6 @@ export default function ChatPage() {
   const [pendingSwitch, setPendingSwitch] = useState<PendingSwitch | null>(
     null,
   );
-  const shouldRenderVoiceSwitchModal = useDelayUnmount(!!pendingSwitch, 200);
   const pendingSwitchRef = useRef(pendingSwitch);
   useEffect(() => {
     pendingSwitchRef.current = pendingSwitch;
@@ -774,7 +782,6 @@ export default function ChatPage() {
   };
   const [pendingCallTarget, setPendingCallTarget] =
     useState<PendingCallTarget | null>(null);
-  const shouldRenderStartCallModal = useDelayUnmount(!!pendingCallTarget, 200);
 
   const executeStartCall = useCallback(
     (target: PendingCallTarget) => {
@@ -1094,10 +1101,10 @@ export default function ChatPage() {
         className="flex flex-1 overflow-hidden relative"
         style={channelSidebarStyle}
       >
-        <div className="hidden h-full shrink-0 flex-col md:flex md:w-[var(--left-nav-width)]">
+        <div className="hidden h-full shrink-0 flex-col bg-rm-bg-secondary md:flex md:w-[var(--left-nav-width)]">
           <div className="flex min-h-0 flex-1">
             {/* Desktop server icon strip */}
-            <div className="z-50 hidden w-[calc(var(--spacing)*18)] shrink-0 flex-col items-center overflow-y-auto bg-rm-bg-floating scrollbar-none md:flex">
+            <div className="z-10 hidden w-[calc(var(--spacing)*18)] shrink-0 flex-col items-center overflow-y-auto bg-rm-bg-floating scrollbar-none md:flex">
               <ServerList
                 servers={servers}
                 activeServerId={activeServerId}
@@ -1170,7 +1177,7 @@ export default function ChatPage() {
               <button
                 type="button"
                 className={cn(
-                  "group absolute inset-y-0 right-0 z-[125] hidden w-3 translate-x-1/2 cursor-col-resize items-center justify-center border-0 bg-transparent p-0 outline-none md:flex",
+                  "group absolute inset-y-0 right-0 z-15 hidden w-3 translate-x-1/2 cursor-col-resize items-center justify-center border-0 bg-transparent p-0 outline-none md:flex",
                   isChannelSidebarResizing && "translate-x-1/2",
                 )}
                 onPointerDown={handleChannelSidebarResizeStart}
@@ -1194,7 +1201,7 @@ export default function ChatPage() {
             </div>
           </div>
 
-          <div className="shrink-0">
+          <div className="shrink-0 bg-rm-bg-secondary">
             <UserPanel
               user={user}
               serverId={voiceState.serverId ?? activeServerId}
@@ -1255,6 +1262,13 @@ export default function ChatPage() {
               voiceSessionId={localStreamState?.voiceSessionId}
               onOpenActivities={() => setVoiceAppsModal("activities")}
               sidebarWidthPx={channelSidebarWidth}
+            />
+            <div
+              className="shrink-0 bg-rm-bg-secondary"
+              style={{
+                height: "calc(8px + var(--safe-area-bottom, 0px))",
+              }}
+              aria-hidden="true"
             />
           </div>
         </div>
@@ -1340,7 +1354,7 @@ export default function ChatPage() {
                   <button
                     type="button"
                     className={cn(
-                      "absolute inset-0 z-[105] bg-black/45 backdrop-blur-[2px] cursor-default",
+                      "absolute inset-0 z-20 bg-black/45 backdrop-blur-[2px] cursor-default",
                       showVoiceTextChat
                         ? "animate-in fade-in duration-200"
                         : "animate-out fade-out duration-200",
@@ -1350,7 +1364,7 @@ export default function ChatPage() {
                   />
                   <div
                     className={cn(
-                      "absolute inset-y-0 right-0 z-[110] flex w-full max-w-[420px] sm:w-[420px] flex-col border-l border-white/10 bg-rm-bg-primary shadow-[-20px_0_40px_rgba(0,0,0,0.4)]",
+                      "absolute inset-y-0 right-0 z-30 flex w-full max-w-[420px] sm:w-[420px] flex-col border-l border-white/10 bg-rm-bg-primary shadow-[-20px_0_40px_rgba(0,0,0,0.4)]",
                       showVoiceTextChat
                         ? "animate-in fade-in slide-in-from-right duration-200"
                         : "animate-out fade-out slide-out-to-right duration-200",
@@ -1580,37 +1594,34 @@ export default function ChatPage() {
           </Suspense>
         )}
 
-        {shouldRenderVoiceAppsModal && (
-          <Suspense fallback={null}>
-            <VoiceAppsModal
-              key={voiceAppsModal}
-              isOpen={!!voiceAppsModal}
-              initialTab={voiceAppsModal ?? "activities"}
-              onClose={() => setVoiceAppsModal(null)}
-              isClosing={!voiceAppsModal}
-              sfu={localStreamState?.sfu ?? null}
-              serverId={voiceState.serverId ?? activeServerId}
-              channelId={localStreamState?.channelId ?? voiceState.channelId}
-              localUserId={user?.id}
-              gridItems={localStreamState?.gridItems ?? EMPTY_GRID_ITEMS}
-            />
-          </Suspense>
-        )}
+        <Suspense fallback={null}>
+          <VoiceAppsModal
+            isOpen={!!voiceAppsModal}
+            initialTab={voiceAppsModal ?? "activities"}
+            onClose={() => setVoiceAppsModal(null)}
+            sfu={localStreamState?.sfu ?? null}
+            serverId={voiceState.serverId ?? activeServerId}
+            channelId={localStreamState?.channelId ?? voiceState.channelId}
+            localUserId={user?.id}
+            gridItems={localStreamState?.gridItems ?? EMPTY_GRID_ITEMS}
+          />
+        </Suspense>
 
-        {shouldRenderInviteModal && activeServerId && activeServer && (
+        {activeServerId && activeServer ? (
           <Suspense fallback={null}>
             <InviteModal
+              open={activeModal === "invite"}
               serverId={activeServerId}
               serverName={activeServer.name}
               onClose={() => uiDispatch({ type: "CLOSE_MODAL" })}
-              isClosing={activeModal !== "invite"}
             />
           </Suspense>
-        )}
+        ) : null}
 
-        {shouldRenderSettingsModal && activeServerId && activeServer && (
+        {activeServerId && activeServer ? (
           <Suspense fallback={null}>
             <ServerSettingsModal
+              open={activeModal === "settings"}
               key={activeServer.name}
               serverId={activeServerId}
               ownerId={activeServer.owner_id}
@@ -1636,36 +1647,38 @@ export default function ChatPage() {
                 uiDispatch({ type: "CLOSE_MODAL" });
                 silentPush("/chat");
               }}
-              isClosing={activeModal !== "settings"}
             />
           </Suspense>
-        )}
+        ) : null}
 
-        {shouldRenderProfileUser &&
-          renderedProfileUser &&
-          renderedProfileUser.id !== user?.id && (
-            <Suspense fallback={null}>
-              <UserProfileModal
-                user={renderedProfileUser}
-                onClose={() => setProfileUser(null)}
-                isClosing={!profileUser}
-              />
-            </Suspense>
-          )}
-
-        {shouldRenderAudioModal && (
+        {profileModalUser && profileModalUser.id !== user?.id ? (
           <Suspense fallback={null}>
-            <AudioInteractionModal
-              onInteract={() => {
-                prewarmAudioContext();
-                resumeSoundContext();
-                setShowAudioModal(false);
+            <UserProfileModal
+              open={profileUser != null}
+              user={profileModalUser}
+              onClose={() => {
+                if (
+                  profileUserRef.current?.id === profileModalUser.id &&
+                  profilePayloadGenerationRef.current === profileModalGeneration
+                ) {
+                  setProfileUser(null);
+                }
               }}
-              onClose={() => setShowAudioModal(false)}
-              isClosing={!showAudioModal}
             />
           </Suspense>
-        )}
+        ) : null}
+
+        <Suspense fallback={null}>
+          <AudioInteractionModal
+            open={showAudioModal}
+            onInteract={() => {
+              prewarmAudioContext();
+              resumeSoundContext();
+              setShowAudioModal(false);
+            }}
+            onClose={() => setShowAudioModal(false)}
+          />
+        </Suspense>
 
         {/* Call Modals + SFU Manager */}
         <Suspense fallback={null}>
@@ -1674,37 +1687,31 @@ export default function ChatPage() {
         </Suspense>
 
         {/* Voice Switch Confirmation */}
-        {shouldRenderVoiceSwitchModal && (
-          <Suspense fallback={null}>
-            <VoiceSwitchModal
-              open
-              targetName={
-                pendingSwitch?.type === "voice"
-                  ? pendingSwitch.channelName
-                  : (activeDm?.recipient?.display_name ??
-                    activeDm?.recipient?.username ??
-                    "call")
-              }
-              currentType={callActive ? "call" : "voice"}
-              isClosing={!pendingSwitch}
-              onConfirm={handleSwitchConfirm}
-              onCancel={handleSwitchCancel}
-            />
-          </Suspense>
-        )}
+        <Suspense fallback={null}>
+          <VoiceSwitchModal
+            open={pendingSwitch != null}
+            targetName={
+              pendingSwitch?.type === "voice"
+                ? pendingSwitch.channelName
+                : (activeDm?.recipient?.display_name ??
+                  activeDm?.recipient?.username ??
+                  "call")
+            }
+            currentType={callActive ? "call" : "voice"}
+            onConfirm={handleSwitchConfirm}
+            onCancel={handleSwitchCancel}
+          />
+        </Suspense>
 
         {/* Start Call Confirmation */}
-        {shouldRenderStartCallModal && (
-          <Suspense fallback={null}>
-            <StartCallModal
-              open
-              targetName={pendingCallTarget?.displayName ?? ""}
-              onConfirm={handleCallConfirm}
-              onCancel={handleCallCancel}
-              isClosing={!pendingCallTarget}
-            />
-          </Suspense>
-        )}
+        <Suspense fallback={null}>
+          <StartCallModal
+            open={pendingCallTarget != null}
+            targetName={pendingCallTarget?.displayName ?? ""}
+            onConfirm={handleCallConfirm}
+            onCancel={handleCallCancel}
+          />
+        </Suspense>
       </div>
     </div>
   );

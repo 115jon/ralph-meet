@@ -247,4 +247,56 @@ describe("chat actions read-state writes", () => {
       ]),
     );
   });
+
+  it("retries first-load AUTH_REQUIRED until the bearer lands", async () => {
+    vi.useFakeTimers();
+    const requestedUrls: string[] = [];
+    let serverAttempts = 0;
+    const authRequired = Object.assign(new Error("Authentication required"), {
+      code: "AUTH_REQUIRED",
+      status: 401,
+    });
+    mocks.apiGet.mockImplementation((url: string) => {
+      requestedUrls.push(url);
+      if (url === "/api/users/me") {
+        return Promise.resolve({
+          id: "user-1",
+          username: "user",
+          display_name: "User",
+          media_content_filter: "standard",
+          theme_sync_enabled: 0,
+        });
+      }
+      if (url === "/api/servers") {
+        serverAttempts += 1;
+        if (serverAttempts === 1) return Promise.reject(authRequired);
+        return Promise.resolve([{ id: "server-1", name: "Predator Island" }]);
+      }
+      if (url === "/api/read-states") {
+        return Promise.resolve({ read_states: [], last_messages: [] });
+      }
+      return Promise.resolve([]);
+    });
+
+    let state: ChatState = {
+      ...initialState,
+      user: { id: "user-1" } as ChatState["user"],
+    };
+    const actions = createChatActions(
+      () => state,
+      (action) => {
+        state = chatReducer(state, action);
+      },
+    );
+
+    const bootstrap = actions.bootstrapChat({ expectedUserId: "user-1" });
+    await vi.advanceTimersByTimeAsync(250);
+    await bootstrap;
+
+    expect(serverAttempts).toBe(2);
+    expect(state.servers).toEqual([
+      { id: "server-1", name: "Predator Island" },
+    ]);
+    vi.useRealTimers();
+  });
 });

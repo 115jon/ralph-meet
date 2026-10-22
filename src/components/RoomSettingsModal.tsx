@@ -1,4 +1,4 @@
-import { BaseModal } from "@/components/ui/BaseModal";
+import { Dialog, DialogPortal, DialogSurface } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import {
@@ -51,11 +51,20 @@ import {
 } from "react";
 import { useShallow } from "zustand/shallow";
 import { NoiseReductionPanel } from "./chat/NoiseReductionPanel";
-import { CustomSelect } from "./ui/CustomSelect";
+import InlineEmojiText from "./chat/InlineEmojiText";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "./ui/select";
+import { shouldIgnoreSelectDismiss } from "./ui/select-dismiss";
 import { VideoPlayer } from "./voice/VideoPlayer";
+import { AudioCompatibilityHint } from "./chat/AudioCompatibilityHint";
 
 interface RoomSettingsModalProps {
-  isClosing?: boolean;
+  open: boolean;
   onClose: () => void;
   settingsUserId: string;
 }
@@ -63,9 +72,9 @@ interface RoomSettingsModalProps {
 type Tab = "voice" | "camera" | "appearance";
 
 export default function RoomSettingsModal({
+  open,
   onClose,
   settingsUserId,
-  isClosing: _isClosing,
 }: RoomSettingsModalProps) {
   const { theme, setTheme } = useTheme();
   const [activeTab, setActiveTab] = useState<Tab>("voice");
@@ -81,6 +90,9 @@ export default function RoomSettingsModal({
   );
   const setDevice = useVoiceSettingsStore((s) => s.setDevice);
   const updateUserSettings = useVoiceSettingsStore((s) => s.updateUserSettings);
+  const updateVoiceSettings = useVoiceSettingsStore(
+    (s) => s.updateVoiceSettings,
+  );
 
   const [previewStream, setPreviewStream] = useState<MediaStream | null>(null);
   const webcamStreamRef = useRef<MediaStream | null>(null);
@@ -363,28 +375,29 @@ export default function RoomSettingsModal({
   };
 
   const handleVoiceToggle = (key: string) => {
-    updateUserSettings((s: any) => {
+    updateVoiceSettings((s: any) => {
       const newVal = !s[key];
       const updates: any = { [key]: newVal };
 
-      // High Fidelity requires ALL audio processing to be OFF to allow stereo Opus
+      // High fidelity disables browser capture processing, but not local
+      // RNNoise or sensitivity gating.
       if (key === "streamHighFidelity" && newVal) {
         updates.echoCancellation = false;
         updates.noiseSuppression = false;
-        updates.autoSensitivity = false;
-        updates.noiseReductionEnabled = false;
       }
 
       if (key === "noiseReductionEnabled" && newVal) {
-        updates.streamHighFidelity = false;
         updates.noiseSuppression = false;
       }
 
-      // Any audio processing requires High Fidelity to be OFF (since processing downmixes to mono)
+      if (key === "noiseSuppression" && newVal) {
+        updates.noiseReductionEnabled = false;
+        updates.streamHighFidelity = false;
+      }
+
+      // Browser capture processing requires High Fidelity to be OFF.
       if (
-        (key === "echoCancellation" ||
-          key === "noiseSuppression" ||
-          key === "autoSensitivity") &&
+        (key === "echoCancellation" || key === "noiseSuppression") &&
         newVal
       ) {
         updates.streamHighFidelity = false;
@@ -395,813 +408,909 @@ export default function RoomSettingsModal({
   };
 
   const handleVoiceSlider = (key: string, val: number) => {
-    updateUserSettings((s: any) => ({ ...s, [key]: val }), settingsUserId);
+    updateVoiceSettings((s: any) => ({ ...s, [key]: val }), settingsUserId);
   };
 
   if (!mounted) return null;
 
   return (
-    <BaseModal onClose={onClose}>
-      <div
-        className="fixed inset-0 z-1000 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200"
-        onClick={(event) => {
-          if (event.target === event.currentTarget) {
-            onClose();
-          }
-        }}
-        onKeyDown={(e) => {
-          if (e.key === "Escape") onClose();
-        }}
-        role="presentation"
-      >
-        <dialog
-          open
-          className="relative m-0 flex h-full w-full flex-col overflow-hidden bg-rm-bg-primary p-0 shadow-2xl pointer-events-auto outline-none md:h-full md:max-h-[640px] md:max-w-[860px] md:flex-row md:rounded-xl md:border border-rm-border animate-in slide-in-from-bottom-full md:slide-in-from-bottom-0 md:fade-in duration-300 md:duration-200"
+    <Dialog open={open} onOpenChange={(nextOpen) => !nextOpen && onClose()}>
+      <DialogPortal>
+        <DialogSurface
+          showCloseButton={false}
+          className="fixed inset-0 z-50 m-0 flex min-h-0 h-full w-full items-center justify-center bg-black/60 p-4 backdrop-blur-sm outline-none animate-in fade-in duration-200 data-[state=closed]:animate-out data-[state=closed]:fade-out"
           aria-labelledby="room-settings-title"
+          onPointerDown={(event) => {
+            if (event.target !== event.currentTarget) return;
+            if (shouldIgnoreSelectDismiss(event.target)) return;
+            onClose();
+          }}
         >
-          {/* Sidebar */}
-          <div
-            className="w-full md:w-[180px] flex flex-row md:flex-col shrink-0 bg-rm-server-bar pt-2 md:pt-10 pb-2 px-4 overflow-x-auto md:overflow-y-auto md:overflow-x-hidden custom-scrollbar border-b md:border-b-0 md:border-r border-rm-border/50 gap-2 md:gap-0"
-            style={{ paddingTop: "calc(8px + var(--safe-area-top, 0px))" }}
-          >
-            <div className="flex w-full md:w-auto items-center justify-between px-2 mb-0 md:mb-6 md:mt-0 gap-4">
-              <h3
-                id="room-settings-title"
-                className="text-[11px] font-bold uppercase tracking-wider text-rm-text-muted shrink-0"
-              >
-                Room Settings
-              </h3>
-              <button
-                type="button"
-                onClick={onClose}
-                className="md:hidden p-1 rounded-full bg-rm-bg-surface text-rm-text flex items-center justify-center hover:bg-rm-bg-hover active:scale-95 transition-all"
-                aria-label="Close room settings"
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            {/* Audio & Video Subgroup */}
-            <div className="flex flex-row md:flex-col gap-1 w-full mb-4 md:mb-6">
-              <span className="hidden md:inline text-[9px] font-bold text-rm-text-muted/50 uppercase tracking-widest px-2 mb-1">
-                Audio & Video
-              </span>
-              <TabBtn
-                active={activeTab === "voice"}
-                onClick={() => setActiveTab("voice")}
-                label="Voice"
-              />
-              <TabBtn
-                active={activeTab === "camera"}
-                onClick={() => setActiveTab("camera")}
-                label="Camera"
-              />
-            </div>
-
-            {/* Theme Subgroup */}
-            <div className="flex flex-row md:flex-col gap-1 w-full">
-              <span className="hidden md:inline text-[9px] font-bold text-rm-text-muted/50 uppercase tracking-widest px-2 mb-1">
-                Theme
-              </span>
-              <TabBtn
-                active={activeTab === "appearance"}
-                onClick={() => setActiveTab("appearance")}
-                label="Appearance"
-              />
-            </div>
-          </div>
-
-          {/* Content */}
-          <div className="flex-1 flex flex-col relative overflow-hidden bg-rm-bg-primary">
-            {/* Close */}
-            <div className="absolute right-5 top-5 z-20 hidden md:flex flex-col items-center gap-1">
-              <button
-                type="button"
-                onClick={onClose}
-                className="flex h-8 w-8 items-center justify-center rounded-full border border-rm-border text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text transition-all"
-                aria-label="Close room settings"
-              >
-                <X size={16} />
-              </button>
-              <span className="text-[11px] font-bold text-rm-text-muted">
-                ESC
-              </span>
-            </div>
-
+          <div className="relative m-0 flex min-h-0 h-full w-full flex-col overflow-hidden bg-rm-bg-primary p-0 shadow-2xl pointer-events-auto outline-none animate-in slide-in-from-bottom-full md:h-full md:max-h-[640px] md:max-w-[860px] md:flex-row md:rounded-xl md:border border-rm-border md:slide-in-from-bottom-0 md:fade-in duration-300 md:duration-200">
+            {/* Sidebar */}
             <div
-              className="flex-1 overflow-y-auto custom-scrollbar px-6 pb-10 pt-6 md:pt-10 max-w-[600px]"
-              style={{
-                paddingBottom: "calc(40px + var(--safe-area-bottom, 0px))",
-              }}
+              className="w-full min-h-0 md:w-[180px] flex flex-row md:flex-col shrink-0 bg-rm-server-bar pt-2 md:pt-10 pb-2 px-4 overflow-x-auto md:overflow-y-auto md:overflow-x-hidden custom-scrollbar border-b md:border-b-0 md:border-r border-rm-border/50 gap-2 md:gap-0"
+              style={{ paddingTop: "calc(8px + var(--safe-area-top, 0px))" }}
             >
-              {activeTab === "voice" && (
-                <div className="animate-in fade-in slide-in-from-right-4 duration-300">
-                  <h1 className="text-xl font-bold text-rm-text mb-1">
-                    Voice Settings
-                  </h1>
-                  <p className="text-sm text-rm-text-muted mb-8">
-                    Configure your media devices and audio processing.
-                  </p>
+              <div className="flex w-full md:w-auto items-center justify-between px-2 mb-0 md:mb-6 md:mt-0 gap-4">
+                <h3
+                  id="room-settings-title"
+                  className="text-[11px] font-bold uppercase tracking-wider text-rm-text-muted shrink-0"
+                >
+                  Room Settings
+                </h3>
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="md:hidden p-1 rounded-full bg-rm-bg-surface text-rm-text flex items-center justify-center hover:bg-rm-bg-hover active:scale-95 transition-all"
+                  aria-label="Close room settings"
+                >
+                  <X size={18} />
+                </button>
+              </div>
 
-                  <div className="space-y-10">
-                    {/* Hardware */}
-                    <section className="space-y-5">
-                      <div className="flex items-center gap-2">
-                        <Volume2 size={14} className="text-rm-accent" />
-                        <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-rm-text-muted">
-                          Hardware
-                        </h3>
-                      </div>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                        <div className="space-y-2">
-                          <Label
-                            htmlFor="room-settings-input-device"
-                            className="text-[10px] font-bold uppercase tracking-wider text-rm-text-muted ml-1"
-                          >
-                            Input Device
-                          </Label>
-                          <select
-                            id="room-settings-input-device"
-                            value={vSettings.inputDeviceId}
-                            onChange={(e) => {
-                              const device = audioInputs.find(
-                                (d) => d.deviceId === e.target.value,
-                              );
-                              setDevice(
-                                "input",
-                                e.target.value,
-                                settingsUserId,
-                                {
+              {/* Audio & Video Subgroup */}
+              <div className="flex flex-row md:flex-col gap-1 w-full mb-4 md:mb-6">
+                <span className="hidden md:inline text-[9px] font-bold text-rm-text-muted/50 uppercase tracking-widest px-2 mb-1">
+                  Audio & Video
+                </span>
+                <TabBtn
+                  active={activeTab === "voice"}
+                  onClick={() => setActiveTab("voice")}
+                  label="Voice"
+                />
+                <TabBtn
+                  active={activeTab === "camera"}
+                  onClick={() => setActiveTab("camera")}
+                  label="Camera"
+                />
+              </div>
+
+              {/* Theme Subgroup */}
+              <div className="flex flex-row md:flex-col gap-1 w-full">
+                <span className="hidden md:inline text-[9px] font-bold text-rm-text-muted/50 uppercase tracking-widest px-2 mb-1">
+                  Theme
+                </span>
+                <TabBtn
+                  active={activeTab === "appearance"}
+                  onClick={() => setActiveTab("appearance")}
+                  label="Appearance"
+                />
+              </div>
+            </div>
+
+            {/* Content */}
+            <div className="flex-1 min-h-0 flex flex-col relative overflow-hidden bg-rm-bg-primary">
+              {/* Close */}
+              <div className="absolute right-5 top-5 z-20 hidden md:flex flex-col items-center gap-1">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="flex h-8 w-8 items-center justify-center rounded-full border border-rm-border text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text transition-all"
+                  aria-label="Close room settings"
+                >
+                  <X size={16} />
+                </button>
+                <span className="text-[11px] font-bold text-rm-text-muted">
+                  ESC
+                </span>
+              </div>
+
+              <div
+                className="flex-1 min-h-0 overflow-y-auto custom-scrollbar px-6 pb-10 pt-6 md:pt-10 max-w-[600px]"
+                style={{
+                  paddingBottom: "calc(40px + var(--safe-area-bottom, 0px))",
+                }}
+              >
+                {activeTab === "voice" && (
+                  <div className="animate-in fade-in slide-in-from-right-4 duration-300">
+                    <h1 className="text-xl font-bold text-rm-text mb-1">
+                      Voice Settings
+                    </h1>
+                    <p className="text-sm text-rm-text-muted mb-8">
+                      Configure your media devices and audio processing.
+                    </p>
+
+                    <div className="space-y-10">
+                      {/* Hardware */}
+                      <section className="space-y-5">
+                        <div className="flex items-center gap-2">
+                          <Volume2 size={14} className="text-rm-accent" />
+                          <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-rm-text-muted">
+                            Hardware
+                          </h3>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                          <div className="space-y-2">
+                            <Label
+                              htmlFor="room-settings-input-device"
+                              className="text-[10px] font-bold uppercase tracking-wider text-rm-text-muted ml-1"
+                            >
+                              Input Device
+                            </Label>
+                            <Select
+                              value={vSettings.inputDeviceId}
+                              onValueChange={(value) => {
+                                const device = audioInputs.find(
+                                  (d) => d.deviceId === value,
+                                );
+                                setDevice("input", value, settingsUserId, {
                                   label: device?.label,
                                   groupId: device?.groupId,
-                                },
-                              );
-                            }}
-                            className="w-full rounded-lg border border-rm-border bg-rm-bg-elevated px-3 py-2 text-sm text-rm-text outline-none"
-                          >
-                            <option value="default">
-                              {defaultAudioInput?.label || "Default Microphone"}
-                            </option>
-                            {filteredAudioInputs.map((d) => (
-                              <option key={d.deviceId} value={d.deviceId}>
-                                {d.label || `Mic ${d.deviceId.slice(0, 5)}`}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                        <div className="space-y-2">
-                          <Label
-                            htmlFor="room-settings-output-device"
-                            className="text-[10px] font-bold uppercase tracking-wider text-rm-text-muted ml-1"
-                          >
-                            Output Device
-                          </Label>
-                          <select
-                            id="room-settings-output-device"
-                            value={vSettings.outputDeviceId}
-                            onChange={(e) => {
-                              const device = audioOutputs.find(
-                                (d) => d.deviceId === e.target.value,
-                              );
-                              setDevice(
-                                "output",
-                                e.target.value,
-                                settingsUserId,
-                                {
+                                });
+                              }}
+                            >
+                              <SelectTrigger
+                                id="room-settings-input-device"
+                                aria-label="Select input device"
+                                className="w-full rounded-lg border-rm-border bg-rm-bg-elevated px-3 py-2 text-sm text-rm-text outline-none"
+                              >
+                                <SelectValue placeholder="Select input device" />
+                              </SelectTrigger>
+                              <SelectContent position="popper" align="start">
+                                <SelectItem
+                                  value="default"
+                                  textValue={
+                                    defaultAudioInput?.label ||
+                                    "Default Microphone"
+                                  }
+                                >
+                                  <InlineEmojiText
+                                    text={
+                                      defaultAudioInput?.label ||
+                                      "Default Microphone"
+                                    }
+                                  />
+                                </SelectItem>
+                                {filteredAudioInputs.map((device) => {
+                                  const label =
+                                    device.label ||
+                                    `Mic ${device.deviceId.slice(0, 5)}`;
+                                  return (
+                                    <SelectItem
+                                      key={device.deviceId}
+                                      value={device.deviceId}
+                                      textValue={label}
+                                    >
+                                      <InlineEmojiText text={label} />
+                                    </SelectItem>
+                                  );
+                                })}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div className="space-y-2">
+                            <Label
+                              htmlFor="room-settings-output-device"
+                              className="text-[10px] font-bold uppercase tracking-wider text-rm-text-muted ml-1"
+                            >
+                              Output Device
+                            </Label>
+                            <Select
+                              value={vSettings.outputDeviceId}
+                              onValueChange={(value) => {
+                                const device = audioOutputs.find(
+                                  (d) => d.deviceId === value,
+                                );
+                                setDevice("output", value, settingsUserId, {
                                   label: device?.label,
                                   groupId: device?.groupId,
-                                },
-                              );
-                            }}
-                            className="w-full rounded-lg border border-rm-border bg-rm-bg-elevated px-3 py-2 text-sm text-rm-text outline-none"
-                          >
-                            <option value="default">
-                              {defaultAudioOutput?.label || "Default Speaker"}
-                            </option>
-                            {filteredAudioOutputs.map((d) => (
-                              <option key={d.deviceId} value={d.deviceId}>
-                                {d.label || `Speaker ${d.deviceId.slice(0, 5)}`}
-                              </option>
-                            ))}
-                          </select>
+                                });
+                              }}
+                            >
+                              <SelectTrigger
+                                id="room-settings-output-device"
+                                aria-label="Select output device"
+                                className="w-full rounded-lg border-rm-border bg-rm-bg-elevated px-3 py-2 text-sm text-rm-text outline-none"
+                              >
+                                <SelectValue placeholder="Select output device" />
+                              </SelectTrigger>
+                              <SelectContent position="popper" align="start">
+                                <SelectItem
+                                  value="default"
+                                  textValue={
+                                    defaultAudioOutput?.label ||
+                                    "Default Speaker"
+                                  }
+                                >
+                                  <InlineEmojiText
+                                    text={
+                                      defaultAudioOutput?.label ||
+                                      "Default Speaker"
+                                    }
+                                  />
+                                </SelectItem>
+                                {filteredAudioOutputs.map((device) => {
+                                  const label =
+                                    device.label ||
+                                    `Speaker ${device.deviceId.slice(0, 5)}`;
+                                  return (
+                                    <SelectItem
+                                      key={device.deviceId}
+                                      value={device.deviceId}
+                                      textValue={label}
+                                    >
+                                      <InlineEmojiText text={label} />
+                                    </SelectItem>
+                                  );
+                                })}
+                              </SelectContent>
+                            </Select>
+                          </div>
                         </div>
-                      </div>
-                    </section>
+                      </section>
 
-                    <Separator className="bg-rm-border" />
+                      <Separator className="bg-rm-border" />
 
-                    {/* Volume */}
-                    <section className="space-y-5">
-                      <div className="flex items-center gap-2">
-                        <Volume2 size={14} className="text-emerald-400" />
-                        <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-rm-text-muted">
-                          Volume
-                        </h3>
-                      </div>
-                      <div className="space-y-4">
-                        <div className="flex justify-between items-end px-1">
-                          <label
-                            htmlFor="outputVolume"
-                            className="text-[10px] font-bold uppercase tracking-wider text-rm-text-muted"
-                          >
-                            Output Volume
-                          </label>
-                          <span className="text-sm font-black text-rm-accent tabular-nums">
-                            {vSettings.outputVolume}%
-                          </span>
+                      {/* Volume */}
+                      <section className="space-y-5">
+                        <div className="flex items-center gap-2">
+                          <Volume2 size={14} className="text-emerald-400" />
+                          <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-rm-text-muted">
+                            Volume
+                          </h3>
                         </div>
-                        <input
-                          id="outputVolume"
-                          type="range"
-                          min="0"
-                          max="200"
-                          value={vSettings.outputVolume}
-                          onChange={(e) =>
-                            handleVoiceSlider(
-                              "outputVolume",
-                              parseInt(e.target.value),
-                            )
-                          }
-                          className="w-full h-1.5 bg-rm-bg-elevated rounded-full appearance-none cursor-pointer accent-rm-accent"
-                        />
-                      </div>
-                      {!vSettings.autoSensitivity && (
                         <div className="space-y-4">
                           <div className="flex justify-between items-end px-1">
                             <label
-                              htmlFor="inputSensitivity"
+                              htmlFor="outputVolume"
                               className="text-[10px] font-bold uppercase tracking-wider text-rm-text-muted"
                             >
-                              Input Sensitivity
+                              Output Volume
                             </label>
-                            <span className="text-sm font-black text-amber-600 dark:text-amber-400 tabular-nums">
-                              {vSettings.sensitivity}dB
+                            <span className="text-sm font-black text-rm-accent tabular-nums">
+                              {vSettings.outputVolume}%
                             </span>
                           </div>
                           <input
-                            id="inputSensitivity"
+                            id="outputVolume"
                             type="range"
-                            min="-100"
-                            max="0"
-                            value={vSettings.sensitivity}
+                            min="0"
+                            max="200"
+                            value={vSettings.outputVolume}
                             onChange={(e) =>
                               handleVoiceSlider(
-                                "sensitivity",
+                                "outputVolume",
                                 parseInt(e.target.value),
                               )
                             }
-                            className="w-full h-1.5 bg-rm-bg-elevated rounded-full appearance-none cursor-pointer accent-amber-500"
+                            className="w-full h-1.5 bg-rm-bg-elevated rounded-full appearance-none cursor-pointer accent-rm-accent"
                           />
                         </div>
-                      )}
-                    </section>
-
-                    <Separator className="bg-rm-border" />
-
-                    <section className="space-y-5">
-                      <div className="flex items-center gap-2">
-                        <Sparkles size={14} className="text-sky-300" />
-                        <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-rm-text-muted">
-                          Noise Suppression
-                        </h3>
-                      </div>
-                      <NoiseReductionPanel settingsUserId={settingsUserId} />
-                    </section>
-
-                    <Separator className="bg-rm-border" />
-
-                    {/* Processing */}
-                    <section className="space-y-5">
-                      <div className="flex items-center gap-2">
-                        <Zap
-                          size={14}
-                          className="text-amber-600 dark:text-amber-400"
-                        />
-                        <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-rm-text-muted">
-                          Audio Processing
-                        </h3>
-                      </div>
-                      <div className="grid grid-cols-1 gap-3">
-                        {[
-                          {
-                            id: "noiseSuppression",
-                            label: "Browser Noise Suppression",
-                            desc: "Uses the browser's built-in noise suppression. Turn on Noise Suppression above for the stronger open-source path.",
-                            icon: <Mic size={16} />,
-                          },
-                          {
-                            id: "echoCancellation",
-                            label: "Echo Cancellation",
-                            desc: "Prevents mic picking up speakers (Disables High Fidelity)",
-                            icon: <Speaker size={16} />,
-                          },
-                          {
-                            id: "autoSensitivity",
-                            label: "Input Sensitivity",
-                            desc: "Auto-detect best input level (Disables High Fidelity)",
-                            icon: <Volume2 size={16} />,
-                          },
-                          {
-                            id: "streamHighFidelity",
-                            label: "High Fidelity Audio",
-                            desc: "Disables all processing for stereo mic",
-                            icon: <Music size={16} />,
-                          },
-                        ].map((opt) => (
-                          <div
-                            key={opt.id}
-                            className="group flex items-center justify-between p-3 rounded-xl bg-rm-bg-elevated/50 border border-rm-border hover:bg-rm-bg-hover transition-all"
-                          >
-                            <div className="flex items-center gap-3">
-                              <div className="w-8 h-8 rounded-lg bg-rm-bg-surface flex items-center justify-center text-rm-text-muted">
-                                {opt.icon}
-                              </div>
-                              <div>
-                                <h4 className="text-[13px] font-bold text-rm-text">
-                                  {opt.label}
-                                </h4>
-                                <p className="text-[11px] text-rm-text-muted">
-                                  {opt.desc}
-                                </p>
-                              </div>
+                        {!vSettings.autoSensitivity && (
+                          <div className="space-y-4">
+                            <div className="flex justify-between items-end px-1">
+                              <label
+                                htmlFor="inputSensitivity"
+                                className="text-[10px] font-bold uppercase tracking-wider text-rm-text-muted"
+                              >
+                                Input Sensitivity
+                              </label>
+                              <span className="text-sm font-black text-amber-600 dark:text-amber-400 tabular-nums">
+                                {vSettings.sensitivity}dB
+                              </span>
                             </div>
-                            <button
-                              type="button"
-                              onClick={() => handleVoiceToggle(opt.id)}
-                              aria-label={opt.label}
-                              aria-pressed={Boolean((vSettings as any)[opt.id])}
-                              className={cn(
-                                "relative w-10 h-5 rounded-full transition-colors duration-200",
-                                (vSettings as any)[opt.id]
-                                  ? "bg-primary"
-                                  : "bg-rm-bg-elevated border border-rm-border",
-                              )}
-                            >
-                              <span
-                                className={cn(
-                                  "absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform duration-200",
-                                  (vSettings as any)[opt.id] && "translate-x-5",
-                                )}
-                              />
-                            </button>
+                            <input
+                              id="inputSensitivity"
+                              type="range"
+                              min="-100"
+                              max="0"
+                              value={vSettings.sensitivity}
+                              onChange={(e) =>
+                                handleVoiceSlider(
+                                  "sensitivity",
+                                  parseInt(e.target.value),
+                                )
+                              }
+                              className="w-full h-1.5 bg-rm-bg-elevated rounded-full appearance-none cursor-pointer accent-amber-500"
+                            />
                           </div>
-                        ))}
-                      </div>
-                    </section>
-                  </div>
-                </div>
-              )}
+                        )}
+                      </section>
 
-              {activeTab === "camera" && (
-                <div className="animate-in fade-in slide-in-from-right-4 duration-300 space-y-8">
-                  <div>
-                    <h1 className="text-xl font-bold text-rm-text mb-1">
-                      Camera Settings
-                    </h1>
-                    <p className="text-sm text-rm-text-muted">
-                      Configure your video input, capture quality, and
-                      background preferences.
-                    </p>
-                  </div>
+                      <Separator className="bg-rm-border" />
 
-                  {/* Live Video Preview Box */}
-                  <div className="relative aspect-video w-full max-w-[480px] overflow-hidden rounded-xl bg-black border border-rm-border flex items-center justify-center">
-                    {previewStream && (
-                      <VideoPlayer
-                        stream={previewStream}
-                        isLocal={true}
-                        className="h-full w-full object-contain bg-black"
-                      />
-                    )}
-                  </div>
+                      <section className="space-y-5">
+                        <div className="flex items-center gap-2">
+                          <Sparkles size={14} className="text-sky-300" />
+                          <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-rm-text-muted">
+                            Noise Suppression
+                          </h3>
+                        </div>
+                        <NoiseReductionPanel settingsUserId={settingsUserId} />
+                      </section>
 
-                  {/* Camera dropdown selection */}
-                  <div className="space-y-2 max-w-[480px]">
-                    <div className="flex flex-col gap-2">
-                      <p className="ml-1 text-[10px] font-bold uppercase tracking-wider text-rm-text-muted">
-                        Camera Device
-                      </p>
-                      <CustomSelect
-                        value={vSettings.videoDeviceId || "default"}
-                        onChange={(val) => {
-                          const device = videoInputs.find(
-                            (d) => d.deviceId === val,
-                          );
-                          setDevice("video", val, settingsUserId, {
-                            label: device?.label,
-                            groupId: device?.groupId,
-                          });
-                        }}
-                        options={videoInputs.map((d) => ({
-                          value: d.deviceId,
-                          label:
-                            d.label ||
-                            (d.deviceId === "default"
-                              ? "Default Camera"
-                              : "Camera"),
-                        }))}
-                        placeholder="Select camera device"
-                      />
-                    </div>
-                  </div>
+                      <Separator className="bg-rm-border" />
 
-                  {/* Camera Quality */}
-                  <div className="space-y-3">
-                    <p className="ml-1 text-[10px] font-bold uppercase tracking-wider text-rm-text-muted">
-                      Capture Quality
-                    </p>
-                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 max-w-[480px]">
-                      {CAMERA_QUALITY_PROFILES.map((profile) => {
-                        const isSelected =
-                          vSettings.cameraQuality === profile.id;
-                        return (
-                          <button
-                            type="button"
-                            key={profile.id}
-                            onClick={() =>
-                              updateUserSettings(
-                                (current: any) => ({
-                                  ...current,
-                                  cameraQuality: profile.id,
-                                }),
-                                settingsUserId,
-                              )
-                            }
-                            className={cn(
-                              "group rounded-xl border p-3 text-left outline-none transition-all",
-                              isSelected
-                                ? "border-primary bg-primary/5 ring-1 ring-primary"
-                                : "border-rm-border bg-rm-bg-surface/40 hover:border-rm-text/20 hover:bg-rm-bg-surface/60",
-                            )}
-                          >
-                            <div className="mb-1 flex items-center justify-between">
-                              <div className="flex items-center gap-1.5">
-                                <span
-                                  className={cn(
-                                    "text-xs font-bold",
-                                    isSelected
-                                      ? "text-primary"
-                                      : "text-rm-text",
-                                  )}
-                                >
-                                  {profile.label}
-                                </span>
-                                <span className="rounded-md bg-rm-bg-elevated/40 px-1 py-0.5 text-[8px] font-black text-rm-text-muted">
-                                  {profile.fps} FPS
-                                </span>
-                              </div>
-                              {isSelected && (
-                                <Check size={12} className="text-primary" />
-                              )}
-                            </div>
-                            <p className="text-[9px] leading-tight text-rm-text-muted">
-                              {profile.width}x{profile.height}
-                            </p>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  {/* Video Background */}
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between gap-3 px-1 max-w-[480px]">
-                      <p className="text-[10px] font-bold uppercase tracking-wider text-rm-text-muted">
-                        Video Background
-                      </p>
-                      {!isUnauthenticated && (
-                        <>
-                          <button
-                            type="button"
-                            onClick={() => fileInputRef.current?.click()}
-                            disabled={isUploadingBackground}
-                            className="flex items-center gap-1.5 rounded-lg border border-rm-border bg-rm-bg-surface/40 px-2.5 py-1.5 text-[10px] font-black text-rm-text-muted transition-colors hover:text-rm-text"
-                          >
-                            <Upload size={12} />{" "}
-                            {isUploadingBackground
-                              ? "Uploading"
-                              : "Upload Image"}
-                          </button>
-                          <input
-                            ref={fileInputRef}
-                            type="file"
-                            accept={CAMERA_BACKGROUND_ACCEPT}
-                            className="hidden"
-                            aria-label="Upload video background image"
-                            onChange={handleUpload}
+                      {/* Processing */}
+                      <section className="space-y-5">
+                        <div className="flex items-center gap-2">
+                          <Zap
+                            size={14}
+                            className="text-amber-600 dark:text-amber-400"
                           />
-                        </>
-                      )}
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 max-w-[480px]">
-                      {[
-                        {
-                          id: "none",
-                          label: "None",
-                          value: { type: "none" } as CameraBackgroundSetting,
-                        },
-                        {
-                          id: "blur",
-                          label: "Blur",
-                          value: {
-                            type: "blur",
-                            strength: "strong",
-                          } as CameraBackgroundSetting,
-                        },
-                      ].map((option) => {
-                        const optionId = option.id;
-                        const currentBgId =
-                          vSettings.cameraBackground.type === "blur"
-                            ? "blur"
-                            : vSettings.cameraBackground.type === "image"
-                              ? `image-${vSettings.cameraBackground.id}`
-                              : "none";
-                        const isSelected = currentBgId === optionId;
-                        return (
-                          <button
-                            type="button"
-                            key={option.id}
-                            onClick={() =>
-                              updateUserSettings(
-                                (current: any) => ({
-                                  ...current,
-                                  cameraBackground: option.value,
-                                }),
-                                settingsUserId,
-                              )
-                            }
-                            className={cn(
-                              "group relative flex flex-col rounded-xl border p-2.5 text-left outline-none transition-all",
-                              isSelected
-                                ? "border-primary bg-primary/5 ring-1 ring-primary"
-                                : "border-rm-border bg-rm-bg-surface/40 hover:border-rm-text/20 hover:bg-rm-bg-surface/60",
-                            )}
-                          >
-                            {option.id === "none" ? (
-                              <div className="mb-2 flex h-16 w-full items-center justify-center rounded-lg bg-rm-bg-elevated/40 text-rm-text-muted/60 transition-all group-hover:scale-[1.02]">
-                                <Ban size={20} />
-                              </div>
-                            ) : (
-                              <div className="relative mb-2 flex h-16 w-full items-center justify-center overflow-hidden rounded-lg bg-rm-bg-elevated/40 transition-all group-hover:scale-[1.02]">
-                                <div className="absolute inset-0 bg-gradient-to-tr from-primary/30 via-rm-accent/25 to-rm-accent/40 filter blur-[8px]" />
-                                <div className="absolute inset-0 bg-black/15" />
-                                <Sparkles
-                                  size={20}
-                                  className="relative z-10 text-white/80"
-                                />
-                              </div>
-                            )}
-                            <span
-                              className={cn(
-                                "text-xs font-bold",
-                                isSelected ? "text-primary" : "text-rm-text",
-                              )}
-                            >
-                              {option.label}
-                            </span>
-                            {isSelected && (
-                              <div className="absolute top-2 right-2 rounded-full bg-primary p-0.5 text-primary-foreground">
-                                <Check size={10} />
-                              </div>
-                            )}
-                          </button>
-                        );
-                      })}
-
-                      {(vSettings.customCameraBackgrounds ?? []).map(
-                        (background) => {
-                          const currentBgId =
-                            vSettings.cameraBackground.type === "image"
-                              ? `image-${vSettings.cameraBackground.id}`
-                              : null;
-                          const isSelected =
-                            currentBgId === `image-${background.id}`;
-                          return (
+                          <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-rm-text-muted">
+                            Audio Processing
+                          </h3>
+                        </div>
+                        <div className="grid grid-cols-1 gap-3">
+                          {[
+                            {
+                              id: "noiseSuppression",
+                              label: "Browser Noise Suppression",
+                              desc: (
+                                <>
+                                  Uses the browser's built-in noise suppression.
+                                  <AudioCompatibilityHint>
+                                    Browser noise suppression is unavailable
+                                    with RNNoise or high fidelity audio.
+                                  </AudioCompatibilityHint>
+                                </>
+                              ),
+                              icon: <Mic size={16} />,
+                            },
+                            {
+                              id: "echoCancellation",
+                              label: "Echo Cancellation",
+                              desc: (
+                                <>
+                                  Prevents mic pickup from speakers.
+                                  <AudioCompatibilityHint>
+                                    Echo cancellation disables high fidelity
+                                    capture, but remains compatible with
+                                    RNNoise.
+                                  </AudioCompatibilityHint>
+                                </>
+                              ),
+                              icon: <Speaker size={16} />,
+                            },
+                            {
+                              id: "autoSensitivity",
+                              label: "Input Sensitivity",
+                              desc: "Auto-detect the best input level.",
+                              icon: <Volume2 size={16} />,
+                            },
+                            {
+                              id: "streamHighFidelity",
+                              label: "High Fidelity Audio",
+                              desc: (
+                                <>
+                                  Disables browser processing for stereo mic.
+                                  <AudioCompatibilityHint>
+                                    RNNoise and input sensitivity remain
+                                    available in high fidelity mode.
+                                  </AudioCompatibilityHint>
+                                </>
+                              ),
+                              icon: <Music size={16} />,
+                            },
+                          ].map((opt) => (
                             <div
-                              key={background.id}
-                              className={cn(
-                                "group relative overflow-hidden rounded-xl border bg-rm-bg-surface/40 outline-none transition-all",
-                                isSelected
-                                  ? "border-primary ring-1 ring-primary"
-                                  : "border-rm-border hover:border-rm-text/20",
-                              )}
+                              key={opt.id}
+                              className="group flex items-center justify-between p-3 rounded-xl bg-rm-bg-elevated/50 border border-rm-border hover:bg-rm-bg-hover transition-all"
                             >
+                              <div className="flex items-center gap-3">
+                                <div className="w-8 h-8 rounded-lg bg-rm-bg-surface flex items-center justify-center text-rm-text-muted">
+                                  {opt.icon}
+                                </div>
+                                <div>
+                                  <h4 className="text-[13px] font-bold text-rm-text">
+                                    {opt.label}
+                                  </h4>
+                                  <p className="text-[11px] text-rm-text-muted">
+                                    {opt.desc}
+                                  </p>
+                                </div>
+                              </div>
                               <button
                                 type="button"
-                                onClick={() =>
-                                  updateUserSettings(
-                                    (current: any) => ({
-                                      ...current,
-                                      cameraBackground: {
-                                        type: "image",
-                                        id: background.id,
-                                      },
-                                    }),
-                                    settingsUserId,
-                                  )
-                                }
-                                className="block w-full p-2 text-left"
+                                onClick={() => handleVoiceToggle(opt.id)}
+                                aria-label={opt.label}
+                                aria-pressed={Boolean(
+                                  (vSettings as any)[opt.id],
+                                )}
+                                className={cn(
+                                  "relative w-10 h-5 rounded-full transition-colors duration-200",
+                                  (vSettings as any)[opt.id]
+                                    ? "bg-primary"
+                                    : "bg-rm-bg-elevated border border-rm-border",
+                                )}
                               >
-                                <img
-                                  src={
-                                    background.url
-                                      ? getAuthAssetUrl(background.url)
-                                      : background.dataUrl
-                                  }
-                                  alt=""
-                                  className="h-16 w-full rounded-lg object-cover"
+                                <span
+                                  className={cn(
+                                    "absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform duration-200",
+                                    (vSettings as any)[opt.id] &&
+                                      "translate-x-5",
+                                  )}
                                 />
-                                <div className="mt-2 flex items-center justify-between gap-2 px-1">
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </section>
+                    </div>
+                  </div>
+                )}
+
+                {activeTab === "camera" && (
+                  <div className="animate-in fade-in slide-in-from-right-4 duration-300 space-y-8">
+                    <div>
+                      <h1 className="text-xl font-bold text-rm-text mb-1">
+                        Camera Settings
+                      </h1>
+                      <p className="text-sm text-rm-text-muted">
+                        Configure your video input, capture quality, and
+                        background preferences.
+                      </p>
+                    </div>
+
+                    {/* Live Video Preview Box */}
+                    <div className="relative aspect-video w-full max-w-[480px] overflow-hidden rounded-xl bg-black border border-rm-border flex items-center justify-center">
+                      {previewStream && (
+                        <VideoPlayer
+                          stream={previewStream}
+                          isLocal={true}
+                          className="h-full w-full object-contain bg-black"
+                        />
+                      )}
+                    </div>
+
+                    {/* Camera dropdown selection */}
+                    <div className="space-y-2 max-w-[480px]">
+                      <div className="flex flex-col gap-2">
+                        <p className="ml-1 text-[10px] font-bold uppercase tracking-wider text-rm-text-muted">
+                          Camera Device
+                        </p>
+                        <Select
+                          value={vSettings.videoDeviceId || "default"}
+                          onValueChange={(val) => {
+                            const device = videoInputs.find(
+                              (d) => d.deviceId === val,
+                            );
+                            setDevice("video", val, settingsUserId, {
+                              label: device?.label,
+                              groupId: device?.groupId,
+                            });
+                          }}
+                        >
+                          <SelectTrigger
+                            aria-label="Select camera device"
+                            className="w-full max-w-[480px] rounded-xl border-rm-border bg-rm-bg-elevated/50 px-4 py-3 text-rm-text hover:bg-rm-bg-elevated"
+                          >
+                            <SelectValue placeholder="Select camera device" />
+                          </SelectTrigger>
+                          <SelectContent
+                            position="popper"
+                            align="start"
+                            className="rounded-xl border-rm-border bg-rm-bg-floating p-1.5 text-rm-text shadow-2xl"
+                          >
+                            {videoInputs.map((device) => {
+                              const label =
+                                device.label ||
+                                (device.deviceId === "default"
+                                  ? "Default Camera"
+                                  : "Camera");
+                              return (
+                                <SelectItem
+                                  key={device.deviceId}
+                                  value={device.deviceId}
+                                  textValue={label}
+                                  className="text-rm-text-secondary hover:bg-rm-bg-elevated hover:text-rm-text focus:bg-rm-bg-elevated focus:text-rm-text"
+                                >
+                                  <InlineEmojiText text={label} />
+                                </SelectItem>
+                              );
+                            })}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+
+                    {/* Camera Quality */}
+                    <div className="space-y-3">
+                      <p className="ml-1 text-[10px] font-bold uppercase tracking-wider text-rm-text-muted">
+                        Capture Quality
+                      </p>
+                      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 max-w-[480px]">
+                        {CAMERA_QUALITY_PROFILES.map((profile) => {
+                          const isSelected =
+                            vSettings.cameraQuality === profile.id;
+                          return (
+                            <button
+                              type="button"
+                              key={profile.id}
+                              onClick={() =>
+                                updateUserSettings(
+                                  (current: any) => ({
+                                    ...current,
+                                    cameraQuality: profile.id,
+                                  }),
+                                  settingsUserId,
+                                )
+                              }
+                              className={cn(
+                                "group rounded-xl border p-3 text-left outline-none transition-all",
+                                isSelected
+                                  ? "border-primary bg-primary/5 ring-1 ring-primary"
+                                  : "border-rm-border bg-rm-bg-surface/40 hover:border-rm-text/20 hover:bg-rm-bg-surface/60",
+                              )}
+                            >
+                              <div className="mb-1 flex items-center justify-between">
+                                <div className="flex items-center gap-1.5">
                                   <span
                                     className={cn(
-                                      "truncate text-xs font-bold",
+                                      "text-xs font-bold",
                                       isSelected
                                         ? "text-primary"
                                         : "text-rm-text",
                                     )}
                                   >
-                                    {background.name}
+                                    {profile.label}
+                                  </span>
+                                  <span className="rounded-md bg-rm-bg-elevated/40 px-1 py-0.5 text-[8px] font-black text-rm-text-muted">
+                                    {profile.fps} FPS
                                   </span>
                                 </div>
-                              </button>
+                                {isSelected && (
+                                  <Check size={12} className="text-primary" />
+                                )}
+                              </div>
+                              <p className="text-[9px] leading-tight text-rm-text-muted">
+                                {profile.width}x{profile.height}
+                              </p>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Video Background */}
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between gap-3 px-1 max-w-[480px]">
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-rm-text-muted">
+                          Video Background
+                        </p>
+                        {!isUnauthenticated && (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => fileInputRef.current?.click()}
+                              disabled={isUploadingBackground}
+                              className="flex items-center gap-1.5 rounded-lg border border-rm-border bg-rm-bg-surface/40 px-2.5 py-1.5 text-[10px] font-black text-rm-text-muted transition-colors hover:text-rm-text"
+                            >
+                              <Upload size={12} />{" "}
+                              {isUploadingBackground
+                                ? "Uploading"
+                                : "Upload Image"}
+                            </button>
+                            <input
+                              ref={fileInputRef}
+                              type="file"
+                              accept={CAMERA_BACKGROUND_ACCEPT}
+                              className="hidden"
+                              aria-label="Upload video background image"
+                              onChange={handleUpload}
+                            />
+                          </>
+                        )}
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 max-w-[480px]">
+                        {[
+                          {
+                            id: "none",
+                            label: "None",
+                            value: { type: "none" } as CameraBackgroundSetting,
+                          },
+                          {
+                            id: "blur",
+                            label: "Blur",
+                            value: {
+                              type: "blur",
+                              strength: "strong",
+                            } as CameraBackgroundSetting,
+                          },
+                        ].map((option) => {
+                          const optionId = option.id;
+                          const currentBgId =
+                            vSettings.cameraBackground.type === "blur"
+                              ? "blur"
+                              : vSettings.cameraBackground.type === "image"
+                                ? `image-${vSettings.cameraBackground.id}`
+                                : "none";
+                          const isSelected = currentBgId === optionId;
+                          return (
+                            <button
+                              type="button"
+                              key={option.id}
+                              onClick={() =>
+                                updateUserSettings(
+                                  (current: any) => ({
+                                    ...current,
+                                    cameraBackground: option.value,
+                                  }),
+                                  settingsUserId,
+                                )
+                              }
+                              className={cn(
+                                "group relative flex flex-col rounded-xl border p-2.5 text-left outline-none transition-all",
+                                isSelected
+                                  ? "border-primary bg-primary/5 ring-1 ring-primary"
+                                  : "border-rm-border bg-rm-bg-surface/40 hover:border-rm-text/20 hover:bg-rm-bg-surface/60",
+                              )}
+                            >
+                              {option.id === "none" ? (
+                                <div className="mb-2 flex h-16 w-full items-center justify-center rounded-lg bg-rm-bg-elevated/40 text-rm-text-muted/60 transition-all group-hover:scale-[1.02]">
+                                  <Ban size={20} />
+                                </div>
+                              ) : (
+                                <div className="relative mb-2 flex h-16 w-full items-center justify-center overflow-hidden rounded-lg bg-rm-bg-elevated/40 transition-all group-hover:scale-[1.02]">
+                                  <div
+                                    data-rm-preserve-blur="true"
+                                    className="absolute inset-0 bg-gradient-to-tr from-primary/30 via-rm-accent/25 to-rm-accent/40 filter blur-[8px]"
+                                  />
+                                  <div className="absolute inset-0 bg-black/15" />
+                                  <Sparkles
+                                    size={20}
+                                    className="relative z-10 text-white/80"
+                                  />
+                                </div>
+                              )}
+                              <span
+                                className={cn(
+                                  "text-xs font-bold",
+                                  isSelected ? "text-primary" : "text-rm-text",
+                                )}
+                              >
+                                {option.label}
+                              </span>
                               {isSelected && (
-                                <div className="absolute top-3 right-8 rounded-full bg-primary p-0.5 text-primary-foreground">
+                                <div className="absolute top-2 right-2 rounded-full bg-primary p-0.5 text-primary-foreground">
                                   <Check size={10} />
                                 </div>
                               )}
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  void removeBackground(background)
-                                }
-                                className="absolute right-2 top-2 rounded-md bg-black/60 p-1 text-white/80 opacity-0 transition-opacity hover:text-white group-hover:opacity-100"
-                                aria-label={`Remove ${background.name}`}
-                              >
-                                <Trash2 size={12} />
-                              </button>
-                            </div>
+                            </button>
                           );
-                        },
-                      )}
+                        })}
 
-                      {isUnauthenticated && (
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <a
-                              href="/sign-in"
-                              target="_blank"
-                              rel="noreferrer"
-                              className="group relative flex flex-col rounded-xl border border-primary/20 bg-gradient-to-br from-primary/10 via-rm-accent/10 to-rm-accent/5 p-2.5 text-left outline-none transition-all hover:border-primary/50 hover:from-primary/15 hover:to-rm-accent/15"
-                            >
-                              <div className="mb-2 flex h-16 w-full flex-col items-center justify-center rounded-lg bg-gradient-to-tr from-primary/20 to-rm-accent/20 text-primary transition-all group-hover:scale-[1.02]">
-                                <Lock
-                                  size={18}
-                                  className="text-rm-accent group-hover:scale-110 transition-transform"
-                                />
+                        {(vSettings.customCameraBackgrounds ?? []).map(
+                          (background) => {
+                            const currentBgId =
+                              vSettings.cameraBackground.type === "image"
+                                ? `image-${vSettings.cameraBackground.id}`
+                                : null;
+                            const isSelected =
+                              currentBgId === `image-${background.id}`;
+                            return (
+                              <div
+                                key={background.id}
+                                className={cn(
+                                  "group relative overflow-hidden rounded-xl border bg-rm-bg-surface/40 outline-none transition-all",
+                                  isSelected
+                                    ? "border-primary ring-1 ring-primary"
+                                    : "border-rm-border hover:border-rm-text/20",
+                                )}
+                              >
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    updateUserSettings(
+                                      (current: any) => ({
+                                        ...current,
+                                        cameraBackground: {
+                                          type: "image",
+                                          id: background.id,
+                                        },
+                                      }),
+                                      settingsUserId,
+                                    )
+                                  }
+                                  className="block w-full p-2 text-left"
+                                >
+                                  <img
+                                    src={
+                                      background.url
+                                        ? getAuthAssetUrl(background.url)
+                                        : background.dataUrl
+                                    }
+                                    alt=""
+                                    className="h-16 w-full rounded-lg object-cover"
+                                  />
+                                  <div className="mt-2 flex items-center justify-between gap-2 px-1">
+                                    <span
+                                      className={cn(
+                                        "truncate text-xs font-bold",
+                                        isSelected
+                                          ? "text-primary"
+                                          : "text-rm-text",
+                                      )}
+                                    >
+                                      {background.name}
+                                    </span>
+                                  </div>
+                                </button>
+                                {isSelected && (
+                                  <div className="absolute top-3 right-8 rounded-full bg-primary p-0.5 text-primary-foreground">
+                                    <Check size={10} />
+                                  </div>
+                                )}
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    void removeBackground(background)
+                                  }
+                                  className="absolute right-2 top-2 rounded-md bg-black/60 p-1 text-white/80 opacity-0 transition-opacity hover:text-white group-hover:opacity-100"
+                                  aria-label={`Remove ${background.name}`}
+                                >
+                                  <Trash2 size={12} />
+                                </button>
                               </div>
-                              <span className="text-xs font-bold text-primary-foreground/90 group-hover:text-primary">
-                                Upload Custom
-                              </span>
-                            </a>
-                          </TooltipTrigger>
-                          <TooltipContent
-                            side="top"
-                            className="bg-rm-bg-floating border border-rm-border text-rm-text-primary text-[12px] font-bold shadow-xl px-3 py-2 rounded-lg"
-                            sideOffset={8}
-                          >
-                            Sign in to upload custom backgrounds
-                          </TooltipContent>
-                        </Tooltip>
-                      )}
-                    </div>
-                    {isLoadingBackgrounds && (
-                      <p className="px-1 text-xs font-medium text-rm-text-muted">
-                        Loading saved backgrounds...
-                      </p>
-                    )}
-                    {uploadError && (
-                      <p className="px-1 text-xs font-medium text-destructive">
-                        {uploadError}
-                      </p>
-                    )}
-                  </div>
-
-                  {/* Always Preview Video Toggle */}
-                  <div className="flex items-center justify-between p-3.5 rounded-xl bg-rm-bg-elevated/50 border border-rm-border hover:bg-rm-bg-hover transition-all max-w-[480px]">
-                    <div>
-                      <h4 className="text-[13px] font-bold text-rm-text">
-                        Always Preview Video
-                      </h4>
-                      <p className="text-[11px] text-rm-text-muted">
-                        Show preview modal before starting video chat
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        updateUserSettings(
-                          (current: any) => ({
-                            ...current,
-                            alwaysPreviewVideo: !current.alwaysPreviewVideo,
-                          }),
-                          settingsUserId,
-                        );
-                      }}
-                      aria-label={`Always preview video: ${vSettings.alwaysPreviewVideo ? "On" : "Off"}`}
-                      aria-pressed={vSettings.alwaysPreviewVideo}
-                      className={cn(
-                        "relative w-10 h-5 rounded-full transition-colors duration-200 outline-none",
-                        vSettings.alwaysPreviewVideo
-                          ? "bg-primary"
-                          : "bg-rm-bg-elevated border border-rm-border",
-                      )}
-                    >
-                      <span
-                        className={cn(
-                          "absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform duration-200",
-                          vSettings.alwaysPreviewVideo && "translate-x-5",
+                            );
+                          },
                         )}
-                      />
-                    </button>
-                  </div>
-                </div>
-              )}
 
-              {activeTab === "appearance" && (
-                <div className="animate-in fade-in slide-in-from-right-4 duration-300">
-                  <h1 className="text-xl font-bold text-rm-text mb-1">
-                    Appearance
-                  </h1>
-                  <p className="text-sm text-rm-text-muted mb-8">
-                    Choose your preferred theme.
-                  </p>
-
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-                    {[
-                      { id: "dark", label: "Dark", preview: "bg-[#0f0f11]" },
-                      { id: "light", label: "Light", preview: "bg-[#f2f3f5]" },
-                      {
-                        id: "system",
-                        label: "System",
-                        preview:
-                          "bg-gradient-to-br from-[#0f0f11] to-[#f2f3f5]",
-                      },
-                      {
-                        id: "miku-dark",
-                        label: "Miku Dark",
-                        preview: "bg-[#0c0b14] border border-[#39c5bb]/30",
-                      },
-                      {
-                        id: "miku-light",
-                        label: "Miku Light",
-                        preview: "bg-[#f3faf9] border border-[#00a399]/30",
-                      },
-                    ].map((t) => (
-                      <button
-                        type="button"
-                        key={t.id}
-                        onClick={() => setTheme(t.id)}
-                        className={cn(
-                          "rounded-xl border-2 p-1 transition-all",
-                          theme === t.id
-                            ? "border-primary ring-2 ring-primary/20"
-                            : "border-rm-border hover:border-rm-text-muted/30",
+                        {isUnauthenticated && (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <a
+                                href="/sign-in"
+                                target="_blank"
+                                rel="noreferrer"
+                                className="group relative flex flex-col rounded-xl border border-primary/20 bg-gradient-to-br from-primary/10 via-rm-accent/10 to-rm-accent/5 p-2.5 text-left outline-none transition-all hover:border-primary/50 hover:from-primary/15 hover:to-rm-accent/15"
+                              >
+                                <div className="mb-2 flex h-16 w-full flex-col items-center justify-center rounded-lg bg-gradient-to-tr from-primary/20 to-rm-accent/20 text-primary transition-all group-hover:scale-[1.02]">
+                                  <Lock
+                                    size={18}
+                                    className="text-rm-accent group-hover:scale-110 transition-transform"
+                                  />
+                                </div>
+                                <span className="text-xs font-bold text-primary-foreground/90 group-hover:text-primary">
+                                  Upload Custom
+                                </span>
+                              </a>
+                            </TooltipTrigger>
+                            <TooltipContent
+                              side="top"
+                              className="bg-rm-bg-floating border border-rm-border text-rm-text-primary text-[12px] font-bold shadow-xl px-3 py-2 rounded-lg"
+                              sideOffset={8}
+                            >
+                              Sign in to upload custom backgrounds
+                            </TooltipContent>
+                          </Tooltip>
                         )}
-                      >
-                        <div
-                          className={cn("h-16 rounded-lg mb-2", t.preview)}
-                        />
-                        <span className="text-xs font-bold text-rm-text">
-                          {t.label}
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-
-                  <div className="mt-8 bg-rm-bg-elevated/40 border border-rm-border rounded-xl p-5">
-                    <div className="flex items-start gap-3">
-                      <div className="p-2.5 rounded-lg bg-primary/10 text-primary border border-primary/20">
-                        <Monitor size={20} />
                       </div>
+                      {isLoadingBackgrounds && (
+                        <p className="px-1 text-xs font-medium text-rm-text-muted">
+                          Loading saved backgrounds...
+                        </p>
+                      )}
+                      {uploadError && (
+                        <p className="px-1 text-xs font-medium text-destructive">
+                          {uploadError}
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Always Preview Video Toggle */}
+                    <div className="flex items-center justify-between p-3.5 rounded-xl bg-rm-bg-elevated/50 border border-rm-border hover:bg-rm-bg-hover transition-all max-w-[480px]">
                       <div>
-                        <h4 className="text-sm font-bold text-rm-text mb-1">
-                          Visual Comfort
+                        <h4 className="text-[13px] font-bold text-rm-text">
+                          Always Preview Video
                         </h4>
-                        <p className="text-xs text-rm-text-muted">
-                          Our dark mode uses true black and slate tones to
-                          reduce eye strain.
+                        <p className="text-[11px] text-rm-text-muted">
+                          Show preview modal before starting video chat
                         </p>
                       </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          updateUserSettings(
+                            (current: any) => ({
+                              ...current,
+                              alwaysPreviewVideo: !current.alwaysPreviewVideo,
+                            }),
+                            settingsUserId,
+                          );
+                        }}
+                        aria-label={`Always preview video: ${vSettings.alwaysPreviewVideo ? "On" : "Off"}`}
+                        aria-pressed={vSettings.alwaysPreviewVideo}
+                        className={cn(
+                          "relative w-10 h-5 rounded-full transition-colors duration-200 outline-none",
+                          vSettings.alwaysPreviewVideo
+                            ? "bg-primary"
+                            : "bg-rm-bg-elevated border border-rm-border",
+                        )}
+                      >
+                        <span
+                          className={cn(
+                            "absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform duration-200",
+                            vSettings.alwaysPreviewVideo && "translate-x-5",
+                          )}
+                        />
+                      </button>
                     </div>
                   </div>
-                </div>
-              )}
+                )}
+
+                {activeTab === "appearance" && (
+                  <div className="animate-in fade-in slide-in-from-right-4 duration-300">
+                    <h1 className="text-xl font-bold text-rm-text mb-1">
+                      Appearance
+                    </h1>
+                    <p className="text-sm text-rm-text-muted mb-8">
+                      Choose your preferred theme.
+                    </p>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                      {[
+                        { id: "dark", label: "Dark", preview: "bg-[#0f0f11]" },
+                        {
+                          id: "light",
+                          label: "Light",
+                          preview: "bg-[#f2f3f5]",
+                        },
+                        {
+                          id: "system",
+                          label: "System",
+                          preview:
+                            "bg-gradient-to-br from-[#0f0f11] to-[#f2f3f5]",
+                        },
+                        {
+                          id: "miku-dark",
+                          label: "Miku Dark",
+                          preview: "bg-[#0c0b14] border border-[#39c5bb]/30",
+                        },
+                        {
+                          id: "miku-light",
+                          label: "Miku Light",
+                          preview: "bg-[#f3faf9] border border-[#00a399]/30",
+                        },
+                      ].map((t) => (
+                        <button
+                          type="button"
+                          key={t.id}
+                          onClick={() => setTheme(t.id)}
+                          className={cn(
+                            "rounded-xl border-2 p-1 transition-all",
+                            theme === t.id
+                              ? "border-primary ring-2 ring-primary/20"
+                              : "border-rm-border hover:border-rm-text-muted/30",
+                          )}
+                        >
+                          <div
+                            className={cn("h-16 rounded-lg mb-2", t.preview)}
+                          />
+                          <span className="text-xs font-bold text-rm-text">
+                            {t.label}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+
+                    <div className="mt-8 bg-rm-bg-elevated/40 border border-rm-border rounded-xl p-5">
+                      <div className="flex items-start gap-3">
+                        <div className="p-2.5 rounded-lg bg-primary/10 text-primary border border-primary/20">
+                          <Monitor size={20} />
+                        </div>
+                        <div>
+                          <h4 className="text-sm font-bold text-rm-text mb-1">
+                            Visual Comfort
+                          </h4>
+                          <p className="text-xs text-rm-text-muted">
+                            Our dark mode uses true black and slate tones to
+                            reduce eye strain.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
-        </dialog>
-      </div>
-    </BaseModal>
+        </DialogSurface>
+      </DialogPortal>
+    </Dialog>
   );
 }
 

@@ -2,26 +2,17 @@ import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
+import { HomeIcon } from "./HomeIcon";
 import ServerList from "./ServerList";
-import { HomeDarkSvg } from "./home-svgs";
 
-describe("HomeDarkSvg", () => {
-  it("uses unique mask ids so repeated home icons do not render as filled squares", () => {
+describe("HomeIcon", () => {
+  it("uses the static theme asset instead of inline SVG markup", () => {
     const markup = renderToStaticMarkup(
-      <>
-        <HomeDarkSvg />
-        <HomeDarkSvg />
-      </>,
-    );
-    const maskIds = Array.from(markup.matchAll(/<mask id="([^"]+)"/g)).map(
-      ([, id]) => id,
+      <HomeIcon variant="dark" showThemeOverlay={false} />,
     );
 
-    expect(maskIds).toHaveLength(2);
-    expect(new Set(maskIds).size).toBe(2);
-    for (const maskId of maskIds) {
-      expect(markup).toContain(`mask="url(#${maskId})"`);
-    }
+    expect(markup).toContain("home-dark.svg");
+    expect(markup).not.toContain("<svg");
   });
 });
 

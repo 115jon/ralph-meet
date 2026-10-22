@@ -2,6 +2,7 @@ import React from "react";
 import type { AvatarDisplay } from "@/lib/avatar-display";
 import type { Attachment, EmbedInfo } from "@/lib/types";
 import { shouldBlurSensitiveAttachment } from "@/lib/media-safety";
+import { useClientDateFormatter } from "@/lib/client-date-format";
 import { isPlayableVideo } from "@/lib/media";
 import { cn } from "@/lib/utils";
 import { extractCustomEmojiIds } from "@/lib/emoji";
@@ -15,6 +16,7 @@ import SensitiveMediaFrame from "./SensitiveMediaFrame";
 import VideoAttachment from "./VideoAttachment";
 import EmojiToken from "./EmojiToken";
 import { AvatarImage } from "./AvatarImage";
+import InlineEmojiText from "./InlineEmojiText";
 
 interface SharePreviewAuthor {
   username: string;
@@ -45,16 +47,6 @@ const EMPTY_ATTACHMENTS: Attachment[] = [];
 const EMPTY_EMBEDS: EmbedInfo[] = [];
 const EMPTY_REACTIONS: Array<{ emoji: string; count: number }> = [];
 
-function formatDate(iso: string): string {
-  return new Date(iso).toLocaleString([], {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
-}
-
 export default function ShareSnapshotPreview({
   content,
   author,
@@ -74,6 +66,7 @@ export default function ShareSnapshotPreview({
 }: ShareSnapshotPreviewProps) {
   const displayName = author.display_name || author.username || "Unknown";
   const initial = (displayName[0] || "?").toUpperCase();
+  const formatDate = useClientDateFormatter();
   const imageAttachments = attachments.filter((attachment) =>
     attachment.content_type?.startsWith("image/"),
   );
@@ -121,16 +114,26 @@ export default function ShareSnapshotPreview({
         </div>
         <div className="min-w-0">
           <div className="flex flex-wrap items-baseline gap-2">
-            <h3 className="text-sm font-bold text-rm-text">{displayName}</h3>
+            <h3 className="text-sm font-bold text-rm-text">
+              <InlineEmojiText text={displayName} />
+            </h3>
             {createdAt && (
               <time className="text-xs text-rm-text-muted">
-                {formatDate(createdAt)}
+                {formatDate(createdAt, {
+                  month: "short",
+                  day: "numeric",
+                  year: "numeric",
+                  hour: "numeric",
+                  minute: "2-digit",
+                })}
               </time>
             )}
           </div>
           {source && (
             <p className="mt-0.5 truncate text-xs text-rm-text-muted">
-              {source.server_name} / #{source.channel_name}
+              <InlineEmojiText
+                text={`${source.server_name ?? ""} / #${source.channel_name ?? ""}`}
+              />
             </p>
           )}
         </div>
