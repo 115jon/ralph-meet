@@ -157,6 +157,9 @@ export const ICONS = {
   offline: { glyph: "wifi-slash" },
 
   /* Settings */
+  sessions: { glyph: "devices" },
+  keyboard: { glyph: "keyboard" },
+  key: { glyph: "key" },
   privacy: { glyph: "shield-check" },
   shield: { glyph: "shield" },
   lock: { glyph: "lock-simple" },
