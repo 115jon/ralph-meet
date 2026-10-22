@@ -10,6 +10,7 @@ import {
   getVoiceActivityLevelPercent,
   getVoiceActivityThreshold,
 } from "@/lib/voice/vad";
+import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -346,8 +347,10 @@ export function MicTestWidget({
 
   return (
     <div className="flex min-w-0 items-center gap-3">
-      <button
+      <Button
         type="button"
+        variant={isPlaybackActive ? "destructive" : "secondary"}
+        aria-pressed={isPlaybackActive}
         onClick={() => {
           if (isPlaybackActive) {
             stopTest({ cancelPendingStart: true });
@@ -355,25 +358,21 @@ export function MicTestWidget({
             startTest({ playback: true }).catch(() => {});
           }
         }}
-        className={`shrink-0 rounded-lg border px-4 py-2 text-sm font-semibold transition-colors active:scale-[0.96] ${
-          isPlaybackActive
-            ? "border-destructive/30 bg-destructive/10 text-destructive hover:bg-destructive/20"
-            : "border-rm-accent bg-rm-accent text-white hover:bg-rm-accent/90"
-        }`}
       >
-        <span className="flex items-center gap-1.5">
-          {isPlaybackActive ? (
-            <Icon name="stop" size="xs" />
-          ) : (
-            <Icon name="mic" size="xs" />
-          )}
-          {isPlaybackActive ? "Stop testing" : "Mic Test"}
-        </span>
-      </button>
+        <Icon name={isPlaybackActive ? "stop" : "mic"} size="sm" />
+        {isPlaybackActive ? "Stop test" : "Test mic"}
+      </Button>
 
       <div
-        className="flex min-w-0 flex-1 items-center gap-1.5"
-        aria-label="Microphone test level"
+        className="flex min-w-0 flex-1 items-center gap-[3px]"
+        role="img"
+        aria-label={
+          !isActive
+            ? "Mic level, idle"
+            : isSpeaking
+              ? "Mic level, people can hear you"
+              : "Mic level, below the sensitivity marker"
+        }
       >
         {Array.from({ length: METER_BARS }, (_, index) => {
           const start = (index / METER_BARS) * 100;
@@ -388,16 +387,16 @@ export function MicTestWidget({
           return (
             <div
               key={index}
-              className={`h-1.5 flex-1 rounded-sm transition-colors ${
+              className={`h-2 flex-1 rounded-[2px] ${
                 !isActive
-                  ? "bg-rm-bg-elevated"
+                  ? "bg-rm-tint-2"
                   : marksThreshold
-                    ? "bg-amber-400/90"
+                    ? "bg-rm-warning-ink"
                     : isFilled
                       ? isSpeaking
-                        ? "bg-emerald-400/90"
-                        : "bg-sky-400/80"
-                      : "bg-rm-bg-surface"
+                        ? "bg-rm-success-ink"
+                        : "bg-rm-accent-ink"
+                      : "bg-rm-tint-2"
               }`}
             />
           );

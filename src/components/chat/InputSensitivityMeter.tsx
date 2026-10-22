@@ -22,6 +22,11 @@ interface InputSensitivityMeterProps {
   processing: VoiceAudioProcessingSettings;
   value: number;
   onCommit: (value: number) => void;
+  /**
+   * id of a visible label rendered by the caller (a settings row). When set,
+   * the meter drops its own "Input sensitivity" caption.
+   */
+  labelledBy?: string;
 }
 
 export function InputSensitivityMeter({
@@ -30,6 +35,7 @@ export function InputSensitivityMeter({
   processing,
   value,
   onCommit,
+  labelledBy,
 }: InputSensitivityMeterProps) {
   const [rms, setRms] = useState(0);
   const [draftValue, setDraftValue] = useState(value);
@@ -164,7 +170,9 @@ export function InputSensitivityMeter({
           onCommit(draftValue);
         }
       }}
-      aria-label="Input sensitivity"
+      aria-label={labelledBy ? undefined : "Input sensitivity"}
+      aria-labelledby={labelledBy}
+      aria-valuetext={autoSensitivity ? "Automatic" : `${draftValue} dB`}
       className={`absolute inset-0 h-2 w-full appearance-none bg-transparent ${
         autoSensitivity
           ? "pointer-events-none cursor-default opacity-0 [&::-moz-range-thumb]:hidden [&::-webkit-slider-thumb]:hidden"
@@ -173,16 +181,19 @@ export function InputSensitivityMeter({
     />
   );
 
+  const Wrapper = labelledBy ? "div" : "label";
   return (
-    <label
-      className={`block space-y-3 py-3 ${
+    <Wrapper
+      className={`block space-y-3 ${labelledBy ? "py-2" : "py-3"} ${
         autoSensitivity ? "cursor-default" : ""
       }`}
-      htmlFor="input-sensitivity"
+      {...(labelledBy ? {} : { htmlFor: "input-sensitivity" })}
     >
-      <span className="text-sm font-semibold text-rm-text">
-        Input sensitivity
-      </span>
+      {labelledBy ? null : (
+        <span className="text-sm font-semibold text-rm-text">
+          Input sensitivity
+        </span>
+      )}
       <div
         className={`relative h-2 overflow-visible rounded-full ${
           autoSensitivity
@@ -227,6 +238,6 @@ export function InputSensitivityMeter({
           </Tooltip>
         )}
       </div>
-    </label>
+    </Wrapper>
   );
 }
