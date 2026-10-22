@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("@kova/react", () => ({
+  useAuth: () => ({ signOut: vi.fn(() => Promise.resolve()) }),
   useUser: () => ({
     user: {
       username: "old_handle",
@@ -42,16 +43,16 @@ vi.mock("@/stores/chat-store", () => ({
     }),
 }));
 
-import SettingsAccountOverviewTab from "../SettingsAccountOverviewTab";
+import AccountPanel from "../settings/AccountPanel";
 
-describe("SettingsAccountOverviewTab inline profile editing", () => {
+describe("AccountPanel inline profile editing", () => {
   afterEach(() => {
     vi.clearAllMocks();
     vi.useRealTimers();
   });
 
   it("uses field-specific edit buttons instead of opening the profile editor", () => {
-    render(<SettingsAccountOverviewTab onOpenProfileEditor={vi.fn()} />);
+    render(<AccountPanel />);
 
     expect(
       screen.getByRole("button", { name: "Edit display name" }),
@@ -67,7 +68,7 @@ describe("SettingsAccountOverviewTab inline profile editing", () => {
   it("saves a display name inline", async () => {
     mocks.apiPatch.mockResolvedValueOnce({});
     mocks.loadCurrentUser.mockResolvedValueOnce(undefined);
-    render(<SettingsAccountOverviewTab onOpenProfileEditor={vi.fn()} />);
+    render(<AccountPanel />);
 
     fireEvent.click(screen.getByRole("button", { name: "Edit display name" }));
     fireEvent.change(screen.getByRole("textbox", { name: "Display name" }), {
@@ -88,7 +89,7 @@ describe("SettingsAccountOverviewTab inline profile editing", () => {
     mocks.apiGet.mockResolvedValue({ available: true });
     mocks.apiPatch.mockResolvedValueOnce({});
     mocks.loadCurrentUser.mockResolvedValueOnce(undefined);
-    render(<SettingsAccountOverviewTab onOpenProfileEditor={vi.fn()} />);
+    render(<AccountPanel />);
 
     fireEvent.click(screen.getByRole("button", { name: "Edit username" }));
     fireEvent.change(screen.getByRole("textbox", { name: "Username" }), {

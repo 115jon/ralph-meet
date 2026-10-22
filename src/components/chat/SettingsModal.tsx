@@ -1,172 +1,194 @@
-import { AvatarImage } from "@/components/chat/AvatarImage";
+/**
+ * User settings, Studio direction: a grouped nav with row-level search on the
+ * leading side, a titled page of calm cards on the trailing side, and a live
+ * preview rail on the pages where you judge a feel (profile, voice, theme,
+ * alerts). On narrow screens the nav is a list that pushes into pages.
+ *
+ * Opening:
+ *   <SettingsModal open initialTab="voice" initialRow="echo-cancellation" />
+ *   openSettings({ row: "sign-out" })   // from anywhere, see settings-links
+ *
+ * Panels live in ./settings; the row map (labels, search words, ids) is
+ * ./settings/schema.ts.
+ */
+
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogOverlay,
   DialogPortal,
   DialogSurface,
-  DialogTrigger,
+  DialogTitle,
 } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
-import { IconButton } from "@/components/ui/IconButton";
-import { Input } from "@/components/ui/input";
-import { Separator } from "@/components/ui/separator";
-import {
-  clearDesktopAuthSession,
-  markAuthLogoutIntent,
-} from "@/lib/desktop-auth";
-import { getDisplayInitial, getDisplayName } from "@/lib/display-name";
-import { getAuthAssetUrl, isDesktop } from "@/lib/platform";
-import { cn } from "@/lib/utils";
-import { useChatStore } from "@/stores/chat-store";
-import {
-  getOSName,
-  useDesktopSettingsStore,
-} from "@/stores/useDesktopSettingsStore";
 import { Icon } from "@/components/ui/icon";
+import { IconButton } from "@/components/ui/IconButton";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { isDesktop } from "@/lib/platform";
+import { cn } from "@/lib/utils";
+import { useDesktopSettingsStore } from "@/stores/useDesktopSettingsStore";
+import { useUser } from "@kova/react";
 import {
   useCallback,
   useDeferredValue,
   useEffect,
+  useId,
+  useLayoutEffect,
   useMemo,
+  useRef,
   useState,
   useSyncExternalStore,
+  type ComponentType,
 } from "react";
 
-import { useAuth, useUser } from "@kova/react";
-
 import SettingsAccountTab from "./SettingsAccountTab";
-import SettingsAccountOverviewTab from "./SettingsAccountOverviewTab";
-import SettingsAppearanceTab from "./SettingsAppearanceTab";
-import SettingsDevicesTab from "./SettingsDevicesTab";
-import SettingsNotificationsTab from "./SettingsNotificationsTab";
-import SettingsOSTab from "./SettingsOSTab";
-import SettingsSharesTab from "./SettingsSharesTab";
-import SettingsVoiceTab from "./SettingsVoiceTab";
-import SettingsCameraTab from "./SettingsCameraTab";
-import SettingsMediaTab from "./SettingsMediaTab";
 import ThemePreviewSidebar from "./ThemePreviewSidebar";
+import AccountPanel from "./settings/AccountPanel";
+import AppearancePanel from "./settings/AppearancePanel";
+import DesktopPanel from "./settings/DesktopPanel";
+import KeybindsPanel from "./settings/KeybindsPanel";
+import NotificationsPanel from "./settings/NotificationsPanel";
+import PrivacyPanel from "./settings/PrivacyPanel";
+import SessionsPanel from "./settings/SessionsPanel";
+import SoundboardPanel from "./settings/SoundboardPanel";
+import VoiceVideoPanel from "./settings/VoiceVideoPanel";
+import {
+  Highlight,
+  rovingKeyDown,
+  SettingsContext,
+  type SettingsContextValue,
+} from "./settings/primitives";
+import { SettingsRail } from "./settings/rails";
+import {
+  isPanelAvailable,
+  PANEL_BY_ID,
+  PANELS_WITH_RAIL,
+  searchSettings,
+  SETTINGS_NAV_GROUPS,
+  type SettingsEnvironment,
+  type SettingsPanelId,
+} from "./settings/schema";
+import {
+  OPEN_SETTINGS_EVENT,
+  resolveSettingsLocation,
+  type SettingsLocation,
+  type SettingsTabInput,
+} from "./settings/settings-links";
+
+export type { SettingsTabInput } from "./settings/settings-links";
 
 interface SettingsModalProps {
   open: boolean;
   onClose: () => void;
-  initialTab?: Tab;
+  /** Panel id, or a pre-Studio tab name ("shares", "camera", …). */
+  initialTab?: SettingsTabInput;
+  /** Row id to land on and highlight (schema.ts). Implies its panel. */
+  initialRow?: string;
   initialProfileEditorOpen?: boolean;
+  /** Overrides for what this device can show (fixtures and tests). */
+  environment?: Partial<SettingsEnvironment>;
 }
 
-type Tab =
-  | "account"
-  | "profiles"
-  | "shares"
-  | "appearance"
-  | "media"
-  | "voice"
-  | "camera"
-  | "accessibility"
-  | "text"
-  | "notifications"
-  | "devices"
-  | "os-settings";
-
-type TabGroup = {
-  title: string;
-  items: Array<{
-    tab: Tab;
-    label: string;
-    keywords: string[];
-  }>;
+const PANEL_COMPONENTS: Record<SettingsPanelId, ComponentType> = {
+  account: AccountPanel,
+  sessions: SessionsPanel,
+  privacy: PrivacyPanel,
+  voice: VoiceVideoPanel,
+  soundboard: SoundboardPanel,
+  keybinds: KeybindsPanel,
+  appearance: AppearancePanel,
+  notifications: NotificationsPanel,
+  desktop: DesktopPanel,
 };
 
-function normalizeTab(tab?: Tab): Tab {
-  if (tab === "text") return "media";
-  return tab ?? "account";
-}
+const MOBILE_QUERY_WIDTH = 768;
+const RAIL_MIN_WIDTH = 840;
+const MAX_ROW_HITS_PER_PANEL = 4;
 
-function getTabTitle(tab: Tab): string {
-  switch (tab) {
-    case "account":
-      return "Account";
-    case "profiles":
-      return "Profiles";
-    case "shares":
-      return "Shared Messages";
-    case "appearance":
-      return "Appearance";
-    case "media":
-      return "Media & Content";
-    case "voice":
-      return "Voice";
-    case "camera":
-      return "Camera";
-    case "accessibility":
-      return "Accessibility";
-    case "text":
-      return "Media & Content";
-    case "notifications":
-      return "Notifications";
-    case "devices":
-      return "Devices";
-    case "os-settings":
-      return "OS Settings";
-    default:
-      return "Settings";
-  }
-}
-
-function TabButton({
-  active,
-  label,
-  onClick,
-}: {
-  active: boolean;
-  label: string;
-  onClick: () => void;
-}) {
-  return (
-    <Button
-      variant="ghost"
-      onClick={onClick}
-      aria-current={active ? "page" : undefined}
-      className={cn(
-        "h-8 w-full justify-start rounded-md px-2.5 text-ui-sm font-medium",
-        active
-          ? "bg-rm-tint-2 text-rm-text"
-          : "text-rm-text-secondary pointer-fine:hover:bg-rm-tint-1 pointer-fine:hover:text-rm-text",
-      )}
-    >
-      {label}
-    </Button>
+function useIsNarrow() {
+  const [narrow, setNarrow] = useState(
+    () =>
+      typeof window !== "undefined" && window.innerWidth < MOBILE_QUERY_WIDTH,
   );
+  useEffect(() => {
+    const onResize = () => setNarrow(window.innerWidth < MOBILE_QUERY_WIDTH);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+  return narrow;
+}
+
+/** Width of an element, tracked with ResizeObserver. */
+function useElementWidth<T extends HTMLElement>() {
+  const [node, setNode] = useState<T | null>(null);
+  const [width, setWidth] = useState(0);
+  useLayoutEffect(() => {
+    if (!node) return undefined;
+    if (typeof ResizeObserver === "undefined") {
+      const frame = requestAnimationFrame(() =>
+        setWidth(node.getBoundingClientRect().width),
+      );
+      return () => cancelAnimationFrame(frame);
+    }
+    const observer = new ResizeObserver(([entry]) => {
+      if (entry) setWidth(entry.contentRect.width);
+    });
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [node]);
+  return [setNode, width] as const;
 }
 
 export default function SettingsModal({
   open,
   onClose,
   initialTab,
+  initialRow,
   initialProfileEditorOpen = false,
+  environment,
 }: SettingsModalProps) {
   const { isLoaded: isUserLoaded } = useUser();
-  const { signOut } = useAuth();
-  const chatUser = useChatStore((s) => s.user);
+  const titleId = useId();
+  const pageTitleId = useId();
+  const env = useMemo<SettingsEnvironment>(
+    () => ({ desktop: environment?.desktop ?? isDesktop() }),
+    [environment?.desktop],
+  );
+  const narrow = useIsNarrow();
 
-  const [activeTab, setActiveTab] = useState<Tab>(() =>
-    normalizeTab(initialTab),
+  // Opened by an `openSettings()` event rather than by the owner's prop.
+  const [eventLocation, setEventLocation] = useState<SettingsLocation | null>(
+    null,
   );
-  const [isMobileViewport, setIsMobileViewport] = useState(
-    () => typeof window !== "undefined" && window.innerWidth < 768,
+  const isOpen = open || eventLocation !== null;
+
+  const initial = resolveSettingsLocation({
+    tab: initialTab,
+    row: initialRow,
+  });
+  const explicitInitial = Boolean(
+    initialRow || (initialTab && initialTab !== "account"),
   );
-  const [showMobileMenu, setShowMobileMenu] = useState(
-    () => !(isMobileViewport && initialProfileEditorOpen),
+  const [panel, setPanel] = useState<SettingsPanelId>(initial.panel);
+  const [target, setTarget] = useState<string | null>(initial.row);
+  const [showList, setShowList] = useState(
+    () => !(initialProfileEditorOpen || explicitInitial),
   );
   const [previewOpen, setPreviewOpen] = useState(false);
   const [profileEditorOpen, setProfileEditorOpen] = useState(
     initialProfileEditorOpen,
   );
-  const [searchQuery, setSearchQuery] = useState("");
-  const deferredSearchQuery = useDeferredValue(searchQuery);
-
-  const openProfileEditor = useCallback(() => {
-    setProfileEditorOpen(true);
-  }, []);
+  const profileEditorTrigger = useRef<HTMLElement | null>(null);
+  const [query, setQuery] = useState("");
+  const deferredQuery = useDeferredValue(query);
+  const searchRef = useRef<HTMLInputElement>(null);
+  // State, not a ref: the dialog portal mounts after this component's first
+  // layout pass, and landing on a row has to wait for the scroller to exist.
+  const [bodyNode, setBodyNode] = useState<HTMLDivElement | null>(null);
+  const pageTitleRef = useRef<HTMLHeadingElement>(null);
+  const navRef = useRef<HTMLElement>(null);
+  const [setMainNode, mainWidth] = useElementWidth<HTMLDivElement>();
+  const railBeside = mainWidth >= RAIL_MIN_WIDTH;
+  const escapeStack = useRef<Array<() => boolean>>([]);
 
   const mounted = useSyncExternalStore(
     () => () => {},
@@ -174,469 +196,626 @@ export default function SettingsModal({
     () => false,
   );
 
-  const handleSignOut = () => {
-    markAuthLogoutIntent();
-    clearDesktopAuthSession();
-    void signOut("/sign-in").finally(() => {
-      if (typeof window !== "undefined") {
-        window.location.replace("/sign-in");
-      }
-    });
-  };
-
-  const isDesktopApp = isDesktop();
-  const osName = getOSName();
   const desktopSettings = useDesktopSettingsStore();
-  const profileDisplayName = getDisplayName({
-    display_name: chatUser?.display_name ?? null,
-    username: chatUser?.username ?? "",
-  });
-  const profileAvatarUrl = chatUser?.avatar_url
-    ? getAuthAssetUrl(chatUser.avatar_url)
-    : null;
-  const tabGroups = useMemo<TabGroup[]>(
-    () => [
-      {
-        title: "User settings",
-        items: [
-          {
-            tab: "account",
-            label: "Account",
-            keywords: ["profile", "email", "username", "identity"],
-          },
-          {
-            tab: "profiles",
-            label: "Profiles",
-            keywords: ["server profile", "avatar", "banner"],
-          },
-          {
-            tab: "shares",
-            label: "Shared Messages",
-            keywords: ["shares", "messages", "links"],
-          },
-        ],
-      },
-      {
-        title: "Audio & video",
-        items: [
-          {
-            tab: "voice",
-            label: "Voice",
-            keywords: ["microphone", "audio", "voice"],
-          },
-          {
-            tab: "camera",
-            label: "Camera",
-            keywords: ["video", "webcam", "camera"],
-          },
-        ],
-      },
-      {
-        title: "App settings",
-        items: [
-          {
-            tab: "appearance",
-            label: "Appearance",
-            keywords: ["theme", "color", "display"],
-          },
-          {
-            tab: "media",
-            label: "Media & Content",
-            keywords: ["images", "content", "text"],
-          },
-          {
-            tab: "accessibility",
-            label: "Accessibility",
-            keywords: ["motion", "readability", "contrast"],
-          },
-          {
-            tab: "notifications",
-            label: "Notifications",
-            keywords: ["alerts", "sounds", "badges"],
-          },
-          {
-            tab: "devices",
-            label: "Devices",
-            keywords: ["input", "output", "hardware"],
-          },
-        ],
-      },
-      ...(isDesktopApp
-        ? [
-            {
-              title: "System",
-              items: [
-                {
-                  tab: "os-settings" as Tab,
-                  label: `${osName} Settings`,
-                  keywords: ["desktop", "system", osName.toLowerCase()],
-                },
-              ],
-            },
-          ]
-        : []),
-    ],
-    [isDesktopApp, osName],
-  );
-  const filteredTabGroups = useMemo(() => {
-    const normalizedQuery = deferredSearchQuery.trim().toLowerCase();
-    if (!normalizedQuery) return tabGroups;
-
-    return tabGroups
-      .map((group) => ({
-        ...group,
-        items: group.items.filter((item) =>
-          `${item.label} ${item.keywords.join(" ")}`
-            .toLowerCase()
-            .includes(normalizedQuery),
-        ),
-      }))
-      .filter((group) => group.items.length > 0);
-  }, [deferredSearchQuery, tabGroups]);
-
   useEffect(() => {
     if (isDesktop()) {
       desktopSettings.syncToBackend();
     }
   }, [desktopSettings]);
 
+  /* Reset to the requested location each time the dialog opens. */
+  const wasOpen = useRef(false);
   useEffect(() => {
-    const handleViewportChange = () => {
-      setIsMobileViewport(window.innerWidth < 768);
+    if (isOpen && !wasOpen.current) {
+      const location = eventLocation
+        ? resolveSettingsLocation({
+            tab: eventLocation.panel,
+            row: eventLocation.row,
+          })
+        : initial;
+      const explicit = eventLocation
+        ? Boolean(eventLocation.panel || eventLocation.row)
+        : explicitInitial || initialProfileEditorOpen;
+      const available = isPanelAvailable(PANEL_BY_ID[location.panel], env);
+      setPanel(available ? location.panel : "account");
+      setTarget(available ? location.row : null);
+      setShowList(!explicit);
+      setQuery("");
+    }
+    wasOpen.current = isOpen;
+    // Only the open transition matters; later prop changes don't move you.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen]);
+
+  useEffect(() => {
+    const onOpenEvent = (event: Event) => {
+      const detail = (event as CustomEvent<SettingsLocation>).detail ?? {};
+      if (isOpen) {
+        const location = resolveSettingsLocation({
+          tab: detail.panel,
+          row: detail.row,
+        });
+        setPanel(location.panel);
+        setTarget(location.row);
+        setShowList(false);
+        setQuery("");
+        return;
+      }
+      setEventLocation(detail);
     };
-    window.addEventListener("resize", handleViewportChange);
-    return () => window.removeEventListener("resize", handleViewportChange);
+    window.addEventListener(OPEN_SETTINGS_EVENT, onOpenEvent);
+    return () => window.removeEventListener(OPEN_SETTINGS_EVENT, onOpenEvent);
+  }, [isOpen]);
+
+  const close = useCallback(() => {
+    setEventLocation(null);
+    if (open) onClose();
+  }, [onClose, open]);
+
+  /* ---------------------------------------------------------------- */
+  /* Search                                                             */
+  /* ---------------------------------------------------------------- */
+
+  const q = deferredQuery.trim();
+  const hits = useMemo(() => searchSettings(q, env), [q, env]);
+  const hitsByPanel = useMemo(() => {
+    const map = new Map<SettingsPanelId, typeof hits>();
+    for (const hit of hits) {
+      const list = map.get(hit.panel.id) ?? [];
+      list.push(hit);
+      map.set(hit.panel.id, list);
+    }
+    return map;
+  }, [hits]);
+  const shownPanel: SettingsPanelId =
+    q && !hitsByPanel.has(panel) ? (hits[0]?.panel.id ?? panel) : panel;
+
+  const navGroups = useMemo(
+    () =>
+      SETTINGS_NAV_GROUPS.map((group) => ({
+        ...group,
+        ids: group.ids.filter((id) => isPanelAvailable(PANEL_BY_ID[id], env)),
+      })).filter((group) => group.ids.length > 0),
+    [env],
+  );
+
+  const go = useCallback((id: SettingsPanelId, rowId: string | null = null) => {
+    setPanel(id);
+    setTarget(rowId);
+    setShowList(false);
+    if (rowId) setQuery("");
   }, []);
+
+  /* ---------------------------------------------------------------- */
+  /* Landing, focus and scroll                                         */
+  /* ---------------------------------------------------------------- */
+
+  const pageVisible = !narrow || !showList;
+  const listVisible = !narrow || showList;
+
+  useLayoutEffect(() => {
+    const body = bodyNode;
+    if (!body || !pageVisible) return;
+    body.scrollTo?.({ top: 0 });
+    if (!target) return;
+    const frame = requestAnimationFrame(() => {
+      const row = body.querySelector<HTMLElement>(`[data-row="${target}"]`);
+      row?.scrollIntoView?.({ block: "center" });
+      row?.focus({ preventScroll: true });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [bodyNode, panel, target, pageVisible, railBeside]);
+
+  const previousShowList = useRef(showList);
+  useEffect(() => {
+    if (narrow && previousShowList.current && !showList && !target) {
+      pageTitleRef.current?.focus({ preventScroll: true });
+    }
+    if (narrow && !previousShowList.current && showList) {
+      navRef.current
+        ?.querySelector<HTMLElement>(`[data-panel="${panel}"]`)
+        ?.focus({ preventScroll: true });
+    }
+    previousShowList.current = showList;
+  }, [narrow, panel, showList, target]);
+
+  /* ---------------------------------------------------------------- */
+  /* Escape and back                                                    */
+  /* ---------------------------------------------------------------- */
+
+  const registerEscape = useCallback((handler: () => boolean) => {
+    escapeStack.current.push(handler);
+    return () => {
+      escapeStack.current = escapeStack.current.filter((h) => h !== handler);
+    };
+  }, []);
+
+  /** One step back. Returns false when the dialog itself should close. */
+  const stepBack = useCallback(() => {
+    const handler = escapeStack.current[escapeStack.current.length - 1];
+    if (handler?.()) return true;
+    if (query) {
+      setQuery("");
+      return true;
+    }
+    if (narrow && !showList) {
+      setShowList(true);
+      return true;
+    }
+    return false;
+  }, [narrow, query, showList]);
 
   const handleModalCloseOrBack = useCallback(() => {
     if (profileEditorOpen) {
       setProfileEditorOpen(false);
     } else if (previewOpen) {
       setPreviewOpen(false);
-    } else if (!showMobileMenu && isMobileViewport) {
-      setShowMobileMenu(true);
+    } else if (narrow && !showList) {
+      setShowList(true);
     } else {
-      onClose();
+      close();
     }
-  }, [
-    isMobileViewport,
-    previewOpen,
-    profileEditorOpen,
-    showMobileMenu,
-    onClose,
-  ]);
+  }, [close, narrow, previewOpen, profileEditorOpen, showList]);
+
+  const contextValue = useMemo<SettingsContextValue>(
+    () => ({
+      env,
+      query: q,
+      target,
+      registerEscape,
+      openProfileEditor: (trigger) => {
+        profileEditorTrigger.current = trigger ?? null;
+        setProfileEditorOpen(true);
+      },
+      openThemePreview: () => setPreviewOpen(true),
+    }),
+    [env, q, registerEscape, target],
+  );
 
   if (!mounted) return null;
 
-  return (
-    <Dialog
-      open={open}
-      onOpenChange={(nextOpen) => !nextOpen && handleModalCloseOrBack()}
-    >
-      <DialogPortal>
-        {!previewOpen && <DialogOverlay className="bg-rm-scrim" />}
-        <DialogSurface
-          showCloseButton={false}
-          className={cn(
-            "fixed inset-0 z-50 m-0 flex min-h-0 flex-col items-stretch justify-center overflow-hidden p-0 outline-none animate-in fade-in duration-200 shadow-2xl",
-            previewOpen ? "bg-transparent" : "bg-rm-bg-primary",
-            previewOpen
-              ? "h-full max-w-none flex-row bg-transparent shadow-none border-0 rounded-none"
-              : "h-full w-full flex-col bg-rm-bg-primary md:inset-auto md:left-1/2 md:top-1/2 md:h-[min(820px,calc(100dvh-32px))] md:w-[min(1040px,calc(100vw-32px))] md:-translate-x-1/2 md:-translate-y-1/2 md:flex-row md:rounded-xl shadow-2xl border-0 md:border md:border-rm-border",
-            !previewOpen && "zoom-in-95",
-            "data-[state=closed]:animate-out data-[state=closed]:fade-out data-[state=closed]:zoom-out-95",
-          )}
-          aria-label="Settings"
-        >
-          {previewOpen ? (
-            <div className="pointer-events-none flex h-full w-full justify-end bg-transparent">
-              <div className="flex-1 bg-transparent" />
-              <ThemePreviewSidebar
-                className="max-w-[320px]"
-                onClose={() => setPreviewOpen(false)}
-                onBackToSettings={() => setPreviewOpen(false)}
-              />
-            </div>
-          ) : (
-            <>
-              {/* Sidebar */}
-              <div
-                role="navigation"
-                aria-label="Settings navigation"
-                aria-hidden={
-                  isMobileViewport && !showMobileMenu ? "true" : undefined
-                }
-                inert={isMobileViewport && !showMobileMenu ? true : undefined}
-                className={cn(
-                  "w-full min-h-0 md:w-[248px] flex-col shrink-0 bg-rm-bg-sidebar pt-0 md:pt-4 pb-5 md:pl-4 pr-0 md:pr-2 overflow-y-auto overflow-x-hidden custom-scrollbar",
-                  "max-md:absolute max-md:inset-0 max-md:z-10 max-md:transition-transform max-md:duration-200 max-md:ease-out flex",
-                  showMobileMenu
-                    ? "max-md:translate-x-0"
-                    : "max-md:-translate-x-full",
-                )}
-              >
-                {/* Mobile Header */}
-                <div
-                  className="flex items-center justify-between px-4 pb-4 border-b border-rm-border md:hidden mb-4 shrink-0"
-                  style={{
-                    paddingTop: "calc(16px + var(--safe-area-top, 0px))",
-                  }}
-                >
-                  <h2 className="text-lg font-bold text-rm-text">Settings</h2>
-                  <IconButton
-                    aria-label="Close settings"
-                    icon="close"
-                    size="sm"
-                    shape="circle"
-                    onClick={onClose}
-                  />
-                </div>
+  const pageDef = PANEL_BY_ID[shownPanel];
+  const PanelComponent = PANEL_COMPONENTS[shownPanel];
+  // While searching, the rail stays only if one of its rows is a hit.
+  const showRail =
+    PANELS_WITH_RAIL.has(shownPanel) &&
+    (!q || (hitsByPanel.get(shownPanel) ?? []).some((hit) => hit.row.rail));
+  const noHits = Boolean(q) && hits.length === 0;
 
-                <div className="space-y-4 px-2 md:px-0">
-                  <div className="rounded-xl border border-rm-border bg-rm-bg-primary/60 p-3">
-                    <div className="flex items-center gap-3">
-                      <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-full border border-rm-border bg-rm-bg-elevated">
-                        {profileAvatarUrl ? (
-                          <AvatarImage
-                            src={profileAvatarUrl}
-                            alt={profileDisplayName}
-                            display={chatUser?.avatar_display ?? null}
-                          />
-                        ) : (
-                          <div className="flex h-full w-full items-center justify-center text-base font-bold text-rm-text">
-                            {getDisplayInitial({ name: profileDisplayName })}
-                          </div>
+  /* ---------------------------------------------------------------- */
+  /* Nav                                                                */
+  /* ---------------------------------------------------------------- */
+
+  const nav = (
+    <>
+      <div className="flex flex-col gap-3 px-3 pb-3 pt-3.5">
+        <div className="flex h-8 items-center justify-between pl-1">
+          <p
+            aria-hidden="true"
+            className="text-ui-lg font-semibold text-rm-text"
+          >
+            Settings
+          </p>
+          {narrow ? (
+            <IconButton
+              aria-label="Close settings"
+              icon="close"
+              size="sm"
+              onClick={close}
+            />
+          ) : null}
+        </div>
+        <div className="relative flex h-9 items-center">
+          <Icon
+            name="search"
+            size="sm"
+            className="pointer-events-none absolute left-2.5 text-rm-text-secondary"
+          />
+          <input
+            ref={searchRef}
+            type="search"
+            value={query}
+            onChange={(event) => setQuery(event.currentTarget.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && hits[0]) {
+                event.preventDefault();
+                go(hits[0].panel.id, hits[0].row.id);
+              }
+              if (event.key === "ArrowDown") {
+                event.preventDefault();
+                navRef.current
+                  ?.querySelector<HTMLElement>("[data-roving]:not([disabled])")
+                  ?.focus();
+              }
+            }}
+            placeholder="Search settings"
+            aria-label="Search settings"
+            aria-describedby={`${titleId}-count`}
+            autoComplete="off"
+            spellCheck={false}
+            className="h-full w-full min-w-0 rounded-md border border-rm-field-edge bg-transparent pl-8 pr-8 text-base text-rm-text outline-none placeholder:text-rm-text-secondary sm:text-ui-sm [&::-webkit-search-cancel-button]:hidden"
+          />
+          {query ? (
+            <IconButton
+              aria-label="Clear search"
+              icon="close"
+              size="xs"
+              className="absolute right-1.5"
+              onClick={() => {
+                setQuery("");
+                searchRef.current?.focus();
+              }}
+            />
+          ) : null}
+        </div>
+        <p id={`${titleId}-count`} className="sr-only" aria-live="polite">
+          {q
+            ? hits.length === 1
+              ? "1 setting matches"
+              : `${hits.length} settings match`
+            : ""}
+        </p>
+      </div>
+      <div
+        onKeyDown={(event) => rovingKeyDown(event)}
+        className="rm-settings-scroll min-h-0 flex-1 overflow-y-auto px-2 pb-4"
+      >
+        {noHits ? (
+          <div className="px-2.5 py-3" role="status">
+            <p className="text-ui-sm font-medium text-rm-text">
+              No settings match “{q}”
+            </p>
+            <p className="mt-1 text-ui-sm text-rm-text-secondary">
+              Try “mic”, “theme” or “sign out”.
+            </p>
+          </div>
+        ) : (
+          navGroups.map((group) => (
+            <div key={group.title} className="mt-4 first:mt-0">
+              <h3 className="px-2.5 pb-1 text-ui-xs font-semibold text-rm-text-secondary">
+                {group.title}
+              </h3>
+              <ul className="flex flex-col gap-px">
+                {group.ids.map((id) => {
+                  const def = PANEL_BY_ID[id];
+                  const panelHits = hitsByPanel.get(id) ?? [];
+                  const count = panelHits.length;
+                  const current = !narrow && shownPanel === id;
+                  const empty = Boolean(q) && count === 0;
+                  const tabbable = narrow
+                    ? group === navGroups[0] && id === group.ids[0]
+                    : shownPanel === id;
+                  return (
+                    <li key={id}>
+                      <button
+                        type="button"
+                        data-roving
+                        data-panel={id}
+                        tabIndex={tabbable ? 0 : -1}
+                        disabled={empty}
+                        aria-current={current ? "page" : undefined}
+                        aria-label={
+                          q
+                            ? `${def.title}, ${count === 1 ? "1 match" : `${count} matches`}`
+                            : undefined
+                        }
+                        onClick={() => go(id)}
+                        className={cn(
+                          "flex w-full items-center gap-2.5 rounded-md px-2.5 text-left text-ui-sm outline-offset-[-2px] transition-[background-color,color,transform] duration-150 ease-(--rm-ease-out) enabled:active:scale-[0.98] motion-reduce:enabled:active:scale-100 disabled:cursor-default disabled:opacity-45",
+                          narrow ? "h-11" : "h-8",
+                          current
+                            ? "bg-rm-bg-active font-medium text-rm-text"
+                            : "text-rm-text-secondary pointer-fine:enabled:hover:bg-rm-bg-hover pointer-fine:enabled:hover:text-rm-text",
                         )}
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="truncate text-sm font-bold text-rm-text">
-                          {profileDisplayName}
-                        </div>
-                        <Dialog
-                          open={profileEditorOpen && !previewOpen}
-                          onOpenChange={setProfileEditorOpen}
-                        >
-                          <DialogTrigger asChild>
-                            <Button
-                              type="button"
-                              variant="link"
-                              className="mt-1 text-ui-sm text-rm-text-secondary pointer-fine:hover:text-rm-text"
-                            >
-                              Edit profile
-                            </Button>
-                          </DialogTrigger>
-                          <DialogPortal>
-                            <DialogSurface
-                              showCloseButton={false}
-                              aria-label="Edit profile"
-                              className="fixed inset-0 z-60 flex items-center justify-center overflow-hidden rounded-2xl border border-rm-border bg-rm-bg-primary p-0 shadow-2xl animate-in fade-in zoom-in-95 duration-200 data-[state=closed]:animate-out data-[state=closed]:zoom-out-95 md:inset-auto md:left-1/2 md:top-1/2 md:h-[min(860px,calc(100dvh-32px))] md:w-[min(1240px,calc(100vw-32px))] md:-translate-x-1/2 md:-translate-y-1/2 md:rounded-2xl"
-                              style={{
-                                width: "min(1240px, calc(100vw - 32px))",
-                                height: "min(860px, calc(100dvh - 32px))",
-                              }}
-                            >
-                              <SettingsAccountTab
-                                authUserLoaded={isUserLoaded}
-                                asModal
-                                onClose={() => setProfileEditorOpen(false)}
-                              />
-                            </DialogSurface>
-                          </DialogPortal>
-                        </Dialog>
-                      </div>
-                    </div>
-                    <div className="relative mt-3">
-                      <Icon
-                        name="search"
-                        size="sm"
-                        className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-rm-text-muted"
-                      />
-                      <Input
-                        value={searchQuery}
-                        onChange={(event) => setSearchQuery(event.target.value)}
-                        className="pl-9"
-                        placeholder="Search settings"
-                        aria-label="Search settings"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="space-y-4">
-                    {filteredTabGroups.length === 0 ? (
-                      <div className="rounded-2xl border border-dashed border-rm-border px-4 py-6 text-sm text-rm-text-muted">
-                        No settings match “{deferredSearchQuery.trim()}”.
-                      </div>
-                    ) : (
-                      filteredTabGroups.map((group) => (
-                        <div key={group.title}>
-                          <div className="mb-1.5 px-2.5 text-ui-xs font-medium text-rm-text-muted">
-                            {group.title}
-                          </div>
-                          <div className="space-y-1">
-                            {group.items.map((item) => (
-                              <TabButton
-                                key={item.tab}
-                                active={activeTab === item.tab}
-                                onClick={() => {
-                                  setActiveTab(item.tab);
-                                  setShowMobileMenu(false);
-                                }}
-                                label={item.label}
-                              />
+                      >
+                        <Icon name={def.icon} size="sm" className="shrink-0" />
+                        <span className="min-w-0 flex-1 truncate">
+                          {def.title}
+                        </span>
+                        {q ? (
+                          <span
+                            className={cn(
+                              "min-w-5 rounded-full px-1.5 text-center text-ui-2xs font-semibold leading-5 tabular-nums",
+                              count > 0
+                                ? "bg-rm-accent-tint text-rm-accent-ink"
+                                : "text-rm-text-secondary",
+                            )}
+                          >
+                            {count}
+                          </span>
+                        ) : narrow ? (
+                          <Icon
+                            name="chevronRight"
+                            size="xs"
+                            className="shrink-0"
+                          />
+                        ) : null}
+                      </button>
+                      {q && count > 0 ? (
+                        <ul className="mb-1 mt-px flex flex-col gap-px">
+                          {panelHits
+                            .slice(0, MAX_ROW_HITS_PER_PANEL)
+                            .map((hit) => (
+                              <li key={hit.row.id}>
+                                <button
+                                  type="button"
+                                  data-roving
+                                  tabIndex={-1}
+                                  aria-label={
+                                    hit.section &&
+                                    hit.section.title !== hit.row.label
+                                      ? `${hit.row.label}, ${hit.section.title}`
+                                      : hit.row.label
+                                  }
+                                  onClick={() => go(id, hit.row.id)}
+                                  className="flex w-full flex-col items-start rounded-md py-1.5 pl-9 pr-2.5 text-left transition-colors duration-150 pointer-fine:hover:bg-rm-bg-hover"
+                                >
+                                  <span className="text-ui-sm text-rm-text">
+                                    <Highlight text={hit.row.label} query={q} />
+                                  </span>
+                                  {hit.section &&
+                                  hit.section.title !== hit.row.label ? (
+                                    <span className="text-ui-xs text-rm-text-secondary">
+                                      {hit.section.title}
+                                    </span>
+                                  ) : null}
+                                </button>
+                              </li>
                             ))}
-                          </div>
-                        </div>
-                      ))
-                    )}
-                  </div>
+                          {count > MAX_ROW_HITS_PER_PANEL ? (
+                            <li className="py-1 pl-9 text-ui-xs text-rm-text-secondary">
+                              {count - MAX_ROW_HITS_PER_PANEL} more on this page
+                            </li>
+                          ) : null}
+                        </ul>
+                      ) : null}
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          ))
+        )}
+      </div>
+    </>
+  );
 
-                  <Separator className="bg-rm-border mx-2" />
+  /* ---------------------------------------------------------------- */
+  /* Page                                                               */
+  /* ---------------------------------------------------------------- */
 
+  const page = (
+    <>
+      <header className="flex h-14 shrink-0 items-center gap-2 border-b border-rm-border px-3 md:px-6">
+        {narrow ? (
+          <IconButton
+            aria-label="Back to all settings"
+            icon="chevronLeft"
+            size="sm"
+            onClick={() => setShowList(true)}
+          />
+        ) : null}
+        <h2
+          id={pageTitleId}
+          ref={pageTitleRef}
+          tabIndex={-1}
+          className="min-w-0 flex-1 truncate text-ui-xl font-semibold text-rm-text outline-none"
+        >
+          {noHits ? "No matches" : pageDef.title}
+        </h2>
+        <IconButton
+          aria-label="Close settings"
+          icon="close"
+          size="sm"
+          onClick={close}
+        />
+      </header>
+      <div
+        ref={setBodyNode}
+        onPointerDown={() => target && setTarget(null)}
+        className="rm-settings-scroll min-h-0 flex-1 overflow-y-auto"
+      >
+        {pageVisible ? (
+          <div
+            key={`${shownPanel}-${narrow ? "n" : "w"}`}
+            className={cn(
+              "flex gap-8 px-4 pb-16 pt-5 md:px-6",
+              narrow ? "rm-settings-push-in" : "rm-settings-panel-in",
+            )}
+          >
+            <div
+              className={cn(
+                "flex min-w-0 flex-1 flex-col gap-5",
+                !(showRail && railBeside) && "mx-auto max-w-[720px]",
+              )}
+            >
+              {noHits ? (
+                <div className="rounded-lg border border-dashed border-rm-border-strong px-5 py-8 text-center">
+                  <p className="text-ui-base font-medium text-rm-text">
+                    No settings match “{q}”
+                  </p>
+                  <p className="mt-1 text-ui-sm text-rm-text-secondary">
+                    Check the spelling, or search for what a setting does, like
+                    “echo” or “startup”.
+                  </p>
                   <Button
-                    variant="destructive"
-                    onClick={handleSignOut}
-                    className="w-full justify-between px-2.5 has-[>svg]:px-2.5"
+                    type="button"
+                    variant="secondary"
+                    className="mt-4"
+                    onClick={() => {
+                      setQuery("");
+                      searchRef.current?.focus();
+                    }}
                   >
-                    <span>Log Out</span>
-                    <Icon name="logout" size="sm" />
+                    Clear search
                   </Button>
                 </div>
-              </div>
-
-              {/* Main Content */}
-              <div
-                role="region"
-                aria-label="Settings content"
-                aria-hidden={
-                  isMobileViewport && showMobileMenu ? "true" : undefined
-                }
-                inert={isMobileViewport && showMobileMenu ? true : undefined}
-                className={cn(
-                  "flex-1 min-h-0 flex-col relative overflow-hidden bg-rm-bg-primary",
-                  "max-md:absolute max-md:inset-0 max-md:z-20 max-md:transition-transform max-md:duration-200 max-md:ease-out flex",
-                  !showMobileMenu
-                    ? "max-md:translate-x-0"
-                    : "max-md:translate-x-full",
-                )}
+              ) : (
+                <>
+                  {q ? (
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="text-ui-sm text-rm-text-secondary">
+                        {hitsByPanel.get(shownPanel)?.length === 1
+                          ? `1 match for “${q}” on this page`
+                          : `${hitsByPanel.get(shownPanel)?.length ?? 0} matches for “${q}” on this page`}
+                      </p>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setQuery("")}
+                      >
+                        Show all {pageDef.title} settings
+                      </Button>
+                    </div>
+                  ) : (
+                    <p className="text-pretty text-ui-sm text-rm-text-secondary">
+                      {pageDef.blurb}
+                    </p>
+                  )}
+                  {showRail && !railBeside ? (
+                    <div className="rounded-lg border border-rm-border bg-rm-bg-surface p-4">
+                      <SettingsRail panel={shownPanel} />
+                    </div>
+                  ) : null}
+                  <PanelComponent />
+                </>
+              )}
+            </div>
+            {showRail && railBeside ? (
+              <aside
+                aria-label="Preview"
+                className="sticky top-5 w-[272px] shrink-0 self-start"
               >
-                {/* Mobile Header */}
-                <div
-                  className="md:hidden flex items-center gap-3 px-4 pb-2 border-b border-rm-border shrink-0 bg-rm-bg-primary z-50"
-                  style={{
-                    paddingTop: "calc(16px + var(--safe-area-top, 0px))",
-                  }}
-                >
-                  <IconButton
-                    aria-label="Show settings menu"
-                    icon="chevronLeft"
-                    size="sm"
-                    shape="circle"
-                    onClick={() => setShowMobileMenu(true)}
-                  />
-                  <h2 className="text-base font-bold text-rm-text uppercase tracking-wider">
-                    {getTabTitle(activeTab)}
-                  </h2>
-                </div>
+                <SettingsRail panel={shownPanel} />
+              </aside>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
+    </>
+  );
 
-                {/* Close Button (Desktop Only) */}
-                <div className="hidden md:flex absolute right-10 top-14 z-20 flex-col items-center gap-1.5">
-                  <IconButton
-                    aria-label="Close settings"
-                    icon="close"
-                    size="sm"
-                    onClick={onClose}
+  return (
+    <SettingsContext.Provider value={contextValue}>
+      <TooltipProvider delayDuration={300}>
+        <Dialog
+          open={isOpen}
+          onOpenChange={(nextOpen) => !nextOpen && handleModalCloseOrBack()}
+        >
+          <DialogPortal>
+            {!previewOpen && <DialogOverlay className="bg-rm-scrim" />}
+            <DialogSurface
+              showCloseButton={false}
+              aria-labelledby={titleId}
+              onOpenAutoFocus={(event) => {
+                if (narrow) {
+                  event.preventDefault();
+                  (showList ? navRef.current : pageTitleRef.current)?.focus?.();
+                }
+              }}
+              onEscapeKeyDown={(event) => {
+                if (previewOpen || profileEditorOpen) return;
+                if (stepBack()) event.preventDefault();
+              }}
+              className={cn(
+                "fixed inset-0 z-50 m-0 flex min-h-0 items-stretch overflow-hidden p-0 outline-none",
+                previewOpen
+                  ? "h-full max-w-none flex-row border-0 bg-transparent shadow-none"
+                  : "h-full w-full flex-row bg-rm-bg-primary md:inset-auto md:left-1/2 md:top-1/2 md:h-[min(820px,calc(100dvh-32px))] md:w-[min(1120px,calc(100vw-32px))] md:-translate-x-1/2 md:-translate-y-1/2 md:rounded-xl md:border md:border-rm-border-strong md:shadow-[var(--rm-shadow-3)]",
+                "animate-in fade-in duration-200 data-[state=closed]:animate-out data-[state=closed]:fade-out",
+                !previewOpen &&
+                  "md:zoom-in-[0.98] md:data-[state=closed]:zoom-out-[0.98]",
+              )}
+            >
+              <DialogTitle id={titleId} className="sr-only">
+                Settings
+              </DialogTitle>
+              {previewOpen ? (
+                <div className="pointer-events-none flex h-full w-full justify-end bg-transparent">
+                  <div className="flex-1 bg-transparent" />
+                  <ThemePreviewSidebar
+                    className="max-w-[320px]"
+                    onClose={() => setPreviewOpen(false)}
+                    onBackToSettings={() => setPreviewOpen(false)}
                   />
-                  <span
-                    aria-hidden="true"
-                    className="text-ui-2xs font-medium text-rm-text-muted hidden md:block"
-                  >
-                    ESC
-                  </span>
                 </div>
-
-                <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar pt-6 md:pt-8 pb-16">
-                  <div
+              ) : (
+                <>
+                  <nav
+                    ref={navRef}
+                    tabIndex={-1}
+                    aria-label="Settings navigation"
+                    aria-hidden={!listVisible ? "true" : undefined}
+                    inert={!listVisible ? true : undefined}
                     className={cn(
-                      "px-4 md:px-9 max-w-[940px] w-full mx-auto transition-opacity duration-150",
+                      "flex min-h-0 flex-col bg-rm-bg-sidebar outline-none",
+                      narrow
+                        ? "w-full"
+                        : "w-[240px] shrink-0 border-r border-rm-border",
+                      !listVisible && "hidden",
                     )}
+                    style={
+                      narrow
+                        ? { paddingTop: "var(--safe-area-top, 0px)" }
+                        : undefined
+                    }
                   >
-                    {activeTab === "account" && (
-                      <SettingsAccountOverviewTab
-                        onOpenProfileEditor={openProfileEditor}
-                      />
+                    {nav}
+                  </nav>
+                  <div
+                    ref={setMainNode}
+                    role="region"
+                    aria-label="Settings content"
+                    aria-hidden={!pageVisible ? "true" : undefined}
+                    inert={!pageVisible ? true : undefined}
+                    className={cn(
+                      "@container relative flex min-h-0 min-w-0 flex-1 flex-col bg-rm-bg-primary",
+                      !pageVisible && "hidden",
                     )}
-                    {activeTab === "appearance" && (
-                      <SettingsAppearanceTab
-                        onOpenPreview={() => setPreviewOpen(true)}
-                      />
-                    )}
-                    {activeTab === "media" && <SettingsMediaTab />}
-                    {activeTab === "voice" && <SettingsVoiceTab />}
-                    {activeTab === "camera" && <SettingsCameraTab />}
-                    {activeTab === "notifications" && (
-                      <SettingsNotificationsTab />
-                    )}
-                    {activeTab === "devices" && <SettingsDevicesTab />}
-                    {activeTab === "os-settings" && isDesktopApp && (
-                      <SettingsOSTab />
-                    )}
-                    {activeTab === "shares" && <SettingsSharesTab />}
-
-                    {activeTab === "profiles" && (
-                      <div className="animate-in fade-in duration-150">
-                        <h1 className="text-ui-xl font-semibold text-rm-text mb-1.5 hidden md:block">
-                          Profiles
-                        </h1>
-                        <p className="text-ui-sm text-rm-text-muted mb-6 md:mb-8">
-                          You can use a different identity across all your
-                          servers.
-                        </p>
-
-                        <div className="bg-rm-bg-surface rounded-xl border border-rm-border p-6 flex flex-col items-center justify-center min-h-[300px] text-center">
-                          <div className="w-16 h-16 rounded-full bg-rm-accent-tint flex items-center justify-center text-rm-accent-ink mb-4">
-                            <Icon name="account" size="2xl" />
-                          </div>
-                          <h2 className="text-lg font-bold text-rm-text mb-2">
-                            Server Profiles are coming soon
-                          </h2>
-                          <p className="text-sm text-rm-text-muted max-w-[320px]">
-                            Soon you'll be able to set a unique avatar, banner,
-                            and bio for each server you're in!
-                          </p>
-                        </div>
-                      </div>
-                    )}
-
-                    {activeTab === "accessibility" && (
-                      <div className="animate-in fade-in duration-150">
-                        <h1 className="text-ui-xl font-semibold text-rm-text mb-1.5 hidden md:block">
-                          Accessibility
-                        </h1>
-                        <p className="text-ui-sm text-rm-text-muted mb-6 md:mb-8">
-                          Configure additional application preferences.
-                        </p>
-
-                        <div className="bg-rm-bg-surface rounded-xl border border-rm-border p-6 flex flex-col items-center justify-center min-h-[300px] text-center">
-                          <div className="w-16 h-16 rounded-full bg-rm-accent-tint flex items-center justify-center text-rm-accent-ink mb-4">
-                            <Icon name="zap" size="2xl" />
-                          </div>
-                          <h2 className="text-lg font-bold text-rm-text mb-2">
-                            These settings are coming soon
-                          </h2>
-                          <p className="text-sm text-rm-text-muted max-w-[320px]">
-                            We're working on bringing more advanced
-                            customization options to Ralph Meet. Stay tuned!
-                          </p>
-                        </div>
-                      </div>
-                    )}
+                    style={
+                      narrow
+                        ? { paddingTop: "var(--safe-area-top, 0px)" }
+                        : undefined
+                    }
+                  >
+                    {page}
                   </div>
-                </div>
-              </div>
-            </>
-          )}
-        </DialogSurface>
-      </DialogPortal>
-    </Dialog>
+                </>
+              )}
+            </DialogSurface>
+          </DialogPortal>
+        </Dialog>
+
+        <Dialog
+          open={isOpen && profileEditorOpen && !previewOpen}
+          onOpenChange={(nextOpen) => {
+            setProfileEditorOpen(nextOpen);
+            if (!nextOpen) {
+              const trigger = profileEditorTrigger.current;
+              requestAnimationFrame(() => trigger?.focus());
+            }
+          }}
+        >
+          <DialogPortal>
+            <DialogSurface
+              showCloseButton={false}
+              aria-label="Edit profile"
+              className="fixed inset-0 z-60 flex items-center justify-center overflow-hidden rounded-2xl border border-rm-border bg-rm-bg-primary p-0 shadow-2xl animate-in fade-in zoom-in-95 duration-200 data-[state=closed]:animate-out data-[state=closed]:zoom-out-95 md:inset-auto md:left-1/2 md:top-1/2 md:h-[min(860px,calc(100dvh-32px))] md:w-[min(1240px,calc(100vw-32px))] md:-translate-x-1/2 md:-translate-y-1/2 md:rounded-2xl"
+              style={{
+                width: "min(1240px, calc(100vw - 32px))",
+                height: "min(860px, calc(100dvh - 32px))",
+              }}
+            >
+              <SettingsAccountTab
+                authUserLoaded={isUserLoaded}
+                asModal
+                onClose={() => setProfileEditorOpen(false)}
+              />
+            </DialogSurface>
+          </DialogPortal>
+        </Dialog>
+      </TooltipProvider>
+    </SettingsContext.Provider>
   );
 }

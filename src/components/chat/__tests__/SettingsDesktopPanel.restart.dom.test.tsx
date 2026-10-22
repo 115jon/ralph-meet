@@ -32,26 +32,41 @@ vi.mock("@/components/chat/useAppearanceTheme", () => ({
   }),
 }));
 
-vi.mock("@/stores/useDesktopSettingsStore", () => ({
-  useDesktopSettingsStore: <T,>(
-    selector: (state: {
-      hardwareAcceleration: boolean;
-      updateSettings: typeof mocks.updateSettings;
-    }) => T,
-  ) =>
-    selector({
-      hardwareAcceleration: true,
-      updateSettings: mocks.updateSettings,
-    }),
-}));
+vi.mock("@/stores/useDesktopSettingsStore", () => {
+  const state = {
+    openOnStartup: false,
+    startMinimized: false,
+    closeToTray: true,
+    hardwareAcceleration: true,
+    desktopNotifications: true,
+    updateSettings: mocks.updateSettings,
+    syncToBackend: vi.fn(),
+  };
+  return {
+    useDesktopSettingsStore: <T,>(selector?: (s: typeof state) => T) =>
+      selector ? selector(state) : state,
+  };
+});
 
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: mocks.invoke,
 }));
 
-import SettingsAppearanceTab from "@/components/chat/SettingsAppearanceTab";
+vi.mock("@/hooks/useAppUpdater", () => ({
+  useAppUpdater: () => ({
+    status: "idle",
+    updateMeta: null,
+    downloadProgress: null,
+    error: null,
+    checkForUpdate: vi.fn(),
+    applyUpdate: vi.fn(),
+  }),
+}));
 
-describe("SettingsAppearanceTab restart flow", () => {
+import DesktopPanel from "@/components/chat/settings/DesktopPanel";
+import { SettingsContext } from "@/components/chat/settings/primitives";
+
+describe("DesktopPanel hardware acceleration restart", () => {
   it("routes hardware acceleration confirmation through the desktop restart command", async () => {
     mocks.invoke.mockImplementation(async (command) => {
       if (command === "get_hardware_acceleration") {
@@ -61,14 +76,25 @@ describe("SettingsAppearanceTab restart flow", () => {
       return undefined;
     });
 
-    render(<SettingsAppearanceTab />);
+    render(
+      <SettingsContext.Provider
+        value={{
+          env: { desktop: true },
+          query: "",
+          target: null,
+          registerEscape: () => () => {},
+          openProfileEditor: () => {},
+          openThemePreview: () => {},
+        }}
+      >
+        <DesktopPanel />
+      </SettingsContext.Provider>,
+    );
 
     fireEvent.click(
-      screen.getByRole("switch", { name: "Enable hardware acceleration" }),
+      screen.getByRole("switch", { name: "Hardware acceleration" }),
     );
-    fireEvent.click(
-      await screen.findByRole("button", { name: "Change and Restart" }),
-    );
+    fireEvent.click(await screen.findByRole("button", { name: "Restart now" }));
 
     await waitFor(() => {
       expect(mocks.invoke).toHaveBeenCalledWith("set_hardware_acceleration", {

@@ -37,7 +37,7 @@ vi.mock("../SoundboardPicker", () => ({
   ),
 }));
 
-import { SettingsSoundboardTriggers } from "@/components/chat/SettingsSoundboardTriggers";
+import { SoundboardSettings } from "@/components/chat/settings/SoundboardPanel";
 import { useSoundSettingsStore } from "@/stores/useSoundSettingsStore";
 
 const servers = [
@@ -50,7 +50,7 @@ const servers = [
   },
 ];
 
-describe("SettingsSoundboardTriggers", () => {
+describe("SoundboardSettings", () => {
   beforeEach(() => {
     HTMLElement.prototype.scrollIntoView = vi.fn();
     HTMLElement.prototype.hasPointerCapture = vi.fn(() => false);
@@ -63,9 +63,9 @@ describe("SettingsSoundboardTriggers", () => {
 
   it("enables and selects a join sound without broadcasting", async () => {
     const user = userEvent.setup();
-    render(<SettingsSoundboardTriggers userId="user-1" servers={servers} />);
+    render(<SoundboardSettings userId="user-1" servers={servers} />);
 
-    await user.click(screen.getByRole("switch", { name: /toggle join/i }));
+    await user.click(screen.getByRole("switch", { name: "Join sound" }));
     await user.click(screen.getByRole("button", { name: /change join/i }));
     await user.click(screen.getByRole("button", { name: "Mock select sound" }));
 
@@ -105,7 +105,7 @@ describe("SettingsSoundboardTriggers", () => {
       _cache: {},
     });
     const user = userEvent.setup();
-    render(<SettingsSoundboardTriggers userId="user-1" servers={servers} />);
+    render(<SoundboardSettings userId="user-1" servers={servers} />);
 
     await user.click(screen.getByRole("button", { name: /clear leave/i }));
 
@@ -119,7 +119,7 @@ describe("SettingsSoundboardTriggers", () => {
     const pushState = vi.spyOn(window.history, "pushState");
     const user = userEvent.setup();
 
-    render(<SettingsSoundboardTriggers userId="user-1" servers={servers} />);
+    render(<SoundboardSettings userId="user-1" servers={servers} />);
     await user.click(screen.getByRole("button", { name: /change join/i }));
 
     expect(pushState).not.toHaveBeenCalled();
@@ -128,16 +128,16 @@ describe("SettingsSoundboardTriggers", () => {
 
   it("switches to a server scope and shows the server icon and name", async () => {
     const user = userEvent.setup();
-    render(<SettingsSoundboardTriggers userId="user-1" servers={servers} />);
+    render(<SoundboardSettings userId="user-1" servers={servers} />);
 
-    await user.click(
-      screen.getByRole("combobox", { name: /soundboard server scope/i }),
-    );
+    await user.click(screen.getByRole("combobox", { name: "Server" }));
     expect(screen.getByRole("option", { name: "Alpha" })).toBeVisible();
     await user.click(screen.getByRole("option", { name: "Alpha" }));
 
     expect(
-      screen.getByText("Alpha overrides inherit from All Servers."),
+      screen.getByText(
+        "Alpha uses your All servers sounds until you change them here.",
+      ),
     ).toBeVisible();
     expect(
       screen
@@ -150,13 +150,13 @@ describe("SettingsSoundboardTriggers", () => {
 
   it("anchors the picker to the pencil that was clicked", async () => {
     const user = userEvent.setup();
-    render(<SettingsSoundboardTriggers userId="user-1" servers={servers} />);
+    render(<SoundboardSettings userId="user-1" servers={servers} />);
 
     await user.click(screen.getByRole("button", { name: /change join/i }));
 
     await waitFor(() =>
       expect(screen.getByTestId("picker-anchor-label")).toHaveTextContent(
-        "Change Join sound",
+        "Change join sound",
       ),
     );
   });

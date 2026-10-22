@@ -1157,6 +1157,83 @@
 }
 
 /* ============================================================
+   Settings dialog. Panels swap with a short fade (nothing travels on
+   desktop); the mobile list pushes into a page with a short slide so the
+   hierarchy reads. Transform and opacity only, under 240ms.
+   ============================================================ */
+@keyframes rm-settings-fade {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes rm-settings-push {
+  from {
+    opacity: 0;
+    transform: translateX(16px);
+  }
+}
+@keyframes rm-settings-drop {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+
+.rm-settings-panel-in {
+  animation: rm-settings-fade 140ms var(--rm-ease-out);
+}
+.rm-settings-push-in {
+  animation: rm-settings-push 220ms var(--rm-ease-drawer);
+}
+.rm-settings-confirm-in {
+  animation: rm-settings-drop 160ms var(--rm-ease-out);
+}
+
+/* A search result or deep link lands here: a held tint, cleared on the
+   next interaction rather than by a timer. */
+.rm-settings-target {
+  position: relative;
+}
+.rm-settings-target::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  background: var(--rm-accent-tint);
+  opacity: 0;
+  transition: opacity var(--rm-dur-3) var(--rm-ease-out);
+}
+.rm-settings-target[data-target]::before {
+  opacity: 1;
+}
+.rm-settings-target > * {
+  position: relative;
+}
+
+.rm-settings-range {
+  height: 20px;
+  accent-color: var(--primary);
+  cursor: pointer;
+}
+.rm-settings-range:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.rm-settings-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: var(--rm-border-strong) transparent;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rm-settings-push-in,
+  .rm-settings-confirm-in {
+    animation: rm-settings-fade var(--rm-dur-1) var(--rm-ease-out);
+  }
+}
+
+/* ============================================================
    Loading screens (splash, connection overlay)
    ============================================================ */
 @keyframes rm-breathe {

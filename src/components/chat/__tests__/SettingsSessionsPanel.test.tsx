@@ -3,14 +3,14 @@
 import { apiGet } from "@/lib/api-client";
 import { act, cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import SettingsDevicesTab from "../SettingsDevicesTab";
+import SessionsPanel from "../settings/SessionsPanel";
 
 vi.mock("@/lib/api-client", () => ({
   apiDelete: vi.fn(),
   apiGet: vi.fn(),
 }));
 
-describe("SettingsDevicesTab", () => {
+describe("SessionsPanel", () => {
   beforeEach(() => {
     vi.mocked(apiGet).mockReset();
   });
@@ -60,7 +60,7 @@ describe("SettingsDevicesTab", () => {
       ],
     });
 
-    render(<SettingsDevicesTab />);
+    render(<SessionsPanel />);
 
     await act(async () => {
       await Promise.resolve();

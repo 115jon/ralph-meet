@@ -1,0 +1,274 @@
+import { SettingsSwitch } from "@/components/chat/SettingsSwitch";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogDescription,
+  DialogPortal,
+  DialogSurface,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { useAppUpdater } from "@/hooks/useAppUpdater";
+import { clog } from "@/lib/console-logger";
+import { restartDesktopApp } from "@/lib/desktop-restart";
+import { useDesktopSettingsStore } from "@/stores/useDesktopSettingsStore";
+import { useEffect, useState } from "react";
+import { SettingsCard, SettingsRow, ValueText } from "./primitives";
+
+const log = clog("Settings");
+
+function HardwareAccelerationRow() {
+  const hardwareAcceleration = useDesktopSettingsStore(
+    (s) => s.hardwareAcceleration,
+  );
+  const updateDesktopSettings = useDesktopSettingsStore(
+    (s) => s.updateSettings,
+  );
+  const [pendingHardwareAcceleration, setPendingHardwareAcceleration] =
+    useState<boolean | null>(null);
+  const [restarting, setRestarting] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    import("@tauri-apps/api/core")
+      .then(({ invoke }) => invoke<boolean>("get_hardware_acceleration"))
+      .then((enabled) => {
+        if (
+          !cancelled &&
+          typeof enabled === "boolean" &&
+          enabled !== hardwareAcceleration
+        ) {
+          updateDesktopSettings({ hardwareAcceleration: enabled });
+        }
+      })
+      .catch((error) =>
+        log.warn("Failed to read hardware acceleration setting:", error),
+      );
+    return () => {
+      cancelled = true;
+    };
+  }, [hardwareAcceleration, updateDesktopSettings]);
+
+  const confirmHardwareAccelerationChange = async () => {
+    if (pendingHardwareAcceleration === null) return;
+    setRestarting(true);
+    updateDesktopSettings({
+      hardwareAcceleration: pendingHardwareAcceleration,
+    });
+    try {
+      const { invoke } = await import("@tauri-apps/api/core");
+      await invoke("set_hardware_acceleration", {
+        enabled: pendingHardwareAcceleration,
+      });
+      await restartDesktopApp();
+    } catch (error) {
+      log.error("Failed to change hardware acceleration:", error);
+      setPendingHardwareAcceleration(null);
+      setRestarting(false);
+    }
+  };
+
+  return (
+    <SettingsRow id="hardware-acceleration" layout="inline">
+      {(ids) => (
+        <>
+          <SettingsSwitch
+            checked={hardwareAcceleration}
+            onChange={() =>
+              setPendingHardwareAcceleration(!hardwareAcceleration)
+            }
+            labelledBy={ids.labelId}
+            describedBy={ids.descId}
+          />
+          <Dialog
+            open={pendingHardwareAcceleration !== null}
+            onOpenChange={(open) =>
+              !open && !restarting && setPendingHardwareAcceleration(null)
+            }
+          >
+            <DialogPortal>
+              <div className="fixed inset-0 z-60 flex items-center justify-center bg-rm-scrim px-4 animate-in fade-in duration-200">
+                <DialogSurface
+                  showCloseButton={false}
+                  className="relative m-0 w-full max-w-[420px] rounded-xl border border-rm-border-strong bg-rm-bg-surface p-5 shadow-[var(--rm-shadow-3)] outline-none animate-in fade-in zoom-in-[0.98] duration-200 dark:bg-rm-bg-elevated"
+                >
+                  <DialogTitle>
+                    {pendingHardwareAcceleration
+                      ? "Turn on hardware acceleration?"
+                      : "Turn off hardware acceleration?"}
+                  </DialogTitle>
+                  <DialogDescription className="mt-2 text-rm-text-secondary">
+                    Ralph Meet restarts to apply this. If you're in a call,
+                    you'll leave it and can rejoin after the restart.
+                  </DialogDescription>
+                  <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      disabled={restarting}
+                      onClick={() => setPendingHardwareAcceleration(null)}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      type="button"
+                      loading={restarting}
+                      onClick={confirmHardwareAccelerationChange}
+                    >
+                      Restart now
+                    </Button>
+                  </div>
+                </DialogSurface>
+              </div>
+            </DialogPortal>
+          </Dialog>
+        </>
+      )}
+    </SettingsRow>
+  );
+}
+
+function UpdatesRow() {
+  const {
+    status,
+    updateMeta,
+    downloadProgress,
+    error,
+    checkForUpdate,
+    applyUpdate,
+  } = useAppUpdater();
+  const [appVersion, setAppVersion] = useState<string>("");
+
+  useEffect(() => {
+    if (typeof window !== "undefined" && "__TAURI_INTERNALS__" in window) {
+      import("@tauri-apps/api/app").then(({ getVersion }) => {
+        getVersion().then(setAppVersion).catch(console.error);
+      });
+    }
+  }, []);
+
+  const progress =
+    downloadProgress !== null ? Math.round(downloadProgress * 100) : 0;
+  const busy =
+    status === "checking" ||
+    status === "downloading" ||
+    status === "installing";
+  const statusText =
+    status === "checking"
+      ? "Checking for updates…"
+      : status === "up-to-date"
+        ? "You're on the latest version."
+        : status === "available"
+          ? `Version ${updateMeta?.version} is ready to install.`
+          : status === "downloading"
+            ? `Downloading the update… ${progress}%`
+            : status === "installing"
+              ? "Installing. Ralph Meet will restart in a moment."
+              : status === "error"
+                ? `Couldn't update: ${error || "unknown error"}. Try again.`
+                : "Check for a newer version of Ralph Meet.";
+
+  return (
+    <SettingsRow
+      id="app-version"
+      layout="stack"
+      description={
+        <span
+          role="status"
+          className={status === "error" ? "text-rm-danger-ink" : undefined}
+        >
+          {statusText}
+        </span>
+      }
+      footer={
+        <>
+          {status === "available" && updateMeta?.notes ? (
+            <div className="mt-3 rounded-md border border-rm-border p-3">
+              <p className="text-ui-xs font-medium text-rm-text">What's new</p>
+              <p className="rm-settings-scroll mt-1 max-h-32 overflow-y-auto whitespace-pre-line text-ui-xs text-rm-text-secondary">
+                {updateMeta.notes}
+              </p>
+            </div>
+          ) : null}
+          {status === "downloading" || status === "installing" ? (
+            <div
+              className="mt-3 h-1 w-full overflow-hidden rounded-full bg-rm-tint-2"
+              role="progressbar"
+              aria-label="Update progress"
+              aria-valuenow={progress}
+              aria-valuemin={0}
+              aria-valuemax={100}
+            >
+              <div
+                className="h-full origin-left rounded-full bg-primary transition-transform duration-200"
+                style={{ transform: `scaleX(${progress / 100})` }}
+              />
+            </div>
+          ) : null}
+        </>
+      }
+    >
+      {() => (
+        <>
+          <ValueText>v{appVersion || "1.0.0"}</ValueText>
+          {status === "available" ? (
+            <Button type="button" onClick={applyUpdate}>
+              Install update
+            </Button>
+          ) : (
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={checkForUpdate}
+              loading={status === "checking"}
+              disabled={busy && status !== "checking"}
+            >
+              Check for updates
+            </Button>
+          )}
+        </>
+      )}
+    </SettingsRow>
+  );
+}
+
+export default function DesktopPanel() {
+  const desktopSettings = useDesktopSettingsStore();
+
+  const toggles: Array<{
+    rowId: string;
+    key: "openOnStartup" | "startMinimized" | "closeToTray";
+  }> = [
+    { rowId: "open-on-startup", key: "openOnStartup" },
+    { rowId: "start-minimized", key: "startMinimized" },
+    { rowId: "close-to-tray", key: "closeToTray" },
+  ];
+
+  return (
+    <>
+      <SettingsCard id="startup">
+        {toggles.map(({ rowId, key }) => (
+          <SettingsRow key={rowId} id={rowId} layout="inline">
+            {(ids) => (
+              <SettingsSwitch
+                checked={desktopSettings[key]}
+                onChange={() =>
+                  desktopSettings.updateSettings({
+                    [key]: !desktopSettings[key],
+                  })
+                }
+                labelledBy={ids.labelId}
+                describedBy={ids.descId}
+              />
+            )}
+          </SettingsRow>
+        ))}
+      </SettingsCard>
+      <SettingsCard id="performance">
+        <HardwareAccelerationRow />
+      </SettingsCard>
+      <SettingsCard id="updates">
+        <UpdatesRow />
+      </SettingsCard>
+    </>
+  );
+}

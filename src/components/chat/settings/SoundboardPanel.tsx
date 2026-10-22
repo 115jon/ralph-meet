@@ -1,40 +1,36 @@
 import InlineEmojiText from "@/components/chat/InlineEmojiText";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { SettingsSwitch } from "@/components/chat/SettingsSwitch";
+import { Icon } from "@/components/ui/icon";
 import { IconButton } from "@/components/ui/IconButton";
+import type { Server } from "@/lib/types";
 import { getAuthAssetUrl } from "@/lib/platform";
 import { previewSoundboardTriggerSelection } from "@/lib/voice/auto-soundboard";
+import { setSoundboardMasterVolume } from "@/lib/voice/soundboard";
+import {
+  toSoundboardTriggerSelection,
+  type SoundboardCatalogSound,
+} from "@/lib/voice/soundboard-catalog";
 import {
   ALL_SERVERS_SOUND_SCOPE,
   resolveSoundboardTriggerConfig,
   type SoundboardTriggerConfig,
   type SoundboardTriggerMap,
 } from "@/lib/voice/soundboard-trigger";
-import {
-  toSoundboardTriggerSelection,
-  type SoundboardCatalogSound,
-} from "@/lib/voice/soundboard-catalog";
-import type { Server } from "@/lib/types";
-import { setSoundboardMasterVolume } from "@/lib/voice/soundboard";
-import { Icon } from "@/components/ui/icon";
+import { useChatStore } from "@/stores/chat-store";
+import { useSoundSettingsStore } from "@/stores/useSoundSettingsStore";
+import { useUser } from "@kova/react";
 import { useEffect, useRef, useState } from "react";
 import { useShallow } from "zustand/shallow";
-import { useSoundSettingsStore } from "@/stores/useSoundSettingsStore";
-import EmojiToken from "./EmojiToken";
-import SoundboardPicker from "./SoundboardPicker";
+import EmojiToken from "../EmojiToken";
+import SoundboardPicker from "../SoundboardPicker";
+import {
+  RangeControl,
+  SettingsCard,
+  SettingsRow,
+  SettingsSelect,
+} from "./primitives";
 
 type TriggerKey = "voiceJoinSoundboard" | "voiceLeaveSoundboard";
-
-interface Props {
-  userId: string | null;
-  servers: Server[];
-}
 
 function ServerIcon({ server }: { server?: Server }) {
   if (!server) return <Icon name="globe" size="sm" />;
@@ -48,7 +44,7 @@ function ServerIcon({ server }: { server?: Server }) {
     );
   }
   return (
-    <span className="flex h-5 w-5 items-center justify-center rounded-md bg-rm-bg-hover text-ui-2xs font-bold text-rm-text-muted">
+    <span className="flex h-5 w-5 items-center justify-center rounded-md bg-rm-tint-2 text-ui-2xs font-bold text-rm-text-secondary">
       {server.name.slice(0, 1).toUpperCase()}
     </span>
   );
@@ -69,7 +65,7 @@ function withoutScope(map: SoundboardTriggerMap, scope: string) {
 }
 
 function TriggerRow({
-  label,
+  rowId,
   actionLabel,
   config,
   inherited,
@@ -79,8 +75,8 @@ function TriggerRow({
   onClear,
   changeButtonRef,
 }: {
-  label: string;
-  actionLabel: string;
+  rowId: string;
+  actionLabel: "join" | "leave";
   config: SoundboardTriggerConfig;
   inherited: boolean;
   onToggle: () => void;
@@ -91,70 +87,84 @@ function TriggerRow({
 }) {
   const sound = config.sound;
   return (
-    <div className="flex items-center gap-3 border-b border-rm-border px-4 py-3 last:border-b-0">
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
-          <h4 className="text-ui-sm font-semibold text-rm-text">{label}</h4>
-          {inherited && (
-            <span className="text-ui-xs font-medium text-rm-text-muted">
-              Inherited
-            </span>
-          )}
-        </div>
-        <div className="mt-1 flex min-w-0 items-center gap-1.5 text-ui-xs text-rm-text-muted">
-          {sound?.emoji && (
+    <SettingsRow
+      id={rowId}
+      layout="inline"
+      description={
+        <span className="flex min-w-0 items-center gap-1.5">
+          {sound?.emoji ? (
             <EmojiToken
               value={sound.emoji}
-              className="h-5 w-5 shrink-0"
-              fallbackClassName="shrink-0 text-base leading-none"
+              className="h-4 w-4 shrink-0"
+              fallbackClassName="shrink-0 text-ui-sm leading-none"
             />
-          )}
+          ) : null}
           <InlineEmojiText
-            text={sound?.name ?? "No sound selected"}
+            text={sound?.name ?? "No sound chosen"}
             className="truncate"
           />
-        </div>
-      </div>
-
-      <div className="flex shrink-0 items-center gap-1">
-        <IconButton
-          type="button"
-          aria-label={`Preview ${actionLabel} sound`}
-          icon="play"
-          variant="muted"
-          iconSize="sm"
-          onClick={onPreview}
-          disabled={!sound}
-        />
-        <IconButton
-          ref={changeButtonRef}
-          type="button"
-          aria-label={`Change ${actionLabel} sound`}
-          icon="edit"
-          variant="muted"
-          iconSize="sm"
-          onClick={onChange}
-        />
-        <IconButton
-          type="button"
-          aria-label={`Clear ${actionLabel} sound`}
-          icon="trash"
-          variant="destructive"
-          iconSize="sm"
-          onClick={onClear}
-          disabled={!sound}
-        />
-        <SettingsSwitch
-          checked={config.enabled}
-          onChange={onToggle}
-          ariaLabel={`Toggle ${actionLabel} sound`}
-        />
-      </div>
-    </div>
+          {inherited ? (
+            <span className="shrink-0 text-rm-text-secondary">
+              · From All servers
+            </span>
+          ) : null}
+        </span>
+      }
+    >
+      {(ids) => (
+        <>
+          <IconButton
+            type="button"
+            aria-label={`Preview ${actionLabel} sound`}
+            icon="play"
+            variant="ghost"
+            iconSize="sm"
+            onClick={onPreview}
+            disabled={!sound}
+          />
+          <IconButton
+            ref={changeButtonRef}
+            type="button"
+            aria-label={`Change ${actionLabel} sound`}
+            icon="edit"
+            variant="ghost"
+            iconSize="sm"
+            onClick={onChange}
+          />
+          <IconButton
+            type="button"
+            aria-label={`Clear ${actionLabel} sound`}
+            icon="trash"
+            variant="destructive"
+            iconSize="sm"
+            onClick={onClear}
+            disabled={!sound}
+          />
+          <span className="ml-1 flex">
+            <SettingsSwitch
+              checked={config.enabled}
+              onChange={onToggle}
+              labelledBy={ids.labelId}
+              describedBy={ids.descId}
+            />
+          </span>
+        </>
+      )}
+    </SettingsRow>
   );
 }
 
-export function SettingsSoundboardTriggers({ userId, servers }: Props) {
+/**
+ * Soundboard volume plus the join/leave triggers. Rendered standalone by
+ * tests with an explicit user and server list; the panel reads both.
+ */
+export function SoundboardSettings({
+  userId,
+  servers,
+}: {
+  userId: string | null;
+  servers: Server[];
+}) {
   const settings = useSoundSettingsStore(
     useShallow((state) => state.getSettings(userId)),
   );
@@ -205,18 +215,6 @@ export function SettingsSoundboardTriggers({ userId, servers }: Props) {
   );
 
   const selectedServer = servers.find((server) => server.id === selectedScope);
-  const scopeOptions = [
-    {
-      value: ALL_SERVERS_SOUND_SCOPE,
-      label: "All Servers",
-      icon: <ServerIcon />,
-    },
-    ...servers.map((server) => ({
-      value: server.id,
-      label: server.name,
-      icon: <ServerIcon server={server} />,
-    })),
-  ];
 
   const updateTrigger = (key: TriggerKey, config: SoundboardTriggerConfig) => {
     if (!userId) return;
@@ -233,12 +231,11 @@ export function SettingsSoundboardTriggers({ userId, servers }: Props) {
     setActiveTrigger(null);
   };
 
-  const getRow = (key: TriggerKey, label: string) => {
+  const getRow = (key: TriggerKey) => {
     const map = settings[key];
     const hasOverride = selectedScope in map;
     return {
       key,
-      label,
       config: hasOverride
         ? map[selectedScope]
         : resolveSoundboardTriggerConfig(map, selectedScope),
@@ -246,95 +243,74 @@ export function SettingsSoundboardTriggers({ userId, servers }: Props) {
     };
   };
 
-  const rows = [
-    getRow("voiceJoinSoundboard", "Entrance / Join"),
-    getRow("voiceLeaveSoundboard", "Exit / Leave"),
-  ];
+  const rows = [getRow("voiceJoinSoundboard"), getRow("voiceLeaveSoundboard")];
 
   return (
-    <section className="space-y-5">
-      <div className="flex items-center gap-2">
-        <Icon name="voiceChannel" size="sm" className="text-rm-accent-ink" />
-        <h3 className="text-ui-xs font-medium text-rm-text-muted">
-          Soundboard Triggers
-        </h3>
-      </div>
+    <>
+      <SettingsCard id="soundboard-playback">
+        <SettingsRow id="soundboard-volume">
+          {(ids) => (
+            <RangeControl
+              ids={ids}
+              value={volumeDraft}
+              onChange={(nextVolume) => {
+                setVolumeOverride(nextVolume);
+                setSoundboardMasterVolume(nextVolume / 100);
+                if (userId) scheduleVolumePersistence(nextVolume);
+              }}
+            />
+          )}
+        </SettingsRow>
+      </SettingsCard>
 
-      <div className="space-y-3 rounded-xl border border-rm-border bg-rm-bg-surface p-4">
-        <div className="flex items-center justify-between gap-4">
-          <div>
-            <div className="text-ui-xs font-bold text-rm-text">
-              Soundboard volume
-            </div>
-            <div className="text-ui-2xs text-rm-text-muted">
-              Local playback volume for automatic sounds
-            </div>
-          </div>
-          <span className="text-sm font-semibold tabular-nums text-rm-accent-ink">
-            {volumeDraft}%
-          </span>
-        </div>
-        <input
-          aria-label="Soundboard volume"
-          type="range"
-          min="0"
-          max="100"
-          value={volumeDraft}
-          onChange={(event) => {
-            const nextVolume = Number(event.currentTarget.value);
-            setVolumeOverride(nextVolume);
-            setSoundboardMasterVolume(nextVolume / 100);
-            if (userId) scheduleVolumePersistence(nextVolume);
-          }}
-          className="h-1.5 w-full cursor-pointer appearance-none rounded-full bg-rm-bg-elevated accent-rm-accent"
-        />
-      </div>
-
-      <div className="space-y-3">
-        <label className="text-ui-xs font-medium text-rm-text-muted">
-          Server scope
-        </label>
-        <Select
-          value={selectedScope}
-          onValueChange={(value) => {
-            setSelectedScope(value);
-            setActiveTrigger(null);
-          }}
+      <SettingsCard id="join-leave-sounds">
+        <SettingsRow
+          id="sound-scope"
+          description={
+            selectedServer ? (
+              <span className="flex items-center gap-1.5">
+                <InlineEmojiText
+                  text={`${selectedServer.name} uses your All servers sounds until you change them here.`}
+                />
+              </span>
+            ) : undefined
+          }
         >
-          <SelectTrigger
-            aria-label="Soundboard server scope"
-            className="w-full rounded-lg border-rm-border bg-rm-bg-elevated/50 px-4 py-2.5 text-rm-text hover:bg-rm-bg-elevated"
-          >
-            <SelectValue placeholder="Select server scope" />
-          </SelectTrigger>
-          <SelectContent
-            position="popper"
-            align="start"
-            className="rounded-lg border-rm-border bg-rm-bg-floating p-1.5 text-rm-text shadow-2xl"
-          >
-            {scopeOptions.map((option) => (
-              <SelectItem
-                key={option.value}
-                value={option.value}
-                textValue={option.label}
-                className="text-rm-text-secondary hover:bg-rm-bg-elevated hover:text-rm-text focus:bg-rm-bg-elevated focus:text-rm-text"
-              >
+          {(ids) => (
+            <SettingsSelect
+              ids={ids}
+              value={selectedScope}
+              options={[
+                { value: ALL_SERVERS_SOUND_SCOPE, label: "All servers" },
+                ...servers.map((server) => ({
+                  value: server.id,
+                  label: server.name,
+                })),
+              ]}
+              renderLabel={(option) => (
                 <span className="flex min-w-0 items-center gap-2">
-                  {option.icon}
+                  <ServerIcon
+                    server={servers.find(
+                      (server) => server.id === option.value,
+                    )}
+                  />
                   <InlineEmojiText text={option.label} />
                 </span>
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-
-      <div className="overflow-hidden rounded-xl border border-rm-border bg-rm-bg-surface">
+              )}
+              onValueChange={(value) => {
+                setSelectedScope(value);
+                setActiveTrigger(null);
+              }}
+            />
+          )}
+        </SettingsRow>
         {rows.map((row) => (
           <TriggerRow
             key={row.key}
-            label={row.label}
-            actionLabel={row.key === "voiceJoinSoundboard" ? "Join" : "Leave"}
+            rowId={
+              row.key === "voiceJoinSoundboard" ? "join-sound" : "leave-sound"
+            }
+            actionLabel={row.key === "voiceJoinSoundboard" ? "join" : "leave"}
             config={row.config}
             inherited={row.inherited}
             changeButtonRef={
@@ -371,20 +347,7 @@ export function SettingsSoundboardTriggers({ userId, servers }: Props) {
             }}
           />
         ))}
-      </div>
-
-      {selectedServer && (
-        <div className="flex items-center gap-2 text-ui-2xs text-rm-text-muted">
-          <ServerIcon server={selectedServer} />
-          <InlineEmojiText
-            text={`${selectedServer.name} overrides inherit from All Servers.`}
-          />
-        </div>
-      )}
-
-      <p className="text-xs text-rm-text-muted">
-        Entrance and exit sounds are added to the existing connection tones.
-      </p>
+      </SettingsCard>
 
       {activeTrigger && (
         <SoundboardPicker
@@ -407,6 +370,12 @@ export function SettingsSoundboardTriggers({ userId, servers }: Props) {
           initialView="soundboard"
         />
       )}
-    </section>
+    </>
   );
+}
+
+export default function SoundboardPanel() {
+  const { user } = useUser();
+  const servers = useChatStore((state) => state.servers);
+  return <SoundboardSettings userId={user?.id ?? null} servers={servers} />;
 }
