@@ -179,8 +179,9 @@
   --popover: oklch(0.06 0.01 270);
   --popover-foreground: oklch(0.98 0 0);
 
-  --primary: oklch(0.62 0.21 260);
-  --primary-foreground: oklch(0.98 0 0);
+  /* One accent per theme: shadcn's primary IS the Ralph accent fill. */
+  --primary: var(--rm-accent-solid);
+  --primary-foreground: var(--rm-on-accent);
 
   --secondary: oklch(0.18 0.014 270);
   --secondary-foreground: oklch(0.92 0.004 286);
@@ -199,10 +200,10 @@
 
   --border: oklch(1 0 0 / 5%);
   --input: oklch(1 0 0 / 5%);
-  --ring: oklch(0.62 0.21 260);
+  --ring: var(--rm-focus);
 
   /* Chart colors */
-  --chart-1: oklch(0.62 0.21 260);
+  --chart-1: var(--rm-accent);
   --chart-2: oklch(0.7 0.17 162);
   --chart-3: oklch(0.77 0.19 70);
   --chart-4: oklch(0.63 0.27 304);
@@ -211,12 +212,12 @@
   /* Sidebar tokens */
   --sidebar: oklch(0.04 0.008 270);
   --sidebar-foreground: oklch(0.98 0 0);
-  --sidebar-primary: oklch(0.62 0.21 260);
-  --sidebar-primary-foreground: oklch(0.98 0 0);
+  --sidebar-primary: var(--rm-accent-solid);
+  --sidebar-primary-foreground: var(--rm-on-accent);
   --sidebar-accent: oklch(0.16 0.014 270);
   --sidebar-accent-foreground: oklch(0.92 0.004 286);
   --sidebar-border: oklch(1 0 0 / 5%);
-  --sidebar-ring: oklch(0.62 0.21 260);
+  --sidebar-ring: var(--rm-focus);
 
   --rm-bg-primary: #070709;
   --rm-bg-secondary: #000000;
@@ -250,7 +251,7 @@
   /* Structure */
   --rm-border-strong: rgba(255, 255, 255, 0.14);
   --rm-scrim: rgba(0, 0, 0, 0.6);
-  --rm-focus: var(--rm-accent);
+  --rm-focus: var(--rm-accent-ink);
   --rm-selection: color-mix(in srgb, var(--rm-accent) 32%, transparent);
 
   /* Server rail tile at rest (must differ from --rm-server-bar) */
@@ -259,6 +260,21 @@
   /* Semantic colour */
   --rm-badge: #f23f43;
   --rm-success: #23a559;
+
+  /* Contrast tokens (Quiet Pro). Every pair is measured per theme:
+     - accent-solid + on-accent: the one solid fill per view (>= 4.5:1);
+     - accent-ink: the accent used as text or a line on the page (>= 4.5:1);
+     - danger + on-danger: the solid destructive fill (>= 4.5:1), used only
+       by Leave and similar irreversible actions;
+     - danger/success/warning-ink: status colour as text (>= 4.5:1). */
+  --rm-accent-solid: var(--rm-accent);
+  --rm-on-accent: #ffffff;
+  --rm-accent-ink: #949cf8;
+  --rm-danger: oklch(0.55 0.2 25);
+  --rm-on-danger: #ffffff;
+  --rm-danger-ink: oklch(0.75 0.15 25);
+  --rm-success-ink: oklch(0.78 0.15 155);
+  --rm-warning-ink: oklch(0.82 0.14 75);
 
   /* Elevation: an offset shadow plus a soft long shadow, alpha per theme */
   --rm-shadow-rgb: 0 0 0;
@@ -289,7 +305,9 @@
   /* RALPH SEMANTIC TEXT */
   --rm-text-primary: oklch(0.98 0 0);
   --rm-text-secondary: oklch(0.98 0 0 / 70%);
-  --rm-text-muted: oklch(0.98 0 0 / 40%);
+  /* 54% clears 4.5:1 on every dark ground incl. elevated #18181b (5.70:1);
+     40% measured 3.51:1 there. */
+  --rm-text-muted: oklch(0.98 0 0 / 54%);
   --rm-text-ghost: oklch(0.98 0 0 / 20%);
   --rm-profile-banner-fallback: linear-gradient(
     135deg,
@@ -321,6 +339,31 @@
       rgba(6, 7, 10, 0.12) 44%,
       rgba(6, 7, 10, 0.32)
     );
+}
+
+/* Derived neutrals, mixed from each theme's text colour so every theme gets
+   the same relative contrast without per-theme hexes. Declared on every theme
+   class so the mix resolves against that element's own text colour.
+   - tint-1/2/3: tonal fills for secondary controls, hover, selected rows;
+   - field-edge: an input's boundary, >= 3:1 on the grounds it sits on
+     (WCAG 1.4.11). Light themes raise the mix in their own blocks. */
+:root,
+.dark,
+.light,
+.miku-light,
+.miku-dark,
+.spiderman-light,
+.spiderman-dark {
+  --rm-tint-1: color-mix(in oklab, var(--rm-text-primary) 6%, transparent);
+  --rm-tint-2: color-mix(in oklab, var(--rm-text-primary) 10%, transparent);
+  --rm-tint-3: color-mix(in oklab, var(--rm-text-primary) 16%, transparent);
+  --rm-field-edge: color-mix(
+    in oklab,
+    var(--rm-text-primary) var(--rm-field-edge-mix, 40%),
+    transparent
+  );
+  --rm-danger-tint: color-mix(in oklab, var(--rm-danger) 16%, transparent);
+  --rm-accent-tint: color-mix(in oklab, var(--rm-accent) 16%, transparent);
 }
 
 .light {
@@ -403,6 +446,14 @@
   --rm-text-secondary: #2e3338;
   --rm-text-muted: #4e5058;
   --rm-text-ghost: #5c5e66;
+
+  /* Contrast tokens (Light). #5865f2 as text is 3.65:1 on #e3e5e8. */
+  --rm-accent-ink: #4752c4;
+  --rm-danger: oklch(0.52 0.2 25);
+  --rm-danger-ink: oklch(0.5 0.19 25);
+  --rm-success-ink: oklch(0.48 0.13 155);
+  --rm-warning-ink: oklch(0.5 0.13 70);
+  --rm-field-edge-mix: 48%;
 }
 
 :is(.light, .miku-light, .spiderman-light) .theme-aware-splash-logo {
@@ -422,8 +473,8 @@
   --popover: #ffffff;
   --popover-foreground: #1b2240;
 
-  --primary: #00a399;
-  --primary-foreground: #ffffff;
+  --primary: var(--rm-accent-solid);
+  --primary-foreground: var(--rm-on-accent);
 
   --secondary: #e1f3f0;
   --secondary-foreground: #1b2240;
@@ -442,7 +493,7 @@
 
   --border: #c0e7e1;
   --input: #c0e7e1;
-  --ring: #39c5bb;
+  --ring: var(--rm-focus);
 
   /* Ralph Meet custom tokens */
   --rm-bg-primary: #f3faf9;
@@ -477,13 +528,25 @@
   /* RALPH SEMANTIC TEXT (Miku Light) */
   --rm-text-primary: #1b2240;
   --rm-text-secondary: #3d4766;
-  --rm-text-muted: #606f99;
+  /* #606f99 measured 4.03:1 on #d3ede8; #525e85 clears 5.17:1. */
+  --rm-text-muted: #525e85;
   --rm-text-ghost: #91a1cc;
 
   --rm-accent: #00a399;
   --rm-accent-hover: #00857d;
   --rm-accent-dim: rgba(0, 163, 153, 0.08);
   --rm-glow: rgba(57, 197, 187, 0.2);
+
+  /* Contrast tokens (Miku Light). White on #00a399 is 3.13:1, so the solid
+     fill deepens to #00706a (white 5.96:1, and 4.84:1 as text). */
+  --rm-accent-solid: #00706a;
+  --rm-on-accent: #ffffff;
+  --rm-accent-ink: #00706a;
+  --rm-danger: oklch(0.52 0.18 25);
+  --rm-danger-ink: oklch(0.5 0.18 25);
+  --rm-success-ink: oklch(0.46 0.13 155);
+  --rm-warning-ink: oklch(0.5 0.13 70);
+  --rm-field-edge-mix: 56%;
 
   --rm-theme-active-gradient: linear-gradient(
     135deg,
@@ -521,8 +584,8 @@
   --popover: #0f0e1a;
   --popover-foreground: #ffffff;
 
-  --primary: #39c5bb;
-  --primary-foreground: #0c0b14;
+  --primary: var(--rm-accent-solid);
+  --primary-foreground: var(--rm-on-accent);
 
   --secondary: #1b192e;
   --secondary-foreground: #ffffff;
@@ -541,7 +604,7 @@
 
   --border: #23213a;
   --input: #23213a;
-  --ring: #39c5bb;
+  --ring: var(--rm-focus);
 
   /* Ralph Meet custom tokens */
   --rm-bg-primary: #0c0b14;
@@ -563,13 +626,19 @@
   /* RALPH SEMANTIC TEXT (Miku Dark) */
   --rm-text-primary: #ffffff;
   --rm-text-secondary: #b2b8d0;
-  --rm-text-muted: #7c83a0;
+  /* #7c83a0 measured 4.58:1 on #1b192e; #868dab adds margin (5.23:1). */
+  --rm-text-muted: #868dab;
   --rm-text-ghost: #494f6a;
 
   --rm-accent: #39c5bb;
   --rm-accent-hover: #5ae0d6;
   --rm-accent-dim: rgba(57, 197, 187, 0.12);
   --rm-glow: rgba(57, 197, 187, 0.15);
+
+  /* Contrast tokens (Miku Dark). Teal is light: white on it is 2.13:1, so
+     the fill takes the dark ground as ink (9.20:1). */
+  --rm-on-accent: #0c0b14;
+  --rm-accent-ink: #39c5bb;
 
   --rm-theme-active-gradient: linear-gradient(
     135deg,
@@ -607,8 +676,8 @@
   --popover: #ffffff;
   --popover-foreground: #0f172a;
 
-  --primary: #e50914;
-  --primary-foreground: #ffffff;
+  --primary: var(--rm-accent-solid);
+  --primary-foreground: var(--rm-on-accent);
 
   --secondary: #f1f3f9;
   --secondary-foreground: #0f172a;
@@ -627,7 +696,7 @@
 
   --border: rgba(15, 23, 42, 0.08);
   --input: rgba(15, 23, 42, 0.08);
-  --ring: #e50914;
+  --ring: var(--rm-focus);
 
   /* Ralph Meet custom tokens */
   --rm-bg-primary: #f8f9fc;
@@ -662,8 +731,17 @@
   /* RALPH SEMANTIC TEXT (Spiderman Light) */
   --rm-text-primary: #0f172a;
   --rm-text-secondary: #475569;
-  --rm-text-muted: #64748b;
+  /* #64748b measured 3.99:1 on #e8ebf3; #56657a clears 4.98:1. */
+  --rm-text-muted: #56657a;
   --rm-text-ghost: #94a3b8;
+
+  /* Contrast tokens (Spider-Man Light). White on #e50914 is 4.79:1. */
+  --rm-accent-ink: #c40812;
+  --rm-danger: oklch(0.52 0.18 25);
+  --rm-danger-ink: oklch(0.5 0.19 25);
+  --rm-success-ink: oklch(0.48 0.13 155);
+  --rm-warning-ink: oklch(0.5 0.13 70);
+  --rm-field-edge-mix: 52%;
 
   --rm-accent: #e50914;
   --rm-accent-hover: #1d4ed8;
@@ -706,8 +784,8 @@
   --popover: #050510;
   --popover-foreground: #ffffff;
 
-  --primary: #e50914;
-  --primary-foreground: #ffffff;
+  --primary: var(--rm-accent-solid);
+  --primary-foreground: var(--rm-on-accent);
 
   --secondary: #03030b;
   --secondary-foreground: #ffffff;
@@ -726,7 +804,7 @@
 
   --border: rgba(26, 115, 232, 0.25);
   --input: rgba(26, 115, 232, 0.25);
-  --ring: #e50914;
+  --ring: var(--rm-focus);
 
   /* Ralph Meet custom tokens */
   --rm-bg-primary: #020208;
@@ -750,6 +828,10 @@
   --rm-text-secondary: #cdd2e0;
   --rm-text-muted: #8e94a5;
   --rm-text-ghost: #4b5066;
+
+  /* Contrast tokens (Spider-Man Dark). #e50914 as text is 3.99:1 on the
+     near-black grounds; the ink lifts it to 6.41:1. */
+  --rm-accent-ink: oklch(0.7 0.2 25);
 
   --rm-accent: #e50914;
   --rm-accent-hover: #1a20fc;
@@ -868,6 +950,22 @@
   --color-rm-badge: var(--rm-badge);
   --color-rm-rail-item: var(--rm-rail-item);
   --color-rm-success: var(--rm-success);
+
+  /* Quiet Pro contrast tokens */
+  --color-rm-accent-solid: var(--rm-accent-solid);
+  --color-rm-on-accent: var(--rm-on-accent);
+  --color-rm-accent-ink: var(--rm-accent-ink);
+  --color-rm-accent-tint: var(--rm-accent-tint);
+  --color-rm-danger: var(--rm-danger);
+  --color-rm-on-danger: var(--rm-on-danger);
+  --color-rm-danger-ink: var(--rm-danger-ink);
+  --color-rm-danger-tint: var(--rm-danger-tint);
+  --color-rm-success-ink: var(--rm-success-ink);
+  --color-rm-warning-ink: var(--rm-warning-ink);
+  --color-rm-field-edge: var(--rm-field-edge);
+  --color-rm-tint-1: var(--rm-tint-1);
+  --color-rm-tint-2: var(--rm-tint-2);
+  --color-rm-tint-3: var(--rm-tint-3);
 }
 
 /* Shared transition for interactive chrome. Replaces `transition-all`: names
