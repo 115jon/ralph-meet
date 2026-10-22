@@ -44,7 +44,7 @@ export function ExternalLinkConfirmModal({
             </button>
           </DialogClose>
 
-          <DialogTitle className="pr-8 text-xl font-extrabold tracking-tight">
+          <DialogTitle className="pr-8 text-xl font-semibold tracking-tight">
             Leaving Ralph Meet
           </DialogTitle>
           <DialogDescription className="mt-1 text-sm text-rm-text-muted">

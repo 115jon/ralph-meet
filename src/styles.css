@@ -16,6 +16,34 @@
   --font-family-body:
     "DM Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 
+  /* App faces: `font-ui` / `font-display` utilities */
+  --font-ui: "Figtree", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-display: "Instrument Serif", ui-serif, Georgia, serif;
+
+  /* UI type scale (size / line-height). Nothing in the app sits below 11px. */
+  --text-ui-2xs: 11px;
+  --text-ui-2xs--line-height: 14px;
+  --text-ui-xs: 12px;
+  --text-ui-xs--line-height: 16px;
+  --text-ui-sm: 13px;
+  --text-ui-sm--line-height: 18px;
+  --text-ui-base: 15px;
+  --text-ui-base--line-height: 1.375;
+  --text-ui-md: 16px;
+  --text-ui-md--line-height: 22px;
+  --text-ui-lg: 18px;
+  --text-ui-lg--line-height: 24px;
+  --text-ui-xl: 22px;
+  --text-ui-xl--line-height: 28px;
+  --text-ui-2xl: 28px;
+  --text-ui-2xl--line-height: 32px;
+  --text-display: 36px;
+  --text-display--line-height: 1.05;
+  --text-display--letter-spacing: -0.01em;
+  --text-display-lg: 44px;
+  --text-display-lg--line-height: 1.02;
+  --text-display-lg--letter-spacing: -0.015em;
+
   @keyframes wiggle {
     0%,
     100% {
@@ -219,6 +247,45 @@
 
   --rm-glow: rgba(99, 102, 241, 0.12);
 
+  /* Structure */
+  --rm-border-strong: rgba(255, 255, 255, 0.14);
+  --rm-scrim: rgba(0, 0, 0, 0.6);
+  --rm-focus: var(--rm-accent);
+  --rm-selection: color-mix(in srgb, var(--rm-accent) 32%, transparent);
+
+  /* Server rail tile at rest (must differ from --rm-server-bar) */
+  --rm-rail-item: var(--rm-bg-elevated);
+
+  /* Semantic colour */
+  --rm-badge: #f23f43;
+  --rm-success: #23a559;
+
+  /* Elevation: an offset shadow plus a soft long shadow, alpha per theme */
+  --rm-shadow-rgb: 0 0 0;
+  --rm-shadow-1:
+    0 1px 2px rgb(var(--rm-shadow-rgb) / 0.24),
+    0 4px 12px -2px rgb(var(--rm-shadow-rgb) / 0.32);
+  --rm-shadow-2:
+    0 2px 4px rgb(var(--rm-shadow-rgb) / 0.24),
+    0 12px 32px -8px rgb(var(--rm-shadow-rgb) / 0.44);
+  --rm-shadow-3:
+    0 4px 8px rgb(var(--rm-shadow-rgb) / 0.26),
+    0 24px 64px -12px rgb(var(--rm-shadow-rgb) / 0.55);
+
+  /* Motion */
+  --rm-ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --rm-ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --rm-ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+  --rm-dur-1: 120ms;
+  --rm-dur-2: 180ms;
+  --rm-dur-3: 240ms;
+  --rm-dur-4: 320ms;
+
+  /* Chrome sizes */
+  --rm-size-header: 48px;
+  --rm-size-rail: 72px;
+  --rm-size-row: 32px;
+
   /* RALPH SEMANTIC TEXT */
   --rm-text-primary: oklch(0.98 0 0);
   --rm-text-secondary: oklch(0.98 0 0 / 70%);
@@ -298,8 +365,22 @@
   --rm-sidebar: #f2f3f5;
   --rm-server-bar: #e3e5e8;
   --rm-border: rgba(0, 0, 0, 0.08);
+  --rm-border-strong: rgba(0, 0, 0, 0.18);
+  --rm-rail-item: var(--rm-bg-surface);
   --rm-bg-hover: rgba(0, 0, 0, 0.04);
   --rm-bg-active: rgba(0, 0, 0, 0.08);
+  --rm-scrim: rgba(0, 0, 0, 0.4);
+  --rm-badge: #da373c;
+  --rm-success: #1a8f4c;
+  --rm-shadow-1:
+    0 1px 2px rgb(var(--rm-shadow-rgb) / 0.08),
+    0 4px 12px -2px rgb(var(--rm-shadow-rgb) / 0.1);
+  --rm-shadow-2:
+    0 2px 4px rgb(var(--rm-shadow-rgb) / 0.08),
+    0 12px 32px -8px rgb(var(--rm-shadow-rgb) / 0.16);
+  --rm-shadow-3:
+    0 4px 8px rgb(var(--rm-shadow-rgb) / 0.1),
+    0 24px 64px -12px rgb(var(--rm-shadow-rgb) / 0.24);
 
   /* RALPH SEMANTIC TEXT (Light Mode) */
   --rm-text-primary: #060607;
@@ -374,8 +455,22 @@
   --rm-sidebar: #e1f3f0;
   --rm-server-bar: #d3ede8;
   --rm-border: #c0e7e1;
+  --rm-border-strong: rgba(0, 163, 153, 0.45);
   --rm-bg-hover: rgba(57, 197, 187, 0.08);
   --rm-bg-active: rgba(57, 197, 187, 0.15);
+  --rm-scrim: rgba(27, 34, 64, 0.4);
+  --rm-badge: #da373c;
+  --rm-success: #1a8f4c;
+  --rm-shadow-rgb: 27 34 64;
+  --rm-shadow-1:
+    0 1px 2px rgb(var(--rm-shadow-rgb) / 0.08),
+    0 4px 12px -2px rgb(var(--rm-shadow-rgb) / 0.1);
+  --rm-shadow-2:
+    0 2px 4px rgb(var(--rm-shadow-rgb) / 0.08),
+    0 12px 32px -8px rgb(var(--rm-shadow-rgb) / 0.16);
+  --rm-shadow-3:
+    0 4px 8px rgb(var(--rm-shadow-rgb) / 0.1),
+    0 24px 64px -12px rgb(var(--rm-shadow-rgb) / 0.24);
 
   --rm-status-offline: #606f99;
 
@@ -459,6 +554,7 @@
   --rm-sidebar: #0f0e1a;
   --rm-server-bar: #07060d;
   --rm-border: #23213a;
+  --rm-border-strong: rgba(57, 197, 187, 0.4);
   --rm-bg-hover: rgba(57, 197, 187, 0.06);
   --rm-bg-active: rgba(57, 197, 187, 0.12);
 
@@ -544,8 +640,22 @@
   --rm-sidebar: #f1f3f9;
   --rm-server-bar: #e8ebf3;
   --rm-border: rgba(15, 23, 42, 0.08);
+  --rm-border-strong: rgba(15, 23, 42, 0.2);
   --rm-bg-hover: rgba(15, 23, 42, 0.04);
   --rm-bg-active: rgba(229, 9, 20, 0.08);
+  --rm-scrim: rgba(15, 23, 42, 0.4);
+  --rm-badge: #da373c;
+  --rm-success: #1a8f4c;
+  --rm-shadow-rgb: 15 23 42;
+  --rm-shadow-1:
+    0 1px 2px rgb(var(--rm-shadow-rgb) / 0.08),
+    0 4px 12px -2px rgb(var(--rm-shadow-rgb) / 0.1);
+  --rm-shadow-2:
+    0 2px 4px rgb(var(--rm-shadow-rgb) / 0.08),
+    0 12px 32px -8px rgb(var(--rm-shadow-rgb) / 0.16);
+  --rm-shadow-3:
+    0 4px 8px rgb(var(--rm-shadow-rgb) / 0.1),
+    0 24px 64px -12px rgb(var(--rm-shadow-rgb) / 0.24);
 
   --rm-status-offline: #64748b;
 
@@ -629,6 +739,7 @@
   --rm-sidebar: #03030b;
   --rm-server-bar: #000000;
   --rm-border: rgba(26, 115, 232, 0.25);
+  --rm-border-strong: rgba(26, 115, 232, 0.5);
   --rm-bg-hover: rgba(26, 115, 232, 0.15);
   --rm-bg-active: rgba(229, 9, 20, 0.3);
 
@@ -670,11 +781,29 @@
 
 /* @theme for Tailwind v4 */
 @theme inline {
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
-  --radius-2xl: calc(var(--radius) + 8px);
+  /* Radius scale: controls/rows md, cards/menus lg, dialogs xl, sheets 2xl */
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-2xl: 20px;
+  --radius-3xl: 24px;
+
+  /* Elevation ramp: existing shadow-* classes resolve to the three tokens */
+  --shadow-xs: var(--rm-shadow-1);
+  --shadow-sm: var(--rm-shadow-1);
+  --shadow-md: var(--rm-shadow-1);
+  --shadow-lg: var(--rm-shadow-2);
+  --shadow-xl: var(--rm-shadow-2);
+  --shadow-2xl: var(--rm-shadow-3);
+
+  /* Motion: the built-in curves are too weak for UI; remap them */
+  --ease-out: var(--rm-ease-out);
+  --ease-in-out: var(--rm-ease-in-out);
+  --ease-drawer: var(--rm-ease-drawer);
+  --default-transition-duration: 160ms;
+  --default-transition-timing-function: var(--rm-ease-out);
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -732,6 +861,43 @@
   --color-rm-text-secondary: var(--rm-text-secondary);
   --color-rm-text-muted: var(--rm-text-muted);
   --color-rm-text-ghost: var(--rm-text-ghost);
+
+  --color-rm-border-strong: var(--rm-border-strong);
+  --color-rm-scrim: var(--rm-scrim);
+  --color-rm-focus: var(--rm-focus);
+  --color-rm-badge: var(--rm-badge);
+  --color-rm-rail-item: var(--rm-rail-item);
+  --color-rm-success: var(--rm-success);
+}
+
+/* Shared transition for interactive chrome. Replaces `transition-all`: names
+   the properties that change on hover/press and uses the house curve.
+   outline-color is deliberately absent: keyboard focus must appear at once. */
+@utility transition-ui {
+  transition-property:
+    color, background-color, border-color, text-decoration-color, fill, stroke,
+    opacity, box-shadow, transform, translate, scale, rotate, border-radius;
+  transition-timing-function: var(--rm-ease-out);
+  transition-duration: var(--rm-dur-2);
+}
+
+/* Count badge: the one unread/mention treatment (rail, sidebar rows, DMs,
+   friends, inbox). Position and rings are added at the call site. */
+@utility badge-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 16px;
+  min-width: 16px;
+  padding-inline: 4px;
+  border-radius: 9999px;
+  background-color: var(--rm-badge);
+  color: #fff;
+  font-size: 11px;
+  line-height: 1;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 /* Base layer */
@@ -797,9 +963,24 @@
     background: var(--rm-text-muted);
   }
 
+  * {
+    scrollbar-color: var(--rm-text-ghost) transparent;
+  }
+
+  /* tw-animate defaults: house curve, menu-speed enters, faster exits.
+     Explicit duration-* / ease-* utilities still win. */
+  :where(.animate-in) {
+    --tw-ease: var(--rm-ease-out);
+    --tw-duration: var(--rm-dur-2);
+  }
+
+  :where(.animate-out) {
+    --tw-ease: var(--rm-ease-out);
+    --tw-duration: var(--rm-dur-1);
+  }
+
   ::selection {
-    background: rgba(99, 102, 241, 0.3);
-    color: #fff;
+    background: var(--rm-selection);
   }
 
   a {
@@ -819,6 +1000,114 @@
   label[for] {
     cursor: pointer;
   }
+}
+
+/* ============================================================
+   Focus. Unlayered so it beats `outline-none` utilities: every keyboard-
+   reachable control gets the same 2px accent ring. Elements that draw a
+   Tailwind ring have it suppressed to avoid a double ring; text fields keep
+   their own inset treatment.
+   ============================================================ */
+:focus-visible {
+  outline: 2px solid var(--rm-focus);
+  outline-offset: 2px;
+  --tw-ring-shadow: 0 0 #0000;
+}
+
+:is(input, textarea, select, [contenteditable="true"]):focus-visible {
+  outline-offset: 0;
+}
+
+.rm-composer textarea:focus-visible {
+  outline: none;
+}
+
+/* Role colours are picked against the dark ground. In the light themes,
+   darken them toward black so names keep >=4.5:1 on the light sidebars. */
+:is(.light, .miku-light, .spiderman-light) .rm-role-name {
+  color: color-mix(in oklab, var(--rm-role-color) 55%, black) !important;
+}
+
+/* ============================================================
+   Reduced motion: keep fades, drop movement, stop the decorative loops.
+   ============================================================ */
+@media (prefers-reduced-motion: reduce) {
+  :where(.animate-in, .animate-out) {
+    --tw-enter-translate-x: 0;
+    --tw-enter-translate-y: 0;
+    --tw-enter-scale: 1;
+    --tw-enter-rotate: 0;
+    --tw-exit-translate-x: 0;
+    --tw-exit-translate-y: 0;
+    --tw-exit-scale: 1;
+    --tw-exit-rotate: 0;
+    --tw-duration: var(--rm-dur-1);
+  }
+
+  .rm-breathe,
+  .animate-pulse,
+  .animate-wiggle,
+  .animate-clack {
+    animation: none !important;
+  }
+
+  .transition-ui,
+  .transition-transform {
+    transition-property:
+      color, background-color, border-color, opacity, box-shadow;
+  }
+}
+
+/* ============================================================
+   Loading screens (splash, connection overlay)
+   ============================================================ */
+@keyframes rm-breathe {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.96;
+  }
+
+  50% {
+    transform: scale(1.04);
+    opacity: 1;
+  }
+}
+
+@keyframes rm-loading-bar {
+  0% {
+    transform: translateX(-100%);
+  }
+
+  100% {
+    transform: translateX(250%);
+  }
+}
+
+.rm-breathe {
+  animation: rm-breathe 3.2s var(--rm-ease-in-out) infinite;
+}
+
+.rm-loading-bar {
+  animation: rm-loading-bar 1.6s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+}
+
+/* Connection overlay exit: hold "Connected!" briefly, then fade. The 1.2s
+   total matches the unmount timer in ConnectionOverlay. */
+@keyframes rm-loading-exit {
+  0%,
+  60% {
+    opacity: 1;
+  }
+
+  100% {
+    opacity: 0;
+    pointer-events: none;
+  }
+}
+
+.rm-loading-exit {
+  animation: rm-loading-exit 1.2s var(--rm-ease-out) forwards;
 }
 
 /* Chat layout utilities */

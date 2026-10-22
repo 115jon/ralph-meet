@@ -30,7 +30,7 @@ export function SettingsToggleRow({
   return (
     <div
       className={cn(
-        "group flex flex-col sm:flex-row sm:items-center justify-between p-4 bg-transparent hover:bg-rm-bg-elevated/40 transition-all gap-4 sm:gap-6",
+        "group flex flex-col sm:flex-row sm:items-center justify-between p-4 bg-transparent hover:bg-rm-bg-elevated/40 transition-ui gap-4 sm:gap-6",
         className,
       )}
     >
@@ -38,13 +38,13 @@ export function SettingsToggleRow({
         {rawIcon ? (
           icon
         ) : (
-          <div className="w-10 h-10 shrink-0 rounded-xl bg-rm-bg-elevated border border-rm-border flex items-center justify-center text-rm-text-secondary group-hover:text-rm-text transition-colors">
+          <div className="w-10 h-10 shrink-0 rounded-lg bg-rm-bg-elevated border border-rm-border flex items-center justify-center text-rm-text-secondary group-hover:text-rm-text transition-colors">
             {icon}
           </div>
         )}
         <div>
-          <h4 className="text-[14px] font-bold text-rm-text">{label}</h4>
-          <p className="text-[12px] text-rm-text-muted leading-snug pr-2">
+          <h4 className="text-sm font-semibold text-rm-text">{label}</h4>
+          <p className="text-ui-xs text-rm-text-muted leading-snug pr-2">
             {description}
           </p>
         </div>
