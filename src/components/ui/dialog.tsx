@@ -176,9 +176,11 @@ const DialogSurface = React.forwardRef<
   const hasDescription = containsDialogPrimitive(children, DialogDescription);
   const hasDescribedBy = props["aria-describedby"] !== undefined;
   const accessibleLabel = props["aria-label"] ?? "Dialog";
-  const ignoreSelectDismiss = (
-    event: { target: EventTarget | null; preventDefault: () => void },
-    handler?: (event: typeof event) => void,
+  const ignoreSelectDismiss = <
+    E extends { target: EventTarget | null; preventDefault: () => void },
+  >(
+    event: E,
+    handler?: (event: E) => void,
   ) => {
     handler?.(event);
     if (shouldIgnoreSelectDismiss(event.target)) {
