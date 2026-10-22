@@ -1,3 +1,4 @@
+import { getAbuseEmail } from "@/lib/platform";
 import type { Attachment, EmbedInfo } from "@/lib/types";
 import { useClientDateFormatter } from "@/lib/client-date-format";
 import { Radio } from "lucide-react";
@@ -138,7 +139,7 @@ export default function SharedMessagePage({
                   : "Permanent share"}
               </span>
               <a
-                href="mailto:abuse@115jon.site"
+                href={`mailto:${getAbuseEmail()}`}
                 className="font-semibold text-primary hover:underline"
               >
                 Report this share

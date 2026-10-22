@@ -1,3 +1,4 @@
+import { getPublicWebUrl } from "@/lib/platform";
 import { clog } from "@/lib/console-logger";
 import {
   getDesktopAuthHandoffToken,
@@ -246,7 +247,7 @@ function redactListenTogetherStreamUrl(rawUrl: string | null) {
       rawUrl,
       typeof window !== "undefined"
         ? window.location.origin
-        : "https://meet.115jon.site",
+        : getPublicWebUrl(),
     );
     if (parsed.searchParams.has("token")) {
       parsed.searchParams.set("token", "[redacted]");

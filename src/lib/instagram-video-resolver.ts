@@ -1,3 +1,4 @@
+import { getBotUserAgent } from "@/lib/platform";
 import { env } from "cloudflare:workers";
 
 import { cacheGet, cacheSet } from "@/lib/cache";
@@ -822,8 +823,7 @@ async function fetchInstagramPublicPageSharedEntityId(
     headers: {
       Accept: "text/html,application/xhtml+xml",
       "Accept-Language": "en-US,en;q=0.8",
-      "User-Agent":
-        "Mozilla/5.0 (compatible; RalphMeetBot/1.0; +https://meet.115jon.site)",
+      "User-Agent": getBotUserAgent(),
     },
   });
 
@@ -875,8 +875,7 @@ async function fetchInstagramPublicPageMetadata(
     headers: {
       Accept: "text/html,application/xhtml+xml",
       "Accept-Language": "en-US,en;q=0.8",
-      "User-Agent":
-        "Mozilla/5.0 (compatible; RalphMeetBot/1.0; +https://meet.115jon.site)",
+      "User-Agent": getBotUserAgent(),
     },
   });
 

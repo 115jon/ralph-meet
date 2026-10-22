@@ -1222,3 +1222,130 @@
 :is([class*=" blur-["], [class^="blur-["]):not([data-rm-preserve-blur="true"]) {
   opacity: 0 !important;
 }
+
+/* ============================================================
+   Auth pages: split layout art panel (sign-in, sign-up, /activate)
+   ============================================================ */
+.auth-art-canvas {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 1;
+  transform: translate(-50%, -50%);
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  opacity: 0;
+  transition: opacity 700ms ease;
+}
+
+.auth-art[data-live="true"] .auth-art-canvas {
+  opacity: 1;
+}
+
+.auth-enter {
+  animation: auth-enter 260ms cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+
+@keyframes auth-enter {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.activate-check-path {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 0;
+  animation: activate-check-draw 300ms cubic-bezier(0.23, 1, 0.32, 1) 120ms both;
+}
+
+@keyframes activate-check-draw {
+  from {
+    stroke-dashoffset: 1;
+  }
+
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .auth-art-canvas {
+    transition: none;
+  }
+
+  @keyframes auth-enter {
+    from {
+      opacity: 0;
+    }
+
+    to {
+      opacity: 1;
+    }
+  }
+
+  .activate-check-path {
+    animation: none;
+  }
+}
+
+/* Kova SDK card inside the split layout: theme tokens + a compact rhythm that
+   fits 1216×644. Providers become an icon row (labels stay for assistive tech). */
+.auth-split [data-ra-root] {
+  --ra-color-primary: var(--rm-accent);
+  --ra-color-primary-hover: var(--rm-accent-hover);
+  --ra-color-background: var(--rm-bg-primary);
+  --ra-color-surface: var(--rm-bg-primary);
+  --ra-color-surface-raised: var(--rm-bg-hover);
+  --ra-color-text: var(--rm-text-primary);
+  --ra-color-text-secondary: var(--rm-text-secondary);
+  --ra-color-text-tertiary: var(--rm-text-muted);
+  --ra-color-border: var(--rm-border);
+  --ra-color-border-strong: var(--rm-text-ghost);
+  --ra-shadow: none;
+  --ra-radius: 10px;
+  --ra-radius-sm: 10px;
+  --ra-font: "Figtree", system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+.auth-split [data-ra-element="socialButtonsRoot"] {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.auth-split [data-ra-element="socialButton"] {
+  justify-content: center;
+  padding: 0;
+  /* Collapses the "Continue with …" text visually; it still names the button. */
+  font-size: 0;
+  gap: 0;
+}
+
+.auth-split [data-ra-element="socialButton"] > * {
+  width: 20px;
+  height: 20px;
+}
+
+.auth-split [data-ra-element="dividerRow"] {
+  margin: 14px 0;
+}
+
+.auth-split [data-ra-element="tabsRoot"] {
+  margin-bottom: 14px;
+}
+
+.auth-split [data-ra-element="formField"] {
+  margin-bottom: 12px;
+}
+
+.auth-split [data-ra-element="cardFooter"] {
+  text-align: center;
+}

@@ -1,3 +1,4 @@
+import { getBotUserAgent } from "@/lib/platform";
 import { createFileRoute } from "@tanstack/react-router";
 import { cacheGet, cacheSet } from "@/lib/cache";
 import { fetchTikTokProxyMetadata } from "@/lib/share-preview-proxy";
@@ -72,8 +73,7 @@ async function resolveTikTokLookupUrl(rawUrl: string): Promise<string> {
       redirect: "follow",
       headers: {
         Accept: "text/html,*/*;q=0.8",
-        "User-Agent":
-          "Mozilla/5.0 (compatible; RalphMeetBot/1.0; +https://meet.115jon.site)",
+        "User-Agent": getBotUserAgent(),
       },
     });
 
