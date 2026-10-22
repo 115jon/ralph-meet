@@ -63,7 +63,9 @@ describe("SettingsAppearanceTab restart flow", () => {
 
     render(<SettingsAppearanceTab />);
 
-    fireEvent.click(screen.getAllByLabelText("Toggle setting")[1]);
+    fireEvent.click(
+      screen.getByRole("switch", { name: "Enable hardware acceleration" }),
+    );
     fireEvent.click(
       await screen.findByRole("button", { name: "Change and Restart" }),
     );

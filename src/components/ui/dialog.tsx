@@ -7,6 +7,7 @@ import { Dialog as DialogPrimitive } from "radix-ui";
 import { useDialogBackButton } from "@/hooks/useBackButton";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { HIT, PRESS } from "@/components/ui/interaction";
 import { shouldIgnoreSelectDismiss } from "@/components/ui/select-dismiss";
 
 type DialogRootContextValue = {
@@ -233,7 +234,11 @@ const DialogSurface = React.forwardRef<
       {showCloseButton && (
         <DialogPrimitive.Close
           data-slot="dialog-close"
-          className="absolute top-3 right-3 flex h-8 w-8 items-center justify-center rounded-md text-rm-text-muted transition-ui hover:bg-rm-bg-hover hover:text-rm-text enabled:active:scale-[0.96] disabled:pointer-events-none [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4"
+          className={cn(
+            "absolute top-3 right-3 inline-flex size-8 items-center justify-center rounded-md text-rm-text-muted pointer-fine:hover:text-rm-text disabled:pointer-events-none [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+            PRESS,
+            HIT,
+          )}
         >
           <XIcon />
           <span className="sr-only">Close</span>
@@ -256,7 +261,7 @@ const DialogContent = React.forwardRef<
         ref={ref}
         data-slot="dialog-content"
         className={cn(
-          "fixed top-[50%] left-[50%] z-50 grid w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 rounded-xl border border-rm-border bg-rm-bg-primary p-6 shadow-2xl duration-200 outline-none data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 sm:max-w-lg",
+          "fixed top-[50%] left-[50%] z-50 grid w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 overscroll-contain rounded-xl border border-rm-border bg-rm-bg-surface p-6 shadow-[var(--rm-shadow-3)] outline-none dark:bg-rm-bg-elevated data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-[0.97] data-[state=closed]:duration-150 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-[0.97] data-[state=open]:duration-200 sm:max-w-lg",
           className,
         )}
         {...props}
@@ -287,7 +292,7 @@ function DialogFooter({
     <div
       data-slot="dialog-footer"
       className={cn(
-        "flex flex-col-reverse gap-2 sm:flex-row sm:justify-end",
+        "flex flex-col-reverse gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end",
         className,
       )}
       {...props}
@@ -310,7 +315,7 @@ function DialogTitle({
     <DialogPrimitive.Title
       data-slot="dialog-title"
       className={cn(
-        "text-ui-lg leading-none font-semibold text-rm-text",
+        "text-ui-lg font-semibold text-balance text-rm-text",
         className,
       )}
       {...props}
@@ -325,7 +330,7 @@ function DialogDescription({
   return (
     <DialogPrimitive.Description
       data-slot="dialog-description"
-      className={cn("text-ui-sm text-rm-text-muted", className)}
+      className={cn("text-ui-sm text-pretty text-rm-text-muted", className)}
       {...props}
     />
   );

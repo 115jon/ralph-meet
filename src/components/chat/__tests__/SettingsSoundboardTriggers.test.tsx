@@ -65,7 +65,7 @@ describe("SettingsSoundboardTriggers", () => {
     const user = userEvent.setup();
     render(<SettingsSoundboardTriggers userId="user-1" servers={servers} />);
 
-    await user.click(screen.getByRole("button", { name: /toggle join/i }));
+    await user.click(screen.getByRole("switch", { name: /toggle join/i }));
     await user.click(screen.getByRole("button", { name: /change join/i }));
     await user.click(screen.getByRole("button", { name: "Mock select sound" }));
 

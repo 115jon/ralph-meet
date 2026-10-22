@@ -3,6 +3,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { DISABLED, HIT, PRESS } from "@/components/ui/interaction";
 import { cn } from "@/lib/utils";
 import React from "react";
 
@@ -10,10 +11,10 @@ type IconButtonVariant = "ghost" | "muted" | "active" | "destructive";
 type IconButtonSize = "xs" | "sm" | "md" | "lg";
 
 const SIZE_CLASSES: Record<IconButtonSize, string> = {
-  xs: "h-6 w-6",
-  sm: "h-8 w-8",
-  md: "h-10 w-10",
-  lg: "h-12 w-12",
+  xs: "size-6 rounded-sm",
+  sm: "size-8 rounded-md",
+  md: "size-10 rounded-md",
+  lg: "size-12 rounded-lg",
 };
 
 const ICON_SIZE: Record<IconButtonSize, number> = {
@@ -23,23 +24,30 @@ const ICON_SIZE: Record<IconButtonSize, number> = {
   lg: 24,
 };
 
+/**
+ * Quiet Pro: bare until hovered (a currentColor overlay), tonal when pressed
+ * or active. Destructive turns its ink red on hover, so the overlay becomes a
+ * red tint; it never fills solid.
+ */
 const VARIANT_CLASSES: Record<IconButtonVariant, string> = {
-  ghost: "text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover",
-  muted: "text-rm-text-muted/70 hover:text-rm-text hover:bg-rm-bg-hover",
-  active: "text-rm-text bg-rm-bg-active",
+  ghost:
+    "text-rm-text-secondary pointer-fine:hover:text-rm-text aria-pressed:bg-rm-tint-2 aria-pressed:text-rm-text",
+  muted:
+    "text-rm-text-muted pointer-fine:hover:text-rm-text aria-pressed:bg-rm-tint-2 aria-pressed:text-rm-text",
+  active: "bg-rm-tint-2 text-rm-text",
   destructive:
-    "text-rm-text-muted hover:text-destructive hover:bg-destructive/10",
+    "text-rm-text-muted pointer-fine:hover:text-rm-danger-ink focus-visible:text-rm-danger-ink",
 };
 
 const SHAPE_CLASSES = {
-  square: "rounded-md",
+  square: "",
   circle: "rounded-full",
 } as const;
 
-interface IconButtonProps extends Omit<
+type IconButtonBaseProps = Omit<
   React.ButtonHTMLAttributes<HTMLButtonElement>,
   "children"
-> {
+> & {
   /** Lucide icon component */
   icon: React.ElementType;
   /** Icon size override (defaults based on button size) */
@@ -50,13 +58,23 @@ interface IconButtonProps extends Omit<
   size?: IconButtonSize;
   /** Border radius shape */
   shape?: "square" | "circle";
-  /** Tooltip text (uses the existing Tooltip components) */
-  tooltip?: string;
   /** Tooltip placement */
   tooltipSide?: "top" | "bottom" | "left" | "right";
   /** Additional icon className */
   iconClassName?: string;
-}
+};
+
+/**
+ * An icon-only button must have an accessible name. Pass `aria-label`, or a
+ * `tooltip` (used as the name when `aria-label` is absent), or
+ * `aria-labelledby`.
+ */
+type IconButtonNameProps =
+  | { "aria-label": string; tooltip?: string }
+  | { tooltip: string; "aria-label"?: string }
+  | { "aria-labelledby": string; tooltip?: string; "aria-label"?: string };
+
+export type IconButtonProps = IconButtonBaseProps & IconButtonNameProps;
 
 export const IconButton = React.forwardRef<HTMLButtonElement, IconButtonProps>(
   (
@@ -76,22 +94,37 @@ export const IconButton = React.forwardRef<HTMLButtonElement, IconButtonProps>(
     ref,
   ) => {
     const resolvedIconSize = iconSize ?? ICON_SIZE[size];
+    const ariaLabel = props["aria-label"] ?? tooltip;
+
+    if (import.meta.env.DEV && !ariaLabel && !props["aria-labelledby"]) {
+      console.warn(
+        "IconButton: missing accessible name. Pass aria-label or tooltip.",
+      );
+    }
 
     const button = (
       <button
         ref={ref}
         type={type ?? "button"}
         className={cn(
-          "inline-flex shrink-0 items-center justify-center outline-none transition-ui enabled:active:scale-[0.96]",
+          "inline-flex shrink-0 items-center justify-center outline-none",
+          PRESS,
+          HIT,
+          DISABLED,
           SIZE_CLASSES[size],
           VARIANT_CLASSES[variant],
           SHAPE_CLASSES[shape],
-          props.disabled && "opacity-40 cursor-not-allowed",
           className,
         )}
         {...props}
+        aria-label={ariaLabel}
       >
-        <Icon size={resolvedIconSize} className={iconClassName} />
+        <Icon
+          aria-hidden
+          size={resolvedIconSize}
+          strokeWidth={1.75}
+          className={iconClassName}
+        />
       </button>
     );
 

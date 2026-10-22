@@ -155,7 +155,7 @@ describe("FloatingSoundboardManager", () => {
     }).not.toThrow();
   });
 
-  it("keeps playback tooltips on the dark floating surface", async () => {
+  it("keeps playback tooltips on the shared inverted surface", async () => {
     const user = userEvent.setup();
     render(
       <FloatingSoundboardManager
@@ -170,7 +170,7 @@ describe("FloatingSoundboardManager", () => {
     await waitFor(() => {
       const tooltip = document.querySelector('[data-slot="tooltip-content"]');
       expect(tooltip).not.toBeNull();
-      expect(tooltip).toHaveClass("bg-rm-bg-floating");
+      expect(tooltip).toHaveClass("bg-rm-text", "text-rm-bg-primary");
     });
   });
 

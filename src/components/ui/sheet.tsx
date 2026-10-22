@@ -5,6 +5,7 @@ import { XIcon } from "lucide-react";
 import { Dialog as SheetPrimitive } from "radix-ui";
 
 import { cn } from "@/lib/utils";
+import { HIT, PRESS } from "@/components/ui/interaction";
 
 function Sheet({ ...props }: React.ComponentProps<typeof SheetPrimitive.Root>) {
   return <SheetPrimitive.Root data-slot="sheet" {...props} />;
@@ -60,7 +61,7 @@ function SheetContent({
       <SheetPrimitive.Content
         data-slot="sheet-content"
         className={cn(
-          "fixed z-50 flex flex-col gap-4 bg-rm-bg-primary shadow-2xl ease-drawer data-[state=closed]:animate-out data-[state=closed]:duration-200 data-[state=open]:animate-in data-[state=open]:duration-[280ms]",
+          "fixed z-50 flex flex-col gap-4 overscroll-contain border-rm-border bg-rm-bg-surface shadow-[var(--rm-shadow-3)] ease-drawer dark:bg-rm-bg-elevated data-[state=closed]:animate-out data-[state=closed]:duration-150 data-[state=open]:animate-in data-[state=open]:duration-240",
           side === "right" &&
             "inset-y-0 right-0 h-full w-3/4 border-l data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right sm:max-w-sm",
           side === "left" &&
@@ -75,7 +76,13 @@ function SheetContent({
       >
         {children}
         {showCloseButton && (
-          <SheetPrimitive.Close className="absolute top-3 right-3 flex h-8 w-8 items-center justify-center rounded-md text-rm-text-muted transition-ui hover:bg-rm-bg-hover hover:text-rm-text enabled:active:scale-[0.96] disabled:pointer-events-none">
+          <SheetPrimitive.Close
+            className={cn(
+              "absolute top-3 right-3 inline-flex size-8 items-center justify-center rounded-md text-rm-text-muted pointer-fine:hover:text-rm-text disabled:pointer-events-none",
+              PRESS,
+              HIT,
+            )}
+          >
             <XIcon className="size-4" />
             <span className="sr-only">Close</span>
           </SheetPrimitive.Close>
@@ -112,7 +119,7 @@ function SheetTitle({
   return (
     <SheetPrimitive.Title
       data-slot="sheet-title"
-      className={cn("font-semibold text-foreground", className)}
+      className={cn("text-ui-md font-semibold text-rm-text", className)}
       {...props}
     />
   );
@@ -125,7 +132,7 @@ function SheetDescription({
   return (
     <SheetPrimitive.Description
       data-slot="sheet-description"
-      className={cn("text-sm text-muted-foreground", className)}
+      className={cn("text-ui-sm text-rm-text-muted", className)}
       {...props}
     />
   );

@@ -37,10 +37,11 @@ const TooltipTrigger = React.memo(function TooltipTrigger({
 });
 
 /**
- * One tooltip for the whole app: floating surface, 13px/500, 8px radius,
- * low elevation, 100ms ease-out from its trigger edge; once one tooltip is
- * open, neighbours open instantly (Radix `instant-open`). Callers should not
- * restyle it.
+ * One tooltip for the whole app (Quiet Pro): inverted so it reads on every
+ * ground (text-colour fill, page-colour ink), 12px/500, 6px radius, no
+ * border. 125ms ease-out scale and fade from the trigger edge; once one
+ * tooltip is open, neighbours open instantly (Radix `instant-open`). Callers
+ * should not restyle it.
  */
 const TooltipContent = React.memo(function TooltipContent({
   className,
@@ -54,8 +55,8 @@ const TooltipContent = React.memo(function TooltipContent({
         data-slot="tooltip-content"
         sideOffset={sideOffset}
         className={cn(
-          "z-80 w-fit max-w-[280px] origin-(--radix-tooltip-content-transform-origin) rounded-md border border-rm-border bg-rm-bg-floating px-2.5 py-1.5 text-ui-sm font-medium text-rm-text shadow-md text-balance pointer-events-none",
-          "animate-in fade-in-0 zoom-in-[0.97] duration-100 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-[0.97] data-[side=bottom]:slide-in-from-top-1 data-[side=left]:slide-in-from-right-1 data-[side=right]:slide-in-from-left-1 data-[side=top]:slide-in-from-bottom-1 data-[state=instant-open]:animate-none",
+          "z-80 w-fit max-w-[280px] origin-(--radix-tooltip-content-transform-origin) rounded-sm bg-rm-text px-2 py-1 text-ui-xs font-medium text-rm-bg-primary text-balance pointer-events-none",
+          "animate-in fade-in-0 zoom-in-[0.97] duration-[125ms] data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-[0.97] data-[state=instant-open]:animate-none",
           className,
         )}
         {...props}

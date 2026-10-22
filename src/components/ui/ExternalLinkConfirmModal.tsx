@@ -1,3 +1,4 @@
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogClose,
@@ -5,6 +6,7 @@ import {
   DialogDescription,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { IconButton } from "@/components/ui/IconButton";
 import { X } from "lucide-react";
 
 export interface PendingExternalLink {
@@ -31,27 +33,26 @@ export function ExternalLinkConfirmModal({
     <Dialog open={open} onOpenChange={(nextOpen) => !nextOpen && onClose()}>
       <DialogContent
         showCloseButton={false}
-        className="relative w-full max-w-[510px] rounded-2xl border border-rm-border bg-rm-bg-primary p-6 text-rm-text-primary shadow-2xl"
+        className="w-full max-w-[510px] p-6 text-rm-text-primary"
       >
         <section>
           <DialogClose asChild>
-            <button
+            <IconButton
+              icon={X}
               type="button"
               aria-label="Close external link confirmation"
-              className="absolute right-4 top-4 rounded-lg p-1.5 text-rm-text-muted transition-colors hover:bg-rm-bg-hover hover:text-rm-text-primary"
-            >
-              <X className="h-5 w-5" />
-            </button>
+              className="absolute right-4 top-4"
+            />
           </DialogClose>
 
-          <DialogTitle className="pr-8 text-xl font-semibold tracking-tight">
+          <DialogTitle className="pr-8 text-ui-lg font-semibold">
             Leaving Ralph Meet
           </DialogTitle>
           <DialogDescription className="mt-1 text-sm text-rm-text-muted">
             This link is taking you to the following website
           </DialogDescription>
 
-          <div className="mt-5 max-h-24 overflow-auto rounded-xl border border-rm-border bg-rm-bg-surface/70 px-4 py-3 text-sm leading-5 text-rm-text-secondary [overflow-wrap:anywhere]">
+          <div className="mt-5 max-h-24 overflow-auto rounded-lg border border-rm-border bg-rm-tint-1 px-4 py-3 text-sm leading-5 text-rm-text-secondary [overflow-wrap:anywhere]">
             {pending.url}
           </div>
 
@@ -65,21 +66,13 @@ export function ExternalLinkConfirmModal({
             <span>Trust {pending.hostname} links from now on</span>
           </label>
 
-          <div className="mt-6 flex gap-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="min-h-11 flex-1 rounded-xl border border-rm-border bg-rm-bg-surface px-4 py-2.5 text-sm font-bold text-rm-text-secondary transition-colors hover:bg-rm-bg-hover hover:text-rm-text-primary active:scale-[0.98]"
-            >
+          <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <Button type="button" variant="secondary" onClick={onClose}>
               Go Back
-            </button>
-            <button
-              type="button"
-              onClick={onConfirm}
-              className="min-h-11 flex-1 rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-white shadow-lg shadow-primary/20 transition-colors hover:bg-primary/90 active:scale-[0.98]"
-            >
+            </Button>
+            <Button type="button" onClick={onConfirm}>
               Visit Site
-            </button>
+            </Button>
           </div>
         </section>
       </DialogContent>
