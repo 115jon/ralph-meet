@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "cross-env CI=true vite dev",
     "build": "vite build",
+    "icons:generate": "node scripts/generate-phosphor-icons.mjs",
     "preview": "vite preview",
     "doctor": "react-doctor --project ralph-meet,desktop,mobile --blocking none -y",
     "doctor:verbose": "react-doctor --project ralph-meet,desktop,mobile --blocking none --verbose -y",
@@ -77,6 +78,7 @@
     "@cloudflare/vitest-pool-workers": "0.18.4",
     "@cloudflare/workers-types": "^5.20260718.1",
     "@eslint/js": "^9.39.3",
+    "@phosphor-icons/core": "2.1.1",
     "@tanstack/eslint-plugin-router": "^1.161.4",
     "@tauri-apps/api": "^2.10.1",
     "@testing-library/jest-dom": "^6.9.1",
