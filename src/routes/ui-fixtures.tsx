@@ -7,7 +7,8 @@
  *
  * surfaces: shell | shell-empty | shell-dm | friends | voice | voice-live
  *           voice-landing
- *           settings | menus | splash | overlay | mobile
+ *           settings | settings-<panel> (&row=<row-id>, &desktop=1)
+ *           menus | splash | overlay | mobile
  */
 
 import { createFileRoute, notFound } from "@tanstack/react-router";

@@ -723,7 +723,53 @@ function Menus() {
   );
 }
 
+/**
+ * Headless Chrome (and any browser before media permission is granted) lists
+ * devices with an empty deviceId and label. Give the settings fixtures named
+ * devices with stable ids so the device pickers render like a real machine.
+ */
+const FIXTURE_DEVICES: MediaDeviceInfo[] = (
+  [
+    ["audioinput", "default", "Default - Shure MV7 (USB Audio)", "g-mv7"],
+    ["audioinput", "mic-mv7", "Shure MV7 (USB Audio)", "g-mv7"],
+    ["audioinput", "mic-wave3", "Elgato Wave:3", "g-wave"],
+    ["audiooutput", "default", "Default - HD 600 (Schiit Modi+)", "g-modi"],
+    ["audiooutput", "out-modi", "HD 600 (Schiit Modi+)", "g-modi"],
+    ["audiooutput", "out-speakers", "Speakers (Realtek Audio)", "g-rt"],
+    ["videoinput", "cam-c920", "Logitech C920", "g-c920"],
+    ["videoinput", "cam-obs", "OBS Virtual Camera", "g-obs"],
+  ] as const
+).map(
+  ([kind, deviceId, label, groupId]) =>
+    ({
+      kind,
+      deviceId,
+      label,
+      groupId,
+      toJSON: () => ({}),
+    }) as MediaDeviceInfo,
+);
+
+function useFixtureDevices() {
+  const [ready] = useState(() => {
+    if (typeof navigator === "undefined" || !navigator.mediaDevices) {
+      return true;
+    }
+    navigator.mediaDevices.enumerateDevices = () =>
+      Promise.resolve(FIXTURE_DEVICES);
+    return true;
+  });
+  return ready;
+}
+
+/** Extra fixture query params the route doesn't validate (row, desktop). */
+function fixtureParam(name: string): string | null {
+  if (typeof window === "undefined") return null;
+  return new URLSearchParams(window.location.search).get(name);
+}
+
 function SettingsFixture({ tab }: { tab?: string }) {
+  useFixtureDevices();
   return (
     <div className="relative h-full w-full bg-rm-bg-primary">
       <Shell surface="shell" />
@@ -731,6 +777,12 @@ function SettingsFixture({ tab }: { tab?: string }) {
         open
         onClose={() => {}}
         initialTab={(tab as never) ?? "appearance"}
+        initialRow={fixtureParam("row") ?? undefined}
+        environment={
+          tab === "desktop" || fixtureParam("desktop") === "1"
+            ? { desktop: true }
+            : undefined
+        }
       />
     </div>
   );
@@ -811,20 +863,6 @@ export default function UiFixtures() {
     case "voice-landing":
       content = <VoiceLandingFixture />;
       break;
-    case "settings":
-    case "settings-voice":
-    case "settings-account":
-    case "settings-notifications":
-      content = (
-        <SettingsFixture
-          tab={
-            surfaceName === "settings"
-              ? "appearance"
-              : surfaceName.replace("settings-", "")
-          }
-        />
-      );
-      break;
     case "menus":
       content = <Menus />;
       break;
@@ -846,7 +884,18 @@ export default function UiFixtures() {
       content = <MobileFixture surface={surface} />;
       break;
     default:
-      content = <Shell surface={surface} />;
+      content =
+        surfaceName === "settings" || surfaceName.startsWith("settings-") ? (
+          <SettingsFixture
+            tab={
+              surfaceName === "settings"
+                ? "appearance"
+                : surfaceName.replace("settings-", "")
+            }
+          />
+        ) : (
+          <Shell surface={surface} />
+        );
   }
 
   return (
