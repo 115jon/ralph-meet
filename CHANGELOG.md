@@ -1,5 +1,75 @@
 # Changelog
 
+## [3.1.0](https://github.com/115jon/ralph-meet/compare/v3.0.0...v3.1.0) (2026-10-22)
+
+
+### Features
+
+* **auth:** ✨ approve desktop sign-ins at /activate on dithered pages ([8a5e337](https://github.com/115jon/ralph-meet/commit/8a5e337a05a22aa6ad7974f715f0a8fecc0f3347))
+* **auth:** approve desktop sign-ins at /activate on dithered pages ([1572756](https://github.com/115jon/ralph-meet/commit/1572756defb1f48b8f88419f9e615139d58e3985))
+
+## [3.0.0](https://github.com/115jon/ralph-meet/compare/v2.0.2...v3.0.0) (2026-10-22)
+
+
+### ⚠ BREAKING CHANGES
+
+* **voice:** Browser media no longer supports the legacy raw-SFU signaling interfaces; consumers must publish and pull through PartyTracks. Native screen sharing retains its dedicated Calls signaling seam.
+* **landing:** Completely new landing page design removes all previous custom UI showcase components (AnimatedChatShowcase, AnimatedVoiceShowcase, HeroInteractiveWorkspace, NetworkVisual)
+
+### Features
+
+* **auth:** ✨ sign in on desktop and mobile with a device code ([edaf484](https://github.com/115jon/ralph-meet/commit/edaf484e05b8b4337e8c60453f43124ed5b2df8e))
+* **auth:** sign in on desktop and mobile with a device code ([6a390f6](https://github.com/115jon/ralph-meet/commit/6a390f67a8a021db288e0a57fc3b9d7bd1b96f92))
+* **landing:** ✨ add framer-motion animations and bento layout ([cb65c9f](https://github.com/115jon/ralph-meet/commit/cb65c9f69802d9f2f3df79f585010d0743db672c))
+* **landing:** ✨ polish homepage motion, a11y, and release fetch ([01eeec2](https://github.com/115jon/ralph-meet/commit/01eeec25cd26be90c11d472a21c3f111d3768a84))
+
+
+### Bug Fixes
+
+* **audio:** 🐛 align VAD gating with processed audio ([a775ef8](https://github.com/115jon/ralph-meet/commit/a775ef8afdae18ff8db02819796b2fed3d88a4d3))
+* **audio:** 🐛 bypass sensitivity gating in Studio mode ([a551731](https://github.com/115jon/ralph-meet/commit/a551731f80f0ada20d0ce3d09d961b74e6bff14a))
+* **audio:** 🐛 prevent silence ticks and preserve RNNoise compatibility ([5ab0fd6](https://github.com/115jon/ralph-meet/commit/5ab0fd6460b9a696edace772dcdaa2604bbaadd1))
+* **auth:** 🐛 bounce native handoff and actually sign out web ([ef20ede](https://github.com/115jon/ralph-meet/commit/ef20ede4668f7f9a902fd202a77d87fe04945b59))
+* **auth:** 🐛 wait for bearer token before web chat bootstrap ([7c9b65d](https://github.com/115jon/ralph-meet/commit/7c9b65d030e6b8bb81f48e1d75bebfcb445000ea))
+* **chat:** 🎨 align voice dashboard and user panel styling ([a01294e](https://github.com/115jon/ralph-meet/commit/a01294e94829154d122dd635db82e847d4d10e9e))
+* **chat:** 🐛 preserve GIF attachments on message send ([73fd29d](https://github.com/115jon/ralph-meet/commit/73fd29d14d3f4a3e8bbf2feb96058e800d6f1a0d))
+* **chat:** 🐛 show voice mute and deafen states ([4f7aee6](https://github.com/115jon/ralph-meet/commit/4f7aee6b586ec1033f27913a696a17008fa40af6))
+* **desktop:** 🐛 pin CEF hit-test correction ([efa0ded](https://github.com/115jon/ralph-meet/commit/efa0ded98cdfd0a2ce21e29ba1f9da8c6fba1a0b))
+* **dialog:** 🐛 restore interactive portal layers ([8958488](https://github.com/115jon/ralph-meet/commit/8958488143915c92b8c3cdfd9ff0f33ddcb79cea))
+* **embeds:** 🐛 tombstone deleted posts and refresh instagram media ([c2b53e9](https://github.com/115jon/ralph-meet/commit/c2b53e90fb0ffc30926facd4fa5f658681d4467c))
+* **gif-picker:** 🐛 keep category search from opening suggestions ([865e8e5](https://github.com/115jon/ralph-meet/commit/865e8e5b64b6c1799716bd4152c87074f86d102e))
+* **rate-limit:** 🐛 give proxy media its own request ceiling ([d1764d9](https://github.com/115jon/ralph-meet/commit/d1764d927a7c17f011823c32e0021f1ef77511f8))
+* **security:** 🔒 harden document response headers ([378d856](https://github.com/115jon/ralph-meet/commit/378d856652f73b63102b020e4ff2bc003c079f15))
+* **ssr:** 🐛 stabilize browser-only reads during SSR ([8d9b5f2](https://github.com/115jon/ralph-meet/commit/8d9b5f2218d72afae89a804e651c643969e7e9c8))
+* **ui:** 🐛 keep modal selects from closing their dialogs ([b81e38d](https://github.com/115jon/ralph-meet/commit/b81e38d856df2e1a32b8533d84ebbebcd9ab16e6))
+* **ui:** 🐛 normalize overlay z-index utilities ([262ec45](https://github.com/115jon/ralph-meet/commit/262ec45e9c902ff72b1e1ada4ad2a2f81af4c623))
+* **ui:** 🐛 render emoji tokens in dynamic names ([48dbf80](https://github.com/115jon/ralph-meet/commit/48dbf804df94a6ab2bc61c48ca59f421f178bc09))
+* **ui:** 🐛 render home icon from static assets ([b871ebc](https://github.com/115jon/ralph-meet/commit/b871ebc1c4d0ba9102e72ff1b1947db51cda40fa))
+* **ui:** 🐛 type the select dismiss guard without a self reference ([3dc26a1](https://github.com/115jon/ralph-meet/commit/3dc26a19939126a2dc5b68f2d931b95c0b4c252d))
+* **ui:** 💄 remove app-wide blur effects ([c63c4e2](https://github.com/115jon/ralph-meet/commit/c63c4e22f1dc7160542a901015fd3cf2e856215a))
+* **validation:** 🔒 disable Zod JIT under CSP ([18b33f7](https://github.com/115jon/ralph-meet/commit/18b33f71f1a656ed1fb0ec6fabed4be8de831d05))
+* **voice:** 🐛 keep speaking indicator after leave/rejoin ([4360e15](https://github.com/115jon/ralph-meet/commit/4360e15f2f1fe20870b645829c912605366e8ee1))
+* **voice:** 🐛 preserve local speaking state on voice-ready ([02a6629](https://github.com/115jon/ralph-meet/commit/02a662997aff4ab8d2f32a29cb5b29b4c7c5608b))
+* **voice:** 🐛 propagate profile updates across voice sessions ([f3ce7b0](https://github.com/115jon/ralph-meet/commit/f3ce7b0bda78ef32d11552f044c706c3b9de1c94))
+* **voice:** 🐛 recover SFU media after signaling loss ([0053c3e](https://github.com/115jon/ralph-meet/commit/0053c3ed52c67ef7634838013c4f7ca5f0d4a2ae))
+* **voice:** 🐛 reduce join latency and harden media lifecycle ([e9b3605](https://github.com/115jon/ralph-meet/commit/e9b36055d0bda69b7cfaa1378b00261dfb84e7aa))
+* **voice:** 🐛 refresh SFU credentials and remote pulls ([9f789b0](https://github.com/115jon/ralph-meet/commit/9f789b0a362d9e5685283c7dc246a13c0e85a0e7))
+* **voice:** 🐛 restore PartyTracks after reconnect ([54cffc8](https://github.com/115jon/ralph-meet/commit/54cffc89cee9507e9f1ee6b074bc85907419643f))
+* **voice:** 🐛 wire microphone monitoring and speaking state ([e474868](https://github.com/115jon/ralph-meet/commit/e474868bf7fa3b38ab5542cb7d1f7f01d5681678))
+* **voice:** 🐛 wire screen preview hide into DM calls ([530a3c1](https://github.com/115jon/ralph-meet/commit/530a3c13c95d93c56d106c77c15caee1476fbf73))
+
+
+### Performance Improvements
+
+* **chat:** ⚡️ stop message list scroll jumps ([14171b1](https://github.com/115jon/ralph-meet/commit/14171b1a36202f784bd28c3f8fcb1c07a90bde19))
+* **voice:** ⚡️ prewarm PartyTracks from room ticket ([6117f36](https://github.com/115jon/ralph-meet/commit/6117f362587c8d84a84ea88d1b77b075f3f4a6fb))
+
+
+### Code Refactoring
+
+* **landing:** ♻️ redesign homepage with real screenshots and clean SaaS aesthetic ([1517cca](https://github.com/115jon/ralph-meet/commit/1517cca8b0f5de4925d55fc03542fcfb5ee2c9d5))
+* **voice:** ♻️ move browser media to PartyTracks ([65748f2](https://github.com/115jon/ralph-meet/commit/65748f2839c0d97e7983676bb3edc89e9ecc6979))
+
 ## [2.0.2](https://github.com/115jon/ralph-meet/compare/v2.0.1...v2.0.2) (2026-07-25)
 
 
