@@ -17,7 +17,7 @@ import { DISABLED, HIT, PRESS } from "@/components/ui/interaction";
 const buttonVariants = cva(
   [
     "inline-flex shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-md text-ui-sm font-medium outline-none",
-    "[&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+    "[&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-']):not([data-icon])]:size-4",
     "aria-invalid:border aria-invalid:border-rm-danger-ink",
     PRESS,
     HIT,
@@ -36,11 +36,12 @@ const buttonVariants = cva(
       },
       size: {
         default: "h-8 px-3 has-[>svg]:px-2.5",
-        xs: "h-6 gap-1 rounded-sm px-2 text-ui-xs has-[>svg]:px-1.5 [&_svg:not([class*='size-'])]:size-3",
+        xs: "h-6 gap-1 rounded-sm px-2 text-ui-xs has-[>svg]:px-1.5 [&_svg:not([class*='size-']):not([data-icon])]:size-3",
         sm: "h-7 gap-1.5 rounded-sm px-2.5 has-[>svg]:px-2",
         lg: "h-10 px-4 text-ui-base has-[>svg]:px-3.5",
         icon: "size-8",
-        "icon-xs": "size-6 rounded-sm [&_svg:not([class*='size-'])]:size-3",
+        "icon-xs":
+          "size-6 rounded-sm [&_svg:not([class*='size-']):not([data-icon])]:size-3",
         "icon-sm": "size-7 rounded-sm",
         "icon-lg": "size-10",
       },

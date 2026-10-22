@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { CheckIcon, ChevronDownIcon, ChevronUpIcon } from "lucide-react";
+import { Icon } from "@/components/ui/icon";
 import { Select as SelectPrimitive } from "radix-ui";
 
 import { cn } from "@/lib/utils";
@@ -37,14 +37,14 @@ function SelectTrigger({
       data-slot="select-trigger"
       data-size={size}
       className={cn(
-        "flex w-fit items-center justify-between gap-2 rounded-md border border-rm-field-edge bg-transparent px-3 py-2 text-base whitespace-nowrap text-rm-text outline-none disabled:cursor-not-allowed disabled:opacity-45 aria-invalid:border-rm-danger-ink data-[placeholder]:text-rm-text-muted data-[size=default]:h-9 data-[size=sm]:h-8 sm:text-ui-sm *:data-[slot=select-value]:line-clamp-1 *:data-[slot=select-value]:flex *:data-[slot=select-value]:items-center *:data-[slot=select-value]:gap-2 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 [&_svg:not([class*='text-'])]:text-rm-text-muted",
+        "flex w-fit items-center justify-between gap-2 rounded-md border border-rm-field-edge bg-transparent px-3 py-2 text-base whitespace-nowrap text-rm-text outline-none disabled:cursor-not-allowed disabled:opacity-45 aria-invalid:border-rm-danger-ink data-[placeholder]:text-rm-text-muted data-[size=default]:h-9 data-[size=sm]:h-8 sm:text-ui-sm *:data-[slot=select-value]:line-clamp-1 *:data-[slot=select-value]:flex *:data-[slot=select-value]:items-center *:data-[slot=select-value]:gap-2 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-']):not([data-icon])]:size-4 [&_svg:not([class*='text-'])]:text-rm-text-muted",
         className,
       )}
       {...props}
     >
       {children}
       <SelectPrimitive.Icon asChild>
-        <ChevronDownIcon aria-hidden className="size-4" />
+        <Icon name="chevronDown" size="sm" />
       </SelectPrimitive.Icon>
     </SelectPrimitive.Trigger>
   );
@@ -112,7 +112,7 @@ function SelectItem({
     <SelectPrimitive.Item
       data-slot="select-item"
       className={cn(
-        "relative flex min-h-8 w-full cursor-default items-center gap-2 rounded-md py-1.5 pr-8 pl-2 text-ui-sm font-medium text-rm-text outline-hidden select-none data-[highlighted]:bg-rm-tint-2 data-[disabled]:pointer-events-none data-[disabled]:opacity-45 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 [&_svg:not([class*='text-'])]:text-rm-text-muted *:[span]:last:flex *:[span]:last:items-center *:[span]:last:gap-2",
+        "relative flex min-h-8 w-full cursor-default items-center gap-2 rounded-md py-1.5 pr-8 pl-2 text-ui-sm font-medium text-rm-text outline-hidden select-none data-[highlighted]:bg-rm-tint-2 data-[disabled]:pointer-events-none data-[disabled]:opacity-45 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-']):not([data-icon])]:size-4 [&_svg:not([class*='text-'])]:text-rm-text-muted *:[span]:last:flex *:[span]:last:items-center *:[span]:last:gap-2",
         className,
       )}
       {...props}
@@ -122,7 +122,7 @@ function SelectItem({
         className="absolute right-2 flex size-3.5 items-center justify-center"
       >
         <SelectPrimitive.ItemIndicator>
-          <CheckIcon className="size-4" />
+          <Icon name="check" size="sm" />
         </SelectPrimitive.ItemIndicator>
       </span>
       <SelectPrimitive.ItemText>{children}</SelectPrimitive.ItemText>
@@ -159,7 +159,7 @@ function SelectScrollUpButton({
       )}
       {...props}
     >
-      <ChevronUpIcon className="size-4" />
+      <Icon name="chevronUp" size="sm" />
     </SelectPrimitive.ScrollUpButton>
   );
 }
@@ -177,7 +177,7 @@ function SelectScrollDownButton({
       )}
       {...props}
     >
-      <ChevronDownIcon className="size-4" />
+      <Icon name="chevronDown" size="sm" />
     </SelectPrimitive.ScrollDownButton>
   );
 }

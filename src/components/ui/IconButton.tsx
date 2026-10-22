@@ -3,6 +3,12 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import {
+  Icon,
+  type IconName,
+  type IconSize,
+  type IconState,
+} from "@/components/ui/icon";
 import { DISABLED, HIT, PRESS } from "@/components/ui/interaction";
 import { cn } from "@/lib/utils";
 import React from "react";
@@ -17,11 +23,12 @@ const SIZE_CLASSES: Record<IconButtonSize, string> = {
   lg: "size-12 rounded-lg",
 };
 
-const ICON_SIZE: Record<IconButtonSize, number> = {
-  xs: 14,
-  sm: 18,
-  md: 20,
-  lg: 24,
+/** Icon step per button size: 20 in 32 and 40px targets, 24 in 48. */
+const ICON_SIZE: Record<IconButtonSize, IconSize> = {
+  xs: "sm",
+  sm: "lg",
+  md: "lg",
+  lg: "xl",
 };
 
 /**
@@ -48,10 +55,15 @@ type IconButtonBaseProps = Omit<
   React.ButtonHTMLAttributes<HTMLButtonElement>,
   "children"
 > & {
-  /** Lucide icon component */
-  icon: React.ElementType;
-  /** Icon size override (defaults based on button size) */
-  iconSize?: number;
+  /** App icon concept (see components/ui/icon/mapping.ts) */
+  icon: IconName;
+  /**
+   * Icon weight state: "active" (Fill) for on/selected, "off" for the
+   * concept's muted partner. Defaults to idle (Bold).
+   */
+  iconState?: IconState;
+  /** Icon size step override (defaults based on button size) */
+  iconSize?: IconSize;
   /** Visual variant */
   variant?: IconButtonVariant;
   /** Button size */
@@ -79,7 +91,8 @@ export type IconButtonProps = IconButtonBaseProps & IconButtonNameProps;
 export const IconButton = React.forwardRef<HTMLButtonElement, IconButtonProps>(
   (
     {
-      icon: Icon,
+      icon,
+      iconState,
       iconSize,
       variant = "ghost",
       size = "sm",
@@ -120,9 +133,9 @@ export const IconButton = React.forwardRef<HTMLButtonElement, IconButtonProps>(
         aria-label={ariaLabel}
       >
         <Icon
-          aria-hidden
+          name={icon}
+          state={iconState}
           size={resolvedIconSize}
-          strokeWidth={1.75}
           className={iconClassName}
         />
       </button>

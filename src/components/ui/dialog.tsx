@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { XIcon } from "lucide-react";
+import { Icon } from "@/components/ui/icon";
 import { Dialog as DialogPrimitive } from "radix-ui";
 
 import { useDialogBackButton } from "@/hooks/useBackButton";
@@ -235,12 +235,12 @@ const DialogSurface = React.forwardRef<
         <DialogPrimitive.Close
           data-slot="dialog-close"
           className={cn(
-            "absolute top-3 right-3 inline-flex size-8 items-center justify-center rounded-md text-rm-text-muted pointer-fine:hover:text-rm-text disabled:pointer-events-none [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+            "absolute top-3 right-3 inline-flex size-8 items-center justify-center rounded-md text-rm-text-muted pointer-fine:hover:text-rm-text disabled:pointer-events-none [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-']):not([data-icon])]:size-4",
             PRESS,
             HIT,
           )}
         >
-          <XIcon />
+          <Icon name="close" size="sm" />
           <span className="sr-only">Close</span>
         </DialogPrimitive.Close>
       )}
