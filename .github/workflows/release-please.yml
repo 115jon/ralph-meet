@@ -17,23 +17,56 @@ permissions:
   pull-requests: write
 
 jobs:
-  release-please:
+  # release-please owns version bumps, CHANGELOG.md, the GitHub Release, and the
+  # vX.Y.Z tag. The work is split into two passes so that a transient failure
+  # while updating the next release PR can't block the desktop build for a
+  # release that was already created.
+  release:
+    name: release
     runs-on: ubuntu-latest
+    outputs:
+      releases_created: ${{ steps.release.outputs.releases_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
     steps:
-      # release-please owns version bumps, CHANGELOG.md, the GitHub Release, and the vX.Y.Z tag.
-      # It will create the Release with proper changelog notes.
-      # The pushed tag triggers desktop-release.yml which uploads the assets to the existing release.
-      - uses: googleapis/release-please-action@8b8fd2cc23b2e18957157a9d923d75aa0c6f6ad5 # v4
+      - name: Create GitHub release for a merged release PR
         id: release
+        # googleapis/release-please-action v4.4.1
+        uses: googleapis/release-please-action@5c625bfb5d1ff62eadeeb3772007f7f66fdcf071
         with:
-          # A PAT is required so the pushed tag triggers desktop-release.yml.
-          # The default GITHUB_TOKEN would NOT trigger downstream workflows.
           token: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
+          skip-github-pull-request: true
 
       - name: Mark Release as Draft
         if: ${{ steps.release.outputs.releases_created == 'true' }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Hide the release immediately until desktop-release.yml finishes
+          # Hide the release until the desktop job uploads the installer and publishes it.
           gh release edit ${{ steps.release.outputs.tag_name }} --draft=true -R ${{ github.repository }}
+
+  desktop:
+    name: desktop release
+    needs: release
+    if: ${{ needs.release.outputs.releases_created == 'true' }}
+    permissions:
+      contents: write
+    # Called directly instead of relying on the tag push, so the build runs
+    # whichever token created the tag, and it saves caches on main.
+    uses: ./.github/workflows/desktop-release.yml
+    with:
+      release_tag: ${{ needs.release.outputs.tag_name }}
+    secrets: inherit
+
+  release-pr:
+    name: release-pr
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Open or update the release PR
+        # googleapis/release-please-action v4.4.1
+        uses: googleapis/release-please-action@5c625bfb5d1ff62eadeeb3772007f7f66fdcf071
+        with:
+          # Keep the PAT: a PR opened with GITHUB_TOKEN does not trigger CI, so
+          # the required `required` check would never report on the release PR.
+          token: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
+          skip-github-release: true

@@ -1,0 +1,36 @@
+name: Setup pnpm workspace
+description: >-
+  Install pnpm and Node.js, restore the pnpm store cache keyed on the root
+  lockfile, and run a frozen pnpm install. Run actions/checkout first.
+
+inputs:
+  install-args:
+    description: Extra arguments for pnpm install, for example workspace filters.
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - name: Setup pnpm
+      # pnpm/action-setup v6.1.0
+      uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413
+      with:
+        version: 10
+
+    - name: Setup Node.js
+      # actions/setup-node v4.4.0
+      uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+      with:
+        node-version: 22
+        cache: pnpm
+        cache-dependency-path: pnpm-lock.yaml
+
+    - name: Install dependencies
+      shell: bash
+      env:
+        INSTALL_ARGS: ${{ inputs.install-args }}
+      run: |
+        # INSTALL_ARGS is word-split on purpose so callers can pass several filters.
+        # shellcheck disable=SC2086
+        pnpm install --frozen-lockfile $INSTALL_ARGS
