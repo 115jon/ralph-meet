@@ -1,4 +1,5 @@
 import { cn } from "@/lib/utils";
+import { DISABLED, HIT, PRESS } from "@/components/ui/interaction";
 import { lazy, Suspense, useCallback, useMemo, useRef, useState } from "react";
 import type { SFUClient } from "@/lib/sfu-client";
 import { handleVoiceCameraToggle } from "@/lib/voice/camera-toggle";
@@ -23,6 +24,27 @@ import {
 } from "../chat/Icons";
 
 const GifPickerModal = lazy(() => import("@/components/chat/GifPickerModal"));
+
+/*
+ * Quiet Pro dock recipe. Rest = neutral tint; mic/deafen "muted" = red tint
+ * (never the solid Leave red); camera/screen share "live" = the only accent
+ * fill; Leave/disconnect = the only solid destructive control.
+ */
+const DOCK_GROUP =
+  "flex items-center gap-1 rounded-xl border border-rm-border bg-rm-bg-surface p-1";
+const DOCK_DIVIDER = "mx-0.5 h-6 w-px shrink-0 bg-rm-border";
+const DOCK_BTN = cn(
+  PRESS,
+  HIT,
+  DISABLED,
+  "inline-flex size-11 shrink-0 items-center justify-center rounded-lg outline-none",
+);
+const DOCK_REST = "bg-rm-tint-1 text-rm-text";
+const DOCK_OPEN = "bg-rm-tint-3 text-rm-text";
+const DOCK_MUTED = "bg-rm-danger-tint text-rm-danger-ink";
+const DOCK_LIVE = "bg-primary text-primary-foreground [--hover-o:0.12]";
+const DOCK_LEAVE = "bg-rm-danger text-rm-on-danger [--hover-o:0.12]";
+const DOCK_STROKE = 1.75;
 
 interface VoiceControlsProps {
   hasMicrophone: boolean;
@@ -92,11 +114,6 @@ export function VoiceControls({
   const settings = useVoiceSettingsStore((s) => s.getSettings(settingsUserId));
 
   const isCall = variant === "call";
-  const pillBgClass = "bg-rm-bg-surface border-rm-border shadow-md";
-  const btnBaseClass =
-    "text-rm-text bg-transparent hover:bg-rm-bg-hover hover:text-rm-text transition-colors";
-  const btnFilledClass =
-    "bg-rm-bg-hover text-rm-text hover:bg-rm-bg-active transition-colors";
   const handleCameraModalClose = useCallback(() => {
     setIsCameraModalOpen(false);
   }, []);
@@ -107,6 +124,8 @@ export function VoiceControls({
     // no-op: voice mode handles send
   }, []);
   const gifPickerVoiceMode = useMemo(() => (sfu ? { sfu } : undefined), [sfu]);
+
+  const isMicMuted = !isMicOn || !hasMicrophone;
 
   return (
     <>
@@ -125,23 +144,17 @@ export function VoiceControls({
           )}
         >
           {isCall && !isFullscreen && (
-            <div
-              className={cn(
-                "flex items-center p-1 rounded-xl border",
-                pillBgClass,
-              )}
-            >
+            <div className={DOCK_GROUP}>
               <button
                 type="button"
                 onClick={toggleChatHidden}
-                className={cn(
-                  "w-10 h-10 md:w-12 md:h-10 rounded-lg flex items-center justify-center transition-ui outline-none enabled:active:scale-[0.96]",
-                  btnBaseClass,
-                )}
+                aria-pressed={!isChatHidden}
+                className={cn(DOCK_BTN, DOCK_REST)}
                 title={isChatHidden ? "Show Chat" : "Hide Chat"}
               >
                 <MessageSquare
                   size={20}
+                  strokeWidth={DOCK_STROKE}
                   className={cn(!isChatHidden && "fill-rm-text/20")}
                 />
               </button>
@@ -152,12 +165,7 @@ export function VoiceControls({
         <div
           className={cn("flex items-center gap-2 md:gap-3 shrink-0 mx-auto")}
         >
-          <div
-            className={cn(
-              "flex items-center gap-0.5 md:gap-1 p-1 rounded-xl border shrink-0",
-              pillBgClass,
-            )}
-          >
+          <div className={cn(DOCK_GROUP, "shrink-0")}>
             <button
               type="button"
               title={
@@ -169,18 +177,13 @@ export function VoiceControls({
               }
               disabled={!hasMicrophone}
               onClick={toggleMic}
-              className={cn(
-                "w-12 h-10 md:w-12 md:h-10 rounded-lg flex items-center justify-center transition-ui outline-none enabled:active:scale-[0.96]",
-                !isMicOn || !hasMicrophone
-                  ? "bg-destructive text-destructive-foreground shadow-lg shadow-destructive/20"
-                  : btnFilledClass,
-                !hasMicrophone && "cursor-not-allowed",
-              )}
+              aria-pressed={isMicMuted}
+              className={cn(DOCK_BTN, isMicMuted ? DOCK_MUTED : DOCK_REST)}
             >
-              {!isMicOn || !hasMicrophone ? (
-                <MicOff size={20} className="text-destructive-foreground" />
+              {isMicMuted ? (
+                <MicOff size={20} strokeWidth={DOCK_STROKE} />
               ) : (
-                <Mic size={20} />
+                <Mic size={20} strokeWidth={DOCK_STROKE} />
               )}
             </button>
 
@@ -188,17 +191,10 @@ export function VoiceControls({
               type="button"
               title={isDeafened ? "Undeafen" : "Deafen"}
               onClick={toggleDeafen}
-              className={cn(
-                "w-12 h-10 md:w-12 md:h-10 rounded-lg flex items-center justify-center transition-ui outline-none enabled:active:scale-[0.96]",
-                isDeafened
-                  ? "bg-destructive text-destructive-foreground"
-                  : btnFilledClass,
-              )}
+              aria-pressed={isDeafened}
+              className={cn(DOCK_BTN, isDeafened ? DOCK_MUTED : DOCK_REST)}
             >
-              <Headphones
-                size={20}
-                className={isDeafened ? "text-destructive-foreground" : ""}
-              />
+              <Headphones size={20} strokeWidth={DOCK_STROKE} />
             </button>
 
             <button
@@ -220,18 +216,17 @@ export function VoiceControls({
                   onOpenPreviewModal: () => setIsCameraModalOpen(true),
                 });
               }}
-              className={cn(
-                "w-12 h-10 md:w-12 md:h-10 rounded-lg flex items-center justify-center transition-ui outline-none enabled:active:scale-[0.96]",
-                isCameraOn
-                  ? "bg-primary text-primary-foreground shadow-lg shadow-primary/20"
-                  : btnFilledClass,
-                !hasCamera && "opacity-50 cursor-not-allowed grayscale",
-              )}
+              aria-pressed={isCameraOn}
+              className={cn(DOCK_BTN, isCameraOn ? DOCK_LIVE : DOCK_REST)}
             >
-              {isCameraOn ? <Video size={20} /> : <VideoOff size={20} />}
+              {isCameraOn ? (
+                <Video size={20} strokeWidth={DOCK_STROKE} />
+              ) : (
+                <VideoOff size={20} strokeWidth={DOCK_STROKE} />
+              )}
             </button>
 
-            <div className="w-px h-6 mx-1 bg-rm-border" />
+            <div aria-hidden className={DOCK_DIVIDER} />
 
             <button
               type="button"
@@ -240,30 +235,23 @@ export function VoiceControls({
                 if (isScreenSharing) toggleScreenShare();
                 else setIsScreenModalOpen(true);
               }}
-              className={cn(
-                "w-12 h-10 md:w-12 md:h-10 rounded-lg flex items-center justify-center transition-ui outline-none enabled:active:scale-[0.96]",
-                isScreenSharing
-                  ? "bg-primary text-primary-foreground"
-                  : btnFilledClass,
-              )}
+              aria-pressed={isScreenSharing}
+              className={cn(DOCK_BTN, isScreenSharing ? DOCK_LIVE : DOCK_REST)}
             >
               {isScreenSharing ? (
-                <X size={20} className="text-primary-foreground" />
+                <X size={20} strokeWidth={DOCK_STROKE} />
               ) : (
-                <Monitor size={20} />
+                <Monitor size={20} strokeWidth={DOCK_STROKE} />
               )}
             </button>
-            <div className="hidden md:block w-px h-6 mx-1 bg-rm-border" />
+            <div aria-hidden className={cn(DOCK_DIVIDER, "hidden md:block")} />
             <button
               type="button"
               title="Activities"
               onClick={onOpenActivities}
-              className={cn(
-                "w-12 h-10 md:w-12 md:h-10 rounded-lg flex items-center justify-center transition-ui outline-none enabled:active:scale-[0.96]",
-                btnFilledClass,
-              )}
+              className={cn(DOCK_BTN, DOCK_REST)}
             >
-              <Gamepad2 size={20} />
+              <Gamepad2 size={20} strokeWidth={DOCK_STROKE} />
             </button>
 
             {/* GIF/Sticker Reactions — only visible when SFU is connected */}
@@ -274,19 +262,18 @@ export function VoiceControls({
                   ref={stickerBtnRef}
                   title="GIF & Sticker Reactions"
                   onClick={() => setIsStickerOpen((v) => !v)}
+                  aria-pressed={isStickerOpen}
                   className={cn(
-                    "w-12 h-10 md:w-12 md:h-10 rounded-lg flex items-center justify-center transition-ui outline-none enabled:active:scale-[0.96]",
-                    isStickerOpen
-                      ? "bg-primary/15 text-primary"
-                      : btnFilledClass,
+                    DOCK_BTN,
+                    isStickerOpen ? DOCK_OPEN : DOCK_REST,
                   )}
                 >
-                  <Sticker size={20} />
+                  <Sticker size={20} strokeWidth={DOCK_STROKE} />
                 </button>
               </div>
             )}
 
-            <div className="w-px h-6 mx-1 bg-rm-border" />
+            <div aria-hidden className={DOCK_DIVIDER} />
 
             <button
               type="button"
@@ -304,7 +291,7 @@ export function VoiceControls({
                     ? () => setFocusedId(null)
                     : handleLeave
               }
-              className="w-12 h-10 md:w-12 md:h-10 flex items-center justify-center bg-destructive text-destructive-foreground rounded-lg shadow-md hover:brightness-110 enabled:active:scale-[0.96] transition-ui shrink-0 ml-1 md:ml-0"
+              className={cn(DOCK_BTN, DOCK_LEAVE)}
             >
               <div className="relative w-5 h-5 flex items-center justify-center">
                 <div
@@ -315,7 +302,7 @@ export function VoiceControls({
                       : "opacity-0 scale-75 rotate-45",
                   )}
                 >
-                  <MonitorX size={20} className="text-destructive-foreground" />
+                  <MonitorX size={20} strokeWidth={DOCK_STROKE} />
                 </div>
                 <div
                   className={cn(
@@ -325,7 +312,7 @@ export function VoiceControls({
                       : "opacity-0 scale-75 rotate-45",
                   )}
                 >
-                  <X size={20} className="text-destructive-foreground" />
+                  <X size={20} strokeWidth={DOCK_STROKE} />
                 </div>
                 <div
                   className={cn(
@@ -335,7 +322,7 @@ export function VoiceControls({
                       : "opacity-0 scale-75 -rotate-45",
                   )}
                 >
-                  <Phone size={20} className="text-destructive-foreground" />
+                  <Phone size={20} strokeWidth={DOCK_STROKE} />
                 </div>
               </div>
             </button>
@@ -347,31 +334,25 @@ export function VoiceControls({
             hideExtraControls && "invisible",
           )}
         >
-          <div
-            className={cn(
-              "flex items-center gap-0.5 md:gap-1 p-1 rounded-xl border",
-              pillBgClass,
-            )}
-          >
+          <div className={DOCK_GROUP}>
             <button
               type="button"
               onClick={toggleFs}
-              className={cn(
-                "w-10 h-10 md:w-12 md:h-10 flex items-center justify-center rounded-lg transition-ui outline-none enabled:active:scale-[0.96]",
-                btnBaseClass,
-              )}
+              className={cn(DOCK_BTN, DOCK_REST)}
               title={isFullscreen ? "Exit Fullscreen" : "Fullscreen"}
             >
-              {isFullscreen ? <Minimize size={20} /> : <Maximize2 size={20} />}
+              {isFullscreen ? (
+                <Minimize size={20} strokeWidth={DOCK_STROKE} />
+              ) : (
+                <Maximize2 size={20} strokeWidth={DOCK_STROKE} />
+              )}
             </button>
             {!isCall && (
               <button
                 type="button"
                 onClick={() => setShowMembers(!showMembers)}
-                className={cn(
-                  "w-10 h-10 md:w-12 md:h-10 flex items-center justify-center rounded-lg transition-ui outline-none enabled:active:scale-[0.96]",
-                  showMembers ? "text-rm-text bg-rm-bg-active" : btnBaseClass,
-                )}
+                aria-pressed={showMembers}
+                className={cn(DOCK_BTN, showMembers ? DOCK_OPEN : DOCK_REST)}
                 title={showMembers ? "Hide Members" : "Show Members"}
               >
                 <ChevronUp
@@ -380,6 +361,7 @@ export function VoiceControls({
                     !showMembers && "rotate-180",
                   )}
                   size={20}
+                  strokeWidth={DOCK_STROKE}
                 />
               </button>
             )}

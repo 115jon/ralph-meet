@@ -1,6 +1,7 @@
 import { Slider } from "@/components/ContextMenu/ContextMenuItems";
 import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
 import { cn } from "@/lib/utils";
+import { PRESS } from "@/components/ui/interaction";
 import { Eye, EyeOff, Headphones, MicOff, Volume2 } from "lucide-react";
 
 import { extractDominantColor } from "@/lib/color-utils";
@@ -240,7 +241,10 @@ export const VoiceGrid = React.memo(
                   aria-label={
                     isPreviewHidden ? "Resume preview" : "Pause preview"
                   }
-                  className="flex items-center gap-1.5 rounded-lg border border-white/15 bg-black/55 px-2.5 py-1.5 text-ui-2xs font-bold text-white/70 shadow-xl backdrop-blur-md transition-colors hover:border-white/30 hover:text-white active:scale-[0.96]"
+                  className={cn(
+                    PRESS,
+                    "flex items-center gap-1.5 rounded-md bg-black/55 px-2.5 py-1.5 text-ui-2xs font-medium text-white backdrop-blur-md outline-none",
+                  )}
                 >
                   {isPreviewHidden ? (
                     <>

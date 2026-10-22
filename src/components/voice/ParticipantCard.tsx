@@ -1,4 +1,6 @@
+import { Button } from "@/components/ui/button";
 import { IconButton } from "@/components/ui/IconButton";
+import { PRESS } from "@/components/ui/interaction";
 import { extractDominantColor } from "@/lib/color-utils";
 import { getAuthAssetUrl } from "@/lib/platform";
 import { cn } from "@/lib/utils";
@@ -241,15 +243,16 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
                 </h3>
               </div>
 
-              <button
+              <Button
+                size="xs"
                 onClick={(e) => {
                   e.stopPropagation();
                   voiceActions?.onToggleWatch?.(item.userId);
                 }}
-                className="shrink-0 mt-1 sm:mt-2 px-2 py-1 sm:px-3 sm:py-1.5 bg-primary hover:bg-primary/90 text-primary-foreground rounded-md text-ui-2xs sm:text-ui-2xs font-semibold uppercase tracking-[0.08em] transition-ui shadow-xl shadow-primary/20 active:scale-[0.96] hover:shadow-[0_6px_18px_-6px_var(--rm-glow)] max-w-full truncate"
+                className="mt-1 max-w-full truncate text-ui-2xs font-semibold uppercase tracking-[0.08em] sm:mt-2 sm:h-7 sm:px-3"
               >
                 Watch Stream
-              </button>
+              </Button>
             </div>
           </div>
         )}
@@ -321,13 +324,13 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
         {/* Status Indicators & Labels */}
         <div className="pointer-events-none absolute bottom-2 left-2 z-30 flex items-center gap-2">
           {isScreen ? (
-            <div className="bg-rm-bg-primary/85 px-2 py-1 rounded-md border border-rm-border shadow-lg">
+            <div className="bg-rm-bg-primary/85 px-2 py-1 rounded-md border border-rm-border">
               <span className="text-ui-2xs font-semibold text-rm-text truncate max-w-[120px]">
                 <InlineEmojiText text={streamDisplayName} />
               </span>
             </div>
           ) : (
-            <div className="bg-rm-bg-primary/85 px-2 py-1 rounded-md border border-rm-border flex items-center gap-2 shadow-lg">
+            <div className="bg-rm-bg-primary/85 px-2 py-1 rounded-md border border-rm-border flex items-center gap-2">
               <div className="flex items-center gap-1">
                 {item.isDeafened && (
                   <Headphones
@@ -383,7 +386,10 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
                   : "Pause preview (saves resources)"
               }
               aria-label={isPreviewHidden ? "Resume preview" : "Pause preview"}
-              className="flex items-center gap-1.5 rounded-lg border border-rm-border bg-rm-bg-primary/70 px-2 py-1 text-ui-2xs font-bold text-rm-text-muted shadow-lg backdrop-blur-md transition-colors hover:text-rm-text active:scale-[0.96]"
+              className={cn(
+                PRESS,
+                "flex items-center gap-1.5 rounded-md bg-black/55 px-2 py-1 text-ui-2xs font-medium text-white backdrop-blur-md outline-none",
+              )}
             >
               {isPreviewHidden ? (
                 <>
@@ -402,9 +408,10 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
         {!isTray && (
           <div className="pointer-events-none absolute bottom-2 right-2 z-50 opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100">
             <IconButton
+              aria-label="More options"
               icon={MoreHorizontal}
               size="xs"
-              className="bg-rm-bg-primary/60 backdrop-blur-md border border-rm-border shadow-xl active:scale-[0.96]"
+              className="rounded-md bg-rm-bg-primary/60 backdrop-blur-md border border-rm-border"
               onClick={(e) => {
                 e.stopPropagation();
                 setContextMenu({ x: e.clientX, y: e.clientY, isMini: true });

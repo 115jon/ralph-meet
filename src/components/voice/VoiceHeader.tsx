@@ -65,13 +65,14 @@ export function VoiceHeader({
       >
         {onMenuClick && (
           <IconButton
+            aria-label="Open sidebar"
             icon={Menu}
             size="sm"
             className={cn(
               "md:hidden",
               focusedItem
-                ? "text-white/70 hover:text-white"
-                : "text-rm-text-muted hover:text-rm-text",
+                ? "text-white/80 pointer-fine:hover:text-white"
+                : "text-rm-text-secondary pointer-fine:hover:text-rm-text",
             )}
             onClick={onMenuClick}
           />
@@ -179,8 +180,8 @@ export function VoiceHeader({
         )}
       >
         {focusedItem && focusedItem?.isStreaming && (
-          <div className="flex items-center gap-1.5 bg-primary/10 backdrop-blur-md px-2.5 py-1 rounded-md border border-primary/20 mr-2 group/hw">
-            <span className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-primary tabular-nums">
+          <div className="flex items-center gap-1.5 bg-black/55 backdrop-blur-md px-2.5 py-1 rounded-md mr-2 group/hw">
+            <span className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-white tabular-nums">
               <QualityMonitor
                 track={focusedItem.stream?.getVideoTracks()[0]}
                 signaledQuality={
@@ -191,7 +192,7 @@ export function VoiceHeader({
                 type={focusedItem.type === "screen" ? "screen" : "cam"}
               />
             </span>
-            <div className="bg-destructive px-1 rounded-[2px] text-ui-2xs font-bold text-destructive-foreground uppercase animate-pulse">
+            <div className="bg-rm-danger px-1 rounded-xs text-ui-2xs font-semibold text-rm-on-danger uppercase animate-pulse">
               LIVE
             </div>
           </div>
@@ -204,8 +205,8 @@ export function VoiceHeader({
             tooltip="Chat"
             className={cn(
               focusedItem
-                ? "text-white/70 hover:text-white hover:bg-white/10"
-                : "text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover",
+                ? "text-white/80 pointer-fine:hover:text-white"
+                : "text-rm-text-secondary pointer-fine:hover:text-rm-text",
             )}
             onClick={onToggleTextChat}
           />

@@ -15,6 +15,8 @@ import type { SFUClient } from "@/lib/sfu-client";
 import type { ScreenShareSourceState } from "@/lib/screen-share-types";
 import type { StreamWatchersByStreamer } from "@/lib/stream-watchers";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { DISABLED, HIT, PRESS } from "@/components/ui/interaction";
 import { handleVoiceCameraToggle } from "@/lib/voice/camera-toggle";
 import type { SharedSpatialAudioState } from "@/lib/voice/spatial-audio";
 import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
@@ -48,6 +50,24 @@ import {
 } from "./Icons";
 import { NoiseReductionPanel } from "./NoiseReductionPanel";
 import { SpatialAudioPanel } from "./SpatialAudioPanel";
+
+/* Quiet Pro: compact dock row in the sidebar voice panel. Rest = neutral
+ * tint; live (camera / screen share on) = the only accent fill; open
+ * pickers = stronger neutral tint. */
+const ACTION_BTN = cn(
+  PRESS,
+  HIT,
+  DISABLED,
+  "group flex h-8 items-center justify-center rounded-md outline-none",
+);
+const ACTION_REST = "bg-rm-tint-1 text-rm-text";
+const ACTION_OPEN = "bg-rm-tint-3 text-rm-text";
+const ACTION_LIVE = "bg-primary text-primary-foreground [--hover-o:0.12]";
+const HEADER_ICON_BTN = cn(
+  PRESS,
+  HIT,
+  "group relative z-10 flex size-8 items-center justify-center rounded-md text-rm-text-secondary outline-none pointer-fine:hover:text-rm-text",
+);
 
 const GifPickerModal = lazy(() => import("@/components/chat/GifPickerModal"));
 const SoundboardPicker = lazy(
@@ -341,7 +361,13 @@ export function VoiceDashboard({
                       type="button"
                       ref={signalBtnRef}
                       onClick={() => setIsVoiceDetailsOpen(!isVoiceDetailsOpen)}
-                      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-rm-success/10 text-rm-success hover:bg-rm-success/20 transition-colors outline-none"
+                      aria-label="Voice connection details"
+                      aria-expanded={isVoiceDetailsOpen}
+                      className={cn(
+                        PRESS,
+                        HIT,
+                        "flex size-8 shrink-0 items-center justify-center rounded-md bg-rm-tint-1 text-rm-success-ink outline-none",
+                      )}
                     >
                       <SignalHigh size={18} className="animate-pulse" />
                     </button>
@@ -370,15 +396,18 @@ export function VoiceDashboard({
             </div>
             <button
               type="button"
-              className="min-w-0 flex-1 rounded-lg px-1.5 py-1 text-left transition-colors outline-none hover:bg-rm-bg-hover/40 focus-visible:ring-2 focus-visible:ring-rm-accent/30"
+              className={cn(
+                PRESS,
+                "min-w-0 flex-1 rounded-md px-1.5 py-1 text-left outline-none [--hover-o:0.05]",
+              )}
               onClick={onVoiceNavigate}
               aria-label="Open voice channel details"
             >
               <div className="flex flex-col min-w-0">
-                <span className="text-[14px] font-bold tracking-tight text-rm-success leading-tight">
+                <span className="text-ui-sm font-semibold leading-tight text-rm-success-ink">
                   Voice Connected
                 </span>
-                <span className="text-ui-xs font-medium text-rm-text-muted/80 truncate max-w-[140px] group-hover/voice-status:text-rm-text-muted">
+                <span className="text-ui-xs font-medium text-rm-text-muted truncate max-w-[140px]">
                   <InlineEmojiText
                     text={`${voiceChannelName || "General"} / ${serverName}`}
                   />
@@ -394,12 +423,14 @@ export function VoiceDashboard({
                         type="button"
                         ref={spatialBtnRef}
                         onClick={() => setIsSpatialOpen((value) => !value)}
+                        aria-label="Spatial Audio"
+                        aria-expanded={isSpatialOpen}
                         className={cn(
-                          "flex h-8 w-8 items-center justify-center rounded-lg p-1.5 text-rm-text-muted/60 hover:bg-rm-bg-hover hover:text-rm-text transition-ui relative z-10 outline-none group",
+                          HEADER_ICON_BTN,
                           spatialAudioState.enabled &&
                             settings.spatialAudioEnabled &&
                             settings.streamHighFidelity &&
-                            "text-primary bg-primary/10",
+                            "bg-rm-accent-tint text-rm-accent-ink",
                         )}
                       >
                         <Sparkles size={18} />
@@ -458,10 +489,11 @@ export function VoiceDashboard({
                         onClick={() =>
                           setIsNoiseReductionOpen((value) => !value)
                         }
+                        aria-label="Noise Suppression"
                         className={cn(
-                          "flex h-8 w-8 items-center justify-center rounded-lg p-1.5 text-rm-text-muted/60 hover:bg-rm-bg-hover hover:text-rm-text transition-ui relative z-10 outline-none group",
+                          HEADER_ICON_BTN,
                           settings.noiseReductionEnabled &&
-                            "bg-sky-500/10 text-sky-300",
+                            "bg-rm-accent-tint text-rm-accent-ink",
                         )}
                         aria-expanded={isNoiseReductionOpen}
                         aria-haspopup="dialog"
@@ -490,11 +522,15 @@ export function VoiceDashboard({
                   <button
                     type="button"
                     onClick={() => onVoiceDisconnect?.()}
-                    className="flex h-8 w-8 items-center justify-center rounded-lg p-1.5 text-rm-text-muted/60 hover:bg-rm-bg-hover hover:text-rm-text transition-ui relative z-10 outline-none group"
+                    aria-label="Disconnect"
+                    className={cn(
+                      HEADER_ICON_BTN,
+                      "pointer-fine:hover:text-rm-danger-ink",
+                    )}
                   >
                     <Phone
                       size={20}
-                      strokeWidth={2.5}
+                      strokeWidth={1.75}
                       className="rotate-[135deg] group-hover:animate-wiggle"
                     />
                   </button>
@@ -545,9 +581,9 @@ export function VoiceDashboard({
 
           {/* STREAMING STATUS */}
           {isScreenSharing && (
-            <div className="bg-rm-bg-elevated/50 rounded-lg p-2.5 border border-rm-border shadow-xl space-y-3 mx-1 mt-1">
+            <div className="bg-rm-bg-elevated/50 rounded-xl p-2.5 border border-rm-border space-y-3 mx-1 mt-1">
               <div className="flex items-start gap-2.5">
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/15 text-primary ring-1 ring-primary/20 overflow-hidden">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-rm-accent-tint text-rm-accent-ink overflow-hidden">
                   {streamSourceIcon ? (
                     <img
                       src={streamSourceIcon}
@@ -568,7 +604,7 @@ export function VoiceDashboard({
                     <span className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text">
                       {streamSourceLabel}
                     </span>
-                    <span className="bg-primary text-ui-2xs font-bold px-1 rounded text-primary-foreground shadow-sm uppercase leading-tight">
+                    <span className="bg-rm-danger-tint text-ui-2xs font-semibold px-1 rounded-xs text-rm-danger-ink uppercase leading-tight">
                       Live
                     </span>
                     {streamQualityBadge && (
@@ -591,26 +627,26 @@ export function VoiceDashboard({
               )}
 
               <div className="flex gap-1.5 relative">
-                <button
+                <Button
                   type="button"
+                  size="sm"
                   onClick={onStopStreaming}
-                  className="flex-1 py-1.5 bg-primary hover:bg-primary/90 text-primary-foreground rounded font-bold text-ui-2xs transition-ui flex items-center justify-center gap-1.5 shadow-lg shadow-primary/20"
+                  className="flex-1"
                 >
-                  <XCircle size={10} /> Stop Streaming
-                </button>
+                  <XCircle /> Stop Streaming
+                </Button>
                 <div className="relative">
-                  <button
+                  <Button
                     type="button"
+                    variant="secondary"
+                    size="icon-sm"
                     onClick={() => setIsStreamMenuOpen(!isStreamMenuOpen)}
-                    className={cn(
-                      "p-1.5 h-full rounded transition-ui outline-none",
-                      isStreamMenuOpen
-                        ? "bg-rm-bg-elevated text-rm-text"
-                        : "bg-rm-bg-elevated/50 text-rm-text-muted hover:bg-rm-bg-elevated",
-                    )}
+                    aria-label="Stream settings"
+                    aria-expanded={isStreamMenuOpen}
+                    className={cn(isStreamMenuOpen && "bg-rm-tint-3")}
                   >
-                    <MoreHorizontal size={14} />
-                  </button>
+                    <MoreHorizontal />
+                  </Button>
 
                   {shouldRenderStreamMenu && (
                     <>
@@ -639,7 +675,7 @@ export function VoiceDashboard({
                             onChangeStreamSource?.();
                             setIsStreamMenuOpen(false);
                           }}
-                          className="w-full text-left px-3 py-2 text-xs font-medium text-primary hover:bg-primary/10 rounded-lg transition-colors flex items-center gap-2"
+                          className="w-full text-left px-3 py-2 text-xs font-medium text-rm-accent-ink hover:bg-rm-accent-tint rounded-lg transition-colors flex items-center gap-2"
                         >
                           <Share2 size={14} /> Change Source
                         </button>
@@ -653,7 +689,7 @@ export function VoiceDashboard({
                           className={cn(
                             "w-full text-left px-3 py-2 text-xs font-medium rounded-lg transition-colors flex items-center justify-between outline-none",
                             isStreamingAudio
-                              ? "text-primary hover:bg-primary/10"
+                              ? "text-rm-accent-ink hover:bg-rm-accent-tint"
                               : "text-rm-text-muted hover:bg-rm-bg-hover",
                           )}
                         >
@@ -686,7 +722,7 @@ export function VoiceDashboard({
                           className={cn(
                             "w-full text-left px-3 py-2 text-xs font-medium rounded-lg transition-colors flex items-center justify-between outline-none",
                             alwaysShowStreamPreview
-                              ? "text-primary hover:bg-primary/10"
+                              ? "text-rm-accent-ink hover:bg-rm-accent-tint"
                               : "text-rm-text-muted hover:bg-rm-bg-hover",
                           )}
                         >
@@ -706,7 +742,7 @@ export function VoiceDashboard({
                           <>
                             <div className="h-[1px] bg-rm-border my-1" />
                             <div className="px-3 py-1.5">
-                              <p className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted/40">
+                              <p className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted">
                                 Quality
                               </p>
                             </div>
@@ -722,7 +758,7 @@ export function VoiceDashboard({
                                   className={cn(
                                     "w-full text-left px-3 py-1.5 text-ui-2xs font-medium rounded-md transition-ui flex items-center justify-between group/q outline-none",
                                     screenQuality === q
-                                      ? "bg-primary/10 text-primary"
+                                      ? "bg-rm-accent-tint text-rm-accent-ink"
                                       : "text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text",
                                   )}
                                 >
@@ -771,12 +807,18 @@ export function VoiceDashboard({
                       });
                     }}
                     disabled={!hasCamera}
+                    aria-label={
+                      !hasCamera
+                        ? "No camera detected"
+                        : isCameraActive
+                          ? "Turn Off Camera"
+                          : "Turn On Camera"
+                    }
+                    aria-pressed={!!isCameraActive}
                     className={cn(
-                      "flex flex-1 h-8 items-center justify-center rounded-md transition-colors outline-none border border-transparent group",
-                      isCameraActive
-                        ? "bg-rm-bg-active text-rm-text"
-                        : "bg-rm-bg-hover border-rm-border text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-active",
-                      !hasCamera && "opacity-20 cursor-not-allowed grayscale",
+                      ACTION_BTN,
+                      "flex-1",
+                      isCameraActive ? ACTION_LIVE : ACTION_REST,
                     )}
                   >
                     {isCameraActive ? (
@@ -812,11 +854,14 @@ export function VoiceDashboard({
                         onShareScreen?.();
                       }
                     }}
+                    aria-label={
+                      isScreenSharing ? "Stop Streaming" : "Share Your Screen"
+                    }
+                    aria-pressed={!!isScreenSharing}
                     className={cn(
-                      "flex flex-1 h-8 items-center justify-center rounded-md transition-colors outline-none border border-transparent group",
-                      isScreenSharing
-                        ? "bg-rm-success text-white hover:bg-[#1f8b4c]"
-                        : "bg-rm-bg-hover border-rm-border text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-active",
+                      ACTION_BTN,
+                      "flex-1",
+                      isScreenSharing ? ACTION_LIVE : ACTION_REST,
                     )}
                   >
                     <Monitor size={18} className="group-hover:animate-wiggle" />
@@ -837,7 +882,8 @@ export function VoiceDashboard({
                     onClick={() => {
                       onOpenActivities?.();
                     }}
-                    className="flex flex-1 h-8 items-center justify-center rounded-md transition-colors outline-none bg-rm-bg-hover border border-rm-border text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-active group"
+                    aria-label="Start an Activity"
+                    className={cn(ACTION_BTN, "flex-1", ACTION_REST)}
                   >
                     <Gamepad2
                       size={18}
@@ -858,11 +904,12 @@ export function VoiceDashboard({
                       type="button"
                       ref={soundboardBtnRef}
                       onClick={toggleSoundboardPicker}
+                      aria-label="Open Soundboard"
+                      aria-expanded={isSoundboardPickerOpen}
                       className={cn(
-                        "flex w-full h-8 items-center justify-center rounded-md transition-colors outline-none border group",
-                        isSoundboardPickerOpen
-                          ? "bg-rm-accent/20 border-rm-accent/40 text-rm-accent"
-                          : "bg-rm-bg-hover border-rm-border text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-active",
+                        ACTION_BTN,
+                        "w-full",
+                        isSoundboardPickerOpen ? ACTION_OPEN : ACTION_REST,
                       )}
                     >
                       <Radio size={18} className="group-hover:animate-wiggle" />
@@ -899,11 +946,12 @@ export function VoiceDashboard({
                         type="button"
                         ref={stickerBtnRef}
                         onClick={() => setIsStickerPickerOpen((v) => !v)}
+                        aria-label="GIF & Sticker Reactions"
+                        aria-expanded={isStickerPickerOpen}
                         className={cn(
-                          "flex w-full h-8 items-center justify-center rounded-md transition-colors outline-none border group",
-                          isStickerPickerOpen
-                            ? "bg-rm-accent/20 border-rm-accent/40 text-rm-accent"
-                            : "bg-rm-bg-hover border-rm-border text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-active",
+                          ACTION_BTN,
+                          "w-full",
+                          isStickerPickerOpen ? ACTION_OPEN : ACTION_REST,
                         )}
                       >
                         <Sticker

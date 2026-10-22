@@ -1,3 +1,4 @@
+import { Button } from "@/components/ui/button";
 import { IconButton } from "@/components/ui/IconButton";
 import { DitherField } from "@/components/ui/DitherField";
 import InlineEmojiText from "@/components/chat/InlineEmojiText";
@@ -38,6 +39,7 @@ export function VoiceLanding({
         <div className="flex items-center gap-2 text-rm-text-muted">
           {onMenuClick && (
             <IconButton
+              aria-label="Open sidebar"
               icon={Menu}
               variant="muted"
               size="sm"
@@ -53,6 +55,7 @@ export function VoiceLanding({
         </div>
         {!showTextChat && (
           <IconButton
+            aria-label="Show chat"
             icon={MessageSquare}
             variant="muted"
             size="sm"
@@ -102,13 +105,14 @@ export function VoiceLanding({
           </div>
         )}
 
-        <button
+        <Button
           type="button"
+          size="lg"
           onClick={handleJoin}
-          className="mt-3 h-10 rounded-md bg-primary px-6 text-ui-base font-semibold text-primary-foreground shadow-md transition-ui hover:bg-primary/90 enabled:active:scale-[0.96] outline-none"
+          className="mt-3 px-6"
         >
           Join Voice
-        </button>
+        </Button>
       </div>
     </div>
   );

@@ -10,6 +10,7 @@ import { useUserResolution } from "@/hooks/useUserResolution";
 import { getAuthAssetUrl } from "@/lib/platform";
 import { playCallEnd, playRingStop, resumeSoundContext } from "@/lib/sounds";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 import type { AvatarDisplay } from "@/lib/avatar-display";
 import { isVoiceMemberReconnecting } from "@/lib/voice-presence";
 import {
@@ -41,6 +42,11 @@ const UnifiedScreenShareModal = lazy(() =>
     default: mod.UnifiedScreenShareModal,
   })),
 );
+
+/* Quiet Pro lobby/ringing actions: 44px tall, radius 8. Accept stays the
+ * conventional green (no accent), decline/cancel is the solid danger fill. */
+const LOBBY_BTN = "h-11 w-14 rounded-lg";
+const LOBBY_ACCEPT = "bg-green-600 text-white [--hover-o:0.12]";
 
 function getEventEpochMs(event: MouseEvent<HTMLElement>) {
   return Math.round(performance.timeOrigin + event.timeStamp);
@@ -657,12 +663,15 @@ export function DMCallRegion({ channelId }: { channelId: string }) {
               {isRingingOutgoing ? (
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <button
+                    <Button
+                      type="button"
+                      variant="danger"
                       onClick={handleCancelCall}
-                      className="flex items-center justify-center w-14 h-12 rounded-2xl bg-destructive hover:bg-destructive/90 text-white transition-ui shadow-lg"
+                      aria-label="Cancel Call"
+                      className={LOBBY_BTN}
                     >
-                      <X className="h-6 w-6" />
-                    </button>
+                      <X className="size-5" strokeWidth={1.75} />
+                    </Button>
                   </TooltipTrigger>
                   <TooltipContent side="top" sideOffset={8}>
                     <p>Cancel Call</p>
@@ -673,12 +682,14 @@ export function DMCallRegion({ channelId }: { channelId: string }) {
                 <>
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <button
+                      <Button
+                        type="button"
                         onClick={handleAcceptWithVideo}
-                        className="flex items-center justify-center w-14 h-12 rounded-2xl bg-green-600 hover:bg-green-500 text-white transition-ui shadow-lg cursor-pointer"
+                        aria-label="Join with Video"
+                        className={cn(LOBBY_BTN, LOBBY_ACCEPT)}
                       >
-                        <Video className="h-6 w-6" />
-                      </button>
+                        <Video className="size-5" strokeWidth={1.75} />
+                      </Button>
                     </TooltipTrigger>
                     <TooltipContent side="top" sideOffset={8}>
                       <p>Join with Video</p>
@@ -687,14 +698,19 @@ export function DMCallRegion({ channelId }: { channelId: string }) {
 
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <button
+                      <Button
+                        type="button"
                         onClick={(event) =>
                           handleAccept(getEventEpochMs(event))
                         }
-                        className="flex items-center justify-center w-14 h-12 rounded-2xl bg-green-600 hover:bg-green-500 text-white transition-ui shadow-lg cursor-pointer"
+                        aria-label="Join Voice"
+                        className={cn(LOBBY_BTN, LOBBY_ACCEPT)}
                       >
-                        <Phone className="h-5 w-5 fill-current" />
-                      </button>
+                        <Phone
+                          className="size-5 fill-current"
+                          strokeWidth={1.75}
+                        />
+                      </Button>
                     </TooltipTrigger>
                     <TooltipContent side="top" sideOffset={8}>
                       <p>Join Voice</p>
@@ -704,12 +720,15 @@ export function DMCallRegion({ channelId }: { channelId: string }) {
                   {isRingingIncoming && (
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <button
+                        <Button
+                          type="button"
+                          variant="danger"
                           onClick={handleDecline}
-                          className="flex items-center justify-center w-14 h-12 rounded-2xl bg-destructive hover:bg-destructive/90 text-white transition-ui shadow-lg cursor-pointer"
+                          aria-label="Decline"
+                          className={LOBBY_BTN}
                         >
-                          <X className="h-6 w-6" />
-                        </button>
+                          <X className="size-5" strokeWidth={1.75} />
+                        </Button>
                       </TooltipTrigger>
                       <TooltipContent side="top" sideOffset={8}>
                         <p>Decline</p>
