@@ -15,21 +15,21 @@ permissions:
 
 concurrency:
   group: ci-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  # Superseded PR pushes are cancelled. Runs on main are allowed to finish
+  # because they refresh the main-scoped pnpm cache that every PR restores from.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   changes:
     name: changes
     runs-on: ubuntu-latest
     outputs:
-      code: ${{ steps.manual.outputs.code || steps.filter.outputs.code }}
+      # unit, worker-runtime, and build run for pull requests that touch code
+      # and for manual runs. Pushes to main skip them: branch protection
+      # requires `required` with strict up-to-date branches, and admins are
+      # included, so every commit on main is the tree its PR already tested.
+      code: ${{ steps.manual.outputs.code || steps.filter.outputs.code || 'false' }}
     steps:
-      - name: Checkout
-        # actions/checkout v4.2.2
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-        with:
-          fetch-depth: 0
-
       - name: Mark all files as relevant for manual runs
         id: manual
         if: ${{ github.event_name == 'workflow_dispatch' }}
@@ -37,9 +37,11 @@ jobs:
 
       - name: Detect code-affecting changes
         id: filter
-        if: ${{ github.event_name != 'workflow_dispatch' }}
-        # dorny/paths-filter v3
-        uses: dorny/paths-filter@6852f92c20ea7fd3b0c25de3b5112db3a98da050
+        if: ${{ github.event_name == 'pull_request' }}
+        # For pull_request events paths-filter lists changed files through the
+        # GitHub API, so this job does not need a checkout.
+        # dorny/paths-filter v3.0.4
+        uses: dorny/paths-filter@0e4a8c6effa4802afeda77dc8d303f8176d7dfad
         with:
           filters: |
             code:
@@ -49,6 +51,8 @@ jobs:
               - 'public/**'
               - 'desktop/**'
               - 'mobile/**'
+              - 'migrations/**'
+              - 'patches/**'
               - '**/*.ts'
               - '**/*.tsx'
               - '**/*.js'
@@ -63,34 +67,23 @@ jobs:
               - '**/*.scss'
               - '**/*.html'
               - '**/*.svg'
+              - '.npmrc'
               - 'package.json'
               - 'pnpm-lock.yaml'
               - 'pnpm-workspace.yaml'
 
   quality:
     name: quality
+    # Runs on main too: it is cheap, and its install keeps the main-scoped
+    # pnpm store cache current after lockfile changes.
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        # actions/checkout v4.2.2
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        # actions/checkout v4.4.0
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
 
-      - name: Setup pnpm
-        # pnpm/action-setup v6.0.9
-        uses: pnpm/action-setup@008330803749db0355799c700092d9a85fd074e9
-        with:
-          version: 10
-
-      - name: Setup Node.js
-        # actions/setup-node v4.4.0
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
-        with:
-          node-version: 22
-          cache: pnpm
-          cache-dependency-path: pnpm-lock.yaml
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+      - name: Setup pnpm workspace
+        uses: ./.github/actions/setup-pnpm
 
       - name: Check formatting
         run: pnpm run format:check
@@ -108,25 +101,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        # actions/checkout v4.2.2
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        # actions/checkout v4.4.0
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
 
-      - name: Setup pnpm
-        # pnpm/action-setup v6.0.9
-        uses: pnpm/action-setup@008330803749db0355799c700092d9a85fd074e9
-        with:
-          version: 10
-
-      - name: Setup Node.js
-        # actions/setup-node v4.4.0
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
-        with:
-          node-version: 22
-          cache: pnpm
-          cache-dependency-path: pnpm-lock.yaml
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+      - name: Setup pnpm workspace
+        uses: ./.github/actions/setup-pnpm
 
       - name: Run unit tests
         # The range-probe suite contacts YouTube and is an explicit live probe,
@@ -140,25 +119,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        # actions/checkout v4.2.2
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        # actions/checkout v4.4.0
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
 
-      - name: Setup pnpm
-        # pnpm/action-setup v6.0.9
-        uses: pnpm/action-setup@008330803749db0355799c700092d9a85fd074e9
-        with:
-          version: 10
-
-      - name: Setup Node.js
-        # actions/setup-node v4.4.0
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
-        with:
-          node-version: 22
-          cache: pnpm
-          cache-dependency-path: pnpm-lock.yaml
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+      - name: Setup pnpm workspace
+        uses: ./.github/actions/setup-pnpm
 
       - name: Configure deterministic Worker test secrets
         shell: bash
@@ -180,25 +145,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        # actions/checkout v4.2.2
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        # actions/checkout v4.4.0
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
 
-      - name: Setup pnpm
-        # pnpm/action-setup v6.0.9
-        uses: pnpm/action-setup@008330803749db0355799c700092d9a85fd074e9
-        with:
-          version: 10
-
-      - name: Setup Node.js
-        # actions/setup-node v4.4.0
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
-        with:
-          node-version: 22
-          cache: pnpm
-          cache-dependency-path: pnpm-lock.yaml
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+      - name: Setup pnpm workspace
+        uses: ./.github/actions/setup-pnpm
 
       - name: Build production output
         run: pnpm run build
