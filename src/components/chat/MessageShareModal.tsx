@@ -1,9 +1,12 @@
+import { Button } from "@/components/ui/button";
 import { Dialog, DialogPortal, DialogSurface } from "@/components/ui/dialog";
+import { IconButton } from "@/components/ui/IconButton";
+import { Input } from "@/components/ui/input";
 import type { Message } from "@/lib/types";
 import { isPlayableVideo } from "@/lib/media";
 import { getAuthAssetUrl, getMediaUrl } from "@/lib/platform";
 import { cn } from "@/lib/utils";
-import { Check, Copy, ExternalLink, Loader2, Share2, X } from "lucide-react";
+import { Check, Copy, ExternalLink, Share2, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import ShareSnapshotPreview from "./ShareSnapshotPreview";
 
@@ -94,20 +97,20 @@ export default function MessageShareModal({
           <DialogSurface
             showCloseButton={false}
             className={cn(
-              "relative m-0 flex max-h-[calc(100dvh-16px)] w-full max-w-[560px] flex-col overflow-hidden rounded-t-xl border border-rm-border bg-rm-bg-primary p-0 shadow-2xl outline-none md:max-h-[min(760px,calc(100dvh-48px))] md:rounded-xl",
+              "relative m-0 flex max-h-[calc(100dvh-16px)] w-full max-w-[560px] flex-col overflow-hidden rounded-t-xl border border-rm-border bg-rm-bg-surface dark:bg-rm-bg-elevated p-0 shadow-[var(--rm-shadow-3)] outline-none md:max-h-[min(760px,calc(100dvh-48px))] md:rounded-xl",
               "animate-in fade-in zoom-in-95 duration-200 data-[state=closed]:animate-out data-[state=closed]:fade-out data-[state=closed]:zoom-out-95",
             )}
             aria-labelledby="message-share-title"
           >
             <div className="flex shrink-0 items-center justify-between border-b border-rm-border px-5 py-4">
               <div className="flex items-center gap-3">
-                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-rm-accent-tint text-rm-accent-ink">
                   <Share2 className="h-4 w-4" />
                 </div>
                 <div>
                   <h2
                     id="message-share-title"
-                    className="text-base font-bold text-rm-text"
+                    className="text-ui-lg font-semibold text-rm-text"
                   >
                     Share Message
                   </h2>
@@ -116,13 +119,13 @@ export default function MessageShareModal({
                   </p>
                 </div>
               </div>
-              <button
+              <IconButton
+                icon={X}
+                iconSize={16}
+                shape="circle"
                 onClick={onClose}
-                className="flex h-8 w-8 items-center justify-center rounded-full text-rm-text-muted transition hover:bg-rm-bg-hover hover:text-rm-text"
                 aria-label="Close"
-              >
-                <X className="h-4 w-4" />
-              </button>
+              />
             </div>
 
             <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-5 py-5 custom-scrollbar">
@@ -165,19 +168,22 @@ export default function MessageShareModal({
                   </p>
                   <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                     {expiryOptions.map((option) => (
-                      <button
+                      <Button
                         key={option.value}
                         type="button"
+                        variant={
+                          expires === option.value ? "secondary" : "outline"
+                        }
+                        aria-pressed={expires === option.value}
                         onClick={() => setExpires(option.value)}
                         className={cn(
-                          "rounded-lg border px-3 py-2 text-sm font-bold transition",
                           expires === option.value
-                            ? "border-primary bg-primary/10 text-primary"
-                            : "border-rm-border bg-rm-bg-surface text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text",
+                            ? "bg-rm-accent-tint text-rm-accent-ink"
+                            : "border-rm-border text-rm-text-secondary",
                         )}
                       >
                         {option.label}
-                      </button>
+                      </Button>
                     ))}
                   </div>
                 </div>
@@ -198,69 +204,56 @@ export default function MessageShareModal({
                     Public Link
                   </label>
                   <div className="flex gap-2">
-                    <input
+                    <Input
                       id="message-share-url"
                       value={shareUrl}
                       readOnly
-                      className="min-w-0 flex-1 rounded-lg border border-rm-border bg-rm-bg-surface px-3 py-2 text-sm text-rm-text outline-none"
+                      className="flex-1"
                       onFocus={(event) => event.target.select()}
                     />
-                    <button
-                      onClick={copyLink}
-                      className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-bold text-primary-foreground transition hover:brightness-110"
-                    >
+                    <Button onClick={copyLink} className="h-9">
                       {copyState === "copied" ? (
                         <Check className="h-4 w-4" />
                       ) : (
                         <Copy className="h-4 w-4" />
                       )}
                       {copyState === "copied" ? "Copied" : "Copy"}
-                    </button>
+                    </Button>
                   </div>
                 </div>
               )}
             </div>
 
-            <div className="flex shrink-0 flex-wrap justify-end gap-2 border-t border-rm-border px-5 py-4">
-              <button
+            <div className="flex shrink-0 flex-col-reverse gap-2 border-t border-rm-border px-5 py-4 sm:flex-row sm:flex-wrap sm:justify-end">
+              <Button
+                variant={shareUrl ? "ghost" : "secondary"}
                 onClick={onClose}
-                className="rounded-lg px-4 py-2 text-sm font-bold text-rm-text-muted transition hover:bg-rm-bg-hover hover:text-rm-text"
               >
                 Close
-              </button>
+              </Button>
               {shareUrl ? (
                 <>
                   {onManageShares && (
-                    <button
-                      onClick={onManageShares}
-                      className="inline-flex items-center gap-2 rounded-lg border border-rm-border px-4 py-2 text-sm font-bold text-rm-text-secondary transition hover:bg-rm-bg-hover hover:text-rm-text"
-                    >
+                    <Button variant="secondary" onClick={onManageShares}>
                       Manage Shares
-                    </button>
+                    </Button>
                   )}
-                  <a
-                    href={shareUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center gap-2 rounded-lg border border-rm-border px-4 py-2 text-sm font-bold text-rm-text-secondary transition hover:bg-rm-bg-hover hover:text-rm-text"
-                  >
-                    <ExternalLink className="h-4 w-4" />
-                    Open
-                  </a>
+                  <Button asChild variant="secondary">
+                    <a href={shareUrl} target="_blank" rel="noreferrer">
+                      <ExternalLink className="h-4 w-4" />
+                      Open
+                    </a>
+                  </Button>
                 </>
               ) : (
-                <button
+                <Button
                   onClick={createShare}
                   disabled={creating}
-                  className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-bold text-primary-foreground transition hover:brightness-110 disabled:opacity-50"
+                  loading={creating}
                 >
-                  {creating ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Share2 className="h-4 w-4" />
-                  )}
-                  {creating ? "Creating..." : "Create Link"}
-                </button>
+                  <Share2 className="h-4 w-4" />
+                  Create Link
+                </Button>
               )}
             </div>
           </DialogSurface>

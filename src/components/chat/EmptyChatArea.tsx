@@ -1,18 +1,21 @@
 import { DitherField } from "@/components/ui/DitherField";
+import { IconButton } from "@/components/ui/IconButton";
 import { Menu, MessageSquare } from "./Icons";
 
 export function EmptyChatArea({ onMenuClick }: { onMenuClick: () => void }) {
   return (
     <div className="flex flex-1 flex-col bg-rm-bg-primary relative overflow-hidden">
       <header className="h-12 flex shrink-0 items-center gap-2 border-b border-rm-border bg-rm-bg-primary px-4 z-10">
-        <button
+        <IconButton
           type="button"
           aria-label="Open navigation"
-          className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-md border-none bg-transparent text-rm-text-muted transition-ui hover:bg-rm-bg-hover hover:text-rm-text md:hidden"
+          icon={Menu}
+          variant="muted"
+          size="sm"
+          iconSize={20}
+          className="md:hidden"
           onClick={onMenuClick}
-        >
-          <Menu className="h-5 w-5" />
-        </button>
+        />
         <span className="text-ui-sm font-medium text-rm-text-muted">
           Select a channel
         </span>

@@ -1,5 +1,17 @@
 import { useMounted } from "@/hooks/useMounted";
 import { cn } from "@/lib/utils";
+import {
+  MENU_ICON,
+  MENU_ITEM,
+  MENU_ITEM_DANGER,
+  MENU_ITEM_DANGER_ON,
+  MENU_ITEM_DEFAULT,
+  MENU_ITEM_DEFAULT_ON,
+  MENU_ITEM_WARNING,
+  MENU_ITEM_WARNING_ON,
+  MENU_PANEL,
+  MENU_SEPARATOR,
+} from "@/components/ui/menu";
 import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
@@ -279,13 +291,10 @@ export default function ContextMenu({
         setSubmenuStyle({});
       }}
     >
-      <div
-        ref={panelRef}
-        className="overflow-hidden rounded-lg border border-rm-border bg-rm-bg-elevated p-1 shadow-lg"
-      >
-        <div className="flex flex-col gap-0.5">
+      <div ref={panelRef} className={cn("overflow-hidden", MENU_PANEL)}>
+        <div className="flex flex-col">
           {topContent ? (
-            <div className="mb-1.5 border-b border-rm-border pb-1.5">
+            <div className="-mx-1 mb-1 border-b border-rm-border px-1 pb-1">
               {topContent}
             </div>
           ) : null}
@@ -341,32 +350,33 @@ export default function ContextMenu({
                     }
                   }}
                   className={cn(
-                    "group flex w-full items-center justify-between rounded-md px-2.5 py-1.5 text-left text-ui-sm font-medium transition-ui",
-                    item.disabled
-                      ? "cursor-default opacity-40"
-                      : "cursor-pointer",
-                    item.disabled && "text-rm-text-muted",
+                    MENU_ITEM,
+                    "justify-between",
+                    item.disabled ? "text-rm-text-muted" : "cursor-pointer",
                     !item.disabled &&
                       (item.variant === "danger"
                         ? isSubmenuOpen
-                          ? "bg-destructive text-destructive-foreground"
-                          : "text-destructive hover:bg-destructive hover:text-destructive-foreground"
+                          ? MENU_ITEM_DANGER_ON
+                          : MENU_ITEM_DANGER
                         : item.variant === "warning"
                           ? isSubmenuOpen
-                            ? "bg-warning text-white"
-                            : "text-warning hover:bg-warning hover:text-white"
+                            ? MENU_ITEM_WARNING_ON
+                            : MENU_ITEM_WARNING
                           : isSubmenuOpen
-                            ? "bg-primary text-primary-foreground"
-                            : "text-rm-text-secondary hover:bg-primary hover:text-primary-foreground"),
+                            ? MENU_ITEM_DEFAULT_ON
+                            : MENU_ITEM_DEFAULT),
                   )}
                 >
-                  <span className="flex min-w-0 items-center gap-2">
+                  <span className="flex min-w-0 items-center gap-2.5">
                     {item.icon ? (
                       <span
+                        aria-hidden
                         className={cn(
-                          "shrink-0 opacity-60",
-                          isSubmenuOpen && "opacity-100",
-                          !item.disabled && "group-hover:opacity-100",
+                          "shrink-0",
+                          !item.variant || item.variant === "default"
+                            ? MENU_ICON
+                            : undefined,
+                          isSubmenuOpen && "text-current",
                         )}
                       >
                         {item.icon}
@@ -375,27 +385,19 @@ export default function ContextMenu({
                     <span className="flex min-w-0 flex-col">
                       <span className="truncate">{item.label}</span>
                       {item.subtitle ? (
-                        <span className="text-ui-2xs font-normal leading-tight opacity-60">
+                        <span className="text-ui-2xs font-normal text-rm-text-muted">
                           {item.subtitle}
                         </span>
                       ) : null}
                     </span>
                   </span>
                   {item.rightIcon ? (
-                    <span
-                      className={cn(
-                        "ml-2 shrink-0 opacity-40",
-                        isSubmenuOpen && "opacity-80",
-                        !item.disabled && "group-hover:opacity-80",
-                      )}
-                    >
+                    <span className={cn("ml-2 shrink-0 text-rm-text-muted")}>
                       {item.rightIcon}
                     </span>
                   ) : null}
                 </button>
-                {item.divider ? (
-                  <div className="my-1.5 h-px w-full bg-rm-border" />
-                ) : null}
+                {item.divider ? <div className={MENU_SEPARATOR} /> : null}
               </React.Fragment>
             );
           })}
@@ -406,7 +408,7 @@ export default function ContextMenu({
           ref={submenuRef}
           role="menu"
           aria-label={`${activeSubmenuItem.label} submenu`}
-          className="absolute z-80 w-[210px] overflow-hidden rounded-lg border border-rm-border bg-rm-bg-elevated p-1 shadow-lg"
+          className={cn("absolute z-80 w-[210px] overflow-hidden", MENU_PANEL)}
           style={submenuStyle}
         >
           {activeSubmenuItem.submenu}

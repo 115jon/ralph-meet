@@ -1,5 +1,6 @@
 import { AvatarImage } from "@/components/chat/AvatarImage";
 import { Dialog, DialogPortal, DialogSurface } from "@/components/ui/dialog";
+import { IconButton } from "@/components/ui/IconButton";
 import { useUserResolution } from "@/hooks/useUserResolution";
 import { getDisplayInitial } from "@/lib/display-name";
 import { getNextReactionEmoji } from "@/lib/reaction-details";
@@ -55,14 +56,15 @@ function ReactionUserRow({
         <p className="truncate text-xs text-rm-text-muted">@{username}</p>
       </div>
       {canManageReactions && (
-        <button
+        <IconButton
+          icon={X}
+          iconSize={16}
+          variant="destructive"
           type="button"
           onClick={onRemove}
-          className="pointer-events-none flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-rm-text-muted opacity-0 transition-[background-color,color,opacity,transform] group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100 hover:bg-destructive/10 hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-destructive/40 active:scale-[0.96]"
+          className="pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100"
           aria-label={`Remove reaction from ${displayName}`}
-        >
-          <X className="h-4 w-4" />
-        </button>
+        />
       )}
     </div>
   );
@@ -86,10 +88,10 @@ function ReactionGroupButton({
       aria-pressed={selected}
       aria-label={`${reaction.emoji} ${reaction.count}`}
       className={cn(
-        "flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left transition-[background-color,color,transform] active:scale-[0.96]",
+        "flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left transition-[background-color,color,transform] active:scale-[0.97]",
         selected
-          ? "bg-primary/10 text-primary"
-          : "text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text",
+          ? "bg-rm-accent-tint text-rm-accent-ink"
+          : "text-rm-text-muted pointer-fine:hover:bg-rm-tint-1 pointer-fine:hover:text-rm-text",
       )}
     >
       <EmojiToken
@@ -144,23 +146,21 @@ export default function ReactionDetailsModal({
         >
           <DialogSurface
             showCloseButton={false}
-            className="relative m-0 flex h-[min(640px,calc(100dvh-24px))] min-h-[340px] w-full max-w-[720px] flex-col overflow-hidden rounded-xl border border-rm-border bg-rm-bg-primary p-0 shadow-2xl outline-none animate-in fade-in zoom-in-95 duration-200 sm:h-[min(640px,calc(100dvh-48px))]"
+            className="relative m-0 flex h-[min(640px,calc(100dvh-24px))] min-h-[340px] w-full max-w-[720px] flex-col overflow-hidden rounded-xl border border-rm-border bg-rm-bg-surface dark:bg-rm-bg-elevated p-0 shadow-[var(--rm-shadow-3)] outline-none animate-in fade-in zoom-in-95 duration-200 sm:h-[min(640px,calc(100dvh-48px))]"
           >
             <header className="flex shrink-0 items-center justify-between border-b border-rm-border px-5 py-4">
               <h2
                 id="reaction-details-title"
-                className="text-base font-bold text-rm-text"
+                className="text-ui-lg font-semibold text-rm-text"
               >
                 Reactions
               </h2>
-              <button
+              <IconButton
+                icon={X}
                 type="button"
                 onClick={onClose}
-                className="flex h-9 w-9 items-center justify-center rounded-md text-rm-text-muted transition-[background-color,color,transform] hover:bg-rm-bg-hover hover:text-rm-text active:scale-[0.96]"
                 aria-label="Close reactions"
-              >
-                <X className="h-5 w-5" />
-              </button>
+              />
             </header>
 
             <div className="grid min-h-0 flex-1 grid-cols-[112px_minmax(0,1fr)] sm:grid-cols-[150px_minmax(0,1fr)]">

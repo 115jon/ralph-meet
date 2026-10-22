@@ -1,4 +1,6 @@
+import { Button } from "@/components/ui/button";
 import { IconButton } from "@/components/ui/IconButton";
+import { PRESS } from "@/components/ui/interaction";
 import {
   Tooltip,
   TooltipContent,
@@ -80,6 +82,7 @@ export function ChatHeader({
     >
       <div className="flex items-center gap-1 group">
         <IconButton
+          aria-label="Servers"
           icon={ArrowLeft}
           variant="muted"
           size="sm"
@@ -114,7 +117,9 @@ export function ChatHeader({
         <button
           className={cn(
             "hidden items-center gap-1.5 md:flex pl-1 group/chname transition-ui cursor-pointer rounded-md px-2 py-1 -ml-2",
-            showChannelDetails ? "bg-rm-bg-hover" : "hover:bg-rm-bg-hover/60",
+            showChannelDetails
+              ? "bg-rm-tint-2"
+              : "pointer-fine:hover:bg-rm-tint-1",
           )}
           onClick={onToggleChannelDetails}
           title="View channel details"
@@ -152,8 +157,8 @@ export function ChatHeader({
             className={cn(
               "h-3.5 w-3.5 transition-ui shrink-0",
               showChannelDetails
-                ? "rotate-90 text-primary"
-                : "text-rm-text-muted/40 group-hover/chname:text-rm-text-muted",
+                ? "rotate-90 text-rm-text"
+                : "text-rm-text-muted group-hover/chname:text-rm-text-secondary",
             )}
           />
         </button>
@@ -165,6 +170,9 @@ export function ChatHeader({
             <Tooltip>
               <TooltipTrigger asChild>
                 <IconButton
+                  aria-label={
+                    hasExistingCall ? "Join Call" : "Start Voice Call"
+                  }
                   icon={Phone}
                   variant="muted"
                   size="sm"
@@ -177,29 +185,30 @@ export function ChatHeader({
               </TooltipContent>
             </Tooltip>
           )}
-          <button
+          <Button
             type="button"
+            variant="ghost"
+            size="icon"
             aria-label="Pinned messages"
             aria-pressed={showPins}
-            className="group relative flex h-8 w-8 cursor-pointer items-center justify-center rounded-md transition-ui hover:bg-rm-bg-hover enabled:active:scale-[0.96]"
+            className="text-rm-text-muted pointer-fine:hover:text-rm-text aria-pressed:bg-rm-tint-2 aria-pressed:text-rm-text"
             title="Pinned Messages"
             onClick={handleTogglePins}
             ref={pinButtonRef}
           >
             <Pin
+              strokeWidth={1.75}
               className={cn(
-                "h-[18px] w-[18px] transition-colors",
-                showPins
-                  ? "text-rm-accent rotate-45"
-                  : "text-rm-text-muted group-hover:text-rm-text",
+                "size-[18px] transition-transform duration-150 ease-(--rm-ease-out)",
+                showPins && "rotate-45",
               )}
             />
             {pinnedCount > 0 && (
-              <span className="absolute -top-0.5 -right-0.5 badge-count bg-rm-accent">
+              <span className="absolute -top-0.5 -right-0.5 badge-count bg-primary text-primary-foreground">
                 {pinnedCount}
               </span>
             )}
-          </button>
+          </Button>
           <NotificationBell />
           {onMembersClick && (
             <IconButton
@@ -208,9 +217,6 @@ export function ChatHeader({
               size="sm"
               aria-label="Members"
               aria-pressed={showMembers}
-              className={cn(
-                showMembers && "text-rm-accent hover:text-rm-accent",
-              )}
               onClick={onMembersClick}
             />
           )}
@@ -218,7 +224,10 @@ export function ChatHeader({
         <div className="flex items-center">
           <button
             type="button"
-            className="hidden md:inline-flex h-8 items-center gap-2 rounded-md border border-rm-border bg-rm-bg-elevated px-2.5 text-ui-sm font-medium text-rm-text-muted transition-ui hover:border-rm-border-strong hover:text-rm-text"
+            className={cn(
+              "hidden md:inline-flex h-8 items-center gap-2 rounded-md bg-rm-tint-1 px-2.5 text-ui-sm font-medium text-rm-text-muted outline-none pointer-fine:hover:text-rm-text",
+              PRESS,
+            )}
             onClick={onOpenSearch}
             title={`Search ${channelName}`}
           >
@@ -226,6 +235,7 @@ export function ChatHeader({
             <span className="max-w-[110px] truncate">Search</span>
           </button>
           <IconButton
+            aria-label="Search"
             icon={Search}
             variant="muted"
             size="sm"
@@ -235,10 +245,11 @@ export function ChatHeader({
         </div>
         {onClose && (
           <IconButton
+            aria-label="Close Chat"
             icon={X}
             variant="muted"
             size="sm"
-            className="ml-1 rounded-md border border-rm-border bg-rm-bg-elevated hover:bg-rm-bg-hover"
+            className="ml-1"
             onClick={onClose}
             title="Close Chat"
           />

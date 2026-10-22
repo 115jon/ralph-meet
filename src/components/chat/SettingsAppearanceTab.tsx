@@ -1,3 +1,4 @@
+import { Button } from "@/components/ui/button";
 import { Dialog, DialogPortal, DialogSurface } from "@/components/ui/dialog";
 import { SettingsToggleRow } from "@/components/ui/SettingsToggleRow";
 import { isDesktop } from "@/lib/platform";
@@ -109,6 +110,7 @@ function ThemeSwatch({
       type="button"
       onClick={onClick}
       aria-label={`Switch to ${choice.label} theme`}
+      aria-pressed={active}
       className={cn(
         "relative h-20 w-[60px] shrink-0 overflow-hidden rounded-2xl transition-ui",
         active
@@ -239,7 +241,7 @@ export default function SettingsAppearanceTab({
 
       <div className="mx-auto w-full max-w-[720px] space-y-8">
         <section className="space-y-5">
-          <div className="flex items-start justify-between gap-4 rounded-2xl border border-rm-border bg-rm-bg-surface p-4 md:p-5">
+          <div className="flex items-start justify-between gap-4 rounded-xl border border-rm-border bg-rm-bg-surface p-4 md:p-5">
             <div>
               <h2 className="text-lg font-bold text-rm-text">Theme</h2>
               <p className="mt-1 text-sm text-rm-text-muted">
@@ -247,20 +249,20 @@ export default function SettingsAppearanceTab({
                 before you commit to browsing with it.
               </p>
             </div>
-            <button
+            <Button
               type="button"
+              variant="secondary"
               onClick={() => {
                 onOpenPreview?.();
               }}
-              className="inline-flex shrink-0 items-center gap-2 rounded-xl border border-rm-border bg-rm-bg-elevated px-3.5 py-2 text-sm font-bold text-rm-text transition-colors hover:bg-rm-bg-hover"
             >
-              <Eye size={16} />
+              <Eye size={16} aria-hidden="true" />
               Preview Theme
-            </button>
+            </Button>
           </div>
 
           <div>
-            <h3 className="text-ui-2xs font-semibold uppercase tracking-[0.08em] mb-3 px-1 text-rm-text-muted">
+            <h3 className="text-ui-xs font-medium mb-3 px-1 text-rm-text-muted">
               Default Themes
             </h3>
             <div className="flex flex-wrap gap-4 px-1">
@@ -345,7 +347,7 @@ export default function SettingsAppearanceTab({
 
         {isDesktopApp && (
           <section className="border-t border-rm-border pt-6">
-            <h2 className="text-ui-2xs font-semibold uppercase tracking-[0.08em] px-1 text-rm-text-muted">
+            <h2 className="text-ui-xs font-medium px-1 text-rm-text-muted">
               Advanced
             </h2>
             <div className="mt-3 overflow-hidden rounded-xl border border-rm-border bg-rm-bg-surface">
@@ -371,7 +373,7 @@ export default function SettingsAppearanceTab({
           <div className="fixed inset-0 z-60 flex items-center justify-center bg-black/70 px-4">
             <DialogSurface
               showCloseButton={false}
-              className="relative m-0 w-full max-w-[420px] rounded-xl border border-rm-border bg-rm-bg-primary p-5 shadow-2xl outline-none"
+              className="relative m-0 w-full max-w-[420px] rounded-2xl border border-rm-border bg-rm-bg-primary p-5 shadow-2xl outline-none"
               aria-labelledby="hardware-acceleration-title"
             >
               <h2
@@ -384,20 +386,19 @@ export default function SettingsAppearanceTab({
                 Changing this setting will relaunch Ralph Meet.
               </p>
               <div className="mt-5 flex justify-end gap-2">
-                <button
+                <Button
                   type="button"
+                  variant="secondary"
                   onClick={() => setPendingHardwareAcceleration(null)}
-                  className="rounded-lg px-4 py-2 text-sm font-bold text-rm-text-muted transition-colors hover:bg-rm-bg-elevated hover:text-rm-text"
                 >
                   Cancel
-                </button>
-                <button
+                </Button>
+                <Button
                   type="button"
                   onClick={confirmHardwareAccelerationChange}
-                  className="rounded-lg bg-destructive px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-destructive/90"
                 >
                   Change and Restart
-                </button>
+                </Button>
               </div>
             </DialogSurface>
           </div>

@@ -1,7 +1,10 @@
+import { Button } from "@/components/ui/button";
 import { Dialog, DialogPortal, DialogSurface } from "@/components/ui/dialog";
+import { IconButton } from "@/components/ui/IconButton";
+import { Input } from "@/components/ui/input";
 import { useChatActions } from "@/stores/chat-store";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Loader2, Tag, X } from "./Icons";
+import { Tag, X } from "./Icons";
 import { cn as _cn } from "@/lib/utils";
 
 interface Props {
@@ -57,17 +60,17 @@ export default function CreateCategoryModal({
           {/* Modal */}
           <DialogSurface
             showCloseButton={false}
-            className="relative z-10 w-full max-w-md animate-in fade-in zoom-in-95 rounded-2xl border border-rm-border bg-rm-bg-primary p-6 shadow-2xl duration-200 data-[state=closed]:animate-out data-[state=closed]:fade-out data-[state=closed]:zoom-out-95"
+            className="relative z-10 w-full max-w-md animate-in fade-in zoom-in-95 rounded-xl border border-rm-border bg-rm-bg-surface dark:bg-rm-bg-elevated p-6 shadow-[var(--rm-shadow-3)] duration-200 data-[state=closed]:animate-out data-[state=closed]:fade-out data-[state=closed]:zoom-out-95"
           >
             {/* Close */}
-            <button
+            <IconButton
+              icon={X}
               onClick={onClose}
-              className="absolute right-4 top-4 rounded-lg p-1.5 text-rm-text-muted/40 transition-colors hover:text-rm-text outline-none"
-            >
-              <X size={20} />
-            </button>
+              className="absolute right-4 top-4"
+              aria-label="Close create category modal"
+            />
 
-            <h2 className="mb-1 text-center text-xl font-bold text-rm-text flex items-center justify-center gap-2">
+            <h2 className="mb-1 text-center text-ui-lg font-semibold text-rm-text flex items-center justify-center gap-2">
               <Tag className="text-rm-text/40" />
               Create Category
             </h2>
@@ -78,36 +81,32 @@ export default function CreateCategoryModal({
             <div className="space-y-3">
               <label
                 htmlFor="category-name"
-                className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted/40"
+                className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted"
               >
                 Category Name
               </label>
-              <input
+              <Input
                 id="category-name"
                 ref={inputRef}
                 value={name}
                 onChange={(e) => setName(e.target.value.toUpperCase())}
                 onKeyDown={(e) => e.key === "Enter" && handleCreate()}
                 placeholder="NEW CATEGORY"
-                className="w-full rounded-xl border border-rm-border bg-rm-bg-surface px-4 py-3 text-rm-text outline-none transition-ui placeholder:text-rm-text-muted/20 focus:border-primary/30 focus:ring-2 focus:ring-primary/20 uppercase"
+                className="h-10 uppercase"
               />
             </div>
 
-            <div className="mt-6 flex justify-end gap-3">
-              <button
-                onClick={onClose}
-                className="rounded-xl px-4 py-2.5 text-sm font-medium text-rm-text-muted/60 transition-colors hover:text-rm-text outline-none"
-              >
+            <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <Button variant="secondary" onClick={onClose}>
                 Cancel
-              </button>
-              <button
+              </Button>
+              <Button
                 onClick={handleCreate}
                 disabled={!name.trim() || creating}
-                className="flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/20 transition-ui hover:brightness-110 disabled:opacity-40"
+                loading={creating}
               >
-                {creating && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-                {creating ? "Creating…" : "Create Category"}
-              </button>
+                Create Category
+              </Button>
             </div>
           </DialogSurface>
         </div>

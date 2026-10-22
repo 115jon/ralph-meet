@@ -1,7 +1,10 @@
 import { useId, useState, useRef, Suspense, lazy } from "react";
-import { Upload, X, Smile, Loader2 } from "lucide-react";
+import { Upload, X, Smile } from "lucide-react";
 import { cn as _cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 import { Dialog, DialogPortal, DialogSurface } from "@/components/ui/dialog";
+import { IconButton } from "@/components/ui/IconButton";
+import { Input } from "@/components/ui/input";
 
 import EmojiToken from "./EmojiToken";
 
@@ -82,22 +85,24 @@ export function UploadSoundModal({
         >
           <DialogSurface
             showCloseButton={false}
-            className="w-[480px] max-w-[90vw] rounded-2xl border border-rm-border bg-rm-bg-surface shadow-2xl p-6 relative animate-in fade-in zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out data-[state=closed]:zoom-out-95"
+            className="w-[480px] max-w-[90vw] rounded-xl border border-rm-border bg-rm-bg-surface dark:bg-rm-bg-elevated shadow-[var(--rm-shadow-3)] p-6 relative animate-in fade-in zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out data-[state=closed]:zoom-out-95"
           >
-            <button
+            <IconButton
+              icon={X}
               type="button"
               onClick={onClose}
-              className="absolute top-5 right-5 text-rm-text-muted hover:text-rm-text transition-colors"
+              className="absolute top-4 right-4"
               aria-label={
                 isEditMode
                   ? "Close edit sound modal"
                   : "Close upload sound modal"
               }
-            >
-              <X size={20} />
-            </button>
+            />
 
-            <h2 id={titleId} className="text-xl font-bold text-rm-text mb-6">
+            <h2
+              id={titleId}
+              className="text-ui-lg font-semibold text-rm-text mb-6"
+            >
               {isEditMode ? "Edit Sound" : "Upload a Sound"}
             </h2>
 
@@ -145,13 +150,13 @@ export function UploadSoundModal({
                   >
                     Sound Name <span className="text-destructive">*</span>
                   </label>
-                  <input
+                  <Input
                     id={soundNameInputId}
                     type="text"
                     value={soundName}
                     onChange={(e) => setSoundName(e.target.value)}
                     placeholder="Sound Name"
-                    className="w-full h-11 bg-rm-bg-hover border border-rm-border rounded-xl px-4 text-sm text-rm-text outline-none focus:border-primary/50 transition-colors"
+                    className="h-11"
                   />
                 </div>
 
@@ -227,23 +232,18 @@ export function UploadSoundModal({
             </div>
 
             {/* Footer actions */}
-            <div className="flex gap-3 mt-8">
-              <button
-                type="button"
-                onClick={onClose}
-                className="flex-1 py-2.5 rounded-xl border border-rm-border bg-rm-bg-hover hover:bg-rm-bg-active text-rm-text font-bold text-sm transition-colors"
-              >
+            <div className="mt-8 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <Button type="button" variant="secondary" onClick={onClose}>
                 Never mind
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
                 onClick={handleSubmit}
                 disabled={(!file && !isEditMode) || !soundName || isUploading}
-                className="flex-1 py-2.5 rounded-xl bg-primary hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed text-primary-foreground font-bold text-sm transition-ui flex items-center justify-center gap-2"
+                loading={isUploading}
               >
-                {isUploading && <Loader2 size={16} className="animate-spin" />}
                 {isEditMode ? "Save" : "Upload"}
-              </button>
+              </Button>
             </div>
           </DialogSurface>
         </div>

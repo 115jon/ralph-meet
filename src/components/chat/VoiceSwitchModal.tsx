@@ -1,6 +1,8 @@
 "use client";
 
+import { Button } from "@/components/ui/button";
 import { Dialog, DialogPortal, DialogSurface } from "@/components/ui/dialog";
+import { IconButton } from "@/components/ui/IconButton";
 import { VOICE_SWITCH_CONFIRM_KEY } from "@/components/chat/voice-confirmation-preferences";
 import { cn } from "@/lib/utils";
 import { X } from "lucide-react";
@@ -67,7 +69,7 @@ export function VoiceSwitchModal({
           <DialogSurface
             showCloseButton={false}
             className={cn(
-              "relative m-0 w-[calc(100%-2rem)] max-w-[440px] rounded-lg border-0 bg-rm-bg-surface p-0 shadow-2xl outline-none animate-in fade-in zoom-in-95 duration-200",
+              "relative m-0 w-[calc(100%-2rem)] max-w-[440px] rounded-xl border border-rm-border bg-rm-bg-surface dark:bg-rm-bg-elevated p-0 shadow-[var(--rm-shadow-3)] outline-none animate-in fade-in zoom-in-95 duration-200",
               "data-[state=closed]:animate-out data-[state=closed]:zoom-out-95",
             )}
             aria-labelledby="voice-switch-title"
@@ -76,17 +78,17 @@ export function VoiceSwitchModal({
             <div className="flex items-center justify-between px-4 pt-4">
               <h2
                 id="voice-switch-title"
-                className="text-base font-bold text-rm-text"
+                className="text-ui-lg font-semibold text-rm-text"
               >
                 You sure?
               </h2>
-              <button
+              <IconButton
+                icon={X}
+                size="xs"
+                iconSize={16}
                 onClick={onCancel}
-                className="flex h-6 w-6 items-center justify-center rounded-sm text-rm-text-muted hover:text-rm-text transition-colors"
                 aria-label="Close"
-              >
-                <X className="h-4 w-4" />
-              </button>
+              />
             </div>
 
             {/* ── Body ───────────────────────────────────────────── */}
@@ -134,18 +136,10 @@ export function VoiceSwitchModal({
 
               {/* Buttons */}
               <div className="flex items-center gap-2">
-                <button
-                  onClick={onCancel}
-                  className="px-4 py-1.5 text-sm font-medium text-rm-text-muted hover:text-rm-text hover:underline transition-colors rounded"
-                >
+                <Button variant="secondary" onClick={onCancel}>
                   Cancel
-                </button>
-                <button
-                  onClick={handleConfirm}
-                  className="px-4 py-1.5 text-sm font-medium rounded bg-primary text-primary-foreground hover:bg-primary/85 transition-colors"
-                >
-                  Confirm
-                </button>
+                </Button>
+                <Button onClick={handleConfirm}>Confirm</Button>
               </div>
             </div>
           </DialogSurface>

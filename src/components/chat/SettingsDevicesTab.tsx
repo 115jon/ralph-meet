@@ -69,7 +69,7 @@ function DeviceRow({
   }
 
   return (
-    <div className="group flex flex-col sm:flex-row sm:items-center justify-between p-4 px-5 hover:bg-rm-bg-elevated/40 transition-ui gap-4">
+    <div className="group flex flex-col sm:flex-row sm:items-center justify-between p-4 px-5 gap-4">
       <div className="flex items-center gap-4 min-w-0">
         <div className="w-[42px] h-[42px] rounded-full border border-rm-border flex items-center justify-center bg-rm-bg-elevated text-rm-text shrink-0">
           <Icon size={22} />
@@ -86,6 +86,7 @@ function DeviceRow({
       </div>
       {!session.isCurrent && (
         <IconButton
+          aria-label="Revoke session"
           icon={X}
           variant="destructive"
           size="sm"
@@ -154,7 +155,7 @@ export default function SettingsDevicesTab() {
       </p>
 
       {sessionError && (
-        <div className="rounded-lg bg-destructive/10 border border-destructive/30 px-4 py-3 text-sm text-destructive font-medium mb-6">
+        <div className="rounded-xl bg-rm-danger-tint px-4 py-3 text-sm text-rm-danger-ink font-medium mb-6">
           {sessionError}
         </div>
       )}
@@ -168,7 +169,7 @@ export default function SettingsDevicesTab() {
         <div className="space-y-8">
           {currentSessions.length > 0 && (
             <section>
-              <h3 className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted mb-4">
+              <h3 className="text-ui-xs font-medium text-rm-text-muted mb-4">
                 Current Device
               </h3>
               <div className="bg-rm-bg-surface border border-rm-border rounded-xl flex flex-col divide-y divide-rm-border">
@@ -186,7 +187,7 @@ export default function SettingsDevicesTab() {
 
           {otherSessions.length > 0 && (
             <section>
-              <h3 className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted mb-4">
+              <h3 className="text-ui-xs font-medium text-rm-text-muted mb-4">
                 Other Devices
               </h3>
               <div className="bg-rm-bg-surface border border-rm-border rounded-xl flex flex-col divide-y divide-rm-border">

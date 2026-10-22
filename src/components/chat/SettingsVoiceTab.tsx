@@ -380,13 +380,15 @@ export default function SettingsVoiceTab() {
                 key={value}
                 type="button"
                 onClick={() => setInputProfile(value)}
+                aria-pressed={selectedProfile === value}
                 className="flex w-full items-start gap-3 py-3 text-left"
               >
                 <span
-                  className={`mt-0.5 flex h-5 w-5 items-center justify-center rounded-full border ${
+                  aria-hidden="true"
+                  className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border ${
                     selectedProfile === value
-                      ? "border-rm-accent bg-rm-accent text-white"
-                      : "border-rm-text-muted/60"
+                      ? "border-primary bg-primary text-primary-foreground"
+                      : "border-rm-field-edge"
                   }`}
                 >
                   {selectedProfile === value && (
@@ -435,7 +437,7 @@ export default function SettingsVoiceTab() {
                       href="https://github.com/xiph/rnnoise"
                       target="_blank"
                       rel="noreferrer"
-                      className="text-rm-accent hover:underline"
+                      className="text-rm-accent-ink underline-offset-[3px] pointer-fine:hover:underline"
                     >
                       RNNoise <ExternalLink size={11} className="inline" />
                     </a>
@@ -507,7 +509,7 @@ export default function SettingsVoiceTab() {
                 <SettingsSwitch
                   checked={vSettings.noiseSuppression}
                   onChange={() => handleVoiceToggle("noiseSuppression")}
-                  ariaLabel="Toggle browser noise suppression"
+                  ariaLabel="Browser noise suppression"
                 />
               </VoiceSettingRow>
               <VoiceSettingRow
@@ -526,7 +528,7 @@ export default function SettingsVoiceTab() {
                 <SettingsSwitch
                   checked={vSettings.echoCancellation}
                   onChange={() => handleVoiceToggle("echoCancellation")}
-                  ariaLabel="Toggle echo cancellation"
+                  ariaLabel="Echo cancellation"
                 />
               </VoiceSettingRow>
               <VoiceSettingRow
@@ -546,7 +548,7 @@ export default function SettingsVoiceTab() {
                 <SettingsSwitch
                   checked={vSettings.streamHighFidelity}
                   onChange={() => handleVoiceToggle("streamHighFidelity")}
-                  ariaLabel="Toggle high fidelity audio"
+                  ariaLabel="High fidelity audio"
                 />
               </VoiceSettingRow>
               <VoiceSettingRow
@@ -565,7 +567,7 @@ export default function SettingsVoiceTab() {
                 <SettingsSwitch
                   checked={vSettings.spatialAudioEnabled}
                   onChange={() => handleVoiceToggle("spatialAudioEnabled")}
-                  ariaLabel="Toggle spatial audio"
+                  ariaLabel="Spatial audio"
                 />
               </VoiceSettingRow>
             </>

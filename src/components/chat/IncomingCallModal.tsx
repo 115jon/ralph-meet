@@ -6,6 +6,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogClose,
@@ -118,7 +119,7 @@ export function IncomingCallModal() {
         >
           <div
             data-state={dialogOpen ? "open" : "closed"}
-            className="pointer-events-auto flex flex-col items-center w-[280px] rounded-xl bg-rm-bg-elevated shadow-2xl p-6 animate-in fade-in zoom-in-95 duration-200 data-[state=closed]:animate-out data-[state=closed]:fade-out data-[state=closed]:zoom-out-95"
+            className="pointer-events-auto flex flex-col items-center w-[280px] rounded-xl border border-rm-border bg-rm-bg-elevated shadow-[var(--rm-shadow-3)] p-6 animate-in fade-in zoom-in-95 duration-200 data-[state=closed]:animate-out data-[state=closed]:fade-out data-[state=closed]:zoom-out-95"
           >
             {/* Avatar with theme-aware pulsing outline */}
             <div className="relative mb-4">
@@ -138,7 +139,7 @@ export function IncomingCallModal() {
             </div>
 
             {/* Caller info */}
-            <DialogTitle className="text-sm font-bold text-rm-text">
+            <DialogTitle className="text-ui-md font-semibold text-rm-text">
               <InlineEmojiText text={activeCaller.displayName} />
             </DialogTitle>
             <DialogDescription className="text-xs text-rm-text-muted mt-0.5 mb-5">
@@ -151,9 +152,14 @@ export function IncomingCallModal() {
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <DialogClose asChild>
-                      <button className="flex h-10 w-16 items-center justify-center rounded-md bg-destructive hover:bg-destructive/90 text-white transition-colors">
-                        <X className="h-5 w-5" />
-                      </button>
+                      <Button
+                        variant="destructive"
+                        size="lg"
+                        aria-label="Dismiss"
+                        className="w-16"
+                      >
+                        <X className="size-5" />
+                      </Button>
                     </DialogClose>
                   </TooltipTrigger>
                   <TooltipContent side="bottom">Dismiss</TooltipContent>
@@ -163,12 +169,14 @@ export function IncomingCallModal() {
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <button
+                    <Button
+                      size="lg"
                       onClick={handleAccept}
-                      className="flex h-10 w-16 items-center justify-center rounded-md bg-emerald-600 hover:bg-emerald-500 text-white transition-colors"
+                      aria-label="Join Call"
+                      className="w-16 bg-emerald-600 text-white"
                     >
-                      <Phone className="h-5 w-5" />
-                    </button>
+                      <Phone className="size-5" />
+                    </Button>
                   </TooltipTrigger>
                   <TooltipContent side="bottom">Join Call</TooltipContent>
                 </Tooltip>

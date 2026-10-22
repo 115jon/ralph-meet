@@ -1,11 +1,19 @@
 import { cn } from "@/lib/utils";
+import {
+  MENU_ICON,
+  MENU_ITEM,
+  MENU_ITEM_DANGER,
+  MENU_ITEM_DANGER_ON,
+  MENU_ITEM_DEFAULT,
+  MENU_ITEM_DEFAULT_ON,
+  MENU_PANEL,
+  MENU_SEPARATOR,
+} from "@/components/ui/menu";
 import InlineEmojiText from "@/components/chat/InlineEmojiText";
 import { Check, ChevronRight } from "lucide-react";
 import React, { memo, useCallback, useEffect, useRef } from "react";
 
-export const Divider = memo(() => (
-  <div className="mx-1 my-1 h-px shrink-0 bg-rm-border" />
-));
+export const Divider = memo(() => <div className={MENU_SEPARATOR} />);
 Divider.displayName = "Divider";
 
 export interface MenuItemProps {
@@ -96,23 +104,19 @@ export const MenuItem = memo(
         }}
         disabled={disabled}
         className={cn(
-          "group flex w-full shrink-0 items-center justify-between rounded-md px-2 py-1.5 text-left transition-colors font-medium",
-          danger
-            ? "text-destructive hover:bg-destructive hover:text-destructive-foreground"
-            : "text-rm-text-secondary hover:bg-primary hover:text-primary-foreground",
-          active &&
-            (danger
-              ? "bg-destructive text-destructive-foreground"
-              : "bg-primary text-primary-foreground"),
-          disabled &&
-            "pointer-events-none cursor-not-allowed grayscale opacity-30",
+          MENU_ITEM,
+          "shrink-0 justify-between",
+          danger ? MENU_ITEM_DANGER : MENU_ITEM_DEFAULT,
+          active && (danger ? MENU_ITEM_DANGER_ON : MENU_ITEM_DEFAULT_ON),
+          disabled && "pointer-events-none",
         )}
       >
-        <div className="flex items-center gap-2 overflow-hidden">
+        <div className="flex items-center gap-2.5 overflow-hidden">
           {Icon && (
             <Icon
+              aria-hidden
               size={14}
-              className="shrink-0 opacity-60 group-hover:opacity-100"
+              className={danger ? "shrink-0" : MENU_ICON}
             />
           )}
           <div className="flex flex-col overflow-hidden">
@@ -125,7 +129,7 @@ export const MenuItem = memo(
               <InlineEmojiText text={label} />
             </span>
             {description && (
-              <span className="truncate text-ui-2xs leading-tight text-rm-text-muted group-hover:primary-foreground/60">
+              <span className="truncate text-ui-2xs text-rm-text-muted">
                 <InlineEmojiText text={description} />
               </span>
             )}
@@ -136,18 +140,24 @@ export const MenuItem = memo(
           {checked !== undefined && (
             <div
               className={cn(
-                "flex h-4 w-4 items-center justify-center rounded border transition-colors",
+                "flex size-4 items-center justify-center rounded-xs border",
                 checked
                   ? checkVariant === "danger"
-                    ? "border-destructive bg-destructive"
-                    : "border-primary bg-primary"
-                  : "border-rm-border group-hover:border-rm-text-muted/40",
+                    ? "border-rm-danger bg-rm-danger text-rm-on-danger"
+                    : "border-primary bg-primary text-primary-foreground"
+                  : "border-rm-field-edge",
               )}
             >
-              {checked && <CheckIcon size={12} className="text-white" />}
+              {checked && <CheckIcon aria-hidden size={12} />}
             </div>
           )}
-          {hasSubmenu && <ChevronRight size={14} className="opacity-40" />}
+          {hasSubmenu && (
+            <ChevronRight
+              aria-hidden
+              size={14}
+              className="text-rm-text-muted"
+            />
+          )}
         </div>
       </button>
     );
@@ -248,7 +258,10 @@ export const SubMenu = memo(
             )
             ?.focus();
         }}
-        className="absolute left-[calc(100%+4px)] top-0 z-80 flex max-h-[70vh] w-[200px] flex-col overflow-y-auto rounded-lg border border-rm-border bg-rm-bg-elevated p-1 shadow-lg overscroll-contain animate-in fade-in slide-in-from-left-1 no-scrollbar"
+        className={cn(
+          "absolute left-[calc(100%+4px)] top-0 z-80 flex max-h-[70vh] w-[200px] flex-col overflow-y-auto animate-in fade-in no-scrollbar",
+          MENU_PANEL,
+        )}
       >
         <div className="absolute top-0 bottom-0 -left-4 w-4" />
         {children}

@@ -1,4 +1,5 @@
 import type { GifPickerItem, GifPickerMediaType } from "@/lib/gif-picker";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { GIF_FAVORITE_ADDED_EVENT } from "@/stores/useGifFavoritesStore";
 import { useEffect, useRef, useState } from "react";
@@ -69,10 +70,9 @@ export function InputControls({
   const mediaButtonClassName = (isActive: boolean, hiddenClassName = "") =>
     cn(
       hiddenClassName,
-      "flex h-8 w-8 items-center justify-center rounded-md transition-ui hover:bg-rm-bg-hover enabled:active:scale-[0.96]",
       isActive
-        ? "bg-rm-bg-hover text-primary shadow-sm dark:shadow-none"
-        : "text-rm-text-muted hover:text-primary",
+        ? "bg-rm-tint-2 text-rm-text"
+        : "text-rm-text-muted pointer-fine:hover:text-rm-text",
     );
 
   const gifPickerMarkerRef =
@@ -86,27 +86,31 @@ export function InputControls({
             Added to Favorites
           </div>
         )}
-        <button
+        <Button
           ref={gifBtnRef}
           type="button"
+          variant="ghost"
+          size="icon"
           aria-label="Open GIF picker"
+          aria-expanded={activeMediaButton === "gifs"}
           title={showFavoriteNotice ? "Added to Favorites" : "GIFs"}
           className={cn(
-            "flex h-8 w-8 items-center justify-center rounded-md transition-ui hover:bg-rm-bg-hover enabled:active:scale-[0.96] hover:text-primary",
-            activeMediaButton === "gifs" &&
-              "bg-rm-bg-hover text-primary shadow-sm dark:shadow-none",
+            mediaButtonClassName(activeMediaButton === "gifs"),
             showFavoriteNotice &&
-              "animate-pulse bg-yellow-400/15 text-yellow-700 dark:text-yellow-300 ring-2 ring-yellow-500/60 dark:ring-yellow-300/60",
+              "animate-pulse bg-rm-tint-2 text-rm-warning-ink ring-2 ring-yellow-500/60 dark:ring-yellow-300/60",
           )}
           onClick={() => openGifPicker("gifs")}
         >
-          <Gif className="h-5 w-5" />
-        </button>
+          <Gif className="size-5" />
+        </Button>
       </div>
-      <button
+      <Button
         ref={stickerBtnRef}
         type="button"
+        variant="ghost"
+        size="icon"
         aria-label="Open sticker picker"
+        aria-expanded={activeMediaButton === "stickers"}
         title="Stickers"
         onClick={() => openGifPicker("stickers")}
         className={mediaButtonClassName(
@@ -114,13 +118,16 @@ export function InputControls({
           "hidden md:flex",
         )}
       >
-        <Sticker className="h-5 w-5" />
-      </button>
+        <Sticker className="size-5" />
+      </Button>
       <div className="relative">
-        <button
+        <Button
           ref={emojiBtnRef}
           type="button"
+          variant="ghost"
+          size="icon"
           aria-label="Open emoji picker"
+          aria-expanded={showEmoji}
           onClick={() =>
             setLocalState(
               (prev: { showEmoji: boolean; showGifPicker: boolean }) => ({
@@ -129,10 +136,10 @@ export function InputControls({
               }),
             )
           }
-          className="flex h-8 w-8 items-center justify-center rounded-md transition-ui hover:bg-rm-bg-hover enabled:active:scale-[0.96] hover:text-primary"
+          className={mediaButtonClassName(showEmoji)}
         >
-          <Smile className="h-5 w-5" />
-        </button>
+          <Smile className="size-5" />
+        </Button>
         <EmojiPicker
           open={showEmoji}
           onSelect={handleEmojiSelect}
@@ -158,14 +165,14 @@ export function InputControls({
             : "w-0 opacity-0 -ml-2 pointer-events-none",
         )}
       >
-        <button
+        <Button
           type="button"
+          size="icon"
           aria-label="Send message"
           onClick={onSend}
-          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md transition-ui bg-primary text-primary-foreground hover:bg-primary/90 enabled:active:scale-[0.96]"
         >
-          <Send className="h-4 w-4 ml-0.5" />
-        </button>
+          <Send className="ml-0.5 size-4" />
+        </Button>
       </div>
     </div>
   );

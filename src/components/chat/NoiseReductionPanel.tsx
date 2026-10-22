@@ -61,6 +61,7 @@ export function NoiseReductionPanel({
         </div>
 
         <SettingsSwitch
+          ariaLabel="Suppress background noise"
           checked={supported && settings.noiseReductionEnabled}
           onChange={() => {
             if (!supported) return;

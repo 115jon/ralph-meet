@@ -1,3 +1,4 @@
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogClose,
@@ -5,6 +6,8 @@ import {
   DialogDescription,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { IconButton } from "@/components/ui/IconButton";
+import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -16,7 +19,7 @@ import { apiPost } from "@/lib/api-client";
 import { getWebOrigin } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 import { useEffect, useState } from "react";
-import { Check, Copy, Loader2, X } from "./Icons";
+import { Check, Copy, X } from "./Icons";
 import InlineEmojiText from "./InlineEmojiText";
 interface InviteModalProps {
   open: boolean;
@@ -77,29 +80,25 @@ export default function InviteModal({
     setTimeout(() => setState((prev) => ({ ...prev, copied: false })), 2000);
   };
 
-  const selectStyle =
-    "w-full rounded-xl border border-rm-border bg-rm-bg-surface px-3 py-2.5 text-sm text-rm-text outline-none transition-ui focus:border-primary/30 focus:ring-2 focus:ring-primary/20";
+  const selectStyle = "w-full";
 
   return (
     <Dialog open={open} onOpenChange={(nextOpen) => !nextOpen && onClose()}>
-      <DialogContent
-        showCloseButton={false}
-        className="relative w-full max-w-[440px] animate-in fade-in zoom-in-95 rounded-2xl border border-rm-border bg-rm-bg-primary p-6 shadow-2xl duration-200"
-      >
+      <DialogContent showCloseButton={false} className="w-full max-w-[440px]">
         <div>
           <DialogClose asChild>
-            <button
+            <IconButton
+              icon={X}
+              iconSize={16}
               type="button"
-              className="absolute right-4 top-4 rounded-lg p-1 text-rm-text-muted/40 transition-colors hover:text-rm-text outline-none"
+              className="absolute right-4 top-4"
               aria-label="Close invite modal"
-            >
-              <X className="h-4 w-4" />
-            </button>
+            />
           </DialogClose>
 
-          <DialogTitle className="mb-6 text-base font-semibold text-rm-text">
+          <DialogTitle className="mb-6 text-ui-lg font-semibold text-rm-text">
             Invite people to{" "}
-            <InlineEmojiText text={serverName} className="text-primary" />
+            <InlineEmojiText text={serverName} className="text-rm-accent-ink" />
           </DialogTitle>
           <DialogDescription className="sr-only">
             Generate an invite link for this server.
@@ -110,7 +109,7 @@ export default function InviteModal({
               <div className="space-y-2">
                 <label
                   htmlFor="expire-after"
-                  className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted/40"
+                  className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted"
                 >
                   Expire after
                 </label>
@@ -142,7 +141,7 @@ export default function InviteModal({
               <div className="space-y-2">
                 <label
                   htmlFor="max-uses"
-                  className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted/40"
+                  className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted"
                 >
                   Max uses
                 </label>
@@ -172,35 +171,30 @@ export default function InviteModal({
                   </SelectContent>
                 </Select>
               </div>
-              <button
-                className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/20 transition-ui hover:brightness-110 disabled:opacity-40"
+              <Button
+                className="w-full"
+                size="lg"
                 onClick={createInvite}
                 disabled={state.loading}
+                loading={state.loading}
               >
-                {state.loading && (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                )}
-                {state.loading ? "Creating..." : "Generate Invite Link"}
-              </button>
+                Generate Invite Link
+              </Button>
             </div>
           ) : (
             <div className="space-y-3">
               <div className="flex gap-2">
-                <input
+                <Input
                   value={`${getWebOrigin()}/invite/${state.inviteCode}`}
                   readOnly
                   aria-label="Invite link"
                   onClick={(e) => (e.target as HTMLInputElement).select()}
-                  className="flex-1 rounded-xl border border-rm-border bg-rm-bg-surface px-3 py-2.5 text-sm text-rm-text outline-none"
+                  className="h-9 flex-1"
                 />
-                <button
+                <Button
+                  variant="secondary"
                   onClick={copyLink}
-                  className={cn(
-                    "flex items-center gap-1.5 rounded-xl border px-3 py-2.5 text-sm font-medium transition-ui",
-                    state.copied
-                      ? "border-primary/30 bg-primary/20 text-primary"
-                      : "border-rm-border bg-rm-bg-elevated text-rm-text hover:bg-rm-bg-hover",
-                  )}
+                  className={cn("h-9", state.copied && "text-rm-accent-ink")}
                 >
                   {state.copied ? (
                     <>
@@ -211,19 +205,21 @@ export default function InviteModal({
                       <Copy className="h-3.5 w-3.5" /> Copy
                     </>
                   )}
-                </button>
+                </Button>
               </div>
               <p className="text-xs text-rm-text-muted">
                 Share this link with others to let them join your server.
               </p>
-              <button
+              <Button
+                variant="ghost"
+                size="sm"
                 onClick={() =>
                   setState((prev) => ({ ...prev, inviteCode: "" }))
                 }
-                className="text-xs font-medium text-rm-text-muted/60 transition-colors hover:text-rm-text outline-none"
+                className="-ml-2.5 text-rm-text-secondary"
               >
                 Generate New Link
-              </button>
+              </Button>
             </div>
           )}
         </div>

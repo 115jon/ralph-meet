@@ -7,6 +7,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { SettingsSwitch } from "@/components/chat/SettingsSwitch";
+import { IconButton } from "@/components/ui/IconButton";
 import { getAuthAssetUrl } from "@/lib/platform";
 import { previewSoundboardTriggerSelection } from "@/lib/voice/auto-soundboard";
 import {
@@ -93,9 +94,9 @@ function TriggerRow({
     <div className="flex items-center gap-3 border-b border-rm-border px-4 py-3 last:border-b-0">
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
-          <h4 className="text-ui-sm font-bold text-rm-text">{label}</h4>
+          <h4 className="text-ui-sm font-semibold text-rm-text">{label}</h4>
           {inherited && (
-            <span className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted">
+            <span className="text-ui-xs font-medium text-rm-text-muted">
               Inherited
             </span>
           )}
@@ -116,33 +117,33 @@ function TriggerRow({
       </div>
 
       <div className="flex shrink-0 items-center gap-1">
-        <button
+        <IconButton
           type="button"
           aria-label={`Preview ${actionLabel} sound`}
+          icon={Play}
+          variant="muted"
+          iconSize={15}
           onClick={onPreview}
           disabled={!sound}
-          className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-rm-text-muted transition-colors hover:bg-rm-bg-hover hover:text-rm-text disabled:cursor-not-allowed disabled:opacity-35"
-        >
-          <Play size={15} />
-        </button>
-        <button
+        />
+        <IconButton
           ref={changeButtonRef}
           type="button"
           aria-label={`Change ${actionLabel} sound`}
+          icon={Pencil}
+          variant="muted"
+          iconSize={15}
           onClick={onChange}
-          className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-rm-text-muted transition-colors hover:bg-rm-bg-hover hover:text-rm-text"
-        >
-          <Pencil size={15} />
-        </button>
-        <button
+        />
+        <IconButton
           type="button"
           aria-label={`Clear ${actionLabel} sound`}
+          icon={Trash2}
+          variant="destructive"
+          iconSize={15}
           onClick={onClear}
           disabled={!sound}
-          className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-rm-text-muted transition-colors hover:bg-destructive/10 hover:text-destructive disabled:cursor-not-allowed disabled:opacity-35"
-        >
-          <Trash2 size={15} />
-        </button>
+        />
         <SettingsSwitch
           checked={config.enabled}
           onChange={onToggle}
@@ -253,8 +254,8 @@ export function SettingsSoundboardTriggers({ userId, servers }: Props) {
   return (
     <section className="space-y-5">
       <div className="flex items-center gap-2">
-        <Volume2 size={16} className="text-rm-accent" />
-        <h3 className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted">
+        <Volume2 size={16} className="text-rm-accent-ink" />
+        <h3 className="text-ui-xs font-medium text-rm-text-muted">
           Soundboard Triggers
         </h3>
       </div>
@@ -269,7 +270,7 @@ export function SettingsSoundboardTriggers({ userId, servers }: Props) {
               Local playback volume for automatic sounds
             </div>
           </div>
-          <span className="text-sm font-bold tabular-nums text-rm-accent">
+          <span className="text-sm font-semibold tabular-nums text-rm-accent-ink">
             {volumeDraft}%
           </span>
         </div>
@@ -290,7 +291,7 @@ export function SettingsSoundboardTriggers({ userId, servers }: Props) {
       </div>
 
       <div className="space-y-3">
-        <label className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted">
+        <label className="text-ui-xs font-medium text-rm-text-muted">
           Server scope
         </label>
         <Select

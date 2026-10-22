@@ -1,3 +1,4 @@
+import { Button } from "@/components/ui/button";
 import { DitherField } from "@/components/ui/DitherField";
 import { getAuthAssetUrl } from "@/lib/platform";
 import { useChatStore } from "@/stores/chat-store";
@@ -68,18 +69,12 @@ export const ChatWelcomeContent = memo(function ChatWelcomeContent({
             . Be kind, be bold, and let the conversation flow.
           </p>
           <div className="mt-5 flex gap-2">
-            <button
-              type="button"
-              className="h-8 rounded-md border border-rm-border bg-rm-bg-elevated px-3 text-ui-sm font-medium text-rm-text transition-ui hover:bg-rm-bg-hover enabled:active:scale-[0.96]"
-            >
+            <Button type="button" variant="secondary">
               View Profile
-            </button>
-            <button
-              type="button"
-              className="h-8 rounded-md border border-destructive/30 bg-destructive/10 px-3 text-ui-sm font-medium text-destructive transition-ui hover:bg-destructive/15 enabled:active:scale-[0.96]"
-            >
+            </Button>
+            <Button type="button" variant="destructive">
               Block User
-            </button>
+            </Button>
           </div>
         </>
       ) : (

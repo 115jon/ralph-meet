@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { Button } from "@/components/ui/button";
 import { SettingsToggleRow } from "@/components/ui/SettingsToggleRow";
 import {
   getOSName,
@@ -116,13 +117,13 @@ export default function SettingsOSTab() {
           Check for and install updates for the Ralph Meet desktop client.
         </p>
 
-        <div className="rounded-xl bg-rm-bg-elevated/30 border border-rm-border p-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="rounded-xl border border-rm-border p-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="flex items-start gap-3.5">
-            <div className="w-10 h-10 rounded-lg border border-rm-accent/20 bg-rm-accent-dim flex items-center justify-center text-rm-accent shrink-0">
+            <div className="w-10 h-10 rounded-lg bg-rm-accent-tint flex items-center justify-center text-rm-accent-ink shrink-0">
               {status === "error" ? (
-                <AlertTriangle size={18} className="text-destructive" />
+                <AlertTriangle size={18} className="text-rm-danger-ink" />
               ) : status === "up-to-date" ? (
-                <CheckCircle2 size={18} className="text-emerald-400" />
+                <CheckCircle2 size={18} className="text-rm-success-ink" />
               ) : (
                 <RefreshCw
                   size={18}
@@ -139,7 +140,7 @@ export default function SettingsOSTab() {
             <div className="flex flex-col">
               <span className="text-sm font-semibold text-rm-text">
                 Current Version:{" "}
-                <span className="text-rm-accent font-mono">
+                <span className="text-rm-accent-ink font-mono">
                   v{appVersion || "1.0.0"}
                 </span>
               </span>
@@ -163,32 +164,27 @@ export default function SettingsOSTab() {
 
           <div className="flex items-center gap-2 self-end md:self-center shrink-0">
             {status === "available" ? (
-              <button
-                onClick={applyUpdate}
-                className="rounded-lg bg-rm-accent px-4 py-2 text-ui-sm font-semibold text-white transition-ui hover:bg-rm-accent-hover active:scale-[0.96]"
-              >
-                Install Update
-              </button>
+              <Button onClick={applyUpdate}>Install Update</Button>
             ) : (
-              <button
+              <Button
+                variant="secondary"
                 onClick={checkForUpdate}
                 disabled={
                   status === "checking" ||
                   status === "downloading" ||
                   status === "installing"
                 }
-                className="rounded-lg bg-rm-bg-hover px-4 py-2 text-ui-sm font-semibold text-rm-text-secondary transition-colors hover:bg-rm-bg-active disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {status === "checking" ? "Checking..." : "Check for Updates"}
-              </button>
+              </Button>
             )}
           </div>
         </div>
 
         {/* Display release notes if available */}
         {status === "available" && updateMeta?.notes && (
-          <div className="mt-3 rounded-lg bg-rm-bg-elevated/20 border border-rm-border/60 p-3.5 animate-in fade-in duration-200">
-            <h4 className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted mb-1.5">
+          <div className="mt-3 rounded-xl border border-rm-border p-3.5 animate-in fade-in duration-200">
+            <h4 className="text-ui-xs font-medium text-rm-text-muted mb-1.5">
               Release Notes
             </h4>
             <p className="text-xs text-rm-text-secondary leading-relaxed whitespace-pre-line max-h-32 overflow-y-auto custom-scrollbar">

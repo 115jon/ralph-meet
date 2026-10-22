@@ -1,4 +1,6 @@
 import InlineEmojiText from "@/components/chat/InlineEmojiText";
+import { SettingsSwitch } from "@/components/chat/SettingsSwitch";
+import { Button } from "@/components/ui/button";
 import {
   Select,
   SelectContent,
@@ -30,7 +32,7 @@ import type {
 import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
 import { useUser } from "@kova/react";
 import { Ban, Check, Sparkles, Trash2, Upload } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { useShallow } from "zustand/shallow";
 import { VideoPlayer } from "../voice/VideoPlayer";
 
@@ -76,6 +78,8 @@ export default function SettingsCameraTab() {
   const [isLoadingBackgrounds, setIsLoadingBackgrounds] = useState(false);
   const [isUploadingBackground, setIsUploadingBackground] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const alwaysPreviewTitleId = useId();
+  const alwaysPreviewDescriptionId = useId();
   const latestCameraBackgroundRef = useRef(vSettings.cameraBackground);
   const latestCustomCameraBackgroundsRef = useRef(
     vSettings.customCameraBackgrounds ?? [],
@@ -353,7 +357,7 @@ export default function SettingsCameraTab() {
       <div className="space-y-10">
         {/* Live Video Preview Box */}
         <section className="space-y-4">
-          <h3 className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted">
+          <h3 className="text-ui-xs font-medium text-rm-text-muted">
             Camera Preview
           </h3>
           <div className="relative aspect-video w-full max-w-[480px] overflow-hidden rounded-xl bg-black border border-rm-border flex items-center justify-center">
@@ -371,7 +375,7 @@ export default function SettingsCameraTab() {
 
         {/* Camera Selector */}
         <section className="space-y-4 max-w-[480px]">
-          <Label className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted ml-1">
+          <Label className="text-ui-xs font-medium text-rm-text-muted ml-1">
             Camera Device
           </Label>
           <Select
@@ -413,7 +417,7 @@ export default function SettingsCameraTab() {
 
         {/* Capture Quality */}
         <section className="space-y-4">
-          <Label className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted ml-1">
+          <Label className="text-ui-xs font-medium text-rm-text-muted ml-1">
             Capture Quality
           </Label>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 max-w-[480px]">
@@ -422,6 +426,7 @@ export default function SettingsCameraTab() {
               return (
                 <button
                   key={profile.id}
+                  aria-pressed={isSelected}
                   onClick={() =>
                     updateUserSettings(
                       (current: any) => ({
@@ -434,16 +439,16 @@ export default function SettingsCameraTab() {
                   className={cn(
                     "group rounded-xl border p-3 text-left outline-none transition-ui",
                     isSelected
-                      ? "border-primary bg-primary/5 ring-1 ring-primary"
-                      : "border-rm-border bg-rm-bg-surface/40 hover:border-rm-text/20 hover:bg-rm-bg-surface/60",
+                      ? "border-primary bg-rm-accent-tint ring-1 ring-primary"
+                      : "border-rm-border bg-rm-bg-surface/40 pointer-fine:hover:bg-rm-tint-1",
                   )}
                 >
                   <div className="mb-1 flex items-center justify-between">
                     <div className="flex items-center gap-1.5">
                       <span
                         className={cn(
-                          "text-xs font-bold",
-                          isSelected ? "text-primary" : "text-rm-text",
+                          "text-xs font-semibold",
+                          isSelected ? "text-rm-accent-ink" : "text-rm-text",
                         )}
                       >
                         {profile.label}
@@ -452,7 +457,13 @@ export default function SettingsCameraTab() {
                         {profile.fps} FPS
                       </span>
                     </div>
-                    {isSelected && <Check size={12} className="text-primary" />}
+                    {isSelected && (
+                      <Check
+                        size={12}
+                        aria-hidden="true"
+                        className="text-rm-accent-ink"
+                      />
+                    )}
                   </div>
                   <p className="text-ui-2xs leading-tight text-rm-text-muted">
                     {profile.width}x{profile.height}
@@ -468,18 +479,19 @@ export default function SettingsCameraTab() {
         {/* Video Background */}
         <section className="space-y-4">
           <div className="flex items-center justify-between gap-3 px-1 max-w-[480px]">
-            <Label className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted">
+            <Label className="text-ui-xs font-medium text-rm-text-muted">
               Video Background
             </Label>
-            <button
+            <Button
               type="button"
+              variant="secondary"
+              size="sm"
               onClick={() => fileInputRef.current?.click()}
               disabled={isUploadingBackground}
-              className="flex items-center gap-1.5 rounded-lg border border-rm-border bg-rm-bg-surface/40 px-2.5 py-1.5 text-ui-2xs font-bold text-rm-text-muted transition-colors hover:text-rm-text"
             >
-              <Upload size={12} />{" "}
+              <Upload size={12} aria-hidden="true" />
               {isUploadingBackground ? "Uploading" : "Upload Image"}
-            </button>
+            </Button>
             <input
               ref={fileInputRef}
               type="file"
@@ -502,6 +514,7 @@ export default function SettingsCameraTab() {
               return (
                 <button
                   key={option.id}
+                  aria-pressed={isSelected}
                   onClick={() =>
                     updateUserSettings(
                       (current: any) => ({
@@ -514,12 +527,12 @@ export default function SettingsCameraTab() {
                   className={cn(
                     "group relative flex flex-col rounded-xl border p-2.5 text-left outline-none transition-ui",
                     isSelected
-                      ? "border-primary bg-primary/5 ring-1 ring-primary"
-                      : "border-rm-border bg-rm-bg-surface/40 hover:border-rm-text/20 hover:bg-rm-bg-surface/60",
+                      ? "border-primary bg-rm-accent-tint ring-1 ring-primary"
+                      : "border-rm-border bg-rm-bg-surface/40 pointer-fine:hover:bg-rm-tint-1",
                   )}
                 >
                   {option.id === "none" ? (
-                    <div className="mb-2 flex h-16 w-full items-center justify-center rounded-lg bg-rm-bg-elevated/40 text-rm-text-muted/60 transition-ui">
+                    <div className="mb-2 flex h-16 w-full items-center justify-center rounded-lg bg-rm-tint-1 text-rm-text-muted">
                       <Ban size={20} />
                     </div>
                   ) : (
@@ -534,8 +547,8 @@ export default function SettingsCameraTab() {
                   )}
                   <span
                     className={cn(
-                      "text-xs font-bold",
-                      isSelected ? "text-primary" : "text-rm-text",
+                      "text-xs font-semibold",
+                      isSelected ? "text-rm-accent-ink" : "text-rm-text",
                     )}
                   >
                     {option.label}
@@ -562,10 +575,11 @@ export default function SettingsCameraTab() {
                     "group relative overflow-hidden rounded-xl border bg-rm-bg-surface/40 outline-none transition-ui",
                     isSelected
                       ? "border-primary ring-1 ring-primary"
-                      : "border-rm-border hover:border-rm-text/20",
+                      : "border-rm-border pointer-fine:hover:bg-rm-tint-1",
                   )}
                 >
                   <button
+                    aria-pressed={isSelected}
                     onClick={() =>
                       updateUserSettings(
                         (current: any) => ({
@@ -593,7 +607,7 @@ export default function SettingsCameraTab() {
                       <span
                         className={cn(
                           "truncate text-xs font-bold",
-                          isSelected ? "text-primary" : "text-rm-text",
+                          isSelected ? "text-rm-accent-ink" : "text-rm-text",
                         )}
                       >
                         {background.name}
@@ -607,7 +621,7 @@ export default function SettingsCameraTab() {
                   )}
                   <button
                     onClick={() => void removeBackground(background)}
-                    className="absolute right-2 top-2 rounded-md bg-black/60 p-1 text-white/80 opacity-0 transition-opacity hover:text-white group-hover:opacity-100"
+                    className="absolute right-2 top-2 rounded-md bg-black/60 p-1 text-white/80 opacity-0 transition-opacity pointer-fine:hover:text-white group-hover:opacity-100 focus-visible:opacity-100 pointer-coarse:opacity-100"
                     aria-label={`Remove ${background.name}`}
                   >
                     <Trash2 size={12} />
@@ -622,7 +636,7 @@ export default function SettingsCameraTab() {
             </p>
           )}
           {uploadError && (
-            <p className="px-1 text-xs font-medium text-destructive">
+            <p className="px-1 text-xs font-medium text-rm-danger-ink">
               {uploadError}
             </p>
           )}
@@ -631,18 +645,24 @@ export default function SettingsCameraTab() {
         <Separator className="bg-rm-border" />
 
         {/* Always Preview Video Toggle */}
-        <section className="flex items-center justify-between p-3.5 rounded-xl bg-rm-bg-elevated/50 border border-rm-border hover:bg-rm-bg-hover transition-ui max-w-[480px]">
+        <section className="flex items-center justify-between gap-4 p-3.5 rounded-xl border border-rm-border max-w-[480px]">
           <div>
-            <h4 className="text-ui-sm font-bold text-rm-text">
+            <h4
+              id={alwaysPreviewTitleId}
+              className="text-ui-sm font-semibold text-rm-text"
+            >
               Always Preview Video
             </h4>
-            <p className="text-ui-2xs text-rm-text-muted">
+            <p
+              id={alwaysPreviewDescriptionId}
+              className="text-ui-2xs text-rm-text-muted"
+            >
               Show preview modal before starting video chat
             </p>
           </div>
-          <button
-            type="button"
-            onClick={() => {
+          <SettingsSwitch
+            checked={vSettings.alwaysPreviewVideo ?? false}
+            onChange={() => {
               updateUserSettings(
                 (current: any) => ({
                   ...current,
@@ -651,22 +671,10 @@ export default function SettingsCameraTab() {
                 settingsUserId ?? undefined,
               );
             }}
-            aria-label="Always preview video"
-            aria-pressed={vSettings.alwaysPreviewVideo}
-            className={cn(
-              "relative w-10 h-5 rounded-full transition-colors duration-200 outline-none",
-              vSettings.alwaysPreviewVideo
-                ? "bg-primary"
-                : "bg-rm-bg-elevated border border-rm-border",
-            )}
-          >
-            <span
-              className={cn(
-                "absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform duration-200",
-                vSettings.alwaysPreviewVideo && "translate-x-5",
-              )}
-            />
-          </button>
+            ariaLabel="Always preview video"
+            labelledBy={alwaysPreviewTitleId}
+            describedBy={alwaysPreviewDescriptionId}
+          />
         </section>
       </div>
     </div>

@@ -1,6 +1,7 @@
 import { AvatarImage } from "@/components/chat/AvatarImage";
 import { ProfileDisplayName } from "@/components/chat/ProfileDisplayName";
 import { Dialog, DialogPortal, DialogSurface } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
 import { IconButton } from "@/components/ui/IconButton";
 import {
   Tooltip,
@@ -33,6 +34,12 @@ import { createAttachmentClipFavorite } from "@/lib/gif-favorite-item";
 import type { Message } from "@/lib/types";
 import { shouldBlurSensitiveAttachment } from "@/lib/media-safety";
 import { cn } from "@/lib/utils";
+import {
+  MENU_ICON,
+  MENU_ITEM,
+  MENU_ITEM_DEFAULT,
+  MENU_SEPARATOR,
+} from "@/components/ui/menu";
 import { useChatActions, useChatStore } from "@/stores/chat-store";
 import { useMediaSafetySettingsStore } from "@/stores/useMediaSafetySettingsStore";
 import { useExternalLinkConfirmation } from "@/hooks/useExternalLinkConfirmation";
@@ -204,10 +211,12 @@ function ToolbarEmojiButton({
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <button
+        <Button
           type="button"
+          variant="ghost"
+          size="icon"
           onClick={() => onClick(item)}
-          className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-rm-text-muted transition-ui hover:bg-rm-bg-hover hover:text-primary"
+          className="text-rm-text-muted pointer-fine:hover:text-rm-text"
           aria-label={`React with ${item.label}`}
         >
           <EmojiToken
@@ -216,7 +225,7 @@ function ToolbarEmojiButton({
             className="h-5 w-5"
             fallbackClassName="text-base"
           />
-        </button>
+        </Button>
       </TooltipTrigger>
       <TooltipContent side="top" sideOffset={8}>
         <p>{item.label}</p>
@@ -624,7 +633,7 @@ const MessageItem = memo(
                 event.stopPropagation();
                 handleQuickReaction(item);
               }}
-              className="group flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-ui-sm font-semibold text-rm-text-secondary transition-ui hover:bg-primary hover:text-primary-foreground"
+              className={cn(MENU_ITEM, MENU_ITEM_DEFAULT, "justify-between")}
             >
               <span className="truncate">{item.label}</span>
               <EmojiToken
@@ -635,15 +644,15 @@ const MessageItem = memo(
               />
             </button>
           ))}
-          <div className="my-1.5 h-px w-full bg-rm-border" />
+          <div className={MENU_SEPARATOR} />
           <button
             type="button"
             role="menuitem"
             onClick={openReactionPickerFromMenu}
-            className="group flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-ui-sm font-semibold text-rm-text-secondary transition-ui hover:bg-primary hover:text-primary-foreground"
+            className={cn(MENU_ITEM, MENU_ITEM_DEFAULT, "justify-between")}
           >
             <span>View More</span>
-            <Smile className="h-4 w-4 opacity-50 transition-opacity group-hover:opacity-90" />
+            <Smile aria-hidden className={cn("h-4 w-4", MENU_ICON)} />
           </button>
         </div>
       );
@@ -809,7 +818,7 @@ const MessageItem = memo(
                     event.stopPropagation();
                     handleQuickReaction(item);
                   }}
-                  className="flex h-11 w-11 items-center justify-center rounded-xl bg-rm-bg-surface text-rm-text transition-ui hover:bg-primary hover:text-primary-foreground"
+                  className="flex h-11 w-11 items-center justify-center rounded-lg bg-rm-tint-1 text-rm-text transition-[background-color] duration-150 pointer-fine:hover:bg-rm-tint-3 active:bg-rm-tint-3"
                   title={item.label}
                   aria-label={`React with ${item.label}`}
                 >
@@ -1060,24 +1069,28 @@ const MessageItem = memo(
                 <div className="mt-1 text-ui-2xs text-rm-text-muted flex gap-2">
                   <span>
                     escape to{" "}
-                    <button
+                    <Button
                       type="button"
+                      variant="link"
+                      size="xs"
                       onClick={cancelEditing}
-                      className="text-primary hover:underline"
+                      className="text-ui-2xs"
                     >
                       cancel
-                    </button>
+                    </Button>
                   </span>
                   <span className="opacity-50">•</span>
                   <span>
                     enter to{" "}
-                    <button
+                    <Button
                       type="button"
+                      variant="link"
+                      size="xs"
                       onClick={handleEditSubmit}
-                      className="text-primary hover:underline"
+                      className="text-ui-2xs"
                     >
                       save
-                    </button>
+                    </Button>
                   </span>
                 </div>
               </div>
@@ -1343,15 +1356,17 @@ const MessageItem = memo(
 
             {/* Thread badge */}
             {(message.reply_count ?? 0) > 0 && (
-              <button
+              <Button
+                variant="secondary"
+                size="xs"
                 onClick={previewOnly ? undefined : () => onThread?.(message.id)}
                 disabled={previewOnly}
-                className="mt-2 flex items-center gap-1.5 rounded-md border border-primary/20 bg-primary/5 px-2.5 py-1 text-ui-xs font-semibold text-primary transition-ui hover:bg-primary/10 hover:border-primary/30 outline-none"
+                className="mt-2 gap-1.5 bg-rm-accent-tint text-rm-accent-ink"
               >
-                <MessageSquare className="h-3 w-3" />
+                <MessageSquare className="size-3" />
                 {message.reply_count}{" "}
                 {message.reply_count === 1 ? "Reply" : "Replies"}
-              </button>
+              </Button>
             )}
           </div>
 
@@ -1360,7 +1375,7 @@ const MessageItem = memo(
             <TooltipProvider delayDuration={120}>
               <div
                 className={cn(
-                  "pointer-events-none absolute -top-4 right-4 z-20 flex max-w-[calc(100vw-96px)] origin-bottom-right scale-[0.97] items-center gap-0.5 overflow-x-auto rounded-md border border-rm-border bg-rm-bg-elevated p-0.5 opacity-0 shadow-md transition-[opacity,transform] duration-100 group-hover:pointer-events-auto group-hover:scale-100 group-hover:opacity-100 focus-within:pointer-events-auto focus-within:scale-100 focus-within:opacity-100",
+                  "pointer-events-none absolute -top-4 right-4 z-20 flex max-w-[calc(100vw-96px)] origin-bottom-right scale-[0.97] items-center gap-0.5 overflow-x-auto rounded-md border border-rm-border bg-rm-bg-surface p-0.5 opacity-0 shadow-[var(--rm-shadow-1)] transition-[opacity,transform] dark:bg-rm-bg-elevated duration-100 group-hover:pointer-events-auto group-hover:scale-100 group-hover:opacity-100 focus-within:pointer-events-auto focus-within:scale-100 focus-within:opacity-100",
                   showEmojiPicker &&
                     "pointer-events-auto scale-100 opacity-100",
                 )}
@@ -1397,7 +1412,7 @@ const MessageItem = memo(
                           message.is_pinned && "fill-current",
                         )}
                         className={
-                          message.is_pinned ? "text-primary" : undefined
+                          message.is_pinned ? "text-rm-accent-ink" : undefined
                         }
                         onClick={(event) =>
                           handlePinToggle(event.shiftKey || isShiftPressed)
@@ -1432,7 +1447,7 @@ const MessageItem = memo(
                         aria-expanded={showEmojiPicker}
                         className={
                           showEmojiPicker
-                            ? "bg-primary/10 text-primary"
+                            ? "bg-rm-tint-2 text-rm-text"
                             : undefined
                         }
                         onClick={() => {
@@ -1498,7 +1513,7 @@ const MessageItem = memo(
                         aria-expanded={showEmojiPicker}
                         className={
                           showEmojiPicker
-                            ? "bg-primary/10 text-primary"
+                            ? "bg-rm-tint-2 text-rm-text"
                             : undefined
                         }
                         onClick={() => {

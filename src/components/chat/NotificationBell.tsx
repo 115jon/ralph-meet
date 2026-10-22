@@ -1,4 +1,5 @@
 import { getDisplayInitial } from "@/lib/display-name";
+import { Button } from "@/components/ui/button";
 import { IconButton } from "@/components/ui/IconButton";
 import { useUserResolution } from "@/hooks/useUserResolution";
 import {
@@ -103,27 +104,28 @@ export const NotificationBell = memo(function NotificationBell() {
   return (
     <div className="relative">
       {/* Bell icon */}
-      <button
+      <Button
         type="button"
+        variant="ghost"
+        size="icon"
         ref={buttonRef}
-        className="group relative flex h-8 w-8 cursor-pointer items-center justify-center rounded-md transition-ui hover:bg-rm-bg-hover enabled:active:scale-[0.96]"
+        aria-label="Notifications"
+        aria-expanded={open}
+        className={cn(
+          open
+            ? "bg-rm-tint-2 text-rm-text"
+            : "text-rm-text-muted pointer-fine:hover:text-rm-text",
+        )}
         title="Notifications"
         onClick={toggle}
       >
-        <Bell
-          className={cn(
-            "h-[14px] w-[14px] transition-colors",
-            open
-              ? "text-rm-accent"
-              : "text-rm-text-muted group-hover:text-rm-text",
-          )}
-        />
+        <Bell strokeWidth={1.75} className="size-[18px]" />
         {unreadCount > 0 && (
           <span className="badge-count absolute -top-1 -right-1 ring-2 ring-rm-bg-primary animate-in zoom-in-90 duration-200">
             {unreadCount > 99 ? "99+" : unreadCount}
           </span>
         )}
-      </button>
+      </Button>
 
       {/* Dropdown panel */}
       {open && (
@@ -154,15 +156,18 @@ export const NotificationBell = memo(function NotificationBell() {
               </h3>
               <div className="flex items-center gap-3 md:gap-2">
                 {unreadCount > 0 && (
-                  <button
+                  <Button
                     type="button"
-                    className="text-ui-2xs font-semibold text-rm-accent hover:opacity-80 transition-colors"
+                    variant="link"
+                    size="xs"
+                    className="text-ui-2xs"
                     onClick={handleMarkAllRead}
                   >
                     Mark all read
-                  </button>
+                  </Button>
                 )}
                 <IconButton
+                  aria-label="Close notifications"
                   icon={X}
                   size="xs"
                   className="md:h-5 md:w-5"

@@ -1,3 +1,4 @@
+import { Button } from "@/components/ui/button";
 import { SettingsToggleRow } from "@/components/ui/SettingsToggleRow";
 import { playNotification } from "@/lib/sounds";
 import { isDesktop } from "@/lib/platform";
@@ -15,7 +16,7 @@ import {
   VolumeX,
   Zap,
 } from "lucide-react";
-import { useEffect } from "react";
+import { useEffect, useId } from "react";
 import { useShallow } from "zustand/shallow";
 import { SettingsSwitch } from "./SettingsSwitch";
 
@@ -34,6 +35,8 @@ export default function SettingsNotificationsTab() {
     (s) => s.updateSettings,
   );
   const isDesktopApp = isDesktop();
+  const soundsTitleId = useId();
+  const soundsDescriptionId = useId();
 
   useEffect(() => {
     const initUser = () => {
@@ -58,7 +61,7 @@ export default function SettingsNotificationsTab() {
           <section className="space-y-6">
             <div className="flex items-center gap-2">
               <Laptop size={16} className="text-sky-400" />
-              <h3 className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted">
+              <h3 className="text-ui-xs font-medium text-rm-text-muted">
                 Desktop Notifications
               </h3>
             </div>
@@ -88,8 +91,8 @@ export default function SettingsNotificationsTab() {
         {/* Master Sound Toggle */}
         <section className="space-y-6">
           <div className="flex items-center gap-2">
-            <Volume2 size={16} className="text-rm-accent" />
-            <h3 className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted">
+            <Volume2 size={16} className="text-rm-accent-ink" />
+            <h3 className="text-ui-xs font-medium text-rm-text-muted">
               Sound Effects
             </h3>
           </div>
@@ -97,7 +100,7 @@ export default function SettingsNotificationsTab() {
           <div className="flex flex-col bg-rm-bg-surface border border-rm-border rounded-xl p-0 overflow-hidden divide-y divide-rm-border">
             <div className="group flex flex-col sm:flex-row sm:items-center justify-between p-4 hover:bg-rm-bg-elevated/40 transition-ui gap-4 sm:gap-6 bg-rm-accent/5">
               <div className="flex items-start gap-4">
-                <div className="w-10 h-10 shrink-0 rounded-xl bg-rm-accent flex items-center justify-center text-white shadow-md shadow-rm-accent/20">
+                <div className="w-10 h-10 shrink-0 rounded-xl bg-rm-accent-tint flex items-center justify-center text-rm-accent-ink">
                   {soundSettings.soundsEnabled ? (
                     <Volume2 size={20} />
                   ) : (
@@ -105,16 +108,25 @@ export default function SettingsNotificationsTab() {
                   )}
                 </div>
                 <div>
-                  <h4 className="text-[14px] font-bold text-rm-text">
+                  <h4
+                    id={soundsTitleId}
+                    className="text-[14px] font-semibold text-rm-text"
+                  >
                     Enable Sound Effects
                   </h4>
-                  <p className="text-ui-xs text-rm-text-muted opacity-80">
+                  <p
+                    id={soundsDescriptionId}
+                    className="text-ui-xs text-rm-text-muted"
+                  >
                     Master switch for all in-app sounds
                   </p>
                 </div>
               </div>
               <div className="flex justify-end w-full sm:w-auto">
                 <SettingsSwitch
+                  ariaLabel="Enable Sound Effects"
+                  labelledBy={soundsTitleId}
+                  describedBy={soundsDescriptionId}
                   checked={soundSettings.soundsEnabled}
                   onChange={() =>
                     updateSoundSettings(
@@ -131,11 +143,11 @@ export default function SettingsNotificationsTab() {
                 <div className="flex justify-between items-end">
                   <label
                     htmlFor="sound-volume"
-                    className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted"
+                    className="text-ui-xs font-medium text-rm-text-muted"
                   >
                     Master Volume
                   </label>
-                  <span className="text-sm font-bold text-rm-accent tabular-nums">
+                  <span className="text-sm font-semibold text-rm-accent-ink tabular-nums">
                     {soundSettings.soundVolume}%
                   </span>
                 </div>
@@ -235,13 +247,10 @@ export default function SettingsNotificationsTab() {
 
           {/* Test Sound Button */}
           <div className="flex justify-end mt-4">
-            <button
-              onClick={() => playNotification()}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-rm-bg-elevated border border-rm-border text-rm-text-secondary hover:bg-rm-bg-hover hover:text-rm-text transition-ui"
-            >
-              <Bell size={14} />
+            <Button variant="secondary" onClick={() => playNotification()}>
+              <Bell size={14} aria-hidden="true" />
               Test Notification Sound
-            </button>
+            </Button>
           </div>
         </section>
       </div>

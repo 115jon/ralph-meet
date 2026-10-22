@@ -1,6 +1,8 @@
 import { getDisplayInitial, getDisplayName } from "@/lib/display-name";
 import { getAuthAssetUrl } from "@/lib/platform";
+import { Button } from "@/components/ui/button";
 import { Dialog, DialogPortal, DialogSurface } from "@/components/ui/dialog";
+import { IconButton } from "@/components/ui/IconButton";
 import type { Message } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { X } from "lucide-react";
@@ -74,7 +76,7 @@ export const PinModal: React.FC<PinModalProps> = ({
           <DialogSurface
             showCloseButton={false}
             className={cn(
-              "relative m-0 w-full max-w-[480px] overflow-hidden rounded-2xl border border-rm-border bg-rm-bg-primary p-0 shadow-2xl outline-none transition-ui",
+              "relative m-0 w-full max-w-[480px] overflow-hidden rounded-xl border border-rm-border bg-rm-bg-surface dark:bg-rm-bg-elevated p-0 shadow-[var(--rm-shadow-3)] outline-none transition-ui",
               "opacity-100 scale-100 translate-y-0 data-[state=closed]:opacity-0 data-[state=closed]:scale-95 data-[state=closed]:translate-y-4",
             )}
             aria-labelledby="pin-modal-title"
@@ -83,16 +85,16 @@ export const PinModal: React.FC<PinModalProps> = ({
               <div className="flex items-start justify-between mb-4">
                 <h2
                   id="pin-modal-title"
-                  className="text-xl font-semibold text-rm-text leading-tight"
+                  className="text-ui-lg font-semibold text-rm-text"
                 >
                   {isPin ? "Pin It. Pin It Good." : "Unpin Message"}
                 </h2>
-                <button
+                <IconButton
+                  icon={X}
                   onClick={onClose}
-                  className="text-rm-text-muted hover:text-rm-text transition-colors"
-                >
-                  <X size={20} />
-                </button>
+                  aria-label="Close"
+                  className="-mr-1.5 -mt-1"
+                />
               </div>
 
               <div className="text-rm-text-muted text-[14px] mb-6 leading-relaxed">
@@ -170,7 +172,7 @@ export const PinModal: React.FC<PinModalProps> = ({
 
               {!isPin && (
                 <div className="mb-6 px-1">
-                  <p className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-primary mb-1.5">
+                  <p className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-accent-ink mb-1.5">
                     Protip:
                   </p>
                   <p className="text-ui-xs text-rm-text-muted leading-relaxed">
@@ -187,27 +189,19 @@ export const PinModal: React.FC<PinModalProps> = ({
                 </div>
               )}
 
-              <div className="flex gap-3">
-                <button
-                  onClick={onClose}
-                  className="flex-1 px-4 py-3 rounded-xl bg-rm-bg-elevated hover:bg-rm-bg-hover text-rm-text-secondary font-bold text-[14px] transition-ui outline-none"
-                >
+              <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                <Button variant="secondary" onClick={onClose}>
                   Cancel
-                </button>
-                <button
+                </Button>
+                <Button
+                  variant={isPin ? "default" : "destructive"}
                   onClick={() => {
                     onConfirm();
                     onClose();
                   }}
-                  className={cn(
-                    "flex-1 px-4 py-3 rounded-xl font-bold text-[14px] transition-ui shadow-lg",
-                    isPin
-                      ? "bg-primary hover:brightness-110 text-primary-foreground shadow-primary/20"
-                      : "bg-destructive hover:brightness-110 text-destructive-foreground shadow-destructive/20",
-                  )}
                 >
                   {isPin ? "Oh yeah. Pin it" : "Remove it please!"}
-                </button>
+                </Button>
               </div>
             </div>
           </DialogSurface>

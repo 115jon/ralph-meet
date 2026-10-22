@@ -6,6 +6,7 @@ import {
   DialogSurface,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
 import { IconButton } from "@/components/ui/IconButton";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
@@ -128,17 +129,19 @@ function TabButton({
   onClick: () => void;
 }) {
   return (
-    <button
+    <Button
+      variant="ghost"
       onClick={onClick}
+      aria-current={active ? "page" : undefined}
       className={cn(
-        "flex w-full items-center rounded-md px-3 py-2 text-sm font-medium transition-colors",
+        "h-8 w-full justify-start rounded-md px-2.5 text-ui-sm font-medium",
         active
-          ? "bg-rm-bg-elevated text-rm-text shadow-[inset_0_0_0_1px_var(--rm-border)]"
-          : "text-rm-text-muted hover:bg-rm-bg-elevated/60 hover:text-rm-text-secondary",
+          ? "bg-rm-tint-2 text-rm-text"
+          : "text-rm-text-secondary pointer-fine:hover:bg-rm-tint-1 pointer-fine:hover:text-rm-text",
       )}
     >
       {label}
-    </button>
+    </Button>
   );
 }
 
@@ -388,6 +391,7 @@ export default function SettingsModal({
                 >
                   <h2 className="text-lg font-bold text-rm-text">Settings</h2>
                   <IconButton
+                    aria-label="Close settings"
                     icon={X}
                     size="sm"
                     shape="circle"
@@ -396,7 +400,7 @@ export default function SettingsModal({
                 </div>
 
                 <div className="space-y-4 px-2 md:px-0">
-                  <div className="rounded-xl border border-rm-border bg-rm-bg-primary/60 p-3 shadow-sm">
+                  <div className="rounded-xl border border-rm-border bg-rm-bg-primary/60 p-3">
                     <div className="flex items-center gap-3">
                       <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-full border border-rm-border bg-rm-bg-elevated">
                         {profileAvatarUrl ? (
@@ -420,12 +424,13 @@ export default function SettingsModal({
                           onOpenChange={setProfileEditorOpen}
                         >
                           <DialogTrigger asChild>
-                            <button
+                            <Button
                               type="button"
-                              className="mt-1 text-sm text-rm-text-muted transition-colors hover:text-rm-text"
+                              variant="link"
+                              className="mt-1 text-ui-sm text-rm-text-secondary pointer-fine:hover:text-rm-text"
                             >
                               Edit profile
-                            </button>
+                            </Button>
                           </DialogTrigger>
                           <DialogPortal>
                             <DialogSurface
@@ -452,7 +457,7 @@ export default function SettingsModal({
                       <Input
                         value={searchQuery}
                         onChange={(event) => setSearchQuery(event.target.value)}
-                        className="h-10 border-rm-border bg-rm-bg-primary/85 pl-9 text-rm-text placeholder:text-rm-text-muted"
+                        className="pl-9"
                         placeholder="Search settings"
                         aria-label="Search settings"
                       />
@@ -467,7 +472,7 @@ export default function SettingsModal({
                     ) : (
                       filteredTabGroups.map((group) => (
                         <div key={group.title}>
-                          <div className="mb-2 px-3 text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted">
+                          <div className="mb-1.5 px-2.5 text-ui-xs font-medium text-rm-text-muted">
                             {group.title}
                           </div>
                           <div className="space-y-1">
@@ -490,16 +495,14 @@ export default function SettingsModal({
 
                   <Separator className="bg-rm-border mx-2" />
 
-                  <button
+                  <Button
+                    variant="destructive"
                     onClick={handleSignOut}
-                    className="flex w-full items-center justify-between rounded-md px-3 py-2 text-sm font-medium text-destructive/80 transition-colors hover:bg-destructive/10 hover:text-destructive group"
+                    className="w-full justify-between px-2.5 has-[>svg]:px-2.5"
                   >
                     <span>Log Out</span>
-                    <LogOut
-                      size={16}
-                      className="opacity-50 group-hover:opacity-100"
-                    />
-                  </button>
+                    <LogOut size={16} aria-hidden="true" />
+                  </Button>
                 </div>
               </div>
 
@@ -527,10 +530,10 @@ export default function SettingsModal({
                   }}
                 >
                   <IconButton
+                    aria-label="Show settings menu"
                     icon={ChevronLeft}
                     size="sm"
                     shape="circle"
-                    className="bg-rm-bg-elevated border border-rm-border"
                     onClick={() => setShowMobileMenu(true)}
                   />
                   <h2 className="text-base font-bold text-rm-text uppercase tracking-wider">
@@ -541,12 +544,15 @@ export default function SettingsModal({
                 {/* Close Button (Desktop Only) */}
                 <div className="hidden md:flex absolute right-10 top-14 z-20 flex-col items-center gap-1.5">
                   <IconButton
+                    aria-label="Close settings"
                     icon={X}
-                    shape="circle"
-                    className="h-9 w-9 border border-rm-border bg-rm-bg-elevated"
+                    size="sm"
                     onClick={onClose}
                   />
-                  <span className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted hidden md:block">
+                  <span
+                    aria-hidden="true"
+                    className="text-ui-2xs font-medium text-rm-text-muted hidden md:block"
+                  >
                     ESC
                   </span>
                 </div>
@@ -589,8 +595,8 @@ export default function SettingsModal({
                           servers.
                         </p>
 
-                        <div className="bg-rm-bg-surface rounded-xl border border-rm-border p-6 flex flex-col items-center justify-center min-h-[300px] text-center shadow-sm">
-                          <div className="w-16 h-16 rounded-full bg-rm-accent/10 flex items-center justify-center text-rm-accent mb-4">
+                        <div className="bg-rm-bg-surface rounded-xl border border-rm-border p-6 flex flex-col items-center justify-center min-h-[300px] text-center">
+                          <div className="w-16 h-16 rounded-full bg-rm-accent-tint flex items-center justify-center text-rm-accent-ink mb-4">
                             <UserIcon size={32} />
                           </div>
                           <h2 className="text-lg font-bold text-rm-text mb-2">
@@ -613,8 +619,8 @@ export default function SettingsModal({
                           Configure additional application preferences.
                         </p>
 
-                        <div className="bg-rm-bg-surface rounded-xl border border-rm-border p-6 flex flex-col items-center justify-center min-h-[300px] text-center shadow-sm">
-                          <div className="w-16 h-16 rounded-full bg-rm-accent/10 flex items-center justify-center text-rm-accent mb-4">
+                        <div className="bg-rm-bg-surface rounded-xl border border-rm-border p-6 flex flex-col items-center justify-center min-h-[300px] text-center">
+                          <div className="w-16 h-16 rounded-full bg-rm-accent-tint flex items-center justify-center text-rm-accent-ink mb-4">
                             <Zap size={32} />
                           </div>
                           <h2 className="text-lg font-bold text-rm-text mb-2">

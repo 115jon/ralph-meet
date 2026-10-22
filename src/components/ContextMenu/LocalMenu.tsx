@@ -83,7 +83,7 @@ export const LocalMenu: React.FC<LocalMenuProps> = ({
             onChangeSource?.();
             onClose();
           }}
-          rightElement={<Share2 size={18} className="text-[#dbdee1]/40" />}
+          rightElement={<Share2 size={18} className="text-rm-text-muted" />}
         />
 
         <SubMenuItem
@@ -132,7 +132,9 @@ export const LocalMenu: React.FC<LocalMenuProps> = ({
                 onToggleAlwaysShowStreamPreview?.();
                 onClose();
               }}
-              rightElement={<Monitor size={16} className="text-[#dbdee1]/40" />}
+              rightElement={
+                <Monitor size={16} className="text-rm-text-muted" />
+              }
             />
           </>
         )}
@@ -252,7 +254,7 @@ export const LocalMenu: React.FC<LocalMenuProps> = ({
         onMouseEnter={clearSubmenu}
         onClick={handleCopyId}
         rightElement={
-          <span className="text-ui-2xs bg-rm-bg-active px-1 rounded text-rm-text-muted/40 font-bold shadow-sm">
+          <span className="text-ui-2xs bg-rm-bg-active px-1 rounded text-rm-text-muted font-bold">
             ID
           </span>
         }

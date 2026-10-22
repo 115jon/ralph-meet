@@ -212,7 +212,7 @@ function InlineProfileRow({
                   handleCancel();
                 }
               }}
-              className="h-10 border-rm-border bg-rm-bg-primary text-rm-text"
+              className="h-8"
             />
             <div className="flex shrink-0 gap-2">
               <Button
@@ -224,18 +224,16 @@ function InlineProfileRow({
                   (field === "username" && usernameCheck !== "available")
                 }
                 aria-label={`Save ${label.toLowerCase()}`}
-                className="h-10 w-10 bg-primary text-primary-foreground hover:bg-primary/90"
               >
                 {saving ? <Loader2 className="animate-spin" /> : <Check />}
               </Button>
               <Button
                 type="button"
                 size="icon"
-                variant="outline"
+                variant="secondary"
                 onClick={handleCancel}
                 disabled={saving}
                 aria-label={`Cancel ${label.toLowerCase()} edit`}
-                className="h-10 w-10 border-rm-border bg-rm-bg-elevated text-rm-text hover:bg-rm-bg-hover"
               >
                 <X />
               </Button>
@@ -251,7 +249,7 @@ function InlineProfileRow({
             </div>
           ) : null}
           {error ? (
-            <div className="mt-2 text-xs text-destructive" role="alert">
+            <div className="mt-2 text-xs text-rm-danger-ink" role="alert">
               {error}
             </div>
           ) : null}
@@ -270,13 +268,13 @@ function InlineProfileRow({
       </div>
       <Button
         type="button"
-        variant="outline"
+        variant="secondary"
         onClick={handleEdit}
         ref={editButtonRef}
         aria-label={`Edit ${label.toLowerCase()}`}
-        className="h-10 shrink-0 border-rm-border bg-rm-bg-elevated text-rm-text hover:bg-rm-bg-hover"
+        className="shrink-0"
       >
-        <Pencil size={15} />
+        <Pencil size={15} aria-hidden="true" />
         Edit
       </Button>
     </div>
@@ -303,9 +301,9 @@ function OverviewRow({
       {actionLabel && onAction && (
         <Button
           type="button"
-          variant="outline"
+          variant="secondary"
           onClick={(event) => onAction(event.currentTarget)}
-          className="h-10 shrink-0 border-rm-border bg-rm-bg-elevated text-rm-text hover:bg-rm-bg-hover"
+          className="shrink-0"
         >
           {actionLabel}
         </Button>
@@ -410,8 +408,8 @@ export default function SettingsAccountOverviewTab({
         Manage your identity, security, and profile appearance from one place.
       </p>
 
-      <section className="overflow-hidden rounded-3xl border border-rm-border bg-rm-bg-surface shadow-[0_24px_70px_rgba(0,0,0,0.18)]">
-        <div className="flex flex-col gap-4 border-b border-rm-border/70 bg-[radial-gradient(circle_at_top,_rgba(92,112,255,0.16),_transparent_48%),linear-gradient(180deg,_rgba(255,255,255,0.02),_rgba(255,255,255,0))] px-5 py-5 md:flex-row md:items-center md:justify-between md:px-8">
+      <section className="overflow-hidden rounded-xl border border-rm-border bg-rm-bg-surface">
+        <div className="flex flex-col gap-4 border-b border-rm-border/70 px-5 py-5 md:flex-row md:items-center md:justify-between md:px-8">
           <div className="flex min-w-0 items-center gap-4">
             <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-full border border-white/10 bg-rm-bg-elevated">
               {avatarUrl ? (
@@ -439,9 +437,9 @@ export default function SettingsAccountOverviewTab({
             type="button"
             onClick={(event) => onOpenProfileEditor(event.currentTarget)}
             disabled={identitySaving}
-            className="h-10 shrink-0 bg-primary text-primary-foreground hover:bg-primary/90"
+            className="shrink-0"
           >
-            <Sparkles size={16} />
+            <Sparkles size={16} aria-hidden="true" />
             Edit profile
           </Button>
         </div>
@@ -474,9 +472,9 @@ export default function SettingsAccountOverviewTab({
         </div>
 
         <div className="grid gap-6 px-5 py-6 md:grid-cols-2 md:px-8">
-          <section className="rounded-2xl border border-rm-border bg-rm-bg-primary/40 p-5">
+          <section className="rounded-xl border border-rm-border bg-rm-bg-primary/40 p-5">
             <div className="mb-4 flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-emerald-500/12 text-emerald-300">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-rm-tint-1 text-rm-success-ink">
                 <CheckCircle2 size={18} />
               </div>
               <div>
@@ -493,9 +491,9 @@ export default function SettingsAccountOverviewTab({
             </p>
           </section>
 
-          <section className="rounded-2xl border border-rm-border bg-rm-bg-primary/40 p-5">
+          <section className="rounded-xl border border-rm-border bg-rm-bg-primary/40 p-5">
             <div className="mb-4 flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-sky-500/12 text-sky-300">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-rm-tint-1 text-rm-text-secondary">
                 <Shield size={18} />
               </div>
               <div>

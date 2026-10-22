@@ -1,6 +1,7 @@
 import { getDisplayInitial } from "@/lib/display-name";
 import { getAuthAssetUrl } from "@/lib/platform";
 import type { Message } from "@/lib/types";
+import { IconButton } from "@/components/ui/IconButton";
 import { cn } from "@/lib/utils";
 import { AvatarImage } from "./AvatarImage";
 import { X } from "./Icons";
@@ -24,7 +25,7 @@ export function ReplyIndicator({
       )}
     >
       <div className="flex items-center gap-2 overflow-hidden">
-        <span className="text-ui-2xs font-semibold uppercase tracking-[0.08em] whitespace-nowrap text-primary">
+        <span className="text-ui-2xs font-semibold uppercase tracking-[0.08em] whitespace-nowrap text-rm-accent-ink">
           Replying to
         </span>
         <div className="flex items-center gap-1.5 overflow-hidden">
@@ -41,7 +42,7 @@ export function ReplyIndicator({
           </div>
           <UserDisplayName
             user={replyTo.author}
-            className="block whitespace-nowrap text-ui-xs font-bold text-primary"
+            className="block whitespace-nowrap text-ui-xs font-bold text-rm-accent-ink"
           />
         </div>
         <span className="truncate text-ui-xs font-medium text-rm-text-muted ml-1">
@@ -53,13 +54,14 @@ export function ReplyIndicator({
           />
         </span>
       </div>
-      <button
+      <IconButton
         type="button"
+        aria-label="Cancel reply"
+        icon={X}
+        variant="muted"
+        size="xs"
         onClick={onCancelReply}
-        className="rounded-lg p-1 text-rm-text-muted transition-ui hover:bg-rm-bg-hover hover:text-rm-text-secondary"
-      >
-        <X className="h-3.5 w-3.5" />
-      </button>
+      />
     </div>
   );
 }

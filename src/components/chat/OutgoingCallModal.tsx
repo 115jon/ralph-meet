@@ -5,6 +5,7 @@ import { getAuthAssetUrl } from "@/lib/platform";
 import { useChatStore } from "@/stores/chat-store";
 import { useCallStore } from "@/stores/useCallStore";
 import { disposePrewarmedAudioContext } from "@/lib/voice/audio-pipeline";
+import { Button } from "@/components/ui/button";
 import { PhoneOff } from "lucide-react";
 import { AvatarImage } from "./AvatarImage";
 import InlineEmojiText from "./InlineEmojiText";
@@ -79,13 +80,16 @@ export function OutgoingCallModal() {
         </div>
 
         {/* Cancel button */}
-        <button
+        <Button
+          variant="danger"
+          size="icon-lg"
           onClick={handleCancel}
-          className="flex h-14 w-14 items-center justify-center rounded-full bg-destructive hover:bg-destructive/90 text-white transition-ui shadow-lg mt-2"
+          className="size-14 rounded-full mt-2"
           title="Cancel Call"
+          aria-label="Cancel Call"
         >
-          <PhoneOff className="h-6 w-6" />
-        </button>
+          <PhoneOff className="size-6" />
+        </Button>
       </div>
     </div>
   );

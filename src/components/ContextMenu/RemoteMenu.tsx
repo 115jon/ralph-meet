@@ -77,7 +77,7 @@ export const RemoteMenu: React.FC<RemoteMenuProps> = ({
           boldLabel
           onMouseEnter={clearSubmenu}
           onClick={stopWatching}
-          rightElement={<MonitorX size={18} className="text-[#dbdee1]/40" />}
+          rightElement={<MonitorX size={18} className="text-rm-text-muted" />}
         />
         <Divider />
         <MenuItem
@@ -98,7 +98,7 @@ export const RemoteMenu: React.FC<RemoteMenuProps> = ({
           boldLabel
           onMouseEnter={clearSubmenu}
           onClick={stopWatching}
-          rightElement={<MonitorX size={18} className="text-[#dbdee1]/40" />}
+          rightElement={<MonitorX size={18} className="text-rm-text-muted" />}
         />
 
         <Divider />
@@ -320,7 +320,7 @@ export const RemoteMenu: React.FC<RemoteMenuProps> = ({
         onMouseEnter={clearSubmenu}
         onClick={handleCopyId}
         rightElement={
-          <span className="text-ui-2xs bg-rm-bg-active px-1 rounded text-rm-text-muted/40 font-bold shadow-sm">
+          <span className="text-ui-2xs bg-rm-bg-active px-1 rounded text-rm-text-muted font-bold">
             ID
           </span>
         }

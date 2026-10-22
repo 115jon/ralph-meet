@@ -1,6 +1,8 @@
 "use client";
 
+import { Button } from "@/components/ui/button";
 import { Dialog, DialogPortal, DialogSurface } from "@/components/ui/dialog";
+import { IconButton } from "@/components/ui/IconButton";
 import { START_CALL_CONFIRM_KEY } from "@/components/chat/voice-confirmation-preferences";
 import { X } from "lucide-react";
 import { useCallback, useState } from "react";
@@ -58,7 +60,7 @@ export function StartCallModal({
           <DialogSurface
             showCloseButton={false}
             className={cn(
-              "relative m-0 w-[calc(100%-2rem)] max-w-[440px] rounded-lg border-0 bg-rm-bg-surface p-0 shadow-2xl outline-none animate-in fade-in zoom-in-95 duration-200",
+              "relative m-0 w-[calc(100%-2rem)] max-w-[440px] rounded-xl border border-rm-border bg-rm-bg-surface dark:bg-rm-bg-elevated p-0 shadow-[var(--rm-shadow-3)] outline-none animate-in fade-in zoom-in-95 duration-200",
               "data-[state=closed]:animate-out data-[state=closed]:zoom-out-95 data-[state=closed]:fade-out",
             )}
             aria-labelledby="start-call-title"
@@ -68,18 +70,18 @@ export function StartCallModal({
             <div className="flex items-center justify-between px-4 pt-4">
               <h2
                 id="start-call-title"
-                className="text-base font-bold text-rm-text"
+                className="text-ui-lg font-semibold text-rm-text"
               >
                 Ready to start a call?
               </h2>
-              <button
+              <IconButton
+                icon={X}
+                size="xs"
+                iconSize={16}
                 type="button"
                 onClick={onCancel}
-                className="flex h-6 w-6 items-center justify-center rounded-sm text-rm-text-muted hover:text-rm-text transition-colors"
                 aria-label="Close"
-              >
-                <X className="h-4 w-4" />
-              </button>
+              />
             </div>
 
             {/* ── Body ───────────────────────────────────────────── */}
@@ -131,20 +133,12 @@ export function StartCallModal({
 
               {/* Buttons */}
               <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={onCancel}
-                  className="px-4 py-1.5 text-sm font-medium text-rm-text-muted hover:text-rm-text hover:underline transition-colors rounded"
-                >
+                <Button type="button" variant="secondary" onClick={onCancel}>
                   Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={handleConfirm}
-                  className="px-4 py-1.5 text-sm font-bold rounded bg-emerald-600 text-white hover:bg-emerald-500 transition-colors"
-                >
+                </Button>
+                <Button type="button" onClick={handleConfirm}>
                   Start Call
-                </button>
+                </Button>
               </div>
             </div>
           </DialogSurface>

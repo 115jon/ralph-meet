@@ -1,5 +1,9 @@
 import { getDisplayInitial, getDisplayName } from "@/lib/display-name";
 import { ButtonBase } from "@/components/ui/button-base";
+import { Button } from "@/components/ui/button";
+import { IconButton } from "@/components/ui/IconButton";
+import { Input } from "@/components/ui/input";
+import { Tabs, tabId } from "@/components/ui/tabs";
 import { useContextMenu } from "@/hooks/useContextMenu";
 import { apiDelete, apiPost, apiPut } from "@/lib/api-client";
 import { getAuthAssetUrl } from "@/lib/platform";
@@ -26,6 +30,7 @@ import { UserDisplayName } from "./UserDisplayName";
 import UserProfilePopover from "./UserProfilePopover";
 
 type Tab = "online" | "all" | "pending" | "blocked";
+const FRIEND_TABS: readonly Tab[] = ["online", "all", "pending", "blocked"];
 
 interface FriendsViewState {
   tab: Tab;
@@ -233,51 +238,49 @@ export default function FriendsView({ onMenuClick, onSelectDm }: Props) {
     <div className="flex flex-1 flex-col bg-rm-bg-primary relative overflow-hidden">
       {/* Header */}
       <header className="h-12 flex shrink-0 items-center gap-3 border-b border-rm-border bg-rm-bg-primary px-4 z-10">
-        <ButtonBase
-          className="cursor-pointer border-none bg-transparent p-1 text-rm-text-muted transition-colors hover:text-rm-text md:hidden"
+        <IconButton
+          icon={Menu}
+          variant="muted"
+          size="sm"
+          className="md:hidden"
+          aria-label="Open sidebar"
           onClick={onMenuClick}
-        >
-          <Menu className="h-5 w-5" />
-        </ButtonBase>
+        />
 
-        <Users className="h-5 w-5 text-rm-text-muted" />
-        <span className="text-sm font-semibold text-rm-text">Friends</span>
+        <Users aria-hidden className="h-5 w-5 text-rm-text-muted" />
+        <span className="text-ui-sm font-semibold text-rm-text">Friends</span>
 
-        <div className="h-5 w-px bg-rm-border mx-1" />
+        <div aria-hidden className="h-5 w-px bg-rm-border mx-1" />
 
-        {/* Tabs in header */}
-        {(["online", "all", "pending", "blocked"] as Tab[]).map((t) => (
-          <ButtonBase
-            key={t}
-            className={cn(
-              "relative h-7 cursor-pointer rounded-md border-none px-2.5 text-ui-sm font-medium transition-ui outline-none enabled:active:scale-[0.96]",
-              tab === t
-                ? "bg-rm-bg-elevated text-rm-text"
-                : "text-rm-text-muted hover:bg-rm-bg-elevated/50 hover:text-rm-text-secondary",
-            )}
-            onClick={() => dispatch({ type: "SET_TAB", value: t })}
-          >
-            {t.charAt(0).toUpperCase() + t.slice(1)}
-            {t === "pending" && pendingCount > 0 && (
-              <span className="badge-count ml-1.5">{pendingCount}</span>
-            )}
-          </ButtonBase>
-        ))}
+        <Tabs
+          label="Friends"
+          idBase="friends"
+          panelId="friends-panel"
+          className="h-full self-stretch"
+          value={tab}
+          onValueChange={(t) => dispatch({ type: "SET_TAB", value: t })}
+          items={FRIEND_TABS.map((t) => ({
+            value: t,
+            label: t.charAt(0).toUpperCase() + t.slice(1),
+            adornment:
+              t === "pending" && pendingCount > 0 ? (
+                <span className="badge-count">{pendingCount}</span>
+              ) : undefined,
+          }))}
+        />
 
-        <ButtonBase
-          className={cn(
-            "ml-auto h-8 cursor-pointer rounded-md border-none px-3 text-ui-sm font-medium transition-ui outline-none enabled:active:scale-[0.96]",
-            addFriendMode
-              ? "bg-primary/20 text-primary"
-              : "text-primary hover:bg-primary/10",
-          )}
+        <Button
+          variant={addFriendMode ? "secondary" : "ghost"}
+          size="sm"
+          className="ml-auto"
+          aria-pressed={addFriendMode}
           onClick={() =>
             dispatch({ type: "SET_ADD_FRIEND_MODE", value: !addFriendMode })
           }
         >
-          <UserPlus className="mr-1.5 inline h-4 w-4" />
+          <UserPlus aria-hidden />
           Add Friend
-        </ButtonBase>
+        </Button>
       </header>
 
       {/* Add friend form */}
@@ -288,8 +291,8 @@ export default function FriendsView({ onMenuClick, onSelectDm }: Props) {
             You can add friends by their username.
           </p>
           <div className="flex gap-2 max-w-lg">
-            <input
-              className="flex-1 rounded-lg border border-rm-border bg-rm-bg-surface px-4 py-2 text-sm text-rm-text outline-none transition-ui placeholder:text-rm-text-muted/30 focus:border-primary/30 focus:ring-2 focus:ring-primary/20"
+            <Input
+              className="flex-1"
               aria-label="Friend username"
               placeholder="Enter a username"
               value={addUsername}
@@ -298,13 +301,14 @@ export default function FriendsView({ onMenuClick, onSelectDm }: Props) {
               }
               onKeyDown={(e) => e.key === "Enter" && handleAddFriend()}
             />
-            <ButtonBase
-              className="rounded-lg bg-primary px-5 py-2 text-sm font-semibold text-primary-foreground transition-colors hover:brightness-110 disabled:opacity-40"
+            <Button
+              size="lg"
+              className="h-9"
               onClick={handleAddFriend}
               disabled={!addUsername.trim()}
             >
               Send Request
-            </ButtonBase>
+            </Button>
           </div>
           {addStatus && (
             <p className="mt-2 text-xs text-primary">{addStatus}</p>
@@ -327,7 +331,12 @@ export default function FriendsView({ onMenuClick, onSelectDm }: Props) {
       </div>
 
       {/* Friends list */}
-      <div className="flex-1 overflow-y-auto custom-scrollbar">
+      <div
+        id="friends-panel"
+        role="tabpanel"
+        aria-labelledby={tabId("friends", tab)}
+        className="flex-1 overflow-y-auto custom-scrollbar"
+      >
         <div className="px-4 py-1">
           {loading && (
             <div className="flex items-center justify-center gap-2 py-12 text-primary/60">
@@ -372,7 +381,7 @@ export default function FriendsView({ onMenuClick, onSelectDm }: Props) {
                 return (
                   <div
                     key={rel.user.id}
-                    className="group relative flex cursor-pointer items-center gap-3 rounded-lg border-b border-rm-border/30 px-3 py-2.5 transition-colors hover:bg-rm-bg-elevated/60 outline-none"
+                    className="group relative flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5 outline-none pointer-fine:hover:bg-rm-tint-1"
                   >
                     <ButtonBase
                       onClick={() => handleOpenDm(rel.user.id)}
@@ -436,34 +445,50 @@ export default function FriendsView({ onMenuClick, onSelectDm }: Props) {
                     </div>
 
                     {/* Actions */}
-                    <div className="relative z-20 flex gap-1.5 opacity-0 transition-opacity group-hover:opacity-100">
+                    <div className="relative z-20 flex gap-1 opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100 pointer-coarse:opacity-100">
                       {rel.type === 0 && (
-                        <ButtonBase
-                          className="cursor-pointer rounded-full p-2 text-rm-text-muted transition-colors hover:bg-rm-bg-elevated hover:text-rm-text outline-none"
+                        <IconButton
+                          icon={MessageSquare}
+                          iconSize={16}
+                          size="sm"
+                          shape="circle"
                           title="Message"
+                          aria-label="Message"
                           onClick={(e) => {
                             e.stopPropagation();
                             handleOpenDm(rel.user.id);
                           }}
-                        >
-                          <MessageSquare className="h-4 w-4" />
-                        </ButtonBase>
+                        />
                       )}
                       {rel.type === 2 && (
-                        <ButtonBase
-                          className="cursor-pointer rounded-full p-2 text-emerald-400/60 transition-colors hover:bg-emerald-500/10 hover:text-emerald-400 outline-none"
+                        <IconButton
+                          icon={Check}
+                          iconSize={16}
+                          size="sm"
+                          shape="circle"
+                          className="text-rm-success-ink"
                           title="Accept"
+                          aria-label="Accept"
                           onClick={(e) => {
                             e.stopPropagation();
                             handleAcceptFriend(rel.user.id);
                           }}
-                        >
-                          <Check className="h-4 w-4" />
-                        </ButtonBase>
+                        />
                       )}
-                      <ButtonBase
-                        className="cursor-pointer rounded-full p-2 text-rm-text-muted/40 transition-colors hover:bg-destructive/10 hover:text-destructive outline-none"
+                      <IconButton
+                        icon={X}
+                        iconSize={16}
+                        size="sm"
+                        shape="circle"
+                        variant="destructive"
                         title={
+                          rel.type === 0
+                            ? "Remove Friend"
+                            : rel.type === 2
+                              ? "Reject"
+                              : "Cancel"
+                        }
+                        aria-label={
                           rel.type === 0
                             ? "Remove Friend"
                             : rel.type === 2
@@ -474,9 +499,7 @@ export default function FriendsView({ onMenuClick, onSelectDm }: Props) {
                           e.stopPropagation();
                           handleRemoveFriend(rel.user.id);
                         }}
-                      >
-                        <X className="h-4 w-4" />
-                      </ButtonBase>
+                      />
                     </div>
                   </div>
                 );

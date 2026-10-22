@@ -1,8 +1,11 @@
+import { Button } from "@/components/ui/button";
 import { Dialog, DialogPortal, DialogSurface } from "@/components/ui/dialog";
+import { IconButton } from "@/components/ui/IconButton";
+import { Input } from "@/components/ui/input";
 import { apiUpload } from "@/lib/api-client";
 import { useChatActions } from "@/stores/chat-store";
 import { useCallback, useEffect, useReducer, useRef } from "react";
-import { Loader2, Plus, X } from "./Icons";
+import { Plus, X } from "./Icons";
 import { cn } from "@/lib/utils";
 interface Props {
   open: boolean;
@@ -179,7 +182,7 @@ export default function CreateServerModal({ open, onClose }: Props) {
           <DialogSurface
             showCloseButton={false}
             className={cn(
-              "relative z-10 w-full sm:max-w-md h-[90vh] sm:h-auto animate-in slide-in-from-bottom-full sm:slide-in-from-bottom-0 sm:fade-in sm:zoom-in-95 rounded-t-3xl sm:rounded-2xl border border-rm-border bg-rm-bg-primary p-6 shadow-2xl duration-300 sm:duration-200 pointer-events-auto flex flex-col",
+              "relative z-10 w-full sm:max-w-md h-[90vh] sm:h-auto animate-in slide-in-from-bottom-full sm:slide-in-from-bottom-0 sm:fade-in sm:zoom-in-95 rounded-t-xl sm:rounded-xl border border-rm-border bg-rm-bg-surface dark:bg-rm-bg-elevated p-6 shadow-[var(--rm-shadow-3)] duration-300 sm:duration-200 pointer-events-auto flex flex-col",
               "data-[state=closed]:animate-out data-[state=closed]:slide-out-to-bottom-full sm:data-[state=closed]:slide-out-to-bottom-0 sm:data-[state=closed]:fade-out sm:data-[state=closed]:zoom-out-95",
             )}
           >
@@ -188,14 +191,15 @@ export default function CreateServerModal({ open, onClose }: Props) {
               <div className="w-12 h-1.5 rounded-full bg-rm-bg-hover" />
             </div>
             {/* Close */}
-            <button
+            <IconButton
+              icon={X}
+              iconSize={16}
               onClick={onClose}
-              className="absolute right-4 top-4 rounded-lg p-1.5 text-rm-text-muted/40 transition-colors hover:text-rm-text outline-none"
-            >
-              <X className="h-4 w-4" />
-            </button>
+              aria-label="Close"
+              className="absolute right-4 top-4"
+            />
 
-            <h2 className="mb-1 text-center text-xl font-bold text-rm-text">
+            <h2 className="mb-1 text-center text-ui-lg font-semibold text-rm-text">
               Create a Server
             </h2>
             <p className="mb-6 text-center text-sm font-medium text-rm-text-muted">
@@ -256,11 +260,11 @@ export default function CreateServerModal({ open, onClose }: Props) {
             <div className="space-y-3">
               <label
                 htmlFor="server-name"
-                className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted/40"
+                className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted"
               >
                 Server Name
               </label>
-              <input
+              <Input
                 id="server-name"
                 ref={inputRef}
                 value={state.name}
@@ -269,27 +273,26 @@ export default function CreateServerModal({ open, onClose }: Props) {
                 }
                 onKeyDown={(e) => e.key === "Enter" && handleCreate()}
                 placeholder="My Awesome Server"
-                className="w-full rounded-xl border border-rm-border bg-rm-bg-surface px-4 py-3 text-rm-text outline-none transition-ui placeholder:text-rm-text-muted/20 focus:border-primary/30 focus:ring-2 focus:ring-primary/20"
+                className="h-10"
               />
             </div>
 
-            <div className="mt-auto sm:mt-6 pt-4 sm:pt-0 pb-6 sm:pb-0 flex flex-col-reverse sm:flex-row justify-end gap-3 shrink-0">
-              <button
+            <div className="mt-auto sm:mt-6 pt-4 sm:pt-0 pb-6 sm:pb-0 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end shrink-0">
+              <Button
+                variant="secondary"
                 onClick={onClose}
-                className="w-full sm:w-auto rounded-xl px-4 py-3 sm:py-2.5 text-ui-base sm:text-sm font-bold text-rm-text-muted transition-colors hover:text-rm-text hover:bg-rm-bg-hover outline-none"
+                className="w-full sm:w-auto"
               >
                 Cancel
-              </button>
-              <button
+              </Button>
+              <Button
                 onClick={handleCreate}
                 disabled={!state.name.trim() || state.creating}
-                className="w-full sm:w-auto flex justify-center items-center gap-2 rounded-xl bg-primary px-5 py-3 sm:py-2.5 text-ui-base sm:text-sm font-bold text-primary-foreground shadow-lg shadow-primary/20 transition-ui hover:brightness-110 disabled:opacity-40"
+                loading={state.creating}
+                className="w-full sm:w-auto"
               >
-                {state.creating && (
-                  <Loader2 className="h-4 w-4 sm:h-3.5 sm:w-3.5 animate-spin" />
-                )}
-                {state.creating ? "Creating…" : "Create Server"}
-              </button>
+                Create Server
+              </Button>
             </div>
           </DialogSurface>
         </div>

@@ -1,3 +1,4 @@
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogClose,
@@ -5,6 +6,8 @@ import {
   DialogDescription,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { IconButton } from "@/components/ui/IconButton";
+import { Input } from "@/components/ui/input";
 import { apiPost } from "@/lib/api-client";
 import { getAuthAssetUrl, getWebOrigin } from "@/lib/platform";
 import type { Channel, Relationship } from "@/lib/types";
@@ -12,7 +15,7 @@ import { cn } from "@/lib/utils";
 import { useChatStore } from "@/stores/chat-store";
 import { useEffect, useId, useMemo, useState } from "react";
 import { AvatarImage } from "./AvatarImage";
-import { Check, Copy, Hash, Loader2, Search, X } from "./Icons";
+import { Check, Copy, Hash, Search, X } from "./Icons";
 import InlineEmojiText from "./InlineEmojiText";
 
 interface ChannelInviteModalProps {
@@ -135,24 +138,26 @@ export default function ChannelInviteModal({
     <Dialog open={open} onOpenChange={(nextOpen) => !nextOpen && onClose()}>
       <DialogContent
         showCloseButton={false}
-        className="relative w-full max-w-[480px] animate-in fade-in zoom-in-95 rounded-2xl border border-rm-border bg-rm-bg-primary shadow-2xl duration-200 overflow-hidden flex flex-col max-h-[80vh]"
+        className="w-full max-w-[480px] overflow-hidden flex flex-col max-h-[80vh]"
       >
         <div>
           {/* Header */}
           <div className="px-6 pt-5 pb-3">
             <DialogClose asChild>
-              <button
+              <IconButton
+                icon={X}
                 type="button"
-                className="absolute right-4 top-4 rounded-lg p-1 text-rm-text-muted/40 transition-colors hover:text-rm-text outline-none"
+                className="absolute right-4 top-4"
                 aria-label="Close invite modal"
-              >
-                <X className="h-5 w-5" />
-              </button>
+              />
             </DialogClose>
 
-            <DialogTitle className="text-base font-bold text-rm-text">
+            <DialogTitle className="text-ui-lg font-semibold text-rm-text">
               Invite friends to{" "}
-              <InlineEmojiText text={serverName} className="text-primary" />
+              <InlineEmojiText
+                text={serverName}
+                className="text-rm-accent-ink"
+              />
             </DialogTitle>
             <DialogDescription className="mt-0.5 flex items-center gap-1 text-sm text-rm-text-muted">
               Recipients will land in <Hash className="h-3 w-3" />
@@ -166,8 +171,8 @@ export default function ChannelInviteModal({
               <label htmlFor={friendSearchInputId} className="sr-only">
                 Search friends
               </label>
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-rm-text-muted/40" />
-              <input
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-rm-text-muted" />
+              <Input
                 id={friendSearchInputId}
                 type="text"
                 placeholder="Search for friends"
@@ -175,7 +180,7 @@ export default function ChannelInviteModal({
                 onChange={(e) =>
                   setState((prev) => ({ ...prev, search: e.target.value }))
                 }
-                className="w-full rounded-lg border border-rm-border bg-rm-bg-surface py-2 pl-9 pr-3 text-sm text-rm-text outline-none placeholder:text-rm-text-muted/40 focus:border-primary/30 focus:ring-2 focus:ring-primary/20 transition-ui"
+                className="pl-9"
               />
             </div>
           </div>
@@ -223,19 +228,16 @@ export default function ChannelInviteModal({
                     </div>
 
                     {/* Invite button */}
-                    <button
+                    <Button
                       type="button"
+                      variant={isInvited ? "ghost" : "secondary"}
+                      size="sm"
                       onClick={() => handleInviteUser(rel.user.id)}
                       disabled={isInvited}
-                      className={cn(
-                        "rounded-md px-3 py-1.5 text-xs font-semibold transition-ui",
-                        isInvited
-                          ? "bg-rm-bg-surface text-rm-text-muted border border-rm-border cursor-default"
-                          : "bg-primary text-primary-foreground hover:brightness-110",
-                      )}
+                      className={cn(isInvited && "text-rm-text-muted")}
                     >
                       {isInvited ? "Invited" : "Invite"}
-                    </button>
+                    </Button>
                   </div>
                 );
               })
@@ -251,27 +253,22 @@ export default function ChannelInviteModal({
               Or, send a server invite link to a friend
             </label>
             <div className="flex gap-2">
-              <input
+              <Input
                 id={inviteLinkInputId}
                 value={state.loading ? "Generating..." : inviteUrl}
                 readOnly
                 onClick={(e) => (e.target as HTMLInputElement).select()}
-                className="flex-1 rounded-lg border border-rm-border bg-rm-bg-surface px-3 py-2 text-sm text-rm-text outline-none truncate"
+                className="flex-1 truncate"
               />
-              <button
+              <Button
                 type="button"
+                variant={state.copied ? "secondary" : "default"}
                 onClick={copyLink}
                 disabled={state.loading || !state.inviteCode}
-                className={cn(
-                  "flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-semibold transition-ui",
-                  state.copied
-                    ? "bg-primary/20 text-primary border border-primary/30"
-                    : "bg-primary text-primary-foreground hover:brightness-110",
-                )}
+                loading={state.loading}
+                className={cn("h-9", state.copied && "text-rm-accent-ink")}
               >
-                {state.loading ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : state.copied ? (
+                {state.copied ? (
                   <>
                     <Check className="h-3.5 w-3.5" /> Copied
                   </>
@@ -280,10 +277,10 @@ export default function ChannelInviteModal({
                     <Copy className="h-3.5 w-3.5" /> Copy
                   </>
                 )}
-              </button>
+              </Button>
             </div>
             {state.inviteCode && (
-              <p className="mt-2 text-ui-2xs text-rm-text-muted/60">
+              <p className="mt-2 text-ui-2xs text-rm-text-muted">
                 Your invite link expires in 7 days.
               </p>
             )}

@@ -1,5 +1,6 @@
 import { getDisplayName } from "@/lib/display-name";
 import type { Message } from "@/lib/types";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import AttachmentList from "./AttachmentList";
 import { InputMentionOverlay } from "./InputMentionOverlay";
@@ -132,14 +133,16 @@ export default function MessageInput({
             }}
           />
 
-          <button
+          <Button
             type="button"
+            variant="secondary"
+            size="icon-sm"
             aria-label="Add attachment"
             onClick={() => fileInputRef.current?.click()}
-            className="mr-3 mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-rm-bg-hover text-rm-text-muted transition-ui hover:bg-rm-bg-active hover:text-rm-text enabled:active:scale-[0.96]"
+            className="mr-3 mt-0.5 rounded-full text-rm-text-muted pointer-fine:hover:text-rm-text"
           >
-            <Plus className="h-4 w-4" strokeWidth={2.5} />
-          </button>
+            <Plus className="size-4" strokeWidth={2.5} />
+          </Button>
 
           <div className="relative flex-1 min-h-[32px] overflow-hidden">
             {value.length === 0 && (
@@ -150,7 +153,7 @@ export default function MessageInput({
                 <MessageInputPlaceholder
                   channelName={channelName}
                   replyDisplayName={replyDisplayName}
-                  className="py-1 text-ui-base font-normal leading-[1.375] text-rm-text-muted/60 max-md:text-ui-md"
+                  className="py-1 text-ui-base font-normal leading-[1.375] text-rm-text-muted max-md:text-ui-md"
                 />
               </div>
             )}
@@ -190,7 +193,7 @@ export default function MessageInput({
               onClick={enforceAtomicMentions}
               placeholder=""
               className={cn(
-                "custom-scrollbar relative z-10 w-full resize-none overflow-y-auto bg-transparent py-1 text-ui-base font-normal leading-[1.375] text-transparent outline-none placeholder:text-rm-text-muted/60 selection:bg-primary/30 selection:text-transparent max-md:text-ui-md",
+                "custom-scrollbar relative z-10 w-full resize-none overflow-y-auto bg-transparent py-1 text-ui-base font-normal leading-[1.375] text-transparent outline-none placeholder:text-rm-text-muted selection:bg-primary/30 selection:text-transparent max-md:text-ui-md",
               )}
               style={{
                 caretColor: "var(--rm-accent)",

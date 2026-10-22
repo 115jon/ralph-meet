@@ -1,3 +1,4 @@
+import { PRESS } from "@/components/ui/interaction";
 import { useContextMenu } from "@/hooks/useContextMenu";
 import { cn } from "@/lib/utils";
 import { useChatActions, useChatStore } from "@/stores/chat-store";
@@ -138,7 +139,10 @@ export default function DMSidebar({
       >
         {/* Search placeholder */}
         <button
-          className="mb-2 mt-1 flex h-8 w-full items-center gap-2 rounded-md border border-rm-border bg-rm-bg-surface px-3 text-ui-sm text-rm-text-muted transition-ui hover:border-rm-border-strong hover:bg-rm-bg-elevated cursor-pointer outline-none"
+          className={cn(
+            "mb-2 mt-1 flex h-8 w-full items-center gap-2 rounded-md bg-rm-tint-1 px-3 text-ui-sm text-rm-text-muted cursor-pointer outline-none pointer-fine:hover:text-rm-text",
+            PRESS,
+          )}
           onClick={() =>
             window.dispatchEvent(new CustomEvent("open-command-menu"))
           }

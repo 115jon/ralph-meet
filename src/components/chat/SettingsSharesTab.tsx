@@ -1,3 +1,5 @@
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { apiDelete, apiGet } from "@/lib/api-client";
 import { cn } from "@/lib/utils";
 import {
@@ -139,17 +141,21 @@ export default function SettingsSharesTab() {
             anything you no longer want available.
           </p>
         </div>
-        <button
+        <Button
+          variant="secondary"
+          size="sm"
           onClick={loadShares}
           disabled={loading}
-          className="inline-flex items-center gap-2 rounded-lg border border-rm-border px-3 py-2 text-xs font-bold text-rm-text-secondary transition hover:bg-rm-bg-hover disabled:opacity-50"
         >
-          <RefreshCw className={cn("h-3.5 w-3.5", loading && "animate-spin")} />
+          <RefreshCw
+            aria-hidden="true"
+            className={cn("size-3.5", loading && "animate-spin")}
+          />
           Refresh
-        </button>
+        </Button>
       </div>
 
-      <div className="mb-4 grid grid-cols-2 rounded-lg border border-rm-border bg-rm-bg-surface p-1">
+      <div className="mb-4 grid grid-cols-2 gap-1 rounded-lg border border-rm-border bg-rm-bg-surface p-1">
         {[
           {
             id: "current" as const,
@@ -157,18 +163,20 @@ export default function SettingsSharesTab() {
           },
           { id: "all" as const, label: `All (${shares.length})` },
         ].map((item) => (
-          <button
+          <Button
             key={item.id}
+            variant="ghost"
             onClick={() => setFilter(item.id)}
+            aria-pressed={filter === item.id}
             className={cn(
-              "rounded-md px-3 py-2 text-sm font-bold transition",
+              "w-full",
               filter === item.id
-                ? "bg-primary text-primary-foreground"
-                : "text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text",
+                ? "bg-rm-tint-2 text-rm-text"
+                : "text-rm-text-secondary pointer-fine:hover:text-rm-text",
             )}
           >
             {item.label}
-          </button>
+          </Button>
         ))}
       </div>
 
@@ -178,11 +186,11 @@ export default function SettingsSharesTab() {
           Loading shares...
         </div>
       ) : error ? (
-        <div className="rounded-lg border border-destructive/20 bg-destructive/10 p-4 text-sm text-destructive">
+        <div className="rounded-xl bg-rm-danger-tint p-4 text-sm text-rm-danger-ink">
           {error}
         </div>
       ) : visibleShares.length === 0 ? (
-        <div className="rounded-lg border border-rm-border bg-rm-bg-surface p-6 text-sm text-rm-text-muted">
+        <div className="rounded-xl border border-rm-border bg-rm-bg-surface p-6 text-sm text-rm-text-muted">
           {filter === "current"
             ? "No current public shares."
             : "No public shares yet."}
@@ -196,7 +204,7 @@ export default function SettingsSharesTab() {
             return (
               <div
                 key={share.id}
-                className="rounded-lg border border-rm-border bg-rm-bg-surface p-4"
+                className="rounded-xl border border-rm-border bg-rm-bg-surface p-4"
               >
                 <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0">
@@ -213,16 +221,14 @@ export default function SettingsSharesTab() {
                       />
                     </p>
                   </div>
-                  <span
-                    className={cn(
-                      "rounded-md border px-2 py-1 text-ui-2xs font-bold uppercase",
-                      active
-                        ? "border-emerald-400/20 bg-emerald-400/10 text-emerald-300"
-                        : "border-rm-border text-rm-text-muted",
-                    )}
+                  <Badge
+                    variant={active ? "secondary" : "outline"}
+                    className={
+                      active ? "text-rm-success-ink" : "text-rm-text-muted"
+                    }
                   >
                     {statusLabel(status)}
-                  </span>
+                  </Badge>
                 </div>
 
                 <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-rm-text-muted">
@@ -235,42 +241,44 @@ export default function SettingsSharesTab() {
                 </div>
 
                 <div className="mt-4 flex flex-wrap gap-2">
-                  <button
+                  <Button
+                    variant="secondary"
+                    size="sm"
                     onClick={() => copy(share.id, url)}
                     disabled={!active}
-                    className="inline-flex items-center gap-2 rounded-lg border border-rm-border px-3 py-2 text-xs font-bold text-rm-text-secondary transition hover:bg-rm-bg-hover disabled:opacity-40"
                   >
                     {copiedId === share.id ? (
-                      <Check className="h-3.5 w-3.5" />
+                      <Check aria-hidden="true" className="size-3.5" />
                     ) : (
-                      <Copy className="h-3.5 w-3.5" />
+                      <Copy aria-hidden="true" className="size-3.5" />
                     )}
                     {copiedId === share.id ? "Copied" : "Copy"}
-                  </button>
+                  </Button>
                   {active && (
-                    <a
-                      href={url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex items-center gap-2 rounded-lg border border-rm-border px-3 py-2 text-xs font-bold text-rm-text-secondary transition hover:bg-rm-bg-hover"
-                    >
-                      <ExternalLink className="h-3.5 w-3.5" />
-                      Open
-                    </a>
+                    <Button asChild variant="secondary" size="sm">
+                      <a href={url} target="_blank" rel="noreferrer">
+                        <ExternalLink aria-hidden="true" className="size-3.5" />
+                        Open
+                      </a>
+                    </Button>
                   )}
                   {active && (
-                    <button
+                    <Button
+                      variant="destructive"
+                      size="sm"
                       onClick={() => revoke(share.id)}
                       disabled={revokingId === share.id}
-                      className="inline-flex items-center gap-2 rounded-lg border border-destructive/20 px-3 py-2 text-xs font-bold text-destructive transition hover:bg-destructive/10 disabled:opacity-40"
                     >
                       {revokingId === share.id ? (
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        <Loader2
+                          aria-hidden="true"
+                          className="size-3.5 animate-spin"
+                        />
                       ) : (
-                        <Trash2 className="h-3.5 w-3.5" />
+                        <Trash2 aria-hidden="true" className="size-3.5" />
                       )}
                       Revoke
-                    </button>
+                    </Button>
                   )}
                 </div>
               </div>

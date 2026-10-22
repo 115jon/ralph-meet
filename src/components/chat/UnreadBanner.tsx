@@ -5,6 +5,7 @@
  * Uses the app's primary color. Includes a "Mark As Read" button.
  */
 
+import { Button } from "@/components/ui/button";
 import { Check } from "./Icons";
 
 interface UnreadBannerProps {
@@ -28,17 +29,19 @@ export function UnreadBanner({
       <span>
         {count} new message{count !== 1 ? "s" : ""} since {timeStr}
       </span>
-      <button
+      <Button
         type="button"
+        variant="ghost"
+        size="xs"
         onClick={(e) => {
           e.stopPropagation();
           onMarkAsRead();
         }}
-        className="flex h-6 items-center gap-1 rounded-sm px-1.5 text-ui-sm font-semibold transition-colors hover:bg-white/15 enabled:active:scale-[0.96]"
+        className="text-ui-sm text-primary-foreground [--hover-o:0.15]"
       >
         Mark As Read
-        <Check className="h-3.5 w-3.5" strokeWidth={2.5} />
-      </button>
+        <Check className="size-3.5" strokeWidth={2.5} />
+      </Button>
     </div>
   );
 }

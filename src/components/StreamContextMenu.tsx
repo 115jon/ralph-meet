@@ -24,6 +24,8 @@ import { useShallow } from "zustand/shallow";
 import { clog } from "@/lib/console-logger";
 import { LocalMenu } from "./ContextMenu/LocalMenu";
 import { RemoteMenu } from "./ContextMenu/RemoteMenu";
+import { MENU_PANEL } from "@/components/ui/menu";
+import { cn } from "@/lib/utils";
 
 const log = clog("Mod");
 
@@ -329,7 +331,10 @@ export const StreamContextMenu: React.FC<StreamContextMenuProps> = ({
       onContextMenu={(event) => event.stopPropagation()}
       onMouseLeave={clearSubmenu}
       onMouseMove={handleMouseMove}
-      className="fixed z-70 w-[210px] bg-rm-bg-elevated border border-rm-border shadow-2xl rounded-lg p-1 pb-2 animate-in fade-in zoom-in-95 duration-100 backdrop-blur-xl flex flex-col"
+      className={cn(
+        "fixed z-70 flex w-[210px] flex-col animate-in fade-in zoom-in-[0.97] duration-150",
+        MENU_PANEL,
+      )}
     >
       <div className="flex flex-col">
         {isLocal ? (

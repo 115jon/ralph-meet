@@ -133,12 +133,12 @@ export default function SettingsMediaTab() {
         <section className="space-y-6">
           <div className="flex items-center gap-2">
             <Shield size={16} className="text-emerald-400" />
-            <h3 className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted">
+            <h3 className="text-ui-xs font-medium text-rm-text-muted">
               Content Filtering
             </h3>
           </div>
 
-          <div className="rounded-2xl border border-rm-border bg-rm-bg-surface p-5 shadow-sm">
+          <div className="rounded-xl border border-rm-border bg-rm-bg-surface p-5">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div className="max-w-[520px]">
                 <p className="text-sm font-semibold text-rm-text">
@@ -181,14 +181,14 @@ export default function SettingsMediaTab() {
                     void handleFilterChange(option.value);
                   }}
                   className={cn(
-                    "w-full rounded-2xl border bg-rm-bg-surface p-4 text-left transition-ui",
+                    "w-full rounded-xl border bg-rm-bg-surface p-4 text-left transition-ui",
                     selected
                       ? cn(
-                          "shadow-lg ring-1",
+                          "ring-1",
                           FILTER_ACCENT_STYLES[option.value].border,
                           FILTER_ACCENT_STYLES[option.value].ring,
                         )
-                      : "border-rm-border hover:border-rm-text-muted/20 hover:bg-rm-bg-elevated/40",
+                      : "border-rm-border pointer-fine:hover:bg-rm-tint-1",
                   )}
                 >
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -234,7 +234,7 @@ export default function SettingsMediaTab() {
             })}
           </div>
           {saveError ? (
-            <div className="rounded-2xl border border-destructive/25 bg-destructive/10 px-4 py-3 text-sm font-medium text-destructive">
+            <div className="rounded-xl bg-rm-danger-tint px-4 py-3 text-sm font-medium text-rm-danger-ink">
               {saveError}
             </div>
           ) : null}
@@ -243,13 +243,13 @@ export default function SettingsMediaTab() {
         <section className="space-y-6">
           <div className="flex items-center gap-2">
             <Sparkles size={16} className="text-sky-400" />
-            <h3 className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted">
+            <h3 className="text-ui-xs font-medium text-rm-text-muted">
               How It Applies
             </h3>
           </div>
 
           <div className="grid gap-3 md:grid-cols-2">
-            <div className="rounded-2xl border border-rm-border bg-rm-bg-surface p-4">
+            <div className="rounded-xl border border-rm-border bg-rm-bg-surface p-4">
               <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl border border-sky-500/20 bg-sky-500/10 text-sky-400">
                 <Sparkles size={18} />
               </div>
@@ -263,8 +263,8 @@ export default function SettingsMediaTab() {
               </p>
             </div>
 
-            <div className="rounded-2xl border border-rm-border bg-rm-bg-surface p-4">
-              <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl border border-rm-accent/20 bg-rm-accent/10 text-rm-accent">
+            <div className="rounded-xl border border-rm-border bg-rm-bg-surface p-4">
+              <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-rm-accent-tint text-rm-accent-ink">
                 <UserRound size={18} />
               </div>
               <h4 className="text-sm font-bold text-rm-text">

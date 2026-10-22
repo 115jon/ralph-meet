@@ -19,6 +19,11 @@ import { ProfileSurfaceShell } from "@/components/chat/ProfileSurfaceShell";
 import { ProfileAssetLayer } from "@/components/chat/ProfileAssetLayer";
 import { UserNameplateLayer } from "@/components/chat/UserNameplateLayer";
 import { Button } from "@/components/ui/button";
+import {
+  MENU_ITEM,
+  MENU_ITEM_DANGER,
+  MENU_ITEM_DEFAULT,
+} from "@/components/ui/menu";
 import { Input } from "@/components/ui/input";
 import {
   Tooltip,
@@ -453,10 +458,8 @@ function ProfileActionMenu({
           tabIndex={-1}
           onClick={action.onClick}
           className={cn(
-            "flex w-full items-center rounded-lg px-3 py-2 text-left text-ui-sm font-semibold transition-colors",
-            action.destructive
-              ? "text-destructive hover:bg-destructive/12 hover:text-destructive"
-              : "text-rm-text hover:bg-rm-bg-hover",
+            MENU_ITEM,
+            action.destructive ? MENU_ITEM_DANGER : MENU_ITEM_DEFAULT,
           )}
         >
           {action.label}
@@ -967,7 +970,8 @@ function ColorField({
                     setDraft("");
                     onChange(null);
                   }}
-                  className="h-7 rounded-md px-2.5 text-ui-2xs font-semibold text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text"
+                  size="sm"
+                  className="text-ui-xs text-rm-text-secondary pointer-fine:hover:text-rm-text"
                   aria-label={`Use the default ${label.toLowerCase()}`}
                 >
                   Use default
@@ -1287,7 +1291,7 @@ function DisplayNameStyleDialog({
               variant="ghost"
               size="icon-sm"
               onClick={onClose}
-              className="rounded-xl border border-rm-border bg-rm-bg-surface/70 text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text"
+              className="text-rm-text-secondary pointer-fine:hover:text-rm-text"
               aria-label="Close display name style dialog"
             >
               <X size={16} />
@@ -1829,32 +1833,25 @@ function DisplayNameStyleDialog({
                 type="button"
                 variant="secondary"
                 onClick={() => setDraftStyle(createRandomDisplayNameStyle())}
-                className="h-11 rounded-xl border border-rm-border bg-rm-bg-surface/70 px-4 text-rm-text hover:bg-rm-bg-hover"
               >
-                <Sparkles size={15} />
+                <Sparkles size={15} aria-hidden="true" />
                 Surprise Me
               </Button>
               <div className="flex items-center gap-3">
                 {normalizeDisplayNameStyle(initialStyle) ? (
                   <Button
                     type="button"
-                    variant="ghost"
+                    variant="destructive"
                     onClick={() => {
                       onApply(null);
                       onClose();
                     }}
-                    className="h-11 rounded-xl border border-rm-border bg-rm-bg-surface/60 px-4 text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text"
                   >
-                    <Trash2 size={15} />
+                    <Trash2 size={15} aria-hidden="true" />
                     Clear style
                   </Button>
                 ) : null}
-                <Button
-                  type="button"
-                  variant="ghost"
-                  onClick={onClose}
-                  className="h-11 rounded-xl border border-rm-border bg-rm-bg-surface/60 px-4 text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text"
-                >
+                <Button type="button" variant="secondary" onClick={onClose}>
                   Cancel
                 </Button>
                 <Button
@@ -1863,7 +1860,6 @@ function DisplayNameStyleDialog({
                     onApply(draftStyle);
                     onClose();
                   }}
-                  className="h-11 rounded-xl bg-primary px-4 text-primary-foreground hover:bg-primary/90"
                 >
                   Apply
                 </Button>
@@ -4577,18 +4573,13 @@ export default function SettingsAccountTab({
               <div className="flex items-center gap-3">
                 <Button
                   type="button"
-                  variant="ghost"
+                  variant="secondary"
                   onClick={resetDraftState}
                   disabled={saving}
-                  className="h-10 rounded-xl border border-rm-border bg-rm-bg-surface/80 px-4 text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text"
                 >
                   Reset
                 </Button>
-                <Button
-                  onClick={handleSaveProfile}
-                  disabled={saving}
-                  className="h-10 rounded-xl bg-primary px-4 text-primary-foreground hover:bg-primary/90"
-                >
+                <Button onClick={handleSaveProfile} disabled={saving}>
                   {saving ? (
                     <Loader2 size={16} className="animate-spin" />
                   ) : (
@@ -4615,18 +4606,13 @@ export default function SettingsAccountTab({
             <div className="flex items-center gap-3">
               <Button
                 type="button"
-                variant="ghost"
+                variant="secondary"
                 onClick={resetDraftState}
                 disabled={saving}
-                className="h-10 rounded-xl border border-rm-border bg-rm-bg-surface/80 px-4 text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text"
               >
                 Reset
               </Button>
-              <Button
-                onClick={handleSaveProfile}
-                disabled={saving}
-                className="h-10 rounded-xl bg-primary px-4 text-primary-foreground hover:bg-primary/90"
-              >
+              <Button onClick={handleSaveProfile} disabled={saving}>
                 {saving ? (
                   <Loader2 size={16} className="animate-spin" />
                 ) : (
