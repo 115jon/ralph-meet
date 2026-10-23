@@ -35,6 +35,26 @@ import { CatalogFixture, ShopFixture } from "@/components/dev/ShopFixtures";
 import SettingsModal from "@/components/chat/SettingsModal";
 import UserPanel from "@/components/chat/UserPanel";
 import { WebAppTitleBar } from "@/components/chat/AppTitleBar";
+import { ListenTogetherPanel } from "@/components/chat/ListenTogetherPanel";
+import { useListenTogetherStore } from "@/stores/useListenTogetherStore";
+import {
+  clearStoredKovaAuthSessionToken,
+  getStoredKovaAuthSessionToken,
+  setStoredKovaAuthSessionToken,
+} from "@/lib/desktop-auth";
+import type {
+  ListenTogetherQueueEntry,
+  ListenTogetherSearchResponse,
+  ListenTogetherStateSnapshot,
+} from "@/lib/listen-together";
+import shareFrame from "@/components/dev/assets/share-frame.webp";
+import coverNightdrive from "@/components/dev/assets/cover-nightdrive.webp";
+import coverPaperboats from "@/components/dev/assets/cover-paperboats.webp";
+import coverCopperline from "@/components/dev/assets/cover-copperline.webp";
+import coverSlowfires from "@/components/dev/assets/cover-slowfires.webp";
+import coverGlasshouse from "@/components/dev/assets/cover-glasshouse.webp";
+import coverTidelines from "@/components/dev/assets/cover-tidelines.webp";
+import coverSmallhours from "@/components/dev/assets/cover-smallhours.webp";
 import { SplashScreen } from "@/components/SplashScreen";
 import { VoiceControls } from "@/components/voice/VoiceControls";
 import { VoiceGrid } from "@/components/voice/VoiceGrid";
@@ -622,10 +642,264 @@ const gridItems: GridItem[] = [
   },
 ];
 
+const linusScreen: GridItem = {
+  id: "g-linus-screen",
+  userId: "u-linus",
+  name: "Linus",
+  stream: null,
+  isLocal: false,
+  type: "screen",
+  isStreaming: true,
+  isMuted: false,
+  isDeafened: false,
+  isSpeaking: false,
+};
+
+const LISTEN_ROOM = "lounge";
+
+function listenEntry(
+  id: string,
+  title: string,
+  artist: string,
+  album: string,
+  durationMs: number,
+  art: string,
+  requester: { id: string; name: string },
+  requestedAt: number,
+): ListenTogetherQueueEntry {
+  return {
+    entryId: `lt-${id}`,
+    requestedAt,
+    track: {
+      kind: "music",
+      id,
+      provider: "youtube_music",
+      videoId: id,
+      title,
+      artist,
+      album,
+      durationMs,
+      artworkUrl: art,
+      canonicalUrl: `https://music.youtube.com/watch?v=${id}`,
+      sourceLabel: "YouTube Music",
+    },
+    requester: { userId: requester.id, displayName: requester.name },
+  };
+}
+
+function listenSnapshot(now: number): ListenTogetherStateSnapshot {
+  const queue = [
+    listenEntry(
+      "fx-nightdrive",
+      "Night Drive",
+      "Lumen Arc",
+      "Afterglow",
+      254_000,
+      coverNightdrive,
+      { id: "u-ada", name: "Ada Lovelace" },
+      now - 540_000,
+    ),
+    listenEntry(
+      "fx-paperboats",
+      "Paper Boats",
+      "The Quiet Kind",
+      "Low Tide",
+      211_000,
+      coverPaperboats,
+      { id: "u-grace", name: "Grace Hopper" },
+      now - 420_000,
+    ),
+    listenEntry(
+      "fx-copperline",
+      "Copper Line",
+      "Marrow & Vale",
+      "Field Notes",
+      198_000,
+      coverCopperline,
+      { id: "u-me", name: "Jon" },
+      now - 300_000,
+    ),
+    listenEntry(
+      "fx-slowfires",
+      "Slow Fires",
+      "Lumen Arc",
+      "Afterglow",
+      276_000,
+      coverSlowfires,
+      { id: "u-linus", name: "Linus" },
+      now - 120_000,
+    ),
+  ];
+  const current = queue[0]!;
+  return {
+    roomSlug: LISTEN_ROOM,
+    revision: 12,
+    paused: false,
+    currentEntryId: current.entryId,
+    anchorPositionMs: 83_000,
+    anchorUpdatedAt: now,
+    lastUpdatedAt: now,
+    recentlyPlayed: [],
+    queue,
+    currentEntry: current,
+    positionMs: 83_000,
+    durationMs:
+      current.track.kind === "music" ? current.track.durationMs : null,
+  };
+}
+
+const LISTEN_SEARCH: ListenTogetherSearchResponse = {
+  filter: "track",
+  cursor: null,
+  results: [
+    {
+      kind: "track",
+      id: "fx-glasshouse",
+      provider: "youtube_music",
+      videoId: "fx-glasshouse",
+      title: "Glasshouse",
+      artist: "Lumen Arc",
+      album: "Afterglow",
+      durationMs: 232_000,
+      artworkUrl: coverGlasshouse,
+      canonicalUrl: "https://music.youtube.com/watch?v=fx-glasshouse",
+      sourceLabel: "YouTube Music",
+    },
+    {
+      kind: "track",
+      id: "fx-tidelines",
+      provider: "youtube_music",
+      videoId: "fx-tidelines",
+      title: "Tidelines",
+      artist: "Lumen Arc",
+      album: "Afterglow",
+      durationMs: 187_000,
+      artworkUrl: coverTidelines,
+      canonicalUrl: "https://music.youtube.com/watch?v=fx-tidelines",
+      sourceLabel: "YouTube Music",
+    },
+    {
+      kind: "track",
+      id: "fx-smallhours",
+      provider: "youtube_music",
+      videoId: "fx-smallhours",
+      title: "Small Hours (Live at Roundhouse)",
+      artist: "Lumen Arc",
+      album: "Live 2025",
+      durationMs: 305_000,
+      artworkUrl: coverSmallhours,
+      canonicalUrl: "https://music.youtube.com/watch?v=fx-smallhours",
+      sourceLabel: "YouTube Music",
+    },
+    {
+      kind: "track",
+      id: "fx-slowfires-s",
+      provider: "youtube_music",
+      videoId: "fx-slowfires",
+      title: "Slow Fires",
+      artist: "Lumen Arc",
+      album: "Afterglow",
+      durationMs: 276_000,
+      artworkUrl: coverSlowfires,
+      canonicalUrl: "https://music.youtube.com/watch?v=fx-slowfires",
+      sourceLabel: "YouTube Music",
+    },
+    {
+      kind: "collection",
+      id: "fx-afterglow",
+      provider: "youtube_music",
+      title: "Afterglow",
+      subtitle: "Album by Lumen Arc",
+      itemCount: 11,
+      artworkUrl: coverNightdrive,
+      sourceUrl: "https://music.youtube.com/playlist?list=fx-afterglow",
+    },
+  ],
+};
+
+/**
+ * Answers the panel's search request from the seed above so the surface
+ * looks in use without a network. Installed only while the listen fixture
+ * is mounted; every other request passes through. The API client refuses to
+ * send anything without a session token, so a placeholder is stored for the
+ * fixture's lifetime when the browser has none (a real one is left alone).
+ */
+function installListenSearchStub() {
+  const placeholderSession = getStoredKovaAuthSessionToken()
+    ? null
+    : "ui-fixture-session";
+  if (placeholderSession) setStoredKovaAuthSessionToken(placeholderSession);
+  const original = window.fetch;
+  window.fetch = async (input, init) => {
+    const url =
+      typeof input === "string"
+        ? input
+        : input instanceof URL
+          ? input.href
+          : input.url;
+    if (url.includes("/api/listen-together/search")) {
+      await new Promise((resolve) => setTimeout(resolve, 120));
+      return new Response(JSON.stringify(LISTEN_SEARCH), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+    return original(input, init);
+  };
+  return () => {
+    window.fetch = original;
+    if (placeholderSession) clearStoredKovaAuthSessionToken();
+  };
+}
+
 /** `live`: mic muted, deafened, camera on and sharing, so every dock state
  * (rest / muted tint / live accent / solid leave) is visible at once. */
-function VoiceRoom({ live = false }: { live?: boolean }) {
-  const [focusedId, setFocusedId] = useState<string | null>(null);
+/**
+ * `share`: Linus is sharing his screen (a real frame of the project's GitHub
+ * page, served as a stream thumbnail so no MediaStream is needed); `focus`
+ * opens it on the stage. `listen`: a seeded Listen Together room with a
+ * track playing and the queue panel open; search is answered from a local
+ * stub so typing a query fills the left pane.
+ */
+function VoiceRoom({
+  live = false,
+  share = false,
+  focus = false,
+  listen = false,
+}: {
+  live?: boolean;
+  share?: boolean;
+  focus?: boolean;
+  listen?: boolean;
+}) {
+  const [focusedId, setFocusedId] = useState<string | null>(
+    share && focus ? "g-linus-screen" : null,
+  );
+  const items = share ? [...gridItems, linusScreen] : gridItems;
+  const linusVoice = share
+    ? [
+        {
+          clerk_user_id: "u-linus",
+          name: "Linus",
+          username: "linus",
+          display_name: "Linus",
+          ...voiceFlags,
+          self_stream: true,
+        },
+      ]
+    : [];
+
+  useEffect(() => {
+    if (!listen) return;
+    const restoreFetch = installListenSearchStub();
+    useListenTogetherStore
+      .getState()
+      .setSnapshot(LISTEN_ROOM, listenSnapshot(Date.now()));
+    return () => {
+      restoreFetch();
+      useListenTogetherStore.getState().clearRoom(LISTEN_ROOM);
+    };
+  }, [listen]);
   return (
     <div
       className="flex h-full flex-col overflow-hidden bg-rm-bg-primary"
@@ -649,6 +923,7 @@ function VoiceRoom({ live = false }: { live?: boolean }) {
                   "ch-lounge": [
                     { clerk_user_id: "u-me", name: "Jon", ...voiceFlags },
                     ...voiceMembers,
+                    ...linusVoice,
                   ],
                 }}
                 localVoiceChannelId="ch-lounge"
@@ -663,7 +938,7 @@ function VoiceRoom({ live = false }: { live?: boolean }) {
               channelName="Lounge"
               connectionState="connected"
               joined
-              focusedItem={gridItems.find((g) => g.id === focusedId) ?? null}
+              focusedItem={items.find((g) => g.id === focusedId) ?? null}
               currentScreenQuality={undefined}
               sfu={null}
               showTextChat={false}
@@ -672,14 +947,28 @@ function VoiceRoom({ live = false }: { live?: boolean }) {
             <div className="flex-1 flex flex-col min-h-0 relative">
               <div className="flex-1 relative min-h-0 bg-rm-bg-primary overflow-hidden flex items-center justify-center">
                 <VoiceGrid
-                  items={gridItems}
+                  items={items}
                   focusedId={focusedId}
                   onFocus={setFocusedId}
                   globalDeafened={false}
                   currentSettings={{ peerSettings: {} }}
-                  watchedStreams={{}}
-                  streamThumbnails={{}}
+                  watchedStreams={share ? { "u-linus": true } : {}}
+                  streamThumbnails={share ? { "u-linus": shareFrame } : {}}
                 />
+                {listen && (
+                  <div className="absolute inset-0 z-30 flex items-center justify-center bg-rm-scrim">
+                    <div className="flex h-[min(600px,calc(100%-48px))] w-[min(1040px,calc(100%-48px))] flex-col overflow-hidden rounded-xl border border-rm-border bg-rm-bg-surface shadow-2xl dark:bg-rm-bg-elevated">
+                      <ListenTogetherPanel
+                        sfu={null}
+                        roomSlug={LISTEN_ROOM}
+                        voiceSessionId="fixture-voice-session"
+                        serverId="s-1"
+                        channelId="ch-lounge"
+                        localUserId="u-me"
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
               <div className="flex-shrink-0 bg-rm-bg-surface border-t border-rm-border z-20 relative">
                 <VoiceControls
@@ -1179,6 +1468,15 @@ export default function UiFixtures() {
       break;
     case "voice-live":
       content = <VoiceRoom live />;
+      break;
+    case "voice-share":
+      content = <VoiceRoom share focus />;
+      break;
+    case "voice-share-grid":
+      content = <VoiceRoom share />;
+      break;
+    case "voice-listen":
+      content = <VoiceRoom listen />;
       break;
     case "voice-landing":
       content = <VoiceLandingFixture />;
