@@ -490,8 +490,8 @@ function seedStore(surface: string) {
     ],
     unreadNotificationCount: 2,
     relationships: [
-      { user: users.ada!, type: 1, created_at: at(100) },
-      { user: users.grace!, type: 1, created_at: at(100) },
+      { user: users.ada!, type: 0, created_at: at(100) },
+      { user: users.grace!, type: 0, created_at: at(100) },
       { user: users.linus!, type: 2, created_at: at(10) },
     ],
   } as never);

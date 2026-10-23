@@ -1,9 +1,10 @@
 /**
  * Profile surface fixtures (unit 16).
  *
- *   sp-profile-modal[-friend|-pending|-blocked|-error]   UserProfileModal
+ *   sp-profile-modal[-friend|-pending|-blocked|-error|-block-confirm]
+ *                                                         UserProfileModal
  *   sp-profile-popover[-banner|-self]                     UserProfilePopover
- *   sp-account-popover                                    UserAccountPopover
+ *   sp-account-popover[-status]                           UserAccountPopover
  *   sp-avatar-picker                                      AvatarPickerModal
  *   sp-avatar-frame                                       AvatarFrameEditor
  */
@@ -29,10 +30,12 @@ export const PROFILE_SURFACES = [
   "sp-profile-modal-pending",
   "sp-profile-modal-blocked",
   "sp-profile-modal-error",
+  "sp-profile-modal-block-confirm",
   "sp-profile-popover",
   "sp-profile-popover-banner",
   "sp-profile-popover-self",
   "sp-account-popover",
+  "sp-account-popover-status",
   "sp-avatar-picker",
   "sp-avatar-frame",
 ];
@@ -170,7 +173,14 @@ function ProfilesFixture({ surface }: { surface: string }) {
   const noop = () => {};
 
   if (surface.startsWith("sp-profile-modal")) {
-    return <UserProfileModal open user={grace} onClose={noop} />;
+    return (
+      <UserProfileModal
+        open
+        user={grace}
+        onClose={noop}
+        initialBlockConfirm={surface === "sp-profile-modal-block-confirm"}
+      />
+    );
   }
   if (surface.startsWith("sp-profile-popover")) {
     const user =
@@ -196,7 +206,7 @@ function ProfilesFixture({ surface }: { surface: string }) {
       </Anchored>
     );
   }
-  if (surface === "sp-account-popover") {
+  if (surface.startsWith("sp-account-popover")) {
     return (
       <Anchored>
         {(anchor) => (
@@ -206,6 +216,9 @@ function ProfilesFixture({ surface }: { surface: string }) {
             updateStatus={noop}
             onOpenProfileEditor={noop}
             anchorEl={anchor}
+            initialView={
+              surface === "sp-account-popover-status" ? "status" : "main"
+            }
           />
         )}
       </Anchored>

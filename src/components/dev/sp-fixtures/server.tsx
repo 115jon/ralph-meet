@@ -13,9 +13,15 @@
  *   sp-server-audit-empty    no entries
  *   sp-server-audit-error    load failed
  *   sp-server-audit-loading  loading
+ *   sp-server-roles-edit     a role open in the editor (pushed on phones)
+ *   sp-server-delete         delete confirm armed (owner)
+ *   sp-server-member         moderator without Manage server: fewer pages
+ *   sp-server-invites-error  invite list failed to load
  */
 
-import ServerSettingsModal from "@/components/chat/ServerSettingsModal";
+import ServerSettingsModal, {
+  type ServerSettingsTab,
+} from "@/components/chat/ServerSettingsModal";
 import { ALL_PERMISSIONS, PERMISSIONS } from "@/lib/permissions";
 import type { Invite, Role, ServerAuditLog } from "@/lib/types";
 import type { ReactNode } from "react";
@@ -41,6 +47,10 @@ export const SERVER_SURFACES = [
   "sp-server-audit-empty",
   "sp-server-audit-error",
   "sp-server-audit-loading",
+  "sp-server-roles-edit",
+  "sp-server-delete",
+  "sp-server-member",
+  "sp-server-invites-error",
 ] as const;
 
 export const FIXTURE_ROLES: Role[] = [
@@ -204,7 +214,10 @@ function serverRoutes(surface: string): StubRoute[] {
     {
       path: /^\/api\/servers\/s-1\/invites$/,
       method: "GET",
-      reply: () => ok(invites),
+      reply: () =>
+        surface === "sp-server-invites-error"
+          ? fail(500, "D1_ERROR: no such table: invites")
+          : ok(invites),
     },
     {
       path: /^\/api\/servers\/s-1\/settings$/,
@@ -238,7 +251,13 @@ function serverRoutes(surface: string): StubRoute[] {
   ];
 }
 
-function tabFor(surface: string) {
+const MODERATOR_PERMISSIONS =
+  PERMISSIONS.KICK_MEMBERS |
+  PERMISSIONS.BAN_MEMBERS |
+  PERMISSIONS.MANAGE_MESSAGES |
+  PERMISSIONS.VIEW_AUDIT_LOG;
+
+function tabFor(surface: string): ServerSettingsTab {
   if (surface.startsWith("sp-server-roles")) return "roles";
   if (surface.startsWith("sp-server-invites")) return "invites";
   if (surface.startsWith("sp-server-bans")) return "bans";
@@ -248,20 +267,21 @@ function tabFor(surface: string) {
 
 function ServerFixture({ surface }: { surface: string }) {
   useApiStub(serverRoutes(surface));
-  // `initialTab` is read by the rebuilt modal; older builds ignore it.
-  const extra = { initialTab: tabFor(surface) } as object;
+  const member = surface === "sp-server-member";
   return (
     <ServerSettingsModal
       open
       serverId="s-1"
-      ownerId="u-me"
+      ownerId={member ? "u-ada" : "u-me"}
       serverName="Ralph HQ"
       iconUrl={null}
-      userPermissions={ALL_PERMISSIONS}
+      userPermissions={member ? MODERATOR_PERMISSIONS : ALL_PERMISSIONS}
       onClose={() => {}}
       onUpdated={() => {}}
       onDeleted={() => {}}
-      {...extra}
+      initialTab={member ? undefined : tabFor(surface)}
+      initialRoleId={surface === "sp-server-roles-edit" ? "r-mod" : undefined}
+      initialConfirmDelete={surface === "sp-server-delete"}
     />
   );
 }

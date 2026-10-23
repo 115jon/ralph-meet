@@ -1,9 +1,12 @@
 /**
  * Channel settings fixtures.
  *
- *   sp-channel              overview
- *   sp-channel-permissions  permissions, with the Moderator override open so
- *                           the deny / inherit / allow rows show
+ *   sp-channel                   overview
+ *   sp-channel-permissions       permissions, with the Moderator override open
+ *                                so the deny / inherit / allow rows show
+ *                                (pushed into the editor on phones)
+ *   sp-channel-permissions-list  permissions, nothing selected
+ *   sp-channel-voice             a voice channel's overview
  */
 
 import ChannelSettingsModal from "@/components/chat/ChannelSettingsModal";
@@ -13,7 +16,12 @@ import type { ReactNode } from "react";
 import { at, ok, useApiStub, type StubRoute } from "./api-stub";
 import { FIXTURE_ROLES } from "./server";
 
-export const CHANNEL_SURFACES = ["sp-channel", "sp-channel-permissions"];
+export const CHANNEL_SURFACES = [
+  "sp-channel",
+  "sp-channel-permissions",
+  "sp-channel-permissions-list",
+  "sp-channel-voice",
+];
 
 const channel: Channel = {
   id: "ch-general",
@@ -24,6 +32,17 @@ const channel: Channel = {
   category_id: "c-text",
   position: 1,
   created_at: at(9000),
+};
+
+const voiceChannel: Channel = {
+  id: "ch-lounge",
+  server_id: "s-1",
+  name: "Lounge",
+  description: null,
+  channel_type: "voice",
+  category_id: "c-voice",
+  position: 1,
+  created_at: at(8000),
 };
 
 const overrides = [
@@ -57,7 +76,7 @@ const overrides = [
 
 const routes: StubRoute[] = [
   {
-    path: /^\/api\/channels\/ch-general\/permissions$/,
+    path: /^\/api\/channels\/ch-[a-z]+\/permissions$/,
     method: "GET",
     reply: () => ok(overrides),
   },
@@ -89,21 +108,18 @@ const routes: StubRoute[] = [
 
 function ChannelFixture({ surface }: { surface: string }) {
   useApiStub(routes);
-  // Read by the rebuilt modal; older builds ignore them.
-  const extra = {
-    initialTab:
-      surface === "sp-channel-permissions" ? "permissions" : "overview",
-    initialOverrideId:
-      surface === "sp-channel-permissions" ? "r-mod" : undefined,
-  } as object;
+  const onPermissions = surface.startsWith("sp-channel-permissions");
   return (
     <ChannelSettingsModal
       open
       serverId="s-1"
-      channel={channel}
+      channel={surface === "sp-channel-voice" ? voiceChannel : channel}
       userPermissions={PERMISSIONS.ADMINISTRATOR}
       onClose={() => {}}
-      {...extra}
+      initialTab={onPermissions ? "permissions" : undefined}
+      initialOverrideId={
+        surface === "sp-channel-permissions" ? "r-mod" : undefined
+      }
     />
   );
 }
