@@ -1,6 +1,7 @@
 import { AvatarImage } from "@/components/chat/AvatarImage";
 import { isMobileViewport } from "@/hooks/useMediaQuery";
 import { ButtonBase } from "@/components/ui/button-base";
+import { HIT, PRESS, REVEAL } from "@/components/ui/interaction";
 import { IconButton } from "@/components/ui/IconButton";
 import {
   PHONE_GROUP,
@@ -1518,7 +1519,14 @@ function FilesTabContent({
                   href={getDownloadUrl(item.url)}
                   download={item.filename}
                   onClick={(e) => e.stopPropagation()}
-                  className="relative z-20 shrink-0 rounded-lg p-2 text-rm-text-muted pointer-fine:opacity-0 transition-ui pointer-fine:hover:bg-primary/10 pointer-fine:hover:text-primary pointer-fine:group-hover:opacity-100"
+                  aria-label={`Download ${item.filename}`}
+                  className={cn(
+                    "relative z-20 flex size-8 shrink-0 items-center justify-center rounded-md text-rm-text-muted pointer-fine:hover:bg-rm-tint-1 pointer-fine:hover:text-rm-text",
+                    PRESS,
+                    HIT,
+                    "relative",
+                    REVEAL,
+                  )}
                 >
                   <Icon name="download" size="sm" />
                 </a>

@@ -1025,7 +1025,7 @@ export default function ChatPage() {
     if (!activeServerId) {
       return (
         <div className="flex h-full flex-col border-r border-rm-border bg-rm-sidebar">
-          <div className="p-4 text-[13px] text-rm-text-muted">
+          <div className="p-4 text-ui-sm text-rm-text-muted">
             Select a server to get started
           </div>
         </div>
@@ -1179,7 +1179,7 @@ export default function ChatPage() {
               <button
                 type="button"
                 className={cn(
-                  "group absolute inset-y-0 right-0 z-15 hidden w-3 translate-x-1/2 cursor-col-resize items-center justify-center border-0 bg-transparent p-0 outline-none md:flex",
+                  "group absolute inset-y-0 right-0 z-20 hidden w-3 translate-x-1/2 cursor-col-resize items-center justify-center border-0 bg-transparent p-0 outline-none md:flex",
                   isChannelSidebarResizing && "translate-x-1/2",
                 )}
                 onPointerDown={handleChannelSidebarResizeStart}
@@ -1193,10 +1193,11 @@ export default function ChatPage() {
               >
                 <span
                   className={cn(
-                    "pointer-events-none h-20 w-px rounded-full transition-[height,background-color,box-shadow] duration-150",
+                    // Grows with scaleY, not height (10.2).
+                    "pointer-events-none h-20 w-px origin-center rounded-full transition-[transform,background-color] duration-150 ease-(--rm-ease-out)",
                     isChannelSidebarResizing
-                      ? "bg-primary shadow-[0_0_18px_rgba(255,255,255,0.12)]"
-                      : "bg-rm-border-strong group-hover:h-28 group-hover:bg-rm-text-ghost group-focus-visible:h-28 group-focus-visible:bg-primary/70",
+                      ? "scale-y-140 bg-rm-accent-ink"
+                      : "bg-rm-border-strong pointer-fine:group-hover:scale-y-140 pointer-fine:group-hover:bg-rm-text-ghost group-focus-visible:scale-y-140 group-focus-visible:bg-rm-accent-ink",
                   )}
                 />
               </button>

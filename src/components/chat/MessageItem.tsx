@@ -695,6 +695,16 @@ const MessageItem = memo(
           rightIcon: <Icon name="copy" size="sm" />,
           onClick: () => navigator.clipboard.writeText(message.content),
         },
+        // The hover bar keeps this behind Shift; touch reaches it here.
+        ...(message.channel_id && !message.pending
+          ? [
+              {
+                label: "Mark unread",
+                rightIcon: <Icon name="markUnread" size="sm" />,
+                onClick: handleMarkUnread,
+              },
+            ]
+          : []),
         ...(hoveredUrl
           ? [
               {
@@ -1014,7 +1024,7 @@ const MessageItem = memo(
               )}
             </button>
           ) : (
-            <div className="flex w-10 shrink-0 items-start justify-center pt-1 opacity-0 pointer-fine:group-hover:opacity-100 transition-opacity">
+            <div className="flex w-10 shrink-0 items-start justify-center pt-1 opacity-0 transition-opacity duration-150 pointer-fine:group-hover:opacity-100 group-focus-within:opacity-100">
               <span className="select-none text-ui-xs text-rm-text-muted tabular-nums">
                 {formatMessageTime(message.created_at, formatClientDate)}
               </span>

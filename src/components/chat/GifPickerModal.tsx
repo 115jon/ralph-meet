@@ -1869,48 +1869,25 @@ export default function GifPickerModal({
 
 const ClipVideoPlayer = memo(function ClipVideoPlayer({
   asset,
-  alt: _alt,
-  clipsMuted,
-  onToggleClipsMuted,
+  muted,
   onDurationLoaded,
 }: {
   asset: GifPickerAsset;
-  alt: string;
-  clipsMuted: boolean;
-  onToggleClipsMuted: () => void;
+  muted: boolean;
   onDurationLoaded?: (duration: number) => void;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const [hovered, setHovered] = useState(false);
-
-  const toggleMute = (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    onToggleClipsMuted();
-  };
-
-  const handleMouseEnter = () => {
-    setHovered(true);
-  };
-
-  const handleMouseLeave = () => {
-    setHovered(false);
-  };
-
-  const isMuted = !hovered || clipsMuted;
 
   useEffect(() => {
     if (videoRef.current) {
-      videoRef.current.muted = isMuted;
+      videoRef.current.muted = muted;
     }
-  }, [isMuted]);
+  }, [muted]);
 
   return (
     <div
       className="relative w-full overflow-hidden"
       style={{ aspectRatio: `${asset.width} / ${asset.height}` }}
-      onMouseEnter={handleMouseEnter}
-      onMouseLeave={handleMouseLeave}
     >
       <video
         ref={videoRef}
@@ -1919,7 +1896,7 @@ const ClipVideoPlayer = memo(function ClipVideoPlayer({
         style={{ aspectRatio: `${asset.width} / ${asset.height}` }}
         autoPlay
         loop
-        muted={isMuted}
+        muted={muted}
         playsInline
         preload="metadata"
         aria-label="Clip preview"
@@ -1937,24 +1914,6 @@ const ClipVideoPlayer = memo(function ClipVideoPlayer({
       >
         <track kind="captions" />
       </video>
-      <button
-        type="button"
-        onClick={toggleMute}
-        className={cn(
-          "absolute bottom-2 left-2 z-10 flex size-7 items-center justify-center rounded-md bg-black/60 text-white transition-opacity duration-150",
-          HIT,
-          hovered ? "opacity-100" : "opacity-0",
-        )}
-        aria-label={isMuted ? "Unmute clip preview" : "Mute clip preview"}
-        aria-pressed={!isMuted}
-        title={isMuted ? "Unmute" : "Mute"}
-      >
-        {isMuted ? (
-          <Icon name="speakerOff" size="sm" />
-        ) : (
-          <Icon name="voiceChannel" size="sm" />
-        )}
-      </button>
     </div>
   );
 });
@@ -1982,8 +1941,39 @@ const GifTile = memo(function GifTile({
 
   const duration = loadedDuration ?? gif.duration;
 
+  // Clip audio: a fine pointer hears the clip it hovers; touch has no hover,
+  // so a tap on the speaker chip opts this one clip in. `clipsMuted` is the
+  // picker-wide mute either way.
+  const [hovered, setHovered] = useState(false);
+  const [tapped, setTapped] = useState(false);
+  const clipMuted = !(hovered || tapped) || clipsMuted;
+  const toggleClipAudio = (event: React.MouseEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (hovered) {
+      onToggleClipsMuted();
+      return;
+    }
+    if (clipMuted) {
+      setTapped(true);
+      if (clipsMuted) onToggleClipsMuted();
+    } else {
+      setTapped(false);
+    }
+  };
+
   return (
-    <div className="group relative overflow-hidden rounded-lg bg-rm-bg-surface">
+    <div
+      className="group relative overflow-hidden rounded-lg bg-rm-bg-surface"
+      onPointerEnter={
+        isClip
+          ? (event) => {
+              if (event.pointerType === "mouse") setHovered(true);
+            }
+          : undefined
+      }
+      onPointerLeave={isClip ? () => setHovered(false) : undefined}
+    >
       <button
         type="button"
         onClick={() => onSelect({ ...gif, duration })}
@@ -1993,15 +1983,33 @@ const GifTile = memo(function GifTile({
         {isClip ? (
           <ClipVideoPlayer
             asset={gif.send}
-            alt={gif.altText || gif.title}
-            clipsMuted={clipsMuted}
-            onToggleClipsMuted={onToggleClipsMuted}
+            muted={clipMuted}
             onDurationLoaded={setLoadedDuration}
           />
         ) : (
           <GifPreviewMedia asset={gif.preview} alt={gif.altText || gif.title} />
         )}
       </button>
+
+      {isClip && (
+        <button
+          type="button"
+          onClick={toggleClipAudio}
+          className={cn(
+            // Media overlay chip over the clip (6.5): always shown on touch,
+            // revealed on hover for fine pointers.
+            "absolute bottom-2 left-2 z-10 flex size-7 items-center justify-center rounded-md bg-black/60 text-white",
+            PRESS,
+            HIT,
+            "absolute",
+            REVEAL,
+          )}
+          aria-label={clipMuted ? "Unmute clip preview" : "Mute clip preview"}
+          aria-pressed={!clipMuted}
+        >
+          <Icon name={clipMuted ? "speakerOff" : "voiceChannel"} size="sm" />
+        </button>
+      )}
 
       {duration !== undefined && (
         <div className="pointer-events-none absolute bottom-2 right-2 z-10 rounded-md bg-black/60 px-1.5 py-0.5 text-ui-2xs font-bold text-white border border-white/5 select-none">

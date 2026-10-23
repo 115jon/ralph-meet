@@ -175,8 +175,11 @@ export default function CreateServerModal({ open, onClose }: Props) {
                 alt="Server icon preview"
                 className="h-full w-full object-cover"
               />
-              <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 transition-opacity pointer-fine:group-hover:opacity-100">
-                <span className="text-ui-2xs font-bold uppercase text-white">
+              {/* Media overlay over the chosen image (6.5). A strip along
+                  the bottom on touch, where there is no hover; the full
+                  hover scrim on fine pointers. */}
+              <div className="absolute inset-x-0 bottom-0 flex items-center justify-center bg-black/60 py-1 pointer-fine:inset-0 pointer-fine:bg-black/40 pointer-fine:py-0 pointer-fine:opacity-0 pointer-fine:transition-opacity pointer-fine:duration-150 pointer-fine:group-hover:opacity-100 pointer-fine:group-focus-visible:opacity-100">
+                <span className="text-ui-2xs font-semibold text-white">
                   Change
                 </span>
               </div>

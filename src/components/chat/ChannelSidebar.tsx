@@ -46,7 +46,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { Icon } from "@/components/ui/icon";
 import { IconButton } from "@/components/ui/IconButton";
-import { HIT } from "@/components/ui/interaction";
+import { HIT, REVEAL } from "@/components/ui/interaction";
 import {
   SIDEBAR_CATEGORY,
   SIDEBAR_ICON_SLOT,
@@ -506,7 +506,7 @@ function SortableChannelItem({
           )}
           {/* Voice channel uptime — visible by default, hidden on hover */}
           {uptime && (
-            <span className="block text-ui-xs font-medium tabular-nums text-rm-success-ink pointer-fine:group-hover:hidden">
+            <span className="block text-ui-xs font-medium tabular-nums text-rm-success-ink pointer-fine:group-hover:hidden pointer-fine:group-focus-within:hidden">
               {uptime}
             </span>
           )}
@@ -515,7 +515,9 @@ function SortableChannelItem({
           <div
             className={cn(
               "relative z-20 items-center gap-1 pointer-coarse:hidden!",
-              uptime ? "hidden pointer-fine:group-hover:flex" : "flex",
+              uptime
+                ? "hidden pointer-fine:group-hover:flex pointer-fine:group-focus-within:flex"
+                : "flex",
             )}
           >
             {canManage && (
@@ -524,7 +526,10 @@ function SortableChannelItem({
                   <button
                     type="button"
                     aria-label="Channel settings"
-                    className="flex size-6 items-center justify-center rounded-sm text-rm-text-muted opacity-0 transition-opacity duration-150 pointer-fine:group-hover:opacity-100 pointer-fine:hover:bg-rm-tint-2 pointer-fine:hover:text-rm-text focus-visible:opacity-100"
+                    className={cn(
+                      "flex size-6 items-center justify-center rounded-sm text-rm-text-muted pointer-fine:hover:bg-rm-tint-2 pointer-fine:hover:text-rm-text",
+                      REVEAL,
+                    )}
                     onClick={(e) => {
                       e.stopPropagation();
                       onEditChannel(channel);
@@ -543,7 +548,10 @@ function SortableChannelItem({
                 <button
                   type="button"
                   aria-label="Invite to channel"
-                  className="flex size-6 items-center justify-center rounded-sm text-rm-text-muted opacity-0 transition-opacity duration-150 pointer-fine:group-hover:opacity-100 pointer-fine:hover:bg-rm-tint-2 pointer-fine:hover:text-rm-text focus-visible:opacity-100"
+                  className={cn(
+                    "flex size-6 items-center justify-center rounded-sm text-rm-text-muted pointer-fine:hover:bg-rm-tint-2 pointer-fine:hover:text-rm-text",
+                    REVEAL,
+                  )}
                   onClick={(e) => {
                     e.stopPropagation();
                     onInviteToChannel(channel);
