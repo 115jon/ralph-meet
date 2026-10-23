@@ -1,3 +1,4 @@
+import { HIT, PRESS } from "@/components/ui/interaction";
 import { getDisplayInitial } from "@/lib/display-name";
 import { getAuthAssetUrl } from "@/lib/platform";
 import { useUserResolution } from "@/hooks/useUserResolution";
@@ -59,8 +60,14 @@ export const PinnedMessagesSidebar: React.FC<PinnedMessagesSidebarProps> = ({
         <h2 className="font-bold text-lg text-rm-text">Pinned Messages</h2>
         <div className="flex-1" />
         <button
+          type="button"
           onClick={onClose}
-          className="w-8 h-8 flex items-center justify-center rounded-full bg-rm-bg-elevated hover:bg-rm-bg-hover text-rm-text-muted hover:text-rm-text transition-ui outline-none"
+          aria-label="Close pinned messages"
+          className={cn(
+            "w-8 h-8 flex items-center justify-center rounded-full bg-rm-bg-elevated pointer-fine:hover:bg-rm-bg-hover text-rm-text-muted pointer-fine:hover:text-rm-text transition-ui outline-none",
+            PRESS,
+            HIT,
+          )}
         >
           <Icon name="close" size="sm" />
         </button>
@@ -143,7 +150,7 @@ const PinnedMessageItem = ({
   }
 
   return (
-    <div className="group p-5 rounded-2xl border border-rm-border bg-rm-bg-elevated/40 hover:bg-rm-bg-elevated/80 transition-ui relative overflow-hidden flex flex-col gap-4">
+    <div className="group p-5 rounded-2xl border border-rm-border bg-rm-bg-elevated/40 pointer-fine:hover:bg-rm-bg-elevated/80 transition-ui relative overflow-hidden flex flex-col gap-4">
       <div className="flex items-start justify-between gap-4">
         <div className="flex gap-4 min-w-0">
           <div className="mt-0.5 flex h-12 w-12 shrink-0 items-center justify-center overflow-visible rounded-full bg-primary/10 text-base font-bold text-primary border border-rm-border transition-transform duration-200">
@@ -233,7 +240,7 @@ const PinnedMessageItem = ({
                       key={att.id}
                       href={getDownloadUrl(att.url || `/api/${att.file_key}`)}
                       download={att.filename}
-                      className="flex items-center gap-3 rounded-xl border border-rm-border bg-rm-bg-primary/20 px-4 py-3 transition-ui hover:border-rm-border hover:bg-rm-bg-hover group/file max-w-[280px]"
+                      className="flex items-center gap-3 rounded-xl border border-rm-border bg-rm-bg-primary/20 px-4 py-3 transition-ui pointer-fine:hover:border-rm-border pointer-fine:hover:bg-rm-bg-hover group/file max-w-[280px]"
                     >
                       <div
                         className={cn(
@@ -267,7 +274,7 @@ const PinnedMessageItem = ({
         <div className="flex items-center gap-1.5 shrink-0 opacity-0 group-hover:opacity-100 transition-ui -translate-y-1 group-hover:translate-y-0">
           <button
             onClick={() => onJumpToMessage(msg.id)}
-            className="px-4 py-1.5 bg-primary hover:brightness-110 text-primary-foreground font-bold text-ui-2xs rounded-lg transition-ui shadow-lg shadow-primary/10"
+            className="px-4 py-1.5 bg-primary pointer-fine:hover:brightness-110 text-primary-foreground font-bold text-ui-2xs rounded-lg transition-ui shadow-lg shadow-primary/10"
           >
             Jump
           </button>
@@ -277,7 +284,7 @@ const PinnedMessageItem = ({
                 e.stopPropagation();
                 onUnpin(msg.id, e.shiftKey);
               }}
-              className="p-1.5 hover:bg-destructive/10 text-rm-text-muted hover:text-destructive transition-ui rounded-lg outline-none"
+              className="p-1.5 pointer-fine:hover:bg-destructive/10 text-rm-text-muted pointer-fine:hover:text-destructive transition-ui rounded-lg outline-none"
               title="Unpin (Shift-click to bypass confirmation)"
             >
               <Icon name="close" size="md" />

@@ -1,11 +1,11 @@
 import { Button } from "@/components/ui/button";
 import {
-  Dialog,
-  DialogClose,
-  DialogContent,
-  DialogDescription,
-  DialogTitle,
-} from "@/components/ui/dialog";
+  ResponsiveDialog,
+  ResponsiveDialogClose,
+  ResponsiveDialogContent,
+  ResponsiveDialogDescription,
+  ResponsiveDialogTitle,
+} from "@/components/ui/responsive-dialog";
 import { IconButton } from "@/components/ui/IconButton";
 import { Input } from "@/components/ui/input";
 import {
@@ -83,26 +83,32 @@ export default function InviteModal({
   const selectStyle = "w-full";
 
   return (
-    <Dialog open={open} onOpenChange={(nextOpen) => !nextOpen && onClose()}>
-      <DialogContent showCloseButton={false} className="w-full max-w-[440px]">
+    <ResponsiveDialog
+      open={open}
+      onOpenChange={(nextOpen) => !nextOpen && onClose()}
+    >
+      <ResponsiveDialogContent
+        showCloseButton={false}
+        dialogClassName="w-full max-w-[440px]"
+      >
         <div>
-          <DialogClose asChild>
+          <ResponsiveDialogClose asChild>
             <IconButton
               icon="close"
               iconSize="sm"
               type="button"
-              className="absolute right-4 top-4"
+              className="absolute right-4 top-4 max-md:hidden"
               aria-label="Close invite modal"
             />
-          </DialogClose>
+          </ResponsiveDialogClose>
 
-          <DialogTitle className="mb-6 text-ui-lg font-semibold text-rm-text">
+          <ResponsiveDialogTitle className="mb-6 text-ui-lg font-semibold text-rm-text">
             Invite people to{" "}
             <InlineEmojiText text={serverName} className="text-rm-accent-ink" />
-          </DialogTitle>
-          <DialogDescription className="sr-only">
+          </ResponsiveDialogTitle>
+          <ResponsiveDialogDescription className="sr-only">
             Generate an invite link for this server.
-          </DialogDescription>
+          </ResponsiveDialogDescription>
 
           {!state.inviteCode ? (
             <div className="space-y-4">
@@ -223,7 +229,7 @@ export default function InviteModal({
             </div>
           )}
         </div>
-      </DialogContent>
-    </Dialog>
+      </ResponsiveDialogContent>
+    </ResponsiveDialog>
   );
 }

@@ -1,11 +1,11 @@
 import { Button } from "@/components/ui/button";
 import {
-  Dialog,
-  DialogClose,
-  DialogContent,
-  DialogDescription,
-  DialogTitle,
-} from "@/components/ui/dialog";
+  ResponsiveDialog,
+  ResponsiveDialogClose,
+  ResponsiveDialogContent,
+  ResponsiveDialogDescription,
+  ResponsiveDialogTitle,
+} from "@/components/ui/responsive-dialog";
 import { IconButton } from "@/components/ui/IconButton";
 import { Input } from "@/components/ui/input";
 import { apiPost } from "@/lib/api-client";
@@ -135,34 +135,38 @@ export default function ChannelInviteModal({
     : "";
 
   return (
-    <Dialog open={open} onOpenChange={(nextOpen) => !nextOpen && onClose()}>
-      <DialogContent
+    <ResponsiveDialog
+      open={open}
+      onOpenChange={(nextOpen) => !nextOpen && onClose()}
+    >
+      <ResponsiveDialogContent
         showCloseButton={false}
-        className="w-full max-w-[480px] overflow-hidden flex flex-col max-h-[80vh]"
+        dialogClassName="w-full max-w-[480px] overflow-hidden flex flex-col max-h-[80dvh]"
+        drawerClassName="px-0"
       >
         <div>
           {/* Header */}
           <div className="px-6 pt-5 pb-3">
-            <DialogClose asChild>
+            <ResponsiveDialogClose asChild>
               <IconButton
                 icon="close"
                 type="button"
-                className="absolute right-4 top-4"
+                className="absolute right-4 top-4 max-md:hidden"
                 aria-label="Close invite modal"
               />
-            </DialogClose>
+            </ResponsiveDialogClose>
 
-            <DialogTitle className="text-ui-lg font-semibold text-rm-text">
+            <ResponsiveDialogTitle className="text-ui-lg font-semibold text-rm-text">
               Invite friends to{" "}
               <InlineEmojiText
                 text={serverName}
                 className="text-rm-accent-ink"
               />
-            </DialogTitle>
-            <DialogDescription className="mt-0.5 flex items-center gap-1 text-sm text-rm-text-muted">
+            </ResponsiveDialogTitle>
+            <ResponsiveDialogDescription className="mt-0.5 flex items-center gap-1 text-sm text-rm-text-muted">
               Recipients will land in <Icon name="textChannel" size="xs" />
               <InlineEmojiText text={channel.name} />
-            </DialogDescription>
+            </ResponsiveDialogDescription>
           </div>
 
           {/* Search */}
@@ -207,7 +211,7 @@ export default function ChannelInviteModal({
                 return (
                   <div
                     key={rel.user.id}
-                    className="flex items-center gap-3 rounded-lg px-3 py-2.5 transition-colors hover:bg-rm-bg-hover"
+                    className="flex items-center gap-3 rounded-lg px-3 py-2.5 transition-colors pointer-fine:hover:bg-rm-bg-hover"
                   >
                     {/* Avatar */}
                     {rel.user.avatar_url ? (
@@ -290,7 +294,7 @@ export default function ChannelInviteModal({
             )}
           </div>
         </div>
-      </DialogContent>
-    </Dialog>
+      </ResponsiveDialogContent>
+    </ResponsiveDialog>
   );
 }

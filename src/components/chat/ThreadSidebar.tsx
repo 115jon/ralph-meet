@@ -1,3 +1,5 @@
+import { HIT, PRESS } from "@/components/ui/interaction";
+import { cn } from "@/lib/utils";
 import { apiGet, apiPost } from "@/lib/api-client";
 import type { Message } from "@/lib/types";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -180,8 +182,14 @@ export default function ThreadSidebar({
           </span>
         </div>
         <button
+          type="button"
           onClick={onClose}
-          className="rounded-lg p-1.5 text-rm-text-muted transition-colors hover:bg-rm-bg-hover hover:text-rm-text outline-none"
+          aria-label="Close thread"
+          className={cn(
+            "rounded-lg p-1.5 text-rm-text-muted transition-colors pointer-fine:hover:bg-rm-bg-hover pointer-fine:hover:text-rm-text outline-none",
+            PRESS,
+            HIT,
+          )}
         >
           <Icon name="close" size="sm" />
         </button>
@@ -317,7 +325,7 @@ function ThreadReplyInput({
         <button
           onClick={handleSubmit}
           disabled={!value.trim() || sending}
-          className="shrink-0 rounded-lg bg-primary px-3 py-1 text-xs font-bold text-primary-foreground transition-ui hover:brightness-110 disabled:opacity-30"
+          className="shrink-0 rounded-lg bg-primary px-3 py-1 text-xs font-bold text-primary-foreground transition-ui pointer-fine:hover:brightness-110 disabled:opacity-30"
         >
           {sending ? "…" : "Send"}
         </button>

@@ -1,5 +1,14 @@
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogPortal, DialogSurface } from "@/components/ui/dialog";
+import { DialogPortal, DialogSurface } from "@/components/ui/dialog";
+import {
+  ResponsiveDialog,
+  ResponsiveDialogContent,
+  ResponsiveDialogDescription,
+  ResponsiveDialogFooter,
+  ResponsiveDialogHeader,
+  ResponsiveDialogTitle,
+} from "@/components/ui/responsive-dialog";
+import { useIsMobile } from "@/hooks/useMediaQuery";
 import { IconButton } from "@/components/ui/IconButton";
 import { Input } from "@/components/ui/input";
 import { apiUpload } from "@/lib/api-client";
@@ -59,6 +68,7 @@ export default function CreateServerModal({ open, onClose }: Props) {
     uploadError: null,
   });
 
+  const isMobile = useIsMobile();
   const inputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -157,150 +167,179 @@ export default function CreateServerModal({ open, onClose }: Props) {
     onClose,
   ]);
 
-  return (
-    <Dialog open={open} onOpenChange={(nextOpen) => !nextOpen && onClose()}>
-      <DialogPortal>
-        <div
-          data-state={open ? "open" : "closed"}
-          className={cn(
-            "fixed inset-0 z-50 flex items-end sm:items-center justify-center pointer-events-none transition-opacity duration-200 data-[state=closed]:opacity-0",
-          )}
+  const fields = (
+    <>
+      {/* Icon upload */}
+      <div className="mb-5 flex justify-center">
+        <button
+          type="button"
+          onClick={() => fileInputRef.current?.click()}
+          onDrop={handleDrop}
+          onDragOver={(e) => e.preventDefault()}
+          className="group relative flex h-20 w-20 cursor-pointer items-center justify-center overflow-hidden rounded-full border-2 border-dashed border-rm-border bg-rm-bg-surface transition-ui pointer-fine:hover:border-primary/50 pointer-fine:hover:bg-rm-bg-elevated"
         >
-          {/* Backdrop */}
-          <button
-            type="button"
-            data-base-modal-backdrop
-            className={cn(
-              "absolute inset-0 border-0 bg-black/60 p-0 backdrop-blur-sm pointer-events-auto",
-              !open && "pointer-events-none opacity-0",
-            )}
-            onClick={onClose}
-            aria-label="Close create server modal"
-          />
+          {state.iconPreview ? (
+            <>
+              <img
+                src={state.iconPreview}
+                alt="Server icon preview"
+                className="h-full w-full object-cover"
+              />
+              <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 transition-opacity group-hover:opacity-100">
+                <span className="text-ui-2xs font-bold uppercase text-white">
+                  Change
+                </span>
+              </div>
+            </>
+          ) : (
+            <div className="flex flex-col items-center gap-0.5">
+              <Icon
+                name="add"
+                size="lg"
+                className="text-rm-text-muted/40 transition-colors group-hover:text-primary"
+              />
+              <span className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted/40 group-hover:text-primary">
+                Icon
+              </span>
+            </div>
+          )}
+        </button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/png,image/jpeg,image/gif,image/webp,image/avif"
+          className="hidden"
+          aria-label="Upload server icon"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) handleIconSelect(file);
+            e.target.value = "";
+          }}
+        />
+      </div>
 
-          {/* Modal */}
-          <DialogSurface
-            showCloseButton={false}
+      {state.uploadError && (
+        <p className="mb-3 text-center text-xs font-medium text-destructive">
+          {state.uploadError}
+        </p>
+      )}
+
+      <div className="space-y-3">
+        <label
+          htmlFor="server-name"
+          className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted"
+        >
+          Server Name
+        </label>
+        <Input
+          id="server-name"
+          ref={inputRef}
+          value={state.name}
+          onChange={(e) =>
+            dispatch({ type: "SET_NAME", payload: e.target.value })
+          }
+          onKeyDown={(e) => e.key === "Enter" && handleCreate()}
+          placeholder="My Awesome Server"
+          className="h-10"
+        />
+      </div>
+    </>
+  );
+
+  return (
+    <ResponsiveDialog
+      open={open}
+      onOpenChange={(nextOpen) => !nextOpen && onClose()}
+    >
+      {isMobile ? (
+        <ResponsiveDialogContent>
+          <ResponsiveDialogHeader>
+            <ResponsiveDialogTitle>Create a Server</ResponsiveDialogTitle>
+            <ResponsiveDialogDescription>
+              Your server is where you and your friends hang out.
+            </ResponsiveDialogDescription>
+          </ResponsiveDialogHeader>
+          {fields}
+          <ResponsiveDialogFooter>
+            <Button
+              onClick={handleCreate}
+              disabled={!state.name.trim() || state.creating}
+              loading={state.creating}
+            >
+              Create Server
+            </Button>
+            <Button variant="secondary" onClick={onClose}>
+              Cancel
+            </Button>
+          </ResponsiveDialogFooter>
+        </ResponsiveDialogContent>
+      ) : (
+        <DialogPortal>
+          <div
+            data-state={open ? "open" : "closed"}
             className={cn(
-              "relative z-10 w-full sm:max-w-md h-[90vh] sm:h-auto animate-in slide-in-from-bottom-full sm:slide-in-from-bottom-0 sm:fade-in sm:zoom-in-95 rounded-t-xl sm:rounded-xl border border-rm-border bg-rm-bg-surface dark:bg-rm-bg-elevated p-6 shadow-[var(--rm-shadow-3)] duration-300 sm:duration-200 pointer-events-auto flex flex-col",
-              "data-[state=closed]:animate-out data-[state=closed]:slide-out-to-bottom-full sm:data-[state=closed]:slide-out-to-bottom-0 sm:data-[state=closed]:fade-out sm:data-[state=closed]:zoom-out-95",
+              "fixed inset-0 z-50 flex items-end sm:items-center justify-center pointer-events-none transition-opacity duration-200 data-[state=closed]:opacity-0",
             )}
           >
-            {/* Mobile drag handle */}
-            <div className="w-full flex justify-center pb-6 sm:hidden shrink-0 mt-[-10px]">
-              <div className="w-12 h-1.5 rounded-full bg-rm-bg-hover" />
-            </div>
-            {/* Close */}
-            <IconButton
-              icon="close"
-              iconSize="sm"
+            {/* Backdrop */}
+            <button
+              type="button"
+              data-base-modal-backdrop
+              className={cn(
+                "absolute inset-0 border-0 bg-black/60 p-0 backdrop-blur-sm pointer-events-auto",
+                !open && "pointer-events-none opacity-0",
+              )}
               onClick={onClose}
-              aria-label="Close"
-              className="absolute right-4 top-4"
+              aria-label="Close create server modal"
             />
 
-            <h2 className="mb-1 text-center text-ui-lg font-semibold text-rm-text">
-              Create a Server
-            </h2>
-            <p className="mb-6 text-center text-sm font-medium text-rm-text-muted">
-              Your server is where you and your friends hang out.
-            </p>
-
-            {/* Icon upload */}
-            <div className="mb-5 flex justify-center">
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                onDrop={handleDrop}
-                onDragOver={(e) => e.preventDefault()}
-                className="group relative flex h-20 w-20 cursor-pointer items-center justify-center overflow-hidden rounded-full border-2 border-dashed border-rm-border bg-rm-bg-surface transition-ui hover:border-primary/50 hover:bg-rm-bg-elevated"
-              >
-                {state.iconPreview ? (
-                  <>
-                    <img
-                      src={state.iconPreview}
-                      alt="Server icon preview"
-                      className="h-full w-full object-cover"
-                    />
-                    <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 transition-opacity group-hover:opacity-100">
-                      <span className="text-ui-2xs font-bold uppercase text-white">
-                        Change
-                      </span>
-                    </div>
-                  </>
-                ) : (
-                  <div className="flex flex-col items-center gap-0.5">
-                    <Icon
-                      name="add"
-                      size="lg"
-                      className="text-rm-text-muted/40 transition-colors group-hover:text-primary"
-                    />
-                    <span className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted/40 group-hover:text-primary">
-                      Icon
-                    </span>
-                  </div>
-                )}
-              </button>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/png,image/jpeg,image/gif,image/webp,image/avif"
-                className="hidden"
-                aria-label="Upload server icon"
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) handleIconSelect(file);
-                  e.target.value = "";
-                }}
-              />
-            </div>
-
-            {state.uploadError && (
-              <p className="mb-3 text-center text-xs font-medium text-destructive">
-                {state.uploadError}
-              </p>
-            )}
-
-            <div className="space-y-3">
-              <label
-                htmlFor="server-name"
-                className="text-ui-2xs font-semibold uppercase tracking-[0.08em] text-rm-text-muted"
-              >
-                Server Name
-              </label>
-              <Input
-                id="server-name"
-                ref={inputRef}
-                value={state.name}
-                onChange={(e) =>
-                  dispatch({ type: "SET_NAME", payload: e.target.value })
-                }
-                onKeyDown={(e) => e.key === "Enter" && handleCreate()}
-                placeholder="My Awesome Server"
-                className="h-10"
-              />
-            </div>
-
-            <div className="mt-auto sm:mt-6 pt-4 sm:pt-0 pb-6 sm:pb-0 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end shrink-0">
-              <Button
-                variant="secondary"
+            {/* Modal */}
+            <DialogSurface
+              showCloseButton={false}
+              className={cn(
+                "relative z-10 w-full sm:max-w-md h-[90dvh] sm:h-auto animate-in slide-in-from-bottom-full sm:slide-in-from-bottom-0 sm:fade-in sm:zoom-in-95 rounded-t-xl sm:rounded-xl border border-rm-border bg-rm-bg-surface dark:bg-rm-bg-elevated p-6 shadow-[var(--rm-shadow-3)] duration-300 sm:duration-200 pointer-events-auto flex flex-col",
+                "data-[state=closed]:animate-out data-[state=closed]:slide-out-to-bottom-full sm:data-[state=closed]:slide-out-to-bottom-0 sm:data-[state=closed]:fade-out sm:data-[state=closed]:zoom-out-95",
+              )}
+            >
+              {/* Close */}
+              <IconButton
+                icon="close"
+                iconSize="sm"
                 onClick={onClose}
-                className="w-full sm:w-auto"
-              >
-                Cancel
-              </Button>
-              <Button
-                onClick={handleCreate}
-                disabled={!state.name.trim() || state.creating}
-                loading={state.creating}
-                className="w-full sm:w-auto"
-              >
-                Create Server
-              </Button>
-            </div>
-          </DialogSurface>
-        </div>
-      </DialogPortal>
-    </Dialog>
+                aria-label="Close"
+                className="absolute right-4 top-4"
+              />
+
+              <h2 className="mb-1 text-center text-ui-lg font-semibold text-rm-text">
+                Create a Server
+              </h2>
+              <p className="mb-6 text-center text-sm font-medium text-rm-text-muted">
+                Your server is where you and your friends hang out.
+              </p>
+
+              {fields}
+
+              <div className="mt-auto sm:mt-6 pt-4 sm:pt-0 pb-6 sm:pb-0 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end shrink-0">
+                <Button
+                  variant="secondary"
+                  onClick={onClose}
+                  className="w-full sm:w-auto"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleCreate}
+                  disabled={!state.name.trim() || state.creating}
+                  loading={state.creating}
+                  className="w-full sm:w-auto"
+                >
+                  Create Server
+                </Button>
+              </div>
+            </DialogSurface>
+          </div>
+        </DialogPortal>
+      )}
+    </ResponsiveDialog>
   );
 }

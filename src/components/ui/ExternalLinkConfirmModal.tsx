@@ -1,11 +1,12 @@
 import { Button } from "@/components/ui/button";
 import {
-  Dialog,
-  DialogClose,
-  DialogContent,
-  DialogDescription,
-  DialogTitle,
-} from "@/components/ui/dialog";
+  ResponsiveDialog,
+  ResponsiveDialogClose,
+  ResponsiveDialogContent,
+  ResponsiveDialogDescription,
+  ResponsiveDialogFooter,
+  ResponsiveDialogTitle,
+} from "@/components/ui/responsive-dialog";
 import { IconButton } from "@/components/ui/IconButton";
 
 export interface PendingExternalLink {
@@ -29,27 +30,31 @@ export function ExternalLinkConfirmModal({
   onConfirm: () => void;
 }) {
   return (
-    <Dialog open={open} onOpenChange={(nextOpen) => !nextOpen && onClose()}>
-      <DialogContent
+    <ResponsiveDialog
+      open={open}
+      onOpenChange={(nextOpen) => !nextOpen && onClose()}
+    >
+      <ResponsiveDialogContent
         showCloseButton={false}
-        className="w-full max-w-[510px] p-6 text-rm-text-primary"
+        className="text-rm-text-primary"
+        dialogClassName="w-full max-w-[510px] p-6"
       >
         <section>
-          <DialogClose asChild>
+          <ResponsiveDialogClose asChild>
             <IconButton
               icon="close"
               type="button"
               aria-label="Close external link confirmation"
-              className="absolute right-4 top-4"
+              className="absolute right-4 top-4 max-md:hidden"
             />
-          </DialogClose>
+          </ResponsiveDialogClose>
 
-          <DialogTitle className="pr-8 text-ui-lg font-semibold">
+          <ResponsiveDialogTitle className="pr-8 text-ui-lg font-semibold">
             Leaving Ralph Meet
-          </DialogTitle>
-          <DialogDescription className="mt-1 text-sm text-rm-text-muted">
+          </ResponsiveDialogTitle>
+          <ResponsiveDialogDescription className="mt-1 text-sm text-rm-text-muted">
             This link is taking you to the following website
-          </DialogDescription>
+          </ResponsiveDialogDescription>
 
           <div className="mt-5 max-h-24 overflow-auto rounded-lg border border-rm-border bg-rm-tint-1 px-4 py-3 text-sm leading-5 text-rm-text-secondary [overflow-wrap:anywhere]">
             {pending.url}
@@ -65,16 +70,16 @@ export function ExternalLinkConfirmModal({
             <span>Trust {pending.hostname} links from now on</span>
           </label>
 
-          <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+          <ResponsiveDialogFooter className="flex-col-reverse md:mt-6">
             <Button type="button" variant="secondary" onClick={onClose}>
               Go Back
             </Button>
             <Button type="button" onClick={onConfirm}>
               Visit Site
             </Button>
-          </div>
+          </ResponsiveDialogFooter>
         </section>
-      </DialogContent>
-    </Dialog>
+      </ResponsiveDialogContent>
+    </ResponsiveDialog>
   );
 }
