@@ -221,8 +221,8 @@ describe("StreamingStatsPanel — render states", () => {
 
     const markup = render({ connectionState: "connected", joined: true });
 
-    // Falls back to the old "Stable" connection label, no stats row.
-    expect(markup).toContain("Stable");
+    // Falls back to the connection label, no stats row.
+    expect(markup).toContain("Connected");
     expect(markup).not.toContain("fwd");
     expect(markup).not.toContain("nvenc");
   });
@@ -244,7 +244,7 @@ describe("StreamingStatsPanel — render states", () => {
 
     const markup = render({ connectionState: "connected", joined: true });
 
-    expect(markup).toContain("Stable");
+    expect(markup).toContain("Connected");
     expect(markup).not.toContain("fwd");
   });
 
@@ -350,11 +350,28 @@ describe("streamingStats display helpers — state matrix", () => {
     expect(formatNegotiatedFps(null)).toBeNull();
   });
 
-  it("connectionStateLabel reproduces the old 'Stable' label states (Req 8.9, 8.11, 13.3)", () => {
-    expect(connectionStateLabel("connected", false)).toBe("Stable");
-    expect(connectionStateLabel("new", true)).toBe("Stable"); // joined wins
-    expect(connectionStateLabel("connecting", false)).toBe("Connecting");
-    expect(connectionStateLabel("failed", false)).toBe("Failed");
+  it("connectionStateLabel maps from the state, never a false 'Stable' (Req 8.9, 8.11, 13.3)", () => {
+    expect(connectionStateLabel("connected", false)).toBe("Connected");
+    expect(connectionStateLabel("new", true)).toBe("Connecting…"); // state wins
+    expect(connectionStateLabel("connecting", false)).toBe("Connecting…");
+    expect(connectionStateLabel("reconnecting", true)).toBe("Reconnecting…");
+    expect(connectionStateLabel("failed", true)).toBe("Failed");
+  });
+
+  it("inks reconnecting as a warning and failed as danger, with an icon", () => {
+    setHook({ data: null, stale: false, isDesktop: true });
+
+    const reconnecting = render({
+      connectionState: "reconnecting",
+      joined: true,
+    });
+    expect(reconnecting).toContain("Reconnecting");
+    expect(reconnecting).toContain("text-rm-warning-ink");
+    expect(reconnecting).toContain("<svg");
+
+    const failed = render({ connectionState: "failed", joined: true });
+    expect(failed).toContain("text-rm-danger-ink");
+    expect(failed).not.toContain("Stable");
   });
 
   it("hasLiveCaptureActivity distinguishes active vs idle sessions (Req 8.2 vs 8.11)", () => {
