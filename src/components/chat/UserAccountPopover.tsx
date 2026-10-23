@@ -33,6 +33,8 @@ interface Props {
   anchorEl: HTMLElement;
   /** @deprecated The popover animates itself; kept for existing callers. */
   isClosing?: boolean;
+  /** Open on the status submenu (fixtures). */
+  initialView?: "main" | "status";
 }
 
 const STATUS_OPTIONS = [
@@ -95,19 +97,23 @@ export default function UserAccountPopover({
   updateStatus,
   onOpenProfileEditor,
   anchorEl,
+  initialView = "main",
 }: Props) {
   const isMobile = useIsMobile();
   const currentUser = useChatStore((state) =>
     state.user?.id === user.id ? state.user : null,
   );
   const profileDisplay = currentUser?.avatar_display ?? user.avatar_display;
-  const [showStatusMenu, setShowStatusMenu] = useState(false);
+  const [showStatusMenu, setShowStatusMenu] = useState(
+    initialView === "status",
+  );
   const [isEditingCustomStatus, setIsEditingCustomStatus] = useState(false);
   const [customStatusInput, setCustomStatusInput] = useState(
     user.custom_status || "",
   );
   const statusRowRef = useRef<HTMLButtonElement>(null);
   const statusBackRef = useRef<HTMLButtonElement>(null);
+  const firstRowRef = useRef<HTMLButtonElement>(null);
   const viewChangedRef = useRef(false);
   const statusLabelId = useId();
 
@@ -161,6 +167,8 @@ export default function UserAccountPopover({
       side="top"
       align="start"
       variant="rich"
+      // Land on the first menu row, not the custom-status pill above it.
+      initialFocus={showStatusMenu ? statusBackRef : firstRowRef}
       // The profile surface is the panel: it carries the radius, border and
       // shadow, and its frame art may overhang the edge.
       className="overflow-visible rounded-none border-0 bg-transparent p-0 shadow-none dark:bg-transparent"
@@ -310,7 +318,12 @@ export default function UserAccountPopover({
                           type="button"
                           role="radio"
                           aria-checked={selected}
-                          className={ROW}
+                          // Selected (14.5): tint + weight, plus the check.
+                          className={cn(
+                            ROW,
+                            selected &&
+                              "bg-[var(--rm-profile-custom-card-bg-strong)] font-semibold",
+                          )}
                           onClick={() => {
                             updateStatus(option.value, user.custom_status);
                             switchView(false);
@@ -326,7 +339,7 @@ export default function UserAccountPopover({
                             {option.label}
                           </span>
                           {selected ? (
-                            <Icon name="check" size="xs" className="shrink-0" />
+                            <Icon name="check" size="sm" className="shrink-0" />
                           ) : null}
                         </button>
                       );
@@ -336,8 +349,9 @@ export default function UserAccountPopover({
               ) : (
                 <>
                   <ActionRow
+                    buttonRef={firstRowRef}
                     icon={<Icon name="edit" size="sm" />}
-                    label="Edit Profile"
+                    label="Edit profile"
                     onClick={() => {
                       onClose();
                       onOpenProfileEditor(anchorEl);
@@ -364,7 +378,7 @@ export default function UserAccountPopover({
                   />
                   <ActionRow
                     icon={<Icon name="copy" size="sm" />}
-                    label="Copy User ID"
+                    label="Copy user ID"
                     onClick={() => {
                       void navigator.clipboard?.writeText(user.id);
                       onClose();
