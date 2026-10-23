@@ -3,7 +3,7 @@
 /**
  * Shared shell for the composer pickers (emoji, GIF, soundboard).
  *
- * Phones (below `md`, 768px): a vaul Drawer, so the sheet drags away, respects
+ * Phones (below `md`, 768px): a bottom Drawer, so the sheet drags away, respects
  * the bottom safe area, and the back button closes it. No snap points: a
  * picker is a fixed 85dvh sheet, and dragging only starts when the inner list
  * is scrolled to the top.

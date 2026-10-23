@@ -1835,22 +1835,100 @@
 }
 
 /*
- * Drawer (vaul) motion: vaul ships 500ms; Quiet Pro caps UI motion under
- * 300ms on the same iOS drawer curve. Doubled attribute beats vaul's injected
- * stylesheet. Reduced motion keeps the scrim fade and drops the slide.
+ * Drawer motion (Base UI Drawer, ui/drawer.tsx). Transform and opacity only,
+ * on the iOS drawer curve, under 300ms. Base UI drives the drag through
+ * --drawer-swipe-movement-* and, on release, sets --drawer-swipe-strength
+ * (0.1-1) from the flick velocity, so a fast flick finishes faster than a
+ * slow drag: the exit carries the finger's momentum instead of a fixed tween.
+ * Reduced motion drops the slide and keeps a short fade.
  */
-[data-vaul-drawer][data-vaul-drawer] {
-  transition-duration: 280ms;
-  animation-duration: 280ms;
+[data-rm-drawer] {
+  transition:
+    transform 280ms var(--rm-ease-drawer),
+    opacity 200ms var(--rm-ease-out);
+  will-change: transform;
 }
 
-[data-vaul-overlay][data-vaul-overlay] {
-  animation-duration: 200ms;
+[data-rm-drawer][data-swipe-direction="down"],
+[data-rm-drawer][data-swipe-direction="up"] {
+  transform: translate3d(
+    0,
+    calc(
+      var(--drawer-snap-point-offset, 0px) + var(--drawer-swipe-movement-y, 0px)
+    ),
+    0
+  );
+}
+
+[data-rm-drawer][data-swipe-direction="left"],
+[data-rm-drawer][data-swipe-direction="right"] {
+  transform: translate3d(var(--drawer-swipe-movement-x, 0px), 0, 0);
+}
+
+[data-rm-drawer][data-swipe-direction="down"]:is(
+    [data-starting-style],
+    [data-ending-style]
+  ) {
+  transform: translate3d(0, calc(100% + 2px), 0);
+}
+
+[data-rm-drawer][data-swipe-direction="up"]:is(
+    [data-starting-style],
+    [data-ending-style]
+  ) {
+  transform: translate3d(0, calc(-100% - 2px), 0);
+}
+
+[data-rm-drawer][data-swipe-direction="left"]:is(
+    [data-starting-style],
+    [data-ending-style]
+  ) {
+  transform: translate3d(calc(-100% - 2px), 0, 0);
+}
+
+[data-rm-drawer][data-swipe-direction="right"]:is(
+    [data-starting-style],
+    [data-ending-style]
+  ) {
+  transform: translate3d(calc(100% + 2px), 0, 0);
+}
+
+[data-rm-drawer-overlay] {
+  opacity: calc(1 - var(--drawer-swipe-progress, 0));
+  transition: opacity 280ms var(--rm-ease-out);
+}
+
+/* Snap-point sheets keep a full scrim at every resting point. */
+[data-rm-drawer-overlay][data-rm-snap] {
+  opacity: 1;
+}
+
+[data-rm-drawer-overlay]:is([data-starting-style], [data-ending-style]) {
+  opacity: 0;
+}
+
+/* Exit: 240ms for a button/Escape/back close, shorter the harder the flick. */
+[data-rm-drawer][data-ending-style],
+[data-rm-drawer-overlay][data-ending-style] {
+  transition-duration: calc(var(--drawer-swipe-strength, 1) * 240ms);
+}
+
+/* Follow the finger; the release transition wins once data-ending-style lands. */
+[data-rm-drawer][data-swiping]:not([data-ending-style]),
+[data-rm-drawer-overlay][data-swiping]:not([data-ending-style]) {
+  transition-duration: 0ms;
+}
+
+[data-rm-drawer][data-swiping] {
+  user-select: none;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  [data-vaul-drawer][data-vaul-drawer] {
-    transition-duration: 1ms;
-    animation-duration: 1ms;
+  [data-rm-drawer][data-swipe-direction]:is(
+      [data-starting-style],
+      [data-ending-style]
+    ) {
+    transform: none;
+    opacity: 0;
   }
 }

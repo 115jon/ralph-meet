@@ -98,11 +98,21 @@ const ResponsiveDialogContent = React.forwardRef<
 ) {
   const drawer = useDrawerMode();
   if (drawer) {
+    // Radix focus/outside hooks have no drawer equivalent (focus is managed
+    // by Base UI); Escape and scrim-tap hooks carry over.
+    const {
+      onOpenAutoFocus: _onOpenAutoFocus,
+      onCloseAutoFocus: _onCloseAutoFocus,
+      onInteractOutside: _onInteractOutside,
+      onFocusOutside: _onFocusOutside,
+      forceMount: _forceMount,
+      ...drawerProps
+    } = props;
     return (
       <DrawerContent
         ref={ref}
         className={cn("gap-4 px-4 pt-1", className, drawerClassName)}
-        {...props}
+        {...drawerProps}
       >
         <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto overscroll-contain">
           {children}

@@ -9,7 +9,11 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { HIT, PRESS } from "@/components/ui/interaction";
 import { shouldIgnoreSelectDismiss } from "@/components/ui/select-dismiss";
-import { containsSlot, isDialogTopmost } from "@/components/ui/dialog-stack";
+import {
+  containsSlot,
+  isDialogTopmost,
+  isDrawerLayerTarget,
+} from "@/components/ui/dialog-stack";
 
 type DialogRootContextValue = {
   id: string;
@@ -144,6 +148,7 @@ const DialogSurface = React.forwardRef<
     onPointerDownOutside,
     onFocusOutside,
     onInteractOutside,
+    onEscapeKeyDown,
     ...props
   },
   ref,
@@ -160,9 +165,22 @@ const DialogSurface = React.forwardRef<
     handler?: (event: E) => void,
   ) => {
     handler?.(event);
-    if (shouldIgnoreSelectDismiss(event.target)) {
+    // Base UI drawers (an action sheet or picker opened from this dialog)
+    // portal outside Radix's layer stack; a tap or focus there isn't outside.
+    if (
+      shouldIgnoreSelectDismiss(event.target) ||
+      isDrawerLayerTarget(event.target)
+    ) {
       event.preventDefault();
     }
+  };
+  const handleEscapeKeyDown = (event: KeyboardEvent) => {
+    // A drawer opened above this dialog closes on its own Escape first.
+    if (rootContext && !isDialogTopmost(rootContext.id)) {
+      event.preventDefault();
+      return;
+    }
+    onEscapeKeyDown?.(event);
   };
   const handleCloseAutoFocus = (
     event: Parameters<
@@ -196,6 +214,7 @@ const DialogSurface = React.forwardRef<
       onInteractOutside={(event) =>
         ignoreSelectDismiss(event, onInteractOutside)
       }
+      onEscapeKeyDown={handleEscapeKeyDown}
       {...props}
     >
       {!hasTitle && (
