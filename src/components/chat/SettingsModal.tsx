@@ -5,8 +5,11 @@
  * alerts). On narrow screens the nav is a list that pushes into pages.
  *
  * Opening:
- *   <SettingsModal open initialTab="voice" initialRow="echo-cancellation" />
  *   openSettings({ row: "sign-out" })   // from anywhere, see settings-links
+ *
+ * The app mounts this once, through SettingsHost, which feeds it the
+ * settings store. Fixtures and tests can still drive it with props:
+ *   <SettingsModal open initialTab="voice" initialRow="echo-cancellation" />
  *
  * Panels live in ./settings; the row map (labels, search words, ids) is
  * ./settings/schema.ts.
@@ -23,6 +26,7 @@ import {
 import { Icon } from "@/components/ui/icon";
 import { IconButton } from "@/components/ui/IconButton";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { useIsMobile } from "@/hooks/useMediaQuery";
 import { isDesktop } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 import { useDesktopSettingsStore } from "@/stores/useDesktopSettingsStore";
@@ -68,9 +72,7 @@ import {
   type SettingsPanelId,
 } from "./settings/schema";
 import {
-  OPEN_SETTINGS_EVENT,
   resolveSettingsLocation,
-  type SettingsLocation,
   type SettingsTabInput,
 } from "./settings/settings-links";
 
@@ -84,6 +86,11 @@ interface SettingsModalProps {
   /** Row id to land on and highlight (schema.ts). Implies its panel. */
   initialRow?: string;
   initialProfileEditorOpen?: boolean;
+  /**
+   * Bumped by the settings store on every open request. A new value while the
+   * dialog is already open moves it to `initialTab` / `initialRow`.
+   */
+  requestId?: number;
   /** Overrides for what this device can show (fixtures and tests). */
   environment?: Partial<SettingsEnvironment>;
 }
@@ -100,22 +107,8 @@ const PANEL_COMPONENTS: Record<SettingsPanelId, ComponentType> = {
   desktop: DesktopPanel,
 };
 
-const MOBILE_QUERY_WIDTH = 768;
 const RAIL_MIN_WIDTH = 840;
 const MAX_ROW_HITS_PER_PANEL = 4;
-
-function useIsNarrow() {
-  const [narrow, setNarrow] = useState(
-    () =>
-      typeof window !== "undefined" && window.innerWidth < MOBILE_QUERY_WIDTH,
-  );
-  useEffect(() => {
-    const onResize = () => setNarrow(window.innerWidth < MOBILE_QUERY_WIDTH);
-    window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
-  }, []);
-  return narrow;
-}
 
 /** Width of an element, tracked with ResizeObserver. */
 function useElementWidth<T extends HTMLElement>() {
@@ -144,6 +137,7 @@ export default function SettingsModal({
   initialTab,
   initialRow,
   initialProfileEditorOpen = false,
+  requestId = 0,
   environment,
 }: SettingsModalProps) {
   const { isLoaded: isUserLoaded } = useUser();
@@ -153,13 +147,9 @@ export default function SettingsModal({
     () => ({ desktop: environment?.desktop ?? isDesktop() }),
     [environment?.desktop],
   );
-  const narrow = useIsNarrow();
+  const narrow = useIsMobile();
 
-  // Opened by an `openSettings()` event rather than by the owner's prop.
-  const [eventLocation, setEventLocation] = useState<SettingsLocation | null>(
-    null,
-  );
-  const isOpen = open || eventLocation !== null;
+  const isOpen = open;
 
   const initial = resolveSettingsLocation({
     tab: initialTab,
@@ -207,15 +197,8 @@ export default function SettingsModal({
   const wasOpen = useRef(false);
   useEffect(() => {
     if (isOpen && !wasOpen.current) {
-      const location = eventLocation
-        ? resolveSettingsLocation({
-            tab: eventLocation.panel,
-            row: eventLocation.row,
-          })
-        : initial;
-      const explicit = eventLocation
-        ? Boolean(eventLocation.panel || eventLocation.row)
-        : explicitInitial || initialProfileEditorOpen;
+      const location = initial;
+      const explicit = explicitInitial || initialProfileEditorOpen;
       const available = isPanelAvailable(PANEL_BY_ID[location.panel], env);
       setPanel(available ? location.panel : "account");
       setTarget(available ? location.row : null);
@@ -227,28 +210,20 @@ export default function SettingsModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen]);
 
-  useEffect(() => {
-    const onOpenEvent = (event: Event) => {
-      const detail = (event as CustomEvent<SettingsLocation>).detail ?? {};
-      if (isOpen) {
-        const location = resolveSettingsLocation({
-          tab: detail.panel,
-          row: detail.row,
-        });
-        setPanel(location.panel);
-        setTarget(location.row);
-        setShowList(false);
-        setQuery("");
-        return;
-      }
-      setEventLocation(detail);
-    };
-    window.addEventListener(OPEN_SETTINGS_EVENT, onOpenEvent);
-    return () => window.removeEventListener(OPEN_SETTINGS_EVENT, onOpenEvent);
-  }, [isOpen]);
+  /* A repeat open request while already open moves the dialog there. */
+  const [seenRequestId, setSeenRequestId] = useState(requestId);
+  if (requestId !== seenRequestId) {
+    setSeenRequestId(requestId);
+    if (isOpen && explicitInitial) {
+      const available = isPanelAvailable(PANEL_BY_ID[initial.panel], env);
+      setPanel(available ? initial.panel : "account");
+      setTarget(available ? initial.row : null);
+      setShowList(false);
+      setQuery("");
+    }
+  }
 
   const close = useCallback(() => {
-    setEventLocation(null);
     if (open) onClose();
   }, [onClose, open]);
 
@@ -458,7 +433,7 @@ export default function SettingsModal({
       </div>
       <div
         onKeyDown={(event) => rovingKeyDown(event)}
-        className="rm-settings-scroll min-h-0 flex-1 overflow-y-auto px-2 pb-4"
+        className="rm-settings-scroll min-h-0 flex-1 overflow-y-auto px-2 pb-[max(16px,var(--safe-area-bottom,0px))]"
       >
         {noHits ? (
           <div className="px-2.5 py-3" role="status">
@@ -619,7 +594,7 @@ export default function SettingsModal({
           <div
             key={`${shownPanel}-${narrow ? "n" : "w"}`}
             className={cn(
-              "flex gap-8 px-4 pb-16 pt-5 md:px-6",
+              "flex gap-8 px-4 pb-[calc(64px+var(--safe-area-bottom,0px))] pt-5 md:px-6",
               narrow ? "rm-settings-push-in" : "rm-settings-panel-in",
             )}
           >
@@ -801,11 +776,16 @@ export default function SettingsModal({
             <DialogSurface
               showCloseButton={false}
               aria-label="Edit profile"
-              className="fixed inset-0 z-60 flex items-center justify-center overflow-hidden rounded-2xl border border-rm-border bg-rm-bg-primary p-0 shadow-2xl animate-in fade-in zoom-in-95 duration-200 data-[state=closed]:animate-out data-[state=closed]:zoom-out-95 md:inset-auto md:left-1/2 md:top-1/2 md:h-[min(860px,calc(100dvh-32px))] md:w-[min(1240px,calc(100vw-32px))] md:-translate-x-1/2 md:-translate-y-1/2 md:rounded-2xl"
-              style={{
-                width: "min(1240px, calc(100vw - 32px))",
-                height: "min(860px, calc(100dvh - 32px))",
-              }}
+              className="fixed inset-0 z-60 flex items-center justify-center overflow-hidden rounded-2xl border border-rm-border bg-rm-bg-primary p-0 shadow-2xl animate-in fade-in zoom-in-95 duration-200 data-[state=closed]:animate-out data-[state=closed]:zoom-out-95 max-md:rounded-none max-md:border-0 max-md:pt-[var(--safe-area-top,0px)] max-md:pb-[var(--safe-area-bottom,0px)] md:inset-auto md:left-1/2 md:top-1/2 md:h-[min(860px,calc(100dvh-32px))] md:w-[min(1240px,calc(100vw-32px))] md:-translate-x-1/2 md:-translate-y-1/2 md:rounded-2xl"
+              // Full screen on phones; the framed editor from md up.
+              style={
+                narrow
+                  ? undefined
+                  : {
+                      width: "min(1240px, calc(100vw - 32px))",
+                      height: "min(860px, calc(100dvh - 32px))",
+                    }
+              }
             >
               <SettingsAccountTab
                 authUserLoaded={isUserLoaded}

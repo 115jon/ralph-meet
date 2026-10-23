@@ -20,7 +20,7 @@ import InlineEmojiText from "./InlineEmojiText";
 export const NotificationBell = memo(function NotificationBell() {
   const unreadCount = useChatStore((s) => s.unreadNotificationCount);
   const notifications = useChatStore((s) => s.notifications);
-  const { loadNotifications, markNotificationsRead } = useChatActions();
+  const { loadNotifications } = useChatActions();
   const [open, setOpen] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
@@ -74,33 +74,6 @@ export const NotificationBell = memo(function NotificationBell() {
     setOpen((v) => !v);
   }, []);
 
-  const handleMarkAllRead = useCallback(() => {
-    markNotificationsRead();
-  }, [markNotificationsRead]);
-
-  const handleNotificationClick = useCallback(
-    (notif: AppNotification) => {
-      // Mark as read
-      if (!notif.is_read) {
-        markNotificationsRead([notif.id]);
-      }
-      // Navigate to the channel/message
-      if (notif.channel_id && notif.message_id) {
-        window.dispatchEvent(
-          new CustomEvent("navigate-channel", {
-            detail: {
-              channelId: notif.channel_id,
-              messageId: notif.message_id,
-              serverId: notif.server_id,
-            },
-          }),
-        );
-      }
-      setOpen(false);
-    },
-    [markNotificationsRead],
-  );
-
   return (
     <div className="relative">
       {/* Bell icon */}
@@ -149,56 +122,7 @@ export const NotificationBell = memo(function NotificationBell() {
               <div className="w-12 h-1.5 rounded-full bg-rm-bg-hover" />
             </div>
 
-            {/* Header */}
-            <div className="flex items-center justify-between px-4 md:px-3 py-3 md:py-2.5 border-b border-rm-border">
-              <h3 className="text-ui-base md:text-ui-sm font-bold text-rm-text-primary tracking-tight">
-                Inbox
-              </h3>
-              <div className="flex items-center gap-3 md:gap-2">
-                {unreadCount > 0 && (
-                  <Button
-                    type="button"
-                    variant="link"
-                    size="xs"
-                    className="text-ui-2xs"
-                    onClick={handleMarkAllRead}
-                  >
-                    Mark all read
-                  </Button>
-                )}
-                <IconButton
-                  aria-label="Close notifications"
-                  icon="close"
-                  size="xs"
-                  className="md:h-5 md:w-5"
-                  onClick={() => setOpen(false)}
-                />
-              </div>
-            </div>
-
-            {/* Notification list */}
-            <div className="flex-1 overflow-y-auto custom-scrollbar pb-6 md:pb-0">
-              {notifications.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-12 gap-2">
-                  <Icon
-                    name="bell"
-                    size="2xl"
-                    className="text-rm-text-muted opacity-40"
-                  />
-                  <p className="text-ui-xs font-medium text-rm-text-muted">
-                    No notifications yet
-                  </p>
-                </div>
-              ) : (
-                notifications.map((notif) => (
-                  <NotificationRow
-                    key={notif.id}
-                    notification={notif}
-                    onClick={handleNotificationClick}
-                  />
-                ))
-              )}
-            </div>
+            <NotificationInbox onClose={() => setOpen(false)} />
           </div>
         </div>
       )}
@@ -206,14 +130,135 @@ export const NotificationBell = memo(function NotificationBell() {
   );
 });
 
+// ── Inbox: header + list, shared by the bell and the mobile tab ────────────
+
+export function NotificationInbox({
+  onClose,
+  onNavigate,
+  variant = "panel",
+}: {
+  /** Shows a close button in the header. */
+  onClose?: () => void;
+  /** Called after a notification row navigates (the bell closes itself). */
+  onNavigate?: () => void;
+  /** `page` is the full-height mobile tab: larger title, no close button. */
+  variant?: "panel" | "page";
+}) {
+  const unreadCount = useChatStore((s) => s.unreadNotificationCount);
+  const notifications = useChatStore((s) => s.notifications);
+  const { markNotificationsRead } = useChatActions();
+  const page = variant === "page";
+
+  const handleNotificationClick = useCallback(
+    (notif: AppNotification) => {
+      if (!notif.is_read) {
+        markNotificationsRead([notif.id]);
+      }
+      if (notif.channel_id && notif.message_id) {
+        window.dispatchEvent(
+          new CustomEvent("navigate-channel", {
+            detail: {
+              channelId: notif.channel_id,
+              messageId: notif.message_id,
+              serverId: notif.server_id,
+            },
+          }),
+        );
+      }
+      onNavigate?.();
+      onClose?.();
+    },
+    [markNotificationsRead, onClose, onNavigate],
+  );
+
+  return (
+    <>
+      <div
+        className={cn(
+          "flex shrink-0 items-center justify-between border-b border-rm-border",
+          page ? "h-14 px-4" : "px-4 py-3 md:px-3 md:py-2.5",
+        )}
+      >
+        <h2
+          className={cn(
+            "tracking-tight",
+            page
+              ? "text-ui-xl font-semibold text-rm-text"
+              : "text-ui-base font-bold text-rm-text-primary md:text-ui-sm",
+          )}
+        >
+          {page ? "Notifications" : "Inbox"}
+        </h2>
+        <div className="flex items-center gap-3 md:gap-2">
+          {unreadCount > 0 && (
+            <Button
+              type="button"
+              variant={page ? "secondary" : "link"}
+              size={page ? "sm" : "xs"}
+              className={page ? undefined : "text-ui-2xs"}
+              onClick={() => markNotificationsRead()}
+            >
+              Mark all read
+            </Button>
+          )}
+          {onClose ? (
+            <IconButton
+              aria-label="Close notifications"
+              icon="close"
+              size="xs"
+              className="md:h-5 md:w-5"
+              onClick={onClose}
+            />
+          ) : null}
+        </div>
+      </div>
+
+      <div className="flex-1 overflow-y-auto overscroll-contain custom-scrollbar pb-6 md:pb-0">
+        {notifications.length === 0 ? (
+          <div className="flex flex-col items-center justify-center gap-2 px-6 py-12 text-center">
+            <Icon
+              name="bell"
+              size="2xl"
+              className="text-rm-text-muted opacity-40"
+            />
+            <p className="text-ui-xs font-medium text-rm-text-muted">
+              No notifications yet
+            </p>
+            {page ? (
+              <p className="text-ui-xs text-rm-text-muted">
+                Mentions and replies show up here.
+              </p>
+            ) : null}
+          </div>
+        ) : (
+          <ul>
+            {notifications.map((notif) => (
+              <li key={notif.id}>
+                <NotificationRow
+                  notification={notif}
+                  onClick={handleNotificationClick}
+                  roomy={page}
+                />
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </>
+  );
+}
+
 // ── Individual notification row ──────────────────────────────────────────────
 
 const NotificationRow = memo(function NotificationRow({
   notification,
   onClick,
+  roomy = false,
 }: {
   notification: AppNotification;
   onClick: (n: AppNotification) => void;
+  /** Touch spacing for the full-page inbox. */
+  roomy?: boolean;
 }) {
   const label =
     notification.type === "mention"
@@ -232,7 +277,8 @@ const NotificationRow = memo(function NotificationRow({
     <button
       type="button"
       className={cn(
-        "flex w-full items-start gap-2.5 px-3 py-2.5 text-left transition-colors hover:bg-rm-bg-hover border-b border-rm-border/50 last:border-0",
+        "flex w-full items-start gap-2.5 text-left transition-colors duration-150 pointer-fine:hover:bg-rm-bg-hover active:bg-rm-bg-hover border-b border-rm-border/50",
+        roomy ? "min-h-16 px-4 py-3" : "px-3 py-2.5",
         !notification.is_read && "bg-rm-accent/5",
       )}
       onClick={() => onClick(notification)}

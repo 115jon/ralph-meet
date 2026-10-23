@@ -15,6 +15,7 @@ import {
   type OpenProfileEditorEventDetail,
 } from "@/lib/profile-editor-events";
 import { useUserResolution } from "@/hooks/useUserResolution";
+import { openSettings as openSettingsAt } from "@/components/chat/settings/settings-links";
 import { getAuthAssetUrl } from "@/lib/platform";
 import type {
   ScreenShareOptions,
@@ -65,7 +66,6 @@ const AudioDeviceMenu = lazy(() =>
     default: mod.AudioDeviceMenu,
   })),
 );
-const SettingsModal = lazy(() => import("@/components/chat/SettingsModal"));
 const ProfileEditorModal = lazy(
   () => import("@/components/chat/ProfileEditorModal"),
 );
@@ -274,10 +274,6 @@ export default function UserPanel({
   const [collectiblesCatalog, setCollectiblesCatalog] = useState(() =>
     getCachedCollectiblesCatalog(),
   );
-  const [showSettings, setShowSettings] = useState(false);
-  const [settingsInitialTab, setSettingsInitialTab] = useState<
-    "account" | "voice" | "shares" | "appearance"
-  >("account");
   const [showProfileEditor, setShowProfileEditor] = useState(false);
   const profileEditorTriggerRef = useRef<HTMLElement | null>(null);
   const [showMenu, setShowMenu] = useState(false);
@@ -325,10 +321,8 @@ export default function UserPanel({
   );
 
   const openSettings = useCallback(
-    (tab: "account" | "voice" | "shares" | "appearance" = "account") => {
-      setSettingsInitialTab(tab);
-      setShowSettings(true);
-    },
+    (tab: "account" | "voice" | "shares" | "appearance" = "account") =>
+      openSettingsAt({ panel: tab }),
     [],
   );
 
@@ -344,19 +338,6 @@ export default function UserPanel({
     profileEditorTriggerRef.current = null;
     if (trigger?.isConnected) trigger.focus();
   }, [showProfileEditor]);
-
-  useEffect(() => {
-    const handleOpenShares = () => {
-      openSettings("shares");
-    };
-    window.addEventListener("open-shared-messages-settings", handleOpenShares);
-    return () => {
-      window.removeEventListener(
-        "open-shared-messages-settings",
-        handleOpenShares,
-      );
-    };
-  }, [openSettings]);
 
   useEffect(() => {
     const handleOpenProfileEditor = (event: Event) => {
@@ -848,17 +829,6 @@ export default function UserPanel({
             />
           </Suspense>
         )}
-        {/* Settings Modal */}
-        <Suspense fallback={null}>
-          <SettingsModal
-            open={showSettings}
-            initialTab={settingsInitialTab}
-            onClose={() => {
-              setShowSettings(false);
-              setSettingsInitialTab("account"); // reset for next open
-            }}
-          />
-        </Suspense>
         <Suspense fallback={null}>
           <ProfileEditorModal
             open={showProfileEditor}

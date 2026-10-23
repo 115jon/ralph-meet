@@ -575,6 +575,7 @@ export function useChatPageLogic() {
         !options?.isJump;
 
       if (channelId === activeChannelId) {
+        uiDispatch({ type: "SET_SIDEBAR", open: false });
         if (options?.forceVoiceJoin && shouldAutoJoinVoice) {
           uiDispatch({ type: "SET_SIDEBAR", open: false });
           uiDispatch({ type: "SET_VOICE_JOIN_ON_SELECT", channelId });

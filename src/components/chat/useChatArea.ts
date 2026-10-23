@@ -1133,6 +1133,10 @@ export function useChatArea({
     );
   }, [effectivePermissions]);
 
+  const canManageChannel =
+    hasPermission(userPermissions, PERMISSIONS.MANAGE_CHANNELS) ||
+    hasPermission(userPermissions, PERMISSIONS.ADMINISTRATOR);
+
   const canBan = useMemo(() => {
     return (
       hasPermission(userPermissions, PERMISSIONS.BAN_MEMBERS) ||
@@ -1268,6 +1272,7 @@ export function useChatArea({
     canPin,
     canDeleteMessages,
     canBan,
+    canManageChannel,
     channelData,
     dispatch,
     restoreInProgress,

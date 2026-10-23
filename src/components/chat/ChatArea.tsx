@@ -1,4 +1,5 @@
 import { useBackButton } from "@/hooks/useBackButton";
+import { isMobileViewport } from "@/hooks/useMediaQuery";
 import type { Channel } from "@/lib/types";
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import ChannelSettingsModal from "./ChannelSettingsModal";
@@ -103,6 +104,7 @@ export default function ChatArea({
     canPin,
     canDeleteMessages,
     canBan,
+    canManageChannel,
     channelData,
     dispatch,
     unreadSeparatorId,
@@ -161,7 +163,7 @@ export default function ChatArea({
       if (showMembers && onMembersClick) {
         // Technically onMembersClick toggles it in the parent (ChatPageClient)
         // But let's verify if we are on a smaller screen since this UI is usually pervasive on desktop
-        if (window.innerWidth < 768) {
+        if (isMobileViewport()) {
           onMembersClick();
           return true;
         }
@@ -411,8 +413,10 @@ export default function ChatArea({
               onOpenSearch={() => {
                 setLocalState({ showSearch: true });
               }}
-              onOpenSettings={() =>
-                setLocalState({ showChannelSettings: true })
+              onOpenSettings={
+                !isDM && canManageChannel && channelSettingsPayload
+                  ? () => setLocalState({ showChannelSettings: true })
+                  : undefined
               }
               onInviteClick={onInviteClick}
               pinnedMessages={state.pinnedMessages}

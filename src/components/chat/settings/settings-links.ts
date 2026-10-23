@@ -4,13 +4,16 @@
  *   openSettings({ panel: "voice", row: "echo-cancellation" });
  *   openSettings({ row: "sign-out" });          // panel is inferred
  *
- * Dispatches a window event that the mounted SettingsModal listens for, so
- * any part of the app can open settings on an exact row without owning the
- * dialog's state. Row ids come from schema.ts and are stable.
+ * Writes to useSettingsDialogStore, which the one SettingsHost (mounted with
+ * the chat layout) renders, so any part of the app can open settings on an
+ * exact row without owning the dialog's state. Opening while the dialog is up
+ * moves it. Row ids come from schema.ts and are stable.
  *
  * The app has no URL route for settings, so there is no "copy link" button;
  * a settings location is { panel, row } and nothing more.
  */
+
+import { useSettingsDialogStore } from "@/stores/useSettingsDialogStore";
 
 import {
   getRowLocation,
@@ -18,10 +21,9 @@ import {
   type SettingsPanelId,
 } from "./schema";
 
-export const OPEN_SETTINGS_EVENT = "ralph:open-settings";
-
 export type SettingsLocation = {
-  panel?: SettingsPanelId;
+  /** Panel id, or a pre-Studio tab name ("shares", "camera", …). */
+  panel?: SettingsTabInput;
   /** A row id from schema.ts. Lands on the row and highlights it. */
   row?: string;
 };
@@ -81,10 +83,9 @@ export function resolveSettingsLocation(input: {
 }
 
 export function openSettings(location: SettingsLocation = {}) {
-  if (typeof window === "undefined") return;
-  window.dispatchEvent(
-    new CustomEvent<SettingsLocation>(OPEN_SETTINGS_EVENT, {
-      detail: location,
-    }),
-  );
+  useSettingsDialogStore.getState().openSettings(location);
+}
+
+export function closeSettings() {
+  useSettingsDialogStore.getState().close();
 }

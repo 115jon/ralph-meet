@@ -3,6 +3,7 @@ import { ChatGateway } from "@/components/chat/ChatGateway";
 import ChatPageClient from "@/components/chat/ChatPageClient";
 import { ConnectionOverlay } from "@/components/chat/ConnectionOverlay";
 import { ImageViewerModal } from "@/components/chat/ImageViewerModal";
+import { SettingsHost } from "@/components/chat/SettingsHost";
 import {
   getDesktopToken,
   getStoredKovaAuthSessionToken,
@@ -115,6 +116,7 @@ function ChatLayout() {
       <ConnectionOverlay />
       <ChatPageClient />
       <ImageViewerModal />
+      <SettingsHost />
       <CommandMenu />
     </>
   );

@@ -1,5 +1,7 @@
 import { AvatarImage } from "@/components/chat/AvatarImage";
+import { isMobileViewport } from "@/hooks/useMediaQuery";
 import { ButtonBase } from "@/components/ui/button-base";
+import { IconButton } from "@/components/ui/IconButton";
 import { getDisplayInitial, getDisplayName } from "@/lib/display-name";
 
 import {
@@ -422,7 +424,7 @@ export default function MemberList({
       memberRoles?: Role[],
     ) => {
       // On mobile, show full-screen profile sheet
-      if (window.innerWidth < 768) {
+      if (isMobileViewport()) {
         setState((prev) => ({
           ...prev,
           mobileProfileUser: { user, roles: memberRoles },
@@ -552,11 +554,11 @@ export default function MemberList({
       <div
         data-testid="members-list"
         className={cn(
-          "fixed inset-y-0 right-0 z-20 flex h-full w-full shrink-0 flex-col overflow-hidden bg-rm-bg-primary shadow-2xl animate-in slide-in-from-right-full duration-300 ease-drawer",
-          // Desktop: static sidebar, width depends on details mode
-          showDetails
-            ? "lg:static lg:z-auto lg:w-[360px] lg:bg-rm-bg-sidebar lg:shadow-none lg:animate-none"
-            : "lg:static lg:z-auto lg:w-60 lg:bg-rm-bg-sidebar lg:shadow-none lg:animate-none",
+          "fixed inset-y-0 right-0 z-20 flex h-full w-full shrink-0 flex-col overflow-hidden bg-rm-bg-primary shadow-2xl animate-in slide-in-from-right-full duration-240 ease-drawer",
+          // Phones: full-screen sheet. Tablets (md): a panel over the chat
+          // edge, so the conversation keeps its width. Desktop (lg): inline.
+          "md:absolute md:top-[calc(48px+var(--safe-area-top,0px))] md:bottom-0 md:h-auto md:border-l md:border-rm-border md:bg-rm-bg-sidebar lg:static lg:h-full lg:z-auto lg:border-l-0 lg:shadow-none lg:animate-none",
+          showDetails ? "md:w-[360px]" : "md:w-60",
         )}
       >
         <MobileHeader
@@ -575,7 +577,7 @@ export default function MemberList({
         )}
 
         <div
-          className="relative flex min-h-0 flex-1 flex-col overflow-y-auto px-4 pb-10 pt-2 custom-scrollbar lg:px-2 lg:pt-4"
+          className="relative flex min-h-0 flex-1 flex-col overflow-y-auto px-4 pb-10 pt-2 custom-scrollbar md:px-2 md:pt-4"
           style={{ paddingBottom: "max(40px, var(--safe-area-bottom, 0px))" }}
         >
           <MemberListTabs
@@ -709,7 +711,7 @@ export default function MemberList({
 
         {state.mobileProfileUser && (
           <MobileProfileSheet
-            open={state.mobileProfileUser !== null}
+            open={!state.mobileProfileUserClosing}
             user={state.mobileProfileUser.user}
             roles={state.mobileProfileUser.roles}
             onClose={closeMobileProfile}
@@ -734,38 +736,41 @@ function MobileHeader({
 }: {
   onClose?: () => void;
   onOpenSearch?: () => void;
+  /** Channel settings; omitted when you can't manage the channel. */
   onOpenSettings?: () => void;
 }) {
   return (
     <div
-      className="flex items-center justify-between pb-4 px-4 lg:hidden sticky top-0 bg-transparent z-10 shrink-0 border-b border-rm-border/30"
-      style={{ paddingTop: "calc(16px + var(--safe-area-top, 0px))" }}
+      className="flex items-center justify-between pb-2 px-2 md:hidden sticky top-0 bg-transparent z-10 shrink-0 border-b border-rm-border/30"
+      style={{ paddingTop: "calc(8px + var(--safe-area-top, 0px))" }}
     >
-      <ButtonBase
+      <IconButton
+        aria-label="Close member list"
+        icon="back"
+        variant="muted"
+        size="lg"
         onClick={onClose}
-        className="p-1 -ml-1 text-rm-text-muted hover:text-rm-text transition-colors"
-      >
-        <Icon name="back" size="xl" />
-      </ButtonBase>
-      <div className="flex items-center gap-5 text-rm-text-muted">
-        <ButtonBase
-          className="hover:text-rm-text transition-colors"
+      />
+      <div className="flex items-center gap-1">
+        <IconButton
+          aria-label="Search this channel"
+          icon="search"
+          variant="muted"
+          size="lg"
           onClick={() => {
             onOpenSearch?.();
             onClose?.();
           }}
-        >
-          <Icon name="search" size="xl" />
-        </ButtonBase>
-        <ButtonBase className="hover:text-rm-text transition-colors">
-          <Icon name="bell" size="xl" />
-        </ButtonBase>
-        <ButtonBase
-          className="hover:text-rm-text transition-colors"
-          onClick={onOpenSettings}
-        >
-          <Icon name="settings" size="xl" />
-        </ButtonBase>
+        />
+        {onOpenSettings ? (
+          <IconButton
+            aria-label="Channel settings"
+            icon="settings"
+            variant="muted"
+            size="lg"
+            onClick={onOpenSettings}
+          />
+        ) : null}
       </div>
     </div>
   );
@@ -781,7 +786,7 @@ function DesktopHeader({
   isDM?: boolean;
 }) {
   return (
-    <div className="hidden lg:flex items-center justify-between px-4 py-3 border-b border-rm-border bg-transparent shrink-0">
+    <div className="hidden md:flex items-center justify-between px-4 py-3 border-b border-rm-border bg-transparent shrink-0">
       <div className="flex items-center gap-2 min-w-0">
         {isDM ? (
           <Icon
@@ -806,7 +811,7 @@ function DesktopHeader({
         <TooltipTrigger asChild>
           <ButtonBase
             onClick={onToggleDetails}
-            className="p-1.5 text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover rounded-lg transition-colors shrink-0"
+            className="p-1.5 text-rm-text-muted pointer-fine:hover:text-rm-text pointer-fine:hover:bg-rm-bg-hover rounded-lg transition-colors shrink-0"
           >
             <Icon name="back" size="md" />
           </ButtonBase>
@@ -850,7 +855,7 @@ function MemberListTabs({
 
   return (
     <>
-      <div className="lg:hidden mb-6 shrink-0">
+      <div className="md:hidden mb-6 shrink-0">
         <div className="flex items-center gap-2 mb-1">
           {isDM ? (
             <Icon
@@ -882,7 +887,7 @@ function MemberListTabs({
       </div>
 
       {showDetails && (
-        <div className="hidden lg:block mb-4 shrink-0 px-2">
+        <div className="hidden md:block mb-4 shrink-0 px-2">
           {renderTabs(
             "flex gap-4 overflow-x-auto custom-scrollbar no-scrollbar text-ui-sm font-semibold text-rm-text-muted border-b border-rm-border pb-2",
             "desktop",
@@ -952,7 +957,9 @@ function MemberTabButton({
       tabIndex={activeTab === tab.id ? 0 : -1}
       className={cn(
         "shrink-0 cursor-pointer transition-colors relative outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-2 focus-visible:ring-offset-rm-bg-primary rounded-sm",
-        activeTab === tab.id ? "text-rm-text-primary" : "hover:text-rm-text",
+        activeTab === tab.id
+          ? "text-rm-text-primary"
+          : "pointer-fine:hover:text-rm-text",
       )}
       onClick={() => onTabChange(tab.id)}
       onKeyDown={handleKeyDown}
@@ -973,9 +980,9 @@ function MobileInviteButton({
   onClose?: () => void;
 }) {
   return (
-    <div className="lg:hidden mb-6 shrink-0 pt-2">
+    <div className="md:hidden mb-6 shrink-0 pt-2">
       <ButtonBase
-        className="w-full flex items-center justify-between bg-rm-bg-elevated hover:bg-rm-bg-hover text-rm-text p-4 rounded-lg transition-ui ring-1 ring-rm-border enabled:active:scale-[0.98]"
+        className="w-full flex items-center justify-between bg-rm-bg-elevated pointer-fine:hover:bg-rm-bg-hover text-rm-text p-4 rounded-lg transition-ui ring-1 ring-rm-border enabled:active:scale-[0.98]"
         onClick={() => {
           onInviteClick?.();
           onClose?.();
@@ -1194,7 +1201,7 @@ function MediaTabContent({
           <ButtonBase
             key={item.id}
             onClick={() => handleMediaClick(idx)}
-            className="aspect-square rounded-xl overflow-hidden bg-rm-bg-elevated border border-rm-border/20 hover:border-primary/40 transition-ui group relative"
+            className="aspect-square rounded-xl overflow-hidden bg-rm-bg-elevated border border-rm-border/20 pointer-fine:hover:border-primary/40 transition-ui group relative"
           >
             <div className="absolute top-1.5 right-1.5 z-10">
               <div className="h-6 w-6 rounded-full overflow-visible border-2 border-black/30 shadow-md bg-rm-bg-elevated">
@@ -1275,7 +1282,7 @@ function PinsTabContent({
           return (
             <ButtonBase
               key={msg.id}
-              className="w-full text-left bg-rm-bg-elevated hover:bg-rm-bg-hover border border-rm-border/30 rounded-xl p-3.5 transition-colors group"
+              className="w-full text-left bg-rm-bg-elevated pointer-fine:hover:bg-rm-bg-hover border border-rm-border/30 rounded-xl p-3.5 transition-colors group"
               onClick={() => onJumpToMessage(msg.id)}
             >
               <div className="flex items-center gap-2 mb-1.5">
@@ -1348,7 +1355,7 @@ function ThreadsTabContent({
           return (
             <ButtonBase
               key={thread.id}
-              className="w-full text-left bg-rm-bg-elevated hover:bg-rm-bg-hover border border-rm-border/30 rounded-xl p-3.5 transition-colors group"
+              className="w-full text-left bg-rm-bg-elevated pointer-fine:hover:bg-rm-bg-hover border border-rm-border/30 rounded-xl p-3.5 transition-colors group"
               onClick={() => onOpenThread(thread.id)}
             >
               <div className="flex items-center gap-2 mb-1.5">
@@ -1420,7 +1427,7 @@ function LinksTabContent({
         return (
           <div
             key={item.id}
-            className="bg-rm-bg-elevated border border-rm-border/30 rounded-xl p-3.5 transition-colors hover:bg-rm-bg-hover"
+            className="bg-rm-bg-elevated border border-rm-border/30 rounded-xl p-3.5 transition-colors pointer-fine:hover:bg-rm-bg-hover"
           >
             <div className="flex items-center gap-2 mb-2">
               <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-ui-2xs font-bold text-primary overflow-visible">
@@ -1456,7 +1463,7 @@ function LinksTabContent({
                 href={url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center gap-2 text-ui-sm text-primary hover:underline truncate mt-1"
+                className="flex items-center gap-2 text-ui-sm text-primary pointer-fine:hover:underline truncate mt-1"
               >
                 <Icon name="externalLink" size="xs" className="shrink-0" />
                 <span className="truncate">{url}</span>
@@ -1517,7 +1524,7 @@ function FilesTabContent({
         return (
           <div
             key={item.id}
-            className="group relative flex cursor-pointer items-center gap-3 rounded-xl border border-rm-border/30 bg-rm-bg-elevated p-3.5 transition-colors hover:bg-rm-bg-hover outline-none focus-within:ring-2 focus-within:ring-primary/20"
+            className="group relative flex cursor-pointer items-center gap-3 rounded-xl border border-rm-border/30 bg-rm-bg-elevated p-3.5 transition-colors pointer-fine:hover:bg-rm-bg-hover outline-none focus-within:ring-2 focus-within:ring-primary/20"
           >
             <ButtonBase
               onClick={() => {
@@ -1586,7 +1593,7 @@ function FilesTabContent({
                   href={getDownloadUrl(item.url)}
                   download={item.filename}
                   onClick={(e) => e.stopPropagation()}
-                  className="relative z-20 shrink-0 rounded-lg p-2 text-rm-text-muted opacity-0 transition-ui hover:bg-primary/10 hover:text-primary group-hover:opacity-100"
+                  className="relative z-20 shrink-0 rounded-lg p-2 text-rm-text-muted opacity-0 transition-ui pointer-fine:hover:bg-primary/10 pointer-fine:hover:text-primary group-hover:opacity-100"
                 >
                   <Icon name="download" size="sm" />
                 </a>
@@ -1787,7 +1794,7 @@ function TabErrorState({
 
       <ButtonBase
         onClick={onRetry}
-        className="flex items-center gap-2 px-4 py-2 bg-rm-bg-elevated hover:bg-rm-bg-hover border border-rm-border rounded-xl text-ui-sm font-bold text-rm-text-primary transition-colors"
+        className="flex items-center gap-2 px-4 py-2 bg-rm-bg-elevated pointer-fine:hover:bg-rm-bg-hover border border-rm-border rounded-xl text-ui-sm font-bold text-rm-text-primary transition-colors"
       >
         <Icon name="refresh" size="sm" />
         Retry
@@ -1904,16 +1911,17 @@ function MemberItem({
     <ButtonBase
       ref={buttonRef}
       className={cn(
-        "group relative flex w-full cursor-pointer items-center gap-3 overflow-hidden border-0 bg-transparent p-0 text-left transition-colors lg:gap-2.5",
+        "group relative flex w-full cursor-pointer items-center gap-3 overflow-hidden border-0 bg-transparent p-0 text-left transition-colors md:gap-2.5",
         "bg-rm-bg-elevated px-3.5 py-3 mb-2 rounded-lg", // mobile
         hasNameplate
           ? "border border-transparent"
           : "border border-rm-border/30",
         hasNameplate && "isolate",
         hasNameplate
-          ? "lg:bg-transparent lg:px-2 lg:py-1.5 lg:mb-0 lg:rounded-md lg:border-transparent lg:hover:bg-rm-bg-hover"
-          : "lg:bg-transparent lg:px-2 lg:py-1.5 lg:mb-0 lg:rounded-md lg:border-transparent lg:hover:bg-rm-bg-hover", // desktop
-        !isOnline && "opacity-60 grayscale hover:opacity-100 hover:grayscale-0",
+          ? "md:bg-transparent md:px-2 md:py-1.5 md:mb-0 md:rounded-md md:border-transparent md:pointer-fine:hover:bg-rm-bg-hover"
+          : "md:bg-transparent md:px-2 md:py-1.5 md:mb-0 md:rounded-md md:border-transparent md:pointer-fine:hover:bg-rm-bg-hover", // desktop
+        !isOnline &&
+          "opacity-60 grayscale hover:opacity-100 pointer-fine:hover:grayscale-0",
       )}
       style={
         hasNameplate && nameplateTheme
@@ -1939,7 +1947,7 @@ function MemberItem({
         </>
       )}
       <div className="relative z-10">
-        <div className="flex h-10 w-10 lg:h-8 lg:w-8 shrink-0 items-center justify-center overflow-visible rounded-full bg-primary text-xs font-bold text-primary-foreground border border-rm-border transition-ui group-hover:ring-2 group-hover:ring-primary/20">
+        <div className="flex h-10 w-10 md:h-8 md:w-8 shrink-0 items-center justify-center overflow-visible rounded-full bg-primary text-xs font-bold text-primary-foreground border border-rm-border transition-ui group-hover:ring-2 group-hover:ring-primary/20">
           {member.user.avatar_url ? (
             <AvatarImage
               src={getAuthAssetUrl(member.user.avatar_url)}
@@ -1953,7 +1961,7 @@ function MemberItem({
         {isTyping && (member.user.status !== "offline" || isMe) ? (
           <div
             className={cn(
-              "absolute -bottom-0.5 -right-0.5 z-20 flex h-4 w-5 lg:h-3.5 lg:w-4.5 items-center justify-center gap-0.5 rounded-full border-2 border-rm-bg-elevated lg:border-rm-bg-sidebar px-0.5",
+              "absolute -bottom-0.5 -right-0.5 z-20 flex h-4 w-5 md:h-3.5 md:w-4.5 items-center justify-center gap-0.5 rounded-full border-2 border-rm-bg-elevated md:border-rm-bg-sidebar px-0.5",
               isMe && member.user.status === "offline"
                 ? "bg-rm-text-muted/40"
                 : "bg-primary",
@@ -1966,7 +1974,7 @@ function MemberItem({
         ) : (
           <UserStatusDot
             status={isOnline ? (member.user.status ?? "online") : "offline"}
-            className="absolute -bottom-0.5 -right-0.5 z-20 h-3.5 w-3.5 border-2 border-rm-bg-elevated transition-colors lg:h-3 lg:w-3 lg:border-rm-bg-sidebar"
+            className="absolute -bottom-0.5 -right-0.5 z-20 h-3.5 w-3.5 border-2 border-rm-bg-elevated transition-colors md:h-3 md:w-3 md:border-rm-bg-sidebar"
           />
         )}
       </div>
@@ -1979,7 +1987,7 @@ function MemberItem({
                   user={member.user}
                   text={displayName}
                   className={cn(
-                    "block min-w-0 truncate text-ui-base lg:text-ui-sm font-semibold lg:font-medium leading-[1.2] transition-colors",
+                    "block min-w-0 truncate text-ui-base md:text-ui-sm font-semibold md:font-medium leading-[1.2] transition-colors",
                     hasNameplate
                       ? "text-rm-text-primary"
                       : !isOnline

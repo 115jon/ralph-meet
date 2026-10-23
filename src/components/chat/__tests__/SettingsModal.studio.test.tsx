@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { act, render, screen, waitFor, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -42,7 +42,6 @@ vi.mock("@/lib/platform", async () => {
 vi.mock("../SettingsAccountTab", () => ({ default: () => null }));
 
 import SettingsModal from "../SettingsModal";
-import { openSettings } from "../settings/settings-links";
 
 function setViewport(width: number) {
   Object.defineProperty(window, "innerWidth", {
@@ -172,31 +171,38 @@ describe("SettingsModal (Studio)", () => {
       ).toHaveAttribute("data-target", "true");
     });
 
-    it("opens itself from openSettings() without changing the owner's state", async () => {
-      const onClose = vi.fn();
-      render(<SettingsModal open={false} onClose={onClose} />);
-      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-
-      act(() => openSettings({ row: "sign-out" }));
-
-      expect(await screen.findByRole("dialog")).toBeInTheDocument();
+    it("moves to a new location when asked again while open", async () => {
+      const { rerender } = render(
+        <SettingsModal open onClose={() => {}} initialTab="account" />,
+      );
       expect(pageTitle()).toHaveTextContent("Account");
-      expect(document.querySelector('[data-row="sign-out"]')).toHaveAttribute(
-        "data-target",
-        "true",
+
+      rerender(
+        <SettingsModal
+          open
+          onClose={() => {}}
+          initialRow="sign-out"
+          requestId={1}
+        />,
       );
 
-      const user = userEvent.setup();
-      await user.click(
-        within(
-          screen.getByRole("region", { name: "Settings content" }),
-        ).getAllByRole("button", { name: "Close settings" })[0]!,
-      );
+      expect(pageTitle()).toHaveTextContent("Account");
       await waitFor(() =>
-        expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+        expect(document.querySelector('[data-row="sign-out"]')).toHaveAttribute(
+          "data-target",
+          "true",
+        ),
       );
-      // The owner never opened it, so it isn't asked to close it.
-      expect(onClose).not.toHaveBeenCalled();
+
+      rerender(
+        <SettingsModal
+          open
+          onClose={() => {}}
+          initialTab="voice"
+          requestId={2}
+        />,
+      );
+      expect(pageTitle()).toHaveTextContent("Voice & video");
     });
   });
 

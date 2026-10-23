@@ -1,4 +1,5 @@
 import ChannelSidebar from "@/components/chat/ChannelSidebar";
+import { isMobileViewport } from "@/hooks/useMediaQuery";
 import { WebAppTitleBar } from "@/components/chat/AppTitleBar";
 import ChatArea from "@/components/chat/ChatArea";
 import { DesktopThumbnailToolbarSync } from "@/components/chat/DesktopThumbnailToolbarSync";
@@ -1074,7 +1075,7 @@ export default function ChatPage() {
     useCallback(() => {
       // Hardware back button behavior for the base layer (behind all modals/panels).
       // If we are on desktop, don't intercept standard back behavior (browser back).
-      if (window.innerWidth >= 768) {
+      if (!isMobileViewport()) {
         return false;
       }
 
@@ -1191,7 +1192,7 @@ export default function ChatPage() {
               >
                 <span
                   className={cn(
-                    "pointer-events-none h-20 w-px rounded-full transition-all duration-150",
+                    "pointer-events-none h-20 w-px rounded-full transition-[height,background-color,box-shadow] duration-150",
                     isChannelSidebarResizing
                       ? "bg-primary shadow-[0_0_18px_rgba(255,255,255,0.12)]"
                       : "bg-rm-border-strong group-hover:h-28 group-hover:bg-rm-text-ghost group-focus-visible:h-28 group-focus-visible:bg-primary/70",
@@ -1276,6 +1277,7 @@ export default function ChatPage() {
         <MobileNavigationSheet
           open={sidebarOpen}
           onClose={() => uiDispatch({ type: "SET_SIDEBAR", open: false })}
+          onSelectDm={onSelectDm}
           serverList={
             <ServerList
               servers={servers}
