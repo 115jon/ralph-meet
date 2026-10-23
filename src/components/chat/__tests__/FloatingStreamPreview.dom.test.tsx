@@ -110,7 +110,7 @@ describe("FloatingStreamPreview context menu", () => {
     );
 
     const previewRoot = container.querySelector(
-      ".fixed.z-40",
+      ".fixed.z-30",
     ) as HTMLDivElement | null;
     expect(previewRoot).not.toBeNull();
     const setPointerCapture = vi.fn();
@@ -164,7 +164,7 @@ describe("FloatingStreamPreview context menu", () => {
       />,
     );
 
-    const previewRoot = container.querySelector(".fixed.z-40");
+    const previewRoot = container.querySelector(".fixed.z-30");
     expect(previewRoot).not.toBeNull();
     fireEvent.contextMenu(previewRoot!);
 

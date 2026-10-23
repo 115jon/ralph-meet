@@ -85,7 +85,7 @@ export const ScreenShareModal: React.FC<ScreenShareModalProps> = ({
       <DialogPortal>
         <div
           className={cn(
-            "fixed inset-0 z-90 flex items-center justify-center bg-black/80 duration-200",
+            "fixed inset-0 z-60 flex items-center justify-center bg-black/80 duration-200",
             "animate-in fade-in data-[state=closed]:pointer-events-none data-[state=closed]:opacity-0 data-[state=closed]:animate-out data-[state=closed]:fade-out",
           )}
           data-state={isOpen ? "open" : "closed"}

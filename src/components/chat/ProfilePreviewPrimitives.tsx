@@ -51,7 +51,7 @@ export function ProfileSurfaceBackdrop({
   return (
     <div
       className={cn(
-        "pointer-events-none absolute inset-0 z-[1] overflow-hidden",
+        "pointer-events-none absolute inset-0 z-10 overflow-hidden",
         className,
       )}
     >

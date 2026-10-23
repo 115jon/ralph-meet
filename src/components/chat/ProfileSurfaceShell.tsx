@@ -97,7 +97,7 @@ export const ProfileSurfaceShell = forwardRef<
         }}
       >
         <div
-          className="pointer-events-none absolute inset-0 z-[5]"
+          className="pointer-events-none absolute inset-0 z-10"
           style={{
             background: "var(--rm-profile-custom-surface-overlay-strong)",
           }}
@@ -123,7 +123,7 @@ export const ProfileSurfaceShell = forwardRef<
         <ProfileFrameLayer
           display={display}
           order="front"
-          className="z-40"
+          className="z-30"
           fitToSurface={variant === "sheet"}
         />
       ) : null}

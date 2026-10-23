@@ -85,7 +85,7 @@ describe("GifPickerModal recent queries rendering", () => {
     const markup = document.body.innerHTML;
 
     expect(markup).toContain(
-      'class="fixed inset-0 transition-opacity duration-150 z-90"',
+      'class="fixed inset-0 transition-opacity duration-150 z-60"',
     );
     expect(markup).toContain(
       "absolute z-10 flex min-h-0 flex-col overflow-hidden rounded-3xl",

@@ -1829,7 +1829,7 @@ function VoiceChannelMemberRow({
 
       {shouldShowStreamState && streamPreviewPosition && (
         <div
-          className="fixed z-40"
+          className="fixed z-30"
           style={{
             left: streamPreviewPosition.left,
             top: streamPreviewPosition.top,

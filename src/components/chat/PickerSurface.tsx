@@ -49,7 +49,13 @@ export type PickerSurfaceProps = {
   >;
   /** Desktop only: wraps the surface inside DialogPortal (overlay nodes). */
   desktopWrap?: (surface: React.ReactElement) => React.ReactNode;
-  /** Phone drawer content classes (height, z-index, etc.). */
+  /**
+   * Opened from inside a dialog or another picker: sits on the stacked
+   * layer (z-60, design-system 11.1) instead of the modal layer (z-50).
+   * The surface owns its z-index; callers do not pass z classes.
+   */
+  stacked?: boolean;
+  /** Phone drawer content classes (height, etc.); never z-index. */
   drawerClassName?: string;
   drawerOverlayClassName?: string;
   /** Ref to the surface element (desktop DialogSurface / phone drawer). */
@@ -71,6 +77,7 @@ export function PickerSurface({
   desktopWrap,
   drawerClassName,
   drawerOverlayClassName,
+  stacked = false,
   contentRef,
   children,
 }: PickerSurfaceProps) {
@@ -87,10 +94,11 @@ export function PickerSurface({
         <DrawerContent
           ref={contentRef}
           aria-label={ariaLabel}
-          overlayClassName={drawerOverlayClassName}
+          overlayClassName={cn(stacked && "z-60", drawerOverlayClassName)}
           onEscapeKeyDown={onEscapeKeyDown}
           className={cn(
             "picker-panel h-[85dvh] overflow-hidden",
+            stacked && "z-60",
             drawerClassName,
           )}
         >
@@ -105,7 +113,7 @@ export function PickerSurface({
       {...desktopProps}
       ref={contentRef}
       showCloseButton={false}
-      className={className}
+      className={cn(stacked && "z-60", className)}
       style={style}
       aria-label={ariaLabel}
       onEscapeKeyDown={onEscapeKeyDown}

@@ -116,7 +116,7 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
     <>
       <div
         className={cn(
-          "@container relative group rounded-xl overflow-hidden bg-rm-bg-elevated/40 transition-[box-shadow,opacity] cursor-pointer aspect-video w-full h-full",
+          "@container isolate relative group rounded-xl overflow-hidden bg-rm-bg-elevated/40 transition-[box-shadow,opacity] cursor-pointer aspect-video w-full h-full",
           isFocused && "ring-2 ring-rm-text/20 z-50",
           item.isSpeaking && "ring-2 ring-primary z-20",
           item.isRinging && "ring-2 ring-primary/50 animate-pulse z-20",
@@ -135,7 +135,7 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
           }}
           {...tileLongPress}
           aria-label={`Open participant tile for ${item.name}`}
-          className="absolute inset-0 z-10 rounded-xl outline-none"
+          className="absolute inset-0 z-0 rounded-xl outline-none"
         />
         <StickerReactionsOverlay
           sfu={voiceActions?.sfu}
@@ -196,7 +196,7 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
         )}
 
         {shouldShowFocusedStreamOverlay && (
-          <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/30 pointer-events-none animate-in fade-in duration-300">
+          <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/30 pointer-events-none animate-in fade-in duration-300">
             <Icon
               name="screenShare"
               state="active"
@@ -221,7 +221,7 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
 
         {/* Watch Stream Prompt / Thumbnail Overlay */}
         {shouldShowWatchPrompt && (
-          <div className="absolute inset-0 z-40 bg-rm-bg-primary flex flex-col items-center justify-center p-2 text-center overflow-hidden">
+          <div className="absolute inset-0 z-10 bg-rm-bg-primary flex flex-col items-center justify-center p-2 text-center overflow-hidden">
             {streamThumbnails[item.userId] && (
               <img
                 src={streamThumbnails[item.userId]}
@@ -263,7 +263,7 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
           !shouldShowWatchPrompt &&
           !isPreviewHidden &&
           !shouldRenderThumbnailPoster && (
-            <div className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center p-4">
+            <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center p-4">
               {item.avatar ? (
                 <div className="h-20 w-20 overflow-visible rounded-full shadow-lg @md:h-28 @md:w-28">
                   <AvatarImage
@@ -312,7 +312,7 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
 
         {/* Ringing Overlay Label */}
         {item.isRinging && (
-          <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/40 pointer-events-none">
+          <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/40 pointer-events-none">
             <span className="bg-rm-bg-surface/80 rounded-full px-3 py-1 text-ui-xs font-semibold text-rm-text animate-pulse shadow-xl">
               Calling...
             </span>
@@ -320,13 +320,13 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
         )}
 
         {shouldShowWatchers && (
-          <div className="pointer-events-none absolute right-2 top-2 z-40 max-w-[75%]">
+          <div className="pointer-events-none absolute right-2 top-2 z-10 max-w-[75%]">
             <StreamWatcherList watchers={streamWatchers} />
           </div>
         )}
 
         {/* Status Indicators & Labels */}
-        <div className="pointer-events-none absolute bottom-2 left-2 z-30 flex items-center gap-2">
+        <div className="pointer-events-none absolute bottom-2 left-2 z-10 flex items-center gap-2">
           {isScreen ? (
             <div className="bg-rm-bg-primary/85 px-2 py-1 rounded-md border border-rm-border">
               <span className="text-ui-2xs font-semibold text-rm-text truncate max-w-[120px]">
@@ -380,7 +380,7 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
         {isScreen && item.isLocal && voiceActions?.togglePreviewHidden && (
           <div
             data-preview-toggle="true"
-            className="pointer-fine:pointer-events-none absolute top-2 left-2 z-50 pointer-fine:opacity-0 transition-opacity pointer-fine:group-hover:pointer-events-auto pointer-fine:group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100 pointer-coarse:pointer-events-auto pointer-coarse:opacity-100"
+            className="pointer-fine:pointer-events-none absolute top-2 left-2 z-10 pointer-fine:opacity-0 transition-opacity pointer-fine:group-hover:pointer-events-auto pointer-fine:group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100 pointer-coarse:pointer-events-auto pointer-coarse:opacity-100"
           >
             <button
               type="button"
@@ -414,7 +414,7 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
 
         {/* Right status (Ellipsis Bottom Right) */}
         {!isTray && (
-          <div className="pointer-fine:pointer-events-none absolute bottom-2 right-2 z-50 pointer-fine:opacity-0 transition-opacity pointer-fine:group-hover:pointer-events-auto pointer-fine:group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100 pointer-coarse:pointer-events-auto pointer-coarse:opacity-100">
+          <div className="pointer-fine:pointer-events-none absolute bottom-2 right-2 z-10 pointer-fine:opacity-0 transition-opacity pointer-fine:group-hover:pointer-events-auto pointer-fine:group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100 pointer-coarse:pointer-events-auto pointer-coarse:opacity-100">
             <IconButton
               aria-label="More options"
               icon="more"
@@ -428,7 +428,7 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
           </div>
         )}
         {isTray && (
-          <div className="pointer-events-none absolute top-2 right-2 z-30 opacity-0 transition-opacity pointer-fine:group-hover:opacity-100">
+          <div className="pointer-events-none absolute top-2 right-2 z-10 opacity-0 transition-opacity pointer-fine:group-hover:opacity-100">
             <div className="bg-rm-bg-primary/60 p-1 rounded-lg border border-rm-border">
               <Icon
                 name="chevronDown"

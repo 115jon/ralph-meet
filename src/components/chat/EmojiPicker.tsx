@@ -786,8 +786,7 @@ export default function EmojiPicker({
                     placementClasses,
                   )}
                   style={dynamicStyle}
-                  drawerClassName="z-60"
-                  drawerOverlayClassName="z-60"
+                  stacked
                   onEscapeKeyDown={(event) => {
                     if (showSkinToneMenu) {
                       event.preventDefault();

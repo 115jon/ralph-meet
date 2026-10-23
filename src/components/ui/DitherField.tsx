@@ -336,7 +336,7 @@ export function DitherField({
     >
       {overlay && (
         <div
-          className="pointer-events-none absolute inset-0 z-[2]"
+          className="pointer-events-none absolute inset-0 z-10"
           style={{ background: overlay }}
         />
       )}

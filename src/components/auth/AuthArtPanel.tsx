@@ -204,7 +204,7 @@ export function AuthArtPanel({ caption = "Ralph Meet" }: { caption?: string }) {
     >
       <div className="absolute inset-0 z-0" style={fallbackStyle(inks)} />
       <div
-        className="pointer-events-none absolute inset-0 z-[2]"
+        className="pointer-events-none absolute inset-0 z-10"
         style={{
           background: [
             `linear-gradient(90deg, rgba(0,0,0,0) 82%, ${seam} 100%)`,
@@ -213,7 +213,7 @@ export function AuthArtPanel({ caption = "Ralph Meet" }: { caption?: string }) {
         }}
       />
       <div
-        className="absolute bottom-[max(24px,env(safe-area-inset-bottom))] left-[max(28px,env(safe-area-inset-left))] z-[3] max-w-[calc(100%-56px)] truncate text-ui-sm font-semibold tracking-[-0.005em] max-md:bottom-[18px] max-md:left-[max(20px,env(safe-area-inset-left))]"
+        className="absolute bottom-[max(24px,env(safe-area-inset-bottom))] left-[max(28px,env(safe-area-inset-left))] z-10 max-w-[calc(100%-56px)] truncate text-ui-sm font-semibold tracking-[-0.005em] max-md:bottom-[18px] max-md:left-[max(20px,env(safe-area-inset-left))]"
         style={{
           color: light ? mixHex(colors.accent, "#000000", 0.55) : "#ffffff",
           textShadow: light ? "none" : "0 1px 2px rgba(0,0,0,0.5)",

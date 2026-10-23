@@ -241,7 +241,7 @@ export default function UserAccountPopover({
     <>
       <div
         className={cn(
-          "fixed inset-0 z-40 cursor-default bg-transparent",
+          "fixed inset-0 z-50 cursor-default bg-transparent",
           isClosing && "pointer-events-none",
         )}
         onClick={onClose}
@@ -297,7 +297,7 @@ export default function UserAccountPopover({
                       displayName[0]?.toUpperCase()
                     )}
                   </div>
-                  <div className="absolute bottom-1 right-1 z-40 flex h-5 w-5 items-center justify-center rounded-full border-[3.5px] border-rm-bg-elevated bg-rm-bg-elevated">
+                  <div className="absolute bottom-1 right-1 z-10 flex h-5 w-5 items-center justify-center rounded-full border-[3.5px] border-rm-bg-elevated bg-rm-bg-elevated">
                     <UserStatusDot
                       status={currentStatus}
                       className="h-full w-full"

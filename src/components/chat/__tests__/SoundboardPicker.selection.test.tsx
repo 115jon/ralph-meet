@@ -642,7 +642,7 @@ describe("SoundboardPicker selection mode", () => {
     ).toBeInTheDocument();
     await waitFor(() => expect(screen.getByText("Server clip")).toBeVisible());
     const picker = screen.getByRole("dialog", { name: "Soundboard picker" });
-    expect(picker).toHaveStyle({ zIndex: "1100" });
+    expect(picker).toHaveClass("z-60");
     expect(picker).not.toHaveClass("inset-0");
     expect(picker).not.toHaveClass("bottom-[calc(100%+10px)]");
     expect(picker).toHaveClass("md:w-[min(440px,calc(100vw-24px))]");

@@ -57,7 +57,7 @@ describe("dialog positioning regression guard", () => {
     const markup = document.body.innerHTML;
 
     expect(markup).not.toContain("<dialog");
-    expect(markup).toContain("fixed inset-0 z-90");
+    expect(markup).toContain("fixed inset-0 z-60");
   });
 
   it("uses the shadcn dialog primitive for desktop screen picker positioning", () => {
@@ -72,7 +72,7 @@ describe("dialog positioning regression guard", () => {
     const markup = document.body.innerHTML;
 
     expect(markup).not.toContain("<dialog");
-    expect(markup).toContain("fixed inset-0 z-90");
+    expect(markup).toContain("fixed inset-0 z-60");
   });
 
   it("keeps the desktop picker open when the quality select opens", async () => {

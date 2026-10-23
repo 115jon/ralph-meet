@@ -260,7 +260,7 @@ export default function UserProfileModal({ open, user, onClose }: Props) {
                       bannerContentType={resolvedUser.banner_content_type}
                     />
                     <div
-                      className="pointer-events-none absolute inset-0 z-[2]"
+                      className="pointer-events-none absolute inset-0 z-10"
                       style={{
                         background:
                           "var(--rm-profile-custom-surface-overlay-strong)",

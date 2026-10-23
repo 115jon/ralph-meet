@@ -98,7 +98,7 @@ function HomePageHeader() {
 
   return (
     <header
-      className={`fixed top-0 left-0 right-0 z-50 transition-[background-color,border-color,backdrop-filter] duration-300 ${
+      className={`fixed top-0 left-0 right-0 z-20 transition-[background-color,border-color,backdrop-filter] duration-300 ${
         scrolled
           ? "border-b border-rm-border bg-rm-bg-primary/88"
           : "border-b border-transparent bg-transparent"
@@ -489,7 +489,7 @@ export default function HomePageClient() {
     <div className="relative flex min-h-[100dvh] flex-col bg-rm-bg-primary">
       <a
         href="#home-hero"
-        className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-[60] focus:rounded-md focus:bg-rm-accent focus:px-3 focus:py-2 focus:text-ui-sm focus:font-semibold focus:text-white"
+        className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-30 focus:rounded-md focus:bg-rm-accent focus:px-3 focus:py-2 focus:text-ui-sm focus:font-semibold focus:text-white"
       >
         Skip to content
       </a>

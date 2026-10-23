@@ -875,7 +875,7 @@ function DesktopUserProfilePopover({
     <TooltipProvider delayDuration={0}>
       <div className="contents">
         <div
-          className="fixed inset-0 z-40 cursor-default bg-black/50 md:bg-transparent md:pointer-events-none animate-in fade-in duration-200"
+          className="fixed inset-0 z-50 cursor-default bg-black/50 md:bg-transparent md:pointer-events-none animate-in fade-in duration-200"
           onClick={onClose}
           onKeyDown={(event) => {
             if (

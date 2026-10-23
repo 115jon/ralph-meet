@@ -312,10 +312,7 @@ export default function GifPickerModal({
   }, [query, mode, results, saveQueryToHistory]);
 
   const isExpanded = lockExpanded || expanded;
-  const effectiveOverlayZIndexClassName = cn(
-    overlayZIndexClassName,
-    isExpanded && "z-90",
-  );
+  const effectiveOverlayZIndexClassName = overlayZIndexClassName;
   const numCols = useColumnsCount(isExpanded);
   const columnItems = useMemo(() => {
     const cols: GifPickerItem[][] = Array.from({ length: numCols }, () => []);

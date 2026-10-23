@@ -427,7 +427,7 @@ function ProfileActionMenu({
       className={cn(
         useBodyPortal
           ? "pointer-events-auto fixed z-80"
-          : "absolute left-[calc(100%+8px)] top-1 z-[180] max-md:left-1/2 max-md:top-[calc(100%+8px)] max-md:-translate-x-1/2",
+          : "absolute left-[calc(100%+8px)] top-1 z-30 max-md:left-1/2 max-md:top-[calc(100%+8px)] max-md:-translate-x-1/2",
         "min-w-[198px] rounded-lg border border-rm-border bg-rm-bg-floating p-1.5 shadow-lg animate-in fade-in zoom-in-95 duration-150",
       )}
       style={useBodyPortal ? position : undefined}
@@ -993,7 +993,7 @@ function ColorField({
       ref={pickerRef}
       className={cn(
         "relative",
-        open && "z-[220]",
+        open && "z-30",
         !renderTrigger && "space-y-3",
         containerClassName,
       )}
@@ -3785,7 +3785,7 @@ export default function SettingsAccountTab({
                 bannerContentType={currentBannerContentType}
               />
               <div
-                className="pointer-events-none absolute inset-0 z-[2]"
+                className="pointer-events-none absolute inset-0 z-10"
                 style={{
                   background: "var(--rm-profile-custom-surface-overlay-strong)",
                 }}
@@ -4586,7 +4586,7 @@ export default function SettingsAccountTab({
       </div>
 
       {asModal && hasChanges ? (
-        <div className="pointer-events-none fixed inset-x-0 bottom-5 z-[120] flex justify-center px-4 md:bottom-6 animate-in fade-in slide-in-from-bottom-4 duration-300">
+        <div className="pointer-events-none fixed inset-x-0 bottom-5 z-80 flex justify-center px-4 md:bottom-6 animate-in fade-in slide-in-from-bottom-4 duration-300">
           <div className="pointer-events-auto flex w-full max-w-[520px] flex-col gap-3 rounded-3xl border border-rm-border bg-rm-bg-elevated/94 px-4 py-4 shadow-lg md:flex-row md:items-center md:justify-between">
             <div className="min-w-0">
               <p className="text-ui-sm font-semibold text-rm-text">

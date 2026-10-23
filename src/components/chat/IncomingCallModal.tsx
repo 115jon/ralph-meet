@@ -115,7 +115,7 @@ export function IncomingCallModal() {
         <DialogSurface
           showCloseButton={false}
           forceMount
-          className="fixed inset-0 z-50 flex items-center justify-center bg-transparent p-4 transition-opacity duration-200 data-[state=closed]:pointer-events-none data-[state=closed]:opacity-0"
+          className="fixed inset-0 z-100 flex items-center justify-center bg-transparent p-4 transition-opacity duration-200 data-[state=closed]:pointer-events-none data-[state=closed]:opacity-0"
         >
           <div
             data-state={dialogOpen ? "open" : "closed"}

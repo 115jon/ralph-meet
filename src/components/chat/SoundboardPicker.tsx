@@ -1338,8 +1338,6 @@ export default function SoundboardPicker({
       "bottom-end": "top-[calc(100%+10px)] right-0 origin-top-right",
     }[placement] || "bottom-[calc(100%+10px)] right-0 origin-bottom-right";
   const isPickerOpen = open ?? !isClosing;
-  const pickerOverlayZIndex = selectionMode ? 1090 : 259;
-  const pickerPanelZIndex = selectionMode ? 1100 : 260;
   const pickerPositionClasses = compact
     ? ""
     : selectionMode
@@ -1355,8 +1353,10 @@ export default function SoundboardPicker({
       {!compact && !isMobile && (
         <div
           data-state={isPickerOpen ? "open" : "closed"}
-          className="fixed inset-0 data-[state=closed]:pointer-events-none data-[state=closed]:opacity-0"
-          style={{ zIndex: pickerOverlayZIndex }}
+          className={cn(
+            "fixed inset-0 data-[state=closed]:pointer-events-none data-[state=closed]:opacity-0",
+            selectionMode ? "z-60" : "z-50",
+          )}
           onClick={onClose}
           aria-hidden="true"
         />
@@ -1370,8 +1370,7 @@ export default function SoundboardPicker({
           }}
           ariaLabel="Soundboard picker"
           contentRef={pickerRef}
-          drawerClassName={selectionMode ? "z-[1100]" : "z-[260]"}
-          drawerOverlayClassName={selectionMode ? "z-[1090]" : "z-[259]"}
+          stacked={selectionMode}
           onEscapeKeyDown={(event) => {
             const target = event.target;
             if (
@@ -1395,10 +1394,7 @@ export default function SoundboardPicker({
                   : "md:w-[min(440px,calc(100vw-24px))]",
             pickerPositionClasses,
           )}
-          style={{
-            ...(markerRef ? dynamicStyle : {}),
-            zIndex: pickerPanelZIndex,
-          }}
+          style={markerRef ? dynamicStyle : undefined}
         >
           <div className="picker-header border-b px-4 pb-3 pt-4">
             {activeView === "soundboard" ? (
@@ -2744,7 +2740,7 @@ export default function SoundboardPicker({
           <DialogPortal>
             <div
               role="presentation"
-              className="fixed inset-0 z-60 flex items-center justify-center border-0 bg-black/50 p-0 text-left dark:bg-black/80 animate-in fade-in duration-150 max-md:z-[1200]"
+              className="fixed inset-0 z-70 flex items-center justify-center border-0 bg-black/50 p-0 text-left dark:bg-black/80 animate-in fade-in duration-150"
               onMouseDown={(event) => {
                 if (event.target === event.currentTarget)
                   setSoundToDelete(null);

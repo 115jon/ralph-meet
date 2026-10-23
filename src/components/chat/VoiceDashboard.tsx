@@ -630,13 +630,13 @@ export function VoiceDashboard({
                     <>
                       <button
                         type="button"
-                        className="fixed inset-0 z-[60]"
+                        className="fixed inset-0 z-60"
                         aria-label="Close stream settings"
                         onClick={() => setIsStreamMenuOpen(false)}
                       />
                       <div
                         className={cn(
-                          "absolute bottom-full right-0 mb-2 w-48 bg-rm-bg-elevated border border-rm-border rounded-xl shadow-2xl p-1.5 z-[70] origin-bottom-right",
+                          "absolute bottom-full right-0 mb-2 w-48 bg-rm-bg-elevated border border-rm-border rounded-xl shadow-2xl p-1.5 z-70 origin-bottom-right",
                           !isStreamMenuOpen
                             ? "animate-out fade-out slide-out-to-bottom-2 zoom-out-95 duration-200"
                             : "animate-in fade-in slide-in-from-bottom-2 duration-200",

@@ -278,7 +278,7 @@ export default function ServerList({
                         {getDisplayInitial(dm.recipient)}
                       </div>
                     )}
-                    <div className="pointer-events-none fixed left-[80px] z-150 hidden whitespace-nowrap rounded-md border border-rm-border bg-rm-bg-floating px-2.5 py-1.5 text-ui-sm font-medium text-rm-text opacity-0 shadow-md transition-opacity pointer-fine:group-hover:opacity-100 md:block">
+                    <div className="pointer-events-none fixed left-[80px] z-80 hidden whitespace-nowrap rounded-md border border-rm-border bg-rm-bg-floating px-2.5 py-1.5 text-ui-sm font-medium text-rm-text opacity-0 shadow-md transition-opacity pointer-fine:group-hover:opacity-100 md:block">
                       <InlineEmojiText text={displayName} />
                     </div>
                     {(dm.unreadCount ?? 1) > 0 && (
