@@ -20,6 +20,7 @@ import { PinModal } from "@/components/chat/PinModal";
 import { PinnedMessagesSidebar } from "@/components/chat/PinnedMessagesSidebar";
 import MessageItem from "@/components/chat/MessageItem";
 import MemberList from "@/components/chat/MemberList";
+import { UnreadBanner } from "@/components/chat/UnreadBanner";
 import { MobileMessagesTab } from "@/components/chat/mobile/MobileMessagesTab";
 import { DeleteMessageDialog } from "@/components/chat/DeleteMessageDialog";
 import { RemoveEmbedsDialog } from "@/components/chat/RemoveEmbedsDialog";
@@ -229,6 +230,11 @@ const channels: Channel[] = [
   },
 ];
 
+/** ch-general with no SEND_MESSAGES for the viewer (read-only composer). */
+const readOnlyChannels: Channel[] = channels.map((c) =>
+  c.id === "ch-general" ? { ...c, permissions: 0 } : c,
+);
+
 const members: ChatMember[] = [
   { user: users.me!, roles: [adminRole()] },
   { user: users.ada!, roles: [adminRole()] },
@@ -403,8 +409,10 @@ function seedStore(surface: string) {
     connected: true,
     user: users.me!,
     servers,
-    channels,
-    channelsByServerId: { "s-1": channels },
+    channels: surface === "shell-readonly" ? readOnlyChannels : channels,
+    channelsByServerId: {
+      "s-1": surface === "shell-readonly" ? readOnlyChannels : channels,
+    },
     channelsLoadedByServerId: { "s-1": true },
     categories,
     categoriesByServerId: { "s-1": categories },
@@ -1578,6 +1586,38 @@ function MobileFixture({ surface }: { surface: string }) {
   );
 }
 
+/**
+ * Message rows in a bare chat column: the unread banner on top, then rows
+ * with a reply, pinned badge, reactions (one reacted), an embed and a file.
+ * Shoot with a hover on a row to see the 12.12 hover bar.
+ */
+function MessageRowsFixture() {
+  return (
+    <div className="flex h-full flex-col bg-rm-bg-primary">
+      <UnreadBanner count={3} since={at(12)} onMarkAsRead={() => {}} />
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-6">
+        {messages.slice(1).map((message, index, list) => (
+          <MessageItem
+            key={message.id}
+            id={`message-${message.id}`}
+            message={message}
+            showHeader={
+              index === 0 || list[index - 1]!.author_id !== message.author_id
+            }
+            currentUserId="u-me"
+            canPin
+            onReply={() => {}}
+            onPin={() => {}}
+            onUnpin={() => {}}
+            onJump={() => {}}
+            onThread={() => {}}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 /** Empty DM list: sidebar on desktop, the Messages tab page on phones. */
 function DmEmptyFixture() {
   return (
@@ -2406,6 +2446,9 @@ export default function UiFixtures() {
     case "mobile":
     case "mobile-sidebar":
       content = <MobileFixture surface={surface} />;
+      break;
+    case "message-rows":
+      content = <MessageRowsFixture />;
       break;
     case "dm-empty":
       // The DM list with no conversations: desktop sidebar ≥md, the phone

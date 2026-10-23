@@ -33,6 +33,7 @@ interface Props {
 
 import { ChatHeader } from "./ChatHeader";
 import { ChatJumpToPresent } from "./ChatJumpToPresent";
+import { Icon } from "@/components/ui/icon";
 import { ChatTypingIndicator } from "./ChatTypingIndicator";
 import { ChatWelcomeContent } from "./ChatWelcomeContent";
 import { DMCallRegion } from "./DMCallRegion";
@@ -351,22 +352,38 @@ export default function ChatArea({
             onJumpToPresent={handleJumpToPresent}
           />
 
-          <div className="shrink-0 relative pt-6">
-            <ChatTypingIndicator typingUsers={typingUsers} />
+          <div className="relative shrink-0">
+            {/* The typing band: a 24px row of its own above the composer,
+                so the pill never covers the last message. */}
+            <div className="flex h-6 items-center px-4">
+              <ChatTypingIndicator typingUsers={typingUsers} />
+            </div>
             {canSendMessages || isDM ? (
               <MessageInput
                 channelId={channelId}
                 channelName={channelName}
+                isDM={isDM}
                 onSend={handleSend}
                 onTyping={handleTyping}
                 replyTo={replyTo}
                 onCancelReply={() => setLocalState({ replyTo: null })}
               />
             ) : (
-              <div className="z-10 px-2 md:px-4 pb-2 md:pb-6 pt-0">
-                <div className="flex h-[44px] items-center justify-center rounded-xl bg-rm-bg-elevated text-ui-sm font-medium text-rm-text-muted border border-rm-border opacity-80 select-none cursor-not-allowed mx-2 md:mx-0">
-                  You do not have permission to send messages in this channel.
-                </div>
+              <div
+                className="px-2 md:px-4"
+                style={{
+                  paddingBottom:
+                    "calc(max(8px, var(--safe-area-bottom, 0px)) + 8px)",
+                }}
+              >
+                <p
+                  data-testid="composer-read-only"
+                  className="flex min-h-11 items-center justify-center gap-2 rounded-lg border border-rm-border bg-rm-tint-1 px-4 py-2 text-center text-ui-sm text-pretty text-rm-text-secondary select-none"
+                >
+                  <Icon name="lock" size="sm" className="shrink-0" />
+                  You don&apos;t have permission to send messages in this
+                  channel.
+                </p>
               </div>
             )}
           </div>

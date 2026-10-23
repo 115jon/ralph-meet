@@ -10,7 +10,7 @@ export function ChatTypingIndicator({
       role="status"
       aria-live="polite"
       aria-atomic="true"
-      className="pointer-events-none absolute bottom-full left-5 z-20 mb-1.5 flex h-7 items-center gap-2 rounded-md border border-rm-border bg-rm-bg-elevated px-2.5 shadow-sm animate-in fade-in slide-in-from-bottom-1 duration-150"
+      className="pointer-events-none flex h-6 min-w-0 items-center gap-2 animate-in fade-in-0 duration-150"
     >
       <div role="presentation" className="flex gap-1">
         <span
@@ -26,13 +26,13 @@ export function ChatTypingIndicator({
           className="h-1 w-1 rounded-full bg-rm-accent animate-[pulse_900ms_cubic-bezier(0.16,1,0.3,1)_infinite]"
         />
       </div>
-      <p className="text-ui-xs leading-none text-rm-text-muted">
+      <p className="truncate text-ui-xs text-rm-text-secondary">
         <span className="font-semibold text-rm-text">
           {typingUsers.length <= 3
             ? typingUsers.join(", ")
             : `${typingUsers.length} people`}
         </span>
-        {typingUsers.length === 1 ? " is typing..." : " are typing..."}
+        {typingUsers.length === 1 ? " is typing…" : " are typing…"}
       </p>
     </div>
   );
