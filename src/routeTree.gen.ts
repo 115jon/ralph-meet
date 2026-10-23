@@ -54,6 +54,7 @@ import { Route as ApiListenTogetherStreamRouteImport } from './routes/api/listen
 import { Route as ApiListenTogetherSearchRouteImport } from './routes/api/listen-together/search'
 import { Route as ApiListenTogetherResolveRouteImport } from './routes/api/listen-together/resolve'
 import { Route as ApiCollectiblesSyncRouteImport } from './routes/api/collectibles/sync'
+import { Route as ApiCollectiblesIngestRouteImport } from './routes/api/collectibles/ingest'
 import { Route as ApiCollectiblesCatalogRouteImport } from './routes/api/collectibles/catalog'
 import { Route as ApiCollectiblesApplyRouteImport } from './routes/api/collectibles/apply'
 import { Route as ApiChannelsIdRouteImport } from './routes/api/channels/$id'
@@ -328,6 +329,11 @@ const ApiListenTogetherResolveRoute =
 const ApiCollectiblesSyncRoute = ApiCollectiblesSyncRouteImport.update({
   id: '/api/collectibles/sync',
   path: '/api/collectibles/sync',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiCollectiblesIngestRoute = ApiCollectiblesIngestRouteImport.update({
+  id: '/api/collectibles/ingest',
+  path: '/api/collectibles/ingest',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiCollectiblesCatalogRoute = ApiCollectiblesCatalogRouteImport.update({
@@ -623,6 +629,7 @@ export interface FileRoutesByFullPath {
   '/api/channels/$id': typeof ApiChannelsIdRouteWithChildren
   '/api/collectibles/apply': typeof ApiCollectiblesApplyRoute
   '/api/collectibles/catalog': typeof ApiCollectiblesCatalogRoute
+  '/api/collectibles/ingest': typeof ApiCollectiblesIngestRoute
   '/api/collectibles/sync': typeof ApiCollectiblesSyncRoute
   '/api/listen-together/resolve': typeof ApiListenTogetherResolveRoute
   '/api/listen-together/search': typeof ApiListenTogetherSearchRoute
@@ -718,6 +725,7 @@ export interface FileRoutesByTo {
   '/api/channels/$id': typeof ApiChannelsIdRouteWithChildren
   '/api/collectibles/apply': typeof ApiCollectiblesApplyRoute
   '/api/collectibles/catalog': typeof ApiCollectiblesCatalogRoute
+  '/api/collectibles/ingest': typeof ApiCollectiblesIngestRoute
   '/api/collectibles/sync': typeof ApiCollectiblesSyncRoute
   '/api/listen-together/resolve': typeof ApiListenTogetherResolveRoute
   '/api/listen-together/search': typeof ApiListenTogetherSearchRoute
@@ -814,6 +822,7 @@ export interface FileRoutesById {
   '/api/channels/$id': typeof ApiChannelsIdRouteWithChildren
   '/api/collectibles/apply': typeof ApiCollectiblesApplyRoute
   '/api/collectibles/catalog': typeof ApiCollectiblesCatalogRoute
+  '/api/collectibles/ingest': typeof ApiCollectiblesIngestRoute
   '/api/collectibles/sync': typeof ApiCollectiblesSyncRoute
   '/api/listen-together/resolve': typeof ApiListenTogetherResolveRoute
   '/api/listen-together/search': typeof ApiListenTogetherSearchRoute
@@ -911,6 +920,7 @@ export interface FileRouteTypes {
     | '/api/channels/$id'
     | '/api/collectibles/apply'
     | '/api/collectibles/catalog'
+    | '/api/collectibles/ingest'
     | '/api/collectibles/sync'
     | '/api/listen-together/resolve'
     | '/api/listen-together/search'
@@ -1006,6 +1016,7 @@ export interface FileRouteTypes {
     | '/api/channels/$id'
     | '/api/collectibles/apply'
     | '/api/collectibles/catalog'
+    | '/api/collectibles/ingest'
     | '/api/collectibles/sync'
     | '/api/listen-together/resolve'
     | '/api/listen-together/search'
@@ -1101,6 +1112,7 @@ export interface FileRouteTypes {
     | '/api/channels/$id'
     | '/api/collectibles/apply'
     | '/api/collectibles/catalog'
+    | '/api/collectibles/ingest'
     | '/api/collectibles/sync'
     | '/api/listen-together/resolve'
     | '/api/listen-together/search'
@@ -1195,6 +1207,7 @@ export interface RootRouteChildren {
   ApiChannelsIdRoute: typeof ApiChannelsIdRouteWithChildren
   ApiCollectiblesApplyRoute: typeof ApiCollectiblesApplyRoute
   ApiCollectiblesCatalogRoute: typeof ApiCollectiblesCatalogRoute
+  ApiCollectiblesIngestRoute: typeof ApiCollectiblesIngestRoute
   ApiCollectiblesSyncRoute: typeof ApiCollectiblesSyncRoute
   ApiListenTogetherResolveRoute: typeof ApiListenTogetherResolveRoute
   ApiListenTogetherSearchRoute: typeof ApiListenTogetherSearchRoute
@@ -1531,6 +1544,13 @@ declare module '@tanstack/react-router' {
       path: '/api/collectibles/sync'
       fullPath: '/api/collectibles/sync'
       preLoaderRoute: typeof ApiCollectiblesSyncRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/collectibles/ingest': {
+      id: '/api/collectibles/ingest'
+      path: '/api/collectibles/ingest'
+      fullPath: '/api/collectibles/ingest'
+      preLoaderRoute: typeof ApiCollectiblesIngestRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/collectibles/catalog': {
@@ -2142,6 +2162,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiChannelsIdRoute: ApiChannelsIdRouteWithChildren,
   ApiCollectiblesApplyRoute: ApiCollectiblesApplyRoute,
   ApiCollectiblesCatalogRoute: ApiCollectiblesCatalogRoute,
+  ApiCollectiblesIngestRoute: ApiCollectiblesIngestRoute,
   ApiCollectiblesSyncRoute: ApiCollectiblesSyncRoute,
   ApiListenTogetherResolveRoute: ApiListenTogetherResolveRoute,
   ApiListenTogetherSearchRoute: ApiListenTogetherSearchRoute,

@@ -5,11 +5,18 @@ import fixture from "@/lib/__fixtures__/yapper-catalog.sample.json";
 import {
   CATALOG_NORMALIZER_VERSION,
   CatalogStorageError,
+  CatalogFetchDeferredError,
+  CatalogIngestConflictError,
   CatalogValidationError,
+  INGEST_COOLDOWN_MS,
+  INGEST_FALLBACK_WINDOW_MS,
   MANUAL_SYNC_COOLDOWN_MS,
   decodeCatalogPayload,
   encodeCatalogPayload,
   getCollectiblesCatalog,
+  getCollectiblesIngestState,
+  ingestCollectiblesCatalog,
+  ingestRetryAfterMs,
   manualSyncRetryAfterMs,
   normalizeYapperCatalog,
   parseCollectiblesAdminIds,
@@ -52,7 +59,7 @@ function createDatabase(
   initial: { row?: CacheRow | null; failStatusWrites?: boolean } = {},
 ) {
   let row: CacheRow | null = initial.row ?? null;
-  let status: StatusRow | null = null;
+  const statuses = new Map<string, StatusRow>();
   const statements: string[] = [];
 
   const db = {
@@ -66,7 +73,7 @@ function createDatabase(
           return {
             async first<T>() {
               if (sql.includes("FROM collectible_catalog_sync_status")) {
-                return status as T | null;
+                return (statuses.get(String(values[0])) ?? null) as T | null;
               }
               return row as T | null;
             },
@@ -87,11 +94,14 @@ function createDatabase(
               }
               if (sql.includes("INSERT INTO collectible_catalog_sync_status")) {
                 if (initial.failStatusWrites) throw new Error("D1 busy");
-                status = Object.fromEntries(
-                  STATUS_COLUMNS.map((column, index) => [
-                    column,
-                    values[index],
-                  ]),
+                statuses.set(
+                  String(values[0]),
+                  Object.fromEntries(
+                    STATUS_COLUMNS.map((column, index) => [
+                      column,
+                      values[index],
+                    ]),
+                  ),
                 );
               }
               return {};
@@ -105,7 +115,8 @@ function createDatabase(
   return {
     db,
     getRow: () => row,
-    getStatus: () => status,
+    getStatus: () => statuses.get("discord-collectibles") ?? null,
+    getIngestStatus: () => statuses.get("discord-collectibles:ingest") ?? null,
     countStatements: (fragment: string) =>
       statements.filter((sql) => sql.includes(fragment)).length,
   };
@@ -605,5 +616,187 @@ describe("manual sync guards", () => {
         now,
       ),
     ).toBe(0);
+  });
+});
+
+describe("ingestCollectiblesCatalog", () => {
+  const body = JSON.stringify(fixture);
+
+  it("stores a pushed catalog through the cron path and records the ingest", async () => {
+    const { db, getRow, getStatus, getIngestStatus } = createDatabase();
+    const fetchMock = vi.fn<typeof fetch>();
+    vi.stubGlobal("fetch", fetchMock);
+
+    const catalog = await ingestCollectiblesCatalog(
+      db,
+      { body, etag: 'W/"up-1"' },
+      SMALL,
+    );
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(getRow()?.payload.startsWith("gz1:")).toBe(true);
+    expect(getRow()?.etag).toBe('W/"up-1"');
+    expect(getRow()?.item_count).toBe(catalog.items.length);
+    expect(getStatus()).toMatchObject({
+      last_outcome: "updated",
+      last_trigger: "ingest",
+      consecutive_failures: 0,
+      item_count: catalog.items.length,
+    });
+    expect(getIngestStatus()).toMatchObject({
+      last_outcome: "updated",
+      last_attempt_at: expect.any(String),
+      last_success_at: expect.any(String),
+    });
+    await expect(getCollectiblesIngestState(db)).resolves.toMatchObject({
+      etag: 'W/"up-1"',
+      syncedAt: getRow()?.synced_at,
+      formatVersion: CATALOG_NORMALIZER_VERSION,
+      lastUploadAt: getIngestStatus()?.last_attempt_at,
+    });
+
+    resetCollectiblesCatalogMemory();
+    const served = await getCollectiblesCatalog(db);
+    expect(served.items).toHaveLength(catalog.items.length);
+    expect(served.stale).toBe(false);
+  });
+
+  it.each([
+    ["invalid JSON", "<html>nope</html>"],
+    ["an object", JSON.stringify({ error: "maintenance" })],
+    ["a partial catalog", JSON.stringify((fixture as any[]).slice(0, 1))],
+  ])("rejects %s and keeps the last good catalog", async (_, bad) => {
+    const { db, getRow, getStatus, getIngestStatus } = createDatabase();
+    await ingestCollectiblesCatalog(db, { body, etag: "good" }, SMALL);
+    const goodPayload = getRow()!.payload;
+
+    await expect(
+      ingestCollectiblesCatalog(db, { body: bad, etag: "bad" }, SMALL),
+    ).rejects.toBeInstanceOf(CatalogValidationError);
+
+    expect(getRow()?.payload).toBe(goodPayload);
+    expect(getRow()?.etag).toBe("good");
+    expect(getStatus()).toMatchObject({
+      last_outcome: "rejected",
+      last_trigger: "ingest",
+      consecutive_failures: 1,
+    });
+    expect(getIngestStatus()?.last_outcome).toBe("rejected");
+  });
+
+  it("refreshes syncedAt on a matching not-modified ping without counting as an upload", async () => {
+    const { db, getRow, getStatus, getIngestStatus } = createDatabase();
+    await ingestCollectiblesCatalog(db, { body, etag: "e1" }, SMALL);
+    const firstSyncedAt = getRow()!.synced_at;
+    const firstUploadAt = getIngestStatus()!.last_attempt_at;
+    await new Promise((resolve) => setTimeout(resolve, 5));
+
+    await ingestCollectiblesCatalog(db, { notModified: true, etag: "e1" });
+
+    expect(Date.parse(getRow()!.synced_at)).toBeGreaterThan(
+      Date.parse(firstSyncedAt),
+    );
+    expect(getStatus()?.last_outcome).toBe("not_modified");
+    expect(getIngestStatus()?.last_attempt_at).toBe(firstUploadAt);
+  });
+
+  it("refuses a not-modified ping for another ETag", async () => {
+    const { db, getRow } = createDatabase();
+    await ingestCollectiblesCatalog(db, { body, etag: "e1" }, SMALL);
+    const syncedAt = getRow()!.synced_at;
+
+    await expect(
+      ingestCollectiblesCatalog(db, { notModified: true, etag: "e0" }),
+    ).rejects.toBeInstanceOf(CatalogIngestConflictError);
+    expect(getRow()?.synced_at).toBe(syncedAt);
+  });
+
+  it("rate-limits uploads from the last upload", () => {
+    const now = Date.parse("2026-10-23T12:00:00Z");
+    expect(ingestRetryAfterMs({ lastUploadAt: null }, now)).toBe(0);
+    expect(
+      ingestRetryAfterMs(
+        { lastUploadAt: new Date(now - 60_000).toISOString() },
+        now,
+      ),
+    ).toBe(INGEST_COOLDOWN_MS - 60_000);
+  });
+
+  it("hides the ETag when the stored catalog came from another normaliser", async () => {
+    const legacy = {
+      ...normalizeYapperCatalog(fixture),
+      normalizerVersion: undefined,
+    };
+    const { db } = createDatabase({ row: legacyRow(legacy, hoursAgo(1)) });
+    await expect(getCollectiblesIngestState(db)).resolves.toMatchObject({
+      etag: null,
+      formatVersion: CATALOG_NORMALIZER_VERSION,
+    });
+  });
+});
+
+describe("cron fallback while ingest keeps up", () => {
+  const blocked = () =>
+    new Response('{"status":403}', { status: 403, statusText: "Forbidden" });
+
+  it("warns instead of recording a failure soon after an ingest", async () => {
+    const { db, getStatus } = createDatabase();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    vi.stubGlobal("fetch", vi.fn<typeof fetch>().mockResolvedValue(blocked()));
+    await ingestCollectiblesCatalog(
+      db,
+      { body: JSON.stringify(fixture), etag: "e1" },
+      SMALL,
+    );
+
+    await expect(
+      syncCollectiblesCatalog(db, { ...SMALL, trigger: "cron" }),
+    ).rejects.toBeInstanceOf(CatalogFetchDeferredError);
+
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("403"));
+    expect(getStatus()).toMatchObject({
+      last_outcome: "updated",
+      last_trigger: "ingest",
+      consecutive_failures: 0,
+    });
+  });
+
+  it("records the failure once the last ingest is older than the window", async () => {
+    const { db, getStatus } = createDatabase();
+    vi.stubGlobal("fetch", vi.fn<typeof fetch>().mockResolvedValue(blocked()));
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      await ingestCollectiblesCatalog(
+        db,
+        { body: JSON.stringify(fixture), etag: "e1" },
+        SMALL,
+      );
+      vi.setSystemTime(Date.now() + INGEST_FALLBACK_WINDOW_MS + 60_000);
+
+      await expect(
+        syncCollectiblesCatalog(db, { ...SMALL, trigger: "cron" }),
+      ).rejects.toThrow("403");
+    } finally {
+      vi.useRealTimers();
+    }
+    expect(getStatus()).toMatchObject({
+      last_outcome: "failed",
+      last_trigger: "cron",
+      consecutive_failures: 1,
+    });
+  });
+
+  it("still records manual failures", async () => {
+    const { db, getStatus } = createDatabase();
+    vi.stubGlobal("fetch", vi.fn<typeof fetch>().mockResolvedValue(blocked()));
+    await ingestCollectiblesCatalog(
+      db,
+      { body: JSON.stringify(fixture), etag: "e1" },
+      SMALL,
+    );
+    await expect(
+      syncCollectiblesCatalog(db, { ...SMALL, trigger: "manual" }),
+    ).rejects.toThrow("403");
+    expect(getStatus()?.last_outcome).toBe("failed");
   });
 });

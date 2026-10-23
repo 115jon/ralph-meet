@@ -43,6 +43,7 @@ import {
 import { retryR2Cleanup } from "./src/services/r2-cleanup.service";
 import {
   COLLECTIBLES_SYNC_CRON,
+  CatalogFetchDeferredError,
   syncCollectiblesCatalog,
 } from "./src/lib/collectibles-catalog";
 import {
@@ -512,9 +513,16 @@ export default {
           {
             name: "Collectibles catalog sync",
             run: async () => {
+              // Upstream blocks Workers egress; an off-Cloudflare fetcher
+              // pushes to /api/collectibles/ingest. While it keeps up, a
+              // failed fetch here was already logged as a warning.
               const catalog = await syncCollectiblesCatalog(env.DB, {
                 trigger: "cron",
+              }).catch((error: unknown) => {
+                if (error instanceof CatalogFetchDeferredError) return null;
+                throw error;
               });
+              if (!catalog) return;
               console.info("Collectibles catalog sync completed", {
                 categories: catalog.categories.length,
                 items: catalog.items.length,

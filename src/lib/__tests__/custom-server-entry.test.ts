@@ -67,6 +67,7 @@ vi.mock("../../../src/services/r2-cleanup.service", () => ({
 
 vi.mock("../../../src/lib/collectibles-catalog", () => ({
   COLLECTIBLES_SYNC_CRON: "17 * * * *",
+  CatalogFetchDeferredError: class CatalogFetchDeferredError extends Error {},
   syncCollectiblesCatalog,
 }));
 
