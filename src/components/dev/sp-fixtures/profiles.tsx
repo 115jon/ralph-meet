@@ -6,13 +6,10 @@
  *   sp-account-popover                                    UserAccountPopover
  *   sp-avatar-picker                                      AvatarPickerModal
  *   sp-avatar-frame                                       AvatarFrameEditor
- *   sp-sheet-banner / -friend / -blocked / -mod / -me-banner
- *                                                         MobileProfileSheet
  */
 
 import { AvatarFrameEditor } from "@/components/chat/AvatarFrameEditor";
 import { AvatarPickerModal } from "@/components/chat/AvatarPickerModal";
-import MobileProfileSheet from "@/components/chat/MobileProfileSheet";
 import UserAccountPopover from "@/components/chat/UserAccountPopover";
 import UserProfileModal from "@/components/chat/UserProfileModal";
 import UserProfilePopover from "@/components/chat/UserProfilePopover";
@@ -38,14 +35,9 @@ export const PROFILE_SURFACES = [
   "sp-account-popover",
   "sp-avatar-picker",
   "sp-avatar-frame",
-  "sp-sheet-banner",
-  "sp-sheet-friend",
-  "sp-sheet-blocked",
-  "sp-sheet-mod",
-  "sp-sheet-me-banner",
 ];
 
-const grace: User = {
+export const grace: User = {
   id: "u-grace",
   username: "grace",
   display_name: "Grace Hopper",
@@ -54,7 +46,7 @@ const grace: User = {
   bio: "Wrote the first compiler. Ask me about nanoseconds.",
 } as User;
 
-const ada: User = {
+export const ada: User = {
   id: "u-ada",
   username: "ada",
   display_name: "Ada Lovelace",
@@ -63,7 +55,7 @@ const ada: User = {
   banner_url: coverNightdrive,
 } as User;
 
-const me: User = {
+export const me: User = {
   id: "u-me",
   username: "jon",
   display_name: "Jon",
@@ -72,7 +64,7 @@ const me: User = {
   banner_url: coverGlasshouse,
 } as User;
 
-function relationshipFor(surface: string, user: User): Relationship[] {
+export function relationshipFor(surface: string, user: User): Relationship[] {
   const type = surface.endsWith("-friend")
     ? 0
     : surface.endsWith("-blocked")
@@ -83,7 +75,7 @@ function relationshipFor(surface: string, user: User): Relationship[] {
   return type === null ? [] : [{ user, type, created_at: at(600) }];
 }
 
-function profileRoutes(surface: string): StubRoute[] {
+export function profileRoutes(surface: string): StubRoute[] {
   return [
     {
       path: /^\/api\/users\/[^/]+\/profile$/,
@@ -142,7 +134,7 @@ function profileRoutes(surface: string): StubRoute[] {
   ];
 }
 
-function useSeedRelationships(surface: string, user: User) {
+export function useSeedRelationships(surface: string, user: User) {
   useEffect(() => {
     useChatStore.setState({
       relationships: relationshipFor(surface, user),
@@ -174,11 +166,7 @@ function Anchored({
 
 function ProfilesFixture({ surface }: { surface: string }) {
   useApiStub(profileRoutes(surface));
-  const sheetUser = surface === "sp-sheet-me-banner" ? me : ada;
-  useSeedRelationships(
-    surface,
-    surface.startsWith("sp-profile-modal") ? grace : sheetUser,
-  );
+  useSeedRelationships(surface, grace);
   const noop = () => {};
 
   if (surface.startsWith("sp-profile-modal")) {
@@ -246,18 +234,7 @@ function ProfilesFixture({ surface }: { surface: string }) {
       />
     );
   }
-  // Phone profile sheets.
-  return (
-    <MobileProfileSheet
-      open
-      user={sheetUser}
-      roles={surface === "sp-sheet-mod" ? FIXTURE_ROLES.slice(1, 3) : undefined}
-      onClose={noop}
-      onOpenProfileEditor={noop}
-      onBan={surface === "sp-sheet-mod" ? noop : undefined}
-      onKick={surface === "sp-sheet-mod" ? noop : undefined}
-    />
-  );
+  return null;
 }
 
 export function renderProfilesFixture(
